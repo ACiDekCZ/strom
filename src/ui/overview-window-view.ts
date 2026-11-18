@@ -41,6 +41,7 @@ import {
 } from './overview-window-states.js';
 import type { DirectionFormOptions } from './direction-form-ui.js';
 import type { WaitingAnswerOutcome } from './waiting-answer-form.js';
+import type { RowNote } from './waiting-row-notes.js';
 import { taskOrderOutcomeOf, type TaskOrderOutcome, type TaskOrderWrite } from './research-offline-ui.js';
 import {
     OVERVIEW_ACTIONS_TO_MAIN, emptyOverviewExtras, overviewSessionFromData, readOverviewState,
@@ -298,6 +299,25 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         async markWaitingSent(_s: LiveSession, w: LiveWaiting): Promise<void> { run('waiting-sent', { itemId: w.id }); },
         async markWaitingUnsent(_s: LiveSession, id: string): Promise<undefined> { run('waiting-unsent', { itemId: id }); return undefined; },
         async markWaitingGroupSent(_s: LiveSession, key: string): Promise<void> { run('waiting-group-sent', { group: key }); },
+        // A row's own write (§7) as the main window has it: "saving", or refused with its sentence; Try again asks it.
+        waitingRowNote(_s: LiveSession, id: string): RowNote | null {
+            const ww = extras().waitingWrite;
+            if (!ww) return null;
+            if (ww.saving.includes(id)) return { kind: 'saving' };
+            const r = ww.refused.find(x => x.id === id);
+            if (!r) return null;
+            const said = refusalsSaid.get(id) === r.text;
+            refusalsSaid.set(id, r.text);
+            return {
+                kind: 'refused', tint: r.tint,
+                refusal: { text: r.text, phase: 'todo', at: 0, untinted: !r.tint, said, ...(r.retry ? { retry: () => run('waiting-retry', { itemId: id }) } : {}) },
+            };
+        },
+        touchWaitingRow(): boolean { return false; },
+        retryWaitingRow(_s: LiveSession, id: string): boolean {
+            run('waiting-retry', { itemId: id });
+            return true;
+        },
         // Leave as is at a finding (spec 109 §4): written by the main window (its toast with Undo); the row goes here at once.
         async keepWaitingAudit(this: UIClass, s: LiveSession, w: LiveWaiting): Promise<void> {
             if (!w.audit || auditResearchUnavailable(s)) return;
@@ -383,6 +403,8 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
 
 /** The last "Work on the queue…" link started from this window (its Try again). */
 let lastWorkUrl: string | null = null;
+/** A refused row's sentence drawn here already (its text): `role=alert` only on its first drawing. */
+const refusalsSaid = new Map<string, string>();
 
 /** The drawn sessions now (the overrides read the session of the last snapshot). */
 let drawnNow: OverviewWindowDrawn | null = null;

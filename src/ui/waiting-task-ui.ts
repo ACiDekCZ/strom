@@ -17,6 +17,8 @@ import { DEFAULT_MEDIA_MAX_BYTES } from '../originals.js';
 import { MQ_PHONE_BAR, isPhoneBar } from '../breakpoints.js';
 import { researchOpenSrText, setResearchActionLabel } from './research-open-mark.js';
 import { uiModule } from './module.js';
+import { shiftHeld } from './busy.js';
+import { WAITING_ROWS_SCOPE } from './waiting-row-notes.js';
 import { el, liveSession, LiveSession, researchSession } from './research-ui.js';
 import { UploadNumbers, UploadOutcome, WaitingImagesUpload } from './waiting-images-upload.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
@@ -842,6 +844,8 @@ export const waitingTaskMethods = uiModule({
             if (unavailable) fix.title = A.auditUnavailable;
             fix.onclick = (e) => {
                 e.stopPropagation();
+                // The rows moved under the pointer a moment ago (another finding fixed, undone or kept): not meant for this one (109 U4).
+                if (shiftHeld(WAITING_ROWS_SCOPE, e)) return;
                 void this.openWaitingAuditFix(s, w, mode);
             };
             actions.appendChild(fix);
@@ -868,6 +872,7 @@ export const waitingTaskMethods = uiModule({
         keep.disabled = unavailable || keeping;
         keep.onclick = (e) => {
             e.stopPropagation();
+            if (shiftHeld(WAITING_ROWS_SCOPE, e)) return;
             void this.keepWaitingAudit(s, w);
         };
         actions.appendChild(keep);
@@ -1000,6 +1005,7 @@ export const waitingTaskMethods = uiModule({
             auditStates.set(key, { phase: 'fixed', stamp: now?.stamp ?? st.stamp });
             fixedFocus = key;
             if (auditSheetFor === key) this.closeWaitingAuditSheet();
+            this.waitingRowsMoved(s);
             this.renderLivePanel();
             return;
         }
@@ -1054,6 +1060,7 @@ export const waitingTaskMethods = uiModule({
             const key = itemKey(s, id);
             if (auditStates.get(key)?.phase === 'fixed') auditStates.delete(key);
             if (fixedFocus === key) fixedFocus = null;
+            this.waitingRowsMoved(s);
             this.renderLivePanel();
             this.showToast(A.auditUndone, 5000, { kind: 'waiting-audit-undone' });
         } else if (result.code === 'audit-changed' || result.code === 'changed') {
@@ -1345,6 +1352,8 @@ export const waitingTaskMethods = uiModule({
         const ok = result.ok || result.code === 'none' || result.code === 'audit-none' || result.code === 'changed';
         if (result.ok) auditStates.set(key, { phase: 'kept', stamp: audit.stamp });
         else auditStates.delete(key);
+        // The finding's row goes (kept): the next one moves up under the pointer.
+        this.waitingRowsMoved(s);
         this.renderLivePanel();
         this.researchStatusAfterWrite(s);
         if (result.ok) {
@@ -1366,6 +1375,7 @@ export const waitingTaskMethods = uiModule({
         const result = await postWaitingAudit(s.bridge.base, task, 'unkeep');
         if (result.ok) this.takeWaitingWriteHead(s, before, result);
         auditStates.delete(itemKey(s, id));
+        this.waitingRowsMoved(s);
         this.renderLivePanel();
         this.researchStatusAfterWrite(s);
         if (!result.ok && result.code !== 'none' && result.code !== 'audit-none') this.showWaitingAuditRefused(result);

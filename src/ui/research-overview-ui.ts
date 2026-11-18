@@ -14,7 +14,8 @@
  */
 
 import { noteQueueStartStatus, QUEUE_START_MS, type QueueStartView } from './queue-start.js';
-import { runBusy, activatedElement, isBusy, busySpinHtml } from './busy.js';
+import { runBusy, activatedElement, isBusy, busySpinHtml, busyStatusEl } from './busy.js';
+import type { RowRefusal } from './waiting-row-notes.js';
 import { researchOpenSrText, setResearchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -1932,7 +1933,13 @@ export const researchOverviewMethods = uiModule({
         if (drawnAs.flat) meta.appendChild(waitingGroupTagEl(w));
         row.appendChild(meta);
         // The "new" tag (any order) over the time it has waited since (a time order).
-        const side = waitingSideEl(w, { isNew: view.tagged.has(w.id), time: isTimeOrder(drawnAs.order) });
+        let side = waitingSideEl(w, { isNew: view.tagged.has(w.id), time: isTimeOrder(drawnAs.order) });
+        // Its own write not confirmed yet (§7, 7a): "saving" with the small spinner at the row's end.
+        const note = this.waitingRowNote(s, w.id);
+        if (note?.kind === 'saving') {
+            side ??= el('span', 'research-overview__waiting-side');
+            side.appendChild(busyStatusEl(strings.busy.savingRow));
+        }
         if (side) {
             row.classList.add('has-side');
             row.appendChild(side);
@@ -1948,6 +1955,14 @@ export const researchOverviewMethods = uiModule({
             this.renderResearchOverview();
         };
         li.appendChild(row);
+        // Refused (§7): back where it was, tinted until the next action in it or 10 s, its sentence with Try again.
+        if (note?.kind === 'refused') {
+            if (note.tint) li.classList.add('is-refused');
+            if (note.refusal.text) li.appendChild(this.waitingRowRefusalEl(s, w.id, note.refusal));
+            li.addEventListener('click', () => {
+                if (this.touchWaitingRow(s, w.id)) li.classList.remove('is-refused');
+            }, true);
+        }
         // Just fixed (spec 109 §2.4): its title in view and focused once drawn where it now belongs.
         auditFixedRowDrawn(itemKey(s, w.id), row);
         // One person's items the card's ! led to: lit, with why they cannot be answered here.
@@ -1970,6 +1985,39 @@ export const researchOverviewMethods = uiModule({
             li.appendChild(detail);
         }
         return li;
+    },
+
+    /** A refused write's sentence in its row (`role=alert` on its first drawing only), "Try again" and the seal's way. */
+    waitingRowRefusalEl(s: LiveSession, id: string, r: RowRefusal): HTMLElement {
+        const msg = el('div', 'busy-msg is-err research-overview__waiting-note');
+        if (!r.said) {
+            msg.setAttribute('role', 'alert');
+            r.said = true;
+        }
+        msg.tabIndex = -1;
+        msg.appendChild(el('span', undefined, r.text));
+        if (r.retry) {
+            const again = el('button', 'link', strings.busy.retry);
+            again.type = 'button';
+            again.dataset.action = 'write-retry';
+            again.onclick = (e) => {
+                e.stopPropagation();
+                this.retryWaitingRow(s, id);
+            };
+            msg.appendChild(again);
+        }
+        if (r.alt) {
+            const alt = r.alt;
+            const b = el('button', 'link');
+            setResearchActionLabel(b, alt.label, alt.ai ? 'agent' : alt.research ? 'terminal' : 'none');
+            b.type = 'button';
+            b.onclick = (e) => {
+                e.stopPropagation();
+                alt.run();
+            };
+            msg.appendChild(b);
+        }
+        return msg;
     },
 
     /**

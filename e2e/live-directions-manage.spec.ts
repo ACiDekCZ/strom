@@ -162,6 +162,26 @@ test.describe('directions managed through the bridge', () => {
             .toHaveText(['Move down']);
     });
 
+    test('order: the moved row says "saving" at its end while the new order is written, its number as it is; then nothing', async ({ page }) => {
+        const b = await followManaged(page);
+        await openOverview(page);
+        let letGo!: () => void;
+        const gate = new Promise<void>(r => { letGo = r; });
+        const order = (u: URL) => u.pathname.endsWith('/directions/order');
+        await page.route(order, async route => { await gate; await route.fallback(); });
+        await directionRow(page, 'G0002').locator('.research-direction__handle').focus();
+        await page.keyboard.press('Alt+ArrowUp');
+        const row = directionRow(page, 'G0002');
+        await expect(row.locator('.research-direction__side > .busy-st')).toHaveText('saving');
+        await expect(row.locator('.research-direction__num')).toHaveText('2');
+        await expect(row.locator('.research-direction__num')).not.toHaveAttribute('aria-busy', 'true');
+        await expect(overview(page).locator('.research-direction__spin')).toHaveCount(0);
+        letGo();
+        await expect.poll(() => directionWrites(b).length).toBe(1);
+        await expect(row.locator('.busy-st')).toHaveCount(0);
+        await page.unroute(order);
+    });
+
     test('a refusal at the row in the research\'s words without Try again; an Undo that fails says so in an alert toast', async ({ page }) => {
         const b = await followManaged(page);
         await openOverview(page);

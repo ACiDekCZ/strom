@@ -281,6 +281,43 @@ test.describe('Fix at a task\'s finding', () => {
         await expect(item(page, 'T0377').locator('.research-overview__waiting-what .waiting-audit-mark')).toHaveCount(1);
     });
 
+    test('rows that just moved take no click a moment (109 U4): Leave as is of another task right after a Fix or its Undo writes nothing', async ({ page }) => {
+        const b = await researchTree(page);
+        await openOverview(page);
+        await openItem(page, 'T0377');
+        await fixBtn(page, 'T0377').click();
+        const confirm = preview(page, 'T0377').locator('[data-action="audit-confirm"]');
+        await expect(confirm).toBeEnabled();
+        await confirm.click();
+        // The moment the fixed row moves, a click meant for it lands on the other task's Leave as is.
+        const strayClick = () => page.evaluate(async () => {
+            const q = (sel: string) => document.querySelector<HTMLElement>(sel);
+            const at = performance.now();
+            while (performance.now() - at < 5000) {
+                const keep = q('#research-overview .research-overview__waiting-item[data-id="T0412"] [data-action="audit-keep"]');
+                if (keep) { keep.click(); return true; }
+                q('#research-overview .research-overview__waiting-item[data-id="T0412"] .research-overview__waiting-row')?.click();
+                await new Promise(r => requestAnimationFrame(r));
+            }
+            return false;
+        });
+        await expect(toast(page, 'waiting-audit-fixed')).toBeVisible();
+        expect(await strayClick()).toBe(true);
+        await page.waitForTimeout(600);
+        expect(b.writes.filter(([, body]) => (body as { do: string }).do === 'keep')).toEqual([]);
+        // The Undo moves the rows again: held once more.
+        await toast(page, 'waiting-audit-fixed').locator('.toast-action').click();
+        await expect.poll(() => b.writes.at(-1)).toEqual(['T0377', { do: 'unfix' }]);
+        await expect(toast(page, 'waiting-audit-undone')).toBeVisible();
+        expect(await strayClick()).toBe(true);
+        await page.waitForTimeout(600);
+        expect(b.writes.filter(([, body]) => (body as { do: string }).do === 'keep')).toEqual([]);
+        // Once the rows stand still, Leave as is writes.
+        await openItem(page, 'T0412');
+        await finding(page, 'T0412').locator('[data-action="audit-keep"]').click();
+        await expect.poll(() => b.writes.filter(([, body]) => (body as { do: string }).do === 'keep').map(([id]) => id)).toEqual(['T0412']);
+    });
+
     test('a fix that woke the task says so; an Undo after a change cannot undo', async ({ page }) => {
         const b = await researchTree(page);
         await openOverview(page);

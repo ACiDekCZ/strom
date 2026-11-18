@@ -469,7 +469,7 @@
             --warning: #d8b25e;
             --pending: #d8b25e;
             --danger-soft: #3d2b27;
-            --warning-soft: #3a3324;
+            --warning-soft: #40351c;  /* warmer than #3a3324 (a tinted row told from --surface), --text-light 4.6:1, --error-text 6:1 */
             --read-amber-bg: #3a3324;
             --read-amber-line: #6b5a32;
             --help-mark-line: #6e675a;
@@ -18779,6 +18779,12 @@
         }
         a[data-busy="busy"], .link[data-busy="busy"], button.link[data-busy="busy"] { text-decoration: none; }
         .busy-slot { display: inline-block; width: 12px; margin-left: 4px; vertical-align: -1px; line-height: 1; }
+        /* A row's own state while its optimistic write is confirmed (§7, 6.1): the 12 px spinner and quiet words.
+           --text-light, not --text-faint: it stays 4.5:1 on a tinted (open or refused) row in both themes. */
+        .busy-st {
+            display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; line-height: 1.3;
+            color: var(--text-light); white-space: nowrap; font-weight: 400;
+        }
         .busy-row-end { margin-left: auto; padding-left: 8px; }
         .busy-msg {
             font-size: 12.5px; line-height: 1.45; margin-top: 6px; color: var(--text-light);
@@ -22322,6 +22328,10 @@
             display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
         }
         .hwr-item > .research-overview__waiting-side { flex: none; }
+        /* A refused write (§7, 7a): the row back where it was, tinted until the next action in it or 10 s, its sentence under the row. */
+        .research-overview__waiting-item.is-refused { background: var(--warning-soft); border-radius: var(--r-md); }
+        .research-overview__waiting-item > .research-overview__waiting-note { margin: 0; padding: 0 4px 8px; }
+        .research-overview__waiting-note:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
         .research-overview__since, .research-overview__waiting-meta .research-overview__since {
             font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap;
         }
@@ -23363,12 +23373,7 @@
             font-size: 12px; line-height: 20px; color: var(--text-faint); font-variant-numeric: tabular-nums;
             text-align: right; margin-top: 1px; position: relative;
         }
-        .research-direction__num[aria-busy="true"] { color: transparent; }
-        .research-direction__spin {
-            position: absolute; right: 1px; top: 5px; width: 9px; height: 9px; border-radius: 50%;
-            border: 1.5px solid var(--dir-drop); border-right-color: transparent; animation: agSpin .8s linear infinite;
-        }
-        @media (prefers-reduced-motion: reduce) { .research-direction__spin { animation: none; } }
+        .research-direction__side > .busy-st { align-self: center; }
         .research-direction__side { display: flex; align-items: flex-start; gap: 6px; }
         .research-direction__moves { display: none; }
         .research-direction__move {
@@ -23847,6 +23852,8 @@
         .research-offline__wait-hint { margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
         .research-offline__elsewhere { margin: 6px 0 0; font-size: 12.5px; }
         .research-offline__wait-actions .is-held { opacity: .45; cursor: not-allowed; }
+        /* An answer on its way (A32): its button carries the working state, the others wait (seen as unavailable). */
+        .research-offline__wait-actions > [aria-disabled="true"]:not(.is-held):not([data-busy]) { opacity: .55; cursor: default; }
         /* A long direction name (with "(paused)") wraps inside its button instead of running past the panel. */
         .research-offline__wait-actions .live-waiting-answer { max-width: 100%; }
         .research-offline__held { margin: 6px 0 0; font-size: 12.5px; }

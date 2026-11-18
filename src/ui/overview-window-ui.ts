@@ -105,6 +105,7 @@ export const overviewWindowMethods = uiModule({
         extras.follow = { on: this.isLiveFollowOn(), view: this.liveFollowView() };
         extras.lines = directionsWindowState(researchSession());
         extras.taskOrder = taskOrderWindowState();
+        extras.waitingWrite = this.waitingRowsWindowState(w?.s ?? null);
         const meta = treeId ? TreeManager.getTreeMetadata(treeId as TreeId) : null;
         const state: OverviewResearchState = {
             v: OVERVIEW_STATE_VERSION,
@@ -256,6 +257,8 @@ export const overviewWindowMethods = uiModule({
                 if (!s) return false;
                 void this.markWaitingGroupSent(s, a.args.group);
                 return true;
+            case 'waiting-retry':
+                return !!s && this.retryWaitingRow(s, a.args.itemId);
             case 'waiting-audit': {
                 const args = a.args;
                 if (args.do === 'preview' || args.do === 'fix') {

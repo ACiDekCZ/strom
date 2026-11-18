@@ -519,6 +519,30 @@ test.describe('work outside the directions through the bridge', () => {
         expect(offWrites(b)[1]).toMatchObject({ path: 'offline/B-P0031', body: { mode: 'default' } });
     });
 
+    test('a growing branch\'s answer on its way: its button works (Saving…), the others wait dimmed and take no click; then the item goes', async ({ page }) => {
+        const b = await follow(page, { waiting: [GROWING] });
+        await openOverview(page);
+        const item = overview(page).locator('.research-overview__waiting-item[data-id="W-B-P0031"]');
+        await item.locator('.research-overview__waiting-row').click();
+        let letGo!: () => void;
+        const gate = new Promise<void>(r => { letGo = r; });
+        const answer = (u: URL) => u.pathname.endsWith('/waiting/W-B-P0031');
+        await page.route(answer, async route => { await gate; await route.fallback(); });
+        await item.locator('[data-do="keep"]').click();
+        const keep = item.locator('[data-do="keep"]');
+        await expect(keep).toHaveAttribute('aria-busy', 'true');
+        await expect(keep).toContainText('Saving…');
+        const never = item.locator('[data-do="never"]');
+        await expect(never).toHaveAttribute('aria-disabled', 'true');
+        await expect(never).toHaveCSS('opacity', '0.55');
+        await never.click({ force: true });
+        await keep.click({ force: true });
+        letGo();
+        await expect(item).toHaveCount(0);
+        expect(offWrites(b).map(w => [w.path, w.body])).toEqual([['waiting/W-B-P0031', { do: 'keep' }]]);
+        await page.unroute(answer);
+    });
+
     test('a growing branch near a paused direction: the nearest running one its person is in, the sentence says paused', async ({ page }) => {
         // Anna Svobodová is in the paused G0004 and in the running G0001 (her son's ancestors).
         const b = await follow(page, { waiting: [GROWING_PAUSED], people: { P0002: ['G0001'] } });

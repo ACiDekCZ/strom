@@ -28,7 +28,9 @@ import { el, LiveSession, researchSession } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { TreeManager } from '../tree-manager.js';
 import type { ToastWorkEnd } from './toast.js';
-import { runBusy } from './busy.js';
+import { activatedElement, announceBusy, holdAfterShift, monoNow, runBusy, shiftHeld } from './busy.js';
+import { RowNote, RowRefusal, WAITING_ROWS_SCOPE, WaitingRowNotes } from './waiting-row-notes.js';
+import { overviewInWindow } from '../windows/overview-window.js';
 
 const NOTE_ID = 'waiting-note-modal';
 /** "All queries' text": how long its reading may take (§1.5, §10.3). */
@@ -41,6 +43,46 @@ interface WriteState {
     pending: Map<string, WaitingPending>;
     /** Places whose "Sent" runs. */
     groups: Set<string>;
+    /** What each row says of its own write: "saving", or refused with its sentence (§7). */
+    notes: WaitingRowNotes;
+    /** The redraw when a refused row's tint ends. */
+    tintTimer: ReturnType<typeof setTimeout> | null;
+    /** The rows as last shown (ids, phases, findings), and when a write here last moved them. */
+    shownSig: string;
+    ownMoveAt: number;
+}
+
+/** The rows' order and look in short: a new status that changes it moves them. */
+function shownSignature(items: readonly LiveWaiting[]): string {
+    return items.map(w => `${w.id}:${waitingPhase(w)}:${w.audit ? 'a' : ''}`).join('|');
+}
+
+
+/** The row of an item in the docked overview (null: not drawn here). */
+function overviewRowEl(id: string): HTMLElement | null {
+    return document.querySelector<HTMLElement>(`#research-overview .research-overview__waiting-item[data-id="${CSS.escape(id)}"]`);
+}
+
+/** A row is seen: drawn in the docked overview, or the overview's own window draws it. */
+function rowSeen(id: string): boolean {
+    if (overviewInWindow()) return true;
+    const li = overviewRowEl(id);
+    return !!li && li.getClientRects().length > 0;
+}
+
+/** The focus is in an item's row (its detail, or its ⋯ menu), or the click now started there (its button may have blurred, disabled). */
+function focusInRow(id: string): boolean {
+    const act = activatedElement();
+    if (act && (overviewRowEl(id)?.contains(act) || act.closest(`#waiting-more-menu[data-id="${CSS.escape(id)}"]`))) return true;
+    const a = document.activeElement;
+    if (!a || a === document.body) return false;
+    if (overviewRowEl(id)?.contains(a)) return true;
+    return !!a.closest(`#waiting-more-menu[data-id="${CSS.escape(id)}"]`);
+}
+
+/** A refusal another try may mend (the research busy, locked, held or not answering; not one it will never take). */
+function retryHelps(r: WaitingWriteRefused): boolean {
+    return r.code !== 'not-sendable' && r.code !== 'app-only' && r.code !== 'bad-body' && r.code !== 'none';
 }
 
 const states = new WeakMap<LiveSession, WriteState>();
@@ -48,7 +90,7 @@ const states = new WeakMap<LiveSession, WriteState>();
 function writeState(s: LiveSession): WriteState {
     let st = states.get(s);
     if (!st) {
-        st = { raw: [...s.waiting], pending: new Map(), groups: new Set() };
+        st = { raw: [...s.waiting], pending: new Map(), groups: new Set(), notes: new WaitingRowNotes(), tintTimer: null, shownSig: '', ownMoveAt: -Infinity };
         states.set(s, st);
     }
     return st;
@@ -125,13 +167,109 @@ export const researchWaitingWriteMethods = uiModule({
         const st = writeState(s);
         st.raw = [...raw];
         settleWaitingPending(st.pending, raw);
-        return applyWaitingPending(raw, st.pending);
+        // A refusal's sentence goes once its item is gone or the research says it elsewhere now.
+        st.notes.settle(raw.map(w => ({ id: w.id, phase: waitingPhase(w) })));
+        const shown = applyWaitingPending(raw, st.pending);
+        // The research's answer to a write made here moves the rows again: their actions held a moment (109 U4).
+        const sig = shownSignature(shown);
+        if (sig !== st.shownSig && monoNow() - st.ownMoveAt < WAITING_SETTLE_MS) holdAfterShift(WAITING_ROWS_SCOPE);
+        st.shownSig = sig;
+        return shown;
+    },
+
+    /**
+     * A write made here moved Awaiting action's rows (a row went, opened its preview or changed its place): their
+     * actions take no click for a moment, so a second click meant for the row before does not land on the next
+     * one (109 U4); the research's answer to it, when it moves them again, holds them once more.
+     */
+    waitingRowsMoved(s: LiveSession | null = researchSession()): void {
+        holdAfterShift(WAITING_ROWS_SCOPE);
+        if (s) writeState(s).ownMoveAt = monoNow();
+    },
+
+    /** What an item's row says of its own write (§7): "saving", or refused (the overview's own window: as its main window has it). */
+    waitingRowNote(s: LiveSession, id: string): RowNote | null {
+        return states.get(s)?.notes.state(id) ?? null;
+    },
+
+    /** An action in a refused row: its tint ends (true: it had one). */
+    touchWaitingRow(s: LiveSession, id: string): boolean {
+        return states.get(s)?.notes.touch(id) ?? false;
+    },
+
+    /** "Try again" in a refused row: the same write once more. */
+    retryWaitingRow(s: LiveSession, id: string): boolean {
+        const retry = states.get(s)?.notes.state(id);
+        if (retry?.kind !== 'refused' || !retry.refusal.retry) return false;
+        retry.refusal.retry();
+        return true;
+    },
+
+    /** The rows' own states for the overview's own window. */
+    waitingRowsWindowState(s: LiveSession | null): ReturnType<WaitingRowNotes['snapshot']> {
+        return s ? states.get(s)?.notes.snapshot() ?? { saving: [], refused: [] } : { saving: [], refused: [] };
+    },
+
+    /** A write of these rows starts (§7): "saving" at their ends, said once; the list's actions held a moment (the rows moved). */
+    startWaitingRows(s: LiveSession, ids: readonly string[]): void {
+        writeState(s).notes.start(ids);
+        this.waitingRowsMoved(s);
+        announceBusy(strings.busy.savingRow);
+    },
+
+    /**
+     * A write of these rows ended: confirmed, the state just goes; refused (`refusal`), the rows are back, tinted
+     * with the sentence in the first (`quiet`: the end is said elsewhere, a toast's Undo). Call before the rows are
+     * drawn again (settleWaitingWrite).
+     */
+    endWaitingRows(s: LiveSession, ids: readonly string[], refusal: Omit<RowRefusal, 'at' | 'untinted' | 'said'> | null): void {
+        const st = writeState(s);
+        if (!refusal) {
+            st.notes.confirm(ids);
+            return;
+        }
+        st.notes.refuse(ids.slice(0, 1), refusal);
+        if (ids.length > 1) st.notes.refuse(ids.slice(1), { phase: refusal.phase, text: '' });
+        this.waitingRowsMoved(s);
+        // The tint ends after 10 s: drawn again then.
+        if (st.tintTimer) clearTimeout(st.tintTimer);
+        const next = st.notes.nextTintEnd();
+        if (next !== null) {
+            st.tintTimer = setTimeout(() => {
+                st.tintTimer = null;
+                if (stillFollowing(s)) this.renderLivePanel();
+            }, Math.max(0, next - Date.now()) + 20);
+        }
+    },
+
+    /**
+     * A refusal drawn in its row: the focus on its sentence when it was in the row (`fromRow`); a row not seen
+     * (the overview closed, its section folded) says it by the toast as before.
+     */
+    sayWaitingRowRefused(id: string, result: WaitingWriteRefused, fromRow: boolean): void {
+        if (!rowSeen(id)) {
+            this.showWaitingRefused(result);
+            return;
+        }
+        if (!fromRow) return;
+        // The row is drawn anew (now or on the next frames): the focus goes to its sentence unless it went elsewhere.
+        let tries = 0;
+        const put = (): void => {
+            const a = document.activeElement;
+            const li = overviewRowEl(id);
+            if (a && a !== document.body && !li?.contains(a)) return;
+            const note = li?.querySelector<HTMLElement>('.research-overview__waiting-note');
+            if (note) note.focus({ preventScroll: true });
+            else if (++tries < 5) requestAnimationFrame(put);
+        };
+        put();
     },
 
     /** Show the list again after a move (the menu's count, the panel, the overview). */
     reshowLiveWaiting(s: LiveSession): void {
         const st = writeState(s);
         s.waiting = applyWaitingPending(st.raw, st.pending);
+        st.shownSig = shownSignature(s.waiting);
         this.refreshActionMenuBadges();
         this.renderLivePanel();
     },
@@ -178,7 +316,11 @@ export const researchWaitingWriteMethods = uiModule({
         return result.ok;
     },
 
-    /** "Sent" at an item: written through the bridge, the row in "Awaiting a reply" at once; "Undo" for a few seconds. */
+    /**
+     * "Sent" at an item: written through the bridge, the row in "Awaiting a reply" at once, saying "saving" at its
+     * end until the research confirms (§7); "Undo" for a few seconds. Refused: the row back, its sentence and
+     * "Try again" in it (a toast only when the row is not seen).
+     */
     async markWaitingSent(s: LiveSession, w: LiveWaiting): Promise<void> {
         const task = researchTaskRef(w.id);
         if (!task || !this.liveWaitingWrites(s).sent) return;
@@ -186,8 +328,11 @@ export const researchWaitingWriteMethods = uiModule({
         // A second click while it is written sends nothing more.
         if (st.pending.get(w.id)?.until === Infinity) return;
         const back = new Map([[w.id, st.pending.get(w.id)]]);
+        const was = waitingPhase(st.raw.find(x => x.id === w.id) ?? w);
+        const fromRow = focusInRow(w.id);
         const now = Date.now();
         st.pending.set(w.id, { phase: 'sent', sentAt: new Date(now).toISOString(), until: Infinity });
+        this.startWaitingRows(s, [w.id]);
         this.reshowLiveWaiting(s);
         const before = await this.waitingHeadBeforeWrite(s);
         const result = await postWaitingSent(s.bridge.base, task, 'sent');
@@ -195,6 +340,8 @@ export const researchWaitingWriteMethods = uiModule({
         // The answer says where the task is now (already sent: `sent: []`, phase sent): the row follows it.
         const phase = waitingWrittenPhase(result, task, 'sent');
         if (phase !== 'sent') st.pending.set(w.id, { phase, until: Infinity });
+        const refused = !result.ok && result.code !== 'none' ? result : null;
+        this.endWaitingRows(s, [w.id], refused ? this.waitingRowRefusal(refused, was, () => { void this.markWaitingSent(s, w); }) : null);
         const ok = this.settleWaitingWrite(s, [w.id], phase, result, back);
         if (!stillFollowing(s)) return;
         const W = strings.live.waitingWrite;
@@ -205,14 +352,24 @@ export const researchWaitingWriteMethods = uiModule({
                 action: { label: W.undo, run: () => this.markWaitingUnsent(s, w.id, { inToast: true }),
                     work: { label: strings.busy.reverting, ...(w.what ? { sub: w.what } : {}) } },
             });
-        } else if (!result.ok && result.code !== 'none') {
-            this.showWaitingRefused(result);
+        } else if (refused) {
+            this.sayWaitingRowRefused(w.id, refused, fromRow);
         }
     },
 
+    /** A refusal as its row says it: the research's sentence, "Try again" where another try may mend it, the seal's way. */
+    waitingRowRefusal(result: WaitingWriteRefused, phase: WaitingPhase, retry: () => void): Omit<RowRefusal, 'at' | 'untinted' | 'said'> {
+        const seal = result.held ? this.researchSealAction(result.held)[0] : undefined;
+        return {
+            text: refusedText(result), phase,
+            ...(retryHelps(result) ? { retry } : {}),
+            ...(seal ? { alt: { label: seal.label, run: () => this.researchSyncAction(seal.action), ...researchMarkFlags(this.researchSyncActionMark(seal.action)) } } : {}),
+        };
+    },
+
     /**
-     * Back to To do ("Undo" after Sent, or at a sent item). `inToast`: the toast's Undo (4d), its end given back
-     * to the toast instead of a toast of its own.
+     * Back to To do ("Undo" after Sent, or at a sent item), the row saying "saving" until confirmed. `inToast`:
+     * the toast's Undo (4d), its end given back to the toast instead of a sentence or a toast of its own.
      */
     async markWaitingUnsent(s: LiveSession, id: string, opts: { inToast?: boolean } = {}): Promise<ToastWorkEnd | undefined> {
         const task = researchTaskRef(id);
@@ -220,26 +377,33 @@ export const researchWaitingWriteMethods = uiModule({
         const st = writeState(s);
         if (st.pending.get(id)?.until === Infinity) return undefined;
         const back = new Map([[id, st.pending.get(id)]]);
+        const raw = st.raw.find(x => x.id === id);
+        const was: WaitingPhase = raw ? waitingPhase(raw) : 'sent';
+        const fromRow = focusInRow(id);
         st.pending.set(id, { phase: 'todo', until: Infinity });
+        this.startWaitingRows(s, [id]);
         this.reshowLiveWaiting(s);
         const before = await this.waitingHeadBeforeWrite(s);
         const result = await postWaitingSent(s.bridge.base, task, 'unsent');
         this.takeWaitingWriteHead(s, before, result);
         const phase = waitingWrittenPhase(result, task, 'todo');
         if (phase !== 'todo') st.pending.set(id, { phase, until: Infinity });
+        const refused = !result.ok && result.code !== 'none' ? result : null;
+        this.endWaitingRows(s, [id], refused && !opts.inToast
+            ? this.waitingRowRefusal(refused, was, () => { void this.markWaitingUnsent(s, id); }) : null);
         const ok = this.settleWaitingWrite(s, [id], phase, result, back);
         if (!stillFollowing(s)) return undefined;
         if (ok && phase === 'todo') {
             if (opts.inToast) return { ok: true, text: strings.live.waitingWrite.unsentToast };
             this.showToast(strings.live.waitingWrite.unsentToast, 3000, { kind: 'waiting-unsent' });
-        } else if (!result.ok && result.code !== 'none') {
-            if (opts.inToast) return { ok: false, text: refusedText(result), whole: true };
-            this.showWaitingRefused(result);
+        } else if (refused) {
+            if (opts.inToast) return { ok: false, text: refusedText(refused), whole: true };
+            this.sayWaitingRowRefused(id, refused, fromRow);
         }
         return undefined;
     },
 
-    /** "Sent" for a whole place: its items to do that offer it move at once; the research writes the place. */
+    /** "Sent" for a whole place: its items to do that offer it move at once, saying "saving"; the research writes the place. */
     async markWaitingGroupSent(s: LiveSession, key: string): Promise<void> {
         if (!this.liveWaitingWrites(s).sent) return;
         const st = writeState(s);
@@ -248,9 +412,11 @@ export const researchWaitingWriteMethods = uiModule({
         if (items.length === 0) return;
         const ids = items.map(w => w.id);
         const back = new Map(ids.map(id => [id, st.pending.get(id)]));
+        const fromRow = ids.some(focusInRow) || !!document.activeElement?.closest('.research-overview__waiting-groupwrite');
         const now = Date.now();
         for (const id of ids) st.pending.set(id, { phase: 'sent', sentAt: new Date(now).toISOString(), until: Infinity });
         st.groups.add(key);
+        this.startWaitingRows(s, ids);
         this.reshowLiveWaiting(s);
         let result: WaitingSentResult;
         try {
@@ -260,6 +426,8 @@ export const researchWaitingWriteMethods = uiModule({
         } finally {
             st.groups.delete(key);
         }
+        const refused = !result.ok && result.code !== 'none' ? result : null;
+        this.endWaitingRows(s, ids, refused ? this.waitingRowRefusal(refused, 'todo', () => { void this.markWaitingGroupSent(s, key); }) : null);
         const ok = this.settleWaitingWrite(s, ids, 'sent', result, back, true);
         if (!stillFollowing(s)) return;
         const W = strings.live.waitingWrite;
@@ -272,15 +440,15 @@ export const researchWaitingWriteMethods = uiModule({
                 ...(marked.length > 0 ? { action: { label: W.undo, run: () => this.markWaitingGroupUnsent(s, key, marked),
                     work: { label: strings.busy.reverting, ...(items[0]?.group?.name ? { sub: items[0].group.name } : {}) } } } : {}),
             });
-        } else if (!result.ok && result.code !== 'none') {
-            this.showWaitingRefused(result);
+        } else if (refused) {
+            this.sayWaitingRowRefused(ids[0], refused, fromRow);
         }
     },
 
     /**
      * "Undo" after a place's Sent: exactly the tasks that Sent marked (its
      * answer's list) go back to do through the bridge; their rows move at
-     * once, and the answer's `unsent` says which really went back. Its end is the toast's (4d).
+     * once saying "saving", and the answer's `unsent` says which really went back. Its end is the toast's (4d).
      */
     async markWaitingGroupUnsent(s: LiveSession, key: string, marked: readonly string[]): Promise<ToastWorkEnd | undefined> {
         if (!this.liveWaitingWrites(s).sent) return undefined;
@@ -293,6 +461,7 @@ export const researchWaitingWriteMethods = uiModule({
         const back = new Map(ids.map(id => [id, st.pending.get(id)]));
         for (const id of ids) st.pending.set(id, { phase: 'todo', until: Infinity });
         st.groups.add(key);
+        this.startWaitingRows(s, ids);
         this.reshowLiveWaiting(s);
         let result: WaitingSentResult;
         try {
@@ -302,6 +471,7 @@ export const researchWaitingWriteMethods = uiModule({
         } finally {
             st.groups.delete(key);
         }
+        this.endWaitingRows(s, ids, null);
         const ok = this.settleWaitingWrite(s, ids, 'todo', result, back, 'exact');
         if (!stillFollowing(s)) return undefined;
         if (ok) return { ok: true, text: strings.live.waitingWrite.unsentToast };
@@ -544,7 +714,8 @@ export const researchWaitingWriteMethods = uiModule({
         btn.dataset.write = 'bridge';
         btn.onclick = (e) => {
             e.stopPropagation();
-            if (btn.disabled) return;
+            // Rows moved under the pointer a moment ago: the click was meant for the row before (drobnost 109 U4).
+            if (btn.disabled || shiftHeld(WAITING_ROWS_SCOPE, e)) return;
             btn.disabled = true;
             run();
         };

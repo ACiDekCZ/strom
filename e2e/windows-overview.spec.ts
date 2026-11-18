@@ -38,19 +38,21 @@ const GED = [
 interface Bridge {
     waiting: Record<string, unknown>[];
     writes: { path: string; body: Record<string, unknown> }[];
+    /** The research refuses the writes (423 locked). */
+    refuse?: boolean;
 }
 
 const DESKTOP = { width: 1440, height: 900 };
 
 /** The main window follows a research whose bridge answers (routed for every page of the context). */
-async function follow(page: Page): Promise<Bridge> {
+async function follow(page: Page, opts: { features?: string[]; waiting?: Record<string, unknown>[] } = {}): Promise<Bridge> {
     await page.setViewportSize(DESKTOP);
     await page.context().addInitScript((links) => {
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
     }, LINKS);
     const at = new Date(Date.now() - 3 * 86_400_000).toISOString();
     const bridge: Bridge = {
-        waiting: [
+        waiting: opts.waiting ?? [
             { id: 'T0001', what: 'Ověřit datum sňatku v oddací matrice', kind: 'web', section: 'web', at, order: 0, person: 'P0001',
               group: { key: 'host:farnost.example', name: 'farnost.example', kind: 'web' }, url: 'https://farnost.example/matriky', actions: ['answer'] },
         ],
@@ -59,7 +61,7 @@ async function follow(page: Page): Promise<Bridge> {
     const status = () => ({
         tree: { id: UUID, name: 'Březinovi' }, head: 'h1', persons: 2, links: LINKS, queue: [],
         working: [{ who: 'agent-matriky', since: new Date(Date.now() - 12 * 60_000).toISOString(), task: 'Sčítání 1910', person: 'P0002' }],
-        waiting: bridge.waiting, features: ['waiting.groups', 'waiting.answer'],
+        waiting: bridge.waiting, features: opts.features ?? ['waiting.groups', 'waiting.answer'],
     });
     const json = (s: number, body: unknown) => ({ status: s, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
     // On the context: a window that asked the bridge would be answered (and seen by the test).
@@ -77,6 +79,7 @@ async function follow(page: Page): Promise<Bridge> {
         const write = /\/waiting\/(T\d+)$/.exec(path);
         if (write && req.method() === 'POST') {
             bridge.writes.push({ path: write[1], body: JSON.parse(req.postData() || '{}') as Record<string, unknown> });
+            if (bridge.refuse) return route.fulfill(json(423, { error: 'locked', code: 'locked' }));
             const i = bridge.waiting.findIndex(w => w.id === write[1]);
             if (i >= 0) bridge.waiting.splice(i, 1);
             return route.fulfill(json(200, { task: write[1], head: '' }));
@@ -217,6 +220,34 @@ test.describe('the Research overview in a window of its own', () => {
         await expect(mainOverview(page)).toBeVisible();
         await expect(mainOverview(page).locator('.research-overview__head > .live-dot')).toHaveCount(1);
         await expect(mainOverview(page).locator('.research-overview__window')).toBeVisible();
+    });
+
+    test('Sent in the window, refused: the row back in the window with its sentence and Try again (no toast in the main window); Try again is written by the main window', async ({ page }) => {
+        const at = new Date(Date.now() - 2 * 86_400_000).toISOString();
+        const bridge = await follow(page, {
+            features: ['waiting.groups', 'waiting.sent'],
+            waiting: [{ id: 'T0005', what: 'Napsat matrice o zápis křtu', kind: 'letter', section: 'letter', at, order: 0,
+                group: { key: 'to:MěÚ Vzorov', name: 'MěÚ Vzorov', kind: 'office' }, actions: ['sent'] }],
+        });
+        bridge.refuse = true;
+        const popup = await openFromMenu(page);
+        const ov = popup.locator('#research-overview');
+        const group = ov.locator('.research-overview__waiting-group[aria-expanded="false"]');
+        while (await group.count() > 0) await group.first().click();
+        const item = ov.locator('.research-overview__waiting-item[data-id="T0005"]');
+        await item.locator('.research-overview__waiting-row').click();
+        await item.locator('.research-overview__waiting-action[data-action="sent"]').click();
+        await expect.poll(() => bridge.writes.length).toBe(1);
+        const note = item.locator('.research-overview__waiting-note');
+        await expect(note).toContainText('Not recorded: another session holds the tree in the research.');
+        await expect(note).toHaveAttribute('role', 'alert');
+        await expect(item).toHaveClass(/is-refused/);
+        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
+        bridge.refuse = false;
+        await note.locator('[data-action="write-retry"]').click();
+        await expect.poll(() => bridge.writes.map(w => [w.path, w.body.do])).toEqual([['T0005', 'sent'], ['T0005', 'sent']]);
+        await expect(note).toHaveCount(0);
+        await popup.close();
     });
 
     test('from the ⧉ menu: one column at 900; Stop ends following in the main window and the window shows the research without following', async ({ page }) => {

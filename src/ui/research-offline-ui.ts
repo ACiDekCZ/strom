@@ -13,6 +13,7 @@
 
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
+import { runBusy } from './busy.js';
 import { Person } from '../types.js';
 import {
     LiveDirection, LiveOffLine, LiveQueueItem, LiveWaiting, LiveWorker, OFF_LINE_BRANCHES_FEATURE, OFF_LINE_MODES, OffLineBranch, OffLineMode, QUEUE_NEXT_FEATURE,
@@ -45,6 +46,8 @@ interface Problem { text: string; tone: 'warn' | 'danger'; retry?: () => void }
 const branchProblems = new Map<string, Problem>();
 /** Branches with a write on its way. */
 const branchBusy = new Set<string>();
+/** Growing branches of Awaiting action whose answer is on its way, and which (A32). */
+const branchAnswering = new Map<string, BranchWaitingDo>();
 /** The queue shows one branch's tasks (the bridge it was chosen at). */
 let queueBranch: { base: string; id: string } | null = null;
 /** The branch added to a direction whose tasks are unfolded in the direction's detail. */
@@ -1371,23 +1374,29 @@ export const researchOffLineMethods = uiModule({
         }
         const pick = growingBranchLine(s, w, b);
         const box = el('div', 'research-offline__wait-actions');
-        const busy = branchBusy.has(w.id);
-        const add = (label: string, cls: string, what: string, run: () => void): void => {
+        // An answer on its way (A32): its button works ("Saving…", the state kept over a redraw), the others wait, dimmed.
+        const answering = branchAnswering.get(w.id);
+        const add = (label: string, cls: string, what: string, run: (btn: HTMLElement) => void): void => {
             const btn = el('button', `live-waiting-answer research-overview__waiting-action ${cls}`, label);
             btn.type = 'button';
             btn.dataset.do = what;
+            btn.dataset.action = `branch-${what}`;
             if (held) holdForBridge(btn, L.waitBranchDown);
-            else if (busy) btn.setAttribute('aria-disabled', 'true');
-            else btn.onclick = run;
+            else if (answering && answering !== what) btn.setAttribute('aria-disabled', 'true');
+            else btn.onclick = () => run(btn);
             box.appendChild(btn);
+        };
+        // The bridge's own limit (30 s, then the row's box says it) ends the state: none of its own.
+        const answer = (btn: HTMLElement, what: BranchWaitingDo, line?: string): void => {
+            void runBusy(btn, () => this.answerGrowingBranch(w, what, line), { label: strings.busy.saving, timeoutMs: Infinity });
         };
         if (pick) {
             const { line, paused } = pick;
-            add(paused ? L.branchAddPaused(line.name) : L.branchAdd(line.name), 'is-primary', 'line', () => void this.answerGrowingBranch(w, 'line', line.id));
+            add(paused ? L.branchAddPaused(line.name) : L.branchAdd(line.name), 'is-primary', 'line', (btn) => answer(btn, 'line', line.id));
         }
         if (b) add(L.dirCreate, '', 'create', () => this.createDirectionFromBranch(b, null, w));
-        add(L.waitBranchLeave, '', 'keep', () => void this.answerGrowingBranch(w, 'keep'));
-        add(L.branchNever, '', 'never', () => void this.answerGrowingBranch(w, 'never'));
+        add(L.waitBranchLeave, '', 'keep', (btn) => answer(btn, 'keep'));
+        add(L.branchNever, '', 'never', (btn) => answer(btn, 'never'));
         host.appendChild(box);
         if (held) host.appendChild(el('p', 'research-overview__muted research-offline__held', L.waitBranchDown));
         const problem = branchProblems.get(w.id);
@@ -1399,15 +1408,20 @@ export const researchOffLineMethods = uiModule({
     /** Answer a growing branch through the bridge: the item leaves at once, a toast with Undo (the branch's choice before). */
     async answerGrowingBranch(w: LiveWaiting, what: BranchWaitingDo, line?: string): Promise<boolean> {
         const s = liveSession();
-        if (!s || s.ended || branchBusy.has(w.id)) return false;
+        if (!s || s.ended || branchAnswering.has(w.id)) return false;
         const L = strings.live;
         const before = s.offLine?.branches.find(x => x.id === w.branch);
-        branchBusy.add(w.id);
+        branchAnswering.set(w.id, what);
         branchProblems.delete(w.id);
         this.renderResearchOverview();
-        const head = await this.waitingHeadBeforeWrite(s);
-        const r = await withBusyRetry(() => answerBranchWaiting(s.bridge.base, w.id, what, line));
-        branchBusy.delete(w.id);
+        let r: Awaited<ReturnType<typeof answerBranchWaiting>>;
+        let head: string;
+        try {
+            head = await this.waitingHeadBeforeWrite(s);
+            r = await withBusyRetry(() => answerBranchWaiting(s.bridge.base, w.id, what, line));
+        } finally {
+            branchAnswering.delete(w.id);
+        }
         if (liveSession() !== s || s.ended) return false;
         if (!r.ok) {
             // Answered elsewhere meanwhile: the item just goes.

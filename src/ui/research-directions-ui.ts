@@ -27,6 +27,7 @@ import {
 } from '../research-directions.js';
 import { DirectionStateDo, DirectionWriteRefused, directionRetryHelps, setDirectionState, writeDirectionOrder } from '../research-directions-write.js';
 import { undoInToast } from './toast.js';
+import { announceBusy, busyStatusEl } from './busy.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
@@ -831,14 +832,7 @@ export const researchDirectionsMethods = uiModule({
             row.appendChild(el('span', 'research-direction__handle is-none'));
         }
 
-        const num = el('span', 'research-direction__num', String(n));
-        if (orderSaving && pendingOrder?.moved === d.id) {
-            const spin = el('span', 'research-direction__spin');
-            spin.setAttribute('aria-hidden', 'true');
-            num.appendChild(spin);
-            num.setAttribute('aria-busy', 'true');
-        }
-        row.appendChild(num);
+        row.appendChild(el('span', 'research-direction__num', String(n)));
 
         const icon = el('span', 'research-direction__icon', d.direction ? KIND_GLYPH[d.direction] : '');
         icon.setAttribute('aria-hidden', 'true');
@@ -873,6 +867,10 @@ export const researchDirectionsMethods = uiModule({
         row.appendChild(main);
 
         const side = el('div', 'research-direction__side');
+        // The moved row while its new order is written (§7, A20): "saving" with the small spinner at its end.
+        if (orderSaving && pendingOrder?.moved === d.id) {
+            side.appendChild(busyStatusEl(strings.busy.savingRow));
+        }
         if (view.ordered && !view.phoneOnly) {
             const order = shownOrder(s);
             const at = order.indexOf(d.id);
@@ -1334,6 +1332,7 @@ export const researchDirectionsMethods = uiModule({
         const base = s.bridge.base;
         const writer = new DirectionOrderWriter(async (order) => {
             orderSaving = true;
+            announceBusy(strings.busy.savingRow);
             this.redrawDirections();
             const head = await this.waitingHeadBeforeWrite(s);
             const r = await withBusyRetry(() => writeDirectionOrder(base, order));

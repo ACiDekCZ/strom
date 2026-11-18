@@ -92,6 +92,8 @@ export interface OverviewExtras {
     offLineSettings?: boolean;
     /** "Work on the queue…" starting (waiting buttons 3a, 3b) as the main window has it; absent or null: none. */
     queueStart?: { phase: 'starting' | 'silent'; startedAt: number } | null;
+    /** Rows of "Awaiting action" whose own write is confirmed now ("saving") or was refused (§7); absent: none. */
+    waitingWrite?: { saving: string[]; refused: { id: string; text: string; tint: boolean; retry: boolean }[] } | null;
 }
 
 /** The tree's verification as the overview's "Verifying" block draws it. */
@@ -335,6 +337,8 @@ export type OverviewAction =
     | { action: 'waiting-unsent'; args: { itemId: string } }
     /** Mark a whole place's items sent. */
     | { action: 'waiting-group-sent'; args: { group: string } }
+    /** "Try again" in a row whose write was refused (§7). */
+    | { action: 'waiting-retry'; args: { itemId: string } }
     /**
      * A task's finding (spec 109 §2, §4): Leave as is, or its Undo (the main window writes it and says it with
      * Undo); the fix's preview read (answered: WaitingAuditPreviewResult); the fix written with the preview's
@@ -371,7 +375,7 @@ export const OVERVIEW_ACTION_IDS = [
     'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings', 'books-settings',
     'hover-person', 'verify-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
-    'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-file', 'waiting-audit',
+    'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-retry', 'waiting-file', 'waiting-audit',
     'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
     'queue-list', 'queue-order',
 ] as const satisfies readonly OverviewActionId[];
@@ -485,6 +489,7 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
             return str(a.itemId) && typeof a.text === 'string' ? { action, args: { itemId: a.itemId, text: a.text } } : null;
         case 'waiting-sent':
         case 'waiting-unsent':
+        case 'waiting-retry':
         case 'answer-task':
             return str(a.itemId) ? { action, args: { itemId: a.itemId } } as OverviewAction : null;
         case 'waiting-group-sent':

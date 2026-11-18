@@ -2594,21 +2594,88 @@ test.describe('Awaiting action written through the bridge', () => {
         expect(bridge.writes).toHaveLength(0);
     });
 
-    test('a refused or unanswered write puts the row back and says so', async ({ page }) => {
+    for (const vp of [{ name: 'desktop', width: 1440, height: 900 }, { name: 'phone', width: 390, height: 844 }]) {
+        test(`Sent at an item (${vp.name}): the row says "saving" where it went until the research confirms, then nothing; no dimming`, async ({ page }) => {
+            const bridge = await follow(page, vp, writable(['waiting.sent']));
+            if (vp.width > 640) await openOverview(page);
+            else {
+                await page.locator('#live-panel .live-panel-toggle').click();
+                await expect(page.locator('#research-overview')).toHaveClass(/research-overview--sheet/);
+            }
+            const ov = page.locator('#research-overview');
+            await sentHead(page).click();
+            await placeHead(page, 'sent', 'MěÚ Vzorov').locator('.research-overview__waiting-group').click();
+            const letter = await openLetter(page);
+            let letGo!: () => void;
+            const gate = new Promise<void>(r => { letGo = r; });
+            const sentRoute = (u: URL) => u.pathname.endsWith('/waiting/T0018');
+            await page.route(sentRoute, async route => { await gate; await route.fallback(); });
+            await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+            // Moved at once (optimistic), carrying "saving" at its end; the row keeps its full look.
+            const moved = ov.locator('.research-overview__phase[data-phase="sent"] .research-overview__waiting-item[data-id="T0018"]');
+            await expect(moved.locator('.busy-st')).toHaveText('saving');
+            await expect(moved.locator('.busy-st .busy-spin')).toBeVisible();
+            await expect(moved).toHaveCSS('opacity', '1');
+            await expect(page.locator('#busy-announce')).toHaveText('saving');
+            expect((await moved.locator('.busy-st').boundingBox())!.width).toBeGreaterThan(0);
+            letGo();
+            // Confirmed: the state goes, no ✓, the row stays where it went.
+            await expect(page.locator('.toast[data-kind="waiting-sent"]')).toBeVisible();
+            await expect(moved.locator('.busy-st')).toHaveCount(0);
+            await expect(moved).not.toContainText('✓');
+            await expect(moved).not.toHaveClass(/is-refused/);
+            expect(bridge.writes.map(w => w.path)).toEqual(['waiting/T0018']);
+            await page.unroute(sentRoute);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        });
+
+        test(`a refused Sent (${vp.name}): the row back, tinted, its sentence (role=alert) and Try again in it, the focus on it; no toast`, async ({ page }) => {
+            const bridge = await follow(page, vp, writable(['waiting.sent']));
+            bridge.refuse = { status: 423, code: 'locked' };
+            if (vp.width > 640) await openOverview(page);
+            else await page.locator('#live-panel .live-panel-toggle').click();
+            const letter = await openLetter(page);
+            await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+            const back = page.locator('#research-overview .research-overview__phase[data-phase="todo"] .research-overview__waiting-item[data-id="T0018"]');
+            const note = back.locator('.research-overview__waiting-note');
+            await expect(note).toContainText('Not recorded: another session holds the tree in the research.');
+            await expect(note).toHaveAttribute('role', 'alert');
+            await expect(back).toHaveClass(/is-refused/);
+            await expect(todoHead(page)).toHaveText(/To do · 30/);
+            await expect(note).toBeFocused();
+            await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
+            // The research did not answer: the same row says that instead.
+            bridge.refuse = 'abort';
+            await back.locator('.research-overview__waiting-action[data-action="sent"]').click();
+            await expect(note).toContainText('Not recorded: the research did not answer.');
+            await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
+            // Try again writes once more; taken now, the row goes, its sentence with it.
+            const writes = bridge.writes.length;
+            delete bridge.refuse;
+            await note.locator('[data-action="write-retry"]').click();
+            await expect(back).toHaveCount(0);
+            await expect(todoHead(page)).toHaveText(/To do · 29/);
+            await expect.poll(() => bridge.writes.slice(writes).map(w => w.body)).toEqual(['{"do":"sent"}']);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        });
+    }
+
+    test('a refused write of a row not seen (its section folded) says so by a toast as before', async ({ page }) => {
         const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
         bridge.refuse = { status: 423, code: 'locked' };
-        await openOverview(page);
-        let letter = await openLetter(page);
-        await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+        const ov = await openOverview(page);
+        const letter = await openLetter(page);
+        const sent = letter.locator('.research-overview__waiting-action[data-action="sent"]');
+        // Folded meanwhile (the place's head): the row back is not seen.
+        await sent.evaluate((b: HTMLButtonElement) => {
+            b.click();
+            const heads = [...document.querySelectorAll<HTMLElement>('#research-overview .research-overview__phase[data-phase="todo"] .research-overview__waiting-grouphead')];
+            heads.find(h => h.querySelector('.research-overview__group-title')?.textContent === 'MěÚ Vzorov')!.querySelector<HTMLElement>('.research-overview__waiting-group')!.click();
+        });
         await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveText('Not recorded: another session holds the tree in the research.');
         await expect(todoHead(page)).toHaveText(/To do · 30/);
-        await expect(letter).toBeVisible();
-        bridge.refuse = 'abort';
-        letter = page.locator('#research-overview .research-overview__waiting-item', { hasText: 'Napsat matrice o zápis 1' });
-        await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
-        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveText('Not recorded: the research did not answer.');
-        await expect(todoHead(page)).toHaveText(/To do · 30/);
-        expect(bridge.writes).toHaveLength(2);
+        await expect(ov.locator('.research-overview__waiting-note')).toHaveCount(0);
+        expect(bridge.writes).toHaveLength(1);
     });
 
     test('phone: the sheet writes through the bridge (Sent, a file, the queries\' text), no way into the research', async ({ page }) => {

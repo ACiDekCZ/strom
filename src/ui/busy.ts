@@ -350,6 +350,7 @@ export function trackActivations(): void {
     };
     document.addEventListener('click', note, true);
     document.addEventListener('keydown', note, true);
+    watchPointer();
 }
 
 /** The element the current click or key started (null: none, or another task). */
@@ -791,4 +792,69 @@ export function setBusyLabel(el: HTMLElement, label: string): void {
 /** Whether a reduced-motion screen shows the three dots (the stylesheet draws them; for the tests). */
 export function busyReducedMotion(): boolean {
     return reducedMotion();
+}
+
+// ==================== A ROW'S OWN STATE (§7) ====================
+
+/**
+ * The quiet state at a row's end while an optimistic write is confirmed (§7, 6.1): the 12 px spinner and the
+ * words ("saving"). Not a live region: a row drawn anew draws it again, so it is said once by `announceBusy`.
+ */
+export function busyStatusEl(text: string): HTMLElement {
+    const st = document.createElement('span');
+    st.className = 'busy-st';
+    st.append(spinEl(12), document.createTextNode(text));
+    return st;
+}
+
+// ==================== A LAYOUT THAT MOVED UNDER THE POINTER ====================
+
+/** How long the actions of a list whose rows just moved take no activation (a click meant for the row before). */
+export const SHIFT_HOLD_MS = 400;
+const shiftHolds = new Map<string, number>();
+
+/** A clock that only goes forward (a page's fixed date, a changed system clock do not stop or turn it). */
+export function monoNow(): number {
+    return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+/** Where the pointer was when a list last moved, and whether it moved on since (aimed anew). */
+let shiftPointer: { x: number; y: number; moved: boolean } | null = null;
+let lastPointer: { x: number; y: number } | null = null;
+let pointerWatch = false;
+
+function watchPointer(): void {
+    if (pointerWatch || typeof document === 'undefined') return;
+    pointerWatch = true;
+    document.addEventListener('pointermove', (e) => {
+        lastPointer = { x: e.clientX, y: e.clientY };
+        // Where it was is not known (no pointer seen before): any move aims anew.
+        if (shiftPointer && !shiftPointer.moved && !(Math.hypot(e.clientX - shiftPointer.x, e.clientY - shiftPointer.y) <= 6)) shiftPointer.moved = true;
+    }, { capture: true, passive: true });
+    document.addEventListener('pointerdown', (e) => { lastPointer = { x: e.clientX, y: e.clientY }; }, { capture: true, passive: true });
+}
+
+/**
+ * The rows of `scope` moved (a row went or changed its place): their actions take no click for a moment, so a
+ * second click meant for the row before does not land on the one that took its place. A pointer aimed anew
+ * (moved since) and a key (the focus does not move with the rows) are not held.
+ */
+export function holdAfterShift(scope: string, ms = SHIFT_HOLD_MS): void {
+    watchPointer();
+    shiftHolds.set(scope, Math.max(shiftHolds.get(scope) ?? 0, monoNow() + ms));
+    shiftPointer = { x: lastPointer?.x ?? NaN, y: lastPointer?.y ?? NaN, moved: false };
+}
+
+/** Whether this activation (`e`) of an action of `scope` is held after a shift of its rows. */
+export function shiftHeld(scope: string, e?: Event): boolean {
+    const until = shiftHolds.get(scope);
+    if (until === undefined) return false;
+    if (monoNow() >= until) {
+        shiftHolds.delete(scope);
+        return false;
+    }
+    // A key's activation (a trusted click with no pointer press): the focus stayed where it was put.
+    if (e?.type === 'click' && e.isTrusted && (e as MouseEvent).detail === 0) return false;
+    if (shiftPointer?.moved) return false;
+    return true;
 }
