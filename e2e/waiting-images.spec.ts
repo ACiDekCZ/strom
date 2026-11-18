@@ -395,6 +395,8 @@ test.describe('a task that does not know how many images it wants (K044)', () =>
         await files.nth(2).locator('.waiting-upload__num').press('Tab');
         await expect(files.nth(2).locator('.waiting-upload__msg.is-warn')).toHaveText('Image 30 is on another file too.');
         await expect(dialog.locator('.waiting-upload__send')).toHaveAttribute('aria-disabled', 'true');
+        // The summary says why it waits: the number is another file's, not missing.
+        await expect(dialog.locator('.waiting-upload__warn')).toHaveText('1 file has the number of another file.');
         // Emptied: the next free again.
         await files.nth(2).locator('.waiting-upload__num').fill('');
         await files.nth(2).locator('.waiting-upload__num').press('Tab');
@@ -427,6 +429,48 @@ test.describe('a task that does not know how many images it wants (K044)', () =>
         await again.locator('.waiting-upload__retry').click();
         await expect(area).toHaveCount(0);
         expect(bridge.puts.map(p => p.image)).toEqual([null, '7']);
+    });
+
+    test('a number refused as not wanted without the numbers wanted: a sentence says so above the field', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            unknownCount(b, 12);
+            b.replies.push({ status: 409, body: { error: 'unwanted', code: 'waiting.image-unwanted', want: [] } });
+        });
+        await openOverview(page);
+        const item = await openItem(page, 'T0004');
+        await item.locator('.research-overview__deliver-steps [data-action="images"]').click();
+        const area = item.locator('.waiting-upload');
+        await area.locator('.waiting-upload__input').setInputFiles([jpeg('skan.jpg')]);
+        await area.locator('.waiting-upload__send').click();
+        const file = area.locator('.waiting-upload__file');
+        await expect(file.locator('.waiting-upload__msg.is-warn')).toHaveText('The research does not take this image number.');
+        await expect(file.locator('.waiting-upload__again .waiting-upload__num')).toBeVisible();
+    });
+});
+
+test.describe('Polish at a tablet\'s width (K044)', () => {
+    test.use({ locale: 'pl-PL' });
+    test('the typed number\'s field is as wide as its placeholder: "— wybierz numer —" is not cut', async ({ page }) => {
+        await follow(page, { width: 1024, height: 800 }, (b) => {
+            unknownCount(b, undefined);
+            b.replies.push({ status: 409, body: { error: 'unknown', code: 'waiting.image-unknown', missing: [] } });
+        });
+        await openOverview(page);
+        const item = await openItem(page, 'T0004');
+        await item.locator('.research-overview__deliver-steps [data-action="images"]').click();
+        const area = item.locator('.waiting-upload');
+        await area.locator('.waiting-upload__input').setInputFiles([jpeg('skan.jpg')]);
+        await area.locator('.waiting-upload__send').click();
+        const field = area.locator('.waiting-upload__again .waiting-upload__num');
+        await expect(field).toHaveAttribute('placeholder', '— wybierz numer —');
+        const fit = await field.evaluate((el: HTMLInputElement) => {
+            const cs = getComputedStyle(el);
+            const ctx = document.createElement('canvas').getContext('2d')!;
+            ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+            const inner = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+            return { inner, text: ctx.measureText(el.placeholder).width };
+        });
+        expect(fit.inner).toBeGreaterThanOrEqual(fit.text);
     });
 });
 

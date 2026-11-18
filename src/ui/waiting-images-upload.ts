@@ -466,7 +466,10 @@ export class WaitingImagesUpload {
         foot.appendChild(send);
         foot.appendChild(this.button('waiting-action waiting-action--link waiting-upload__cancel', T.cancel, 'cancel', () => this.close()));
         if (a.needAssign > 0 || a.needDecide > 0) {
-            const warn = node('span', 'waiting-upload__warn', a.needAssign > 0 ? T.needAssign(a.needAssign) : T.needDecide(a.needDecide));
+            // A number another file has too is no missing number (K044): said as such.
+            const twice = a.files.filter(x => !x.problem && x.twice !== undefined).length;
+            const bare = a.needAssign - twice;
+            const warn = node('span', 'waiting-upload__warn', bare > 0 ? T.needAssign(bare) : twice > 0 ? T.needTwice(twice) : T.needDecide(a.needDecide));
             warn.id = `${this.opts.idPrefix}-warn`;
             send.setAttribute('aria-describedby', warn.id);
             foot.appendChild(warn);
@@ -607,7 +610,7 @@ export class WaitingImagesUpload {
                 const nums = f.state === 'unwanted' ? f.want ?? [] : f.missing ?? [];
                 // No numbers to choose from (a task that knows none): never an empty list — the name gives none, a number is typed.
                 if (nums.length === 0) {
-                    if (f.state === 'unknown') li.appendChild(this.message(T.nameNoNumber, 'warn'));
+                    li.appendChild(this.message(f.state === 'unknown' ? T.nameNoNumber : T.numNotTaken, 'warn'));
                     li.appendChild(this.renumberFree(f));
                     break;
                 }
@@ -703,6 +706,8 @@ export class WaitingImagesUpload {
         field.maxLength = String(MAX_IMAGE_NUMBER).length;
         field.dataset.fk = fk;
         field.placeholder = placeholder;
+        // Wide enough for its placeholder (K044: "— wybierz numer —" was cut).
+        field.style.setProperty('--ph-len', String([...placeholder].length));
         field.value = value !== null ? String(value) : '';
         field.setAttribute('aria-label', `${f.file.name}: ${T.numLabel}`);
         field.onchange = () => {

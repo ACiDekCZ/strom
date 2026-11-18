@@ -23046,8 +23046,8 @@
             font: inherit; font-size: 13px;
         }
         .waiting-upload__num.is-missing { border: 1.5px solid var(--warn-text); }
-        /* K044: a number typed at a task that does not know how many images it wants (the placeholder may be cut). */
-        .waiting-upload__num--free { width: 10em; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+        /* K044: a number typed at a task that does not know how many images it wants; as wide as its placeholder (--ph-len), the row's width at most. */
+        .waiting-upload__num--free { width: max(10em, calc(var(--ph-len, 0) * 1ch + 4ch)); text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
         .waiting-upload__num:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .waiting-upload__how { font-size: 11.5px; color: var(--text-faint); }
         .waiting-upload__fixed { font-size: 12.5px; color: var(--text-light); white-space: nowrap; }
