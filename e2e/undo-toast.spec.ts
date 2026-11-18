@@ -97,8 +97,12 @@ test.describe('one toast at a time, the undo pill a message as the others', () =
     const hasHaldewin = (page: Page) => page.evaluate(() =>
         window.Strom.DataManager.getAllPersons().some((p: { firstName: string }) => p.firstName === 'Haldewin'));
 
-    /** Jan in the tree, his father Haldewin deleted: the undo pill for the deletion stands. */
+    /**
+     * Jan in the tree, his father Haldewin deleted: the undo pill for the deletion stands.
+     * The page runs on Playwright's clock: the pill's 3 s to be read and its 6 s pass by `runFor`.
+     */
     async function deleteWithPill(page: Page): Promise<void> {
+        await page.clock.install();
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Zwolbrack');
         await page.evaluate(() => {
@@ -136,6 +140,7 @@ test.describe('one toast at a time, the undo pill a message as the others', () =
             const pill = page.locator('body > .undo-toast.show');
             const pillBottom = await settledBottom(page, 'body > .undo-toast.show');
             await page.evaluate(() => window.Strom.UI.showToast('Copied', 10000));
+            await page.clock.runFor(3000); // the pill stands its 3 s to be read, then the message comes
             const message = page.locator('body > .toast');
             await expect(message).toContainText('Copied');
             const undo = message.getByRole('button', { name: 'Undo' });
@@ -155,9 +160,12 @@ test.describe('one toast at a time, the undo pill a message as the others', () =
     test('"Undo" leaves the message when the pill\'s time runs out; the message runs its own time', async ({ page }) => {
         await deleteWithPill(page);
         await page.evaluate(() => window.Strom.UI.showToast('Copied', 10000));
+        await page.clock.runFor(3000); // the pill stands its 3 s to be read, then the message comes
         const message = page.locator('body > .toast');
         await expect(message.locator('.undo-toast-btn')).toHaveCount(1);
-        await expect(message.locator('.undo-toast-btn')).toHaveCount(0, { timeout: 7000 });
+        // The pill's 6 s run out on the page's clock
+        await page.clock.runFor(6000);
+        await expect(message.locator('.undo-toast-btn')).toHaveCount(0);
         await expect(message).toBeVisible();
         await expect(message).toHaveText('Copied');
         await expect(page.locator('body > .undo-toast.show')).toHaveCount(0);
@@ -167,7 +175,9 @@ test.describe('one toast at a time, the undo pill a message as the others', () =
     test('a message gone before the pill\'s time gives the pill back with "Undo"', async ({ page }) => {
         await deleteWithPill(page);
         await page.evaluate(() => window.Strom.UI.showToast('Copied', 800));
+        await page.clock.runFor(3000); // the pill stands its 3 s to be read, then the message comes
         await expect(page.locator('body > .toast .undo-toast-btn')).toHaveCount(1);
+        await page.clock.runFor(1000); // the message's 800 ms
         const pill = page.locator('body > .undo-toast.show');
         await expect(pill).toBeVisible({ timeout: 3000 });
         await expect(page.locator('body > .toast')).toHaveCount(0);
@@ -180,13 +190,16 @@ test.describe('one toast at a time, the undo pill a message as the others', () =
     test('a pointer on the message carrying "Undo" holds the pill\'s time', async ({ page }) => {
         await deleteWithPill(page);
         await page.evaluate(() => window.Strom.UI.showToast('Copied', 20000));
+        await page.clock.runFor(3000); // the pill stands its 3 s to be read, then the message comes
         const message = page.locator('body > .toast');
         await expect(message.locator('.undo-toast-btn')).toHaveCount(1);
         await message.hover();
-        await page.waitForTimeout(7000);
+        // Longer than the pill's 6 s on the page's clock: held while the pointer is on it
+        await page.clock.runFor(7000);
         await expect(message.locator('.undo-toast-btn')).toHaveCount(1);
         await page.mouse.move(8, 300);
-        await expect(message.locator('.undo-toast-btn')).toHaveCount(0, { timeout: 7000 });
+        await page.clock.runFor(6000);
+        await expect(message.locator('.undo-toast-btn')).toHaveCount(0);
     });
 
     test('390: the undo pill coming while a message stands shows in the message\'s place; gone, the message comes back', async ({ page }) => {
@@ -221,6 +234,7 @@ test.describe('a toast to be read stands 3 s at least', () => {
     const now = (page: Page) => page.evaluate(() => performance.now());
 
     test('the undo pill coming 1 s after a message with an action waits until that message has stood 3 s, then stands its own 6 s', async ({ page }) => {
+        await page.clock.install();
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Zwolbrack');
         await page.locator('#tree-container').click({ position: { x: 5, y: 5 } });
@@ -229,13 +243,14 @@ test.describe('a toast to be read stands 3 s at least', () => {
         const t0 = await now(page);
         await page.evaluate(() => window.Strom.UI.showToast('Older copy of the tree', 8000, { action: { label: 'Open', run: () => {} } }));
         await expect(page.locator('body > .toast.show')).toBeVisible();
-        await page.waitForTimeout(1000);
+        await page.clock.runFor(1000);
         await page.evaluate(() => window.Strom.UI.showUndoToast('adding Wolfbrecht'));
         // Not yet: the message with its action stands, the pill is not there
-        await page.waitForTimeout(1200);
+        await page.clock.runFor(1200);
         await expect(page.locator('body > .undo-toast')).toHaveCount(0);
         await expect(page.locator('body > .toast')).toContainText('Older copy of the tree');
         // Its 3 s over: the pill shows in its place, the message waits under it
+        await page.clock.runFor(900);
         const pill = page.locator('body > .undo-toast.show');
         await expect(pill).toBeVisible({ timeout: 2000 });
         const shownAfter = await since(page, t0);
@@ -243,18 +258,20 @@ test.describe('a toast to be read stands 3 s at least', () => {
         expect(shownAfter).toBeLessThan(4200);
         await expect(pill.locator('.undo-toast-btn')).toBeVisible();
         // Its own full time: still there 5 s after it came
-        await page.waitForTimeout(5000);
+        await page.clock.runFor(5000);
         await expect(page.locator('body > .undo-toast.show')).toHaveCount(1);
     });
 
     test('a message without an action coming 1 s after a notice waits for the notice\'s 3 s; one after a plain message replaces it at once', async ({ page }) => {
+        await page.clock.install();
         await openApp(page);
         const t0 = await now(page);
         await page.evaluate(() => window.Strom.UI.showToast('This is an older copy of the tree', 8000, { notice: true }));
-        await page.waitForTimeout(1000);
+        await page.clock.runFor(1000);
         await page.evaluate(() => window.Strom.UI.showToast('Copied', 8000));
-        await page.waitForTimeout(1200);
+        await page.clock.runFor(1200);
         await expect(page.locator('body > .toast')).toHaveText('This is an older copy of the tree');
+        await page.clock.runFor(900);
         await expect(page.locator('body > .toast')).toHaveText('Copied', { timeout: 2000 });
         expect(await since(page, t0)).toBeGreaterThanOrEqual(2900);
         await expect(page.locator('body > .toast')).toHaveCount(1);
@@ -283,6 +300,7 @@ test.describe('a toast to be read stands 3 s at least', () => {
 });
 
 test('a change of the UI language closes the undo pill and the "Undone: …" message said in the old one', async ({ page }) => {
+    await page.clock.install();
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     const pill = page.locator('body > .undo-toast');
@@ -301,6 +319,6 @@ test('a change of the UI language closes the undo pill and the "Undone: …" mes
     await page.evaluate(() => window.Strom.UI.showUndoToast('adding Wolfbrecht'));
     await expect(pill).toBeVisible();
     await page.evaluate(() => window.Strom.UI.setLanguage('en' as never));
-    await page.waitForTimeout(400);
+    await page.clock.runFor(400);
     await expect(pill).toBeVisible();
 });
