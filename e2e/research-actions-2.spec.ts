@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, openPersonSubmenu, AFTER_HAND_OVER, openTreeActions } from './helpers.js';
+import { openApp, card, openPersonSubmenu, openTreeActions, closeHandedOver } from './helpers.js';
 import { acceptLoad } from './research-bridge.js';
 
 /**
@@ -582,14 +582,10 @@ test.describe('Start research with this tree (G3)', () => {
         await expect(dialog).toHaveCount(0);
         const [url] = await launched(page);
         expect(url).toMatch(TOKEN_RE);
-        await expect(page.locator('.toast .toast-spinner')).toBeVisible();
-        await expect(page.locator('.toast')).toContainText('Waiting for the research… Finish setting up in the terminal.');
+        // The link's state where it was started (the dialog gone: a toast); the waiting after it: research-adopt-busy.spec.ts.
+        await expect(page.locator('.toast--progress')).toContainText('Opening the research…');
         const stored = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchAdoptToken?.token);
         expect(stored).toBe(url.match(TOKEN_RE)![1]);
-        // Closing the toast keeps the token.
-        await page.locator('.toast-close').click();
-        await expect(page.locator('.toast')).toHaveCount(0);
-        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchAdoptToken?.token)).toBe(stored);
     });
 
     /** The research's next version of the adopted tree: its own numbers, no images. */
@@ -654,7 +650,7 @@ test.describe('Start research with this tree (G3)', () => {
         await expect(dialog.locator('.research-send-dialog-note')).toHaveText('A backup is saved before handing over.');
         await expect(dialog.locator('#research-adopt-images')).toHaveCount(0);
         await dialog.locator('#research-adopt-confirm').click();
-        await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.', AFTER_HAND_OVER);
+        await closeHandedOver(page);
         expect(calls.posted[0]).toContain('1 NAME Karel /Dvořák/');
         // As the dialog said: a backup before handing over.
         const reasons = await page.evaluate(() => new Promise<string[]>((resolve, reject) => {
@@ -691,7 +687,7 @@ test.describe('Start research with this tree (G3)', () => {
         await routeBridge(page, token, calls, { ged: adoptedGed() });
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
         await page.locator('#research-adopt-confirm').click();
-        await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.', AFTER_HAND_OVER);
+        await closeHandedOver(page);
         // The research never got the images.
         expect(calls.posted[0]).not.toContain('AAAA');
         return { img, att };
@@ -713,7 +709,7 @@ test.describe('Start research with this tree (G3)', () => {
         const box = page.locator('#research-adopt-modal #research-adopt-images');
         await expect(box).toBeChecked();
         await page.locator('#research-adopt-confirm').click();
-        await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.', AFTER_HAND_OVER);
+        await closeHandedOver(page);
         expect(calls.posted[0]).toContain('AAAA');
     });
 
@@ -978,7 +974,6 @@ test.describe('Start research with this tree (G3)', () => {
         await tree.locator('#actions-tree-researchAdopt-row').click();
         await expect.poll(async () => (await launched(page))[0]).toMatch(TOKEN_RE);
         // The tree manager's row menu offers it too.
-        await page.locator('.toast-close').click();
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
         const row = page.locator('.tree-manager-item').first();
         await row.locator('.tree-row-menu-btn').click();

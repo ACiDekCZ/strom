@@ -156,6 +156,18 @@ export async function asWindowlessTab(page: Page): Promise<void> {
  */
 export const AFTER_HAND_OVER = { timeout: 4_000 + 5_000 };
 
+/**
+ * The hand-over ended linked in its dialog (A175: the dialog stays with its steps): the sentence there,
+ * every step done, then the dialog closed (its Close).
+ */
+export async function closeHandedOver(page: Page, opts: { timeout?: number } = AFTER_HAND_OVER): Promise<void> {
+    const dialog = page.locator('#research-adopt-modal');
+    await expect(dialog.locator('.research-adopt-end')).toHaveText('The tree is linked with the research.', opts);
+    await expect(dialog.locator('ul.steps > li.done')).toHaveCount(4);
+    await dialog.locator('#research-adopt-close').click();
+    await expect(dialog).toHaveCount(0);
+}
+
 /** The visible person modal (add/edit). */
 export function personModal(page: Page): Locator {
     return page.locator('#person-modal');

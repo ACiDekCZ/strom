@@ -216,6 +216,12 @@ export interface LongOpts {
     show?: () => void;
     /** §2.6: the words of the lock on edits. */
     lockEdits?: string;
+    /** When the action started (its time counts from then; default: the toast's start). */
+    startedAt?: number;
+    /** Cancel's own words ("Stop waiting", §2.4). */
+    cancelLabel?: string;
+    /** One more action beside Cancel / Show (e.g. "Not installed? Install…"). */
+    more?: { label: string; run: () => void };
 }
 
 /** A step of a long action: its words, "k of n", a size; `percent` draws a known bar (null: a bar of unknown share). */
@@ -237,7 +243,7 @@ export interface ProgressToastHandle {
     /** Done: a summary with ✓ for 4 s (`role=status`); without a summary it just goes. */
     done(summary?: string): void;
     /** It failed: the words as an alert (a title over them), ✕ and the actions; it does not go by itself. */
-    fail(text: string, action?: { label: string; run: () => void }, extra?: { title?: string; more?: { label: string; run: () => void } }): void;
+    fail(text: string, action?: { label: string; run: () => void }, extra?: { title?: string; more?: { label: string; run: () => void }; neutral?: boolean }): void;
     /** It goes now. */
     close(): void;
 }
@@ -264,7 +270,7 @@ export function progressSubLine(st: ProgressStep, elapsedMs: number): string {
 /** The progress toast of a long action (§2.1): on the screen at once, until it is done, failed or closed. */
 export function showProgressToast(opts: LongOpts, first: ProgressStep = {}): ProgressToastHandle {
     watchToasts();
-    const started = Date.now();
+    const started = opts.startedAt ?? Date.now();
     let step: ProgressStep = { ...first };
     let title = opts.title;
     let ended = false;
@@ -301,12 +307,13 @@ export function showProgressToast(opts: LongOpts, first: ProgressStep = {}): Pro
         b.onclick = run;
         return b;
     };
-    const cancelBtn = opts.cancel ? button(strings.buttons.cancel, () => opts.cancel?.()) : null;
+    const cancelBtn = opts.cancel ? button(opts.cancelLabel ?? strings.buttons.cancel, () => opts.cancel?.()) : null;
     if (cancelBtn) {
         cancelBtn.dataset.act = 'cancel';
         actions.appendChild(cancelBtn);
     }
     if (opts.show) actions.appendChild(button(strings.busy.show, () => opts.show?.()));
+    if (opts.more) actions.appendChild(button(opts.more.label, () => opts.more?.run()));
 
     const draw = (): void => {
         if (ended) return;
@@ -368,7 +375,8 @@ export function showProgressToast(opts: LongOpts, first: ProgressStep = {}): Pro
         fail(text, action, extra) {
             if (ended && !toast.isConnected) return;
             finish();
-            fillToast(toast, text, { alert: true, closable: true, kind: 'progress', ...(action ? { action } : {}),
+            // A neutral end (a question, not an error) is said politely, without the error's alert.
+            fillToast(toast, text, { alert: !extra?.neutral, closable: true, kind: 'progress', ...(action ? { action } : {}),
                 ...(extra?.title ? { title: extra.title } : {}), ...(extra?.more ? { more: extra.more } : {}) });
         },
         close() {

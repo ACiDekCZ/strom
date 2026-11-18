@@ -99,7 +99,8 @@ import {
     storedResearchBridge,
 } from '../research-device.js';
 import { rememberBridgeStatus, researchSendMode, researchStatusNow, researchMediaFirstAgain, researchBridgeDownNow } from './research-sync-ui.js';
-import { openResearchBusy, withHandoff } from './research-open-busy.js';
+import { openResearchBusy, withHandoff, type OpenBusyResult } from './research-open-busy.js';
+import { endResearchAdoptWait } from './research-adopt-ui.js';
 import { countGedcomPersons, readBodyWithProgress, type TreeDownloadWatch, type TreeLoadRun } from './tree-load-progress.js';
 import type { ProgressToastHandle } from './toast.js';
 import { holdLeave } from './busy-leave.js';
@@ -2913,13 +2914,14 @@ export const researchUiMethods = uiModule({
      * "Opening the research…" until the research proves it took the link, or a sentence after the limit
      * (waiting buttons §3.1, src/ui/research-open-busy.ts). A new version from the research waits as before.
      */
-    launchResearchLink(url: string, kind: ResearchLinkKind = 'terminal', el?: HTMLElement | null, opts: { timeoutMs?: number; rowOf?: Element } = {}): void {
+    launchResearchLink(url: string, kind: ResearchLinkKind = 'terminal', el?: HTMLElement | null,
+        opts: { timeoutMs?: number; rowOf?: Element; quietLimit?: boolean; signal?: AbortSignal } = {}): Promise<OpenBusyResult> {
         if (kind === 'version') {
             this.handOverResearchLink(url);
             this.awaitResearchVersion();
-            return;
+            return Promise.resolve('opened');
         }
-        void openResearchBusy(el ?? null, url, { agent: kind === 'agent', ...opts }, {
+        return openResearchBusy(el ?? null, url, { agent: kind === 'agent', ...opts }, {
             handOver: (link, handoff) => this.handOverResearchLink(link, handoff),
             ask: (id) => this.askResearchBridge(id, OPEN_ASK_TIMEOUT_MS),
             statusNow: (id) => researchStatusNow(id),
@@ -2935,7 +2937,7 @@ export const researchUiMethods = uiModule({
             versionChannel.onmessage = () => {
                 this.settleResearchVersion();
                 // The research came back for the tree in another tab: stop waiting here.
-                document.querySelector('.toast[data-kind="adopt"]')?.remove();
+                endResearchAdoptWait();
             };
             if (arrivedHere) versionChannel.postMessage('arrived');
         } catch { /* no channel: the wait just ends on its own */ }

@@ -3,6 +3,7 @@
  */
 
 import type { StringsType } from '../strings.js';
+import { plPl } from './helpers.js';
 
 export const plPart10: Pick<StringsType, 'busy'> = {
     busy: {
@@ -72,5 +73,19 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         editsWaitShort: 'zmiany poczekają na wczytanie',
         mb: (x: string) => `${x} MB`,
         sizeOf: (a: string, b: string) => `${a} z ${b}`,
+        adoptHeading: 'Przekazać drzewo badaniu',
+        adoptLead: (name: string) => `Drzewo „${name}” przechodzi do Strom Research.`,
+        adoptPeople: (n: number, shown: string) => `${shown} ${plPl(n, 'osoba', 'osoby', 'osób')}`,
+        adoptLongNote: 'Duże drzewo z obrazami może potrwać do 2 minut.',
+        adoptLinked: 'Drzewo jest połączone z badaniem.',
+        adoptUnchanged: 'Drzewo w aplikacji pozostało bez zmian; kopia zapasowa jest zapisana.',
+        adoptUnchangedPlain: 'Drzewo w aplikacji pozostało bez zmian.',
+        adoptNotTaken: 'Badanie nie przejęło drzewa.',
+        adoptRefused: (why: string) => `Badanie nie przejęło drzewa: ${why}.`,
+        adoptFailedTitle: 'Drzewo nie zostało przekazane.',
+        adoptWaiting: 'Oczekiwanie na badanie…',
+        adoptWaitingSub: 'Zakładanie kończy się w terminalu.',
+        stopWaiting: 'Przerwij oczekiwanie',
+        adoptWaitEnd: 'Badanie przejmie drzewo, gdy zostanie założone w terminalu.',
     },
 };

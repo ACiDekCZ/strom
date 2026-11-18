@@ -42,6 +42,13 @@ export interface OpenBusyOpts {
      * asks its main window): the element shows the state a moment, the main window says the rest.
      */
     relayed?: boolean;
+    /**
+     * A link the research cannot prove (`new?app=`: no research yet): its limit ends quietly, the caller says what
+     * follows (waiting for the research to come back for the tree, with its own limit and sentence).
+     */
+    quietLimit?: boolean;
+    /** The wait ends quietly now (the research came back meanwhile). */
+    signal?: AbortSignal;
 }
 
 /** How long a relayed link's element shows its state. */
@@ -118,6 +125,17 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
     });
 }
 
+/** One signal for either (the limit's, the caller's). */
+function eitherSignal(a: AbortSignal, b?: AbortSignal): AbortSignal {
+    if (!b) return a;
+    const ac = new AbortController();
+    const stop = (): void => ac.abort();
+    if (a.aborted || b.aborted) stop();
+    a.addEventListener('abort', stop);
+    b.addEventListener('abort', stop);
+    return ac.signal;
+}
+
 /** Without an element (an automatic action, the element gone before): a stand-in, its state in a toast. */
 function standIn(): HTMLElement {
     return document.createElement('span');
@@ -174,12 +192,15 @@ export async function openResearchBusy(el: HTMLElement | null, link: string, opt
                 return;
             }
             const until = Date.now() + limit;
-            while (canProve && Date.now() < until && !ctl.signal.aborted) {
-                await sleep(Math.min(OPEN_ASK_MS, Math.max(0, until - Date.now())), ctl.signal);
-                if (Date.now() >= until || ctl.signal.aborted) break;
+            const signal = eitherSignal(ctl.signal, opts.signal);
+            while (canProve && Date.now() < until && !signal.aborted) {
+                await sleep(Math.min(OPEN_ASK_MS, Math.max(0, until - Date.now())), signal);
+                if (Date.now() >= until || signal.aborted) break;
                 if (proven(await deps.ask(researchId!))) { result = 'opened'; return; }
             }
-            if (!canProve) await sleep(Math.max(0, until - Date.now()), ctl.signal);
+            if (!canProve) await sleep(Math.max(0, until - Date.now()), signal);
+            // Stopped by the caller, or a quiet limit: no sentence (the caller says what follows).
+            if (opts.signal?.aborted || opts.quietLimit && !canProve) return;
             ctl.end({ ok: false, kind: 'timeout', neutral: true, text: sentence.text, hint: sentence.hint, retry });
         }, { label, kind: 'terminal', timeoutMs: limit + 5000, rowOf: opts.rowOf, toastWhenGone: true });
     } finally {

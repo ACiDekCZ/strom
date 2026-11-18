@@ -20998,6 +20998,26 @@
             .modal-overlay:has(> .research-send-dialog) { align-items: flex-end; }
             .modal.research-send-dialog { border-radius: var(--r-lg) var(--r-lg) 0 0; max-height: 94vh; max-height: 94dvh; }
         }
+        /* The hand-over in progress (2a–2c, 2i): its steps in the dialog – done ✓, running spinner, to come ·, failed !. */
+        .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.4; color: var(--text); }
+        .steps li { display: flex; gap: 10px; align-items: center; min-width: 0; }
+        .steps .g { width: 16px; display: inline-flex; justify-content: center; color: var(--text-faint); flex: none; }
+        .steps li.done { color: var(--text-light); }
+        .steps li.todo { color: var(--text-faint); }
+        .steps li.fail, .steps li.fail .g { color: var(--error-text); }
+        .steps .steps-label { min-width: 0; overflow-wrap: anywhere; }
+        .steps .meta { margin-left: auto; padding-left: 8px; flex: none; white-space: nowrap; font-size: 12.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .research-adopt-lead { margin: 0 0 12px; font-size: 14px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+        .research-adopt-steps .busy-msg { margin-top: 12px; font-size: 13px; }
+        .modal .buttons .research-adopt-wait-note { margin-right: auto; min-width: 0; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        @media (max-width: 640px) {
+            /* A bottom sheet with the steps and "Continue in the background" only (2i). */
+            .research-adopt-running .research-adopt-lead, .research-adopt-running .research-adopt-wait-note { display: none; }
+        }
+        @media (pointer: coarse) {
+            .research-adopt-running .buttons > button { min-height: 44px; }
+            .research-adopt-modal.research-adopt-running .research-send-dialog-foot > button { height: auto; }
+        }
         .research-changes-skip { display: flex; flex: 1 1 140px; align-items: center; gap: 6px; font-size: 12px; color: var(--text-light); margin-right: auto; }
         .research-transcripts.research-send-mode.research-mode-ask-cards { margin: 0; padding: 0; border: 0; }
         .research-adopt-send > legend { font-weight: 600; font-size: 15px; margin-bottom: 6px; }

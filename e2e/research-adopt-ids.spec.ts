@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, AFTER_HAND_OVER } from './helpers.js';
+import { openApp, closeHandedOver } from './helpers.js';
 
 /**
  * After "Start research with this tree": the copy in the app must name the
@@ -132,7 +132,7 @@ async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Pa
         await expect.poll(() => b.gedAsks).toBeGreaterThan(0);
         await expect.poll(async () => { await page.clock.fastForward(1000); return b.gedAsks; }).toBe(ADOPT_TRIES);
     }
-    await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.', AFTER_HAND_OVER);
+    await closeHandedOver(page);
     // Sending by hand goes at once in these tests ("What will be sent" first: research-auto-send.spec.ts).
     await page.evaluate(() => {
         const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
@@ -208,8 +208,9 @@ test.describe('the research\'s numbers after a hand-over', () => {
         expect(b.gedAsks).toBeGreaterThan(0);
         await expect.poll(() => refns(page)).toEqual(['1:P0001', '2:P0002', '3:P0003']);
         // The research opens its tree in the app too (?import-url=): nothing changes.
+        const asked = b.gedAsks;
         await page.evaluate((u) => window.Strom.UI.openExternalRequest(new URLSearchParams({ 'import-url': u })), `${BRIDGE}/tree.ged`);
-        await expect(page.locator('.toast')).toContainText('Test Win4');
+        await expect.poll(() => b.gedAsks).toBeGreaterThan(asked);
         expect(await refns(page)).toEqual(['1:P0001', '2:P0002', '3:P0003']);
         // The loads are no edits of the user's: nothing counted as waiting (finding 31).
         const auto = await page.evaluate(() => JSON.parse(localStorage.getItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`) ?? '{}'));
@@ -367,7 +368,7 @@ test.describe('a tree from older data, handed over by hand', () => {
         await routeBridge(page, url.match(TOKEN_RE)![1], { ids: true, treeGed: version });
         await page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: base })), BRIDGE);
         await page.locator('#research-adopt-confirm').click();
-        await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.', AFTER_HAND_OVER);
+        await closeHandedOver(page);
         await page.evaluate(() => window.Strom.UI.pollResearchBridge());
         await page.clock.fastForward(1500);
         const state = await page.evaluate(() => window.Strom.UI.currentResearchSyncState());
@@ -409,7 +410,7 @@ test.describe('"married, the spouse unknown" through a hand-over', () => {
         const bridge = await routeBridge(page, url.match(TOKEN_RE)![1], { ids: true, treeGed: version });
         await page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: base })), BRIDGE);
         await page.locator('#research-adopt-confirm').click();
-        await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.', AFTER_HAND_OVER);
+        await closeHandedOver(page);
         // What went over says it: the known spouse's family with the wedding, no nameless person.
         expect(bridge.adopted[0]).toMatch(/0 @F1@ FAM\n1 HUSB @I1@\n1 MARR\n/);
         expect(bridge.adopted[0]).not.toContain('1 NAME //');

@@ -28,7 +28,7 @@ import type { UIClass } from './index.js';
 import { el, setOverviewWindowDrawn, type LiveSession, type OverviewViewing } from './research-ui.js';
 import { applyDirectionsWindowState, setQueueDirectionFilter } from './research-directions-ui.js';
 import { setOverviewOwnWindow } from './research-overview-ui.js';
-import { openResearchBusy } from './research-open-busy.js';
+import { openResearchBusy, type OpenBusyResult } from './research-open-busy.js';
 import type { ResearchLinkKind } from './research-ui.js';
 import { auditRefusalOf, auditResearchUnavailable, setWaitingAuditState } from './waiting-task-ui.js';
 import { asAuditPreview } from '../research-audit.js';
@@ -356,9 +356,9 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             port.send('research-link', { link: l.link, params: l.params, ...(l.link === 'work' ? { kind: 'agent' } : {}) });
         },
         /** A link from here: the element's state a moment; the main window hands it over and waits for its proof. */
-        launchResearchLink(this: UIClass, url: string, kind: ResearchLinkKind = 'terminal', el?: HTMLElement | null): void {
-            if (kind === 'version') { this.handOverResearchLink(url); return; }
-            void openResearchBusy(el ?? null, url, { agent: kind === 'agent', relayed: true }, {
+        launchResearchLink(this: UIClass, url: string, kind: ResearchLinkKind = 'terminal', el?: HTMLElement | null): Promise<OpenBusyResult> {
+            if (kind === 'version') { this.handOverResearchLink(url); return Promise.resolve('opened'); }
+            return openResearchBusy(el ?? null, url, { agent: kind === 'agent', relayed: true }, {
                 handOver: (link) => this.handOverResearchLink(link),
                 ask: async () => null,
                 statusNow: () => null,
