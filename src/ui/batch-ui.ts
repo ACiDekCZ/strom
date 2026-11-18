@@ -487,7 +487,7 @@ export const batchMethods = uiModule({
             </details>` : '';
         return `
                 <div class="modal-content batch-content batch-progress${r.paused ? ' is-paused' : ''}">
-                    <div class="batch-progress-title">${r.paused ? '' : '<span class="research-sync-spinner" aria-hidden="true"></span>'}${esc(r.paused ? b.paused : b.progressTitle)}</div>
+                    <div class="batch-progress-title">${r.paused ? '' : '<i class="busy-spin s12" aria-hidden="true"></i>'}${esc(r.paused ? b.paused : b.progressTitle)}</div>
                     <div class="batch-progress-sub">${esc(b.progressSub(r.name, research))}</div>
                     <div class="batch-progress-count" role="status"><strong>${esc(b.progressCount(done, r.total))}</strong>
                         <span>${esc(b.progressBytes(formatBytesShort(r.doneBytes), formatBytesShort(r.totalBytes)))}</span></div>

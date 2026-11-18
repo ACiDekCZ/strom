@@ -207,7 +207,7 @@ function folderIcon(): SVGSVGElement {
 
 /** A small spinner (still with reduced motion). */
 function spinner(): HTMLElement {
-    const spin = el('span', 'waiting-audit__spin');
+    const spin = el('i', 'busy-spin');
     spin.setAttribute('aria-hidden', 'true');
     return spin;
 }

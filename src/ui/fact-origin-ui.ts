@@ -351,7 +351,7 @@ export const factOriginMethods = uiModule({
             const described = was ? ` aria-describedby="${noteId}"` : '';
             if (view.choices === 'buttons') {
                 return `<button type="button" class="${cls}" data-decide="${which}" data-focus="choice-${which}"${busy ? ' aria-busy="true" aria-disabled="true"' : ''}${off ? ' disabled' : ''}${described}>${busy
-                    ? `<span class="prc-spinner" aria-hidden="true"></span>${esc(k.busy)}` : esc(label)}</button>`;
+                    ? `<i class="busy-spin" aria-hidden="true"></i>${esc(k.busy)}` : esc(label)}</button>`;
             }
             return `<button type="button" class="${cls}" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${described}>${researchActionLabel(label, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>`;
         };

@@ -300,7 +300,7 @@ test.describe('The setting "Task from a new reading"', () => {
         await expect(rowOf('always')).toHaveAttribute('data-pend', '1');
         await expect(rowOf('always').locator('.busy-st')).toHaveText('Saving…');
         await expect(input('never')).toHaveAttribute('aria-disabled', 'true');
-        await expect(page.locator('#research-readtask .read-task-spin')).toHaveCount(0);
+        await expect(page.locator('#research-readtask .research-readtask-note .busy-spin')).toHaveCount(0);
         answer();
         await expect(page.locator('#research-readtask-note')).toHaveText(/The research confirmed\./);
         await expect(rowOf('always')).not.toHaveAttribute('data-pend', '1');

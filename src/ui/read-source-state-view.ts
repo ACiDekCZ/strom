@@ -182,7 +182,7 @@ export function sourceRowHtml(o: SourceRowInput): string {
         const choice = (c: RowChoice): string => {
             const on = busy && o.act!.how === c.how && !!o.act!.unsure === !!c.unsure;
             const label = on
-                ? `<span class="read-task-spin" aria-hidden="true"></span>${esc(c.how === 'save' ? t.tBusySave : t.tBusy)}`
+                ? `<i class="busy-spin" aria-hidden="true"></i>${esc(c.how === 'save' ? t.tBusySave : t.tBusy)}`
                 : choiceLabel(c.how, c.label);
             return `<button type="button" class="link-button viewer-read-state-choice${on ? ' is-busy' : ''}" data-read-how="${c.how}"${c.unsure ? ' data-read-unsure="true"' : ''}${busy ? ' disabled' : ''}${on ? ' aria-busy="true"' : ''}>${label}</button>`;
         };
@@ -281,7 +281,7 @@ export function proposalActions(features: readonly string[], phone: boolean, up:
 }
 
 function spinLabel(on: boolean, label: string): string {
-    return on ? `<span class="read-task-spin" aria-hidden="true"></span>${esc(label)}` : esc(label);
+    return on ? `<i class="busy-spin" aria-hidden="true"></i>${esc(label)}` : esc(label);
 }
 
 /** The block under the source's row: who proposed it, the places, the whole text, Accept / Keep (or the answer and Undo). */

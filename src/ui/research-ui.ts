@@ -1669,7 +1669,7 @@ export function pausedText(w: LiveWorker): string {
 function livePreparing(tag: 'p' | 'span', cls: string): HTMLElement {
     const note = el(tag, cls);
     note.setAttribute('role', 'status');
-    const spin = note.appendChild(el('span', 'live-panel-spinner'));
+    const spin = note.appendChild(el('i', 'busy-spin s12'));
     spin.setAttribute('aria-hidden', 'true');
     note.appendChild(el('span', 'live-panel-preparing-text', strings.research.newerPreparing));
     return note;

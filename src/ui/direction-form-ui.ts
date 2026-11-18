@@ -616,7 +616,7 @@ export const directionFormMethods = uiModule({
         const primary = q<HTMLButtonElement>(root, '#direction-form-submit');
         primary.replaceChildren();
         if (f.sending) {
-            const spin = el('span', 'direction-form__spinner');
+            const spin = el('i', 'busy-spin');
             spin.setAttribute('aria-hidden', 'true');
             primary.append(spin, el('span', undefined, f.edit ? L.dirSaving : L.dirCreating));
         } else {

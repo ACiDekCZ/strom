@@ -198,7 +198,7 @@ test.describe('Fix at a task\'s finding', () => {
         const loading = finding(page, 'T0412').locator('.waiting-audit__loading');
         await expect(loading).toHaveAttribute('role', 'status');
         await expect(loading).toHaveText('Loading preview…');
-        await expect(loading.locator('.waiting-audit__spin')).toHaveCount(1);
+        await expect(loading.locator('.busy-spin')).toHaveCount(1);
         await expect(preview(page, 'T0412')).toHaveCount(0);
         release();
         b.next.hold = null;

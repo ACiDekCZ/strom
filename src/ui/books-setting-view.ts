@@ -56,7 +56,7 @@ export function booksSettingHtml(o: BooksSettingInput): string {
     const sameDefault = s.sameBookDefault ?? BOOKS_SAME_BOOK_DEFAULT;
     const n = o.note;
     const note = !n ? '' : n.kind === 'busy'
-        ? `<p class="research-stories-note research-readtask-note" id="research-books-note" role="status"><span class="read-task-spin" aria-hidden="true"></span><span>${esc(t.rtBusy)}</span></p>`
+        ? `<p class="research-stories-note research-readtask-note" id="research-books-note" role="status"><i class="busy-spin" aria-hidden="true"></i><span>${esc(t.rtBusy)}</span></p>`
         : n.kind === 'ok'
             ? `<p class="research-stories-note research-readtask-note is-ok" id="research-books-note" role="status"><span class="research-readtask-ok" aria-hidden="true">✓</span><span>${esc(t.booksOk)}</span></p>`
             : `<p class="research-stories-note research-readtask-note" id="research-books-note" role="status"><span>${esc(n.text)}</span>${n.retry

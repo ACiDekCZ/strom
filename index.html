@@ -3453,7 +3453,6 @@
         #history-modal .pm-lifeline-row.hd-ev { margin: 3px 16px; padding: 7px 6px 8px 8px; gap: 9px; border-radius: 6px; }
         #history-modal .hd-ev .pm-lifeline-year { min-width: 64px; }
         #history-modal .hd-ev.is-dim { opacity: 0.6; }
-        #history-modal .hd-ev.is-busy { opacity: 0.75; }
         #history-modal .hd-ev .pm-lifeline-desc { flex: 1 1 auto; padding-right: 30px; }
         .hd-mark { flex: none; position: relative; width: 9px; height: 14px; }
         .hd-mark::before { content: ''; position: absolute; }
@@ -6465,7 +6464,6 @@
             min-height: 36px; padding: 0 14px; border-radius: 8px; font-size: 13.5px; white-space: normal; text-align: left;
         }
         .waiting-place-note { margin: 0; font-size: 13px; color: var(--text-light); }
-        .waiting-places-body.is-busy .waiting-place { opacity: 0.85; }
         @media (pointer: coarse) {
             .waiting-places-modal .waiting-place-foot button,
             .waiting-places-modal .waiting-places-bulk button,
@@ -18759,17 +18757,10 @@
         }
         .toast-body { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
         .toast-title { font-size: 14px; font-weight: 600; }
-        .toast-spinner {
-            flex-shrink: 0; width: 14px; height: 14px; margin-top: 2px;
-            border: 2px solid color-mix(in srgb, var(--surface) 35%, transparent);
-            border-top-color: var(--surface); border-radius: 50%;
-            animation: toast-spin 0.9s linear infinite;
-        }
-        @keyframes toast-spin { to { transform: rotate(360deg); } }
-        @media (prefers-reduced-motion: reduce) { .toast-spinner { animation-duration: 2.4s; } }
+        .toast--rich > .busy-spin { margin-top: 2px; }
         /* The one working state (src/ui/busy.ts, waiting buttons §1.3): the one spinner, the idle / working / done
            words in one grid cell (the width never changes), the end's sentence under the element. Working is not
-           disabled: no dimming, the element keeps its colour and focus. The older spinners below go in phase 4. */
+           disabled: no dimming, the element keeps its colour and focus. It replaces every older spinner (src/__tests__/busy-spin-guard.test.ts). */
         .busy-spin {
             display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box;
             border: 2px solid color-mix(in srgb, currentColor 28%, transparent); border-top-color: currentColor;
@@ -18795,7 +18786,8 @@
         /* Over today's :disabled / [aria-disabled] dimming: a working element is not a disabled one. */
         :is(button, a, [role="button"], [role="switch"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"])[data-busy="busy"],
         :is(button, a, [role="button"], [role="switch"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"])[data-busy="lock"],
-        :is(button, a, [role="button"], [role="switch"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"])[data-busy="done"] {
+        :is(button, a, [role="button"], [role="switch"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"])[data-busy="done"],
+        :is(button, a, [role="button"], [role="switch"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"])[aria-busy="true"] {
             opacity: 1 !important;
         }
         a[data-busy="busy"], .link[data-busy="busy"], button.link[data-busy="busy"] { text-decoration: none; }
@@ -19197,13 +19189,6 @@
         .live-panel-preparing { display: flex; align-items: center; gap: 6px; margin: -4px 0 8px; font-size: 12px; color: var(--text-light); }
         .live-panel-chip.live-panel-preparing { display: inline-flex; gap: 5px; margin: 0; font-size: 11px; min-width: 0; max-width: 100%; }
         .live-panel-chip .live-panel-preparing-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-        .live-panel-spinner {
-            flex: none; width: 10px; height: 10px; box-sizing: border-box;
-            border: 2px solid color-mix(in srgb, var(--text-light) 30%, transparent);
-            border-top-color: var(--text-light); border-radius: 50%;
-            animation: toast-spin 0.9s linear infinite;
-        }
-        @media (prefers-reduced-motion: reduce) { .live-panel-spinner { animation-duration: 2.4s; } }
         /* Phone held sideways: the strip is one row; the note gives way to the head. */
         @media (max-width: 640px) and (max-height: 500px) and (orientation: landscape) {
             .live-panel.phone-strip .live-panel-chip.live-panel-preparing { max-width: 160px; }
@@ -19419,19 +19404,13 @@
             display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px;
             font-size: 13px; border-radius: var(--r-sm);
         }
-        .research-menu-body .research-sync-btn[disabled] { opacity: 0.75; cursor: progress; }
+        .research-menu-body .research-sync-btn[disabled] { cursor: progress; }
         .research-sync-link, .toolbar .research-sync-link {
             padding: 2px 0; border: 0; background: none; cursor: pointer; font: inherit;
             font-size: 13px; font-weight: 600; color: var(--primary);
         }
         @media (hover: hover) { .research-sync-link:hover, .toolbar .research-sync-link:hover { text-decoration: underline; background: none; } }
         .research-sync-btn:focus-visible, .research-sync-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-        .research-sync-spinner {
-            flex: none; width: 11px; height: 11px; border-radius: 50%;
-            border: 2px solid color-mix(in srgb, currentColor 35%, transparent); border-top-color: currentColor;
-            animation: toast-spin 0.9s linear infinite;
-        }
-        @media (prefers-reduced-motion: reduce) { .research-sync-spinner { animation: none; } }
         /* The toolbar pill: changes would be lost / "Send, then load" waits. */
         .toolbar .research-sync-pill { margin-left: 6px; gap: 6px; padding: 0 4px 0 10px; cursor: default; }
         .toolbar .research-sync-pill.is-wait { padding-right: 10px; }
@@ -19477,7 +19456,7 @@
         }
         .research-sync-mark-count { font-family: var(--font-sans); font-size: 12px; font-weight: 600; line-height: 1; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
         .research-sync-mark-check { font-size: 14px; font-weight: 700; line-height: 1; color: var(--primary); animation: research-mark-in 0.2s ease-out; }
-        .research-sync-mark .research-sync-spinner { width: 12px; height: 12px; box-sizing: border-box; color: var(--primary); }
+        .research-sync-mark .busy-spin { color: var(--primary); }
         @keyframes research-mark-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
         @media (prefers-reduced-motion: reduce) { .research-sync-mark-check { animation: none; } }
         /* Sent by hand: the Send button while changes wait and the research runs. */
@@ -20190,12 +20169,7 @@
         .modal .read-task-choice:disabled { opacity: 0.45; cursor: default; }
         .modal .read-task-choice[aria-busy="true"] { opacity: 1; border-color: var(--primary); }
         @media (hover: hover) { .modal .read-task-choice:not(:disabled):hover { border-color: var(--primary); background: var(--primary-soft); } }
-        .read-task-spin {
-            flex: none; width: 14px; height: 14px; box-sizing: border-box; border: 2px solid var(--divider); border-top-color: var(--primary);
-            border-radius: 50%; animation: read-task-spin 0.9s linear infinite;
-        }
-        @keyframes read-task-spin { to { transform: rotate(360deg); } }
-        @media (prefers-reduced-motion: reduce) { .read-task-spin { animation-duration: 2.4s; } }
+        .read-task-choice .busy-spin, .viewer-read-state-choice .busy-spin, .research-readtask-note .busy-spin { color: var(--primary); }
         .read-task-status { flex: 1 1 auto; display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
         .read-task-msg { min-width: 0; }
         .read-task-t1, .read-task-t2 { margin: 0; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
@@ -20715,9 +20689,7 @@
         .phone-content.is-lost .phone-body { opacity: 0.55; }
         .phone-body { display: flex; flex-direction: column; gap: 14px; }
         .phone-loading { min-height: 120px; display: flex; align-items: center; justify-content: center; }
-        .phone-spinner { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--primary); animation: phone-spin 0.9s linear infinite; }
-        @keyframes phone-spin { to { transform: rotate(360deg); } }
-        @media (prefers-reduced-motion: reduce) { .phone-spinner { animation: none; } }
+        .phone-loading > .busy-spin { color: var(--primary); }
         .phone-lost, .phone-note { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--surface-2); color: var(--text-light); font-size: 13px; }
         .phone-note { background: var(--warning-soft); color: var(--warning-text); }
         .phone-footer { gap: 10px; }
@@ -20864,7 +20836,7 @@
         }
         /* A large file for a research being read (hash, preview). */
         .attachment-preparing { align-items: center; }
-        .attachment-preparing-spin { flex: none; width: 14px; height: 14px; margin: 0 6px; color: var(--primary); }
+        .attachment-preparing-spin { margin: 0 6px; color: var(--primary); }
         .research-changes-panel {
             position: fixed; z-index: 190; width: 360px; max-width: calc(100vw - 16px);
             max-height: calc(100vh - 72px); max-height: calc(100dvh - 72px); overflow: hidden;
@@ -21026,7 +20998,7 @@
         }
         .research-sync-tag--inline { display: inline-block; vertical-align: middle; margin-left: 6px; }
         .research-sync-actions { gap: 14px; align-items: center; flex-wrap: wrap; }
-        .research-sync-title .research-sync-spinner { display: inline-block; margin-right: 6px; vertical-align: -1px; }
+        .research-sync-title .busy-spin { margin-right: 6px; vertical-align: -1px; }
         /* Research for this tree: sending changes. */
         .research-mode-line { margin-top: 2px; font-size: 12px; color: var(--text-light); }
         .research-transcripts.research-send-mode { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--divider); }
@@ -22550,7 +22522,6 @@
             font: inherit; font-size: 14px; line-height: 1.45;
         }
         .waiting-answer__text:focus-visible { outline: 2px solid var(--primary); outline-offset: 0; border-color: var(--primary); }
-        .waiting-answer.is-sending .waiting-answer__text { opacity: 0.75; }
         .waiting-answer__foot { display: flex; align-items: baseline; gap: 10px; }
         .waiting-answer__hint { flex: 1; min-width: 0; margin: 0; font-size: 12px; color: var(--text-faint); }
         .waiting-answer__count { flex: none; font-size: 12px; font-weight: 600; color: var(--warn-text); font-variant-numeric: tabular-nums; }
@@ -22685,13 +22656,6 @@
         /* The fix's loading and preview (spec 109 §2.2–§2.6), in place of the finding row's actions: the changes on the
            surface, its footer with the one green button (Fix); a refusal quiet (no danger colour). */
         .waiting-audit__loading { display: flex; align-items: center; gap: 8px; min-height: 32px; margin-top: 4px; font-size: 13px; color: var(--text-light); }
-        .waiting-audit__spin {
-            display: inline-block; flex: none; width: 14px; height: 14px; box-sizing: border-box; border-radius: var(--r-pill);
-            border: 2px solid var(--border); border-top-color: var(--text-light); animation: waiting-audit-spin .8s linear infinite;
-        }
-        .waiting-audit__confirm .waiting-audit__spin { border-color: var(--primary-dark); border-top-color: var(--on-primary); }
-        @keyframes waiting-audit-spin { to { transform: rotate(360deg); } }
-        @media (prefers-reduced-motion: reduce) { .waiting-audit__spin { animation: none; } }
         .waiting-audit__preview {
             display: flex; flex-direction: column; min-width: 0; margin-top: 6px; padding: 4px 0 0; box-sizing: border-box;
             background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); color: var(--text);
@@ -22742,7 +22706,6 @@
             outline: 2px solid var(--primary); outline-offset: 2px;
         }
         .waiting-audit__cancel:disabled, .waiting-audit__confirm:disabled, .waiting-audit__reload:disabled { opacity: 0.55; cursor: default; }
-        .waiting-audit__confirm[aria-busy="true"] { opacity: 0.85; }
         @media (hover: hover) {
             .waiting-audit__cancel:not(:disabled):hover, .waiting-audit__reload:not(:disabled):hover, .waiting-audit__chat:hover { background: var(--hover-bg); }
             .waiting-audit__confirm:not(:disabled):hover { background: var(--primary-dark); border-color: var(--primary-dark); }
@@ -22996,7 +22959,6 @@
             background: var(--primary); color: var(--on-primary, #fff); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
         }
         .waiting-answer-sheet__send[aria-disabled="true"] { opacity: 0.45; cursor: default; }
-        .waiting-answer-sheet__send.is-sending { opacity: 0.6; }
         .waiting-answer-sheet__cancel:focus-visible, .waiting-answer-sheet__send:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .waiting-answer-sheet__task {
             flex: none; margin: 0; padding: 8px 16px 0; font-size: 13px; color: var(--text-muted, var(--text-light)); overflow-wrap: anywhere;
@@ -23443,7 +23405,7 @@
             background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
         }
         .research-directions__empty-new:focus-visible, .research-direction__state:focus-visible, .research-direction__edit:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-        .research-direction__state[aria-busy="true"] { opacity: .6; cursor: progress; }
+        .research-direction__state[aria-busy="true"] { cursor: progress; }
         @media (hover: hover) {
             .research-directions__empty-new:hover, .research-direction__state:hover, .research-direction__edit:hover { background: var(--hover-bg); }
         }
@@ -23506,7 +23468,6 @@
         #direction-form-modal { z-index: 1100; }
         .modal.modal--md.direction-form { width: 520px; max-width: min(520px, 94vw); }
         .direction-form__fields { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
-        .direction-form.is-sending .direction-form__fields { opacity: .6; }
         .direction-form__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
         .direction-form__field[hidden], .direction-form [hidden] { display: none !important; }
         .direction-form .direction-form__label { font-size: 13px; font-weight: 600; color: var(--text); margin: 0; }
@@ -23593,12 +23554,6 @@
         .direction-form__retry { font-size: 13px; padding: 0; }
         .direction-form .direction-form__primary { display: inline-flex; align-items: center; gap: 8px; }
         .direction-form .direction-form__primary.is-off { opacity: .45; cursor: default; }
-        .direction-form__spinner {
-            width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent;
-            animation: direction-form-spin .8s linear infinite;
-        }
-        @keyframes direction-form-spin { to { transform: rotate(360deg); } }
-        @media (prefers-reduced-motion: reduce) { .direction-form__spinner { animation: none; } }
         /* A direction just created: lit for 2 s (fading only with motion allowed). */
         .research-direction--managed.is-new { background: var(--line-selected-bg); }
         @media (prefers-reduced-motion: no-preference) { .research-direction--managed { transition: background-color .6s ease-out; } }
@@ -23689,7 +23644,6 @@
         .research-overview__queue-search-input::placeholder, .research-overview__section-search-input::placeholder { color: var(--text-faint); }
         .research-overview__queue-search-input::-webkit-search-cancel-button, .research-overview__section-search-input::-webkit-search-cancel-button { display: none; }
         .research-overview__queue-search-tail, .research-overview__section-search-tail { flex: none; display: inline-flex; align-items: center; gap: 4px; padding-right: 4px; }
-        .research-overview__queue-search-spin { width: 14px; height: 14px; }
         .research-overview__queue-search-clear, .research-overview__section-search-clear {
             width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--r-sm); background: none; cursor: pointer;
             font: inherit; font-size: 16px; line-height: 1; color: var(--text-light);
@@ -24051,13 +24005,6 @@
         .prc-tag { display: inline-flex; align-items: center; gap: 5px; }
         .prc-tag--busy { background: var(--dir-icon-bg); color: var(--text-light); }
         .prc-tag--done { background: var(--primary-soft); color: var(--primary-dark); }
-        .prc-spinner {
-            flex: none; display: inline-block; width: 13px; height: 13px; border-radius: 50%;
-            border: 2px solid currentColor; border-right-color: transparent; animation: prc-spin 0.9s linear infinite;
-        }
-        .prc-spinner--tag { width: 9px; height: 9px; border-width: 1.5px; }
-        @keyframes prc-spin { to { transform: rotate(360deg); } }
-        @media (prefers-reduced-motion: reduce) { .prc-spinner { animation: none; border-right-color: currentColor; opacity: 0.6; } }
         .prc-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
         .prc-side {
             display: flex; flex-direction: column; gap: 8px; min-width: 0;
@@ -27410,7 +27357,7 @@
         }
         .source-offer-tile[aria-pressed="true"] { background: var(--surface); box-shadow: inset 0 0 0 2px var(--text); }
         .source-offer-tile[aria-disabled="true"] { opacity: .55; cursor: default; }
-        .source-offer-tile[aria-busy="true"] { opacity: .7; cursor: progress; }
+        .source-offer-tile[aria-busy="true"] { cursor: progress; }
         .source-offer-tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         @media (hover: hover) { .source-offer-tile:not([aria-disabled="true"]):hover { background: var(--surface); } }
         .source-offer-thumb { width: 100%; aspect-ratio: 1; }
@@ -29697,13 +29644,7 @@
         .media-state.is-quiet { color: var(--text-faint); }
         .media-ring { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--text-light); box-sizing: border-box; flex-shrink: 0; display: inline-block; }
         .media-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0; display: inline-block; }
-        .media-spinner {
-            width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; display: inline-block;
-            border: 2px solid color-mix(in srgb, var(--primary) 25%, transparent); border-top-color: var(--primary);
-            animation: media-spin 0.9s linear infinite;
-        }
-        @keyframes media-spin { to { transform: rotate(360deg); } }
-        @media (prefers-reduced-motion: reduce) { .media-spinner { animation: none; } }
+        .media-state > .busy-spin, .research-sync-line2 > .busy-spin { color: var(--primary); }
         .media-full-quality { flex-shrink: 0; font-size: 13px; font-weight: 600; color: var(--primary); align-self: center; white-space: nowrap; }
         .media-older-note { font-size: 12px; color: var(--text-faint); font-weight: 400; }
         .media-older-note[hidden] { display: none; }

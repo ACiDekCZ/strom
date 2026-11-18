@@ -264,7 +264,7 @@ export const attachmentsMethods = uiModule({
         const row = document.createElement('div');
         row.className = 'attachment-row attachment-preparing';
         row.setAttribute('role', 'status');
-        row.innerHTML = `<span class="attachment-preparing-spin research-sync-spinner" aria-hidden="true"></span>`
+        row.innerHTML = `<i class="attachment-preparing-spin busy-spin" aria-hidden="true"></i>`
             + `<div class="attachment-main"><span class="attachment-name"></span><span class="media-state">${this.escapeHtml(strings.media.preparing(formatBytes(bytes)))}</span></div>`;
         row.querySelector('.attachment-name')!.textContent = name;
         container.appendChild(row);
@@ -423,7 +423,7 @@ export const attachmentsMethods = uiModule({
         const line = (icon: string, text: string, cls: string, title = ''): string =>
             `<span class="media-state ${cls}"${title ? ` title="${esc(title)}"` : ''}>${icon}<span>${esc(text)}</span></span>`;
         const ring = '<span class="media-ring" aria-hidden="true"></span>';
-        const spin = '<span class="media-spinner" aria-hidden="true"></span>';
+        const spin = '<i class="busy-spin s12" aria-hidden="true"></i>';
         switch (state.kind) {
             case 'queued': {
                 const bigger = state.bytes > 0 && item.previewBytes !== undefined && Math.abs(state.bytes - item.previewBytes) > 1024;

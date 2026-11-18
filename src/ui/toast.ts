@@ -108,7 +108,7 @@ function fillToast(toast: HTMLElement, message: string, opts: ToastOptions, onAc
     else delete toast.dataset.notice;
     if (opts.spinner) {
         const spin = document.createElement('span');
-        spin.className = 'toast-spinner';
+        spin.className = 'busy-spin';
         spin.setAttribute('aria-hidden', 'true');
         toast.appendChild(spin);
     }

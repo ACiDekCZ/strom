@@ -482,7 +482,7 @@ export const phoneMethods = uiModule({
         const d = ph!;
         return `
                 <div class="modal-content phone-content phone-loading">
-                    ${d.lost ? `<p class="phone-lost" role="status">${esc(strings.phone.lost)}</p>` : '<div class="phone-spinner" aria-hidden="true"></div>'}
+                    ${d.lost ? `<p class="phone-lost" role="status">${esc(strings.phone.lost)}</p>` : '<i class="busy-spin s16" aria-hidden="true"></i>'}
                 </div>
                 <div class="buttons phone-footer">
                     <span class="phone-foot-note"></span>

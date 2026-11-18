@@ -103,7 +103,7 @@ export class SectionSearch {
         if (opts.maxLength) input.maxLength = opts.maxLength;
         const tail = box.appendChild(make('span', `${p}-tail`));
         if (opts.mode === 'remote') {
-            const spin = this.spinner = tail.appendChild(make('span', `live-panel-spinner ${p}-spin`));
+            const spin = this.spinner = tail.appendChild(make('i', `busy-spin ${p}-spin`));
             spin.setAttribute('aria-hidden', 'true');
             spin.hidden = true;
         } else this.spinner = null;

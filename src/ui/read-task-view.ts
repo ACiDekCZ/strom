@@ -124,7 +124,7 @@ function choiceHtml(c: Choice, act: ReadTaskAct | null | undefined): string {
     const busy = !!act?.busy && act.how === c.how && !!act.unsure === !!c.unsure;
     const off = !!act?.busy;
     const title = busy
-        ? `<span class="read-task-spin" aria-hidden="true"></span>${esc(c.how === 'save' ? t.tBusySave : t.tBusy)}`
+        ? `<i class="busy-spin" aria-hidden="true"></i>${esc(c.how === 'save' ? t.tBusySave : t.tBusy)}`
         : choiceLabel(c.how, c.title);
     const sub = c.short
         ? `<span class="read-task-cs"><span class="read-task-long">${esc(c.sub)}</span><span class="read-task-short">${esc(c.short)}</span></span>`

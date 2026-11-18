@@ -1364,7 +1364,7 @@ test.describe('the toolbar', () => {
         bridge.syncDelayMs = 1500;
         await editJan(page);
         void page.evaluate(() => window.Strom.UI.researchAutoLeave()).catch(() => undefined);
-        const spinner = mark(page).locator('.research-sync-spinner');
+        const spinner = mark(page).locator('.busy-spin');
         await expect(spinner).toBeVisible();
         expect(await spinner.evaluate(el => getComputedStyle(el).animationName)).toBe('none');
     });

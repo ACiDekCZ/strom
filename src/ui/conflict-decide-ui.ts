@@ -186,7 +186,7 @@ export const conflictDecideMethods = uiModule({
         const kindLine = kind && view.body === 'sides' ? `<p class="prc-kind">${esc(kind === 'import' ? o.proposeImport : o.proposeUser)}.</p>` : '';
 
         const tag = view.tag === 'busy'
-            ? `<span class="person-research-open-tag prc-tag prc-tag--busy"><span class="prc-spinner prc-spinner--tag" aria-hidden="true"></span>${esc(k.busyTag)}</span>`
+            ? `<span class="person-research-open-tag prc-tag prc-tag--busy"><i class="busy-spin s12" aria-hidden="true"></i>${esc(k.busyTag)}</span>`
             : view.tag === 'done'
                 ? `<span class="person-research-open-tag prc-tag prc-tag--done">${esc(k.decidedTag)}</span>`
                 : `<span class="person-research-open-tag">${esc(r.conflictOpen)}</span>`;
@@ -241,7 +241,7 @@ export const conflictDecideMethods = uiModule({
                     // A conflict of a kind: the choices stand in one row under both sides (kindRow).
                 } else if (view.choices === 'buttons') {
                     choice = `<button type="button" class="prc-choice" data-decide="${which}" data-focus="choice-${which}"${busy ? ' aria-busy="true" aria-disabled="true"' : ''}${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${busy
-                        ? `<span class="prc-spinner" aria-hidden="true"></span>${esc(k.busy)}`
+                        ? `<i class="busy-spin" aria-hidden="true"></i>${esc(k.busy)}`
                         : esc(which === 'user' ? k.keep : k.take)}</button>`;
                 } else if (view.choices === 'links') {
                     choice = `<button type="button" class="prc-choice" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${researchActionLabel(which === 'user' ? k.keepLink : k.takeLink, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>`;

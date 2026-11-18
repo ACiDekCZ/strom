@@ -3350,13 +3350,13 @@ export const researchSyncMethods = uiModule({
             return a.asLink
                 ? `<button type="button" class="research-sync-link${cls}" role="menuitem" data-action="${a.action}"${describe} onclick="${call('researchSyncAction', `'${a.action}'`)}">${this.researchSyncActionLabel(a.action, label)}</button>`
                 : `<button type="button" class="primary btn-sm research-sync-btn${cls}" role="menuitem" data-action="${a.action}"${named}${describe}${busy ? ' disabled aria-busy="true"' : ''}`
-                    + ` onclick="${call('researchSyncAction', `'${a.action}'`)}">${busy ? `<span class="research-sync-spinner" aria-hidden="true"></span>${esc(s.sending)}` : this.researchSyncActionLabel(a.action, label)}</button>`;
+                    + ` onclick="${call('researchSyncAction', `'${a.action}'`)}">${busy ? `<i class="busy-spin s12" aria-hidden="true"></i>${esc(s.sending)}` : this.researchSyncActionLabel(a.action, label)}</button>`;
         };
         const note = b.note ? ` title="${esc(b.note)}" aria-description="${esc(b.note)}"` : '';
         return `<div class="research-sync-block research-sync-block--${b.tone}" id="research-sync-block" data-state="${b.kind}" role="group" aria-label="${esc(b.title)}">`
             + '<span class="research-sync-dot" aria-hidden="true"></span>'
             + `<div class="research-sync-status" id="research-sync-status" role="status" aria-live="polite"${note}>`
-            + `<div class="research-sync-title">${b.spinner ? '<span class="research-sync-spinner" aria-hidden="true"></span>' : ''}<span>${esc(b.title)}</span></div>`
+            + `<div class="research-sync-title">${b.spinner ? '<i class="busy-spin s12" aria-hidden="true"></i>' : ''}<span>${esc(b.title)}</span></div>`
             // A tag ("Strom archive") opens the second line, before the facts: the title stays one line (menu 1020 D17).
             + (b.sub || opts.tag ? '<div class="research-sync-sub">'
                 + (opts.tag ? `<span class="research-sync-tag" id="research-menu-archive">${esc(opts.tag)}</span>` : '')
@@ -3774,7 +3774,7 @@ export const researchSyncMethods = uiModule({
         }
         pill.removeAttribute('aria-live');
         if (kind === 'waitThenLoad') {
-            set('is-wait', '<span class="research-sync-spinner" aria-hidden="true"></span>'
+            set('is-wait', '<i class="busy-spin s12" aria-hidden="true"></i>'
                 + `<span class="research-sync-pill-label" onclick="${call('openResearchSyncMenu')}">${esc(s.waitThenLoad)}</span>`, s.waitThenLoad);
             return;
         }
@@ -3814,7 +3814,7 @@ export const researchSyncMethods = uiModule({
             set(`is-send${more.startsWith('<button') ? ' is-split' : ''}`, `<button type="button" class="research-sync-send" id="research-sync-send"${busy ? ' disabled aria-busy="true"' : ''}`
                 + ` title="${esc(s.sendButtonTitle)}" onclick="${call('researchSyncAction', "'send'")}">`
                 + (busy
-                    ? `<span class="research-sync-spinner" aria-hidden="true"></span><span>${esc(s.sending)}</span>`
+                    ? `<i class="busy-spin s12" aria-hidden="true"></i><span>${esc(s.sending)}</span>`
                     : `<span class="research-sync-send-long">${esc(s.sendButton)}</span><span class="research-sync-send-short">${esc(s.barSend)}</span>`)
                 + '</button>' + more);
             return;
@@ -3857,7 +3857,7 @@ export const researchSyncMethods = uiModule({
         }
         set('is-mark', `<button type="button" class="research-sync-mark${count ? ' research-sync-mark--count' : ''}" id="research-sync-mark" data-look="${look}"`
             + ` title="${esc(label)}" aria-label="${esc(label)}" onclick="${call('openResearchSyncMenu')}">`
-            + (look === 'spin' ? '<span class="research-sync-spinner" aria-hidden="true"></span>'
+            + (look === 'spin' ? '<i class="busy-spin s12" aria-hidden="true"></i>'
                 : look === 'check' ? '<span class="research-sync-mark-check" aria-hidden="true">✓</span>'
                 : `<span class="research-sync-mark-${look}" aria-hidden="true"></span>`)
             + markCount(count) + '</button>');

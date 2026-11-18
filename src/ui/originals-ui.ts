@@ -538,7 +538,7 @@ export const originalsMethods = uiModule({
             : line.days >= 3 ? `${q.staleTitle(line.days)} · ${q.staleSub(line.n, formatBytesShort(line.bytes))}`
             : full ? `${q.fullTitle} · ${q.fullSub(formatBytesShort(line.bytes), formatBytesShort(lastBudget))}`
             : q.summary(line.n, formatBytesShort(line.bytes));
-        const icon = sendingNow ? '<span class="media-spinner" aria-hidden="true"></span>'
+        const icon = sendingNow ? '<i class="busy-spin s12" aria-hidden="true"></i>'
             : warn ? '<span class="media-warn-dot" aria-hidden="true"></span>' : '<span class="media-ring" aria-hidden="true"></span>';
         return `<div class="research-sync-line2${warn ? ' is-warn' : ''}">${icon}`
             + `<span class="research-sync-line2-text">${esc(text)}</span>`
