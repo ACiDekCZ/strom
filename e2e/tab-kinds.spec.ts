@@ -15,7 +15,12 @@ const cardOf = (page: Page, id: string) => page.locator(`#tree-canvas .person-ca
 const rowOf = (page: Page, id: string) => cardOf(page, id).locator(':scope > .edge-top-right');
 const focusOf = (page: Page) => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId());
 
+/**
+ * The page runs on Playwright's clock (it ticks as ever): the times of the toasts (a message's,
+ * the focus toast's 5 s, the 3 s a toast to be read stands) pass by `runFor`.
+ */
 async function setup(page: Page): Promise<void> {
+    await page.clock.install();
     await page.setViewportSize({ width: 1440, height: 900 });
     await openApp(page);
     await seedTree(page, {
@@ -38,7 +43,7 @@ async function startView(page: Page): Promise<void> {
     await expect(cardOf(page, 'g1')).toBeVisible();
     await expect(cardOf(page, 'gg1')).toHaveCount(0);
     await page.evaluate(() => window.Strom.ZoomPan.centerOnPerson('g1' as never));
-    await page.waitForTimeout(400);
+    await page.clock.runFor(400);
 }
 
 test('parents and a brother out of view: one "◎ family" tab in the focus look, its bubble by group and what a click does', async ({ page }) => {
@@ -93,9 +98,10 @@ test('the toast goes at the next click in the tree, and after 5 s', async ({ pag
     await rowOf(page, 'g1').locator('.branch-tab.kind-focus').click();
     await expect(toast).toBeVisible();
     await page.mouse.move(8, 450);
-    await page.waitForTimeout(3000);
+    await page.clock.runFor(3000);
     await expect(toast).toBeVisible();
-    await expect(toast).toHaveCount(0, { timeout: 5000 });
+    await page.clock.runFor(2500);
+    await expect(toast).toHaveCount(0);
 });
 
 test('"Focus" in the menu focuses without the toast; the menu marks its rows by kind', async ({ page }) => {
@@ -108,7 +114,7 @@ test('"Focus" in the menu focuses without the toast; the menu marks its rows by 
     await expect(focusRow).toHaveText('Focus');
     await focusRow.click();
     await expect.poll(() => focusOf(page)).toBe('g1');
-    await page.waitForTimeout(300);
+    await page.clock.runFor(300);
     await expect(page.locator('#focus-toast .focus-toast-box')).toHaveCount(0);
 });
 
@@ -200,6 +206,7 @@ test.describe('a toast over a bubble', () => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
         const own = await settledRect(page, '.toast.show');
+        await page.clock.runFor(1200);
         await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
         const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
         await family.hover();
@@ -225,6 +232,7 @@ test.describe('a toast over a bubble', () => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
         const own = await settledRect(page, '.toast.show');
+        await page.clock.runFor(1200);
         await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
         const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
         await family.hover();
@@ -311,6 +319,7 @@ test.describe('a toast over a bubble', () => {
         await family.hover();
         await expect(bubble).toBeVisible();
         await expect.poll(() => seen(page, 'body > .toast')).toBe(false);
+        await page.clock.runFor(3000);
         await expect(page.locator('body > .toast')).toHaveCount(0, { timeout: 4000 });
         await page.mouse.move(8, 450);
         await expect(bubble).toBeHidden();
@@ -321,6 +330,7 @@ test.describe('a toast over a bubble', () => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
         const own = await settledRect(page, '.toast.show');
+        await page.clock.runFor(1200);
         await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
         const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
         await family.hover();
@@ -339,7 +349,7 @@ test.describe('a toast over a bubble', () => {
         /** A long press on the element (a tab: its bubble). */
         async function hold(page: Page, el: ReturnType<Page['locator']>): Promise<void> {
             for (const type of ['touchstart', 'touchend'] as const) {
-                if (type === 'touchend') await page.waitForTimeout(700);
+                if (type === 'touchend') await page.clock.runFor(700);
                 await el.evaluate((e: HTMLElement, kind) => {
                     const r = e.getBoundingClientRect();
                     const t = new Touch({ identifier: 1, target: e, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 });
@@ -353,9 +363,10 @@ test.describe('a toast over a bubble', () => {
             await setup(page);
             await page.setViewportSize({ width: 390, height: 844 });
             await page.evaluate(() => window.Strom.ZoomPan.centerOnPerson('g1' as never));
-            await page.waitForTimeout(400);
+            await page.clock.runFor(400);
             await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
             const own = await settledRect(page, '.toast.show');
+            await page.clock.runFor(1200);
             await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
             const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
             await hold(page, family);
@@ -438,7 +449,7 @@ test.describe('a toast over a bubble', () => {
         await setup(page);
         await page.setViewportSize({ width: 844, height: 390 });
         await page.evaluate(() => window.Strom.ZoomPan.centerOnPerson('g1' as never));
-        await page.waitForTimeout(400);
+        await page.clock.runFor(400);
         await rowOf(page, 'g1').locator('.branch-tab.kind-focus').click();
         await expect.poll(() => focusOf(page)).toBe('g1');
         const toast = page.locator('#focus-toast .focus-toast-box');
@@ -488,6 +499,7 @@ test.describe('one toast at a time', () => {
         const box = page.locator('#focus-toast .focus-toast-box');
         const boxRect = (await box.boundingBox())!;
         await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        await page.clock.runFor(3000); // the focus toast stands its 3 s to be read, then the message comes
         const message = page.locator('body > .toast');
         await expect(message).toBeVisible();
         await expect(box).toBeHidden();
@@ -509,6 +521,7 @@ test.describe('one toast at a time', () => {
     test('the undo pill takes the focus toast\'s place as well', async ({ page }) => {
         await focusWithToast(page);
         await page.evaluate(() => window.Strom.UI.showUndoToast('adding Wolfbrecht'));
+        await page.clock.runFor(3000); // the focus toast stands its 3 s to be read, then the pill comes
         const pill = page.locator('body > .undo-toast');
         await expect(pill.locator('.focus-toast-back')).toHaveText('↩ Back');
         await expect(page.locator('#focus-toast .focus-toast-box')).toBeHidden();
@@ -519,6 +532,7 @@ test.describe('one toast at a time', () => {
         await focusWithToast(page);
         await page.evaluate(() => window.Strom.UI.showUndoToast('adding Wolfbrecht'));
         await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        await page.clock.runFor(3000); // the focus toast stands its 3 s to be read, then the message comes
         const message = page.locator('body > .toast');
         await expect(message.locator('.undo-toast-btn, .focus-toast-back')).toHaveText(['Undo', '↩ Back']);
         await expect(page.locator('body > .undo-toast')).toBeHidden();
@@ -528,9 +542,12 @@ test.describe('one toast at a time', () => {
     test('"↩ Back" leaves the message when the focus toast\'s time runs out; the message runs its own time', async ({ page }) => {
         await focusWithToast(page);
         await page.evaluate(() => window.Strom.UI.showToast('Saved', 9000));
+        await page.clock.runFor(3000); // the focus toast stands its 3 s to be read, then the message comes
         const message = page.locator('body > .toast');
         await expect(message.locator('.focus-toast-back')).toHaveCount(1);
-        await expect(message.locator('.focus-toast-back')).toHaveCount(0, { timeout: 6000 });
+        // The focus toast's 5 s run out (the message's own 9 s not)
+        await page.clock.runFor(5000);
+        await expect(message.locator('.focus-toast-back')).toHaveCount(0);
         await expect(message).toBeVisible();
         await expect(message).toHaveText('Saved');
         await expect(page.locator('#focus-toast .focus-toast-box')).toHaveCount(0);
@@ -539,7 +556,9 @@ test.describe('one toast at a time', () => {
     test('a message gone before the focus toast\'s time gives the focus toast back with "↩ Back"', async ({ page }) => {
         await focusWithToast(page);
         await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
+        await page.clock.runFor(3000); // the focus toast stands its 3 s to be read, then the message comes
         await expect(page.locator('body > .toast .focus-toast-back')).toHaveCount(1);
+        await page.clock.runFor(1000); // the message's 800 ms
         const box = page.locator('#focus-toast .focus-toast-box');
         await expect(box).toBeVisible({ timeout: 3000 });
         await expect(box.locator('.focus-toast-back')).toHaveText('↩ Back');
@@ -550,7 +569,7 @@ test.describe('one toast at a time', () => {
         await setup(page);
         await page.setViewportSize({ width: 844, height: 390 });
         await page.evaluate(() => window.Strom.ZoomPan.centerOnPerson('g1' as never));
-        await page.waitForTimeout(400);
+        await page.clock.runFor(400);
         await rowOf(page, 'g1').locator('.branch-tab.kind-focus').click();
         await expect.poll(() => focusOf(page)).toBe('g1');
         await page.mouse.move(400, 200);
@@ -558,6 +577,7 @@ test.describe('one toast at a time', () => {
         await expect(box).toBeVisible();
         const b = (await box.boundingBox())!;
         await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        await page.clock.runFor(3000); // the focus toast stands its 3 s to be read, then the message comes
         const message = page.locator('body > .toast');
         await expect(message.locator('.focus-toast-back')).toHaveCount(1);
         await expect(message).toHaveClass(/at-focus-toast/);
