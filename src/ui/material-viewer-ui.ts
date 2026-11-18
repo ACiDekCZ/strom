@@ -352,14 +352,18 @@ export const materialViewerMethods = uiModule({
         if (pending) void pending();
         // Going through: the title field ready for typing (on a computer; a phone's keyboard waits for a tap).
         if (st.review && st.editing === item.key && !slots.redraw && !window.matchMedia?.('(pointer: coarse)').matches) {
-            // After the viewer is shown (the first file is drawn before the overlay opens).
-            setTimeout(() => {
+            const ready = (): void => {
                 if (viewer !== st || viewerListIndex() !== index) return;
                 const title = slots.panel.querySelector<HTMLInputElement>('.mat-edit-title');
                 if (!title || document.activeElement === title) return;
                 title.focus();
                 title.select();
-            }, 0);
+            };
+            // At once when going on (←, →, Enter, Skip), so a key pressed right after reaches the field
+            // and not the viewer behind it (a → there would move the image instead of going on).
+            ready();
+            // The first file is drawn before the overlay takes the focus: after it, once more.
+            setTimeout(ready, 0);
         }
     },
 

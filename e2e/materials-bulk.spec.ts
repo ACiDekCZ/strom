@@ -185,9 +185,18 @@ test.describe('Going through many files (a tree without a research)', () => {
         await title.press('Enter');
         await expect(page.locator('#image-viewer-pos')).toHaveText('Going through · 2 of 2 · Without title · Esc ends');
         await expect(title).toBeFocused();
-        // ← at the field's start goes back (the first file keeps its new title).
-        await title.evaluate(el => (el as HTMLInputElement).setSelectionRange(0, 0));
-        await title.press('ArrowLeft');
+        // ← at the field's start goes back (the first file keeps its new title). Its field has the focus
+        // at once, not after a timer: a key pressed right after reaches it (a → before the timer went to
+        // the viewer, and Playwright's press, focusing the field itself, put the caret at its start).
+        const focusedAtOnce = await title.evaluate(async el => {
+            const input = el as HTMLInputElement;
+            input.setSelectionRange(0, 0);
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }));
+            for (let i = 0; i < 20; i++) await Promise.resolve();
+            const now = document.activeElement;
+            return now instanceof HTMLInputElement && now !== input && now.classList.contains('mat-edit-title');
+        });
+        expect(focusedAtOnce).toBe(true);
         await expect(page.locator('#image-viewer-pos')).toContainText('1 of 2');
         await expect(title).toHaveValue('Letter from Quellbach');
         // The caret at the end (End does not move it on a Mac).
