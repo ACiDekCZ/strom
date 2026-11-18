@@ -272,6 +272,8 @@ test.describe('follow the agent in the tree', () => {
     });
 
     test('a new target: one jump after the brake, to the latest one', async ({ page }) => {
+        // The brake's 6 s run on Playwright's clock (it ticks as ever).
+        await page.clock.install();
         const bridge = await follow(page, { gap: 6000, on: true, quick: true });
         await expect.poll(() => focusRefn(page)).toBe('P0012');
         await page.evaluate(() => {
@@ -284,11 +286,17 @@ test.describe('follow the agent in the tree', () => {
         // Read within the brake, then the next one comes.
         await nextStatus(bridge);
         bridge.person = 'P0002';
+        // Read within the brake too, then the brake runs out.
+        await nextStatus(bridge);
+        expect(await focusRefn(page)).toBe('P0012');
+        await page.clock.runFor(6000);
         await expect.poll(() => focusRefn(page), { timeout: 10000 }).toBe('P0002');
         expect(await page.evaluate(() => (window.Strom.TreeRenderer as unknown as { __calls: number }).__calls)).toBe(1);
     });
 
     test('moving the tree pauses (pill, no jump); back by itself after a while without touching; a touch counts again', async ({ page }) => {
+        // The pause's 3 s and the reconnects run on Playwright's clock (it ticks as ever).
+        await page.clock.install();
         const bridge = await follow(page, { idle: 3000, on: true });
         await expect.poll(() => focusRefn(page)).toBe('P0012');
         await dragTree(page);
@@ -297,12 +305,17 @@ test.describe('follow the agent in the tree', () => {
         await expect(btn(page)).toHaveClass(/is-paused/);
         await expect(btn(page)).toHaveAttribute('aria-pressed', 'true');
         bridge.person = 'P0001';
-        await page.waitForTimeout(2000);
+        const asked = bridge.chain;
+        await page.clock.runFor(2000);
+        // The new target was said meanwhile (the bridge asked again), and not jumped to.
+        await expect.poll(() => bridge.chain).toBeGreaterThan(asked);
+        expect(await focusRefn(page)).toBe('P0012');
         // A wheel over the tree starts the wait again.
         await page.mouse.wheel(0, 100);
-        await page.waitForTimeout(2000);
+        await page.clock.runFor(2000);
         expect(await focusRefn(page)).toBe('P0012');
         await expect(pill).toBeVisible();
+        await page.clock.runFor(1500);
         await expect.poll(() => focusRefn(page), { timeout: 6000 }).toBe('P0001');
         await expect(pill).toHaveCount(0);
     });
