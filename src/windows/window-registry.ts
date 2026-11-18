@@ -48,6 +48,8 @@ export interface MainWindowHost {
     hasFocus(): boolean;
     /** The person in the centre and its generations (sent with the tree: where a satellite without a state starts); null: none. */
     focus?(): { personId: string; depthUp: number; depthDown: number } | null;
+    /** This window follows the research agent now (spec 097 §4, not paused): the status says it (spec 110 §4). */
+    followingAgent?(): boolean;
 }
 
 /** The main window as DataManager and TreeManager have it. */
@@ -182,7 +184,12 @@ export const PATCH_INTERVAL_MS = 500;
 /** The status is sent at least this often (the satellites tell a closed main window by its silence). */
 export const HEARTBEAT_MS = 1000;
 
-type SelectHandler = (personId: string | null, origin: string) => void;
+/** What a satellite's choice does here (spec 110): `focus` makes the person the centre; its number rises in that window. */
+export interface SelectMeta {
+    intent: 'mark' | 'focus';
+    seq: number | null;
+}
+type SelectHandler = (personId: string | null, origin: string, meta: SelectMeta) => void;
 type LinkHandler = (link: { search?: string; files?: unknown[] }, from: string) => void;
 /** Runs a research action; what it returns (or its promise resolves to) goes back to an action sent with `reqId`. */
 type ResearchActionHandler = (action: string, args: unknown, from: string) => unknown;
@@ -197,6 +204,7 @@ export class WindowRegistry {
     private readonly spawned = new Map<string, Spawned>();
     private readonly changeListeners = new Set<() => void>();
     private readonly selectHandlers = new Set<SelectHandler>();
+    private readonly sendEndHandlers = new Set<(windowId: string) => void>();
     private linkHandler: LinkHandler | null = null;
     private researchHandler: ResearchActionHandler | null = null;
     private researchMenuProvider: ((personId: string) => unknown[]) | null = null;
@@ -249,6 +257,7 @@ export class WindowRegistry {
             b.on('view', m => this.onView(m)),
             b.on('spawn', m => this.onSpawn(m)),
             b.on('select', m => this.handleSelect(m)),
+            b.on('send-mode', m => { if (m.mode !== 'focus') this.sendEnded(m.windowId || m.from); }),
             b.on('focus-req', m => this.onFocusRequest(m.from)),
             b.on('focused', m => this.focusWaiters.get(m.from)?.()),
             b.on('link', m => this.onLink({ search: m.search, files: m.files }, m.from)),
@@ -379,6 +388,22 @@ export class WindowRegistry {
     onSelect(cb: SelectHandler): () => void {
         this.selectHandlers.add(cb);
         return () => { this.selectHandlers.delete(cb); };
+    }
+
+    /**
+     * A window's choices no longer make this window's centre (spec 110 §2,
+     * §7): it chose another send mode, switched to a view without one,
+     * stopped sending, or went away. Returns the unsubscribe.
+     */
+    onSendEnded(cb: (windowId: string) => void): () => void {
+        this.sendEndHandlers.add(cb);
+        return () => { this.sendEndHandlers.delete(cb); };
+    }
+
+    private sendEnded(id: string): void {
+        for (const cb of [...this.sendEndHandlers]) {
+            try { cb(id); } catch (err) { console.error('send end handler failed', err); }
+        }
     }
 
     /** Who opens an address or a launch another window passed on (§5); links that came before are handed over now. */
@@ -521,6 +546,7 @@ export class WindowRegistry {
             windows: [...this.entries.keys()],
             agentRev: this.agentRev,
             ...this.agentsField(),
+            ...(this.host.followingAgent?.() ? { followingAgent: true } : {}),
         };
     }
 
@@ -552,7 +578,7 @@ export class WindowRegistry {
         if (++this.ticks % 2 === 0) {
             let changed = false;
             for (const [id, e] of this.entries) {
-                if (e.win && e.win.closed) { this.entries.delete(id); changed = true; }
+                if (e.win && e.win.closed) { this.entries.delete(id); changed = true; this.sendEnded(id); }
             }
             if (changed) this.emitChange();
         }
@@ -641,6 +667,7 @@ export class WindowRegistry {
 
     private onBye(m: MessageOf<'bye'>): void {
         const id = m.windowId || m.from;
+        this.sendEnded(id);
         if (!this.entries.delete(id)) return;
         this.emitChange();
     }
@@ -650,7 +677,8 @@ export class WindowRegistry {
         this.lastSelection = m.personId;
         this.applyingRemoteSelection = true;
         try {
-            for (const cb of [...this.selectHandlers]) cb(m.personId, m.origin);
+            const meta: SelectMeta = { intent: m.intent === 'focus' ? 'focus' : 'mark', seq: typeof m.seq === 'number' ? m.seq : null };
+            for (const cb of [...this.selectHandlers]) cb(m.personId, m.origin, meta);
         } catch (err) {
             console.error('select handler failed', err);
         } finally {

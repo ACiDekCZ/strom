@@ -102,6 +102,7 @@ import { MOBILE_MAX, MQ_PHONE_LANDSCAPE } from './breakpoints.js';
 import { updateBulkFamilySwitches } from './ui/bulk-family-ui.js';
 import { pillUnderFinger } from './card-tap.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
+import { VIEW_STEP_EVENT } from './windows/window-focus.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
 import { rememberOpenedFocus, updateDefaultFocusButtons } from './ui/default-focus.js';
@@ -170,6 +171,11 @@ interface CustomCardsMeasure {
  * A layout configuration with another spacing's gaps (layoutConfigFor), its
  * card sizes, partner line and card heights kept.
  */
+/** A step of the view's own (a step of its history, Back / Forward, another view): the run of another window's centres ends. */
+function viewStep(): void {
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(VIEW_STEP_EVENT));
+}
+
 function withSpacing(config: LayoutConfig, spacing: TreeSpacing): LayoutConfig {
     const { dense: _dense, ...rest } = config;
     const gaps = layoutConfigFor(spacing);
@@ -1938,8 +1944,11 @@ class TreeRendererClass {
      * this (it moves the view itself). Resolves once drawn and placed.
      * `agent`: a jump that follows the research agent (spec 097 §4) — not a
      * choice of a person, so the other windows do not take it as a selection.
+     * `history: 'replace'`: the step takes the place of the last one (a run
+     * of centres chosen in another window, spec 110 §2): the view it leaves
+     * is not kept, Back goes to the view before the run.
      */
-    setFocus(personId: PersonId | null, saveToData = true, reveal?: (id: PersonId) => void, opts: { agent?: boolean } = {}): Promise<void> {
+    setFocus(personId: PersonId | null, saveToData = true, reveal?: (id: PersonId) => void, opts: { agent?: boolean; history?: 'push' | 'replace' } = {}): Promise<void> {
         // Always have a focus person
         // If null is passed, find a default person
         if (!personId) {
@@ -1955,7 +1964,7 @@ class TreeRendererClass {
         // programmatic focus a load performs, while still counting the user's
         // very first click. goBack/goForward set suppressHistoryPush so they
         // can manage the stacks themselves.
-        if (!this.suppressHistoryPush && this.focusPersonId && personId
+        if (!this.suppressHistoryPush && opts.history !== 'replace' && this.focusPersonId && personId
             && this.focusPersonId !== personId) {
             const before = this.currentHistoryEntry();
             this.pushHistoryStep(before && { ...before, leftView: this.historyTransform() });
@@ -4087,6 +4096,7 @@ class TreeRendererClass {
      */
     async setViewMode(mode: ViewMode, beforeLayout?: () => Promise<void>): Promise<void> {
         if (this.viewMode === mode) return;
+        viewStep();
         // The Table view and the others share the person in focus (spec 073 U9):
         // the table's active row's person goes along, and the table opens at the focus.
         const fromTable = this.viewMode === 'table' ? UI.tableFocusPerson?.(this.focusPersonId) ?? null : null;
@@ -4258,6 +4268,7 @@ class TreeRendererClass {
         this.viewStandIn = null;
         this.historySeq++;
         this.updateNavButtons();
+        viewStep();
     }
 
     /** The pan and zoom the history takes the view for (historyView: the stand-in after a step over a new focus). */
@@ -4306,6 +4317,7 @@ class TreeRendererClass {
      * persons deleted meanwhile.
      */
     private async navigateHistory(dir: 'back' | 'forward'): Promise<void> {
+        viewStep();
         const current = this.currentHistoryEntry();
         if (!current) {
             this.updateNavButtons();
@@ -4589,15 +4601,25 @@ class TreeRendererClass {
         if (this.viewMode === 'fan') {
             this.fanView?.revealPerson(id);
         } else if (this.viewMode === 'timeline') {
-            const row = this.markTimelineWindowSelected();
-            const box = document.getElementById('timeline-container');
-            if (!row || !box) return;
-            const r = row.getBoundingClientRect(), c = box.getBoundingClientRect();
-            if (r.top < c.top) box.scrollBy({ top: r.top - c.top - 8, behavior: 'smooth' });
-            else if (r.bottom > c.bottom) box.scrollBy({ top: r.bottom - c.bottom + 8, behavior: 'smooth' });
+            this.scrollTimelineRow(this.markTimelineWindowSelected());
         } else if (this.viewMode === 'map') {
             UI.revealMapPerson(id);
         }
+    }
+
+    /** The Timeline scrolled to the person's row when it is out of view (a centre chosen in another window, spec 110 §3). */
+    revealTimelinePerson(id: PersonId): void {
+        if (this.viewMode !== 'timeline') return;
+        const sel = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id;
+        this.scrollTimelineRow(document.querySelector<SVGGElement>(`#timeline-container .timeline-bar[data-person-id="${sel}"]`));
+    }
+
+    private scrollTimelineRow(row: SVGGElement | null): void {
+        const box = document.getElementById('timeline-container');
+        if (!row || !box) return;
+        const r = row.getBoundingClientRect(), c = box.getBoundingClientRect();
+        if (r.top < c.top) box.scrollBy({ top: r.top - c.top - 8, behavior: 'smooth' });
+        else if (r.bottom > c.bottom) box.scrollBy({ top: r.bottom - c.bottom + 8, behavior: 'smooth' });
     }
 
     getWindowSelected(): PersonId | null {

@@ -17,6 +17,7 @@ import { UndoManager } from '../../undo.js';
 import type { StromData, TreeId, Person, PersonId } from '../../types.js';
 import { WindowBus, createMemoryHub, FOCUS_WAIT_MS, type WindowMessage, type WindowStatus } from '../window-bus.js';
 import { SatelliteClient, followSelectionKey, MAIN_SILENCE_MS } from '../satellite.js';
+import { sendModeKey } from '../follow-mode.js';
 import type { LocksLike } from '../window-role.js';
 
 const TREE = 'sat-tree' as TreeId;
@@ -443,6 +444,60 @@ describe('selection', () => {
         await settle();
         expect(of('select').map(m => m.origin)).toEqual([SAT]);
         other.stop();
+    });
+
+    it('send mode (spec 110 §1): a choice says focus or mark and its rising number; off sends nothing; a change is told to the main window', async () => {
+        await connect();
+        const said = vi.fn();
+        sat.on('send-mode', said);
+        expect(sat.sendMode).toBe('mark');
+        sat.announceSelection('p1');
+        sat.sendMode = 'focus';
+        expect(session.get(sendModeKey(SAT))).toBe('focus');
+        sat.announceSelection('p2');
+        sat.announceSelection('p3');
+        await settle();
+        const sel = of('select');
+        expect(sel.map(m => [m.personId, m.intent])).toEqual([['p1', 'mark'], ['p2', 'focus'], ['p3', 'focus']]);
+        expect(sel[1].seq!).toBeGreaterThan(sel[0].seq!);
+        expect(sel[2].seq!).toBeGreaterThan(sel[1].seq!);
+        expect(of('send-mode')).toEqual([expect.objectContaining({ windowId: SAT, mode: 'focus' })]);
+        // A view without it (Family) marks only: the main window hears the run of this window end.
+        sat.setKind('family');
+        expect(sat.sendMode).toBe('mark');
+        expect(sat.sendModeChoice).toBe('focus');
+        sat.setKind('timeline');
+        expect(sat.sendMode).toBe('focus');
+        // Off: nothing sent, and the main window hears it marks no more.
+        sat.followMode = 'off';
+        sat.announceSelection('p4');
+        await settle();
+        expect(of('select')).toHaveLength(3);
+        expect(of('send-mode').map(m => m.mode)).toEqual(['focus', 'mark', 'focus', 'mark']);
+        expect(said.mock.calls).toEqual([['focus'], ['mark'], ['focus'], ['mark']]);
+        // A reload starts its numbers above the earlier ones (the clock).
+        vi.advanceTimersByTime(1000);
+        const again = new SatelliteClient({ kind: 'table', treeId: TREE, windowId: SAT, newId: false }, { bus: new WindowBus(SAT, hub.channel()), storage: { getItem: k => session.get(k) ?? null, setItem: () => {} }, locks: noLocks(), closeSelf: () => {}, hasFocus: () => true, bounds: () => undefined });
+        expect(again.sendModeChoice).toBe('focus');
+        again.stop();
+    });
+
+    it('the main window\'s state (spec 110 §4, §7): open while heard, following the agent as its status says', async () => {
+        const states = vi.fn();
+        sat.on('main-state', states);
+        expect(sat.mainState).toEqual({ open: false, followingAgent: false });
+        await connect();
+        expect(sat.mainState).toEqual({ open: true, followingAgent: false });
+        main.post({ type: 'status', ...status({ followingAgent: true }) });
+        await settle();
+        expect(sat.mainState).toEqual({ open: true, followingAgent: true });
+        main.post({ type: 'status', ...status() });
+        await settle();
+        expect(states.mock.calls).toEqual([
+            [{ open: true, followingAgent: false }],
+            [{ open: true, followingAgent: true }],
+            [{ open: true, followingAgent: false }],
+        ]);
     });
 
     it('a selection taken from another window is not sent back', async () => {

@@ -10368,6 +10368,17 @@ const stringsEN = {
         stopWaiting: 'Stop waiting',
         adoptWaitEnd: 'The research takes the tree over once it is set up in the terminal.',
     },
+    /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
+    mainNotice: {
+        focusFromWindow: 'Centre chosen in another window',
+        restoreAria: (name: string) => `Restore the previous centre: ${name}`,
+        close: 'Close notice',
+        notInView: (name: string) => `${name} is not in this view.`,
+        goTo: 'Go to',
+        agent: 'Following the agent – a selection from another window is only marked.',
+        hidden: 'The selected person is hidden in this window.',
+        deleted: 'The selected person is no longer in the tree.',
+    },
 };
 
 const stringsCZ: StringsType = {
@@ -20308,6 +20319,17 @@ const stringsCZ: StringsType = {
         stopWaiting: 'Zrušit čekání',
         adoptWaitEnd: 'Výzkum strom převezme, až se v terminálu založí.',
     },
+    /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
+    mainNotice: {
+        focusFromWindow: 'Střed vybrán v dalším okně',
+        restoreAria: (name: string) => `Vrátit předchozí střed: ${name}`,
+        close: 'Zavřít oznámení',
+        notInView: (name: string) => `${name} v tomto pohledu není.`,
+        goTo: 'Přejít na',
+        agent: 'Sleduje se agent – výběr z dalšího okna se jen vyznačí.',
+        hidden: 'Vybraná osoba je v tomto okně skrytá.',
+        deleted: 'Vybraná osoba už ve stromu není.',
+    },
 };
 
 const stringsDE: StringsType = {
@@ -30167,6 +30189,17 @@ const stringsDE: StringsType = {
         adoptWaitingSub: 'Das Anlegen wird im Terminal abgeschlossen.',
         stopWaiting: 'Warten beenden',
         adoptWaitEnd: 'Die Forschung übernimmt den Stammbaum, sobald sie im Terminal angelegt ist.',
+    },
+    /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
+    mainNotice: {
+        focusFromWindow: 'Mitte in anderem Fenster gewählt',
+        restoreAria: (name: string) => `Vorherige Mitte wiederherstellen: ${name}`,
+        close: 'Hinweis schließen',
+        notInView: (name: string) => `${name} ist in dieser Ansicht nicht enthalten.`,
+        goTo: 'Gehe zu',
+        agent: 'Agent wird verfolgt – eine Auswahl aus einem anderen Fenster wird nur markiert.',
+        hidden: 'Die gewählte Person ist in diesem Fenster ausgeblendet.',
+        deleted: 'Die gewählte Person ist nicht mehr im Baum.',
     },
 };
 

@@ -26,6 +26,7 @@ import type { WindowRegistry } from './window-registry.js';
 import type { SatelliteClient } from './satellite.js';
 import type { TableSelectionShare } from '../ui/table-view/table-ui.js';
 import { viewRecenters, type FollowMode } from './follow-mode.js';
+import { VIEW_STEP_EVENT, WindowFocusController, type WindowFocusDeps, type WindowNotice } from './window-focus.js';
 
 /** A person picked in a view without a new focus (a satellite's map): `detail.personId`. */
 export const PERSON_CHOSEN_EVENT = 'strom:person-chosen';
@@ -54,6 +55,28 @@ export interface SelectionDeps {
      * Absent: never (the main window).
      */
     agentAttached?(): boolean;
+    /** The main window's side of a choice sent with `focus` (spec 110); absent: a satellite. */
+    mainFocus?: MainFocusDeps;
+}
+
+/** What the notice's buttons do (spec 110 §2, §3): ×, "↶ {previous centre}", "Go to". */
+export interface WindowNoticeActions {
+    close(): void;
+    restore(): void;
+    goTo(personId: PersonId): void;
+    /** A notice without × ran its time out (the run goes on). */
+    expired(): void;
+}
+
+/** The main window's part of a choice sent with `focus` (spec 110 §2–§7). */
+export interface MainFocusDeps extends Omit<WindowFocusDeps, 'ring' | 'showNotice'> {
+    showNotice(notice: WindowNotice, announce: boolean, actions: WindowNoticeActions): void;
+    /** Whether the person is drawn in the chart shown (Family, Descendants, Fan); null: another view. */
+    drawn(personId: PersonId): boolean | null;
+    /** Back in the view's history (the view before the run). */
+    back(): void;
+    /** "Go to" of the notice: the person made the centre, as the card's Focus does. */
+    goTo(personId: PersonId): void;
 }
 
 /** The detail of `strom:focus-changed`: the person, and whether it was a jump after the agent (not a choice). */
@@ -111,12 +134,45 @@ export function applySharedSelection(personId: string | null, deps: SelectionDep
     if (cardInView(doc, personId) === false) deps.glideTo(personId as PersonId);
 }
 
-/** The main window: its choices go to the satellites, theirs are highlighted here. Returns the unsubscribe. */
+/**
+ * The main window: its choices go to the satellites, theirs are highlighted
+ * here; a satellite's choice sent with `focus` becomes the centre here
+ * (spec 110, WindowFocusController), and a person marked but not drawn in
+ * the chart is said in the notice with "Go to". Returns the unsubscribe.
+ */
 export function wireMainSelection(registry: WindowRegistry, deps: SelectionDeps): () => void {
     deps.setTableSelectionShare({
         active: () => registry.list().length > 0,
         announce: (id) => registry.announceSelection(id),
     });
+    const mf = deps.mainFocus;
+    let ctl: WindowFocusController | null = null;
+    if (mf) {
+        const actions: WindowNoticeActions = {
+            close: () => ctl?.endRun(),
+            restore: () => { ctl?.endRun(); mf.back(); },
+            goTo: (id) => { ctl?.endRun(); mf.goTo(id); },
+            expired: () => ctl?.hide(),
+        };
+        ctl = new WindowFocusController({
+            ...mf,
+            ring: (id) => deps.setWindowSelected(id),
+            showNotice: (n, announce) => mf.showNotice(n, announce, actions),
+        });
+    }
+    const focusCtl = ctl;
+    /** A choice marked here (mark only): a person the chart does not draw is said, with "Go to" (spec 110 §2). */
+    const markNotice = (personId: string | null): void => {
+        if (!focusCtl || !mf) return;
+        const id = personId as PersonId | null;
+        const absent = !!id && mf.exists(id) && !mf.hidden(id) && mf.drawn(id) === false;
+        if (absent) focusCtl.notice({ kind: 'not-in-view', personId: id! });
+        else if (focusCtl.noticeShown === 'not-in-view') focusCtl.hide();
+    };
+    // A step of this window's own ends a run of another window's centres (its own focus does not).
+    const onStep = (): void => { if (focusCtl && !focusCtl.isApplying) focusCtl.endRun(); };
+    if (focusCtl) window.addEventListener(VIEW_STEP_EVENT, onStep);
+    const offEnded = focusCtl ? registry.onSendEnded((id) => focusCtl.sourceEnded(id)) : () => {};
     const onFocus = (e: Event): void => {
         const id = chosenByFocus(e);
         if (!id) return;
@@ -125,9 +181,19 @@ export function wireMainSelection(registry: WindowRegistry, deps: SelectionDeps)
         registry.announceSelection(id);
     };
     window.addEventListener('strom:focus-changed', onFocus);
-    const off = registry.onSelect((personId) => applySharedSelection(personId, deps));
+    const off = registry.onSelect((personId, origin, meta) => {
+        if (focusCtl && meta?.intent === 'focus') {
+            focusCtl.take(personId, origin, meta.seq);
+            return;
+        }
+        applySharedSelection(personId, deps);
+        markNotice(personId);
+    });
     return () => {
         window.removeEventListener('strom:focus-changed', onFocus);
+        if (focusCtl) window.removeEventListener(VIEW_STEP_EVENT, onStep);
+        offEnded();
+        focusCtl?.dispose();
         off();
         deps.setTableSelectionShare(null);
     };

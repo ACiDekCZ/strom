@@ -21,7 +21,7 @@ import { DataManager, type WindowEditSink } from '../data.js';
 import type { TreeId } from '../types.js';
 import { WindowBus, answerWhenFocused, FOCUS_WAIT_MS, type MessageOf, type WindowStatus, type EditRefusal, type WindowBounds } from './window-bus.js';
 import { isMainAlive, MAIN_WINDOW_NAME, newWindowId, type LocksLike, type SatelliteParams, type SatelliteKind } from './window-role.js';
-import { effectiveFollowMode, followChoiceToStore, parseFollowChoice, type FollowMode } from './follow-mode.js';
+import { effectiveFollowMode, followChoiceToStore, parseFollowChoice, getSendModeChoice, sendModeAvailable, setSendMode, type FollowMode, type SendMode } from './follow-mode.js';
 import type { AgentFollow } from './agent-follow-state.js';
 
 /** Where the satellite's copy of the tree lives (DataManager; a test may pass its own). */
@@ -70,6 +70,10 @@ export interface SatelliteEvents {
     follow: boolean;
     /** The window's "Follow selection" mode changed (a choice in the header, K2.1). */
     'follow-mode': FollowMode;
+    /** What a choice here does in the main window now changed (spec 110 §1: the send mode, the view, "off"). */
+    'send-mode': SendMode;
+    /** The main window opened, closed or started or stopped following the agent (spec 110 §4, §7). */
+    'main-state': MainWindowState;
     /** Another window takes over after the main window closed (spec 097 §7). */
     'taking-over': { windowId: string };
     /** The main window asks this window to close (§4 ×). */
@@ -79,6 +83,16 @@ export interface SatelliteEvents {
      * within FOCUS_WAIT_MS (§4, 4c): the window marks its title for a while.
      */
     attention: Record<string, never>;
+}
+
+/**
+ * The main window as another window shows it (spec 110 §4, §7): `open`
+ * while it is heard; `followingAgent` while it follows the research agent
+ * (a choice sent with `focus` is only marked there).
+ */
+export interface MainWindowState {
+    open: boolean;
+    followingAgent: boolean;
 }
 
 type Listener<K extends keyof SatelliteEvents> = (payload: SatelliteEvents[K]) => void;
@@ -155,6 +169,11 @@ export class SatelliteClient {
 
     private lastSelection: string | null = null;
     private applyingRemoteSelection = false;
+    /** The number of this window's last choice (from the clock: a reload never repeats an earlier one's). */
+    private seq = Date.now();
+    /** What a choice here did in the main window as last said (sendModeNow). */
+    private sentMode: SendMode;
+    private lastMainState: MainWindowState = { open: false, followingAgent: false };
     private focusWaiter: (() => void) | null = null;
     private started = false;
     private menuReqs = 0;
@@ -172,6 +191,7 @@ export class SatelliteClient {
         this.closeSelf = opts.closeSelf ?? (() => { if (typeof window !== 'undefined') window.close(); });
         this.hasFocus = opts.hasFocus ?? (() => typeof document !== 'undefined' && document.hasFocus());
         this.bounds = opts.bounds ?? defaultBounds;
+        this.sentMode = this.sendMode;
     }
 
     // ---- state ----
@@ -219,11 +239,53 @@ export class SatelliteClient {
         const on = this.followSelection;
         if (on !== wasOn) this.emit('follow', on);
         if (this.followMode !== wasMode) this.emit('follow-mode', this.followMode);
+        this.syncSendMode();
     }
 
     /** The window sends and takes the selection (any mode but off). */
     get followSelection(): boolean {
         return this.followMode !== 'off';
+    }
+
+    /** The send mode chosen in this window (spec 110 §1), whatever view shows now and also while "off". */
+    get sendModeChoice(): SendMode {
+        return getSendModeChoice(this.windowId, this.storage);
+    }
+
+    /**
+     * What a choice here does in the main window now (spec 110 §1, §6): the
+     * chosen send mode in a view that offers it while the window sends its
+     * choices; `mark` otherwise.
+     */
+    get sendMode(): SendMode {
+        return this.followSelection && sendModeAvailable(this._kind) ? this.sendModeChoice : 'mark';
+    }
+
+    /** Choose the send mode (kept for the window; the main window hears what it does now). */
+    set sendMode(mode: SendMode) {
+        setSendMode(this.windowId, mode, this.storage);
+        this.syncSendMode();
+    }
+
+    /** The main window as this window shows it now (spec 110 §4, §7). */
+    get mainState(): MainWindowState {
+        return { open: this._connection === 'connected', followingAgent: this._connection === 'connected' && !!this._status?.followingAgent };
+    }
+
+    /** What a choice here does in the main window changed: said here, and to the main window (another than focus ends its run there). */
+    private syncSendMode(): void {
+        const mode = this.sendMode;
+        if (mode === this.sentMode) return;
+        this.sentMode = mode;
+        this.emit('send-mode', mode);
+        if (this.started) this.bus.post({ type: 'send-mode', windowId: this.windowId, mode });
+    }
+
+    private syncMainState(): void {
+        const now = this.mainState;
+        if (now.open === this.lastMainState.open && now.followingAgent === this.lastMainState.followingAgent) return;
+        this.lastMainState = now;
+        this.emit('main-state', now);
     }
 
     private followChoice(): FollowMode | null {
@@ -316,6 +378,8 @@ export class SatelliteClient {
         // The view's default (or a switch of a view that cannot move its centre) may change what a choice does here.
         if (this.followMode !== wasMode) this.emit('follow-mode', this.followMode);
         if (this.started) this.bus.post({ type: 'view', windowId: this.windowId, kind, agent: this._agent });
+        // A view without the send mode marks only (spec 110 §6): the main window's run of this window's choices ends.
+        this.syncSendMode();
     }
 
     /** This window's own following of the agent (spec 097 §1–§3; null: no live session). */
@@ -345,11 +409,16 @@ export class SatelliteClient {
         if (this.mainId && !this.readOnly()) this.bus.post({ type: 'redo' });
     }
 
-    /** The person selected in this window (sent only while following the selection, never back to where it came from). */
+    /**
+     * The person selected in this window (sent only while following the
+     * selection, never back to where it came from, nor again when another
+     * window gives back this window's own choice). It says what it does in
+     * the main window (spec 110: the send mode) and its number.
+     */
     announceSelection(personId: string | null): void {
         if (!this.followSelection || this.applyingRemoteSelection || personId === this.lastSelection) return;
         this.lastSelection = personId;
-        this.bus.post({ type: 'select', personId, treeId: this._treeId, origin: this.windowId });
+        this.bus.post({ type: 'select', personId, treeId: this._treeId, origin: this.windowId, intent: this.sendMode, seq: ++this.seq });
     }
 
     /**
@@ -429,6 +498,7 @@ export class SatelliteClient {
         if (this._connection === c) return;
         this._connection = c;
         this.emit('connection', c);
+        this.syncMainState();
     }
 
     private onStatus(m: MessageOf<'status'>): void {
@@ -452,6 +522,7 @@ export class SatelliteClient {
             this.emit('renamed', status.treeName);
         }
         this.setConnection('connected');
+        this.syncMainState();
         if (this.hasTree && !status.treeExists && status.treeId === null) this.markGone();
         if (status.locked && this.hasTree) this.dropLockedCopy();
         this.emit('status', status);

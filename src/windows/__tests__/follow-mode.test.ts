@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { defaultFollowMode, effectiveFollowMode, followChoiceToStore, followModesFor, parseFollowChoice, viewRecenters } from '../follow-mode.js';
+import { defaultFollowMode, effectiveFollowMode, followChoiceToStore, followModesFor, getSendMode, getSendModeChoice, parseFollowChoice, parseSendMode, sendModeAvailable, sendModeKey, setSendMode, viewRecenters } from '../follow-mode.js';
 
 describe('follow mode', () => {
     it('switch in Family, Descendants and the Fan; mark in the Timeline, the Map, the Table and the overview', () => {
@@ -34,5 +34,33 @@ describe('follow mode', () => {
         expect(followChoiceToStore('mark', 'family')).toBe('mark');
         expect(followChoiceToStore('mark', 'map')).toBe('');
         expect(followChoiceToStore('off', 'map')).toBe('off');
+    });
+});
+
+describe('send mode (spec 110 §1)', () => {
+    const store = () => {
+        const m = new Map<string, string>();
+        return { m, s: { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); } } };
+    };
+
+    it('offered in the Table, the Timeline and the Map; not in the charts', () => {
+        expect(['table', 'timeline', 'map'].map(sendModeAvailable)).toEqual([true, true, true]);
+        expect(['family', 'descendants', 'fan', 'overview'].map(sendModeAvailable)).toEqual([false, false, false, false]);
+    });
+
+    it('mark until focus is chosen; kept per window; a view without it marks only', () => {
+        const { m, s } = store();
+        expect(getSendModeChoice('w1', s)).toBe('mark');
+        setSendMode('w1', 'focus', s);
+        expect(m.get(sendModeKey('w1'))).toBe('focus');
+        expect(getSendModeChoice('w1', s)).toBe('focus');
+        expect(getSendModeChoice('w2', s)).toBe('mark');
+        expect(getSendMode('w1', 'table', s)).toBe('focus');
+        expect(getSendMode('w1', 'fan', s)).toBe('mark');
+        setSendMode('w1', 'mark', s);
+        expect(m.get(sendModeKey('w1'))).toBe('');
+        expect(parseSendMode('anything')).toBe('mark');
+        // No storage (a private window that throws): the default.
+        expect(getSendModeChoice('w1', { getItem: () => { throw new Error('no'); }, setItem: () => {} })).toBe('mark');
     });
 });

@@ -32,7 +32,8 @@ import { setAgentStateHint } from '../ui/research-ui.js';
 import { onBridgeStatus } from '../ui/research-sync-ui.js';
 import { onDirectionPlaces } from '../research-directions-write.js';
 import type { PersonId } from '../types.js';
-import { wireMainSelection, wireSatelliteSelection, type SelectionDeps } from './window-selection.js';
+import { cardInView, wireMainSelection, wireSatelliteSelection, type MainFocusDeps, type SelectionDeps } from './window-selection.js';
+import { hideWindowNotice, showWindowNotice } from '../ui/window-notice.js';
 import { windowAgentFollow } from './agent-follow-state.js';
 import { setTableResearchForward, TABLE_BUBBLE_ACTION } from './window-table-research.js';
 import { SettingsManager } from '../settings.js';
@@ -105,10 +106,12 @@ export function startMainWindow(): WindowRegistry {
             redo: () => UI.performRedo(),
             // Where a satellite without a state of its own starts (its reload, another tree).
             focus: () => mainFocusNow(),
+            // Following the agent, a centre chosen in another window is only marked (spec 110 §4): the satellites say so.
+            followingAgent: () => mainFollowsAgent(),
         }),
     });
     registry.start();
-    wireMainSelection(registry, selectionDeps());
+    wireMainSelection(registry, { ...selectionDeps(), mainFocus: mainFocusDeps() });
     // The person menu's research rows of a satellite (§2, 2g): listed and run here, as this window's own menu.
     const researchItems = (personId: string) => (DataManager.getPerson(personId as PersonId) ? UI.personResearchMenuItems(personId as PersonId) : null);
     registry.setResearchMenuProvider((personId) => researchItems(personId) ?? []);
@@ -167,6 +170,49 @@ function selectionDeps(): SelectionDeps {
         glideTo: (id) => { ZoomPan.glideToPerson(id); },
         reveal: (id) => TreeRenderer.revealWindowSelected(id),
         recenter: (id) => recenterOn(id),
+    };
+}
+
+/** The main window follows the research agent now (spec 097 §4): following on and not paused here. */
+function mainFollowsAgent(): boolean {
+    return UI.liveFollowView() !== null && !UI.liveFollowPausedHere();
+}
+
+/**
+ * A centre chosen in another window (spec 110 §3): as the card's Focus, in
+ * the view shown (Descendants stays Descendants, its new root); stored as
+ * the tree's last focus as the card's Focus stores it. The Timeline and the
+ * Map bring the person into view, the Table selects their row.
+ */
+function focusFromWindow(id: PersonId, history: 'push' | 'replace'): void {
+    const mode = TreeRenderer.getViewMode();
+    const reveal = mode === 'timeline' ? (pid: PersonId) => TreeRenderer.revealTimelinePerson(pid)
+        : mode === 'map' ? (pid: PersonId) => UI.revealMapPerson(pid)
+        : undefined;
+    void TreeRenderer.setFocus(id, true, reveal, { history }).then(() => {
+        if (TreeRenderer.getViewMode() === 'table') UI.tableSharedSelect(id, true);
+    });
+}
+
+/** The app's side of a centre chosen in another window (spec 110 §2–§7). */
+function mainFocusDeps(): MainFocusDeps {
+    return {
+        focusId: () => TreeRenderer.getFocusPersonId(),
+        exists: (id) => !!DataManager.getPerson(id),
+        // No person is hidden in a window yet (privacy hides only in an export): nothing to say.
+        hidden: () => false,
+        followingAgent: () => mainFollowsAgent(),
+        focus: (id, history) => focusFromWindow(id, history),
+        showNotice: (n, announce, actions) => showWindowNotice(n, announce, actions),
+        hideNotice: () => hideWindowNotice(),
+        drawn: (id) => {
+            const mode = TreeRenderer.getViewMode();
+            if (mode === 'family' || mode === 'descendants') return cardInView(document, id) !== null;
+            if (mode === 'fan') return TreeRenderer.getFanView()?.hasPerson(id) ?? null;
+            return null;
+        },
+        back: () => { void TreeRenderer.goBack(); },
+        goTo: (id) => { void TreeRenderer.setFocus(id); },
     };
 }
 

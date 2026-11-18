@@ -47,6 +47,12 @@ export interface WindowStatus {
      * the order of taking over); only the windows that have one.
      */
     agents?: Record<string, AgentFollow>;
+    /**
+     * The main window follows the research agent now (spec 097 §4, attached:
+     * not paused): a choice sent to it with `focus` is only marked there
+     * (spec 110 §4). Missing: no.
+     */
+    followingAgent?: boolean;
 }
 
 /** Where a satellite stands on screen (K4 layout). */
@@ -81,8 +87,20 @@ export type WindowMessageBody =
     | { type: 'edit'; windowId: string; editId: string; treeId: TreeId; baseRevision: number; json: string; label: string }
     /** main → sat: the edit's result; `ok: false` = not applied (a fresh `tree` follows to that window). */
     | { type: 'edit-result'; to: string; editId: string; ok: boolean; revision: number; reason?: EditRefusal }
-    /** all → all: the selected person (only windows following the selection send and take it). */
-    | { type: 'select'; personId: string | null; treeId: TreeId | null; origin: string }
+    /**
+     * all → all: the selected person (only windows following the selection
+     * send and take it). A satellite's says what the choice does in the main
+     * window (`intent`, spec 110: `focus` makes the person its centre, `mark`
+     * or none only marks) and numbers its choices (`seq`, rising in the
+     * window: the main window takes only the newest).
+     */
+    | { type: 'select'; personId: string | null; treeId: TreeId | null; origin: string; intent?: 'mark' | 'focus'; seq?: number }
+    /**
+     * sat → main: what a choice in the window does in the main window now
+     * (spec 110 §1: its send mode, `mark` while it sends nothing or its view
+     * offers no choice); another than `focus` ends a run of its choices there.
+     */
+    | { type: 'send-mode'; windowId: string; mode: 'mark' | 'focus' }
     /** sat → main: undo / redo from the main window's history (the result comes as `patch`). */
     | { type: 'undo' }
     | { type: 'redo' }
@@ -147,7 +165,7 @@ export interface ChannelLike {
     close(): void;
 }
 
-const TYPES = new Set<string>(['hello', 'init', 'tree', 'patch', 'edit', 'edit-result', 'select', 'undo', 'redo', 'status',
+const TYPES = new Set<string>(['hello', 'init', 'tree', 'patch', 'edit', 'edit-result', 'select', 'send-mode', 'undo', 'redo', 'status',
     'focus-req', 'focused', 'research-action', 'research-action-result', 'research-menu-req', 'research-menu', 'research-state', 'agent-state', 'agent-state-req', 'view', 'spawn', 'bye', 'main-bye', 'taking-over', 'link', 'close']);
 
 function isWindowMessage(data: unknown): data is WindowMessage {

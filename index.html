@@ -16540,6 +16540,90 @@
                 max-width: calc(100vw - var(--side-bar-w) - 248px);
             }
         }
+        /* The notice about another window's choice in the main window (spec 110,
+           src/ui/window-notice.ts): the focus confirmation's place at the bottom
+           middle of the tree, one at a time; it steps aside while a message
+           toast shows. The status line beside it is read, not seen. */
+        .window-notice {
+            position: fixed; left: 50%; bottom: 24px; z-index: 90;
+            transform: translateX(-50%);
+            /* Clear of ↩ ↪ (left) and the zoom panel (right, about 200 px) on both sides */
+            max-width: min(640px, calc(100vw - 416px));
+            pointer-events: none;
+        }
+        .wn-box {
+            pointer-events: auto;
+            display: flex; align-items: center; gap: 8px;
+            min-height: 40px; box-sizing: border-box; padding: 0 4px 0 12px;
+            min-width: 0; max-width: 100%;
+            background: var(--surface); color: var(--text);
+            border: 1px solid var(--border); border-radius: var(--r-lg);
+            box-shadow: var(--shadow-lg);
+            font-family: var(--font-sans); font-size: 13px;
+            opacity: 0; transform: translateY(6px);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+        .wn-box.show { opacity: 1; transform: none; }
+        .wn-box.wn-plain { padding-right: 12px; }
+        .wn-icon { flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; color: var(--text-muted); }
+        /* The message wraps to a second line only where the row is too short (the name in ↶ gives way first) */
+        .wn-msg { min-width: 0; padding: 4px 0; line-height: 1.3; overflow-wrap: anywhere; }
+        .wn-msg > .wn-name { white-space: normal; }
+        .wn-name { font-family: var(--font-serif); font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .wn-restore, .wn-go {
+            flex-shrink: 4; min-width: 96px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+            height: 30px; padding: 0 10px; max-width: 280px;
+            border: none; border-radius: var(--r-md); background: var(--surface-2);
+            color: var(--text); font: inherit; cursor: pointer;
+        }
+        .wn-go { flex-shrink: 0; min-width: 0; font-weight: 600; color: var(--primary); }
+        .wn-restore-icon { color: var(--text); }
+        .wn-close {
+            flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+            width: 30px; height: 30px; padding: 0; border: none; border-radius: var(--r-md);
+            background: transparent; color: var(--text-muted); cursor: pointer;
+        }
+        @media (hover: hover) {
+            .wn-restore:hover, .wn-go:hover { background: color-mix(in srgb, var(--primary) 12%, var(--surface-2)); }
+            .wn-close:hover { background: var(--surface-2); color: var(--text); }
+        }
+        .wn-restore:focus-visible, .wn-go:focus-visible, .wn-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .window-notice-status {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
+        @media (prefers-reduced-motion: reduce) { .wn-box { transition: none; transform: none; } }
+        body.view-mode-print .window-notice,
+        body.slideshow-mode .window-notice,
+        body:has(.modal-overlay.active) .window-notice,
+        body:has(> .toast.show:not(.toast-held), > .undo-toast.show) .window-notice { display: none; }
+        @media print { .window-notice { display: none !important; } }
+        @media (pointer: coarse), (max-width: 1024px) {
+            .wn-box { min-height: 48px; }
+            .wn-restore, .wn-go { height: 40px; }
+            .wn-close { width: 44px; height: 44px; }
+        }
+        /* Tablet: above the bottom bar, between ↩ ↪ and the zoom stack (as the focus confirmation). */
+        @media (max-width: 1024px) {
+            .window-notice { bottom: calc(var(--bottom-bar-h) + 16px); }
+        }
+        /* Phone: a row of its own above ↩ ↪ and the zoom stack, the phone's width with its gutters;
+           the message wraps to a second line rather than end in "…" (the name in the button does). */
+        @media (max-width: 640px) {
+            .window-notice {
+                bottom: calc(var(--bottom-bar-h) + 68px); left: 16px; right: 16px; max-width: none;
+                transform: none; display: flex; justify-content: center;
+            }
+            .wn-restore { max-width: 45%; }
+        }
+        /* A phone held sideways: beside the side bar, clear of the home indicator. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .window-notice {
+                bottom: calc(var(--bottom-bar-h) + 16px + env(safe-area-inset-bottom, 0px));
+                left: calc(var(--side-bar-w) + (100vw - var(--side-bar-w)) / 2);
+                max-width: calc(100vw - var(--side-bar-w) - 416px);
+            }
+        }
         /* One toast at a time (round 5 §39, round 6 §43, src/toast-slot.ts):
            the newest message shows, one under it waits hidden (.toast-held);
            the undo pill's "Undo" and the confirmation's "↩ Back" ride in the
@@ -32158,6 +32242,8 @@
     <button id="focus-forward-btn" class="focus-nav-btn focus-forward-btn" style="display:none;"
         onclick="window.Strom.TreeRenderer.goForward()" data-i18n-title="focus.forward" data-i18n-aria-label="focus.forward">↪</button>
     <div id="focus-toast" class="focus-toast" role="status" aria-live="polite"></div>
+    <div id="window-notice" class="window-notice"></div>
+    <div id="window-notice-status" class="window-notice-status" role="status" aria-live="polite"></div>
 
     <div id="slideshow-overlay" class="slideshow-overlay">
         <div id="slideshow-caption" class="slideshow-caption"></div>

@@ -937,6 +937,12 @@ export class FanViewController {
         if (!inside) zoom.animateTo({ z: zoom.zoom(), cx: x, cy: y });
     }
 
+    /** Whether the fan drawn now shows the person (a sector of theirs, the centre among them). */
+    hasPerson(id: string): boolean {
+        const m = this.model;
+        return !!m && [...m.sectors, ...m.desc].some(s => s.person?.id === id);
+    }
+
     /** The sectors of the person selected in another window (not the focus: the centre is them already). */
     private windowSelectedKeys(): string[] {
         const id = this.host.windowSelected?.();

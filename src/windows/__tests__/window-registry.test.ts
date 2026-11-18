@@ -364,7 +364,7 @@ describe('selection', () => {
         registry.onSelect(seen);
         sat.bus.post({ type: 'select', personId: 'p1', treeId: TREE, origin: sat.id });
         await settle();
-        expect(seen).toHaveBeenCalledWith('p1', sat.id);
+        expect(seen).toHaveBeenCalledWith('p1', sat.id, { intent: 'mark', seq: null });
         expect(sat.of('select')).toHaveLength(0);
 
         registry.announceSelection('p2');
@@ -373,6 +373,44 @@ describe('selection', () => {
         registry.announceSelection('p2');
         await settle();
         expect(sat.of('select')).toHaveLength(1);
+    });
+
+    it('a choice sent with focus (spec 110): its intent and number reach the main view; the end of a window\'s sending is said', async () => {
+        const sat = await connect();
+        const seen = vi.fn();
+        const ended = vi.fn();
+        registry.onSelect(seen);
+        registry.onSendEnded(ended);
+        sat.bus.post({ type: 'select', personId: 'p1', treeId: TREE, origin: sat.id, intent: 'focus', seq: 7 });
+        await settle();
+        expect(seen).toHaveBeenCalledWith('p1', sat.id, { intent: 'focus', seq: 7 });
+        sat.bus.post({ type: 'send-mode', windowId: sat.id, mode: 'focus' });
+        await settle();
+        expect(ended).not.toHaveBeenCalled();
+        sat.bus.post({ type: 'send-mode', windowId: sat.id, mode: 'mark' });
+        await settle();
+        expect(ended.mock.calls).toEqual([[sat.id]]);
+        sat.bus.post({ type: 'bye', windowId: sat.id });
+        await settle();
+        expect(ended.mock.calls).toEqual([[sat.id], [sat.id]]);
+    });
+});
+
+describe('the main window following the agent (spec 110 §4)', () => {
+    it('its status says so to the other windows', async () => {
+        registry.stop();
+        let following = false;
+        registry = new WindowRegistry({
+            bus: new WindowBus('main-1', hub.channel()),
+            host: dataManagerHost({ treeName: () => treeName, treeExists: () => true, focusSelf: () => {}, hasFocus: () => true, followingAgent: () => following }),
+            openWindow: () => fakeWindow() as unknown as Window,
+        });
+        registry.start();
+        const sat = await connect();
+        expect(last(sat.of('status'))?.followingAgent).toBeUndefined();
+        following = true;
+        await settle(1100);
+        expect(last(sat.of('status'))?.followingAgent).toBe(true);
     });
 });
 
