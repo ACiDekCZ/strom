@@ -25,13 +25,17 @@ const NOT_TAKEN = {
     skipped: [{ n: 1, kind: 'fact.main', why: 'not cited', code: 'main.notCarried', params: { family: 'F0001', fact: 'MARR', source: 'S0001' } }],
 };
 
+/** The page runs on Playwright's clock: the edit's undo pill stands its 3 s to be read by `runFor`. */
 async function sendAnswered(page: Page, body: unknown, features: string[]): Promise<FakeBridge> {
+    await page.clock.install();
     await openResearch(page);
     const b = await fakeBridge(page, { features, syncReply: { status: 200, body } });
     await poll(page);
     await editJan(page, 'Kolín');
     await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
     await expect.poll(() => b.posts.length).toBe(1);
+    // The send's answer is said once the edit's undo pill has stood its 3 s (it carries the pill's Undo).
+    await page.clock.runFor(3000);
     return b;
 }
 
