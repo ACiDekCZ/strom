@@ -34,7 +34,7 @@ async function openMain(page: Page): Promise<string> {
         const w = window as unknown as { __links: string[] };
         w.__links = [];
         const ui = window.Strom.UI as unknown as Record<string, (...a: unknown[]) => unknown>;
-        for (const name of ['openDeepLink', 'handleSearchResults', 'openExternalRequest']) {
+        for (const name of ['openDeepLink', 'handleSearchResults', 'runExternalRequest']) {
             const orig = ui[name];
             ui[name] = function (this: unknown, ...a: unknown[]) {
                 w.__links.push(`${name} ${name === 'handleSearchResults' ? a[1] : JSON.stringify(a[0])}`);
@@ -128,7 +128,7 @@ test.describe('desktop (1440)', () => {
         await expect(page.locator('#person-page-modal .pp-sub')).toContainText('Kunhuta');
         // Heartbeats later: opened exactly once.
         await tab.waitForTimeout(2500);
-        expect(await linksOf(page)).toEqual(['openExternalRequest {}', 'openDeepLink {"kind":"person","ref":"k"}']);
+        expect(await linksOf(page)).toEqual(['runExternalRequest {}', 'openDeepLink {"kind":"person","ref":"k"}']);
         expect(await storageLog(tab)).toEqual([]);
         await tab.close();
     });

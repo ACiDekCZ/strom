@@ -2047,7 +2047,7 @@ export const researchUiMethods = uiModule({
                     startupLaunchSeen = true;
                     if (!isStartup) {
                         const launch = new URLSearchParams(search);
-                        const opening = this.openExternalRequest(launch);
+                        const opening = this.runExternalRequest(launch);
                         // `strom app --person P…` into the open window: the person once the research's tree is in.
                         const link = opening ? parseDeepLink(launch) : null;
                         if (opening && link) void opening.then(() => this.openDeepLinkFor(link, launch));
@@ -2070,10 +2070,15 @@ export const researchUiMethods = uiModule({
     /**
      * A request from Strom Research reaching the window that is already open
      * (a later launch of the installed app): the same handling as at startup.
-     * Returns the request's handling, settled once it is done (its tree in),
-     * or null when there was none.
+     * Returns whether the address carried such a request; its handling runs
+     * on (runExternalRequest gives it, for what waits on the tree coming in).
      */
-    openExternalRequest(params: URLSearchParams): Promise<void> | null {
+    openExternalRequest(params: URLSearchParams): boolean {
+        return this.runExternalRequest(params) !== null;
+    },
+
+    /** openExternalRequest's handling, settled once it is done (its tree in); null when the address has none. */
+    runExternalRequest(params: URLSearchParams): Promise<void> | null {
         const sendUrl = params.get('send');
         const liveUrl = params.get('live');
         const importUrl = params.get('import-url');

@@ -59,7 +59,7 @@ export interface LinkOpenerDeps {
     /** Open another tree, as the tree switcher does. */
     switchTree(treeId: string): Promise<void>;
     /**
-     * `?send=` / `?live=` / `?import-url=` / `?adopt=` (UI.openExternalRequest): its handling, settled once done
+     * `?send=` / `?live=` / `?import-url=` / `?adopt=` (UI.runExternalRequest): its handling, settled once done
      * (the research's tree in); null when the address has none.
      */
     externalRequest(params: URLSearchParams): Promise<void> | null;
