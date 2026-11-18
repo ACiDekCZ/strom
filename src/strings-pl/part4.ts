@@ -525,8 +525,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         searchLabel: 'Znajdź to miejsce pod inną nazwą',
         searching: 'Wyszukiwanie…',
         matched: (label: string) => label ? `Dopasowano do ${label}` : 'Dopasowano',
-        geocodingProgress: (done: number, total: number, place: string) =>
-            `Wyszukiwanie miejsc… ${done}/${total} (${place})`,
+        geocodingTitle: 'Wyszukiwanie miejsc…',
         done: (found: number) => `Na mapie: ${placeCountPl(found)}.`,
         doneWithMisses: (found: number, missed: number) =>
             `Na mapie: ${placeCountPl(found)}. Nie udało się znaleźć: ${missed} – pomoże poprawienie zapisu lub dodanie kraju.`,

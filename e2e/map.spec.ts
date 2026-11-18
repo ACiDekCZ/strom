@@ -171,7 +171,21 @@ test('the map offers to look up places after consent, plots them, never scrolls 
     // Consent is asked for before anything is sent.
     await expect(page.getByText(/place names.*will be sent/i)).toBeVisible();
     expect(asked).toEqual([]);
+    // The second place waits until the progress is seen (a route added later is asked first).
+    let release!: () => void;
+    const held = new Promise<void>(r => { release = r; });
+    await page.route('**://nominatim.openstreetmap.org/**', async route => {
+        if (asked.length > 0) await held;
+        await route.fallback();
+    });
     await page.getByRole('button', { name: 'Look them up' }).click();
+    // While it looks up (2h): what runs with "k of n" at the right, the one 4 px bar, Cancel at the right.
+    const geo = page.locator('#map-status .map-geo-prog');
+    await expect(geo.locator('.prog-t')).toHaveText('Looking up places…');
+    await expect(geo.locator('.prog-k')).toHaveText(/^[01] of 2$/);
+    expect(await geo.locator('.bar').evaluate(el => getComputedStyle(el).height)).toBe('4px');
+    await expect(geo.locator('.prog-acts').getByRole('button', { name: 'Cancel' })).toBeVisible();
+    release();
     // Markers appear for both places.
     await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
     expect([...asked].sort()).toEqual(['Greenwich', 'Pembroke']);

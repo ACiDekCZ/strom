@@ -33,6 +33,7 @@ import {
 import { onBridgeStatus } from './research-sync-ui.js';
 import type { TreeId } from '../types.js';
 import { uiModule } from './module.js';
+import { barHtml } from './prog-bar.js';
 
 /** The accept / reject toast (its Undo stands above the dialog, index.html). */
 const SUGGEST_TOAST_KIND = 'surname-suggest';
@@ -275,7 +276,7 @@ export const surnameSuggestMethods = uiModule({
         if (!up) {
             body = `<p class="ss-note">${esc(reply ? t.cached : t.needsBridge)}</p>`;
         } else if (view.phase === 'loading') {
-            body = `<div class="ss-progress" role="progressbar" aria-label="${esc(t.loading)}"><span></span></div>
+            body = `${barHtml(null, { cls: 'ss-progress', attrs: `role="progressbar" aria-label="${esc(t.loading)}"` })}
                 <p class="ss-note">${esc(t.loading)}</p>`;
         } else if (view.phase === 'error') {
             body = `<p class="ss-error" role="alert">${esc(view.error || t.error)}</p>

@@ -23,6 +23,7 @@ import {
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { isWriteHeldCode, joinSaid, writeHeldOfRefusal } from '../research-write-held.js';
 import { formatBytesShort } from './originals-ui.js';
+import { barHtml } from './prog-bar.js';
 import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
@@ -476,7 +477,7 @@ export const batchMethods = uiModule({
         const b = strings.batch;
         const r = run!;
         const done = r.index;
-        const pct = r.totalBytes > 0 ? Math.min(100, Math.round(r.doneBytes / r.totalBytes * 100)) : 0;
+        const share = r.totalBytes > 0 ? r.doneBytes / r.totalBytes : 0;
         const link = this.researchOriginalsLink();
         const research = link ? this.researchStatusOf(link.researchId)?.name || r.name : r.name;
         const cur = r.queue[r.index];
@@ -489,9 +490,11 @@ export const batchMethods = uiModule({
                 <div class="modal-content batch-content batch-progress${r.paused ? ' is-paused' : ''}">
                     <div class="batch-progress-title">${r.paused ? '' : '<i class="busy-spin s12" aria-hidden="true"></i>'}${esc(r.paused ? b.paused : b.progressTitle)}</div>
                     <div class="batch-progress-sub">${esc(b.progressSub(r.name, research))}</div>
-                    <div class="batch-progress-count" role="status"><strong>${esc(b.progressCount(done, r.total))}</strong>
-                        <span>${esc(b.progressBytes(formatBytesShort(r.doneBytes), formatBytesShort(r.totalBytes)))}</span></div>
-                    <div class="batch-bar"><span style="width:${pct}%"></span></div>
+                    <div class="prog batch-prog">
+                        <div class="prog-line batch-progress-count" role="status"><span>${esc(b.progressSize(formatBytesShort(r.doneBytes), formatBytesShort(r.totalBytes)))}</span>
+                            <strong class="prog-k">${esc(b.progressCount(done, r.total))}</strong></div>
+                        ${barHtml(share, { paused: r.paused })}
+                    </div>
                     ${r.paused ? `<p class="batch-paused-note">${esc(r.held || (r.lost ? b.bridgeLost : b.pausedNote))}${r.held && r.heldSeal && this.activeResearchLink('seal')
                         ? ` <button type="button" class="link-button" data-act="seal">${this.researchSyncActionLabel('sealTakeOver', strings.sync.held.sealButton)}</button>` : ''}</p>`
                         : cur ? `<p class="batch-now">${esc(b.now(cur.path, formatBytesShort(cur.size)))}</p>` : ''}

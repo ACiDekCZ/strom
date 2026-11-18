@@ -5674,17 +5674,7 @@
         .ss-note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-light); }
         .ss-error { margin: 10px 0 8px; font-size: 13px; color: var(--danger); }
         .modal button.ss-suggest { margin-top: 10px; min-height: 28px; }
-        .ss-progress {
-            position: relative; height: 4px; margin-top: 12px; overflow: hidden;
-            border-radius: 2px; background: var(--surface-2);
-        }
-        .ss-progress span {
-            position: absolute; inset: 0 auto 0 0; width: 40%;
-            border-radius: 2px; background: var(--primary);
-            animation: ss-bar 1.2s ease-in-out infinite;
-        }
-        @keyframes ss-bar { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
-        @media (prefers-reduced-motion: reduce) { .ss-progress span { animation: none; width: 100%; opacity: 0.5; } }
+        .ss-progress { margin-top: 12px; }
         .ss-level { margin-top: 16px; }
         .ss-level-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
         .ss-level-head h4 {
@@ -12580,6 +12570,10 @@
         }
         .map-status-text { font-size: 13px; color: var(--text-color, #222); }
         .map-status button { padding: 5px 10px; font-size: 13px; }
+        /* Looking places up (2h): a progress block as wide as the bar allows, the count and Cancel at the right. */
+        .map-status .map-geo-prog { flex: 1 1 auto; width: min(340px, 100%); }
+        .map-status .map-geo-prog .map-status-text { flex-basis: auto; text-align: left; font-size: 13px; }
+        .map-geo-place { font-size: 12.5px; }
         .map-status button.map-status-research { background: var(--research); border-color: var(--research); color: var(--research-soft); }
         @media (hover: hover) { .map-status button.map-status-research:hover { filter: brightness(1.1); } }
         .map-status button.map-status-confirm { color: var(--warn-text); border-color: var(--warn-line); background: var(--warn-soft); }
@@ -18840,19 +18834,38 @@
             border-radius: var(--r-md); box-shadow: var(--shadow-lg); font-size: 13.5px; line-height: 1.35;
         }
         .canvas-busy .ovl > span { min-width: 0; overflow-wrap: anywhere; }
+        /* The one progress bar (§2.8, 2h, src/ui/prog-bar.ts): 4 px, a pill, its track the text's colour at 22 %, the share
+           in --primary (a paused one --text-faint); `.ind` runs when the share is not known. Still under reduced motion. */
+        .bar {
+            display: block; position: relative; overflow: hidden; height: 4px; border-radius: var(--r-pill);
+            background: color-mix(in srgb, currentColor 22%, transparent);
+        }
+        .bar > i { position: absolute; inset: 0 auto 0 0; background: var(--primary); border-radius: inherit; transition: width .3s ease; }
+        .bar.is-paused > i { background: var(--text-faint); }
+        .bar.ind > i { width: 35%; animation: busy-bar 1.4s ease-in-out infinite; }
+        @keyframes busy-bar { from { left: -35%; } to { left: 100%; } }
+        @media (prefers-reduced-motion: reduce) {
+            .bar > i { transition: none; }
+            .bar.ind > i { animation: none; left: 0; width: 100%; opacity: .45; }
+        }
+        /* A progress block (2h): what runs with "k of n" at the right, the bar, then what else is known with the
+           actions at the right; both lines wrap when narrow, the count and the actions keep to the right edge. */
+        .prog { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 13px; }
+        .prog-line {
+            display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px;
+            color: var(--text-light); font-variant-numeric: tabular-nums;
+        }
+        .prog-line > * { min-width: 0; overflow-wrap: anywhere; }
+        .prog-t { color: var(--text); font-weight: 600; }
+        .prog-k { flex: none; margin-left: auto; }
+        .prog-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-left: auto; }
         /* A computation in parts inside its dialog (§8, 8b, src/ui/busy-prog.ts): above the footer, the step with
            "k/n" and a bar; its end the quiet sentence in the same place. */
         .busy-prog { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 0; font-size: 13px; color: var(--text-light); }
         .busy-prog__line { display: flex; justify-content: space-between; gap: 10px; font-variant-numeric: tabular-nums; }
         .busy-prog__text { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
         .busy-prog__k { flex: none; }
-        .busy-prog .bar {
-            display: block; position: relative; overflow: hidden; height: 4px; border-radius: 2px;
-            background: color-mix(in srgb, currentColor 22%, transparent);
-        }
         .busy-prog .bar[hidden] { display: none; }
-        .busy-prog .bar > i { position: absolute; inset: 0 auto 0 0; background: var(--primary); border-radius: 2px; transition: width .3s ease; }
-        @media (prefers-reduced-motion: reduce) { .busy-prog .bar > i { transition: none; } }
         .busy-prog-done { margin: 10px 0 0; }
         /* Between a dialog's scrolling body and its footer: the body's inset, so it never scrolls away. */
         .modal:has(> .modal-content) > .busy-prog,
@@ -18912,17 +18925,8 @@
         .toast--progress .toast-body { min-width: 0; flex: 1 1 auto; }
         .toast--progress .t-sub { font-size: 12.5px; opacity: .8; font-variant-numeric: tabular-nums; }
         .toast--progress .t-long { font-size: 12.5px; }
-        .toast--progress .bar {
-            display: block; position: relative; overflow: hidden; height: 4px; margin-top: 6px; border-radius: 2px;
-            background: color-mix(in srgb, currentColor 22%, transparent); min-width: 180px;
-        }
-        .toast--progress .bar > i { position: absolute; inset: 0 auto 0 0; background: currentColor; border-radius: 2px; transition: width .3s ease; }
-        .toast--progress .bar.ind > i { width: 35%; animation: busy-bar 1.4s ease-in-out infinite; }
-        @keyframes busy-bar { from { left: -35%; } to { left: 100%; } }
-        @media (prefers-reduced-motion: reduce) {
-            .toast--progress .bar.ind > i { animation: none; left: 0; width: 100%; opacity: .45; }
-            .toast--progress .bar > i { transition: none; }
-        }
+        .toast--progress .bar { margin-top: 6px; min-width: 180px; }
+        .toast--progress .bar > i { background: currentColor; }
         .toast--progress .toast-actions[hidden], .toast--progress [hidden] { display: none; }
         .toast--progress > .ok { margin-right: 8px; }
         /* A toast's Undo worked in the toast (§4, 4d): its end's mark (✓, !) before the words. */
@@ -19556,12 +19560,8 @@
         .batch-keep-tab { font-size: 12px; color: var(--text-light); }
         .batch-progress-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; }
         .batch-progress-sub { font-size: 13px; color: var(--text-light); margin: 2px 0 16px; }
-        .batch-progress-count { display: flex; align-items: baseline; gap: 8px; }
-        .batch-progress-count strong { font-size: 22px; }
-        .batch-progress-count span { font-size: 13px; color: var(--text-light); }
-        .batch-bar { height: 8px; margin: 10px 0; border-radius: var(--r-lg); background: var(--surface-2); overflow: hidden; }
-        .batch-bar span { display: block; height: 100%; background: var(--primary); transition: width 0.3s; }
-        .batch-progress.is-paused .batch-bar span { background: var(--text-light); }
+        .batch-prog { margin: 0 0 10px; }
+        .batch-prog .prog-k { color: var(--text); font-weight: 600; }
         .batch-now, .batch-skipped, .batch-paused-note { font-size: 13px; color: var(--text-light); overflow-wrap: anywhere; }
         .batch-refused { font-size: 13px; margin: 8px 0; }
         .batch-refused summary { cursor: pointer; color: var(--warning-text); }
@@ -19743,12 +19743,12 @@
         }
         .read-how-cmd { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--text); overflow-wrap: anywhere; user-select: all; }
         .read-run { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-        .read-run-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+        .read-run-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; }
+        .read-run-side { display: inline-flex; gap: 10px; margin-left: auto; font-size: 13.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         .read-run-title { margin: 0; font-size: 16px; font-weight: 600; font-family: inherit; }
         .read-run .read-progress-time { margin: 0; font-size: 13.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         .read-run .read-progress-time[hidden] { display: none; }
         .read-run-text { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-light); }
-        .read-run .read-bar { max-width: none; height: 6px; margin: 0; background: var(--divider); }
         .read-run-rows, .read-failed .read-run-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
         .read-failed .read-run-rows { margin: 12px 0 0; }
         .read-run-row {
@@ -22865,11 +22865,8 @@
         }
         .waiting-upload__replace:focus-visible, .waiting-upload__keep:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .waiting-upload__again { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-        .waiting-upload__progress { display: flex; flex-direction: column; gap: 3px; }
-        .waiting-upload__bar { height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; box-shadow: inset 0 0 0 1px var(--divider); }
-        .waiting-upload__fill { display: block; height: 100%; background: var(--primary); transition: width 0.2s linear; }
-        .waiting-upload__progress-text { font-size: 12px; color: var(--text-light); font-variant-numeric: tabular-nums; }
-        .waiting-upload__line { margin: 0; font-size: 12.5px; color: var(--text-light); }
+        .waiting-upload__progress { font-size: 12px; }
+        .waiting-upload__line { margin: 0; font-size: 12.5px; }
         .waiting-upload__more { align-self: flex-start; }
         .waiting-upload__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
         .waiting-upload__warn { flex: 1 1 100%; font-size: 12.5px; font-weight: 500; color: var(--warn-text); }
@@ -23000,7 +22997,7 @@
             .waiting-answer-sheet .waiting-answer__text { min-height: 48px; }
         }
         @media (prefers-reduced-motion: reduce) {
-            .waiting-upload__drop, .waiting-upload__fill { transition: none; }
+            .waiting-upload__drop { transition: none; }
         }
         .research-overview__muted { color: var(--text-faint); font-size: 12px; }
         /* The agent's text across the whole width, its actions in a row of links under it (one row per session). */
@@ -28323,16 +28320,7 @@
             padding: 12px; text-align: center;
         }
         .viewer-excerpt-slot-text { font-size: 13px; color: var(--text-secondary); }
-        .viewer-excerpt-slot-bar {
-            position: relative; width: min(200px, 60%); height: 3px; border-radius: 2px; overflow: hidden;
-            background: color-mix(in srgb, var(--primary) 18%, transparent);
-        }
-        .viewer-excerpt-slot-bar::after {
-            content: ''; position: absolute; inset: 0 auto 0 0; width: 40%; border-radius: 2px; background: var(--primary);
-            animation: research-image-bar 1.4s ease-in-out infinite;
-        }
-        @keyframes research-image-bar { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
-        @media (prefers-reduced-motion: reduce) { .viewer-excerpt-slot-bar::after { animation: none; width: 100%; opacity: 0.6; } }
+        .viewer-excerpt-slot > .bar { width: min(200px, 60%); color: var(--primary); }
         .viewer-excerpt-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
         .viewer-excerpt-origin { min-width: 0; font-size: 12.5px; color: var(--text-faint); }
         .viewer-excerpt-more { position: relative; flex: none; }
@@ -28380,13 +28368,10 @@
             padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2);
         }
         .sources-bulk-title { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
-        .sources-bulk-text, .sources-bulk-progress { margin: 0 0 6px; font-size: 13.5px; line-height: 1.45; }
+        .sources-bulk-text { margin: 0 0 6px; font-size: 13.5px; line-height: 1.45; }
         .sources-bulk-note { margin: 6px 0 0; font-size: 12.5px; color: var(--text-faint); }
-        .sources-bulk-bar {
-            height: 3px; border-radius: 2px; overflow: hidden; background: color-mix(in srgb, var(--primary) 18%, transparent);
-        }
-        .sources-bulk-bar > span { display: block; height: 100%; background: var(--primary); transition: width 0.3s; }
-        .sources-bulk-panel.is-paused .sources-bulk-bar > span { background: var(--text-faint); }
+        .sources-bulk-prog { font-size: 13.5px; }
+        .sources-bulk-prog .prog-acts { margin-top: 6px; }
         .sources-bulk-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 10px; }
         .research-images-host:empty { display: none; }
         /* Research for this tree → Stories, "History in stories" (spec 1028 §7, 7a): the section's last row. */
@@ -29475,8 +29460,7 @@
         .mw-foot { flex-shrink: 0; }
         .mw-skipped { padding: 6px 24px; font-size: 12px; color: var(--text-light); background: var(--surface-2); }
         .mw-thumbs { display: flex; align-items: center; gap: 10px; padding: 6px 24px; border-top: 1px solid var(--divider); font-size: 12px; color: var(--text-light); }
-        .mw-progress { width: 120px; height: 4px; flex-shrink: 0; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
-        .mw-progress span { display: block; height: 100%; background: var(--primary); }
+        .mw-progress { width: 120px; flex-shrink: 0; }
         .mw-thumbs-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .materials-window .mw-thumbs-toggle { font-size: 12px; padding: 2px 0; }
         .mw-selbar {

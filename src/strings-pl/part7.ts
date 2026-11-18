@@ -668,7 +668,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         progressTitle: 'Odczyt dokumentu',
         progressSub: (name: string, pages: number) => `${name ? `${name} · ` : ''}${nPl(pages, 'strona', 'strony', 'stron')}`,
         sending: 'Wysyłanie',
-        sendingPage: (k: number, n: number) => `Wysyłanie · strona ${k} z ${n}`,
+        sendingPages: 'Wysyłanie stron',
         sent: 'Wysłano',
         queued: 'Czeka w kolejce',
         reading: 'Odczyt…',

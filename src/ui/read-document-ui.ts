@@ -12,6 +12,7 @@
  */
 
 import { researchActionLabel, researchBridgeAgentLabel } from './research-open-mark.js';
+import { barHtml } from './prog-bar.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -1508,7 +1509,7 @@ export const readDocumentMethods = uiModule({
         // A source read again: its comparison with the transcript is named as such.
         const again = live?.source || s.srcAgain ? this.readSourceAgainNow() : null;
         const running = state === 'reading' || state === 'checking';
-        const title = s.sending ? t.sendingPage(s.sending.k, s.sending.n)
+        const title = s.sending ? t.sendingPages
             : state === 'queued' ? t.waitTitle
                 : state === 'checking' ? (again ? t.comparingSource : t.checking) : t.readingTitle;
         const done = state === 'checking' ? readers : Math.min(readers, live?.done ?? 0);
@@ -1517,15 +1518,19 @@ export const readDocumentMethods = uiModule({
         // Waiting is said only once the research lists the reading as queued (not while it is not listed yet).
         const text = live?.state === 'queued' ? t.waitText
             : running && readers >= 2 && !rows && done > 0 && done < readers ? t.readersSoFar(done, readers) : '';
-        // The share of readers done, never an empty bar.
-        const bar = running && readers >= 2
-            ? `<span class="batch-bar read-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${readers}" aria-valuenow="${done}" aria-label="${esc(t.readersDone(done, readers))}"><span style="width:${Math.max(6, Math.round(done / readers * 100))}%"></span></span>`
-            : '';
+        // The share of readers done, never an empty bar; while the pages go, the page now (half sent) of all.
+        const bar = s.sending
+            ? barHtml((s.sending.k - 0.5) / s.sending.n, { cls: 'read-bar', attrs: `role="progressbar" aria-valuemin="0" aria-valuemax="${s.sending.n}" aria-valuenow="${s.sending.k - 1}" aria-label="${esc(t.sendingPages)}"` })
+            : running && readers >= 2
+                ? barHtml(Math.max(0.06, done / readers), { cls: 'read-bar', attrs: `role="progressbar" aria-valuemin="0" aria-valuemax="${readers}" aria-valuenow="${done}" aria-label="${esc(t.readersDone(done, readers))}"` })
+                : '';
+        // "k of n" at the right of the title: the page sent now, or the readers done.
+        const count = s.sending ? strings.busy.kOfN(s.sending.k, s.sending.n) : bar ? strings.busy.kOfN(done, readers) : '';
         return `
                 <div class="read-run" data-state="${state}">
                     <div class="read-run-head">
                         <h3 class="read-run-title">${esc(title)}</h3>
-                        <span class="read-progress-time" id="read-progress-time"${running ? '' : ' hidden'}></span>
+                        <span class="read-run-side">${count ? `<span class="read-run-k">${esc(count)}</span>` : ''}<span class="read-progress-time" id="read-progress-time"${running ? '' : ' hidden'}></span></span>
                     </div>
                     ${text ? `<p class="read-run-text">${esc(text)}</p>` : ''}
                     ${bar}

@@ -29,6 +29,7 @@ import {
 import { researchSendMode } from './research-sync-ui.js';
 import { readDialogState, readCropHtml, regionStyle } from './read-document-ui.js';
 import { uiModule } from './module.js';
+import { barHtml } from './prog-bar.js';
 
 const SECOND_KEY = 'read.secondBeforeApply';
 
@@ -233,7 +234,7 @@ export const readProposeMethods = uiModule({
             const sub = [step, t.readersDone(done, readers)].filter(Boolean).join(' · ');
             parts.push(`<div class="read-p-progress" role="status">
                     <span class="read-p-progress-text">${esc(t.secondReading)}<span class="read-p-progress-sub">${esc(sub)}</span></span>
-                    <span class="batch-bar read-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${readers}" aria-valuenow="${done}" aria-label="${esc(t.readersDone(done, readers))}"><span style="width:${Math.round(done / readers * 100)}%"></span></span>
+                    ${barHtml(done / readers, { cls: 'read-bar', attrs: `role="progressbar" aria-valuemin="0" aria-valuemax="${readers}" aria-valuenow="${done}" aria-label="${esc(t.readersDone(done, readers))}"` })}
                     <button type="button" class="secondary read-cancel" data-act="cancel"${s.busy ? ' disabled' : ''}>${esc(t.cancel)}</button>
                 </div>`);
         } else if (this.readSecondOffered()) {

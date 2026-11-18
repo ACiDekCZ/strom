@@ -14,6 +14,7 @@ import { strings } from '../strings.js';
 import { MAX_IMAGE_NUMBER, type WaitingInbox } from '../research-link.js';
 import { ImageAssignment, ImagesAssigned, TASK_IMAGE_ACCEPT, assignImages, fileExt, imageRanges, imageSlotOptions } from '../research-waiting.js';
 import type { TaskImageResult } from '../research-waiting-write.js';
+import { barEl } from './prog-bar.js';
 
 /**
  * The numbers the task asks for (null: not known — a file goes with the
@@ -531,7 +532,10 @@ export class WaitingImagesUpload {
         this.root.appendChild(list);
         const going = this.files.filter(f => f.state === 'queued' || f.state === 'sending').length;
         if (going > 0) {
-            const line = node('p', 'waiting-upload__line', T.sendingN(going));
+            // What goes, with the files done of all at the right (2h).
+            const line = node('div', 'prog-line waiting-upload__line');
+            line.append(node('span', 'waiting-upload__going', T.sendingN(going)),
+                node('span', 'prog-k', strings.busy.kOfN(this.files.length - going, this.files.length)));
             line.setAttribute('role', 'status');
             this.root.appendChild(line);
         } else if (!this.finished) {
@@ -558,19 +562,20 @@ export class WaitingImagesUpload {
         }
         li.appendChild(side);
         if (f.state === 'queued' || f.state === 'sending') {
-            const prog = node('div', 'waiting-upload__progress');
-            const bar = node('div', 'waiting-upload__bar');
+            // The file's share: its MB sent at the right above its bar (2h).
+            const prog = node('div', 'prog waiting-upload__progress');
+            const line = node('div', 'prog-line');
+            line.appendChild(node('span', 'prog-k', T.sendingProgress(Math.floor(f.sent / MB), mb(f.file.size))));
             const total = f.file.size || 1;
             const pct = Math.max(0, Math.min(100, Math.round(f.sent / total * 100)));
+            const bar = barEl(pct / 100);
+            bar.removeAttribute('aria-hidden');
             bar.setAttribute('role', 'progressbar');
             bar.setAttribute('aria-valuemin', '0');
             bar.setAttribute('aria-valuemax', '100');
             bar.setAttribute('aria-valuenow', String(pct));
             bar.setAttribute('aria-label', f.file.name);
-            const fill = node('span', 'waiting-upload__fill');
-            fill.style.width = `${pct}%`;
-            bar.appendChild(fill);
-            prog.append(bar, node('span', 'waiting-upload__progress-text', T.sendingProgress(Math.floor(f.sent / MB), mb(f.file.size))));
+            prog.append(line, bar);
             li.appendChild(prog);
             return li;
         }

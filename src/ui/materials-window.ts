@@ -50,6 +50,7 @@ import {
 import { uiModule } from './module.js';
 import type { SortPlan, SortTarget } from './material-sort-ui.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
+import { barHtml } from './prog-bar.js';
 
 const MODAL_ID = 'materials-modal';
 const VIEW_KEY = 'strom.materials.view';
@@ -1222,7 +1223,7 @@ export const materialsWindowMethods = uiModule({
         const pct = total ? Math.round((s.done / total) * 100) : 0;
         const text = s.phase === 'paused' ? m.thumbsPaused(s.done, total, s.where) : m.thumbsLoading(s.done, total, s.where);
         redraw(el, `
-            <span class="mw-progress" aria-hidden="true"><span style="width:${pct}%"></span></span>
+            ${barHtml(pct / 100, { cls: 'mw-progress', paused: s.phase === 'paused' })}
             <span class="mw-thumbs-text">${esc(text)}</span>
             <button type="button" class="link-button mw-thumbs-toggle" data-mw="${s.phase === 'paused' ? 'thumbs-resume' : 'thumbs-pause'}">${esc(s.phase === 'paused' ? m.resume : m.pause)}</button>`);
     },
@@ -1489,7 +1490,7 @@ export const materialsWindowMethods = uiModule({
         if (k === null) { el.hidden = true; el.innerHTML = ''; return; }
         el.hidden = false;
         const pct = n ? Math.round((k / n) * 100) : 0;
-        el.innerHTML = `<span class="mw-progress" aria-hidden="true"><span style="width:${pct}%"></span></span><span class="mw-thumbs-text">${esc(strings.materials.bulkProgress(k, n))}</span>${cancel ? `<button type="button" class="link-button mw-thumbs-toggle" data-mw="bulk-cancel">${esc(strings.buttons.cancel)}</button>` : ''}`;
+        el.innerHTML = `${barHtml(pct / 100, { cls: 'mw-progress' })}<span class="mw-thumbs-text">${esc(strings.materials.bulkProgress(k, n))}</span>${cancel ? `<button type="button" class="link-button mw-thumbs-toggle" data-mw="bulk-cancel">${esc(strings.buttons.cancel)}</button>` : ''}`;
         el.querySelector('[data-mw="bulk-cancel"]')?.addEventListener('click', () => { cancel?.(); el.hidden = true; });
     },
 

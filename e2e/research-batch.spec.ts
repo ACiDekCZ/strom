@@ -154,6 +154,11 @@ test.describe('Add materials', () => {
         await dialog.getByRole('button', { name: 'Send 2 files' }).click();
         await expect(dialog.locator('.batch-progress-title')).toHaveText('Paused');
         await expect(dialog.locator('.batch-paused-note')).toContainText('The research stopped responding');
+        // The one bar (2h): "k of n" at the right of the size, a 4 px paused bar.
+        await expect(dialog.locator('.batch-prog .prog-k')).toHaveText(/^\d of 2$/);
+        const bar = dialog.locator('.batch-prog .bar.is-paused');
+        await expect(bar).toHaveCount(1);
+        expect(await bar.evaluate(el => getComputedStyle(el).height)).toBe('4px');
         // Hidden: the block tells how far it is, with Show.
         await dialog.getByRole('button', { name: 'Hide' }).click();
         await expect(dialog).toHaveCount(0);

@@ -32,6 +32,8 @@ interface Bridge {
     replies: Reply[];
     puts: Put[];
     answers: { task: string; body: Record<string, unknown> }[];
+    /** While set, an upload waits for it before its answer (the sending state stays on screen). */
+    hold?: Promise<void>;
 }
 
 const ARCHIVE = { key: 'repo:R0077', kind: 'archive', name: 'Zemský archiv ve Smyšlenově' };
@@ -106,6 +108,7 @@ async function follow(page: Page, size: { width: number; height: number }, setup
             const h = req.headers();
             const put: Put = { task: h['x-strom-task'], image: h['x-strom-image'] ?? null, replace: h['x-strom-replace'] ?? null, name: h['x-strom-name'] ?? null };
             bridge.puts.push(put);
+            if (bridge.hold) await bridge.hold;
             const next = bridge.replies.shift();
             if (next) return route.fulfill(json(next.status, next.body));
             const n = Number(put.image);
@@ -185,7 +188,19 @@ test.describe('Add images in the overview (accepts.media.taskImages)', () => {
         const send = area.locator('.waiting-upload__send');
         await expect(send).toHaveText('Send 2 images');
         await expect(send).toHaveAttribute('aria-disabled', 'false');
+        let release!: () => void;
+        bridge.hold = new Promise<void>(r => { release = r; });
         await send.click();
+        // While it sends (2h): what goes with the files done of all at the right; each file its MB above a 4 px bar.
+        const line = area.locator('.waiting-upload__line');
+        await expect(line.locator('.waiting-upload__going')).toHaveText('Sending 2 files…');
+        await expect(line.locator('.prog-k')).toHaveText('0 of 2');
+        const bar = area.locator('.waiting-upload__progress .bar[role="progressbar"]').first();
+        await expect(bar).toBeVisible();
+        expect(await bar.evaluate(el => getComputedStyle(el).height)).toBe('4px');
+        await expect(area.locator('.waiting-upload__progress .prog-k').first()).toHaveText(/^sending · \d+ of [\d.]+ MB$/);
+        release();
+        bridge.hold = undefined;
 
         await expect(item).toHaveCount(0);
         await expect(page.locator('.toast', { hasText: 'All images saved, the task is back in the queue.' })).toBeVisible();

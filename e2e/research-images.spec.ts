@@ -183,7 +183,18 @@ test.describe('source images from the research', () => {
         await modal.getByRole('button', { name: 'Load all from the research…' }).click();
         await expect(modal.locator('.sources-bulk-panel')).toContainText('2 sources, 3 images, about 900 kB.');
         await expect(modal.locator('.sources-bulk-panel')).toContainText('Free space in the browser');
+        let release!: () => void;
+        ex.hold = new Promise<void>(r => { release = r; });
         await modal.locator('#sources-bulk-go').click();
+        // While it loads (2h): what runs with "k of n" at the right, a 4 px bar, Pause and Stop at the right.
+        const prog = modal.locator('.sources-bulk-prog');
+        await expect(prog.locator('.prog-t')).toHaveText('Loading source images from the research');
+        await expect(prog.locator('.prog-k')).toHaveText('0 of 2');
+        expect(await prog.locator('.bar').evaluate(el => getComputedStyle(el).height)).toBe('4px');
+        await expect(prog.locator('.prog-acts #sources-bulk-pause')).toBeVisible();
+        await expect(prog.locator('.prog-acts #sources-bulk-stop')).toBeVisible();
+        release();
+        ex.hold = undefined;
         await expect(modal.locator('.sources-bulk-panel')).toContainText('Loaded 2 sources');
         expect(ex.asks.sort()).toEqual(['S0001/C0001', 'S0001/C0002', 'S0002/C0003']);
         // No badge in the toolbar: the Research menu's row says it ended (until Sources opens again).

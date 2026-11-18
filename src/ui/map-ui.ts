@@ -50,6 +50,7 @@ import { loadMapTile, mapTilesBlocked, onMapTilesChange, releaseMapTile } from '
 
 import { iconSvg } from '../icons.js';
 import { shownName } from '../person-name.js';
+import { barHtml } from './prog-bar.js';
 /** A place that has coordinates and therefore something to draw. */
 export interface MappedPlace {
     key: string;
@@ -600,9 +601,15 @@ export const mapMethods = uiModule({
 
         if (this.mapGeocoding) {
             const { done, total, place } = this.mapGeocoding;
+            // 2h: what runs with "k of n" at the right, the bar, the place asked now with Cancel at the right.
             box.innerHTML = `
-                <span class="map-status-text">${strings.map.geocodingProgress(done, total, this.escapeHtml(place))}</span>
-                <button type="button" class="secondary" onclick="window.Strom.UI.cancelGeocoding()">${strings.buttons.cancel}</button>`;
+                <div class="prog map-geo-prog">
+                    <div class="prog-line" role="status"><span class="prog-t map-status-text">${this.escapeHtml(strings.map.geocodingTitle)}</span>
+                        <span class="prog-k">${this.escapeHtml(strings.busy.kOfN(done, total))}</span></div>
+                    ${barHtml(total ? done / total : 0)}
+                    <div class="prog-line"><span class="map-geo-place">${this.escapeHtml(place)}</span>
+                        <span class="prog-acts"><button type="button" class="secondary" onclick="window.Strom.UI.cancelGeocoding()">${strings.buttons.cancel}</button></span></div>
+                </div>`;
             box.style.display = 'flex';
             return;
         }
