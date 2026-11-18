@@ -75,9 +75,22 @@ test('change packet round-trip: preview names the change, Accept applies with un
     const hasStrycek = () => page.evaluate(() =>
         Object.values(window.Strom.DataManager.getData().persons)
             .some((p: { firstName?: string }) => p.firstName === 'Strycek'));
-    await preview.getByRole('button', { name: 'Accept changes' }).click();
+    // The preview stays, Accept locked, while the packet is applied and drawn (C84, waiting buttons §8).
+    const accept = preview.getByRole('button', { name: 'Accept changes' });
+    await accept.evaluate((b) => {
+        const w = window as unknown as { __at: string | null };
+        w.__at = null;
+        const DM = window.Strom.DataManager as { applyChangePacketDirect: (...a: unknown[]) => unknown };
+        const apply = DM.applyChangePacketDirect.bind(DM);
+        DM.applyChangePacketDirect = (...a: unknown[]) => {
+            w.__at = `${b.getAttribute('aria-disabled')}|${document.getElementById('share-packet-modal')!.classList.contains('active')}`;
+            return apply(...a);
+        };
+    });
+    await accept.click();
     await expect(preview).toBeHidden();
     await expect.poll(hasStrycek).toBe(true);
+    expect(await page.evaluate(() => (window as unknown as { __at: string | null }).__at)).toBe('true|true');
 
     // One Ctrl+Z reverts the whole acceptance (undoable choke point).
     await page.evaluate(() => window.Strom.DataManager.undo());

@@ -13,13 +13,13 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
 import { AppExporter } from '../export.js';
-import { MergerUI } from '../merge/index.js';
+import { MergerUI, mergeAnalysisLong, MERGE_ANALYSIS_LONG_AT } from '../merge/index.js';
 import { classifyShareFile } from '../share.js';
 import { strings } from '../strings.js';
 import { PrivacyMode } from '../privacy.js';
 import { EmbeddedDataEnvelope, StromData, TreeId } from '../types.js';
 import { uiModule } from './module.js';
-import { activatedElement, busyLocal, busyToast } from './busy.js';
+import { activatedElement, busyLocal, busyToast, runHeavy } from './busy.js';
 import { holdLeave } from './busy-leave.js';
 import { autoGrowAll } from './autogrow.js';
 import { safeFileName } from '../filenames.js';
@@ -377,13 +377,18 @@ export const shareUiMethods = uiModule({
         const packet = this.pendingChangePacket;
         if (!packet) return;
         // Compute the applied counts BEFORE the tree changes (for the toast).
-        const { summarizeChangePacket } = await import('../share-diff.js');
-        const summary = summarizeChangePacket(DataManager.getData(), packet);
-        this.closeChangePacketPreview();
-
-        DataManager.applyChangePacketDirect(packet);
-        await TreeRenderer.renderAsync();
-        this.showToast(strings.shareDiff.applied(summary.newPersons.length, summary.modifiedPersons.length));
+        // §8: applied and drawn under Accept's working state, the preview open until then.
+        const el = activatedElement();
+        const n = Object.keys(DataManager.getData().persons).length;
+        await runHeavy(el, async () => {
+            const { summarizeChangePacket } = await import('../share-diff.js');
+            if (this.pendingChangePacket !== packet) return;
+            const summary = summarizeChangePacket(DataManager.getData(), packet);
+            DataManager.applyChangePacketDirect(packet);
+            await TreeRenderer.renderAsync();
+            this.closeChangePacketPreview();
+            this.showToast(strings.shareDiff.applied(summary.newPersons.length, summary.modifiedPersons.length));
+        }, { label: strings.busy.applyingChanges, atOnce: n >= MERGE_ANALYSIS_LONG_AT });
     },
 
     /** Review in detail: hand the reconstructed incoming tree to the merge engine. */
@@ -391,11 +396,15 @@ export const shareUiMethods = uiModule({
         const packet = this.pendingChangePacket;
         const base = this.pendingChangePacketBase;
         if (!packet || !base) return;
-        this.closeChangePacketPreview();
-
+        // §8: the matching under the working state of the choice, the preview open until the wizard comes.
+        const el = activatedElement();
         const { applyChangePacket } = await import('../share-diff.js');
+        if (this.pendingChangePacket !== packet) return;
         const incoming = applyChangePacket(base, packet);
-        MergerUI.startMerge(incoming, packet.senderName || strings.share.unknownSender);
+        await runHeavy(el?.isConnected ? el : null, () => {
+            this.closeChangePacketPreview();
+            MergerUI.startMerge(incoming, packet.senderName || strings.share.unknownSender);
+        }, { label: strings.merge.analyzing, atOnce: mergeAnalysisLong(DataManager.getData(), incoming) });
     },
 
     closeChangePacketPreview(): void {

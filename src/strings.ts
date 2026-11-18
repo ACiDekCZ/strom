@@ -10254,6 +10254,8 @@ const stringsEN = {
         findingFamilies: 'Finding the families…',
         /** What will be sent / was written: the tree compared with the research's version (§8). */
         findingChanges: 'Finding the changes…',
+        /** A packet of changes applied to the tree (§8). */
+        applyingChanges: 'Applying the changes…',
         adoptTitle: 'Handing the tree to the research…',
         adoptBackup: 'Saving a backup',
         adoptGedcom: 'Creating GEDCOM',
@@ -20187,6 +20189,7 @@ const stringsCZ: StringsType = {
         findingParts: 'Hledají se části…',
         findingFamilies: 'Hledají se rodiny…',
         findingChanges: 'Hledají se změny…',
+        applyingChanges: 'Přijímají se změny…',
         adoptTitle: 'Předává se strom výzkumu…',
         adoptBackup: 'Ukládá se záloha',
         adoptGedcom: 'Vytváří se GEDCOM',
@@ -30031,6 +30034,7 @@ const stringsDE: StringsType = {
         findingParts: 'Teile werden gesucht…',
         findingFamilies: 'Familien werden gesucht…',
         findingChanges: 'Änderungen werden gesucht…',
+        applyingChanges: 'Änderungen werden übernommen…',
         adoptTitle: 'Stammbaum wird an die Forschung übergeben…',
         adoptBackup: 'Sicherung wird gespeichert',
         adoptGedcom: 'GEDCOM wird erstellt',

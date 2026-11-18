@@ -35,6 +35,7 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         findingParts: 'Wyszukiwanie części…',
         findingFamilies: 'Wyszukiwanie rodzin…',
         findingChanges: 'Wyszukiwanie zmian…',
+        applyingChanges: 'Wprowadzanie zmian…',
         adoptTitle: 'Przekazywanie drzewa badaniu…',
         adoptBackup: 'Zapisywanie kopii zapasowej',
         adoptGedcom: 'Tworzenie GEDCOM',
