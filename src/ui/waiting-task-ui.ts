@@ -20,6 +20,7 @@ import { uiModule } from './module.js';
 import { shiftHeld } from './busy.js';
 import { WAITING_ROWS_SCOPE } from './waiting-row-notes.js';
 import { el, liveSession, LiveSession, researchSession } from './research-ui.js';
+import { rangesWhole } from './ranges-whole.js';
 import { UploadNumbers, UploadOutcome, WaitingImagesUpload } from './waiting-images-upload.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { bindImagesDrop, imagesShortEl, itemKey } from './waiting-images-ui.js';
@@ -1164,12 +1165,12 @@ export const waitingTaskMethods = uiModule({
             glyph.setAttribute('aria-hidden', 'true');
             const what = el('div', 'waiting-audit__chg-body');
             const main = el('div', 'waiting-audit__chg-text');
-            main.append(line.kind === 'new' ? el('span', 'waiting-audit__tag', line.lead) : el('b', undefined, line.lead), document.createTextNode(` ${line.text}`));
+            main.append(line.kind === 'new' ? el('span', 'waiting-audit__tag', line.lead) : el('b', undefined, line.lead), rangesWhole(` ${line.text}`));
             what.appendChild(main);
             if (line.sub) {
                 const sub = el('div', 'waiting-audit__sub');
                 if (line.sub.folder) sub.appendChild(folderIcon());
-                sub.appendChild(document.createTextNode(line.sub.text));
+                sub.appendChild(rangesWhole(line.sub.text));
                 what.appendChild(sub);
             }
             li.append(glyph, what);
@@ -1188,7 +1189,7 @@ export const waitingTaskMethods = uiModule({
                 const glyph = el('span', 'waiting-audit__glyph', '–');
                 glyph.setAttribute('aria-hidden', 'true');
                 const what = el('div', 'waiting-audit__chg-body');
-                what.appendChild(el('div', 'waiting-audit__chg-text', text));
+                what.appendChild(el('div', 'waiting-audit__chg-text')).appendChild(rangesWhole(text));
                 // Discuss with the agent once, at the first book the agent adds (AI + terminal, as ever).
                 if (chatUrl && i === 0) {
                     const act = el('div', 'waiting-audit__chg-act');

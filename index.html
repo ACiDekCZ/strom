@@ -18912,6 +18912,8 @@
             overflow-wrap: anywhere;
         }
         .busy-msg.is-err { color: var(--error-text); }
+        /* A number range ("57–58") never breaks at its dash (src/ui/ranges-whole.ts). */
+        .range-whole { white-space: nowrap; }
         .research-hypos-note.is-err, .research-readtask-note.is-err { color: var(--error-text); }
         .research-hypos-note .link-button.research-hypos-retry, .research-readtask-note .research-readtask-retry { margin-left: 8px; }
         @media (pointer: coarse) { .research-hypos-retry, .research-readtask-retry { min-height: 44px; } }

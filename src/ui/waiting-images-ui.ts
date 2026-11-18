@@ -9,6 +9,7 @@
 import { strings } from '../strings.js';
 import { LiveWaiting } from '../research-link.js';
 import { ImagesState, imageRanges, imagesArrived, imagesState } from '../research-waiting.js';
+import { rangesWhole } from './ranges-whole.js';
 
 /** The followed research as far as these helpers need it (its tree and its items). */
 interface ImagesSession {
@@ -93,7 +94,8 @@ export function imagesShortEl(key: string, img: ImagesState): HTMLElement {
     const text = img.detail === 'unknown' ? T.imagesUnknown(img.have)
         : img.have > 0 || missing.length === 0 ? T.imagesShort(img.have, img.want ?? img.have)
             : T.imagesNeeded(imageRanges(missing), missing.length);
-    const short = el('span', 'waiting-images__text', text);
+    const short = el('span', 'waiting-images__text');
+    short.appendChild(rangesWhole(text));
     if (since < ARRIVED_MS) {
         short.classList.add('is-arrived');
         short.style.animationDelay = `-${Math.round(since)}ms`;
@@ -131,7 +133,7 @@ export function appendImagesDetail(host: HTMLElement, img: ImagesState): void {
     }
     const sentence = imagesSentence(img);
     if (img.detail === 'old') {
-        host.appendChild(el('p', 'wait-book__state', sentence));
+        host.appendChild(el('p', 'wait-book__state')).appendChild(rangesWhole(sentence));
         return;
     }
     const frame = el('div', 'wait-book');
@@ -149,7 +151,7 @@ export function appendImagesDetail(host: HTMLElement, img: ImagesState): void {
         }
         frame.appendChild(slots);
     }
-    frame.appendChild(el('p', 'wait-book__state', sentence));
+    frame.appendChild(el('p', 'wait-book__state')).appendChild(rangesWhole(sentence));
     host.appendChild(frame);
 }
 

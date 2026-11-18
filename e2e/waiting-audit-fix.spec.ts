@@ -257,6 +257,31 @@ test.describe('Fix at a task\'s finding', () => {
         expect(b.reads).toEqual(['T0412', 'T0412', 'T0377']);
     });
 
+    test('a range of images never breaks at its dash in a narrow column ("57–" / "58")', async ({ page }) => {
+        await researchTree(page);
+        await openOverview(page);
+        await openItem(page, 'T0412');
+        await fixBtn(page, 'T0412').click();
+        const p = preview(page, 'T0412');
+        await expect(p).toBeVisible();
+        const range = p.locator('.waiting-audit__chg-text .range-whole', { hasText: '57–58' });
+        await expect(range).toHaveCount(1);
+        // Every width of the column: the range on one line (one box), the line's text unchanged.
+        const broken = await p.evaluate((preview) => {
+            const text = preview.querySelector<HTMLElement>('.waiting-audit__chg-text')!;
+            const span = text.querySelector<HTMLElement>('.range-whole')!;
+            const out: number[] = [];
+            for (let w = 120; w <= 420; w += 2) {
+                text.style.width = `${w}px`;
+                if (span.getClientRects().length !== 1) out.push(w);
+            }
+            text.style.width = '';
+            return out;
+        });
+        expect(broken).toEqual([]);
+        await expect(p.locator('.waiting-audit__chg-list').first().locator('.waiting-audit__chg-body')).toHaveText(CHANGE_412);
+    });
+
     test('Fix writes once with the preview\'s stamp; the list read again, a toast with Undo; Undo writes unfix', async ({ page }) => {
         const b = await researchTree(page);
         await openOverview(page);
