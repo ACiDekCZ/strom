@@ -676,6 +676,12 @@ function endToast(el: HTMLElement, end: Extract<BusyEnd, { ok: false }>): void {
 // ==================== ERRORS (§10.2) ====================
 
 /** What an error means (§10.2): `bridge` false for a service that is not the research's bridge (a map, a register). */
+/** An outside service (the map's geocoder) without an answer (§10.3): the network, no answer in time, its request limit. */
+export function serviceFailText(kind: 'network' | 'timeout' | 'limit', timeoutMs: number = BUSY_TIMEOUTS.network): string {
+    const b = strings.busy;
+    return kind === 'timeout' ? b.serviceTimeout(Math.round(timeoutMs / 1000)) : kind === 'limit' ? b.serviceLimit : b.errNetwork;
+}
+
 export function busyErrFromBridge(err: unknown, opts: { timeoutMs?: number; bridge?: boolean } = {}): Extract<BusyEnd, { ok: false }> {
     const b = strings.busy;
     const name = (err as { name?: string } | null)?.name;

@@ -288,6 +288,38 @@ test.describe('Find on the map', () => {
         expect(await geoOf(page, 'Lhotínek')).toMatchObject({ lat: 49.654, byTown: 'Jinov', origin: 'hand' });
     });
 
+    test('nothing found: Search differently goes back to the query, its words chosen', async ({ page }) => {
+        await stubGeocoder(page, {});
+        await seed(page);
+        const r = await search(page, 'Lhotínek');
+        await expect(r.locator('.place-empty')).toBeVisible(SEARCH);
+        await r.locator('.place-search-other').click();
+        await expect(r.locator('.place-query')).toBeFocused();
+        expect(await r.locator('.place-query').evaluate(el => {
+            const i = el as HTMLInputElement;
+            return [i.selectionStart, i.selectionEnd, i.value.length];
+        })).toEqual([0, 'Lhotínek'.length, 'Lhotínek'.length]);
+    });
+
+    test('the network down (§10.3): the search says so with Try again, not "found nothing"; the button works meanwhile', async ({ page }) => {
+        let down = true;
+        await page.route('**://nominatim.openstreetmap.org/**', route => {
+            if (down) return route.abort('internetdisconnected');
+            return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+        });
+        await seed(page);
+        await openOn(page, 'Lhotínek');
+        const r = row(page, 'Lhotínek');
+        await r.locator('.place-search-go').click();
+        const failed = r.locator('.place-results .busy-msg.is-err[role="alert"]');
+        await expect(failed.locator('.busy-msg__text')).toHaveText('The service is not available (network error).', SEARCH);
+        await expect(r.locator('.place-empty')).toHaveCount(0);
+        down = false;
+        await failed.getByRole('button', { name: 'Try again' }).click();
+        await expect(r.locator('.place-empty-head')).toHaveText('The map found nothing under Lhotínek (also searched as Lhotinek).', SEARCH);
+        await expect(r.locator('.place-search-other')).toHaveText('Search differently');
+    });
+
     test('a town nearby the map does not know either says so', async ({ page }) => {
         await stubGeocoder(page, {});
         await seed(page);

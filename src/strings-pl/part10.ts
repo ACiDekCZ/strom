@@ -68,6 +68,8 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         errTimeout: (s: number) => `Badanie nie odpowiedziało w ciągu ${s} s.`,
         errRefused: (why: string) => `Nie zapisano: ${why}`,
         errNetwork: 'Usługa jest niedostępna (błąd sieci).',
+        serviceTimeout: (s: number) => `Usługa nie odpowiedziała w ciągu ${s} s.`,
+        serviceLimit: 'Usługa odrzuca teraz kolejne zapytania (limit zapytań). Ponowna próba będzie możliwa później.',
         notFound: (q: string) => `Nie znaleziono „${q}”.`,
         searchOther: 'Szukać inaczej',
         mainWindowSilent: 'Główne okno Strom nie odpowiada.',

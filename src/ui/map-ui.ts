@@ -44,7 +44,8 @@ import {
     fitBounds, panCenter, pinchZoomStep, pointInViewport, tileUrl, tilesForViewport, zoomAround,
     TILE_ATTRIBUTION, TILE_ATTRIBUTION_URL,
 } from '../map.js';
-import { GEOCODER_NAME, geocodePlaces, placesCentroid } from '../geocode.js';
+import { GEOCODER_NAME, GEOCODE_TIMEOUT_MS, geocodePlaces, placesCentroid, type GeocodeFailure } from '../geocode.js';
+import { serviceFailText } from './busy.js';
 import { uiModule } from './module.js';
 import { loadMapTile, mapTilesBlocked, onMapTilesChange, releaseMapTile } from './map-tiles.js';
 
@@ -97,6 +98,8 @@ let mapTilesBound = false;
 
 /** Per tree: the places the map's own lookup asked for and did not find (this page's life). */
 const geocodeMissed = new Map<string, Set<string>>();
+/** A lookup run stopped by a request without an answer (§10.3), by tree: the bar says why, with Try again. */
+const geocodeFailed = new Map<string, GeocodeFailure>();
 /** How old the research's places may be when the map opens before it reads them again. */
 const LIVE_MAX_AGE_MS = 15000;
 
@@ -610,6 +613,19 @@ export const mapMethods = uiModule({
                     <div class="prog-line"><span class="map-geo-place">${this.escapeHtml(place)}</span>
                         <span class="prog-acts"><button type="button" class="secondary" onclick="window.Strom.UI.cancelGeocoding()">${strings.buttons.cancel}</button></span></div>
                 </div>`;
+            box.style.display = 'flex';
+            return;
+        }
+
+        // The last lookup run got no answer (§10.3): why, with Try again (the run goes on from the places left).
+        const failedTree = DataManager.getCurrentTreeId();
+        const failure = failedTree ? geocodeFailed.get(failedTree) : undefined;
+        if (failure) {
+            box.innerHTML = `
+                <div class="busy-msg is-err map-geo-failed" role="alert"><span class="busy-msg__text">${this.escapeHtml(serviceFailText(failure, GEOCODE_TIMEOUT_MS))}</span>
+                    <button type="button" class="link busy-msg__retry" onclick="window.Strom.UI.startGeocoding()">${this.escapeHtml(strings.busy.retry)}</button></div>
+                <button type="button" class="secondary" onclick="window.Strom.UI.showPlacesManager()">${strings.map.managePlaces}</button>`;
+            box.classList.remove('is-after');
             box.style.display = 'flex';
             return;
         }
@@ -1946,6 +1962,8 @@ export const mapMethods = uiModule({
 
         const controller = new AbortController();
         this.mapGeocodeAbort = controller;
+        if (treeId) geocodeFailed.delete(treeId);
+        let failure: GeocodeFailure | null = null;
         this.mapGeocoding = { done: 0, total: missing.length, place: missing[0].usage.display };
         this.renderMapStatus(this.mapPlaces());
 
@@ -1963,6 +1981,7 @@ export const mapMethods = uiModule({
             townFallback: { centroid: placesCentroid(data.places), known: knownStreets(data) },
             // Of several towns of a place's name, the one nearest the tree's other places (A6.5.1).
             treePlaces: data.places,
+            onFailure: kind => { failure = kind; },
             onProgress: (done, total) => {
                 this.mapGeocoding = { done, total, place: names[Math.min(done, total - 1)] };
                 this.renderMapStatus(this.mapPlaces());
@@ -1989,6 +2008,14 @@ export const mapMethods = uiModule({
                 else if (key) missed.delete(key);
             }
             geocodeMissed.set(treeId, missed);
+        }
+
+        if (failure) {
+            // The places from the failure on are neither found nor "not found": the bar says why, with Try again.
+            if (treeId) geocodeFailed.set(treeId, failure);
+            this.mapCenter = null;
+            TreeRenderer.render();
+            return;
         }
 
         const notFound = results.size - found.size;

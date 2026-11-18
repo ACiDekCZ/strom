@@ -33,6 +33,15 @@ export const GEOCODER_CONTACT = 'milan@stromapp.info';
 /** Nominatim's usage policy: one request per second, absolute maximum. */
 export const REQUEST_INTERVAL_MS = 1100;
 
+/** One request waits this long for the service (§10.3): then it is "no answer in time", not "not found". */
+export const GEOCODE_TIMEOUT_MS = 10_000;
+
+/**
+ * Why a lookup got no answer (§10.3), told apart from "not found": the network (the service not reached or
+ * failing), no answer within GEOCODE_TIMEOUT_MS, or the service's request limit (429, 403 of its policy).
+ */
+export type GeocodeFailure = 'network' | 'timeout' | 'limit';
+
 /** Shape of the fields we read from a Nominatim (jsonv2) result. */
 interface NominatimHit {
     lat?: string;
@@ -262,6 +271,10 @@ export interface GeocodeOptions {
     fetchFn?: typeof fetch;
     /** Injected in tests to avoid real waiting. */
     waitFn?: (ms: number) => Promise<void>;
+    /** A request got no answer (not a stop by `signal`): a run stops there, its places not counted as not found. */
+    onFailure?: (kind: GeocodeFailure) => void;
+    /** Per request; GEOCODE_TIMEOUT_MS without it. */
+    timeoutMs?: number;
 }
 
 /** geocodePlaces' second step: a place with a house that was not found is looked up by its town. */
@@ -316,20 +329,51 @@ export function pickPlaceHit(body: unknown, place: string, center?: LatLon | nul
     return { ...nearestTo(towns, center)!, townChoices: towns.length };
 }
 
-/** One request for a place (CANDIDATE_LIMIT hits): the answer's body, or null on any failure. */
-async function lookUpPlace(place: string, options: GeocodeOptions): Promise<unknown> {
+/** One request's end: the answer's body (null: not a JSON answer), or why there was none. */
+type Asked = { ok: true; body: unknown } | { ok: false; kind: GeocodeFailure | 'stopped' };
+
+/**
+ * One request to the geocoder, at most `timeoutMs` (GEOCODE_TIMEOUT_MS) long. A failure is reported through
+ * `onFailure` (a stop by `signal` is not one).
+ */
+async function askGeocoder(url: string, options: GeocodeOptions): Promise<Asked> {
     const doFetch = options.fetchFn ?? fetch;
+    const own = new AbortController();
+    let late = false;
+    const timer = setTimeout(() => { late = true; own.abort(); }, options.timeoutMs ?? GEOCODE_TIMEOUT_MS);
+    const stop = (): void => own.abort();
+    if (options.signal?.aborted) own.abort(); else options.signal?.addEventListener('abort', stop, { once: true });
+    const failed = (kind: GeocodeFailure): Asked => {
+        options.onFailure?.(kind);
+        return { ok: false, kind };
+    };
     try {
-        const response = await doFetch(buildGeocodeUrl(place, CANDIDATE_LIMIT), {
-            headers: { Accept: 'application/json' },
-            signal: options.signal,
-        });
-        if (!response.ok) return null;
-        return await response.json();
+        const response = await doFetch(url, { headers: { Accept: 'application/json' }, signal: own.signal });
+        // Nominatim's usage policy: too many requests (429), or blocked for the rate (403).
+        if (response.status === 429 || response.status === 403) return failed('limit');
+        if (!response.ok) return failed('network');
+        try {
+            return { ok: true, body: await response.json() };
+        } catch {
+            if (late) return failed('timeout');
+            return options.signal?.aborted ? { ok: false, kind: 'stopped' } : { ok: true, body: null };
+        }
     } catch {
-        return null;  // offline, blocked, rate-limited — all just "unknown"
+        if (late) return failed('timeout');
+        if (options.signal?.aborted) return { ok: false, kind: 'stopped' };
+        return failed('network');
+    } finally {
+        clearTimeout(timer);
+        options.signal?.removeEventListener('abort', stop);
     }
 }
+
+/** One request for a place (CANDIDATE_LIMIT hits). */
+function lookUpPlace(place: string, options: GeocodeOptions): Promise<Asked> {
+    return askGeocoder(buildGeocodeUrl(place, CANDIDATE_LIMIT), options);
+}
+
+const bodyOf = (a: Asked): unknown => a.ok ? a.body : null;
 
 /**
  * Look one place up (one request). Of several towns of its name, the one
@@ -337,7 +381,7 @@ async function lookUpPlace(place: string, options: GeocodeOptions): Promise<unkn
  * "no coordinates".
  */
 export async function geocodePlace(place: string, options: GeocodeOptions & { center?: LatLon | null } = {}): Promise<PlaceGeo | null> {
-    return pickPlaceHit(await lookUpPlace(place, options), place, options.center);
+    return pickPlaceHit(bodyOf(await lookUpPlace(place, options)), place, options.center);
 }
 
 /**
@@ -347,17 +391,7 @@ export async function geocodePlace(place: string, options: GeocodeOptions & { ce
  * are, under the place the family actually wrote.
  */
 export async function geocodeCandidates(query: string, options: GeocodeOptions = {}): Promise<PlaceGeo[]> {
-    const doFetch = options.fetchFn ?? fetch;
-    try {
-        const response = await doFetch(buildGeocodeUrl(query, CANDIDATE_LIMIT), {
-            headers: { Accept: 'application/json' },
-            signal: options.signal,
-        });
-        if (!response.ok) return [];
-        return parseGeocodeCandidates(await response.json());
-    } catch {
-        return [];
-    }
+    return parseGeocodeCandidates(bodyOf(await askGeocoder(buildGeocodeUrl(query, CANDIDATE_LIMIT), options)));
 }
 
 /**
@@ -365,17 +399,7 @@ export async function geocodeCandidates(query: string, options: GeocodeOptions =
  * so a settlement picked for a place with a house can be stored "by the town".
  */
 export async function searchPlaceCandidates(query: string, options: GeocodeOptions = {}): Promise<GeocodeCandidate[]> {
-    const doFetch = options.fetchFn ?? fetch;
-    try {
-        const response = await doFetch(buildGeocodeUrl(query, CANDIDATE_LIMIT, true), {
-            headers: { Accept: 'application/json' },
-            signal: options.signal,
-        });
-        if (!response.ok) return [];
-        return parseGeocodeCandidateDetails(await response.json());
-    } catch {
-        return [];
-    }
+    return parseGeocodeCandidateDetails(bodyOf(await askGeocoder(buildGeocodeUrl(query, CANDIDATE_LIMIT, true), options)));
 }
 
 /**
@@ -397,17 +421,7 @@ export function pickTownHit(body: unknown, town: string, centroid?: LatLon | nul
  * mean null, as everywhere here.
  */
 export async function geocodeTown(town: string, options: GeocodeOptions & { centroid?: LatLon | null } = {}): Promise<PlaceGeo | null> {
-    const doFetch = options.fetchFn ?? fetch;
-    try {
-        const response = await doFetch(buildGeocodeUrl(town, CANDIDATE_LIMIT), {
-            headers: { Accept: 'application/json' },
-            signal: options.signal,
-        });
-        if (!response.ok) return null;
-        return pickTownHit(await response.json(), town, options.centroid);
-    } catch {
-        return null;
-    }
+    return pickTownHit(bodyOf(await askGeocoder(buildGeocodeUrl(town, CANDIDATE_LIMIT), options)), town, options.centroid);
 }
 
 /**
@@ -415,7 +429,10 @@ export async function geocodeTown(town: string, options: GeocodeOptions & { cent
  * requested name (null = not found) so callers can report what is still missing.
  * Aborting stops the queue and returns what was found so far.
  */
-export async function geocodePlaces(places: string[], options: GeocodePlacesOptions = {}): Promise<Map<string, PlaceGeo | null>> {
+export async function geocodePlaces(places: string[], given: GeocodePlacesOptions = {}): Promise<Map<string, PlaceGeo | null>> {
+    // A request without an answer stops the run (§10.3): the places from it on are not "not found".
+    let failed = false;
+    const options: GeocodePlacesOptions = { ...given, onFailure: kind => { failed = true; given.onFailure?.(kind); } };
     const wait = options.waitFn ?? defaultWait;
     const found = new Map<string, PlaceGeo | null>();
     const fallback = options.townFallback;
@@ -440,7 +457,9 @@ export async function geocodePlaces(places: string[], options: GeocodePlacesOpti
     for (let i = 0; i < places.length; i++) {
         if (!await turn()) break;
         const place = places[i];
-        const body = await lookUpPlace(place, options);
+        const asked = await lookUpPlace(place, options);
+        if (!asked.ok) break;
+        const body = asked.body;
         if (options.treePlaces && sameNamedTowns(body, place).length > 1) {
             doubtful.push({ place, body });
             found.set(place, parseGeocodeResponse(body));
@@ -459,7 +478,9 @@ export async function geocodePlaces(places: string[], options: GeocodePlacesOpti
                         options.onProgress?.(i + 1, places.length, place);
                         break;
                     }
-                    towns.set(key, await geocodeTown(parsed.town, { ...options, centroid: fallback.centroid }));
+                    const town = await geocodeTown(parsed.town, { ...options, centroid: fallback.centroid });
+                    if (failed || options.signal?.aborted) break;
+                    towns.set(key, town);
                 }
                 const town = towns.get(key);
                 if (town) geo = { ...town, byTown: parsed.town };
@@ -487,9 +508,12 @@ export interface FormCandidate {
  * between them, the same spot found twice kept once (under the first form).
  * `onForm` after every form, with what is found so far.
  */
-export async function searchPlaceForms(forms: readonly string[], options: GeocodeOptions & {
+export async function searchPlaceForms(forms: readonly string[], given: GeocodeOptions & {
     onForm?: (found: readonly FormCandidate[], asked: number) => void;
 } = {}): Promise<FormCandidate[]> {
+    // A form without an answer stops the search (§10.3); what the forms before found stays.
+    let failed = false;
+    const options = { ...given, onFailure: (kind: GeocodeFailure) => { failed = true; given.onFailure?.(kind); } };
     const wait = options.waitFn ?? defaultWait;
     const found: FormCandidate[] = [];
     const seen = new Set<string>();
@@ -497,7 +521,9 @@ export async function searchPlaceForms(forms: readonly string[], options: Geocod
         if (options.signal?.aborted) break;
         if (i > 0) await wait(REQUEST_INTERVAL_MS);
         if (options.signal?.aborted) break;
-        for (const c of await searchPlaceCandidates(forms[i]!, options)) {
+        const got = await searchPlaceCandidates(forms[i]!, options);
+        if (failed || options.signal?.aborted) break;
+        for (const c of got) {
             const spot = `${c.geo.lat.toFixed(4)},${c.geo.lon.toFixed(4)}`;
             if (seen.has(spot)) continue;
             seen.add(spot);

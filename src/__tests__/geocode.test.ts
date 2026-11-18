@@ -9,7 +9,7 @@ import {
     buildGeocodeUrl, geocodeCandidates, geocodePlace, geocodePlaces,
     parseGeocodeCandidates, parseGeocodeResponse, placesCentroid, isSettlementHit, searchPlaceCandidates, hitKind, hitLabelParts,
     CANDIDATE_LIMIT, GEOCODER_URL, GEOCODER_CONTACT, REQUEST_INTERVAL_MS, parseHitAddress, searchPlaceForms,
-    pickPlaceHit, sameNamedTowns, treeCenter,
+    pickPlaceHit, sameNamedTowns, treeCenter, GEOCODE_TIMEOUT_MS,
 } from '../geocode.js';
 import { placeGeoHash } from '../place-records.js';
 import type { PlaceGeo } from '../types.js';
@@ -355,5 +355,66 @@ describe('parseHitAddress and searchPlaceForms', () => {
         expect(asked).toEqual(['Lhotov', 'Lhotow']);
         expect(waits).toHaveLength(1);
         expect(found.map(f => [f.candidate.geo.lat, f.form])).toEqual([[50, 'Lhotov'], [49, 'Lhotow']]);
+    });
+});
+
+describe('a lookup without an answer (§10.3)', () => {
+    const silent = (_u: unknown, init?: RequestInit): Promise<Response> => new Promise((_res, rej) => {
+        init?.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')));
+    });
+
+    it('waits 10 s at most per request, then says timeout (not "not found")', async () => {
+        vi.useFakeTimers();
+        try {
+            const onFailure = vi.fn();
+            const ask = searchPlaceCandidates('Lhota', { fetchFn: silent as typeof fetch, onFailure });
+            await vi.advanceTimersByTimeAsync(GEOCODE_TIMEOUT_MS - 1);
+            expect(onFailure).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await ask).toEqual([]);
+            expect(onFailure).toHaveBeenCalledWith('timeout');
+            expect(GEOCODE_TIMEOUT_MS).toBe(10_000);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('tells the network, the service\'s request limit and "not found" apart; a stop is no failure', async () => {
+        const kinds: string[] = [];
+        const onFailure = (k: string): void => { kinds.push(k); };
+        await geocodeCandidates('A', { fetchFn: vi.fn().mockRejectedValue(new TypeError('Failed to fetch')), onFailure });
+        await geocodeCandidates('A', { fetchFn: vi.fn().mockResolvedValue({ ok: false, status: 429 } as Response), onFailure });
+        await geocodeCandidates('A', { fetchFn: vi.fn().mockResolvedValue({ ok: false, status: 403 } as Response), onFailure });
+        await geocodeCandidates('A', { fetchFn: vi.fn().mockResolvedValue({ ok: false, status: 502 } as Response), onFailure });
+        await geocodeCandidates('A', { fetchFn: vi.fn().mockResolvedValue(okResponse([])), onFailure });
+        const ctl = new AbortController();
+        const stopped = geocodeCandidates('A', { fetchFn: silent as typeof fetch, onFailure, signal: ctl.signal });
+        ctl.abort();
+        await stopped;
+        expect(kinds).toEqual(['network', 'limit', 'limit', 'network']);
+    });
+
+    it('a run stops at the first failure; the places from there on are not "not found"', async () => {
+        const fetchFn = vi.fn()
+            .mockResolvedValueOnce(okResponse(hit('50.08', '14.44')))
+            .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+            .mockResolvedValue(okResponse([]));
+        const onFailure = vi.fn();
+        const found = await geocodePlaces(['Praha', 'Brno', 'Made Up'], { fetchFn, waitFn: async () => {}, onFailure });
+        expect([...found.keys()]).toEqual(['Praha']);
+        expect(onFailure).toHaveBeenCalledWith('network');
+        expect(fetchFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('the search under the forms stops there too, keeping what was found', async () => {
+        const fetchFn = vi.fn()
+            .mockResolvedValueOnce(okResponse([{ lat: '50', lon: '14', display_name: 'Lhota', addresstype: 'village' }]))
+            .mockResolvedValueOnce({ ok: false, status: 429 } as Response)
+            .mockResolvedValue(okResponse([]));
+        const onFailure = vi.fn();
+        const found = await searchPlaceForms(['Lhota', 'Lhotta', 'Lhotha'], { fetchFn, waitFn: async () => {}, onFailure });
+        expect(found).toHaveLength(1);
+        expect(onFailure).toHaveBeenCalledWith('limit');
+        expect(fetchFn).toHaveBeenCalledTimes(2);
     });
 });

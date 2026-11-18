@@ -785,7 +785,10 @@ export const placesManagerMethods = uiModule({
         const search = row.querySelector('.place-search') as HTMLElement;
         const query = row.querySelector('.place-query') as HTMLInputElement;
         const go = row.querySelector('.place-search-go') as HTMLButtonElement;
-        const run = (): void => { void this.searchPlaceFromManager(key, query.value, row); };
+        // B141: the button in its working state while the forms are asked (the run's own waits between them).
+        const run = (): void => {
+            void runBusy(go, () => this.searchPlaceFromManager(key, query.value, row), { label: strings.map.searching, timeoutMs: Infinity });
+        };
         go.onclick = run;
         query.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); run(); } };
 

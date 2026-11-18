@@ -221,6 +221,62 @@ test('the map offers to look up places after consent, plots them, never scrolls 
     await expect(page.getByRole('button', { name: /Look up \d+ places?/ })).toBeHidden();
 });
 
+test('a lookup without an answer (§10.3): the network down stops the run with its sentence and Try again, nothing counted as not found', async ({ page }) => {
+    await stubTiles(page);
+    let down = true;
+    const asked: string[] = [];
+    await page.route('**://nominatim.openstreetmap.org/**', route => {
+        const q = new URL(route.request().url()).searchParams.get('q') ?? '';
+        asked.push(q);
+        if (down) return route.abort('internetdisconnected');
+        return route.fulfill({ status: 200, contentType: 'application/json',
+            body: JSON.stringify([{ lat: q === 'Greenwich' ? '51.48' : '51.67', lon: q === 'Greenwich' ? '0.0' : '-4.91', display_name: `${q}, Test` }]) });
+    });
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    await seedPlaces(page);
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
+    await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
+    await page.getByRole('button', { name: 'Look them up' }).click();
+    const failed = page.locator('#map-status .busy-msg.is-err[role="alert"]');
+    await expect(failed.locator('.busy-msg__text')).toHaveText('The service is not available (network error).');
+    // The run stopped at the first place; no "not found" toast.
+    expect(asked).toHaveLength(1);
+    await expect(page.locator('.toast', { hasText: 'not found' })).toHaveCount(0);
+    await expect(page.locator('#map-status')).not.toContainText('not found by the map');
+    down = false;
+    await failed.getByRole('button', { name: 'Try again' }).click();
+    await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
+    await expect(failed).toHaveCount(0);
+});
+
+test('the service\'s request limit (429) and no answer in 10 s are said as such', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-11-18T10:00:00Z') });
+    await stubTiles(page);
+    let reply: 'limit' | 'silent' = 'limit';
+    await page.route('**://nominatim.openstreetmap.org/**', route => {
+        if (reply === 'limit') return route.fulfill({ status: 429, contentType: 'application/json', body: '[]' });
+        return undefined;   // never answers
+    });
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    await seedPlaces(page);
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
+    await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
+    await page.getByRole('button', { name: 'Look them up' }).click();
+    const failed = page.locator('#map-status .busy-msg.is-err');
+    await expect(failed.locator('.busy-msg__text')).toHaveText('The service refuses more requests right now (request limit). Another attempt is possible later.');
+    reply = 'silent';
+    await failed.getByRole('button', { name: 'Try again' }).click();
+    await expect(page.locator('#map-status .map-geo-prog')).toBeVisible();
+    await page.clock.runFor(11_000);
+    await expect(failed.locator('.busy-msg__text')).toHaveText('The service did not answer within 10 s.');
+});
+
 test('of several towns of the same name the lookup takes the one nearest the tree\'s other places, in one request; a location placed by hand stays', async ({ page }) => {
     await stubTiles(page);
     const urls: URL[] = [];
