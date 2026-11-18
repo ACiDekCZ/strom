@@ -111,7 +111,7 @@ export const researchFollowMethods = uiModule({
      * tree as it opened with a short notice; nothing else happens.
      */
     async openDeepLink(link: DeepLink, treeMatches: boolean): Promise<void> {
-        const notice = (text: string): void => this.showToast(text, 5000, { notice: true, closable: true, kind: 'deep-link' });
+        const notice = (text: string): void => { this.showToast(text, 5000, { notice: true, closable: true, kind: 'deep-link' }); };
         if (!treeMatches) {
             notice(strings.deepLink.treeNotFound);
             return;

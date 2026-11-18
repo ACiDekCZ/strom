@@ -56,7 +56,7 @@ import { yearOf } from '../dates.js';
 import { twoFiguresSvg } from '../icons.js';
 import { shownNameOrEmpty, nameHtml } from '../person-name.js';
 import { forgetCardTypeCopy } from './card-fields-ui.js';
-import { setResearchOpenLabel } from './research-open-mark.js';
+import { showToast as showToastNow, putToast as putToastNow, showProgressToast as showProgressToastNow, type ToastOptions, type ToastHandle, type LongOpts, type ProgressStep, type ProgressToastHandle } from './toast.js';
 import { helpMark, setHelpMarkTopic } from './help-mark.js';
 import { HELP_TOPICS, type HelpTopic } from '../help/topics.js';
 import { openHelp } from './help-ui.js';
@@ -64,24 +64,6 @@ import { syncControlBlock } from './minimap.js';
 import { addLender, cancelWaiting, removeLender, watchToasts, whenFree } from '../toast-slot.js';
 
 
-/** How a message shows (UI.showToast). */
-interface ToastOptions {
-    title?: string;
-    spinner?: boolean;
-    closable?: boolean;
-    kind?: string;
-    /** `research`: it opens the research (its mark at the end, §6). */
-    /** `research`: the action opens the research's terminal (its mark); `ai`: an agent works there too. */
-    action?: { label: string; run: () => void; research?: boolean; ai?: boolean };
-    hold?: boolean;
-    /** A notice to be read: it stands 3 s at least before a newer toast takes its place (round 7 §53). */
-    notice?: boolean;
-    /** Said as an alert (`role="alert"`): something asked for did not happen. */
-    alert?: boolean;
-    /** A dialog's footer (selector) the toast stands above while it is on the screen: shown over a
-     *  dialog, the toast must not cover the dialog's action buttons. */
-    clearOf?: string;
-}
 
 /** The sample name under Settings > Surname display (no titles shown). */
 const SURNAME_SAMPLE = { firstName: 'Marie', lastName: 'Dvořáková', marriedSurname: 'Nováková' };
@@ -1770,100 +1752,18 @@ export const miscMethods = uiModule({
      * §53): a message coming sooner waits and shows then, with its full time.
      * `notice`: this message is such a toast as well (a warning to be read).
      */
-    showToast(message: string, duration = 3000, opts: ToastOptions = {}): void {
-        watchToasts();
-        whenFree('message', () => this.putToast(message, duration, opts));
+    showToast(message: string, duration = 3000, opts: ToastOptions = {}): ToastHandle {
+        return showToastNow(message, duration, opts);
     },
 
     /** Put the message on the screen now (showToast, its turn come). */
     putToast(message: string, duration: number, opts: ToastOptions): void {
-        // Remove existing toast
-        const existing = document.querySelector('.toast');
-        if (existing) existing.remove();
+        putToastNow(message, duration, opts);
+    },
 
-        const toast = document.createElement('div');
-        toast.className = opts.title || opts.spinner ? 'toast toast--rich' : 'toast';
-        toast.setAttribute('role', opts.alert ? 'alert' : 'status');
-        if (opts.kind) toast.dataset.kind = opts.kind;
-        if (opts.notice) toast.dataset.notice = '';
-        if (opts.spinner) {
-            const spin = document.createElement('span');
-            spin.className = 'toast-spinner';
-            spin.setAttribute('aria-hidden', 'true');
-            toast.appendChild(spin);
-        }
-        if (opts.title) {
-            const body = document.createElement('span');
-            body.className = 'toast-body';
-            const title = document.createElement('strong');
-            title.className = 'toast-title';
-            title.textContent = opts.title;
-            body.append(title, document.createTextNode(message));
-            toast.appendChild(body);
-        } else {
-            toast.appendChild(document.createTextNode(message));
-        }
-        if (opts.action) {
-            const { label, run, research, ai } = opts.action;
-            const act = document.createElement('button');
-            act.type = 'button';
-            act.className = 'toast-action';
-            if (research) setResearchOpenLabel(act, label, { ai });
-            else act.textContent = label;
-            act.onclick = () => {
-                toast.classList.remove('show');
-                setTimeout(() => toast.remove(), 300);
-                run();
-            };
-            // In the group of actions: an "Undo" or "↩ Back" riding along joins it, the group wraps whole
-            const actions = document.createElement('span');
-            actions.className = 'toast-actions';
-            actions.appendChild(act);
-            toast.appendChild(actions);
-        }
-        if (opts.closable) {
-            const close = document.createElement('button');
-            close.type = 'button';
-            close.className = 'toast-close';
-            close.setAttribute('aria-label', strings.buttons.close);
-            close.innerHTML = '&times;';
-            close.onclick = () => {
-                toast.classList.remove('show');
-                setTimeout(() => toast.remove(), 300);
-            };
-            toast.classList.add('toast--closable');
-            toast.appendChild(close);
-        }
-        document.body.appendChild(toast);
-        if (opts.clearOf) {
-            const foot = document.querySelector<HTMLElement>(opts.clearOf);
-            const top = foot?.offsetParent ? foot.getBoundingClientRect().top : 0;
-            if (top > 0) toast.style.bottom = `${Math.max(0, window.innerHeight - top) + 8}px`;
-        }
-
-        // Trigger animation
-        requestAnimationFrame(() => {
-            toast.classList.add('show');
-        });
-
-        // Auto-hide; a toast with a button (its action, or "Undo" / "↩ Back" riding
-        // in it) stays while the keyboard is on it (reached with Tab) and goes
-        // once focus leaves (`hold`: also under the pointer).
-        if (!Number.isFinite(duration)) return;
-        const hide = (): void => {
-            if (toast.isConnected && toast.contains(document.activeElement)) {
-                toast.addEventListener('focusout', () => setTimeout(hide, 0), { once: true });
-                return;
-            }
-            // `hold`: it also stays while the pointer is on it.
-            if (opts.hold && toast.isConnected && toast.matches(':hover')) {
-                toast.addEventListener('mouseleave', () => setTimeout(hide, 1000), { once: true });
-                return;
-            }
-            toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 300);
-        };
-        setTimeout(hide, duration);
+    /** The progress toast of a long action (waiting buttons §2.1). */
+    showProgressToast(opts: LongOpts, first?: ProgressStep): ProgressToastHandle {
+        return showProgressToastNow(opts, first);
     },
 
     // ---- UNDO TOAST ----

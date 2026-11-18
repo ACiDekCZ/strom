@@ -38,6 +38,7 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         beforeSwitchSend: 'Przed przełączeniem wysyłanie zmian do badania…',
         preparingBook: 'Przygotowywanie książki…',
         chapterK: (k: number, n: number) => `rozdział ${k} z ${n}`,
+        kOfN: (k: number, n: number) => `${k} z ${n}`,
         creatingTreeK: (k: number, n: number, name: string) => `Tworzenie drzewa ${k} z ${n}: ${name}…`,
         loadingFile: (name: string) => `Wczytywanie ${name}…`,
         stopsAfterFile: 'Zatrzyma się po bieżącym pliku.',

@@ -355,7 +355,7 @@ export const researchLiveMethods = uiModule({
     },
 
     copyResearchLiveCommand(command: string): void {
-        const done = (): void => this.showToast(strings.researchLive.copied, 3000);
+        const done = (): void => { this.showToast(strings.researchLive.copied, 3000); };
         try {
             void navigator.clipboard?.writeText(command).then(done, () => { /* the code stays selectable */ });
         } catch { /* the code stays selectable */ }

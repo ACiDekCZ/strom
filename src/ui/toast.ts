@@ -1,0 +1,360 @@
+/**
+ * The app's toasts (UI.showToast, round 6 §43): a message at the bottom, one
+ * at a time (src/toast-slot.ts). `showToast` gives back a handle: the toast
+ * can be changed in place (`update`) or closed (`close`), also before it got
+ * its turn on the screen.
+ *
+ * The progress toast (waiting buttons §2.1, `showProgressToast`): one steady
+ * place for a long action whose element is gone (a closed dialog or menu) or
+ * that runs long: the one spinner (`.busy-spin.s16`) or a bar (`.bar`, known
+ * share or not), a title, a line with the step, "k of n", a size and the time
+ * from 10 s, "Taking longer than usual." from twice the usual time (20 s at
+ * least), Cancel / Show where they work. It stays while the action runs; its
+ * end is a summary with ✓ (4 s, `role=status`) or an error (`role=alert`,
+ * with ✕, no closing by itself). It goes on the screen at once and a message
+ * coming meanwhile does not remove it (it shows again when the message goes).
+ */
+
+import { strings } from '../strings.js';
+import { setResearchOpenLabel } from './research-open-mark.js';
+import { watchToasts, whenFree } from '../toast-slot.js';
+
+/** How a message shows (UI.showToast). */
+export interface ToastOptions {
+    title?: string;
+    spinner?: boolean;
+    closable?: boolean;
+    kind?: string;
+    /** `research`: the action opens the research's terminal (its mark); `ai`: an agent works there too. */
+    action?: { label: string; run: () => void; research?: boolean; ai?: boolean };
+    hold?: boolean;
+    /** A notice to be read: it stands 3 s at least before a newer toast takes its place (round 7 §53). */
+    notice?: boolean;
+    /** Said as an alert (`role="alert"`): something asked for did not happen. */
+    alert?: boolean;
+    /** A dialog's footer (selector) the toast stands above while it is on the screen: shown over a
+     *  dialog, the toast must not cover the dialog's action buttons. */
+    clearOf?: string;
+}
+
+/** A toast shown (or waiting for its turn): changed in place or closed. */
+export interface ToastHandle {
+    /** The toast on the screen (null: not yet there, or gone). */
+    readonly el: HTMLElement | null;
+    /** Its words, time and options anew (the same element; its time starts again). */
+    update(message: string, duration?: number, opts?: ToastOptions): void;
+    /** It goes (one waiting for its turn never comes). */
+    close(): void;
+}
+
+/** Fade a toast out and remove it. */
+function fadeOut(toast: HTMLElement): void {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+}
+
+/** Fill a toast with its message and options (its old content replaced). */
+function fillToast(toast: HTMLElement, message: string, opts: ToastOptions, onAction?: () => void): void {
+    toast.replaceChildren();
+    const progress = toast.classList.contains('toast--progress');
+    toast.className = progress ? 'toast toast--rich toast--progress' : opts.title || opts.spinner ? 'toast toast--rich' : 'toast';
+    if (toast.dataset.shown !== undefined) toast.classList.add('show');
+    toast.setAttribute('role', opts.alert ? 'alert' : 'status');
+    if (opts.kind) toast.dataset.kind = opts.kind;
+    else delete toast.dataset.kind;
+    if (opts.notice) toast.dataset.notice = '';
+    else delete toast.dataset.notice;
+    if (opts.spinner) {
+        const spin = document.createElement('span');
+        spin.className = 'toast-spinner';
+        spin.setAttribute('aria-hidden', 'true');
+        toast.appendChild(spin);
+    }
+    if (opts.title) {
+        const body = document.createElement('span');
+        body.className = 'toast-body';
+        const title = document.createElement('strong');
+        title.className = 'toast-title';
+        title.textContent = opts.title;
+        body.append(title, document.createTextNode(message));
+        toast.appendChild(body);
+    } else {
+        toast.appendChild(document.createTextNode(message));
+    }
+    if (opts.action) {
+        const { label, run, research, ai } = opts.action;
+        const act = document.createElement('button');
+        act.type = 'button';
+        act.className = 'toast-action';
+        if (research) setResearchOpenLabel(act, label, { ai });
+        else act.textContent = label;
+        act.onclick = () => {
+            fadeOut(toast);
+            onAction?.();
+            run();
+        };
+        // In the group of actions: an "Undo" or "↩ Back" riding along joins it, the group wraps whole
+        const actions = document.createElement('span');
+        actions.className = 'toast-actions';
+        actions.appendChild(act);
+        toast.appendChild(actions);
+    }
+    if (opts.closable) {
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'toast-close';
+        close.setAttribute('aria-label', strings.buttons.close);
+        close.innerHTML = '&times;';
+        close.onclick = () => fadeOut(toast);
+        toast.classList.add('toast--closable');
+        toast.appendChild(close);
+    }
+}
+
+/** Its auto-hide (Infinity: none); a toast with a button stays while the keyboard (`hold`: the pointer) is on it. */
+function scheduleHide(toast: HTMLElement, duration: number, opts: ToastOptions): ReturnType<typeof setTimeout> | null {
+    if (!Number.isFinite(duration)) return null;
+    const hide = (): void => {
+        if (toast.isConnected && toast.contains(document.activeElement)) {
+            toast.addEventListener('focusout', () => setTimeout(hide, 0), { once: true });
+            return;
+        }
+        // `hold`: it also stays while the pointer is on it.
+        if (opts.hold && toast.isConnected && toast.matches(':hover')) {
+            toast.addEventListener('mouseleave', () => setTimeout(hide, 1000), { once: true });
+            return;
+        }
+        fadeOut(toast);
+    };
+    return setTimeout(hide, duration);
+}
+
+/** Toasts with a timer of their own (a new time from `update` stops the old one). */
+const hideTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+
+function setHide(toast: HTMLElement, duration: number, opts: ToastOptions): void {
+    const old = hideTimers.get(toast);
+    if (old) clearTimeout(old);
+    const t = scheduleHide(toast, duration, opts);
+    if (t) hideTimers.set(toast, t);
+    else hideTimers.delete(toast);
+}
+
+/** Show `toast` (made, filled) on the screen. */
+function mount(toast: HTMLElement, opts: ToastOptions): void {
+    document.body.appendChild(toast);
+    if (opts.clearOf) {
+        const foot = document.querySelector<HTMLElement>(opts.clearOf);
+        const top = foot?.offsetParent ? foot.getBoundingClientRect().top : 0;
+        if (top > 0) toast.style.bottom = `${Math.max(0, window.innerHeight - top) + 8}px`;
+    }
+    // Trigger animation
+    requestAnimationFrame(() => {
+        if (!toast.isConnected) return;
+        toast.classList.add('show');
+        toast.dataset.shown = '';
+    });
+}
+
+/** Put the message on the screen now (its turn come): it replaces the message before it, never a running progress toast. */
+export function putToast(message: string, duration: number, opts: ToastOptions): HTMLElement {
+    for (const t of document.querySelectorAll<HTMLElement>('body > .toast')) {
+        if (!t.classList.contains('toast--progress') || t.dataset.ended !== undefined) t.remove();
+    }
+    const toast = document.createElement('div');
+    fillToast(toast, message, opts);
+    mount(toast, opts);
+    setHide(toast, duration, opts);
+    return toast;
+}
+
+/** A message at the bottom, when it is its turn (see UI.showToast); the handle changes or closes it. */
+export function showToast(message: string, duration = 3000, opts: ToastOptions = {}): ToastHandle {
+    let el: HTMLElement | null = null;
+    let closed = false;
+    let args: [string, number, ToastOptions] = [message, duration, opts];
+    watchToasts();
+    whenFree('message', () => {
+        if (closed) return;
+        el = putToast(...args);
+    });
+    return {
+        get el() { return el?.isConnected ? el : null; },
+        update(m: string, d = args[1], o: ToastOptions = args[2]) {
+            args = [m, d, o];
+            if (!el || !el.isConnected) return;
+            fillToast(el, m, o);
+            setHide(el, d, o);
+        },
+        close() {
+            closed = true;
+            if (el) fadeOut(el);
+        },
+    };
+}
+
+// ==================== THE PROGRESS TOAST (§2.1) ====================
+
+/** A long action (§2): its progress toast, or its dialog. */
+export interface LongOpts {
+    /** "Handing the tree to the research…" */
+    title: string;
+    /** Its usual time: "Taking longer than usual." from max(2 × usualMs, 20 s). */
+    usualMs?: number;
+    /** Only where cancelling really works (§2.4). */
+    cancel?: () => void;
+    /** "Show": back to the dialog or window the action came from. */
+    show?: () => void;
+    /** §2.6: the words of the lock on edits. */
+    lockEdits?: string;
+}
+
+/** A step of a long action: its words, "k of n", a size; `percent` draws a known bar (null: a bar of unknown share). */
+export interface ProgressStep {
+    step?: string;
+    k?: number;
+    n?: number;
+    size?: string;
+    /** 0–100: a bar with that share; null: a bar of unknown share; absent: the spinner. */
+    percent?: number | null;
+}
+
+export interface ProgressToastHandle {
+    readonly el: HTMLElement;
+    /** A new step (and title). */
+    update(step: ProgressStep & { title?: string }): void;
+    /** Done: a summary with ✓ for 4 s (`role=status`); without a summary it just goes. */
+    done(summary?: string): void;
+    /** It failed: the words as an alert, ✕ and the action; it does not go by itself. */
+    fail(text: string, action?: { label: string; run: () => void }): void;
+    /** It goes now. */
+    close(): void;
+}
+
+/** "· 12 s" shows from this long. */
+export const ELAPSED_FROM_MS = 10_000;
+/** "Taking longer than usual." never sooner than this. */
+export const TAKING_LONG_MIN_MS = 20_000;
+/** A summary stands this long. */
+export const SUMMARY_MS = 4000;
+
+/** The sub line of a progress toast: step · k of n · size · time. */
+export function progressSubLine(st: ProgressStep, elapsedMs: number): string {
+    const parts: string[] = [];
+    if (st.step) parts.push(st.step);
+    if (st.k !== undefined && st.n !== undefined) parts.push(strings.busy.kOfN(st.k, st.n));
+    if (st.size) parts.push(st.size);
+    const line = parts.join(' · ');
+    if (elapsedMs < ELAPSED_FROM_MS) return line;
+    const time = strings.busy.elapsed(Math.floor(elapsedMs / 1000));
+    return line ? `${line} ${time}` : time.replace(/^·\s*/, '');
+}
+
+/** The progress toast of a long action (§2.1): on the screen at once, until it is done, failed or closed. */
+export function showProgressToast(opts: LongOpts, first: ProgressStep = {}): ProgressToastHandle {
+    watchToasts();
+    const started = Date.now();
+    let step: ProgressStep = { ...first };
+    let title = opts.title;
+    let ended = false;
+    const toast = document.createElement('div');
+    toast.className = 'toast toast--rich toast--progress';
+    toast.dataset.kind = 'progress';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-busy', 'true');
+
+    const lead = document.createElement('span');
+    lead.className = 'toast-lead';
+    const body = document.createElement('span');
+    body.className = 'toast-body';
+    const head = document.createElement('strong');
+    head.className = 'toast-title';
+    const sub = document.createElement('span');
+    sub.className = 't-sub';
+    const long = document.createElement('span');
+    long.className = 't-long';
+    const bar = document.createElement('span');
+    bar.className = 'bar';
+    bar.setAttribute('aria-hidden', 'true');
+    bar.appendChild(document.createElement('i'));
+    body.append(head, sub, bar, long);
+    const actions = document.createElement('span');
+    actions.className = 'toast-actions';
+    toast.append(lead, body, actions);
+
+    const button = (label: string, run: () => void): HTMLButtonElement => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'toast-action';
+        b.textContent = label;
+        b.onclick = run;
+        return b;
+    };
+    if (opts.cancel) actions.appendChild(button(strings.buttons.cancel, () => opts.cancel?.()));
+    if (opts.show) actions.appendChild(button(strings.busy.show, () => opts.show?.()));
+
+    const draw = (): void => {
+        if (ended) return;
+        head.textContent = title;
+        const elapsed = Date.now() - started;
+        sub.textContent = progressSubLine(step, elapsed);
+        sub.hidden = sub.textContent === '';
+        const longAfter = Math.max(2 * (opts.usualMs ?? 0), TAKING_LONG_MIN_MS);
+        long.textContent = elapsed >= longAfter ? strings.busy.takingLong : '';
+        long.hidden = long.textContent === '';
+        const hasBar = step.percent !== undefined;
+        bar.hidden = !hasBar;
+        bar.classList.toggle('ind', step.percent === null);
+        (bar.firstElementChild as HTMLElement).style.width = typeof step.percent === 'number'
+            ? `${Math.max(0, Math.min(100, step.percent))}%` : '';
+        if (hasBar) lead.replaceChildren();
+        else if (!lead.querySelector('.busy-spin')) {
+            const spin = document.createElement('i');
+            spin.className = 'busy-spin s16';
+            spin.setAttribute('aria-hidden', 'true');
+            lead.replaceChildren(spin);
+        }
+        actions.hidden = actions.childElementCount === 0;
+    };
+    draw();
+    const ticker = setInterval(draw, 1000);
+    mount(toast, {});
+
+    const finish = (): void => {
+        ended = true;
+        clearInterval(ticker);
+        toast.dataset.ended = '';
+        toast.removeAttribute('aria-busy');
+    };
+    return {
+        el: toast,
+        update(st) {
+            if (st.title) title = st.title;
+            const { title: _t, ...rest } = st;
+            step = { ...step, ...rest };
+            draw();
+        },
+        done(summary) {
+            if (ended) return;
+            finish();
+            if (!summary) { fadeOut(toast); return; }
+            toast.replaceChildren();
+            const ok = document.createElement('span');
+            ok.className = 'ok';
+            ok.setAttribute('aria-hidden', 'true');
+            ok.textContent = '✓';
+            toast.append(ok, document.createTextNode(summary));
+            toast.setAttribute('role', 'status');
+            setHide(toast, SUMMARY_MS, {});
+        },
+        fail(text, action) {
+            if (ended && !toast.isConnected) return;
+            finish();
+            fillToast(toast, text, { alert: true, closable: true, kind: 'progress', ...(action ? { action } : {}) });
+        },
+        close() {
+            finish();
+            fadeOut(toast);
+        },
+    };
+}
