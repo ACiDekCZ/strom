@@ -247,7 +247,7 @@ test.describe('card height by content (U02 V3)', () => {
         const cards = await drawn(page);
         expect(new Set(cards.map(c => c.height)).size).toBeGreaterThan(2);
         const svg = await posterSvg(page);
-        const rects = [...svg.matchAll(/<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="(\d+)" rx="8"[^>]*\/>(\s*<path class="branch-stripe" d="([^"]+)")?/g)]
+        const rects = [...svg.matchAll(/<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="(\d+)" rx="8"[^>]*\/>(\s*<path class="branch-stripe"[^>]* d="([^"]+)")?/g)]
             .map(m => ({ x: Number(m[1]), y: Number(m[2]), height: Number(m[4]), stripe: m[6] ?? null }));
         expect(rects).toHaveLength(cards.length);
         // Positions as laid out: each card's rect is its own height.
@@ -262,7 +262,7 @@ test.describe('card height by content (U02 V3)', () => {
             }
         }
         // The stripe on the cards the screen tags with a branch.
-        const tagged = await page.locator('#tree-canvas .person-card[class*="branch-"]').count();
+        const tagged = await page.locator('#tree-canvas .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant)').count();
         expect(tagged).toBeGreaterThan(1);
         expect(rects.filter(r => r.stripe).length).toBe(tagged);
         // The poster's size: the lowest card's own bottom.

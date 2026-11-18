@@ -20,7 +20,9 @@ const lifts: Record<'tree' | 'fan', Lift> = {
 };
 
 function writeHeight(kind: 'tree' | 'fan', el: HTMLElement): void {
-    const h = el.style.display === 'none' || el.hidden ? 0 : Math.ceil(el.getBoundingClientRect().height);
+    // The exact height, fractions kept: rounded up, a legend of a fractional height
+    // (rows of the lineage signs) would lift the buttons 1px past their 8px gap.
+    const h = el.style.display === 'none' || el.hidden ? 0 : Math.round(el.getBoundingClientRect().height * 100) / 100;
     document.body.style.setProperty(`--${kind}-legend-h`, `${h}px`);
     // The fan's card is hidden by its view (and on a phone, which has the chip): shown means it has a size.
     if (kind === 'fan') document.body.classList.toggle('fan-legend-shown', h > 0);
