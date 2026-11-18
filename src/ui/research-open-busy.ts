@@ -56,10 +56,11 @@ export const OPEN_LATE_WATCH_MS = 60_000;
 
 /**
  * The links waiting for their proof (by the link without its handoff): a second start within this time does nothing
- * (a double activation, the list drawn again under the pointer); later it is a new start, unless the element that
- * shows the state is still busy.
+ * (a double activation: a double click, the list drawn again under the pointer between its two clicks); later it is
+ * a new start the person meant (another dialog's button, the card's ! once more), unless the element that shows the
+ * state is still busy. Within a double click's time, never longer: two steps of a person take more.
  */
-export const OPEN_REPEAT_MS = 1000;
+export const OPEN_REPEAT_MS = 400;
 const inFlight = new Map<string, { at: number }>();
 /** The late watch of each link after its limit (a new try ends it). */
 const lateWatches = new Map<string, () => void>();

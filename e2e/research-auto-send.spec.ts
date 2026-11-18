@@ -1710,6 +1710,8 @@ test.describe('the research as an archive', () => {
         await poll(page);
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         await expect(where).toHaveText('The Strom archive is switched to research in the research, with the first item of its menu: “Switch research on”. Open the research, opens in the research');
+        // A person's next step, not the second click of a double click (the same link within 400 ms hands nothing over).
+        await page.clock.fastForward(500);
         await where.locator('#research-mode-where-open').click();
         expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`, `strom-research://open?tree=${UUID}`]);
     });

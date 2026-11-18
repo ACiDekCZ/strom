@@ -77,7 +77,8 @@ async function openCard(page: Page): Promise<void> {
 const idOf = (page: Page, refn: string) => page.evaluate((r) => window.Strom.DataManager.getAllPersons().find((p: { refn?: string }) => p.refn === r)!.id, refn);
 const card = (page: Page) => page.locator('#person-research-modal .person-research-hypo[data-hypo="H0051"]');
 const row = (page: Page, v: string) => card(page).locator(`.person-research-variant[data-variant="${v}"]`);
-const toast = (page: Page) => page.locator('.toast');
+/** The message toast (beside it a link's "Opening the research…" may run). */
+const toast = (page: Page) => page.locator('.toast:not(.toast--progress)');
 const opened = async (page: Page): Promise<string[]> => (await links(page)).filter(u => u.startsWith('strom-research://hypothesis'));
 const stub = (page: Page) => page.locator('.person-card .research-edge.edge-named');
 const parentsOf = (page: Page) => page.evaluate(() => {
@@ -183,6 +184,8 @@ test.describe('A hypothesis decided from the app: the research confirms it', () 
         await expect(bubble.locator('.reb-variant[data-variant="A"] .reb-wait')).toBeVisible();
         await expect(bubble.locator('.reb-pick:not([disabled])')).toHaveCount(0);
         await expect(bubble.locator('.reb-wait-again')).toBeFocused();
+        // A person's next step, not the second click of a double click (the same link within 400 ms hands nothing over).
+        await page.clock.fastForward(500);
         await bubble.locator('.reb-wait-again').click();
         expect((await opened(page)).length).toBe(2);
         // The research decides A with the links: the bubble closes, the keyboard on Jan's card.

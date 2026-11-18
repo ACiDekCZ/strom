@@ -211,8 +211,9 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         const done = page.evaluate((u) => window.Strom.UI.sendChangesToResearch(u), BRIDGE);
         const dialog = page.locator('#confirmation-modal');
         await dialog.getByRole('button', { name: 'Send' }).click();
-        await expect(dialog).toContainText('Sent.');
-        await dialog.getByRole('button', { name: 'OK' }).click();
+        // The result in the send's progress toast, no dialog to dismiss (waiting buttons §2.3).
+        await expect(page.locator('.toast--progress')).toContainText('Sent.');
+        await expect(dialog).not.toHaveClass(/active/);
         await done;
         expect(b.syncPosts).toHaveLength(1);
         expect(b.syncPosts[0]).toContain(`1 _STROM_TREE ${UUID}`);
@@ -231,7 +232,7 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         const done = page.evaluate((u) => window.Strom.UI.sendChangesToResearch(u), BRIDGE);
         const confirm = page.locator('#confirmation-modal');
         await confirm.getByRole('button', { name: 'Send' }).click();
-        await confirm.getByRole('button', { name: 'OK' }).click();
+        await expect(page.locator('.toast--progress')).toContainText('Sent.');
         await done;
 
         // The research's next version, without that source (?import-url= / a dropped tree.ged).

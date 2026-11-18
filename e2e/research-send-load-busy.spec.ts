@@ -147,3 +147,35 @@ test.describe('loading the research\'s version', () => {
         await expect(loadToast(page)).toHaveCount(0, { timeout: 10_000 });
     });
 });
+
+test.describe('a progress toast and a message to be read', () => {
+    test('a progress toast coming after "Research version loaded" with Restore waits under it; an informative one or one that stays gives way', async ({ page }) => {
+        await openResearch(page);
+        const shown = page.locator('body > .toast:not(.toast-held)');
+        // A message with its action and its own time: a progress toast started after it waits under it.
+        await page.evaluate(() => {
+            const UI = window.Strom.UI as any;
+            UI.showToast('Research version loaded.', 4000, { action: { label: 'Restore the state before loading', run: () => undefined } });
+            (window as any).__p = UI.showProgressToast({ title: 'Opening the research…' }, {});
+        });
+        await expect(shown).toHaveCount(1);
+        await expect(shown).toContainText('Research version loaded.');
+        await expect(shown.getByRole('button', { name: 'Restore the state before loading' })).toBeVisible();
+        // Its time over: the progress toast shows.
+        await expect(shown).toContainText('Opening the research…', { timeout: 6000 });
+        await page.evaluate(() => (window as any).__p.close());
+
+        // A mere message, or one that stays until closed: the progress toast shows over it at once.
+        for (const stays of [false, true]) {
+            await page.evaluate((closable) => {
+                const UI = window.Strom.UI as any;
+                UI.showToast('A message.', closable ? Infinity : 4000,
+                    closable ? { closable, action: { label: 'Try again', run: () => undefined } } : {});
+                (window as any).__p = UI.showProgressToast({ title: 'Loading the tree…' }, {});
+            }, stays);
+            await expect(shown).toHaveCount(1);
+            await expect(shown).toContainText('Loading the tree…');
+            await page.evaluate(() => (window as any).__p.close());
+        }
+    });
+});

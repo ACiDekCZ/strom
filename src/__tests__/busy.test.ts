@@ -371,6 +371,22 @@ describe('openResearchBusy: a link into the research', () => {
         expect(b.handed).toHaveLength(2);
     });
 
+    it('the same link started again from a new element half a second later is a new start (another dialog\'s button)', async () => {
+        const b = bridge();
+        void openResearchBusy(btn, LINK, {}, b.deps);
+        // the dialog of the first click closed; the next dialog's button, a step of the person later
+        btn.remove();
+        await vi.advanceTimersByTimeAsync(500);
+        const nb = dom.document.createElement('button');
+        dom.document.body.appendChild(nb);
+        void openResearchBusy(nb as unknown as HTMLElement, LINK, {}, b.deps);
+        expect(b.handed).toHaveLength(2);
+        // still a double activation within a double click's time
+        const third = dom.document.createElement('button') as unknown as HTMLElement;
+        void openResearchBusy(third, LINK, {}, b.deps);
+        expect(b.handed).toHaveLength(2);
+    });
+
     it('an older research (no handoffs): a new session is the proof', async () => {
         const b = bridge({ before: status({ features: null, sessions: 0 }) });
         b.answer(status({ features: null, sessions: 0 }));

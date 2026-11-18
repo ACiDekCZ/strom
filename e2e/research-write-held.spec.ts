@@ -78,7 +78,8 @@ test.describe('a send the research holds back', () => {
             // Settled there: sent by hand, it goes.
             bridge.syncReply = { status: 200, body: { ok: true, input: 'I0042', changes: 6, inbox: true } };
             await page.evaluate(() => window.Strom.UI.researchSendNow());
-            await expect(page.locator('.toast')).toContainText('Sent to the research');
+            // The message (beside it "Opening the research…" of Take over may still run).
+            await expect(page.locator('.toast:not(.toast--progress)')).toContainText('Sent to the research');
             expect(bridge.posts).toHaveLength(2);
             await openResearchMenu(page);
             await expect(block(page)).not.toHaveAttribute('data-state', 'writeHeld');

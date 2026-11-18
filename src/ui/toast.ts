@@ -11,8 +11,10 @@
  * from 10 s, "Taking longer than usual." from twice the usual time (20 s at
  * least), Cancel / Show where they work. It stays while the action runs; its
  * end is a summary with ✓ (4 s, `role=status`) or an error (`role=alert`,
- * with ✕, no closing by itself). It goes on the screen at once and a message
- * coming meanwhile does not remove it (it shows again when the message goes).
+ * with ✕, no closing by itself). It goes on the screen at once (under a
+ * message to be read whose own time runs, until it goes: src/toast-slot.ts)
+ * and a message coming meanwhile does not remove it (it shows again when the
+ * message goes).
  */
 
 import { strings } from '../strings.js';
@@ -139,6 +141,9 @@ const hideTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 function setHide(toast: HTMLElement, duration: number, opts: ToastOptions): void {
     const old = hideTimers.get(toast);
     if (old) clearTimeout(old);
+    // A toast with its own time (the slot: a progress toast coming after one to be read waits under it).
+    if (Number.isFinite(duration)) toast.dataset.timed = '';
+    else delete toast.dataset.timed;
     const t = scheduleHide(toast, duration, opts);
     if (t) hideTimers.set(toast, t);
     else hideTimers.delete(toast);

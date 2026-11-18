@@ -206,6 +206,8 @@ test.describe('Research hypotheses in What waits and the overview', () => {
         await expect(h22.locator('.prv-wait-title')).toHaveText('Waiting for confirmation in the research');
         await expect(h22.locator('.hwr-accept')).toBeDisabled();
         await expect(h22.locator('.hwr-leave')).toBeDisabled();
+        // A person's next step, not the second click of a double click (the same link within 400 ms hands nothing over).
+        await page.clock.fastForward(500);
         await h22.locator('.prv-wait-again').click();
         expect((await opened(page)).length).toBe(2);
         await h22.locator('.prv-wait-stop').click();

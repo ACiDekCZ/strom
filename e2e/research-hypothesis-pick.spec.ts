@@ -102,7 +102,9 @@ test.describe('Deciding a hypothesis in the app: What the research knows', () =>
         await expect(card.locator('[data-hypo-act="abandon"]')).toBeDisabled();
         await expect(card.locator('.prh-more')).toHaveCount(0);
         await expect(wait.locator('.prv-wait-again')).toBeFocused();
-        // Open again: the same link once more.
+        // Open again: the same link once more (a person's next step, not the second click of a double click:
+        // the same link within 400 ms hands nothing over).
+        await page.waitForTimeout(500);
         await wait.locator('.prv-wait-again').click();
         expect((await opened(page)).length).toBe(2);
         // Stop waiting: the choices back.

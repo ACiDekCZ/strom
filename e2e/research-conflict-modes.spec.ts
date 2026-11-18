@@ -332,7 +332,8 @@ test.describe('the bridge\'s answers from the panel', () => {
         await choice(page, 'user').click();
         await expect(panel(page)).toHaveCount(0);
         await expect(tag(page)).toHaveCount(0);
-        await expect(page.locator('.toast')).toHaveText('Already decided in the research: 3 FEB 1865 (S0001)');
+        // The message (the load of its version runs beside it in its progress toast).
+        await expect(page.locator('.toast:not(.toast--progress)')).toHaveText('Already decided in the research: 3 FEB 1865 (S0001)');
         await expect.poll(() => janBirth(page)).toBe('1865-02-03');
         await expect(page.locator('#input-birthdate')).not.toHaveValue('1865');
         expect(await activeId(page)).toBe('input-birthdate');

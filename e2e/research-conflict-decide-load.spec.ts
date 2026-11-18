@@ -27,6 +27,8 @@ const ged = conflictGed;
 
 const linkHead = (page: Page, treeId: string) => page.evaluate(id => window.Strom.TreeManager.getTreeMetadata(id)?.research?.head, treeId);
 const toast = (page: Page) => page.locator('.toast');
+/** The message toast (beside it a load's progress toast may run, or still fade). */
+const message = (page: Page) => page.locator('.toast:not(.toast--progress)');
 
 test.describe('after deciding a conflict in the app', () => {
     test.use({ locale: 'en-US' });
@@ -142,7 +144,7 @@ test.describe('after deciding a conflict in the app', () => {
             then: { head: NEW_HEAD, janBirth: '3 FEB 1865', janState: 'decided', janDecision: '3 FEB 1865 (S0001)' } });
         await side(page, 'user').locator('.prc-choice').click();
         await expect(cardOf(page)).toHaveAttribute('data-state', 'elsewhere');
-        await expect(toast(page)).toHaveText('Already decided in the research: 3 FEB 1865 (S0001)');
+        await expect(message(page)).toHaveText('Already decided in the research: 3 FEB 1865 (S0001)');
         await expect.poll(() => janBirth(page)).toBe('1865-02-03');
         expect(await linkHead(page, treeId)).toBe(NEW_HEAD);
         await expect(cardOf(page).locator('.prc-decided-line')).toHaveText(/^The value here changed from 1865\./);

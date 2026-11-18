@@ -473,7 +473,8 @@ test('a newer version with the very same tree (the research committed only its f
     await openResearchMenu(page);
     await expect(block(page)).toHaveAttribute('data-state', 'newer');
     await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
-    await expect(page.locator('.toast')).toContainText('In sync with the research');
+    // The message (the load's progress toast runs beside it until the version is in).
+    await expect(page.locator('.toast:not(.toast--progress)')).toContainText('In sync with the research');
     await expect(page.locator('#research-load-modal.active')).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(bridge.head);
     await poll(page);
@@ -497,7 +498,8 @@ test.describe('updating over changes the research does not have', () => {
         await expect(dialog).toContainText('the research has a newer version');
         await expect(dialog.locator('.confirm-aside-btn')).toHaveText('Load without changes');
         await dialog.getByRole('button', { name: 'Send, then load' }).click();
-        await expect(page.locator('.toast')).toContainText('Sent to the research');
+        // The message (the load's progress toast, gone for the question, may still fade beside it).
+        await expect(page.locator('.toast:not(.toast--progress)')).toContainText('Sent to the research');
         await expect(pill).toContainText('Confirm the changes in the research, then the new version loads');
 
         // Written in the research: its record says so, the version holds the change.
@@ -507,7 +509,7 @@ test.describe('updating over changes the research does not have', () => {
         bridge.head = 'aa11bb22cc33';
         bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Fíšek/', '1 NAME Jan /Fíšek/\n1 BIRT\n2 PLAC Praha');
         await poll(page);
-        await expect(page.locator('.toast')).toContainText('Research version loaded.');
+        await expect(page.locator('.toast:not(.toast--progress)')).toContainText('Research version loaded.');
         // Sent by hand, nothing to send: only the Send button's empty place stays.
         await expect(pill).not.toHaveClass(/is-warn|is-wait/);
         await expect(pill.locator('#research-sync-send')).toHaveCount(0);

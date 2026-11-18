@@ -2945,12 +2945,12 @@ export const researchUiMethods = uiModule({
     awaitResearchVersion(): void {
         const r = strings.research;
         if (versionWait) clearTimeout(versionWait);
+        // A new wait: the toast of the one before goes, also its "did not answer".
         versionWaitToast?.close();
         const toast = this.showProgressToast({ title: r.awaitingVersion }, {});
         versionWaitToast = toast;
         versionWait = setTimeout(() => {
             versionWait = null;
-            if (versionWaitToast === toast) versionWaitToast = null;
             toast.fail(r.noAnswer, { label: strings.busy.retry, run: () => {
                 const url = this.activeResearchLink('app');
                 if (url) this.launchResearchLink(url, 'version');
@@ -2960,11 +2960,12 @@ export const researchUiMethods = uiModule({
 
     /** The version came (or something else was asked for): stop waiting quietly. */
     settleResearchVersion(): void {
+        // Its toast goes, also a "did not answer" of a wait over (the version came late).
+        versionWaitToast?.close();
+        versionWaitToast = null;
         if (!versionWait) return;
         clearTimeout(versionWait);
         versionWait = null;
-        versionWaitToast?.close();
-        versionWaitToast = null;
     },
 
     /** The active tree's research id, when it is a research tree (the app's own trees: null). */

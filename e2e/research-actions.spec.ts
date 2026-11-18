@@ -142,30 +142,35 @@ test.describe('the Research menu', () => {
         await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-version').click();
         expect(await launched(page)).toEqual([`strom-research://app?tree=${UUID}`]);
-        await expect(page.locator('.toast .toast-spinner')).toBeVisible();
-        await expect(page.locator('.toast')).toContainText('Waiting for the new version from the research…');
+        // The wait in its progress toast (waiting buttons §2.8): the one spinner, then the failure with Try again.
+        const wait = page.locator('.toast--progress');
+        await expect(wait.locator('.busy-spin')).toBeVisible();
+        await expect(wait).toContainText('Waiting for the new version from the research…');
         await page.clock.fastForward(20_500);
-        await expect(page.locator('.toast')).toHaveText('The research did not answer. Start it and try again.');
+        await expect(wait).toHaveAttribute('role', 'alert');
+        await expect(wait).toContainText('The research did not answer. Start it and try again.');
+        await expect(wait.getByRole('button', { name: 'Try again' })).toBeVisible();
 
-        // It came in time: the spinner goes, the import takes over.
+        // It came in time: the spinner goes (the failure before with it), the import takes over.
         await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-version').click();
-        await expect(page.locator('.toast .toast-spinner')).toBeVisible();
+        await expect(wait.locator('.busy-spin')).toBeVisible();
+        await expect(page.locator('.toast', { hasText: 'did not answer' })).toHaveCount(0);
         await page.evaluate(() => window.Strom.UI.openExternalRequest(new URLSearchParams('import-url=https://example.com/x.ged')));
-        await expect(page.locator('.toast .toast-spinner')).toHaveCount(0);
+        await expect(wait.locator('.busy-spin')).toHaveCount(0);
         await page.clock.fastForward(25_000);
-        await expect(page.locator('.toast')).not.toContainText('did not answer');
+        await expect(page.locator('.toast', { hasText: 'did not answer' })).toHaveCount(0);
     });
 
     test('"Load new version": the version opening in another tab (app in a browser) ends the wait here', async ({ page, context }) => {
         await setup(page);
         await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-version').click();
-        await expect(page.locator('.toast .toast-spinner')).toBeVisible();
+        await expect(page.locator('.toast--progress .busy-spin')).toBeVisible();
         const other = await context.newPage();
         await asWindowlessTab(other);
         await other.goto(`/strom.html?import-url=${encodeURIComponent('http://127.0.0.1:5995/tree.ged')}`);
-        await expect(page.locator('.toast .toast-spinner')).toHaveCount(0);
+        await expect(page.locator('.toast--progress .busy-spin')).toHaveCount(0);
         await other.close();
     });
 

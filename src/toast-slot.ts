@@ -32,6 +32,12 @@
  * of each kind. A message carrying a lent button is not held for it (the
  * button rides on in the newer message), and other messages are replaced at
  * once, as before.
+ *
+ * A progress toast (waiting buttons §2.1) shows at once, over a message
+ * standing, except over a message to be read whose own time runs (its
+ * action would go unseen): it waits under it and shows when it goes. A
+ * message coming while a progress toast runs shows over it, and the
+ * progress toast shows again when the message goes.
  */
 
 import { watchSheets } from './sheet-toasts.js';
@@ -241,7 +247,11 @@ export function reconcile(): void {
     const candidates = dialog
         ? messages.filter(t => !t.classList.contains('undo-toast') || t.classList.contains('undo-toast-over-dialog')) : messages;
     const focus = lenders.find(l => l.kind === 'focus') ?? null;
-    const next = candidates[candidates.length - 1] ?? messages[messages.length - 1] ?? focus?.el ?? null;
+    const pool = candidates.length ? candidates : messages;
+    let next = pool[pool.length - 1] ?? focus?.el ?? null;
+    // A progress toast that came after a message to be read whose own time runs (its action, e.g. "Restore the
+    // state before loading") waits under it: shown first it would hide that action until its time is over.
+    if (next && runningProgress(next)) next = [...pool].reverse().find(standsOverProgress) ?? next;
 
     for (const t of messages) toggle(t, 'toast-held', t !== next);
     for (const l of lenders) l.shown?.(l.el === next);
@@ -289,6 +299,20 @@ export function reconcile(): void {
 function keyOf(t: HTMLElement): HTMLElement {
     const focus = lenders.find(l => l.kind === 'focus');
     return focus && t === focus.el ? focus.home : t;
+}
+
+/** A progress toast still running (waiting buttons §2.1). */
+function runningProgress(t: HTMLElement): boolean {
+    return t.classList.contains('toast--progress') && t.dataset.ended === undefined;
+}
+
+/**
+ * A message to be read with its own time (`data-timed`): a progress toast coming after it does not take its
+ * place. One that stays until closed (an error with ✕) gives way, and a mere message too (§2.1: the progress
+ * toast before the informative ones).
+ */
+function standsOverProgress(t: HTMLElement): boolean {
+    return t.classList.contains('toast') && !runningProgress(t) && t.dataset.timed !== undefined && toBeRead(t);
 }
 
 /** A toast to be read (round 7 §53): the undo pill, the focus confirmation, a message with its own action or a notice. */

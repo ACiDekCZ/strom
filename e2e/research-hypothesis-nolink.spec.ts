@@ -83,7 +83,8 @@ async function openCard(page: Page): Promise<void> {
 
 const card = (page: Page) => page.locator('#person-research-modal .person-research-hypo[data-hypo="H0060"]');
 const row = (page: Page, v: string) => card(page).locator(`.person-research-variant[data-variant="${v}"]`);
-const toast = (page: Page) => page.locator('.toast');
+/** The message toast (beside it a link's "Opening the research…" may run). */
+const toast = (page: Page) => page.locator('.toast:not(.toast--progress)');
 const opened = async (page: Page): Promise<string[]> => (await links(page)).filter(u => u.startsWith('strom-research://hypothesis'));
 const stub = (page: Page) => page.locator('.person-card .research-edge.edge-named');
 
