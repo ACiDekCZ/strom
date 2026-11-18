@@ -156,11 +156,15 @@ test('own files that could not be had: tried again by itself, then said with Try
         .some(p => p.firstName === 'Jan Václav'))).toBe(true);
     const tries = asked.length;
     const notice = page.locator('.toast[data-kind="research-media-missed"]');
-    await page.clock.fastForward(5_000);
-    await expect.poll(() => asked.length).toBe(tries + 1);
+    // Each attempt's wait starts once the one before has ended (its images asked as well), a while after its
+    // file was asked: moved on by that wait until the attempt is made (a wait started after a move needs another).
+    const attempted = (n: number, wait: number) => expect(async () => {
+        await page.clock.fastForward(wait);
+        expect(asked.length).toBe(tries + n);
+    }).toPass();
+    await attempted(1, 5_000);
     await expect(notice).toHaveCount(0);
-    await page.clock.fastForward(30_000);
-    await expect.poll(() => asked.length).toBe(tries + 2);
+    await attempted(2, 30_000);
     await expect(notice).toBeVisible();
     // The research gives them now: Try again takes that very version with them, nothing asked.
     await page.unroute(/\/tree\.ged(\?|$)/);
