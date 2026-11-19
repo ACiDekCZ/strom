@@ -453,8 +453,10 @@ test.describe('More under First up', () => {
             await expect(moreBox(page).locator('.queue-work__more-hint')).toHaveCount(0);
             // The status's window: the first and 13 after it.
             await expect(rows(page)).toHaveCount(13);
-            await expect(rows(page).first().locator('.queue-work__pos')).toHaveText('2.');
-            await expect(rows(page).last().locator('.queue-work__pos')).toHaveText('14.');
+            // Numbered as they come after the first; the place in the whole queue in the tooltip.
+            await expect(rows(page).first().locator('.queue-work__pos')).toHaveText('1.');
+            await expect(rows(page).last().locator('.queue-work__pos')).toHaveText('13.');
+            await expect(rows(page).first()).toHaveAttribute('title', '2 in the queue');
             await expect(rows(page).first().locator('.queue-work__more-text')).toHaveText('T0202 Matriky Smrkov, svazek 2, 2 in the queue');
             await expect(moreBox(page).locator('.queue-work__more-rest')).toHaveText('and 43 more tasks in the queue · Research overview ›');
             await expect(btn).toBeFocused();
@@ -472,6 +474,22 @@ test.describe('More under First up', () => {
             await expect(queueHead(page)).toHaveAttribute('aria-expanded', 'true');
         });
     }
+
+    test('a task set first from 2nd place: Then numbered 1., 2., 3. without a gap, the places in the tooltip', async ({ page }) => {
+        const queue = [
+            { id: 'T0401', text: 'Matriky Smrkov', state: 'next', research: 'G0001' },
+            { id: 'T0402', text: 'Sčítání lidu Smrkov 1880', state: 'next', research: 'G0001', own: 'next' },
+            { id: 'T0403', text: 'Kdo byl Josef Fíšek', state: 'next', research: 'G0001' },
+            { id: 'T0404', text: 'Pozemková kniha Smrkov', state: 'next', research: 'G0001' },
+        ];
+        await follow(page, { features: [...WORK, 'queue.page', 'queue.next'], queue, paged: true });
+        await workBtn(page).click();
+        await expect(dialog(page).locator('.queue-work__first-task')).toHaveText('T0402 Sčítání lidu Smrkov 1880');
+        await moreBtn(page).click();
+        await expect(moreBox(page).locator('.queue-work__more-head')).toHaveText('Then');
+        await expect(rows(page).locator('.queue-work__pos')).toHaveText(['1.', '2.', '3.']);
+        expect(await rows(page).evaluateAll(els => els.map(e => e.getAttribute('title')))).toEqual(['1 in the queue', '3 in the queue', '4 in the queue']);
+    });
 
     test('the overview\'s own window 390 px wide: the unfolded list within it', async ({ page }) => {
         const queue = Array.from({ length: 30 }, (_, i) => ({

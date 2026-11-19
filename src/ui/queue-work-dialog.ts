@@ -112,13 +112,15 @@ export function queueWorkRest(state: QueueWorkState, more: readonly LiveQueueIte
 function queueWorkMoreHtml(state: QueueWorkState, more: readonly LiveQueueItem[]): string {
     const L = strings.live;
     const placed = more.some(q => q.pos !== undefined);
-    const rows = more.map(q => {
+    // With places: the rows numbered 1., 2., 3. as they come after the first (a task set first from 2nd
+    // place left no gap at 2.); the place in the whole queue in the tooltip and for a screen reader.
+    const rows = more.map((q, i) => {
         const kind = queueKindText(q);
         const tags = `${q.own === 'next' ? ` <span class="research-queue__tag-next">${esc(L.queueTagNext)}</span>` : ''}${kind
             ? ` <span class="live-queue-kind" data-kind="${esc(q.kind ?? '')}">${esc(kind)}</span>` : ''}`;
         return `
-                        <li class="queue-work__more-row">
-                            <span class="queue-work__pos" aria-hidden="true">${q.pos !== undefined ? `${q.pos}.` : '–'}</span>
+                        <li class="queue-work__more-row"${q.pos !== undefined ? ` title="${esc(L.branchQueuePos(q.pos))}"` : ''}>
+                            <span class="queue-work__pos" aria-hidden="true">${placed ? `${i + 1}.` : '–'}</span>
                             <span class="queue-work__more-text"><strong>${esc(q.id)}</strong> ${esc(q.text)}${tags}${q.pos !== undefined
                                 ? `<span class="queue-work__sr">, ${esc(L.branchQueuePos(q.pos))}</span>` : ''}</span>
                         </li>`;
