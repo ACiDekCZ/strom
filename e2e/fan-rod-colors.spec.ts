@@ -15,8 +15,8 @@ const SURNAMES = ['Arvenko', 'Belmudr', 'Corvanek', 'Dresslin', 'Elvatch', 'Forn
 /**
  * Four rings of ancestors (Ahnentafel 1–31): a father keeps the child's
  * surname, a mother brings her own. The father's side has lines of 5, 3, 2, 2
- * sectors, the mother's 4, 3, 2, 2, and eight lines are drawn once (grey,
- * under "Other").
+ * sectors, the mother's 4, 3, 2, 2, and eight lines are drawn once (each in
+ * its colour, under "Other"; K1.7).
  */
 function ancestors(): Record<string, SeedPerson> {
     const surname = new Map<number, string>();
@@ -118,10 +118,19 @@ test('fan family lines: the legend in parts by side, its rows are buttons in one
     await expect(first).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('fan family lines: "Other" expands the grey lines, kept on the device (spec 114 §4)', async ({ page }) => {
+test('fan family lines: "Other" expands the smaller lines, in colour, kept on the device (spec 114 §4, K1.7)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openRodFan(page);
+    // No sector grey: every line has a colour (K1.7), every person here has a line.
+    const fills = await page.evaluate(() => [...document.querySelectorAll<SVGPathElement>('#fan-chart [data-fan-person] .fan-fill')]
+        .map(p => getComputedStyle(p).fill));
+    expect(fills.length).toBe(30);
+    expect(fills.filter(f => f === 'rgb(220, 215, 204)')).toEqual([]);
+    expect(new Set(fills).size).toBeGreaterThan(12);
     const other = page.locator('#fan-legend-items .fan-legend-other');
+    // Its swatch shows the colours of its first lines, not grey.
+    const sw = await other.locator('.fan-sw').evaluate(e => getComputedStyle(e).backgroundImage);
+    expect(sw).not.toContain('rgb(220, 215, 204)');
     await expect(other).toBeVisible();
     await expect(other).toHaveAttribute('aria-expanded', 'false');
     await expect(other.locator('.fan-legend-label')).toHaveText('Other · 8 lines');
@@ -132,6 +141,9 @@ test('fan family lines: "Other" expands the grey lines, kept on the device (spec
     const n = parseInt((await other.locator('.fan-legend-label').textContent())!.replace(/\D+/g, ''), 10);
     await expect(page.locator('#fan-legend-items button.fan-legend-sub[data-fan-rod]')).toHaveCount(n);
     await expect(other).toBeFocused();
+    // Each smaller line with its own colour; neighbours in the fan never share one.
+    const subs = await page.locator('#fan-legend-items button.fan-legend-sub[data-fan-rod] .fan-sw').evaluateAll(es => es.map(e => getComputedStyle(e).backgroundImage));
+    for (const b of subs) expect(b).not.toContain('rgb(220, 215, 204)');
     // A low window: the long legend scrolls inside its card and stops under the top-left row of pills (⌂).
     await page.setViewportSize({ width: 1440, height: 520 });
     await expect.poll(() => page.evaluate(() => {
@@ -145,12 +157,12 @@ test('fan family lines: "Other" expands the grey lines, kept on the device (spec
         return { underPills: stage >= 55, clearOfHome: !home || home.bottom <= legend.top, scrolls: legend.height < document.querySelector('#fan-legend')!.scrollHeight };
     })).toEqual({ underPills: true, clearOfHome: true, scrolls: true });
     await page.setViewportSize({ width: 1440, height: 900 });
-    // A grey line can be highlighted from the expanded list.
-    const grey = page.locator('#fan-legend-items button.fan-legend-sub[data-fan-rod]').first();
-    await grey.click();
-    await expect(grey).toHaveAttribute('aria-pressed', 'true');
+    // A smaller line can be highlighted from the expanded list.
+    const small = page.locator('#fan-legend-items button.fan-legend-sub[data-fan-rod]').first();
+    await small.click();
+    await expect(small).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('#evidence-pill')).toBeVisible();
-    // Closed, "Other" marks the chosen grey line.
+    // Closed, "Other" marks the chosen smaller line.
     await other.click();
     await expect(other).toHaveClass(/is-selected/);
     await page.reload();

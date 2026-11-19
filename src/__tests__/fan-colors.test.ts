@@ -108,16 +108,19 @@ describe('family-line palette (spec 114 §2)', () => {
     const slots = fanRodSlots();
     const of = (g: string, t: string) => slots.filter(s => s.startsWith(g + t));
 
-    it('has the slots of the table: P 6 strong + 5 muted, M 6 + 4, D 3 + 2', () => {
-        expect(slots.length).toBe(26);
-        expect(FAN_ROD_GROUPS.map(g => [of(g, 'S').length, of(g, 'T').length])).toEqual([[6, 5], [6, 4], [3, 2]]);
+    it('has the slots of the table widened for K1.7: P 8 strong + 9 muted, M 8 + 6, D 4 + 4', () => {
+        expect(slots.length).toBe(39);
+        expect(FAN_ROD_GROUPS.map(g => [of(g, 'S').length, of(g, 'T').length])).toEqual([[8, 9], [8, 6], [4, 4]]);
         expect(slots.every(s => parseFanRodSlot(s))).toBe(true);
-        for (const bad of ['PS6', 'MT4', 'DS3', 'XS0', 'PS', 'ps0', 'PS00x']) expect(parseFanRodSlot(bad), bad).toBeNull();
+        for (const bad of ['PS8', 'MT6', 'DS4', 'XS0', 'PS', 'ps0', 'PS00x']) expect(parseFanRodSlot(bad), bad).toBeNull();
     });
 
-    it('equals the hex table of §2 in the light (= print) and the dark theme (test 2)', () => {
-        expect(Object.keys(REF.hex).sort()).toEqual([...slots].sort());
-        for (const s of slots) {
+    it('equals the hex table of §2 in the light (= print) and the dark theme (test 2); the added slots keep clear of their group', () => {
+        // The design's table is the start of each group's list; the slots after it are K1.7's.
+        const table = Object.keys(REF.hex);
+        expect(table.length).toBe(26);
+        expect(table.every(s => slots.includes(s as FanRodSlot))).toBe(true);
+        for (const s of table as FanRodSlot[]) {
             expect(fanRodSlotColor(s, 'light'), s).toBe(REF.hex[s][0]);
             expect(fanRodSlotColor(s, 'print'), s).toBe(REF.hex[s][0]);
             expect(fanRodSlotColor(s, 'dark'), s).toBe(REF.hex[s][1]);
@@ -128,6 +131,13 @@ describe('family-line palette (spec 114 §2)', () => {
         expect(fanRodFill(null, 'light')).toBe(FAN_PALETTES.light.grey);
         expect(fanRodFill(null, 'dark')).toBe('#3a372f');
         expect(fanRodFill('DS0', 'print')).toBe('#ddbf80');
+        for (const s of slots.filter(x => !table.includes(x))) {
+            const g = s[0];
+            for (const o of slots.filter(x => x !== s && x[0] === g)) {
+                expect(deltaE(fanRodSlotColor(s, 'light'), fanRodSlotColor(o, 'light')), `${s} × ${o} light`).toBeGreaterThanOrEqual(0.03);
+                expect(deltaE(fanRodSlotColor(s, 'dark'), fanRodSlotColor(o, 'dark')), `${s} × ${o} dark`).toBeGreaterThanOrEqual(0.0225);
+            }
+        }
     });
 
     it('keeps the slots apart (test 3): the first strong ones of a group, strong × muted, the groups\' cores', () => {

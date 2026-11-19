@@ -24,7 +24,7 @@ import {
     buildFanModel, buildFanSvg, fanLineages, FanHighlight, FanModel, FanShape, FanSvgOptions,
 } from '../fan-chart.js';
 import {
-    FanColorMode, FanTheme, fanLegend, fanHasRepeats, FanLegendItem, FanRodGroup, FanRodSlot, parseFanRodSlot, FAN_PALETTES,
+    FanColorMode, FanTheme, fanLegend, fanHasRepeats, FanLegendItem, FanRodGroup, FanRodSlot, parseFanRodSlot, FAN_PALETTES, fanRodOtherSwatch,
 } from '../fan-colors.js';
 import { assignFanRodColors, FanRodAssignment, FanRodLegend, fanRodLegend } from '../fan-rod-assign.js';
 import { RodId, rodLabels, rodOf, realRodMembers, realRodSpouses } from '../lineage.js';
@@ -171,7 +171,7 @@ export class FanViewController {
     private modelKey = '';
     private redrawFrame = 0;
     private legendOpen: boolean;
-    /** "Other" (the grey family lines) expanded in the legend (spec 114 §4). */
+    /** "Other" (the smaller family lines) expanded in the legend (spec 114 §4). */
     private legendOtherOpen: boolean;
     /** The legend's rods of the current assignment. */
     private rodLegendCache: { a: FanRodAssignment; l: RodLegends } | null = null;
@@ -1469,17 +1469,17 @@ export class FanViewController {
     /**
      * The family lines of the fan (spec 114 §4): a part per side (the
      * father's, the mother's, the descendants) with its heading, then "Other"
-     * (the grey lines, expandable) and "no family line". The rows are buttons
-     * (§5): pressed is the tree's chosen line (spec 039); a chosen grey line
-     * marks "Other" while it is closed.
+     * (the smaller lines, each in its colour, expandable; K1.7) and "no family
+     * line". The rows are buttons (§5): pressed is the tree's chosen line
+     * (spec 039); a chosen smaller line marks "Other" while it is closed.
      */
     private rodLegendHtml(L: RodLegends): string {
         const S = strings.fan;
         const esc = this.host.esc;
         const sel = this.host.selectedRod?.() ?? null;
         const coloured = sel !== null && L.light.groups.some(g => g.items.some(i => i.key === sel));
-        const grey = sel !== null && L.light.other.some(i => i.key === sel);
-        const pressed = coloured || (grey && this.legendOtherOpen) ? sel : null;
+        const small = sel !== null && L.light.other.some(i => i.key === sel);
+        const pressed = coloured || (small && this.legendOtherOpen) ? sel : null;
         const heads: Record<FanRodGroup, string> = { P: S.legendFatherSide, M: S.legendMotherSide, D: S.legendDescendants };
         const greyOf = (theme: FanTheme): FanLegendItem => ({ key: '', label: '', color: FAN_PALETTES[theme].grey });
         const greySw = this.swatch({ light: greyOf('light'), dark: greyOf('dark'), print: greyOf('print') });
@@ -1504,8 +1504,10 @@ export class FanViewController {
         });
         if (L.light.otherRods) {
             const open = this.legendOtherOpen;
-            html += `<button type="button" class="fan-legend-row fan-legend-other sel-opt${grey && !open ? ' is-selected' : ''}" data-sel-form="row"`
-                + ` data-fan-legend="rodOther" aria-expanded="${open}" tabindex="-1">${greySw}`
+            const otherOf = (l: FanRodLegend): FanLegendItem => ({ key: '', label: '', ...fanRodOtherSwatch(l.other) });
+            const otherSw = this.swatch({ light: otherOf(L.light), dark: otherOf(L.dark), print: otherOf(L.print) });
+            html += `<button type="button" class="fan-legend-row fan-legend-other sel-opt${small && !open ? ' is-selected' : ''}" data-sel-form="row"`
+                + ` data-fan-legend="rodOther" aria-expanded="${open}" tabindex="-1">${otherSw}`
                 + `<span class="fan-legend-label">${esc(S.legendOther(L.light.otherRods))}</span>`
                 + `<span class="fan-legend-who">${L.light.otherPeople}×</span>${arrow(open ? '▾' : '▸')}</button>`;
             if (open) {

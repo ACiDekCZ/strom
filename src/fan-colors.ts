@@ -37,7 +37,7 @@ export interface FanPalette {
     hatch: string;
     /** Dashed outline of an empty slot (edit mode). */
     line: string;
-    /** Family lines outside the ten largest, and small ones. */
+    /** People without a family line (every line has a colour, K1.7). */
     grey: string;
 }
 
@@ -241,20 +241,23 @@ export const FAN_ROD_GROUPS: readonly FanRodGroup[] = ['P', 'M', 'D'];
 /**
  * The slots of each group in the order they are handed out: hue (OKLCH) and
  * lightness step (−1 / 0 / +1). Hue bands: P 132–290° (green → blue → blue
- * violet), M 302–50° (pink violet → pink → coral → orange), D 65–110° (ochre).
+ * violet), M 302–50° (pink violet → pink → coral → orange), D 62–112° (ochre).
+ * The slots after the design's table (P 6 + 5, M 6 + 4, D 3 + 2) widen it
+ * for dense fans where every line is coloured (K1.7); each keeps clear of
+ * its group's other slots (ΔE OK ≥ 0.03 light, 0.025 dark).
  */
 export const FAN_ROD_SLOTS: Readonly<Record<FanRodGroup, Readonly<Record<FanRodTier, ReadonlyArray<readonly [number, -1 | 0 | 1]>>>>> = {
     P: {
-        S: [[252, 0], [150, 0], [205, 1], [178, -1], [285, -1], [232, 1]],
-        T: [[222, 0], [160, 1], [268, -1], [192, -1], [138, 0]],
+        S: [[252, 0], [150, 0], [205, 1], [178, -1], [285, -1], [232, 1], [216, -1], [290, 1]],
+        T: [[222, 0], [160, 1], [268, -1], [192, -1], [138, 0], [288, 1], [196, 1], [234, 1], [158, -1]],
     },
     M: {
-        S: [[352, 0], [42, 0], [318, 1], [15, -1], [332, -1], [28, 1]],
-        T: [[8, 0], [335, 1], [42, -1], [305, -1]],
+        S: [[352, 0], [42, 0], [318, 1], [15, -1], [332, -1], [28, 1], [302, -1], [6, 1]],
+        T: [[8, 0], [335, 1], [42, -1], [305, -1], [50, 1], [342, -1]],
     },
     D: {
-        S: [[85, 0], [105, 1], [68, -1]],
-        T: [[97, 1], [74, -1]],
+        S: [[85, 0], [105, 1], [68, -1], [112, -1]],
+        T: [[97, 1], [74, -1], [112, -1], [62, 1]],
     },
 };
 
@@ -368,6 +371,15 @@ export interface FanLegendItem {
     focus?: boolean;
 }
 
+/**
+ * The swatch of "Other" in the family-line legend: the colours of its first
+ * two lines side by side (K1.7: the smaller lines are coloured, not grey).
+ */
+export function fanRodOtherSwatch(other: readonly FanLegendItem[]): { color: string; color2: string } {
+    const color = other[0]?.color ?? FAN_PALETTES.light.grey;
+    return { color, color2: other[1]?.color ?? color };
+}
+
 /** What the legend needs of a fan model (kept structural: fan-chart imports this file). */
 export interface FanLegendModel {
     focus: Person;
@@ -394,11 +406,11 @@ export function fanLegend(model: FanLegendModel, mode: FanColorMode, theme: FanT
         });
     }
     if (mode === 'rod') {
-        // A flat list of the sides' lines and one row of the grey ones (spec 114 §4 groups them in the view).
+        // A flat list of the sides' lines and one row of the smaller ones (spec 114 §4 groups them in the view).
         if (!rods) return [];
         const legend = fanRodLegend(rods, theme);
         const items = legend.groups.flatMap(g => g.items);
-        if (legend.otherRods) items.push({ key: 'rodOther', label: S.legendOther(legend.otherRods), who: `${legend.otherPeople}×`, color: T.grey });
+        if (legend.otherRods) items.push({ key: 'rodOther', label: S.legendOther(legend.otherRods), who: `${legend.otherPeople}×`, ...fanRodOtherSwatch(legend.other) });
         else if (legend.noRod) items.push({ key: 'noRod', label: S.legendNoRod, who: `${legend.noRod}×`, color: T.grey });
         return items;
     }

@@ -42,7 +42,7 @@ export const FAN_STORAGE_KEYS = {
     color: 'strom-fan-color',
     /** Legend card open: '1' / '0'. */
     legendOpen: 'strom-fan-legend-open',
-    /** "Other" (the grey family lines) of the legend expanded: '1' / '0' (spec 114 §4). */
+    /** "Other" (the smaller family lines) of the legend expanded: '1' / '0' (spec 114 §4). */
     legendOtherOpen: 'strom-fan-legend-other',
 } as const;
 

@@ -4,15 +4,17 @@
  *
  * The sample data (fictional plant surnames) and the expected slots come from
  * the reference implementation the design was drawn with (fixtures/
- * fan-rod-reference.json): the same fan models, the same results.
+ * fan-rod-reference.json): the same fan models, the same sides and counts, the
+ * same strong slots. The reference greyed the lines past the 20th place and
+ * the lines drawn once; K1.7 colours every line, so those differ.
  */
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-    assignFanRodColors, assignFanRodSlots, fanRodSides, fanRodAdjacency, fanRodLegend, fanRodSlotOf,
-    FAN_ROD_MAX_STRONG, FAN_ROD_MAX_COLOURED, FanRodAssignment, FanRodInfo, FanRodModel,
+    assignFanRodColors, assignFanRodSlots, fanRodSides, fanRodAdjacency, fanRodNear, fanRodLegend, fanRodSlotOf,
+    FAN_ROD_MAX_STRONG, FAN_ROD_LEGEND_MAIN, FanRodAssignment, FanRodInfo, FanRodModel,
 } from '../fan-rod-assign.js';
 import {
     FanRodSlot, fanRodSlotColor, deltaE, deltaEDeutan, parseFanRodSlot, FAN_PALETTES, fanMixWhite, FAN_PRINT_DIM, FAN_PRINT_EDGE,
@@ -84,13 +86,25 @@ const obj = (m: ReadonlyMap<string, string>) => Object.fromEntries([...m].sort((
 describe('the reference (sample data of the design)', () => {
     const got = runReference();
 
-    it.each(REF.states.map(s => s.name))('state %s: the same slots, memory, sides and counts', name => {
+    it.each(REF.states.map(s => s.name))('state %s: the same sides, counts and strong slots; every line coloured, remembered', name => {
         const s = state(name);
         const a = got.get(name)!;
-        expect(obj(a.slotOf)).toEqual(s.slots);
-        expect(obj(a.memory)).toEqual(s.memory);
         expect(Object.fromEntries(a.rods.map(r => [r.id, r.group]))).toEqual(s.groups);
         expect(Object.fromEntries(a.rods.map(r => [r.id, r.count]))).toEqual(s.counts);
+        expect(a.slotOf.size).toBe(a.rods.length);
+        expect(obj(a.memory)).toEqual(obj(a.slotOf));
+        // The strong lines on their group's strong shades: the reference's slot (the table widened after it, K1.7).
+        for (const r of a.rods) {
+            const ref = s.slots[r.id] ? parseFanRodSlot(s.slots[r.id]) : null;
+            if (r.tier === 'S' && !r.kept && ref && ref.group === r.group && ref.tier === 'S') expect(a.slotOf.get(r.id), `${name} ${REF.label[r.id]}`).toBe(s.slots[r.id]);
+        }
+    });
+
+    it('fresh fans (A, half5): every line the reference coloured has the reference\'s slot', () => {
+        for (const name of ['A', 'half5']) {
+            const s = state(name), a = got.get(name)!;
+            for (const [id, slot] of Object.entries(s.slots)) expect(a.slotOf.get(id as RodId), `${name} ${REF.label[id]}`).toBe(slot);
+        }
     });
 
     it('sides (test 7): Adéla’s fan has the father’s, the mother’s and the descendants’ lines; Klásek coloured; the centre on PS0', () => {
@@ -171,6 +185,29 @@ describe('the reference (sample data of the design)', () => {
         expect(pairs('full')).toContain('r4-r5');
         expect(pairs('half')).not.toContain('r4-r5');
     });
+
+    it('near (K1.7): one sector between, measured on the sectors; a long line does not make its two ends near', () => {
+        const p = (id: string) => refPerson(id);
+        // The father's line on 2, 4, 8, 16; the mother (3) and the mother of 8 (17) are four sectors apart.
+        const index = stubIndex({ me: 'L', f: 'L', ff: 'L', fff: 'L', ffff: 'L', m: 'x', fffm: 'y', fm: 'z' });
+        const model: FanRodModel = {
+            focus: p('me'), shape: 'half', desc: [],
+            sectors: [
+                { ahnentafel: 2, generation: 1, person: p('f') }, { ahnentafel: 3, generation: 1, person: p('m') },
+                { ahnentafel: 4, generation: 2, person: p('ff') }, { ahnentafel: 5, generation: 2, person: p('fm') },
+                { ahnentafel: 8, generation: 3, person: p('fff') },
+                { ahnentafel: 16, generation: 4, person: p('ffff') }, { ahnentafel: 17, generation: 4, person: p('fffm') },
+            ],
+        };
+        const near = fanRodNear(model, index).map(x => x.join('-')).sort();
+        // x (3) and z (5) have 2 between them; z (5) and y (17) have 4 and 8 between: not near; x and y neither.
+        expect(near).toContain('x-z');
+        expect(near).not.toContain('x-y');
+        expect(near).not.toContain('y-z');
+        // The lines' graph would call x and y near (both neighbours of L).
+        const adj = fanRodAdjacency(model, index).map(x => x.join('-'));
+        expect(adj).toEqual(expect.arrayContaining(['L-x', 'L-y']));
+    });
 });
 
 // ---------------------------------------------------------------- slots and memory
@@ -197,49 +234,56 @@ describe('slots (§1 steps 2–8)', () => {
         expect(slotOf.get('mid' as RodId)).toBe('PS2');
     });
 
-    it('keeps PS0 free while the centre’s line is coloured, and gives it away once the centre’s line is grey', () => {
+    it('gives the centre’s line PS0 even when drawn once; without a centre line PS0 goes to the largest', () => {
         const withCentre = assignFanRodSlots([info('a', 5), info('me', 2, 'P', { focus: true })], [], new Map([['a' as RodId, 'PS1' as FanRodSlot]]));
         expect(withCentre.slotOf.get('me' as RodId)).toBe('PS0');
-        const grey = assignFanRodSlots([info('a', 5), info('me', 1, 'P', { focus: true })], []);
-        expect(grey.slotOf.get('a' as RodId)).toBe('PS0');
-        expect(grey.slotOf.has('me' as RodId)).toBe(false);
+        const once = assignFanRodSlots([info('a', 5), info('me', 1, 'P', { focus: true })], []);
+        expect(once.slotOf.get('me' as RodId)).toBe('PS0');
+        expect(once.slotOf.get('a' as RodId)).toBe('PS1');
+        const none = assignFanRodSlots([info('a', 5), info('b', 3)], []);
+        expect(none.slotOf.get('a' as RodId)).toBe('PS0');
     });
 
-    it('colours at most 20 lines, the first 10 strong; a muted line takes its group’s muted shades first', () => {
-        const rods = Array.from({ length: 25 }, (_, i) => info(`r${String(i).padStart(2, '0')}`, 40 - i, (['P', 'M', 'D'] as const)[i % 3]));
+    it('colours every line (K1.7): the first 10 of 2+ sectors strong, the others muted in their own group\'s shades', () => {
+        const rods = Array.from({ length: 60 }, (_, i) => info(`r${String(i).padStart(2, '0')}`, Math.max(1, 40 - i), (['P', 'M', 'D'] as const)[i % 3]));
         const { slotOf, ranked } = assignFanRodSlots(rods, []);
-        expect(slotOf.size).toBe(FAN_ROD_MAX_COLOURED);
+        expect(slotOf.size).toBe(60);
         expect(ranked.filter(r => r.tier === 'S').length).toBe(FAN_ROD_MAX_STRONG);
-        expect(new Set(slotOf.values()).size).toBe(slotOf.size);
-        for (const r of ranked.slice(20)) expect(r.slot).toBeUndefined();
-        const muted = ranked.slice(10, 20);
-        for (const r of muted.filter(x => !x.borrowed)) expect(parseFanRodSlot(r.slot!)!.tier).toBe('T');
+        for (const r of ranked.slice(FAN_ROD_MAX_STRONG)) expect(parseFanRodSlot(r.slot!), r.id).toMatchObject({ group: r.group, tier: 'T' });
+        // Without neighbours nothing is borrowed: the own group's shades repeat.
+        expect(ranked.some(r => r.borrowed)).toBe(false);
+        expect(ranked.some(r => r.shared)).toBe(true);
+        // Fresh shades before a repeat: the first 10 have slots of their own.
+        expect(new Set(ranked.slice(0, FAN_ROD_MAX_STRONG).map(r => r.slot)).size).toBe(FAN_ROD_MAX_STRONG);
     });
 
-    it('memory: a line seen once holds its slot loosely and gets it back; a line gone frees it; a line past the 20th loses it', () => {
+    it('repeats a shade only on lines far apart: never on neighbours or a neighbour\'s neighbour', () => {
+        // A chain r0 – r1 – … – r39 in one group: a shade may come back only three links on.
+        const rods = Array.from({ length: 40 }, (_, i) => info(`r${String(i).padStart(2, '0')}`, 2, 'D'));
+        const adj = rods.slice(1).map((r, i) => [rods[i].id, r.id] as const);
+        const { slotOf } = assignFanRodSlots(rods, adj);
+        for (let i = 0; i < 40; i++) {
+            for (const k of [1, 2]) if (i + k < 40) expect(slotOf.get(rods[i].id), `r${i} × r${i + k}`).not.toBe(slotOf.get(rods[i + k].id));
+            expect(parseFanRodSlot(slotOf.get(rods[i].id)!)!.group, `r${i}`).toBe('D');
+        }
+    });
+
+    it('memory: a line keeps its slot, also drawn once; a line gone frees it; a neighbour holding it moves the later one', () => {
         const first = assignFanRodSlots([info('a', 4, 'M'), info('b', 3, 'M')], []);
         expect(obj(first.slotOf)).toEqual({ a: 'MS0', b: 'MS1' });
-        // b seen once: grey, its slot kept loosely, the new line c takes the next free one.
+        // b seen once: still coloured on its slot (muted tier now, the slot kept), c takes a fresh one.
         const second = assignFanRodSlots([info('a', 4, 'M'), info('b', 1, 'M'), info('c', 3, 'M')], [], first.memory);
-        expect(obj(second.slotOf)).toEqual({ a: 'MS0', c: 'MS2' });
-        expect(second.memory.get('b' as RodId)).toBe('MS1');
-        // b back on 2+: its slot again.
-        const third = assignFanRodSlots([info('a', 4, 'M'), info('b', 2, 'M'), info('c', 3, 'M')], [], second.memory);
-        expect(third.slotOf.get('b' as RodId)).toBe('MS1');
+        expect(obj(second.slotOf)).toEqual({ a: 'MS0', b: 'MS1', c: 'MS2' });
+        expect(obj(second.memory)).toEqual(obj(second.slotOf));
         // b gone: the slot is free for anybody.
-        const fourth = assignFanRodSlots([info('a', 4, 'M'), info('d', 3, 'M')], [], third.memory);
-        expect(fourth.memory.has('b' as RodId)).toBe(false);
-        expect(fourth.slotOf.get('d' as RodId)).toBe('MS1');
-        // A loosely held slot is the last choice of a new line.
-        const loose = assignFanRodSlots([info('x', 1, 'D'), info('y', 3, 'D')], [], new Map([['x' as RodId, 'DS0' as FanRodSlot]]));
-        expect(loose.slotOf.get('y' as RodId)).toBe('DS1');
-        // Past the 20th place: grey, and its remembered slot goes to the line ranked in its place.
-        const many = Array.from({ length: 21 }, (_, i) => info(`r${String(i).padStart(2, '0')}`, 30 - i, 'P'));
-        const kept = new Map([['r20' as RodId, 'PS1' as FanRodSlot]]);
-        const out = assignFanRodSlots(many, [], kept);
-        expect(out.slotOf.has('r20' as RodId)).toBe(false);
-        expect(out.slotOf.get('r00' as RodId)).toBe('PS0');
-        expect([...out.slotOf.values()]).toContain('PS1');
+        const third = assignFanRodSlots([info('a', 4, 'M'), info('d', 3, 'M')], [], second.memory);
+        expect(third.memory.has('b' as RodId)).toBe(false);
+        expect(third.slotOf.get('d' as RodId)).toBe('MS1');
+        // Two lines remembering one slot (a repeat) become neighbours: the larger keeps it.
+        const shared = new Map([['x' as RodId, 'MT0' as FanRodSlot], ['y' as RodId, 'MT0' as FanRodSlot]]);
+        const out = assignFanRodSlots([info('x', 3, 'M'), info('y', 2, 'M')], [['x' as RodId, 'y' as RodId]], shared);
+        expect(out.slotOf.get('x' as RodId)).toBe('MT0');
+        expect(out.slotOf.get('y' as RodId)).not.toBe('MT0');
     });
 
     it('drops invalid slots of a memory (another window, an older build)', () => {
@@ -330,28 +374,31 @@ function randomTree(r: () => number): { data: StromData; focus: PersonId; people
     return { data, focus: focus.id, people: Object.keys(persons) as PersonId[] };
 }
 
-/** K1.1 and the limits of step 2–3 on one assignment. */
-function checkK11(a: FanRodAssignment, what: string): void {
-    const coloured = a.rods.filter(r => a.slotOf.has(r.id));
-    const grey = a.rods.filter(r => !a.slotOf.has(r.id));
-    expect(coloured.length, what).toBeLessThanOrEqual(FAN_ROD_MAX_COLOURED);
-    const focusLate = coloured.some(r => r.focus && (r.rank ?? 0) >= FAN_ROD_MAX_STRONG) ? 1 : 0;
-    expect(coloured.filter(r => r.tier === 'S').length, what).toBeLessThanOrEqual(FAN_ROD_MAX_STRONG + focusLate);
-    expect(new Set(a.slotOf.values()).size, what).toBe(a.slotOf.size);
-    const minColoured = Math.min(...coloured.map(r => r.count));
-    for (const g of grey) {
-        // Grey only when drawn once, or past the 20th place.
-        if (g.count >= 2) expect(coloured.length, `${what}: ${g.id} grey with ${g.count}`).toBe(FAN_ROD_MAX_COLOURED);
-        // More people ⇒ never grey while a line with fewer has a colour.
-        expect(g.count, `${what}: ${g.id} grey with ${g.count}, a coloured line has ${minColoured}`).toBeLessThanOrEqual(minColoured);
-    }
+/** K1.1, K1.6 and K1.7 on one assignment. */
+function checkK17(a: FanRodAssignment, model: FanRodModel, what: string): void {
+    // Every line coloured, in its own side's shades unless borrowed for distinctness.
+    expect(a.slotOf.size, what).toBe(a.rods.length);
+    for (const r of a.rods) if (!r.borrowed && !r.kept) expect(parseFanRodSlot(r.slot!)!.group, `${what}: ${r.id}`).toBe(r.group);
+    // Strong = the larger lines: no muted line has more sectors than a strong one (the centre's line apart).
+    const strong = a.rods.filter(r => r.tier === 'S' && !r.focus);
+    expect(strong.length, what).toBeLessThanOrEqual(FAN_ROD_MAX_STRONG);
+    const minStrong = Math.min(...strong.map(r => r.count));
+    for (const r of a.rods) if (r.tier === 'T') expect(r.count, `${what}: ${r.id}`).toBeLessThanOrEqual(minStrong);
+    // PS0 only for one line; never a shade shared by neighbours.
+    expect([...a.slotOf.values()].filter(s => s === 'PS0').length, what).toBeLessThanOrEqual(1);
+    for (const [x, y] of fanRodAdjacency(model, a.index)) expect(a.slotOf.get(x), `${what}: ${x} × ${y}`).not.toBe(a.slotOf.get(y));
+}
+
+/** Pairs of lines near each other (one sector between) holding the same shade. */
+function nearRepeats(a: FanRodAssignment, model: FanRodModel): number {
+    return fanRodNear(model, a.index).filter(([x, y]) => a.slotOf.get(x) === a.slotOf.get(y)).length;
 }
 
 describe('K1.1 (property, test 4)', () => {
-    it('200 random trees and fans with re-centring: more people is never grey while fewer is coloured; at most 10 strong and 20 coloured', () => {
+    it('200 random trees and fans with re-centring: every line coloured, the larger ones strong, neighbours never alike, slots kept', () => {
         const r = rng(114);
         const shapes: FanShape[] = ['half', 'full', 'two'];
-        let states = 0, saturated = 0;
+        let states = 0, shared = 0, near = 0, seenAgain = 0, kept = 0;
         for (let t = 0; t < 200; t++) {
             const { data, focus, people } = randomTree(r);
             const index = buildLineages(data);
@@ -361,8 +408,11 @@ describe('K1.1 (property, test 4)', () => {
                 const opts = { generations: 3 + Math.floor(r() * 8), shape: shapes[Math.floor(r() * 3)], descGenerations: 1 + Math.floor(r() * 3) };
                 const model = buildFanModel(data, centre, opts)!;
                 const a = assignFanRodColors(model, index, memory);
-                checkK11(a, `tree ${t} step ${step}`);
-                if (a.slotOf.size === FAN_ROD_MAX_COLOURED) saturated++;
+                checkK17(a, model, `tree ${t} step ${step}`);
+                if (a.rods.some(x => x.shared)) shared++;
+                near += nearRepeats(a, model);
+                // K1.2: a line seen before keeps its slot (unless a neighbour holds it now).
+                for (const [id, s] of memory ?? []) if (a.slotOf.has(id)) { seenAgain++; if (a.slotOf.get(id) === s) kept++; }
                 // Remembered slots: only lines in this fan.
                 for (const id of a.memory.keys()) expect(a.rods.some(x => x.id === id)).toBe(true);
                 memory = a.memory;
@@ -371,8 +421,10 @@ describe('K1.1 (property, test 4)', () => {
             }
         }
         expect(states).toBe(800);
-        // The generator reaches the 20-line limit in some fans (else the property would not test it).
-        expect(saturated).toBeGreaterThan(0);
+        // The generator runs some groups out of fresh shades (else the repeats would not be tested).
+        expect(shared).toBeGreaterThan(0);
+        expect(near).toBe(0);
+        expect(kept / seenAgain).toBeGreaterThan(0.99);
     });
 });
 
@@ -441,7 +493,9 @@ describe('legend data (test 9)', () => {
             const label = (id: RodId) => REF.label[id];
             expect(legendSum(a, label), s.name).toBe(drawn);
             const L = fanRodLegend(a, 'dark', label);
-            expect(L.otherRods).toBe(a.rods.filter(r => !a.slotOf.has(r.id)).length);
+            // "Other": the smaller lines, each in its colour.
+            expect(L.otherRods).toBe(a.rods.filter(r => !r.focus && ((r.rank ?? 0) >= FAN_ROD_LEGEND_MAIN || r.count < 2)).length);
+            for (const i of L.other) expect(i.color).toBe(fanRodSlotColor(i.slot!, 'dark'));
             // Groups P, M, D in this order; the centre's line first in P.
             expect(L.groups.map(g => g.group)).toEqual(['P', 'M', 'D'].filter(g => L.groups.some(x => x.group === g)));
             expect(L.groups[0].items[0].focus).toBe(true);
@@ -504,16 +558,15 @@ describe('edge states (§10)', () => {
         expect(L.otherRods).toBe(0);
     });
 
-    it('only the centre: its line drawn once is grey, "Other" has one line and one person', () => {
+    it('only the centre: its line drawn once is coloured, on PS0, the one row in P', () => {
         const a = run(tree({ me: 'Jasanovec' }));
-        expect(a.slotOf.size).toBe(0);
+        expect(obj(a.slotOf)).toEqual({ [a.rods[0].id]: 'PS0' });
         const L = fanRodLegend(a, 'light');
-        expect(L.groups).toEqual([]);
-        expect([L.otherRods, L.otherPeople]).toEqual([1, 1]);
-        expect(L.other[0].color).toBe(FAN_PALETTES.light.grey);
+        expect(L.groups.map(g => [g.group, g.items.length])).toEqual([['P', 1]]);
+        expect([L.otherRods, L.otherPeople]).toEqual([0, 0]);
     });
 
-    it('every line drawn once: everything grey', () => {
+    it('every line drawn once: every line coloured, the centre\'s in P, the others under "Other" in colour', () => {
         // The centre without a father, his mother and hers: three lines of one person each.
         const persons: Record<string, Person> = {};
         const data: StromData = { persons: persons as StromData['persons'], partnerships: {} };
@@ -521,9 +574,11 @@ describe('edge states (§10)', () => {
         me.parentIds.push(m.id); m.childIds.push(me.id);
         m.parentIds.push(mm.id); mm.childIds.push(m.id);
         const a = run({ data, me: me.id });
-        expect(a.slotOf.size).toBe(0);
+        expect(a.slotOf.size).toBe(3);
         const L = fanRodLegend(a, 'light');
-        expect([L.groups.length, L.otherRods, L.otherPeople]).toEqual([0, 3, 3]);
+        expect([L.groups.length, L.otherRods, L.otherPeople]).toEqual([1, 2, 2]);
+        for (const i of L.other) expect(i.color).not.toBe(FAN_PALETTES.light.grey);
+        expect(L.other.map(i => parseFanRodSlot(i.slot!)!.group)).toEqual(['M', 'M']);
     });
 
     it('a small centre line (2 people) is still PS0, the anchor', () => {
@@ -552,14 +607,17 @@ describe('edge states (§10)', () => {
         const fan = () => buildFanModel(data, me.id, { generations: 4, shape: 'half' })!;
         const first = assignFanRodColors(fan(), buildLineages(data));
         const jasan = rodOf(first.index, me.id)!;
-        expect(obj(first.slotOf)).toEqual({ [jasan]: 'PS0' });
+        expect(first.slotOf.get(jasan)).toBe('PS0');
+        expect(first.slotOf.size).toBe(first.rods.length);
         // An edit adds the mother's parents: her line now has two people.
         couple(data, mk(persons, 'male', 'Klásek'), mk(persons, 'female', 'Habrůvek'), [m]);
         const index = buildLineages(data);
         const second = assignFanRodColors(fan(), index, first.memory);
         expect(second.slotOf.get(jasan)).toBe('PS0');
         expect(second.slotOf.get(rodOf(index, m.id)!)).toBe('MS0');
-        expect(second.slotOf.size).toBe(2);
+        expect(second.slotOf.size).toBe(second.rods.length);
+        // The lines that stayed keep their slots (Mech, drawn once, too).
+        for (const [id, slot] of first.slotOf) if (second.slotOf.has(id)) expect(second.slotOf.get(id)).toBe(slot);
     });
 });
 
@@ -733,28 +791,59 @@ describe('shapes and a dense fan (§8)', () => {
         expect(groups('two')).toContain('D');
     });
 
-    it('eight rings: the lines hold together, the small ones muted, the single ones grey; a small line highlighted alone', () => {
+    it('eight rings (K1.7): over 60 lines, every one coloured, no grey sector, no shade repeated near; a small line highlighted alone', () => {
         const { data, focus } = dense();
         const index = buildLineages(data);
         const model = buildFanModel(data, focus.id, { generations: 8, shape: 'full' })!;
         expect(model.generations).toBe(8);
         const a = assignFanRodColors(model, index);
-        checkK11(a, 'dense');
-        for (const r of a.rods) if (r.count < 2) expect(a.slotOf.has(r.id)).toBe(false);
-        const coloured = a.rods.filter(r => a.slotOf.has(r.id));
-        expect(coloured.length).toBe(FAN_ROD_MAX_COLOURED);
-        // The smallest coloured line takes a muted slot.
-        const small = coloured.reduce((x, y) => (y.count < x.count ? y : x));
+        expect(a.rods.length).toBeGreaterThan(60);
+        checkK17(a, model, 'dense');
+        expect(nearRepeats(a, model)).toBe(0);
+        // Shades repeat (more lines than the palette has), each in its own side's band.
+        expect(a.rods.some(r => r.shared)).toBe(true);
+        for (const th of ['light', 'dark'] as const) {
+            const svg = buildFanSvg(model, { ...opts(), uid: `d${th}`, rodColors: a });
+            expect(svg, th).not.toContain(`fill="${FAN_PALETTES[th].grey}"`);
+        }
+        // The smallest line takes a muted slot.
+        const small = a.rods.reduce((x, y) => (y.count < x.count ? y : x));
         expect(parseFanRodSlot(a.slotOf.get(small.id)!)!.tier).toBe('T');
-        const highlight: FanHighlight = { rodId: small.id, hit: new Set(realRodMembers(index, small.id)) };
+        const two = a.rods.find(r => r.count === 2 && r.tier === 'T')!;
+        const highlight: FanHighlight = { rodId: two.id, hit: new Set(realRodMembers(index, two.id)) };
         const poster = buildFanPosterSvg(model, { ...opts(), rodColors: a, highlight }, {});
-        expect((poster.match(/class="fan-hl-edge"/g) ?? []).length).toBe(small.count);
+        expect((poster.match(/class="fan-hl-edge"/g) ?? []).length).toBe(two.count);
         expect((poster.match(/class="fan-poster-strong"/g) ?? []).length).toBe(1);
-        // A grey line highlighted: "Other" is the legend's marked row.
-        const grey = a.rods.find(r => !a.slotOf.has(r.id) && r.count === 1)!;
-        const g = buildFanPosterSvg(model, { ...opts(), rodColors: a, highlight: { rodId: grey.id, hit: new Set(realRodMembers(index, grey.id)) } }, {});
+        // A line drawn once highlighted: "Other" (in colours, not grey) is the legend's marked row.
+        const once = a.rods.find(r => r.count === 1)!;
+        const g = buildFanPosterSvg(model, { ...opts(), rodColors: a, highlight: { rodId: once.id, hit: new Set(realRodMembers(index, once.id)) } }, {});
         expect((g.match(/class="fan-hl-edge"/g) ?? []).length).toBe(1);
         expect(g).toMatch(/font-weight="600" fill="[^"]+">[^<]+ · \d+ [^<]+ · \d+×<\/text>\s*<rect class="fan-poster-strong"/);
+        const L = fanRodLegend(a, 'print');
+        expect(L.otherRods).toBeGreaterThan(0);
+        expect(g).toContain(`fill="${L.other[0].color}"`);
+        expect(g).not.toContain(`fill="${FAN_PALETTES.print.grey}"`);
+    });
+
+    it('re-centring a dense fan (K1.2): the lines seen in both states keep their colours', () => {
+        const { data, focus } = dense();
+        const index = buildLineages(data);
+        const [father, mother] = focus.parentIds;
+        let memory: ReadonlyMap<RodId, FanRodSlot> | null = null;
+        let prev: FanRodAssignment | null = null;
+        // Each step shares lines with the one before (the father's and the mother's fans share none).
+        for (const [centre, gens] of [[focus.id, 8], [father, 8], [focus.id, 7], [mother, 8], [focus.id, 9]] as const) {
+            const model = buildFanModel(data, centre, { generations: gens, shape: 'full' })!;
+            const a = assignFanRodColors(model, index, memory);
+            checkK17(a, model, `centre ${centre}`);
+            if (prev) {
+                let both = 0;
+                for (const [id, slot] of prev.slotOf) if (a.slotOf.has(id)) { both++; expect(a.slotOf.get(id), `${centre} ${id}`).toBe(slot); }
+                expect(both, centre).toBeGreaterThan(30);
+            }
+            memory = a.memory;
+            prev = a;
+        }
     });
     const opts = () => ({ esc: (t: string) => t, editable: false, addParentLabel: '', colorMode: 'rod' as const });
 });

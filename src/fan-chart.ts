@@ -26,7 +26,7 @@ import {
 } from './export-image.js';
 import {
     FanColorMode, FanTheme, FanPalette, FAN_PALETTES, fanFill, fanLegend, fanHasRepeats,
-    fanMixWhite, FAN_PRINT_DIM, FAN_PRINT_EDGE, FanRodGroup,
+    fanMixWhite, FAN_PRINT_DIM, FAN_PRINT_EDGE, FanRodGroup, fanRodOtherSwatch,
 } from './fan-colors.js';
 import { assignFanRodColors, fanRodLegend, FanRodAssignment } from './fan-rod-assign.js';
 import {
@@ -875,7 +875,7 @@ function posterLegendParts(model: FanModel, mode: FanColorMode, opts: PosterRodO
     const rest: PosterLegendItem[] = [];
     if (legend.otherRods) {
         const strong = !!hl && legend.other.some(i => i.key === hl.rodId);
-        rest.push({ text: `${S.legendOther(legend.otherRods)} · ${legend.otherPeople}×`, color: grey, ...(strong ? { strong } : {}) });
+        rest.push({ text: `${S.legendOther(legend.otherRods)} · ${legend.otherPeople}×`, ...fanRodOtherSwatch(legend.other), ...(strong ? { strong } : {}) });
     } else if (legend.noRod) rest.push({ text: `${S.legendNoRod} · ${legend.noRod}×`, color: grey });
     rest.push(...repeats);
     if (rest.length) parts.push({ indent: parts.length > 0, items: rest });
