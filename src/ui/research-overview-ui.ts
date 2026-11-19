@@ -1127,7 +1127,8 @@ export const researchOverviewMethods = uiModule({
         const order = storedWaitingOrder(books);
         const groupsShown = shownWaitingGroups(storedWaitingGroupMode(), order, books);
         const flat = isTimeOrder(order) && grouped && groupsShown === 'none';
-        const groupOpts: WaitingGroupOpts = books && groupsShown === 'book' ? { by: 'book', books: s.books } : {};
+        // The research's books also by place: a file of a book's inbox set aside stands under its book there too.
+        const groupOpts: WaitingGroupOpts = books ? { ...(groupsShown === 'book' ? { by: 'book' as const } : {}), books: s.books } : {};
         setWaitingDrawn(order, flat);
         const orderRow = total >= 2 ? this.overviewWaitingOrderEl(order, grouped, mode, books) : null;
         const chips = grouped ? waitingChips(s.waiting) : [];
@@ -1631,7 +1632,7 @@ export const researchOverviewMethods = uiModule({
         const people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
         const task = researchTaskRef(w.id);
         const hypo = w.kind === 'hypothesis' ? w.id : /\bH\d+\b/.exec(w.on)?.[0];
-        const what = w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'branch' ? waitBranchText(w, s) : w.what;
+        const what = w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'branch' ? waitBranchText(w, s) : w.kind === 'aside' ? this.asideText(w, s) : w.what;
         const place = w.kind === 'place' ? strings.places.waiting.group : w.group?.name;
         // Its book's title and archive (spec 105 §1), as its book's heading says them.
         const book = booksOn(s) ? bookById(s, w.book) : null;
@@ -1931,7 +1932,7 @@ export const researchOverviewMethods = uiModule({
         if (w.kind === 'story') head.appendChild(el('span', 'live-kind-story', L.kindStory));
         else if (w.kind === 'branch') head.appendChild(el('span', 'live-kind live-kind--decide', L.waitBranchKind));
         else if (w.section || w.kind) head.appendChild(waitingKindLabel(w));
-        head.append(w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'branch' ? waitBranchText(w, s) : w.what);
+        head.append(w.kind === 'story' ? strings.story.nvWaitingItem : w.kind === 'branch' ? waitBranchText(w, s) : w.kind === 'aside' ? this.asideText(w, s) : w.what);
         row.appendChild(head);
         const meta = el('span', 'research-overview__waiting-meta');
         let people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
@@ -2082,6 +2083,11 @@ export const researchOverviewMethods = uiModule({
                 detail.appendChild(meta);
             }
             this.appendBranchWaitingActions(detail, w, s);
+            return detail;
+        }
+        if (w.kind === 'aside') {
+            // A file of a book's inbox set aside: the image it is compared with, the book's folder, the answers through the bridge.
+            this.appendAsideWaitingActions(detail, w, s);
             return detail;
         }
         // Images, a website or a check (spec 048 U6): the actions of their kind, an answer written here, the images' state.

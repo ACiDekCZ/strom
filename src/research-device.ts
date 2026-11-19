@@ -9,7 +9,7 @@
  */
 
 import {
-    ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, WAITING_GROUPS_FEATURE, sanitizeUpdate, sanitizeIntake, sanitizeBusy, LiveBusy,
+    ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, asideWaiting, sanitizeBooksAside, WAITING_GROUPS_FEATURE, sanitizeUpdate, sanitizeIntake, sanitizeBusy, LiveBusy,
     sanitizeAccepts, parseLiveBridge, isResearchHead, researchLinkScheme, DEFAULT_RESEARCH_SCHEME,
     ResearchTreeKind, ResearchTreeState, sanitizeTreeKind, sanitizeTreeState,
 } from './research-link.js';
@@ -116,7 +116,9 @@ export function noteResearchWaiting(
 ): void {
     try {
         const groups = !!extra.features?.includes(WAITING_GROUPS_FEATURE);
-        const kept = items.map(w => ({
+        // A file of a book's inbox set aside is kept as the research said it (made an item again when read).
+        const aside = items.flatMap(w => (w.kind === 'aside' && w.aside ? [w.aside] : []));
+        const kept = items.filter(w => w.kind !== 'aside').map(w => ({
             id: w.id, what: w.what, at: w.at, ...(w.person ? { person: w.person } : {}),
             // An archive's question keeps what answers it there, and its terms.
             ...(w.kind === 'permission' && w.host ? { kind: w.kind, host: w.host, on: w.on } : {}),
@@ -133,6 +135,7 @@ export function noteResearchWaiting(
         }));
         localStorage.setItem(WAITING_KEY + researchId, JSON.stringify({
             items: kept,
+            ...(aside.length > 0 ? { aside } : {}),
             ...(groups ? { groups: true } : {}),
             at: new Date().toISOString(),
             ...(extra.update ? { update: extra.update } : {}),
@@ -158,11 +161,11 @@ export function storedResearchWaiting(researchId: string, now = Date.now()): Sto
     try {
         const raw = localStorage.getItem(WAITING_KEY + researchId);
         if (!raw) return null;
-        const parsed = JSON.parse(raw) as { items?: unknown; groups?: unknown; at?: unknown; update?: unknown; busy?: unknown; lastIntake?: unknown };
+        const parsed = JSON.parse(raw) as { items?: unknown; aside?: unknown; groups?: unknown; at?: unknown; update?: unknown; busy?: unknown; lastIntake?: unknown };
         const at = typeof parsed.at === 'string' ? Date.parse(parsed.at) : NaN;
         if (!Number.isFinite(at) || now - at > WAITING_MAX_AGE_MS) return null;
         return {
-            items: sanitizeWaiting(parsed.items, parsed.groups === true),
+            items: [...sanitizeWaiting(parsed.items, parsed.groups === true), ...asideWaiting({ aside: sanitizeBooksAside(parsed.aside) })],
             at,
             update: sanitizeUpdate(parsed.update),
             ...(sanitizeBusy(parsed.busy) ? { busy: sanitizeBusy(parsed.busy)! } : {}),

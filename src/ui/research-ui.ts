@@ -3392,7 +3392,7 @@ export const researchUiMethods = uiModule({
         s.working = withFamilyPersons(status.working, s.bridge);
         s.features = status.features;
         s.accepts = status.accepts;
-        s.waiting = this.withoutBranchAnswers(this.liveWaitingShown(s, status.waiting));
+        s.waiting = this.withoutAsideAnswers(this.withoutBranchAnswers(this.liveWaitingShown(s, status.waiting)));
         // A task new since the overview opened unfolds as it does while following (the first answer is no news).
         const fresh = status.waiting.filter(w => !s.seenWaiting.has(w.id));
         for (const w of fresh) s.seenWaiting.add(w.id);
@@ -3509,6 +3509,8 @@ export const researchUiMethods = uiModule({
 
     /** "Answer (research)" can be offered at this waiting item (a link the research takes leads there). */
     canAnswerResearchWaiting(w: LiveWaiting): boolean {
+        // A file of a book's inbox set aside is answered through the bridge, in its row (never in the research's terminal).
+        if (w.kind === 'aside') return false;
         if (this.researchLinkAvailable('open')) return true;
         return w.kind === 'permission' ? this.researchLinkAvailable('archive') : this.researchLinkAvailable('task');
     },
@@ -4155,7 +4157,7 @@ export const researchUiMethods = uiModule({
         s.features = status.features;
         s.accepts = status.accepts;
         // A row moved by a write the research has not reported yet stays where it was moved.
-        s.waiting = this.withoutBranchAnswers(this.liveWaitingShown(s, status.waiting));
+        s.waiting = this.withoutAsideAnswers(this.withoutBranchAnswers(this.liveWaitingShown(s, status.waiting)));
         // A task that was not there before unfolds "Waiting for you" (its phase and its group;
         // the section is expanded by default). Collapsed or hidden by the user, nothing opens:
         // the heading counts it as new, and expanding it later opens what came meanwhile.
@@ -4630,7 +4632,7 @@ export const researchUiMethods = uiModule({
             else if (w.section) what.appendChild(waitingKindLabel(w));
             // A hypothesis (spec 074 §9): its id before its question.
             if (w.kind === 'hypothesis') what.append(el('strong', 'hwr-id', w.id), ' · ');
-            what.append(w.kind === 'branch' ? waitBranchText(w, liveSession()) : w.what);
+            what.append(w.kind === 'branch' ? waitBranchText(w, liveSession()) : w.kind === 'aside' ? this.asideText(w, researchSession()) : w.what);
             // "on" is the agent's free text; "user" only repeats the heading.
             // A compact row: a long instruction is clamped to two lines here, whole in the overview.
             if (!waitsOnUser(w.on)) {
@@ -4652,6 +4654,15 @@ export const researchUiMethods = uiModule({
                 answer.dataset.action = 'place';
                 answer.onclick = () => this.showWaitingPlaces(w.place ?? w.id);
                 li.appendChild(answer);
+            } else if (w.kind === 'aside') {
+                // A file of a book's inbox set aside: decided in the overview's row (it opens there).
+                if (answerable && this.canExpandLivePanel()) {
+                    const open = el('button', 'live-waiting-answer', strings.live.aside.panelOpen);
+                    open.type = 'button';
+                    open.dataset.action = 'aside-open';
+                    open.onclick = () => this.showOverviewWaitingItem(w.id);
+                    li.appendChild(open);
+                }
             } else if (w.kind === 'hypothesis') {
                 // A hypothesis: decided in its card (or in the overview's row), "More ›" leads there.
                 const personId = this.waitingHypothesisPerson(w);
@@ -4713,7 +4724,7 @@ export const researchUiMethods = uiModule({
         const B = strings.live.books;
         const order = storedWaitingOrder(true);
         const groupsShown = shownWaitingGroups(storedWaitingGroupMode(), order, true);
-        const opts: WaitingGroupOpts = groupsShown === 'book' ? { by: 'book', books: s.books } : {};
+        const opts: WaitingGroupOpts = { ...(groupsShown === 'book' ? { by: 'book' as const } : {}), books: s.books };
         if (todoWaiting(items).length >= 2) {
             host.appendChild(this.overviewWaitingOrderEl(order, true, 'docked', true, { compact: true, redraw: () => this.renderLivePanel() }));
         }

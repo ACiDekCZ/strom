@@ -35,6 +35,7 @@ import { activatedElement } from './busy.js';
 import type { ResearchLinkKind } from './research-ui.js';
 import { auditRefusalOf, auditResearchUnavailable, setWaitingAuditState } from './waiting-task-ui.js';
 import { asAuditPreview } from '../research-audit.js';
+import { readAsideOutcome, type AsideDo, type AsideOutcome } from '../research-aside.js';
 import type { WaitingAuditPreviewResult, WaitingAuditResult, WaitingFileResult } from '../research-waiting-write.js';
 import { itemKey } from './waiting-images-ui.js';
 import { SECTION_PREFS_EVENT, sectionPrefs, watchSectionPrefsStorage } from './live-section-prefs.js';
@@ -345,6 +346,13 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         async sendWaitingAnswer(_s: LiveSession, w: LiveWaiting, text: string): Promise<WaitingAnswerOutcome> {
             const r = await port.ask('waiting-answer', { itemId: w.id, text }, OVERVIEW_ANSWER_WAIT_MS);
             return (typeof r === 'string' ? r : 'fail') as WaitingAnswerOutcome;
+        },
+        // A file of a book's inbox set aside: written by the main window (its toast); answered or gone, the item goes here at once.
+        async writeAsideAnswer(this: UIClass, s: LiveSession, w: LiveWaiting, what: AsideDo, image?: number): Promise<AsideOutcome> {
+            const r = await port.ask('waiting-aside', { itemId: w.id, do: what, ...(what === 'image' && image !== undefined ? { image } : {}) }, OVERVIEW_ANSWER_WAIT_MS);
+            const out = readAsideOutcome(r) ?? { ok: false, text: strings.busy.mainWindowSilent, retry: true, tone: 'danger' };
+            if (out.ok || out.gone) s.waiting = s.waiting.filter(x => x.id !== w.id);
+            return out;
         },
         async markWaitingSent(_s: LiveSession, w: LiveWaiting): Promise<void> { run('waiting-sent', { itemId: w.id }); },
         async markWaitingUnsent(_s: LiveSession, id: string): Promise<undefined> { run('waiting-unsent', { itemId: id }); return undefined; },

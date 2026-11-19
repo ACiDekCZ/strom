@@ -165,6 +165,17 @@ describe('the state sent to the overview window', () => {
 describe('the window\'s actions run today\'s functions', () => {
     const run = (ui: unknown, a: OverviewAction) => overviewWindowMethods.runOverviewWindowAction.call(ui as never, a);
 
+    it('a file of a book\'s inbox set aside: its answer written here, the outcome back to the window; an item not here, gone', async () => {
+        const a = { file: '3.jpg.other-than-M0042', recordset: 'B0001', image: 3, kind: 'other', media: 'M0042', at: '' };
+        fake.live = liveOf({ waiting: [{ id: 'aside:B0001/3.jpg.other-than-M0042', what: a.file, on: '', at: '', kind: 'aside', section: 'decide', book: 'B0001', aside: a }] as never });
+        const ui = fakeUi({ writeAsideAnswer: vi.fn(async () => ({ ok: true })) });
+        const s = fake.live as LiveSession;
+        await expect(run(ui, { action: 'waiting-aside', args: { itemId: 'aside:B0001/3.jpg.other-than-M0042', do: 'image', image: 7 } })).resolves.toEqual({ ok: true });
+        expect(ui.writeAsideAnswer).toHaveBeenCalledWith(s, s.waiting[0], 'image', 7);
+        expect(run(ui, { action: 'waiting-aside', args: { itemId: 'W9', do: 'discard' } })).toEqual({ ok: false, gone: true });
+        expect(ui.writeAsideAnswer).toHaveBeenCalledTimes(1);
+    });
+
     it('each action reaches its function with its arguments', async () => {
         fake.live = liveOf();
         const ui = fakeUi({

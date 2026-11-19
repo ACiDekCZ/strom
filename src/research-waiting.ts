@@ -136,7 +136,8 @@ function groupInOrder<T extends LiveWaiting>(items: readonly T[], opts: WaitingG
     const byBook = opts.by === 'book';
     const groups = new Map<string, WaitingGroupRows<T>>();
     for (const w of items) {
-        const book = byBook ? itemBook(w) : null;
+        // A file of a book's inbox set aside is done at its book, whatever the groups: under its book always.
+        const book = byBook || w.kind === 'aside' ? itemBook(w) : null;
         if (book) {
             const key = BOOK_GROUP_PREFIX + book;
             let g = groups.get(key);
@@ -169,9 +170,12 @@ function groupInOrder<T extends LiveWaiting>(items: readonly T[], opts: WaitingG
 
 const listed = <T extends LiveWaiting>(g: WaitingGroupRows<T>): boolean => listedBook(g.book) !== null;
 
-/** The books' groups first (in the order given), then the rest, the first of them marked to stand after the books. */
-function booksFirst<T extends LiveWaiting>(books: WaitingGroupRows<T>[], rest: WaitingGroupRows<T>[]): WaitingGroupRows<T>[] {
-    if (books.length === 0 || rest.length === 0) return [...books, ...rest];
+/**
+ * The books' groups first (in the order given), then the rest, the first of them marked to stand after the books
+ * ("No book"; only by book: by place a book's group holds only its files set aside, the places may have books too).
+ */
+function booksFirst<T extends LiveWaiting>(books: WaitingGroupRows<T>[], rest: WaitingGroupRows<T>[], byBook = true): WaitingGroupRows<T>[] {
+    if (!byBook || books.length === 0 || rest.length === 0) return [...books, ...rest];
     return [...books, { ...rest[0], afterBooks: true }, ...rest.slice(1)];
 }
 
@@ -194,7 +198,7 @@ export function groupWaiting<T extends LiveWaiting>(items: readonly T[], opts: W
         const download = [...known.filter(g => !disk.includes(g)), ...books.filter(g => !listed(g))];
         return booksFirst(markPart(download, 'download', disk.length > 0).concat(markPart(disk, 'disk', download.length > 0)), rest);
     }
-    return booksFirst(books, rest);
+    return booksFirst(books, rest, opts.by === 'book');
 }
 
 /** A part's first book marked with the part and its count (`both`: the phase has books of the other part too). */
@@ -266,7 +270,7 @@ function phaseRows<T extends LiveWaiting>(items: readonly T[], order: WaitingOrd
     if (!groups) return sorted.length > 0 ? [{ key: FLAT_GROUP, group: null, items: sorted }] : [];
     // Each group where its newest (oldest) item stands; "Other" and "Places" too, not kept at the bottom.
     const list = groupInOrder(sorted, opts);
-    return booksFirst(list.filter(g => g.book), list.filter(g => !g.book));
+    return booksFirst(list.filter(g => g.book), list.filter(g => !g.book), opts.by === 'book');
 }
 
 /**
@@ -329,6 +333,8 @@ export function panelWaitingGroups<T extends LiveWaiting>(items: readonly T[], o
     const drawn = all.flatMap(g => g.items);
     const first = drawn.filter(w => focus.has(w.id));
     const keep = new Set<T>([...first, ...drawn.filter(w => !focus.has(w.id)).slice(0, Math.max(0, n - first.length))]);
+    // "No book" only by book (by place a book's group holds only its files set aside).
+    const byBook = order === 'most' || opts.by === 'book';
     const out: PanelWaitingGroup<T>[] = [];
     let afterBook = false;
     let noBookSaid = false;
@@ -337,7 +343,7 @@ export function panelWaitingGroups<T extends LiveWaiting>(items: readonly T[], o
         if (rows.length === 0) continue;
         const { afterBooks: _drop, ...rest } = g;
         const next: WaitingGroupRows<T> = { ...rest, items: rows };
-        if (g.book) afterBook = true;
+        if (g.book) afterBook = byBook;
         else if (afterBook && !noBookSaid && g.key !== FLAT_GROUP) {
             next.afterBooks = true;
             noBookSaid = true;

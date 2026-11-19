@@ -521,6 +521,8 @@ export const waitingTaskMethods = uiModule({
             }
         }
         if (w.kind === 'place' && this.waitingPlacesAccess().canAnswer) return () => this.showWaitingPlaces(w.place ?? w.id);
+        // A file of a book's inbox set aside: decided in the overview's row.
+        if (w.kind === 'aside') return s && !s.ended && this.canExpandLivePanel() ? () => this.showOverviewWaitingItem(w.id) : null;
         if (this.canAnswerResearchWaiting(w)) return () => this.answerResearchTask(w);
         return null;
     },
@@ -544,6 +546,15 @@ export const waitingTaskMethods = uiModule({
             place.dataset.action = 'place';
             place.onclick = () => this.showWaitingPlaces(w.place ?? w.id);
             return place;
+        }
+        if (w.kind === 'aside') {
+            // A file of a book's inbox set aside: decided in the overview's row (it opens there).
+            if (!s || s.ended || !this.canExpandLivePanel()) return null;
+            const open = el('button', 'live-waiting-answer', strings.live.aside.panelOpen);
+            open.type = 'button';
+            open.dataset.action = 'aside-open';
+            open.onclick = () => this.showOverviewWaitingItem(w.id);
+            return open;
         }
         if (!this.canAnswerResearchWaiting(w)) return null;
         const answer = setResearchActionLabel(el('button', 'live-waiting-answer'), strings.research.answer, researchLinkMark('task'));

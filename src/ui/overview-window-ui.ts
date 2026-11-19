@@ -319,6 +319,12 @@ export const overviewWindowMethods = uiModule({
                     overviewChanged();
                 });
             }
+            case 'waiting-aside': {
+                // Written through this window's bridge, the outcome to the window (it says a refusal at its item).
+                const w = item(a.args.itemId);
+                if (!s || !w?.aside) return { ok: false, gone: true };
+                return this.writeAsideAnswer(s, w, a.args.do, a.args.image);
+            }
             case 'hypothesis-ask': {
                 const h = researchHypotheses(DataManager.getData()).get(a.args.hypothesisId);
                 if (!h) return false;

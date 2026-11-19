@@ -162,6 +162,7 @@ import { placesIdentifyMethods } from './places-identify-ui.js';
 import { placeMenuMethods } from './place-menu-ui.js';
 import { placesFindMethods } from './places-find-ui.js';
 import { waitingPlacesMethods } from './waiting-places-ui.js';
+import { waitingAsideMethods } from './waiting-aside-ui.js';
 import type { PlaceStateFilter } from '../place-identity.js';
 import type { PlacesSort } from '../places.js';
 import { splitMethods } from './split-ui.js';
@@ -1101,6 +1102,10 @@ Object.assign(UIClass.prototype, placesFindMethods);
 type WaitingPlacesMethods = typeof waitingPlacesMethods;
 export interface UIClass extends WaitingPlacesMethods {}
 Object.assign(UIClass.prototype, waitingPlacesMethods);
+
+type WaitingAsideMethods = typeof waitingAsideMethods;
+export interface UIClass extends WaitingAsideMethods {}
+Object.assign(UIClass.prototype, waitingAsideMethods);
 
 type SplitMethods = typeof splitMethods;
 export interface UIClass extends SplitMethods {}

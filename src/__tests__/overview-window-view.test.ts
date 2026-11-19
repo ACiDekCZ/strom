@@ -262,6 +262,24 @@ describe('the overview\'s controls ask the main window', () => {
         expect(port.focusMain).not.toHaveBeenCalled();
     });
 
+    it('a file of a book\'s inbox set aside: answered by the main window; done or gone, the item goes here at once; no answer, why', async () => {
+        const { o, port } = overrides();
+        const a = { file: '3.jpg.other-than-M0042', recordset: 'B0001', image: 3, kind: 'other', media: 'M0042', at: '' };
+        const w = { id: 'aside:B0001/3.jpg.other-than-M0042', what: a.file, on: '', at: '', kind: 'aside', section: 'decide', book: 'B0001', aside: a } as LiveWaiting;
+        const other = { id: 'T0001', what: 'x', on: 'user', at: '' } as LiveWaiting;
+        const s = { ended: false, lostSince: null, waiting: [w, other] } as unknown as LiveSession;
+        port.ask.mockResolvedValueOnce({ ok: false, text: 'Number 7 already has another scan.', retry: false, tone: 'danger' });
+        expect(await o.writeAsideAnswer(s, w, 'image', 7)).toEqual({ ok: false, text: 'Number 7 already has another scan.', retry: false, tone: 'danger' });
+        expect(port.ask).toHaveBeenLastCalledWith('waiting-aside', { itemId: w.id, do: 'image', image: 7 }, 30_000);
+        expect(s.waiting).toHaveLength(2);
+        port.ask.mockResolvedValueOnce(null);
+        expect(await o.writeAsideAnswer(s, w, 'take')).toMatchObject({ ok: false, retry: true });
+        expect(port.ask).toHaveBeenLastCalledWith('waiting-aside', { itemId: w.id, do: 'take' }, 30_000);
+        port.ask.mockResolvedValueOnce({ ok: false, gone: true });
+        expect(await o.writeAsideAnswer(s, w, 'discard')).toEqual({ ok: false, gone: true });
+        expect(s.waiting).toEqual([other]);
+    });
+
     it('an answer waits for the main window\'s outcome (no answer: failed)', async () => {
         const { o, port } = overrides();
         await expect(o.sendWaitingAnswer(null, W1, 'Kutná Hora')).resolves.toBe('saved');

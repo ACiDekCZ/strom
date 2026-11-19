@@ -2328,7 +2328,12 @@ export interface LiveWaiting {
      * 'permission': the research asks how it may download from an archive (`host`); `on` carries its terms.
      * The rest only from a research with `waiting.groups` in its features (see below).
      */
-    kind?: 'story' | 'permission' | 'place' | 'branch' | 'hypothesis' | WaitingTaskKind;
+    kind?: 'story' | 'permission' | 'place' | 'branch' | 'hypothesis' | 'aside' | WaitingTaskKind;
+    /**
+     * 'aside' (`inbox.aside`): a file of a book's inbox folder the research set aside (`/status.books.aside`), made
+     * an item here (asideWaiting): its id `aside:<book>/<file>`, its book in `book`, a decision (section 'decide').
+     */
+    aside?: LiveBookAside;
     /**
      * 'hypothesis' (spec 074, V13; a research that decides hypotheses from the app): the item's id is the
      * hypothesis ("H0022"), `person` the first person of its question; the agent's proposal (a version's
@@ -3311,6 +3316,70 @@ export interface LiveBooks {
     settings: LiveBooksSettings;
     list: LiveBook[];
     more: number;
+    /** Files of the books' inbox folders set aside, newest first (only with `inbox.aside`; absent: none). */
+    aside?: LiveBookAside[];
+}
+
+/** `/status.features`: files of a book's inbox set aside (`/status.books.aside`, `POST /books/aside`; Strom Research 1.36). */
+export const INBOX_ASIDE_FEATURE = 'inbox.aside';
+
+/**
+ * A file of a book's inbox folder the research did not take in: 'other' — another scan than the image saved under
+ * its number (`image`); 'same' — the same scan as an image saved under another number. `media`: the saved image
+ * it is compared with ("M0042"); `at`: when the file was saved.
+ */
+export interface LiveBookAside {
+    file: string;
+    recordset: string;
+    image?: number;
+    kind: 'other' | 'same';
+    media: string;
+    at: string;
+}
+
+/** Most files set aside taken from one status. */
+const MAX_ASIDE = 200;
+
+/** One file of `/status.books.aside`, or null when it is not one. Untrusted input: every field is checked. */
+export function sanitizeBookAside(value: unknown): LiveBookAside | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const file = typeof r.file === 'string' && r.file.length <= 255 && !/[\\/\u0000-\u001f]/.test(r.file) && r.file.trim() === r.file ? r.file : '';
+    const recordset = researchBookRef(r.recordset);
+    const kind = r.kind === 'other' || r.kind === 'same' ? r.kind : null;
+    const media = typeof r.media === 'string' && /^M\d{1,7}$/.test(r.media) ? r.media : null;
+    if (!file || file === '.' || file === '..' || !recordset || !kind || !media) return null;
+    const image = imageNumber(r.image);
+    const at = cleanText(r.at, 40);
+    return { file, recordset, ...(image !== null ? { image } : {}), kind, media, at: Number.isFinite(Date.parse(at)) ? at : '' };
+}
+
+/** `/status.books.aside`: each file once (the first said), at most MAX_ASIDE. */
+export function sanitizeBooksAside(value: unknown): LiveBookAside[] {
+    const out: LiveBookAside[] = [];
+    const seen = new Set<string>();
+    for (const raw of Array.isArray(value) ? value : []) {
+        if (out.length >= MAX_ASIDE) break;
+        const a = sanitizeBookAside(raw);
+        const key = a ? `${a.recordset}/${a.file}` : '';
+        if (a && !seen.has(key)) { seen.add(key); out.push(a); }
+    }
+    return out;
+}
+
+/** The id of a file set aside as an item of Awaiting action. */
+export function asideWaitingId(a: Pick<LiveBookAside, 'recordset' | 'file'>): string {
+    return `aside:${a.recordset}/${a.file}`;
+}
+
+/**
+ * The files set aside as items of Awaiting action (a decision, under their book), newest first. Their text is
+ * the file's name here; the app's words come where they are drawn (asideWaitingText).
+ */
+export function asideWaiting(books: Pick<LiveBooks, 'aside'> | null | undefined): LiveWaiting[] {
+    return (books?.aside ?? []).map(a => ({
+        id: asideWaitingId(a), what: a.file, on: '', at: a.at, kind: 'aside' as const, section: 'decide' as const, book: a.recordset, aside: a,
+    }));
 }
 
 /** The fewest and the most tasks of "Book offered from this many tasks". */
@@ -3383,8 +3452,8 @@ export function sanitizeBook(value: unknown): LiveBook | null {
     };
 }
 
-/** `/status.books`, or null when it is not one (no valid settings). */
-export function sanitizeBooks(value: unknown): LiveBooks | null {
+/** `/status.books`, or null when it is not one (no valid settings); `aside` only with `inbox.aside`. */
+export function sanitizeBooks(value: unknown, aside = false): LiveBooks | null {
     const r = asRecord(value);
     const settings = sanitizeBooksSettings(r?.settings);
     if (!r || !settings) return null;
@@ -3395,7 +3464,8 @@ export function sanitizeBooks(value: unknown): LiveBooks | null {
         const b = sanitizeBook(raw);
         if (b && !seen.has(b.id)) { seen.add(b.id); list.push(b); }
     }
-    return { settings, list, more: asCount(r.more) ?? 0 };
+    const asideList = aside ? sanitizeBooksAside(r.aside) : [];
+    return { settings, list, more: asCount(r.more) ?? 0, ...(asideList.length > 0 ? { aside: asideList } : {}) };
 }
 
 /** The books are shown: a research that announces them and said its part `books` (else everything stays as before). */
@@ -4195,6 +4265,11 @@ export function sanitizeHandoffs(value: unknown): string[] {
     return out;
 }
 
+/** `/status.books` as a research with `books` says it (its files set aside only with `inbox.aside`). */
+function statusBooks(value: unknown, features: readonly string[] | null): LiveBooks | null {
+    return features?.includes(BOOKS_FEATURE) ? sanitizeBooks(value, features.includes(INBOX_ASIDE_FEATURE)) : null;
+}
+
 export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
     const r = asRecord(value);
     if (!r) return null;
@@ -4211,8 +4286,12 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         persons: asCount(r.persons),
         families: asCount(r.families),
         working: sanitizeWorking(r.working, !!features?.includes(WORKING_HELPS_FEATURE)),
-        waiting: sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE),
-            !!features?.includes(TASKS_AUDIT_FEATURE)),
+        waiting: [
+            ...sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE),
+                !!features?.includes(TASKS_AUDIT_FEATURE)),
+            // The files of the books' inbox set aside (`inbox.aside`): decisions under their book.
+            ...asideWaiting(statusBooks(r.books, features)),
+        ],
         links: sanitizeResearchLinks(r.links),
         queue: sanitizeQueue(r.queue, !!features?.includes(TASKS_OFF_LINE_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE), undefined,
             !!features?.includes(OFF_LINE_BRANCHES_FEATURE) || !!features?.includes(QUEUE_NEXT_FEATURE)),
@@ -4248,7 +4327,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(WORK_LINK_FEATURE) && sanitizeLiveWork(r.work) ? { work: sanitizeLiveWork(r.work)! } : {}),
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
         ...(features?.includes(OFF_LINE_BRANCHES_FEATURE) && sanitizeOffLine(r.offLine) ? { offLine: sanitizeOffLine(r.offLine)! } : {}),
-        ...(features?.includes(BOOKS_FEATURE) && sanitizeBooks(r.books) ? { books: sanitizeBooks(r.books)! } : {}),
+        ...(statusBooks(r.books, features) ? { books: statusBooks(r.books, features)! } : {}),
         ...(features?.includes(QUEUE_PAGE_FEATURE) && sanitizeQueueCounts(r.queueCounts) ? { queueCounts: sanitizeQueueCounts(r.queueCounts)! } : {}),
         ...agentSaid(r.agent),
         ...(sanitizeBrowser(r) ? { browser: sanitizeBrowser(r)! } : {}),

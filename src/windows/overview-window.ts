@@ -24,7 +24,8 @@
 
 import type { TreeId } from '../types.js';
 import type { LiveSession, OverviewViewing } from '../ui/research-ui.js';
-import { QUEUE_TASK_KINDS, RESEARCH_LINK_ACTIONS, type QueueTaskKind, type ResearchLinkAction } from '../research-link.js';
+import { QUEUE_TASK_KINDS, RESEARCH_LINK_ACTIONS, imageNumber, type QueueTaskKind, type ResearchLinkAction } from '../research-link.js';
+import type { AsideDo } from '../research-aside.js';
 import { sanitizeTaskOrderWas, type TaskOrderWas } from '../research-directions-write.js';
 import { queueQuery, type QueueFilter } from '../research-queue-pages.js';
 
@@ -359,6 +360,11 @@ export type OverviewAction =
     | { action: 'waiting-audit'; args: { itemId: string; do: 'keep' | 'unkeep' | 'preview' | 'unfix' } | { itemId: string; do: 'fix'; expect: string } }
     /** A file picked in the window for a task. */
     | { action: 'waiting-file'; args: { itemId: string; file: File } }
+    /**
+     * A file of a book's inbox set aside (`inbox.aside`): its answer written by the main window through its
+     * bridge (answered: AsideOutcome; the main window says it in its toast).
+     */
+    | { action: 'waiting-aside'; args: { itemId: string; do: AsideDo; image?: number } }
     /** Ask the research (its terminal) to decide a hypothesis of "Awaiting action". */
     | { action: 'hypothesis-ask'; args: { hypothesisId: string; do: 'decide' | 'abandon' | 'keep-open'; variant?: string } }
     /** "Accept proposals (n)". */
@@ -387,7 +393,7 @@ export const OVERVIEW_ACTION_IDS = [
     'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings', 'books-settings',
     'hover-person', 'verify-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
-    'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-retry', 'waiting-file', 'waiting-audit',
+    'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-retry', 'waiting-file', 'waiting-audit', 'waiting-aside',
     'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
     'queue-list', 'queue-order',
 ] as const satisfies readonly OverviewActionId[];
@@ -511,6 +517,12 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
             if (!str(a.itemId)) return null;
             if (a.do === 'fix') return str(a.expect) && a.expect.length <= 120 ? { action, args: { itemId: a.itemId, do: 'fix', expect: a.expect } } : null;
             return a.do === 'keep' || a.do === 'unkeep' || a.do === 'preview' || a.do === 'unfix' ? { action, args: { itemId: a.itemId, do: a.do } } : null;
+        case 'waiting-aside': {
+            if (!str(a.itemId) || (a.do !== 'discard' && a.do !== 'take' && a.do !== 'image')) return null;
+            if (a.do !== 'image') return a.image === undefined ? { action, args: { itemId: a.itemId, do: a.do } } : null;
+            const n = imageNumber(a.image);
+            return n !== null && a.image === n ? { action, args: { itemId: a.itemId, do: 'image', image: n } } : null;
+        }
         case 'waiting-file':
             return str(a.itemId) && isFile(a.file) ? { action, args: { itemId: a.itemId, file: a.file } } : null;
         case 'hypothesis-ask': {
