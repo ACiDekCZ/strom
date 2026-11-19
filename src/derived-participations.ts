@@ -182,8 +182,8 @@ export function derivedRoleLabel(d: Pick<DerivedParticipation, 'role' | 'extra' 
     }
     switch (d.role) {
         case 'godparent':
-            if (d.eventType === 'baptism' && !d.partnershipId) return f ? E.derivedGodparentF : E.derivedGodparent;
-            return E.derivedOther(E.derivedRoles.godparent[f ? 'f' : 'm'], word);
+            if (d.eventType === 'baptism' && !d.partnershipId) return f ? E.derivedGodparentF : gender === 'male' ? E.derivedGodparent : E.derivedGodparentU;
+            return E.derivedOther(E.derivedRoles.godparent[sexKey(gender)], word);
         case 'witness':
             if (d.eventType === 'marriage') return f ? E.derivedWitnessF : E.derivedWitness;
             return E.derivedOther(E.derivedRoles.witness[f ? 'f' : 'm'], word);
@@ -202,11 +202,16 @@ export function derivedRoleWord(d: Pick<DerivedParticipation, 'role' | 'extra' |
     if (d.extra === 'informant') return E.derivedWord(E.derivedRoles.informant[f ? 'f' : 'm']);
     if (d.extra) return E.derivedWord(E.extraRoles[d.extra]);
     switch (d.role) {
-        case 'godparent': return E.derivedWord(E.derivedRoles.godparent[f ? 'f' : 'm']);
+        case 'godparent': return E.derivedWord(E.derivedRoles.godparent[sexKey(gender)]);
         case 'witness': return E.derivedWord(E.derivedRoles.witness[f ? 'f' : 'm']);
         case 'officiant': return E.derivedWord(E.derivedRoles.officiant[f ? 'f' : 'm']);
         default: return d.note ? shortNote(d.note) : E.derivedWord(E.roles.other);
     }
+}
+
+/** The key of a role word that has a form for an unknown sex (a godparent). */
+function sexKey(gender: Gender | undefined): 'm' | 'f' | 'u' {
+    return gender === 'female' ? 'f' : gender === 'male' ? 'm' : 'u';
 }
 
 /** A participant's note as a role: its first clause, at most 40 characters. */

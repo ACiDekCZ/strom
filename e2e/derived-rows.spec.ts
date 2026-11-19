@@ -5,7 +5,7 @@ import { openApp, cardAction, personModal } from './helpers.js';
  * A person's part at another's event in their own life (spec 085 §5): the
  * derived rows in the person dialog's list of events (among the own events
  * by date, ⋯ on the right) and in the life on the person page with the
- * summary "Godparent and witness for"; a row opens the event where it is
+ * summary "Godfather and witness for"; a row opens the event where it is
  * kept (the baptism at the child, the wedding in its witnesses' dialog);
  * German at 1440/1024/390, light and dark, with long names. Invented data,
  * a fixed clock.
@@ -55,9 +55,9 @@ test.describe('a part at another\'s event in one\'s own life', () => {
         const modal = personModal(page);
         const rows = modal.locator('#events-list .event-row');
         await expect(rows.locator('.event-type, .derived-head')).toHaveText([
-            'Birth', 'Witness · marriage: Dobrohost Ořešník and Radmila Pšeničná', 'Residence', 'Godparent · baptism: Bolemír Pšeničný', 'Death',
+            'Birth', 'Witness · marriage: Dobrohost Ořešník and Radmila Pšeničná', 'Residence', 'Godfather · baptism: Bolemír Pšeničný', 'Death',
         ]);
-        const bap = modal.locator('.event-row.derived', { hasText: 'Godparent' });
+        const bap = modal.locator('.event-row.derived', { hasText: 'Godfather' });
         await expect(bap.locator('.derived-meta')).toHaveText(/1890 · Zvonov/);
         await expect(bap.locator('.derived-mark svg')).toHaveCount(1);
         await expect(bap.locator('.fact-status')).toHaveCount(0);
@@ -91,14 +91,14 @@ test.describe('a part at another\'s event in one\'s own life', () => {
         await expect(w).toBeVisible();
         await expect(w.locator('.pp-row--part .pp-t')).toHaveText([
             /^Witness · marriage: Dobrohost Ořešník and Radmila Pšeničná · Zvonov/,
-            /^Godparent · baptism: Bolemír Pšeničný · Zvonov/,
+            /^Godfather · baptism: Bolemír Pšeničný · Zvonov/,
         ]);
-        const people = w.locator('.pp-people-row', { hasText: 'Godparent and witness for' });
+        const people = w.locator('.pp-people-row', { hasText: 'Godfather and witness for' });
         await expect(people.locator('li')).toHaveText([
             'Dobrohost Ořešník and Radmila Pšeničná · witness · marriage 1888',
-            ' · Bolemír Pšeničný · godparent · baptism 1890',
+            ' · Bolemír Pšeničný · godfather · baptism 1890',
         ]);
-        await w.locator('.pp-part-open', { hasText: 'Godparent' }).click();
+        await w.locator('.pp-part-open', { hasText: 'Godfather' }).click();
         await expect(w).toBeHidden();
         const editor = page.locator('#event-editor-modal');
         await expect(editor).toHaveClass(/active/);

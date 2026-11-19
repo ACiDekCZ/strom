@@ -100,7 +100,7 @@ describe('derived rows', () => {
         const label = (who: string, g: Gender, S = cs) => rows(d, who).map(r => derivedRoleLabel(r, g, S));
         expect(label('hm', 'male')).toEqual(['Svědek · ohlášky:', 'Svědek · sňatek:', 'Kmotr · křest:', 'Oznamovatel · sčítání lidu:']);
         expect(label('jz', 'female')).toEqual(['Oddávající · sňatek:', 'Kmotra · křest:', 'Porodní bába · křest:']);
-        expect(label('hm', 'male', en)).toEqual(['Witness · banns:', 'Witness · marriage:', 'Godparent · baptism:', 'Informant · census:']);
+        expect(label('hm', 'male', en)).toEqual(['Witness · banns:', 'Witness · marriage:', 'Godfather · baptism:', 'Informant · census:']);
         expect(label('jz', 'female', de)).toEqual(['Amtsperson · Heirat:', 'Patin · Taufe:', 'Hebamme · Taufe:']);
         // A woman witness, a role with a note of its own.
         expect(derivedRoleLabel({ role: 'witness', eventType: 'marriage', partnershipId: 'u1' as PartnershipId }, 'female', cs)).toBe('Svědkyně · sňatek:');
@@ -132,21 +132,29 @@ describe('derived rows', () => {
             'Celebrantka · chrzest:', 'Chrzestna · chrzest:', 'Świadek · ślub:', 'Akuszerka · chrzest:']);
         expect(labels('male', pl)).toEqual(['Zgłaszający · zgon:', 'Zgłaszający · Death record:', 'Udzielający ślubu · ślub:',
             'Celebrans · chrzest:', 'Chrzestny · chrzest:', 'Świadek · ślub:', 'Akuszerka · chrzest:']);
-        // English role nouns have one form for both.
-        expect(labels('female', en)).toEqual(labels('male', en));
+        // English: godfather / godmother; the other role nouns have one form for both.
         expect(labels('female', en)).toEqual(['Informant · death:', 'Informant · Death record:', 'Officiant · marriage:',
-            'Officiant · baptism:', 'Godparent · baptism:', 'Witness · marriage:', 'Midwife · baptism:']);
+            'Officiant · baptism:', 'Godmother · baptism:', 'Witness · marriage:', 'Midwife · baptism:']);
+        expect(labels('male', en)).toEqual(['Informant · death:', 'Informant · Death record:', 'Officiant · marriage:',
+            'Officiant · baptism:', 'Godfather · baptism:', 'Witness · marriage:', 'Midwife · baptism:']);
+        expect(words('female', en)[4]).toBe('godmother');
+        expect(derivedRoleLabel({ ...godparent, eventType: 'custom', customLabel: 'Confirmation' }, 'female', en)).toBe('Godmother · Confirmation:');
         // The summary's role word follows the same choice.
         expect(words('female', cs)).toEqual(['oznamovatelka', 'oznamovatelka', 'oddávající / křtící', 'oddávající / křtící', 'kmotra', 'svědkyně', 'porodní bába']);
         expect(words('female', de)).toEqual(['Anzeigende', 'Anzeigende', 'Amtsperson', 'Amtsperson', 'Patin', 'Zeugin', 'Hebamme']);
         expect(words('female', pl)).toEqual(['zgłaszająca', 'zgłaszająca', 'celebrantka', 'celebrantka', 'chrzestna', 'świadek', 'akuszerka']);
         expect(words('male', pl)).toEqual(['zgłaszający', 'zgłaszający', 'celebrans', 'celebrans', 'chrzestny', 'świadek', 'akuszerka']);
-        // An unknown sex keeps the first form, in every language.
-        for (const S of [cs, en, de, pl]) {
+        // An unknown sex keeps the first form, in every language; English names a godparent of unknown sex "godparent".
+        for (const S of [cs, de, pl]) {
             expect(labels('unknown', S)).toEqual(labels('male', S));
             expect(labels(undefined, S)).toEqual(labels('male', S));
             expect(words('unknown', S)).toEqual(words('male', S));
         }
+        const enUnknown = labels('male', en).map((l, i) => i === 4 ? 'Godparent · baptism:' : l);
+        expect(labels('unknown', en)).toEqual(enUnknown);
+        expect(labels(undefined, en)).toEqual(enUnknown);
+        expect(words('unknown', en)[4]).toBe('godparent');
+        expect(derivedRoleLabel({ ...godparent, eventType: 'custom', customLabel: 'Confirmation' }, 'unknown', en)).toBe('Godparent · Confirmation:');
     });
 
     it('a shared event gives one row with all its persons', () => {

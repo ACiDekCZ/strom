@@ -162,7 +162,7 @@ test.describe('link a participant recorded by name', () => {
 
         // The son has the derived row in his life.
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('p_rk2' as never));
-        await expect(personModal(page).locator('.event-row.derived .derived-head')).toHaveText(['Godparent · baptism: Vojmír Úlehla']);
+        await expect(personModal(page).locator('.event-row.derived .derived-head')).toHaveText(['Godfather · baptism: Vojmír Úlehla']);
     });
 
     test('the wedding witnesses\' dialog: one candidate, Link, the derived row', async ({ page }) => {
@@ -194,7 +194,7 @@ test.describe('link a participant recorded by name', () => {
         const items = modal.locator('.vq-namelink-item');
         await expect(modal.locator('.vq-namelink-title')).toHaveText('Godparents and witnesses by name who are probably in the tree · 3');
         await expect(items.locator('.vq-namelink-name')).toHaveText(['Radslav Křemínek', 'Zdislava Bělohoubková', 'Zdislava Bělohoubková']);
-        await expect(items.nth(0).locator('.vq-namelink-where')).toHaveText('Godparent · baptism: Vojmír Úlehla, 12 Mar 1895');
+        await expect(items.nth(0).locator('.vq-namelink-where')).toHaveText('Godfather · baptism: Vojmír Úlehla, 12 Mar 1895');
         await expect(items.nth(2).locator('.vq-namelink-where')).toHaveText('Witness · marriage: Ctislav Úlehla and Zbyhněva Lánská, 20 May 1893');
         await expect(items.nth(0).locator('.vq-namelink-reject')).toHaveText('None of them');
         await expect(items.nth(1).locator('.vq-namelink-reject')).toHaveText('Not this person');

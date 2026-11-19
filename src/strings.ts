@@ -941,8 +941,9 @@ const stringsEN = {
         sharedLineMore: (n: number) => `and ${n} more`,
         sharedLineOpen: 'Open the shared event',
         // Derived rows (spec 085 §5): a part at another's event in one's own list, "Role · type:" and the names.
-        derivedGodparent: 'Godparent · baptism:',
-        derivedGodparentF: 'Godparent · baptism:',
+        derivedGodparent: 'Godfather · baptism:',
+        derivedGodparentF: 'Godmother · baptism:',
+        derivedGodparentU: 'Godparent · baptism:',
         derivedWitness: 'Witness · marriage:',
         derivedWitnessF: 'Witness · marriage:',
         derivedOfficiant: 'Officiant · marriage:',
@@ -951,10 +952,10 @@ const stringsEN = {
         derivedInformant: 'Informant · death:',
         derivedInformantF: 'Informant · death:',
         derivedOther: (role: string, type: string) => `${role} · ${type}:`,
-        /** The role by the person's sex (m also when it is unknown). English role nouns have one form: "godparent" is the
-         *  role's own name (GEDCOM GODP) and covers both, like "witness", "officiant" and "informant". */
+        /** The role by the person's sex (m also when it is unknown; a godparent has its own unknown form u).
+         *  English has godfather / godmother; "witness", "officiant" and "informant" have one form. */
         derivedRoles: {
-            godparent: { m: 'Godparent', f: 'Godparent' }, witness: { m: 'Witness', f: 'Witness' },
+            godparent: { m: 'Godfather', f: 'Godmother', u: 'Godparent' }, witness: { m: 'Witness', f: 'Witness' },
             officiant: { m: 'Officiant', f: 'Officiant' }, informant: { m: 'Informant', f: 'Informant' },
         },
         /** An event type's name inside a derived row ("baptism"); German keeps its capital. */
@@ -9342,7 +9343,7 @@ const stringsEN = {
             othersBaptism: (y: string) => (y ? `Others at baptism ${y}` : 'Others at baptism'),
             witnesses: (y: string) => (y ? `Witnesses at marriage ${y}` : 'Witnesses at marriage'),
             others: (y: string) => (y ? `Others at marriage ${y}` : 'Others at marriage'),
-            godparentWitness: { m: 'Godparent and witness for', f: 'Godparent and witness for', u: 'Godparent and witness for' },
+            godparentWitness: { m: 'Godfather and witness for', f: 'Godmother and witness for', u: 'Godparent and witness for' },
             more: (n: number) => `and ${n} more`,
         },
         gal: {
@@ -11337,6 +11338,7 @@ const stringsCZ: StringsType = {
         sharedLineOpen: 'Otevřít společnou událost',
         derivedGodparent: 'Kmotr · křest:',
         derivedGodparentF: 'Kmotra · křest:',
+        derivedGodparentU: 'Kmotr · křest:',
         derivedWitness: 'Svědek · sňatek:',
         derivedWitnessF: 'Svědkyně · sňatek:',
         derivedOfficiant: 'Oddávající · sňatek:',
@@ -11346,7 +11348,7 @@ const stringsCZ: StringsType = {
         derivedInformantF: 'Oznamovatelka · úmrtí:',
         derivedOther: (role: string, type: string) => `${role} · ${type}:`,
         derivedRoles: {
-            godparent: { m: 'Kmotr', f: 'Kmotra' }, witness: { m: 'Svědek', f: 'Svědkyně' },
+            godparent: { m: 'Kmotr', f: 'Kmotra', u: 'Kmotr' }, witness: { m: 'Svědek', f: 'Svědkyně' },
             officiant: { m: 'Oddávající / křtící', f: 'Oddávající / křtící' }, informant: { m: 'Oznamovatel', f: 'Oznamovatelka' },
         },
         derivedWord: (label: string) => label.toLowerCase(),
@@ -21512,6 +21514,7 @@ const stringsDE: StringsType = {
         sharedLineOpen: 'Gemeinsames Ereignis öffnen',
         derivedGodparent: 'Pate · Taufe:',
         derivedGodparentF: 'Patin · Taufe:',
+        derivedGodparentU: 'Pate · Taufe:',
         derivedWitness: 'Trauzeuge · Heirat:',
         derivedWitnessF: 'Trauzeugin · Heirat:',
         derivedOfficiant: 'Amtsperson · Heirat:',
@@ -21521,7 +21524,7 @@ const stringsDE: StringsType = {
         derivedInformantF: 'Anzeigende · Tod:',
         derivedOther: (role: string, type: string) => `${role} · ${type}:`,
         derivedRoles: {
-            godparent: { m: 'Pate', f: 'Patin' }, witness: { m: 'Zeuge', f: 'Zeugin' },
+            godparent: { m: 'Pate', f: 'Patin', u: 'Pate' }, witness: { m: 'Zeuge', f: 'Zeugin' },
             officiant: { m: 'Amtsperson', f: 'Amtsperson' }, informant: { m: 'Anzeigender', f: 'Anzeigende' },
         },
         derivedWord: (label: string) => label,
