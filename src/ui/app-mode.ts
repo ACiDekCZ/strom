@@ -796,13 +796,13 @@ export const appModeMethods = uiModule({
     setBranchMarker(marker: BranchMarker): void {
         if (!(BRANCH_MARKERS as readonly string[]).includes(marker)) return;
         SettingsManager.setBranchMarker(marker);
-        syncBranchMarkerSetting(marker, SettingsManager.isBranchTintChosen());
+        syncBranchMarkerSetting(marker, SettingsManager.isBranchTintOn());
         this.applyBranchMarkerAttrs();
         TreeRenderer.render();   // re-render to add/remove the markers
         this.updateViewModeUI(); // owns the legend visibility
     },
 
-    /** Tint the marked cards in their lineage colour (kept while the markers are off, drawn only with them). */
+    /** Tint the marked cards in their lineage colour, with any shape or alone. */
     setBranchTint(on: boolean): void {
         SettingsManager.setBranchTint(on);
         syncBranchMarkerSetting(SettingsManager.getBranchMarker(), on);

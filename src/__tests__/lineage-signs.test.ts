@@ -91,7 +91,7 @@ describe('Timeline: the lineage sign before the name (screen)', () => {
     });
 
     it('draws nothing while the markers are off or no signs are given', () => {
-        for (const svg of [buildTimelineSvg(model, { ...base, branches: signsOf(d, 'off') }), buildTimelineSvg(model, base)]) {
+        for (const svg of [buildTimelineSvg(model, { ...base, branches: signsOf(d, 'none') }), buildTimelineSvg(model, base)]) {
             expect(svg).not.toContain('branch-sign');
         }
     });
@@ -205,7 +205,7 @@ describe('Table: the Lineage column', () => {
             '<span class="tv-lineage"><span class="tv-lineage-signs">'
             + '<span class="branch-swatch branch-sign is-numbered" data-line="maternal" data-shape="corner" aria-hidden="true"><i></i></span>'
             + '</span><span class="tv-cell-text">Second parent\'s line</span></span>');
-        expect(lineageHtml(v, '', 'off')).toBe('<span class="tv-cell-text">Second parent\'s line</span>');
+        expect(lineageHtml(v, '', 'none')).toBe('<span class="tv-cell-text">Second parent\'s line</span>');
         expect(branchSignsHtml(['paternal', 'maternal'], 'stripe', false).match(/data-shape="stripe"/g)).toHaveLength(2);
     });
 });

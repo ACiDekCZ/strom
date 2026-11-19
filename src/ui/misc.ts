@@ -390,7 +390,7 @@ export const miscMethods = uiModule({
         this.syncTreeSpacingSetting();
         // The previews draw with the tag's letters of the language (also before a tree is drawn).
         this.applyBranchMarkerAttrs();
-        syncBranchMarkerSetting(SettingsManager.getBranchMarker(), SettingsManager.isBranchTintChosen());
+        syncBranchMarkerSetting(SettingsManager.getBranchMarker(), SettingsManager.isBranchTintOn());
         const descFamiliesToggle = document.getElementById('descendants-families-default-toggle') as HTMLInputElement | null;
         if (descFamiliesToggle) descFamiliesToggle.checked = SettingsManager.isDescendantsFullFamiliesDefault();
 
@@ -622,7 +622,7 @@ export const miscMethods = uiModule({
         const legend = document.getElementById('branch-legend');
         const branchShown = !!legend && cardsShown && SettingsManager.isBranchLegendEnabled()
             && syncBranchLegend(legend, SettingsManager.getBranchMarker(),
-                !!document.getElementById('tree-canvas')?.classList.contains('branch-numbered'));
+                !!document.getElementById('tree-canvas')?.classList.contains('branch-numbered'), SettingsManager.isBranchTintOn());
         if (legend) legend.style.display = branchShown ? 'flex' : 'none';
         if (treeLegend) {
             const hasPersons = DataManager.getAllPersons().length > 0;

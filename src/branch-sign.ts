@@ -21,17 +21,17 @@ export const BRANCH_SIGN_SLOT = 18;
 export const BRANCH_SIGN_GAP = 3;
 
 /** The drawn width of one sign per shape (the legend's sizes). */
-const SIGN_W: Readonly<Record<Exclude<BranchMarker, 'off'>, number>> = { arc: 10, tag: 13, stripe: 4, corner: 15 };
+const SIGN_W: Readonly<Record<Exclude<BranchMarker, 'none'>, number>> = { arc: 10, tag: 13, stripe: 4, corner: 15 };
 
 /** The lines a set shows signs for: none while the markers are off. */
 export function branchSignLines(set: BranchSet | undefined, marker: BranchMarker | undefined): Branch[] {
-    if (!marker || marker === 'off') return [];
+    if (!marker || marker === 'none') return [];
     return branchesOf(set);
 }
 
 /** The width (px) the signs of `lines` take in a name's slot: at least the slot, two signs side by side. */
 export function branchSignWidth(lines: readonly Branch[], marker: BranchMarker): number {
-    if (marker === 'off' || lines.length === 0) return BRANCH_SIGN_SLOT;
+    if (marker === 'none' || lines.length === 0) return BRANCH_SIGN_SLOT;
     const w = lines.length * SIGN_W[marker] + (lines.length - 1) * BRANCH_SIGN_GAP;
     return Math.max(BRANCH_SIGN_SLOT, w);
 }
@@ -42,7 +42,7 @@ export function branchSignWidth(lines: readonly Branch[], marker: BranchMarker):
  * there is no line or the markers are off.
  */
 export function branchSignsHtml(lines: readonly Branch[], marker: BranchMarker | undefined, numbered: boolean): string {
-    if (!marker || marker === 'off') return '';
+    if (!marker || marker === 'none') return '';
     const num = numbered ? ' is-numbered' : '';
     return lines.map(b =>
         `<span class="branch-swatch branch-sign${num}" data-line="${b}" data-shape="${marker}" aria-hidden="true"><i></i></span>`).join('');
@@ -57,7 +57,7 @@ const f = (n: number): string => (Math.round(n * 100) / 100).toString();
  * (maternal hatched — needs `branchMarkerDefs` in the image — descendants an
  * outline).
  */
-function signSvg(b: Branch, marker: Exclude<BranchMarker, 'off'>, x: number, cy: number, letters: Record<Branch, string>): string {
+function signSvg(b: Branch, marker: Exclude<BranchMarker, 'none'>, x: number, cy: number, letters: Record<Branch, string>): string {
     const color = BRANCH_COLORS[b];
     switch (marker) {
         case 'arc':
@@ -90,7 +90,7 @@ function signSvg(b: Branch, marker: Exclude<BranchMarker, 'off'>, x: number, cy:
 export function branchSignsSvg(
     lines: readonly Branch[], marker: BranchMarker, x: number, cy: number, letters: Record<Branch, string>,
 ): string {
-    if (marker === 'off' || lines.length === 0) return '';
+    if (marker === 'none' || lines.length === 0) return '';
     const w = SIGN_W[marker];
     const total = lines.length * w + (lines.length - 1) * BRANCH_SIGN_GAP;
     let left = x + (branchSignWidth(lines, marker) - total) / 2;

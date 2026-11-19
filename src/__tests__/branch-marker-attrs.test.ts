@@ -32,7 +32,7 @@ function fakeDoc(): { doc: Document; body: FakeEl } {
 }
 
 describe('applyBranchMarkerAttrs', () => {
-    it('puts the shape and the tint on <body>; off removes both', () => {
+    it('puts the shape and the tint on <body>; no shape keeps the tint alone, or nothing', () => {
         const { doc, body } = fakeDoc();
         applyBranchMarkerAttrs('tag', true, doc);
         expect(body.dataset.branchMarker).toBe('tag');
@@ -40,7 +40,10 @@ describe('applyBranchMarkerAttrs', () => {
         applyBranchMarkerAttrs('arc', false, doc);
         expect(body.dataset.branchMarker).toBe('arc');
         expect('branchTint' in body.dataset).toBe(false);
-        applyBranchMarkerAttrs('off', true, doc);
+        applyBranchMarkerAttrs('none', true, doc);
+        expect('branchMarker' in body.dataset).toBe(false);
+        expect(body.dataset.branchTint).toBe('');
+        applyBranchMarkerAttrs('none', false, doc);
         expect('branchMarker' in body.dataset).toBe(false);
         expect('branchTint' in body.dataset).toBe(false);
     });

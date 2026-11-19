@@ -543,10 +543,10 @@ export function linkHtml(link: { href: string; label: string }, hit = ''): strin
         + `<span class="tv-link-out" aria-hidden="true"> ↗</span></a></span>`;
 }
 
-/** The marker shape the page shows (body[data-branch-marker], spec 112), or 'off'. */
+/** The marker shape the page shows (body[data-branch-marker], spec 112), or 'none'. */
 function pageBranchMarker(): BranchMarker {
     const m = typeof document !== 'undefined' ? document.body?.dataset.branchMarker : undefined;
-    return m && (BRANCH_MARKERS as readonly string[]).includes(m) ? m as BranchMarker : 'off';
+    return m && (BRANCH_MARKERS as readonly string[]).includes(m) ? m as BranchMarker : 'none';
 }
 
 /**

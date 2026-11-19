@@ -4925,7 +4925,7 @@ class TreeRendererClass {
         // Optional lineage markers: classify once per render (the Timeline draws no cards; its signs: timelineBranchSigns).
         // A link "linked in the view only" stands as if real: the family it shows takes its branch.
         const layoutData = this.viewLayer?.data ?? DataManager.getData();
-        const branches = (SettingsManager.isBranchMarkerOn() && this.viewMode !== 'timeline' && this.focusPersonId)
+        const branches = (SettingsManager.isBranchMarkingOn() && this.viewMode !== 'timeline' && this.focusPersonId)
             ? classifyBranches(layoutData, this.focusPersonId)
             : null;
         const branchMap: Map<PersonId, BranchSet> | null = branches?.map ?? null;
@@ -7163,7 +7163,7 @@ class TreeRendererClass {
      */
     private timelineBranchSigns(): TimelineBranchSigns | null {
         const marker = SettingsManager.getBranchMarker();
-        if (marker === 'off' || !this.focusPersonId) return null;
+        if (marker === 'none' || !this.focusPersonId) return null;
         const data = this.viewLayer?.data ?? DataManager.getData();
         if (!data.persons[this.focusPersonId]) return null;
         const { map, numbered } = classifyBranches(data, this.focusPersonId);

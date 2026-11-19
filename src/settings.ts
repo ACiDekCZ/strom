@@ -152,7 +152,8 @@ class SettingsManagerClass {
     private save(): void {
         if (this.readOnly) return;
         // Lineage markers (spec 112, R1): the first write stores the migrated choice instead of the old flag.
-        if (this.settings.branchMarker === undefined || 'branchColors' in this.settings) {
+        if (this.settings.branchMarker === undefined || 'branchColors' in this.settings
+            || (this.settings.branchMarker as string) === 'off') {
             this.settings.branchMarker = this.getBranchMarker();
             delete this.settings.branchColors;
         }
@@ -531,12 +532,14 @@ class SettingsManagerClass {
 
     /**
      * Shape of the lineage marker (spec 112, R1), default the arc. Settings
-     * from before it keep their choice: branch colours off → 'off', on → 'arc'.
+     * from before it keep their choice: branch colours off → 'none' (no tint),
+     * on → 'arc'. The 'off' of 3.30.0-beta.6 reads as 'none'.
      */
     getBranchMarker(): BranchMarker {
         const m = this.settings.branchMarker;
         if (m && (BRANCH_MARKERS as readonly string[]).includes(m)) return m;
-        return this.settings.branchColors === false ? 'off' : 'arc';
+        if ((m as string | undefined) === 'off') return 'none';
+        return this.settings.branchColors === false ? 'none' : 'arc';
     }
 
     setBranchMarker(marker: BranchMarker): void {
@@ -545,19 +548,18 @@ class SettingsManagerClass {
         this.save();
     }
 
-    /** Any lineage marker drawn (not 'off'). */
-    isBranchMarkerOn(): boolean {
-        return this.getBranchMarker() !== 'off';
-    }
-
-    /** Cards tinted in the lineage colour: only while a marker is on; the choice itself is kept under 'off'. */
+    /** Cards tinted in the lineage colour: its own switch, with any shape or alone (Milan 19 Nov 2026). */
     isBranchTintOn(): boolean {
-        return this.settings.branchTint === true && this.isBranchMarkerOn();
+        return this.settings.branchTint === true;
     }
 
-    /** The tint as chosen, regardless of the marker (the checkbox shows it while disabled). */
-    isBranchTintChosen(): boolean {
-        return this.settings.branchTint === true;
+    /**
+     * Any lineage marking on the cards: a shape, the tint, or both. The cards'
+     * line classes, the legend, the Timeline, the Table, the Fan, the Map and
+     * the image export follow it ('none' without the tint = no marking).
+     */
+    isBranchMarkingOn(): boolean {
+        return this.getBranchMarker() !== 'none' || this.isBranchTintOn();
     }
 
     setBranchTint(on: boolean): void {

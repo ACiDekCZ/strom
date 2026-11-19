@@ -107,7 +107,7 @@ export interface TimelineSvgOptions {
 
 /** Whether the rows carry a lineage sign slot (the markers on). */
 function signsOn(opts: TimelineSvgOptions): opts is TimelineSvgOptions & { branches: TimelineBranchSigns } {
-    return !!opts.branches && opts.branches.marker !== 'off';
+    return !!opts.branches && opts.branches.marker !== 'none';
 }
 
 /** The history row's height (DEV symboly-dejin §9): 28 px, a phone 26 px. */

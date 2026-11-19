@@ -314,17 +314,21 @@ describe('lineage markers (spec 112): the shape from Settings, both lines (R4), 
         expect(svgOf({ ...cfg, branchMarker: 'corner' })).toContain('d="M-0.5 -0.5H11.5L-0.5 11.5Z"');
     });
 
-    it('tint: the marked card\'s ground in its line\'s tint, both halves for both lines; never without a marker', () => {
+    it('tint: the marked card\'s ground in its line\'s tint, both halves for both lines; alone with no shape', () => {
         const ground = (svg: string) => [...svg.matchAll(/<rect x="(-?[\d.]+)" y="[^"]+" width="188" height="64" rx="8" fill="([^"]+)"/g)].map(m => m[2]);
         const svg = svgOf({ branchMarker: 'stripe', branchTint: true });
         expect(ground(svg)).toEqual(['#e9eced', '#faeeef', '#f3eedf', 'url(#branch-tint-pm)', '#fffdf8']);
         expect(svg).toMatch(/<linearGradient id="branch-tint-pm" x1="0" y1="0" x2="0" y2="1"><stop offset="0.5" stop-color="#e9eced"\/><stop offset="0.5" stop-color="#faeeef"\/>/);
-        expect(ground(svgOf({ branchMarker: 'off', branchTint: true }))).toEqual(Array(5).fill('#fffdf8'));
+        // No shape + tint (Milan 19 Nov 2026): only the card's ground, no marker drawn.
+        const tintOnly = svgOf({ branchMarker: 'none', branchTint: true });
+        expect(ground(tintOnly)).toEqual(['#e9eced', '#faeeef', '#f3eedf', 'url(#branch-tint-pm)', '#fffdf8']);
+        expect(tintOnly).toContain('<linearGradient id="branch-tint-pm"');
+        expect(tintOnly).not.toMatch(/branch-stripe|branch-mark|branch-hatch/);
         expect(ground(svgOf())).toEqual(Array(5).fill('#fffdf8'));
     });
 
-    it('off, no map or a placeholder: no marker at all', () => {
-        for (const svg of [svgOf({ branchMarker: 'off' }), buildTreeSvg(data, l())]) {
+    it('no shape without the tint, no map or a placeholder: no marker at all', () => {
+        for (const svg of [svgOf({ branchMarker: 'none' }), svgOf({ branchMarker: 'none', branchTint: false }), buildTreeSvg(data, l())]) {
             expect(svg).not.toMatch(/branch-stripe|branch-mark|branch-hatch|branch-tint/);
         }
         const ph = makeData(person('a', { isPlaceholder: true }));

@@ -53,17 +53,17 @@ export function branchAriaId(set: BranchSet | undefined, numbered: boolean): str
 }
 
 /**
- * Put the marker's state on <body>: `data-branch-marker` (absent when 'off'),
- * `data-branch-tint` (only while a marker is on and the tint chosen), the
+ * Put the marker's state on <body>: `data-branch-marker` (absent when 'none'),
+ * `data-branch-tint` (while the tint is chosen, with any shape or alone), the
  * tag's letters as `--branch-letter-*` (quoted CSS strings), and the hidden
  * lineage texts in the current language.
  */
 export function applyBranchMarkerAttrs(marker: BranchMarker, tint: boolean, doc: Document = document): void {
     const body = doc.body;
     if (!body) return;
-    if (marker === 'off') delete body.dataset.branchMarker;
+    if (marker === 'none') delete body.dataset.branchMarker;
     else body.dataset.branchMarker = marker;
-    if (marker !== 'off' && tint) body.dataset.branchTint = '';
+    if (tint) body.dataset.branchTint = '';
     else delete body.dataset.branchTint;
     const s = strings.branchColors;
     body.style.setProperty('--branch-letter-paternal', JSON.stringify(s.letterPaternal));

@@ -327,7 +327,7 @@ export interface PosterOptions extends PosterFooterMeta {
      * no markers.
      */
     branchMap?: Map<string, BranchSet> | null;
-    /** The marker's shape from Settings (spec 112 R1); default arc. 'off' draws nothing. */
+    /** The marker's shape from Settings (spec 112 R1); default arc. 'none' draws no shape (the tint may still fill the card). */
     branchMarker?: BranchMarker;
     /** The marked cards' ground in their line's tint (Settings, R1). */
     branchTint?: boolean;
@@ -930,8 +930,8 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     out.push('<g class="cards">');
     let clipCounter = 0;
     // Lineage markers (spec 112): the shape chosen in Settings, the tint, R4 and R5.
-    const branchMarker: BranchMarker = options.branchMap ? (options.branchMarker ?? 'arc') : 'off';
-    const branchTint = !!options.branchTint && branchMarker !== 'off';
+    const branchMarker: BranchMarker = options.branchMap ? (options.branchMarker ?? 'arc') : 'none';
+    const branchTint = !!options.branchTint && !!options.branchMap;
     const branchDraw = {
         marker: branchMarker,
         compact: !options.cardLines && options.cardDensity === 'compact',
@@ -970,7 +970,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
         const borderDash = isPlaceholder ? ' stroke-dasharray="4,3"' : '';
         const border = options.cardLines ? COLORS.printBorder : COLORS.cardBorder;
         // The lineage (a placeholder carries none, as on screen).
-        const branchSet = isPlaceholder || branchMarker === 'off' ? undefined : options.branchMap?.get(personId);
+        const branchSet = isPlaceholder || (branchMarker === 'none' && !branchTint) ? undefined : options.branchMap?.get(personId);
         const cardFill = (branchTint && branchTintFill(branchSet)) || COLORS.cardBg;
         out.push(`<rect x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" width="${cw}" height="${ch}" rx="8" fill="${cardFill}" stroke="${border}" stroke-width="1"${borderDash}/>`);
 

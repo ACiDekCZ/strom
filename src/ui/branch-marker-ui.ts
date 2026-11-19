@@ -2,15 +2,16 @@
  * Lineage markers in the Settings and the tree legend (spec 112, R1 / §3).
  *
  * Settings > Tree view: a radio row per shape (arc, letter tag, stripe,
- * corner, off), each with a compact card as its preview (on a phone the three
- * lines' signs instead), and the tint switch under it — disabled and shown
- * unchecked while the markers are off, its choice kept for when a shape comes
- * back.
+ * corner, no shape), each with a compact card as its preview (on a phone the
+ * three lines' signs instead), and the tint switch under it — always enabled,
+ * with any shape or alone (Milan 19 Nov 2026: "no shape" + tint = tinted cards
+ * only, "no shape" without it = no marking).
  *
  * The legend: the three lines' signs in the chosen shape (the stylesheet draws
  * `.branch-swatch[data-shape][data-line]`), their names — "first / second
  * parent's line" when the focused person's two parents share a gender (R5,
- * `#tree-canvas.branch-numbered`) — and the "no marker" line.
+ * `#tree-canvas.branch-numbered`) — and the "no marker" line. With no shape
+ * and the tint the signs are the tint's 16px squares (data-shape="none").
  */
 
 import { BranchMarker, BRANCH_MARKERS } from '../types.js';
@@ -27,32 +28,22 @@ export function branchLegendLabelKeys(numbered: boolean): Record<BranchLine, Leg
         : { paternal: 'legendPaternal', maternal: 'legendMaternal', descendant: 'legendDescendant' };
 }
 
-/** The tint switch: checked only while it applies, disabled while the markers are off. */
-export function branchTintControl(marker: BranchMarker, tintChosen: boolean): { checked: boolean; disabled: boolean } {
-    const off = marker === 'off';
-    return { checked: tintChosen && !off, disabled: off };
-}
-
-/** Put the Settings' lineage marker rows in the state of the settings. */
-export function syncBranchMarkerSetting(marker: BranchMarker, tintChosen: boolean, root: ParentNode = document): void {
+/** Put the Settings' lineage marker rows in the state of the settings (the tint is never disabled). */
+export function syncBranchMarkerSetting(marker: BranchMarker, tint: boolean, root: ParentNode = document): void {
     for (const input of root.querySelectorAll<HTMLInputElement>('input[name="branch-marker"]')) {
         input.checked = input.value === marker;
     }
-    const tint = root.querySelector<HTMLInputElement>('#branch-tint-toggle');
-    if (tint) {
-        const state = branchTintControl(marker, tintChosen);
-        tint.checked = state.checked;
-        tint.disabled = state.disabled;
-        tint.closest('#branch-tint-row')?.classList.toggle('is-disabled', state.disabled);
-    }
+    const box = root.querySelector<HTMLInputElement>('#branch-tint-toggle');
+    if (box) box.checked = tint;
 }
 
 /**
  * The legend's lineage part: each sign in the chosen shape (numbered letters
- * under R5) and each line's name; returns whether it is drawn at all.
+ * under R5; the tint's square with no shape) and each line's name; returns
+ * whether it is drawn at all (a shape or the tint).
  */
-export function syncBranchLegend(group: HTMLElement, marker: BranchMarker, numbered: boolean): boolean {
-    if (marker === 'off' || !(BRANCH_MARKERS as readonly string[]).includes(marker)) return false;
+export function syncBranchLegend(group: HTMLElement, marker: BranchMarker, numbered: boolean, tint = false): boolean {
+    if (!(BRANCH_MARKERS as readonly string[]).includes(marker) || (marker === 'none' && !tint)) return false;
     const keys = branchLegendLabelKeys(numbered);
     for (const item of group.querySelectorAll<HTMLElement>('.branch-legend-item')) {
         const swatch = item.querySelector<HTMLElement>('.branch-swatch');

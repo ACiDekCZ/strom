@@ -32,18 +32,28 @@ afterEach(() => {
 describe('lineage marker settings', () => {
     it('default: the arc, no tint', () => {
         expect(SettingsManager.getBranchMarker()).toBe('arc');
-        expect(SettingsManager.isBranchMarkerOn()).toBe(true);
+        expect(SettingsManager.isBranchMarkingOn()).toBe(true);
         expect(SettingsManager.isBranchTintOn()).toBe(false);
     });
 
-    it('migration: branch colours on → arc, off → off', () => {
+    it('migration: branch colours on → arc, off → no shape without the tint', () => {
         store.set(SETTINGS_KEY, JSON.stringify({ branchColors: true }));
         restart();
         expect(SettingsManager.getBranchMarker()).toBe('arc');
         store.set(SETTINGS_KEY, JSON.stringify({ branchColors: false }));
         restart();
-        expect(SettingsManager.getBranchMarker()).toBe('off');
-        expect(SettingsManager.isBranchMarkerOn()).toBe(false);
+        expect(SettingsManager.getBranchMarker()).toBe('none');
+        expect(SettingsManager.isBranchTintOn()).toBe(false);
+        expect(SettingsManager.isBranchMarkingOn()).toBe(false);
+    });
+
+    it('the "off" stored by 3.30.0-beta.6 reads as no shape and is written as such', () => {
+        store.set(SETTINGS_KEY, JSON.stringify({ branchMarker: 'off', branchTint: true }));
+        restart();
+        expect(SettingsManager.getBranchMarker()).toBe('none');
+        expect(SettingsManager.isBranchTintOn()).toBe(true);
+        SettingsManager.setGenLabels(false);   // any other setting
+        expect(stored().branchMarker).toBe('none');
     });
 
     it('the migration is not written at start; the first write of any setting stores it', () => {
@@ -51,10 +61,10 @@ describe('lineage marker settings', () => {
         restart();
         expect(stored()).toEqual({ branchColors: false });
         SettingsManager.setGenLabels(false);   // any other setting
-        expect(stored().branchMarker).toBe('off');
+        expect(stored().branchMarker).toBe('none');
         expect('branchColors' in stored()).toBe(false);
         restart();
-        expect(SettingsManager.getBranchMarker()).toBe('off');
+        expect(SettingsManager.getBranchMarker()).toBe('none');
     });
 
     it('a chosen shape wins over the old flag and removes it', () => {
@@ -70,18 +80,21 @@ describe('lineage marker settings', () => {
     it('an unknown stored shape falls back to the old flag, then the arc', () => {
         store.set(SETTINGS_KEY, JSON.stringify({ branchMarker: 'wave', branchColors: false }));
         restart();
-        expect(SettingsManager.getBranchMarker()).toBe('off');
+        expect(SettingsManager.getBranchMarker()).toBe('none');
         store.set(SETTINGS_KEY, JSON.stringify({ branchMarker: 'wave' }));
         restart();
         expect(SettingsManager.getBranchMarker()).toBe('arc');
     });
 
-    it('the tint is drawn only with a marker, and kept while the markers are off', () => {
+    it('the tint stands alone: no shape + tint is still a marking, no shape alone is none', () => {
         SettingsManager.setBranchTint(true);
         expect(SettingsManager.isBranchTintOn()).toBe(true);
-        SettingsManager.setBranchMarker('off');
-        expect(SettingsManager.isBranchTintOn()).toBe(false);
-        expect(SettingsManager.isBranchTintChosen()).toBe(true);
+        SettingsManager.setBranchMarker('none');
+        expect(SettingsManager.isBranchTintOn()).toBe(true);
+        expect(SettingsManager.isBranchMarkingOn()).toBe(true);
+        SettingsManager.setBranchTint(false);
+        expect(SettingsManager.isBranchMarkingOn()).toBe(false);
+        SettingsManager.setBranchTint(true);
         SettingsManager.setBranchMarker('stripe');
         expect(SettingsManager.isBranchTintOn()).toBe(true);
         restart();

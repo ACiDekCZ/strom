@@ -1586,7 +1586,7 @@
             z-index: 100;
         } }
         /* Lineage markers (spec 112): the shape chosen in the Settings
-           (body[data-branch-marker], absent = off) drawn as a layer of the
+           (body[data-branch-marker], absent = no shape) drawn as a layer of the
            card (::before / ::after), so the card box never changes. A card
            can carry two lines (R4: paternal and maternal). The Settings'
            previews (.bm-preview[data-shape] .bm-card, no .person-card: the
@@ -1844,6 +1844,12 @@
         }
         .branch-swatch[data-shape="corner"][data-line="descendant"] > i { clip-path: path(evenodd, 'M0 0H15L0 15Z M3.5 3.5H8.5L3.5 8.5Z'); }
         body[data-branch-tint] .branch-swatch { padding: 4px; background: var(--sw-tint); }
+        /* No shape, only the tint (Milan 19 Nov 2026): the sign is the tint itself, a 16px square. */
+        .branch-swatch[data-shape="none"] > i {
+            width: 16px; height: 16px; box-sizing: border-box; border: 1px solid var(--border);
+            border-radius: var(--r-sm); background: var(--sw-tint);
+        }
+        body[data-branch-tint] .branch-swatch[data-shape="none"] { padding: 0; background: none; }
         /* A sign before a name (the Timeline, the Table's Lineage column): just the shape, never the tint. */
         .branch-swatch.branch-sign { min-width: 0; min-height: 0; }
         body[data-branch-tint] .branch-swatch.branch-sign { padding: 0; background: none; }
@@ -2787,8 +2793,9 @@
            row filled, a 2px line under it), each with a compact card at 0.7 as
            its preview, drawn by the cards' own rules (.bm-preview[data-shape]
            .bm-card). On a phone the three lines' signs stand at the right
-           instead of the card. The tint below is disabled (and unchecked)
-           while the markers are off; its choice comes back with a shape. */
+           instead of the card. The tint below combines with every row, "no
+           shape" included (then only the tint marks the cards; the row's
+           phone signs, the tint's squares, show only while it is on). */
         fieldset.branch-marker-group { margin: 0; border: 0; min-width: 0; }
         /* A floated legend is laid out as a block, so the row's divider stays above it (not through it). */
         .branch-marker-group > legend.settings-text { display: flex; float: left; width: 100%; padding: 0; margin: 0; }
@@ -2825,8 +2832,6 @@
             font-size: 11px; font-weight: 600; line-height: 1.4; color: var(--primary); white-space: nowrap;
         }
         .bm-signs { display: none; flex: none; align-items: center; gap: 8px; }
-        #branch-tint-row.is-disabled { opacity: 0.5; cursor: default; }
-        #branch-tint-row.is-disabled input[type="checkbox"]:disabled { opacity: 1; }
         @media (pointer: coarse) {
             .modal label.branch-marker-opt { min-height: 48px; }
         }
@@ -2835,11 +2840,13 @@
             .modal label.branch-marker-opt { min-height: 52px; padding: 4px 12px; }
             .bm-preview { display: none; }
             .bm-signs { display: inline-flex; }
+            body:not([data-branch-tint]) .bm-signs-tint { display: none; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .modal label.branch-marker-opt { min-height: 52px; padding: 4px 12px; }
             .bm-preview { display: none; }
             .bm-signs { display: inline-flex; }
+            body:not([data-branch-tint]) .bm-signs-tint { display: none; }
         }
         /* Spacing (Settings > Person card, spec 069 §1): a segment of two
            options, each with a small picture of the density (two rows of
@@ -33639,9 +33646,10 @@
                                 <span class="bm-signs" aria-hidden="true"><span class="branch-swatch" data-line="paternal" data-shape="corner"><i></i></span><span class="branch-swatch" data-line="maternal" data-shape="corner"><i></i></span><span class="branch-swatch" data-line="descendant" data-shape="corner"><i></i></span></span>
                             </label>
                             <label class="sel-opt branch-marker-opt" data-sel-form="row">
-                                <input type="radio" name="branch-marker" value="off" onchange="window.Strom.UI.setBranchMarker(this.value)">
-                                <span class="bm-preview" aria-hidden="true"><span class="bm-scale"><span class="bm-card"><span class="bm-lines"><i></i><i></i></span></span></span></span>
-                                <span class="bm-name" data-i18n="branchColors.markerOff"></span>
+                                <input type="radio" name="branch-marker" value="none" onchange="window.Strom.UI.setBranchMarker(this.value)">
+                                <span class="bm-preview" data-shape="none" aria-hidden="true"><span class="bm-scale"><span class="bm-card branch-paternal"><span class="bm-lines"><i></i><i></i></span></span></span></span>
+                                <span class="bm-name" data-i18n="branchColors.markerNone"></span>
+                                <span class="bm-signs bm-signs-tint" aria-hidden="true"><span class="branch-swatch" data-line="paternal" data-shape="none"><i></i></span><span class="branch-swatch" data-line="maternal" data-shape="none"><i></i></span><span class="branch-swatch" data-line="descendant" data-shape="none"><i></i></span></span>
                             </label>
                         </div>
                     </fieldset>

@@ -133,7 +133,7 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
     const focusId = TreeRenderer.getFocusPersonId();
     // The lineage markers as on screen (spec 112): the chosen shape and tint, both lines (R4), 1 and 2 (R5).
     const branchMarker = SettingsManager.getBranchMarker();
-    const branches = (branchMarker !== 'off' && focusId) ? classifyBranches(data, focusId) : null;
+    const branches = (SettingsManager.isBranchMarkingOn() && focusId) ? classifyBranches(data, focusId) : null;
     const branchMap = branches ? new Map<string, BranchSet>([...branches.map].map(([id, set]) => [id as string, set])) : null;
     // Draw parity: the descendants / family views dim context-only people on
     // screen (opacity 0.5). Reuse the SAME membership rule so the image dims
@@ -340,7 +340,7 @@ function buildCurrentPoster(): PosterBuild | null {
         // The lineage signs before the names as on screen (spec 112 §3), in the light theme's P2 hex.
         const marker = SettingsManager.getBranchMarker();
         const timelineFocus = TreeRenderer.getFocusPersonId();
-        const signs = marker !== 'off' && timelineFocus ? classifyBranches(data, timelineFocus) : null;
+        const signs = marker !== 'none' && timelineFocus ? classifyBranches(data, timelineFocus) : null;
         const svg = buildTimelinePosterSvg(model, {
             esc: escapeXml,
             focusId: TreeRenderer.getFocusPersonId(),

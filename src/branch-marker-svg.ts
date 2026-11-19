@@ -68,7 +68,7 @@ export function branchStripePath(x: number, y: number, h: number, r: number, w: 
  * upper half paternal, the lower maternal). '' when none is needed.
  */
 export function branchMarkerDefs(sets: Iterable<BranchSet>, marker: BranchMarker, tint: boolean): string {
-    if (marker === 'off') return '';
+    if (marker === 'none' && !tint) return '';
     let hatch = false;
     let tintBoth = false;
     for (const set of sets) {
@@ -117,7 +117,7 @@ export function branchMarkerSvg(set: BranchSet | undefined, box: BranchCardBox, 
     const under: string[] = [];
     const over: string[] = [];
     const lines = branchesOf(set);
-    if (!set || lines.length === 0 || draw.marker === 'off') return { under, over };
+    if (!set || lines.length === 0 || draw.marker === 'none') return { under, over };
     const pm = both(set);
     const { x, y, w, h } = box;
     const mid = y + h / 2;
