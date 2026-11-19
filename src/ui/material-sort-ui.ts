@@ -19,13 +19,15 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import type { Attachment, MaterialKind, MediaPlace, PersonId } from '../types.js';
 import {
     MaterialItem, MaterialError, SortJob, SortLink, SORT_MAX_FILES, SORT_MAX_TEXT, type EditRequest,
-    startMaterialSort, fetchMaterialSort, cancelMaterialSort, fetchMaterial, cachedMaterialList,
+    startMaterialSort, fetchMaterialSort, cancelMaterialSort, fetchMaterialSortRun, cancelMaterialSortRun, fetchMaterial, cachedMaterialList,
+    type SortRunState,
     getCachedThumb, fileExt, mergeIntoCache, materialErrorText, materialKindLabel, isPortraitCandidate, materialType,
 } from '../materials.js';
 import { overviewItems, nameWithoutYears } from '../materials-overview.js';
 import {
     sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
     sortNext, sortLeftMap, sortCopyOf, sortStripState, sortRunBatches, sortProposalCounts, sortLeftIds, sortBackRow,
+    sortJobsMerged, sortRunView, sortRunAdvance, type SortRunView,
     type SortNext, type SortNextOpts, type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite, type SortCounts, type SortStripState,
 } from '../material-sort.js';
 import { researchPersonRef } from '../research-link.js';
@@ -90,8 +92,58 @@ const countChip = (link: SortLink): SortChip => ({ link, place: null, person: nu
 /** The open proposal's redraw with the files as remembered now (a file hidden or restored meanwhile). */
 let proposalRedraw: (() => void) | null = null;
 
-/** The sorting asked about now (one per page: the active tree's). */
-let watch: { treeId: string; id: string; timer: ReturnType<typeof setTimeout> | null; job: SortJob | null; busy: boolean } | null = null;
+/**
+ * The sorting asked about now (one per page: the active tree's), by its key
+ * (sortKey). A run of batches (spec 102 §3): `run` as the research said it
+ * last, `jobs` the finished batches' sortings (read once each), `job` their
+ * proposals merged into one.
+ */
+let watch: {
+    treeId: string; id: string; timer: ReturnType<typeof setTimeout> | null; job: SortJob | null; busy: boolean;
+    run?: SortRunState | null; jobs?: Map<string, SortJob>;
+    /** Waiting for the bridge to come up (asked at once when it does). */
+    down?: boolean;
+} | null = null;
+
+/** The open proposal takes in what a run's batch just finished brought (spec 102 §3), and redraws its run line. */
+let proposalRun: ((job: SortJob) => void) | null = null;
+
+/** The key a sorting is watched by: its run (spec 102 §3), else its sorting. */
+function sortKey(r: Pick<ResearchSortRemembered, 'id' | 'run'>): string {
+    return r.run?.id ?? r.id;
+}
+
+/** What is known now of the remembered sorting (a run's batches merged), null before the first answer. */
+function watchedJob(r: ResearchSortRemembered | null): SortJob | null {
+    return r && watch?.id === sortKey(r) ? watch.job : null;
+}
+
+/** Where the remembered run is (spec 102 §3): as the research said it last, else as remembered. */
+function runViewOf(r: ResearchSortRemembered | null): SortRunView | null {
+    if (!r?.run?.id) return null;
+    return sortRunView(r.run, watch?.id === r.run.id ? watch.run ?? null : null);
+}
+
+/**
+ * A run's progress bar (spec 102 §3): one for the whole run, its ticks where
+ * one batch ends and the next starts. Without the research's word on the
+ * files judged in the batch at work: a progress without a number.
+ */
+function runBarHtml(v: SortRunView, label: string): string {
+    if (v.running && !v.starting && v.batchDone === undefined) {
+        return `<span class="mw-sort-bar is-run is-indeterminate" role="progressbar" aria-label="${esc(label)}"><span></span></span>`;
+    }
+    const pct = v.files ? Math.round((v.filesDone / v.files) * 1000) / 10 : 0;
+    const ticks = v.marks.map(m => `<i style="left: ${m}%"></i>`).join('');
+    return `<span class="mw-sort-bar is-run" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${v.files}" aria-valuenow="${v.filesDone}"><span style="width: ${pct}%"></span>${ticks}</span>`;
+}
+
+/** The strip's line of a run at work (spec 102 §3): which batch, how far in it. */
+function runLabel(v: SortRunView): string {
+    const s = strings.materials.agentSort;
+    if (v.starting) return s.runStarting(v.batch, v.batches);
+    return v.batchDone !== undefined ? s.runBatch(v.batch, v.batches, v.batchDone, v.batchFiles) : s.runBatchFiles(v.batch, v.batches, v.batchFiles);
+}
 
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -182,7 +234,7 @@ export const materialSortMethods = uiModule({
     materialSortBusy(): boolean {
         const r = this.materialSortRemembered();
         if (!r || r.ended) return false;
-        return watch?.id === r.id ? running(watch.job) : true;
+        return watch?.id === sortKey(r) ? running(watch.job) : true;
     },
 
     /**
@@ -196,7 +248,7 @@ export const materialSortMethods = uiModule({
         const r = this.materialSortRemembered();
         if (!mc || !r || r.ended || !this.materialSortGate()) return null;
         this.materialSortWatch();
-        const job = watch?.id === r.id ? watch.job : null;
+        const job = watchedJob(r);
         const pending = job ? this.materialSortCounts(mc.treeId, r, job).open : 0;
         if (pending > 0) return 'ready';
         return running(job) ? 'run' : null;
@@ -218,7 +270,7 @@ export const materialSortMethods = uiModule({
         const mc = this.materialsContext();
         const r = this.materialSortRemembered();
         if (!mc || !r) return;
-        const job = watch?.id === r.id ? watch.job : null;
+        const job = watchedJob(r);
         const patch: Partial<ResearchAutoState> = { materialSort: undefined };
         if (job && hasProposal(job)) {
             const byId = this.materialSortItemMap(mc.treeId);
@@ -244,7 +296,7 @@ export const materialSortMethods = uiModule({
         const r = this.materialSortRemembered();
         if (!mc || !r) return;
         const s = strings.materials.agentSort;
-        const job = watch?.id === r.id ? watch.job : null;
+        const job = watchedJob(r);
         const n = job ? this.materialSortCounts(mc.treeId, r, job).open : 0;
         let closing = false;
         const dialog = materialDialog({ title: s.closeAsk, modifier: 'sortclose', onClose: () => { if (!closing) keep?.(); } });
@@ -571,10 +623,15 @@ export const materialSortMethods = uiModule({
     materialSortWatch(): void {
         const mc = this.materialsContext();
         const r = mc ? researchAutoState(mc.treeId).materialSort : undefined;
-        if (!mc || !r || r.ended) { if (watch && (!r || watch.id !== r.id)) this.materialSortStop(); return; }
-        if (watch && (watch.id !== r.id || watch.treeId !== mc.treeId)) this.materialSortStop();
-        if (!watch) watch = { treeId: mc.treeId, id: r.id, timer: null, job: null, busy: false };
-        if (watch.timer || watch.busy || (watch.job && !running(watch.job))) return;
+        if (!mc || !r || r.ended) { if (watch && (!r || watch.id !== sortKey(r))) this.materialSortStop(); return; }
+        const key = sortKey(r);
+        if (watch && (watch.id !== key || watch.treeId !== mc.treeId)) this.materialSortStop();
+        // A run (spec 102 §3): read again after a reload or the app's start too; it goes on in the research.
+        if (!watch) watch = { treeId: mc.treeId, id: key, timer: null, job: null, busy: false, ...(r.run?.id ? { run: null, jobs: new Map() } : {}) };
+        // The bridge came up (after a reload, the app's start): asked now, not after the long wait.
+        if (watch.timer && watch.down && mc.base && mc.caps.bridgeUp) { clearTimeout(watch.timer); watch.timer = null; }
+        if (watch.timer || watch.busy || (watch.job && !running(watch.job) && !watch.run)) return;
+        if (watch.run && !runViewOf(r)?.running && watch.job && !running(watch.job)) return;
         void this.materialSortTick();
     },
 
@@ -587,10 +644,12 @@ export const materialSortMethods = uiModule({
         const w = watch;
         if (!w) return;
         w.timer = null;
+        w.down = false;
         const mc = this.materialsContext();
         const again = (ms: number) => { if (watch === w) w.timer = setTimeout(() => void this.materialSortTick(), ms); };
         if (!mc || mc.treeId !== w.treeId) { this.materialSortStop(); return; }
-        if (!mc.base || !mc.caps.bridgeUp) { again(POLL_DOWN_MS); return; }
+        if (!mc.base || !mc.caps.bridgeUp) { again(POLL_DOWN_MS); w.down = true; return; }
+        if (w.jobs) { await this.materialSortRunTick(w, mc.base, again); return; }
         w.busy = true;
         const res = await fetchMaterialSort(mc.base, w.id);
         w.busy = false;
@@ -624,6 +683,70 @@ export const materialSortMethods = uiModule({
         this.refreshMaterialsWindow();
     },
 
+    /**
+     * A run of batches (spec 102 §3): the research keeps it and the app only
+     * reads it (GET). Each finished batch's sorting is read once; its
+     * proposals join the one proposal at its end, the remembered run moves on
+     * with the research (it outlives a reload).
+     */
+    async materialSortRunTick(w: NonNullable<typeof watch>, base: string, again: (ms: number) => void): Promise<void> {
+        const jobs = w.jobs!;
+        w.busy = true;
+        const res = await fetchMaterialSortRun(base, w.id);
+        if (watch !== w) { w.busy = false; return; }
+        if (!res.ok) {
+            w.busy = false;
+            if (res.error.status === 404) {
+                // The research no longer knows it: forgotten here too.
+                patchResearchAutoState(w.treeId, { materialSort: undefined });
+                this.materialSortStop();
+                this.refreshMaterialsWindow();
+                return;
+            }
+            again(POLL_DOWN_MS);
+            return;
+        }
+        w.run = res.value;
+        const r0 = researchAutoState(w.treeId).materialSort;
+        if (!r0?.run || sortKey(r0) !== w.id) { w.busy = false; return; }
+        const view = sortRunView(r0.run, res.value);
+        // The batches finished since: their proposals (a batch not read now is read with the next answer).
+        let missing = false;
+        for (const i of view.done) {
+            const id = view.sorts[i];
+            if (!id || jobs.has(id)) continue;
+            const one = await fetchMaterialSort(base, id);
+            if (watch !== w) { w.busy = false; return; }
+            if (one.ok) jobs.set(id, one.value);
+            else missing = true;
+        }
+        w.busy = false;
+        const was = w.job;
+        const state = view.running ? (res.value.state === 'queued' ? 'queued' : 'working') : res.value.state;
+        const job = sortJobsMerged(w.id, state, view.done.map(i => jobs.get(view.sorts[i])));
+        const current = res.value.parts.find(p => p.part === view.batch);
+        if (view.running && current?.filesDone !== undefined) job.filesDone = current.filesDone;
+        w.job = job;
+        // The remembered run moves on (what was decided meanwhile stays: read anew).
+        const r = researchAutoState(w.treeId).materialSort;
+        const moved = r && sortKey(r) === w.id ? sortRunAdvance(r, view) : null;
+        if (moved) patchResearchAutoState(w.treeId, { materialSort: moved });
+        if (view.running || missing) {
+            again(document.hidden ? POLL_HIDDEN_MS : POLL_MS);
+        } else if (hasProposal(job)) {
+            if (was && running(was)) {
+                this.showToast(strings.materials.agentSort.ready, TOAST_MS, {
+                    closable: true, kind: 'materials',
+                    action: { label: strings.materials.agentSort.open, run: () => void this.openSortProposal() },
+                });
+            }
+        } else if (r && sortKey(r) === w.id) {
+            patchResearchAutoState(w.treeId, { materialSort: { ...(moved ?? r), ended: res.value.state === 'cancelled' ? 'cancelled' : 'failed' } });
+        }
+        proposalRun?.(job);
+        this.refreshMaterialsWindow();
+    },
+
     /** Cancel the sorting; with proposals already made, whether to keep them (default) is asked. */
     async materialSortCancel(): Promise<void> {
         const mc = this.materialsContext();
@@ -633,7 +756,8 @@ export const materialSortMethods = uiModule({
         cancelAsking = true;
         let res: Awaited<ReturnType<typeof cancelMaterialSort>>;
         try {
-            res = await cancelMaterialSort(mc.base, w.id);
+            // A run (spec 102 §3): the batch at work stops, the waiting ones do not start.
+            res = w.jobs ? await cancelMaterialSortRun(mc.base, w.id) : await cancelMaterialSort(mc.base, w.id);
         } finally {
             cancelAsking = false;
         }
@@ -688,7 +812,7 @@ export const materialSortMethods = uiModule({
             };
         }
         if (r) this.materialSortWatch();
-        const job = r && watch?.id === r.id ? watch.job : null;
+        const job = watchedJob(r);
         const counts = r && job ? this.materialSortCounts(mc.treeId, r, job) : null;
         const byId = new Map(items.filter(i => i.file).map(i => [i.file!.id, i]));
         // E: the files the agent left unassigned (this proposal's, or remembered from the closed ones) still without a title or a person.
@@ -771,8 +895,10 @@ export const materialSortMethods = uiModule({
         // A number only when the research says how many files its readers have judged; else a progress without one.
         const counted = working && typeof job.filesDone === 'number' && total > 0;
         const k = counted ? Math.min(total, job.filesDone ?? 0) : 0;
-        const label = !working ? s.queued : counted ? s.run(k, total) : s.runFiles(total);
-        const bar = counted
+        // A run (spec 102 §3): which batch and how far in it, one bar for the whole run with a tick between batches.
+        const rv = runViewOf(r);
+        const label = rv ? runLabel(rv) : !working ? s.queued : counted ? s.run(k, total) : s.runFiles(total);
+        const bar = rv ? runBarHtml(rv, label) : counted
             ? `<span class="mw-sort-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${k}"><span style="width: ${Math.round((k / total) * 100)}%"></span></span>`
             : `<span class="mw-sort-bar is-indeterminate" role="progressbar" aria-label="${esc(label)}"><span></span></span>`;
         const n = counts?.open ?? 0;
@@ -817,13 +943,18 @@ export const materialSortMethods = uiModule({
         const mc = this.materialsContext();
         const r = this.materialSortRemembered();
         if (!mc || !r) return;
-        let job = watch?.id === r.id ? watch.job : null;
+        let job = watchedJob(r);
+        // A run (spec 102 §3): the proposals of the batches finished so far, while the next ones work.
+        if (r.run?.id) {
+            if (job?.files.length) this.materialSortProposalWindow(mc, r, job);
+            return;
+        }
         if (!hasProposal(job)) {
             if (!mc.base || !mc.caps.bridgeUp) return;
             const res = await fetchMaterialSort(mc.base, r.id);
             if (!res.ok || !hasProposal(res.value)) return;
             job = res.value;
-            if (watch?.id === r.id) watch.job = job;
+            if (watch?.id === sortKey(r)) watch.job = job;
         }
         if (job) this.materialSortProposalWindow(mc, r, job);
     },
@@ -834,7 +965,8 @@ export const materialSortMethods = uiModule({
     },
 
     /** `opts.tab`: the tab it opens on (back from Hide… of Unassigned). */
-    materialSortProposalWindow(mc: MaterialsContext, r: ResearchSortRemembered, job: SortJob, opts: { tab?: 'unassigned' } = {}): void {
+    materialSortProposalWindow(mc: MaterialsContext, r: ResearchSortRemembered, opened: SortJob, opts: { tab?: 'unassigned' } = {}): void {
+        let job = opened;
         const s = strings.materials.agentSort;
         const byId = this.materialSortItemMap(mc.treeId);
         const tree = sortTreeIndex(DataManager.getData(), personName);
@@ -846,24 +978,30 @@ export const materialSortMethods = uiModule({
             newSource: s.newSource,
         };
         const chipOf = (link: SortLink, title?: string) => sortChip(link, tree, names, title);
-        const rows = sortRows(job, id => byId.get(id) ?? null, chipOf);
         // A photo the agent says is a portrait of a person who has none yet: offered as a chip (spec 102 §10).
-        for (const row of rows) {
-            const it = row.item;
-            const ref = row.proposal?.portrait;
-            if (!ref || row.unrelated || !it || it.hidden) continue;
-            const image = it.attachment && !it.removedId ? isPortraitCandidate(it.attachment) : !it.attachment && materialType(it.file?.mime, it.name) === 'image';
-            const known = tree.person(ref);
-            const person = image && known ? DataManager.getPerson(known.id) : null;
-            if (!person || person.photo || !canEditPortrait(person.id)) continue;
-            row.portrait = { person: person.id, name: known!.name };
-        }
+        const withPortraits = (list: SortRow[]): SortRow[] => {
+            for (const row of list) {
+                const it = row.item;
+                const ref = row.proposal?.portrait;
+                if (!ref || row.unrelated || !it || it.hidden) continue;
+                const image = it.attachment && !it.removedId ? isPortraitCandidate(it.attachment) : !it.attachment && materialType(it.file?.mime, it.name) === 'image';
+                const known = tree.person(ref);
+                const person = image && known ? DataManager.getPerson(known.id) : null;
+                if (!person || person.photo || !canEditPortrait(person.id)) continue;
+                row.portrait = { person: person.id, name: known!.name };
+            }
+            return list;
+        };
+        // A run's batches finished later join at the end (spec 102 §3): the rows drawn stay where they are.
+        let rows = withPortraits(sortRows(job, id => byId.get(id) ?? null, chipOf));
+        /** The sorting as known now (a run's batches merged), else as opened. */
+        const jobNow = (): SortJob => watchedJob(this.materialSortRemembered()) ?? job;
         // Chips taken off a proposal (×): its back side, its portrait.
         const dropped = new Map<string, { back?: true; portrait?: true }>();
         const backOn = (row: SortRow) => !!row.back && !dropped.get(row.id)?.back;
         const portraitOn = (row: SortRow) => !!row.portrait && !dropped.get(row.id)?.portrait;
         // Why a file has no proposal, as the research says it (an older research says nothing: no reason shown).
-        const unproposed = new Map((job.unproposed ?? []).map(u => [u.id, u]));
+        let unproposed = new Map((job.unproposed ?? []).map(u => [u.id, u]));
         const decided: Record<string, 'accepted' | 'rejected'> = { ...r.decided };
         // What undoes each accepted row (Undo under Done): kept with the sorting, so it outlives a reload.
         const reverts: Record<string, unknown> = { ...(r.reverts ?? {}) };
@@ -873,15 +1011,20 @@ export const materialSortMethods = uiModule({
         let editing: string | null = null;
         let focusId: string | null = null;
 
-        const assigned = rows.filter(sortRowProposes);
-        // The files the agent says are not about the family first: Hide as Not about the family stands over them.
-        const unassignedAll = rows.filter(x => !sortRowProposes(x));
-        const unassigned = [...unassignedAll.filter(x => x.unrelated), ...unassignedAll.filter(x => !x.unrelated)];
+        let assigned: SortRow[] = [];
+        let unassigned: SortRow[] = [];
+        const split = () => {
+            assigned = rows.filter(sortRowProposes);
+            // The files the agent says are not about the family first: Hide as Not about the family stands over them.
+            const unassignedAll = rows.filter(x => !sortRowProposes(x));
+            unassigned = [...unassignedAll.filter(x => x.unrelated), ...unassignedAll.filter(x => !x.unrelated)];
+        };
+        split();
         const open = () => assigned.filter(x => !decided[x.id]);
         const done = () => assigned.filter(x => decided[x.id]);
         const remember = () => {
             const now = researchAutoState(mc.treeId).materialSort;
-            if (now?.id !== r.id) return;
+            if (!now || sortKey(now) !== sortKey(r)) return;
             const kept = Object.fromEntries(Object.entries(reverts).filter(([k]) => decided[k] === 'accepted'));
             const { reverts: _old, ...rest } = now;
             patchResearchAutoState(mc.treeId, { materialSort: { ...rest, decided: { ...decided }, ...(Object.keys(kept).length ? { reverts: kept } : {}) } });
@@ -902,8 +1045,8 @@ export const materialSortMethods = uiModule({
                 // Closed with nothing waiting and nothing at work: the proposal closes itself (spec 102 §6).
                 // Not when the window only steps aside (Hide…, Close the proposal…: it comes back or asks).
                 const now = this.materialSortRemembered();
-                const jobNow = watch?.id === r.id && watch.job ? watch.job : job;
-                if (!handover && now?.id === r.id && !open().length && !running(jobNow)) { this.materialSortForget(); return; }
+                if (proposalRun === absorb) proposalRun = null;
+                if (!handover && now && sortKey(now) === sortKey(r) && !open().length && !running(jobNow())) { this.materialSortForget(); return; }
                 this.refreshMaterialsWindow();
             },
         });
@@ -912,7 +1055,7 @@ export const materialSortMethods = uiModule({
         const reopen = () => {
             const now = this.materialsContext();
             const rNow = this.materialSortRemembered();
-            if (now && rNow?.id === r.id) this.materialSortProposalWindow(now, rNow, job, { tab: 'unassigned' });
+            if (now && rNow && sortKey(rNow) === sortKey(r)) this.materialSortProposalWindow(now, rNow, jobNow(), { tab: 'unassigned' });
         };
         // The window steps aside for a dialog that brings it back (it does not close the proposal then).
         let handover = false;
@@ -933,7 +1076,37 @@ export const materialSortMethods = uiModule({
         tabs.setAttribute('role', 'tablist');
         const list = h('div', 'msp-list');
         list.setAttribute('role', 'list');
-        dialog.body.append(tabs, list);
+        // A run at work (spec 102 §3): which batch runs, the run's bar, Cancel; new proposals join at the end and are said below.
+        const runLine = h('div', 'msp-run');
+        runLine.setAttribute('role', 'status');
+        runLine.hidden = true;
+        const runBody = h('span', 'msp-run-body');
+        const runCancel = h('button', 'link-button msp-run-cancel', strings.buttons.cancel);
+        runCancel.type = 'button';
+        runCancel.addEventListener('click', () => void runBusy(runCancel, () => this.materialSortCancel(), { label: strings.busy.cancelling, kind: 'bridge', toastWhenGone: true }));
+        runLine.append(runBody, runCancel);
+        const more = h('div', 'msp-more');
+        more.setAttribute('role', 'status');
+        more.setAttribute('aria-live', 'polite');
+        more.hidden = true;
+        const moreText = h('span', 'msp-more-text');
+        const moreShow = h('button', 'link-button msp-more-show', s.show);
+        moreShow.type = 'button';
+        more.append(moreText, moreShow);
+        /** The first of the proposals that joined last (Show goes to it). */
+        let moreFirst: string | null = null;
+        const moreHide = () => { more.hidden = true; moreFirst = null; };
+        moreShow.addEventListener('click', () => {
+            const first = moreFirst;
+            moreHide();
+            const el = first ? list.querySelector<HTMLElement>(`.msp-row[data-id="${CSS.escape(first)}"]`) : null;
+            if (!el) return;
+            focusId = first;
+            list.querySelectorAll<HTMLElement>('.msp-row').forEach(x => { x.tabIndex = x === el ? 0 : -1; });
+            el.scrollIntoView({ block: 'nearest' });
+            el.focus();
+        });
+        dialog.body.append(tabs, runLine, list, more);
         const foot = dialog.foot;
         const write = h('p', 'mdlg-note msp-write', s.write);
         const accSel = button('', 'msp-accept-sel', () => void accept([...selected]));
@@ -946,7 +1119,7 @@ export const materialSortMethods = uiModule({
             this.materialSortCloseAsk(() => {
                 const now = this.materialsContext();
                 const rNow = this.materialSortRemembered();
-                if (now && rNow?.id === r.id) this.materialSortProposalWindow(now, rNow, job);
+                if (now && rNow && sortKey(rNow) === sortKey(r)) this.materialSortProposalWindow(now, rNow, jobNow());
             });
         });
         const closeBtn = button(strings.buttons.close, 'msp-close', () => dialog.close());
@@ -1171,7 +1344,7 @@ export const materialSortMethods = uiModule({
         const drawFoot = () => {
             const n = open().length;
             // The end (spec 102 §5): closing the window closes the proposal, Close is the one action.
-            const end = n === 0 && !running(watch?.id === r.id && watch.job ? watch.job : job);
+            const end = n === 0 && !running(jobNow());
             write.textContent = end ? s.endFoot : s.write;
             closeLink.hidden = end;
             closeBtn.classList.toggle('is-primary', end);
@@ -1192,6 +1365,17 @@ export const materialSortMethods = uiModule({
             const rj = done().length - a;
             const box = h('div', 'msp-end');
             const head = h('div', 'msp-end-head');
+            // A run still at work (spec 102 §3, §5): what is done so far, and that more proposals will come.
+            const v = running(jobNow()) ? runNow() : null;
+            if (v) {
+                head.append(h('h3', 'msp-end-title', s.endSoFar(a, rj)), h('p', 'msp-end-sub', s.endRunSoFar(v.done.length, v.batches, rows.length)));
+                const sec = h('div', 'msp-end-sec');
+                const line = h('div', 'msp-run msp-end-run');
+                line.innerHTML = runInner(v, s.moreComing(v.batch, v.batches));
+                sec.append(line, h('p', 'mdlg-note', s.runNote));
+                box.append(head, sec);
+                return box;
+            }
             head.append(h('h3', 'msp-end-title', s.endTitle(a, rj, unassigned.length)),
                 h('p', 'msp-end-sub', s.endRun(r.run?.batches.length ?? 1, r.run ? r.run.batches.reduce((t, b) => t + b.length, 0) : rows.length)));
             box.appendChild(head);
@@ -1217,7 +1401,8 @@ export const materialSortMethods = uiModule({
                 const go = button(label, 'is-primary msp-sort-next', () => {
                     // Closing the window closes the proposal (nothing waits), then the dialog opens.
                     dialog.close();
-                    if (this.materialSortRemembered()?.id === r.id) this.materialSortForget();
+                    const rNow = this.materialSortRemembered();
+                    if (rNow && sortKey(rNow) === sortKey(r)) this.materialSortForget();
                     this.openSortDialog({ items: next, batch: null, whole: true });
                 });
                 go.innerHTML = researchBridgeActionLabel(label, 'material-sort');
@@ -1259,15 +1444,20 @@ export const materialSortMethods = uiModule({
             return box;
         };
 
-        const draw = () => {
+        const drawTabs = () => {
             const counts = { proposals: open().length, unassigned: unassigned.length, done: done().length };
+            const had = (tabs.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.tab : null) ?? null;
             tabs.replaceChildren(...(['proposals', 'unassigned', 'done'] as const).map(t => {
-                const b = button(s.tabs[t](counts[t]), `msp-tab sel-tab${t === tab ? ' is-active' : ''}`, () => { tab = t; editing = null; focusId = null; draw(); });
+                const b = button(s.tabs[t](counts[t]), `msp-tab sel-tab${t === tab ? ' is-active' : ''}`, () => { tab = t; editing = null; focusId = null; moreHide(); draw(); });
                 b.setAttribute('role', 'tab');
                 b.dataset.tab = t;
                 b.setAttribute('aria-selected', String(t === tab));
                 return b;
             }));
+            if (had) tabs.querySelector<HTMLElement>(`[data-tab="${had}"]`)?.focus();
+        };
+        const draw = () => {
+            drawTabs();
             const shown = tab === 'proposals' ? open() : tab === 'unassigned' ? unassigned : done();
             if (!focusId || !shown.some(x => x.id === focusId)) focusId = shown[0]?.id ?? null;
             const children: HTMLElement[] = [];
@@ -1290,10 +1480,12 @@ export const materialSortMethods = uiModule({
                 children.push(head);
             }
             children.push(...shown.map(rowEl));
-            if (!shown.length) children.push(tab === 'proposals' && !running(watch?.id === r.id && watch.job ? watch.job : job) ? endEl() : h('p', 'msp-empty', s.empty));
+            // The end (spec 102 §5); a run still at work: what is done so far and that more will come (§3).
+            if (!shown.length) children.push(tab === 'proposals' && (!running(jobNow()) || r.run?.id) ? endEl() : h('p', 'msp-empty', s.empty));
             list.replaceChildren(...children);
             drawnKey = shownKey();
             drawFoot();
+            drawRun();
             if (editing) return;
             const f = list.querySelector<HTMLElement>(`.msp-row[data-id="${CSS.escape(focusId ?? '')}"]`);
             if (f && list.contains(document.activeElement)) f.focus();
@@ -1560,6 +1752,78 @@ export const materialSortMethods = uiModule({
             draw();
         };
         proposalRedraw = redraw;
+
+        /** Where this proposal's run is now (spec 102 §3); null without a run. */
+        function runNow(): SortRunView | null {
+            const now = researchAutoState(mc.treeId).materialSort ?? null;
+            return now && sortKey(now) === sortKey(r) ? runViewOf(now) : null;
+        }
+        /** A run's line: what it says, the run's bar, how far the batch at work is. */
+        function runInner(v: SortRunView, label: string): string {
+            const k = v.batchDone !== undefined ? `<span class="mw-sort-note">${esc(strings.materials.countOf(v.batchDone, v.batchFiles))}</span>` : '';
+            return `<span class="mw-sort-run">${esc(label)}</span>${runBarHtml(v, label)}${k}`;
+        }
+        /** The run's line over the list while it works; the end below says it when nothing waits (spec 102 §3, §5). */
+        function drawRun(): void {
+            const v = running(jobNow()) ? runNow() : null;
+            const endShown = tab === 'proposals' && !open().length;
+            runLine.hidden = !v || endShown;
+            if (v && !endShown) {
+                const html = runInner(v, s.runInWindow(v.batch, v.batches));
+                if (runBody.innerHTML !== html) runBody.innerHTML = html;
+            }
+            const endRun = list.querySelector<HTMLElement>('.msp-end-run');
+            if (v && endRun) {
+                const html = runInner(v, s.moreComing(v.batch, v.batches));
+                if (endRun.innerHTML !== html) endRun.innerHTML = html;
+            }
+        }
+        /**
+         * A run's batch finished (spec 102 §3): its rows join at the end, the
+         * list does not jump and the focus stays; "N proposals from batch b
+         * arrived" with Show says it while proposals are being gone through.
+         */
+        const absorb = (fresh: SortJob) => {
+            const wasRunning = running(job);
+            job = fresh;
+            const known = new Set(rows.map(x => x.id));
+            const items = this.materialSortItemMap(mc.treeId);
+            const added = withPortraits(sortRows(fresh, id => items.get(id) ?? byId.get(id) ?? null, chipOf).filter(x => !known.has(x.id)));
+            const openBefore = open().length;
+            if (added.length) {
+                rows = [...rows, ...added];
+                for (const u of fresh.unproposed ?? []) if (!unproposed.has(u.id)) unproposed.set(u.id, u);
+                split();
+                const sub = dialog.box.querySelector<HTMLElement>('.mdlg-head .mdlg-sub:not(.msp-know)');
+                if (sub) sub.textContent = [r.batch ?? '', s.propSub(rows.length, assigned.length, unassigned.length)].filter(Boolean).join(' · ');
+                const proposed = added.filter(sortRowProposes);
+                const runR = researchAutoState(mc.treeId).materialSort?.run ?? r.run;
+                const batch = proposed.length && runR ? runR.batches.findIndex(b => b.includes(proposed[0].id)) + 1 : 0;
+                if (proposed.length && openBefore > 0 && tab === 'proposals' && batch > 0) {
+                    moreText.textContent = s.moreArrived(proposed.length, batch);
+                    moreFirst = proposed[0].id;
+                    more.hidden = false;
+                }
+            }
+            if (editing) { drawRun(); return; }
+            if (added.length && tab === 'proposals' && openBefore > 0) {
+                // The rows drawn stay as they are: the new ones join at the end.
+                for (const row of added.filter(x => sortRowProposes(x) && !decided[x.id])) list.appendChild(rowEl(row));
+                drawnKey = shownKey();
+                drawTabs();
+                drawFoot();
+                drawRun();
+                return;
+            }
+            if (added.length || wasRunning !== running(fresh)) {
+                const had = list.contains(document.activeElement);
+                draw();
+                if (had) list.querySelector<HTMLElement>(`.msp-row[data-id="${CSS.escape(focusId ?? '')}"]`)?.focus();
+                return;
+            }
+            drawRun();
+        };
+        proposalRun = absorb;
 
         draw();
         list.querySelector<HTMLElement>('.msp-row')?.focus();

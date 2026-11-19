@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { parseSortJob, parseMaterialFile, startMaterialSort, parseSortRun, type MaterialItem, type SortLink } from '../materials.js';
-import { sortNeeds, sortNeedy, sortNext, sortLeftMap, sortCopyOf, sortIsText, SORT_MAX_BATCHES, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, sortBackRow, parseSortRevert, sortUnrelatedHideable, sortRunBatches, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
+import { parseSortJob, parseMaterialFile, startMaterialSort, parseSortRun, type MaterialItem, type SortLink, type SortJob } from '../materials.js';
+import { sortRememberedFrom, type ResearchSortRemembered } from '../research-device.js';
+import { sortNeeds, sortNeedy, sortNext, sortLeftMap, sortCopyOf, sortIsText, SORT_MAX_BATCHES, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, sortBackRow, parseSortRevert, sortUnrelatedHideable, sortRunBatches, sortJobsMerged, sortRunView, sortRunAdvance, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
 import type { PartnershipId } from '../types.js';
 import type { Attachment, PersonId } from '../types.js';
 
@@ -609,5 +610,82 @@ describe('a run of batches (spec 102 §3, material.sortRun)', () => {
         expect(run?.waiting).toEqual({ why: 'read.app', retry: 60 });
         expect(parseSortRun({ id: 'sort-20261119080000-0001', state: 'done', parts: [] })).toBeNull();
         expect(parseSortRun({ id: 'run-1', state: 'whatever', parts: [] })).toBeNull();
+    });
+});
+
+describe('a run of batches as it goes (spec 102 §3)', () => {
+    const ids = (n: number, from = 1) => Array.from({ length: n }, (_, i) => `I${String(i + from).padStart(4, '0')}`);
+    const batches = sortRunBatches(ids(120));
+    const SORTS = ['sort-20261119080000-0001', 'sort-20261119080000-0002', 'sort-20261119080000-0003'];
+    const run = { id: 'run-20261119080000-ab12', batches, sorts: SORTS, next: 0, scope: 'all' as const };
+    const state = (parts: { state: string; filesDone?: number }[], over: Record<string, unknown> = {}) => parseSortRun({
+        id: run.id, run: true, state: parts.some(p => p.state === 'working') ? 'working' : parts.some(p => p.state === 'queued') ? 'queued' : 'done',
+        files: 120, filesDone: parts.reduce((t, p, i) => t + (p.state === 'done' ? batches[i].length : p.filesDone ?? 0), 0),
+        parts: parts.map((p, i) => ({ id: SORTS[i], part: i + 1, files: batches[i].length, ...p })), ...over,
+    });
+    const job = (i: number, proposals: string[], unproposed: string[] = []): SortJob => ({
+        id: SORTS[i], state: 'done', files: batches[i], at: `2026-11-19T08:0${i}:00Z`,
+        proposals: proposals.map(id => ({ id, links: [], why: '', sure: 'high' })) as unknown as SortJob['proposals'],
+        ...(unproposed.length ? { unproposed: unproposed.map(id => ({ id, why: 'nothing-said' as const })) } : {}),
+    });
+
+    it('merges the finished batches into one proposal, in batch order; a batch not read yet is left out', () => {
+        const merged = sortJobsMerged(run.id, 'working', [job(0, ['I0001', 'I0002'], ['I0003']), undefined, job(1, ['I0051'])]);
+        expect(merged.id).toBe(run.id);
+        expect(merged.state).toBe('working');
+        expect(merged.files).toEqual([...batches[0], ...batches[1]]);
+        expect(merged.proposals.map(p => p.id)).toEqual(['I0001', 'I0002', 'I0051']);
+        expect(merged.unproposed).toEqual([{ id: 'I0003', why: 'nothing-said' }]);
+        expect(merged.at).toBe('2026-11-19T08:00:00Z');
+        const none = sortJobsMerged(run.id, 'queued', []);
+        expect(none.files).toEqual([]);
+        expect(none).not.toHaveProperty('unproposed');
+    });
+
+    it('which batch runs and how far: one bar for the whole run, a tick between batches', () => {
+        const first = sortRunView(run, state([{ state: 'working', filesDone: 12 }, { state: 'queued' }, { state: 'queued' }]));
+        expect(first).toMatchObject({ batch: 1, batches: 3, next: 0, running: true, starting: false, batchFiles: 50, batchDone: 12, files: 120, filesDone: 12, done: [] });
+        expect(first.marks).toEqual([41.7, 83.3]);
+        // Between batches: the next one is starting; what is done counts whole.
+        const between = sortRunView(run, state([{ state: 'done' }, { state: 'queued' }, { state: 'queued' }]));
+        expect(between).toMatchObject({ batch: 2, next: 1, running: true, starting: true, filesDone: 50, done: [0] });
+        expect(between).not.toHaveProperty('batchDone');
+        // The research does not say the files judged in the batch: no number.
+        const unsaid = sortRunView(run, state([{ state: 'done' }, { state: 'working' }, { state: 'queued' }]));
+        expect(unsaid.starting).toBe(false);
+        expect(unsaid.batchDone).toBeUndefined();
+        // The last one: 20 files; more than sent is never said.
+        const last = sortRunView(run, state([{ state: 'done' }, { state: 'done' }, { state: 'working', filesDone: 99 }]));
+        expect(last).toMatchObject({ batch: 3, next: 2, batchFiles: 20, batchDone: 20, filesDone: 120, done: [0, 1] });
+        const end = sortRunView(run, state([{ state: 'done' }, { state: 'done' }, { state: 'done' }]));
+        expect(end).toMatchObject({ batch: 3, next: 3, running: false, starting: false, filesDone: 120, done: [0, 1, 2] });
+    });
+
+    it('before the research answers (a reload): as remembered, the batch next to run starting', () => {
+        expect(sortRunView({ ...run, next: 1 }, null)).toMatchObject({ batch: 2, next: 1, running: true, starting: true, filesDone: 50, done: [0] });
+        expect(sortRunView({ ...run, next: 3 }, null)).toMatchObject({ batch: 3, running: false, done: [0, 1, 2] });
+    });
+
+    it('the remembered run moves on with the research and outlives a reload, what was decided stays', () => {
+        const r: ResearchSortRemembered = {
+            id: SORTS[0], files: batches[0], text: 'Talvanen box', at: '2026-11-19T08:00:00Z', decided: { I0001: 'accepted' }, run,
+        };
+        expect(sortRunAdvance(r, sortRunView(run, state([{ state: 'working', filesDone: 12 }, { state: 'queued' }, { state: 'queued' }])))).toBeNull();
+        const moved = sortRunAdvance(r, sortRunView(run, state([{ state: 'done' }, { state: 'working', filesDone: 3 }, { state: 'queued' }])))!;
+        expect(moved.id).toBe(SORTS[1]);
+        expect(moved.files).toEqual(batches[1]);
+        expect(moved.run).toMatchObject({ id: run.id, next: 1, sorts: SORTS });
+        expect(moved.decided).toEqual({ I0001: 'accepted' });
+        // Stored and read back after a reload: the run, where it is, what was decided.
+        const back = sortRememberedFrom(JSON.parse(JSON.stringify(moved)))!;
+        expect(back.run).toEqual(moved.run);
+        expect(back.id).toBe(SORTS[1]);
+        expect(back.decided).toEqual({ I0001: 'accepted' });
+        expect(sortRunView(back.run!, null)).toMatchObject({ batch: 2, starting: true, filesDone: 50 });
+        // Every batch done: the last one stays the remembered sorting.
+        const done = sortRunAdvance(moved, sortRunView(moved.run!, state([{ state: 'done' }, { state: 'done' }, { state: 'done' }])))!;
+        expect(done.run!.next).toBe(3);
+        expect(done.id).toBe(SORTS[2]);
+        expect(sortRunAdvance({ ...r, run: undefined }, sortRunView(run, null))).toBeNull();
     });
 });

@@ -3028,7 +3028,7 @@ const stringsEN = {
         agentSort: {
             sort: 'Sort with the agent…',
             go: 'Sort with the agent',
-            stripWhole: (n: number) => `${nEn(n, 'file', 'files')} without title or person`,
+            stripWhole: (n: number) => `${numEn(n)} ${plural('en', n, 'file', 'files')} without title or person`,
             closeWhole: 'Close the offer',
             // The one strip of sorting and the proposal's end (spec 102 §1, §5, §6).
             stripAdded: (k: number, n: number) => `${nEn(k, 'file', 'files')} added · ${numEn(n)} without title or person`,
@@ -3046,7 +3046,9 @@ const stringsEN = {
             readOnlyNote: 'The tree is read-only.',
             phoneShort: 'The proposal is in the app on the computer.',
             endTitle: (a: number, r: number, u: number) => `Done · ${numEn(a)} accepted · ${numEn(r)} rejected · ${numEn(u)} unassigned`,
-            endRun: (nb: number, n: number) => `For the whole run: ${nEn(nb, 'batch', 'batches')} · ${nEn(n, 'file', 'files')}`,
+            endRun: (nb: number, n: number) => `For the whole run: ${numEn(nb)} ${plural('en', nb, 'batch', 'batches')} · ${numEn(n)} ${plural('en', n, 'file', 'files')}`,
+            endSoFar: (a: number, r: number) => `Everything finished is handled · ${numEn(a)} accepted · ${numEn(r)} rejected`,
+            endRunSoFar: (b: number, nb: number, n: number) => `So far ${numEn(b)} of ${numEn(nb)} batches · ${numEn(n)} ${plural('en', n, 'file', 'files')}`,
             restLine: (n: number) => `${nEn(n, 'unsorted file is', 'unsorted files are')} left in the archive`,
             restNote: 'This closes the proposal and opens the Sort with the agent dialog.',
             leftLine: (n: number) => `The agent did not assign ${nEn(n, 'file', 'files')}`,
@@ -13248,7 +13250,7 @@ const stringsCZ: StringsType = {
         agentSort: {
             sort: 'Roztřídit agentem…',
             go: 'Roztřídit agentem',
-            stripWhole: (n: number) => `${nCs(n, 'soubor', 'soubory', 'souborů')} bez titulku nebo osoby`,
+            stripWhole: (n: number) => `${numCs(n)} ${plural('cs', n, 'soubor', 'soubory', 'souborů')} bez titulku nebo osoby`,
             closeWhole: 'Zavřít nabídku',
             // The one strip of sorting and the proposal's end (spec 102 §1, §5, §6).
             stripAdded: (k: number, n: number) => `${plural('cs', k, 'Přidán', 'Přidány', 'Přidáno')} ${nCs(k, 'soubor', 'soubory', 'souborů')} · ${numCs(n)} bez titulku nebo osoby`,
@@ -13267,7 +13269,9 @@ const stringsCZ: StringsType = {
             readOnlyNote: 'Strom je jen ke čtení.',
             phoneShort: 'Návrh je v aplikaci na počítači.',
             endTitle: (a: number, r: number, u: number) => `Hotovo · přijato ${numCs(a)} · odmítnuto ${numCs(r)} · nepřiřazeno ${numCs(u)}`,
-            endRun: (nb: number, n: number) => `Za celý běh: ${nCs(nb, 'dávka', 'dávky', 'dávek')} · ${nCs(n, 'soubor', 'soubory', 'souborů')}`,
+            endRun: (nb: number, n: number) => `Za celý běh: ${numCs(nb)} ${plural('cs', nb, 'dávka', 'dávky', 'dávek')} · ${numCs(n)} ${plural('cs', n, 'soubor', 'soubory', 'souborů')}`,
+            endSoFar: (a: number, r: number) => `Vyřízeno vše hotové · přijato ${numCs(a)} · odmítnuto ${numCs(r)}`,
+            endRunSoFar: (b: number, nb: number, n: number) => `Zatím ${numCs(b)} ${plural('cs', b, 'dávka', 'dávky', 'dávek')} ${zeCs(nb)} ${numCs(nb)} · ${numCs(n)} ${plural('cs', n, 'soubor', 'soubory', 'souborů')}`,
             restLine: (n: number) => `V archivu ${plural('cs', n, 'zbývá', 'zbývají', 'zbývá')} ${nCs(n, 'nezařazený soubor', 'nezařazené soubory', 'nezařazených souborů')}`,
             restNote: 'Návrh se tím uzavře a otevře se dialog Roztřídit agentem.',
             leftLine: (n: number) => `${nCs(n, 'soubor', 'soubory', 'souborů')} agent nezařadil`,
@@ -23324,7 +23328,7 @@ const stringsDE: StringsType = {
         agentSort: {
             sort: 'Mit dem Agenten sortieren…',
             go: 'Mit dem Agenten sortieren',
-            stripWhole: (n: number) => `${nDe(n, 'Datei', 'Dateien')} ohne Titel oder Person`,
+            stripWhole: (n: number) => `${numDe(n)} ${plural('de', n, 'Datei', 'Dateien')} ohne Titel oder Person`,
             closeWhole: 'Angebot schließen',
             // The one strip of sorting and the proposal's end (spec 102 §1, §5, §6).
             stripAdded: (k: number, n: number) => `${nDe(k, 'Datei', 'Dateien')} hinzugefügt · ${numDe(n)} ohne Titel oder Person`,
@@ -23342,7 +23346,9 @@ const stringsDE: StringsType = {
             readOnlyNote: 'Der Baum ist schreibgeschützt.',
             phoneShort: 'Der Vorschlag ist in der App am Computer.',
             endTitle: (a: number, r: number, u: number) => `Fertig · ${numDe(a)} angenommen · ${numDe(r)} abgelehnt · ${numDe(u)} nicht zugeordnet`,
-            endRun: (nb: number, n: number) => `Für den ganzen Lauf: ${numDe(nb)} Stapel · ${nDe(n, 'Datei', 'Dateien')}`,
+            endRun: (nb: number, n: number) => `Für den ganzen Lauf: ${numDe(nb)} Stapel · ${numDe(n)} ${plural('de', n, 'Datei', 'Dateien')}`,
+            endSoFar: (a: number, r: number) => `Alles Fertige erledigt · ${numDe(a)} angenommen · ${numDe(r)} abgelehnt`,
+            endRunSoFar: (b: number, nb: number, n: number) => `Bisher ${numDe(b)} von ${numDe(nb)} Stapeln · ${numDe(n)} ${plural('de', n, 'Datei', 'Dateien')}`,
             restLine: (n: number) => `Im Archiv ${n === 1 ? 'bleibt' : 'bleiben'} ${nDe(n, 'nicht eingeordnete Datei', 'nicht eingeordnete Dateien')}`,
             restNote: 'Damit wird der Vorschlag geschlossen und der Dialog „Mit dem Agenten sortieren“ öffnet sich.',
             leftLine: (n: number) => `${nDe(n, 'Datei', 'Dateien')} hat der Agent nicht zugeordnet`,

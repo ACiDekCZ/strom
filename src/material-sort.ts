@@ -9,7 +9,8 @@
  */
 
 import type { MaterialItem } from './materials.js';
-import { SORT_MAX_FILES, fileExt, materialFolder, materialType, type SortJob, type SortLink, type SortProposal } from './materials.js';
+import { SORT_MAX_FILES, fileExt, materialFolder, materialType, type SortJob, type SortLink, type SortProposal, type SortRunState, type SortState } from './materials.js';
+import type { ResearchSortRemembered, ResearchSortRun } from './research-device.js';
 import type { MaterialKind, MediaBy, MediaPlace, PartnershipId, PersonId, StromData } from './types.js';
 import { researchPersonRef } from './research-link.js';
 
@@ -255,6 +256,106 @@ export function sortLeftIds(rows: readonly SortRow[], unproposed: readonly { id:
     return rows.filter(r => !decided[r.id] && !sortRowProposes(r))
         .filter(r => { const w = why.get(r.id); return w !== 'left-out' && w !== 'reader-failed'; })
         .map(r => ({ id: r.id, ...(r.unrelated ? { why: 'unrelated' } : why.get(r.id) ? { why: why.get(r.id)! } : {}) }));
+}
+
+/**
+ * A run's batches as one proposal (spec 102 §3): the files, proposals and
+ * files without a proposal of the batches finished so far, in batch order.
+ * `state` is the run's (a run still at work is still at work).
+ */
+export function sortJobsMerged(id: string, state: SortState, jobs: readonly (SortJob | null | undefined)[]): SortJob {
+    const got = jobs.filter((j): j is SortJob => !!j);
+    const unproposed = got.flatMap(j => j.unproposed ?? []);
+    return {
+        id, state, at: got[0]?.at ?? '',
+        files: got.flatMap(j => j.files), proposals: got.flatMap(j => j.proposals),
+        ...(unproposed.length ? { unproposed } : {}),
+    };
+}
+
+/** Where a run of batches is (spec 102 §3): the strip's and the proposal window's line and bar. */
+export interface SortRunView {
+    /** The batch at work or next to start (1…), the last one once none is left. */
+    batch: number;
+    batches: number;
+    /** The index of the batch at work or next to start; `batches` once none is left. */
+    next: number;
+    /** The run still works (a batch at work or waiting). */
+    running: boolean;
+    /** The batch next has not started yet (it waits its turn). */
+    starting: boolean;
+    /** The files of the batch at work and how many its readers judged (undefined: the research does not say). */
+    batchFiles: number;
+    batchDone?: number;
+    /** The whole run's files and those judged: the bar's value. */
+    files: number;
+    filesDone: number;
+    /** Where one batch ends and the next starts, in % of the bar (one fewer than batches). */
+    marks: number[];
+    /** The batches finished (index): their proposals can be gone through. */
+    done: number[];
+    /** The sortings of the batches as the research says them (index = batch); missing ones as remembered. */
+    sorts: string[];
+}
+
+const liveState = (s: SortState): boolean => s === 'queued' || s === 'working';
+
+/**
+ * A run as the research says it (`GET /material/sort/<run-…>`), over the
+ * batches the app remembers; without the research's word yet (a reload,
+ * the first read), as remembered.
+ */
+export function sortRunView(run: Pick<ResearchSortRun, 'batches' | 'sorts' | 'next'>, state: SortRunState | null): SortRunView {
+    const nb = run.batches.length;
+    const byIndex = new Map((state?.parts ?? []).map(p => [p.part - 1, p]));
+    const sizes = run.batches.map((b, i) => byIndex.get(i)?.files || b.length);
+    const files = sizes.reduce((t, n) => t + n, 0);
+    const marks: number[] = [];
+    for (let i = 0, at = 0; i < nb - 1; i++) {
+        at += sizes[i];
+        marks.push(files ? Math.round((at / files) * 1000) / 10 : 0);
+    }
+    const sorts = run.batches.map((_, i) => byIndex.get(i)?.id ?? run.sorts[i] ?? '');
+    let next: number;
+    let done: number[];
+    let running: boolean;
+    if (state) {
+        next = run.batches.findIndex((_, i) => { const p = byIndex.get(i); return !p || liveState(p.state); });
+        if (next < 0) next = nb;
+        done = run.batches.map((_, i) => i).filter(i => byIndex.get(i)?.state === 'done');
+        running = liveState(state.state) && next < nb;
+    } else {
+        next = Math.min(run.next, nb);
+        done = run.batches.map((_, i) => i).filter(i => i < next);
+        running = next < nb;
+    }
+    const at = Math.min(next, nb - 1);
+    const part = byIndex.get(at);
+    const starting = running && (!part || part.state === 'queued');
+    const batchDone = running && part?.state === 'working' && part.filesDone !== undefined ? Math.min(part.filesDone, sizes[at]) : undefined;
+    const before = sizes.slice(0, Math.min(next, nb)).reduce((t, n) => t + n, 0);
+    const filesDone = Math.min(files, state ? Math.max(state.filesDone, before + (batchDone ?? 0)) : before);
+    return {
+        batch: at + 1, batches: nb, next, running, starting, batchFiles: sizes[at] ?? 0,
+        ...(batchDone !== undefined ? { batchDone } : {}),
+        files, filesDone, marks, done, sorts,
+    };
+}
+
+/**
+ * The remembered sorting moved on with its run (spec 102 §3): the batch at
+ * work (its sorting and files) and the next index; null when nothing moved.
+ * What was decided stays.
+ */
+export function sortRunAdvance(r: ResearchSortRemembered, view: SortRunView): ResearchSortRemembered | null {
+    const run = r.run;
+    if (!run) return null;
+    const at = Math.min(view.next, run.batches.length - 1);
+    const sorts = view.sorts.map((id, i) => id || run.sorts[i] || '').filter(Boolean);
+    const id = sorts[at] ?? r.id;
+    const files = run.batches[at] ?? r.files;
+    if (run.next === view.next && r.id === id && sorts.join() === run.sorts.join()) return null;
+    return { ...r, id, files, run: { ...run, next: view.next, sorts } };
 }
 
 export interface SortField<T> {

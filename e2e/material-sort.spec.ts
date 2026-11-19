@@ -1298,3 +1298,141 @@ test.describe('Sort with the agent: the dialog\'s scope and batches (spec 102 §
         });
     });
 });
+
+test.describe('Sort with the agent: a run of batches as it goes (spec 102 §3)', () => {
+    test.use({ viewport: DESKTOP });
+    const RUN = [...SORT_FEATURES, 'material.sortRun', 'material.left', 'material.sourceOf'];
+    const OTHER = { id: 'b-87654321', name: 'Dopisy Quellmayer', at: '2026-11-12T09:00:00Z' };
+    /** 117 photos without a title or a person: with the 3 files of BATCH (none has a person) 120 files, 3 batches (50, 50, 20). */
+    const photos = () => Array.from({ length: 117 }, (_, i) => materialFile(100 + i, { batch: OTHER.id, path: `Talvanen/${String(i).padStart(4, '0')}.jpg` }));
+    const bar = (page: Page) => strip(page).locator('.mw-sort-bar.is-run');
+    const runPart = (m: FakeMaterial, k: number) => {
+        const run = [...m.sortRuns!.values()][0];
+        return m.sortJobs!.get(run.parts[k])!;
+    };
+    /** Lets the run take one step (each GET of the run is one) and holds it there. */
+    const step = async (m: FakeMaterial, k: number, state: string) => {
+        m.sortRunHold = false;
+        await expect.poll(() => runPart(m, k).state, { timeout: 10_000 }).toBe(state);
+        m.sortRunHold = true;
+    };
+    /** Proposals for the first files of each batch: 2 in batch 1, 3 in batch 2, 1 in batch 3. */
+    const propose = (m: FakeMaterial) => {
+        m.sortProposals = [2, 3, 1].flatMap((n, k) => runPart(m, k).files.slice(0, n).map((id, i) => ({
+            id, title: `Talvanen letter ${k + 1}.${i + 1}`, links: [{ type: 'person', ref: 'P0001' }], why: 'The same hand', sure: 'high',
+        })));
+    };
+    const start = async (page: Page) => {
+        const material = await setup(page, { features: RUN, batches: [OTHER], files: photos() });
+        material.sortRunHold = true;
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        await expect(sortDialog(page).locator('.mdlg-title')).toHaveText('Sort with the agent · 120 files');
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect.poll(() => material.sortRuns?.size).toBe(1);
+        propose(material);
+        return material;
+    };
+
+    test('one bar with a tick between batches; finished batches\' proposals join at the end, said below; the end of the window for the whole run', async ({ page }) => {
+        const material = await start(page);
+        expect(material.sorts).toHaveLength(1);
+        expect(material.sorts![0].ids as string[]).toHaveLength(120);
+
+        // Batch 1 of 3 starting: one bar for the run (120 files), ticks where a batch ends.
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent is sorting · batch 1 of 3 is starting');
+        await expect(bar(page)).toHaveAttribute('aria-valuemax', '120');
+        await expect(bar(page)).toHaveAttribute('aria-valuenow', '0');
+        await expect(bar(page).locator('i')).toHaveCount(2);
+        expect(await bar(page).locator('i').evaluateAll(els => els.map(e => (e as HTMLElement).style.left))).toEqual(['41.7%', '83.3%']);
+
+        await step(material, 0, 'working');
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent is sorting · batch 1 of 3 · 12 of 50');
+        await expect(bar(page)).toHaveAttribute('aria-valuenow', '12');
+        await expect(strip(page).locator('[data-sort="open"]')).toHaveCount(0);
+
+        // Batch 1 done: its proposals wait (C) while batch 2 starts.
+        await step(material, 0, 'done');
+        await expect(strip(page)).toHaveAttribute('data-state', 'C');
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent is sorting · batch 2 of 3 is starting');
+        await expect(bar(page)).toHaveAttribute('aria-valuenow', '50');
+        await strip(page).locator('[data-sort="open"]').click();
+        const p = proposal(page);
+        await expect(p.locator('.msp-list .msp-row')).toHaveCount(2);
+        await expect(p.locator('.msp-tab[data-tab="proposals"]')).toContainText('2');
+        await expect(p.locator('.msp-run .mw-sort-run')).toHaveText('Batch 2 of 3 is running · more proposals will come');
+        await expect(p.locator('.msp-run .mw-sort-bar.is-run')).toHaveAttribute('aria-valuenow', '50');
+        await expect(p.locator('.msp-more')).toBeHidden();
+
+        // Batch 2 done while the proposals are gone through: they join at the end, the focus stays, a line says so.
+        const first = p.locator('.msp-list .msp-row').first();
+        const firstId = await first.getAttribute('data-id');
+        await first.focus();
+        await step(material, 1, 'working');
+        await expect(p.locator('.msp-run .mw-sort-note')).toHaveText('12 of 50');
+        await step(material, 1, 'done');
+        await expect(p.locator('.msp-list .msp-row')).toHaveCount(5);
+        await expect(p.locator('.msp-tab[data-tab="proposals"]')).toContainText('5');
+        await expect(p.locator('.msp-more')).toBeVisible();
+        await expect(p.locator('.msp-more-text')).toHaveText('3 proposals from batch 2 arrived: they are at the end of the list.');
+        await expect(p.locator(`.msp-list .msp-row[data-id="${firstId}"]`)).toBeFocused();
+        await expect(p.locator('.msp-list .msp-row').nth(2).locator('.msp-title')).toHaveText('Talvanen letter 2.1');
+        await expect(p.locator('.msp-run .mw-sort-run')).toHaveText('Batch 3 of 3 is running · more proposals will come');
+        // Show goes to the first of them.
+        await p.locator('.msp-more-show').click();
+        await expect(p.locator('.msp-more')).toBeHidden();
+        await expect(p.locator('.msp-list .msp-row').nth(2)).toBeFocused();
+
+        // Everything finished handled while batch 3 runs: so far, and more will come.
+        await p.locator('.msp-accept-all').click();
+        await expect(p.locator('.msp-end-title')).toHaveText('Everything finished is handled · 5 accepted · 0 rejected');
+        await expect(p.locator('.msp-end-sub')).toHaveText('So far 2 of 3 batches · 100 files');
+        await expect(p.locator('.msp-end .msp-run .mw-sort-run')).toHaveText('More proposals will come: batch 3 of 3 is running');
+        await expect(p.locator('.msp-run:not(.msp-end-run)')).toBeHidden();
+
+        // Batch 3 done: its proposal shows (nothing was waiting, no line), then the end for the whole run.
+        await step(material, 2, 'working');
+        await step(material, 2, 'done');
+        material.sortRunHold = false;
+        await expect(p.locator('.msp-list .msp-row')).toHaveCount(1);
+        await expect(p.locator('.msp-list .msp-row .msp-title')).toHaveText('Talvanen letter 3.1');
+        await expect(p.locator('.msp-more')).toBeHidden();
+        await expect(p.locator('.msp-run')).toBeHidden();
+        await p.locator('.msp-accept-all').click();
+        await expect(p.locator('.msp-end-sub')).toHaveText('For the whole run: 3 batches · 120 files');
+        await expect(p.locator('.msp-end-title')).toContainText('6 accepted');
+        expect(material.sorts).toHaveLength(1);
+    });
+
+    test('a reload in the middle of a run: the run is watched again where it was, its finished proposals kept, nothing sent again', async ({ page }) => {
+        const material = await start(page);
+        await step(material, 0, 'working');
+        await step(material, 0, 'done');
+        await expect(strip(page)).toHaveAttribute('data-state', 'C');
+        await strip(page).locator('[data-sort="open"]').click();
+        await proposal(page).locator('.msp-list .msp-row').first().locator('.msp-accept').click();
+        await expect.poll(() => (material.edits ?? []).length).toBeGreaterThan(0);
+
+        await page.reload();
+        await expect(page.locator('.person-card').first()).toBeVisible();
+        await poll(page);
+        await openWindow(page);
+        await expect(strip(page)).toHaveAttribute('data-state', 'C');
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent is sorting · batch 2 of 3 is starting');
+        await expect(bar(page)).toHaveAttribute('aria-valuenow', '50');
+        await strip(page).locator('[data-sort="open"]').click();
+        const p = proposal(page);
+        await expect(p.locator('.msp-list .msp-row')).toHaveCount(1);
+        // The accepted one is not offered again.
+        await expect(p.locator('.msp-tab[data-tab="proposals"]')).toHaveText('Proposals · 1');
+        await expect(p.locator('.msp-run .mw-sort-run')).toHaveText('Batch 2 of 3 is running · more proposals will come');
+
+        material.sortRunHold = false;
+        await expect(p.locator('.msp-list .msp-row')).toHaveCount(5, { timeout: 15_000 });
+        await expect(p.locator('.msp-run')).toBeHidden({ timeout: 15_000 });
+        await p.locator('.msp-accept-all').click();
+        await expect(p.locator('.msp-end-sub')).toHaveText('For the whole run: 3 batches · 120 files');
+        expect(material.sorts).toHaveLength(1);
+        expect(material.sortRuns?.size).toBe(1);
+    });
+});

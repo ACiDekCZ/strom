@@ -522,7 +522,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         agentSort: {
             sort: 'Uporządkuj agentem…',
             go: 'Uporządkuj agentem',
-            stripWhole: (n: number) => `${nPl(n, 'plik', 'pliki', 'plików')} bez tytułu lub osoby`,
+            stripWhole: (n: number) => `${numPl(n)} ${plPl(n, 'plik', 'pliki', 'plików')} bez tytułu lub osoby`,
             closeWhole: 'Zamknij propozycję',
             // The one strip of sorting and the proposal's end (spec 102 §1, §5, §6).
             stripAdded: (k: number, n: number) => `Dodano ${nPl(k, 'plik', 'pliki', 'plików')} · ${numPl(n)} bez tytułu lub osoby`,
@@ -541,7 +541,9 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
             readOnlyNote: 'Drzewo jest tylko do odczytu.',
             phoneShort: 'Propozycja jest w aplikacji na komputerze.',
             endTitle: (a: number, r: number, u: number) => `Gotowe · przyjęto ${numPl(a)} · odrzucono ${numPl(r)} · nieprzypisane ${numPl(u)}`,
-            endRun: (nb: number, n: number) => `Za cały przebieg: ${nPl(nb, 'partia', 'partie', 'partii')} · ${nPl(n, 'plik', 'pliki', 'plików')}`,
+            endRun: (nb: number, n: number) => `Za cały przebieg: ${numPl(nb)} ${plPl(nb, 'partia', 'partie', 'partii')} · ${numPl(n)} ${plPl(n, 'plik', 'pliki', 'plików')}`,
+            endSoFar: (a: number, r: number) => `Załatwiono wszystkie gotowe · przyjęto ${numPl(a)} · odrzucono ${numPl(r)}`,
+            endRunSoFar: (b: number, nb: number, n: number) => `Na razie ${numPl(b)} z ${numPl(nb)} partii · ${numPl(n)} ${plPl(n, 'plik', 'pliki', 'plików')}`,
             restLine: (n: number) => `W archiwum ${plPl(n, 'został', 'zostały', 'zostało')} ${nPl(n, 'nieuporządkowany plik', 'nieuporządkowane pliki', 'nieuporządkowanych plików')}`,
             restNote: 'To zamknie propozycję i otworzy okno „Uporządkuj agentem”.',
             leftLine: (n: number) => `${nPl(n, 'plik', 'pliki', 'plików')} agent nie przypisał`,
