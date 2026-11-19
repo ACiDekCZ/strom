@@ -336,7 +336,7 @@ export function fanFill(s: FanFillSubject, mode: FanColorMode, theme: FanTheme, 
 
 /** One row of the legend (§6.3). */
 export interface FanLegendItem {
-    /** Stable key: 'male' / 'female' / 'unknown', 'line0'…'line3', a rod id, 'rodOther'. */
+    /** Stable key: 'male' / 'female' / 'unknown', 'line0'…'line3', a rod id, 'rodOther', 'noRod'. */
     key: string;
     label: string;
     /** Line mode: the grandparent's name; rod mode: "7×". */
@@ -383,7 +383,8 @@ export function fanLegend(model: FanLegendModel, mode: FanColorMode, theme: FanT
         if (!rods) return [];
         const legend = fanRodLegend(rods, theme);
         const items = legend.groups.flatMap(g => g.items);
-        if (legend.otherPeople) items.push({ key: 'rodOther', label: S.legendOtherRods, who: `${legend.otherPeople}×`, color: T.grey });
+        if (legend.otherRods) items.push({ key: 'rodOther', label: S.legendOther(legend.otherRods), who: `${legend.otherPeople}×`, color: T.grey });
+        else if (legend.noRod) items.push({ key: 'noRod', label: S.legendNoRod, who: `${legend.noRod}×`, color: T.grey });
         return items;
     }
     return [

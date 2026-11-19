@@ -4677,6 +4677,19 @@ class TreeRendererClass {
         return this.evidenceIds;
     }
 
+    /**
+     * The fan's preview of a family line under the mouse (spec 114 §5): its
+     * sectors marked as when highlighted, the others less dimmed; it covers
+     * the highlighted group while it lasts. Null ends it.
+     */
+    setFanRodPreview(group: { hit: ReadonlySet<PersonId>; faint: ReadonlySet<PersonId> } | null): void {
+        if (!group && !this.fanRodPreview) return;
+        this.fanRodPreview = group;
+        this.applyEvidenceHighlight();
+    }
+
+    private fanRodPreview: { hit: ReadonlySet<PersonId>; faint: ReadonlySet<PersonId> } | null = null;
+
     /** A card's class while a group is highlighted: in it, shown faintly beside it, or dimmed. */
     private evidenceClass(id: PersonId): string {
         if (this.evidenceIds?.has(id)) return 'evidence-hit';
@@ -4695,8 +4708,46 @@ class TreeRendererClass {
             const level = card.dataset.id ? this.evidenceLevelMap?.get(card.dataset.id as PersonId) : undefined;
             if (level) card.classList.add(`evl-${level}`);
         });
-        document.querySelectorAll<HTMLElement>('[data-fan-person]').forEach(seg => mark(seg, seg.dataset.fanPerson));
+        const preview = this.fanRodPreview;
+        document.querySelectorAll<HTMLElement>('[data-fan-person]').forEach(seg => {
+            const id = seg.dataset.fanPerson as PersonId | undefined;
+            if (!preview || !seg.closest('#fan-chart')) { mark(seg, id); return; }
+            seg.classList.remove('evidence-hit', 'evidence-faint', 'evidence-dim');
+            if (id) seg.classList.add(preview.hit.has(id) ? 'evidence-hit' : preview.faint.has(id) ? 'evidence-faint' : 'evidence-dim');
+        });
+        document.getElementById('fan-chart')?.classList.toggle('fan-rod-preview', !!preview);
+        this.applyFanHighlightEdges();
         document.body.classList.toggle('evidence-mode', !!this.evidenceIds || !!this.evidenceLevelMap);
+    }
+
+    /**
+     * The highlighted sectors of the fan outlined in a layer over all of them
+     * (spec 114 §5): a dashed copy of each one's outline, whole (a stroke on
+     * the sector itself hides under its neighbours' gaps).
+     */
+    private applyFanHighlightEdges(): void {
+        const svg = document.querySelector<SVGSVGElement>('#fan-chart svg.fan-svg');
+        if (!svg) return;
+        svg.querySelectorAll('.fan-hl-layer').forEach(e => e.remove());
+        const hits = svg.querySelectorAll<SVGGElement>('[data-fan-person].evidence-hit');
+        if (!hits.length) return;
+        const NS = 'http://www.w3.org/2000/svg';
+        const layer = document.createElementNS(NS, 'g');
+        layer.setAttribute('class', 'fan-hl-layer');
+        layer.setAttribute('pointer-events', 'none');
+        layer.setAttribute('aria-hidden', 'true');
+        for (const g of hits) {
+            const shape = g.querySelector<SVGElement>('.fan-fill, .fan-focus-disc');
+            if (!shape) continue;
+            const edge = document.createElementNS(NS, shape.tagName === 'circle' ? 'circle' : 'path');
+            for (const a of shape.tagName === 'circle' ? ['cx', 'cy', 'r'] : ['d']) {
+                const v = shape.getAttribute(a);
+                if (v !== null) edge.setAttribute(a, v);
+            }
+            edge.setAttribute('class', 'fan-hl-edge');
+            layer.appendChild(edge);
+        }
+        svg.appendChild(layer);
     }
 
     private updateFocusUI(): void {
@@ -7119,7 +7170,7 @@ class TreeRendererClass {
                 relTypeLabel: (t) => strings.parentRelType[t],
                 addParentLabel: () => strings.contextMenu.addParent,
                 afterDraw: () => {
-                    if (this.evidenceIds || this.evidenceLevelMap) this.applyEvidenceHighlight();
+                    if (this.evidenceIds || this.evidenceLevelMap || this.fanRodPreview) this.applyEvidenceHighlight();
                     UI.applyFanFollowMarks?.();
                 },
                 pinnedCenter: () => UI.liveFollowPinned?.() ?? null,
@@ -7128,6 +7179,8 @@ class TreeRendererClass {
                 homeChanged: () => updateDefaultFocusButtons(),
                 menuClosed: () => UI.fanFollowMenuClosed?.(),
                 selectedRod: () => UI.selectedRod(),
+                selectRod: id => UI.selectRodFromFan(id),
+                previewRod: group => this.setFanRodPreview(group),
                 personDetail: id => UI.runPersonMenuAction(id, 'edit'),
                 personPage: id => UI.runPersonMenuAction(id, 'page'),
                 menuSheet: (menu, onClose) => UI.presentMenuSheet(menu.title, [

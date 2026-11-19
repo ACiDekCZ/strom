@@ -792,7 +792,8 @@ function rodLegendOfCopy(model: FanModel, rc: FanRodAssignment): PosterLegendIte
     };
     const legend = fanRodLegend(rc, 'print', labelOf);
     const items: PosterLegendItem[] = legend.groups.flatMap(g => g.items).map(i => ({ text: `${i.label} · ${i.who}`, color: i.color }));
-    if (legend.otherPeople) items.push({ text: `${strings.fan.legendOtherRods} · ${legend.otherPeople}×`, color: FAN_PALETTES.print.grey });
+    if (legend.otherRods) items.push({ text: `${strings.fan.legendOther(legend.otherRods)} · ${legend.otherPeople}×`, color: FAN_PALETTES.print.grey });
+    else if (legend.noRod) items.push({ text: `${strings.fan.legendNoRod} · ${legend.noRod}×`, color: FAN_PALETTES.print.grey });
     return items;
 }
 

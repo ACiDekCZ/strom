@@ -23,9 +23,11 @@ import type { PersonId, StromData } from '../types.js';
 import {
     buildFanModel, buildFanSvg, fanLineages, FanModel, FanShape, FanSvgOptions,
 } from '../fan-chart.js';
-import { FanColorMode, FanTheme, fanLegend, fanHasRepeats, FanLegendItem, FanRodSlot, parseFanRodSlot } from '../fan-colors.js';
-import { assignFanRodColors, FanRodAssignment } from '../fan-rod-assign.js';
-import type { RodId } from '../lineage.js';
+import {
+    FanColorMode, FanTheme, fanLegend, fanHasRepeats, FanLegendItem, FanRodGroup, FanRodSlot, parseFanRodSlot, FAN_PALETTES,
+} from '../fan-colors.js';
+import { assignFanRodColors, FanRodAssignment, FanRodLegend, fanRodLegend } from '../fan-rod-assign.js';
+import { RodId, rodLabels, rodOf, realRodMembers, realRodSpouses } from '../lineage.js';
 import { fanScreenSizes, clearFanMeasureCache } from '../fan-labels.js';
 import { FanZoom, FanView as FanZoomView, FanZoomPoint } from '../fan-zoom.js';
 import { fanNavNodes, fanNavMove, FanNavDir } from '../fan-nav.js';
@@ -67,6 +69,18 @@ export interface FanViewHost {
     addParentLabel(): string;
     /** The family line chosen in the tree view (its legend row marked). */
     selectedRod?(): string | null;
+    /**
+     * A legend row or a sector's menu (spec 114 §5): the family line becomes
+     * the tree's chosen line (spec 039, one state with the Family view); null:
+     * the whole tree again.
+     */
+    selectRod?(id: string | null): void;
+    /**
+     * The mouse over a legend row (spec 114 §5): the line's sectors shown as
+     * when highlighted, the others less dimmed; no pill, nothing kept. Null
+     * ends the preview (the chosen line, if any, shows again).
+     */
+    previewRod?(group: { hit: ReadonlySet<PersonId>; faint: ReadonlySet<PersonId> } | null): void;
     /** The centre pinned while following the research agent (its label replaces the origin pill). */
     pinnedCenter?(): PersonId | null;
     /** Extra items of a person's menu (pin / release the centre while following), after re-centring. */
@@ -106,7 +120,7 @@ export interface FanMenuSpec {
     items: Array<{ id: FanMenuItemId; label: string; kbd?: string; run: () => void }>;
 }
 
-export type FanMenuItemId = 'recenter' | 'pin' | 'unpin' | 'detail' | 'page' | 'first' | 'add';
+export type FanMenuItemId = 'recenter' | 'pin' | 'unpin' | 'detail' | 'page' | 'rod' | 'first' | 'add';
 
 /**
  * The re-centring swap: a short cross-fade without any change of size, the
@@ -139,6 +153,13 @@ function readLegendOpen(): boolean | null {
     } catch { return null; }
 }
 
+function readLegendOtherOpen(): boolean {
+    try { return localStorage.getItem(FAN_STORAGE_KEYS.legendOtherOpen) === '1'; } catch { return false; }
+}
+
+/** The legend's rods in the three themes (the same rows, their swatches differ). */
+interface RodLegends { light: FanRodLegend; dark: FanRodLegend; print: FanRodLegend }
+
 export class FanViewController {
     private readonly host: FanViewHost;
     private container: HTMLElement | null = null;
@@ -148,6 +169,16 @@ export class FanViewController {
     private modelKey = '';
     private redrawFrame = 0;
     private legendOpen: boolean;
+    /** "Other" (the grey family lines) expanded in the legend (spec 114 §4). */
+    private legendOtherOpen: boolean;
+    /** The legend's rods of the current assignment. */
+    private rodLegendCache: { a: FanRodAssignment; l: RodLegends } | null = null;
+    /** The legend's markup last put in (unchanged markup is not put in again: focus and hover stay). */
+    private legendHtml: string | null = null;
+    /** The family line previewed under the mouse (spec 114 §5). */
+    private previewId: string | null = null;
+    /** The row just clicked: no preview of it until the mouse goes to another one. */
+    private previewHeld: string | null = null;
     /** The view the screen showed before the browser printed the whole fan. */
     private printView: FanZoomView | null = null;
     private printing = false;
@@ -198,6 +229,7 @@ export class FanViewController {
         this.host = host;
         // §0.5: open on a computer, closed on a phone (where the legend is a chip and a sheet).
         this.legendOpen = readLegendOpen() ?? !isMobile();
+        this.legendOtherOpen = readLegendOtherOpen();
     }
 
     /** The current fan model (null before the first draw or without a focus). */
@@ -457,6 +489,7 @@ export class FanViewController {
      */
     deactivate(): void {
         this.forgetRodColors();
+        this.setPreview(null);
         if (!this.origin && !this.shown && !this.menuKey && !this.swap && !this.flashKey) return;
         this.origin = null;
         this.shown = null;
@@ -825,6 +858,8 @@ export class FanViewController {
             items.push(...(this.host.menuExtra?.(pid, kind === 'focus') ?? []));
             items.push({ id: 'detail', label: S.personDetail, run: () => this.host.personDetail(pid) });
             items.push({ id: 'page', label: S.personPage, run: () => this.host.personPage(pid) });
+            const rod = this.rodMenuItem(pid);
+            if (rod) items.push(rod);
             const first = el.getAttribute('data-fan-repeat-of');
             if (first) {
                 const n = /^a(\d+)$/.exec(first);
@@ -839,6 +874,23 @@ export class FanViewController {
             title: male ? S.emptyFather : S.emptyMother,
             sub: num ? S.number(num) : '',
             items: [{ id: 'add', label: male ? S.addFather : S.addMother, run: () => this.host.addParent(child, male ? 'male' : 'female') }],
+        };
+    }
+
+    /**
+     * "Highlight the X family line" / "Clear the family line highlight"
+     * (spec 114 §5): in the family-line colours, for a person with a line.
+     */
+    private rodMenuItem(pid: PersonId): FanMenuSpec['items'][number] | null {
+        const a = this.rodColors();
+        const rod = a && this.host.selectRod ? rodOf(a.index, pid) : null;
+        if (!a || !rod) return null;
+        const S = strings.fan;
+        const on = (this.host.selectedRod?.() ?? null) === rod;
+        return {
+            id: 'rod',
+            label: on ? S.menuUnhighlightRod : S.menuHighlightRod(this.rodName(a, rod)),
+            run: () => this.host.selectRod?.(on ? null : rod),
         };
     }
 
@@ -1203,13 +1255,32 @@ export class FanViewController {
             const color = t.closest<HTMLElement>('.fan-color-btn');
             if (color?.dataset.fanColor) { this.host.setColorMode(color.dataset.fanColor as FanColorMode); return; }
             if (t.closest('#fan-legend-head')) { this.toggleLegend(); return; }
+            const rod = t.closest<HTMLElement>('[data-fan-rod]');
+            if (rod?.dataset.fanRod) { this.toggleRod(rod.dataset.fanRod); return; }
+            if (t.closest('.fan-legend-other')) { this.toggleLegendOther(); return; }
             if (t.closest('#fan-legend-chip')) { this.openSheet(); return; }
             if (t.closest('[data-fan-sheet-close]')) { this.closeSheet(); return; }
         });
         container.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this.sheetOpen()) { e.preventDefault(); e.stopPropagation(); this.closeSheet(); return; }
+            if (this.legendRowKeys(e)) return;
             this.radioKeys(e);
         });
+        // §5: the mouse over a family line's row previews it (a mouse only; touch has no hover).
+        const legendItems = container.querySelector<HTMLElement>('#fan-legend-items');
+        if (legendItems && typeof matchMedia === 'function' && matchMedia('(hover: hover)').matches) {
+            legendItems.addEventListener('pointerover', (e) => {
+                if (e.pointerType !== 'mouse') return;
+                const id = (e.target as Element).closest?.<HTMLElement>('[data-fan-rod]')?.dataset.fanRod ?? null;
+                if (id && id === this.previewHeld) return;
+                this.previewHeld = null;
+                this.setPreview(id);
+            });
+            legendItems.addEventListener('pointerleave', () => {
+                this.previewHeld = null;
+                this.setPreview(null);
+            });
+        }
         const gen = container.querySelector<HTMLSelectElement>('#fan-gen-native');
         gen?.addEventListener('change', () => this.host.setGenerations(parseInt(gen.value, 10)));
         const desc = container.querySelector<HTMLSelectElement>('#fan-desc-native');
@@ -1312,6 +1383,25 @@ export class FanViewController {
         return light.map((item, i) => ({ item, light: item, dark: dark[i] ?? item, print: print[i] ?? item }));
     }
 
+    /** The family lines of the legend in the three themes (computed once per assignment, the lines named once). */
+    private rodLegends(): RodLegends | null {
+        const a = this.rodColors();
+        if (!a) return null;
+        if (this.rodLegendCache?.a === a) return this.rodLegendCache.l;
+        const labelOf = (id: RodId) => this.rodName(a, id);
+        const l = { light: fanRodLegend(a, 'light', labelOf), dark: fanRodLegend(a, 'dark', labelOf), print: fanRodLegend(a, 'print', labelOf) };
+        this.rodLegendCache = { a, l };
+        return l;
+    }
+
+    /** A family line's name as the tree overview writes it (the names computed once per index). */
+    private rodName(a: FanRodAssignment, id: RodId): string {
+        if (this.rodLabelCache?.index !== a.index) this.rodLabelCache = { index: a.index, labels: rodLabels(a.index) };
+        return this.rodLabelCache.labels.get(id) ?? '';
+    }
+
+    private rodLabelCache: { index: FanRodAssignment['index']; labels: Map<RodId, string> } | null = null;
+
     private swatch(r: { light: FanLegendItem; dark: FanLegendItem; print: FanLegendItem }): string {
         const v = (name: string, a: FanLegendItem) => `--${name}:${a.color};--${name}2:${a.color2 ?? a.color};`;
         return `<span class="fan-sw" aria-hidden="true" style="${v('sl', r.light)}${v('sd', r.dark)}${v('sp', r.print)}"></span>`;
@@ -1319,13 +1409,9 @@ export class FanViewController {
 
     private legendItemsHtml(): string {
         const esc = this.host.esc;
-        const legend = this.legendRows();
-        // The family line chosen in the tree view (spec 039 §4.2): its row marked; a line
-        // without a colour of its own marks "Other families".
-        const sel = this.host.settings().colorMode === 'rod' ? this.host.selectedRod?.() ?? null : null;
-        const selKey = sel === null ? null : legend.some(r => r.item.key === sel) ? sel : 'rodOther';
-        const rows = legend.map(r =>
-            `<div class="fan-legend-row sel-opt${r.item.key === selKey ? ' is-selected' : ''}" data-sel-form="row" data-fan-legend="${esc(r.item.key)}">${this.swatch(r)}`
+        const rods = this.host.settings().colorMode === 'rod' ? this.rodLegends() : null;
+        const rows = rods ? [this.rodLegendHtml(rods)] : this.legendRows().map(r =>
+            `<div class="fan-legend-row sel-opt" data-sel-form="row" data-fan-legend="${esc(r.item.key)}">${this.swatch(r)}`
             + `<span class="fan-legend-label">${esc(r.item.label)}</span>`
             + (r.item.who ? `<span class="fan-legend-who">${esc(r.item.who)}</span>` : '')
             + '</div>');
@@ -1336,10 +1422,73 @@ export class FanViewController {
         return rows.join('');
     }
 
+    /**
+     * The family lines of the fan (spec 114 §4): a part per side (the
+     * father's, the mother's, the descendants) with its heading, then "Other"
+     * (the grey lines, expandable) and "no family line". The rows are buttons
+     * (§5): pressed is the tree's chosen line (spec 039); a chosen grey line
+     * marks "Other" while it is closed.
+     */
+    private rodLegendHtml(L: RodLegends): string {
+        const S = strings.fan;
+        const esc = this.host.esc;
+        const sel = this.host.selectedRod?.() ?? null;
+        const coloured = sel !== null && L.light.groups.some(g => g.items.some(i => i.key === sel));
+        const grey = sel !== null && L.light.other.some(i => i.key === sel);
+        const pressed = coloured || (grey && this.legendOtherOpen) ? sel : null;
+        const heads: Record<FanRodGroup, string> = { P: S.legendFatherSide, M: S.legendMotherSide, D: S.legendDescendants };
+        const greyOf = (theme: FanTheme): FanLegendItem => ({ key: '', label: '', color: FAN_PALETTES[theme].grey });
+        const greySw = this.swatch({ light: greyOf('light'), dark: greyOf('dark'), print: greyOf('print') });
+        const arrow = (a: string) => `<span class="fan-legend-arrow" aria-hidden="true">${a}</span>`;
+        const row = (r: { light: FanLegendItem; dark: FanLegendItem; print: FanLegendItem }, sub: boolean): string => {
+            const i = r.light;
+            const aria = S.legendRowAria(i.label, i.count ?? 0) + (i.focus ? `, ${S.legendCentreAria}` : '');
+            return `<button type="button" class="fan-legend-row fan-legend-rod sel-opt${sub ? ' fan-legend-sub' : ''}" data-sel-form="row"`
+                + ` data-fan-legend="${esc(i.key)}" data-fan-rod="${esc(i.key)}" aria-pressed="${i.key === pressed}" aria-label="${esc(aria)}" tabindex="-1">`
+                + this.swatch(r)
+                + `<span class="fan-legend-label">${esc(i.label)}${i.focus ? `<span class="fan-legend-centre"> · ${esc(S.legendCentre)}</span>` : ''}</span>`
+                + `<span class="fan-legend-who">${esc(i.who ?? '')}</span>${sub ? arrow('') : ''}</button>`;
+        };
+        const noRod = (sub: boolean) => `<div class="fan-legend-row fan-legend-norod sel-opt${sub ? ' fan-legend-sub' : ''}" data-sel-form="row" data-fan-legend="noRod">${greySw}`
+            + `<span class="fan-legend-label">${esc(S.legendNoRod)}</span><span class="fan-legend-who">${L.light.noRod}×</span>${sub ? arrow('') : ''}</div>`;
+        let html = '';
+        L.light.groups.forEach((g, gi) => {
+            html += `<div class="fan-legend-group">${esc(heads[g.group])}</div>`;
+            g.items.forEach((light, k) => {
+                html += row({ light, dark: L.dark.groups[gi]?.items[k] ?? light, print: L.print.groups[gi]?.items[k] ?? light }, false);
+            });
+        });
+        if (L.light.otherRods) {
+            const open = this.legendOtherOpen;
+            html += `<button type="button" class="fan-legend-row fan-legend-other sel-opt${grey && !open ? ' is-selected' : ''}" data-sel-form="row"`
+                + ` data-fan-legend="rodOther" aria-expanded="${open}" tabindex="-1">${greySw}`
+                + `<span class="fan-legend-label">${esc(S.legendOther(L.light.otherRods))}</span>`
+                + `<span class="fan-legend-who">${L.light.otherPeople}×</span>${arrow(open ? '▾' : '▸')}</button>`;
+            if (open) {
+                L.light.other.forEach((light, k) => { html += row({ light, dark: L.dark.other[k] ?? light, print: L.print.other[k] ?? light }, true); });
+                if (L.light.noRod) html += noRod(true);
+            }
+        } else if (L.light.noRod) html += noRod(false);
+        return html ? `<div class="fan-legend-rods" role="group" aria-label="${esc(S.legendRowsAria)}">${html}</div>` : '';
+    }
+
+    /** The chip's three dots: the first line of each side; a side missing takes the father's side's next line (§4). */
+    private chipDots(): Array<{ light: string; dark: string }> {
+        const L = this.host.settings().colorMode === 'rod' ? this.rodLegends() : null;
+        if (!L) return this.legendRows().slice(0, 3).map(r => ({ light: r.light.color, dark: r.dark.color }));
+        const pick = (gi: number, k: number) => ({ light: L.light.groups[gi].items[k].color, dark: L.dark.groups[gi]?.items[k]?.color ?? L.light.groups[gi].items[k].color });
+        const dots = L.light.groups.map((_, gi) => pick(gi, 0));
+        const p = L.light.groups.findIndex(g => g.group === 'P');
+        for (let k = 1; dots.length < 3 && p >= 0 && k < L.light.groups[p].items.length; k++) dots.push(pick(p, k));
+        if (!dots.length) dots.push({ light: FAN_PALETTES.light.grey, dark: FAN_PALETTES.dark.grey });
+        return dots.slice(0, 3);
+    }
+
     private renderLegend(): void {
         const c = this.container;
         if (!c) return;
         const mode = this.host.settings().colorMode;
+        if (mode !== 'rod' || !this.legendOpen) this.setPreview(null);
         const label = this.colorLabel(mode);
         const esc = this.host.esc;
         const items = this.legendItemsHtml();
@@ -1355,23 +1504,87 @@ export class FanViewController {
                 + `<span class="fan-legend-arrow" aria-hidden="true">${this.legendOpen ? '▾' : '▸'}</span>`;
             head.setAttribute('aria-expanded', this.legendOpen ? 'true' : 'false');
         }
-        if (list) list.innerHTML = items;
+        const sheetItems = c.querySelector<HTMLElement>('#fan-sheet-items');
+        if (items !== this.legendHtml) {
+            this.legendHtml = items;
+            // The row with the keyboard focus keeps it (a click re-renders the rows).
+            const active = document.activeElement;
+            const lists = [list, sheetItems].filter((e): e is HTMLElement => !!e);
+            const holder = lists.find(e => active instanceof HTMLElement && e.contains(active)) ?? null;
+            const key = holder && active instanceof HTMLElement ? active.closest<HTMLElement>('[data-fan-legend]')?.dataset.fanLegend ?? null : null;
+            for (const e of lists) e.innerHTML = items;
+            for (const e of lists) this.legendRoving(e);
+            if (holder) {
+                const again = [...holder.querySelectorAll<HTMLElement>('button[data-fan-legend]')].find(b => b.dataset.fanLegend === key)
+                    ?? holder.querySelector<HTMLElement>('.fan-legend-rods button[tabindex="0"]');
+                again?.focus({ preventScroll: true });
+            }
+        }
         const chip = c.querySelector<HTMLElement>('#fan-legend-chip');
         if (chip) {
-            const dots = this.legendRows().slice(0, 3)
-                .map(r => `<span class="fan-chip-dot" style="--sl:${r.light.color};--sd:${r.dark.color}"></span>`).join('');
+            const dots = this.chipDots()
+                .map(d => `<span class="fan-chip-dot" style="--sl:${d.light};--sd:${d.dark}"></span>`).join('');
             chip.innerHTML = `<span class="fan-chip-dots" aria-hidden="true">${dots}</span>`
                 + `<span class="fan-chip-label">${esc(label)}</span><span class="fan-chip-arrow" aria-hidden="true">▴</span>`;
             chip.setAttribute('aria-label', strings.fan.colorsChip(label));
             chip.toggleAttribute('hidden', !this.model);
         }
-        const sheetItems = c.querySelector<HTMLElement>('#fan-sheet-items');
-        if (sheetItems) sheetItems.innerHTML = items;
+    }
+
+    /** One tab stop in the legend's rows: the pressed row, else "Other" when it marks the chosen line, else the first. */
+    private legendRoving(list: HTMLElement, to?: HTMLElement): void {
+        const rows = [...list.querySelectorAll<HTMLElement>('.fan-legend-rods > button')];
+        const on = to ?? rows.find(b => b.getAttribute('aria-pressed') === 'true') ?? rows.find(b => b.classList.contains('is-selected')) ?? rows[0];
+        for (const b of rows) b.tabIndex = b === on ? 0 : -1;
+    }
+
+    /** ↑ / ↓ / Home / End between the legend's rows ("Other" among them); Enter and Space are the buttons' own. */
+    private legendRowKeys(e: KeyboardEvent): boolean {
+        if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return false;
+        const row = (e.target as Element).closest?.<HTMLElement>('.fan-legend-rods > button');
+        const list = row?.closest<HTMLElement>('#fan-legend-items, #fan-sheet-items');
+        if (!row || !list) return false;
+        const rows = [...list.querySelectorAll<HTMLElement>('.fan-legend-rods > button')];
+        const i = rows.indexOf(row);
+        const n = e.key === 'Home' ? 0 : e.key === 'End' ? rows.length - 1
+            : Math.max(0, Math.min(rows.length - 1, i + (e.key === 'ArrowUp' ? -1 : 1)));
+        e.preventDefault();
+        e.stopPropagation();
+        this.legendRoving(list, rows[n]);
+        rows[n].focus();
+        return true;
     }
 
     /** The legend again (the chosen family line changed). */
     refreshLegend(): void {
         this.renderLegend();
+    }
+
+    /** A family line's row: chosen as the tree's line (spec 039), pressed again: the whole tree (§5). */
+    private toggleRod(id: string): void {
+        this.previewHeld = id;
+        this.setPreview(null);
+        const sel = this.host.selectedRod?.() ?? null;
+        this.host.selectRod?.(sel === id ? null : id);
+    }
+
+    /** "Other" expanded or closed (kept on the device; a satellite window in its memory only). */
+    private toggleLegendOther(): void {
+        this.legendOtherOpen = !this.legendOtherOpen;
+        if (this.host.remembersPrefs?.() !== false) {
+            try { localStorage.setItem(FAN_STORAGE_KEYS.legendOtherOpen, this.legendOtherOpen ? '1' : '0'); } catch { /* ignore */ }
+        }
+        this.renderLegend();
+    }
+
+    /** The preview of a family line under the mouse (null: none, the chosen line shows again). */
+    private setPreview(id: string | null): void {
+        if (id === this.previewId) return;
+        const a = id ? this.rodColors() : null;
+        this.previewId = a ? id : null;
+        if (!a || !id) { this.host.previewRod?.(null); return; }
+        const rod = id as RodId;
+        this.host.previewRod?.({ hit: new Set(realRodMembers(a.index, rod)), faint: new Set(realRodSpouses(a.index, rod)) });
     }
 
     private toggleLegend(): void {

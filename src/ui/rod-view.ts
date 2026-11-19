@@ -32,7 +32,7 @@ import type { HighlightGroup } from './evidence-ui.js';
 import { uiModule } from './module.js';
 
 /** Where a line was chosen: from memory ('restore') the focus stays. */
-export type RodOrigin = 'picker' | 'menu' | 'pill' | 'overview' | 'person' | 'restore';
+export type RodOrigin = 'picker' | 'menu' | 'pill' | 'overview' | 'person' | 'legend' | 'restore';
 
 /** What the state needs of the app (the UI; a fake in tests). */
 export interface RodViewHost {
@@ -366,6 +366,12 @@ export const rodViewMethods = uiModule({
     /** The chosen line (the fan's legend marks its row). */
     selectedRod(): RodId | null {
         return getSelectedRod();
+    },
+
+    /** A row of the fan's legend or a sector's menu (spec 114 §5): the tree's chosen line, null: the whole tree. */
+    selectRodFromFan(id: string | null): void {
+        if (id) setRodSelection(id, 'legend');
+        else clearRodSelection();
     },
 
     /** The choice or the data changed: the toolbar's choice and the fan's legend follow. */
