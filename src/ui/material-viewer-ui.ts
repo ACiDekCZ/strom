@@ -28,7 +28,7 @@ import {
 import { iconSvg } from '../icons.js';
 import { detailsKeys, materialDetailsEdit, materialDetailsFields, materialDetailsOf } from './material-details-ui.js';
 import { canEditPortrait } from './portrait-actions-ui.js';
-import { pdfBlobFromDataUrl } from '../attachments.js';
+import { attachmentResizeState, pdfBlobFromDataUrl } from '../attachments.js';
 import { formatBytesShort } from './originals-ui.js';
 import { openViewerList, closeImageViewer, viewerListOpen, viewerListIndex, redrawViewerList, relayoutViewer, goViewerList, ViewerSlots } from './image-viewer.js';
 import { MaterialOpenCtx, MaterialsContext, appendBreakable, materialItemSha, materialTileLetters, treeAttachmentsKey } from './materials-ui.js';
@@ -755,8 +755,10 @@ export const materialViewerMethods = uiModule({
         if (item.bytes) {
             const type = (fileExt(name) || '').toUpperCase();
             const att = item.attachment;
-            const resized = item.origin === 'tree' && att && !att.originalOnly && !att.original && att.mimeType.startsWith('image/');
-            field(m.f.size, [formatBytesShort(item.bytes), type, resized ? m.resized : ''].filter(Boolean).join(' · '));
+            // Said only of a picture that was downscaled; one whose size cannot be read says the limit.
+            const resized = item.origin === 'tree' && att ? attachmentResizeState(att) : null;
+            const note = resized === 'resized' ? m.resized : resized === 'unknown' ? m.resizedAtMost : '';
+            field(m.f.size, [formatBytesShort(item.bytes), type, note].filter(Boolean).join(' · '));
         }
         // Why the agent left it unassigned (spec 102 §4.4): the reader's own words, else the reason.
         if (item.agentLeft) {

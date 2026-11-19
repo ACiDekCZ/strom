@@ -253,6 +253,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         },
         from: { app: 'z aplikacji', batch: 'partia z aplikacji', phone: 'z telefonu', cli: 'z terminala' } as Record<string, string>,
         resized: 'zmniejszono do 1600 px',
+        resizedAtMost: 'najwyżej 1600 px',
         personNotInTree: 'Osoba jest na razie tylko w Archiwum Strom.',
         personNotInTreeResearch: 'Osoba jest na razie tylko w badaniu.',
         noRefn: 'Archiwum Strom pozna osobę dopiero po kolejnym zapisie drzewa. Do tego czasu są tu tylko załączniki z drzewa.',

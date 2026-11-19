@@ -10,7 +10,8 @@ import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { StromData, PersonId, TreeId, NewPersonData, Gender, Person, Attachment } from '../types.js';
-import { stripAttachments, stripMedia, totalAttachmentBytes } from '../attachments.js';
+import { stripAttachments, stripMedia, totalAttachmentBytes, attachmentResizeState, ATTACHMENT_MAX_SIDE } from '../attachments.js';
+import { strings, getStringsForLang } from '../strings.js';
 import { applyLivingPrivacy } from '../privacy.js';
 import { personMedia } from '../media.js';
 
@@ -176,5 +177,50 @@ describe('DataManager.linkMedia and sameFileMedia (spec 102 §4, §12h)', () => 
         expect(DataManager.sameFileMedia({ dataUrl: 'data:image/jpeg;base64,AAAA' })).toBeUndefined();
         expect(DataManager.restoreMedia(att.id)).toBe(true);
         expect(DataManager.getMedia(att.id)!.places).toHaveLength(1);
+    });
+});
+
+/**
+ * The material detail says "resized to 1600 px" only of a picture that was
+ * downscaled (its stored longest side is the limit), "at most 1600 px" when
+ * the size cannot be read, nothing for a smaller or larger one
+ * (verification of 3.30.0, finding N5).
+ */
+describe('attachmentResizeState', () => {
+    /** A PNG data URL whose header says w × h (the size is all that is read). */
+    function png(w: number, h: number): string {
+        const b = new Uint8Array(33);
+        b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+        const dv = new DataView(b.buffer);
+        dv.setUint32(16, w);
+        dv.setUint32(20, h);
+        return 'data:image/png;base64,' + btoa(String.fromCharCode(...b));
+    }
+    const img = (dataUrl: string, mimeType = 'image/png') => ({ mimeType, dataUrl });
+
+    it('a picture smaller than the limit was not resized', () => {
+        expect(attachmentResizeState(img(png(160, 120)))).toBeNull();
+    });
+    it('a picture whose longest side is the limit was resized (landscape and portrait)', () => {
+        expect(attachmentResizeState(img(png(ATTACHMENT_MAX_SIDE, 1200)))).toBe('resized');
+        expect(attachmentResizeState(img(png(900, ATTACHMENT_MAX_SIDE)))).toBe('resized');
+    });
+    it('a larger picture (kept as it came) was not resized', () => {
+        expect(attachmentResizeState(img(png(2400, 1800)))).toBeNull();
+    });
+    it('an image whose size cannot be read is "unknown"', () => {
+        expect(attachmentResizeState(img('data:image/png;base64,AAAA'))).toBe('unknown');
+    });
+    it('a PDF, only the original, or one with its original is never said resized', () => {
+        expect(attachmentResizeState(img('data:application/pdf;base64,JVBERi0=', 'application/pdf'))).toBeNull();
+        expect(attachmentResizeState({ ...img(''), originalOnly: true })).toBeNull();
+        expect(attachmentResizeState({ ...img(png(ATTACHMENT_MAX_SIDE, 1200)), original: { name: 'scan.tif' } })).toBeNull();
+    });
+    it('the neutral "at most" text is in every language', () => {
+        expect(strings.materials.resizedAtMost).toBeTruthy();
+        expect(getStringsForLang('cs').materials.resizedAtMost).toBe('nejvýš 1600 px');
+        expect(getStringsForLang('de').materials.resizedAtMost).toBe('höchstens 1600 px');
+        expect(getStringsForLang('pl').materials.resizedAtMost).toBe('najwyżej 1600 px');
+        expect(getStringsForLang('en').materials.resizedAtMost).toBe('at most 1600 px');
     });
 });

@@ -6,7 +6,7 @@
  */
 
 import { Person, StromData, personSourceIds, partnershipSourceIds } from './types.js';
-import { dataUrlByteSize, stripPhotos } from './photo.js';
+import { dataUrlByteSize, dataUrlImageSize, stripPhotos } from './photo.js';
 import { allMedia, personMedia as personMediaOf } from './media.js';
 
 /** Longest edge (px) an attached image is downscaled to. */
@@ -19,6 +19,23 @@ export const MAX_PDF_BYTES = 2 * 1024 * 1024;
 export const ATTACHMENT_WARN_BYTES = 10 * 1024 * 1024;
 
 export const ATTACHMENT_IMAGE_TYPES = ['image/jpeg', 'image/png'];
+
+/**
+ * Whether a file of the tree was downscaled when it was added, told by the
+ * size of the image as stored (read from its header, cheap):
+ * - 'resized': its longest side is ATTACHMENT_MAX_SIDE, the size
+ *   compressImageAttachment brings a larger picture to;
+ * - 'unknown': an image whose size cannot be read (said as "at most");
+ * - null: not resized — a smaller or a larger image (one from a GEDCOM file
+ *   or the research is kept as it came), not an image, or only the original
+ *   the research keeps.
+ */
+export function attachmentResizeState(att: { mimeType: string; dataUrl: string; originalOnly?: true; original?: unknown }): 'resized' | 'unknown' | null {
+    if (!att.mimeType.startsWith('image/') || att.originalOnly || att.original || !att.dataUrl) return null;
+    const size = dataUrlImageSize(att.dataUrl);
+    if (!size) return 'unknown';
+    return Math.max(size.w, size.h) === ATTACHMENT_MAX_SIDE ? 'resized' : null;
+}
 
 /**
  * Compress a user-selected image into an aspect-preserving JPEG data URL whose
