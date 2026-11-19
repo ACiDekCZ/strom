@@ -131,6 +131,27 @@ test('the legend draws the lines\' signs in the chosen shape (spec 112)', async 
     const sq = legend.locator('.branch-swatch > i').first();
     await expect(sq).toHaveCSS('width', '16px');
     await expect(sq).toHaveCSS('height', '16px');
+    // Each square is framed in its line's colour, its fill the line's tint, in both themes;
+    // in the dark one the three tints stay apart from each other (spec 112, 19 Nov 2026).
+    const squares = () => legend.locator('.branch-swatch > i').evaluateAll(els => els.map(e => {
+        const line = (e.parentElement as HTMLElement).dataset.line;
+        const probe = document.createElement('span');
+        probe.style.color = `var(--branch-${line})`;
+        probe.style.background = `var(--branch-${line}-tint)`;
+        document.body.appendChild(probe);
+        const want = { border: getComputedStyle(probe).color, fill: getComputedStyle(probe).backgroundColor };
+        probe.remove();
+        const cs = getComputedStyle(e);
+        return { want, border: cs.borderTopColor, fill: cs.backgroundColor };
+    }));
+    for (const theme of ['light', 'dark'] as const) {
+        await page.evaluate(t => window.Strom.SettingsManager.setTheme(t), theme);
+        await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+        const got = await squares();
+        for (const s of got) expect({ border: s.border, fill: s.fill }).toEqual(s.want);
+        expect(new Set(got.map(s => s.fill)).size).toBe(3);
+    }
+    await page.evaluate(() => window.Strom.SettingsManager.setTheme('system'));
     await page.evaluate(() => window.Strom.UI.setBranchTint(false));
     await expect(legend).toBeHidden();
 });

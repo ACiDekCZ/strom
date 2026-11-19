@@ -572,16 +572,20 @@
             --line-e7: #f0a6b6;
             --line-casing: rgba(22,20,16,.92);
             --avatar-bg: #3a362c;
-            /* lineage markers: P2, decision R2 — no palette choice; tint 8 % over --surface */
+            /* lineage markers: P2, decision R2 — no palette choice. The tint stands alone too
+               ("No shape" + tint): at the card's own lightness (OKLCH L 0.28) in the line's hue
+               with chroma 0.05 (descendants 0.06, the card is ochre-grey itself), so the line reads
+               by its hue, every card text keeps 4.5:1 (--text-faint too) and a tinted card is told
+               from a plain one; checked in src/__tests__/branch-tint-contrast.test.ts. */
             --branch-paternal: #9cc2f2;
             --branch-maternal: #f6a9cb;
             --branch-descendant: #e3b552;
             --branch-paternal-ink: #211f1a;
             --branch-maternal-ink: #211f1a;
             --branch-descendant-ink: #211f1a;
-            --branch-paternal-tint: #353634;
-            --branch-maternal-tint: #3c3431;
-            --branch-descendant-tint: #3b3528;
+            --branch-paternal-tint: #172a41;
+            --branch-maternal-tint: #3b1e2c;
+            --branch-descendant-tint: #372600;
 
             --border: #3e3a30;
             --divider: #35322a;
@@ -1763,6 +1767,10 @@
         body[data-branch-tint] .bm-preview :is(.person-card, .bm-card).branch-paternal.branch-maternal {
             background: linear-gradient(to bottom, var(--branch-paternal-tint) 50%, var(--branch-maternal-tint) 50%);
         }
+        /* The card's faint small text (the birth surname, a detail line's label) keeps 4.5:1 on
+           the light tints: a shade stronger, as on the "shown here" stripe (5.1:1 on the paternal
+           tint, 4.4:1 before). The dark tints sit at the card's own lightness and need none. */
+        [data-theme="light"] body[data-branch-tint] #tree-canvas .person-card:is(.branch-paternal, .branch-maternal, .branch-descendant):not(.view-ghost, .evl-full, .evl-none, .shown-here, .research-island) > .card-body { --text-faint: #6a6254; }
 
         /* Legend pill (bottom-left): gender rings, plus branch swatches when on.
            Informational only — never intercepts pointer events. */
@@ -1844,9 +1852,10 @@
         }
         .branch-swatch[data-shape="corner"][data-line="descendant"] > i { clip-path: path(evenodd, 'M0 0H15L0 15Z M3.5 3.5H8.5L3.5 8.5Z'); }
         body[data-branch-tint] .branch-swatch { padding: 4px; background: var(--sw-tint); }
-        /* No shape, only the tint (Milan 19 Nov 2026): the sign is the tint itself, a 16px square. */
+        /* No shape, only the tint (Milan 19 Nov 2026): the sign is the tint itself, a 16px square,
+           framed in the line's colour so it stands out on any ground (a selected row too). */
         .branch-swatch[data-shape="none"] > i {
-            width: 16px; height: 16px; box-sizing: border-box; border: 1px solid var(--border);
+            width: 16px; height: 16px; box-sizing: border-box; border: 1px solid var(--sw);
             border-radius: var(--r-sm); background: var(--sw-tint);
         }
         body[data-branch-tint] .branch-swatch[data-shape="none"] { padding: 0; background: none; }
