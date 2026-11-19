@@ -184,17 +184,29 @@ export interface ImageCount {
     photos: number;
     attachments: number;
     excerpts: number;
+    /**
+     * Bytes of the image data the tree carries: each distinct picture once (the
+     * same scan as an attachment and as the excerpts of several sources, or one
+     * photo of several people, is one picture), measured by its data URL — the
+     * preview in the tree, never the size of an original the research keeps.
+     */
     bytes: number;
 }
 
 /** Count photos, attachments and source excerpts with their total payload size. */
 export function countImages(data: StromData): ImageCount {
     const out: ImageCount = { photos: 0, attachments: 0, excerpts: 0, bytes: 0 };
+    const seen = new Set<string>();
+    const weigh = (dataUrl: string | undefined): void => {
+        if (!dataUrl || !dataUrl.startsWith('data:') || seen.has(dataUrl)) return;
+        seen.add(dataUrl);
+        out.bytes += dataUrlByteSize(dataUrl);
+    };
     const portraits = new Set<string>();
     for (const person of Object.values(data.persons)) {
         if (person.photo) {
             out.photos++;
-            out.bytes += dataUrlByteSize(person.photo);
+            weigh(person.photo);
             portraits.add(person.photo);
         }
     }
@@ -202,20 +214,20 @@ export function countImages(data: StromData): ImageCount {
         // A portrait's own record (data v25) is the same picture: counted once, as the portrait.
         if (att.dataUrl && portraits.has(att.dataUrl)) continue;
         out.attachments++;
-        out.bytes += att.sizeBytes || dataUrlByteSize(att.dataUrl);
+        weigh(att.dataUrl);
     }
     // The couples' photos count with the photos (spec 107); a portrait's
     // original is an attachment already.
     for (const union of Object.values(data.partnerships ?? {})) {
         if (union.photo) {
             out.photos++;
-            out.bytes += dataUrlByteSize(union.photo);
+            weigh(union.photo);
         }
     }
     for (const src of Object.values(data.sources ?? {})) {
         for (const exc of src.excerpts ?? []) {
             out.excerpts++;
-            out.bytes += exc.sizeBytes || dataUrlByteSize(exc.dataUrl);
+            weigh(exc.dataUrl);
         }
     }
     return out;
