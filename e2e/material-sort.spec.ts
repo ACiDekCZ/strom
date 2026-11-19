@@ -1592,4 +1592,56 @@ test.describe('Sort with the agent: a run of batches as it goes (spec 102 §3)',
         await expect(p.locator('.msp-run .mw-sort-run')).toHaveText('Batch 2 of 3 is running · more proposals will come', { timeout: 15_000 });
         await expect(p.locator('.msp-run .msp-run-wait')).toHaveCount(0);
     });
+
+    test('the line of proposals that arrived goes once they are handled; the run\'s end says itself in the open window, no toast over it', async ({ page }) => {
+        const material = await start(page);
+        await step(material, 0, 'working');
+        await step(material, 0, 'done');
+        await strip(page).locator('[data-sort="open"]').click();
+        const p = proposal(page);
+        await expect(p.locator('.msp-list .msp-row')).toHaveCount(2);
+        await step(material, 1, 'working');
+        await step(material, 1, 'done');
+        await expect(p.locator('.msp-more')).toBeVisible();
+        // All of them accepted without Show: the line points at nothing any more.
+        await p.locator('.msp-accept-all').click();
+        await expect(p.locator('.msp-end-title')).toBeVisible();
+        await expect(p.locator('.msp-more')).toBeHidden();
+        material.sortRunHold = false;
+        await expect(p.locator('.msp-list .msp-row')).toHaveCount(1, { timeout: 15_000 });
+        await p.locator('.msp-accept-all').click();
+        await expect(p.locator('.msp-end-sub')).toHaveText('For the whole run: 3 batches · 120 files');
+        await expect(p.locator('.msp-more')).toBeHidden();
+        await expect(page.locator('.toast[data-kind="materials"]', { hasText: 'The agent’s proposal is ready' })).toHaveCount(0);
+    });
+
+    test.describe('on a phone held sideways (844 × 390)', () => {
+        test.use({ viewport: { width: 844, height: 390 } });
+
+        test('the strip of a run on one line in German: what does not fit ends with an ellipsis, nothing cut off (spec 102 §11)', async ({ page }) => {
+            const material = await setup(page, { features: RUN, batches: [OTHER], files: photos() });
+            material.sortRunHold = true;
+            await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+            await openWindow(page);
+            await expect(strip(page)).toHaveAttribute('data-state', 'A');
+            await expect(strip(page).locator('.mw-sort-phone-short')).toBeVisible();
+            await expect(strip(page).locator('.mw-sort-phone')).toBeHidden();
+            await expect(strip(page).locator('button')).toHaveCount(0);
+            await page.evaluate(() => (window.Strom.UI as unknown as { openSortDialog(t: unknown): void }).openSortDialog({ items: [], batch: null, whole: true }));
+            await sortDialog(page).locator('.mdlg-sort-go').click();
+            await expect.poll(() => material.sortRuns?.size).toBe(1);
+            propose(material);
+            await step(material, 0, 'working');
+            await step(material, 0, 'done');
+            await expect(strip(page)).toHaveAttribute('data-state', 'C');
+            const fit = await strip(page).evaluate((el) => {
+                const text = el.querySelector<HTMLElement>('.mw-sort-text')!;
+                const cut = [...text.children].filter(c => (c as HTMLElement).scrollWidth > (c as HTMLElement).clientWidth + 1 && getComputedStyle(c).textOverflow !== 'ellipsis').length;
+                return { height: el.getBoundingClientRect().height, over: text.scrollWidth - text.clientWidth, cut };
+            });
+            expect(fit.height).toBeLessThanOrEqual(48);
+            expect(fit.over).toBeLessThanOrEqual(1);
+            expect(fit.cut).toBe(0);
+        });
+    });
 });

@@ -30753,6 +30753,8 @@
             .mw-sort-text { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
             .mw-sort-text > span { flex: none; }
             .mw-sort-text > .mw-sort-what { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+            /* A run's line (bar, proposals waiting, the short sentence) gives way with an ellipsis, never cut off. */
+            .mw-sort-text > .mw-sort-note, .mw-sort-text > .mw-sort-wait { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
             .mw-sort-phone { display: none; }
             .mw-sort-phone-short { display: inline; flex-basis: auto; }
             .mw-sort[data-state="error"] .mw-sort-text > span:not(.mw-sort-err) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

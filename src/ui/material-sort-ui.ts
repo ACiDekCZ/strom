@@ -759,7 +759,8 @@ export const materialSortMethods = uiModule({
         if (running(job) || earlier.missing) {
             again(document.hidden ? POLL_HIDDEN_MS : POLL_MS);
         } else if (hasProposal(job)) {
-            if (was && running(was)) {
+            // Not over the proposal window already open: it shows the end itself (spec 102 §3, §5).
+            if (was && running(was) && !proposalRun) {
                 this.showToast(strings.materials.agentSort.ready, TOAST_MS, {
                     closable: true, kind: 'materials',
                     action: { label: strings.materials.agentSort.open, run: () => void this.openSortProposal() },
@@ -847,7 +848,8 @@ export const materialSortMethods = uiModule({
         if (view.running || missing) {
             again(document.hidden ? POLL_HIDDEN_MS : POLL_MS);
         } else if (hasProposal(job)) {
-            if (was && running(was)) {
+            // Not over the proposal window already open: it shows the end itself (spec 102 §3, §5).
+            if (was && running(was) && !proposalRun) {
                 this.showToast(strings.materials.agentSort.ready, TOAST_MS, {
                     closable: true, kind: 'materials',
                     action: { label: strings.materials.agentSort.open, run: () => void this.openSortProposal() },
@@ -1659,6 +1661,8 @@ export const materialSortMethods = uiModule({
         const draw = () => {
             drawTabs();
             const shown = tab === 'proposals' ? open() : tab === 'unassigned' ? unassigned : done();
+            // "N proposals from batch b arrived" goes once the proposals it points to are handled (spec 102 §3).
+            if (moreFirst && !open().some(x => x.id === moreFirst)) moreHide();
             if (!focusId || !shown.some(x => x.id === focusId)) focusId = shown[0]?.id ?? null;
             const children: HTMLElement[] = [];
             if (tab === 'unassigned' && unassigned.length) {
