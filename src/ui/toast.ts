@@ -35,6 +35,8 @@ export interface ToastOptions {
     action?: ToastAction;
     /** A second action beside `action` (e.g. "Export GEDCOM" beside "Try again"). */
     more?: { label: string; run: () => void };
+    /** A third one after them (an output's "Cancel" beside "Try again" and "Continue without", spec 116 §8). */
+    third?: { label: string; run: () => void };
     hold?: boolean;
     /** A notice to be read: it stands 3 s at least before a newer toast takes its place (round 7 §53). */
     notice?: boolean;
@@ -123,7 +125,7 @@ function fillToast(toast: HTMLElement, message: string, opts: ToastOptions, onAc
     } else {
         toast.appendChild(document.createTextNode(message));
     }
-    const acts = [opts.action, opts.more].filter((a): a is NonNullable<ToastOptions['action']> => !!a);
+    const acts = [opts.action, opts.more, opts.third].filter((a): a is NonNullable<ToastOptions['action']> => !!a);
     if (acts.length) {
         // In the group of actions: an "Undo" or "↩ Back" riding along joins it, the group wraps whole
         const actions = document.createElement('span');
@@ -399,8 +401,13 @@ export interface ProgressToastHandle {
     update(step: ProgressStep & { title?: string }): void;
     /** Done: a summary with ✓ for 4 s (`role=status`); without a summary it just goes. */
     done(summary?: string): void;
-    /** It failed: the words as an alert (a title over them), ✕ and the actions; it does not go by itself. */
-    fail(text: string, action?: { label: string; run: () => void }, extra?: { title?: string; more?: { label: string; run: () => void }; neutral?: boolean }): void;
+    /**
+     * It failed: the words as an alert (a title over them), ✕ and the actions; it does not go by itself.
+     * `third`: a third action (its own "Cancel"), and no ✕ then (spec 116 §8).
+     */
+    fail(text: string, action?: { label: string; run: () => void }, extra?: {
+        title?: string; more?: { label: string; run: () => void }; third?: { label: string; run: () => void }; neutral?: boolean;
+    }): void;
     /** It goes now. */
     close(): void;
 }
@@ -533,8 +540,9 @@ export function showProgressToast(opts: LongOpts, first: ProgressStep = {}): Pro
             if (ended && !toast.isConnected) return;
             finish();
             // A neutral end (a question, not an error) is said politely, without the error's alert.
-            fillToast(toast, text, { alert: !extra?.neutral, closable: true, kind: 'progress', ...(action ? { action } : {}),
-                ...(extra?.title ? { title: extra.title } : {}), ...(extra?.more ? { more: extra.more } : {}) });
+            fillToast(toast, text, { alert: !extra?.neutral, closable: !extra?.third, kind: 'progress', ...(action ? { action } : {}),
+                ...(extra?.title ? { title: extra.title } : {}), ...(extra?.more ? { more: extra.more } : {}),
+                ...(extra?.third ? { third: extra.third } : {}) });
         },
         close() {
             finish();

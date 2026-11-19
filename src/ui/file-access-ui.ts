@@ -19,6 +19,8 @@ import {
 } from '../file-access.js';
 import { uiModule } from './module.js';
 import { activatedElement, runBusy } from './busy.js';
+import { imagesToAwait } from '../image-loads.js';
+import { imagesBeforeOutput } from './output-images.js';
 import { holdLeave } from './busy-leave.js';
 import { whilePicking } from './file-pick.js';
 
@@ -148,6 +150,10 @@ export const fileAccessMethods = uiModule({
             this.showToast(strings.fileAccess.permissionDenied);
             return;
         }
+        // The tree's photos still on their way: the file waits for them (spec 116 §8).
+        const waits = imagesToAwait(treeId);
+        if (await imagesBeforeOutput(strings.photos.out.backup, { el: origin, treeId }) === 'cancelled') return;
+        if (waits) await TreeManager.flush(treeId);
         const save = async (): Promise<void> => {
             const release = holdLeave('export');
             try {

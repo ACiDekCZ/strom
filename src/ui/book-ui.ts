@@ -53,6 +53,7 @@ import { openPersonPopover } from './person-popover.js';
 import { readRecent } from './tree-overview.js';
 import { uiModule } from './module.js';
 import { activatedElement, BUSY_MIN_MS, BUSY_SHOW_MS, busySpinHtml, nextPaint } from './busy.js';
+import { imagesBeforeOutput } from './output-images.js';
 import { showProgressToast, type ProgressToastHandle } from './toast.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 
@@ -1336,6 +1337,11 @@ export const bookUiMethods = uiModule({
         if (!s || s.output !== 'pages' || s.phase !== 'options') return;
         // One build at a time (1102 §7.2).
         if (running && running !== s) { this.showAlert(strings.familyPages.running, 'info'); return; }
+        const el = activatedElement();
+        if (!selectionReady(selectionOf(s))) return;
+        // The tree's photos still on their way: the file waits for them (spec 116 §8), its button says so.
+        if (await imagesBeforeOutput(strings.photos.out.familyPages, { el, treeId: s.treeId }) === 'cancelled') return;
+        if (st !== s || s.phase !== 'options' || (running && running !== s)) return;
         const sel = selectionOf(s);
         if (!selectionReady(sel)) return;
         if (s.estTimer !== null) scheduleEstimate(s, true);
@@ -1566,6 +1572,16 @@ export const bookUiMethods = uiModule({
             setTimeout(go, 100);
         });
         try {
+            // The tree's photos still on their way: the book waits for them (spec 116 §8, 8c), its window says so.
+            const closed = new AbortController();
+            const watch = setInterval(() => { if (win.closed) closed.abort(); }, 250);
+            const go = await imagesBeforeOutput(strings.photos.out.book, {
+                el: null, signal: closed.signal,
+                step: (line) => { const k$ = doc.querySelector('.bp-k'); if (k$) k$.textContent = line; },
+            }).finally(() => clearInterval(watch));
+            if (go === 'cancelled' || win.closed) throw new BookBuildStopped();
+            const k0 = doc.querySelector('.bp-k');
+            if (k0) k0.textContent = '';
             const html = await buildFamilyBookAsync(DataManager.getData(), options, this.familyBookEnv(options, false), async ({ k, n }) => {
                 if (cancelled || win.closed) throw new BookBuildStopped();
                 const k$ = doc.querySelector('.bp-k');
@@ -1631,7 +1647,7 @@ export const bookUiMethods = uiModule({
                 if (s.phase !== 'options') return;
                 this.closeBookDialog();
                 this.showPersonPage(one);
-                this.showPersonPageExport(false);
+                void this.personPageExportAfterImages(false);
                 return;
             }
             void this.buildPagesFromDialog();
@@ -1695,7 +1711,10 @@ export const bookUiMethods = uiModule({
             const run = (): void => {
                 if (painted) return;
                 painted = true;
-                try { this.saveOrShareBook(win, options, act, title()); } finally { rest(); }
+                // The tree's photos still on their way: the file waits for them (spec 116 §8), the button stays "Saving…".
+                void imagesBeforeOutput(strings.photos.out.book, { el: null }).then((go) => {
+                    try { if (go !== 'cancelled' && !win.closed) this.saveOrShareBook(win, options, act, title()); } finally { rest(); }
+                }, rest);
             };
             try { win.requestAnimationFrame(() => win.setTimeout(run, 0)); } catch { /* closed */ }
             setTimeout(run, 100);

@@ -194,4 +194,23 @@ describe('when the indicator shows', () => {
         expect(h.visible()).toMatchObject({ kind: 'run', done: 400 });
         expect(h.shown[h.shown.length - 1]).toMatchObject({ done: 400 });
     });
+
+    it('held back by an output\'s wait: some did not load, no notice of its own (the output asks, §8)', () => {
+        const h = harness();
+        h.model.update(snap());
+        const release = h.model.suspend();
+        h.model.update(snap({ phase: 'done', done: 848, failed: 12, left: 0, reasons: ['offline'] }));
+        expect(h.failed).toEqual([]);
+        release();
+        expect(h.failed).toEqual([]);
+        expect(h.visible()).toBeNull();
+        // A notice shown before the output began goes: the output's alert asks instead.
+        const g = harness();
+        g.model.update(snap());
+        g.model.update(snap({ phase: 'done', done: 848, failed: 12, left: 0, reasons: ['offline'] }));
+        expect(g.failed).toHaveLength(1);
+        g.model.suspend()();
+        expect(g.closed()).toBe(1);
+        expect(g.failed).toHaveLength(1);
+    });
 });

@@ -20,6 +20,8 @@ import { PrivacyMode } from '../privacy.js';
 import { EmbeddedDataEnvelope, StromData, TreeId } from '../types.js';
 import { uiModule } from './module.js';
 import { activatedElement, busyLocal, busyToast, runHeavy } from './busy.js';
+import { imagesToAwait } from '../image-loads.js';
+import { imagesBeforeOutput } from './output-images.js';
 import { holdLeave } from './busy-leave.js';
 import { autoGrowAll } from './autogrow.js';
 import { safeFileName } from '../filenames.js';
@@ -124,6 +126,10 @@ export const shareUiMethods = uiModule({
         // The dialog stays while the file is made (§1: its button "Saving…", leaving asks); it goes once the
         // file is handed to the browser, a failure stays at the button with "Try again".
         const btn = activatedElement() ?? document.querySelector<HTMLElement>('#share-modal .buttons .primary');
+        // The tree's photos still on their way: the file waits for them (spec 116 §8), its button says so.
+        const waits = imagesToAwait(treeId);
+        if (await imagesBeforeOutput(strings.photos.out.backup, { el: btn, treeId }) === 'cancelled') return;
+        if (waits) await TreeManager.flush(treeId);
         const made = await busyLocal(btn, strings.busy.saving, async () => {
             const release = holdLeave('export');
             try {

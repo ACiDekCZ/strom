@@ -25,6 +25,8 @@ import { isPromoAvailable } from '../research-promo.js';
 import { onComputer } from './research-ui.js';
 import { uiModule } from './module.js';
 import { activatedElement, runBusy } from './busy.js';
+import { imagesToAwait } from '../image-loads.js';
+import { imagesBeforeOutput } from './output-images.js';
 import { holdLeave } from './busy-leave.js';
 import { whilePicking } from './file-pick.js';
 import { iconSvg } from '../icons.js';
@@ -373,6 +375,17 @@ export const fileCopyMethods = uiModule({
      * "Try again". The shortcut (no button) says only the toast.
      */
     runQuickSave(origin: HTMLElement | null, make: () => Promise<string | null>, again: () => void): void {
+        // The tree's photos still on their way: the copy waits for them (spec 116 §8), its button says so.
+        const waits = imagesToAwait();
+        void imagesBeforeOutput(strings.photos.out.backup, { el: origin }).then(async (go) => {
+            if (go === 'cancelled') return;
+            // The tree as stored (its photos stored once they all came) is what goes into the file.
+            if (waits) await TreeManager.flush();
+            this.runQuickSaveNow(origin, make, again);
+        });
+    },
+
+    runQuickSaveNow(origin: HTMLElement | null, make: () => Promise<string | null>, again: () => void): void {
         const save = async (): Promise<void> => {
             const release = holdLeave('export');
             try {

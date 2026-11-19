@@ -40,6 +40,9 @@ import type { SetRef } from './family-pages-ui.js';
 import { openImageViewer } from './image-viewer.js';
 import { personSubtitle } from './person-sources-ui.js';
 import { HISTORY_CHANGED_EVENT } from './history-ui.js';
+import { activatedElement } from './busy.js';
+import { imagesToAwait } from '../image-loads.js';
+import { imagesBeforeOutput, imagesReadyForPrint } from './output-images.js';
 
 export const PERSON_PAGE_ID = 'person-page-modal';
 export const PERSON_PAGE_EXPORT_ID = 'person-page-export-modal';
@@ -680,8 +683,8 @@ export const personPageMethods = uiModule({
         const setRef = state.current.set;
         if (setRef && (target.closest('.pp-save') || target.closest('.pp-share'))) { this.familyPagesWindowSave(setRef); return; }
         if (setRef && target.closest('.pp-book')) { this.familyPagesWindowBook(setRef); return; }
-        if (target.closest('.pp-save')) { this.showPersonPageExport(false); return; }
-        if (target.closest('.pp-share')) { this.showPersonPageExport(canShareFiles()); return; }
+        if (target.closest('.pp-save')) { void this.personPageExportAfterImages(false); return; }
+        if (target.closest('.pp-share')) { void this.personPageExportAfterImages(canShareFiles()); return; }
         if (target.closest('.pp-more')) { this.togglePersonPageMenu(); return; }
         const menuItem = target.closest<HTMLElement>('[data-pp-menu]');
         if (menuItem) { this.runPersonPageMenu(menuItem.dataset.ppMenu ?? ''); return; }
@@ -1023,7 +1026,7 @@ export const personPageMethods = uiModule({
             else if (key === 'print') this.printPersonPage();
             return;
         }
-        if (key === 'save') this.showPersonPageExport(false);
+        if (key === 'save') void this.personPageExportAfterImages(false);
         else if (key === 'print') this.printPersonPage();
         else if (key === 'edit') {
             if (DataManager.isReadOnly() || DataManager.isPersonLocked(personId)) return;
@@ -1040,8 +1043,21 @@ export const personPageMethods = uiModule({
         }
     },
 
-    /** Print the page only (the tree and the window's controls stay out, §6.2). */
-    printPersonPage(): void {
+    /**
+     * Print the page only (the tree and the window's controls stay out, §6.2). The tree's photos still on
+     * their way: the print waits for them (spec 116 §8) and the page is drawn anew with them; its images
+     * loaded lazily are loaded and decoded first, else the print shows empty frames.
+     */
+    async printPersonPage(): Promise<void> {
+        const el = activatedElement();
+        const waits = imagesToAwait();
+        const title = state?.current.set ? strings.photos.out.familyPages : strings.photos.out.personPage;
+        if (await imagesBeforeOutput(title, { el }) === 'cancelled' || !overlayEl()) return;
+        if (waits) {
+            this.snapshotPersonPage();
+            this.renderPersonPage();
+        }
+        await imagesReadyForPrint(overlayEl() ?? document);
         // The whole fan on paper (§8.6), not the part zoomed into.
         fanZoom?.reset();
         document.body.classList.add('printing-person-page');
@@ -1051,6 +1067,12 @@ export const personPageMethods = uiModule({
         };
         window.addEventListener('afterprint', done);
         window.print();
+    },
+
+    /** "Save as HTML" / "Share…" once the tree's photos came (spec 116 §8): the file is built with them. */
+    async personPageExportAfterImages(share: boolean): Promise<void> {
+        if (await imagesBeforeOutput(strings.photos.out.personPage) === 'cancelled' || !state) return;
+        this.showPersonPageExport(share);
     },
 
     // ── "Save as HTML" (§5.1, §5.5, §6.1) ──

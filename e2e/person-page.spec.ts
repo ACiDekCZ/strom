@@ -586,6 +586,47 @@ test.describe('desktop', () => {
         await page.emulateMedia({ media: 'screen' });
     });
 
+    test('Print waits for the images below the fold: none is printed as an empty frame', async ({ page }) => {
+        // Regression: the gallery's images load lazily; print() came before they did, the sheet had empty frames.
+        await page.route('**/pp-lazy-print.jpg', (route) => route.fulfill({
+            status: 200, contentType: 'image/jpeg', body: Buffer.from(IMG.slice(IMG.indexOf(',') + 1), 'base64'),
+        }));
+        await page.setViewportSize({ width: 1280, height: 420 });
+        await openApp(page);
+        await seedFisek(page);
+        await openPageFromMenu(page);
+        const w = win(page);
+        const gal = w.locator('#pp-sec-materials .pp-gal-img');
+        await expect(gal).toHaveCount(1);
+        // The gallery's image as one still to load: an address, far below the fold of a long page (the
+        // browser loads a lazy image only within a screenful or two of the view).
+        await gal.evaluate((el) => {
+            const far = document.createElement('div');
+            far.style.height = '9000px';
+            el.closest('#pp-sec-materials')!.before(far);
+            const img = document.createElement('img');
+            img.className = 'pp-gal-img';
+            img.loading = 'lazy';
+            img.alt = '';
+            img.src = '/pp-lazy-print.jpg';
+            el.replaceWith(img);
+        });
+        expect(await gal.evaluate((el) => (el as HTMLImageElement).loading)).toBe('lazy');
+        expect(await gal.evaluate((el) => (el as HTMLImageElement).complete)).toBe(false);
+        await page.evaluate(() => {
+            const g = window as unknown as { __printed?: { imgs: number; drawn: number } };
+            window.print = () => {
+                const imgs = [...document.querySelectorAll<HTMLImageElement>('#person-page-modal img')];
+                g.__printed = { imgs: imgs.length, drawn: imgs.filter((i) => i.complete && i.naturalWidth > 0).length };
+            };
+        });
+        await w.locator('.pp-print').click();
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __printed?: unknown }).__printed ?? null)).not.toBeNull();
+        const printed = await page.evaluate(() => (window as unknown as { __printed: { imgs: number; drawn: number } }).__printed);
+        expect(printed.imgs).toBeGreaterThan(0);
+        expect(printed.drawn).toBe(printed.imgs);
+    });
+
     test('paragraphs with their own spacing keep it in the window and the file (the notes, the sources\' intro, a couple chapter\'s foot)', async ({ page, browser }) => {
         await openApp(page);
         await page.evaluate(() => window.Strom.UI.loadDemoTree());

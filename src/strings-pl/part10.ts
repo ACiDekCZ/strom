@@ -144,5 +144,17 @@ export const plPart10: Pick<StringsType, 'busy' | 'photos'> = {
         detailEditable: 'Drzewo można w tym czasie edytować.',
         someFailed: (n: number) => `Niektóre zdjęcia nie zostały wczytane (${n}).`,
         whyMissing: 'Badanie nie ma tych zdjęć.',
+        waiting: 'Oczekiwanie na zdjęcia',
+        continueWithout: (n: number) => `Kontynuuj bez ${n} ${plPl(n, 'zdjęcia', 'zdjęć', 'zdjęć')}`,
+        out: {
+            poster: 'Drukowanie plakatu',
+            png: 'Obraz PNG',
+            svg: 'Wektor SVG',
+            personPage: 'Strona osoby',
+            familyPages: 'Strony rodziny',
+            book: 'Księga rodu',
+            backup: 'Kopia danych',
+            gedcom: 'Eksport GEDCOM',
+        },
     },
 };

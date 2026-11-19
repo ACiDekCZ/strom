@@ -624,6 +624,11 @@ export class ImageLoadQueue {
         return this.aborted;
     }
 
+    /** Is its tree the open one? */
+    holdsOpenTree(): boolean {
+        return this.o.deps.currentTreeId() === this.treeId;
+    }
+
     stateOf(key: FieldKey): ImageLoadState | null {
         return this.items.get(key)?.state ?? null;
     }
@@ -848,12 +853,16 @@ export class ImageLoadQueue {
 
     private emitState(): void {
         if (currentLoad !== this) return;
-        this.o.deps.emit(IMAGES_STATE_EVENT, this.snapshot());
+        const s = this.snapshot();
+        this.o.deps.emit(IMAGES_STATE_EVENT, s);
+        tellState(s);
     }
 
     /** Tell that nothing loads any more (this load was let go). */
     emitIdle(): void {
-        this.o.deps.emit(IMAGES_STATE_EVENT, { treeId: null, seq: this.seq, phase: 'idle', done: 0, total: 0, failed: 0, left: 0, reasons: [] } satisfies ImageLoadSnapshot);
+        const s: ImageLoadSnapshot = { treeId: null, seq: this.seq, phase: 'idle', done: 0, total: 0, failed: 0, left: 0, reasons: [] };
+        this.o.deps.emit(IMAGES_STATE_EVENT, s);
+        tellState(s);
     }
 
     /** Nothing more to come: the tree is stored once, and whoever waits is told. */
@@ -881,6 +890,17 @@ export class ImageLoadQueue {
 
 let currentLoad: ImageLoadQueue | null = null;
 let loadSeq = 0;
+const stateListeners = new Set<(s: ImageLoadSnapshot) => void>();
+
+function tellState(s: ImageLoadSnapshot): void {
+    for (const fn of [...stateListeners]) fn(s);
+}
+
+/** Listen to the state of the current load (as `strom:images-state`, without a window); returns the unsubscribe. */
+export function onImageLoadState(fn: (s: ImageLoadSnapshot) => void): () => void {
+    stateListeners.add(fn);
+    return () => { stateListeners.delete(fn); };
+}
 
 /**
  * Begin loading the images of `o.pending` into tree `o.treeId` (the open
@@ -951,3 +971,103 @@ export const imageLoads = {
     },
     reset: resetImageLoads,
 };
+
+// ==================== OUTPUTS WAIT FOR THE PHOTOS (§8, K1.7) ====================
+
+/** How the wait before an output ended: all came, made without those that did not, or not made. */
+export type AwaitImagesResult = 'ready' | 'without' | 'cancelled';
+/** The choice once some did not come: ask again, make the output without them, or not at all. */
+export type AwaitImagesChoice = 'retry' | 'without' | 'cancel';
+
+export interface AwaitImagesOptions {
+    /** The output (its toast's title). */
+    title: string;
+    /** Aborted: the wait ends 'cancelled' (the output's window closed…). */
+    signal?: AbortSignal;
+    /** The tree the output is made of (none: any); the photos of another tree are not waited for. */
+    treeId?: string | null;
+}
+
+/** What the wait shows (the app's progress toast; a test's record). */
+export interface AwaitImagesView {
+    /** Photos on their way: the count anew (the first call shows the wait; `cancel` ends it 'cancelled'). */
+    waiting(title: string, s: ImageLoadSnapshot, cancel: () => void): void;
+    /** Some did not come: the three choices (Try again, Continue without N photos, Cancel). */
+    ask(title: string, s: ImageLoadSnapshot): Promise<AwaitImagesChoice>;
+    /** The wait is over: what it showed goes. */
+    close(): void;
+}
+
+/** Has an output of tree `treeId` (none: any) photos to wait for: some still on their way, or not loaded? */
+export function imagesToAwait(treeId?: string | null): boolean {
+    const q = currentLoad;
+    if (!q || q.isAborted() || (treeId != null && q.treeId !== treeId)) return false;
+    const s = q.snapshot();
+    return s.total > 0 && (s.left > 0 || s.failed > 0);
+}
+
+/**
+ * Before an output (print, a file, the book): wait until the tree's photos
+ * came, so none is made without them. Nothing to wait for: 'ready' at once,
+ * nothing shown. Else the view counts them (Cancel: 'cancelled'); all came:
+ * 'ready'; some did not: the view asks — Try again waits anew, Continue
+ * without makes the output from the data as they are ('without', the one
+ * deliberate way to an output without them), Cancel ('cancelled'). The load
+ * let go meanwhile: a new load of the same tree is waited for instead; the
+ * same tree still open without one: 'ready'; another tree open: 'cancelled'.
+ */
+export async function awaitTreeImages(o: AwaitImagesOptions, view: AwaitImagesView): Promise<AwaitImagesResult> {
+    let q = currentLoad;
+    if (!q || !imagesToAwait(o.treeId)) return 'ready';
+    if (o.signal?.aborted) return 'cancelled';
+    let cancelled = false;
+    let wake: (() => void) | null = null;
+    const cancel = (): void => {
+        cancelled = true;
+        wake?.();
+    };
+    o.signal?.addEventListener('abort', cancel, { once: true });
+    let counting = false;
+    const off = onImageLoadState(s => {
+        if (counting && !cancelled && q && s.treeId === q.treeId && s.seq === q.seq && s.phase === 'running') view.waiting(o.title, s, cancel);
+    });
+    try {
+        for (;;) {
+            const load: ImageLoadQueue = q!;
+            if (load.isAborted() || currentLoad !== load) {
+                const next = currentLoad;
+                if (next && next.treeId === load.treeId && !next.isAborted()) {
+                    q = next;
+                    continue;
+                }
+                return load.holdsOpenTree() ? 'ready' : 'cancelled';
+            }
+            const s = load.snapshot();
+            if (s.left > 0) {
+                counting = true;
+                view.waiting(o.title, s, cancel);
+                await new Promise<void>(resolve => {
+                    wake = resolve;
+                    void load.whenIdle().then(resolve);
+                });
+                wake = null;
+                counting = false;
+                if (cancelled) return 'cancelled';
+                continue;
+            }
+            if (s.failed === 0) return 'ready';
+            const choice = await new Promise<AwaitImagesChoice>(resolve => {
+                wake = () => resolve('cancel');
+                void view.ask(o.title, s).then(resolve);
+            });
+            wake = null;
+            if (cancelled || choice === 'cancel') return 'cancelled';
+            if (choice === 'without') return 'without';
+            load.retry(load.failedKeys());
+        }
+    } finally {
+        off();
+        o.signal?.removeEventListener('abort', cancel);
+        view.close();
+    }
+}

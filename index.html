@@ -2091,6 +2091,9 @@
         @media (hover: hover) { #about-modal .about-share:hover { background: var(--hover-bg); } }
         /* What Share Strom did (the address copied, or the address itself): over the About dialog. */
         .toast[data-kind="about-share"] { z-index: 250; }
+        /* An output's wait for the photos (spec 116 §8): above the dialog it was asked from (the poster's 300, the
+           export's 500), its Cancel and its three actions reachable. */
+        .toast[data-output-wait] { z-index: 550; }
         .about-share .ui-icon { color: var(--primary); }
         /* Touch: both support buttons a finger high. */
         @media (pointer: coarse) {

@@ -121,7 +121,8 @@ export class ImageLoadChipModel {
         const roundEnded = sameLoad && before!.phase === 'running';
         if (s.failed > 0) {
             this.hide();
-            if (roundEnded) {
+            // Held back for an output's wait: its own alert asks about them (§8), not a second one.
+            if (roundEnded && !this.held) {
                 this.failedShown = true;
                 this.deps.showFailed(s);
             }
@@ -149,11 +150,14 @@ export class ImageLoadChipModel {
 
     /**
      * Hold the indicator back (an output's progress toast counts the photos,
-     * §8); the returned function lets it show again (once per hold).
+     * §8), its notice of photos not loaded gone (the output asks about them);
+     * the returned function lets it show again (once per hold).
      */
     suspend(): () => void {
         this.held++;
         this.deps.render(null);
+        // The output asks about those not loaded itself: one alert, not two.
+        this.closeFailed();
         let released = false;
         return () => {
             if (released) return;

@@ -115,6 +115,18 @@ export const BOOK_WINDOW_SCRIPT = `(function () {
   var tocBtn = d.querySelector('[data-book-ui="toc"]');
   var moreBtn = d.querySelector('[data-book-ui="more"]');
   function near(t, sel) { return t && t.closest ? t.closest(sel) : null; }
+  // Print only with every image drawn: a lazily loaded one is loaded now (at most 5 s), else its frame is empty.
+  function printReady() {
+    var imgs = d.images, waits = [], done = false, i;
+    function go() { if (!done) { done = true; window.print(); } }
+    for (i = 0; i < imgs.length; i++) {
+      if (imgs[i].loading === 'lazy') imgs[i].loading = 'eager';
+      if (imgs[i].decode) waits.push(imgs[i].decode()['catch'](function () {}));
+    }
+    if (!waits.length || typeof Promise === 'undefined') { go(); return; }
+    Promise.all(waits).then(go, go);
+    setTimeout(go, 5000);
+  }
   function setToc(open) {
     b.classList.toggle('book-toc-open', open);
     if (tocBtn) tocBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -130,7 +142,7 @@ export const BOOK_WINDOW_SCRIPT = `(function () {
     if (ui === 'toc') { setMore(false); setToc(!b.classList.contains('book-toc-open')); return; }
     if (ui === 'toc-close') { setToc(false); return; }
     if (ui === 'more') { setToc(false); setMore(!!(more && more.hidden)); return; }
-    if (ui === 'print') { setMore(false); window.print(); return; }
+    if (ui === 'print') { setMore(false); printReady(); return; }
     if (ui === 'close') { window.close(); setTimeout(function () { if (!window.closed) history.back(); }, 200); return; }
     if (more && !more.hidden && (!near(t, '.book-more') || near(t, '[data-book-act]'))) setMore(false);
     if (near(t, '.book-side a')) { setToc(false); return; }

@@ -4,6 +4,8 @@
  */
 
 import { runBusy, isBusy, busyStep } from './busy.js';
+import { imagesToAwait } from '../image-loads.js';
+import { imagesBeforeOutput } from './output-images.js';
 import { holdLeave } from './busy-leave.js';
 import { allMedia, hasTreeMedia, mediaSourceIds } from '../media.js';
 import { DataManager, auditPersonName, storedTreeForExport } from '../data.js';
@@ -63,6 +65,8 @@ let exportQuick = false;
 let exportFormat: ExportFormat = 'json';
 /** The export takes every tree (only the current one is measured; the others may hold sources). */
 let exportAllTrees = false;
+/** The one tree the dialog exports (null: the open one, or every tree). */
+let exportTreeIdFor: TreeId | null = null;
 /**
  * The one tree exported when it is not the open one (the tree manager's export
  * of another tree): the estimate and the privacy note are its own, read from
@@ -1003,6 +1007,7 @@ export const encryptionUiMethods = uiModule({
         const quick = options.quick;
         exportQuick = !!quick;
         exportAllTrees = !!options.allTrees;
+        exportTreeIdFor = options.treeId ?? null;
         const format = options.format ?? 'json';
         exportFormat = format;
         const e = strings.encryption;
@@ -1287,8 +1292,18 @@ export const encryptionUiMethods = uiModule({
             close();
             if (file) this.showToast(backup ? strings.busy.backupSaved(file) : strings.busy.fileSaved(file), 4000);
         };
+        if (btn && isBusy(btn)) return;
+        // The tree's photos still on their way: the file waits for them (spec 116 §8); a CSV has none.
+        if (exportFormat !== 'csv') {
+            const treeId = exportAllTrees ? undefined : exportTreeIdFor ?? DataManager.getCurrentTreeId();
+            const waits = imagesToAwait(treeId);
+            const title = exportFormat === 'gedcom' ? strings.photos.out.gedcom : strings.photos.out.backup;
+            if (await imagesBeforeOutput(title, { el: btn, treeId }) === 'cancelled') return;
+            if (this.exportPasswordCallback !== callback) return;
+            // The tree as stored (its photos stored once they all came) is what goes into the file.
+            if (waits) await TreeManager.flush();
+        }
         if (!btn || isBusy(btn)) {
-            if (btn && isBusy(btn)) return;
             saved(await work());
             return;
         }

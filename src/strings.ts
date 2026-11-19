@@ -10644,6 +10644,21 @@ const stringsEN = {
         /** The notice once the photos that did not load are known (§7): the title, and why when the research lacks them. */
         someFailed: (n: number) => `Some photos did not load (${n}).`,
         whyMissing: 'The research does not have these photos.',
+        /** An output waiting for the tree's photos (§8): the step of its progress toast and of its element. */
+        waiting: 'Waiting for photos',
+        /** The choice after some did not load: the output made without them. */
+        continueWithout: (n: number) => `Continue without ${n} ${plural('en', n, 'photo', 'photos')}`,
+        /** The outputs waiting (the progress toast's title). */
+        out: {
+            poster: 'Printing the poster',
+            png: 'PNG image',
+            svg: 'SVG vector',
+            personPage: 'Person page',
+            familyPages: 'Family pages',
+            book: 'Family book',
+            backup: 'Data backup',
+            gedcom: 'GEDCOM export',
+        },
     },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {
@@ -20876,6 +20891,18 @@ const stringsCZ: StringsType = {
         detailEditable: 'Strom lze mezitím upravovat.',
         someFailed: (n: number) => `Některé fotky se nenačetly (${n}).`,
         whyMissing: 'Výzkum tyto fotky nemá.',
+        waiting: 'Čeká se na fotky',
+        continueWithout: (n: number) => `Pokračovat bez ${n} ${plural('cs', n, 'fotky', 'fotek', 'fotek')}`,
+        out: {
+            poster: 'Tisk plakátu',
+            png: 'Obrázek PNG',
+            svg: 'Vektor SVG',
+            personPage: 'Stránka osoby',
+            familyPages: 'Stránky rodiny',
+            book: 'Kniha rodu',
+            backup: 'Záloha dat',
+            gedcom: 'Export GEDCOM',
+        },
     },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {
@@ -31027,6 +31054,18 @@ const stringsDE: StringsType = {
         detailEditable: 'Der Stammbaum kann inzwischen bearbeitet werden.',
         someFailed: (n: number) => `Einige Fotos wurden nicht geladen (${n}).`,
         whyMissing: 'Die Forschung hat diese Fotos nicht.',
+        waiting: 'Warten auf Fotos',
+        continueWithout: (n: number) => `Ohne ${n} ${plural('de', n, 'Foto', 'Fotos')} fortfahren`,
+        out: {
+            poster: 'Poster drucken',
+            png: 'PNG-Bild',
+            svg: 'SVG-Vektor',
+            personPage: 'Personenseite',
+            familyPages: 'Familienseiten',
+            book: 'Familienbuch',
+            backup: 'Datensicherung',
+            gedcom: 'GEDCOM-Export',
+        },
     },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {

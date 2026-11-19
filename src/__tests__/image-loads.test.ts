@@ -10,7 +10,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
-    applyImageFills, imageLoads, personsByNearness, resetImageLoads, startImageLoad, takePendingImages, withArrivedImages,
+    applyImageFills, awaitTreeImages, imageLoads, imagesToAwait, personsByNearness, resetImageLoads, startImageLoad,
+    takePendingImages, withArrivedImages, type AwaitImagesChoice, type AwaitImagesView,
     IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, IMAGE_FIRST_BATCH,
     type ImageFill, type ImageLoadDeps, type ImageLoadSnapshot, type ImagesArrivedDetail, type PendingImage,
 } from '../image-loads.js';
@@ -420,6 +421,124 @@ describe('the queue', () => {
         await l.q.whenIdle();
         expect(b.asks).toEqual([[pending[0].ref.sha]]);
         expect(data.persons[toPersonId('p1')].photo).toBe(data.persons[toPersonId('p0')].photo);
+    });
+});
+
+/** The wait's look as a record: what it showed, and the answers to its question. */
+function fakeView(answers: AwaitImagesChoice[] = []) {
+    const shown: { done: number; total: number }[] = [];
+    const asked: { failed: number; reasons: string[] }[] = [];
+    let cancel: (() => void) | null = null;
+    let closed = 0;
+    const view: AwaitImagesView = {
+        waiting: (title, s, c) => { expect(title).toBe('Printing the poster'); shown.push({ done: s.done, total: s.total }); cancel = c; },
+        ask: async (_t, s) => { asked.push({ failed: s.failed, reasons: [...s.reasons] }); return answers.shift() ?? 'cancel'; },
+        close: () => { closed++; },
+    };
+    return { view, shown, asked, cancel: () => cancel?.(), closed: () => closed };
+}
+const POSTER = { title: 'Printing the poster' };
+const tick = (): Promise<void> => new Promise(r => setTimeout(r, 5));
+
+describe('an output waits for the photos (awaitTreeImages, §8)', () => {
+    it('nothing on its way: ready at once, nothing shown', async () => {
+        const v = fakeView();
+        expect(imagesToAwait()).toBe(false);
+        expect(await awaitTreeImages(POSTER, v.view)).toBe('ready');
+        expect(v.shown).toEqual([]);
+        expect(v.closed()).toBe(0);
+        // All came already: the same.
+        const { data, pending, store } = chain(2);
+        const l = load({ pending, data, fetch: bridge(store).deps });
+        await l.q.whenIdle();
+        expect(await awaitTreeImages(POSTER, v.view)).toBe('ready');
+        expect(v.shown).toEqual([]);
+    });
+
+    it('photos on their way: counted, the output once all came', async () => {
+        const { data, pending, store } = chain(3);
+        const b = bridge(store, { hold: true });
+        const l = load({ pending, data, fetch: b.deps, firstBatch: 1, batch: 1 });
+        const v = fakeView();
+        const wait = awaitTreeImages(POSTER, v.view);
+        await tick();
+        expect(v.shown[0]).toEqual({ done: 0, total: 3 });
+        for (let i = 0; i < 3; i++) { b.release(); await tick(); }
+        expect(await wait).toBe('ready');
+        // The count moved on while it waited.
+        expect(v.shown.some(x => x.done > 0 && x.done < 3)).toBe(true);
+        expect(v.asked).toEqual([]);
+        expect(v.closed()).toBe(1);
+        expect(data.persons[toPersonId('p2')].photo).toBe(store.get(pending[2].ref.sha));
+        expect(l.q.snapshot().left).toBe(0);
+    });
+
+    it('photos of another tree: not waited for', async () => {
+        const { data, pending, store } = chain(2);
+        load({ pending, data, fetch: bridge(store, { hold: true }).deps });
+        const v = fakeView();
+        expect(await awaitTreeImages({ ...POSTER, treeId: 'tree-b' }, v.view)).toBe('ready');
+        expect(v.shown).toEqual([]);
+    });
+
+    it('Cancel during the wait, or its window closed: cancelled', async () => {
+        const { data, pending, store } = chain(2);
+        load({ pending, data, fetch: bridge(store, { hold: true }).deps });
+        const v = fakeView();
+        const wait = awaitTreeImages(POSTER, v.view);
+        await tick();
+        v.cancel();
+        expect(await wait).toBe('cancelled');
+        expect(v.closed()).toBe(1);
+        const gone = new AbortController();
+        const w2 = awaitTreeImages({ ...POSTER, signal: gone.signal }, v.view);
+        await tick();
+        gone.abort();
+        expect(await w2).toBe('cancelled');
+    });
+
+    it('some did not come: asked once; Continue without makes it, Cancel does not', async () => {
+        const { data, pending, store } = chain(3);
+        const b = bridge(store, { fault: () => new TypeError('Failed to fetch') });
+        load({ pending, data, fetch: b.deps });
+        const v = fakeView(['without', 'cancel']);
+        expect(await awaitTreeImages(POSTER, v.view)).toBe('without');
+        expect(v.asked).toEqual([{ failed: 3, reasons: ['offline'] }]);
+        expect(await awaitTreeImages(POSTER, v.view)).toBe('cancelled');
+        expect(v.asked.length).toBe(2);
+        expect(v.closed()).toBe(2);
+    });
+
+    it('Try again asks the bridge anew: they came, the output is made with them', async () => {
+        const { data, pending, store } = chain(3);
+        let down = true;
+        const b = bridge(store, { fault: () => (down ? new TypeError('Failed to fetch') : null) });
+        const l = load({ pending, data, fetch: b.deps });
+        await l.q.whenIdle();
+        const v: AwaitImagesView = {
+            ...fakeView().view,
+            ask: async () => { down = false; return 'retry'; },
+        };
+        expect(await awaitTreeImages(POSTER, v)).toBe('ready');
+        expect(l.q.snapshot()).toMatchObject({ done: 3, failed: 0 });
+        expect(data.persons[toPersonId('p0')].photo).toBe(store.get(pending[0].ref.sha));
+    });
+
+    it('the load let go meanwhile: ready while its tree is open, cancelled once another is', async () => {
+        const { data, pending, store } = chain(2);
+        let open: string | null = 'tree-a';
+        load({ pending, data, fetch: bridge(store, { hold: true }).deps, tree: () => open });
+        const v = fakeView();
+        const wait = awaitTreeImages(POSTER, v.view);
+        await tick();
+        resetImageLoads();
+        expect(await wait).toBe('ready');
+        load({ pending, data, fetch: bridge(store, { hold: true }).deps, tree: () => open });
+        const w2 = awaitTreeImages(POSTER, v.view);
+        await tick();
+        open = 'tree-b';
+        resetImageLoads();
+        expect(await w2).toBe('cancelled');
     });
 });
 

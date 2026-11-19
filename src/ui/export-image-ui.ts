@@ -16,6 +16,7 @@ import { computeTimelineModel } from '../timeline.js';
 import { buildTimelinePosterSvg, timelinePosterGeometry } from '../timeline-chart.js';
 import { uiModule } from './module.js';
 import { runBusy, activatedElement, nextPaint } from './busy.js';
+import { imagesBeforeOutput } from './output-images.js';
 import { LayoutConfig, StromData, TreeSpacing, ViewMode, layoutConfigFor, personCardHeight } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
 import { classifyBranches, BranchSet } from '../branch-colors.js';
@@ -310,8 +311,7 @@ export const POSTER_SHOWN_AT_ONCE = 1500;
  * A poster built under the working state of the button that asked for it (§8), "Saving the file…": painted before
  * the build, at once for a large view (the page cannot paint while it builds). Without a button: built at once.
  */
-async function posterBusy(work: () => void | Promise<void>): Promise<void> {
-    const el = activatedElement();
+async function posterBusy(work: () => void | Promise<void>, el: HTMLElement | null): Promise<void> {
     if (!el) { await work(); return; }
     const cards = TreeRenderer.getPosterLayout({ includeView: true }).positions.size;
     await runBusy(el, async () => { await nextPaint(); await work(); },
@@ -491,8 +491,11 @@ export const exportImageMethods = uiModule({
     },
 
     /** Download the current view as a self-contained SVG (built under its button's working state, §8). */
-    exportPosterSvg(): Promise<void> {
-        return posterBusy(() => {
+    async exportPosterSvg(): Promise<void> {
+        // The tree's photos still on their way: the file waits for them (spec 116 §8).
+        const el = activatedElement();
+        if (await imagesBeforeOutput(strings.photos.out.svg, { el }) === 'cancelled') return;
+        await posterBusy(() => {
             const poster = buildCurrentPoster();
             if (!poster) {
                 this.showAlert(strings.poster.empty, 'warning');
@@ -500,12 +503,14 @@ export const exportImageMethods = uiModule({
             }
             downloadBlob(poster.svg, 'image/svg+xml', posterFilename('svg'));
             this.closePosterDialog();
-        });
+        }, el);
     },
 
     /** Rasterize the current view to a 2x PNG (scaled down to the canvas limit, none when unreadable so: posterPngScales), under its button's working state (§8). */
-    exportPosterPng(): Promise<void> {
-        return posterBusy(async () => {
+    async exportPosterPng(): Promise<void> {
+        const el = activatedElement();
+        if (await imagesBeforeOutput(strings.photos.out.png, { el }) === 'cancelled') return;
+        await posterBusy(async () => {
             const poster = buildCurrentPoster();
             if (!poster) {
                 this.showAlert(strings.poster.empty, 'warning');
@@ -571,14 +576,16 @@ export const exportImageMethods = uiModule({
                 console.error('PNG export failed:', e);
                 this.showAlert(strings.poster.pngError, 'error');
             }
-        });
+        }, el);
     },
 
     /**
      * Open the browser print dialog with the tree tiled across pages of the
      * chosen paper size/orientation, with a 10mm overlap and glue/crop marks.
      */
-    printPosterPdf(): void {
+    async printPosterPdf(): Promise<void> {
+        // The tree's photos still on their way: the print waits for them, its row says so (spec 116 §8, 8a).
+        if (await imagesBeforeOutput(strings.photos.out.poster) === 'cancelled') return;
         const poster = buildCurrentPoster();
         if (!poster) {
             this.showAlert(strings.poster.empty, 'warning');
