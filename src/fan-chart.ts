@@ -31,7 +31,7 @@ import {
 import { assignFanRodColors, fanRodLegend, FanRodAssignment } from './fan-rod-assign.js';
 import {
     FanLabelSizes, FanMeasure, fanScreenSizes, fanPrintSizes, fanBaseSize, defaultFanMeasure, fanLabelBox, fitFanLabel, fitFanSectorLabel,
-    fanLabelSvg, fanCenteredRowsSvg, fanRadialRotation, fanYears, FanLabelBox,
+    fanLabelSvg, fanCenteredRowsSvg, fanFocusFallbackRows, fanRadialRotation, fanYears, FanLabelBox,
 } from './fan-labels.js';
 
 // ==================== GEOMETRY ====================
@@ -738,7 +738,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         const lab = fit && (fit.level < 7 || fprot || !f.firstName) ? fit : null;
         const rows: Array<{ text: string; fs: number; bold: boolean; cls?: string }> = lab
             ? lab.rows.slice()
-            : [{ text: fprot ? strings.fan.living : (f.firstName || shownNameFull(f)), fs: sizes.min, bold: true }];
+            : fanFocusFallbackRows(fprot ? strings.fan.living : (f.firstName || shownNameFull(f)), box, sizes.min, measure);
         if (back) rows.push({ text: back.row, fs: Math.max(sizes.min, 11), bold: true, cls: 'fan-name fan-back' });
         flabel = fanCenteredRowsSvg(rows, ppu, esc);
     }

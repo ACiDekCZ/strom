@@ -429,6 +429,38 @@ export function fitFanLabel(p: Person, box: FanLabelBox, opts: FitFanLabelOption
 }
 
 /**
+ * The focus disc's text where the ladder gives nothing better (the given name,
+ * "Living person"): measured, never wider than the disc (P1b, 3.30.0: a long
+ * given name ran into the first sector on a phone). Its words wrap onto as
+ * many rows as the box holds; given names beyond them are left out (as step 6
+ * keeps only the first); a word too wide for a row is cut with "…". The full
+ * name stays in the disc's title.
+ */
+export function fanFocusFallbackRows(text: string, box: Pick<FanLabelBox, 'len' | 'cross'>, fs: number, measure: FanMeasure = defaultFanMeasure): FanLabelRow[] {
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const maxRows = Math.max(1, Math.floor(box.cross / (fs * LINE_HEIGHT)));
+    const fits = (s: string) => measure(s, fs, true) <= box.len;
+    const cut = (s: string): string => {
+        const chars = [...s];
+        for (let n = chars.length - 1; n >= 1; n--) {
+            const t = chars.slice(0, n).join('') + '…';
+            if (fits(t)) return t;
+        }
+        return chars[0] + '…';
+    };
+    const rows: string[] = [];
+    for (const w of words) {
+        const last = rows.length - 1;
+        if (last >= 0 && fits(`${rows[last]} ${w}`)) rows[last] = `${rows[last]} ${w}`;
+        // A word cut with "…" ends the text: "Maxi… / There…" names nobody better than "Maxi…".
+        else if (rows.length < maxRows && (last < 0 || fits(rows[last]))) rows.push(w);
+        else break;
+    }
+    return rows.map(r => ({ text: fits(r) ? r : cut(r), fs, bold: true }));
+}
+
+/**
  * The label of a person's sector: the ladder in the box fanLabelBox chose,
  * and where that gives nothing or only a shortened surname (the initial or a
  * cut), in the turned box when it holds more — a better step, or more of the
