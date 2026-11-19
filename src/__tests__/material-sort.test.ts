@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseSortJob, startMaterialSort, type MaterialItem, type SortLink } from '../materials.js';
-import { sortCandidates, sortNeeds, sortNeedy, sortNextItems, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, parseSortRevert, sortUnrelatedHideable, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
+import { parseSortJob, parseMaterialFile, startMaterialSort, type MaterialItem, type SortLink } from '../materials.js';
+import { sortNeeds, sortNeedy, sortNext, sortLeftMap, sortCopyOf, sortIsText, SORT_MAX_BATCHES, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, sortBackRow, parseSortRevert, sortUnrelatedHideable, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
 import type { PartnershipId } from '../types.js';
 import type { Attachment, PersonId } from '../types.js';
 
@@ -101,9 +101,10 @@ describe('the files a sorting takes', () => {
         const tree = item('I0009', { file: undefined, origin: 'tree' });
         const hidden = item('I0008', { hidden: {} });
         const many = Array.from({ length: 55 }, (_, i) => item(`I${String(i + 100)}`));
-        const { send, over } = sortCandidates([tree, hidden, ...many]);
-        expect(send).toHaveLength(50);
-        expect(over).toBe(5);
+        const { send, batches, over } = sortNext([tree, hidden, ...many], { scope: 'all', left: new Set() });
+        expect(send).toHaveLength(55);
+        expect(batches.map(b => b.length)).toEqual([50, 5]);
+        expect(over).toBe(0);
         expect(sortNeeds([item('I0001'), item('I0002', { titled: true, persons: ['P0001'] }), item('I0003', { viaBatch: ['P0002'] })]))
             .toEqual({ n: 3, t: 2, p: 1 });
     });
@@ -115,15 +116,15 @@ describe('the files a sorting takes', () => {
         const noPerson = item('I0004', { titled: true });
         const hidden = item('I0005', { hidden: {} });
         const files = [done, viaBatch, noTitle, noPerson, hidden];
-        expect(sortCandidates(files).send.map(i => i.file!.id)).toEqual(['I0003', 'I0004']);
-        expect(sortCandidates(files, true).send.map(i => i.file!.id)).toEqual(['I0001', 'I0002', 'I0003', 'I0004']);
-        // The limit counts the files that go: finished ones neither fill it nor make it over.
+        const none = new Set<string>();
+        expect(sortNext(files, { scope: 'all', left: none }).send.map(i => i.file!.id)).toEqual(['I0003', 'I0004']);
+        expect(sortNext(files, { scope: 'selection', left: none }).send.map(i => i.file!.id)).toEqual(['I0001', 'I0002', 'I0003', 'I0004']);
+        // The batches count the files that go: finished ones neither fill them nor make more.
         const many = [...Array.from({ length: 30 }, (_, i) => item(`I${i + 100}`, { titled: true, persons: ['P0001'] })), ...Array.from({ length: 52 }, (_, i) => item(`I${i + 200}`))];
-        const batch = sortCandidates(many);
-        expect(batch.send).toHaveLength(50);
-        expect(batch.over).toBe(2);
+        const batch = sortNext(many, { scope: 'all', left: none });
+        expect(batch.batches.map(b => b.length)).toEqual([50, 2]);
         expect(batch.send[0].file!.id).toBe('I200');
-        expect(sortCandidates(many, true).over).toBe(32);
+        expect(sortNext(many, { scope: 'selection', left: none }).batches.map(b => b.length)).toEqual([50, 32]);
     });
 
     it('over everything: only the files without a title or a person (a person through the batch counts), never hidden or the tree\'s own', () => {
@@ -134,6 +135,124 @@ describe('the files a sorting takes', () => {
         const hidden = item('I0005', { hidden: {} });
         const tree = item('I0006', { file: undefined, origin: 'tree' });
         expect(sortNeedy([done, viaBatch, noTitle, noPerson, hidden, tree]).map(i => i.file!.id)).toEqual(['I0003', 'I0004']);
+    });
+});
+
+describe('what the next sorting sends and in which order (spec 102 §4, K1.13)', () => {
+    /** A file of the research: its name, batch, path, content (sha) and when it came. */
+    const f = (id: string, name: string, init: { batch?: string; path?: string; sha?: string; at?: string; mime?: string;
+        left?: unknown; sameAs?: string; of?: unknown[] } = {}): MaterialItem => item(id, {
+        name, title: name,
+        ...(init.batch ? { batch: { id: init.batch, name: init.batch } } : {}),
+        ...(init.path ? { path: init.path } : {}),
+        file: {
+            id, name, sha: init.sha ?? id.toLowerCase().padEnd(64, '0'), persons: [],
+            ...(init.batch ? { batch: init.batch } : {}), ...(init.path ? { path: init.path } : {}),
+            ...(init.at ? { at: init.at } : {}), ...(init.mime ? { mime: init.mime } : {}),
+            ...(init.left ? { left: init.left } : {}), ...(init.sameAs ? { sameAs: init.sameAs } : {}),
+            ...(init.of ? { uses: { excerpts: 0, sources: [], tasks: 0, of: init.of } } : {}),
+        } as unknown as MaterialItem['file'],
+    });
+    const ids = (list: readonly MaterialItem[]) => list.map(i => i.file!.id);
+    const none = new Set<string>();
+
+    it('pictures and PDFs first, then the other files; text and data files only when asked, and then last', () => {
+        const files = [
+            f('I0001', 'notes.md'), f('I0002', 'tape.mp3'), f('I0003', 'IMG_0403.jpg'), f('I0004', 'data.json'),
+            f('I0005', 'sken-017.pdf'), f('I0006', 'list.csv'), f('I0007', 'letter.txt'), f('I0008', 'scan', { mime: 'image/tiff' }),
+            f('I0009', 'archive.zip'), f('I0010', 'readme', { mime: 'text/plain' }),
+        ];
+        const plain = sortNext(files, { scope: 'all', left: none });
+        expect(ids(plain.send)).toEqual(['I0003', 'I0005', 'I0008', 'I0002', 'I0009']);
+        expect(ids(plain.skipped.text)).toEqual(['I0001', 'I0004', 'I0006', 'I0007', 'I0010']);
+        const withText = sortNext(files, { scope: 'all', left: none, withText: true });
+        expect(ids(withText.send)).toEqual(['I0003', 'I0005', 'I0008', 'I0002', 'I0009', 'I0001', 'I0004', 'I0006', 'I0007', 'I0010']);
+        expect(withText.skipped.text).toEqual([]);
+        expect(sortIsText({ name: 'Brief.MD' } as MaterialItem)).toBe(true);
+        expect(sortIsText({ name: 'photo.jpg' } as MaterialItem)).toBe(false);
+    });
+
+    it('the files of one folder stay together, in the batches\' and folders\' order, and a folder that fits a batch is not split', () => {
+        const files = [
+            f('I0001', 'a1.jpg', { batch: 'b1', path: 'Talvany/a1.jpg' }),
+            f('I0002', 'c1.jpg', { batch: 'b2', path: 'Ostrovid/c1.jpg' }),
+            f('I0003', 'b1.jpg', { batch: 'b1', path: 'Quellmayer/b1.jpg' }),
+            f('I0004', 'a2.jpg', { batch: 'b1', path: 'Talvany/a2.jpg' }),
+            f('I0005', 'b2.jpg', { batch: 'b1', path: 'Quellmayer/b2.jpg' }),
+        ];
+        expect(ids(sortNext(files, { scope: 'all', left: none }).send)).toEqual(['I0001', 'I0004', 'I0003', 'I0005', 'I0002']);
+        // 30 files of one folder, then 30 of another: the second starts a batch of its own rather than split at 50.
+        const big = [
+            ...Array.from({ length: 30 }, (_, i) => f(`I${1000 + i}`, `a${i}.jpg`, { batch: 'b1', path: `Talvany/a${i}.jpg` })),
+            ...Array.from({ length: 30 }, (_, i) => f(`I${2000 + i}`, `b${i}.jpg`, { batch: 'b1', path: `Quellmayer/b${i}.jpg` })),
+        ];
+        const run = sortNext(big, { scope: 'all', left: none });
+        expect(run.batches.map(b => b.length)).toEqual([30, 30]);
+        expect(run.batches[1].every(i => i.path!.startsWith('Quellmayer/'))).toBe(true);
+        // A folder bigger than a batch is split.
+        const huge = Array.from({ length: 70 }, (_, i) => f(`I${3000 + i}`, `h${i}.jpg`, { batch: 'b1', path: `Ostrovid/h${i}.jpg` }));
+        expect(sortNext(huge, { scope: 'all', left: none }).batches.map(b => b.length)).toEqual([50, 20]);
+    });
+
+    it('at most 30 batches (1500 files) at once; the rest is counted for the next action', () => {
+        const many = Array.from({ length: 1520 }, (_, i) => f(`I${10000 + i}`, `p${i}.jpg`));
+        const run = sortNext(many, { scope: 'all', left: none });
+        expect(run.send).toHaveLength(1520);
+        expect(run.batches).toHaveLength(SORT_MAX_BATCHES);
+        expect(run.over).toBe(20);
+    });
+
+    it('of files with the same content only the original goes: by the research\'s sameAs behind its gate, else by the hash (the oldest)', () => {
+        const sha = 'ab'.repeat(32);
+        const files = [
+            f('I0001', 'IMG_0412.jpg', { sha, at: '2026-11-02T10:00:00Z' }),
+            f('I0002', 'IMG_0412 (1).jpg', { sha, at: '2026-11-01T10:00:00Z' }),
+            f('I0003', 'IMG_0412 (2).jpg', { sha, at: '2026-11-03T10:00:00Z' }),
+            f('I0004', 'other.jpg'),
+        ];
+        const byHash = sortCopyOf(files, false);
+        expect([...byHash]).toEqual([['I0001', 'I0002'], ['I0003', 'I0002']]);
+        const run = sortNext(files, { scope: 'all', left: none, copyOf: byHash });
+        expect(ids(run.send)).toEqual(['I0002', 'I0004']);
+        expect(ids(run.skipped.copies)).toEqual(['I0001', 'I0003']);
+        // The research says it: only its word counts (the hashes are not compared then).
+        const said = [f('I0001', 'a.jpg', { sha }), f('I0002', 'b.jpg', { sha }), f('I0005', 'c.jpg', { sameAs: 'I0004' }), f('I0004', 'd.jpg')];
+        expect([...sortCopyOf(said, true)]).toEqual([['I0005', 'I0004']]);
+        expect(ids(sortNext(said, { scope: 'all', left: none, copyOf: sortCopyOf(said, true) }).send)).toEqual(['I0001', 'I0002', 'I0004']);
+        // Selected by hand: copies go too.
+        expect(ids(sortNext(files, { scope: 'selection', left: none, copyOf: byHash }).send)).toEqual(['I0001', 'I0002', 'I0003', 'I0004']);
+    });
+
+    it('the file of a source is not sent behind the research\'s gate; without it, as before', () => {
+        const of = [{ source: 'S12', via: 'input', cited: [], citedCount: 0, inTree: true }];
+        const files = [f('I0001', 'matrika.pdf', { of }), f('I0002', 'IMG_1.jpg')];
+        const gated = sortNext(files, { scope: 'all', left: none, sourceOf: true });
+        expect(ids(gated.send)).toEqual(['I0002']);
+        expect(ids(gated.skipped.sources)).toEqual(['I0001']);
+        expect(ids(sortNext(files, { scope: 'all', left: none }).send)).toEqual(['I0001', 'I0002']);
+        expect(ids(sortNext(files, { scope: 'selection', left: none, sourceOf: true }).send)).toEqual(['I0001', 'I0002']);
+    });
+
+    it('what the agent left unassigned is not sent again (the research\'s left behind its gate, else the app\'s memory), unless selected', () => {
+        const left = { at: '2026-11-19T10:00:00Z', sort: 'sort-20261119100000-ab12', why: 'nothing-said', said: 'A blank page' };
+        const files = [f('I0001', 'sken-019.pdf', { left }), f('I0002', 'IMG_2.jpg'), f('I0003', 'IMG_3.jpg')];
+        const app = { I0003: { why: 'unrelated' } };
+        // Without the gate: only what the app remembers.
+        const without = sortLeftMap(files, { research: false, app });
+        expect([...without.keys()]).toEqual(['I0003']);
+        expect(ids(sortNext(files, { scope: 'all', left: without }).send)).toEqual(['I0001', 'I0002']);
+        // Behind the gate: the research's word together with the app's.
+        const gated = sortLeftMap(files, { research: true, app });
+        expect(gated.get('I0001')).toEqual({ why: 'nothing-said', said: 'A blank page' });
+        const run = sortNext(files, { scope: 'all', left: gated });
+        expect(ids(run.send)).toEqual(['I0002']);
+        expect(ids(run.skipped.left)).toEqual(['I0001', 'I0003']);
+        expect(ids(sortNext(files, { scope: 'selection', left: gated }).send)).toEqual(['I0001', 'I0002', 'I0003']);
+    });
+
+    it('a batch takes only its own files', () => {
+        const files = [f('I0001', 'a.jpg', { batch: 'b1' }), f('I0002', 'b.jpg', { batch: 'b2' }), f('I0003', 'c.jpg', { batch: 'b1' })];
+        expect(ids(sortNext(files, { scope: 'batch', batchId: 'b1', left: none }).send)).toEqual(['I0001', 'I0003']);
     });
 });
 
@@ -169,9 +288,10 @@ describe('the one strip of sorting (spec 102 §1)', () => {
 describe('what "Sort the next" takes and what a closed proposal leaves (spec 102 §5, §6)', () => {
     const files = [item('I0001'), item('I0002'), item('I0003', { titled: true, persons: ['P0001'] }), item('I0004', { hidden: {} })];
     it('the files without a title or a person, except the ones the agent left unassigned before', () => {
-        expect(sortNextItems(files).map(i => i.file!.id)).toEqual(['I0001', 'I0002']);
-        expect(sortNextItems(files, { I0002: { at: '2026-11-19T10:00:00Z' } }).map(i => i.file!.id)).toEqual(['I0001']);
-        expect(sortNextItems(files, new Set(['I0001'])).map(i => i.file!.id)).toEqual(['I0002']);
+        const ids = (left: Parameters<typeof sortNext>[1]['left']) => sortNext(files, { scope: 'all', left }).send.map(i => i.file!.id);
+        expect(ids({})).toEqual(['I0001', 'I0002']);
+        expect(ids({ I0002: { at: '2026-11-19T10:00:00Z' } })).toEqual(['I0001']);
+        expect(ids(new Set(['I0001']))).toEqual(['I0002']);
     });
     const job = {
         files: ['I0001', 'I0002', 'I0005', 'I0006', 'I0007', 'I0008'],
@@ -372,5 +492,73 @@ describe('what accepting writes beyond people (spec 102 §13)', () => {
         });
         expect(parseSortRevert({ places: [{ personId: 'p1' }] })).toBeNull();
         expect(parseSortRevert('x')).toBeNull();
+    });
+});
+
+describe('what the research says of a file for the next sorting, behind its gates (spec 102 §4)', () => {
+    it('left, sameAs and the sources a file is the file of are read; anything off is dropped', () => {
+        const f = parseMaterialFile({
+            id: 'I0012', name: 'sken-019.pdf', sha: 'c'.repeat(64), persons: [],
+            left: { at: '2026-11-19T10:00:00Z', sort: 'sort-20261119100000-ab12', why: 'nothing-said', said: 'A blank page' },
+            sameAs: 'I0003',
+            uses: { excerpts: 0, sources: [], tasks: 0, of: [{ source: 'S12', via: 'input', title: 'Matrika Talvany', cited: ['P0001'], citedCount: 1, inTree: true }, { source: 'X1', via: 'input' }] },
+        })!;
+        expect(f.left).toEqual({ at: '2026-11-19T10:00:00Z', sort: 'sort-20261119100000-ab12', why: 'nothing-said', said: 'A blank page' });
+        expect(f.sameAs).toBe('I0003');
+        expect(f.uses?.of?.map(o => o.source)).toEqual(['S12']);
+        const off = parseMaterialFile({ id: 'I0012', name: 'a.jpg', sha: 'c'.repeat(64), persons: [], left: { why: 'nothing-said' }, sameAs: 'I0012' })!;
+        expect(off.left).toBeUndefined();
+        expect(off.sameAs).toBeUndefined();
+    });
+});
+
+describe('the back side and the portrait as chips of a proposal (spec 102 §10)', () => {
+    const job = (links: unknown[], extra: Record<string, unknown> = {}) => parseSortJob({
+        id: 'sort-20261119100000-ab12', state: 'done', files: ['I0403', 'I0413'],
+        proposals: [{ id: 'I0403', title: 'Svatba Oskara a Ilsy', date: '5. 1924', kind: 'photo', links, why: 'Wedding', sure: 'high', ...extra }],
+    })!;
+
+    it('a link to another file of the research is its back side; the back has no row of its own', () => {
+        const j = job([{ type: 'person', ref: 'P0001' }, { type: 'back', ref: 'I0413' }]);
+        expect(j.proposals[0].back).toBe('I0413');
+        expect(j.proposals[0].links.map(l => l.type)).toEqual(['person']);
+        const rows = sortRows(j, id => item(id), chip);
+        expect(rows.map(r => r.id)).toEqual(['I0403']);
+        expect(rows[0].back?.id).toBe('I0413');
+        // Itself, or not a file: no back side.
+        expect(job([{ type: 'back', ref: 'I0403' }]).proposals[0].back).toBeUndefined();
+        expect(job([{ type: 'back', ref: 'P0001' }]).proposals[0].back).toBeUndefined();
+        // A portrait is the agent's word for a person (P…), never a guess of the app.
+        expect(job([{ type: 'portrait', ref: 'P0002' }]).proposals[0].portrait).toBe('P0002');
+        expect(job([{ type: 'portrait', ref: 'I0413' }]).proposals[0].portrait).toBeUndefined();
+        expect(job([{ type: 'person', ref: 'P0002' }]).proposals[0].portrait).toBeUndefined();
+        // A back the agent proposed something for keeps its own row, no chip.
+        const both = parseSortJob({
+            id: 'sort-20261119100000-ab12', state: 'done', files: ['I0403', 'I0413'],
+            proposals: [{ id: 'I0403', title: 'Front', links: [{ type: 'back', ref: 'I0413' }], why: '', sure: 'high' }, { id: 'I0413', title: 'Back', links: [], why: '', sure: 'high' }],
+        })!;
+        const r2 = sortRows(both, id => item(id), chip);
+        expect(r2.map(r => r.id)).toEqual(['I0403', 'I0413']);
+        expect(r2[0].back).toBeUndefined();
+    });
+
+    it('accepting writes the back with the front\'s date, kind and links and the title with "(back)"; what a person set on it stays', () => {
+        const j = job([{ type: 'person', ref: 'P0001' }, { type: 'back', ref: 'I0413' }]);
+        const rub = (t: string) => `${t} (rub)`;
+        const [row] = sortRows(j, id => item(id), chip);
+        const b = sortBackRow(row, rub)!;
+        const w = sortWrite(b.row, b.choice)!;
+        expect(w.fileId).toBe('I0413');
+        expect(w.title).toEqual({ value: 'Svatba Oskara a Ilsy (rub)', by: 'agent' });
+        expect(w.date?.value).toBe('5. 1924');
+        expect(w.kind?.value).toBe('photo');
+        expect(w.persons).toEqual(['P0001']);
+        // A back already titled by a person keeps its title; an edited front carries over.
+        const titled = item('I0413', { titled: true, title: 'Věnování', file: { id: 'I0413', name: 'IMG_0413.jpg', sha: 'd'.repeat(64), persons: [], title: 'Věnování' } as unknown as MaterialItem['file'] });
+        const [row2] = sortRows(j, id => id === 'I0413' ? titled : item(id), chip);
+        expect(sortWrite(sortBackRow(row2, rub)!.row)!.title).toBeUndefined();
+        const edited = sortBackRow(row, rub, { edit: { title: 'Svatba 1924' } })!;
+        expect(sortWrite(edited.row, edited.choice)!.title).toEqual({ value: 'Svatba 1924 (rub)', by: 'user' });
+        expect(sortBackRow({ ...row, back: undefined }, rub)).toBeNull();
     });
 });

@@ -29952,6 +29952,9 @@
         #materials-modal[data-model="archive"] .mw-li-used, #materials-modal[data-model="archive"] .mw-lh-used { grid-column: 9; }
         .mw-li .is-none, .mw-li-source.is-none { color: var(--text-faint); font-style: italic; }
         .mw-intree-tag { display: inline-block; max-width: 100%; box-sizing: border-box; padding: 1px 7px; border: 1px solid var(--border); border-radius: var(--r-tag); font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+        /* A tag before the people of a tile or a row: "Not assigned by the agent", "Same content" (spec 102 §4). */
+        .mw-tile-persons .mw-intree-tag, .mw-li-persons .mw-intree-tag { margin-right: 4px; white-space: nowrap; vertical-align: 1px; font-family: var(--font-sans); font-style: normal; }
+        .mw-tile-persons .mw-intree-tag { font-size: 10.5px; padding: 0 5px; }
         /* The list's column header (sort by a click or Enter; aria-sort). */
         .mw-lhead { padding: 0 24px; border-bottom: 1px solid var(--divider); }
         .mw-lh { height: 34px; padding: 0 8px; border-bottom: none; cursor: default; font-size: 12px; }
@@ -30745,6 +30748,10 @@
         .msp-chip.is-person { font-family: var(--font-serif); font-size: 13.5px; }
         .msp-chip.is-unknown { color: var(--text-faint); text-decoration: line-through; }
         .msp-chip .mdlg-btn.msp-chip-x { padding: 0 4px; min-height: 0; border: none; background: none; }
+        /* The proposal's own chips: the back side with its thumbnail, a portrait (spec 102 §10). */
+        .msp-chip .msp-chip-thumb { position: relative; width: 22px; height: 22px; border-radius: var(--r-sm); overflow: hidden; background: var(--surface); flex: none; font-size: 8px; line-height: 22px; text-align: center; color: var(--text-faint); }
+        .msp-chip .msp-chip-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+        .msp-chip-label { font-family: var(--font-sans); font-size: 12px; color: var(--text-faint); }
         .msp-why { font-size: 12.5px; color: var(--text-light); }
         /* What the reader wrote of a file without a proposal: one line, the whole of it in the tooltip. */
         .msp-said { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }

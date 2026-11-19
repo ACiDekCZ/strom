@@ -755,6 +755,11 @@ export const materialViewerMethods = uiModule({
             const resized = item.origin === 'tree' && att && !att.originalOnly && !att.original && att.mimeType.startsWith('image/');
             field(m.f.size, [formatBytesShort(item.bytes), type, resized ? m.resized : ''].filter(Boolean).join(' · '));
         }
+        // Why the agent left it unassigned (spec 102 §4.4): the reader's own words, else the reason.
+        if (item.agentLeft) {
+            const why = item.agentLeft.why as keyof typeof m.agentSort.unproposed | undefined;
+            field(m.agentSort.unassignedWhy, item.agentLeft.said || (why && m.agentSort.unproposed[why]) || m.agentSort.unproposed['left-out']);
+        }
         if (agent && inArchive) {
             if (item.state === 'processed') field(m.f.state, m.agentDone);
             else if (item.state === 'new') field(m.f.state, m.agentWaiting);

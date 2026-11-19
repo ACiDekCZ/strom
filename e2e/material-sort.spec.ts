@@ -317,6 +317,12 @@ test.describe('Sort with the agent', () => {
         await page.locator('.mdlg', { hasText: 'Discard the finished proposals?' }).getByRole('button', { name: 'Discard', exact: true }).click();
         await expect(strip(page)).toHaveAttribute('data-state', 'A');
         await expect(strip(page).locator('.mw-sort-text')).toHaveText('3 files without title or person');
+        // While selecting, A gives way to the selection bar's own Sort (spec 102 §1); out of it, the strip is back.
+        if (await win(page).evaluate(el => el.classList.contains('is-selecting'))) {
+            await expect(strip(page)).toBeHidden();
+            await win(page).locator('[data-mw="select"]').click();
+            await expect(win(page)).not.toHaveClass(/is-selecting/);
+        }
         await expect(strip(page).locator('[data-sort="sort"]')).toBeVisible();
         expect(material.cancels).toHaveLength(2);
     });
@@ -1000,5 +1006,86 @@ test.describe('Sort with the agent: not about the family', () => {
         await expect(proposal(page).locator('.msp-flag')).toHaveCount(0);
         await expect(proposal(page).locator('.msp-hide, .msp-hide-unrelated, .msp-restore')).toHaveCount(0);
         await expect(proposal(page).locator('.msp-review')).toHaveText('Go through by hand (1)');
+    });
+});
+
+test.describe('What the next sorting sends and the proposal\'s own chips (spec 102 §4, §10)', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('a file the agent left unassigned is tagged and has a filter of its own; it and a copy of another file are not sent again', async ({ page }) => {
+        const material = await setup(page, {
+            features: [...SORT_FEATURES, 'material.left'],
+            files: [
+                materialFile(4, { batch: BATCH.id, left: { at: '2026-11-18T10:00:00Z', why: 'nothing-said', said: 'A blank page' } }),
+                // The same content as I0001, come later: a copy.
+                materialFile(5, { batch: BATCH.id, sha: materialSha('I0001') }),
+            ],
+        });
+        await openWindow(page);
+        const tile = (name: string) => win(page).locator('.mw-tile', { hasText: name });
+        await expect(tile('scan-4.jpg').locator('.mw-tile-persons .mw-intree-tag')).toHaveText('Not assigned by the agent');
+        await expect(tile('scan-5.jpg').locator('.mw-tile-persons .mw-intree-tag')).toHaveText('Same content');
+        await expect(tile('scan-1.jpg').locator('.mw-intree-tag')).toHaveCount(0);
+        // The filter: only with such a file, after a separator.
+        const left = win(page).locator('.mw-toggle[data-mw="left"]');
+        await expect(left).toHaveText('Not assigned by the agent · 1');
+        await left.click();
+        await expect(left).toHaveAttribute('aria-pressed', 'true');
+        await expect(win(page).locator('.mw-canvas .mw-tile')).toHaveCount(1);
+        await expect(win(page).locator('.mw-canvas .mw-tile').first()).toContainText('scan-4.jpg');
+        await left.click();
+        await expect(win(page).locator('.mw-canvas .mw-tile')).toHaveCount(5);
+        // The list's row carries the tag too.
+        await win(page).locator('[data-mw="view-list"]').click();
+        await expect(win(page).locator('.mw-li', { hasText: 'scan-4.jpg' }).locator('.mw-li-persons .mw-intree-tag')).toHaveText('Not assigned by the agent');
+        // Sorting over everything leaves both out.
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect.poll(() => material.sorts?.length).toBe(1);
+        expect([...(material.sorts![0].ids as string[])].sort()).toEqual(['I0001', 'I0002', 'I0003']);
+    });
+
+    test('without the research\'s gate its word on a file left unassigned is not read', async ({ page }) => {
+        await setup(page, { files: [materialFile(4, { batch: BATCH.id, left: { at: '2026-11-18T10:00:00Z', why: 'nothing-said' } })] });
+        await openWindow(page);
+        await expect(win(page).locator('.mw-tile', { hasText: 'scan-4.jpg' })).toBeVisible();
+        await expect(win(page).locator('.mw-intree-tag', { hasText: 'Not assigned by the agent' })).toHaveCount(0);
+        await expect(win(page).locator('.mw-toggle[data-mw="left"]')).toHaveCount(0);
+    });
+
+    test('the back side and the portrait are chips of the proposal; × takes one off; the back is written with its front, titled "(back)"', async ({ page }) => {
+        const material = await setup(page, {
+            proposals: [
+                { id: 'I0001', title: 'Wedding 1924', kind: 'photo', why: 'A veil and a bouquet; a dedication on the back', sure: 'high',
+                    links: [{ type: 'person', ref: 'P0001' }, { type: 'back', ref: 'I0003' }, { type: 'portrait', ref: 'P0001' }] },
+                PROPOSALS[1],
+            ],
+        });
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect(strip(page)).toHaveAttribute('data-state', 'D');
+        await strip(page).locator('[data-sort="open"]').click();
+        const row = proposal(page).locator('.msp-row[data-id="I0001"]');
+        await expect(row.locator('.msp-file')).toHaveText('scan-1.jpg + scan-3.jpg (back)');
+        await expect(row.locator('.msp-meta')).toContainText('2 sides');
+        const back = row.locator('.msp-chip[data-chip="back"]');
+        await expect(back.locator('.msp-chip-thumb')).toHaveCount(1);
+        await expect(back.locator('.msp-chip-label')).toHaveText('Back:');
+        await expect(back).toContainText('scan-3.jpg');
+        const portrait = row.locator('.msp-chip.is-person[data-chip="portrait"]');
+        await expect(portrait.locator('.msp-chip-label')).toHaveText('Portrait:');
+        await expect(portrait).toContainText('Josef Fíšek');
+        // The back has no row of its own: nothing unassigned.
+        await expect(proposal(page).locator('.msp-row[data-id="I0003"]')).toHaveCount(0);
+        await expect(proposal(page).locator('.msp-tab[data-tab="unassigned"]')).not.toContainText('1');
+        await portrait.getByRole('button', { name: 'Remove Portrait' }).click();
+        await expect(row.locator('.msp-chip[data-chip="portrait"]')).toHaveCount(0);
+        await expect(back).toBeVisible();
+        await row.locator('.msp-accept').click();
+        await expect.poll(() => JSON.stringify(material.edits ?? [])).toContain('Wedding 1924 (back)');
+        await expect.poll(() => JSON.stringify(material.assigns ?? [])).toContain('I0003');
+        // No portrait editor: its chip was taken off.
+        await expect(page.locator('.pe-overlay')).toHaveCount(0);
     });
 });

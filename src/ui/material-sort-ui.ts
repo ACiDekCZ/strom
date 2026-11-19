@@ -20,13 +20,13 @@ import type { Attachment, MaterialKind, MediaPlace, PersonId } from '../types.js
 import {
     MaterialItem, MaterialError, SortJob, SortLink, SORT_MAX_FILES, SORT_MAX_TEXT, type EditRequest,
     startMaterialSort, fetchMaterialSort, cancelMaterialSort, fetchMaterial, cachedMaterialList,
-    getCachedThumb, fileExt, mergeIntoCache, materialErrorText, materialKindLabel,
+    getCachedThumb, fileExt, mergeIntoCache, materialErrorText, materialKindLabel, isPortraitCandidate, materialType,
 } from '../materials.js';
 import { overviewItems, nameWithoutYears } from '../materials-overview.js';
 import {
-    sortCandidates, sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
-    sortNextItems, sortStripState, sortProposalCounts, sortLeftIds,
-    type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite, type SortCounts, type SortStripState,
+    sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
+    sortNext, sortLeftMap, sortCopyOf, sortStripState, sortProposalCounts, sortLeftIds, sortBackRow,
+    type SortNext, type SortNextOpts, type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite, type SortCounts, type SortStripState,
 } from '../material-sort.js';
 import { researchPersonRef } from '../research-link.js';
 import { PersonPicker } from '../person-picker.js';
@@ -37,6 +37,7 @@ import { treeRecords, materialsWindowOpen } from './materials-window.js';
 import type { MaterialsContext } from './materials-ui.js';
 import { uiModule } from './module.js';
 import { runBusy } from './busy.js';
+import { canEditPortrait } from './portrait-actions-ui.js';
 
 /** Asking about a sorting at work: every 2 s, 10 s while the page is hidden, 15 s while the bridge is down (spec 102 §13). */
 const POLL_MS = 2_000;
@@ -252,6 +253,37 @@ export const materialSortMethods = uiModule({
         stay.focus();
     },
 
+    /**
+     * What the agent left unassigned and which files are copies of an older
+     * one (spec 102 §4.2, §4.4), over every file known here: as the research
+     * says it behind its gates (`material.left`, `material.sameAs`), else as
+     * this app remembers it (closed proposals) and by the files' hashes.
+     */
+    materialSortMarks(all: readonly MaterialItem[]): { left: Map<string, { why?: string; said?: string }>; copyOf: Map<string, string> } {
+        const mc = this.materialsContext();
+        const app = mc ? researchAutoState(mc.treeId).sortLeft ?? {} : {};
+        return {
+            left: sortLeftMap(all, { research: !!mc?.caps.left, app }),
+            copyOf: sortCopyOf(all, !!mc?.caps.sameAs),
+        };
+    },
+
+    /**
+     * What the next sorting sends (spec 102 §4): `items` the files it may take
+     * (the whole archive, a batch's, the selected ones), `all` every file known
+     * (copies and what the agent left are found over them), `alsoLeft` files a
+     * proposal still open leaves unassigned.
+     */
+    materialSortNext(items: readonly MaterialItem[], opts: { scope?: SortNextOpts['scope']; withText?: boolean; all?: readonly MaterialItem[]; alsoLeft?: readonly string[] } = {}): SortNext {
+        const mc = this.materialsContext();
+        const marks = this.materialSortMarks(opts.all ?? items);
+        for (const id of opts.alsoLeft ?? []) if (!marks.left.has(id)) marks.left.set(id, {});
+        return sortNext(items, {
+            scope: opts.scope ?? 'all', left: marks.left, copyOf: marks.copyOf, sourceOf: !!mc?.caps.sourceOf,
+            ...(opts.withText ? { withText: true } : {}),
+        });
+    },
+
     /** The items the window shows (the research's list with the tree's files), by the research's I…. */
     materialSortItemMap(treeId: string): Map<string, MaterialItem> {
         const items = overviewItems(cachedMaterialList(treeId), treeRecords(true));
@@ -270,7 +302,13 @@ export const materialSortMethods = uiModule({
         const mc = this.materialsContext();
         if (!mc || this.materialSortGate() !== 'on' || this.materialSortBusy()) return;
         const s = strings.materials.agentSort;
-        const { send, over } = sortCandidates(target.items, !!target.selection);
+        // In the order of spec 102 §4 (pictures first, a folder together; copies, sources' files and what the agent
+        // left unassigned not again, unless selected); one sorting takes at most SORT_MAX_FILES (the batches: §2, §3).
+        const next = this.materialSortNext(target.items, {
+            scope: target.selection ? 'selection' : 'all', all: [...this.materialSortItemMap(mc.treeId).values()],
+        });
+        const send = next.send.slice(0, SORT_MAX_FILES);
+        const over = next.send.length - send.length;
         if (!send.length) return;
         const n = send.length;
         const dialog = materialDialog({ title: s.title(n), sub: s.what(n, target.batch), modifier: 'sort' });
@@ -473,7 +511,8 @@ export const materialSortMethods = uiModule({
         const s = strings.materials.agentSort;
         const auto = researchAutoState(mc.treeId);
         const r = auto.materialSort ?? null;
-        const next = sortNextItems(items, auto.sortLeft ?? {});
+        const marks = this.materialSortMarks(items);
+        const next = this.materialSortNext(items).send;
         if (r?.ended) {
             return {
                 ...none, state: 'ended', mod: r.ended === 'failed' ? 'is-error' : 'is-done',
@@ -487,7 +526,7 @@ export const materialSortMethods = uiModule({
         const byId = new Map(items.filter(i => i.file).map(i => [i.file!.id, i]));
         // E: the files the agent left unassigned (this proposal's, or remembered from the closed ones) still without a title or a person.
         const leftItems = (): MaterialItem[] => {
-            const ids = new Set(Object.keys(auto.sortLeft ?? {}));
+            const ids = new Set(marks.left.keys());
             if (r && job) {
                 const rows = sortRows(job, id => byId.get(id) ?? null, countChip);
                 for (const row of rows) if (!r.decided[row.id] && !sortRowProposes(row)) ids.add(row.id);
@@ -641,6 +680,21 @@ export const materialSortMethods = uiModule({
         };
         const chipOf = (link: SortLink, title?: string) => sortChip(link, tree, names, title);
         const rows = sortRows(job, id => byId.get(id) ?? null, chipOf);
+        // A photo the agent says is a portrait of a person who has none yet: offered as a chip (spec 102 §10).
+        for (const row of rows) {
+            const it = row.item;
+            const ref = row.proposal?.portrait;
+            if (!ref || row.unrelated || !it || it.hidden) continue;
+            const image = it.attachment && !it.removedId ? isPortraitCandidate(it.attachment) : !it.attachment && materialType(it.file?.mime, it.name) === 'image';
+            const known = tree.person(ref);
+            const person = image && known ? DataManager.getPerson(known.id) : null;
+            if (!person || person.photo || !canEditPortrait(person.id)) continue;
+            row.portrait = { person: person.id, name: known!.name };
+        }
+        // Chips taken off a proposal (×): its back side, its portrait.
+        const dropped = new Map<string, { back?: true; portrait?: true }>();
+        const backOn = (row: SortRow) => !!row.back && !dropped.get(row.id)?.back;
+        const portraitOn = (row: SortRow) => !!row.portrait && !dropped.get(row.id)?.portrait;
         // Why a file has no proposal, as the research says it (an older research says nothing: no reason shown).
         const unproposed = new Map((job.unproposed ?? []).map(u => [u.id, u]));
         const decided: Record<string, 'accepted' | 'rejected'> = { ...r.decided };
@@ -783,11 +837,13 @@ export const materialSortMethods = uiModule({
                 main.appendChild(editForm(row));
             } else {
                 main.appendChild(h('div', 'msp-title', titleShown));
-                if (item && item.name !== titleShown) main.appendChild(h('div', 'msp-file', item.name));
+                const back = backOn(row) ? row.back! : null;
+                if (item && back) main.appendChild(h('div', 'msp-file', s.rubFiles(item.name, back.item.name)));
+                else if (item && item.name !== titleShown) main.appendChild(h('div', 'msp-file', item.name));
                 const meta = h('div', 'msp-meta');
                 const date = row.date && (row.date.human === undefined || use.date) ? row.date.proposed : row.date?.human;
                 const kind = row.kind && (row.kind.human === undefined || use.kind) ? row.kind.proposed : row.kind?.human;
-                const bits = [date ?? '', kind ? kindText(kind) : ''].filter(Boolean);
+                const bits = [date ?? '', kind ? kindText(kind) : '', back ? s.twoSides : ''].filter(Boolean);
                 if (bits.length) meta.appendChild(document.createTextNode(`${bits.join(' · ')} · `));
                 if (row.unrelated) {
                     meta.appendChild(h('span', 'msp-flag is-unrelated', strings.materials.reason.unrelated));
@@ -799,9 +855,24 @@ export const materialSortMethods = uiModule({
                 }
                 main.appendChild(meta);
                 for (const line of [fieldLine(row, 'title', v => v), fieldLine(row, 'date', v => v), fieldLine(row, 'kind', kindText)]) if (line) main.appendChild(line);
-                if (row.chips.length) {
+                if (row.chips.length || back || portraitOn(row)) {
                     const chips = h('div', 'msp-chips');
                     for (const c of row.chips) chips.appendChild(h('span', `msp-chip is-${c.kind}${c.place || c.person ? '' : ' is-unknown'}`, c.label));
+                    // The proposal's own chips (§10): × takes one off while the proposal is open.
+                    const own = (cls: string, label: string, text: string, which: 'back' | 'portrait', lead?: HTMLElement) => {
+                        const chip = h('span', `msp-chip ${cls}`);
+                        chip.dataset.chip = which;
+                        if (lead) chip.appendChild(lead);
+                        chip.append(h('span', 'msp-chip-label', label), document.createTextNode(` ${text}`));
+                        if (tab === 'proposals' && !state) {
+                            const x = button('×', 'msp-chip-x', () => { dropped.set(row.id, { ...dropped.get(row.id), [which]: true }); draw(); });
+                            x.setAttribute('aria-label', s.removeLink(label.replace(/:$/, '')));
+                            chip.appendChild(x);
+                        }
+                        chips.appendChild(chip);
+                    };
+                    if (back) own('is-back', s.rubChip, back.item.name, 'back', previewEl(mc.treeId, back.item, 'msp-chip-thumb'));
+                    if (portraitOn(row)) own('is-person', s.portraitChip, row.portrait!.name, 'portrait');
                     main.appendChild(chips);
                 }
                 if (p?.why) main.appendChild(h('div', 'msp-why', tab === 'unassigned' ? `${s.unassignedWhy}: ${p.why}` : p.why));
@@ -961,8 +1032,7 @@ export const materialSortMethods = uiModule({
             const gate = this.materialSortGate();
             const readOnly = DataManager.isReadOnly();
             // What "Sort the next" takes: as the strip counts it, without the files this proposal leaves unassigned.
-            const leftNow = { ...(researchAutoState(mc.treeId).sortLeft ?? {}), ...Object.fromEntries(unassigned.map(x => [x.id, true])) };
-            const next = sortNextItems([...this.materialSortItemMap(mc.treeId).values()], leftNow);
+            const next = this.materialSortNext([...this.materialSortItemMap(mc.treeId).values()], { alsoLeft: unassigned.map(x => x.id) }).send;
             const items = unassigned.map(x => x.item).filter((i): i is MaterialItem => !!i && !i.hidden);
             const sec = (line: string, note?: string): { el: HTMLElement; acts: HTMLElement } => {
                 const el = h('div', 'msp-end-sec');
@@ -1051,8 +1121,21 @@ export const materialSortMethods = uiModule({
         const accept = async (ids: string[]) => {
             const picked = ids.map(id => assigned.find(x => x.id === id)).filter((x): x is SortRow => !!x && !decided[x.id]);
             if (!picked.length) return;
-            const writes = picked.map(x => ({ row: x, w: sortWrite(x, choices.get(x.id)) }));
-            const ok = new Set<string>(writes.filter(x => !x.w).map(x => x.row.id));
+            // A back side is written with its front, as a row of its own (§10); it is never decided by itself.
+            const backIds = new Set<string>();
+            const writes = picked.flatMap(x => {
+                const front = { row: x, w: sortWrite(x, choices.get(x.id)) };
+                const b = backOn(x) && !decided[x.back!.id] ? sortBackRow(x, s.rubSuffix, choices.get(x.id)) : null;
+                // A portrait needs the file in the tree, at its person.
+                const pid = portraitOn(x) ? x.portrait!.person : null;
+                if (pid && front.w && !front.w.places.some(pl => 'personId' in pl && pl.personId === pid && !pl.fact && !pl.eventId)) {
+                    front.w.places.push({ personId: pid, by: 'agent' });
+                }
+                if (!b) return [front];
+                backIds.add(b.row.id);
+                return [front, { row: b.row, w: sortWrite(b.row, b.choice) }];
+            });
+            const ok = new Set<string>(writes.filter(x => !x.w && !backIds.has(x.row.id)).map(x => x.row.id));
             const readOnly = DataManager.isReadOnly();
             const byOf = (row: SortRow): 'user' | 'agent' => choices.get(row.id)?.edit?.chips ? 'user' : 'agent';
             let refused = 0;
@@ -1106,7 +1189,7 @@ export const materialSortMethods = uiModule({
             const treeOk = tree.filter(x => !readOnly && DataManager.canEditMedia(x.w!.mediaId!));
             refused += tree.length - treeOk.length;
             for (const { row } of treeOk) ok.add(row.id);
-            for (const id of ok) { decided[id] = 'accepted'; selected.delete(id); }
+            for (const id of ok) if (!backIds.has(id)) { decided[id] = 'accepted'; selected.delete(id); }
             const a = Object.values(decided).filter(d => d === 'accepted').length;
             const rj = Object.values(decided).filter(d => d === 'rejected').length;
             const text = s.done(a, rj, unassigned.length);
@@ -1168,6 +1251,12 @@ export const materialSortMethods = uiModule({
             }
             remember();
             draw();
+            // A portrait accepted with its photo: the portrait editor, one person after another (the crop as always).
+            for (const row of picked) {
+                if (decided[row.id] !== 'accepted' || !portraitOn(row)) continue;
+                const mid = parseSortRevert(reverts[row.id])?.media ?? (row.item?.attachment && !row.item.removedId ? row.item.attachment.id : null);
+                if (mid) await this.useAttachmentAsPortrait(row.portrait!.person, mid);
+            }
         };
 
         /** Undo of an accepted row: the research's part through the bridge, the tree's in one undo step; then it is a proposal again. */
@@ -1220,6 +1309,9 @@ export const materialSortMethods = uiModule({
             delete reverts[id];
             remember();
             draw();
+            // Its back side, written with it, goes back with it.
+            const backId = rows.find(x => x.id === id)?.back?.id;
+            if (backId && reverts[backId]) await revert(backId);
         };
 
         list.addEventListener('keydown', e => {

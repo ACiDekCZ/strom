@@ -334,7 +334,7 @@ export const materialsWindowMethods = uiModule({
             metrics: { view: 'grid', cols: 1, tileRow: 180, restoreExtra: 28, listRow: 48, group: 56, folder: 36, skeleton: 180, groupEnd: 12 },
             rendered: new Map(),
             names: new Map(),
-            summary: { files: 0, batches: 0, noPerson: 0, hidden: 0, noTitle: 0, noSource: 0, inTree: 0, onlyArchive: 0 },
+            summary: { files: 0, batches: 0, noPerson: 0, hidden: 0, noTitle: 0, noSource: 0, inTree: 0, onlyArchive: 0, left: 0 },
             io: null,
             ro: null,
             unsubThumbs: null,
@@ -621,7 +621,10 @@ export const materialsWindowMethods = uiModule({
         }
         // A research without assigning never sends hidden files; "Show hidden" is not offered.
         if (!ctx.caps.assign) w.filters.showHidden = false;
+        this.mwSortMarks();
         w.summary = overviewSummary(w.items, list, !!rec?.full, model === 'app');
+        // "Not assigned by the agent" is offered only while there is such a file: its filter goes with the last one.
+        if (!w.summary.left) w.filters.left = false;
         w.groups = overviewGroups({
             items: w.items, list, filters: w.filters, mode: w.group,
             batchLoaded: id => !!rec?.full || w.loadedBatches.has(id),
@@ -652,6 +655,33 @@ export const materialsWindowMethods = uiModule({
         materialThumbs().setEnv({ treeId: w.treeId, base: ctx.base, thumb: ctx.caps.thumb, bridgeUp: ctx.caps.bridgeUp });
         this.mwThumbStrip(materialThumbs().snapshot());
         for (const id of this.mwOpenPendingBatches()) void this.mwLoadBatch(id);
+    },
+
+    /**
+     * The files the agent left unassigned and the copies of an older file
+     * (spec 102 §4.2, §4.4), marked on the items that still lack a title or a
+     * person: their tag in the tile and the row, the filter "Not assigned by
+     * the agent". Only beside a research that sorts.
+     */
+    mwSortMarks(): void {
+        const w = win!;
+        const marks = w.model === 'archive' && this.materialSortGate() ? this.materialSortMarks(w.items) : null;
+        for (const i of w.items) {
+            delete i.agentLeft;
+            delete i.copyOf;
+            if (!marks || !i.file || i.hidden || (i.titled && (i.persons.length || i.viaBatch.length))) continue;
+            const left = marks.left.get(i.file.id);
+            if (left) i.agentLeft = { ...left };
+            const copy = marks.copyOf.get(i.file.id);
+            if (copy) i.copyOf = copy;
+        }
+    },
+
+    /** The tag before the people of a tile or a row: the agent left it unassigned, or it is a copy (spec 102 §4). */
+    mwSortTagHtml(item: MaterialItem): string {
+        const s = strings.materials.agentSort;
+        const tag = item.agentLeft ? s.tagLeft : item.copyOf ? s.tagCopy : '';
+        return tag ? `<span class="mw-intree-tag mw-sort-tag" data-tag="${item.agentLeft ? 'left' : 'copy'}">${esc(tag)}</span>` : '';
     },
 
     /** The header's counts (or "Loading…"). */
@@ -740,6 +770,8 @@ export const materialsWindowMethods = uiModule({
                 ${toggle('notitle', m.filterCount(m.fNoTitle, s.noTitle), f.noTitle)}
                 ${toggle('nosource', m.filterCount(m.fNoSource, s.noSource), f.noSource)}
                 ${where}
+                ${s.left ? `<span class="mw-chips-sep" aria-hidden="true"></span>
+                ${toggle('left', m.filterCount(m.agentSort.fLeft, s.left), f.left)}` : ''}
             </div>`;
     },
 
@@ -1062,7 +1094,8 @@ export const materialsWindowMethods = uiModule({
         const m = strings.materials;
         const persons = this.mwPersons(item).text;
         const hidden = item.hidden ? m.hiddenLabel[item.hidden.reason ?? 'none'] ?? m.hiddenLabel.none : '';
-        return [item.title, persons, hidden].filter(Boolean).join(', ');
+        const tag = item.agentLeft ? m.agentSort.tagLeft : item.copyOf ? m.agentSort.tagCopy : '';
+        return [item.title, persons, tag, hidden].filter(Boolean).join(', ');
     },
 
     mwRestoreHtml(item: MaterialItem): string {
@@ -1079,7 +1112,7 @@ export const materialsWindowMethods = uiModule({
         return `<div class="mw-tile${selected ? ' is-selected' : ''}${item.hidden ? ' is-hidden' : ''}" role="gridcell" tabindex="-1" data-key="${esc(item.key)}" aria-label="${esc(this.mwAriaLabel(item))}"${w.selecting ? ` aria-selected="${selected}"` : ''}>
             ${this.mwThumbHtml(item, group, false)}
             <span class="mw-tile-title" title="${esc(item.title)}">${fileNameBreakParts(item.title).map(esc).join('<wbr>')}</span>
-            <span class="mw-tile-persons${persons.none ? ' is-none' : ''}">${esc(persons.text)}</span>
+            <span class="mw-tile-persons${persons.none ? ' is-none' : ''}">${this.mwSortTagHtml(item)}${esc(persons.text)}</span>
             ${this.mwRestoreHtml(item)}
         </div>`;
     },
@@ -1110,7 +1143,7 @@ export const materialsWindowMethods = uiModule({
             </span>
             <span class="mw-li-kind" title="${esc(kind)}">${esc(kind)}</span>
             <span class="mw-li-date">${esc(date)}</span>
-            <span class="mw-li-persons${persons.none ? ' is-none' : ''}">${esc(persons.text)}</span>
+            <span class="mw-li-persons${persons.none ? ' is-none' : ''}">${this.mwSortTagHtml(item)}${esc(persons.text)}</span>
             <span class="mw-li-source${item.source ? '' : ' is-none'}" title="${esc(item.source ?? '')}">${esc(item.source ?? m.noSourceShort)}</span>
             ${inTree}
             <span class="mw-li-used">${used}</span>
@@ -1490,7 +1523,7 @@ export const materialsWindowMethods = uiModule({
         if (!w || !items.length) return;
         const m = strings.materials;
         const f = w.filters;
-        const label = [f.noTitle ? m.fNoTitle : '', f.noSource ? m.fNoSource : '', f.noPerson ? m.noPerson : ''].filter(Boolean).join(' · ');
+        const label = [f.noTitle ? m.fNoTitle : '', f.noSource ? m.fNoSource : '', f.noPerson ? m.noPerson : '', f.left ? m.agentSort.fLeft : ''].filter(Boolean).join(' · ');
         this.openMaterialViewer(items, 0, {
             where: 'review', label, noSource: f.noSource,
             done: () => { if (alive(w.gen)) { this.clearMaterialsSelection(); this.mwRebuild({ items: true }); } },
@@ -1998,6 +2031,7 @@ export const materialsWindowMethods = uiModule({
                 case 'noperson': w.filters.noPerson = !w.filters.noPerson; break;
                 case 'notitle': w.filters.noTitle = !w.filters.noTitle; break;
                 case 'nosource': w.filters.noSource = !w.filters.noSource; break;
+                case 'left': w.filters.left = !w.filters.left; break;
                 case 'where-tree': w.filters.where = w.filters.where === 'tree' ? null : 'tree'; break;
                 case 'where-archive': w.filters.where = w.filters.where === 'archive' ? null : 'archive'; break;
                 case 'hidden': w.filters.showHidden = !w.filters.showHidden; break;
@@ -2147,6 +2181,7 @@ export const materialsWindowMethods = uiModule({
             case 'noperson': f.noPerson = !f.noPerson; break;
             case 'notitle': f.noTitle = !f.noTitle; break;
             case 'nosource': f.noSource = !f.noSource; break;
+            case 'left': f.left = !f.left; break;
             case 'where-tree': f.where = f.where === 'tree' ? null : 'tree'; break;
             case 'where-archive': f.where = f.where === 'archive' ? null : 'archive'; break;
             case 'hidden': f.showHidden = !f.showHidden; break;

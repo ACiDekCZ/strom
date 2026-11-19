@@ -1362,8 +1362,12 @@ export interface FakeMaterialFile {
     kind?: 'photo' | 'document' | 'record' | 'other';
     date?: string;
     hidden?: { at?: string; by?: string; reason?: 'unrelated' | 'duplicate' };
-    /** Where the research uses it (`material.uses`). */
-    uses?: { excerpts: number; sources: string[]; tasks: number };
+    /** Where the research uses it (`material.uses`); `of`: the sources it is the file of (`material.sourceOf`). */
+    uses?: { excerpts: number; sources: string[]; tasks: number; of?: Record<string, unknown>[] };
+    /** The agent left it unassigned (`material.left`). */
+    left?: { at: string; sort?: string; why: 'nothing-said' | 'nothing-new' | 'dropped'; said?: string };
+    /** The oldest other file with the same content (`material.sameAs`). */
+    sameAs?: string;
 }
 
 export interface FakeMaterialBatch {

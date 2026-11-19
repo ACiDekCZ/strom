@@ -103,6 +103,20 @@ export interface MaterialFile {
     links?: MaterialLink[];
     /** Where the research uses it (material.uses; on every file with the gate). */
     uses?: MaterialUses;
+    /** The agent left it unassigned in the last finished sorting that took it (`material.left`, spec 102 K1.13). */
+    left?: MaterialLeft;
+    /** The oldest other file of the material with the same content (`material.sameAs`, spec 102 K1.13). */
+    sameAs?: string;
+}
+
+/** A file the agent left unassigned, as the research says it (`left`). */
+export interface MaterialLeft {
+    at: string;
+    /** The sorting that left it (sort-…). */
+    sort?: string;
+    why: 'nothing-said' | 'nothing-new' | 'dropped';
+    /** What its reader wrote of it. */
+    said?: string;
 }
 
 export interface MaterialLink {
@@ -116,6 +130,20 @@ export interface MaterialUses {
     excerpts: number;
     sources: string[];
     tasks: number;
+    /** The sources whose file it is (`material.sourceOf`, spec 102 K1.14); one per source, by S…. */
+    of?: MaterialSourceOf[];
+}
+
+/** A source whose file a file is: `input` (made from it), `excerpt` (an excerpt of it on the same content), `media` (its picture). */
+export interface MaterialSourceOf {
+    source: string;
+    via: 'input' | 'excerpt' | 'media';
+    title?: string;
+    /** People (REFN) whose events or names cite the source, at most 5; `citedCount` all of them. */
+    cited: string[];
+    citedCount: number;
+    /** The source comes to the tree (the research's `/tree.ged`). */
+    inTree: boolean;
 }
 
 export interface MaterialBatch {
@@ -183,6 +211,10 @@ export interface MaterialItem {
     source?: string;
     /** The tree's record of it, taken out of the tree (spec 102 §9): "Restore" brings it back with its places. */
     removedId?: string;
+    /** The agent left it unassigned and it still lacks a title or a person (spec 102 §4.4; set by the Materials window). */
+    agentLeft?: { why?: string; said?: string };
+    /** It has the same content as an older file (its I…) and is not sent to the agent (spec 102 §4.2; set by the Materials window). */
+    copyOf?: string;
 }
 
 // ==================== READING THE BRIDGE'S ANSWER ====================
@@ -296,7 +328,41 @@ export function parseMaterialFile(raw: unknown): MaterialFile | null {
     }
     const uses = usesOf(r.uses);
     if (uses) file.uses = uses;
+    const left = leftOf(r.left);
+    if (left) file.left = left;
+    if (typeof r.sameAs === 'string' && FILE_ID.test(r.sameAs) && r.sameAs !== id) file.sameAs = r.sameAs;
     return file;
+}
+
+const LEFT_WHYS: readonly MaterialLeft['why'][] = ['nothing-said', 'nothing-new', 'dropped'];
+
+function leftOf(v: unknown): MaterialLeft | undefined {
+    if (!v || typeof v !== 'object') return undefined;
+    const o = v as Record<string, unknown>;
+    const at = isoTime(o.at);
+    if (!at || !LEFT_WHYS.includes(o.why as MaterialLeft['why'])) return undefined;
+    const sort = typeof o.sort === 'string' && /^sort-[0-9A-Za-z-]{1,60}$/.test(o.sort) ? o.sort : undefined;
+    const said = text(o.said, 1000);
+    return { at, why: o.why as MaterialLeft['why'], ...(sort ? { sort } : {}), ...(said ? { said } : {}) };
+}
+
+const SOURCE_REF = /^S\d{1,9}$/;
+
+function sourceOfList(v: unknown): MaterialSourceOf[] {
+    if (!Array.isArray(v)) return [];
+    const out: MaterialSourceOf[] = [];
+    for (const x of v.slice(0, 200)) {
+        if (!x || typeof x !== 'object') continue;
+        const o = x as Record<string, unknown>;
+        const source = typeof o.source === 'string' ? o.source.trim() : '';
+        if (!SOURCE_REF.test(source) || out.some(y => y.source === source)) continue;
+        const via = o.via === 'input' || o.via === 'excerpt' || o.via === 'media' ? o.via : null;
+        if (!via) continue;
+        const title = text(o.title, 300);
+        const cited = refs(o.cited).slice(0, 5);
+        out.push({ source, via, ...(title ? { title } : {}), cited, citedCount: Math.max(count(o.citedCount), cited.length), inTree: o.inTree === true });
+    }
+    return out;
 }
 
 const count = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
@@ -306,7 +372,8 @@ function usesOf(v: unknown): MaterialUses | undefined {
     const u = v as Record<string, unknown>;
     const sources = Array.isArray(u.sources)
         ? [...new Set(u.sources.slice(0, 500).map(x => text(x, 40)).filter((x): x is string => !!x))] : [];
-    return { excerpts: count(u.excerpts), sources, tasks: count(u.tasks) };
+    const of = sourceOfList(u.of);
+    return { excerpts: count(u.excerpts), sources, tasks: count(u.tasks), ...(of.length ? { of } : {}) };
 }
 
 export function parseMaterialBatch(raw: unknown): MaterialBatch | null {
@@ -1246,6 +1313,17 @@ export interface SortProposal {
      * Optional: a research that does not say it leaves the file unassigned.
      */
     unrelated?: true;
+    /**
+     * The back side of the same photo or page (its I…; spec 102 §10, a link
+     * `{type: 'back', ref: 'I…'}`): offered as a chip, accepting gives it the
+     * same places and the title with "(back)".
+     */
+    back?: string;
+    /**
+     * The file is a portrait of this person (P…; a link `{type: 'portrait',
+     * ref: 'P…'}`, spec 102 §10): offered as a chip when the person has none.
+     */
+    portrait?: string;
 }
 
 /** A sorting as the research tells it (`GET /material/sort/<id>`). */
@@ -1326,11 +1404,20 @@ export function parseSortProposal(raw: unknown): SortProposal | null {
     const date = cleanText(o.date, 100);
     const kind = typeof o.kind === 'string' && KINDS.includes(o.kind as MaterialKind) ? o.kind as MaterialKind : undefined;
     const links = Array.isArray(o.links) ? o.links.map(parseSortLink).filter((l): l is SortLink => !!l).slice(0, 20) : [];
+    // The back side: the first link to another file of the research.
+    const backLink = Array.isArray(o.links) ? o.links.find((l): l is { type: 'back'; ref: string } => !!l && typeof l === 'object'
+        && (l as Record<string, unknown>).type === 'back' && typeof (l as Record<string, unknown>).ref === 'string'
+        && FILE_ID.test(((l as Record<string, unknown>).ref as string).trim()) && ((l as Record<string, unknown>).ref as string).trim() !== id) : undefined;
+    const portraitLink = Array.isArray(o.links) ? o.links.find((l): l is { type: 'portrait'; ref: string } => !!l && typeof l === 'object'
+        && (l as Record<string, unknown>).type === 'portrait' && typeof (l as Record<string, unknown>).ref === 'string'
+        && /^P\d{1,9}$/.test(((l as Record<string, unknown>).ref as string).trim())) : undefined;
     const sure: SortSure = o.sure === 'high' || o.sure === 'low' ? o.sure : 'medium';
     return {
         id, links, sure, why: cleanText(o.why, 500) ?? '',
         ...(title ? { title } : {}), ...(date ? { date } : {}), ...(kind ? { kind } : {}),
         ...(o.unrelated === true ? { unrelated: true as const } : {}),
+        ...(backLink ? { back: backLink.ref.trim() } : {}),
+        ...(portraitLink ? { portrait: portraitLink.ref.trim() } : {}),
     };
 }
 

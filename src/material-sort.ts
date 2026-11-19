@@ -9,20 +9,9 @@
  */
 
 import type { MaterialItem } from './materials.js';
-import { SORT_MAX_FILES, type SortJob, type SortLink, type SortProposal } from './materials.js';
+import { SORT_MAX_FILES, fileExt, materialFolder, materialType, type SortJob, type SortLink, type SortProposal } from './materials.js';
 import type { MaterialKind, MediaBy, MediaPlace, PartnershipId, PersonId, StromData } from './types.js';
 import { researchPersonRef } from './research-link.js';
-
-/**
- * The files a sorting takes: the research's files (I…), not hidden, at most
- * SORT_MAX_FILES. A batch, a review filter and the whole view send only the
- * files without a title or a person (`sortNeedy`): what a person finished is
- * not given to the agent. A selection sends exactly what is selected.
- */
-export function sortCandidates(items: readonly MaterialItem[], selection = false): { send: MaterialItem[]; over: number } {
-    const all = selection ? items.filter(i => !!i.file && !i.hidden) : sortNeedy(items);
-    return { send: all.slice(0, SORT_MAX_FILES), over: Math.max(0, all.length - SORT_MAX_FILES) };
-}
 
 /** What the files lack: a title of their own, a person. */
 export function sortNeeds(items: readonly MaterialItem[]): { n: number; t: number; p: number } {
@@ -39,14 +28,154 @@ export function sortNeedy(items: readonly MaterialItem[]): MaterialItem[] {
     return items.filter(i => !!i.file && !i.hidden && (!i.titled || (!i.persons.length && !i.viaBatch.length)));
 }
 
+/** The most batches one action sends (1500 files, the research's `SORT_RUN_MOST_FILES`, spec 102 K1.12). */
+export const SORT_MAX_BATCHES = 30;
+
+/** Text and data files: the agent reads them as text or by name only; sent only when asked, after the pictures (spec 102 §4.1). */
+const TEXT_EXT = new Set(['md', 'markdown', 'txt', 'text', 'json', 'csv']);
+const TEXT_MIME = new Set(['text/plain', 'text/markdown', 'text/csv', 'application/json']);
+
+export function sortIsText(item: Pick<MaterialItem, 'mime' | 'name' | 'file'>): boolean {
+    const name = item.file?.name ?? item.name;
+    return TEXT_EXT.has(fileExt(name)) || TEXT_MIME.has((item.file?.mime ?? item.mime ?? '').toLowerCase());
+}
+
+/** What the agent left unassigned (spec 102 §4.4): I… → why it said nothing, what its reader wrote. */
+export type SortLeftMap = ReadonlyMap<string, { why?: string; said?: string }>;
+
 /**
- * The files the next sorting takes (spec 102 §1, §5): the files without a
- * title or a person (`sortNeedy`) the agent did not leave unassigned before
- * (`left`: I…, spec 102 §4.4). What "N left" says and "Sort the next" sends.
+ * The files the agent left unassigned: as the research says it (`material.left`,
+ * `research`) together with what this app remembers from the proposals it
+ * closed (`app`, ResearchAutoState.sortLeft; the only memory of an older research).
  */
-export function sortNextItems(items: readonly MaterialItem[], left: ReadonlySet<string> | Readonly<Record<string, unknown>> = {}): MaterialItem[] {
-    const has = (id: string) => left instanceof Set ? left.has(id) : Object.prototype.hasOwnProperty.call(left, id);
-    return sortNeedy(items).filter(i => !has(i.file!.id));
+export function sortLeftMap(items: readonly MaterialItem[], opts: { research: boolean; app?: Readonly<Record<string, { why?: string }>> }): Map<string, { why?: string; said?: string }> {
+    const out = new Map<string, { why?: string; said?: string }>();
+    for (const [id, x] of Object.entries(opts.app ?? {})) out.set(id, x?.why ? { why: x.why } : {});
+    if (opts.research) {
+        for (const i of items) {
+            const l = i.file?.left;
+            if (l) out.set(i.file!.id, { why: l.why, ...(l.said ? { said: l.said } : {}) });
+        }
+    }
+    return out;
+}
+
+/**
+ * The files with the same content as an older one (spec 102 §4.2): I… → the
+ * original's I…. As the research says it (`material.sameAs`), else by the
+ * hash among the files known here: the oldest (received first, then the
+ * lowest number) is the original, the others its copies.
+ */
+export function sortCopyOf(items: readonly MaterialItem[], research: boolean): Map<string, string> {
+    const out = new Map<string, string>();
+    const files = items.filter(i => !!i.file).map(i => i.file!);
+    if (research) {
+        for (const f of files) if (f.sameAs && f.sameAs !== f.id) out.set(f.id, f.sameAs);
+        return out;
+    }
+    const num = (id: string) => Number(id.slice(1)) || 0;
+    const first = new Map<string, typeof files[number]>();
+    const older = (a: typeof files[number], b: typeof files[number]) => {
+        const ta = a.at ? Date.parse(a.at) : Number.POSITIVE_INFINITY;
+        const tb = b.at ? Date.parse(b.at) : Number.POSITIVE_INFINITY;
+        return ta !== tb ? ta < tb : num(a.id) < num(b.id);
+    };
+    for (const f of files) {
+        if (!f.sha) continue;
+        const o = first.get(f.sha);
+        if (!o || older(f, o)) first.set(f.sha, f);
+    }
+    for (const f of files) {
+        const o = f.sha ? first.get(f.sha) : undefined;
+        if (o && o.id !== f.id) out.set(f.id, o.id);
+    }
+    return out;
+}
+
+export interface SortNextOpts {
+    /** all: every file without a title or a person; batch: those of one batch (`batchId`); selection: exactly the items given. */
+    scope: 'all' | 'selection' | 'batch';
+    batchId?: string;
+    /** Text and data files too (the dialog's checkbox), after the pictures. */
+    withText?: boolean;
+    /** What the agent left unassigned (sortLeftMap): not sent again, unless selected. */
+    left: ReadonlySet<string> | ReadonlyMap<string, unknown> | Readonly<Record<string, unknown>>;
+    /** Copies of an older file (sortCopyOf): only the original is sent, unless selected. */
+    copyOf?: ReadonlyMap<string, string>;
+    /** The research says which sources a file is the file of (`material.sourceOf`): those are not sent, unless selected. */
+    sourceOf?: boolean;
+}
+
+export interface SortNext {
+    /** Every file to send, in order: pictures and PDFs first, then the others, text and data last; a folder's files together. */
+    send: MaterialItem[];
+    /** `send` in batches of at most SORT_MAX_FILES, at most SORT_MAX_BATCHES of them. */
+    batches: MaterialItem[][];
+    /** Files of `send` beyond the last batch (the next action takes them). */
+    over: number;
+    /** What is not sent, and why. */
+    skipped: { copies: MaterialItem[]; text: MaterialItem[]; sources: MaterialItem[]; left: MaterialItem[] };
+}
+
+/**
+ * What the next sorting sends and in which order (spec 102 §4, K1.13):
+ * 1 pictures (images, PDFs) first, then the other files; text and data files
+ * only when asked (`withText`), and then last; 2 of files with the same
+ * content only the original; 3 not the file of a source (only when the
+ * research says it); 4 not what the agent left unassigned before; 5 within
+ * a group by batch and folder, a folder of at most 50 files kept in one batch
+ * (a new batch starts rather than split it). A selection sends every file
+ * selected (only in this order).
+ */
+export function sortNext(items: readonly MaterialItem[], opts: SortNextOpts): SortNext {
+    const skipped: SortNext['skipped'] = { copies: [], text: [], sources: [], left: [] };
+    const left = opts.left;
+    const isLeft = (id: string) => left instanceof Set || left instanceof Map ? left.has(id) : Object.prototype.hasOwnProperty.call(left, id);
+    const selection = opts.scope === 'selection';
+    const pool = selection
+        ? items.filter(i => !!i.file && !i.hidden)
+        : sortNeedy(opts.scope === 'batch' ? items.filter(i => i.batch?.id === opts.batchId || i.file?.batch === opts.batchId) : items);
+    const take: { item: MaterialItem; group: number; i: number }[] = [];
+    pool.forEach((item, i) => {
+        const id = item.file!.id;
+        const text = sortIsText(item);
+        if (!selection) {
+            if (opts.sourceOf && item.file!.uses?.of?.length) { skipped.sources.push(item); return; }
+            if (opts.copyOf?.has(id)) { skipped.copies.push(item); return; }
+            if (isLeft(id)) { skipped.left.push(item); return; }
+            if (text && !opts.withText) { skipped.text.push(item); return; }
+        }
+        const type = materialType(item.file!.mime ?? item.mime, item.file!.name);
+        take.push({ item, group: text ? 2 : type === 'image' || type === 'pdf' ? 0 : 1, i });
+    });
+    // A batch's and a folder's place: where its first file stands.
+    const rank = new Map<string, number>();
+    const rankOf = (key: string) => { if (!rank.has(key)) rank.set(key, rank.size); return rank.get(key)!; };
+    const batchKey = (x: MaterialItem) => x.batch?.id ?? x.file?.batch ?? '';
+    const folderKey = (x: MaterialItem) => `${batchKey(x)}\u0000${materialFolder(x.path ?? x.file?.path)}`;
+    const keyed = take.map(t => ({ ...t, b: rankOf(`b\u0000${batchKey(t.item)}`), f: rankOf(`f\u0000${folderKey(t.item)}`) }));
+    keyed.sort((a, b) => a.group - b.group || a.b - b.b || a.f - b.f || a.i - b.i);
+    const send = keyed.map(k => k.item);
+
+    // Batches: a folder that fits a batch of its own is not split; a bigger one is.
+    const batches: MaterialItem[][] = [];
+    let cur: MaterialItem[] = [];
+    const close = () => { if (cur.length) batches.push(cur); cur = []; };
+    for (let i = 0; i < keyed.length;) {
+        let j = i;
+        while (j < keyed.length && keyed[j].group === keyed[i].group && keyed[j].f === keyed[i].f) j++;
+        const seg = keyed.slice(i, j).map(k => k.item);
+        if (seg.length <= SORT_MAX_FILES && cur.length + seg.length > SORT_MAX_FILES) close();
+        for (const x of seg) {
+            cur.push(x);
+            if (cur.length === SORT_MAX_FILES) close();
+        }
+        i = j;
+    }
+    close();
+    const kept = batches.slice(0, SORT_MAX_BATCHES);
+    const over = send.length - kept.reduce((t, b) => t + b.length, 0);
+    return { send, batches: kept, over, skipped };
 }
 
 /**
@@ -69,7 +198,7 @@ export function sortStripState(input: {
     pending: number;
     /** The last proposal closed and its line not closed (ResearchAutoState.sortClosed). */
     closed: boolean;
-    /** The files the next sorting takes (sortNextItems). */
+    /** The files the next sorting takes (sortNext's `send`). */
     next: number;
     /** The files the agent left unassigned that still lack a title or a person (Go through by hand). */
     left?: number;
@@ -149,6 +278,10 @@ export interface SortRow {
     chips: SortChip[];
     /** The agent says the file is not about the family: unassigned, nothing of its proposal is offered. */
     unrelated?: true;
+    /** The back side of the same photo or page (spec 102 §10): its file, written with this row. */
+    back?: { id: string; item: MaterialItem };
+    /** The one person of the file as its portrait (spec 102 §10; set by the proposal's window). */
+    portrait?: { person: PersonId; name: string };
 }
 
 /** Names the planner needs from the tree (pure: the caller passes the data). */
@@ -243,7 +376,7 @@ function humanValue<T>(item: MaterialItem | null, field: 'title' | 'date' | 'kin
 export function sortRows(job: Pick<SortJob, 'files' | 'proposals'>, itemOf: (id: string) => MaterialItem | null, chip: (link: SortLink, title?: string) => SortChip): SortRow[] {
     const byId = new Map(job.proposals.map(p => [p.id, p]));
     const ids = [...job.files, ...job.proposals.map(p => p.id).filter(id => !job.files.includes(id))];
-    return ids.map(id => {
+    const rows = ids.map((id): SortRow => {
         const proposal = byId.get(id) ?? null;
         const item = itemOf(id);
         const row: SortRow = { id, item, proposal, chips: [] };
@@ -264,6 +397,9 @@ export function sortRows(job: Pick<SortJob, 'files' | 'proposals'>, itemOf: (id:
         if (kind) row.kind = kind;
         const have = new Set(item?.persons ?? []);
         const seen = new Set<string>();
+        // A back side the agent proposed something of its own for keeps its own row (no chip then).
+        const back = proposal.back && proposal.back !== id && !byId.has(proposal.back) ? itemOf(proposal.back) : null;
+        if (back && proposal.back) row.back = { id: proposal.back, item: back };
         for (const link of proposal.links) {
             const key = `${link.type}:${link.ref}:${link.event ?? ''}`;
             if (seen.has(key)) continue;
@@ -274,11 +410,48 @@ export function sortRows(job: Pick<SortJob, 'files' | 'proposals'>, itemOf: (id:
         }
         return row;
     });
+    // A back side goes with its front: its own row only when the agent proposed something of its own for it.
+    const backs = new Set(rows.flatMap(r => r.back ? [r.back.id] : []));
+    return rows.filter(r => !backs.has(r.id));
+}
+
+/**
+ * The back side as a row of its own, written with its front (spec 102 §10):
+ * the front's date, kind and links, its title with "(back)"; what a person set
+ * on the back stays. `choice`: the front's edit carried over.
+ */
+export function sortBackRow(row: SortRow, rubTitle: (title: string) => string, choice: SortChoice = {}): { row: SortRow; choice: SortChoice } | null {
+    if (!row.back) return null;
+    const item = row.back.item;
+    const out: SortRow = { id: row.back.id, item, proposal: row.proposal, chips: [] };
+    const field = <T>(name: 'title' | 'date' | 'kind', proposed: T | undefined): SortField<T> | undefined =>
+        proposed === undefined || proposed === '' || humanValue<T>(item, name) !== undefined ? undefined : { proposed };
+    const frontTitle = row.title && (row.title.human === undefined || choice.use?.title) ? row.title.proposed : undefined;
+    const title = field('title', frontTitle ? rubTitle(frontTitle) : undefined);
+    const date = field('date', row.date && (row.date.human === undefined || choice.use?.date) ? row.date.proposed : undefined);
+    const kind = field<MaterialKind>('kind', row.kind && (row.kind.human === undefined || choice.use?.kind) ? row.kind.proposed : undefined);
+    if (title) out.title = title;
+    if (date) out.date = date;
+    if (kind) out.kind = kind;
+    const have = new Set(item.persons);
+    const keep = (chips: readonly SortChip[]) => chips.filter(c => !(c.link.type === 'person' && have.has(c.link.ref)));
+    out.chips = keep(row.chips);
+    const e = choice.edit;
+    if (!e) return { row: out, choice: {} };
+    return {
+        row: out,
+        choice: { edit: {
+            ...(e.title !== undefined ? { title: e.title ? rubTitle(e.title) : '' } : {}),
+            ...(e.date !== undefined ? { date: e.date } : {}),
+            ...(e.kind !== undefined ? { kind: e.kind } : {}),
+            ...(e.chips ? { chips: keep(e.chips) } : {}),
+        } },
+    };
 }
 
 /** The row proposes something (else it is unassigned: nothing to accept). */
 export function sortRowProposes(row: SortRow): boolean {
-    return !!(row.title || row.date || row.kind || row.chips.length);
+    return !!(row.title || row.date || row.kind || row.chips.length || row.back || row.portrait);
 }
 
 /**

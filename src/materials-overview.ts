@@ -37,23 +37,25 @@ export interface OverviewFilters {
     noSource: boolean;
     /** Beside an archive: only files in the tree, or only in the archive (mutually exclusive). */
     where: 'tree' | 'archive' | null;
+    /** The files the agent left unassigned (spec 102 §4.4; not remembered). */
+    left: boolean;
     showHidden: boolean;
     query: string;
 }
 
 export function emptyFilters(): OverviewFilters {
-    return { person: null, kinds: [], batch: null, noPerson: false, noTitle: false, noSource: false, where: null, showHidden: false, query: '' };
+    return { person: null, kinds: [], batch: null, noPerson: false, noTitle: false, noSource: false, where: null, left: false, showHidden: false, query: '' };
 }
 
 /** Filters that narrow the list ("Filters · N"; the search is not counted, showing hidden is). */
 export function activeFilterCount(f: OverviewFilters): number {
     return (f.person ? 1 : 0) + (f.kinds.length ? 1 : 0) + (f.batch ? 1 : 0) + (f.noPerson ? 1 : 0)
-        + (f.noTitle ? 1 : 0) + (f.noSource ? 1 : 0) + (f.where ? 1 : 0) + (f.showHidden ? 1 : 0);
+        + (f.noTitle ? 1 : 0) + (f.noSource ? 1 : 0) + (f.where ? 1 : 0) + (f.left ? 1 : 0) + (f.showHidden ? 1 : 0);
 }
 
 /** Something leaves items out (groups then say "k of n" and skip groups without a match). */
 export function narrowing(f: OverviewFilters): boolean {
-    return !!(f.person || f.kinds.length || f.batch || f.noPerson || f.noTitle || f.noSource || f.where || f.query.trim());
+    return !!(f.person || f.kinds.length || f.batch || f.noPerson || f.noTitle || f.noSource || f.where || f.left || f.query.trim());
 }
 
 /** The remembered filters (`strom.materials.view` `filters`; the search and the person are not kept). */
@@ -186,6 +188,7 @@ export function passesFilters(item: MaterialItem, f: OverviewFilters, words: str
     if (f.noTitle && item.titled) return false;
     if (f.noSource && item.source) return false;
     if (f.where && (f.where === 'tree') !== itemInTree(item)) return false;
+    if (f.left && !item.agentLeft) return false;
     if (words.length) {
         const h = hay(item);
         if (!words.every(w => h.includes(w))) return false;
@@ -207,6 +210,8 @@ export interface OverviewSummary {
     noSource: number;
     inTree: number;
     onlyArchive: number;
+    /** Files the agent left unassigned that still lack a title or a person (spec 102 §4.4). */
+    left: number;
 }
 
 /**
@@ -214,7 +219,7 @@ export interface OverviewSummary {
  * list not loaded yet), the batches' own counts stand in for theirs.
  */
 export function overviewSummary(items: readonly MaterialItem[], list: MaterialList | null, full: boolean, withTree = false): OverviewSummary {
-    let files = 0, noPerson = 0, hidden = 0, noTitle = 0, noSource = 0, inTree = 0, onlyArchive = 0;
+    let files = 0, noPerson = 0, hidden = 0, noTitle = 0, noSource = 0, inTree = 0, onlyArchive = 0, left = 0;
     const loadedPerBatch = new Map<string, number>();
     for (const item of items) {
         // The tree's own files count only where they are the whole list (a tree without an archive).
@@ -223,6 +228,7 @@ export function overviewSummary(items: readonly MaterialItem[], list: MaterialLi
             if (!item.titled) noTitle++;
             if (!item.source) noSource++;
             if (itemInTree(item)) inTree++; else onlyArchive++;
+            if (item.agentLeft) left++;
         }
         if (item.origin === 'tree' && !withTree) continue;
         if (item.hidden) { hidden++; continue; }
@@ -233,7 +239,7 @@ export function overviewSummary(items: readonly MaterialItem[], list: MaterialLi
     if (!full && list) {
         for (const b of list.batches) files += Math.max(0, b.files - (loadedPerBatch.get(b.id) ?? 0));
     }
-    return { files, batches: list?.batches.length ?? 0, noPerson, hidden, noTitle, noSource, inTree, onlyArchive };
+    return { files, batches: list?.batches.length ?? 0, noPerson, hidden, noTitle, noSource, inTree, onlyArchive, left };
 }
 
 // ==================== GROUPS ====================
