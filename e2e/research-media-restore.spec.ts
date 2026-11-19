@@ -213,7 +213,7 @@ test.describe('the tree\'s own files restored from a research that keeps them (m
         const imgs = await makeImages(page);
         const [portrait, , couple] = imgs;
         const bridge = await follow(page, imgs, ['ged.stale', 'ged.etag', 'ged.imagesByHash', 'media.app'], { failImages: true });
-        // The file with its images in it was taken: no portrait, no couple's photo.
+        // The tree shows without them (they did not come after it, spec 116): no portrait, no couple's photo.
         expect(await media(page)).toMatchObject({ portrait: null, couple: null });
         const withMedia = () => bridge.trees.filter(t => t.media === 'app').length;
         const first = withMedia();

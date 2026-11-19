@@ -102,7 +102,7 @@ function surnameNoteGroups(noteLines: readonly string[] | null): string[][] {
 import { excerptFromDataUrl } from './excerpts';
 import { unionCitations } from './citation-quality';
 import { cleanSourceEvents } from './citation-order';
-import { imageRefSha, resolveImageFile } from './research-image-refs';
+import { imageRefSha, resolveImageFile, type ImageRef } from './research-image-refs';
 import { normalizeSha256 } from './sha256';
 import { isConfirmDay, isTranscriptMark } from './source-confirm';
 import { ORIGINAL_ONLY_DATA_URL } from './validation';
@@ -1915,6 +1915,15 @@ export interface GedcomConvertOptions {
      * the browser holds: the attachment then keeps that file.
      */
     images?: ReadonlyMap<string, string>;
+    /**
+     * Images the file names by their hash that are still on their way
+     * (spec 116: the tree shows before they come): a reference to one of
+     * them that `images` lacks becomes its stand-in (pendingImageUrl), so
+     * its record is made as with the image. The caller takes the stand-ins
+     * out before the data are loaded or stored (image-loads.ts
+     * takePendingImages).
+     */
+    pendingImages?: ReadonlyMap<string, ImageRef>;
 }
 
 /** Result of GEDCOM to Strom conversion */
@@ -5619,7 +5628,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
         const linked = linkedMedia(link);
         if (!linked) return null;
         // An image named by its hash: the image itself, else left out (never a file path).
-        const resolved = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images) } : linked;
+        const resolved = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images, options.pendingImages) } : linked;
         // A file the archive names only (its name and hash, spec 108 §5) that this browser holds (the
         // tree's own attachment, found by its hash): the file itself, as the tree had it.
         const heldFile = resolved.file && !resolved.file.startsWith('data:') && resolved.sha && resolved.stromKind !== 'photo'
@@ -5692,7 +5701,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
             const linked = linkedSourceMedia(link);
             if (!linked) { skipMedia(); continue; }
             // An image named by its hash: the image itself (or left out).
-            const media = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images) } : linked;
+            const media = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images, options.pendingImages) } : linked;
             const exc = media.file.startsWith('data:')
                 ? excerptFromDataUrl(media.file, { caption: media.title, pageUrl: media.pageUrl, clip: media.clip, originalSha: media.sha, orient: media.orient })
                 : null;
@@ -6103,7 +6112,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
             : [...read.filter(r => r.media?.primary), ...read.filter(r => !r.media?.primary)];
         for (const { link, media } of candidates) {
             if (!media?.file) continue;
-            const file = imageRefSha(media.file) ? resolveImageFile(media.file, options.images) : media.file;
+            const file = imageRefSha(media.file) ? resolveImageFile(media.file, options.images, options.pendingImages) : media.file;
             if (!file) continue;
             if (file.startsWith('data:')) {
                 if (!SAFE_PHOTO_DATA_URL.test(file)) continue;

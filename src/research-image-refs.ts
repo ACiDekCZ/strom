@@ -65,10 +65,46 @@ export function imageRefSha(value: string): string | null {
  * `images`, or '' when not there (the image is then left out, as a file with
  * a reference was always read). Any other value as it is.
  */
-export function resolveImageFile(value: string, images?: ReadonlyMap<string, string> | null): string {
+export function resolveImageFile(value: string, images?: ReadonlyMap<string, string> | null, pending?: ReadonlyMap<string, ImageRef> | null): string {
     const sha = imageRefSha(value);
     if (!sha) return value;
-    return images?.get(sha) ?? '';
+    const url = images?.get(sha);
+    if (url) return url;
+    const ref = pending?.get(sha);
+    return ref ? pendingImageUrl(ref) : '';
+}
+
+// ==================== IMAGES STILL ON THEIR WAY ====================
+
+/**
+ * An image the tree shows before it came (spec 116): the parser puts this
+ * stand-in where the image will be, so every record it belongs to is made as
+ * with the image; image-loads.ts takes each one out of the data before they
+ * are loaded or stored (takePendingImages) and puts the image in when it
+ * comes. It carries the image's hash, type and size. Never stored: an
+ * attempt is caught on reading (validation's stripUnsafeMediaDataUrls).
+ */
+const PENDING_MARK = 'STROMPENDING';
+const PENDING_URL = /^data:([a-z0-9.+/-]+);base64,STROMPENDING([0-9a-f]{64})X(\d+)A*$/;
+
+/** The stand-in data URL of an image still on its way. */
+export function pendingImageUrl(ref: Pick<ImageRef, 'sha' | 'mime' | 'bytes'>): string {
+    let body = `${PENDING_MARK}${ref.sha.toLowerCase()}X${Math.max(0, Math.round(ref.bytes ?? 0))}`;
+    // Whole base64 quads, as any data URL of an image.
+    while (body.length % 4) body += 'A';
+    return `data:${ref.mime};base64,${body}`;
+}
+
+/** Is `url` the stand-in of an image still on its way (pendingImageUrl)? */
+export function isPendingImageUrl(url: unknown): url is string {
+    return typeof url === 'string' && url.length < 200 && url.startsWith('data:') && url.includes(`;base64,${PENDING_MARK}`) && PENDING_URL.test(url);
+}
+
+/** What a stand-in says of its image: hash, type and size in bytes (0 when not known); null for any other value. */
+export function pendingImageOf(url: unknown): { sha: string; mime: string; bytes: number } | null {
+    if (!isPendingImageUrl(url)) return null;
+    const m = PENDING_URL.exec(url)!;
+    return { sha: m[2], mime: m[1], bytes: Number(m[3]) };
 }
 
 /** An image the file names by its hash, with what its lines say of it. */
@@ -227,55 +263,110 @@ interface ImagesAnswer {
 }
 
 /** One answer of `POST /images` for `shas`, asked again after a network error, a 5xx or an answer cut short. */
-async function askImages(url: string, shas: string[], deps: ImageFetchDeps): Promise<ImagesAnswer> {
+async function askImages(url: string, shas: string[], deps: ImageFetchDeps, signal?: AbortSignal): Promise<ImagesAnswer> {
     for (let attempt = 0; ; attempt++) {
         try {
-            return await askImagesOnce(url, shas, deps);
+            return await askImagesOnce(url, shas, deps, signal);
         } catch (err) {
+            if (signal?.aborted) throw abortError();
             const retry = !(err instanceof ImagesNotResolved) || err.retry;
             if (!retry || attempt >= IMAGE_RETRY_MS.length) throw err;
             await deps.sleep(IMAGE_RETRY_MS[attempt]);
+            if (signal?.aborted) throw abortError();
         }
     }
 }
 
-async function askImagesOnce(url: string, shas: string[], deps: ImageFetchDeps): Promise<ImagesAnswer> {
+/** The error an ask stopped by its caller ends with. */
+function abortError(): Error {
+    const err = new Error('aborted');
+    err.name = 'AbortError';
+    return err;
+}
+
+/** An answer not had within IMAGE_ANSWER_MS (asked again like a network error). */
+class ImagesTimedOut extends ImagesNotResolved {
+    constructor() {
+        super('no answer in time', true);
+    }
+}
+
+async function askImagesOnce(url: string, shas: string[], deps: ImageFetchDeps, signal?: AbortSignal): Promise<ImagesAnswer> {
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = ctl ? setTimeout(() => ctl.abort(), IMAGE_ANSWER_MS) : null;
+    let timedOut = false;
+    const timer = ctl ? setTimeout(() => { timedOut = true; ctl.abort(); }, IMAGE_ANSWER_MS) : null;
+    const stop = (): void => ctl?.abort();
+    if (signal?.aborted) throw abortError();
+    signal?.addEventListener('abort', stop);
     try {
-        const res = await deps.fetch(deps.address ? deps.address(url) : url, {
-            method: 'POST',
-            mode: 'cors',
-            credentials: 'omit',
-            cache: 'no-store',
-            // text/plain keeps it a simple request (the bridge reads the body as JSON).
-            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-            body: JSON.stringify({ images: shas }),
-            ...(ctl ? { signal: ctl.signal } : {}),
-        });
-        if (res.status >= 500) throw new ImagesNotResolved(`HTTP ${res.status}`, true);
-        if (!res.ok) throw new ImagesNotResolved(`HTTP ${res.status}`);
-        let body: unknown;
-        try {
-            // An answer cut short is no JSON: asked again.
-            body = JSON.parse(await res.text());
-        } catch {
-            throw new ImagesNotResolved('answer cut short', true);
-        }
-        const b = body as Partial<ImagesAnswer> | null;
-        const list = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === 'string');
-        if (!b || !Array.isArray(b.images) || !list(b.missing ?? []) || !list(b.more ?? [])
-            || !b.images.every(i => i && typeof i.sha === 'string' && typeof i.data === 'string' && typeof i.mime === 'string')) {
-            throw new ImagesNotResolved('unexpected answer');
-        }
-        return {
-            images: b.images,
-            missing: (b.missing ?? []).map(s => s.toLowerCase()),
-            more: (b.more ?? []).map(s => s.toLowerCase()),
-        };
+        return await askImagesAnswer(url, shas, deps, ctl);
+    } catch (err) {
+        if (timedOut && !signal?.aborted) throw new ImagesTimedOut();
+        throw err;
     } finally {
         if (timer) clearTimeout(timer);
+        signal?.removeEventListener('abort', stop);
     }
+}
+
+async function askImagesAnswer(url: string, shas: string[], deps: ImageFetchDeps, ctl: AbortController | null): Promise<ImagesAnswer> {
+    const res = await deps.fetch(deps.address ? deps.address(url) : url, {
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
+        cache: 'no-store',
+        // text/plain keeps it a simple request (the bridge reads the body as JSON).
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        body: JSON.stringify({ images: shas }),
+        ...(ctl ? { signal: ctl.signal } : {}),
+    });
+    if (res.status >= 500) throw new ImagesNotResolved(`HTTP ${res.status}`, true);
+    if (!res.ok) throw new ImagesNotResolved(`HTTP ${res.status}`);
+    let body: unknown;
+    try {
+        // An answer cut short is no JSON: asked again.
+        body = JSON.parse(await res.text());
+    } catch {
+        throw new ImagesNotResolved('answer cut short', true);
+    }
+    const b = body as Partial<ImagesAnswer> | null;
+    const list = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === 'string');
+    if (!b || !Array.isArray(b.images) || !list(b.missing ?? []) || !list(b.more ?? [])
+        || !b.images.every(i => i && typeof i.sha === 'string' && typeof i.data === 'string' && typeof i.mime === 'string')) {
+        throw new ImagesNotResolved('unexpected answer');
+    }
+    return {
+        images: b.images,
+        missing: (b.missing ?? []).map(s => s.toLowerCase()),
+        more: (b.more ?? []).map(s => s.toLowerCase()),
+    };
+}
+
+/**
+ * One image of an answer checked against what was asked: its data URL as
+ * the file with its images in it would carry it, or null when its type is
+ * not the one asked or its bytes do not give its hash.
+ */
+async function checkedImage(img: { sha: string; mime: string; data: string }, ref: ImageRef, deps: ImageFetchDeps): Promise<{ url: string } | { wrongType: true } | null> {
+    const sha = ref.sha;
+    const mime = img.mime.toLowerCase();
+    if (mime !== ref.mime || !SAFE_IMAGE_MIME.test(mime)) return { wrongType: true };
+    // Canonical base64 (what the bridge sends) is kept as it came; any
+    // other is written anew from its bytes, as a file would carry it.
+    let bytes: Uint8Array | null = canonicalBase64Bytes(img.data);
+    const canonical = bytes !== null;
+    if (!bytes) {
+        try {
+            bytes = base64ToBytes(img.data);
+        } catch {
+            bytes = null;
+        }
+    }
+    if (!bytes || await deps.sha256Hex(bytes) !== sha) return null;
+    const dataUrl = `data:${mime};base64,${canonical ? img.data : bytesToBase64(bytes)}`;
+    // Storing the tree takes these checked bytes instead of decoding the text again.
+    rememberImageBytes(dataUrl, bytes);
+    return { url: dataUrl };
 }
 
 /**
@@ -306,24 +397,10 @@ export async function fetchImagesByHash(url: string, refs: readonly ImageRef[], 
             const ref = wanted.get(sha);
             // Only what was asked, once: nothing is ever kept under a hash not asked for.
             if (!ref || !open.delete(sha)) continue;
-            const mime = img.mime.toLowerCase();
-            if (mime !== ref.mime || !SAFE_IMAGE_MIME.test(mime)) throw new ImagesNotResolved(`unexpected type ${img.mime}`);
-            // Canonical base64 (what the bridge sends) is kept as it came; any
-            // other is written anew from its bytes, as a file would carry it.
-            let bytes: Uint8Array | null = canonicalBase64Bytes(img.data);
-            const canonical = bytes !== null;
-            if (!bytes) {
-                try {
-                    bytes = base64ToBytes(img.data);
-                } catch {
-                    bytes = null;
-                }
-            }
-            if (bytes && await deps.sha256Hex(bytes) === sha) {
-                const dataUrl = `data:${mime};base64,${canonical ? img.data : bytesToBase64(bytes)}`;
-                out.set(sha, dataUrl);
-                // Storing the tree takes these checked bytes instead of decoding the text again.
-                rememberImageBytes(dataUrl, bytes);
+            const got = await checkedImage(img, ref, deps);
+            if (got && 'wrongType' in got) throw new ImagesNotResolved(`unexpected type ${img.mime}`);
+            if (got) {
+                out.set(sha, got.url);
                 continue;
             }
             if (mismatched.has(sha)) throw new ImagesNotResolved(`image does not give its hash: ${sha}`);
@@ -349,6 +426,76 @@ export async function fetchImagesByHash(url: string, refs: readonly ImageRef[], 
         if (running.size) await Promise.race(running);
     }
     if (failed) throw failed;
+    return out;
+}
+
+/** Why an image could not be had: the bridge is not reachable (or refuses), it did not answer in time, or it lacks the image. */
+export type ImageFailReason = 'offline' | 'timeout' | 'missing';
+
+/** A batch the bridge could not be asked for (after asking again): why. */
+export class ImageBatchFailed extends Error {
+    constructor(readonly reason: Exclude<ImageFailReason, 'missing'>, cause?: unknown) {
+        super(`images not had: ${reason}`);
+        this.name = 'ImageBatchFailed';
+        if (cause !== undefined) (this as { cause?: unknown }).cause = cause;
+    }
+}
+
+/** What one batch brought (fetchImageBatch). */
+export interface ImageBatchResult {
+    /** Each image had, checked against its hash, as a data URL. */
+    images: Map<string, string>;
+    /** Not to be had from the bridge: it lacks them, or sends what is not them (twice), or another type. */
+    missing: string[];
+    /** Did not fit into the answer: to be asked again. */
+    more: string[];
+}
+
+/**
+ * One batch of images (≤ IMAGE_BATCH) from the bridge, each checked against
+ * its hash, image by image (images arriving later, spec 116): what came,
+ * what the bridge lacks and what did not fit. A network error, a 5xx or an
+ * answer cut short is asked again (IMAGE_RETRY_MS); when it still fails it
+ * throws ImageBatchFailed with why. `signal` stops it (an AbortError).
+ */
+export async function fetchImageBatch(url: string, refs: readonly ImageRef[], deps: ImageFetchDeps, signal?: AbortSignal): Promise<ImageBatchResult> {
+    const wanted = new Map(refs.map(r => [r.sha, r]));
+    const out: ImageBatchResult = { images: new Map(), missing: [], more: [] };
+    let ask = [...wanted.keys()];
+    /** Bytes that did not give their hash once: asked once more. */
+    const mismatched = new Set<string>();
+    while (ask.length) {
+        let answer: ImagesAnswer;
+        try {
+            answer = await askImages(url, ask, deps, signal);
+        } catch (err) {
+            if (signal?.aborted || (err as Error)?.name === 'AbortError') throw abortError();
+            throw new ImageBatchFailed(err instanceof ImagesTimedOut ? 'timeout' : 'offline', err);
+        }
+        if (signal?.aborted) throw abortError();
+        const open = new Set(ask);
+        const again: string[] = [];
+        for (const img of answer.images) {
+            const sha = img.sha.toLowerCase();
+            const ref = wanted.get(sha);
+            // Only what was asked, once: nothing is ever kept under a hash not asked for.
+            if (!ref || !open.delete(sha)) continue;
+            const got = await checkedImage(img, ref, deps);
+            if (got && 'url' in got) {
+                out.images.set(sha, got.url);
+            } else if (got || mismatched.has(sha)) {
+                out.missing.push(sha);
+            } else {
+                mismatched.add(sha);
+                again.push(sha);
+            }
+        }
+        for (const sha of answer.missing) if (open.delete(sha)) out.missing.push(sha);
+        for (const sha of answer.more) if (open.delete(sha)) out.more.push(sha);
+        // Neither given nor said why: as not had.
+        for (const sha of open) out.missing.push(sha);
+        ask = again;
+    }
     return out;
 }
 
@@ -391,6 +538,7 @@ export interface ImagesResolved {
 export async function resolveImageRefs(
     o: { researchId: string | null; refs: readonly ImageRef[]; imagesUrl: string; files?: readonly string[] },
     deps: ImageResolveDeps,
+    later?: ImageRef[],
 ): Promise<ImagesResolved> {
     const researchId = o.researchId ? o.researchId.toLowerCase() : null;
     const known = researchId && held?.researchId === researchId ? held.bySha : null;
@@ -437,14 +585,54 @@ export async function resolveImageRefs(
         }
     }
     let fetched = 0;
+    if (later) {
+        // Left for later (images arriving later): none asked of the bridge here.
+        later.push(...want.values());
+        want.clear();
+    }
     if (want.size) {
         const got = await fetchImagesByHash(o.imagesUrl, [...want.values()], deps);
         for (const [sha, url] of got) images.set(sha, url);
         fetched = got.size;
     }
     for (const ref of o.refs) {
-        if (!images.has(ref.sha)) throw new ImagesNotResolved(`not resolved: ${ref.sha}`);
+        if (!images.has(ref.sha) && !later) throw new ImagesNotResolved(`not resolved: ${ref.sha}`);
     }
-    if (researchId) held = { researchId, bySha: images };
+    // A copy: the images that come later join the ones held, never the map handed out.
+    if (researchId) held = { researchId, bySha: new Map(images) };
     return { images, held: fromHeld, seeded, fetched };
+}
+
+/** Images had since for the research whose images are held (images arriving later): held with them. */
+export function addHeldImages(researchId: string, images: ReadonlyMap<string, string>): void {
+    const id = researchId.toLowerCase();
+    if (!held || held.researchId !== id) return;
+    for (const [sha, url] of images) held.bySha.set(sha, url);
+}
+
+/** What the app holds of the images a file names (resolveHeldImageRefs), and what is still to come. */
+export interface ImagesHeldResolved extends ImagesResolved {
+    /** The images neither held nor in the stored tree: to come from the bridge (images arriving later). */
+    pending: ImageRef[];
+}
+
+/**
+ * The images `refs` names that the app holds — those of the last file
+ * loaded, then the stored tree's own (hashed) — without asking the bridge
+ * (the tree shows before its other images come, spec 116). The images held
+ * are then these; the rest come with addHeldImages. `files` as for
+ * resolveImageRefs.
+ */
+export async function resolveHeldImageRefs(
+    o: { researchId: string | null; refs: readonly ImageRef[]; files?: readonly string[] },
+    deps: Pick<ImageResolveDeps, 'treeImages' | 'sha256Hex'>,
+): Promise<ImagesHeldResolved> {
+    const pending: ImageRef[] = [];
+    const noBridge: ImageResolveDeps = {
+        ...deps,
+        fetch: () => Promise.reject(new Error('no bridge asked')),
+        sleep: () => Promise.resolve(),
+    };
+    const got = await resolveImageRefs({ ...o, imagesUrl: '' }, noBridge, pending);
+    return { ...got, pending };
 }

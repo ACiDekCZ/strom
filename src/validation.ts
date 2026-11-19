@@ -15,6 +15,7 @@ import { readRecordedAge, recordedAgeGap } from './recorded-age.js';
 import { findDivergentShares, findSeparateSameEvents } from './shared-events.js';
 import { divergenceSentence, divergentPersons } from './shared-divergence.js';
 import { nameLinkLeads, type ParticipantRef } from './participant-match.js';
+import { isPendingImageUrl } from './research-image-refs.js';
 
 // ==================== ISSUE TYPES ====================
 
@@ -883,26 +884,28 @@ export function safeWebUrl(url: string | undefined | null): string | null {
  * Drop photos and attachments whose payload is not an allowed data URL
  * (e.g. data:text/html from a crafted file — it would open with the app's
  * origin). Mutates `data`; returns how many were dropped. Run on load, so
- * such payloads never reach storage or the DOM.
+ * such payloads never reach storage or the DOM. The stand-in of an image
+ * still on its way (pendingImageUrl, spec 116) is never data: one that got
+ * stored goes too.
  */
 export function stripUnsafeMediaDataUrls(data: StromData): number {
     let dropped = 0;
     for (const person of Object.values(data.persons ?? {}) as Person[]) {
         if (!person || typeof person !== 'object') continue;
-        if (person.photo !== undefined && (typeof person.photo !== 'string' || !isSafePhotoDataUrl(person.photo))) {
+        if (person.photo !== undefined && (typeof person.photo !== 'string' || !isSafePhotoDataUrl(person.photo) || isPendingImageUrl(person.photo))) {
             delete person.photo;
             dropped++;
         }
     }
     // The tree's files (data v24): an image or a PDF, or a file held as its original only.
     dropped += filterMedia(data, att =>
-        !!att && typeof att.dataUrl === 'string' && (isSafeAttachmentDataUrl(att.dataUrl) || isOriginalOnlyAttachment(att)));
+        !!att && typeof att.dataUrl === 'string' && !isPendingImageUrl(att.dataUrl) && (isSafeAttachmentDataUrl(att.dataUrl) || isOriginalOnlyAttachment(att)));
     // Held as an original only: the page icon as its data, so an older app keeps it (see ORIGINAL_ONLY_DATA_URL).
     for (const att of allMedia(data)) if (att.dataUrl === '' && isOriginalOnlyAttachment(att)) att.dataUrl = ORIGINAL_ONLY_DATA_URL;
     // The couple's photo (spec 107): the same rule as a person's.
     for (const union of Object.values(data.partnerships ?? {}) as Partnership[]) {
         if (!union || typeof union !== 'object') continue;
-        if (union.photo !== undefined && (typeof union.photo !== 'string' || !isSafePhotoDataUrl(union.photo))) {
+        if (union.photo !== undefined && (typeof union.photo !== 'string' || !isSafePhotoDataUrl(union.photo) || isPendingImageUrl(union.photo))) {
             delete union.photo;
             delete union.photoOriginalName;
             delete union.photoDate;
@@ -915,7 +918,7 @@ export function stripUnsafeMediaDataUrls(data: StromData): number {
     for (const src of Object.values(data.sources ?? {}) as Source[]) {
         if (!src || typeof src !== 'object' || !Array.isArray(src.excerpts)) continue;
         const kept = src.excerpts.filter(exc =>
-            exc && typeof exc.dataUrl === 'string' && isSafeExcerptDataUrl(exc.dataUrl));
+            exc && typeof exc.dataUrl === 'string' && isSafeExcerptDataUrl(exc.dataUrl) && !isPendingImageUrl(exc.dataUrl));
         dropped += src.excerpts.length - kept.length;
         for (const exc of kept) {
             if (exc.region !== undefined && !isValidRegion(exc.region)) delete exc.region;

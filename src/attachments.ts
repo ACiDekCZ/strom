@@ -8,6 +8,7 @@
 import { Person, StromData, personSourceIds, partnershipSourceIds } from './types.js';
 import { dataUrlByteSize, dataUrlImageSize, stripPhotos } from './photo.js';
 import { allMedia, personMedia as personMediaOf } from './media.js';
+import { pendingImageOf } from './research-image-refs.js';
 
 /** Longest edge (px) an attached image is downscaled to. */
 export const ATTACHMENT_MAX_SIDE = 1600;
@@ -200,7 +201,8 @@ export function countImages(data: StromData): ImageCount {
     const weigh = (dataUrl: string | undefined): void => {
         if (!dataUrl || !dataUrl.startsWith('data:') || seen.has(dataUrl)) return;
         seen.add(dataUrl);
-        out.bytes += dataUrlByteSize(dataUrl);
+        // An image still on its way (spec 116): the size its stand-in says.
+        out.bytes += pendingImageOf(dataUrl)?.bytes ?? dataUrlByteSize(dataUrl);
     };
     const portraits = new Set<string>();
     for (const person of Object.values(data.persons)) {

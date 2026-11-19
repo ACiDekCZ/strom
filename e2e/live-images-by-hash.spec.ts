@@ -180,14 +180,16 @@ test.describe('follow live with the images by their hash (ged.imagesByHash)', ()
         // The file by reference, its two images asked (one per answer: the second as `more`).
         expect(bridge.trees[0]).toMatchObject({ ref: true, status: 200 });
         expect(bridge.trees.every(t => t.ref)).toBe(true);
-        expect(bridge.images.map(a => a.shas)).toEqual([[imgs[0].sha, imgs[1].sha], [imgs[1].sha]]);
+        // The images come after the tree is shown (spec 116): waited for, not there at once.
         await expect.poll(() => excerpts(page)).toEqual([imgs[0].url, imgs[1].url]);
+        expect(bridge.images.map(a => a.shas)).toEqual([[imgs[0].sha, imgs[1].sha], [imgs[1].sha]]);
         await showsExcerpts(page, 2);
         // How long the first load waited for its images (the mock bridge answers at once).
         const waited = bridge.images[bridge.images.length - 1].at - bridge.trees[0].at;
         test.info().annotations.push({ type: 'first-load-image-wait-ms', description: String(waited) });
-        const link = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.treeEtag);
-        expect(link).toMatchObject({ tag: `"${H1}-ref"`, variant: 'ref' });
+        // The file's tag kept once every image came.
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.treeEtag))
+            .toMatchObject({ tag: `"${H1}-ref"`, variant: 'ref' });
 
         // A change of a fact: the file again, no image.
         const files = bridge.trees.length;
@@ -236,16 +238,16 @@ test.describe('follow live with the images by their hash (ged.imagesByHash)', ()
         await showsExcerpts(page, 2);
     });
 
-    test('an image the bridge does not have: the file with its images in it, all of them there', async ({ page }) => {
+    test('an image the bridge does not have: the tree with the others, that one failed; never the whole file (spec 116)', async ({ page }) => {
         const imgs = await makeImages(page);
         const bridge = await follow(page, imgs, { byHash: true, lacks: [imgs[1].sha] });
-        await expect.poll(() => excerpts(page)).toEqual([imgs[0].url, imgs[1].url]);
-        expect(bridge.trees.map(t => t.ref)).toEqual([true, false]);
-        // The tag kept is the whole file's.
+        await expect.poll(() => excerpts(page)).toEqual([imgs[0].url]);
+        // Images come after the tree: the one missing is not a reason to download the file with its images in it.
+        expect(bridge.trees.map(t => t.ref)).toEqual([true]);
+        // Not every image came: the file's tag is not kept as the tree's finished state (a reload asks anew).
         const etag = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.treeEtag);
-        expect(etag?.tag).toBe(`"${H1}-data"`);
-        expect(etag?.variant).toBeUndefined();
-        await showsExcerpts(page, 2);
+        expect(etag).toBeUndefined();
+        await showsExcerpts(page, 1);
     });
 
     test('without the feature: the file as always, no images asked', async ({ page }) => {

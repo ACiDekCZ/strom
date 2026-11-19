@@ -4,6 +4,7 @@
  */
 
 import { rewriteStorySources, storySourceIds } from './story-sources.js';
+import { imageLoads } from './image-loads.js';
 import { CitationRef, citationFact, cleanTreeSourceEvents } from './citation-order.js';
 import {
     CitationHolder, citationMainOf, cleanCitationMain, cleanCitationQuay, cleanTreeCitationQuay, joinQualityOnlySources, putCitationMain, setCitationQuality, unionCitations,
@@ -1405,6 +1406,25 @@ class DataManagerClass {
     /** Store the open tree again as it is (its research base changed: they are stored together). */
     resaveCurrent(): void {
         this.save('state');
+    }
+
+    /**
+     * Images that came after the tree (spec 116, image-loads.ts) put into
+     * the open tree `treeId` by `apply`: no undo step and no edit of the
+     * user's; not stored here (storeArrivedImages, once they all came).
+     * Null when `treeId` is not the open tree (or it cannot be changed).
+     */
+    applyImageArrivals<T>(treeId: TreeId, apply: (data: StromData) => T): T | null {
+        if (this.currentTreeId !== treeId || this.isReadOnly() || this.windowSink) return null;
+        const out = apply(this.data);
+        this.revision++;
+        this.contentRevision++;
+        return out;
+    }
+
+    /** Store the open tree `treeId` with the images that came (one save after them all). */
+    storeArrivedImages(treeId: TreeId): void {
+        if (this.currentTreeId === treeId) this.save('content');
     }
 
     /**
@@ -5298,6 +5318,8 @@ class DataManagerClass {
         this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         // Undo choke point (see clearData) — an accidental import-over is
         // now one Ctrl+Z away instead of silently corrupting the stack.
+        // Images still on their way into the data replaced go nowhere (spec 116).
+        imageLoads.onDataReplaced(this.currentTreeId);
         this.beginMutation();
         this.data = migrateData(newData);
         this.commitMutation(strings.undo.loadedData, true);
@@ -5326,6 +5348,7 @@ class DataManagerClass {
         if (this.isReadOnly() || !this.currentTreeId) return false;
         // The tree shown until now: the drawing goes from it to the new one (spec 055).
         const previous = this.data;
+        imageLoads.onDataReplaced(treeId);
         this.data = migrateData(newData);
         this.save();
         UndoManager.setActiveTree(this.currentTreeId);
