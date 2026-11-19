@@ -27,7 +27,7 @@ import { SettingsManager } from './settings.js';
 import { peekReloadPoint, forgetLastView } from './resume-view.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
-import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
+import { createSnapshot, listSnapshots, SnapshotResearchBase } from './snapshots.js';
 import { researchAutoState, patchResearchAutoState, type ResearchAutoState } from './research-device.js';
 import { researchBaseKey, isHistoryKey } from './storage-keys.js';
 import { deleteHistoryStore } from './history-store.js';
@@ -856,6 +856,11 @@ class TreeManagerClass {
         // Ensure this tree's queued saves (and any other pending writes) have
         // landed before reading (review S20).
         await this.flush(id);
+        return this.readStoredRecord(id);
+    }
+
+    /** readTreeRecord without waiting for the tree's queue (a step on that queue reads with it). */
+    private async readStoredRecord(id: TreeId): Promise<TreeReadResult> {
         const raw = await StorageManager.get<StromData | EncryptedData | PooledTreeRecord>('trees', id);
         if (!raw) {
             this.unreadableTrees.delete(id);
@@ -1117,10 +1122,37 @@ class TreeManagerClass {
             for (const item of list) if (item !== store) void this.backUpRescue(id, item.key, item.rescued);
             if (!store) continue;
             store.rescued.data.version = STROM_DATA_VERSION;
+            // Its first write here may be the one that moves an older app's tree to this version (N1-b).
+            this.noteStoredPreMigrationState(id);
             this.queueWrite(id, { data: store.rescued.data, base: store.rescued.base ?? null });
             // Its key goes once the write lands (settle).
             this.restoredRescues.set(id, store.key);
         }
+    }
+
+    /**
+     * A rescued state goes over the tree as stored, which may still be an
+     * older app's (the page was left while the first write here waited for
+     * the backup before the data update): that stored state is kept as
+     * notePreMigrationState keeps it, so the rescued write takes the backup
+     * first (takePreMigrationBackup). Read on the tree's queue, ahead of the
+     * rescued write. Not when a backup of it was taken already (the page
+     * went away after the backup, before the write landed): never a second.
+     */
+    private noteStoredPreMigrationState(id: TreeId): void {
+        const storedAt = Date.parse(this.index.trees.find(t => t.id === id)?.lastModifiedAt ?? '');
+        const prev = this.saveQueues.get(id) ?? Promise.resolve();
+        const step = prev.then(async () => {
+            if (this.preMigrationStates.has(id)) return;
+            const stored = await this.readStoredRecord(id);
+            if (stored.status !== 'ok' || (stored.data.version ?? 1) >= STROM_DATA_VERSION) return;
+            const backups = await listSnapshots(id);
+            if (Number.isFinite(storedAt) && backups.some(m => m.reason === 'pre-migration' && m.createdAt >= storedAt)) return;
+            this.notePreMigrationState(id, stored.data, stored.data.version ?? 1);
+        }).catch((err) => {
+            console.warn('The tree as stored could not be read for the backup before the data update', err);
+        });
+        this.saveQueues.set(id, step);
     }
 
     /**

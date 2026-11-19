@@ -4,7 +4,9 @@
  * files); the first write stamps the new version. That first write takes the
  * backup "Before the data update of a new version" (pre-migration) with the
  * state as stored, once per tree and version step; a tree only opened gets
- * none, an empty tree none (verification of 3.30.0, finding N1).
+ * none, an empty tree none (verification of 3.30.0, finding N1). A page left
+ * before that first write landed stores it through its rescue copy on the next
+ * start, and that write takes the backup too, once (N1-b).
  *
  * StorageManager is replaced by an in-memory, per-store Map (no IndexedDB in
  * the node test env); the snapshots module is the real one. All data is
@@ -182,5 +184,108 @@ describe('a tree of an older data version, written here for the first time', () 
         expect(await DataManager.switchTree(T2)).toBe(true);
         await editAndSave();
         expect(await preMigrationBackups(T2)).toHaveLength(0);
+    });
+});
+
+function memoryStorage(): Storage {
+    const store = new Map<string, string>();
+    return {
+        get length() { return store.size; },
+        clear: () => store.clear(),
+        getItem: (k: string) => store.get(k) ?? null,
+        key: (i: number) => [...store.keys()][i] ?? null,
+        removeItem: (k: string) => { store.delete(k); },
+        setItem: (k: string, v: string) => { store.set(k, String(v)); },
+    };
+}
+
+type Internals = {
+    index: { version: number; activeTreeId: TreeId | null; trees: TreeMetadata[] };
+    saveQueues: Map<TreeId, Promise<void>>; pendingSaves: Map<TreeId, unknown>; unsettledSaves: Map<TreeId, unknown>;
+    preMigrationStates: Map<TreeId, unknown>; restoredRescues: Map<TreeId, string>; queuedWrites: Map<TreeId, number>;
+    restoreRescuedSaves(): void;
+};
+
+describe('the first write left with the page, stored from its rescue copy on the next start (N1-b)', () => {
+    beforeEach(() => vi.stubGlobal('localStorage', memoryStorage()));
+
+    /**
+     * Opens the v21 tree, edits it and leaves the page before the write lands:
+     * the rescue copy as the page left it. Then the page "dies": the tree as
+     * stored, the backups (unless `keepBackups`: the backup landed, the write
+     * did not) and the window's state go back to before the edit.
+     */
+    async function editAndLeave(stored: StromData, keepBackups = false): Promise<void> {
+        const tm = TreeManager as unknown as Internals;
+        const index = structuredClone(tm.index);
+        expect(await DataManager.switchTree(T2)).toBe(true);
+        DataManager.createPerson({ firstName: 'Radegunda', lastName: 'Kvítková', gender: 'female' });
+        TreeManager.rescueUnsettledSaves();
+        const rescued = Object.fromEntries(Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!)
+            .map(k => [k, localStorage.getItem(k)!]));
+        expect(Object.keys(rescued)).toHaveLength(1);
+        await TreeManager.flush();
+
+        st('trees').set('t2', structuredClone(stored));
+        if (!keepBackups) st('snapshots').clear();
+        localStorage.clear();
+        for (const [k, v] of Object.entries(rescued)) localStorage.setItem(k, v);
+        tm.index = index;
+        tm.saveQueues = new Map();
+        tm.pendingSaves = new Map();
+        tm.unsettledSaves = new Map();
+        tm.preMigrationStates = new Map();
+        tm.restoredRescues = new Map();
+        tm.queuedWrites = new Map();
+    }
+
+    async function nextStart(): Promise<void> {
+        (TreeManager as unknown as Internals).restoreRescuedSaves();
+        await TreeManager.flush();
+    }
+
+    it('the rescued write takes the pre-migration backup with the stored v21 state, the tree saved as v24 with the edit', async () => {
+        const stored = v21Tree();
+        st('trees').set('t2', structuredClone(stored));
+        await editAndLeave(stored);
+        expect(await preMigrationBackups(T2)).toHaveLength(0);
+
+        await nextStart();
+        const backups = await preMigrationBackups(T2);
+        expect(backups).toHaveLength(1);
+        expect(JSON.parse((await getSnapshotJson(backups[0].id))!)).toEqual(stored);
+        const saved = st('trees').get('t2') as StromData;
+        expect(saved.version).toBe(STROM_DATA_VERSION);
+        expect(Object.keys(saved.persons)).toHaveLength(2);
+        expect(localStorage.length).toBe(0);
+    });
+
+    it('only once: opening and editing it afterwards takes no other backup', async () => {
+        const stored = v21Tree();
+        st('trees').set('t2', structuredClone(stored));
+        await editAndLeave(stored);
+        await nextStart();
+        expect(await DataManager.switchTree(T1)).toBe(true);
+        expect(await DataManager.switchTree(T2)).toBe(true);
+        await editAndSave();
+        expect(await preMigrationBackups(T2)).toHaveLength(1);
+    });
+
+    it('a backup taken before the page went away is not taken a second time', async () => {
+        const stored = v21Tree();
+        st('trees').set('t2', structuredClone(stored));
+        await editAndLeave(stored, true);
+        expect(await preMigrationBackups(T2)).toHaveLength(1);
+        await nextStart();
+        expect(await preMigrationBackups(T2)).toHaveLength(1);
+        expect((st('trees').get('t2') as StromData).version).toBe(STROM_DATA_VERSION);
+    });
+
+    it('a tree of this data version rescued so takes no pre-migration backup', async () => {
+        st('trees').set('t2', currentTree());
+        await editAndLeave(currentTree());
+        await nextStart();
+        expect(await preMigrationBackups(T2)).toHaveLength(0);
+        expect(Object.keys((st('trees').get('t2') as StromData).persons)).toHaveLength(2);
     });
 });
