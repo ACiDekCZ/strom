@@ -1899,6 +1899,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushMedia(person.photo, person.photoOriginalName ?? '', 'photo', undefined, undefined, undefined, undefined, person.photoDate);
         }
         for (const att of mediaByPerson.get(personId) ?? []) {
+            // The portrait's own record (data v25): written once, as the portrait above.
+            if (person.photo && att.dataUrl === person.photo) continue;
             if (att.places.some(p => atOwner(p, q => 'personId' in q && q.personId === personId))) pushMediaSlot(att, 1, 'person');
         }
 

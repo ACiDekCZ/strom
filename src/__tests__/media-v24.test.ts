@@ -42,8 +42,8 @@ function v23Tree(): Record<string, unknown> {
 }
 
 describe('data v24: StromData.media', () => {
-    it('is the current data version', () => {
-        expect(STROM_DATA_VERSION).toBe(24);
+    it('is in the current data version', () => {
+        expect(STROM_DATA_VERSION).toBeGreaterThanOrEqual(24);
     });
 
     it('moves the attachments into records with their places, the source as a place', () => {

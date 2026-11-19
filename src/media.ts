@@ -326,6 +326,66 @@ export function moveLegacyAttachments(data: StromData): number {
     return joined;
 }
 
+/**
+ * Every portrait a record of the tree's files (data v25): a tree of v24 and
+ * older kept a portrait made from a file only on its person (Person.photo),
+ * so it was in no list of the tree's files. Each such portrait gets the
+ * person's place in the record of that picture — one there already (the
+ * same picture, not taken out), else a new one of kind photo with the
+ * portrait's name and date. The same portrait at several people is one
+ * record with each person's place. The record's id follows from the picture,
+ * so reading the same data again gives the same record, never a second one.
+ * A portrait of a person the research gave (a research tree, the person
+ * with its REFN) is the archive's file and its record is there: left alone.
+ * Mutates `data`; returns how many people got a place.
+ */
+export function givePortraitsRecords(data: StromData, researchTree = false): number {
+    let placed = 0;
+    const byUrl = new Map<string, Attachment>();
+    for (const att of allMedia(data)) {
+        if (!att.removed && !att.originalOnly && att.dataUrl && !byUrl.has(att.dataUrl)) byUrl.set(att.dataUrl, att);
+    }
+    for (const [personId, person] of Object.entries(data.persons ?? {}) as [PersonId, StromData['persons'][PersonId]][]) {
+        const photo = person?.photo;
+        if (!photo || typeof photo !== 'string' || !photo.startsWith('data:') || (researchTree && person.refn)) continue;
+        const place: MediaPlace = { personId };
+        const same = byUrl.get(photo);
+        if (same) {
+            if (mediaAt(same, place)) continue;
+            same.places.push(place);
+            placed++;
+            continue;
+        }
+        const mimeType = photo.slice(5, photo.search(/[;,]/)) || 'image/jpeg';
+        const comma = photo.indexOf(',');
+        const b64 = comma >= 0 ? photo.slice(comma + 1) : '';
+        const sizeBytes = Math.max(0, Math.floor(b64.length * 3 / 4) - (b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0));
+        const base = `att_portrait_${photo.length.toString(36)}${portraitHash(photo, 0x811c9dc5, 0x01000193)}${portraitHash(photo, 0x01000193, 0x5bd1e995)}`;
+        let id = base;
+        for (let n = 2; data.media?.[id]; n++) id = `${base}_${n}`;
+        const ext = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+        const name = typeof person.photoOriginalName === 'string' && person.photoOriginalName.trim() ? person.photoOriginalName : `portrait.${ext}`;
+        const record: Attachment = {
+            id, name, mimeType, dataUrl: photo, sizeBytes, kind: 'photo', places: [place],
+            ...(typeof person.photoDate === 'string' && person.photoDate ? { date: person.photoDate } : {}),
+        };
+        (data.media ??= {})[id] = record;
+        byUrl.set(photo, record);
+        placed++;
+    }
+    return placed;
+}
+
+/** An FNV-1a-like hash of a text in base 36 (a portrait record's id). */
+function portraitHash(text: string, seed: number, prime: number): string {
+    let h = seed >>> 0;
+    for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, prime) >>> 0;
+    }
+    return h.toString(36);
+}
+
 const KINDS = new Set(['photo', 'document', 'record', 'other']);
 const isBy = (v: unknown): v is 'user' | 'agent' => v === 'user' || v === 'agent';
 

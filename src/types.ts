@@ -1861,9 +1861,20 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   a tree of v23 is moved over when read (each attachment a record at its
  *   person and its source; the same file at several people one record).
  *   An older app (v23) would find no attachments and drop them on a
- *   re-save, so the bump makes it warn first.
+ *   re-save, so the bump makes it warn first. A portrait stayed on its
+ *   person alone (Person.photo) and was in no record until v25.
+ * v25 (2026-11): every portrait is in a record of the tree's files: a tree
+ *   of v24 and older gives each person's portrait the person's place in the
+ *   record of that picture (one there already, else a new record of kind
+ *   photo with the portrait's name and date; the same portrait at several
+ *   people one record), once when read (src/media.ts givePortraitsRecords).
+ *   A portrait of a research tree's person with its REFN is the archive's
+ *   file and is left alone; a couple's photo has no record. A GEDCOM export
+ *   writes such a record at its person once, as the portrait. The version
+ *   marks a tree moved over, so a record taken out later is not made again;
+ *   an older app (v24) warns first, as for every bump.
  */
-export const STROM_DATA_VERSION = 24;
+export const STROM_DATA_VERSION = 25;
 
 /** The rows of a saved Table view (spec 073 §2; events and sources come later). */
 export type TableViewRowType = 'persons' | 'unions' | 'events' | 'sources';

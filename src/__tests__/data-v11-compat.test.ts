@@ -115,8 +115,9 @@ describe('data format 10 -> 11', () => {
         // for the named lists of people and the date a person was added
         // (spec 084), 23 for the original a portrait was cut from and the
         // couple's photo (spec 107), 24 for the tree's files as records with
-        // their places (spec 102).
-        expect(STROM_DATA_VERSION).toBe(24);
+        // their places (spec 102), 25 for every portrait in a record of the
+        // files (verification of 3.30.0, N2).
+        expect(STROM_DATA_VERSION).toBe(25);
         // A raise would stop an older build at its start (VersionError) — the
         // whole app, also an older exported HTML file: never raised again.
         const storage = readFileSync(new URL('../storage.ts', import.meta.url), 'utf8');

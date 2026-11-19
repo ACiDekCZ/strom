@@ -71,7 +71,7 @@ import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDa
 import { ValidationIssue, stripUnsafeMediaDataUrls, cleanPortraitSources, isSafePhotoDataUrl, translateValidationType } from './validation.js';
 import { isPortraitSourceShape } from './photo.js';
 import { cloneTreeData } from './clone.js';
-import { sanitizeMediaRecords, moveLegacyAttachments, pruneMedia, findMedia, treeMedia, personMedia, mediaOf, mediaAt, placeKey as mediaPlaceKey, putMedia, dropMediaPlaces, deleteMedia, placePersonId } from './media.js';
+import { sanitizeMediaRecords, moveLegacyAttachments, givePortraitsRecords, pruneMedia, findMedia, treeMedia, personMedia, mediaOf, mediaAt, placeKey as mediaPlaceKey, putMedia, dropMediaPlaces, deleteMedia, placePersonId } from './media.js';
 import { UndoManager, type UndoMark } from './undo.js';
 import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
@@ -389,6 +389,10 @@ export function migrateData(data: unknown): StromData {
     // else (data:text/html…) from a crafted file is dropped before it can be
     // stored or rendered. After the sources are in: excerpts live there.
     stripUnsafeMediaDataUrls(result);
+    // v25: every portrait is in a record of the tree's files (a tree of v24
+    // and older kept one made from a file only on its person). Once, by the
+    // stored version: a record deleted afterwards stays deleted.
+    if (typeof d.version === 'number' && d.version < 25) givePortraitsRecords(result, typeof d.researchAsOf === 'string');
     // v23 (spec 107): only portrait sources whose original is still there.
     cleanPortraitSources(result);
 
