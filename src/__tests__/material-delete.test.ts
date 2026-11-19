@@ -192,6 +192,8 @@ describe('what the dialog says of the list', () => {
         expect(d.subPeople(1, 12)).toBe('1 soubor zmizí z jejich materiálů');
         expect(d.subPeople(3, 12)).toBe('3 soubory zmizí z jejich materiálů');
         expect(d.subPeople(7, 12)).toBe('7 souborů zmizí z jejich materiálů');
+        expect(d.subTasks(1)).toMatch(/^soubor z nich vypadne;/);
+        expect(d.subTasks(12)).toMatch(/^soubory z nich vypadnou;/);
 
         setLanguage('en');
         d = strings.materials.del;
@@ -201,6 +203,8 @@ describe('what the dialog says of the list', () => {
         expect(d.subPeople(1, 1)).toBe('the file leaves their materials');
         expect(d.subPeople(1, 12)).toBe('1 file leaves their materials');
         expect(d.subPeople(7, 12)).toBe('7 files leave their materials');
+        expect(d.subTasks(1)).toMatch(/^the file leaves them;/);
+        expect(d.subTasks(3)).toMatch(/^the files leave them;/);
 
         setLanguage('de');
         d = strings.materials.del;
@@ -209,10 +213,14 @@ describe('what the dialog says of the list', () => {
         expect(d.understandHintArchive(12)).toMatch(/^Die Dateien bleiben nur in früheren Sicherungen des Archivs\./);
         expect(d.subPeople(1, 12)).toBe('1 Datei verschwindet aus ihren Materialien');
         expect(d.subPeople(7, 12)).toBe('7 Dateien verschwinden aus ihren Materialien');
+        expect(d.subTasks(1)).toMatch(/^die Datei fällt heraus;/);
+        expect(d.subTasks(12)).toMatch(/^die Dateien fallen heraus;/);
 
         setLanguage('pl');
         d = strings.materials.del;
         expect(d.understandHint(1)).toMatch(/^Plik zostanie /);
+        expect(d.subTasks(1)).toMatch(/^plik z nich wypadnie;/);
+        expect(d.subTasks(5)).toMatch(/^pliki z nich wypadną;/);
         for (const n of [2, 5, 22, 25]) expect(d.understandHint(n)).toMatch(/^Pliki zostaną /);
         expect(d.understandHintArchive(25)).toMatch(/^Pliki zostaną tylko we wcześniejszych kopiach zapasowych archiwum\./);
         expect(d.subPeople(1, 1)).toBe('plik zniknie z ich materiałów');

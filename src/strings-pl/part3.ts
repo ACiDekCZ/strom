@@ -563,7 +563,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
             subTree: 'usunie je kolejna wersja drzewa z badania',
             subPeople: (k: number, n: number) => (n === 1 ? 'plik zniknie z ich materiałów' : `${nPl(k, 'plik zniknie', 'pliki znikną', 'plików zniknie')} z ich materiałów`),
             tasksN: (n: number) => nPl(n, 'zadanie', 'zadania', 'zadań'),
-            subTasks: 'plik z nich wypadnie; zadanie bez innych plików zostanie porzucone',
+            subTasks: (n: number) => (n === 1 ? 'plik z nich wypadnie; zadanie bez innych plików zostanie porzucone' : 'pliki z nich wypadną; zadanie bez innych plików zostanie porzucone'),
             countExcerpts: (n: number) => nPl(n, 'wycinek', 'wycinki', 'wycinków'),
             countPeople: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
             countSources: (n: number) => nPl(n, 'źródło', 'źródła', 'źródeł'),

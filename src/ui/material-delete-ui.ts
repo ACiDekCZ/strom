@@ -283,7 +283,7 @@ export const materialDeleteMethods = uiModule({
                 const more = s.people.length - names.length;
                 row('people', d.rowPeople(s.people.length), `${names.join(', ')}${more > 0 ? `, + ${more}` : ''}`, d.subPeople(s.peopleFiles, n));
             }
-            if (s.tasks.length) row('tasks', d.rowTasks, d.tasksN(s.tasks.length), d.subTasks);
+            if (s.tasks.length) row('tasks', d.rowTasks, d.tasksN(s.tasks.length), d.subTasks(n));
             sec.append(head, grid);
             out.push(sec);
         } else if (impacts.length) {
