@@ -49,6 +49,8 @@ const NOT_VERB_END = /(?:ním|tím)$/u;
  * ("Rozumím" to a notice, "Nevím" among the answers to the agent's question).
  */
 const OWN_ANSWERS = new Set(['Rozumím', 'Nevím']);
+/** A box the person ticks in their own words (Delete permanently's "Rozumím, smazání nejde v aplikaci vrátit", spec 102 §9). */
+const OWN_WORDS_PATHS = new Set(['materials.del.understand']);
 const NOT_VERBS = new Set(['Přím', 'Rám', 'Tím', 'Nám', 'Vám', 'Sám', 'Jím', 'Kterým', 'Jejím', 'Mým', 'Tvým', 'Svým', 'Jakým', 'Všem', 'Dlouhým', 'Prvním', 'Posledním', 'Novým', 'Starým', 'Jiným', 'Každým', 'Takovým', 'Dalším', 'Ostatním', 'Hlavním', 'Celým', 'Jediným', 'Vlastním', 'Stejným', 'Tímto', 'Pouhým', 'Nejbližším']);
 
 describe('impersonal Czech texts (§12.2)', () => {
@@ -56,7 +58,7 @@ describe('impersonal Czech texts (§12.2)', () => {
         const bad = new Set<string>();
         for (const { path, text } of texts('cs')) {
             for (const w of sentenceStarts(text)) {
-                if (w === 'Čekáme' || (FIRST_PERSON_CS.test(w) && !NOT_VERB_END.test(w) && !NOT_VERBS.has(w) && !OWN_ANSWERS.has(text))) bad.add(`${path}: ${text}`);
+                if (w === 'Čekáme' || (FIRST_PERSON_CS.test(w) && !NOT_VERB_END.test(w) && !NOT_VERBS.has(w) && !OWN_ANSWERS.has(text) && !OWN_WORDS_PATHS.has(path))) bad.add(`${path}: ${text}`);
             }
         }
         expect([...bad]).toEqual([]);

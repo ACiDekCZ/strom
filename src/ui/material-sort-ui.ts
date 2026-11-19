@@ -28,6 +28,7 @@ import {
     sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
     sortNext, sortLeftMap, sortCopyOf, sortStripState, sortRunBatches, sortProposalCounts, sortLeftIds, sortBackRow,
     sortJobsMerged, sortRunView, sortRunAdvance, sortRunEnded, sortRunCancelled, sortRunRest, sortFinishedSorts, sortRunContinued, type SortRunView,
+    sortJobWithout, sortRememberedWithout,
     type SortNext, type SortNextOpts, type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite, type SortCounts, type SortStripState,
 } from '../material-sort.js';
 import { researchPersonRef } from '../research-link.js';
@@ -148,7 +149,9 @@ function sortKey(r: Pick<ResearchSortRemembered, 'id' | 'run'>): string {
 
 /** What is known now of the remembered sorting (a run's batches merged), null before the first answer. */
 function watchedJob(r: ResearchSortRemembered | null): SortJob | null {
-    return r && watch?.id === sortKey(r) ? watch.job : null;
+    const job = r && watch?.id === sortKey(r) ? watch.job : null;
+    // Files deleted for good meanwhile (spec 102 §12): their proposals are not shown.
+    return job && r?.gone?.length ? sortJobWithout(job, r.gone) : job;
 }
 
 /** Where the remembered run is (spec 102 §3): as the research said it last, else as remembered. */
@@ -210,7 +213,7 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
 }
 
 /** A preview: the research's cached one, else the file's extension in letters. */
-function previewEl(treeId: string, item: MaterialItem | null, cls: string): HTMLElement {
+export function previewEl(treeId: string, item: MaterialItem | null, cls: string): HTMLElement {
     const box = h('span', cls);
     box.setAttribute('aria-hidden', 'true');
     const name = item?.name ?? '';
@@ -275,6 +278,18 @@ export const materialSortMethods = uiModule({
         if (!mc || !mc.agent || !mc.caps.list) return null;
         if (!mc.caps.sort) return 'older';
         return mc.caps.bridgeUp ? 'on' : 'offRun';
+    },
+
+    /**
+     * Files deleted for good (spec 102 §9, §12): they leave the remembered
+     * sorting — its batches waiting, its proposal and what was decided here.
+     */
+    materialSortDropFiles(gone: readonly string[]): void {
+        const mc = this.materialsContext();
+        const r = this.materialSortRemembered();
+        if (!mc || !r || !gone.length) return;
+        const next = sortRememberedWithout(r, gone);
+        if (next) patchResearchAutoState(mc.treeId, { materialSort: next });
     },
 
     /** The sorting remembered for the active tree (null: none). */
@@ -873,7 +888,7 @@ export const materialSortMethods = uiModule({
             const dialog = materialDialog({ title: s.discardAsk });
             if (r?.run && view) {
                 // Which batches will not run and how many files stay unsorted; the proposals still to go through.
-                const rest = sortRunRest(r.run, view);
+                const rest = sortRunRest(r.run, view, r.gone);
                 const open = r && w.job ? this.materialSortCounts(mc.treeId, r, w.job).open : made;
                 const from = Math.min(view.batches, Math.max(1, view.batches - rest.batches + 1));
                 if (rest.batches > 0) dialog.body.append(h('p', 'mdlg-text', s.discardRun(from, view.batches, rest.files.length, open)));
@@ -971,7 +986,7 @@ export const materialSortMethods = uiModule({
         if (run && !run.closed && (run.error || run.stopped)) {
             const nb = run.batches.length;
             const done = run.done ?? [];
-            const rest = sortRunRest(run, { done });
+            const rest = sortRunRest(run, { done }, r?.gone);
             const p = counts?.open ?? 0;
             const handle = quiet || p <= 0 ? '' : `<button type="button" class="mw-sort-btn secondary" data-sort="open">${esc(s.handle(p))}</button>`;
             const go = (label: string, act: 'retry' | 'resume') => {
@@ -1065,7 +1080,7 @@ export const materialSortMethods = uiModule({
         const mc = this.materialsContext();
         const r = this.materialSortRemembered();
         if (!mc || !r?.run) return;
-        const rest = sortRunRest(r.run, { done: r.run.done ?? [] });
+        const rest = sortRunRest(r.run, { done: r.run.done ?? [] }, r.gone);
         const byId = this.materialSortItemMap(mc.treeId);
         const items = rest.files.map(id => byId.get(id)).filter((i): i is MaterialItem => !!i);
         this.openSortDialog({ items, batch: r.batch ?? null, rest: true, text: r.text });

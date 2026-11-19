@@ -30877,6 +30877,19 @@
         .mdlg-warn-ref { color: var(--text); overflow-wrap: anywhere; }
         .mdlg-warn-keep { color: var(--text-light); font-size: 12.5px; }
         .mdlg-dup-new { align-self: flex-start; font-size: 13.5px; }
+        /* Delete permanently (spec 102 §9): the research's list (its warning, What refers to the file), the note of a list that changed. */
+        .mdlg-delete-list { display: flex; flex-direction: column; gap: 12px; }
+        .mdlg-delete-list:empty, .mdlg-delete-note[hidden] { display: none; }
+        .mdlg--delete .mdlg-check:has(input:disabled) { cursor: default; color: var(--text-faint); }
+        @media (max-width: 640px) {
+            /* A sheet from below: Cancel and Delete side by side, Only hide under them (Tel-smazat). */
+            .mdlg--delete .mdlg-foot .link-button { order: 1; flex-basis: 100%; margin-right: 0; min-height: 44px; }
+            .mdlg--delete .mv-uses-head { flex-wrap: wrap; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .mdlg--delete .mdlg-body { gap: 8px; }
+            .mdlg--delete .mdlg-sort-preview { width: 40px; height: 40px; }
+        }
         .mv-uses-attach { font-size: 13px; }
         @media (hover: hover) {
             .mdlg-attach-list .mdlg-radio:hover { background: var(--hover-bg); }

@@ -858,6 +858,10 @@ export const materialViewerMethods = uiModule({
         if (inTree && DataManager.canEditMedia(item.attachment!.id)) {
             action(m.removeFromTree, () => void this.openRemoveFromTreeDialog(item, { leave: () => closeImageViewer() }), { danger: true, id: 'removeFromTree' });
         }
+        // Delete permanently… (spec 102 §9): the last action, behind `material.delete`, never in a tree that is read only.
+        if (inArchive && ctx?.caps.delete && !DataManager.isReadOnly()) {
+            action(m.del.forever, () => void this.openDeleteDialog([item], { leave: () => closeImageViewer(), ctx: { where: 'viewer' } }), { danger: true, write: true, id: 'delete' });
+        }
         if ((writes || edit === 'off') && !up) foot.appendChild(h('p', 'mv-off', m.actionsWhenRunning));
         if (actions.childElementCount) foot.appendChild(actions);
 

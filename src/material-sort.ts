@@ -391,9 +391,11 @@ export function sortRunCancelled(r: ResearchSortRemembered, view: SortRunView | 
  * (failed, cancelled, never run), their files in the order sent and how
  * many there are; Try again and Continue sort them.
  */
-export function sortRunRest(run: Pick<ResearchSortRun, 'batches'>, view: Pick<SortRunView, 'done'>): { batches: number; files: string[] } {
+export function sortRunRest(run: Pick<ResearchSortRun, 'batches'>, view: Pick<SortRunView, 'done'>, gone: readonly string[] = []): { batches: number; files: string[] } {
     const done = new Set(view.done);
-    const left = run.batches.filter((_, i) => !done.has(i));
+    const out = new Set(gone);
+    // A batch whose every file was deleted for good is no batch left to run (the research skips it).
+    const left = run.batches.filter((_, i) => !done.has(i)).map(b => b.filter(f => !out.has(f))).filter(b => b.length > 0);
     return { batches: left.length, files: left.flat() };
 }
 
@@ -804,4 +806,46 @@ export function parseSortRevert(raw: unknown): SortRevert | null {
         if (refs.length) out.persons = refs;
     }
     return Object.keys(out).length ? out : null;
+}
+
+// ==================== FILES DELETED FOR GOOD (spec 102 §9, §12) ====================
+
+/** A sorting without the files deleted for good: they leave its files, its proposals and its files without one. */
+export function sortJobWithout(job: SortJob, gone: readonly string[]): SortJob {
+    if (!gone.length) return job;
+    const out = new Set(gone);
+    if (!job.files.some(f => out.has(f)) && !job.proposals.some(p => out.has(p.id)) && !job.unproposed?.some(u => out.has(u.id))) return job;
+    return {
+        ...job,
+        files: job.files.filter(f => !out.has(f)),
+        proposals: job.proposals.filter(p => !out.has(p.id)),
+        ...(job.unproposed ? { unproposed: job.unproposed.filter(u => !out.has(u.id)) } : {}),
+    };
+}
+
+/** The most files deleted for good a remembered sorting keeps (a run's largest). */
+export const SORT_GONE_MAX = 1500;
+
+/**
+ * The remembered sorting without files deleted for good (spec 102 §12): they
+ * leave the batch sent, each batch of the run and what was decided here;
+ * kept as gone so proposals read before stay hidden and a batch whose every
+ * file went counts as none (the research skips it). Null: none of them was
+ * in it.
+ */
+export function sortRememberedWithout(r: ResearchSortRemembered, gone: readonly string[]): ResearchSortRemembered | null {
+    const out = new Set(gone);
+    const hit = (ids: readonly string[]) => ids.some(f => out.has(f));
+    if (!hit(r.files) && !hit(r.run?.batches.flat() ?? []) && !hit(Object.keys(r.decided)) && !(r.earlier?.length && gone.length)) return null;
+    const decided = Object.fromEntries(Object.entries(r.decided).filter(([k]) => !out.has(k)));
+    const reverts = r.reverts ? Object.fromEntries(Object.entries(r.reverts).filter(([k]) => !out.has(k))) : undefined;
+    return {
+        ...r,
+        files: r.files.filter(f => !out.has(f)),
+        decided,
+        ...(reverts ? { reverts } : {}),
+        // A batch left without files keeps them (an empty batch is not stored, and the indices name the research's batches).
+        ...(r.run ? { run: { ...r.run, batches: r.run.batches.map(b => (b.every(f => out.has(f)) ? b : b.filter(f => !out.has(f)))) } } : {}),
+        gone: [...new Set([...(r.gone ?? []), ...gone])].slice(-SORT_GONE_MAX),
+    };
 }

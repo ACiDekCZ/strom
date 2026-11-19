@@ -1448,6 +1448,12 @@ export interface FakeMaterial {
     sortRefuse?: string;
     /** A batch closed (`POST /batch/<id>/done`) lists its new files and itself, as the research does (spec 102 §8). */
     listBatches?: boolean;
+    /** Every `POST /material/delete` body, dry runs and confirmations (only with `material.delete`, spec 102 §9). */
+    deletes?: Record<string, unknown>[];
+    /** What deleting a file takes with it (I… → fields of its impact over the defaults: nothing but its people). */
+    deleteImpacts?: Record<string, Record<string, unknown>>;
+    /** Right before the next confirmation, the research changes: these impacts replace the ones of their files (409 `material.delete-changed`). */
+    deleteChangeOnce?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -1475,6 +1481,9 @@ export function foreignCommit(b: FakeBridge): string {
 }
 
 /** A write of the app committed (foreignAtWrite first, if due): its answer's `head` (and `parent` with writeParent). */
+/** The deletions' confirmations each bridge signed (confirm → the files and the list it was given for). */
+const deleteConfirms = new WeakMap<FakeBridge, Map<string, string>>();
+
 function commitWrite(b: FakeBridge): { head: string; parent?: string } {
     if (b.material?.foreignAtWrite) {
         b.material.foreignAtWrite--;
@@ -1589,7 +1598,7 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
     const m = b.material;
     const rest = url.pathname.replace(/^\/[^/]+/, '');
     const sortPath = /^\/material\/sort(?:\/([^/]+)(\/cancel)?)?$/.exec(rest);
-    if (!m || (!sortPath && !/^\/material(\/assign|\/hide|\/edit)?$/.test(rest))) return null;
+    if (!m || (!sortPath && !/^\/material(\/assign|\/hide|\/edit|\/delete)?$/.test(rest))) return null;
     const features = b.features ?? [];
     const refusal = (status: number, code: string, params?: Record<string, unknown>) =>
         ({ status, body: { error: code, code, text: code, ...(params ? { params } : {}) } });
@@ -1751,6 +1760,47 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
     let body: Record<string, unknown>;
     try { body = JSON.parse(postData ?? ''); } catch { return refusal(400, 'material.body'); }
     if (!body || typeof body !== 'object') return refusal(400, 'material.body');
+    if (rest === '/material/delete') {
+        // Delete for good (spec 102 §9, the research's V3): a dry run lists what goes and signs that list; only that
+        // confirmation deletes, and only while the list is still the same.
+        if (!features.includes('material.delete')) return { status: 404, body: '' };
+        (m.deletes ??= []).push(body);
+        if ((m.busyTimes ?? 0) > 0) return busy();
+        if (m.readonly) return refusal(403, 'material.readonly');
+        const ids = body.files;
+        if (!Array.isArray(ids) || ids.length === 0 || ids.length > 500 || !ids.every(i => typeof i === 'string' && FILE_REF.test(i))
+            || (body.dryRun !== true && typeof body.confirm !== 'string')) {
+            return refusal(400, 'material.body');
+        }
+        const files = (ids as string[]).map(id => m.files.find(f => f.id === id));
+        const missing = (ids as string[]).find((_, i) => !files[i]);
+        if (missing) return refusal(404, 'material.file', { id: missing });
+        const impacts = () => (files as FakeMaterialFile[]).map(f => ({
+            id: f.id, name: f.name, sha: f.sha, sources: [], excerpts: 0, people: f.persons, links: 0, tasks: [], bytes: 'deleted', sameAs: [],
+            ...(m.deleteImpacts?.[f.id] ?? {}),
+        }));
+        const signed = (deleteConfirms.get(b) ?? new Map<string, string>());
+        deleteConfirms.set(b, signed);
+        if (body.dryRun === true) {
+            const confirm = `confirm-${signed.size + 1}`;
+            const list = impacts();
+            signed.set(confirm, JSON.stringify({ ids, list }));
+            return { status: 200, body: { files: ids, dryRun: true, impacts: list, confirm } };
+        }
+        const was = signed.get(body.confirm as string);
+        if (!was || JSON.stringify((JSON.parse(was) as { ids: unknown }).ids) !== JSON.stringify(ids)) return refusal(400, 'material.body');
+        if (m.deleteChangeOnce) {
+            m.deleteImpacts = { ...(m.deleteImpacts ?? {}), ...m.deleteChangeOnce };
+            delete m.deleteChangeOnce;
+        }
+        const list = impacts();
+        if (JSON.stringify((JSON.parse(was) as { list: unknown }).list) !== JSON.stringify(list)) {
+            return { status: 409, body: { error: 'changed', code: 'material.delete-changed', text: 'changed', impacts: list } };
+        }
+        signed.delete(body.confirm as string);
+        m.files = m.files.filter(f => !(ids as string[]).includes(f.id));
+        return { status: 200, body: { files: ids, deleted: ids, impacts: list, ...commitWrite(b) } };
+    }
     if (rest === '/material/edit') {
         (m.edits ??= []).push(body);
         if ((m.busyTimes ?? 0) > 0) return busy();

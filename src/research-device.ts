@@ -419,6 +419,8 @@ export interface ResearchSortRemembered {
      * (spec 102 §3): their proposals stay in it beside the new batches'.
      */
     earlier?: string[];
+    /** Files deleted for good while it was remembered (spec 102 §9, §12): their proposals are not shown. */
+    gone?: string[];
 }
 
 /**
@@ -497,7 +499,16 @@ export function sortRememberedFrom(v: unknown): ResearchSortRemembered | null {
         ...sortReverts(o.reverts, decided),
         ...(run ? { run } : {}),
         ...(earlier.length ? { earlier } : {}),
+        ...goneFrom(o.gone),
     };
+}
+
+/** Files deleted for good while a sorting was remembered, as stored (at most SORT_GONE_KEPT, the newest kept). */
+const SORT_GONE_KEPT = 1500;
+function goneFrom(v: unknown): { gone?: string[] } {
+    if (!Array.isArray(v)) return {};
+    const gone = [...new Set(v.filter((f): f is string => typeof f === 'string' && FILE_REF.test(f)))].slice(-SORT_GONE_KEPT);
+    return gone.length ? { gone } : {};
 }
 
 /** The closed proposal's line as stored (anything off: none). */

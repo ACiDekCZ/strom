@@ -1105,13 +1105,14 @@ async function request(url: string, init: RequestInit, opts: BridgeOptions, raw 
  * A request that is asked again, quietly, while the research is busy (409):
  * three more times after 1, 2 and 4 s, or after what it asks for (capped).
  */
-async function withBusyRetry(url: string, init: RequestInit, opts: BridgeOptions, raw = false): Promise<RawAnswer | MaterialError> {
+async function withBusyRetry(url: string, init: RequestInit, opts: BridgeOptions, raw = false,
+    retryIf: (answer: RawAnswer) => boolean = () => true): Promise<RawAnswer | MaterialError> {
     const delays = opts.retryDelaysMs ?? BUSY_RETRY_DELAYS_MS;
     const sleep = opts.sleep ?? ((ms: number) => defaultSleep(ms, opts.signal));
     for (let attempt = 0; ; attempt++) {
         const answer = await request(url, init, opts, raw);
         if ('kind' in answer) return answer;
-        if (answer.status !== 409 || attempt >= delays.length) return answer;
+        if (answer.status !== 409 || attempt >= delays.length || !retryIf(answer)) return answer;
         const err = materialErrorOf(answer.status, answer.body, answer.retryAfter);
         const wait = err.retry !== undefined ? Math.min(err.retry * 1000, MAX_RETRY_WAIT_MS) : delays[attempt];
         await sleep(wait);
@@ -1294,6 +1295,151 @@ export async function editMaterial(base: string, req: EditRequest, opts: BridgeO
         return { ok: true, value: { files: parseFiles(b.files), people: parsePeople(b.people), was: parseWas(b.was), head: isResearchHead(b.head) ?? '', parent: isResearchHead(b.parent) ?? '' } };
     }
     return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+}
+
+// ==================== DELETING FOR GOOD (`material.delete`, spec 102 §9, K1.17) ====================
+
+/** The most files one deletion takes (the research's `DELETE_MOST_FILES`). */
+export const DELETE_MAX_FILES = 500;
+
+/** A source a file to be deleted is the file of: made of it (input), an excerpt on (excerpt) or an image of (media) its content. */
+export interface DeleteImpactSource {
+    id: string;
+    title: string;
+    via: 'input' | 'excerpt' | 'media';
+    citedCount: number;
+}
+
+/** What deleting one file takes with it (`impacts[]` of `POST /material/delete`). */
+export interface DeleteImpact {
+    id: string;
+    name: string;
+    sha: string;
+    sources: DeleteImpactSource[];
+    /** Excerpts of sources on images of its content (they go only with its bytes). */
+    excerpts: number;
+    /** The people it is of (REFN). */
+    people: string[];
+    /** Its places in the app's tree (taken off). */
+    links: number;
+    /** The tasks holding it (narrowed, or given up). */
+    tasks: string[];
+    /** Its bytes go, or stay: another file of the research (`sameAs`) or another research keeps the same content. */
+    bytes: 'deleted' | 'kept';
+    keptWhy?: 'sameAs' | 'otherResearch';
+    /** The files of the research with the same content that keep the bytes. */
+    sameAs: string[];
+}
+
+/** The research's list of what a deletion takes, file by file (anything not understood left out). */
+export function parseDeleteImpacts(raw: unknown): DeleteImpact[] {
+    if (!Array.isArray(raw)) return [];
+    const out: DeleteImpact[] = [];
+    for (const x of raw.slice(0, DELETE_MAX_FILES)) {
+        if (!x || typeof x !== 'object') continue;
+        const o = x as Record<string, unknown>;
+        const id = typeof o.id === 'string' && FILE_ID.test(o.id) ? o.id : null;
+        if (!id || out.some(i => i.id === id)) continue;
+        const sources: DeleteImpactSource[] = [];
+        for (const s of Array.isArray(o.sources) ? o.sources.slice(0, 200) : []) {
+            if (!s || typeof s !== 'object') continue;
+            const so = s as Record<string, unknown>;
+            const sid = typeof so.id === 'string' ? so.id.trim() : '';
+            const via = so.via === 'input' || so.via === 'excerpt' || so.via === 'media' ? so.via : null;
+            if (!SOURCE_REF.test(sid) || !via || sources.some(y => y.id === sid && y.via === via)) continue;
+            sources.push({ id: sid, title: text(so.title, 300) ?? sid, via, citedCount: count(so.citedCount) });
+        }
+        const tasks = Array.isArray(o.tasks)
+            ? [...new Set(o.tasks.filter((t): t is string => typeof t === 'string' && /^[A-Za-z0-9_-]{1,60}$/.test(t)))] : [];
+        const sameAs = Array.isArray(o.sameAs)
+            ? [...new Set(o.sameAs.filter((t): t is string => typeof t === 'string' && FILE_ID.test(t) && t !== id))] : [];
+        const keptWhy = o.keptWhy === 'sameAs' || o.keptWhy === 'otherResearch' ? o.keptWhy : undefined;
+        out.push({
+            id, name: text(o.name, 300) ?? id, sha: typeof o.sha === 'string' && SHA.test(o.sha) ? o.sha : '',
+            sources, excerpts: count(o.excerpts), people: refs(o.people), links: count(o.links), tasks,
+            // Not said as kept: the bytes go (the strict reading — the dialog never promises they stay).
+            bytes: o.bytes === 'kept' ? 'kept' : 'deleted', ...(o.bytes === 'kept' && keptWhy ? { keptWhy } : {}), sameAs,
+        });
+    }
+    return out;
+}
+
+/** The dry run's answer: what the deletion takes and the bridge's confirmation of that list (15 minutes). */
+export interface DeleteDry {
+    files: string[];
+    impacts: DeleteImpact[];
+    confirm: string;
+}
+
+/** The deletion's answer. */
+export interface DeleteDone {
+    files: string[];
+    deleted: string[];
+    impacts: DeleteImpact[];
+    /** The research's head after the write ('' = not said). */
+    head: string;
+}
+
+/**
+ * A refused deletion; `changed`: the research changed since the list was
+ * shown (409 `material.delete-changed`), with the new list to show and confirm again.
+ */
+export type DeleteResult<T> = { ok: true; value: T } | { ok: false; error: MaterialError; changed?: DeleteImpact[] };
+
+const ids = (v: unknown): string[] => (Array.isArray(v) ? [...new Set(v.filter((f): f is string => typeof f === 'string' && FILE_ID.test(f)))] : []);
+
+/** Busy is waited out quietly; a changed list never (the person has to see it). */
+const busyOnly = (a: RawAnswer): boolean => !(a.body && typeof a.body === 'object' && (a.body as Record<string, unknown>).code === 'material.delete-changed');
+
+/** What deleting files would take with them (`POST /material/delete {files, dryRun: true}`): nothing is written. */
+export async function deleteMaterialDry(base: string, files: string[], opts: BridgeOptions = {}): Promise<DeleteResult<DeleteDry>> {
+    if (!files.length || files.length > DELETE_MAX_FILES || !files.every(f => FILE_ID.test(f))) return bodyError();
+    const answer = await withBusyRetry(withAppVersion(`${base}/material/delete`), postInit({ files, dryRun: true }), opts);
+    if ('kind' in answer) return { ok: false, error: answer };
+    if (answer.status === 200 && answer.body && typeof answer.body === 'object') {
+        const b = answer.body as Record<string, unknown>;
+        const confirm = typeof b.confirm === 'string' && b.confirm.length <= 4096 ? b.confirm : '';
+        if (b.dryRun !== true || !confirm) return bodyError();
+        return { ok: true, value: { files: ids(b.files), impacts: parseDeleteImpacts(b.impacts), confirm } };
+    }
+    return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+}
+
+/**
+ * Delete files for good (`POST /material/delete {files, confirm}`): only with
+ * the confirmation of a dry run whose list the person saw and confirmed.
+ */
+export async function deleteMaterial(base: string, files: string[], confirm: string, opts: BridgeOptions = {}): Promise<DeleteResult<DeleteDone>> {
+    if (!files.length || files.length > DELETE_MAX_FILES || !files.every(f => FILE_ID.test(f)) || !confirm) return bodyError();
+    const answer = await withBusyRetry(withAppVersion(`${base}/material/delete`), postInit({ files, confirm }), opts, false, busyOnly);
+    if ('kind' in answer) return { ok: false, error: answer };
+    if (answer.status === 200 && answer.body && typeof answer.body === 'object') {
+        const b = answer.body as Record<string, unknown>;
+        return { ok: true, value: { files: ids(b.files), deleted: ids(b.deleted), impacts: parseDeleteImpacts(b.impacts), head: isResearchHead(b.head) ?? '' } };
+    }
+    const b = answer.body && typeof answer.body === 'object' ? answer.body as Record<string, unknown> : {};
+    if (answer.status === 409 && b.code === 'material.delete-changed') {
+        return { ok: false, error: { kind: 'body', status: 409, code: 'material.delete-changed' }, changed: parseDeleteImpacts(b.impacts) };
+    }
+    return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+}
+
+/** Files deleted for good leave the remembered list (and their batches' counts). */
+export async function dropFromCache(treeId: string, gone: readonly string[], now: number = Date.now()): Promise<MaterialCacheRecord | null> {
+    await primeMaterials(treeId);
+    const prev = cachedMaterials(treeId);
+    if (!prev || !gone.length) return prev;
+    const set = new Set(gone);
+    const rec = cloneRecord(prev);
+    const left: MaterialFile[] = [];
+    const less = new Map<string, number>();
+    for (const f of rec.list.files) {
+        if (!set.has(f.id)) { left.push(f); continue; }
+        if (f.batch) less.set(f.batch, (less.get(f.batch) ?? 0) + 1);
+    }
+    rec.list.files = left;
+    rec.list.batches = rec.list.batches.map(b => (less.has(b.id) ? { ...b, files: Math.max(0, b.files - less.get(b.id)!) } : b));
+    return putRecord(rec, now);
 }
 
 // ==================== SORTING BY THE AGENT (`material.sort`, spec 102 §13) ====================

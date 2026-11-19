@@ -33,7 +33,7 @@ import { MQ_MOBILE, MQ_PHONE_LANDSCAPE, MQ_TABLET } from '../breakpoints.js';
 import {
     MaterialItem, MaterialList, MaterialBatch, MaterialError, MaterialActionId, MaterialCaps,
     cachedMaterials, primeMaterials, fetchMaterial, saveMaterialList, materialKindLabel, materialErrorText,
-    materialType, materialDateForInput, MATERIAL_SORT_FEATURE,
+    materialType, materialDateForInput, MATERIAL_SORT_FEATURE, DELETE_MAX_FILES,
 } from '../materials.js';
 import {
     OverviewFilters, OverviewGroupMode, OverviewView, OverviewGroup, OverviewFolder, OverviewLayout, OverviewRow,
@@ -54,6 +54,7 @@ import type { SortStripState } from '../material-sort.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { barHtml } from './prog-bar.js';
+import { deletableFiles } from '../material-delete.js';
 import { closeHeadMenu, openHeadMenu, SEP, type MenuEntry } from './table-view/table-headmenu.js';
 
 const MODAL_ID = 'materials-modal';
@@ -1497,6 +1498,13 @@ export const materialsWindowMethods = uiModule({
                 : this.materialSortBusy() ? m.agentSort.runNote : null;
             out.push({ id: 'sel-sort', label: m.agentSort.sort, html: researchBridgeActionLabel(m.agentSort.sort, 'material-sort'), why });
         }
+        // Delete permanently… (spec 102 §9): the last one, behind `material.delete`, never in a tree that is read only.
+        if (ctx.caps.delete && !readOnly) {
+            const files = deletableFiles(items).length;
+            const why = !ctx.caps.bridgeUp ? m.actionsWhenRunning : !n ? m.nothingSelected : !files ? m.skippedTree(n)
+                : files > DELETE_MAX_FILES ? m.del.tooMany(DELETE_MAX_FILES) : null;
+            out.push({ id: 'sel-delete', label: m.del.forever, why });
+        }
         return out;
     },
 
@@ -1506,9 +1514,11 @@ export const materialsWindowMethods = uiModule({
         const inline = media(MQ_MOBILE) ? ['sel-attach', 'sel-title', 'sel-review'] : ['sel-review', 'sel-attach', 'sel-title', 'sel-kind', 'sel-date', 'sel-sort'];
         const acts = this.mwSelActions(items).filter(a => !inline.includes(a.id));
         pop.innerHTML = acts.map(a => {
-            const divider = a.id === 'sel-remove' ? '<div class="materials-item-menu-divider" role="separator"></div>' : '';
+            const danger = a.id === 'sel-remove' || a.id === 'sel-delete';
+            // Remove from the tree… and Delete permanently… each after a divider of its own.
+            const divider = danger ? '<div class="materials-item-menu-divider" role="separator"></div>' : '';
             const off = a.why ? ` aria-disabled="true" title="${esc(a.why)}"` : '';
-            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row${a.id === 'sel-remove' ? ' is-danger' : ''}" data-action="${a.id}"${off}>${a.html ?? esc(a.label)}</button>`;
+            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row${danger ? ' is-danger' : ''}" data-action="${a.id}"${off}>${a.html ?? esc(a.label)}</button>`;
         }).join('');
         pop.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(btn => btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1534,6 +1544,7 @@ export const materialsWindowMethods = uiModule({
             case 'sel-kind': this.openBulkEditDialog('kind', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
             case 'sel-date': this.openBulkEditDialog('date', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
             case 'sel-remove': void this.openRemoveManyFromTreeDialog(items).then(ok => { if (ok) end(); }); return;
+            case 'sel-delete': void this.openDeleteDialog(items, { ctx: { selection: true, where: 'window' } }); return;
             case 'sel-remove-person':
                 this.openSelRemovePersonDialog(items, {
                     done: end,
@@ -2350,6 +2361,7 @@ export const materialsWindowMethods = uiModule({
                 case 'sort': this.mwSortBy(act.dataset.col as ListColumn); return;
                 case 'sel-review': case 'sel-attach': case 'sel-title': case 'sel-kind': case 'sel-date':
                 case 'sel-assign': case 'sel-hide': case 'sel-restore': case 'sel-remove': case 'sel-remove-person': case 'sel-sort':
+                case 'sel-delete':
                     if (disabled) return;
                     this.mwSelAction(act.dataset.mw);
                     return;
