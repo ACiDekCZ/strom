@@ -30629,45 +30629,55 @@
         .mw-sort-bar.is-indeterminate > span { width: 40%; animation: mw-sort-sweep 1.6s ease-in-out infinite; }
         @keyframes mw-sort-sweep { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
         @media (prefers-reduced-motion: reduce) { .mw-sort-bar.is-indeterminate > span { width: 100%; opacity: 0.4; animation: none; } }
-        /* A phone: the sorting at work in its batch (one line of the list) keeps its words whole, the bar gives way, the note stays out. */
-        @media (max-width: 640px) {
-            .mw-sort-bar { width: 96px; flex: 0 1 96px; min-width: 32px; }
-            .mw-sort--row .mw-sort-text > .mw-sort-run { flex: none; }
-            .mw-sort--row .mw-sort-note { display: none; }
+        /* The one strip of sorting (spec 102 §1): A–F over the whole archive. E and F done, off (not running, read-only, older), a failed batch. */
+        .mw-sort.is-off { background: var(--surface-2); color: var(--text-light); }
+        .mw-sort.is-done { background: var(--surface-2); }
+        .mw-sort.is-error { background: var(--error-soft); }
+        .mw-sort-err { color: var(--error-text); font-weight: 600; }
+        .mw-sort-what { min-width: 0; overflow-wrap: anywhere; }
+        .mw-sort-wait { font-weight: 600; }
+        .materials-window .mw-sort .link-button { font-size: 13px; padding: 2px 0; flex: none; }
+        .mw-sort-btn {
+            display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px; font: inherit; font-size: 13px;
+            border-radius: var(--r-lg); white-space: nowrap; flex: none; cursor: pointer;
         }
-        .materials-window .mw-sort .link-button { font-size: 13px; padding: 2px 0; }
+        .mw-sort-btn.primary { background: var(--primary); color: var(--on-primary); border: none; font-weight: 600; }
+        .mw-sort-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
         .mw-sort-btn[aria-disabled="true"], .batch-sort-btn[aria-disabled="true"] { opacity: 0.55; cursor: default; }
-        /* The strip under a batch's header (13b/13e): one line in its row of the list. */
-        .mw-r-sort { display: flex; align-items: flex-start; }
-        .mw-sort--row {
-            flex: 1; min-width: 0; margin: 2px 0 8px; padding: 8px 12px; flex-wrap: nowrap; overflow: hidden;
-            border-radius: var(--r-md); background: var(--surface-2); color: var(--text-light);
-        }
-        .mw-sort--row .mw-sort-text { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
-        .mw-sort--row .mw-sort-text > span:not(.mw-sort-bar), .mw-sort--row .mw-sort-text:not(:has(span)) { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-        .mw-sort--row .mw-sort-run { color: var(--text); }
-        .mw-sort--row .mw-sort-btn { flex: none; height: 30px; }
-        @media (pointer: coarse) { .mw-sort--row .mw-sort-btn { height: 44px; } }
-        /* The whole view's strip (no filter, no search): one line, its text shortened, closed with ×. */
-        .mw-sort--whole { flex-wrap: nowrap; gap: 8px 12px; }
-        .mw-sort--whole .mw-sort-text { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .mw-sort--whole .mw-sort-btn { flex: none; display: inline-flex; align-items: center; height: 30px; padding: 0 14px; font-size: 13px; }
-        .mw-sort--whole .mw-sort-close {
+        .mw-sort-close {
             flex: none; width: 30px; height: 30px; padding: 0; border: none; border-radius: var(--r-pill);
             background: none; color: var(--text-light); font: inherit; font-size: 18px; line-height: 1; cursor: pointer;
         }
-        .mw-sort--whole .mw-sort-close:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
-        @media (hover: hover) { .mw-sort--whole .mw-sort-close:hover { background: var(--surface-2); color: var(--text); } }
-        @media (pointer: coarse) { .mw-sort--whole .mw-sort-btn, .mw-sort--whole .mw-sort-close { height: 44px; } .mw-sort--whole .mw-sort-close { width: 44px; } }
-        /* A phone: the text whole (wrapped if need be) beside ×, the button on the line below. */
-        @media (max-width: 640px) {
-            .mw-sort--whole { flex-wrap: wrap; }
-            .mw-sort--whole .mw-sort-text { flex: 1 1 calc(100% - 56px); white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
-            .mw-sort--whole .mw-sort-close { order: 1; }
-            .mw-sort--whole .mw-sort-btn { order: 2; }
+        .mw-sort-close:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+        @media (hover: hover) {
+            .mw-sort-btn.primary:not([aria-disabled="true"]):hover { background: var(--primary-dark); }
+            .mw-sort-close:hover { background: var(--surface-2); color: var(--text); }
+            .mw-sort.is-done .mw-sort-close:hover, .mw-sort.is-off .mw-sort-close:hover { background: var(--hover-bg); }
         }
-        /* Selecting has its own Sort with the agent in the selection bar. */
-        #materials-modal.is-selecting .mw-sort--whole { display: none; }
+        @media (pointer: coarse) {
+            .mw-sort-btn { height: 44px; }
+            .mw-sort-close { width: 44px; height: 44px; }
+            .materials-window .mw-sort .link-button { min-height: 44px; }
+        }
+        /* The short sentence of a phone held sideways (§11). */
+        .mw-sort-phone-short { display: none; }
+        /* A phone: the state only (no action, §11), its gutter 16 px; the bar gives way, the words stay whole. */
+        @media (max-width: 640px) {
+            .mw-sort { padding: 8px 16px; gap: 8px; }
+            .mw-sort-bar { width: 96px; flex: 0 1 96px; min-width: 32px; }
+            .mw-sort-phone { flex-basis: 100%; }
+        }
+        /* A phone held sideways: one line, the sentence shortened. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .mw-sort { flex-wrap: nowrap; padding: 6px 16px; }
+            .mw-sort-text { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
+            .mw-sort-text > span { flex: none; }
+            .mw-sort-text > .mw-sort-what { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+            .mw-sort-phone { display: none; }
+            .mw-sort-phone-short { display: inline; flex-basis: auto; }
+        }
+        /* Selecting has its own Sort with the agent in the selection bar: the offer (A, E) steps aside. */
+        #materials-modal.is-selecting .mw-sort[data-state="A"], #materials-modal.is-selecting .mw-sort[data-state="E"] { display: none; }
         .batch-sort { margin: 0 0 14px; padding: 12px 14px; background: var(--surface-2); border-radius: var(--r-md); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
         .batch-sort-title { font-size: 14px; font-weight: 600; color: var(--text); }
         .batch-sort-text, .batch-sort-older { margin: 0; font-size: 13px; color: var(--text-light); }
@@ -30675,9 +30685,27 @@
         .mdlg--sortprop .mdlg-body { flex: 1; padding-top: 4px; }
         .msp-know { font-style: italic; }
         .msp-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--divider); flex-wrap: wrap; }
-        .msp-tabs .mdlg-btn.msp-tab { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 12px; color: var(--text-light); }
-        .msp-tabs .mdlg-btn.msp-tab.is-active { border-bottom-color: var(--primary); color: var(--text); font-weight: 600; }
+        /* The tabs are .sel-tab (src/ui/sel-css.ts, spec 046): the chosen one has the dark line, never a green one. */
+        .msp-tabs .mdlg-btn.msp-tab { border: none; border-radius: 0; background: none; padding: 8px 12px; color: var(--text-light); font-size: 14px; font-weight: 500; }
+        .msp-tabs .mdlg-btn.msp-tab[aria-selected="true"] { color: var(--sel-fg); font-weight: 600; }
         .msp-list { display: flex; flex-direction: column; }
+        /* The end of the proposal (spec 102 §5): what was done, what is left, what the agent left unassigned. */
+        .msp-end { display: flex; flex-direction: column; gap: 16px; max-width: 680px; padding: 24px 8px 8px; }
+        .msp-end-title { margin: 0; font-family: var(--font-serif); font-size: 20px; font-weight: 600; line-height: 1.3; color: var(--text); }
+        .msp-end-sub { margin: 4px 0 0; font-size: 13.5px; color: var(--text-light); }
+        .msp-end-sec { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--divider); }
+        .msp-end-line { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+        .msp-end-sec .mdlg-note { margin: 0; }
+        .msp-end-acts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .msp-end-acts .mdlg-btn { min-height: 36px; }
+        @media (pointer: coarse) { .msp-end-acts .mdlg-btn { min-height: 44px; } }
+        @media (max-width: 640px) {
+            .msp-end { padding: 16px 0 8px; }
+            .msp-end-acts .mdlg-btn { flex: 1 1 100%; }
+        }
+        /* Close the proposal… on the footer's left (as the source picker's footer link). */
+        .mdlg-foot .link-button { margin-right: auto; font-size: 13.5px; }
+        @media (pointer: coarse) { .mdlg-foot .link-button { min-height: 44px; } }
         .msp-row { display: grid; grid-template-columns: auto 64px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 8px; border-bottom: 1px solid var(--divider); border-radius: var(--r-sm); }
         /* Unassigned and Done have no checkbox: the preview takes the first column. */
         .msp-row.is-nocheck { grid-template-columns: 64px minmax(0, 1fr) auto; }

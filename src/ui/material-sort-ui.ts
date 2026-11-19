@@ -18,18 +18,19 @@ import { allMedia } from '../media.js';
 import { strings } from '../strings.js';
 import type { Attachment, MaterialKind, MediaPlace, PersonId } from '../types.js';
 import {
-    MaterialItem, MaterialError, SortJob, SortLink, SORT_MAX_TEXT, type EditRequest,
+    MaterialItem, MaterialError, SortJob, SortLink, SORT_MAX_FILES, SORT_MAX_TEXT, type EditRequest,
     startMaterialSort, fetchMaterialSort, cancelMaterialSort, fetchMaterial, cachedMaterialList,
     getCachedThumb, fileExt, mergeIntoCache, materialErrorText, materialKindLabel,
 } from '../materials.js';
 import { overviewItems, nameWithoutYears } from '../materials-overview.js';
 import {
-    sortCandidates, sortNeeds, sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
-    type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite,
+    sortCandidates, sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
+    sortNextItems, sortStripState, sortProposalCounts, sortLeftIds,
+    type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite, type SortCounts, type SortStripState,
 } from '../material-sort.js';
 import { researchPersonRef } from '../research-link.js';
 import { PersonPicker } from '../person-picker.js';
-import { researchAutoState, patchResearchAutoState, type ResearchSortRemembered } from '../research-device.js';
+import { researchAutoState, patchResearchAutoState, type ResearchSortRemembered, type ResearchAutoState, type ResearchSortLeft } from '../research-device.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { materialDialog, button, type MaterialDialog } from './material-actions-ui.js';
 import { treeRecords, materialsWindowOpen } from './materials-window.js';
@@ -52,19 +53,33 @@ export interface SortTarget {
     items: MaterialItem[];
     /** The batch's name (the dialog's "from the batch …"). */
     batch: string | null;
-    /** The files of a review filter (Without title / Without person), not of a batch. */
-    filter?: boolean;
     /** Every file without a title or a person (the window's whole view), closed with its ×. */
     whole?: boolean;
     /** The files selected by hand: sent as selected, finished ones too. */
     selection?: boolean;
 }
 
-/** Where the strips stand in the Materials window: under batch headers (by group key) and over the list. */
-export interface SortPlan {
-    rows: Map<string, { target: SortTarget; state: boolean }>;
-    top: { target: SortTarget | null; state: boolean } | null;
+/**
+ * The one strip of sorting over the Materials window (spec 102 §1): its
+ * state, its markup, and the files its actions take.
+ */
+export interface SortStripView {
+    state: SortStripState | 'ended' | null;
+    html: string;
+    /** The strip's modifier: '' (at work, waiting), is-done (E, F), is-off (not running, read-only, older), is-error (failed). */
+    mod: '' | 'is-done' | 'is-off' | 'is-error';
+    /** What Sort with the agent… / Sort the next… sends (the dialog decides). */
+    next: MaterialItem[];
+    /** What Go through by hand opens: A the files to sort, E the ones the agent left unassigned. */
+    review: MaterialItem[];
 }
+
+/** Proposal closed and nothing left (F): said this long, then the strip goes (spec 102 §1). */
+const ALL_SORTED_MS = 4000;
+let allSortedTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** A chip for counting only (the counts never show a chip). */
+const countChip = (link: SortLink): SortChip => ({ link, place: null, person: null, kind: 'person', label: '' });
 
 /** The open proposal's redraw with the files as remembered now (a file hidden or restored meanwhile). */
 let proposalRedraw: (() => void) | null = null;
@@ -165,17 +180,76 @@ export const materialSortMethods = uiModule({
     },
 
     /**
-     * The sorting on the research menu's Materials row (13e): 'run' while the
-     * agent works (a green dot), 'ready' once its proposal waits (the waiting
-     * dot). Asking about a remembered sorting starts here too (GET only).
+     * The sorting on the research menu's Materials row (spec 102 §1): 'run'
+     * while the agent works and nothing waits (B, a green dot), 'ready' while
+     * proposals wait (C, D: the waiting dot); none once the proposal is
+     * closed. Asking about a remembered sorting starts here too (GET only).
      */
     materialSortMenuMark(): 'run' | 'ready' | null {
+        const mc = this.materialsContext();
         const r = this.materialSortRemembered();
-        if (!r || r.ended || !this.materialSortGate()) return null;
+        if (!mc || !r || r.ended || !this.materialSortGate()) return null;
         this.materialSortWatch();
         const job = watch?.id === r.id ? watch.job : null;
-        if (hasProposal(job)) return job!.proposals.some(p => !r.decided[p.id] && (p.title || p.date || p.kind || p.links.length)) ? 'ready' : null;
+        const pending = job ? this.materialSortCounts(mc.treeId, r, job).open : 0;
+        if (pending > 0) return 'ready';
         return running(job) ? 'run' : null;
+    },
+
+    /** A proposal's rows counted as the proposal window shows them (spec 102 §1, §5). */
+    materialSortCounts(treeId: string, r: ResearchSortRemembered, job: SortJob): SortCounts {
+        const byId = this.materialSortItemMap(treeId);
+        return sortProposalCounts(sortRows(job, id => byId.get(id) ?? null, countChip), r.decided);
+    },
+
+    /**
+     * Close the proposal (spec 102 §6): what is waiting is not written, the
+     * files the agent left unassigned are remembered as such (not sent
+     * again), the strip says what was done. Accepted rows stay; the app's
+     * Undo still undoes them, the proposal window does not come back.
+     */
+    materialSortForget(): void {
+        const mc = this.materialsContext();
+        const r = this.materialSortRemembered();
+        if (!mc || !r) return;
+        const job = watch?.id === r.id ? watch.job : null;
+        const patch: Partial<ResearchAutoState> = { materialSort: undefined };
+        if (job && hasProposal(job)) {
+            const byId = this.materialSortItemMap(mc.treeId);
+            const rows = sortRows(job, id => byId.get(id) ?? null, countChip);
+            const c = sortProposalCounts(rows, r.decided);
+            const at = new Date().toISOString();
+            const left: Record<string, ResearchSortLeft> = { ...(researchAutoState(mc.treeId).sortLeft ?? {}) };
+            for (const x of sortLeftIds(rows, job.unproposed, r.decided)) left[x.id] = { at, ...(x.why ? { why: x.why } : {}) };
+            if (Object.keys(left).length) patch.sortLeft = left;
+            patch.sortClosed = { at, handled: c.accepted + c.rejected, unassigned: c.unassigned, files: c.files, batches: r.run?.batches.length ?? 1 };
+        }
+        patchResearchAutoState(mc.treeId, patch);
+        this.materialSortStop();
+        this.refreshMaterialsWindow();
+    },
+
+    /**
+     * "Close the proposal…" before all of it is handled (spec 102 §6): asked
+     * first; Keep (or Esc) leaves it as it is (`keep`: what comes back then).
+     */
+    materialSortCloseAsk(keep?: () => void): void {
+        const mc = this.materialsContext();
+        const r = this.materialSortRemembered();
+        if (!mc || !r) return;
+        const s = strings.materials.agentSort;
+        const job = watch?.id === r.id ? watch.job : null;
+        const n = job ? this.materialSortCounts(mc.treeId, r, job).open : 0;
+        let closing = false;
+        const dialog = materialDialog({ title: s.closeAsk, modifier: 'sortclose', onClose: () => { if (!closing) keep?.(); } });
+        dialog.body.appendChild(h('p', 'mdlg-text', s.closeText(n)));
+        const stay = button(s.closeKeep, 'msp-close-keep', () => dialog.close());
+        dialog.foot.append(stay, button(s.closeGo, 'is-primary msp-close-go', () => {
+            closing = true;
+            dialog.close();
+            this.materialSortForget();
+        }));
+        stay.focus();
     },
 
     /** The items the window shows (the research's list with the tree's files), by the research's I…. */
@@ -265,7 +339,8 @@ export const materialSortMethods = uiModule({
                 id: res.value.id, files: ids, text, at: new Date().toISOString(), decided: {},
                 ...(target.batch ? { batch: target.batch } : {}),
             };
-            patchResearchAutoState(now.treeId, { materialSort: remembered });
+            // A new sorting: the last proposal's "Done: …" line goes.
+            patchResearchAutoState(now.treeId, { materialSort: remembered, sortClosed: undefined });
             dialog.close();
             this.materialSortStop();
             this.materialSortWatch();
@@ -384,23 +459,108 @@ export const materialSortMethods = uiModule({
     },
 
     /**
-     * The strip in the Materials window (13b, 13e) for the remembered sorting:
-     * at work (progress, Cancel), its proposal ready (Open), or ended (Close).
+     * The one strip of sorting over the Materials window (spec 102 §1): the
+     * state of the whole archive (A–F), whatever the filter shows. `items`:
+     * every file the window knows; `phone`: the state only, no action (the
+     * proposal is in the app on the computer, §11); `added`: the files of a
+     * batch just added (A says them).
      */
-    materialSortStateHtml(): string {
+    materialSortStripView(items: readonly MaterialItem[], opts: { phone?: boolean; added?: number } = {}): SortStripView {
+        const none: SortStripView = { state: null, html: '', mod: '', next: [], review: [] };
+        const mc = this.materialsContext();
+        const gate = this.materialSortGate();
+        if (!mc || !gate) return none;
         const s = strings.materials.agentSort;
-        const r = this.materialSortRemembered();
-        if (!r || !this.materialSortGate()) return '';
-        if (r.ended) {
-            return `<span class="mw-sort-text">${esc(r.ended === 'cancelled' ? s.cancelled : s.failed)}</span>
-                <button type="button" class="link-button" data-sort="dismiss">${esc(s.dismiss)}</button>`;
+        const auto = researchAutoState(mc.treeId);
+        const r = auto.materialSort ?? null;
+        const next = sortNextItems(items, auto.sortLeft ?? {});
+        if (r?.ended) {
+            return {
+                ...none, state: 'ended', mod: r.ended === 'failed' ? 'is-error' : 'is-done',
+                html: `<span class="mw-sort-text">${esc(r.ended === 'cancelled' ? s.cancelled : s.failed)}</span>${opts.phone ? ''
+                    : `<button type="button" class="link-button" data-sort="dismiss">${esc(s.dismiss)}</button>`}`,
+            };
         }
-        const job = watch?.id === r.id ? watch.job : null;
-        if (hasProposal(job)) {
-            return `<span class="mw-sort-text">${esc(s.ready)}</span>
-                <button type="button" class="link-button mw-sort-open" data-sort="open">${esc(s.open)}</button>`;
+        if (r) this.materialSortWatch();
+        const job = r && watch?.id === r.id ? watch.job : null;
+        const counts = r && job ? this.materialSortCounts(mc.treeId, r, job) : null;
+        const byId = new Map(items.filter(i => i.file).map(i => [i.file!.id, i]));
+        // E: the files the agent left unassigned (this proposal's, or remembered from the closed ones) still without a title or a person.
+        const leftItems = (): MaterialItem[] => {
+            const ids = new Set(Object.keys(auto.sortLeft ?? {}));
+            if (r && job) {
+                const rows = sortRows(job, id => byId.get(id) ?? null, countChip);
+                for (const row of rows) if (!r.decided[row.id] && !sortRowProposes(row)) ids.add(row.id);
+            }
+            return sortNeedy([...ids].map(id => byId.get(id)).filter((i): i is MaterialItem => !!i));
+        };
+        const left = leftItems();
+        const state = sortStripState({ remembered: !!r, running: !!r && running(job), pending: counts?.open ?? 0, closed: !!auto.sortClosed, next: next.length, left: left.length });
+        if (!state) return none;
+        if (state === 'F') {
+            if (!allSortedTimer) {
+                const treeId = mc.treeId;
+                allSortedTimer = setTimeout(() => {
+                    allSortedTimer = null;
+                    patchResearchAutoState(treeId, { sortClosed: undefined });
+                    this.refreshMaterialsWindow();
+                }, ALL_SORTED_MS);
+            }
+        } else if (allSortedTimer) { clearTimeout(allSortedTimer); allSortedTimer = null; }
+
+        const readOnly = DataManager.isReadOnly();
+        const quiet = !!opts.phone || readOnly;
+        const note = (text: string) => `<span class="mw-sort-note">${esc(text)}</span>`;
+        // The state alone: on a phone the proposal is on the computer (its short form on a phone held sideways).
+        const phoneNote = opts.phone ? `<span class="mw-sort-note mw-sort-phone">${esc(s.phone)}</span><span class="mw-sort-note mw-sort-phone-short">${esc(s.phoneShort)}</span>` : '';
+        const roNote = readOnly && !opts.phone ? note(s.readOnlyNote) : '';
+        const closeX = quiet ? '' : `<button type="button" class="mw-sort-close" data-sort="close" aria-label="${esc(s.closeWhole)}" title="${esc(s.closeWhole)}">×</button>`;
+        const sortBtn = (label: string, act: 'sort' | 'next') => {
+            if (quiet || gate === 'older') return '';
+            const off = gate === 'offRun' ? ` aria-disabled="true" title="${esc(s.offRun)}"` : '';
+            return `<button type="button" class="mw-sort-btn primary" data-sort="${act}"${off}>${researchBridgeActionLabel(label, 'material-sort')}</button>`;
+        };
+        const gateNote = gate === 'older' ? note(s.older) : gate === 'offRun' ? note(s.offRun) : '';
+        const offMod = (fallback: SortStripView['mod']): SortStripView['mod'] => readOnly || gate === 'older' || gate === 'offRun' ? 'is-off' : fallback;
+        const review = (list: MaterialItem[]) => quiet || !list.length ? '' : `<button type="button" class="link-button" data-sort="review">${esc(s.reviewHand)}</button>`;
+
+        if (state === 'A') {
+            const what = opts.added ? s.stripAdded(opts.added, next.length) : s.stripWhole(next.length);
+            return {
+                state, mod: offMod(''), next, review: next,
+                html: `<span class="mw-sort-text" title="${esc(what)}"><span class="mw-sort-what">${esc(what)}</span>${quiet ? '' : gateNote}${roNote}${phoneNote}</span>
+                    ${sortBtn(s.sort, 'sort')}${review(next)}${closeX}`,
+            };
         }
-        const total = job?.files.length || r.files.length;
+        if (state === 'E' || state === 'F') {
+            const closed = auto.sortClosed;
+            const handled = counts ? counts.accepted + counts.rejected : closed?.handled ?? 0;
+            const unassigned = counts ? counts.unassigned : closed?.unassigned ?? 0;
+            if (state === 'F') {
+                return { state, mod: 'is-done', next, review: [], html: `<span class="mw-sort-text"><span class="mw-sort-what">${esc(s.allSorted)}</span></span>` };
+            }
+            const line = s.doneLine(handled, unassigned, next.length);
+            // An older research takes 50 files at once: "Sort the next 50…" says so (spec 102 §12).
+            const fifty = !mc.caps.sortRun && next.length > SORT_MAX_FILES;
+            return {
+                state, mod: offMod('is-done'), next, review: left,
+                html: `<span class="mw-sort-text" title="${esc(line)}"><span class="mw-sort-what">${esc(line)}</span>${quiet ? '' : gate === 'on' && fifty && next.length ? note(s.olderRun) : gateNote}${roNote}${phoneNote}</span>
+                    ${next.length ? sortBtn(fifty ? s.olderNext : s.sortNextN(next.length), 'next') : ''}${review(left)}${closeX}`,
+            };
+        }
+        if (state === 'D') {
+            const n = counts?.open ?? 0;
+            const nb = r?.run?.batches.length ?? 1;
+            const files = r?.run ? r.run.batches.reduce((t, b) => t + b.length, 0) : (job?.files.length || r?.files.length || 0);
+            return {
+                state, mod: readOnly ? 'is-off' : '', next, review: [],
+                html: `<span class="mw-sort-text"><span class="mw-sort-run">${esc(s.pending(n))}</span>${note(s.runSize(nb, files))}${roNote}${phoneNote}</span>${quiet ? ''
+                    : `<button type="button" class="mw-sort-btn primary" data-sort="open">${esc(s.handle(n))}</button>
+                    <button type="button" class="link-button" data-sort="close-proposal">${esc(s.closeProposal)}</button>`}`,
+            };
+        }
+        // B, C: the agent works.
+        const total = job?.files.length || r!.files.length;
         const working = !!job && job.state !== 'queued';
         // A number only when the research says how many files its readers have judged; else a progress without one.
         const counted = working && typeof job.filesDone === 'number' && total > 0;
@@ -409,39 +569,31 @@ export const materialSortMethods = uiModule({
         const bar = counted
             ? `<span class="mw-sort-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${k}"><span style="width: ${Math.round((k / total) * 100)}%"></span></span>`
             : `<span class="mw-sort-bar is-indeterminate" role="progressbar" aria-label="${esc(label)}"><span></span></span>`;
-        return `<span class="mw-sort-text"><span class="mw-sort-run">${esc(label)}</span>
+        const n = counts?.open ?? 0;
+        const after = state === 'C' ? `<span class="mw-sort-wait">${esc(s.waiting(n))}</span>` : opts.phone ? '' : note(s.runNote);
+        return {
+            state, mod: readOnly ? 'is-off' : '', next, review: [],
+            html: `<span class="mw-sort-text"><span class="mw-sort-run">${esc(label)}</span>
                 ${bar}
-                <span class="mw-sort-note">${esc(s.runNote)}</span></span>
-                <button type="button" class="link-button" data-sort="cancel">${esc(strings.buttons.cancel)}</button>`;
+                ${after}${roNote}${phoneNote}</span>${quiet ? '' : `${state === 'C' ? `<button type="button" class="mw-sort-btn primary" data-sort="open">${esc(s.handle(n))}</button>` : ''}
+                <button type="button" class="link-button" data-sort="cancel">${esc(strings.buttons.cancel)}</button>`}`,
+        };
     },
 
-    /** The offer over a batch's (or a review filter's) files without a title or a person; '' = none. */
-    materialSortOfferHtml(target: SortTarget | null): string {
-        const s = strings.materials.agentSort;
-        const gate = this.materialSortGate();
-        if (!target || !gate) return '';
-        // The count said is the count sent: only the files without a title or a person.
-        const needs = sortNeeds(sortNeedy(target.items));
-        if (!needs.n || (!needs.t && !needs.p)) return '';
-        // An older research is said beside a batch only (spec 102 §13: elsewhere nothing).
-        if (gate === 'older') return target.filter || target.whole ? '' : `<span class="mw-sort-text">${esc(s.older)}</span>`;
-        const what = target.whole ? s.stripWhole(needs.n) : target.filter ? s.stripFilter(needs.n) : s.strip(needs.n, needs.t, needs.p);
-        const off = gate === 'offRun' ? ` aria-disabled="true" title="${esc(s.offRun)}"` : '';
-        const text = `${what}${gate === 'offRun' ? ` · ${s.offRun}` : ''}`;
-        // The whole view's strip is one line: its text shortened with an ellipsis (whole in its title), closed with ×.
-        return `<span class="mw-sort-text"${target.whole ? ` title="${esc(text)}"` : ''}>${esc(text)}</span>
-            <button type="button" class="secondary mw-sort-btn" data-sort="sort"${off}>${researchBridgeActionLabel(s.sort, 'material-sort')}</button>${target.whole
-                ? `<button type="button" class="mw-sort-close" data-sort="close-whole" aria-label="${esc(s.closeWhole)}" title="${esc(s.closeWhole)}">×</button>` : ''}`;
-    },
-
-    /** A click in the strip. */
-    materialSortStripClick(e: MouseEvent, target: SortTarget | null): void {
+    /** A click in the strip (Go through by hand and × are the window's). */
+    materialSortStripClick(e: MouseEvent, view: SortStripView): void {
         const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-sort]');
         if (!btn || btn.getAttribute('aria-disabled') === 'true') return;
         const mc = this.materialsContext();
         switch (btn.dataset.sort) {
-            case 'sort': if (target) this.openSortDialog(target); return;
+            case 'sort': this.openSortDialog({ items: view.next, batch: null, whole: true }); return;
+            // Sort the next: a proposal handled to the end closes first (spec 102 §6).
+            case 'next':
+                if (this.materialSortRemembered()) this.materialSortForget();
+                this.openSortDialog({ items: view.next, batch: null, whole: true });
+                return;
             case 'open': void this.openSortProposal(); return;
+            case 'close-proposal': this.materialSortCloseAsk(); return;
             // Said from the click until the research answers (a strip drawn anew meanwhile: a toast says it).
             case 'cancel': void runBusy(btn, () => this.materialSortCancel(), { label: strings.busy.cancelling, kind: 'bridge', toastWhenGone: true }); return;
             case 'dismiss':
@@ -526,6 +678,11 @@ export const materialSortMethods = uiModule({
             },
             onClose: () => {
                 if (proposalRedraw === redraw) proposalRedraw = null;
+                // Closed with nothing waiting and nothing at work: the proposal closes itself (spec 102 §6).
+                // Not when the window only steps aside (Hide…, Close the proposal…: it comes back or asks).
+                const now = this.materialSortRemembered();
+                const jobNow = watch?.id === r.id && watch.job ? watch.job : job;
+                if (!handover && now?.id === r.id && !open().length && !running(jobNow)) { this.materialSortForget(); return; }
                 this.refreshMaterialsWindow();
             },
         });
@@ -536,8 +693,12 @@ export const materialSortMethods = uiModule({
             const rNow = this.materialSortRemembered();
             if (now && rNow?.id === r.id) this.materialSortProposalWindow(now, rNow, job, { tab: 'unassigned' });
         };
+        // The window steps aside for a dialog that brings it back (it does not close the proposal then).
+        let handover = false;
         const hide = (items: MaterialItem[]) => {
-            if (items.length) this.materialAction('hide', items, { where: 'window', back: reopen });
+            if (!items.length) return;
+            handover = true;
+            this.materialAction('hide', items, { where: 'window', back: reopen });
         };
         /** Hide… and Restore here: the research's write on material, while it runs. */
         const hideCan = (): 'yes' | 'off' | null => {
@@ -556,7 +717,19 @@ export const materialSortMethods = uiModule({
         const write = h('p', 'mdlg-note msp-write', s.write);
         const accSel = button('', 'msp-accept-sel', () => void accept([...selected]));
         const accAll = button('', 'is-primary msp-accept-all', () => void accept(open().map(x => x.id)));
-        foot.append(write, button(strings.buttons.close, '', () => dialog.close()), accSel, accAll);
+        // Close the proposal… before the end (spec 102 §6): asked first; Keep brings the window back.
+        const closeLink = h('button', 'link-button msp-close-proposal', s.closeProposal);
+        closeLink.type = 'button';
+        closeLink.addEventListener('click', () => {
+            handover = true;
+            this.materialSortCloseAsk(() => {
+                const now = this.materialsContext();
+                const rNow = this.materialSortRemembered();
+                if (now && rNow?.id === r.id) this.materialSortProposalWindow(now, rNow, job);
+            });
+        });
+        const closeBtn = button(strings.buttons.close, 'msp-close', () => dialog.close());
+        foot.append(write, closeLink, closeBtn, accSel, accAll);
 
         const fieldLine = (row: SortRow, name: 'title' | 'date' | 'kind', show: (v: string) => string): HTMLElement | null => {
             const f = row[name] as { proposed: string; human?: string } | undefined;
@@ -759,17 +932,86 @@ export const materialSortMethods = uiModule({
 
         const drawFoot = () => {
             const n = open().length;
+            // The end (spec 102 §5): closing the window closes the proposal, Close is the one action.
+            const end = n === 0 && !running(watch?.id === r.id && watch.job ? watch.job : job);
+            write.textContent = end ? s.endFoot : s.write;
+            closeLink.hidden = end;
+            closeBtn.classList.toggle('is-primary', end);
             accAll.textContent = s.acceptAll(n);
             accAll.disabled = tab !== 'proposals' || n === 0;
             accSel.textContent = s.acceptSel(selected.size);
             accSel.disabled = tab !== 'proposals' || selected.size === 0;
-            accSel.hidden = accAll.hidden = tab !== 'proposals';
+            accSel.hidden = accAll.hidden = tab !== 'proposals' || end;
+        };
+
+        /**
+         * The end of the proposal (spec 102 §5): what was done, what is left
+         * in the archive (Sort the next…), what the agent left unassigned.
+         * In place of the empty list; the tab stays where it is.
+         */
+        const endEl = (): HTMLElement => {
+            const a = done().filter(x => decided[x.id] === 'accepted').length;
+            const rj = done().length - a;
+            const box = h('div', 'msp-end');
+            const head = h('div', 'msp-end-head');
+            head.append(h('h3', 'msp-end-title', s.endTitle(a, rj, unassigned.length)),
+                h('p', 'msp-end-sub', s.endRun(r.run?.batches.length ?? 1, r.run ? r.run.batches.reduce((t, b) => t + b.length, 0) : rows.length)));
+            box.appendChild(head);
+            const now = this.materialsContext();
+            const gate = this.materialSortGate();
+            const readOnly = DataManager.isReadOnly();
+            // What "Sort the next" takes: as the strip counts it, without the files this proposal leaves unassigned.
+            const leftNow = { ...(researchAutoState(mc.treeId).sortLeft ?? {}), ...Object.fromEntries(unassigned.map(x => [x.id, true])) };
+            const next = sortNextItems([...this.materialSortItemMap(mc.treeId).values()], leftNow);
+            const items = unassigned.map(x => x.item).filter((i): i is MaterialItem => !!i && !i.hidden);
+            const sec = (line: string, note?: string): { el: HTMLElement; acts: HTMLElement } => {
+                const el = h('div', 'msp-end-sec');
+                el.appendChild(h('p', 'msp-end-line', line));
+                if (note) el.appendChild(h('p', 'mdlg-note', note));
+                const acts = h('div', 'msp-end-acts');
+                el.appendChild(acts);
+                box.appendChild(el);
+                return { el, acts };
+            };
+            if (next.length && gate && gate !== 'older' && !readOnly) {
+                const { acts } = sec(s.restLine(next.length), s.restNote);
+                const fifty = !now?.caps.sortRun && next.length > SORT_MAX_FILES;
+                const label = fifty ? s.olderNext : s.sortNextN(next.length);
+                const go = button(label, 'is-primary msp-sort-next', () => {
+                    // Closing the window closes the proposal (nothing waits), then the dialog opens.
+                    dialog.close();
+                    if (this.materialSortRemembered()?.id === r.id) this.materialSortForget();
+                    this.openSortDialog({ items: next, batch: null, whole: true });
+                });
+                go.innerHTML = researchBridgeActionLabel(label, 'material-sort');
+                if (gate === 'offRun') { go.disabled = true; go.title = s.offRun; }
+                acts.appendChild(go);
+                if (fifty) acts.appendChild(h('p', 'mdlg-note', s.olderRun));
+            }
+            if (unassigned.length) {
+                const { el, acts } = sec(s.leftLine(unassigned.length), s.leftNote);
+                if (!next.length) el.insertBefore(h('p', 'mdlg-note msp-end-nothing', s.nothingLeft), el.firstChild);
+                if (items.length && materialsWindowOpen()) {
+                    acts.appendChild(button(s.reviewByHand(items.length), `msp-review${next.length ? '' : ' is-primary'}`, () => { dialog.close(); this.mwReview(items); }));
+                }
+                const unrelated = sortUnrelatedHideable(unassigned);
+                const can = hideCan();
+                if (unrelated.length && can) {
+                    const all = button(s.hideUnrelated(unrelated.length), 'msp-hide-unrelated', () => hide(unrelated));
+                    all.disabled = can === 'off';
+                    acts.appendChild(all);
+                }
+                if (!acts.childElementCount) acts.remove();
+            } else if (!next.length) {
+                sec(s.allSorted).acts.remove();
+            }
+            return box;
         };
 
         const draw = () => {
             const counts = { proposals: open().length, unassigned: unassigned.length, done: done().length };
             tabs.replaceChildren(...(['proposals', 'unassigned', 'done'] as const).map(t => {
-                const b = button(s.tabs[t](counts[t]), `msp-tab${t === tab ? ' is-active' : ''}`, () => { tab = t; editing = null; focusId = null; draw(); });
+                const b = button(s.tabs[t](counts[t]), `msp-tab sel-tab${t === tab ? ' is-active' : ''}`, () => { tab = t; editing = null; focusId = null; draw(); });
                 b.setAttribute('role', 'tab');
                 b.dataset.tab = t;
                 b.setAttribute('aria-selected', String(t === tab));
@@ -797,7 +1039,7 @@ export const materialSortMethods = uiModule({
                 children.push(head);
             }
             children.push(...shown.map(rowEl));
-            if (!shown.length) children.push(h('p', 'msp-empty', s.empty));
+            if (!shown.length) children.push(tab === 'proposals' && !running(watch?.id === r.id && watch.job ? watch.job : job) ? endEl() : h('p', 'msp-empty', s.empty));
             list.replaceChildren(...children);
             drawnKey = shownKey();
             drawFoot();

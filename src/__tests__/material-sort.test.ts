@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseSortJob, startMaterialSort, type MaterialItem, type SortLink } from '../materials.js';
-import { sortCandidates, sortNeeds, sortNeedy, sortWholeOffered, sortRows, sortRowProposes, sortWrite, sortChip, parseSortRevert, sortUnrelatedHideable, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
+import { sortCandidates, sortNeeds, sortNeedy, sortNextItems, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, parseSortRevert, sortUnrelatedHideable, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
 import type { PartnershipId } from '../types.js';
 import type { Attachment, PersonId } from '../types.js';
 
@@ -137,22 +137,71 @@ describe('the files a sorting takes', () => {
     });
 });
 
-describe('the strip over everything and the more specific ones', () => {
-    const base = { narrowed: false, remembered: false, offered: true, needy: 5, batches: [3, 2] };
-    it('offered in the whole view when files need it and more than one batch strip would say it', () => {
-        expect(sortWholeOffered(base)).toBe(true);
-        // Loose files outside any batch: no batch strip offers them.
-        expect(sortWholeOffered({ ...base, needy: 4, batches: [3] })).toBe(true);
-        expect(sortWholeOffered({ ...base, needy: 2, batches: [] })).toBe(true);
+describe('the one strip of sorting (spec 102 §1)', () => {
+    const base = { remembered: false, running: false, pending: 0, closed: false, next: 137 };
+    it('A: files to sort and nothing remembered; nothing to sort and nothing remembered: no strip', () => {
+        expect(sortStripState(base)).toBe('A');
+        expect(sortStripState({ ...base, next: 0 })).toBeNull();
     });
-    it('the more specific strip wins: one batch with all of them, a narrowed view, a sorting at work or remembered', () => {
-        expect(sortWholeOffered({ ...base, needy: 3, batches: [3] })).toBe(false);
-        expect(sortWholeOffered({ ...base, narrowed: true })).toBe(false);
-        expect(sortWholeOffered({ ...base, remembered: true })).toBe(false);
+    it('B and C while the agent works: C once proposals wait', () => {
+        expect(sortStripState({ ...base, remembered: true, running: true })).toBe('B');
+        expect(sortStripState({ ...base, remembered: true, running: true, pending: 44 })).toBe('C');
     });
-    it('nothing missing, or a research that cannot sort: no strip', () => {
-        expect(sortWholeOffered({ ...base, needy: 0, batches: [] })).toBe(false);
-        expect(sortWholeOffered({ ...base, offered: false })).toBe(false);
+    it('D: proposals wait and nothing works; all of it handled counts as E (it can be sorted further)', () => {
+        expect(sortStripState({ ...base, remembered: true, pending: 44 })).toBe('D');
+        expect(sortStripState({ ...base, remembered: true, pending: 0 })).toBe('E');
+        expect(sortStripState({ ...base, remembered: true, pending: 0, next: 0 })).toBe('E');
+    });
+    it('E after the proposal closed with files left, F with nothing left (never "the proposal is ready" again)', () => {
+        expect(sortStripState({ ...base, closed: true, next: 17 })).toBe('E');
+        expect(sortStripState({ ...base, closed: true, next: 0 })).toBe('F');
+    });
+    it('files the agent left unassigned keep E (Go through by hand), never "All files have a title and a person"', () => {
+        expect(sortStripState({ ...base, closed: true, next: 0, left: 10 })).toBe('E');
+        expect(sortStripState({ ...base, closed: true, next: 0, left: 0 })).toBe('F');
+        expect(sortStripState({ ...base, next: 0, left: 10 })).toBeNull();
+    });
+    it('a remembered sorting wins over the closed line of the last one', () => {
+        expect(sortStripState({ ...base, remembered: true, running: true, closed: true })).toBe('B');
+    });
+});
+
+describe('what "Sort the next" takes and what a closed proposal leaves (spec 102 §5, §6)', () => {
+    const files = [item('I0001'), item('I0002'), item('I0003', { titled: true, persons: ['P0001'] }), item('I0004', { hidden: {} })];
+    it('the files without a title or a person, except the ones the agent left unassigned before', () => {
+        expect(sortNextItems(files).map(i => i.file!.id)).toEqual(['I0001', 'I0002']);
+        expect(sortNextItems(files, { I0002: { at: '2026-11-19T10:00:00Z' } }).map(i => i.file!.id)).toEqual(['I0001']);
+        expect(sortNextItems(files, new Set(['I0001'])).map(i => i.file!.id)).toEqual(['I0002']);
+    });
+    const job = {
+        files: ['I0001', 'I0002', 'I0005', 'I0006', 'I0007', 'I0008'],
+        proposals: [
+            { id: 'I0001', title: 'Quellmayer wedding', links: [], why: '', sure: 'high' as const },
+            { id: 'I0002', title: 'Talvanen farm', links: [], why: '', sure: 'high' as const },
+            { id: 'I0005', title: 'Ostrovid letter', links: [], why: '', sure: 'medium' as const },
+            { id: 'I0006', links: [], why: 'A receipt', sure: 'low' as const, unrelated: true as const },
+        ],
+        unproposed: [{ id: 'I0007', why: 'nothing-said' as const }, { id: 'I0008', why: 'reader-failed' as const }],
+    };
+    const rows = sortRows(job, id => item(id), chip);
+    it('counts the rows as the proposal window shows them', () => {
+        expect(sortProposalCounts(rows, { I0001: 'accepted', I0002: 'rejected' })).toEqual({ files: 6, open: 1, accepted: 1, rejected: 1, unassigned: 3 });
+        expect(sortProposalCounts(rows, {}).open).toBe(3);
+    });
+    it('remembers as unassigned the files with no proposal or not about the family, not those the research did not judge', () => {
+        expect(sortLeftIds(rows, job.unproposed)).toEqual([{ id: 'I0006', why: 'unrelated' }, { id: 'I0007', why: 'nothing-said' }]);
+        expect(sortLeftIds(rows)).toEqual([{ id: 'I0006', why: 'unrelated' }, { id: 'I0007' }, { id: 'I0008' }]);
+    });
+    it('a row accepted counts as accepted, never as unassigned, though the file has what was proposed now', () => {
+        // After the acceptance the file has the title: its row, made anew, proposes nothing.
+        const titled = (id: string) => {
+            const i = item(id, { titled: true, title: 'Quellmayer wedding' });
+            return { ...i, file: { ...i.file!, title: 'Quellmayer wedding' } } as MaterialItem;
+        };
+        const after = sortRows(job, id => id === 'I0001' ? titled(id) : item(id), chip);
+        expect(sortRowProposes(after[0])).toBe(false);
+        expect(sortProposalCounts(after, { I0001: 'accepted' })).toMatchObject({ accepted: 1, unassigned: 3, open: 2 });
+        expect(sortLeftIds(after, job.unproposed, { I0001: 'accepted' }).map(x => x.id)).toEqual(['I0006', 'I0007']);
     });
 });
 

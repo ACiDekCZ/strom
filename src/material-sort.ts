@@ -40,30 +40,84 @@ export function sortNeedy(items: readonly MaterialItem[]): MaterialItem[] {
 }
 
 /**
- * Whether the strip over everything (the window's whole view: no filter, no
- * search) offers sorting. It is one strip instead of one under each batch
- * (closed with its ×, neither comes back while the window is open); a more
- * specific one has priority: a review filter's, a narrowed view's batch, a
- * sorting remembered (at work, its proposal, its end), and the one batch
- * strip that already offers every file which needs it.
+ * The files the next sorting takes (spec 102 §1, §5): the files without a
+ * title or a person (`sortNeedy`) the agent did not leave unassigned before
+ * (`left`: I…, spec 102 §4.4). What "N left" says and "Sort the next" sends.
  */
-export function sortWholeOffered(input: {
-    /** A filter or a search narrows the window. */
-    narrowed: boolean;
-    /** A sorting is remembered for the tree. */
-    remembered: boolean;
-    /** Sorting is on, or offered but off while the research does not run (an older research says nothing here). */
-    offered: boolean;
-    /** The files that need it (sortNeedy) over everything known. */
-    needy: number;
-    /** What the batch strips would offer: how many files that need it, per batch. */
-    batches: readonly number[];
-}): boolean {
-    if (input.narrowed || input.remembered || !input.offered || !input.needy) return false;
-    return !(input.batches.length === 1 && input.batches[0] === input.needy);
+export function sortNextItems(items: readonly MaterialItem[], left: ReadonlySet<string> | Readonly<Record<string, unknown>> = {}): MaterialItem[] {
+    const has = (id: string) => left instanceof Set ? left.has(id) : Object.prototype.hasOwnProperty.call(left, id);
+    return sortNeedy(items).filter(i => !has(i.file!.id));
 }
 
-/** One field of a proposal against what the file has. */
+/**
+ * The one strip of sorting in the Materials window (spec 102 §1), over the
+ * whole archive whatever the filter shows:
+ * A unsorted files and nothing remembered (Sort with the agent…),
+ * B the agent works and nothing waits, C it works and proposals wait,
+ * D proposals wait and nothing works, E the proposal closed (or all of it
+ * handled) and files are left (Sort the next…), F nothing is left (said a
+ * moment after a proposal closes). null: no strip.
+ */
+export type SortStripState = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+
+export function sortStripState(input: {
+    /** A sorting is remembered for the tree (not ended without a proposal). */
+    remembered: boolean;
+    /** The sorting works (queued, working, or not asked about yet). */
+    running: boolean;
+    /** Its proposals not accepted or rejected yet. */
+    pending: number;
+    /** The last proposal closed and its line not closed (ResearchAutoState.sortClosed). */
+    closed: boolean;
+    /** The files the next sorting takes (sortNextItems). */
+    next: number;
+    /** The files the agent left unassigned that still lack a title or a person (Go through by hand). */
+    left?: number;
+}): SortStripState | null {
+    if (input.remembered) {
+        if (input.running) return input.pending > 0 ? 'C' : 'B';
+        return input.pending > 0 ? 'D' : 'E';
+    }
+    // F only when nothing is left at all: files the agent left unassigned keep E (Go through by hand).
+    if (input.closed) return input.next > 0 || (input.left ?? 0) > 0 ? 'E' : 'F';
+    return input.next > 0 ? 'A' : null;
+}
+
+/** A proposal's rows counted (spec 102 §1, §5): waiting, accepted, rejected, unassigned. */
+export interface SortCounts {
+    files: number;
+    open: number;
+    accepted: number;
+    rejected: number;
+    unassigned: number;
+}
+
+export function sortProposalCounts(rows: readonly SortRow[], decided: Readonly<Record<string, 'accepted' | 'rejected'>>): SortCounts {
+    const out: SortCounts = { files: rows.length, open: 0, accepted: 0, rejected: 0, unassigned: 0 };
+    for (const row of rows) {
+        // A row decided counts as decided: once accepted the file has what was proposed, so its row proposes nothing now.
+        const d = decided[row.id];
+        if (d === 'accepted') out.accepted++;
+        else if (d === 'rejected') out.rejected++;
+        else if (!sortRowProposes(row)) out.unassigned++;
+        else out.open++;
+    }
+    return out;
+}
+
+/**
+ * What a closed proposal leaves as unassigned (spec 102 §4.4, §6): the files
+ * with no proposal or not about the family, except those the research did
+ * not judge (left out, its reader failed): they go to the next sorting again.
+ */
+export function sortLeftIds(rows: readonly SortRow[], unproposed: readonly { id: string; why: string }[] = [],
+    decided: Readonly<Record<string, 'accepted' | 'rejected'>> = {}): { id: string; why?: string }[] {
+    const why = new Map(unproposed.map(u => [u.id, u.why]));
+    return rows.filter(r => !decided[r.id] && !sortRowProposes(r))
+        .filter(r => { const w = why.get(r.id); return w !== 'left-out' && w !== 'reader-failed'; })
+        .map(r => ({ id: r.id, ...(r.unrelated ? { why: 'unrelated' } : why.get(r.id) ? { why: why.get(r.id)! } : {}) }));
+}
+
 export interface SortField<T> {
     /** What the agent proposes. */
     proposed: T;

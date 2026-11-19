@@ -6,12 +6,15 @@ import {
 } from './research-bridge.js';
 
 /**
- * Sort with the agent (spec 102 §13): nothing goes to the agent before its
- * dialog said what it costs and where the files go and its button was
- * clicked — closing, Esc, Cancel, a batch's end and a reload send nothing.
- * The proposal is accepted into the research's files, a person's title stays.
- * Without the research's gate only the batch strip says a newer research can;
- * without an agent nothing is offered. Invented data.
+ * Sort with the agent (spec 102 §13, §1, §5, §6): nothing goes to the agent
+ * before its dialog said what it costs and where the files go and its button
+ * was clicked — closing, Esc, Cancel, a batch's end and a reload send nothing.
+ * One strip over the Materials window says the state of the whole archive
+ * (A–F), with a filter too. The proposal is accepted into the research's
+ * files, a person's title stays; its end says what was done and what is left
+ * (Sort the next), and it closes by itself or with Close the proposal….
+ * Without the research's gate the strip says a newer research can; without an
+ * agent nothing is offered. Invented data.
  */
 
 const DESKTOP = { width: 1440, height: 900 };
@@ -23,8 +26,8 @@ const SORT_FEATURES = [...MATERIAL_FEATURES, 'material.edit', 'material.sort'];
 const BATCH = { id: 'b-12345678', name: 'Krabice od babičky', at: '2026-11-10T09:00:00Z' };
 
 const win = (page: Page) => page.locator('#materials-modal');
-/** The strip under the batch's header (13b); the one over the list stands for a review filter. */
-const strip = (page: Page) => win(page).locator('.mw-sort--row');
+/** The one strip of sorting over the list (spec 102 §1), its state in data-state (A–F). */
+const strip = (page: Page) => win(page).locator('.mw-sort--top');
 const sortDialog = (page: Page) => page.locator('.mdlg--sort');
 const proposal = (page: Page) => page.locator('#material-sort-proposal');
 
@@ -73,8 +76,12 @@ test.describe('Sort with the agent', () => {
     test('nothing is sent without the dialog\'s click: close, Esc, Cancel, a batch\'s end and a reload', async ({ page }) => {
         const material = await setup(page);
         await openWindow(page);
-        await expect(strip(page)).toContainText('3 new files · 2 without title · 3 without person');
+        await expect(strip(page)).toHaveAttribute('data-state', 'A');
+        await expect(strip(page).locator('.mw-sort-text')).toHaveText('3 files without title or person');
+        // No strip under a batch any more: the one over the list stands for the whole archive.
+        await expect(win(page).locator('.mw-sort--row, .mw-sort--whole')).toHaveCount(0);
         const btn = strip(page).locator('[data-sort="sort"]');
+        await expect(btn).toHaveClass(/primary/);
         await expect(btn.locator('.research-ai-badge')).toHaveCount(1);
         await expect(btn.locator('.research-open-mark')).toHaveCount(0);
 
@@ -159,13 +166,22 @@ test.describe('Sort with the agent', () => {
         expect([...(material.sorts![0].ids as string[])].sort()).toEqual(['I0001', 'I0002', 'I0003']);
         expect(material.sorts![0].text).toBe('A box from the attic, the Fíšek family');
 
-        await expect(strip(page)).toContainText('The agent’s proposal is ready');
+        // D: the proposal waits and nothing works (spec 102 §1).
+        await expect(strip(page)).toHaveAttribute('data-state', 'D');
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent’s proposal: 2 to go through');
+        await expect(strip(page).locator('.mw-sort-note')).toHaveText('1 batch · 3 files');
+        await expect(strip(page).locator('[data-sort="open"]')).toHaveText('Go through the proposal (2)');
         // The research menu's Materials row carries the waiting dot (13e).
         await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-materials .research-item-attn')).toHaveCount(1);
         await expect(page.locator('#research-item-materials')).toHaveAttribute('aria-label', /The agent’s proposal is ready/);
         await page.keyboard.press('Escape');
         await strip(page).locator('[data-sort="open"]').click();
+        // The tabs are the Line (spec 046): the chosen one has the dark line, never the green one.
+        const chosen = proposal(page).locator('.msp-tab[aria-selected="true"]');
+        await expect(chosen).toHaveClass(/sel-tab/);
+        expect(await chosen.evaluate(el => ({ border: getComputedStyle(el).borderBottomStyle, line: getComputedStyle(el).boxShadow.includes('inset') })))
+            .toEqual({ border: 'none', line: true });
         await expect(proposal(page)).toBeVisible();
         const row1 = proposal(page).locator('.msp-row[data-id="I0001"]');
         const row2 = proposal(page).locator('.msp-row[data-id="I0002"]');
@@ -186,11 +202,13 @@ test.describe('Sort with the agent', () => {
         expect(material.sorts).toHaveLength(1);
     });
 
-    test('a research without the gate: only the batch strip says a newer one can', async ({ page }) => {
+    test('a research without the gate: the strip says a newer one can, nothing to send', async ({ page }) => {
         const material = await setup(page, { features: [...MATERIAL_FEATURES, 'material.edit'] });
         await openWindow(page);
-        await expect(strip(page)).toHaveText('A newer version of the research can sort with the agent.');
-        await expect(strip(page).locator('[data-sort]')).toHaveCount(0);
+        await expect(strip(page)).toHaveAttribute('data-state', 'A');
+        await expect(strip(page)).toHaveClass(/is-off/);
+        await expect(strip(page).locator('.mw-sort-note')).toHaveText('A newer version of the research can sort with the agent.');
+        await expect(strip(page).locator('[data-sort="sort"], [data-sort="next"]')).toHaveCount(0);
         await page.keyboard.press('ControlOrMeta+a');
         await expect(win(page).locator('.mw-selbar')).toBeVisible();
         await expect(win(page).locator('[data-mw="sel-sort"], [data-action="sel-sort"]')).toHaveCount(0);
@@ -207,33 +225,36 @@ test.describe('Sort with the agent', () => {
         expect(material.sorts ?? []).toHaveLength(0);
     });
 
-    test('a strip under each batch with files to sort; the sorting stands in its batch and the others wait', async ({ page }) => {
+    test('one strip for the whole archive, with a filter too; a batch is sorted from its ⋯ menu; while it works the strip says it everywhere', async ({ page }) => {
         const other = { id: 'b-87654321', name: 'Dopisy z Talvan', at: '2026-11-12T09:00:00Z' };
         const material = await setup(page, { batches: [other], files: [materialFile(7, { batch: other.id }), materialFile(8, { batch: other.id })] });
         material.sortDoneAt = 99;
         await openWindow(page);
-        // The whole view has one strip over both batches; a filter that narrows the window shows the batches' own.
-        await expect(win(page).locator('.mw-sort--top')).toContainText('5 files without title or person');
-        await expect(strip(page)).toHaveCount(0);
-        // A narrowing filter opens every batch it finds files in: each batch has its strip.
+        await expect(strip(page)).toHaveAttribute('data-state', 'A');
+        await expect(strip(page).locator('.mw-sort-text')).toHaveText('5 files without title or person');
+        // A narrowing filter keeps the archive's strip as it is (spec 102 §1).
         await win(page).locator('[data-mw="nosource"]').click();
-        await expect(strip(page)).toHaveCount(2);
-        await expect(win(page).locator('.mw-sort--top')).toBeHidden();
-        await strip(page).filter({ hasText: '3 new files' }).locator('[data-sort="sort"]').click();
+        await expect(strip(page)).toBeVisible();
+        await expect(strip(page).locator('.mw-sort-text')).toHaveText('5 files without title or person');
+        await expect(win(page).locator('.mw-sort--row')).toHaveCount(0);
+        // The batch's ⋯ menu: Sort with the agent… (AI badge alone) opens the dialog for its files.
+        await win(page).locator('.mw-canvas .mw-group', { hasText: BATCH.name }).locator('[data-mw="batch-menu"]').click();
+        const item = page.locator('.mw-pop-batchMenu [data-action="sort"]');
+        await expect(item.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(item.locator('.research-open-mark')).toHaveCount(0);
+        await item.click();
+        await expect(sortDialog(page)).toContainText('3 files from the batch Krabice od babičky');
         await sortDialog(page).locator('.mdlg-sort-go').click();
-        // While it works, only its batch says so; the other batch offers nothing.
-        await expect(strip(page)).toHaveCount(1);
-        await expect(strip(page)).toContainText('The agent is sorting · 3 files');
         expect(material.sorts).toHaveLength(1);
-        // Back in the whole view the sorting at work has priority: still in its batch, no strip over everything.
+        expect([...(material.sorts![0].ids as string[])].sort()).toEqual(['I0001', 'I0002', 'I0003']);
+        // B: it works and nothing waits: no ×, Cancel only; the same with and without the filter.
+        await expect(strip(page)).toHaveAttribute('data-state', 'B');
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent is sorting · 3 files');
+        await expect(strip(page).locator('[data-sort="close"], [data-sort="open"]')).toHaveCount(0);
+        await expect(strip(page).locator('[data-sort="cancel"]')).toBeVisible();
         await win(page).locator('[data-mw="nosource"]').click();
-        await expect(win(page).locator('.mw-sort--top')).toBeHidden();
-        // Only the newest batch is open there; a closed batch shows no strip until it is opened.
-        await expect(strip(page)).toHaveCount(0);
-        await win(page).locator('.mw-group-toggle', { hasText: BATCH.name }).click();
-        await expect(strip(page)).toHaveCount(1);
-        await expect(strip(page)).toContainText('The agent is sorting · 3 files');
-        await expect(win(page).locator('.mw-sort--top')).toBeHidden();
+        await expect(strip(page)).toHaveAttribute('data-state', 'B');
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent is sorting · 3 files');
         await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-materials .research-item-dot')).toHaveCount(1);
         await page.keyboard.press('Escape');
@@ -243,8 +264,9 @@ test.describe('Sort with the agent', () => {
         // I0004 in the batch has its title and a person: the strip and its dialog leave it out.
         const material = await setup(page, { files: [materialFile(4, { batch: BATCH.id, title: 'Letter from Talvany', persons: ['P0001'] })] });
         await openWindow(page);
-        await expect(strip(page)).toContainText('3 new files · 2 without title · 3 without person');
-        await strip(page).locator('[data-sort="sort"]').click();
+        await expect(strip(page).locator('.mw-sort-text')).toHaveText('3 files without title or person');
+        await win(page).locator('.mw-canvas [data-mw="batch-menu"]').first().click();
+        await page.locator('.mw-pop-batchMenu [data-action="sort"]').click();
         await expect(sortDialog(page).locator('.mdlg-title')).toHaveText('Sort with the agent · 3 files');
         await expect(sortDialog(page)).toContainText('3 files from the batch Krabice od babičky');
         await page.keyboard.press('Escape');
@@ -275,23 +297,26 @@ test.describe('Sort with the agent', () => {
         await expect(ask).toBeVisible();
         await expect(ask.getByRole('button', { name: 'Keep them' })).toBeFocused();
         await ask.getByRole('button', { name: 'Keep them' }).click();
-        await expect(strip(page)).toContainText('The agent’s proposal is ready');
+        // The proposals made stay: D, waiting and nothing at work.
+        await expect(strip(page)).toHaveAttribute('data-state', 'D');
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent’s proposal: 1 to go through');
         expect(material.cancels).toHaveLength(1);
 
-        // A new sorting from the selection, cancelled and its proposals discarded: the batch offers sorting again.
+        // A new sorting from the selection, cancelled and its proposals discarded: the strip offers sorting again.
+        await win(page).locator('.mw-canvas .mw-tile').first().focus();
         await page.keyboard.press('ControlOrMeta+a');
         await win(page).locator('.mw-selbar [data-mw="sel-sort"]').click();
         await sortDialog(page).locator('.mdlg-sort-go').click();
         // The click ends before its request reaches the research: counted once it has.
         await expect.poll(() => material.sorts?.length).toBe(2);
         await page.keyboard.press('Escape');
-        // A selection's sorting has no batch: it stands over the list and the batch offers nothing meanwhile.
-        const top = win(page).locator('.mw-sort--top');
-        await expect(top).toContainText('1 of 3');
-        await expect(strip(page)).toHaveCount(0);
-        await top.locator('[data-sort="cancel"]').click();
+        // C: it works and a proposal waits already.
+        await expect(strip(page)).toHaveAttribute('data-state', 'C');
+        await expect(strip(page)).toContainText('1 of 3');
+        await strip(page).locator('[data-sort="cancel"]').click();
         await page.locator('.mdlg', { hasText: 'Discard the finished proposals?' }).getByRole('button', { name: 'Discard', exact: true }).click();
-        await expect(strip(page)).toContainText('3 new files');
+        await expect(strip(page)).toHaveAttribute('data-state', 'A');
+        await expect(strip(page).locator('.mw-sort-text')).toHaveText('3 files without title or person');
         await expect(strip(page).locator('[data-sort="sort"]')).toBeVisible();
         expect(material.cancels).toHaveLength(2);
     });
@@ -523,9 +548,9 @@ test.describe('Sort with the agent: the progress and the open proposal', () => {
     });
 });
 
-test.describe('Sort with the agent over everything (the whole view)', () => {
+test.describe('Sort with the agent: the one strip over the whole archive (spec 102 §1)', () => {
     test.use({ viewport: DESKTOP });
-    const top = (page: Page) => win(page).locator('.mw-sort--top');
+    const top = strip;
     const other = { id: 'b-87654321', name: 'Dopisy z Talvan', at: '2026-11-12T09:00:00Z' };
     /** Two batches and a loose file: I0007 has its title and a person, the other five lack one of them. */
     const spread = () => ({
@@ -537,15 +562,21 @@ test.describe('Sort with the agent over everything (the whole view)', () => {
         ],
     });
 
-    test('one strip counts only the files without a title or a person; its dialog says the count and the cost; × closes it for the window; nothing is sent by itself', async ({ page }) => {
+    test('A counts only the files without a title or a person; Go through by hand; its dialog says the count and the cost; × closes it while the window is open; nothing is sent by itself', async ({ page }) => {
         const material = await setup(page, spread());
         await openWindow(page);
-        await expect(top(page)).toHaveClass(/mw-sort--whole/);
+        await expect(top(page)).toHaveAttribute('data-state', 'A');
         await expect(top(page).locator('.mw-sort-text')).toHaveText('5 files without title or person');
-        await expect(strip(page)).toHaveCount(0);
         const btn = top(page).locator('[data-sort="sort"]');
         await expect(btn.locator('.research-ai-badge')).toHaveCount(1);
         await expect(btn.locator('.research-open-mark')).toHaveCount(0);
+
+        // Go through by hand: the files the sorting would take, in the viewer.
+        await top(page).locator('[data-sort="review"]').click();
+        await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
+        await expect(page.locator('#image-viewer-pos')).toContainText('1 of 5');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#attachment-overlay')).not.toHaveClass(/active/);
 
         // The dialog: the count of the files that need it and what it costs; Esc sends nothing.
         await btn.click();
@@ -554,16 +585,16 @@ test.describe('Sort with the agent over everything (the whole view)', () => {
         await page.keyboard.press('Escape');
         await expect(sortDialog(page)).toHaveCount(0);
 
-        // Selecting has its own Sort with the agent: the strip steps aside meanwhile.
+        // Selecting has its own Sort with the agent: the offer steps aside meanwhile.
         await win(page).locator('[data-mw="select"]').click();
         await expect(top(page)).toBeHidden();
         await win(page).locator('[data-mw="select"]').click();
         await expect(top(page)).toBeVisible();
 
-        // × closes it while the window is open; the batches' strips do not take its place.
-        await top(page).locator('[data-sort="close-whole"]').click();
+        // × closes it while the window is open; the focus goes on to the files.
+        await top(page).locator('[data-sort="close"]').click();
         await expect(top(page)).toBeHidden();
-        await expect(strip(page)).toHaveCount(0);
+        await expect(win(page).locator('.mw-sort--row')).toHaveCount(0);
         await expect(page.locator('#materials-modal :focus')).toHaveCount(1);
         await page.waitForTimeout(2500);
         await expect(top(page)).toBeHidden();
@@ -579,20 +610,9 @@ test.describe('Sort with the agent over everything (the whole view)', () => {
         await expect(sortDialog(page)).toHaveCount(0);
         expect(material.sorts).toHaveLength(1);
         expect([...(material.sorts![0].ids as string[])].sort()).toEqual(['I0001', 'I0002', 'I0003', 'I0008', 'I0009']);
-        // The sorting's own strip stands there now.
-        await expect(top(page)).not.toHaveClass(/mw-sort--whole/);
-        await expect(top(page)).toContainText('The agent’s proposal is ready');
-    });
-
-    test('one batch\'s strip already offers every file that needs it: no strip over everything; a review filter keeps its own strip', async ({ page }) => {
-        const older = { ...other, at: '2026-11-01T09:00:00Z' };
-        await setup(page, { batches: [older], files: [materialFile(7, { batch: older.id, title: 'Letter from Talvany', persons: ['P0001'] })] });
-        await openWindow(page);
-        await expect(strip(page)).toContainText('3 new files');
-        await expect(top(page)).toBeHidden();
-        await win(page).locator('[data-mw="notitle"]').click();
-        await expect(top(page)).toContainText('2 files in the filter');
-        await expect(top(page)).not.toHaveClass(/mw-sort--whole/);
+        // The same strip says the sorting now (D), never "the proposal is ready" beside an offer.
+        await expect(top(page)).toHaveAttribute('data-state', 'D');
+        await expect(top(page)).not.toContainText('The agent’s proposal is ready');
     });
 
     test('everything with a title and a person: nothing is offered', async ({ page }) => {
@@ -613,35 +633,234 @@ test.describe('Sort with the agent over everything (the whole view)', () => {
     test.describe('beside a 1024 px window', () => {
         test.use({ viewport: { width: 1024, height: 800 } });
 
-        test('the strip keeps its button (the toolbar\'s Sort ▾ hidden there is another one)', async ({ page }) => {
+        test('the strip keeps its button and its × (the toolbar\'s Sort ▾ hidden there is another one)', async ({ page }) => {
             await setup(page, spread());
             await openWindow(page);
             await expect(win(page).locator('[data-mw="sort-menu"]')).toBeHidden();
             await expect(top(page).locator('[data-sort="sort"]')).toBeVisible();
-            await expect(top(page).locator('[data-sort="close-whole"]')).toBeVisible();
+            await expect(top(page).locator('[data-sort="close"]')).toBeVisible();
+            const over = await top(page).evaluate(el => el.scrollWidth > el.clientWidth + 1);
+            expect(over).toBe(false);
         });
     });
 
     test.describe('on a phone (390 px)', () => {
         test.use({ viewport: { width: 390, height: 844 } });
 
-        test('the German text stays whole (wrapped, never cut short) beside ×, the button below it', async ({ page }) => {
+        test('the state only (spec 102 §11): the German text whole, the sentence that sorting is on the computer, no button and no ×', async ({ page }) => {
             await setup(page, spread());
             await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
             await openWindow(page);
-            const text = top(page).locator('.mw-sort-text');
-            await expect(text).toHaveText('5 Dateien ohne Titel oder Person');
-            const fit = await text.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth, sh: el.scrollHeight, ch: el.clientHeight }));
+            await expect(top(page)).toHaveAttribute('data-state', 'A');
+            const what = top(page).locator('.mw-sort-what');
+            await expect(what).toHaveText('5 Dateien ohne Titel oder Person');
+            const fit = await what.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth, sh: el.scrollHeight, ch: el.clientHeight }));
             expect(fit.sw).toBeLessThanOrEqual(fit.cw);
             expect(fit.sh).toBeLessThanOrEqual(fit.ch);
-            const strip = await top(page).evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }));
-            expect(strip.sw).toBeLessThanOrEqual(strip.cw);
-            const t = (await text.boundingBox())!;
-            const btn = (await top(page).locator('[data-sort="sort"]').boundingBox())!;
-            const close = (await top(page).locator('[data-sort="close-whole"]').boundingBox())!;
-            expect(btn.y).toBeGreaterThanOrEqual(t.y + t.height - 1);
-            expect(close.x).toBeGreaterThanOrEqual(t.x + t.width - 1);
-            expect(close.y).toBeLessThan(t.y + t.height);
+            const box = await top(page).evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }));
+            expect(box.sw).toBeLessThanOrEqual(box.cw);
+            await expect(top(page).locator('.mw-sort-phone')).toBeVisible();
+            await expect(top(page).locator('.mw-sort-phone-short')).toBeHidden();
+            await expect(top(page).locator('button')).toHaveCount(0);
+        });
+    });
+});
+
+/**
+ * The end of the proposal and closing it (spec 102 §5, §6): the proposal
+ * handled to its end says what was done and what is left in its own window
+ * (Sort the next (N)…, what the agent left unassigned); it closes by itself
+ * when its window closes with nothing waiting, or before that with Close the
+ * proposal… after a question. Closed, the strip says what was done (E) or
+ * that nothing is left (F), and the research menu's dot goes.
+ */
+test.describe('Sort with the agent: the end of the proposal and closing it', () => {
+    test.use({ viewport: DESKTOP });
+    const ask = (page: Page) => page.locator('.mdlg', { hasText: 'Close the proposal?' });
+    const menuMarks = async (page: Page): Promise<number> => {
+        await openResearchMenu(page, { expandMore: true });
+        const n = await page.locator('#research-item-materials .research-item-attn, #research-item-materials .research-item-dot').count();
+        await page.keyboard.press('Escape');
+        return n;
+    };
+    async function sortAndOpen(page: Page, opts: { batchMenu?: boolean } = {}): Promise<void> {
+        await openWindow(page);
+        if (opts.batchMenu) {
+            await win(page).locator('.mw-canvas .mw-group', { hasText: BATCH.name }).locator('[data-mw="batch-menu"]').click();
+            await page.locator('.mw-pop-batchMenu [data-action="sort"]').click();
+        } else {
+            await strip(page).locator('[data-sort="sort"]').click();
+        }
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect(strip(page)).toHaveAttribute('data-state', 'D');
+        await strip(page).locator('[data-sort="open"]').click();
+        await expect(proposal(page)).toBeVisible();
+    }
+
+    test('Close the proposal… asks first, from the proposal\'s footer and from the strip; closed, nothing is written and the strip says what was done (E) with Sort the next and ×', async ({ page }) => {
+        const material = await setup(page);
+        await sortAndOpen(page);
+        // D: no × while proposals wait.
+        await expect(strip(page).locator('[data-sort="close"]')).toHaveCount(0);
+
+        // From the footer: Keep (focused) brings the proposal window back.
+        await proposal(page).locator('.msp-close-proposal').click();
+        await expect(ask(page)).toContainText('2 open proposals will not be written; the files stay unsorted. Accepted ones stay accepted.');
+        await expect(ask(page).getByRole('button', { name: 'Keep', exact: true })).toBeFocused();
+        await ask(page).getByRole('button', { name: 'Keep', exact: true }).click();
+        await expect(proposal(page)).toBeVisible();
+        // Closed with proposals waiting: the proposal stays (D).
+        await proposal(page).locator('.msp-close').click();
+        await expect(proposal(page)).toHaveCount(0);
+        await expect(strip(page)).toHaveAttribute('data-state', 'D');
+        expect(await menuMarks(page)).toBe(1);
+
+        // From the strip: the same question; Close the proposal closes it.
+        await strip(page).locator('[data-sort="close-proposal"]').click();
+        await ask(page).getByRole('button', { name: 'Close the proposal', exact: true }).click();
+        await expect(ask(page)).toHaveCount(0);
+        await expect(strip(page)).toHaveAttribute('data-state', 'E');
+        await expect(strip(page)).toHaveClass(/is-done/);
+        await expect(strip(page).locator('.mw-sort-what')).toHaveText('Done: 0 handled · 1 unassigned · 2 unsorted left');
+        expect(material.edits ?? []).toHaveLength(0);
+        expect(material.assigns ?? []).toHaveLength(0);
+        expect(await menuMarks(page)).toBe(0);
+
+        // Go through by hand: the file the agent left unassigned.
+        await strip(page).locator('[data-sort="review"]').click();
+        await expect(page.locator('#image-viewer-pos')).toContainText('1 of 1');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#attachment-overlay')).not.toHaveClass(/active/);
+
+        // Sort the next: the files left, never the one the agent left unassigned.
+        const next = strip(page).locator('[data-sort="next"]');
+        await expect(next).toContainText('Sort the next (2)…');
+        await expect(next.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(strip(page).locator('[data-sort="close"]')).toBeVisible();
+        await next.click();
+        await expect(sortDialog(page).locator('.mdlg-title')).toHaveText('Sort with the agent · 2 files');
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect.poll(() => material.sorts?.length).toBe(2);
+        expect([...(material.sorts![1].ids as string[])].sort()).toEqual(['I0001', 'I0002']);
+        await expect(strip(page)).toHaveAttribute('data-state', 'D');
+    });
+
+    test('the end in the proposal window: what was done, Sort the next (N) closes the proposal and opens the dialog; E closes with its ×', async ({ page }) => {
+        const other = { id: 'b-87654321', name: 'Dopisy z Talvan', at: '2026-11-12T09:00:00Z' };
+        const material = await setup(page, {
+            batches: [other], files: [materialFile(8, { batch: other.id }), materialFile(9, { batch: other.id })],
+            proposals: [PROPOSALS[0], { id: 'I0002', links: [{ type: 'person', ref: 'P0002' }], why: 'A well', sure: 'low' }],
+        });
+        await sortAndOpen(page, { batchMenu: true });
+        expect([...(material.sorts![0].ids as string[])].sort()).toEqual(['I0001', 'I0002', 'I0003']);
+        await proposal(page).locator('.msp-accept-all').click();
+        await expect.poll(() => JSON.stringify(material.assigns ?? [])).toContain('P0002');
+
+        // In place of the empty list, the tab stays where it is.
+        const end = proposal(page).locator('.msp-end');
+        await expect(end.locator('.msp-end-title')).toHaveText('Done · 2 accepted · 0 rejected · 1 unassigned');
+        await expect(end.locator('.msp-end-sub')).toHaveText('For the whole run: 1 batch · 3 files');
+        await expect(proposal(page).locator('.msp-tab[data-tab="proposals"]')).toHaveAttribute('aria-selected', 'true');
+        await expect(proposal(page).locator('.msp-empty')).toHaveCount(0);
+        await expect(end).toContainText('2 unsorted files are left in the archive');
+        const go = end.locator('.msp-sort-next');
+        await expect(go).toContainText('Sort the next (2)…');
+        await expect(go.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(end).toContainText('The agent did not assign 1 file');
+        await expect(end.locator('.msp-review')).toHaveText('Go through by hand (1)');
+        // The footer at the end: closing closes the proposal, Close is the one action.
+        await expect(proposal(page).locator('.msp-write')).toHaveText('Closing the window closes the proposal. Accepted ones stay written; the app’s Undo still works.');
+        await expect(proposal(page).locator('.msp-accept-all')).toBeHidden();
+        await expect(proposal(page).locator('.msp-accept-sel')).toBeHidden();
+        await expect(proposal(page).locator('.msp-close-proposal')).toBeHidden();
+        await expect(proposal(page).locator('.msp-close')).toHaveClass(/is-primary/);
+
+        // Sort the next: the window and the proposal close, the dialog takes the other batch's files.
+        await go.click();
+        await expect(proposal(page)).toHaveCount(0);
+        await expect(sortDialog(page).locator('.mdlg-title')).toHaveText('Sort with the agent · 2 files');
+        await page.keyboard.press('Escape');
+        await expect(strip(page)).toHaveAttribute('data-state', 'E');
+        await expect(strip(page).locator('.mw-sort-what')).toHaveText('Done: 2 handled · 1 unassigned · 2 unsorted left');
+        await expect(strip(page).locator('[data-sort="next"]')).toContainText('Sort the next (2)…');
+        expect(await menuMarks(page)).toBe(0);
+        // × closes E while it stays; nothing was sent meanwhile.
+        await strip(page).locator('[data-sort="close"]').click();
+        await expect(strip(page)).toBeHidden();
+        expect(material.sorts).toHaveLength(1);
+    });
+
+    test('only unassigned files left: Go through by hand is the action; the window closed, the proposal closes by itself and E keeps them (no Sort the next)', async ({ page }) => {
+        const material = await setup(page, {
+            proposals: [PROPOSALS[0], { id: 'I0002', links: [{ type: 'person', ref: 'P0002' }], why: 'A well', sure: 'low' }],
+        });
+        await sortAndOpen(page);
+        await proposal(page).locator('.msp-accept-all').click();
+        await expect.poll(() => JSON.stringify(material.assigns ?? [])).toContain('P0002');
+        const end = proposal(page).locator('.msp-end');
+        await expect(end.locator('.msp-end-nothing')).toHaveText('Nothing else in the archive is left to sort.');
+        await expect(end.locator('.msp-sort-next')).toHaveCount(0);
+        await expect(end.locator('.msp-review')).toHaveClass(/is-primary/);
+
+        // Closed with nothing waiting and nothing at work: the proposal closes by itself.
+        await proposal(page).locator('.msp-close').click();
+        await expect(proposal(page)).toHaveCount(0);
+        await expect(strip(page)).toHaveAttribute('data-state', 'E');
+        await expect(strip(page).locator('.mw-sort-what')).toHaveText('Done: 2 handled · 1 unassigned');
+        await expect(strip(page).locator('[data-sort="next"], [data-sort="open"]')).toHaveCount(0);
+        await expect(strip(page).locator('[data-sort="review"]')).toBeVisible();
+        expect(await menuMarks(page)).toBe(0);
+        // The proposal does not come back with the window.
+        await page.evaluate(() => (window.Strom.UI as unknown as { closeMaterials(): void }).closeMaterials());
+        await openWindow(page);
+        await expect(strip(page)).toHaveAttribute('data-state', 'E');
+        expect(material.sorts).toHaveLength(1);
+    });
+
+    test('nothing left: the end says so, the window closed, the strip says All files have a title and a person, then goes', async ({ page }) => {
+        const material = await setup(page, {
+            proposals: [
+                PROPOSALS[0],
+                { id: 'I0002', links: [{ type: 'person', ref: 'P0002' }], why: 'A well', sure: 'low' },
+                { id: 'I0003', title: 'Letter from Ostrovid', links: [{ type: 'person', ref: 'P0003' }], why: 'A signature', sure: 'high' },
+            ],
+        });
+        await sortAndOpen(page);
+        await proposal(page).locator('.msp-accept-all').click();
+        await expect.poll(() => JSON.stringify(material.assigns ?? [])).toContain('P0003');
+        const end = proposal(page).locator('.msp-end');
+        await expect(end.locator('.msp-end-title')).toHaveText('Done · 3 accepted · 0 rejected · 0 unassigned');
+        await expect(end).toContainText('All files have a title and a person.');
+        await expect(end.locator('.msp-sort-next, .msp-review')).toHaveCount(0);
+        await proposal(page).locator('.msp-close').click();
+        await expect(strip(page)).toHaveAttribute('data-state', 'F');
+        await expect(strip(page)).toHaveAttribute('role', 'status');
+        await expect(strip(page).locator('.mw-sort-text')).toHaveText('All files have a title and a person.');
+        await expect(strip(page).locator('button')).toHaveCount(0);
+        // A moment later the strip goes.
+        await expect(strip(page)).toBeHidden({ timeout: 10_000 });
+        expect(await menuMarks(page)).toBe(0);
+    });
+
+    test.describe('on a phone (390 px)', () => {
+        test.use({ viewport: { width: 390, height: 844 } });
+
+        test('the proposal waiting is said as a state only: no Go through, no Close the proposal', async ({ page }) => {
+            await setup(page);
+            await page.setViewportSize(DESKTOP);
+            await openWindow(page);
+            await strip(page).locator('[data-sort="sort"]').click();
+            await sortDialog(page).locator('.mdlg-sort-go').click();
+            await expect(strip(page)).toHaveAttribute('data-state', 'D');
+            await page.evaluate(() => (window.Strom.UI as unknown as { closeMaterials(): void }).closeMaterials());
+            await page.setViewportSize({ width: 390, height: 844 });
+            await openWindow(page);
+            await expect(strip(page)).toHaveAttribute('data-state', 'D');
+            await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent’s proposal: 2 to go through');
+            await expect(strip(page).locator('.mw-sort-phone')).toBeVisible();
+            await expect(strip(page).locator('button')).toHaveCount(0);
+            const over = await strip(page).evaluate(el => el.scrollWidth > el.clientWidth + 1);
+            expect(over).toBe(false);
         });
     });
 });

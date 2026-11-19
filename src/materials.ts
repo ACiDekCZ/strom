@@ -35,6 +35,16 @@ export const MATERIAL_USES_FEATURE = 'material.uses';
 export const MATERIAL_EDIT_FEATURE = 'material.edit';
 /** `POST /material/sort`: the research's agent proposes titles and places for files (only a research with an agent). */
 export const MATERIAL_SORT_FEATURE = 'material.sort';
+/** `uses.of` on `/material` and `of` on `GET /material/<I…>/uses`: the sources whose file a file is (spec 102 K1.14, research 1.35). */
+export const MATERIAL_SOURCE_OF_FEATURE = 'material.sourceOf';
+/** `POST /material/sort` with 51–1500 files is a run of batches the research keeps; its `GET` and `cancel` (spec 102 K1.12). */
+export const MATERIAL_SORT_RUN_FEATURE = 'material.sortRun';
+/** `left {at, sort, why, said?}` on a file of `/material`: the agent left it unassigned last time (spec 102 K1.13). */
+export const MATERIAL_LEFT_FEATURE = 'material.left';
+/** `sameAs: "I…"` on a file of `/material`: an older file of the material has the same content (spec 102 K1.13). */
+export const MATERIAL_SAME_AS_FEATURE = 'material.sameAs';
+/** `POST /material/delete` with `dryRun` and the bridge's `confirm`: a file deleted for good (spec 102 K1.17). */
+export const MATERIAL_DELETE_FEATURE = 'material.delete';
 
 /** Preview sizes the bridge makes (longer side, px). */
 export const THUMB_SIZES = [128, 256, 512] as const;
@@ -629,6 +639,31 @@ export function matSort(env: MaterialEnv): boolean {
     return matList(env) && has(env, MATERIAL_SORT_FEATURE);
 }
 
+/** The research keeps a run of batches (`material.sortRun`): one action sends up to 1500 files. */
+export function matSortRun(env: MaterialEnv): boolean {
+    return matSort(env) && has(env, MATERIAL_SORT_RUN_FEATURE);
+}
+
+/** The research says which sources a file is the file of (`material.sourceOf`). */
+export function matSourceOf(env: MaterialEnv): boolean {
+    return matList(env) && has(env, MATERIAL_SOURCE_OF_FEATURE);
+}
+
+/** The research says which files the agent left unassigned (`material.left`). */
+export function matLeft(env: MaterialEnv): boolean {
+    return matList(env) && has(env, MATERIAL_LEFT_FEATURE);
+}
+
+/** The research says which files have the same content as an older one (`material.sameAs`). */
+export function matSameAs(env: MaterialEnv): boolean {
+    return matList(env) && has(env, MATERIAL_SAME_AS_FEATURE);
+}
+
+/** The research deletes a file for good, after the dialog's confirmation (`material.delete`). */
+export function matDelete(env: MaterialEnv): boolean {
+    return matList(env) && has(env, MATERIAL_DELETE_FEATURE);
+}
+
 export interface MaterialCaps {
     list: boolean;
     assign: boolean;
@@ -642,6 +677,16 @@ export interface MaterialCaps {
     uses: boolean;
     /** The research's agent sorts files (`material.sort`). */
     sort: boolean;
+    /** The research keeps a run of batches (`material.sortRun`). */
+    sortRun: boolean;
+    /** The research says which sources a file is the file of (`material.sourceOf`). */
+    sourceOf: boolean;
+    /** The research says which files the agent left unassigned (`material.left`). */
+    left: boolean;
+    /** The research says which files have the same content as an older one (`material.sameAs`). */
+    sameAs: boolean;
+    /** The research deletes a file for good (`material.delete`). */
+    delete: boolean;
     /** The research keeps the tree's own files (`media.app`). */
     mediaApp: boolean;
     /** Links into the research open (`/status.links`, also remembered); default yes. */
@@ -653,6 +698,7 @@ export function materialCaps(env: MaterialEnv & { openLinks?: boolean }): Materi
         list: matList(env), assign: matAssign(env), thumb: matThumb(env), bridgeUp: env.bridgeUp,
         links: env.linked && has(env, MATERIAL_LINKS_FEATURE),
         edit: matEdit(env), uses: matUses(env), sort: matSort(env),
+        sortRun: matSortRun(env), sourceOf: matSourceOf(env), left: matLeft(env), sameAs: matSameAs(env), delete: matDelete(env),
         mediaApp: env.linked && has(env, MEDIA_APP_FEATURE),
     };
     if (env.openLinks !== undefined) caps.openLinks = env.openLinks;

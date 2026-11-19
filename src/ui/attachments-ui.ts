@@ -77,7 +77,7 @@ function isImage(att: Attachment): boolean {
 
 /** Convert a data URL to a Blob (for opening PDFs via an object URL). */
 /** No research: the menu offers the tree's own actions only. */
-const NO_CAPS: MaterialCaps = { list: false, assign: false, thumb: false, bridgeUp: false, links: false, edit: false, uses: false, sort: false, mediaApp: false };
+const NO_CAPS: MaterialCaps = { list: false, assign: false, thumb: false, bridgeUp: false, links: false, edit: false, uses: false, sort: false, sortRun: false, sourceOf: false, left: false, sameAs: false, delete: false, mediaApp: false };
 
 /** The row's name: the title (the whole of it on hover), else the file's name (spec 102 §2). */
 function attachmentNameHtml(att: Attachment, esc: (t: string) => string): string {

@@ -595,8 +595,6 @@ export interface RowMetrics {
     skeleton: number;
     /** Space after an open group's content. */
     groupEnd: number;
-    /** The strip of Sort with the agent under a batch's header (spec 102 §13b). */
-    sort?: number;
 }
 
 export type OverviewRow =
@@ -605,7 +603,6 @@ export type OverviewRow =
     | { type: 'tiles'; key: string; top: number; height: number; group: OverviewGroup; folder?: OverviewFolder; items: MaterialItem[]; first: number }
     | { type: 'item'; key: string; top: number; height: number; group: OverviewGroup; folder?: OverviewFolder; item: MaterialItem; first: number }
     | { type: 'skeleton'; key: string; top: number; height: number; group: OverviewGroup }
-    | { type: 'sort'; key: string; top: number; height: number; group: OverviewGroup }
     | { type: 'end'; key: string; top: number; height: number; group: OverviewGroup };
 
 export interface OverviewLayout {
@@ -617,11 +614,8 @@ export interface OverviewLayout {
     rowOf: Map<string, number>;
 }
 
-/**
- * Lay out the groups as rows: a header per group, its content when open.
- * `sortStrip`: the groups with the strip of Sort with the agent under their header (13b).
- */
-export function overviewRows(groups: readonly OverviewGroup[], isOpen: (key: string) => boolean, m: RowMetrics, sortStrip?: (group: OverviewGroup) => boolean): OverviewLayout {
+/** Lay out the groups as rows: a header per group, its content when open. */
+export function overviewRows(groups: readonly OverviewGroup[], isOpen: (key: string) => boolean, m: RowMetrics): OverviewLayout {
     const rows: OverviewRow[] = [];
     const order: MaterialItem[] = [];
     const rowOf = new Map<string, number>();
@@ -649,7 +643,6 @@ export function overviewRows(groups: readonly OverviewGroup[], isOpen: (key: str
         const open = isOpen(group.key);
         push({ type: 'group', key: group.key, top, height: m.group, group, open });
         if (!open) continue;
-        if (!group.pending && m.sort && sortStrip?.(group)) push({ type: 'sort', key: `so:${group.key}`, top, height: m.sort, group });
         if (group.pending) {
             push({ type: 'skeleton', key: `s:${group.key}`, top, height: m.skeleton, group });
         } else {

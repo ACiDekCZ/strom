@@ -356,34 +356,116 @@ const INTRO_KEY = 'strom-research-auto-intro-seen';
  * new version), the research's mode as last shown (a switch is said once),
  * the one-time offer to send by itself, and the user's edits not sent yet.
  */
+/** The most batches one action sends (1500 files; spec 102 K1.12, the research's `SORT_RUN_MOST_FILES`). */
+const SORT_RUN_MAX_BATCHES = 30;
+/** The most files one batch (one sorting) takes. */
+const SORT_BATCH_MAX_FILES = 50;
+const SORT_ID = /^sort-[0-9A-Za-z-]{1,60}$/;
+const FILE_REF = /^I\d{1,7}$/;
+
+/** Why a batch of a run did not run (spec 102 §3). */
+export type SortRunErrorCode = 'limit' | 'queue' | 'agent' | 'other';
+
+/**
+ * A run of batches (spec 102 §2, §3): one action of a person sorts more than
+ * one batch. Missing: one batch (the sorting before 3.30).
+ */
+export interface ResearchSortRun {
+    /** The research's run (`run-…`, when the research keeps the run: `material.sortRun`); else the app sends the batches. */
+    id?: string;
+    /** The files (I…) of each batch, in the order sent; at most SORT_RUN_MAX_BATCHES. */
+    batches: string[][];
+    /** The sortings (`sort-…`) of the batches finished and at work (index = batch). */
+    sorts: string[];
+    /** The batch that runs or is to run next (index). */
+    next: number;
+    /** What the dialog sorted. */
+    scope: 'all' | 'selection' | 'batch' | 'filter';
+    /** A batch did not run (spec 102 §3). */
+    error?: { batch: number; code: SortRunErrorCode; reason?: string };
+    /** The app was closed between batches (the app sends the batches): the run goes on only with a new action. */
+    stopped?: true;
+}
+
 /** The agent's sorting of materials the app asked for (spec 102 §13): kept so its proposal outlives the window and a reload. */
 export interface ResearchSortRemembered {
-    /** The research's sorting (`sort-…`). */
+    /** The research's sorting (`sort-…`): of the batch at work or the last one. */
     id: string;
-    /** The files sent (I…). */
+    /** The files sent (I…) in that batch. */
     files: string[];
     /** What was said about the files (sent as it is). */
     text: string;
     /** The batch the files came in (its name, for the header), when all of one batch. */
     batch?: string;
     at: string;
-    /** The rows decided here (I… → accepted / rejected). */
+    /** The rows decided here (I… → accepted / rejected), over every batch of the run. */
     decided: Record<string, 'accepted' | 'rejected'>;
     /** What undoes each accepted row (I… → SortRevert of src/material-sort.ts, checked when used). */
     reverts?: Record<string, unknown>;
     /** The sorting ended without a proposal (failed, cancelled): said once in the strip. */
     ended?: 'failed' | 'cancelled';
+    /** A run of batches (spec 102 §2, §3); missing: one batch. */
+    run?: ResearchSortRun;
 }
 
-function sortRememberedFrom(v: unknown): ResearchSortRemembered | null {
+/**
+ * A sorting's proposal closed (spec 102 §6): what the strip says after it
+ * ("Done: 40 handled · 10 unassigned · 17 unsorted left") until the next
+ * sorting starts or the line is closed with its ×.
+ */
+export interface ResearchSortClosed {
+    at: string;
+    /** Rows accepted or rejected. */
+    handled: number;
+    /** Files without a proposal (or not about the family). */
+    unassigned: number;
+    /** Files sent over the whole run and its batches. */
+    files: number;
+    batches: number;
+}
+
+/** A file the agent left unassigned (spec 102 §4.4): not sent again unless selected. */
+export interface ResearchSortLeft {
+    at: string;
+    /** The research's reason (`unproposed[].why`), when it said one. */
+    why?: string;
+}
+
+function sortRunFrom(v: unknown): ResearchSortRun | null {
     if (!v || typeof v !== 'object') return null;
     const o = v as Record<string, unknown>;
-    if (typeof o.id !== 'string' || !/^sort-[0-9A-Za-z-]{1,60}$/.test(o.id) || !Array.isArray(o.files)) return null;
-    const files = o.files.filter((f): f is string => typeof f === 'string' && /^I\d{1,7}$/.test(f)).slice(0, 50);
+    if (!Array.isArray(o.batches)) return null;
+    const batches = o.batches.slice(0, SORT_RUN_MAX_BATCHES)
+        .map(b => Array.isArray(b) ? b.filter((f): f is string => typeof f === 'string' && FILE_REF.test(f)).slice(0, SORT_BATCH_MAX_FILES) : [])
+        .filter(b => b.length > 0);
+    if (!batches.length) return null;
+    const sorts = Array.isArray(o.sorts) ? o.sorts.filter((x): x is string => typeof x === 'string' && SORT_ID.test(x)).slice(0, batches.length) : [];
+    const next = typeof o.next === 'number' && Number.isFinite(o.next) ? Math.max(0, Math.min(batches.length, Math.floor(o.next))) : 0;
+    const scope = o.scope === 'selection' || o.scope === 'batch' || o.scope === 'filter' ? o.scope : 'all';
+    const run: ResearchSortRun = { batches, sorts, next, scope };
+    if (typeof o.id === 'string' && /^run-[0-9A-Za-z-]{1,60}$/.test(o.id)) run.id = o.id;
+    const e = o.error as Record<string, unknown> | undefined;
+    if (e && typeof e === 'object' && typeof e.batch === 'number' && e.batch >= 0 && e.batch < batches.length) {
+        const code: SortRunErrorCode = e.code === 'limit' || e.code === 'queue' || e.code === 'agent' ? e.code : 'other';
+        run.error = { batch: Math.floor(e.batch), code, ...(typeof e.reason === 'string' && e.reason ? { reason: e.reason.slice(0, 300) } : {}) };
+    }
+    if (o.stopped === true) run.stopped = true;
+    return run;
+}
+
+/** A remembered sorting as stored; one stored before runs of batches reads as a run of one batch (no `run`). */
+export function sortRememberedFrom(v: unknown): ResearchSortRemembered | null {
+    if (!v || typeof v !== 'object') return null;
+    const o = v as Record<string, unknown>;
+    if (typeof o.id !== 'string' || !SORT_ID.test(o.id) || !Array.isArray(o.files)) return null;
+    const files = o.files.filter((f): f is string => typeof f === 'string' && FILE_REF.test(f)).slice(0, SORT_BATCH_MAX_FILES);
+    const run = sortRunFrom(o.run);
+    // Decided rows of every batch of the run (one batch: its files).
+    const sent = new Set([...files, ...(run?.batches.flat() ?? [])]);
     const decided: Record<string, 'accepted' | 'rejected'> = {};
     if (o.decided && typeof o.decided === 'object') {
         for (const [k, d] of Object.entries(o.decided as Record<string, unknown>)) {
-            if (files.includes(k) && (d === 'accepted' || d === 'rejected')) decided[k] = d;
+            if (sent.has(k) && (d === 'accepted' || d === 'rejected')) decided[k] = d;
         }
     }
     return {
@@ -393,7 +475,32 @@ function sortRememberedFrom(v: unknown): ResearchSortRemembered | null {
         ...(typeof o.batch === 'string' && o.batch ? { batch: o.batch.slice(0, 200) } : {}),
         ...(o.ended === 'failed' || o.ended === 'cancelled' ? { ended: o.ended } : {}),
         ...sortReverts(o.reverts, decided),
+        ...(run ? { run } : {}),
     };
+}
+
+/** The closed proposal's line as stored (anything off: none). */
+export function sortClosedFrom(v: unknown): ResearchSortClosed | null {
+    if (!v || typeof v !== 'object') return null;
+    const o = v as Record<string, unknown>;
+    const n = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && x >= 0 ? Math.min(Math.floor(x), 1_000_000) : 0;
+    if (typeof o.at !== 'string' || !Number.isFinite(Date.parse(o.at))) return null;
+    return { at: o.at, handled: n(o.handled), unassigned: n(o.unassigned), files: n(o.files), batches: Math.max(1, n(o.batches)) };
+}
+
+/** The files the agent left unassigned, as stored (I… → when, why); at most SORT_LEFT_MAX, the newest kept. */
+export const SORT_LEFT_MAX = 5000;
+export function sortLeftFrom(v: unknown): Record<string, ResearchSortLeft> {
+    const out: Record<string, ResearchSortLeft> = {};
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+    const rows = Object.entries(v as Record<string, unknown>)
+        .filter(([k, x]) => FILE_REF.test(k) && !!x && typeof x === 'object' && typeof (x as Record<string, unknown>).at === 'string')
+        .slice(-SORT_LEFT_MAX);
+    for (const [k, x] of rows) {
+        const o = x as Record<string, unknown>;
+        out[k] = { at: (o.at as string).slice(0, 40), ...(typeof o.why === 'string' && /^[a-z-]{1,24}$/.test(o.why) ? { why: o.why } : {}) };
+    }
+    return out;
 }
 
 /** The accepted rows' reverts as stored (only of accepted rows; their shape is checked when used). */
@@ -409,6 +516,10 @@ function sortReverts(v: unknown, decided: Record<string, 'accepted' | 'rejected'
 export interface ResearchAutoState {
     /** The agent's sorting of materials (spec 102 §13). */
     materialSort?: ResearchSortRemembered;
+    /** The last sorting's proposal closed (spec 102 §6): the strip's "Done: …" line. */
+    sortClosed?: ResearchSortClosed;
+    /** Files the agent left unassigned (spec 102 §4.4, a research without `material.left`): I… → when, why. */
+    sortLeft?: Record<string, ResearchSortLeft>;
     /** The last send the research wrote, and the conflicts it left. */
     lastWritten?: { at: string; changes: number | null; conflicts: number; persons?: string[]; conflictIds?: string[]; intake?: string; fingerprint?: string };
     /** The research's mode the user last saw ("switched" is said once). */
@@ -741,6 +852,10 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         }
         const sort = sortRememberedFrom(p.materialSort);
         if (sort) out.materialSort = sort;
+        const closed = sortClosedFrom(p.sortClosed);
+        if (closed) out.sortClosed = closed;
+        const left = sortLeftFrom(p.sortLeft);
+        if (Object.keys(left).length) out.sortLeft = left;
         if (Array.isArray(p.removedAsk)) {
             const asks = p.removedAsk.slice(0, 20).map(removedAskFrom).filter((a): a is ResearchRemovedAsk => !!a);
             if (asks.length) out.removedAsk = asks;

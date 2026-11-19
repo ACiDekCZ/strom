@@ -48,8 +48,9 @@ import {
     MaterialsOpenOptions, MaterialActionCtx, fileNameBreakParts, materialShortDate, materialStaleTime, materialTileLetters, materialItemSha, treeAttachmentsKey,
 } from './materials-ui.js';
 import { uiModule } from './module.js';
-import type { SortPlan, SortTarget } from './material-sort-ui.js';
-import { sortNeedy, sortWholeOffered } from '../material-sort.js';
+import type { SortStripView } from './material-sort-ui.js';
+import type { SortStripState } from '../material-sort.js';
+import { isPhoneBar } from '../breakpoints.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { barHtml } from './prog-bar.js';
 import { closeHeadMenu, openHeadMenu, SEP, type MenuEntry } from './table-view/table-headmenu.js';
@@ -199,10 +200,12 @@ interface Win {
     drawnCaps: string;
     /** The tree's attachments its items were built from (see treeAttachmentsKey). */
     drawnAttachments: string;
-    /** Sort with the agent (spec 102 §13b/13e): the strips under batch headers, by group key, and the one over the list. */
-    sortPlan: SortPlan;
-    /** The strip over everything was closed (×): it stays away while the window is open. */
-    sortWholeClosed: boolean;
+    /** The one strip of sorting over the window (spec 102 §1) as drawn last. */
+    sortView: SortStripView | null;
+    /** The strip closed with its × (A, E): away while its state stays, back with the next state or the next opening. */
+    sortClosedState: SortStripState | null;
+    /** A batch just added here (its file count): state A says "N files added" (spec 102 §1, §8). */
+    sortAdded: number;
 }
 
 interface SelAction {
@@ -215,7 +218,7 @@ interface SelAction {
 }
 
 function capsKey(caps: MaterialCaps, base: string | null): string {
-    return `${caps.list}|${caps.assign}|${caps.thumb}|${caps.bridgeUp}|${caps.openLinks !== false}|${caps.links}|${caps.edit}|${caps.uses}|${caps.sort}|${caps.mediaApp}|${base ?? ''}`;
+    return `${caps.list}|${caps.assign}|${caps.thumb}|${caps.bridgeUp}|${caps.openLinks !== false}|${caps.links}|${caps.edit}|${caps.uses}|${caps.sort}|${caps.sortRun}|${caps.sourceOf}|${caps.left}|${caps.sameAs}|${caps.delete}|${caps.mediaApp}|${base ?? ''}`;
 }
 
 let win: Win | null = null;
@@ -349,8 +352,9 @@ export const materialsWindowMethods = uiModule({
             bridgeUp: ctx.caps.bridgeUp,
             drawnCaps: '',
             drawnAttachments: '',
-            sortPlan: { rows: new Map(), top: null },
-            sortWholeClosed: false,
+            sortView: null,
+            sortClosedState: null,
+            sortAdded: 0,
         };
         win = w;
         const thumbs = materialThumbs();
@@ -438,7 +442,6 @@ export const materialsWindowMethods = uiModule({
         const cameUp = ctx.caps.bridgeUp && !w.bridgeUp;
         w.bridgeUp = ctx.caps.bridgeUp;
         // The agent's sorting moves on its own (its progress, its proposal ready).
-        this.mwSortRows();
         this.mwSortStrip();
         const changed = capsKey(ctx.caps, ctx.base) !== w.drawnCaps || (cachedMaterials(w.treeId)?.list ?? null) !== w.list
             || treeAttachmentsKey() !== w.drawnAttachments;
@@ -583,7 +586,6 @@ export const materialsWindowMethods = uiModule({
             folder: coarse ? 44 : 36,
             skeleton: w.view === 'grid' ? tileRow : 96,
             groupEnd: 12,
-            sort: coarse ? 70 : 56,
         };
     },
 
@@ -624,8 +626,7 @@ export const materialsWindowMethods = uiModule({
         sortOverviewGroups(w.groups, w.sort, { personName: key => w.names.get(key) ?? null, kindLabel: materialKindLabel });
         w.drawnCaps = capsKey(ctx.caps, ctx.base);
         w.metrics = this.mwMetrics();
-        w.sortPlan = this.mwSortPlan();
-        w.layout = overviewRows(w.groups, key => this.mwIsOpen(key), w.metrics, g => w.sortPlan.rows.has(g.key));
+        w.layout = overviewRows(w.groups, key => this.mwIsOpen(key), w.metrics);
         w.overlay.dataset.group = w.group;
         w.overlay.dataset.model = model;
         w.overlay.classList.toggle('can-select', this.mwCanSelect());
@@ -751,9 +752,8 @@ export const materialsWindowMethods = uiModule({
         if (w.model === 'app') {
             // A tree beside a research on a phone or a tablet: its own files here, the archive's on the computer (spec 102 §11f).
             const linked = this.materialsTouchLinked() ? this.materialsContext() : null;
-            // A research whose agent sorts: that and its proposal are on the computer too (spec 102 §13l).
-            const sorts = !!linked?.agent && !!linked.env.features?.includes(MATERIAL_SORT_FEATURE);
-            const note = linked ? `${sorts ? `${m.agentSort.phone} ` : ''}${linked.agent ? m.desktopOnlyResearch : m.desktopOnly}` : '';
+            // Sorting with the agent says itself in the strip of sorting (spec 102 §11).
+            const note = linked ? (linked.agent ? m.desktopOnlyResearch : m.desktopOnly) : '';
             w.overlay.dataset.state = 'live';
             el.hidden = !note;
             el.setAttribute('role', 'note');
@@ -775,101 +775,52 @@ export const materialsWindowMethods = uiModule({
     },
 
     /**
-     * Where Sort with the agent stands (spec 102 §13b/13e): over the files of
-     * a review filter (Without title / Without person) one strip over the
-     * list; else a strip under each batch header with files without a title or
-     * a person. The sorting at work or its proposal ready stands in its batch
-     * (over the list when that batch is not shown) and the other batches offer
-     * nothing while it works. The whole view (no filter, no search) has one
-     * strip over every file without a title or a person instead, unless one
-     * batch strip offers them all.
+     * The one strip of sorting over the list (spec 102 §1): the state of the
+     * whole archive, with a filter or a search too. On a phone (and a phone
+     * held sideways) the state only (§11); a tree beside a research on a
+     * phone or a tablet says that sorting is on the computer.
      */
-    mwSortPlan(): SortPlan {
-        const w = win!;
-        const plan: SortPlan = { rows: new Map(), top: null };
-        if (w.model !== 'archive' || !this.materialSortGate()) return plan;
-        const r = this.materialSortRemembered();
-        if (w.filters.noTitle || w.filters.noPerson) {
-            plan.top = { target: { items: w.groups.flatMap(g => g.items), batch: null, filter: true }, state: !!r };
-            return plan;
-        }
-        const batches = w.groups.filter(g => g.kind === 'batch' && !g.pending);
-        // The whole view (no filter, no search): one strip over every file that needs it instead of one under each batch.
-        if (!r) {
-            const gate = this.materialSortGate();
-            const needy = sortNeedy(w.items);
-            const whole = sortWholeOffered({
-                narrowed: narrowing(w.filters), remembered: false, offered: gate === 'on' || gate === 'offRun', needy: needy.length,
-                batches: batches.map(g => sortNeedy(g.items).length).filter(n => n > 0),
-            });
-            if (whole) {
-                if (!w.sortWholeClosed) plan.top = { target: { items: needy, batch: null, whole: true }, state: false };
-                return plan;
-            }
-        }
-        const home = r ? batches.find(g => !!r.batch && g.batch?.name === r.batch) : undefined;
-        if (r && !home) plan.top = { target: null, state: true };
-        const busy = this.materialSortBusy();
-        for (const g of batches) {
-            const target: SortTarget = { items: g.items, batch: g.batch?.name ?? null };
-            if (g === home) plan.rows.set(g.key, { target, state: true });
-            else if (!busy && this.materialSortOfferHtml(target)) plan.rows.set(g.key, { target, state: false });
-        }
-        return plan;
-    },
-
-    /**
-     * The strips under the batches follow the sorting: a strip that comes or
-     * goes (sent, cancelled, done) lays the rows out again, otherwise the
-     * drawn strips are only rewritten (progress, the proposal ready).
-     */
-    mwSortRows(): void {
-        const w = win;
-        if (!w) return;
-        const plan = this.mwSortPlan();
-        const sig = (p: SortPlan): string => `${[...p.rows].map(([k, v]) => `${k}:${v.state ? 1 : 0}`).join('|')}#${p.top ? (p.top.state ? 1 : 0) : '-'}`;
-        if (sig(plan) !== sig(w.sortPlan)) {
-            if (!w.raf) {
-                w.raf = requestAnimationFrame(() => {
-                    w.raf = 0;
-                    if (alive(w.gen)) this.mwRebuild({ items: treeAttachmentsKey() !== w.drawnAttachments });
-                });
-            }
-            return;
-        }
-        w.sortPlan = plan;
-        for (const row of w.layout.rows) {
-            if (row.type !== 'sort') continue;
-            const el = w.rendered.get(row.key)?.querySelector<HTMLElement>('.mw-sort--row');
-            const p = plan.rows.get(row.group.key);
-            if (!el || !p) continue;
-            setStripHtml(el, p.state ? this.materialSortStateHtml() : this.materialSortOfferHtml(p.target));
-        }
-    },
-
-    /** The strip over the list (a review filter's, or the sorting whose batch is not shown). */
     mwSortStrip(): void {
         const w = win;
         const el = w?.overlay.querySelector<HTMLElement>('.mw-sort--top');
         if (!w || !el) return;
-        const top = w.sortPlan.top;
-        const html = !top ? '' : top.state && this.materialSortRemembered() ? this.materialSortStateHtml() : this.materialSortOfferHtml(top.target);
+        const s = strings.materials.agentSort;
+        let view: SortStripView | null = null;
+        let html = '';
+        let mod = '';
+        if (w.model === 'app') {
+            // A research whose agent sorts: that and its proposal are on the computer (spec 102 §13l, §11).
+            const linked = this.materialsTouchLinked() ? this.materialsContext() : null;
+            if (linked?.agent && linked.env.features?.includes(MATERIAL_SORT_FEATURE)) {
+                html = `<span class="mw-sort-text"><span class="mw-sort-note mw-sort-phone">${esc(s.phone)}</span><span class="mw-sort-note mw-sort-phone-short">${esc(s.phoneShort)}</span></span>`;
+                mod = 'is-off';
+            }
+        } else {
+            view = this.materialSortStripView(w.items, { phone: isPhoneBar(), added: w.sortAdded });
+            // Closed with its ×: back once the state is another one.
+            if (w.sortClosedState && view.state !== w.sortClosedState) w.sortClosedState = null;
+            if (!(view.state && view.state === w.sortClosedState)) { html = view.html; mod = view.mod; }
+        }
+        w.sortView = view;
         el.hidden = !html;
-        el.classList.toggle('mw-sort--whole', !!html && !top?.state && !!top?.target?.whole);
+        for (const c of ['is-done', 'is-off', 'is-error']) el.classList.toggle(c, c === mod);
+        el.dataset.state = html ? view?.state ?? '' : '';
         setStripHtml(el, html);
         el.onclick = (e) => {
-            if ((e.target as HTMLElement).closest('[data-sort="close-whole"]')) { this.mwSortWholeClose(); return; }
-            this.materialSortStripClick(e, top?.target ?? null);
+            const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-sort]');
+            if (!btn || !view) return;
+            if (btn.dataset.sort === 'close') { this.mwSortWholeClose(); return; }
+            if (btn.dataset.sort === 'review') { this.mwReview(view.review); return; }
+            this.materialSortStripClick(e, view);
         };
-        if (html || w.sortPlan.rows.size) this.materialSortWatch();
     },
 
-    /** The whole view's strip closed (×): away while the window is open; the focus goes on to the files. */
+    /** The strip closed (×, states A and E): away while its state stays; the focus goes on to the files. */
     mwSortWholeClose(): void {
         const w = win;
         if (!w) return;
-        w.sortWholeClosed = true;
-        w.sortPlan = this.mwSortPlan();
+        const state = w.sortView?.state;
+        w.sortClosedState = state === 'A' || state === 'E' ? state : null;
         this.mwSortStrip();
         const next = w.canvas.querySelector<HTMLElement>('[tabindex="0"]') ?? w.overlay.querySelector<HTMLElement>('.mw-search');
         next?.focus();
@@ -981,14 +932,6 @@ export const materialsWindowMethods = uiModule({
                     ? '<span class="mw-skel-tile"></span>'.repeat(Math.min(w.metrics.cols, 8))
                     : '<span class="mw-skel-line"></span><span class="mw-skel-line"></span>';
                 break;
-            case 'sort': {
-                // Sort with the agent under the batch's header (13b): it only opens the dialog, nothing is sent from here.
-                const plan = w.sortPlan.rows.get(row.group.key);
-                const html = plan ? (plan.state ? this.materialSortStateHtml() : this.materialSortOfferHtml(plan.target)) : '';
-                el.innerHTML = `<div class="mw-sort mw-sort--row" role="gridcell" aria-colspan="${w.metrics.cols}">${html}</div>`;
-                el.addEventListener('click', e => this.materialSortStripClick(e, plan?.target ?? null));
-                break;
-            }
             case 'end': el.setAttribute('aria-hidden', 'true'); el.removeAttribute('role'); break;
         }
         return el;
@@ -1639,6 +1582,11 @@ export const materialsWindowMethods = uiModule({
                 rows.push({ id: 'hide', label: m.batchHide, writes: true });
             }
         }
+        // Sort with the agent over the batch's files without a title or a person (spec 102 §1: the batch's strip went).
+        const gate = this.materialSortGate();
+        if (!folder && (gate === 'on' || gate === 'offRun') && (group.pending || group.items.some(i => !!i.file && !i.hidden && (!i.titled || (!i.persons.length && !i.viaBatch.length))))) {
+            rows.push({ id: 'sort', label: m.agentSort.sort, divider: rows.length > 0 });
+        }
         if (ctx.caps.openLinks !== false) rows.push({ id: 'research', label: strings.batch.openInResearch, divider: rows.length > 0 });
         return rows;
     },
@@ -1659,6 +1607,11 @@ export const materialsWindowMethods = uiModule({
         if (!w || !batch) return;
         const folderCtx = folder ? { folder: { batch: batch.id, path: folder.label } } : {};
         switch (id) {
+            case 'sort': {
+                const items = await this.mwBatchItems(batch);
+                if (win) this.openSortDialog({ items, batch: batch.name });
+                break;
+            }
             case 'select': {
                 const items = await this.mwBatchItems(batch, folder?.label);
                 const now = win;
@@ -1776,9 +1729,12 @@ export const materialsWindowMethods = uiModule({
         pop.innerHTML = actions.map(a => {
             const divider = a.divider ? '<div class="materials-item-menu-divider" role="separator"></div>' : '';
             // A read-only tree (locked, a newer version's data, an exported page) writes nothing (spec 102 §12g).
-            const why = !a.writes ? null : DataManager.isReadOnly() ? m.treeReadOnly : !ctx.caps.bridgeUp ? m.actionsWhenRunning : null;
+            const why = a.id === 'sort' ? (!ctx.caps.bridgeUp ? m.agentSort.offRun : this.materialSortBusy() ? m.agentSort.runNote : null)
+                : !a.writes ? null : DataManager.isReadOnly() ? m.treeReadOnly : !ctx.caps.bridgeUp ? m.actionsWhenRunning : null;
             const off = why ? ` aria-disabled="true" title="${esc(why)}"` : '';
-            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row" data-action="${a.id}"${off}>${researchActionLabel(a.label, a.id === 'research' ? researchLinkMark('open') : 'none')}</button>`;
+            // Sort with the agent: through the bridge, the AI badge alone.
+            const label = a.id === 'sort' ? researchBridgeActionLabel(a.label, 'material-sort') : researchActionLabel(a.label, a.id === 'research' ? researchLinkMark('open') : 'none');
+            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row" data-action="${a.id}"${off}>${label}</button>`;
         }).join('');
         pop.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(btn => btn.addEventListener('click', (e) => {
             e.stopPropagation();
