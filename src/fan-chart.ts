@@ -26,6 +26,7 @@ import {
 } from './export-image.js';
 import {
     FanColorMode, FanTheme, FanPalette, FAN_PALETTES, fanFill, fanLegend, fanHasRepeats,
+    fanMixWhite, FAN_PRINT_DIM, FAN_PRINT_EDGE, FanRodGroup,
 } from './fan-colors.js';
 import { assignFanRodColors, fanRodLegend, FanRodAssignment } from './fan-rod-assign.js';
 import {
@@ -415,12 +416,33 @@ export interface FanSvgOptions {
      * fan's own assignment, without memory.
      */
     rodColors?: FanRodAssignment;
+    /**
+     * A highlighted family line printed as it is seen (spec 114 §7; drawings
+     * with `embedStyles` only — the screen marks its sectors by class): its
+     * sectors outlined in a layer over all of them, the others' fills mixed
+     * toward white and their names lighter. Ignored when none of `hit` is drawn.
+     */
+    highlight?: FanHighlight;
     /** Sector keys to outline (e.g. a first occurrence). */
     marks?: Iterable<string>;
     /** An extra row in the focus disc and its tooltip (the way back after re-centring). */
     focusBack?: { row: string; title: string };
     /** False: shapes and titles only (during a gesture). */
     labels?: boolean;
+}
+
+/** A family line highlighted in a printed fan: its id and its people (the faint spouses print as the others). */
+export interface FanHighlight {
+    rodId: RodId;
+    hit: ReadonlySet<PersonId>;
+}
+
+/** The highlight when any of its people is drawn in the model, else null. */
+export function fanDrawnHighlight(model: FanModel, h: FanHighlight | null | undefined): FanHighlight | null {
+    if (!h || !h.hit.size) return null;
+    if (h.hit.has(model.focus.id)) return h;
+    const drawn = (p: Person | null) => !!p && h.hit.has(p.id);
+    return model.sectors.some(s => drawn(s.person)) || model.desc.some(s => drawn(s.person)) ? h : null;
 }
 
 const fmt = (n: number) => n.toFixed(2);
@@ -474,6 +496,21 @@ function themeRules(scope: string, T: FanPalette, fills: readonly string[], edit
     return css;
 }
 
+/**
+ * The window's print of a highlighted group (spec 114 §7): the dimmed and the
+ * faint sectors at full opacity, their fills mixed toward white (computed
+ * hexes) and their names lighter, so paper (even grey) shows the group.
+ */
+function printHighlightRules(scope: string, fills: readonly string[]): string {
+    const T = FAN_PALETTES.print;
+    const s = `:is(${scope},[data-theme="dark"] ${scope})`;
+    const off = ':is(.evidence-dim,.evidence-faint)';
+    let css = `${s} :is(.fan-sector,.fan-focus)${off}{opacity:1!important}`
+        + `${s} ${off} :is(.fan-name,.fan-years,.fan-kekule){fill:${T.textLight}}`;
+    fills.forEach((c, i) => { css += `${s} ${off} .fc${i}{fill:${fanMixWhite(c, FAN_PRINT_DIM)}}`; });
+    return css;
+}
+
 /** Sector title: "#241 · Marie Trnkopalová (1781–1840)" + the tie, the repeat or the partner note. */
 function sectorTitle(p: Person | null, o: {
     ahnentafel?: number; protect: boolean; extra: string[];
@@ -510,13 +547,21 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
     const embedTheme: FanTheme = opts.theme ?? 'light';
     const rc: FanRodAssignment | null = mode === 'rod' ? fanRodColorsOf(model, opts) : null;
     const marks = new Set(opts.marks ?? []);
+    // A printed highlight (spec 114 §7): the line's sectors outlined over all, the rest toward white.
+    const hl = embedded ? fanDrawnHighlight(model, opts.highlight) : null;
+    const dimmed = (p: Person | null) => !!hl && !(p && hl.hit.has(p.id));
+    const hlEdges: string[] = [];
+    const hlEdge = (d: string) => {
+        if (hl) hlEdges.push(`<path class="fan-hl-edge" d="${d}"/>`);
+    };
 
     // Fill classes: one per distinct colour pair (light/dark) or embedded colour.
     const fillClass = new Map<string, number>();
     const fillsA: string[] = [];
     const fillsB: string[] = [];
-    const fillOf = (s: Parameters<typeof fanFill>[0]): string => {
-        const a = fanFill(s, mode, embedded ? embedTheme : 'light', rc);
+    const fillOf = (s: Parameters<typeof fanFill>[0], dim = false): string => {
+        let a = fanFill(s, mode, embedded ? embedTheme : 'light', rc);
+        if (dim) a = fanMixWhite(a, FAN_PRINT_DIM);
         const b = embedded ? a : fanFill(s, mode, 'dark', rc);
         const k = `${a}${b}`;
         let i = fillClass.get(k);
@@ -583,7 +628,9 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         }
         const p = s.person;
         const prot = protect(p);
-        const fc = fillOf({ kind: 'anc', person: p, generation: s.generation, ahnentafel: s.ahnentafel });
+        const dim = dimmed(p);
+        const fc = fillOf({ kind: 'anc', person: p, generation: s.generation, ahnentafel: s.ahnentafel }, dim);
+        if (hl && !dim) hlEdge(d);
         const nonBio = s.relType ? ' fan-nonbio' : '';
         const rep = s.repeatOf != null;
         const extra: string[] = [];
@@ -601,7 +648,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
             if (fit) label = fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
         }
         if (marks.has(s.key)) over.push(`<path class="fan-mark" d="${d}" fill="none" stroke-width="3" vector-effect="non-scaling-stroke" pointer-events="none"/>`);
-        body.push(wrap(p.id, `<g class="fan-sector ${p.gender}${nonBio}${rep ? ' fan-repeat' : ''}" data-fan-key="${s.key}" data-fan-kind="anc"`
+        body.push(wrap(p.id, `<g class="fan-sector ${p.gender}${nonBio}${rep ? ' fan-repeat' : ''}${dim ? ' fan-hl-dim' : ''}" data-fan-key="${s.key}" data-fan-kind="anc"`
             + ` data-fan-ahnentafel="${s.ahnentafel}" data-fan-person="${esc(p.id)}"${rep ? ` data-fan-repeat-of="a${s.repeatOf}"` : ''}>`
             + `<path class="fan-fill ${fc}" d="${d}" ${STROKE}/>`
             + (rep ? `<path class="fan-hatch" d="${d}" fill="url(#${uid}h)" pointer-events="none"/>` : '')
@@ -625,8 +672,8 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
                     label = fanLabelSvg({ rows: [{ text: strings.fan.unknownPartner, fs, bold: false }], level: 4 }, box, ppu, labelOpts);
                 }
             }
-            body.push(`<g class="fan-sector unknown fan-partner fan-unknown-partner" data-fan-key="${s.key}" data-fan-kind="partner">`
-                + `<path class="fan-fill ${fillOf({ kind: 'partner', person: null })}" d="${d}" ${STROKE}/>`
+            body.push(`<g class="fan-sector unknown fan-partner fan-unknown-partner${hl ? ' fan-hl-dim' : ''}" data-fan-key="${s.key}" data-fan-kind="partner">`
+                + `<path class="fan-fill ${fillOf({ kind: 'partner', person: null }, !!hl)}" d="${d}" ${STROKE}/>`
                 + `<path class="fan-hatch" d="${d}" fill="url(#${uid}h)" pointer-events="none"/>`
                 + label
                 + `<title>${esc(strings.fan.unknownPartner)}</title></g>`);
@@ -634,7 +681,9 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         }
         if (!p) continue;
         const prot = protect(p);
-        const fc = fillOf({ kind: s.kind, person: p });
+        const dim = dimmed(p);
+        const fc = fillOf({ kind: s.kind, person: p }, dim);
+        if (hl && !dim) hlEdge(d);
         const extra: string[] = [];
         if (s.kind === 'partner') extra.push(strings.fan.partner);
         if (rep) extra.push(strings.fan.repeatsShownBefore);
@@ -659,7 +708,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
             }
         }
         const kindCls = s.kind === 'partner' ? ' fan-partner' : ' fan-desc';
-        body.push(wrap(p.id, `<g class="fan-sector ${p.gender}${kindCls}${rep ? ' fan-repeat' : ''}" data-fan-key="${s.key}" data-fan-kind="${s.kind}"`
+        body.push(wrap(p.id, `<g class="fan-sector ${p.gender}${kindCls}${rep ? ' fan-repeat' : ''}${dim ? ' fan-hl-dim' : ''}" data-fan-key="${s.key}" data-fan-kind="${s.kind}"`
             + ` data-fan-person="${esc(p.id)}"${rep ? ` data-fan-repeat-of="${s.repeatOfKey}"` : ''}>`
             + `<path class="fan-fill ${fc}" d="${d}" ${STROKE}/>`
             + (rep ? `<path class="fan-hatch" d="${d}" fill="url(#${uid}h)" pointer-events="none"/>` : '')
@@ -688,7 +737,9 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         flabel = fanCenteredRowsSvg(rows, ppu, esc);
     }
     const ftitle = `#1 · ${sectorTitle(f, { protect: fprot, extra: [] })}${opts.focusBack ? ` · ${opts.focusBack.title}` : ''}`;
-    body.push(wrap(null, `<g class="fan-focus ${f.gender}" data-fan-key="f" data-fan-kind="focus" data-fan-person="${esc(f.id)}">`
+    const fdim = dimmed(f);
+    if (hl && !fdim) hlEdges.push(`<circle class="fan-hl-edge" cx="0" cy="0" r="${FOCUS_R}"/>`);
+    body.push(wrap(null, `<g class="fan-focus ${f.gender}${fdim ? ' fan-hl-dim' : ''}" data-fan-key="f" data-fan-kind="focus" data-fan-person="${esc(f.id)}">`
         + `<circle class="fan-focus-disc" cx="0" cy="0" r="${FOCUS_R}" stroke-width="2" vector-effect="non-scaling-stroke"/>`
         + flabel
         + `<title>${esc(ftitle)}</title></g>`));
@@ -697,17 +748,25 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
     const scope = `#${uid}`;
     let css: string;
     if (embedded) {
-        css = themeRules(scope, FAN_PALETTES[embedTheme], fillsA, opts.editable);
+        const T = FAN_PALETTES[embedTheme];
+        css = themeRules(scope, T, fillsA, opts.editable);
+        if (hl) {
+            css += `${scope} .fan-hl-dim :is(.fan-name,.fan-years,.fan-kekule){fill:${T.textLight}}`
+                + `${scope} .fan-hl-edge{fill:none;stroke:${FAN_PRINT_EDGE};stroke-width:${fmt(2.5 / ppu)};`
+                + `stroke-dasharray:${fmt(5 / ppu)} ${fmt(3 / ppu)};stroke-linejoin:round}`;
+        }
     } else {
         css = themeRules(scope, FAN_PALETTES.light, fillsA, opts.editable)
             + themeRules(`[data-theme="dark"] ${scope}`, FAN_PALETTES.dark, fillsB, opts.editable)
-            + `@media print{${themeRules(`[data-theme="dark"] ${scope}`, FAN_PALETTES.print, fillsA, opts.editable)}}`;
+            + `@media print{${themeRules(`[data-theme="dark"] ${scope}`, FAN_PALETTES.print, fillsA, opts.editable)}`
+            + printHighlightRules(scope, fillsA) + '}';
     }
     css += `${scope} text{pointer-events:none}`;
 
     const vb = `${fmt(view.x)} ${fmt(view.y)} ${fmt(view.w)} ${fmt(view.h)}`;
     return `<svg class="fan-svg" id="${uid}" xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" data-fan-shape="${model.shape}" role="img" font-family="${SANS}">`
-        + `<style>${css}</style><defs>${defs.join('')}</defs>${body.join('')}${over.join('')}</svg>`;
+        + `<style>${css}</style><defs>${defs.join('')}</defs>${body.join('')}${over.join('')}`
+        + (hlEdges.length ? `<g class="fan-hl-layer" pointer-events="none">${hlEdges.join('')}</g>` : '') + '</svg>';
 }
 
 // ==================== FAN POSTER ====================
@@ -762,39 +821,93 @@ function posterScale(model: FanModel): number {
     return Math.max(1, Math.min(3, 12 / arc));
 }
 
-interface PosterLegendItem { text: string; color?: string; color2?: string; hatch?: boolean }
+interface PosterLegendItem {
+    text: string;
+    color?: string;
+    color2?: string;
+    hatch?: boolean;
+    /** The highlighted family line (spec 114 §7): bold and underlined, as the screen's pressed row. */
+    strong?: boolean;
+}
 
-function posterLegendItems(model: FanModel, mode: FanColorMode, opts: Pick<FanSvgOptions, 'rodColors' | 'rodIndex'>): PosterLegendItem[] {
-    const rc = mode === 'rod' ? fanRodColorsOf(model, opts) : null;
-    const items: PosterLegendItem[] = rc && rc.index.data !== model.data
-        ? rodLegendOfCopy(model, rc)
-        : fanLegend(model, mode, 'print', rc).map(i => ({ text: i.who ? `${i.label} · ${i.who}` : i.label, color: i.color, color2: i.color2 }));
-    if (fanHasRepeats(model)) items.push({ text: strings.fan.legendRepeats, hatch: true });
-    return items;
+/** A part of the poster's legend on rows of its own: a side's lines after its heading, or the rest. */
+interface PosterLegendPart {
+    head?: string;
+    /** The part's rows start after the headings' column. */
+    indent: boolean;
+    items: PosterLegendItem[];
+}
+
+type PosterRodOptions = Pick<FanSvgOptions, 'rodColors' | 'rodIndex' | 'highlight'>;
+
+/** Width of the headings' column of the legend (spec 114 §7: 112 px and a 14 px gap). */
+const POSTER_LEGEND_HEAD_W = 126;
+
+/**
+ * The poster's legend: one part in the sex and line modes; by family lines a
+ * part per side with its heading (spec 114 §7), then "Other" (or "no family
+ * line") and the repeats on a row of their own.
+ */
+function posterLegendParts(model: FanModel, mode: FanColorMode, opts: PosterRodOptions): PosterLegendPart[] {
+    const S = strings.fan;
+    const repeats: PosterLegendItem[] = fanHasRepeats(model) ? [{ text: S.legendRepeats, hatch: true }] : [];
+    if (mode !== 'rod') {
+        const items: PosterLegendItem[] = fanLegend(model, mode, 'print', null)
+            .map(i => ({ text: i.who ? `${i.label} · ${i.who}` : i.label, color: i.color, color2: i.color2 }));
+        return [{ indent: false, items: [...items, ...repeats] }];
+    }
+    const rc = fanRodColorsOf(model, opts);
+    const hl = fanDrawnHighlight(model, opts.highlight);
+    // A copy of the data (the living hidden) names each line as the copy does.
+    const legend = fanRodLegend(rc, 'print', rc.index.data !== model.data ? copyRodLabeler(model, rc.index) : undefined);
+    const heads: Record<FanRodGroup, string> = { P: S.legendFatherSide, M: S.legendMotherSide, D: S.legendDescendants };
+    const parts: PosterLegendPart[] = legend.groups.map(g => ({
+        head: heads[g.group], indent: true,
+        items: g.items.map(i => ({ text: `${i.label} · ${i.who}`, color: i.color, ...(hl?.rodId === i.key ? { strong: true } : {}) })),
+    }));
+    const grey = FAN_PALETTES.print.grey;
+    const rest: PosterLegendItem[] = [];
+    if (legend.otherRods) {
+        const strong = !!hl && legend.other.some(i => i.key === hl.rodId);
+        rest.push({ text: `${S.legendOther(legend.otherRods)} · ${legend.otherPeople}×`, color: grey, ...(strong ? { strong } : {}) });
+    } else if (legend.noRod) rest.push({ text: `${S.legendNoRod} · ${legend.noRod}×`, color: grey });
+    rest.push(...repeats);
+    if (rest.length) parts.push({ indent: parts.length > 0, items: rest });
+    return parts;
 }
 
 /**
- * The legend of a poster drawn from a copy of the data (the living hidden):
- * the window's colours, but each line named as the copy names it (through a
- * drawn member), so a hidden surname never reaches the poster.
+ * The names of the lines of a poster drawn from a copy of the data (the
+ * living hidden): each line named as the copy names it (through a drawn
+ * member), so a hidden surname never reaches the poster.
  */
-function rodLegendOfCopy(model: FanModel, rc: FanRodAssignment): PosterLegendItem[] {
+function copyRodLabeler(model: FanModel, index: LineageIndex): (id: RodId) => string {
     const own = lineagesOf(model.data);
     const ownLabels = rodLabels(own);
     const drawn = [model.focus, ...model.sectors.map(s => s.person), ...model.desc.map(s => s.person)];
-    const labelOf = (id: RodId): string => {
+    return (id: RodId): string => {
         for (const p of drawn) {
-            if (!p || rodOf(rc.index, p.id) !== id) continue;
+            if (!p || rodOf(index, p.id) !== id) continue;
             const r = rodOf(own, p.id);
             if (r) return ownLabels.get(r) ?? '–';
         }
         return '–';
     };
-    const legend = fanRodLegend(rc, 'print', labelOf);
-    const items: PosterLegendItem[] = legend.groups.flatMap(g => g.items).map(i => ({ text: `${i.label} · ${i.who}`, color: i.color }));
-    if (legend.otherRods) items.push({ text: `${strings.fan.legendOther(legend.otherRods)} · ${legend.otherPeople}×`, color: FAN_PALETTES.print.grey });
-    else if (legend.noRod) items.push({ text: `${strings.fan.legendNoRod} · ${legend.noRod}×`, color: FAN_PALETTES.print.grey });
-    return items;
+}
+
+/** The highlighted line's name for the subtitle: as the drawing's data names it, through a drawn member. */
+function highlightLabel(model: FanModel, hl: FanHighlight): string {
+    const own = lineagesOf(model.data);
+    const drawn = [model.focus, ...model.sectors.map(s => s.person), ...model.desc.map(s => s.person)];
+    const p = drawn.find(x => !!x && hl.hit.has(x.id));
+    const r = p ? rodOf(own, p.id) : null;
+    return (r && rodLabels(own).get(r)) || '–';
+}
+
+/** A row of the poster's legend: a part's heading (its first row) and its items placed from the left. */
+interface PosterLegendRow {
+    head?: string;
+    cells: Array<{ item: PosterLegendItem; x: number; w: number }>;
 }
 
 interface PosterLayout {
@@ -803,46 +916,51 @@ interface PosterLayout {
     scale: number;
     header: { x: number; y: number; w: number; h: number };
     fan: { x: number; y: number; w: number; h: number };
-    legend: { x: number; y: number; w: number; h: number; rows: Array<Array<{ item: PosterLegendItem; x: number; w: number }>> };
+    legend: { x: number; y: number; w: number; h: number; rows: PosterLegendRow[] };
     footer: number;
     title: string;
     subtitle: string;
 }
 
 function posterLayout(model: FanModel, mode: FanColorMode, meta: PosterFooterMeta, measure: FanMeasure,
-    rods: Pick<FanSvgOptions, 'rodColors' | 'rodIndex'>, protect?: (p: Person) => boolean): PosterLayout {
+    rods: PosterRodOptions, protect?: (p: Person) => boolean): PosterLayout {
     const s = posterScale(model);
     const b = model.bounds;
     const fanW = b.w * s, fanH = b.h * s;
     const S = strings.fan;
     const title = S.posterTitle(protect?.(model.focus) ? S.living : shownName(model.focus), model.shape === 'two');
-    const subtitle = [
+    const subtitleParts = [
         S.posterGenerations(model.generations, model.shape === 'two' ? model.descGenerations : null),
         S.posterShape[model.shape],
         S.posterColors[mode],
-    ].join(' · ');
+    ];
+    const hl = fanDrawnHighlight(model, rods.highlight);
+    if (hl) subtitleParts.push(S.posterHighlighted(highlightLabel(model, hl)));
+    const subtitle = subtitleParts.join(' · ');
     const titleW = Math.max(measure(title, POSTER_TITLE_FS, true), measure(subtitle, POSTER_SUB_FS, false));
     const contentW = Math.max(fanW, Math.min(titleW, 1600));
     const width = contentW + POSTER_PADDING * 2;
     const headerH = POSTER_TITLE_FS * 1.2 + 8 + POSTER_SUB_FS * 1.3;
 
-    // Legend: one row, wrapping when the poster is narrow.
-    const items = posterLegendItems(model, mode, rods);
-    const rows: PosterLayout['legend']['rows'] = [];
-    let row: PosterLayout['legend']['rows'][number] = [];
-    let x = 0;
-    for (const item of items) {
-        const w = 14 + 6 + measure(item.text, POSTER_LEGEND_FS, false) + 18;
-        if (row.length && x + w > contentW) { rows.push(row); row = []; x = 0; }
-        row.push({ item, x, w });
-        x += w;
+    // Legend: a part per row (by family lines a side after its heading), wrapping when the poster is narrow.
+    const rows: PosterLegendRow[] = [];
+    for (const part of posterLegendParts(model, mode, rods)) {
+        const x0 = part.indent ? POSTER_LEGEND_HEAD_W : 0;
+        let row: PosterLegendRow = { ...(part.head ? { head: part.head } : {}), cells: [] };
+        let x = x0;
+        for (const item of part.items) {
+            const w = 14 + 6 + measure(item.text, POSTER_LEGEND_FS, !!item.strong) + 18;
+            if (row.cells.length && x + w > contentW) { rows.push(row); row = { cells: [] }; x = x0; }
+            row.cells.push({ item, x, w });
+            x += w;
+        }
+        if (row.cells.length) rows.push(row);
     }
-    if (row.length) rows.push(row);
     const legendH = rows.length * POSTER_LEGEND_ROW;
 
     const header = { x: POSTER_PADDING, y: POSTER_PADDING, w: Math.min(titleW, contentW), h: headerH };
     const fan = { x: POSTER_PADDING + (contentW - fanW) / 2, y: POSTER_PADDING + headerH + POSTER_GAP, w: fanW, h: fanH };
-    const legendW = rows.reduce((m, r) => Math.max(m, r[r.length - 1].x + r[r.length - 1].w), 0);
+    const legendW = rows.reduce((m, r) => Math.max(m, r.cells[r.cells.length - 1].x + r.cells[r.cells.length - 1].w), 0);
     const legend = { x: POSTER_PADDING, y: fan.y + fanH + POSTER_GAP, w: legendW, h: legendH, rows };
     const footer = posterFooterHeight(meta, width);
     const height = legend.y + legendH + POSTER_PADDING + footer;
@@ -884,7 +1002,7 @@ function posterOccupancy(model: FanModel, L: PosterLayout): FanOccupancy {
  * for tile skipping.
  */
 export function fanPosterGeometry(model: FanModel, meta: PosterFooterMeta,
-    opts?: Pick<FanSvgOptions, 'colorMode' | 'measure' | 'rodIndex' | 'rodColors' | 'protect'>): FanPosterGeometry {
+    opts?: Pick<FanSvgOptions, 'colorMode' | 'measure' | 'rodIndex' | 'rodColors' | 'protect' | 'highlight'>): FanPosterGeometry {
     const L = posterLayout(model, opts?.colorMode ?? 'gender', meta, opts?.measure ?? defaultFanMeasure, opts ?? {}, opts?.protect);
     return { width: L.width, height: L.height, hasContent: posterOccupancy(model, L) };
 }
@@ -925,7 +1043,10 @@ export function buildFanPosterSvg(model: FanModel, opts: FanPosterOptions, meta:
     const lg: string[] = [];
     L.legend.rows.forEach((row, ri) => {
         const y = L.legend.y + ri * POSTER_LEGEND_ROW;
-        for (const { item, x } of row) {
+        if (row.head) {
+            lg.push(`<text x="${fmt(L.legend.x)}" y="${fmt(y + 13.5)}" font-size="${POSTER_LEGEND_FS}" font-weight="600" fill="${T.textLight}">${esc(row.head)}</text>`);
+        }
+        for (const { item, x, w } of row.cells) {
             const sx = L.legend.x + x;
             if (item.hatch) {
                 lg.push(`<rect x="${fmt(sx)}" y="${fmt(y + 2)}" width="14" height="14" fill="${T.unknown}"/>`);
@@ -935,7 +1056,9 @@ export function buildFanPosterSvg(model: FanModel, opts: FanPosterOptions, meta:
             } else {
                 lg.push(`<rect x="${fmt(sx)}" y="${fmt(y + 2)}" width="14" height="14" fill="${item.color}"/>`);
             }
-            lg.push(`<text x="${fmt(sx + 20)}" y="${fmt(y + 13.5)}" font-size="${POSTER_LEGEND_FS}" fill="${T.text}">${esc(item.text)}</text>`);
+            lg.push(`<text x="${fmt(sx + 20)}" y="${fmt(y + 13.5)}" font-size="${POSTER_LEGEND_FS}"${item.strong ? ' font-weight="600"' : ''} fill="${T.text}">${esc(item.text)}</text>`);
+            // The highlighted line: underlined as the screen's pressed row (spec 114 §7).
+            if (item.strong) lg.push(`<rect class="fan-poster-strong" x="${fmt(sx)}" y="${fmt(y + 19)}" width="${fmt(w - 18)}" height="2" fill="${T.text}"/>`);
         }
     });
     if (lg.length) out.push(`<g class="fan-poster-legend" font-family="${SANS}">${lg.join('')}</g>`);

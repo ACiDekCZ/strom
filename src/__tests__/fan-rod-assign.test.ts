@@ -14,9 +14,12 @@ import {
     assignFanRodColors, assignFanRodSlots, fanRodSides, fanRodAdjacency, fanRodLegend, fanRodSlotOf,
     FAN_ROD_MAX_STRONG, FAN_ROD_MAX_COLOURED, FanRodAssignment, FanRodInfo, FanRodModel,
 } from '../fan-rod-assign.js';
-import { FanRodSlot, fanRodSlotColor, deltaE, deltaEDeutan, parseFanRodSlot, FAN_PALETTES } from '../fan-colors.js';
-import { buildFanModel, buildFanSvg, buildFanPosterSvg, FanShape } from '../fan-chart.js';
-import { buildLineages, LineageIndex, RodId, rodOf } from '../lineage.js';
+import {
+    FanRodSlot, fanRodSlotColor, deltaE, deltaEDeutan, parseFanRodSlot, FAN_PALETTES, fanMixWhite, FAN_PRINT_DIM, FAN_PRINT_EDGE,
+} from '../fan-colors.js';
+import { buildFanModel, buildFanSvg, buildFanPosterSvg, fanPosterGeometry, FanShape, FanHighlight } from '../fan-chart.js';
+import { buildLineages, LineageIndex, RodId, rodOf, rodLabels, realRodMembers } from '../lineage.js';
+import { strings } from '../strings.js';
 import { StromData, Person, PersonId, Gender, PartnershipId, Partnership } from '../types.js';
 
 // ---------------------------------------------------------------- the reference
@@ -600,4 +603,150 @@ describe('the drawing and the poster take the window’s colours (§3, §7)', ()
         expect(poster).not.toContain('Lopuch');
         expect(poster).toContain('Jasanovec');
     });
+});
+
+describe('a highlighted line on the poster, the image and paper (§7, test 10)', () => {
+    const family = () => {
+        const persons: Record<string, Person> = {};
+        const data: StromData = { persons: persons as StromData['persons'], partnerships: {} };
+        const me = mk(persons, 'male', 'Jasanovec'), f = mk(persons, 'male', 'Jasanovec'), m = mk(persons, 'female', 'Lopuchová');
+        couple(data, f, m, [me]);
+        const mf = mk(persons, 'male', 'Lopuch');
+        couple(data, mf, mk(persons, 'female', 'Habrůvek'), [m]);
+        couple(data, mk(persons, 'male', 'Lopuch'), mk(persons, 'female', 'Mech'), [mf]);
+        couple(data, mk(persons, 'male', 'Jasanovec'), mk(persons, 'female', 'Pelyněk'), [f]);
+        return { data, me, m };
+    };
+    const opts = { esc: (t: string) => t, editable: false, addParentLabel: '', colorMode: 'rod' as const };
+    const setup = () => {
+        const { data, me, m } = family();
+        const model = buildFanModel(data, me.id, 4)!;
+        const index = buildLineages(data);
+        const a = assignFanRodColors(model, index);
+        const rod = rodOf(index, m.id)!;
+        const highlight: FanHighlight = { rodId: rod, hit: new Set(realRodMembers(index, rod)) };
+        return { data, me, model, index, a, rod, highlight };
+    };
+    const drawnOf = (svg: string, hit: ReadonlySet<PersonId>) =>
+        [...svg.matchAll(/data-fan-person="([^"]+)"/g)].filter(x => hit.has(x[1] as PersonId)).length;
+
+    it('outlines the line in a layer over the sectors, the others toward white (hexes, no opacity), the subtitle names it', () => {
+        const { model, index, a, rod, highlight } = setup();
+        const poster = buildFanPosterSvg(model, { ...opts, rodColors: a, highlight }, {});
+        const layer = /<g class="fan-hl-layer"[^>]*>(.*?)<\/g>/.exec(poster);
+        expect(layer).not.toBeNull();
+        // One outline per drawn sector of the line, after every sector.
+        const edges = (layer![1].match(/class="fan-hl-edge"/g) ?? []).length;
+        expect(edges).toBe(drawnOf(poster, highlight.hit));
+        expect(edges).toBeGreaterThan(1);
+        expect(poster.lastIndexOf('data-fan-person=')).toBeLessThan(poster.indexOf('class="fan-hl-layer"'));
+        expect(poster).toContain(`stroke:${FAN_PRINT_EDGE}`);
+        // The centre's line (another colour) printed lighter: the computed hex, not an opacity.
+        const centre = fanRodSlotColor(a.slotOf.get(rodOf(index, model.focus.id)!)!, 'print');
+        expect(poster).toContain(`{fill:${fanMixWhite(centre, FAN_PRINT_DIM)}}`);
+        expect(poster).toContain(`{fill:${fanRodSlotColor(a.slotOf.get(rod)!, 'print')}}`);
+        expect(poster).not.toMatch(/(^|[^-])opacity/);
+        // The others' names in the lighter text.
+        expect(poster).toContain(`.fan-hl-dim :is(.fan-name,.fan-years,.fan-kekule){fill:${FAN_PALETTES.print.textLight}}`);
+        // The subtitle and the legend's row (bold, underlined).
+        const label = rodLabels(index).get(rod)!;
+        expect(poster).toMatch(new RegExp(`class="fan-poster-subtitle"[^>]*>[^<]* · ${strings.fan.posterHighlighted(label)}<`));
+        expect(poster).toMatch(new RegExp(`font-weight="600" fill="[^"]+">${label} · \\d+×<`));
+        expect((poster.match(/class="fan-poster-strong"/g) ?? []).length).toBe(1);
+        // The legend in parts by side, each after its heading.
+        expect(poster).toContain(`>${strings.fan.legendFatherSide}</text>`);
+        expect(poster).toContain(`>${strings.fan.legendMotherSide}</text>`);
+        // The geometry knows the longer subtitle.
+        const plain = fanPosterGeometry(model, {}, { colorMode: 'rod', rodColors: a });
+        const lit = fanPosterGeometry(model, {}, { colorMode: 'rod', rodColors: a, highlight });
+        expect(lit.width).toBeGreaterThanOrEqual(plain.width);
+    });
+
+    it('without a highlight (or with one nobody drawn belongs to) prints none of it', () => {
+        const { model, a } = setup();
+        for (const highlight of [undefined, { rodId: 'nobody' as RodId, hit: new Set(['p0' as PersonId]) }]) {
+            const poster = buildFanPosterSvg(model, { ...opts, rodColors: a, ...(highlight ? { highlight } : {}) }, {});
+            expect(poster).not.toContain('fan-hl-layer');
+            expect(poster).not.toContain('fan-hl-dim');
+            expect(poster).not.toContain('fan-poster-strong');
+            expect(poster).not.toContain(strings.fan.posterHighlighted('').trim());
+        }
+    });
+
+    it('prints a highlight in the sex colours too (what is seen is printed)', () => {
+        const { model, highlight } = setup();
+        const poster = buildFanPosterSvg(model, { ...opts, colorMode: 'gender', highlight }, {});
+        expect((poster.match(/class="fan-hl-edge"/g) ?? []).length).toBe(drawnOf(poster, highlight.hit));
+        expect(poster).toContain(`{fill:${fanMixWhite(FAN_PALETTES.print.male, FAN_PRINT_DIM)}}`);
+        expect(poster).not.toContain('fan-poster-strong');
+    });
+
+    it('the window\'s print: the dimmed sectors at full opacity, their fills toward white', () => {
+        const { model, a } = setup();
+        const svg = buildFanSvg(model, { ...opts, uid: 'w', rodColors: a });
+        const print = svg.slice(svg.indexOf('@media print{'));
+        expect(print).toContain(':is(.fan-sector,.fan-focus):is(.evidence-dim,.evidence-faint){opacity:1!important}');
+        const centre = fanRodSlotColor(a.slotOf.get(rodOf(a.index, model.focus.id)!)!, 'light');
+        expect(print).toContain(`:is(.evidence-dim,.evidence-faint) .fc`);
+        expect(print).toContain(`{fill:${fanMixWhite(centre, FAN_PRINT_DIM)}}`);
+        // The screen's drawing has no layer of its own (the renderer adds it by class).
+        expect(svg).not.toContain('fan-hl-layer');
+    });
+});
+
+describe('shapes and a dense fan (§8)', () => {
+    /** Eight full rings: a father keeps the surname, every mother brings a line of her own. */
+    const dense = () => {
+        const persons: Record<string, Person> = {};
+        const data: StromData = { persons: persons as StromData['persons'], partnerships: {} };
+        const name = new Map<number, string>();
+        const at = new Map<number, Person>();
+        for (let n = 1; n < 512; n++) {
+            name.set(n, n === 1 || n % 2 === 1 ? `Tvarek${n}` : name.get(n / 2)!);
+            at.set(n, mk(persons, n === 1 || n % 2 === 0 ? 'male' : 'female', name.get(n)!));
+        }
+        for (let n = 1; n < 256; n++) couple(data, at.get(2 * n)!, at.get(2 * n + 1)!, [at.get(n)!]);
+        // A daughter's husband and child: a line of the descendants alone.
+        const kid = mk(persons, 'female', name.get(1)!);
+        couple(data, at.get(1)!, mk(persons, 'female', 'Tvarek0'), [kid]);
+        couple(data, mk(persons, 'male', 'Tvarek600'), kid, [mk(persons, 'male', 'Tvarek600')]);
+        return { data, focus: at.get(1)! };
+    };
+
+    it('half and full circle: no Descendants part; two-way: the descendants\' part', () => {
+        const { data, focus } = dense();
+        const index = buildLineages(data);
+        const groups = (shape: FanShape) => {
+            const model = buildFanModel(data, focus.id, { generations: 4, shape, descGenerations: 2 })!;
+            return fanRodLegend(assignFanRodColors(model, index), 'light').groups.map(g => g.group);
+        };
+        expect(groups('half')).not.toContain('D');
+        expect(groups('full')).not.toContain('D');
+        expect(groups('two')).toContain('D');
+    });
+
+    it('eight rings: the lines hold together, the small ones muted, the single ones grey; a small line highlighted alone', () => {
+        const { data, focus } = dense();
+        const index = buildLineages(data);
+        const model = buildFanModel(data, focus.id, { generations: 8, shape: 'full' })!;
+        expect(model.generations).toBe(8);
+        const a = assignFanRodColors(model, index);
+        checkK11(a, 'dense');
+        for (const r of a.rods) if (r.count < 2) expect(a.slotOf.has(r.id)).toBe(false);
+        const coloured = a.rods.filter(r => a.slotOf.has(r.id));
+        expect(coloured.length).toBe(FAN_ROD_MAX_COLOURED);
+        // The smallest coloured line takes a muted slot.
+        const small = coloured.reduce((x, y) => (y.count < x.count ? y : x));
+        expect(parseFanRodSlot(a.slotOf.get(small.id)!)!.tier).toBe('T');
+        const highlight: FanHighlight = { rodId: small.id, hit: new Set(realRodMembers(index, small.id)) };
+        const poster = buildFanPosterSvg(model, { ...opts(), rodColors: a, highlight }, {});
+        expect((poster.match(/class="fan-hl-edge"/g) ?? []).length).toBe(small.count);
+        expect((poster.match(/class="fan-poster-strong"/g) ?? []).length).toBe(1);
+        // A grey line highlighted: "Other" is the legend's marked row.
+        const grey = a.rods.find(r => !a.slotOf.has(r.id) && r.count === 1)!;
+        const g = buildFanPosterSvg(model, { ...opts(), rodColors: a, highlight: { rodId: grey.id, hit: new Set(realRodMembers(index, grey.id)) } }, {});
+        expect((g.match(/class="fan-hl-edge"/g) ?? []).length).toBe(1);
+        expect(g).toMatch(/font-weight="600" fill="[^"]+">[^<]+ · \d+ [^<]+ · \d+×<\/text>\s*<rect class="fan-poster-strong"/);
+    });
+    const opts = () => ({ esc: (t: string) => t, editable: false, addParentLabel: '', colorMode: 'rod' as const });
 });

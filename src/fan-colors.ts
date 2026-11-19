@@ -160,6 +160,21 @@ export function deltaEDeutan(a: string, b: string): number {
     return deltaE(deuteranopia(a), deuteranopia(b));
 }
 
+/**
+ * A hex colour mixed toward white by `t` (0…1) in sRGB: what a highlight
+ * leaves of the other sectors on paper (spec 114 §7; a hex, not an opacity).
+ */
+export function fanMixWhite(hex: string, t: number): string {
+    const n = parseInt(hex.slice(1), 16);
+    const ch = (v: number) => Math.round(v + (255 - v) * t).toString(16).padStart(2, '0');
+    return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
+}
+
+/** How far the sectors outside a printed highlight go toward white (spec 114 §7). */
+export const FAN_PRINT_DIM = 0.62;
+/** The printed highlight's dashed outline: the copper of `--accent-text` (spec 114 §7). */
+export const FAN_PRINT_EDGE = '#8a5528';
+
 /** WCAG relative luminance of a hex colour. */
 export function relativeLuminance(hex: string): number {
     const [r, g, b] = hexToLinear(hex);

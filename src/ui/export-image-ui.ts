@@ -370,8 +370,11 @@ function buildCurrentPoster(): PosterBuild | null {
         const rodColors = colorMode === 'rod' && shown && shown.focus.id === focusId && shown.shape === model.shape
             && shown.generations === model.generations && shown.descGenerations === model.descGenerations
             ? view?.getRodAssignment() ?? null : null;
+        // A highlighted family line prints as it is seen (spec 114 §7).
+        const highlight = view?.getPrintHighlight() ?? null;
         const svg = buildFanPosterSvg(model, {
             ...(rodColors ? { rodColors } : {}),
+            ...(highlight ? { highlight } : {}),
             esc: escapeXml,
             editable: false,
             addParentLabel: '',
@@ -380,7 +383,7 @@ function buildCurrentPoster(): PosterBuild | null {
             mmPerPx: MM_PER_PX,
             fontFaceCss: appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]),
         }, meta);
-        const geom = fanPosterGeometry(model, meta, { colorMode, ...(rodColors ? { rodColors } : {}) });
+        const geom = fanPosterGeometry(model, meta, { colorMode, ...(rodColors ? { rodColors } : {}), ...(highlight ? { highlight } : {}) });
         return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };
     }
 

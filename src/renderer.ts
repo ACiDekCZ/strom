@@ -4665,6 +4665,8 @@ class TreeRendererClass {
         this.evidenceIds = ids;
         this.evidenceFaintIds = ids ? faint : null;
         this.applyEvidenceHighlight();
+        // The fan's legend chip names a highlighted family line (spec 114 §6).
+        this.fanView?.refreshLegend();
     }
 
     /** The Evidence mode: each card framed by its level (full / partial / none); null ends it. */
@@ -7179,6 +7181,7 @@ class TreeRendererClass {
                 homeChanged: () => updateDefaultFocusButtons(),
                 menuClosed: () => UI.fanFollowMenuClosed?.(),
                 selectedRod: () => UI.selectedRod(),
+                highlightedRod: () => (UI.evidenceHighlightKind() === 'rod' ? UI.selectedRod() : null),
                 selectRod: id => UI.selectRodFromFan(id),
                 previewRod: group => this.setFanRodPreview(group),
                 personDetail: id => UI.runPersonMenuAction(id, 'edit'),

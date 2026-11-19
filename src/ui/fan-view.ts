@@ -21,7 +21,7 @@
 
 import type { PersonId, StromData } from '../types.js';
 import {
-    buildFanModel, buildFanSvg, fanLineages, FanModel, FanShape, FanSvgOptions,
+    buildFanModel, buildFanSvg, fanLineages, FanHighlight, FanModel, FanShape, FanSvgOptions,
 } from '../fan-chart.js';
 import {
     FanColorMode, FanTheme, fanLegend, fanHasRepeats, FanLegendItem, FanRodGroup, FanRodSlot, parseFanRodSlot, FAN_PALETTES,
@@ -69,6 +69,8 @@ export interface FanViewHost {
     addParentLabel(): string;
     /** The family line chosen in the tree view (its legend row marked). */
     selectedRod?(): string | null;
+    /** The chosen family line while its highlight holds the pill (no other group covers it); else null. */
+    highlightedRod?(): string | null;
     /**
      * A legend row or a sector's menu (spec 114 §5): the family line becomes
      * the tree's chosen line (spec 039, one state with the Family view); null:
@@ -251,6 +253,20 @@ export class FanViewController {
      */
     getRodAssignment(): FanRodAssignment | null {
         return this.rodColors();
+    }
+
+    /**
+     * The highlighted family line as a poster or an image prints it (spec 114
+     * §7): its id and its people in the tree, or null when no line's highlight
+     * is on.
+     */
+    getPrintHighlight(): FanHighlight | null {
+        const id = this.host.highlightedRod?.() ?? null;
+        if (!id) return null;
+        const index = fanLineages(this.host.data());
+        const rodId = id as RodId;
+        const hit = new Set(realRodMembers(index, rodId));
+        return hit.size ? { rodId, hit } : null;
     }
 
     private rodColors(): FanRodAssignment | null {
@@ -1256,7 +1272,13 @@ export class FanViewController {
             if (color?.dataset.fanColor) { this.host.setColorMode(color.dataset.fanColor as FanColorMode); return; }
             if (t.closest('#fan-legend-head')) { this.toggleLegend(); return; }
             const rod = t.closest<HTMLElement>('[data-fan-rod]');
-            if (rod?.dataset.fanRod) { this.toggleRod(rod.dataset.fanRod); return; }
+            if (rod?.dataset.fanRod) {
+                // §6: a tap in the sheet closes it, so the fan shows the line (the chip names it).
+                const inSheet = !!rod.closest('#fan-sheet-items');
+                this.toggleRod(rod.dataset.fanRod);
+                if (inSheet) this.closeSheet();
+                return;
+            }
             if (t.closest('.fan-legend-other')) { this.toggleLegendOther(); return; }
             if (t.closest('#fan-legend-chip')) { this.openSheet(); return; }
             if (t.closest('[data-fan-sheet-close]')) { this.closeSheet(); return; }
@@ -1522,13 +1544,34 @@ export class FanViewController {
         }
         const chip = c.querySelector<HTMLElement>('#fan-legend-chip');
         if (chip) {
-            const dots = this.chipDots()
-                .map(d => `<span class="fan-chip-dot" style="--sl:${d.light};--sd:${d.dark}"></span>`).join('');
-            chip.innerHTML = `<span class="fan-chip-dots" aria-hidden="true">${dots}</span>`
-                + `<span class="fan-chip-label">${esc(label)}</span><span class="fan-chip-arrow" aria-hidden="true">▴</span>`;
-            chip.setAttribute('aria-label', strings.fan.colorsChip(label));
+            // §6: a highlighted line in the fan: its swatch and name (the pill below carries the ×).
+            const rod = this.chipRod();
+            let html: string;
+            if (rod) {
+                html = this.swatch(rod) + `<span class="fan-chip-label">${esc(rod.light.label)}</span>`;
+                chip.setAttribute('aria-label', strings.fan.colorsChipRod(label, rod.light.label));
+            } else {
+                const dots = this.chipDots()
+                    .map(d => `<span class="fan-chip-dot" style="--sl:${d.light};--sd:${d.dark}"></span>`).join('');
+                html = `<span class="fan-chip-dots" aria-hidden="true">${dots}</span><span class="fan-chip-label">${esc(label)}</span>`;
+                chip.setAttribute('aria-label', strings.fan.colorsChip(label));
+            }
+            html += '<span class="fan-chip-arrow" aria-hidden="true">▴</span>';
+            if (chip.innerHTML !== html) chip.innerHTML = html;
+            chip.classList.toggle('has-rod', !!rod);
             chip.toggleAttribute('hidden', !this.model);
         }
+    }
+
+    /** The chip's family line: the chosen one while it is highlighted and drawn in the fan (colours by family lines). */
+    private chipRod(): { light: FanLegendItem; dark: FanLegendItem; print: FanLegendItem } | null {
+        const id = this.host.highlightedRod?.() ?? null;
+        const L = id && this.host.settings().colorMode === 'rod' ? this.rodLegends() : null;
+        if (!L || !id) return null;
+        const find = (l: FanRodLegend) => l.groups.flatMap(g => g.items).concat(l.other).find(i => i.key === id) ?? null;
+        const light = find(L.light);
+        if (!light) return null;
+        return { light, dark: find(L.dark) ?? light, print: find(L.print) ?? light };
     }
 
     /** One tab stop in the legend's rows: the pressed row, else "Other" when it marks the chosen line, else the first. */
