@@ -54,7 +54,7 @@ import { migrateData } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { listSnapshots, getSnapshotJson } from '../snapshots.js';
 import { qualityOnlySources } from '../citation-quality.js';
-import { StromData, TreeId, TreeMetadata, STROM_DATA_VERSION } from '../types.js';
+import { PersonId, StromData, TreeId, TreeMetadata, STROM_DATA_VERSION } from '../types.js';
 
 const T1 = 'kvapilik' as TreeId;
 
@@ -182,7 +182,7 @@ describe('the backup before the data update fails: the stored tree is not update
         // The open tree in memory (migrateData joins the source there) is edited and saved.
         const open = migrateData(structuredClone(read.data));
         expect(open.sources?.['s1~1']).toBeUndefined();
-        open.persons.p0.firstName = 'Zbyhněvek';
+        open.persons['p0' as PersonId].firstName = 'Zbyhněvek';
         TreeManager.saveTreeData(T1, open);
         await TreeManager.flush();
         expect(st('trees').get(T1)).toEqual(stored);
@@ -202,7 +202,7 @@ describe('the backup before the data update fails: the stored tree is not update
         expect(JSON.parse((await getSnapshotJson(backups[0].id))!)).toEqual(stored);
         const saved = st('trees').get(T1) as StromData;
         expect(saved.version).toBe(STROM_DATA_VERSION);
-        expect(saved.persons.p0.firstName).toBe('Zbyhněvek');
+        expect(saved.persons['p0' as PersonId].firstName).toBe('Zbyhněvek');
         expect(saveFailures).toBe(2);
     });
 
