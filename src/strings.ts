@@ -10634,6 +10634,16 @@ const stringsEN = {
         ariaFailed: 'photo not loaded',
         /** The portrait editor waits for the photo it would open on (the crop, Make portraits…). */
         recropWait: 'The crop can be edited once the photo has loaded.',
+        /** The indicator of the tree's photos on their way (spec 116 §6, src/ui/image-load-chip.ts). */
+        chipLabel: 'Photos',
+        chipAria: (k: number, n: number) => `Loading photos: ${k} of ${n}`,
+        chipFailed: (n: number) => `· ${n} not loaded`,
+        /** Its detail (a click on the indicator). */
+        detailLeft: (left: number, failed: number) => `${left} to go · ${failed} not loaded`,
+        detailEditable: 'The tree can be edited meanwhile.',
+        /** The notice once the photos that did not load are known (§7): the title, and why when the research lacks them. */
+        someFailed: (n: number) => `Some photos did not load (${n}).`,
+        whyMissing: 'The research does not have these photos.',
     },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {
@@ -20859,6 +20869,13 @@ const stringsCZ: StringsType = {
         ariaLoading: 'fotka se načítá',
         ariaFailed: 'fotka se nenačetla',
         recropWait: 'Výřez půjde upravit po načtení fotky.',
+        chipLabel: 'Fotky',
+        chipAria: (k: number, n: number) => `Načítají se fotky: ${k} z ${n}`,
+        chipFailed: (n: number) => `· ${n} nenačteno`,
+        detailLeft: (left: number, failed: number) => `Zbývá ${left} · nenačteno ${failed}`,
+        detailEditable: 'Strom lze mezitím upravovat.',
+        someFailed: (n: number) => `Některé fotky se nenačetly (${n}).`,
+        whyMissing: 'Výzkum tyto fotky nemá.',
     },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {
@@ -31003,6 +31020,13 @@ const stringsDE: StringsType = {
         ariaLoading: 'Foto wird geladen',
         ariaFailed: 'Foto nicht geladen',
         recropWait: 'Der Ausschnitt lässt sich bearbeiten, sobald das Foto geladen ist.',
+        chipLabel: 'Fotos',
+        chipAria: (k: number, n: number) => `Fotos werden geladen: ${k} von ${n}`,
+        chipFailed: (n: number) => `· ${n} nicht geladen`,
+        detailLeft: (left: number, failed: number) => `Noch ${left} · ${failed} nicht geladen`,
+        detailEditable: 'Der Stammbaum kann inzwischen bearbeitet werden.',
+        someFailed: (n: number) => `Einige Fotos wurden nicht geladen (${n}).`,
+        whyMissing: 'Die Forschung hat diese Fotos nicht.',
     },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {

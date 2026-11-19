@@ -3671,8 +3671,14 @@ export const researchUiMethods = uiModule({
                 if (appMedia) {
                     patchResearchAutoState(treeId, { mediaBase: { research: appMedia.researchId,
                         keys: researchMediaKeys(withArrivedImages(appMedia.research, arrived)).slice(0, MEDIA_BASE_MAX) } });
-                    // The tree lacks files the archive holds: its writes only add, tried again by itself, then said (spec 108).
-                    if (failed > 0) this.researchMediaMissed(treeId, appMedia.researchId);
+                    // The tree lacks files the archive holds: its writes only add until they came (spec 108). The images
+                    // not had are said by the photos' notice with Try again (spec 116 §7, src/ui/image-load-chip.ts).
+                    if (failed > 0) noteResearchMediaMissed(treeId, appMedia.researchId);
+                    else if (researchAutoState(treeId).mediaMissed?.toLowerCase() === appMedia.researchId.toLowerCase()) {
+                        // A Try again brought them all: the tree holds the archive's files again.
+                        patchResearchAutoState(treeId, { mediaMissed: undefined });
+                        mediaRetryDone(treeId);
+                    }
                 }
                 o.onDone?.({ treeId, failed });
             },

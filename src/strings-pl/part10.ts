@@ -137,5 +137,12 @@ export const plPart10: Pick<StringsType, 'busy' | 'photos'> = {
         ariaLoading: 'zdjęcie się wczytuje',
         ariaFailed: 'zdjęcie nie wczytane',
         recropWait: 'Kadr można edytować po wczytaniu zdjęcia.',
+        chipLabel: 'Zdjęcia',
+        chipAria: (k: number, n: number) => `Wczytywanie zdjęć: ${k} z ${n}`,
+        chipFailed: (n: number) => `· nie wczytano: ${n}`,
+        detailLeft: (left: number, failed: number) => `Pozostało ${left} · nie wczytano: ${failed}`,
+        detailEditable: 'Drzewo można w tym czasie edytować.',
+        someFailed: (n: number) => `Niektóre zdjęcia nie zostały wczytane (${n}).`,
+        whyMissing: 'Badanie nie ma tych zdjęć.',
     },
 };

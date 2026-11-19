@@ -47,6 +47,7 @@ import { peekBecomeMainMark, retryBecomeMain, takeBecomeMainMark } from './windo
 import { formatLiveClock } from './live-time.js';
 import { startedAgainAsMain } from './resume-view.js';
 import { initWindowControls } from './windows/window-controls.js';
+import { initImageLoadChip } from './ui/image-load-chip.js';
 import { windowTitle } from './windows/window-title.js';
 import { mountSatHeader, SAT_VIEWS } from './windows/sat-header.js';
 import { followSatelliteView, openAnotherWindow } from './windows/sat-views.js';
@@ -891,6 +892,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Strom Research in the app: welcome-screen offer + menu item gating.
     UI.initResearchPromo();
+
+    // The tree's photos on their way: "Photos k / n" and the notice of those that did not load (spec 116 §6, §7).
+    initImageLoadChip(() => DataManager.getCurrentTreeId());
 
     // History in the life timeline (on by default): bridge statuses, tree switches.
     UI.initHistoryLayer();

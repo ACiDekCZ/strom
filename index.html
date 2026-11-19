@@ -25107,6 +25107,56 @@
             .evidence-pill-next, .evidence-pill-cite, .evidence-pill-sources, .evidence-pill-close { height: 40px; min-width: 40px; }
         }
 
+        /* The tree's photos on their way, "Photos k / n" (spec 116 §6, src/ui/image-load-chip.ts): quieter than the
+           highlight pill whose place it takes, under the top bar in the middle (below the pills when they are up:
+           --img-chip-below, measured); at most 1024 wide above the bottom bar (above a pill there: --img-chip-above). */
+        .img-load-chip {
+            position: fixed; top: max(calc(var(--toolbar-h, 56px) + 8px), var(--img-chip-below, 0px)); left: 50%; transform: translateX(-50%); z-index: 95;
+            display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; min-height: 30px; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text-light);
+            box-shadow: var(--shadow-sm); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer;
+        }
+        .img-load-chip[hidden], .img-load-pop[hidden], .img-load-chip > [hidden] { display: none; }
+        .img-load-chip .prog-t { color: var(--text); font-weight: 600; }
+        .img-load-chip .bar { flex: 0 1 56px; width: 56px; min-width: 24px; }
+        .img-load-chip .ok { font-weight: 700; color: var(--text); }
+        .img-load-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) { .img-load-chip:hover { border-color: var(--text-faint); } }
+        /* Its detail (a click): under it, above it where it stands at the bottom (placed by the script). */
+        .img-load-pop {
+            position: fixed; z-index: 96; transform: translateX(-50%); width: max-content; max-width: min(280px, calc(100vw - 32px));
+            display: flex; flex-direction: column; box-sizing: border-box;
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+            padding: 10px 12px; font-size: 12.5px; line-height: 1.5; color: var(--text-light); font-variant-numeric: tabular-nums;
+        }
+        .img-load-pop b { color: var(--text); font-weight: 600; }
+        .img-load-pop-note { color: var(--text-faint); }
+        /* Where the highlight pill moves (the focus bar, the descendants badge, the fan's toolbar), it moves too. */
+        @media (min-width: 1025px) {
+            body.has-focus-panel:not(.standalone-view) .img-load-chip,
+            body.descendants-view .img-load-chip,
+            body[data-view-mode="fan"] .img-load-chip { top: max(112px, calc(var(--fan-toolbar-bottom, 0px) + 8px), var(--img-chip-below, 0px)); }
+            body.overview-docked .img-load-chip { left: calc((100vw - var(--overview-w)) / 2); }
+        }
+        @media (max-width: 1024px) {
+            .img-load-chip { top: auto; bottom: max(calc(var(--bottom-bar-h, 64px) + 16px + var(--live-strip-h, 0px)), var(--img-chip-above, 0px)); }
+        }
+        /* Phones: in the middle between back / forward (16–112 from the left) and the zoom's column (12 + 48 from the
+           right); the count wraps rather than run under them. */
+        @media (max-width: 640px) {
+            .img-load-chip { left: calc((120px + 100vw - 64px) / 2); max-width: calc(100vw - 184px); }
+            .img-load-chip .img-load-n { white-space: normal; min-width: 0; line-height: 1.25; }
+        }
+        /* Held sideways: at the bottom of the tree, in the middle of what the side bar leaves. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .img-load-chip { bottom: max(12px, var(--img-chip-above, 0px)); left: calc(50% + var(--side-bar-w, 0px) / 2); max-width: none; }
+        }
+        @media (pointer: coarse) { .img-load-chip { min-height: 44px; } }
+        body.slideshow-mode .img-load-chip, body.slideshow-mode .img-load-pop,
+        html.window-overview .img-load-chip, html.window-overview .img-load-pop,
+        body.view-mode-print .img-load-chip, body.view-mode-print .img-load-pop { display: none; }
+        @media print { .img-load-chip, .img-load-pop { display: none !important; } }
+
         /* Back to the tree overview from its highlight: on phones the pill takes two rows. */
         .evidence-pill-back {
             flex: none; height: 30px; padding: 0 10px; cursor: pointer; border: 0; border-radius: var(--r-sm);
