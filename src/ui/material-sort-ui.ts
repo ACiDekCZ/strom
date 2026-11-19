@@ -27,7 +27,7 @@ import { overviewItems, nameWithoutYears } from '../materials-overview.js';
 import {
     sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
     sortNext, sortLeftMap, sortCopyOf, sortStripState, sortRunBatches, sortProposalCounts, sortLeftIds, sortBackRow,
-    sortJobsMerged, sortRunView, sortRunAdvance, type SortRunView,
+    sortJobsMerged, sortRunView, sortRunAdvance, sortRunEnded, sortRunCancelled, sortRunRest, sortFinishedSorts, sortRunContinued, type SortRunView,
     type SortNext, type SortNextOpts, type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite, type SortCounts, type SortStripState,
 } from '../material-sort.js';
 import { researchPersonRef } from '../research-link.js';
@@ -50,7 +50,7 @@ const PREVIEWS = 6;
 const SORT_MANY_BATCHES = 10;
 
 /** What the dialog sorts (spec 102 §2): every unsorted file, the selected ones, a batch's, the first 50 only. */
-type SortScope = 'all' | 'selection' | 'batch' | 'first';
+type SortScope = 'all' | 'selection' | 'batch' | 'first' | 'rest';
 const TOAST_MS = 8000;
 
 /** Whether sorting is offered: on, offered but off (not running), only said (an older research), or not at all. */
@@ -65,6 +65,14 @@ export interface SortTarget {
     whole?: boolean;
     /** The files selected by hand: sent as selected, finished ones too. */
     selection?: boolean;
+    /**
+     * What is left of a run (Try again, Continue; spec 102 §3): the files of
+     * its batches that did not run, sent as the run sent them; the new
+     * batches join the proposal still open.
+     */
+    rest?: boolean;
+    /** What was said about the files before (the dialog starts with it). */
+    text?: string;
 }
 
 /**
@@ -72,7 +80,8 @@ export interface SortTarget {
  * state, its markup, and the files its actions take.
  */
 export interface SortStripView {
-    state: SortStripState | 'ended' | null;
+    /** A–F, a sorting ended without a proposal, a batch of a run that did not run, a run stopped elsewhere (spec 102 §3). */
+    state: SortStripState | 'ended' | 'error' | 'stopped' | null;
     html: string;
     /** The strip's modifier: '' (at work, waiting), is-done (E, F), is-off (not running, read-only, older), is-error (failed). */
     mod: '' | 'is-done' | 'is-off' | 'is-error';
@@ -103,7 +112,31 @@ let watch: {
     run?: SortRunState | null; jobs?: Map<string, SortJob>;
     /** Waiting for the bridge to come up (asked at once when it does). */
     down?: boolean;
+    /** The proposal's earlier sortings (Try again, Continue: spec 102 §3), read once each; null: the research no longer has it. */
+    earlier?: Map<string, SortJob | null>;
+    /** Why a run's batch did not run (its sorting's reason), read once each. */
+    reasons?: Map<string, string>;
 } | null = null;
+
+/**
+ * The finished sortings a proposal had before Try again or Continue (spec
+ * 102 §3), read once each; `missing`: one could not be read now (asked again
+ * with the next answer).
+ */
+async function earlierJobs(w: NonNullable<typeof watch>, base: string, ids: readonly string[] | undefined): Promise<{ jobs: SortJob[]; missing: boolean }> {
+    if (!ids?.length) return { jobs: [], missing: false };
+    const got = (w.earlier ??= new Map());
+    let missing = false;
+    for (const id of ids) {
+        if (got.has(id)) continue;
+        const one = await fetchMaterialSort(base, id);
+        if (watch !== w) return { jobs: [], missing: true };
+        if (one.ok) got.set(id, one.value);
+        else if (one.error.status === 404) got.set(id, null);
+        else missing = true;
+    }
+    return { jobs: ids.map(id => got.get(id)).filter((j): j is SortJob => !!j), missing };
+}
 
 /** The open proposal takes in what a run's batch just finished brought (spec 102 §3), and redraws its run line. */
 let proposalRun: ((job: SortJob) => void) | null = null;
@@ -138,11 +171,31 @@ function runBarHtml(v: SortRunView, label: string): string {
     return `<span class="mw-sort-bar is-run" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${v.files}" aria-valuenow="${v.filesDone}"><span style="width: ${pct}%"></span>${ticks}</span>`;
 }
 
-/** The strip's line of a run at work (spec 102 §3): which batch, how far in it. */
+/** The strip's line of a run at work (spec 102 §3): which batch, how far in it, or that it waits. */
 function runLabel(v: SortRunView): string {
     const s = strings.materials.agentSort;
+    if (v.waiting) return s.runWaiting(v.batch, v.batches);
     if (v.starting) return s.runStarting(v.batch, v.batches);
     return v.batchDone !== undefined ? s.runBatch(v.batch, v.batches, v.batchDone, v.batchFiles) : s.runBatchFiles(v.batch, v.batches, v.batchFiles);
+}
+
+/**
+ * Why a run's next batch waits (spec 102 §3, the research's `waiting`): the
+ * app's readings, the readers' limit or another word of theirs, and when it
+ * starts by itself.
+ */
+function runWaitText(w: { why: string; retry?: number }): string {
+    const s = strings.materials.agentSort;
+    const why = w.why === 'read.app' ? s.waitApp : w.why === 'limit' ? s.errLimit : w.why === 'archive' ? s.errNone : s.errNotReady(w.why);
+    if (!w.retry) return why;
+    const min = Math.max(1, Math.ceil(w.retry / 60));
+    return `${why} ${min >= 90 ? s.waitRetry(Math.round(min / 60), true) : s.waitRetry(min, false)}`;
+}
+
+/** Why a batch of a run did not run, in words (spec 102 §3): the readers' limit, else the agent did not finish it. */
+function runErrorText(code: string): string {
+    const s = strings.materials.agentSort;
+    return code === 'limit' ? s.errLimit : s.batchErr;
 }
 
 function esc(text: string): string {
@@ -234,6 +287,8 @@ export const materialSortMethods = uiModule({
     materialSortBusy(): boolean {
         const r = this.materialSortRemembered();
         if (!r || r.ended) return false;
+        // A run that ended (a batch did not run, stopped, cancelled here): nothing at work.
+        if (r.run?.error || r.run?.stopped || r.run?.cancelled) return false;
         return watch?.id === sortKey(r) ? running(watch.job) : true;
     },
 
@@ -363,15 +418,16 @@ export const materialSortMethods = uiModule({
         const runs = !!mc.caps.sortRun;
         const all = [...this.materialSortItemMap(mc.treeId).values()];
         // The scopes (spec 102 §2): the one it came from first; every file without a title or a person always.
-        const base: SortScope = target.selection ? 'selection' : target.batch ? 'batch' : 'all';
+        // What is left of a run (Try again, Continue): only that, it goes on with the proposal still open.
+        const base: SortScope = target.rest ? 'rest' : target.selection ? 'selection' : target.batch ? 'batch' : 'all';
         const plans = new Map<string, SortNext>();
         const planOf = (scope: SortScope, withText: boolean): SortNext => {
             const key = `${scope}:${withText}`;
             const known = plans.get(key);
             if (known) return known;
-            const from = scope === 'selection' || scope === 'batch' ? target.items : all;
-            // A batch's files come with the target: over them as over everything.
-            let plan = this.materialSortNext(from, { scope: scope === 'selection' ? 'selection' : 'all', all, withText });
+            const from = scope === 'rest' ? sortNeedy(target.items) : scope === 'selection' || scope === 'batch' ? target.items : all;
+            // A batch's files come with the target: over them as over everything. What is left of a run goes as it went.
+            let plan = this.materialSortNext(from, { scope: scope === 'selection' || scope === 'rest' ? 'selection' : 'all', all, withText });
             if (!runs || scope === 'first') {
                 const first = plan.batches.slice(0, 1);
                 plan = { ...plan, batches: first, over: plan.send.length - (first[0]?.length ?? 0) };
@@ -384,9 +440,9 @@ export const materialSortMethods = uiModule({
         const batchesOf = (p: SortNext) => sortRunBatches(filesOf(p).map(i => i.file!.id)).length;
         const candidates = (p: SortNext) => p.send.length + p.skipped.copies.length + p.skipped.text.length + p.skipped.sources.length + p.skipped.left.length;
         if (!filesOf(planOf(base, false)).length && !filesOf(planOf(base, true)).length) return;
-        const scopes: SortScope[] = base === 'all' ? ['all'] : [base, 'all'];
+        const scopes: SortScope[] = base === 'all' || base === 'rest' ? [base] : [base, 'all'];
         // Many batches: First 50 only, to try (§12).
-        if (runs && batchesOf(planOf('all', false)) > SORT_MANY_BATCHES) scopes.splice(scopes.indexOf('all') + 1, 0, 'first');
+        if (runs && scopes.includes('all') && batchesOf(planOf('all', false)) > SORT_MANY_BATCHES) scopes.splice(scopes.indexOf('all') + 1, 0, 'first');
         const marks = this.materialSortMarks(all);
         const flagged = (i: MaterialItem) => marks.copyOf.has(i.file!.id) || (!!mc.caps.sourceOf && !!i.file!.uses?.of?.length);
 
@@ -412,7 +468,8 @@ export const materialSortMethods = uiModule({
             input.value = sc;
             input.checked = sc === scope;
             input.addEventListener('change', () => { if (input.checked) { scope = sc; draw(); } });
-            const name = h('span', 'mdlg-scope-name', sc === 'all' ? s.scopeAll : sc === 'selection' ? s.scopeSel : sc === 'batch' ? s.scopeBatch(target.batch ?? '') : s.scopeFirst);
+            const name = h('span', 'mdlg-scope-name', sc === 'all' ? s.scopeAll : sc === 'selection' ? s.scopeSel : sc === 'batch' ? s.scopeBatch(target.batch ?? '')
+                : sc === 'rest' ? s.scopeRest : s.scopeFirst);
             const subText = sc === 'first' ? s.scopeFirstSub : runs && nb > SORT_MANY_BATCHES ? s.scopeRun(nb) : '';
             if (subText) name.appendChild(h('span', 'mdlg-scope-sub', subText));
             const n = sc === 'first' ? filesOf(off).length : candidates(off);
@@ -436,6 +493,7 @@ export const materialSortMethods = uiModule({
         area.rows = 3;
         area.placeholder = s.knowPh;
         area.id = 'mdlg-sort-text';
+        area.value = (target.text ?? '').slice(0, SORT_MAX_TEXT);
         const hint = h('span', 'mdlg-check-hint', s.knowHint);
         hint.id = 'mdlg-sort-hint';
         area.setAttribute('aria-describedby', hint.id);
@@ -532,7 +590,7 @@ export const materialSortMethods = uiModule({
             const n = files.length;
             const nb = batchesOf(p);
             title.textContent = s.title(n);
-            sub.textContent = scope === 'selection' ? s.what(n, null)
+            sub.textContent = scope === 'selection' ? s.what(n, null) : scope === 'rest' ? s.what(n, target.batch)
                 : scope === 'batch' ? s.what(candidates(off), target.batch) : s.stripWhole(candidates(planOf('all', false)));
             strip.replaceChildren();
             for (const item of files.slice(0, PREVIEWS)) {
@@ -588,14 +646,17 @@ export const materialSortMethods = uiModule({
                 dialog.error(sortErrorText(res.error, now.agent));
                 return;
             }
-            const remembered: ResearchSortRemembered = {
+            let remembered: ResearchSortRemembered = {
                 id: res.value.id, files: batches[0], text, at: new Date().toISOString(), decided: {},
                 ...(scope === 'batch' && target.batch ? { batch: target.batch } : {}),
                 // A run (spec 102 §3): the research keeps it; the app reads how far it is.
                 ...(many && res.value.run && res.value.parts ? {
-                    run: { id: res.value.run, batches, sorts: res.value.parts.slice(0, batches.length), next: 0, scope: scope === 'first' ? 'all' : scope },
+                    run: { id: res.value.run, batches, sorts: res.value.parts.slice(0, batches.length), next: 0, scope: scope === 'first' ? 'all' : scope === 'rest' ? 'selection' : scope },
                 } : {}),
             };
+            // What is left of a run (Try again, Continue): the proposal still open goes on, its finished proposals stay.
+            const old = this.materialSortRemembered();
+            if (scope === 'rest' && old && !old.ended) remembered = sortRunContinued(old, remembered, sortFinishedSorts(old, runViewOf(old)));
             // A new sorting: the last proposal's "Done: …" line goes.
             patchResearchAutoState(now.treeId, { materialSort: remembered, sortClosed: undefined });
             dialog.close();
@@ -666,10 +727,23 @@ export const materialSortMethods = uiModule({
             return;
         }
         const was = w.job;
-        w.job = res.value;
-        if (running(res.value)) {
+        // Try again / Continue of a proposal (spec 102 §3): its earlier sortings' proposals stay in it.
+        const rNow = researchAutoState(w.treeId).materialSort;
+        w.busy = true;
+        const earlier = rNow && sortKey(rNow) === w.id ? await earlierJobs(w, mc.base, rNow.earlier) : { jobs: [], missing: false };
+        w.busy = false;
+        if (watch !== w) return;
+        let job = res.value;
+        if (earlier.jobs.length) {
+            // This sorting brought nothing (failed, cancelled): the earlier proposals stay as they were.
+            const state = !running(res.value) && !hasProposal(res.value) ? 'done' : res.value.state;
+            job = sortJobsMerged(w.id, state, [...earlier.jobs, res.value]);
+            if (res.value.filesDone !== undefined) job.filesDone = res.value.filesDone;
+        }
+        w.job = job;
+        if (running(job) || earlier.missing) {
             again(document.hidden ? POLL_HIDDEN_MS : POLL_MS);
-        } else if (hasProposal(res.value)) {
+        } else if (hasProposal(job)) {
             if (was && running(was)) {
                 this.showToast(strings.materials.agentSort.ready, TOAST_MS, {
                     closable: true, kind: 'materials',
@@ -720,17 +794,41 @@ export const materialSortMethods = uiModule({
             if (one.ok) jobs.set(id, one.value);
             else missing = true;
         }
+        // Once the run ended: why a batch did not run (its sorting's reason), read once.
+        const reasons = (w.reasons ??= new Map());
+        const why = new Map<number, string>();
+        for (const i of view.running ? [] : view.failed) {
+            const id = view.sorts[i];
+            if (!id) continue;
+            if (!reasons.has(id)) {
+                const one = await fetchMaterialSort(base, id);
+                if (watch !== w) { w.busy = false; return; }
+                reasons.set(id, one.ok ? one.value.reason ?? '' : '');
+            }
+            if (reasons.get(id)) why.set(i, reasons.get(id)!);
+        }
+        // Try again / Continue (spec 102 §3): the proposal's earlier sortings stay in it.
+        const earlier = await earlierJobs(w, base, r0.earlier);
+        if (watch !== w) { w.busy = false; return; }
+        missing ||= earlier.missing;
         w.busy = false;
         const was = w.job;
-        const state = view.running ? (res.value.state === 'queued' ? 'queued' : 'working') : res.value.state;
-        const job = sortJobsMerged(w.id, state, view.done.map(i => jobs.get(view.sorts[i])));
+        const merged = [...earlier.jobs, ...view.done.map(i => jobs.get(view.sorts[i]))];
+        // A run whose every batch failed keeps the proposals it went on with.
+        const state = view.running ? (res.value.state === 'queued' ? 'queued' : 'working')
+            : res.value.state === 'failed' && earlier.jobs.length ? 'done' : res.value.state;
+        const job = sortJobsMerged(w.id, state, merged);
         const current = res.value.parts.find(p => p.part === view.batch);
         if (view.running && current?.filesDone !== undefined) job.filesDone = current.filesDone;
         w.job = job;
-        // The remembered run moves on (what was decided meanwhile stays: read anew).
+        // The remembered run moves on (what was decided meanwhile stays: read anew); once it ended,
+        // a batch that did not run or a stop from elsewhere is remembered (spec 102 §3).
         const r = researchAutoState(w.treeId).materialSort;
         const moved = r && sortKey(r) === w.id ? sortRunAdvance(r, view) : null;
-        if (moved) patchResearchAutoState(w.treeId, { materialSort: moved });
+        const ended = r && sortKey(r) === w.id && !missing ? sortRunEnded(moved ?? r, view, res.value, why) : null;
+        const now = ended ?? moved;
+        if (now) patchResearchAutoState(w.treeId, { materialSort: now });
+        const outcome = !!(now ?? r)?.run && !!((now ?? r)!.run!.error || (now ?? r)!.run!.stopped);
         if (view.running || missing) {
             again(document.hidden ? POLL_HIDDEN_MS : POLL_MS);
         } else if (hasProposal(job)) {
@@ -740,8 +838,9 @@ export const materialSortMethods = uiModule({
                     action: { label: strings.materials.agentSort.open, run: () => void this.openSortProposal() },
                 });
             }
-        } else if (r && sortKey(r) === w.id) {
-            patchResearchAutoState(w.treeId, { materialSort: { ...(moved ?? r), ended: res.value.state === 'cancelled' ? 'cancelled' : 'failed' } });
+        } else if (r && sortKey(r) === w.id && !outcome) {
+            // Nothing came of it and nothing is left to try again (the strip says the sorting ended).
+            patchResearchAutoState(w.treeId, { materialSort: { ...(now ?? r), ended: res.value.state === 'cancelled' ? 'cancelled' : 'failed' } });
         }
         proposalRun?.(job);
         this.refreshMaterialsWindow();
@@ -754,6 +853,9 @@ export const materialSortMethods = uiModule({
         // Asked already and not answered (the strip drawn anew meanwhile has a new button): nothing more.
         if (!mc?.base || !w || cancelAsking) return;
         cancelAsking = true;
+        // How far the run got before it stops (what the question says, what stays remembered).
+        const before = researchAutoState(mc.treeId).materialSort;
+        const view = before && sortKey(before) === w.id ? runViewOf(before) : null;
         let res: Awaited<ReturnType<typeof cancelMaterialSort>>;
         try {
             // A run (spec 102 §3): the batch at work stops, the waiting ones do not start.
@@ -762,10 +864,20 @@ export const materialSortMethods = uiModule({
             cancelAsking = false;
         }
         if (!res.ok) { this.materialErrorToast(mc, res.error, () => void this.materialSortCancel()); return; }
+        // A run cancelled here (spec 102 §3): not said as stopped, the batches not finished stay unsorted.
+        const r = researchAutoState(mc.treeId).materialSort;
+        if (r?.run && sortKey(r) === w.id) patchResearchAutoState(mc.treeId, { materialSort: sortRunCancelled(r, view) });
         const made = w.job?.proposals.length ?? 0;
         if (made > 0) {
             const s = strings.materials.agentSort;
             const dialog = materialDialog({ title: s.discardAsk });
+            if (r?.run && view) {
+                // Which batches will not run and how many files stay unsorted; the proposals still to go through.
+                const rest = sortRunRest(r.run, view);
+                const open = r && w.job ? this.materialSortCounts(mc.treeId, r, w.job).open : made;
+                const from = Math.min(view.batches, Math.max(1, view.batches - rest.batches + 1));
+                if (rest.batches > 0) dialog.body.append(h('p', 'mdlg-text', s.discardRun(from, view.batches, rest.files.length, open)));
+            }
             // The Cancel that asked is drawn anew: the focus goes to the strip's action, not to the page.
             const refocus = () => requestAnimationFrame(() => {
                 if (document.activeElement && document.activeElement !== document.body) return;
@@ -854,6 +966,35 @@ export const materialSortMethods = uiModule({
         const offMod = (fallback: SortStripView['mod']): SortStripView['mod'] => readOnly || gate === 'older' || gate === 'offRun' ? 'is-off' : fallback;
         const review = (list: MaterialItem[]) => quiet || !list.length ? '' : `<button type="button" class="link-button" data-sort="review">${esc(s.reviewHand)}</button>`;
 
+        // A run that ended before all its batches ran (spec 102 §3): a batch did not run, or it stopped elsewhere.
+        const run = r?.run;
+        if (run && !run.closed && (run.error || run.stopped)) {
+            const nb = run.batches.length;
+            const done = run.done ?? [];
+            const rest = sortRunRest(run, { done });
+            const p = counts?.open ?? 0;
+            const handle = quiet || p <= 0 ? '' : `<button type="button" class="mw-sort-btn secondary" data-sort="open">${esc(s.handle(p))}</button>`;
+            const go = (label: string, act: 'retry' | 'resume') => {
+                if (quiet || !rest.files.length || gate === 'older') return '';
+                const off = gate === 'offRun' ? ` aria-disabled="true" title="${esc(s.offRun)}"` : '';
+                return `<button type="button" class="mw-sort-btn primary" data-sort="${act}"${off}>${researchBridgeActionLabel(label, 'material-sort')}</button>`;
+            };
+            const close = quiet ? '' : `<button type="button" class="link-button" data-sort="close-run">${esc(s.dismiss)}</button>`;
+            if (run.error) {
+                return {
+                    state: 'error', mod: 'is-error', next, review: [],
+                    html: `<span class="mw-sort-text"><span class="mw-sort-err">${esc(s.batchFailed(run.error.batch + 1, nb))}</span><span>${esc(runErrorText(run.error.code))}</span>${note(s.leftAfterError(rest.files.length, p))}${quiet ? '' : gateNote}${roNote}${phoneNote}</span>${handle}${go(s.retry, 'retry')}${close}`,
+                };
+            }
+            // The last batch that finished (none: nothing ran before the stop).
+            const last = done.length ? done[done.length - 1] + 1 : 0;
+            const what = last ? s.stopped(last, nb) : s.cancelled;
+            return {
+                state: 'stopped', mod: offMod('is-done'), next, review: [],
+                html: `<span class="mw-sort-text"><span><b>${esc(what)}</b></span>${note(s.stoppedNote(rest.files.length))}${quiet ? '' : gateNote}${roNote}${phoneNote}</span>${handle}${go(s.resume(rest.batches), 'resume')}${close}`,
+            };
+        }
+
         if (state === 'A') {
             const what = opts.added ? s.stripAdded(opts.added, next.length) : s.stripWhole(next.length);
             return {
@@ -890,7 +1031,8 @@ export const materialSortMethods = uiModule({
             };
         }
         // B, C: the agent works.
-        const total = job?.files.length || r!.files.length;
+        // A sorting that goes on with a proposal (Try again, Continue) counts its own files, not the earlier ones'.
+        const total = (r!.earlier ? r!.files.length : 0) || job?.files.length || r!.files.length;
         const working = !!job && job.state !== 'queued';
         // A number only when the research says how many files its readers have judged; else a progress without one.
         const counted = working && typeof job.filesDone === 'number' && total > 0;
@@ -902,7 +1044,9 @@ export const materialSortMethods = uiModule({
             ? `<span class="mw-sort-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${k}"><span style="width: ${Math.round((k / total) * 100)}%"></span></span>`
             : `<span class="mw-sort-bar is-indeterminate" role="progressbar" aria-label="${esc(label)}"><span></span></span>`;
         const n = counts?.open ?? 0;
-        const after = state === 'C' ? `<span class="mw-sort-wait">${esc(s.waiting(n))}</span>` : opts.phone ? '' : note(s.runNote);
+        // The next batch waits (spec 102 §3): why and when it starts by itself, in place of the run's note.
+        const wait = rv?.waiting ? note(runWaitText(rv.waiting)) : '';
+        const after = state === 'C' ? `${wait}<span class="mw-sort-wait">${esc(s.waiting(n))}</span>` : wait || (opts.phone ? '' : note(s.runNote));
         return {
             state, mod: readOnly ? 'is-off' : '', next, review: [],
             html: `<span class="mw-sort-text"><span class="mw-sort-run">${esc(label)}</span>
@@ -910,6 +1054,42 @@ export const materialSortMethods = uiModule({
                 ${after}${roNote}${phoneNote}</span>${quiet ? '' : `${state === 'C' ? `<button type="button" class="mw-sort-btn primary" data-sort="open">${esc(s.handle(n))}</button>` : ''}
                 <button type="button" class="link-button" data-sort="cancel">${esc(strings.buttons.cancel)}</button>`}`,
         };
+    },
+
+    /**
+     * Try again… / Continue (N batches)… (spec 102 §3): the sorting dialog
+     * over what is left of the run (the files of the batches that did not
+     * run, still without a title or a person), with what was said before.
+     */
+    materialSortRestDialog(): void {
+        const mc = this.materialsContext();
+        const r = this.materialSortRemembered();
+        if (!mc || !r?.run) return;
+        const rest = sortRunRest(r.run, { done: r.run.done ?? [] });
+        const byId = this.materialSortItemMap(mc.treeId);
+        const items = rest.files.map(id => byId.get(id)).filter((i): i is MaterialItem => !!i);
+        this.openSortDialog({ items, batch: r.batch ?? null, rest: true, text: r.text });
+    },
+
+    /**
+     * Close the error or the stop of a run (spec 102 §3): with proposals
+     * still waiting the strip says them (D), else the proposal closes as
+     * Close the proposal does.
+     */
+    materialSortCloseRun(): void {
+        const mc = this.materialsContext();
+        const r = this.materialSortRemembered();
+        if (!mc || !r?.run) return;
+        const job = watchedJob(r);
+        const open = job ? this.materialSortCounts(mc.treeId, r, job).open : 0;
+        if (open > 0) {
+            patchResearchAutoState(mc.treeId, { materialSort: { ...r, run: { ...r.run, closed: true } } });
+            this.refreshMaterialsWindow();
+            requestAnimationFrame(() => document.querySelector<HTMLElement>('#materials-modal .mw-sort [data-sort]')?.focus());
+            return;
+        }
+        this.materialSortForget();
+        this.refreshMaterialsWindow();
     },
 
     /** A click in the strip (Go through by hand and × are the window's). */
@@ -926,6 +1106,10 @@ export const materialSortMethods = uiModule({
                 return;
             case 'open': void this.openSortProposal(); return;
             case 'close-proposal': this.materialSortCloseAsk(); return;
+            // What is left of a run (spec 102 §3): the dialog over the batches that did not run, nothing sent before its Send.
+            case 'retry':
+            case 'resume': this.materialSortRestDialog(); return;
+            case 'close-run': this.materialSortCloseRun(); return;
             // Said from the click until the research answers (a strip drawn anew meanwhile: a toast says it).
             case 'cancel': void runBusy(btn, () => this.materialSortCancel(), { label: strings.busy.cancelling, kind: 'bridge', toastWhenGone: true }); return;
             case 'dismiss':
@@ -1014,9 +1198,11 @@ export const materialSortMethods = uiModule({
         let assigned: SortRow[] = [];
         let unassigned: SortRow[] = [];
         const split = () => {
-            assigned = rows.filter(sortRowProposes);
+            // A row decided already stays with the proposals (Done), also when the file now has what was proposed (after a reload).
+            const proposes = (x: SortRow) => !!decided[x.id] || sortRowProposes(x);
+            assigned = rows.filter(proposes);
             // The files the agent says are not about the family first: Hide as Not about the family stands over them.
-            const unassignedAll = rows.filter(x => !sortRowProposes(x));
+            const unassignedAll = rows.filter(x => !proposes(x));
             unassigned = [...unassignedAll.filter(x => x.unrelated), ...unassignedAll.filter(x => !x.unrelated)];
         };
         split();
@@ -1376,8 +1562,7 @@ export const materialSortMethods = uiModule({
                 box.append(head, sec);
                 return box;
             }
-            head.append(h('h3', 'msp-end-title', s.endTitle(a, rj, unassigned.length)),
-                h('p', 'msp-end-sub', s.endRun(r.run?.batches.length ?? 1, r.run ? r.run.batches.reduce((t, b) => t + b.length, 0) : rows.length)));
+            head.append(h('h3', 'msp-end-title', s.endTitle(a, rj, unassigned.length)), h('p', 'msp-end-sub', endRunText()));
             box.appendChild(head);
             const now = this.materialsContext();
             const gate = this.materialSortGate();
@@ -1758,10 +1943,29 @@ export const materialSortMethods = uiModule({
             const now = researchAutoState(mc.treeId).materialSort ?? null;
             return now && sortKey(now) === sortKey(r) ? runViewOf(now) : null;
         }
-        /** A run's line: what it says, the run's bar, how far the batch at work is. */
+        /** A run's line: what it says, the run's bar, how far the batch at work is or why it waits. */
         function runInner(v: SortRunView, label: string): string {
             const k = v.batchDone !== undefined ? `<span class="mw-sort-note">${esc(strings.materials.countOf(v.batchDone, v.batchFiles))}</span>` : '';
-            return `<span class="mw-sort-run">${esc(label)}</span>${runBarHtml(v, label)}${k}`;
+            const wait = v.waiting ? `<span class="mw-sort-note msp-run-wait">${esc(runWaitText(v.waiting))}</span>` : '';
+            const said = v.waiting ? s.runWaiting(v.batch, v.batches) : label;
+            return `<span class="mw-sort-run">${esc(said)}</span>${runBarHtml(v, said)}${k}${wait}`;
+        }
+        /**
+         * What the proposal came from (the end's line): the whole run, or only
+         * its batches that finished when it was cancelled, stopped or a batch
+         * did not run (spec 102 §3); with Try again or Continue the earlier
+         * sortings' batches too.
+         */
+        function endRunText(): string {
+            const now = researchAutoState(mc.treeId).materialSort ?? null;
+            const cur = now && sortKey(now) === sortKey(r) ? now : r;
+            const run = cur.run;
+            const cut = !!run && !!(run.cancelled || run.stopped || run.error);
+            const own = run ? (cut ? run.done ?? [] : run.batches.map((_, i) => i)) : [0];
+            const files = run ? own.reduce((n, i) => n + (run.batches[i]?.length ?? 0), 0) : cur.files.length;
+            const earlier = cur.earlier?.length ?? 0;
+            if (earlier) return s.endRun(earlier + own.length, rows.length);
+            return s.endRun(Math.max(1, own.length), run ? files : rows.length);
         }
         /** The run's line over the list while it works; the end below says it when nothing waits (spec 102 §3, §5). */
         function drawRun(): void {

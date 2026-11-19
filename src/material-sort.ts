@@ -10,7 +10,7 @@
 
 import type { MaterialItem } from './materials.js';
 import { SORT_MAX_FILES, fileExt, materialFolder, materialType, type SortJob, type SortLink, type SortProposal, type SortRunState, type SortState } from './materials.js';
-import type { ResearchSortRemembered, ResearchSortRun } from './research-device.js';
+import type { ResearchSortRemembered, ResearchSortRun, SortRunErrorCode } from './research-device.js';
 import type { MaterialKind, MediaBy, MediaPlace, PartnershipId, PersonId, StromData } from './types.js';
 import { researchPersonRef } from './research-link.js';
 
@@ -296,6 +296,10 @@ export interface SortRunView {
     done: number[];
     /** The sortings of the batches as the research says them (index = batch); missing ones as remembered. */
     sorts: string[];
+    /** The batches that did not run (index): failed in the research. */
+    failed: number[];
+    /** Why the batch next to start waits and in how many seconds it is tried again (the research's word). */
+    waiting?: { why: string; retry?: number };
 }
 
 const liveState = (s: SortState): boolean => s === 'queued' || s === 'working';
@@ -305,7 +309,7 @@ const liveState = (s: SortState): boolean => s === 'queued' || s === 'working';
  * batches the app remembers; without the research's word yet (a reload,
  * the first read), as remembered.
  */
-export function sortRunView(run: Pick<ResearchSortRun, 'batches' | 'sorts' | 'next'>, state: SortRunState | null): SortRunView {
+export function sortRunView(run: Pick<ResearchSortRun, 'batches' | 'sorts' | 'next' | 'done'>, state: SortRunState | null): SortRunView {
     const nb = run.batches.length;
     const byIndex = new Map((state?.parts ?? []).map(p => [p.part - 1, p]));
     const sizes = run.batches.map((b, i) => byIndex.get(i)?.files || b.length);
@@ -319,15 +323,18 @@ export function sortRunView(run: Pick<ResearchSortRun, 'batches' | 'sorts' | 'ne
     let next: number;
     let done: number[];
     let running: boolean;
+    let failed: number[] = [];
     if (state) {
         next = run.batches.findIndex((_, i) => { const p = byIndex.get(i); return !p || liveState(p.state); });
         if (next < 0) next = nb;
         done = run.batches.map((_, i) => i).filter(i => byIndex.get(i)?.state === 'done');
+        failed = run.batches.map((_, i) => i).filter(i => byIndex.get(i)?.state === 'failed');
         running = liveState(state.state) && next < nb;
     } else {
         next = Math.min(run.next, nb);
-        done = run.batches.map((_, i) => i).filter(i => i < next);
-        running = next < nb;
+        // A run that ended keeps which batches finished (the others did not run).
+        done = run.done ?? run.batches.map((_, i) => i).filter(i => i < next);
+        running = !run.done && next < nb;
     }
     const at = Math.min(next, nb - 1);
     const part = byIndex.get(at);
@@ -335,10 +342,80 @@ export function sortRunView(run: Pick<ResearchSortRun, 'batches' | 'sorts' | 'ne
     const batchDone = running && part?.state === 'working' && part.filesDone !== undefined ? Math.min(part.filesDone, sizes[at]) : undefined;
     const before = sizes.slice(0, Math.min(next, nb)).reduce((t, n) => t + n, 0);
     const filesDone = Math.min(files, state ? Math.max(state.filesDone, before + (batchDone ?? 0)) : before);
+    const waiting = running && starting && state?.waiting ? state.waiting : undefined;
     return {
         batch: at + 1, batches: nb, next, running, starting, batchFiles: sizes[at] ?? 0,
         ...(batchDone !== undefined ? { batchDone } : {}),
-        files, filesDone, marks, done, sorts,
+        files, filesDone, marks, done, sorts, failed,
+        ...(waiting ? { waiting } : {}),
+    };
+}
+
+/** Why a batch did not run, from its sorting's `reason` (the research's word: limit, auth, timeout, error, stopped…). */
+export function sortRunErrorCode(reason: string | undefined): SortRunErrorCode {
+    if (reason === 'limit') return 'limit';
+    return reason ? 'agent' : 'other';
+}
+
+/**
+ * A run that ended (spec 102 §3, §12), as remembered: a batch that did not
+ * run (the first one, with the research's reason) is the run's error; a run
+ * stopped elsewhere (cancelled, not here) before every batch ran is stopped.
+ * Which batches finished is kept. null: nothing new to remember (still at
+ * work, said already, or closed here).
+ */
+export function sortRunEnded(r: ResearchSortRemembered, view: SortRunView, state: SortRunState, reasons: ReadonlyMap<number, string> = new Map()): ResearchSortRemembered | null {
+    const run = r.run;
+    if (!run || view.running || run.error || run.stopped || run.closed) return null;
+    const done = [...view.done];
+    if (view.failed.length) {
+        const batch = view.failed[0];
+        const reason = reasons.get(batch);
+        return { ...r, run: { ...run, done, error: { batch, code: sortRunErrorCode(reason), ...(reason ? { reason } : {}) } } };
+    }
+    if (state.state === 'cancelled' && !run.cancelled && done.length < run.batches.length) return { ...r, run: { ...run, done, stopped: true } };
+    if (run.done?.join() !== done.join()) return { ...r, run: { ...run, done } };
+    return null;
+}
+
+/** The run cancelled here (spec 102 §3): the batches not finished stay unsorted, nothing goes on by itself. */
+export function sortRunCancelled(r: ResearchSortRemembered, view: SortRunView | null): ResearchSortRemembered {
+    if (!r.run) return r;
+    // A stop read meanwhile (the research said cancelled before the cancel answered) was this one.
+    const { stopped: _stopped, ...run } = r.run;
+    return { ...r, run: { ...run, cancelled: true, ...(view ? { done: [...view.done] } : {}) } };
+}
+
+/**
+ * What is left of a run (spec 102 §3): the batches that brought no proposal
+ * (failed, cancelled, never run), their files in the order sent and how
+ * many there are; Try again and Continue sort them.
+ */
+export function sortRunRest(run: Pick<ResearchSortRun, 'batches'>, view: Pick<SortRunView, 'done'>): { batches: number; files: string[] } {
+    const done = new Set(view.done);
+    const left = run.batches.filter((_, i) => !done.has(i));
+    return { batches: left.length, files: left.flat() };
+}
+
+/** The finished sortings of a remembered proposal (its run's finished batches, else the one sorting, and those before). */
+export function sortFinishedSorts(r: ResearchSortRemembered, view: SortRunView | null): string[] {
+    const own = r.run?.id && view ? view.done.map(i => view.sorts[i]).filter(Boolean) : r.run ? [] : [r.id];
+    return [...new Set([...(r.earlier ?? []), ...own])];
+}
+
+/**
+ * A new sorting that goes on with a proposal (spec 102 §3: Try again,
+ * Continue): what was decided, its undo and the finished sortings stay, so
+ * the proposals still waiting are not lost; the new batches join them.
+ */
+export function sortRunContinued(old: ResearchSortRemembered, fresh: ResearchSortRemembered, finished: readonly string[]): ResearchSortRemembered {
+    const earlier = [...new Set(finished)].filter(id => id !== fresh.id && !fresh.run?.sorts.includes(id));
+    return {
+        ...fresh,
+        decided: { ...old.decided, ...fresh.decided },
+        ...(old.reverts ? { reverts: { ...old.reverts } } : {}),
+        ...(!fresh.batch && old.batch ? { batch: old.batch } : {}),
+        ...(earlier.length ? { earlier } : {}),
     };
 }
 

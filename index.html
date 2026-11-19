@@ -30696,6 +30696,8 @@
             border-radius: var(--r-lg); white-space: nowrap; flex: none; cursor: pointer;
         }
         .mw-sort-btn.primary { background: var(--primary); color: var(--on-primary); border: none; font-weight: 600; }
+        /* Go through the proposal beside Try again… (spec 102 §3): the second action of a run that ended, a ghost button. */
+        .mw-sort-btn.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
         .mw-sort-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
         .mw-sort-btn[aria-disabled="true"], .batch-sort-btn[aria-disabled="true"] { opacity: 0.55; cursor: default; }
         .mw-sort-close {
@@ -30705,6 +30707,7 @@
         .mw-sort-close:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
         @media (hover: hover) {
             .mw-sort-btn.primary:not([aria-disabled="true"]):hover { background: var(--primary-dark); }
+            .mw-sort-btn.secondary:hover { background: var(--hover-bg); }
             .mw-sort-close:hover { background: var(--surface-2); color: var(--text); }
             .mw-sort.is-done .mw-sort-close:hover, .mw-sort.is-off .mw-sort-close:hover { background: var(--hover-bg); }
         }
@@ -30712,6 +30715,10 @@
             .mw-sort-btn { height: 44px; }
             .mw-sort-close { width: 44px; height: 44px; }
             .materials-window .mw-sort .link-button { min-height: 44px; }
+        }
+        /* A run that ended (spec 102 §3: a batch did not run, stopped): on a tablet the sentence takes the line, the actions below it. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .mw-sort[data-state="error"] .mw-sort-text, .mw-sort[data-state="stopped"] .mw-sort-text { flex-basis: 100%; }
         }
         /* The short sentence of a phone held sideways (§11). */
         .mw-sort-phone-short { display: none; }
@@ -30729,6 +30736,7 @@
             .mw-sort-text > .mw-sort-what { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
             .mw-sort-phone { display: none; }
             .mw-sort-phone-short { display: inline; flex-basis: auto; }
+            .mw-sort[data-state="error"] .mw-sort-text > span:not(.mw-sort-err) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         }
         /* Selecting has its own Sort with the agent in the selection bar: the offer (A, E) steps aside. */
         #materials-modal.is-selecting .mw-sort[data-state="A"], #materials-modal.is-selecting .mw-sort[data-state="E"] { display: none; }
@@ -30758,11 +30766,12 @@
         @media (max-width: 640px) {
             .mw-sort-bar.is-run { width: 96px; flex: 0 1 96px; min-width: 32px; }
             .msp-run { padding: 8px 10px; gap: 8px; }
+            .msp-run .msp-run-wait { flex-basis: 100%; }
             .msp-more { justify-content: flex-start; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .msp-run { flex-wrap: nowrap; padding: 6px 10px; margin: 0 0 6px; }
-            .msp-run .mw-sort-run { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .msp-run .mw-sort-run, .msp-run .msp-run-wait { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             .msp-more { padding: 6px 10px; margin-top: 6px; }
         }
         /* The end of the proposal (spec 102 §5): what was done, what is left, what the agent left unassigned. */

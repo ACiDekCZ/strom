@@ -1299,6 +1299,37 @@ test.describe('Sort with the agent: the dialog\'s scope and batches (spec 102 §
     });
 });
 
+test.describe('Sort with the agent: a proposal after a reload (spec 102 §3)', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('a row accepted before a reload counts under Done, not under Unassigned (the file has the title and the person now)', async ({ page }) => {
+        const material = await setup(page);
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await strip(page).locator('[data-sort="open"]').click();
+        await proposal(page).locator('.msp-row[data-id="I0001"] .msp-accept').click();
+        await expect.poll(() => JSON.stringify(material.edits ?? [])).toContain('Wedding 1924');
+        await expect.poll(() => JSON.stringify(material.assigns ?? [])).toContain('P0001');
+        await expect(proposal(page).locator('.msp-tab[data-tab="done"]')).toHaveText('Done · 1');
+
+        await page.reload();
+        await expect(page.locator('.person-card').first()).toBeVisible();
+        await poll(page);
+        await openWindow(page);
+        await expect(strip(page)).toHaveAttribute('data-state', 'D');
+        await strip(page).locator('[data-sort="open"]').click();
+        const p = proposal(page);
+        await expect(p.locator('.msp-tab[data-tab="done"]')).toHaveText('Done · 1');
+        await expect(p.locator('.msp-tab[data-tab="unassigned"]')).toHaveText('Unassigned · 1');
+        await expect(p.locator('.msp-tab[data-tab="proposals"]')).toHaveText('Proposals · 1');
+        await p.locator('.msp-tab[data-tab="done"]').click();
+        await expect(p.locator('.msp-row[data-id="I0001"] .msp-state')).toHaveText('Accepted');
+        await p.locator('.msp-tab[data-tab="unassigned"]').click();
+        await expect(p.locator('.msp-row[data-id="I0001"]')).toHaveCount(0);
+    });
+});
+
 test.describe('Sort with the agent: a run of batches as it goes (spec 102 §3)', () => {
     test.use({ viewport: DESKTOP });
     const RUN = [...SORT_FEATURES, 'material.sortRun', 'material.left', 'material.sourceOf'];
@@ -1423,8 +1454,10 @@ test.describe('Sort with the agent: a run of batches as it goes (spec 102 §3)',
         await strip(page).locator('[data-sort="open"]').click();
         const p = proposal(page);
         await expect(p.locator('.msp-list .msp-row')).toHaveCount(1);
-        // The accepted one is not offered again.
+        // The accepted one is not offered again; it counts under Done, not under Unassigned (its file has the title and the person now).
         await expect(p.locator('.msp-tab[data-tab="proposals"]')).toHaveText('Proposals · 1');
+        await expect(p.locator('.msp-tab[data-tab="done"]')).toHaveText('Done · 1');
+        await expect(p.locator('.msp-tab[data-tab="unassigned"]')).toHaveText('Unassigned · 48');
         await expect(p.locator('.msp-run .mw-sort-run')).toHaveText('Batch 2 of 3 is running · more proposals will come');
 
         material.sortRunHold = false;
@@ -1434,5 +1467,129 @@ test.describe('Sort with the agent: a run of batches as it goes (spec 102 §3)',
         await expect(p.locator('.msp-end-sub')).toHaveText('For the whole run: 3 batches · 120 files');
         expect(material.sorts).toHaveLength(1);
         expect(material.sortRuns?.size).toBe(1);
+    });
+    test('Cancel in the middle of a run: the batches not run stay unsorted, the finished proposals stay to go through', async ({ page }) => {
+        const material = await start(page);
+        await step(material, 0, 'working');
+        await step(material, 0, 'done');
+        await step(material, 1, 'working');
+        await expect(strip(page)).toHaveAttribute('data-state', 'C');
+        await strip(page).locator('[data-sort="cancel"]').click();
+        const ask = page.locator('.mdlg', { hasText: 'Discard the finished proposals?' });
+        await expect(ask.locator('.mdlg-text')).toHaveText('Sorting stops: batches 2 to 3 of 3 will not run and their 70 files stay unsorted. The finished proposals (2) can stay to go through.');
+        await expect(ask.locator('.mdlg-foot button', { hasText: 'Keep them' })).toBeFocused();
+        await ask.locator('.mdlg-foot button', { hasText: 'Keep them' }).click();
+        expect(material.runCancels).toHaveLength(1);
+        expect(runPart(material, 1).state).toBe('cancelled');
+        expect(runPart(material, 2).state).toBe('cancelled');
+        material.sortRunHold = false;
+        // Cancelled here: no stop said, the proposal waits (D) with its 2 rows.
+        await expect(strip(page)).toHaveAttribute('data-state', 'D');
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('The agent’s proposal: 2 to go through');
+        await strip(page).locator('[data-sort="open"]').click();
+        const p = proposal(page);
+        await expect(p.locator('.msp-list .msp-row')).toHaveCount(2);
+        await expect(p.locator('.msp-run')).toBeHidden();
+        await p.locator('.msp-accept-all').click();
+        await expect(p.locator('.msp-end-sub')).toHaveText('For the whole run: 1 batch · 50 files');
+        expect(material.sorts).toHaveLength(1);
+    });
+
+    test('a batch that did not run: the strip says it with what is left, Try again… sorts only that and the proposal goes on', async ({ page }) => {
+        const material = await start(page);
+        material.sortRunFail = 2;
+        material.sortRunHold = false;
+        // The research goes on after the failed batch: said once the run ended.
+        await expect(strip(page)).toHaveAttribute('data-state', 'error', { timeout: 15_000 });
+        await expect(strip(page)).toHaveAttribute('role', 'alert');
+        await expect(strip(page)).toHaveClass(/is-error/);
+        expect(runPart(material, 2).state).toBe('done');
+        await expect(strip(page).locator('.mw-sort-err')).toHaveText('Batch 2 of 3 did not run:');
+        await expect(strip(page).locator('.mw-sort-text')).toContainText('The research’s limit for reading by the agent is used up for now.');
+        await expect(strip(page).locator('.mw-sort-note')).toHaveText('50 files stay unsorted · finished proposals (3) are waiting');
+        await expect(strip(page).locator('[data-sort="open"]')).toHaveText('Go through the proposal (3)');
+        await expect(strip(page).locator('[data-sort="open"]')).toHaveClass(/secondary/);
+        await expect(strip(page).locator('[data-sort="retry"] .research-ai-badge')).toHaveCount(1);
+        await expect(strip(page).locator('[data-sort="close-run"]')).toHaveText('Close');
+        // A reload says it again, as remembered.
+        await page.reload();
+        await expect(page.locator('.person-card').first()).toBeVisible();
+        await poll(page);
+        await openWindow(page);
+        await expect(strip(page)).toHaveAttribute('data-state', 'error');
+        expect(material.sorts).toHaveLength(1);
+
+        await strip(page).locator('[data-sort="retry"]').click();
+        await expect(sortDialog(page).locator('.mdlg-title')).toHaveText('Sort with the agent · 50 files');
+        await expect(sortDialog(page).locator('.mdlg-scope')).toHaveCount(1);
+        await expect(sortDialog(page).locator('.mdlg-scope-name')).toHaveText('What is left of the run');
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect.poll(() => material.sorts?.length).toBe(2);
+        expect(material.sorts![1].ids).toEqual(runPart(material, 1).files);
+        // The new batch's proposals join the ones still waiting.
+        await expect(strip(page)).toHaveAttribute('data-state', 'D', { timeout: 15_000 });
+        await strip(page).locator('[data-sort="open"]').click();
+        const p = proposal(page);
+        await expect(p.locator('.msp-tab[data-tab="proposals"]')).toHaveText('Proposals · 6');
+        await p.locator('.msp-accept-all').click();
+        await expect(p.locator('.msp-end-sub')).toHaveText('For the whole run: 3 batches · 120 files');
+    });
+
+    test('a run stopped elsewhere: the strip says after which batch, Continue (N batches)… opens the dialog over the rest', async ({ page }) => {
+        const material = await start(page);
+        material.sortRunStopAt = 2;
+        material.sortRunHold = false;
+        await expect(strip(page)).toHaveAttribute('data-state', 'stopped', { timeout: 15_000 });
+        await expect(strip(page)).toHaveClass(/is-done/);
+        await expect(strip(page).locator('.mw-sort-text b')).toHaveText('Sorting stopped after batch 1 of 3.');
+        await expect(strip(page).locator('.mw-sort-note')).toHaveText('70 files stay unsorted');
+        await expect(strip(page).locator('[data-sort="resume"]')).toContainText('Continue (2 batches)…');
+        await expect(strip(page).locator('[data-sort="resume"] .research-ai-badge')).toHaveCount(1);
+        // Nothing starts by itself.
+        expect(material.sorts).toHaveLength(1);
+        material.sortRunStopAt = undefined;
+
+        await strip(page).locator('[data-sort="resume"]').click();
+        await expect(sortDialog(page).locator('.mdlg-title')).toHaveText('Sort with the agent · 70 files');
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await expect.poll(() => material.sortRuns?.size).toBe(2);
+        expect(material.sorts![1].ids).toEqual([...runPart(material, 1).files, ...runPart(material, 2).files]);
+        await expect(strip(page)).toHaveAttribute('data-state', 'D', { timeout: 15_000 });
+        await strip(page).locator('[data-sort="open"]').click();
+        const p = proposal(page);
+        await expect(p.locator('.msp-tab[data-tab="proposals"]')).toHaveText('Proposals · 6');
+        await p.locator('.msp-accept-all').click();
+        await expect(p.locator('.msp-end-sub')).toHaveText('For the whole run: 3 batches · 120 files');
+    });
+
+    test('Close on a stopped run with proposals waiting: the proposal stays to go through', async ({ page }) => {
+        const material = await start(page);
+        material.sortRunStopAt = 2;
+        material.sortRunHold = false;
+        await expect(strip(page)).toHaveAttribute('data-state', 'stopped', { timeout: 15_000 });
+        await strip(page).locator('[data-sort="close-run"]').click();
+        await expect(strip(page)).toHaveAttribute('data-state', 'D');
+        await expect(strip(page).locator('[data-sort="open"]')).toBeFocused();
+        expect(material.sorts).toHaveLength(1);
+    });
+
+    test('the next batch waits: the strip and the proposal say why and when it starts by itself', async ({ page }) => {
+        const material = await start(page);
+        await step(material, 0, 'working');
+        await step(material, 0, 'done');
+        material.sortRunWaiting = { why: 'read.app', retry: 300 };
+        material.sortRunHold = false;
+        await expect(strip(page).locator('.mw-sort-run')).toHaveText('Batch 2 of 3 is waiting');
+        const why = 'The readings the app may ask for are used up for this hour or day. It starts by itself in about 5 min.';
+        await expect(strip(page).locator('.mw-sort-note').first()).toHaveText(why);
+        await strip(page).locator('[data-sort="open"]').click();
+        const p = proposal(page);
+        await expect(p.locator('.msp-run .mw-sort-run')).toHaveText('Batch 2 of 3 is waiting');
+        await expect(p.locator('.msp-run .msp-run-wait')).toHaveText(why);
+        // The readings come back: it goes on by itself (held there to read it).
+        material.sortRunHold = true;
+        material.sortRunWaiting = undefined;
+        await expect(p.locator('.msp-run .mw-sort-run')).toHaveText('Batch 2 of 3 is running · more proposals will come', { timeout: 15_000 });
+        await expect(p.locator('.msp-run .msp-run-wait')).toHaveCount(0);
     });
 });

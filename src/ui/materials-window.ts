@@ -844,6 +844,9 @@ export const materialsWindowMethods = uiModule({
         el.hidden = !html;
         for (const c of ['is-done', 'is-off', 'is-error']) el.classList.toggle(c, c === mod);
         el.dataset.state = html ? view?.state ?? '' : '';
+        // A batch of a run that did not run is said at once (spec 102 §3); the other states as a status.
+        const role = view?.state === 'error' && html ? 'alert' : 'status';
+        if (el.getAttribute('role') !== role) el.setAttribute('role', role);
         setStripHtml(el, html);
         el.onclick = (e) => {
             const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-sort]');

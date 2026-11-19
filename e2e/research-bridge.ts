@@ -1426,8 +1426,12 @@ export interface FakeMaterial {
      */
     sortRuns?: Map<string, { id: string; parts: string[] }>;
     sortRunHold?: boolean;
-    /** The batch (1…) of a run that fails: the readers' limit. */
+    /** The batch (1…) of a run that fails: the readers' limit (its sorting's reason `limit`, as the research says it). */
     sortRunFail?: number;
+    /** The batch next to start waits (the research's `waiting`): the run stays where it is while set. */
+    sortRunWaiting?: { why: string; retry?: number };
+    /** The run is cancelled elsewhere (the research's CLI) when batch (1…) is about to start. */
+    sortRunStopAt?: number;
     /** Every run cancelled (`POST /material/sort/<run-…>/cancel`). */
     runCancels?: string[];
     /** What the agent proposes for each sorting (by default none: every file unassigned). */
@@ -1643,9 +1647,12 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
             }
             if (method !== 'GET') return { status: 404, body: '' };
             const at = parts.find(live);
-            if (at && !m.sortRunHold) {
+            const waits = !!m.sortRunWaiting && at?.state === 'queued';
+            if (at && at.state === 'queued' && m.sortRunStopAt === at.part) {
+                for (const j of parts) if (live(j)) j.state = 'cancelled';
+            } else if (at && !m.sortRunHold && !waits) {
                 if (at.state === 'queued') { at.state = 'working'; at.filesDone = Math.min(12, at.files.length); }
-                else if (m.sortRunFail === at.part) { at.state = 'failed'; at.reason = 'The readers’ limit is used up.'; }
+                else if (m.sortRunFail === at.part) { at.state = 'failed'; at.reason = 'limit'; }
                 else { at.state = 'done'; at.filesDone = at.files.length; }
             }
             const done = (j: typeof parts[number]) => j.state === 'done' ? j.files.length : j.filesDone ?? 0;
@@ -1653,6 +1660,7 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
                 status: 200, body: {
                     id, run: true, state: runState(), files: parts.reduce((t, j) => t + j.files.length, 0), filesDone: parts.reduce((t, j) => t + done(j), 0),
                     parts: parts.map(j => ({ id: j.id, part: j.part, state: j.state, files: j.files.length, ...(j.filesDone !== undefined ? { filesDone: j.filesDone } : {}) })),
+                    ...(waits ? { waiting: m.sortRunWaiting } : {}),
                 },
             };
         }

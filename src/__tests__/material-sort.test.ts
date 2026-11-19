@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseSortJob, parseMaterialFile, startMaterialSort, parseSortRun, type MaterialItem, type SortLink, type SortJob } from '../materials.js';
 import { sortRememberedFrom, type ResearchSortRemembered } from '../research-device.js';
-import { sortNeeds, sortNeedy, sortNext, sortLeftMap, sortCopyOf, sortIsText, SORT_MAX_BATCHES, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, sortBackRow, parseSortRevert, sortUnrelatedHideable, sortRunBatches, sortJobsMerged, sortRunView, sortRunAdvance, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
+import { sortNeeds, sortNeedy, sortNext, sortLeftMap, sortCopyOf, sortIsText, SORT_MAX_BATCHES, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, sortBackRow, parseSortRevert, sortUnrelatedHideable, sortRunBatches, sortJobsMerged, sortRunView, sortRunAdvance, sortRunEnded, sortRunCancelled, sortRunRest, sortRunContinued, sortFinishedSorts, sortRunErrorCode, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
 import type { PartnershipId } from '../types.js';
 import type { Attachment, PersonId } from '../types.js';
 
@@ -687,5 +687,83 @@ describe('a run of batches as it goes (spec 102 §3)', () => {
         expect(done.run!.next).toBe(3);
         expect(done.id).toBe(SORTS[2]);
         expect(sortRunAdvance({ ...r, run: undefined }, sortRunView(run, null))).toBeNull();
+    });
+    const remembered = (over: Partial<ResearchSortRemembered> = {}): ResearchSortRemembered => ({
+        id: SORTS[0], files: batches[0], text: 'Ostrovid letters', at: '2026-11-19T08:00:00Z', decided: { I0001: 'accepted' }, run, ...over,
+    });
+
+    it('a batch that did not run is the run\'s error once it ended; the batches after it still ran (spec 102 §3)', () => {
+        const parts = [{ state: 'done' }, { state: 'failed' }, { state: 'done' }];
+        // Still at work: nothing said yet, the research goes on with batch 3.
+        const working = sortRunView(run, state([{ state: 'done' }, { state: 'failed' }, { state: 'working', filesDone: 4 }]));
+        expect(working.failed).toEqual([1]);
+        expect(sortRunEnded(remembered(), working, state([{ state: 'done' }, { state: 'failed' }, { state: 'working' }])!)).toBeNull();
+        const ended = sortRunView(run, state(parts));
+        expect(ended).toMatchObject({ running: false, done: [0, 2], failed: [1] });
+        const r = sortRunEnded(remembered(), ended, state(parts)!, new Map([[1, 'limit']]))!;
+        expect(r.run).toMatchObject({ error: { batch: 1, code: 'limit', reason: 'limit' }, done: [0, 2] });
+        expect(r.decided).toEqual({ I0001: 'accepted' });
+        // Said once: the next answer changes nothing; closed here it is not said again.
+        expect(sortRunEnded(r, ended, state(parts)!)).toBeNull();
+        // What is left: batch 2's files, for Try again.
+        expect(sortRunRest(r.run!, ended)).toEqual({ batches: 1, files: batches[1] });
+        // Stored and read back after a reload, the run without the research's answer counts the finished batches.
+        const back = sortRememberedFrom(JSON.parse(JSON.stringify(r)))!;
+        expect(back.run).toEqual(r.run);
+        expect(sortRunView(back.run!, null)).toMatchObject({ running: false, done: [0, 2] });
+        expect(sortRememberedFrom(JSON.parse(JSON.stringify({ ...r, run: { ...r.run, closed: true } })))!.run!.closed).toBe(true);
+    });
+
+    it('why a batch did not run, from its sorting\'s reason', () => {
+        expect(sortRunErrorCode('limit')).toBe('limit');
+        for (const why of ['auth', 'timeout', 'error', 'start', 'stopped']) expect(sortRunErrorCode(why)).toBe('agent');
+        expect(sortRunErrorCode(undefined)).toBe('other');
+        const r = sortRunEnded(remembered(), sortRunView(run, state([{ state: 'failed' }, { state: 'failed' }, { state: 'failed' }])), state([{ state: 'failed' }, { state: 'failed' }, { state: 'failed' }], { state: 'failed' })!)!;
+        expect(r.run!.error).toEqual({ batch: 0, code: 'other' });
+        expect(r.run!.done).toEqual([]);
+    });
+
+    it('a run cancelled elsewhere stops; one cancelled here does not say it (spec 102 §3)', () => {
+        const parts = [{ state: 'done' }, { state: 'cancelled' }, { state: 'cancelled' }];
+        const ended = sortRunView(run, state(parts, { state: 'cancelled' }));
+        expect(ended).toMatchObject({ running: false, done: [0], failed: [] });
+        const stopped = sortRunEnded(remembered(), ended, state(parts, { state: 'cancelled' })!)!;
+        expect(stopped.run).toMatchObject({ stopped: true, done: [0] });
+        expect(sortRunRest(stopped.run!, ended)).toEqual({ batches: 2, files: [...batches[1], ...batches[2]] });
+        // Cancel here: the batches done before stay, nothing is said as stopped.
+        const before = sortRunView(run, state([{ state: 'done' }, { state: 'working', filesDone: 7 }, { state: 'queued' }]));
+        const cancelled = sortRunCancelled({ ...remembered(), run: { ...run, stopped: true } }, before);
+        expect(cancelled.run).toMatchObject({ cancelled: true, done: [0] });
+        expect(cancelled.run!.stopped).toBeUndefined();
+        expect(sortRunEnded(cancelled, ended, state(parts, { state: 'cancelled' })!)).toBeNull();
+        // Every batch done before a cancel elsewhere: nothing stopped.
+        const all = [{ state: 'done' }, { state: 'done' }, { state: 'done' }];
+        expect(sortRunEnded({ ...remembered(), run: { ...run, done: [0, 1, 2] } }, sortRunView(run, state(all, { state: 'cancelled' })), state(all, { state: 'cancelled' })!)).toBeNull();
+    });
+
+    it('a batch that waits says why and when it starts by itself', () => {
+        const v = sortRunView(run, state([{ state: 'done' }, { state: 'queued' }, { state: 'queued' }], { waiting: { why: 'read.app', retry: 300 } }));
+        expect(v).toMatchObject({ batch: 2, starting: true, waiting: { why: 'read.app', retry: 300 } });
+        // Working on a batch: no waiting said.
+        expect(sortRunView(run, state([{ state: 'working', filesDone: 2 }, { state: 'queued' }, { state: 'queued' }], { waiting: { why: 'limit' } })).waiting).toBeUndefined();
+    });
+
+    it('Try again and Continue go on with the proposal: what was decided and the finished batches stay', () => {
+        const parts = [{ state: 'done' }, { state: 'failed' }, { state: 'done' }];
+        const ended = sortRunView(run, state(parts));
+        const old = { ...sortRunEnded(remembered({ reverts: { I0001: { title: 'Old' } } as unknown as ResearchSortRemembered['reverts'] }), ended, state(parts)!)!, batch: 'Talvanen box' };
+        const finished = sortFinishedSorts(old, ended);
+        expect(finished).toEqual([SORTS[0], SORTS[2]]);
+        const fresh: ResearchSortRemembered = { id: 'sort-20261119090000-0001', files: batches[1], text: 'Ostrovid letters', at: '2026-11-19T09:00:00Z', decided: {} };
+        const next = sortRunContinued(old, fresh, finished);
+        expect(next).toMatchObject({ id: fresh.id, files: batches[1], decided: { I0001: 'accepted' }, batch: 'Talvanen box', earlier: [SORTS[0], SORTS[2]] });
+        expect(next.reverts).toEqual(old.reverts);
+        expect(next.run).toBeUndefined();
+        // A remembered one read back keeps its earlier sortings and what was decided in them.
+        const back = sortRememberedFrom(JSON.parse(JSON.stringify(next)))!;
+        expect(back.earlier).toEqual([SORTS[0], SORTS[2]]);
+        expect(back.decided).toEqual({ I0001: 'accepted' });
+        // Again over that: the earlier ones and this one.
+        expect(sortFinishedSorts(back, null)).toEqual([SORTS[0], SORTS[2], fresh.id]);
     });
 });
