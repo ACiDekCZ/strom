@@ -82,6 +82,31 @@ test('poster PNG export downloads a non-empty PNG image', async ({ page }) => {
     expect(bytes.length).toBeGreaterThan(1000);
 });
 
+test('poster PNG the browser cannot make: no empty file, a clear message, the dialog stays with SVG and PDF (N3)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    // A canvas too large for the browser gives no image data ("data:,"): an empty PNG file before.
+    await page.evaluate(() => { HTMLCanvasElement.prototype.toDataURL = () => 'data:,'; });
+
+    await page.evaluate(() => window.Strom.UI.showExportDialog());
+    await page.locator('#export-modal').locator('.menu-option', { hasText: 'Poster' }).click();
+    const poster = page.locator('#poster-modal');
+    await expect(poster).toBeVisible();
+
+    let downloads = 0;
+    page.on('download', () => { downloads++; });
+    await poster.locator('.menu-option', { hasText: 'PNG' }).click();
+    const alert = page.locator('#confirmation-modal');
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText('too large for a PNG image');
+    await expect(page.locator('.toast', { hasText: 'scaled down' })).toHaveCount(0);
+    await alert.locator('button', { hasText: 'OK' }).click();
+    await expect(poster).toBeVisible();
+    await expect(poster.locator('.menu-option', { hasText: 'SVG' })).toBeEnabled();
+    await expect(poster.locator('.menu-option', { hasText: 'PDF' })).toBeEnabled();
+    expect(downloads).toBe(0);
+});
+
 test('poster SVG applies the living-privacy filter', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Alice', 'Living', { gender: 'female', birthDate: '1990' });

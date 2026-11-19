@@ -3,7 +3,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildTreeSvg, computeBounds, PosterLayout, PosterOptions, fitCompactName, COMPACT_NAME_MIN_SQUEEZE } from '../export-image.js';
+import {
+    buildTreeSvg, computeBounds, PosterLayout, PosterOptions, fitCompactName, COMPACT_NAME_MIN_SQUEEZE,
+    posterPngScales, PNG_SAFE_SIDE_PX, PNG_MAX_SIDE_PX, PNG_FIREFOX_SIDE_PX, PNG_MAX_AREA_PX, PNG_MIN_SCALE,
+} from '../export-image.js';
 import type { BranchSet } from '../branch-colors.js';
 import { StromData, Person, PersonId, PartnershipId, Position, DEFAULT_LAYOUT_CONFIG } from '../types.js';
 import { MeasureTexts, normalCardHeights, cardNameMaxRows } from '../card-width.js';
@@ -525,6 +528,22 @@ describe('a long name on the card is never shortened in the image (T40)', () => 
         for (const svg of [k.svg, f.svg]) for (const m of svg.matchAll(/font-size="([\d.]+)" font-weight="600" fill="#2b2822"/g)) expect(Number(m[1])).toBeGreaterThanOrEqual(12.5);
     });
 
+    it('normal: the names on one line are measured in one batch, not one measurement (a page layout) per card (N4)', () => {
+        const calls: string[][] = [];
+        const counting: MeasureTexts = (kind, texts) => {
+            if (kind === 'name') calls.push([...texts]);
+            return measure(kind, texts);
+        };
+        const names = ['Kasimir', 'Florimund', 'Ludmila', 'Bohumil', 'Radegunda'];
+        const persons = names.map((first, i) => person(`p${i}`, { firstName: first, lastName: 'Pfefferkorn' }));
+        const positions = Object.fromEntries(persons.map((p, i) => [p.id, { x: i * 200, y: 0 }]));
+        const svg = buildTreeSvg(makeData(...persons), layout(positions), { cardDensity: 'normal', measureCardTexts: counting });
+        expect(calls).toHaveLength(1);
+        expect(new Set(calls[0])).toEqual(new Set(names.map(n => `${n} Pfefferkorn`)));
+        // Drawn as before: Kasimir Pfefferkorn (19 characters) at 14px on one line.
+        expect(svg).toMatch(/font-size="14"[^>]*>Kasimir Pfefferkorn</);
+    });
+
     it('normal: a short name stays the one-line 64px card', () => {
         const svg = buildTreeSvg(makeData(person('a')), layout({ a: { x: 0, y: 0 } }), { cardDensity: 'normal', measureCardTexts: measure });
         expect(rows(svg)).toEqual([]);
@@ -594,5 +613,57 @@ describe('a long name on the card is never shortened in the image (T40)', () => 
         const register = rows(draw(cardNameMaxRows('register')));
         expect(register).toHaveLength(2);
         expect(register[1].endsWith('…')).toBe(true);
+    });
+});
+
+describe('posterPngScales (verification of 3.30.0, N3)', () => {
+    const fits = (w: number, h: number, scale: number, side: number) =>
+        Math.floor(w * scale) <= side && Math.floor(h * scale) <= side && Math.floor(w * scale) * Math.floor(h * scale) <= PNG_MAX_AREA_PX;
+
+    it('a poster that fits twice over is drawn at 2x only', () => {
+        expect(posterPngScales(6993, 764)).toEqual([2]);
+        expect(posterPngScales(PNG_SAFE_SIDE_PX / 2, 100)).toEqual([2]);
+    });
+
+    it('one that fits at its own size is scaled down to the usual limit, not below its size', () => {
+        const [scale, ...rest] = posterPngScales(13649, 1196);
+        expect(rest).toEqual([]);
+        expect(scale).toBeGreaterThanOrEqual(1);
+        expect(scale).toBeLessThan(2);
+        expect(fits(13649, 1196, scale, PNG_SAFE_SIDE_PX)).toBe(true);
+    });
+
+    it('a wider one: its own size first, then below it within the usual limit (never above the canvas limits)', () => {
+        expect(posterPngScales(27249, 1340)).toHaveLength(2);
+        const [own, safe] = posterPngScales(27249, 1340);
+        expect(own).toBe(1);
+        expect(safe).toBeLessThan(1);
+        expect(fits(27249, 1340, safe, PNG_SAFE_SIDE_PX)).toBe(true);
+        // Wider than Firefox's canvas: its own size (Chrome), as large as Firefox's holds, the usual limit unreadable.
+        const [chrome, firefox, ...rest] = posterPngScales(54449, 1484);
+        expect(chrome).toBe(1);
+        expect(firefox).toBeLessThan(1);
+        expect(fits(54449, 1484, firefox, PNG_FIREFOX_SIDE_PX)).toBe(true);
+        expect(rest).toEqual([]);
+        // Tall and wide: the area holds it.
+        for (const scale of posterPngScales(25000, 25000)) expect(fits(25000, 25000, scale, PNG_MAX_SIDE_PX)).toBe(true);
+    });
+
+    it('scales below the readable size are left out', () => {
+        // The 108 849 px family poster: only Chrome's largest canvas holds it readable.
+        const [largest, ...none] = posterPngScales(108849, 1628);
+        expect(none).toEqual([]);
+        expect(largest).toBeGreaterThanOrEqual(PNG_MIN_SCALE);
+        expect(fits(108849, 1628, largest, PNG_MAX_SIDE_PX)).toBe(true);
+        expect(posterPngScales(PNG_MAX_SIDE_PX / PNG_MIN_SCALE + 10, 500)).toEqual([]);
+        expect(posterPngScales(200000, 1600)).toEqual([]);
+        for (const [w, h] of [[20000, 900], [40000, 1500], [60000, 2000], [16000, 16000], [100000, 3000]]) {
+            for (const scale of posterPngScales(w, h)) expect(scale).toBeGreaterThanOrEqual(PNG_MIN_SCALE);
+        }
+    });
+
+    it('an empty poster has no PNG', () => {
+        expect(posterPngScales(0, 100)).toEqual([]);
+        expect(posterPngScales(100, Number.NaN)).toEqual([]);
     });
 });

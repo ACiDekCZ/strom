@@ -9,7 +9,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import {
-    buildTreeSvg, computeBounds, escapeXml, PosterOptions, PosterFooterMeta, posterFooterHeight, POSTER_PADDING,
+    buildTreeSvg, computeBounds, escapeXml, PosterOptions, PosterFooterMeta, posterFooterHeight, POSTER_PADDING, posterPngScales, PNG_SCALE,
 } from '../export-image.js';
 import { buildFanModel, buildFanPosterSvg, fanPosterGeometry } from '../fan-chart.js';
 import { computeTimelineModel } from '../timeline.js';
@@ -32,8 +32,6 @@ import { measureUnionOrderPill } from '../union-order-measure.js';
 /** The face of the marriage-order pill's text (index.html .union-order-pill). */
 const PILL_FACE = { family: 'Instrument Sans', weight: 600 };
 
-/** Browsers cap canvas dimensions; keep well under the common ~16k limit. */
-const MAX_CANVAS_PX = 15000;
 /** Paper sizes in millimetres (portrait). */
 const PAPER: Record<string, { w: number; h: number }> = {
     A4: { w: 210, h: 297 },
@@ -505,7 +503,7 @@ export const exportImageMethods = uiModule({
         });
     },
 
-    /** Rasterize the current view to a 2x PNG (clamped to the canvas limit), under its button's working state (§8). */
+    /** Rasterize the current view to a 2x PNG (scaled down to the canvas limit, none when unreadable so: posterPngScales), under its button's working state (§8). */
     exportPosterPng(): Promise<void> {
         return posterBusy(async () => {
             const poster = buildCurrentPoster();
@@ -516,13 +514,12 @@ export const exportImageMethods = uiModule({
             const svg = poster.svg;
             const baseW = poster.widthPx;
             const baseH = poster.heightPx;
-
-            let scale = 2;
-            const maxScale = Math.min(MAX_CANVAS_PX / baseW, MAX_CANVAS_PX / baseH);
-            let clamped = false;
-            if (scale > maxScale) {
-                scale = Math.max(1, maxScale);
-                clamped = true;
+            // Too large even scaled down to a readable size: no PNG (an empty file before, N3);
+            // the dialog stays open with SVG and Print / PDF.
+            const scales = posterPngScales(baseW, baseH);
+            if (scales.length === 0) {
+                void this.showAlert(strings.poster.pngTooLarge, 'warning');
+                return;
             }
 
             try {
@@ -535,22 +532,38 @@ export const exportImageMethods = uiModule({
                     img.src = svgDataUrl(svg);
                 });
 
-                const canvas = document.createElement('canvas');
-                canvas.width = Math.round(baseW * scale);
-                canvas.height = Math.round(baseH * scale);
-                const ctx = canvas.getContext('2d');
-                if (!ctx) throw new Error('Canvas 2D context unavailable');
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-                const dataUrl = canvas.toDataURL('image/png');
+                // A canvas the browser cannot make draws nothing and gives no image ("data:,"): the next scale.
+                let dataUrl = '';
+                let scale = 0;
+                for (const s of scales) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.floor(baseW * s));
+                    canvas.height = Math.max(1, Math.floor(baseH * s));
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) continue;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const url = canvas.toDataURL('image/png');
+                    // Freed at once: the next try (or the download) needs the memory.
+                    canvas.width = canvas.height = 0;
+                    if (url.startsWith('data:image/png')) {
+                        dataUrl = url;
+                        scale = s;
+                        break;
+                    }
+                }
+                // Never an empty file.
+                if (!dataUrl) {
+                    void this.showAlert(strings.poster.pngTooLarge, 'warning');
+                    return;
+                }
                 const a = document.createElement('a');
                 a.href = dataUrl;
                 a.download = posterFilename('png');
                 a.click();
 
-                if (clamped) {
+                if (scale < PNG_SCALE) {
                     this.showToast(strings.poster.pngScaledDown);
                 }
                 this.closePosterDialog();

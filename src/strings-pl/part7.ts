@@ -418,6 +418,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         empty: 'Brak danych do eksportu – najpierw trzeba otworzyć drzewo.',
         pngScaledDown: 'Obraz został zmniejszony ze względu na limit rozmiaru.',
         pngError: 'Nie udało się utworzyć obrazu.',
+        pngTooLarge: 'Drzewo jest za duże na obraz PNG: zmniejszone do limitu nie byłoby czytelne. Zamiast tego można wybrać SVG albo Druk / PDF.',
         pageLabel: (row: number, col: number) => `wiersz ${row} · kolumna ${col}`,
         guideOption: 'Dodaj stronę początkową z instrukcją sklejania',
         guideTitle: 'Instrukcja sklejania',

@@ -948,6 +948,17 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     const laidOutWithPhoto = (id: string, p: StromData['persons'][keyof StromData['persons']] | undefined): boolean =>
         photoView !== 'small' && !!p && !p.isPlaceholder && (photoIds ? photoIds.has(id) : true);
     const entries = [...result.positions.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    // The Normal cards' names on one line, measured in one batch: one layout of the page, not one per
+    // card (the first poster of a large family view took 10–25 s, verification of 3.30.0, N4).
+    const namesAt15 = new Map<string, number>();
+    if (options.measureCardTexts && !options.cardLines && options.cardDensity !== 'compact') {
+        const names = new Set<string>();
+        for (const [personId] of entries) {
+            const p = data.persons[personId];
+            if (p && !p.isPlaceholder) names.add(shownName(p, '?'));
+        }
+        if (names.size > 0) for (const [text, w] of options.measureCardTexts('name', [...names])) namesAt15.set(text, w);
+    }
     for (const [personId, pos] of entries) {
         const person = data.persons[personId];
         const ch = heightOf(personId);
@@ -1047,7 +1058,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             const wrapped = nameRows.length > 2;
             // One line as the screen fits it (renderer.ts fitCardNamesNow): 15 → 14 → 13px, measured in the
             // screen's font; still too wide, the rows (step 2) — never smaller than the screen's 13px floor.
-            const nameAt15 = measure('name', [fullName]).get(fullName) ?? 0;
+            const nameAt15 = namesAt15.get(fullName) ?? measure('name', [fullName]).get(fullName) ?? 0;
             const oneLine = wrapped ? undefined : [15, 14, 13].find(fs => nameAt15 * fs / 15 <= contentW);
             if (!wrapped && !birthText && oneLine) {
                 // Measured by the screen: drawn at that width (inside the column in any font).
@@ -1177,4 +1188,36 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
 
     out.push('</svg>');
     return out.join('\n');
+}
+
+/** A canvas every browser makes (the PNG's usual limit): its side. */
+export const PNG_SAFE_SIDE_PX = 15000;
+/** The largest canvas a browser makes: its side (Chrome; Firefox 32 767) and its area (all of them). */
+export const PNG_MAX_SIDE_PX = 65535;
+export const PNG_FIREFOX_SIDE_PX = 32767;
+export const PNG_MAX_AREA_PX = 16384 * 16384;
+/** A PNG is normally the poster at twice its own resolution. */
+export const PNG_SCALE = 2;
+/** Below half the poster's size its texts are not readable any more: no PNG then (SVG or PDF instead). */
+export const PNG_MIN_SCALE = 0.5;
+
+/**
+ * The scales a poster of `widthPx` × `heightPx` is drawn to a PNG at, to be
+ * tried in this order (a browser that cannot make the canvas gives an empty
+ * image: the next one is tried). Twice its size within the usual limit;
+ * a larger poster as large as fits that limit, and when that is below its
+ * own size, first at its own size or as large as the largest canvas holds
+ * (Chrome's, then Firefox's), then within the usual limit. Never below the
+ * readable PNG_MIN_SCALE: no scale at all for a poster too large for a PNG
+ * (an empty file before, verification of 3.30.0, N3).
+ */
+export function posterPngScales(widthPx: number, heightPx: number): number[] {
+    if (!(widthPx > 0 && heightPx > 0)) return [];
+    const safe = Math.min(PNG_SAFE_SIDE_PX / widthPx, PNG_SAFE_SIDE_PX / heightPx);
+    if (safe >= PNG_SCALE) return [PNG_SCALE];
+    if (safe >= 1) return [safe];
+    const area = Math.sqrt(PNG_MAX_AREA_PX / (widthPx * heightPx));
+    const within = (side: number) => Math.min(1, side / widthPx, side / heightPx, area);
+    const scales = [within(PNG_MAX_SIDE_PX), within(PNG_FIREFOX_SIDE_PX), safe].filter(scale => scale >= PNG_MIN_SCALE);
+    return scales.filter((scale, i) => scales.indexOf(scale) === i);
 }
