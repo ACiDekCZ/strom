@@ -357,7 +357,7 @@ describe('labels of wide short sectors on a phone (1101)', () => {
 
     it('a long given name in the focus disc stays inside the disc on a phone, whole in the title (P1b, 3.30.0)', () => {
         const d = withUnions([
-            person('me', 'male', [], { firstName: 'Maximilian Ferdinand', lastName: 'Wolkenstein-Habermann' }), person('w', 'female'),
+            person('me', 'male', [], { firstName: 'Wendelin Bonifatius', lastName: 'Haselbrunner-Quellenstein' }), person('w', 'female'),
             person('c1', 'female'),
         ], [union('u1', 'me', 'w', ['c1'])]);
         for (const [shape, ppu] of [['half', 0.45], ['two', 0.45], ['half', 0.35]] as const) {
@@ -368,11 +368,11 @@ describe('labels of wide short sectors on a phone (1101)', () => {
             expect(rows.length, `${shape} @${ppu}`).toBeGreaterThan(0);
             // The disc's text box: 1.7 radii less 6 px, as the ladder measures it.
             for (const r of rows) expect(estimate(r.text, r.fs, true), `${shape} @${ppu}: "${r.text}"`).toBeLessThanOrEqual(56 * 1.7 * ppu - 6);
-            expect(rows[0].text).toMatch(/^Max/);
+            expect(rows[0].text).toMatch(/^Wen/);
             // A cut word ends the text (no second cut row).
             expect(rows.filter(r => r.text.endsWith('…')).length).toBeLessThanOrEqual(1);
             if (rows.length > 1) expect(rows[0].text.endsWith('…')).toBe(false);
-            expect(disc).toMatch(/<title>[^<]*Maximilian Ferdinand Wolkenstein-Habermann/);
+            expect(disc).toMatch(/<title>[^<]*Wendelin Bonifatius Haselbrunner-Quellenstein/);
         }
     });
 
