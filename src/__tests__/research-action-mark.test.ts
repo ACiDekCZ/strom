@@ -73,6 +73,9 @@ describe('the map of research actions to their marks', () => {
         // Work on the queue (spec 052 §5): automatically or a number of tasks, both the agent's.
         expect(researchUrlMark(url('work', { workDo: 'loop' }))).toBe('agent');
         expect(researchUrlMark(url('work', { workDo: 'tasks', n: 7 }))).toBe('agent');
+        // "Process now" after a try of the verification (spec 065 K7.2): the agent's work on exactly those tasks.
+        expect(researchUrlMark(url('work', { workDo: 'tasks', workTasks: ['T0412', 'T0413'] }))).toBe('agent');
+        expect(researchLinkFlags(url('work', { workDo: 'tasks', workTasks: ['T0412'] }))).toEqual({ research: true, ai: true });
         expect(researchUrlMark(url('book', { book: 'B0003', bookDo: 'folder' }))).toBe('none');
         expect(url('book', { book: 'B0003', bookDo: 'folder' })).toBe(`strom-research://book?tree=${TREE}&id=B0003&do=folder`);
         expect(researchLinkFlags(url('book', { book: 'B0003', bookDo: 'folder' }))).toEqual({ research: false, ai: false });

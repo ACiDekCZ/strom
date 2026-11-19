@@ -23,10 +23,11 @@ import type { LiveStatus } from '../research-link.js';
 import { FactHolder, factCitations, factsOf, isPartnership } from '../import-origin.js';
 import { factReliability, ReliabilityStepName } from '../reliability.js';
 import {
-    VERIFY_BULK_FEATURE, VERIFY_FEATURE, VERIFY_STOP_FEATURE, factResearchEid, factVerifyInfo, personResearchRef,
+    VERIFY_BULK_FEATURE, VERIFY_FEATURE, VERIFY_STOP_FEATURE, VERIFY_TRY_FIRST_FEATURE, factResearchEid, factVerifyInfo, personResearchRef,
 } from '../verify.js';
 import {
     VerifyBulkDone, VerifyBulkOrder, VerifyBulkResult, VerifyFact, VerifyTarget, postVerify, postVerifyBulk, postVerifyStop,
+    verifyBulkStartedKind,
 } from '../research-verify.js';
 import {
     BulkScopeOption, FactOffer, PERSON_VERIFY_KINDS, VERIFY_TRY_PEOPLE, bulkScopeOptions, factOffer, personVerifyAskCount, personVerifyCounts, queuedToastDue,
@@ -35,7 +36,7 @@ import {
 import { VerifyResearch, researchVerifies } from '../verify-offer.js';
 import { closeStatusTip, refreshStatusTip, registerStatusTipExtension } from './status-tip.js';
 import { reliabilityLabel } from './fact-status.js';
-import { researchBridgeActionLabel } from './research-open-mark.js';
+import { researchBridgeActionLabel, researchLinkFlags } from './research-open-mark.js';
 import { activeResearchId, bridgeBase } from './history-ui.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { liveSession } from './research-ui.js';
@@ -51,6 +52,9 @@ export const VERIFY_TREE_DIALOG_ID = 'verify-tree-modal';
 
 /** How long the toast after a run of re-verification stands. */
 const QUEUED_TOAST_MS = 10_000;
+/** How long the toast after a try at the head of the queue stands (with "Process now": longer, closable). */
+const BULK_STARTED_MS = 5000;
+const BULK_PROCESS_MS = 15_000;
 const TOAST_KEY = (treeId: string): string => `strom-verify-toast:${treeId}`;
 
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -895,6 +899,8 @@ export const verifyPersonMethods = uiModule({
                 <input type="radio" name="vfy-order" value="${o}"${o === st.order ? ' checked' : ''}>
                 <span class="vfy-opt-main"><span class="vfy-opt-title">${esc(orderLabel(o))}</span></span>
             </label>`).join('');
+        // The try's tasks go to the head of the queue only where the research says so (spec 065 K7.3).
+        const tryHead = !!this.researchStatusOf(st.rid)?.features?.includes(VERIFY_TRY_FIRST_FEATURE);
         const restoreFocus = keepFocus(modal);
         modal.innerHTML = `
             <div class="modal-header vfy-header">
@@ -907,7 +913,7 @@ export const verifyPersonMethods = uiModule({
                 <label class="vfy-opt vfy-try">
                     <input type="checkbox" name="vfy-try"${st.tryFirst ? ' checked' : ''}>
                     <span class="vfy-opt-main"><span class="vfy-opt-title">${esc(v.tryFirst(VERIFY_TRY_PEOPLE))}</span>
-                    <span class="vfy-opt-sub">${esc(v.tryFirstSub(VERIFY_TRY_PEOPLE))}</span></span>
+                    <span class="vfy-opt-sub">${esc(tryHead ? v.tryFirstSubHead(VERIFY_TRY_PEOPLE) : v.tryFirstSub(VERIFY_TRY_PEOPLE))}</span></span>
                 </label>
                 <div class="vfy-est" aria-live="polite"></div>
             </div>
@@ -936,7 +942,7 @@ export const verifyPersonMethods = uiModule({
                     .filter(Boolean).join(' · ');
                 est.innerHTML = `<p class="vfy-est-head">${esc(head)}</p>`
                     + (e.left > 0 ? `<p class="vfy-est-left">${esc(v.bulkLeft(e.left))}</p>` : '')
-                    + `<p class="vfy-est-note">${esc(v.bulkNote)}</p>`;
+                    + `<p class="vfy-est-note">${esc(v.bulkNote(`${strings.live.knowsTitle} › ${v.section}`))}</p>`;
             }
         }
         if (start) {
@@ -982,8 +988,28 @@ export const verifyPersonMethods = uiModule({
             return;
         }
         this.closeVerifyBulkDialog();
-        this.showToast(strings.verify.bulkStarted(r.facts), 5000);
+        this.showVerifyBulkStarted(st.rid, r);
         this.afterVerifyStarted();
+    },
+
+    /**
+     * The toast after a start (spec 065 K7.2): a try at the head of the queue while the research is idle
+     * offers "Process now" (the `work` link on exactly its tasks, as "Work on the queue" opens it); while it
+     * works its tasks are next; without `verify.tryFirst` today's "N facts queued".
+     */
+    showVerifyBulkStarted(rid: string, r: VerifyBulkDone): void {
+        const v = strings.verify;
+        const kind = verifyBulkStartedKind(r, this.researchStatusOf(rid)?.features ?? null);
+        if (kind === 'plain') { this.showToast(v.bulkStarted(r.facts), BULK_STARTED_MS); return; }
+        if (kind === 'next') { this.showToast(v.bulkStartedNext(r.facts), BULK_STARTED_MS); return; }
+        const url = kind === 'process' && !this.activeResearchNoAgent() && activeResearchId() === rid.toLowerCase()
+            ? this.activeResearchLink('work', { workDo: 'tasks', workTasks: r.tasks }) : null;
+        if (!url) { this.showToast(v.bulkStartedHead(r.facts), BULK_STARTED_MS); return; }
+        // Its mark from the one map (RESEARCH_LINK_MARKS, `work`: the AI badge and the terminal mark).
+        this.showToast(v.bulkStartedIdle(r.facts), BULK_PROCESS_MS, {
+            closable: true, kind: 'verify-process',
+            action: { label: v.processNow, run: () => this.beginQueueWork(url), ...researchLinkFlags(url) },
+        });
     },
 
     // ==================== The toast after a run (10m) ====================

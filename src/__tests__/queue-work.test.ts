@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-    RUN_TASKS_FEATURE, STATUS_BUSY_FEATURE, WORK_LINK_FEATURE, researchSchemeUrl, sanitizeLiveStatus, sanitizeLiveWork, workTasksCount,
+    RUN_TASKS_FEATURE, STATUS_BUSY_FEATURE, WORK_LINK_FEATURE, researchSchemeUrl, sanitizeLiveStatus, sanitizeLiveWork, workTaskIds, workTasksCount,
     type LiveQueueItem,
 } from '../research-link.js';
 import {
@@ -30,6 +30,22 @@ describe('the work link', () => {
         expect(researchSchemeUrl('work', { tree: TREE, workDo: 'tasks' })).toBeNull();
         expect(researchSchemeUrl('work', { tree: TREE, workDo: 'loop', n: 5 })).toBeNull();
         expect(researchSchemeUrl('work', { tree: TREE })).toBeNull();
+    });
+
+    it('names exactly the tasks of "Process now": 1–100 task ids, never with a count (spec 065 K7.2)', () => {
+        const link = (workTasks: readonly string[], extra: { n?: number } = {}) => researchSchemeUrl('work', { tree: TREE, workDo: 'tasks', workTasks, ...extra });
+        expect(link(['T0412', 'T0413', 'T0414'])).toBe(`strom-research://work?tree=${TREE}&do=tasks&task=T0412,T0413,T0414`);
+        // Each task once, in its first place.
+        expect(link(['T0413', 'T0412', 'T0413'])).toBe(`strom-research://work?tree=${TREE}&do=tasks&task=T0413,T0412`);
+        const hundred = Array.from({ length: 100 }, (_, i) => `T${1000 + i}`);
+        expect(link(hundred)).toBe(`strom-research://work?tree=${TREE}&do=tasks&task=${hundred.join(',')}`);
+        expect(link([...hundred, 'T2000'])).toBeNull();
+        expect(link([])).toBeNull();
+        for (const bad of ['P0412', 'T', 'T12345678', '', ' T0412', 'T0412;', 'Т0412', 'T04,12', 'task']) expect(link(['T0001', bad])).toBeNull();
+        expect(link(['T0412'], { n: 3 })).toBeNull();
+        expect(researchSchemeUrl('work', { tree: TREE, workDo: 'loop', workTasks: ['T0412'] })).toBeNull();
+        expect(workTaskIds('T0412')).toBeNull();
+        expect(workTaskIds([1, 2])).toBeNull();
     });
 
     it('reads a count as a whole number 1–100', () => {

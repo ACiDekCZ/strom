@@ -39,6 +39,11 @@ export const FACTS_CONFIRM_VALUE_FEATURE = 'facts.confirm.value';
 export const FACT_MARK = /^[0-9a-fA-F]{16}$/;
 /** POST /verify/stop: drop the re-verification tasks not yet begun. */
 export const VERIFY_STOP_FEATURE = 'verify.stop';
+/**
+ * POST /verify/bulk with `try` puts its tasks at the head of the queue, and its answer (not dry) says
+ * `first` and whether the research works now (`working`) — spec 065 K7.1/K7.2.
+ */
+export const VERIFY_TRY_FIRST_FEATURE = 'verify.tryFirst';
 
 export const VERIFY_PENDING: readonly FactVerifyPending[] = ['wait', 'asked', 'images', 'permission'];
 

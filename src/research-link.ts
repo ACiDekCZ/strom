@@ -89,7 +89,8 @@ export const RESEARCH_LINK_MARKS: Readonly<Record<ResearchLinkAction, ResearchAc
     hypothesis: 'terminal', hypotheses: 'terminal',
     // The agent's work: a conversation, or a session the terminal starts with its estimate.
     chat: 'agent', history: 'agent', places: 'agent',
-    // Work on the queue (spec 052 §5): the terminal shows what runs and starts the agent's sessions on a yes.
+    // Work on the queue (spec 052 §5): the terminal shows what runs and starts the agent's sessions on a yes;
+    // "Process now" after a try of the verification (`do=tasks&task=`, spec 065 K7.2) the same.
     work: 'agent',
 };
 
@@ -355,6 +356,11 @@ export interface ResearchLinkParams {
     /** `work` with `workDo: 'tasks'`: how many tasks (1–100; a number or its digits). */
     n?: number | string;
     /**
+     * `work` with `workDo: 'tasks'` (spec 065 K7.2, `work.tasks`): exactly these tasks ("T0412"), 1–100,
+     * in this order — never together with `n`.
+     */
+    workTasks?: readonly string[];
+    /**
      * `history-kinds` (spec 035): the kinds of events to search — a list of kinds, `all`, `none`
      * or `all` without some (`all,-law`) — or `inherit` (the research's own value dropped).
      */
@@ -394,6 +400,21 @@ export type ResearchWorkDo = 'loop' | 'tasks';
 /** The fewest and the most tasks of "Only N tasks" (`strom run --tasks N`). */
 export const WORK_TASKS_MIN = 1;
 export const WORK_TASKS_MAX = 100;
+
+/**
+ * The tasks of "Process now" (spec 065 K7.2, `work?do=tasks&task=`): 1–100 task ids ("T0412"), each once
+ * in its first place; null when there is none, more than 100, or any is not a task id.
+ */
+export function workTaskIds(value: unknown): string[] | null {
+    if (!Array.isArray(value)) return null;
+    const ids: string[] = [];
+    for (const v of value) {
+        const id = typeof v === 'string' && /^T\d{1,7}$/.test(v) ? v : null;
+        if (!id) return null;
+        if (!ids.includes(id)) ids.push(id);
+    }
+    return ids.length >= WORK_TASKS_MIN && ids.length <= WORK_TASKS_MAX ? ids : null;
+}
 
 /** A number of tasks for "Only N tasks": a whole number 1–100 (as a number, or 1–3 digits), else null. */
 export function workTasksCount(value: unknown): number | null {
@@ -568,8 +589,12 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             return p.prune ? `${base}&prune=1` : base;
         case 'work': {
             // spec 052 §5: the fixed `do`, and a count 1–100 only with `tasks` — nothing else.
-            if (p.workDo === 'loop') return p.n === undefined ? `${base}&do=loop` : null;
+            if (p.workDo === 'loop') return p.n === undefined && p.workTasks === undefined ? `${base}&do=loop` : null;
             if (p.workDo !== 'tasks') return null;
+            if (p.workTasks !== undefined) {
+                const ids = p.n === undefined ? workTaskIds(p.workTasks) : null;
+                return ids ? `${base}&do=tasks&task=${ids.join(',')}` : null;
+            }
             const n = workTasksCount(p.n);
             return n !== null ? `${base}&do=tasks&n=${n}` : null;
         }
@@ -3391,6 +3416,8 @@ export const QUEUE_NEXT_FEATURE = 'queue.next';
  * (`do=loop|tasks`) — and `/status.work` saying the gate and a session's length (Strom Research 1.32).
  */
 export const WORK_LINK_FEATURE = 'work.link';
+/** `/status.features`: the link `work?do=tasks&task=T…,T…` works on exactly these tasks (spec 065 K7.2, "Process now"). */
+export const WORK_TASKS_FEATURE = 'work.tasks';
 /** `/status.features`: `strom run --tasks N`, so "Only N tasks" of the link `work` is offered. */
 export const RUN_TASKS_FEATURE = 'run.tasks';
 

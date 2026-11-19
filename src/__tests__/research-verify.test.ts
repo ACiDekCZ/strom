@@ -7,7 +7,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
     postVerify, postVerifyBulk, postFactConfirm, verifyRequestBody, verifyBulkRequestBody, factConfirmRequestBody,
     verifyReply, verifyBulkReply, factConfirmReply, verifyStatusSaid, researchFactRef, researchLineageRef,
-    postVerifyStop, verifyStopRequestBody, verifyStopReply, VERIFY_STOP_FEATURE,
+    postVerifyStop, verifyStopRequestBody, verifyStopReply, VERIFY_STOP_FEATURE, verifyBulkStartedKind,
 } from '../research-verify.js';
 import { sanitizeLiveStatus } from '../research-link.js';
 import { getStringsForLang } from '../strings.js';
@@ -170,6 +170,47 @@ describe('requests', () => {
         expect(calls[0].url.startsWith(`${BASE}/verify/bulk`)).toBe(true);
         expect(JSON.parse(calls[0].init.body as string)).toEqual({ scope: 'line', of: 'P1', try: 5 });
         expect(res).toEqual({ ok: true, people: 4, facts: 11, tasks: ['T1', 'T2'], left: 3, estimate: { sessions: 3, usd: 2 }, head: HEAD });
+    });
+
+    it('a try at the head of the queue says `first` and `working`; anything not a boolean is as if not said (spec 065 K7.2)', () => {
+        const base = { ok: true, people: 2, facts: 5, tasks: ['T0412', 'T0413'], left: 0, estimate: { sessions: 2 }, head: HEAD };
+        expect(verifyBulkReply(200, { ...base, first: true, working: false })).toMatchObject({ first: true, working: false });
+        const odd = verifyBulkReply(200, { ...base, first: 'yes', working: 1 });
+        expect(odd.ok && 'first' in odd).toBe(false);
+        expect(odd.ok && 'working' in odd).toBe(false);
+    });
+
+    it('the message after a start: today\'s without verify.tryFirst, Process now only while idle with work.tasks (spec 065 K7.2)', () => {
+        const ALLP = ['verify', 'verify.bulk', 'verify.tryFirst', 'work.tasks'];
+        const r = (extra: { first?: boolean; working?: boolean; tasks?: string[] }) => ({ tasks: ['T0412', 'T0413'], ...extra });
+        expect(verifyBulkStartedKind(r({ first: true, working: false }), ALLP)).toBe('process');
+        expect(verifyBulkStartedKind(r({ first: true, working: true }), ALLP)).toBe('next');
+        // Without the feature, or not a try at the head: today's message, whatever else is said.
+        expect(verifyBulkStartedKind(r({ first: true, working: false }), ['verify', 'verify.bulk', 'work.tasks'])).toBe('plain');
+        expect(verifyBulkStartedKind(r({ first: false, working: false }), ALLP)).toBe('plain');
+        expect(verifyBulkStartedKind(r({ working: false }), ALLP)).toBe('plain');
+        expect(verifyBulkStartedKind(r({ first: true, working: false }), null)).toBe('plain');
+        // Idle without the link on tasks, without valid tasks or with too many: at the head, no action.
+        expect(verifyBulkStartedKind(r({ first: true, working: false }), ['verify.tryFirst'])).toBe('head');
+        expect(verifyBulkStartedKind(r({ first: true, working: false, tasks: [] }), ALLP)).toBe('head');
+        const many = Array.from({ length: 101 }, (_, i) => `T${1000 + i}`);
+        expect(verifyBulkStartedKind(r({ first: true, working: false, tasks: many }), ALLP)).toBe('head');
+        // Not said whether it works: nothing that could start work beside a running one.
+        expect(verifyBulkStartedKind(r({ first: true }), ALLP)).toBe('head');
+    });
+
+    it('the messages after a start keep the count of facts and never address anyone', () => {
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            const v = getStringsForLang(lang).verify;
+            for (const text of [v.bulkStartedIdle(5), v.bulkStartedNext(5), v.bulkStartedHead(5), v.bulkStartedIdle(1)]) {
+                expect(text).toMatch(/\b[15] /);
+                expect(text).not.toMatch(/\b(you|your|vy|váš|vaše|Sie|Ihr|du)\b/i);
+            }
+            for (const text of [v.bulkNote('A › B'), v.previewNote, v.estimateNote, v.tryFirstSubHead(5)]) {
+                expect(text).not.toMatch(/background|pozadí|Hintergrund|w tle/i);
+            }
+        }
+        expect(getStringsForLang('cs').verify.bulkStartedIdle(2)).toBe('2 údaje k ověření jsou na začátku fronty. Výzkum teď nepracuje.');
     });
 
     it("a bulk round's `left` is the people not taken, and the dialog says people in every language", () => {

@@ -31995,6 +31995,8 @@
         .vfy-heading h2 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; text-wrap: pretty; }
         .vfy-sub { margin-top: 2px; font-size: 13px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
         .vfy-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 20px 12px; display: flex; flex-direction: column; gap: 10px; }
+        /* The body scrolls; its parts keep their height (a squeezed option's text ran under the estimate). */
+        .vfy-body > * { flex-shrink: 0; }
         .vfy-loading, .vfy-error { margin: 8px 0; font-size: 14px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
         .vfy-error { color: var(--text); }
         .vfy-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }

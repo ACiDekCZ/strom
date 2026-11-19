@@ -27,6 +27,8 @@ export interface FakeVerify {
     busy?: 'overlap' | number | 'always';
     /** How long each answer takes (ms; default 0). */
     delayMs?: number;
+    /** What a bulk start (not dry) says besides (`first`, `working`, `tasks` of `verify.tryFirst`, spec 065 K7.2). */
+    bulkStart?: Record<string, unknown>;
     /** The busy answers given. */
     busyAnswers: number;
     /** The most requests being answered at once. */
@@ -106,6 +108,7 @@ export async function fakeVerify(page: Page, bridge: FakeBridge, init: Partial<F
                 ok: true, people, facts, tasks: dry ? [] : ['T0050'],
                 // As the research: the people not taken in this round, not their facts.
                 left: Math.max(0, everyone - people), estimate: { sessions: Math.max(1, Math.round(facts / 4)), usd: facts * 0.3 }, head: bridge.head,
+                ...(dry ? {} : v.bulkStart ?? {}),
             });
             return;
         }
