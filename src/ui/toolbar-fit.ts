@@ -10,8 +10,10 @@
  * slides under the search field), the pill keeps its place but its tree name
  * is cut shorter than the name's own cap (de at 1440 with a research: "F."),
  * the search field of any tree is narrower than SEARCH_MIN_PX (de and pl
- * without a research at 1300 px: a stub of 8-36 px), or a research tree's
- * search field cannot hold its placeholder (up to SEARCH_ROOM_CAP_PX). The
+ * without a research at 1300 px: a stub of 8-36 px), or the search field
+ * cannot hold its placeholder (up to SEARCH_ROOM_CAP_PX; asked of a research
+ * tree first, of every tree since de's "Person suchen…" was cut to "Person
+ * suche" at 1440 with the line picker, verification of 3.30.0). The
  * steps (spec 073 §1.2), each taken only when the
  * ones before it are not enough:
  *
@@ -55,7 +57,8 @@
  *      shortcut H still works), only where even the magnifier leaves no room.
  *
  * Every step is taken too while the search input is narrower than
- * TABLET_SEARCH_MIN_PX, so finding a person keeps its room before the other
+ * TABLET_SEARCH_MIN_PX or than its placeholder (up to SEARCH_ROOM_CAP_PX),
+ * so finding a person keeps its room before the other
  * controls do, and a field that still cannot have it becomes the magnifier
  * (de and pl at 641-768 px with the sample tree: a stub of 8-63 px before).
  */
@@ -95,14 +98,14 @@ function placeholderWidth(input: HTMLInputElement, cs: CSSStyleDeclaration): num
 
 /**
  * The room the search input lacks (0 when it has enough), with `reserve` px
- * held back: every tree's input asks for SEARCH_MIN_PX, a research tree's
- * also for its placeholder (up to SEARCH_ROOM_CAP_PX).
+ * held back: the input asks for SEARCH_MIN_PX and for its placeholder (up to
+ * SEARCH_ROOM_CAP_PX), so "Person suchen…" is not cut.
  */
-export function searchShortfall(toolbar: HTMLElement, reserve = 0): number {
+export function searchShortfall(toolbar: HTMLElement, reserve = 0, minPx = SEARCH_MIN_PX): number {
     const input = toolbar.querySelector<HTMLInputElement>('#toolbar-search-picker .person-picker-input');
     if (!input || input.getClientRects().length === 0) return 0;
-    const belowMin = Math.max(0, Math.ceil(SEARCH_MIN_PX - (input.getBoundingClientRect().width - reserve)));
-    if (!document.body.classList.contains('research-actions') || !input.placeholder) return belowMin;
+    const belowMin = Math.max(0, Math.ceil(minPx - (input.getBoundingClientRect().width - reserve)));
+    if (!input.placeholder) return belowMin;
     const cs = getComputedStyle(input);
     const room = input.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) - reserve;
     const need = Math.min(placeholderWidth(input, cs), SEARCH_ROOM_CAP_PX);
@@ -173,12 +176,10 @@ function tabletTooTight(toolbar: HTMLElement, reserve: number): boolean {
 
 /**
  * True when the tablet's search input is shown and narrower than
- * TABLET_SEARCH_MIN_PX (`reserve` px held back).
+ * TABLET_SEARCH_MIN_PX or than its placeholder (`reserve` px held back).
  */
 function tabletSearchTooNarrow(toolbar: HTMLElement, reserve: number): boolean {
-    const input = toolbar.querySelector<HTMLElement>('#toolbar-search-picker .person-picker-input');
-    if (!input || input.getClientRects().length === 0) return false;
-    return input.getBoundingClientRect().width - reserve < TABLET_SEARCH_MIN_PX;
+    return searchShortfall(toolbar, reserve, TABLET_SEARCH_MIN_PX) > 0;
 }
 
 /** Take the steps of `steps` the toolbar needs, measured one by one. */

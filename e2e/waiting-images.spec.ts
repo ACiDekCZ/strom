@@ -472,6 +472,37 @@ test.describe('Polish at a tablet\'s width (K044)', () => {
         });
         expect(fit.inner).toBeGreaterThanOrEqual(fit.text);
     });
+
+    for (const width of [1024, 700]) {
+        test(`the number choices show "— wybierz numer —" whole, before sending and after a refusal (@${width})`, async ({ page }) => {
+            await follow(page, { width, height: 844 }, (b) => {
+                b.replies.push({ status: 409, body: { error: 'unwanted', code: 'waiting.image-unwanted', want: [112, 113] } });
+            });
+            await openOverview(page);
+            const item = await openItem(page, 'T0002');
+            await item.locator('.research-overview__deliver-steps [data-action="images"]').click();
+            const area = item.locator('.waiting-upload');
+            await area.locator('.waiting-upload__input').setInputFiles([jpeg('skan.jpg')]);
+            const whole = async (sel: Locator) => {
+                await expect(sel.locator('option').first()).toHaveText('— wybierz numer —');
+                await expect(sel).toHaveValue('');
+                return sel.evaluate((el: HTMLSelectElement) => {
+                    const cs = getComputedStyle(el);
+                    const ctx = document.createElement('canvas').getContext('2d')!;
+                    ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+                    // The arrow takes about 20 px at the right of a select.
+                    const inner = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 20;
+                    return inner - ctx.measureText(el.options[el.selectedIndex].text).width;
+                });
+            };
+            expect(await whole(area.locator('.waiting-upload__pickbox .waiting-upload__num'))).toBeGreaterThanOrEqual(0);
+            await area.locator('.waiting-upload__pickbox .waiting-upload__num').selectOption('112');
+            await area.locator('.waiting-upload__send').click();
+            const again = area.locator('.waiting-upload__again .waiting-upload__num');
+            expect(await whole(again)).toBeGreaterThanOrEqual(0);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+        });
+    }
 });
 
 test.describe('the small panel', () => {

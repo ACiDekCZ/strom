@@ -559,7 +559,9 @@ test.describe('the search field beside the view tabs (de-DE, no research)', () =
  * tabs, ⋯, a shorter tree name; on a tablet the steppers' words, the count,
  * the switch) and a field that still cannot have it becomes the magnifier,
  * which opens the field over the bar. Before, only a research tree was
- * measured: without one, de and pl at 1300 px kept a stub of 8-36 px. On a
+ * measured: without one, de and pl at 1300 px kept a stub of 8-36 px. The
+ * field of every tree is as wide as its placeholder where it can be (before,
+ * only a research tree's: de showed "Person suche" over the sample tree). On a
  * phone the magnifier opens the field over the bar as well. Nothing runs
  * over the bar and its controls do not overlap.
  */
@@ -592,8 +594,18 @@ for (const locale of ['de-DE', 'pl-PL']) {
                         overlaps.push(`${parts[i][0]} × ${parts[j][0]}`);
                     }
                 }
+                // The placeholder ("Person suchen…") against the field's room for text.
+                let phShort = 0;
+                if (shown(input)) {
+                    const el = input as HTMLInputElement, cs = getComputedStyle(el);
+                    const ctx = document.createElement('canvas').getContext('2d')!;
+                    ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+                    const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+                    phShort = Math.ceil(ctx.measureText(el.placeholder).width - room);
+                }
                 return {
                     field: shown(input) ? Math.round(input.getBoundingClientRect().width) : 0,
+                    phShort,
                     magnifier: shown(magnifier),
                     overflow: tb.scrollWidth - tb.clientWidth,
                     page: document.documentElement.scrollWidth - window.innerWidth,
@@ -603,7 +615,7 @@ for (const locale of ['de-DE', 'pl-PL']) {
         }
 
         async function checkWidths(page: Page, what: string) {
-            for (const width of [1440, 1300, 1024, 768, 390]) {
+            for (const width of [1440, 1300, 1200, 1100, 1024, 768, 390]) {
                 await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
                 const s = await searchFit(page);
                 const at = `${what} @${width}px`;
@@ -621,6 +633,8 @@ for (const locale of ['de-DE', 'pl-PL']) {
                     await expect(page.locator('body')).not.toHaveClass(/search-open/);
                 } else {
                     expect(s.field, `${at}: the search field (${s.field}px) keeps 80 px`).toBeGreaterThanOrEqual(80);
+                    // Its placeholder shows whole: de cut "Person suchen…" to "Person suche" (verification of 3.30.0).
+                    expect(s.phShort, `${at}: the placeholder fits the field`).toBeLessThanOrEqual(0);
                 }
             }
         }
