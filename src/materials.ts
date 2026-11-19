@@ -215,6 +215,8 @@ export interface MaterialItem {
     agentLeft?: { why?: string; said?: string };
     /** It has the same content as an older file (its I…) and is not sent to the agent (spec 102 §4.2; set by the Materials window). */
     copyOf?: string;
+    /** The sources whose file it is (`material.sourceOf`, spec 102 §7; set by the overview with the gate): it counts as assigned. */
+    sourceOf?: MaterialSourceOf[];
 }
 
 // ==================== READING THE BRIDGE'S ANSWER ====================
@@ -367,6 +369,14 @@ function sourceOfList(v: unknown): MaterialSourceOf[] {
 
 const count = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
 
+/**
+ * The research's uses of a file: `uses` of a file in `GET /material`, or the
+ * answer of `GET /material/<I…>/uses` (the same fields; `of` with `material.sourceOf`).
+ */
+export function parseMaterialUses(v: unknown): MaterialUses | undefined {
+    return usesOf(v);
+}
+
 function usesOf(v: unknown): MaterialUses | undefined {
     if (!v || typeof v !== 'object') return undefined;
     const u = v as Record<string, unknown>;
@@ -518,9 +528,13 @@ export function materialMatches(item: MaterialItem, query: string): boolean {
     return words.every(w => hay.includes(w));
 }
 
-/** A file nobody said whom it concerns: no person on it, none from sorting and none on its batch. */
-export function fileWithoutPerson(file: MaterialFile, list: Pick<MaterialList, 'batches'>): boolean {
+/**
+ * A file nobody said whom it concerns: no person on it, none from sorting and none on its batch.
+ * `sourceOf` (the research has `material.sourceOf`): the file of a source counts as assigned (spec 102 §7).
+ */
+export function fileWithoutPerson(file: MaterialFile, list: Pick<MaterialList, 'batches'>, opts: { sourceOf?: boolean } = {}): boolean {
     if (file.persons.length || file.sorted?.persons?.length) return false;
+    if (opts.sourceOf && file.uses?.of?.length) return false;
     const batch = file.batch ? list.batches.find(b => b.id === file.batch) : undefined;
     return !batch?.persons?.length;
 }

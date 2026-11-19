@@ -89,6 +89,27 @@ export interface TreeRecord {
     uses: number;
     /** The title of the first source it is evidence of or cut out for (none: without a source). */
     source?: string;
+    /** The research's ids (S…) of the tree's sources it is evidence of or cut out for (not counted twice with `sourceOf`). */
+    sourceRefs?: readonly string[];
+}
+
+export interface OverviewItemsOpts {
+    /** The research says which sources a file is the file of (`material.sourceOf`, spec 102 §7). */
+    sourceOf?: boolean;
+}
+
+/**
+ * The file of a source (spec 102 §7): its sources on the item, the first one's
+ * title as its source when the tree has none, and its sources in the tree
+ * counted among its places (those the tree's file is not already at).
+ */
+function withSourceOf(item: MaterialItem, rec: TreeRecord | undefined): void {
+    const of = item.file?.uses?.of;
+    if (!of?.length) return;
+    item.sourceOf = of;
+    if (!item.source) item.source = of[0].title ?? of[0].source;
+    const more = of.filter(s => s.inTree && !rec?.sourceRefs?.includes(s.source)).length;
+    if (more) item.uses = (item.uses ?? 0) + more;
 }
 
 /**
@@ -97,7 +118,7 @@ export interface TreeRecord {
  * original there (`tree`, their time the one they were added). Hidden files
  * are included (the filters decide).
  */
-export function overviewItems(list: MaterialList | null, tree: readonly TreeRecord[]): MaterialItem[] {
+export function overviewItems(list: MaterialList | null, tree: readonly TreeRecord[], opts: OverviewItemsOpts = {}): MaterialItem[] {
     const files = list?.files ?? [];
     // A tree's file joins the research's record of it (`origin: 'app'`, material.links) before another
     // record of the same original (it came in a batch too); an older research: the first by the hash.
@@ -139,6 +160,7 @@ export function overviewItems(list: MaterialList | null, tree: readonly TreeReco
             item.removedId = out.att.id;
             item.hidden = { reason: 'removed' };
         }
+        if (opts.sourceOf) withSourceOf(item, rec);
         return item;
     });
     return [...items, ...treeOnly];
@@ -169,13 +191,31 @@ export function queryWords(query: string): string[] {
  * union; a person the research does not know yet still counts as one).
  */
 export function itemWithoutPerson(item: MaterialItem): boolean {
-    if (item.persons.length > 0) return false;
+    // The file of a source is assigned (spec 102 §7): "Without a person" does not show it.
+    if (item.persons.length > 0 || item.sourceOf?.length) return false;
     return item.origin !== 'tree' || !item.attachment?.places?.some(p => 'personId' in p);
 }
 
-/** The file is in the tree (the tree keeps it or uses it); beside an archive the rest is only in the archive. */
+/**
+ * The file is in the tree (the tree keeps it or uses it, or a source it is the file of comes to the tree,
+ * spec 102 §7); beside an archive the rest is only in the archive.
+ */
 export function itemInTree(item: MaterialItem): boolean {
-    return !!item.attachment || (item.uses ?? 0) > 0;
+    return !!item.attachment || (item.uses ?? 0) > 0 || !!item.sourceOf?.some(s => s.inTree);
+}
+
+/**
+ * The people a source the file is the file of cites (spec 102 §7), after the file's own: each once, in
+ * order, and how many more the research counted than it named (`citedCount` over the first five).
+ */
+export function sourceOfPersons(item: Pick<MaterialItem, 'persons' | 'sourceOf'>): { persons: string[]; more: number } {
+    const persons = [...item.persons];
+    let more = 0;
+    for (const s of item.sourceOf ?? []) {
+        for (const p of s.cited) if (!persons.includes(p)) persons.push(p);
+        more = Math.max(more, s.citedCount - s.cited.length);
+    }
+    return { persons, more };
 }
 
 /** Does the item pass the filters? (`words`: `queryWords(f.query)`, computed once.) */
@@ -717,11 +757,12 @@ export function nameWithoutYears(name: string): string {
         .trim();
 }
 
-/** "Jan Novák +2"; '' without people. `name`: a REFN's name (null: unknown). */
-export function personsShort(persons: readonly string[], name: (refn: string) => string | null): string {
+/** "Jan Novák +2"; '' without people. `name`: a REFN's name (null: unknown); `more`: people counted but not named. */
+export function personsShort(persons: readonly string[], name: (refn: string) => string | null, more = 0): string {
     if (persons.length === 0) return '';
     const first = nameWithoutYears(name(persons[0]) ?? persons[0]);
-    return persons.length > 1 ? `${first} +${persons.length - 1}` : first;
+    const rest = persons.length - 1 + more;
+    return rest > 0 ? `${first} +${rest}` : first;
 }
 
 // ==================== LIST COLUMNS (spec 102 §8f) ====================

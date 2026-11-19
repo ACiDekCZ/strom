@@ -1700,16 +1700,22 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
     const concerns = (f: FakeMaterialFile, p: string) =>
         f.persons.includes(p) || !!f.sorted?.persons?.includes(p) || !!batchOf(f.batch)?.persons?.includes(p);
     const assignOn = features.includes('material.assign');
+    const sourceOfOn = features.includes('material.sourceOf');
     const shown = (f: FakeMaterialFile): Record<string, unknown> => {
-        if (assignOn) return { ...f };
+        // `uses.of` only behind `material.sourceOf` (Strom Research 1.35, spec 102 V1).
+        const { of: _of, ...usesOlder } = f.uses ?? { excerpts: 0, sources: [], tasks: 0 };
+        const g = f.uses && !sourceOfOn ? { ...f, uses: usesOlder } : f;
+        if (assignOn) return { ...g };
         // An older research: no title, kind, date nor hidden.
-        const { title: _t, kind: _k, date: _d, hidden: _h, ...older } = f;
+        const { title: _t, kind: _k, date: _d, hidden: _h, ...older } = g;
         return older;
     };
     const peopleOf = (files: FakeMaterialFile[], batches: FakeMaterialBatch[]) => {
         const out: Record<string, string> = {};
         const add = (p: string) => { if (m.people[p]) out[p] = m.people[p]; };
         files.forEach(f => { f.persons.forEach(add); f.sorted?.persons?.forEach(add); });
+        // The people citing a source the file is the file of (`material.sourceOf`, V1c).
+        if (sourceOfOn) files.forEach(f => f.uses?.of?.forEach(o => (Array.isArray(o.cited) ? o.cited as string[] : []).forEach(add)));
         batches.forEach(x => x.persons?.forEach(add));
         return out;
     };

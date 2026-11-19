@@ -13,10 +13,11 @@
 import { DataManager } from '../data.js';
 import { PersonId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { MaterialItem, cachedMaterialList } from '../materials.js';
+import { MaterialItem, MaterialSourceOf, cachedMaterialList } from '../materials.js';
 import { MediaUse, materialPersonLabel, mediaUseLabel, mediaUses } from '../media-uses.js';
 import { placePersonId } from '../media.js';
-import { researchPersonRef } from '../research-link.js';
+import { nameWithoutYears } from '../materials-overview.js';
+import { researchPersonRef, researchSourceRef } from '../research-link.js';
 import { closeImageViewer } from './image-viewer.js';
 import type { MaterialsContext } from './materials-ui.js';
 import { uiModule } from './module.js';
@@ -64,12 +65,18 @@ export const materialUsesMethods = uiModule({
         const block = h('section', 'mv-uses');
         block.dataset.uses = String(uses.length);
 
+        // The file of a source (spec 102 §7, set only with `material.sourceOf`): its sources first.
+        const of = archive ? item.sourceOf ?? [] : [];
         const head = h('div', 'mv-uses-head');
         const title = h('h3', 'mv-uses-title', m.used);
         head.appendChild(title);
-        if (uses.length) head.appendChild(h('span', 'mv-uses-count', m.places(uses.length)));
+        const count = [of.length ? m.agentSort.sourcesN(of.length) : '', uses.length ? m.places(uses.length) : ''].filter(Boolean).join(' · ');
+        if (count) head.appendChild(h('span', 'mv-uses-count', count));
         block.appendChild(head);
-        if (archive) block.appendChild(h('div', 'mv-uses-sub', m.usedInTree));
+        if (of.length) block.appendChild(this.materialSourceOfRows(of, ctx!, opts));
+        // In the tree only through a source and nowhere of its own: no "Not in the tree yet." (Link to… stays an action).
+        const viaSourceOnly = !uses.length && of.some(s => s.inTree);
+        if (archive && !viaSourceOnly) block.appendChild(h('div', 'mv-uses-sub', m.usedInTree));
 
         if (uses.length) {
             const collapse = uses.length > COLLAPSE_OVER && !opts.expanded;
@@ -84,7 +91,7 @@ export const materialUsesMethods = uiModule({
                 more.addEventListener('click', () => opts.expand());
                 block.appendChild(more);
             }
-        } else {
+        } else if (!viaSourceOnly) {
             const none = h('p', 'mv-uses-none', m.nowhereYet);
             // Link to… (spec 102 §4): the tree's file, or material outside the tree while the bridge runs (Q2).
             const canLink = !DataManager.isReadOnly() && !item.removedId
@@ -118,6 +125,63 @@ export const materialUsesMethods = uiModule({
             if (arch.childElementCount > 1) block.appendChild(arch);
         }
         return block;
+    },
+
+    /**
+     * "File of a source" (spec 102 §7): one row per source, its title a link to the tree's source (none: the
+     * title alone), under it how the file belongs to it and who cites it.
+     */
+    materialSourceOfRows(of: readonly MaterialSourceOf[], ctx: MaterialsContext, opts: MaterialUsesOpts): HTMLElement {
+        const m = strings.materials;
+        const s = m.agentSort;
+        const data = DataManager.getData();
+        const wrap = h('div', 'mv-uses-sourceof');
+        wrap.appendChild(h('div', 'mv-uses-sub', s.usesSourceOf));
+        const grid = h('div', 'mv-uses-grid');
+        const bySourceRef = new Map<string, string>();
+        for (const src of Object.values(data.sources ?? {})) {
+            const ref = researchSourceRef(src.refn);
+            if (ref && !bySourceRef.has(ref)) bySourceRef.set(ref, src.id);
+        }
+        const names = this.materialRefnNames(ctx);
+        for (const use of of) {
+            grid.appendChild(h('span', 'mv-use-type', m.usedType.source));
+            const main = h('div', 'mv-use-main');
+            const sourceId = bySourceRef.get(use.source);
+            const label = use.title ?? (sourceId ? data.sources?.[sourceId]?.title : undefined) ?? use.source;
+            if (sourceId) {
+                const link = h('button', 'mv-use-link', label);
+                link.type = 'button';
+                link.dataset.use = 'sourceof';
+                link.addEventListener('click', () => this.openMaterialUse({ kind: 'source', sourceId }, opts));
+                main.appendChild(link);
+            } else {
+                main.appendChild(h('span', 'mv-use-text', label));
+            }
+            const sub = h('span', 'mv-use-sub', use.via === 'input' ? s.viaInput : use.via === 'media' ? s.viaMedia : s.viaExcerpt);
+            if (use.cited.length) {
+                // "Cited by: <name>, + 2": the first person's name in serif, the rest counted.
+                const [before, after = ''] = s.citedBy('\u0000', use.citedCount - 1).split('\u0000');
+                sub.append(` · ${before}`, h('span', 'is-person', nameWithoutYears(names(use.cited[0]))), after);
+            }
+            main.appendChild(sub);
+            grid.appendChild(main);
+            grid.appendChild(h('span'));
+        }
+        wrap.appendChild(grid);
+        return wrap;
+    },
+
+    /** A REFN's name: the tree's person (without a name: what the research calls them), else the research's name, else the REFN. */
+    materialRefnNames(ctx: MaterialsContext): (refn: string) => string {
+        const tree = new Map<string, string>();
+        for (const p of DataManager.getAllPersons()) {
+            const refn = researchPersonRef(p.refn);
+            const own = `${p.firstName} ${p.lastName}`.trim();
+            if (refn && !tree.has(refn) && own && own !== '?') tree.set(refn, own);
+        }
+        const known = cachedMaterialList(ctx.treeId)?.people ?? {};
+        return refn => tree.get(refn) ?? (known[refn] ? materialPersonLabel(known[refn]) : refn);
     },
 
     /** One place's row: its kind, the link (and its sentence), "×" for a place of its own. */

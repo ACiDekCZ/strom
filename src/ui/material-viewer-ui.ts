@@ -386,9 +386,12 @@ export const materialViewerMethods = uiModule({
         const ctx = this.materialsContext();
         const list = ctx ? cachedMaterialList(ctx.treeId) : null;
         const file = list?.files.find(f => f.id === item.file!.id);
-        const fresh = !list || !file
+        const built = !list || !file
             ? (attachment === item.attachment ? item : { ...materialFileItem(item.file, { batches: [] }, attachment), batch: item.batch })
             : materialFileItem(file, list, attachment);
+        // The file of a source (spec 102 §7): its sources as the research says them now.
+        const of = ctx?.caps.list && ctx.caps.sourceOf ? (file ?? item.file).uses?.of : undefined;
+        const fresh = of?.length ? { ...built, sourceOf: of } : built;
         // Taken out of the tree and not back yet: still hidden "removed".
         const wasId = item.removedId ?? item.attachment?.id;
         const out = !attachment && wasId ? DataManager.getMedia(wasId) : undefined;
@@ -769,6 +772,8 @@ export const materialViewerMethods = uiModule({
         // Where it is kept (§2.4), and an older research.
         if (item.origin === 'both') body.appendChild(h('p', 'mv-sentence', agent ? m.keptArchiveResearch : m.keptArchive));
         else if (item.origin === 'tree') body.appendChild(h('p', 'mv-sentence', m.keptApp));
+        // The file of a source that comes to the tree (spec 102 §7): in the tree through the source.
+        else if (inArchive && item.sourceOf?.some(s => s.inTree)) body.appendChild(h('p', 'mv-sentence', m.agentSort.keptViaSource));
         else if (inArchive) body.appendChild(h('p', 'mv-sentence', agent ? m.archiveOnlyResearch : m.archiveOnly));
         if (inArchive && ctx?.caps.list && !ctx.caps.assign) body.appendChild(h('p', 'mv-sentence is-muted', m.assignNewer));
 

@@ -26,7 +26,7 @@ import type { UIClass } from './index.js';
 import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
-import { researchPersonRef, researchSchemeUrl, researchLinkMark } from '../research-link.js';
+import { researchPersonRef, researchSchemeUrl, researchLinkMark, researchSourceRef } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import { PersonPicker } from '../person-picker.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE, MQ_TABLET } from '../breakpoints.js';
@@ -41,7 +41,7 @@ import {
     emptyFilters, activeFilterCount, narrowing, overviewItems, overviewSummary, overviewGroups, overviewRows,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, personsShort, nameWithoutYears, parseViewPrefs,
     itemWithoutPerson, OverviewSummary, inMaterialFolder, firstFolderLine, ViewPrefs,
-    ListSort, ListColumn, SortChoice, sortOverviewGroups, chooseSort, storedFilters, itemInTree,
+    ListSort, ListColumn, SortChoice, sortOverviewGroups, chooseSort, storedFilters, itemInTree, sourceOfPersons,
     WindowHeadAction, windowHeadMenu, dragCarriesFiles,
 } from '../materials-overview.js';
 import { materialThumbs, ThumbSnapshot } from '../material-thumbs.js';
@@ -242,11 +242,15 @@ export function treeRecords(byRefn: boolean): TreeRecord[] {
         const used = uses.get(att.id) ?? [];
         const src = used.find(u => u.kind === 'source' || u.kind === 'excerpt');
         const source = src?.sourceId ? (data.sources?.[src.sourceId]?.title || strings.materials.unknownSource) : undefined;
+        // The research's ids of its sources, not counted again as the file of a source (spec 102 §7).
+        const sourceRefs = byRefn ? [...new Set(used.filter(u => u.kind === 'source' || u.kind === 'excerpt')
+            .map(u => researchSourceRef(data.sources?.[u.sourceId ?? '']?.refn)).filter((r): r is string => !!r))] : [];
         return {
             att,
             persons: mediaPersonIds(att.places.length ? att : { places: att.removed?.places ?? [] }).map(key).filter((k): k is string => !!k),
             uses: used.length,
             ...(source ? { source } : {}),
+            ...(sourceRefs.length ? { sourceRefs } : {}),
         };
     });
 }
@@ -614,7 +618,7 @@ export const materialsWindowMethods = uiModule({
         if (opts.items || list !== w.list) {
             w.list = list;
             w.drawnAttachments = treeAttachmentsKey();
-            w.items = overviewItems(list, treeRecords(model === 'archive'));
+            w.items = overviewItems(list, treeRecords(model === 'archive'), { sourceOf: model === 'archive' && ctx.caps.sourceOf });
             w.names = namesOf(list, model);
             const keys = new Set(w.items.map(i => i.key));
             for (const k of [...w.selected]) if (!keys.has(k)) w.selected.delete(k);
@@ -669,7 +673,8 @@ export const materialsWindowMethods = uiModule({
         for (const i of w.items) {
             delete i.agentLeft;
             delete i.copyOf;
-            if (!marks || !i.file || i.hidden || (i.titled && (i.persons.length || i.viaBatch.length))) continue;
+            // The file of a source is assigned (spec 102 §7): no "Not assigned by the agent", no copy tag.
+            if (!marks || !i.file || i.hidden || i.sourceOf?.length || (i.titled && (i.persons.length || i.viaBatch.length))) continue;
             const left = marks.left.get(i.file.id);
             if (left) i.agentLeft = { ...left };
             const copy = marks.copyOf.get(i.file.id);
@@ -682,6 +687,12 @@ export const materialsWindowMethods = uiModule({
         const s = strings.materials.agentSort;
         const tag = item.agentLeft ? s.tagLeft : item.copyOf ? s.tagCopy : '';
         return tag ? `<span class="mw-intree-tag mw-sort-tag" data-tag="${item.agentLeft ? 'left' : 'copy'}">${esc(tag)}</span>` : '';
+    },
+
+    /** "File of a source" / "File of 2 sources" (spec 102 §7), '' for any other file. */
+    mwSourceOfTag(item: MaterialItem): string {
+        const n = item.sourceOf?.length ?? 0;
+        return n ? strings.materials.agentSort.sourceOfN(n) : '';
     },
 
     /** The header's counts (or "Loading…"). */
@@ -1066,6 +1077,11 @@ export const materialsWindowMethods = uiModule({
     mwPersons(item: MaterialItem): { text: string; none: boolean } {
         const w = win!;
         if (itemWithoutPerson(item)) return { text: strings.materials.noPerson, none: true };
+        // The file of a source (spec 102 §7): its own people, then those the source cites.
+        if (item.sourceOf?.length) {
+            const cited = sourceOfPersons(item);
+            return { text: personsShort(cited.persons, refn => w.names.get(refn) ?? null, cited.more), none: false };
+        }
         return { text: personsShort(item.persons, refn => w.names.get(refn) ?? null), none: false };
     },
 
@@ -1077,7 +1093,7 @@ export const materialsWindowMethods = uiModule({
         const check = '<span class="mw-check" aria-hidden="true"></span>';
         const cls = `mw-thumb${item.hidden ? ' is-hidden' : ''}`;
         // "In the tree" only beside an archive (without one everything is); a hidden file keeps its own label.
-        const inTree = win?.model === 'archive' && !hiddenLabel && (!!item.attachment || (item.uses ?? 0) > 0)
+        const inTree = win?.model === 'archive' && !hiddenLabel && itemInTree(item)
             ? `<span class="mw-intree">${esc(m.inTreeTag)}</span>` : '';
         const places = item.uses ? `<span class="mw-places" aria-label="${esc(m.places(item.uses))}" title="${esc(m.places(item.uses))}">${item.uses.toLocaleString(getCurrentLanguage())}</span>` : '';
         const marks = `${label}${inTree}${places}${check}`;
@@ -1097,7 +1113,7 @@ export const materialsWindowMethods = uiModule({
         const m = strings.materials;
         const persons = this.mwPersons(item).text;
         const hidden = item.hidden ? m.hiddenLabel[item.hidden.reason ?? 'none'] ?? m.hiddenLabel.none : '';
-        const tag = item.agentLeft ? m.agentSort.tagLeft : item.copyOf ? m.agentSort.tagCopy : '';
+        const tag = item.agentLeft ? m.agentSort.tagLeft : item.copyOf ? m.agentSort.tagCopy : this.mwSourceOfTag(item);
         return [item.title, persons, tag, hidden].filter(Boolean).join(', ');
     },
 
@@ -1115,7 +1131,7 @@ export const materialsWindowMethods = uiModule({
         return `<div class="mw-tile${selected ? ' is-selected' : ''}${item.hidden ? ' is-hidden' : ''}" role="gridcell" tabindex="-1" data-key="${esc(item.key)}" aria-label="${esc(this.mwAriaLabel(item))}"${w.selecting ? ` aria-selected="${selected}"` : ''}>
             ${this.mwThumbHtml(item, group, false)}
             <span class="mw-tile-title" title="${esc(item.title)}">${fileNameBreakParts(item.title).map(esc).join('<wbr>')}</span>
-            <span class="mw-tile-persons${persons.none ? ' is-none' : ''}">${this.mwSortTagHtml(item)}${esc(persons.text)}</span>
+            <span class="mw-tile-persons${persons.none ? ' is-none' : ''}">${this.mwSortTagHtml(item)}${this.mwSourceOfTagHtml(item)}${esc(persons.text)}</span>
             ${this.mwRestoreHtml(item)}
         </div>`;
     },
@@ -1146,11 +1162,28 @@ export const materialsWindowMethods = uiModule({
             </span>
             <span class="mw-li-kind" title="${esc(kind)}">${esc(kind)}</span>
             <span class="mw-li-date">${esc(date)}</span>
-            <span class="mw-li-persons${persons.none ? ' is-none' : ''}">${this.mwSortTagHtml(item)}${esc(persons.text)}</span>
-            <span class="mw-li-source${item.source ? '' : ' is-none'}" title="${esc(item.source ?? '')}">${esc(item.source ?? m.noSourceShort)}</span>
+            <span class="mw-li-persons${persons.none ? ' is-none' : ''}">${this.mwSortTagHtml(item)}${this.mwSourceOfTagHtml(item, 'mw-li-srctag')}${esc(persons.text)}</span>
+            ${this.mwListSourceHtml(item)}
             ${inTree}
             <span class="mw-li-used">${used}</span>
         </div>`;
+    },
+
+    /** The tag "File of a source" before the people (spec 102 §7; in a list row only on a phone, where the Source column is not). */
+    mwSourceOfTagHtml(item: MaterialItem, cls = ''): string {
+        const tag = this.mwSourceOfTag(item);
+        return tag ? `<span class="mw-intree-tag mw-srcof-tag${cls ? ` ${cls}` : ''}">${esc(tag)}</span>` : '';
+    },
+
+    /** A list row's Source: the file of a source with its tag and the first source's title (", + 1"), else the tree's source. */
+    mwListSourceHtml(item: MaterialItem): string {
+        const m = strings.materials;
+        const of = item.sourceOf ?? [];
+        if (of.length) {
+            const title = `${of[0].title ?? of[0].source}${of.length > 1 ? `, + ${(of.length - 1).toLocaleString(getCurrentLanguage())}` : ''}`;
+            return `<span class="mw-li-source is-sourceof" title="${esc(title)}">${this.mwSourceOfTagHtml(item)} ${esc(title)}</span>`;
+        }
+        return `<span class="mw-li-source${item.source ? '' : ' is-none'}" title="${esc(item.source ?? '')}">${esc(item.source ?? m.noSourceShort)}</span>`;
     },
 
     /** The list's column header: a click or Enter sorts by it, again the other way, a third time back to the groups' order. */

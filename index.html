@@ -29955,6 +29955,11 @@
         /* A tag before the people of a tile or a row: "Not assigned by the agent", "Same content" (spec 102 §4). */
         .mw-tile-persons .mw-intree-tag, .mw-li-persons .mw-intree-tag { margin-right: 4px; white-space: nowrap; vertical-align: 1px; font-family: var(--font-sans); font-style: normal; }
         .mw-tile-persons .mw-intree-tag { font-size: 10.5px; padding: 0 5px; }
+        /* The file of a source (spec 102 §7): its tag before the source's title in the list's Source column; before the
+           people only on a phone, where the Source column is not shown. */
+        .mw-li-source.is-sourceof { color: var(--text); }
+        .mw-li-source .mw-intree-tag { margin-right: 2px; font-size: 10.5px; padding: 0 5px; vertical-align: 1px; font-style: normal; }
+        .mw-li-persons .mw-li-srctag { display: none; }
         /* The list's column header (sort by a click or Enter; aria-sort). */
         .mw-lhead { padding: 0 24px; border-bottom: 1px solid var(--divider); }
         .mw-lh { height: 34px; padding: 0 8px; border-bottom: none; cursor: default; font-size: 12px; }
@@ -30107,6 +30112,7 @@
             .mw-li-persons { grid-column: 3; grid-row: 2; align-self: start; }
             .mw-li, #materials-modal[data-model="archive"] .mw-li { grid-template-columns: auto 40px minmax(0, 1fr) auto; }
             .mw-li-source { display: none; }
+            .mw-li-persons .mw-li-srctag { display: inline-block; font-size: 10.5px; padding: 0 5px; }
             .mw-li-date { grid-column: 4; grid-row: 1 / span 2; }
             .mw-lhead { display: none; }
             .mw-bulk { padding-left: 16px; padding-right: 16px; }
@@ -30487,6 +30493,10 @@
         }
         .mv-use-link.is-person { font-family: var(--font-serif); font-size: 14px; }
         .mv-use-sub { font-size: 11.5px; color: var(--text-faint); }
+        /* The file of a source (spec 102 §7): a source the tree does not have is its title without a link; the people citing it in serif. */
+        .mv-uses-sourceof { display: flex; flex-direction: column; gap: 8px; }
+        .mv-use-text { font-size: 13px; line-height: 1.35; color: var(--text); overflow-wrap: anywhere; }
+        .mv-use-sub .is-person { font-family: var(--font-serif); font-size: 12.5px; color: var(--text-light); }
         .mv-use-x {
             width: 22px; height: 22px; align-self: start; border: none; border-radius: var(--r-sm); background: none; padding: 0;
             color: var(--text-light); font-size: 15px; line-height: 1; cursor: pointer;
