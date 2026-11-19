@@ -132,6 +132,19 @@ test('fan family lines: "Other" expands the grey lines, kept on the device (spec
     const n = parseInt((await other.locator('.fan-legend-label').textContent())!.replace(/\D+/g, ''), 10);
     await expect(page.locator('#fan-legend-items button.fan-legend-sub[data-fan-rod]')).toHaveCount(n);
     await expect(other).toBeFocused();
+    // A low window: the long legend scrolls inside its card and stops under the top-left row of pills (⌂).
+    await page.setViewportSize({ width: 1440, height: 520 });
+    await expect.poll(() => page.evaluate(() => {
+        const box = (sel: string) => {
+            const el = document.querySelector<HTMLElement>(sel);
+            const r = el?.getBoundingClientRect();
+            return r && r.width > 0 && getComputedStyle(el!).display !== 'none' ? r : null;
+        };
+        const legend = box('#fan-legend')!, stage = box('#fan-legend')!.top - box('.fan-stage')!.top;
+        const home = box('#fan-home-pill');
+        return { underPills: stage >= 55, clearOfHome: !home || home.bottom <= legend.top, scrolls: legend.height < document.querySelector('#fan-legend')!.scrollHeight };
+    })).toEqual({ underPills: true, clearOfHome: true, scrolls: true });
+    await page.setViewportSize({ width: 1440, height: 900 });
     // A grey line can be highlighted from the expanded list.
     const grey = page.locator('#fan-legend-items button.fan-legend-sub[data-fan-rod]').first();
     await grey.click();
@@ -315,6 +328,20 @@ for (const theme of ['light', 'dark'] as const) {
             await expect(sheet).toBeVisible();
             // The legend in parts by side in the sheet; its rows are 34px.
             await expect(sheet.locator('.fan-legend-group')).toHaveText(["Father's side", "Mother's side"]);
+            // Scrolled (a low phone), a side's heading sticks to the sheet's top edge (no rows showing above it).
+            await page.setViewportSize({ width: 390, height: 480 });
+            await sheet.locator('.fan-legend-other').tap();
+            await expect(sheet.locator('.fan-legend-other')).toHaveAttribute('aria-expanded', 'true');
+            await page.locator('.fan-sheet-panel').evaluate(e => { e.scrollTop = e.scrollHeight; });
+            await expect.poll(() => page.evaluate(() => {
+                const panel = document.querySelector('.fan-sheet-panel')!.getBoundingClientRect();
+                const h = document.querySelectorAll('#fan-sheet .fan-legend-group')[1].getBoundingClientRect();
+                return Math.abs(h.top - panel.top) <= 2;
+            })).toBe(true);
+            await sheet.locator('.fan-legend-other').tap();
+            await expect(sheet.locator('.fan-legend-other')).toHaveAttribute('aria-expanded', 'false');
+            await page.locator('.fan-sheet-panel').evaluate(e => { e.scrollTop = 0; });
+            await page.setViewportSize({ width: 390, height: 844 });
             const row = sheet.locator('button[data-fan-rod]').nth(1);
             expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(34);
             const name = (await row.locator('.fan-legend-label').textContent())!.trim();
@@ -335,6 +362,14 @@ for (const theme of ['light', 'dark'] as const) {
             expect(swatch).toBe(rowSwatch);
             const c = (await chip.boundingBox())!, p = (await page.locator('#evidence-pill').boundingBox())!;
             expect(c.y + c.height).toBeLessThanOrEqual(p.y);
+            // Held sideways the pill stands at the top: the chip keeps the bottom left, clear of it.
+            await page.setViewportSize({ width: 844, height: 390 });
+            await expect.poll(async () => {
+                const a = (await chip.boundingBox())!, b = (await page.locator('#evidence-pill').boundingBox())!;
+                const apart = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+                return { apart, bottom: a.y + a.height > 390 / 2, inside: a.y + a.height <= 390 };
+            }).toEqual({ apart: true, bottom: true, inside: true });
+            await page.setViewportSize({ width: 390, height: 844 });
             // No sideways scroll on the phone.
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
@@ -405,6 +440,14 @@ test('fan family lines: print and the poster carry the highlight (spec 114 §7)'
     const paper = await look();
     expect(paper.opacity).toBe('1');
     expect(paper.fill).not.toBe(screen.fill);
+    // The legend flows in lines as on the poster (not one tall column), the sides' headings not sticky;
+    // the highlight's pill and ⌂ are the screen's and stay off the paper.
+    expect(await page.evaluate(() => ({
+        rods: getComputedStyle(document.querySelector('#fan-legend .fan-legend-rods')!).display,
+        heading: getComputedStyle(document.querySelector('#fan-legend .fan-legend-group')!).position,
+        pill: getComputedStyle(document.getElementById('evidence-pill')!).display,
+        home: getComputedStyle(document.getElementById('fan-home-pill')!).display,
+    }))).toEqual({ rods: 'flex', heading: 'static', pill: 'none', home: 'none' });
     await page.emulateMedia({ media: 'screen' });
     await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
     await expect.poll(async () => (await look()).opacity).toBe('0.45');

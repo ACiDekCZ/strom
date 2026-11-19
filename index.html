@@ -13413,10 +13413,13 @@
                 font-size: 22px;
             }
         }
-        /* Legend: a card bottom-left, its head folds it (remembered on the device). */
+        /* Legend: a card bottom-left, its head folds it (remembered on the device). A long one
+           (family lines, spec 114) stops under the top-left row of pills (⌂, the original person's
+           pill, the pinned centre), --fan-legend-top; --fan-legend-nav keeps room for back / forward. */
         .fan-legend {
             position: absolute; left: 14px; bottom: 14px; z-index: 3;
-            max-width: 280px; max-height: calc(100% - 28px); overflow: auto; box-sizing: border-box;
+            --fan-legend-top: 56px;
+            max-width: 280px; max-height: calc(100% - 14px - var(--fan-legend-top) - var(--fan-legend-nav, 0px)); overflow: auto; box-sizing: border-box;
             padding: 6px 12px; border-radius: var(--r-lg);
             background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
             font-size: 12.5px; color: var(--text);
@@ -13426,8 +13429,10 @@
             display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
             min-height: 28px; padding: 0; margin: 0; border: 0; background: none; box-shadow: none;
             color: var(--text-light); font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer;
-            /* It stays at the top while the card's rows scroll (spec 114 §4). */
-            position: sticky; top: 0; z-index: 2; background: var(--surface);
+            /* It stays at the top while the card's rows scroll (spec 114 §4), from the card's top edge:
+               it takes the card's 6px top padding, so no row shows above it. */
+            position: sticky; top: -6px; z-index: 2; background: var(--surface);
+            margin-top: -6px; padding-top: 6px; min-height: 34px; box-sizing: border-box;
         }
         .fan-legend-head:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .fan-legend-items { display: none; padding: 2px 0 4px; }
@@ -13503,6 +13508,9 @@
         .fan-sheet-seg .fan-color-btn { flex: 1 1 0; height: 40px; padding: 0 6px; font-size: 14px; }
         .fan-sheet-items .fan-legend-row { min-height: 34px; font-size: 14px; }
         .fan-sheet-items .fan-sw { width: 28px; height: 14px; }
+        /* The sheet scrolls as a whole (its head goes with it): the sides' headings stick to its top edge,
+           not 28px under it (the card's head), where the rows showed above them. */
+        .fan-sheet-items .fan-legend-group { top: -8px; }
         /* The fan's hover and pointer (the SVG carries its own colours,
            fan-colors.ts, both themes, scoped to its id). */
         .fan-kekule { dominant-baseline: middle; }
@@ -13516,7 +13524,12 @@
         /* Back / forward (bottom-left) show: the legend keeps its place and they stand above it
            (T54 H1, --nav-lift by the legend's height, measured into --fan-legend-h by src/ui/legend-lift.ts);
            the legend keeps room for them above it. */
-        body.focus-nav-shown .fan-legend { max-height: calc(100% - 90px); }
+        body.focus-nav-shown .fan-legend { --fan-legend-nav: 62px; }
+        .fan-stage.fan-home-below > .fan-legend { --fan-legend-top: 100px; }
+        @media (pointer: coarse) {
+            .fan-legend { --fan-legend-top: 64px; }
+            .fan-stage.fan-home-below > .fan-legend { --fan-legend-top: 116px; }
+        }
         /* Tablet: colours as a dropdown. */
         @media (max-width: 1024px) {
             .fan-color-seg.sel-seg, .fan-colors-label { display: none; }
@@ -26556,6 +26569,13 @@
             body[data-view-mode="fan"]:not(:has(#evidence-pill)):not(:has(#live-follow-pill)) { --nav-lift: 52px; }
             body:has(> #live-panel.phone-strip:not([hidden])) { --nav-lift: 0px; }
         }
+        /* Held sideways the tree's pill stands at the top, centred: the fan's chip keeps the bottom left
+           with back / forward above it, as without the pill (a family line's name in the chip, spec 114 §6,
+           ran under the pill at the top right). The research's card and the paused pill keep their rules. */
+        @media (min-width: 641px) and (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            body:has(#evidence-pill):not(:has(#live-follow-pill)):not(:has(> #live-panel:not([hidden]))) .fan-legend-chip { top: auto; right: auto; left: 12px; bottom: 12px; }
+            body[data-view-mode="fan"]:has(#evidence-pill):not(:has(#live-follow-pill)):not(:has(> #live-panel:not([hidden]))) { --nav-lift: 52px; }
+        }
         /* Upright the toasts span the phone: they rise as far as the buttons do. */
         @media (max-width: 640px) and (orientation: portrait), (max-width: 640px) and (min-height: 501px) {
             body.focus-nav-shown > .toast, body.focus-nav-shown > .undo-toast, body.focus-nav-shown .focus-toast { margin-bottom: var(--nav-lift, 0px); }
@@ -31277,6 +31297,20 @@
                 margin: 8px auto 0; border: 0; box-shadow: none; background: none; color: #222;
             }
             .fan-legend .fan-legend-items { display: flex !important; flex-wrap: wrap; justify-content: center; gap: 4px 18px; }
+            /* The family lines flow in lines as on the poster (spec 114 §7), not one tall column: each side's
+               heading starts a line, its lines follow side by side; no sticky headings, no row rules. */
+            .fan-legend .fan-legend-rods { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px 18px; flex: 1 1 100%; }
+            .fan-legend .fan-legend-group { position: static !important; flex: 1 1 100%; text-align: center; background: none; padding: 6px 0 0; color: #555; }
+            .fan-legend .fan-legend-rods > .fan-legend-row.sel-opt { width: auto; margin: 0; padding: 0; min-height: 0; border: 0; background: none; box-shadow: none; }
+            .fan-legend .fan-legend-rods > .fan-legend-row.sel-opt[data-sel-form="row"][aria-pressed="true"] { background: none; box-shadow: none; border-bottom: 2px solid #222; }
+            .fan-legend .fan-legend-arrow { display: none; }
+            /* "Other · N lines" stands for its grey lines as on the poster (opened, they took a second page);
+               a highlighted grey line keeps its row. */
+            .fan-legend .fan-legend-sub:not([aria-pressed="true"]) { display: none !important; }
+            .fan-legend .fan-legend-centre { color: #555; }
+            /* The screen's controls: the highlight's pill and the file's banner (fixed, in every view they
+               printed over each page) and the fan's ⌂ / pinned-centre pills. */
+            .evidence-pill, .embedded-mode-banner, .fan-home-pill, .fan-center-pin { display: none !important; }
             .fan-sw:not(.fan-sw-hatch), [data-theme="dark"] .fan-sw:not(.fan-sw-hatch) {
                 background: linear-gradient(90deg, var(--sp) 0 50%, var(--sp2) 50% 100%) !important;
                 border-color: rgba(0,0,0,0.2) !important;
