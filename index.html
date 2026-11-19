@@ -24197,6 +24197,11 @@
         /* A task's direction, while two or more run: grey words, no colour. */
         .research-overview__dir { color: var(--text-light); font-size: 12px; font-weight: 400; }
         .research-overview__queue-filters { margin: 4px 0 8px; }
+        /* The kinds of work (spec 065 K7.4): a second row of the same chips right under the lines' one,
+           wrapping onto more rows (up to nine kinds; none out of sight beside the others). */
+        .research-overview__queue-kinds { flex-wrap: wrap; overflow-x: visible; row-gap: 6px; }
+        .research-overview__queue-kinds > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .research-overview__queue-filters + .research-overview__queue-kinds { margin-top: -2px; }
         /* The queue searched (spec 052 §1): the field on its own row under the heading, over the chips.
            A section's field (spec 083 §3: Awaiting action, What the research knows) is the same field. */
         .research-overview__queue-search, .research-overview__section-search {
@@ -32045,8 +32050,11 @@
         .vfy-sec-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
         .vfy-sec-title { font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
         .vfy-sec-sub { font-size: 12.5px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
-        .vfy-sec-stop { flex: none; white-space: nowrap; }
-        button.vfy-sec-row:focus-visible, .vfy-sec-stop:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .vfy-sec-stop, .vfy-sec-queue { flex: none; white-space: nowrap; }
+        /* "Show in the queue" beside Stop (spec 065 K7.4): where the words do not fit beside the title, the buttons go under it. */
+        .vfy-sec-pending { flex-wrap: wrap; row-gap: 0; }
+        .vfy-sec-pending .vfy-sec-main { flex-basis: 12em; }
+        button.vfy-sec-row:focus-visible, .vfy-sec-stop:focus-visible, .vfy-sec-queue:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         /* The card tip: "N facts waiting to be verified" when there is nothing to start. */
         .status-tip .st-acts > .st-verify-pending { flex: 1 1 100%; font-size: 12.5px; line-height: 1.4; color: var(--text-light); }
         .status-tip .st-acts > .st-verify-person { max-width: 100%; white-space: normal; text-align: left; }
@@ -32054,7 +32062,7 @@
         @media (pointer: coarse) {
             .vfy-modal .vfy-row, .vfy-modal .vfy-opt, .vfy-sec-row { min-height: 48px; }
             .vfy-row input, .vfy-opt input { width: 22px; height: 22px; }
-            .vfy-modal .vfy-foot button, .vfy-sec-stop { min-height: 44px; }
+            .vfy-modal .vfy-foot button, .vfy-sec-stop, .vfy-sec-queue { min-height: 44px; }
         }
         @media (min-width: 641px) and (max-width: 1024px) {
             .vfy-modal .vfy-header { padding: 16px 18px 10px; }

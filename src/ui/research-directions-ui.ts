@@ -135,6 +135,16 @@ export function keepLineFocus(): () => void {
             focusDirectionControl(rowId, control);
         };
     }
+    // A kind's chip of the queue (`queue.kind`): the same kind's chip again, else the row's first.
+    const kind = a.dataset.taskKind;
+    if (kind && a.matches('#research-overview .research-overview__queue-kinds .research-overview__filter')) {
+        return () => {
+            const now = document.activeElement;
+            if (now && now !== document.body && now.isConnected) return;
+            const all = [...document.querySelectorAll<HTMLElement>('#research-overview .research-overview__queue-kinds .research-overview__filter')];
+            (all.find(e => e.dataset.taskKind === kind) ?? all[0])?.focus();
+        };
+    }
     const id = a.dataset.direction;
     if (!id) return () => {};
     const sel = a.matches('#live-panel button.live-line, #live-panel .live-lines-all') ? '#live-panel button.live-line'

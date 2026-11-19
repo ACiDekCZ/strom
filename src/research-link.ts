@@ -3173,6 +3173,8 @@ export interface LiveQueueItem {
     pos?: number;
     /** What the task makes (Strom Research 1.31): a person's story, or a piece of history; absent: neither said. */
     kind?: LiveQueueKind;
+    /** Its kind of work (`queue.kind`, spec 065 K7.4): an unknown word is `other`; absent: not said. */
+    taskKind?: QueueTaskKind;
     /** The one book the task waits for or works in ("B0002", spec 105); absent: none or several. */
     book?: string;
     /** Put forward by "Downloaded book first" (`queue.sameBook`): the book of the last session (spec 105). */
@@ -3416,6 +3418,20 @@ export const QUEUE_NEXT_FEATURE = 'queue.next';
  * (`do=loop|tasks`) — and `/status.work` saying the gate and a session's length (Strom Research 1.32).
  */
 export const WORK_LINK_FEATURE = 'work.link';
+/**
+ * `/status.features`: each queued task says its kind of work (`taskKind`), `GET /queue?kind=…` narrows the
+ * queue to one kind and `/status.queueCounts.kind` counts them (spec 065 K7.4).
+ */
+export const QUEUE_KIND_FEATURE = 'queue.kind';
+/** The kinds of work a queued task is, in the order their chips stand (`queue.kind`). */
+export const QUEUE_TASK_KINDS = ['verify', 'records', 'material', 'places', 'enrich', 'request', 'story', 'history', 'other'] as const;
+export type QueueTaskKind = typeof QUEUE_TASK_KINDS[number];
+/** A task's kind as the research says it: one known here, any other word `other` (a newer research), else null. */
+export function queueTaskKindOf(v: unknown): QueueTaskKind | null {
+    if (typeof v !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/i.test(v)) return null;
+    const k = v.toLowerCase();
+    return (QUEUE_TASK_KINDS as readonly string[]).includes(k) ? k as QueueTaskKind : 'other';
+}
 /** `/status.features`: the link `work?do=tasks&task=T…,T…` works on exactly these tasks (spec 065 K7.2, "Process now"). */
 export const WORK_TASKS_FEATURE = 'work.tasks';
 /** `/status.features`: `strom run --tasks N`, so "Only N tasks" of the link `work` is offered. */
@@ -3441,6 +3457,8 @@ export function sanitizeLiveWork(value: unknown): LiveWork | null {
 export interface LiveQueueCounts {
     research: Record<string, number>;
     branch: Record<string, number>;
+    /** Tasks up next by their kind of work (`queue.kind`; only kinds with a task; absent: none said). */
+    kind?: Partial<Record<QueueTaskKind, number>>;
     next: number;
     parked: number;
     /** A print of the queue's order (16 hex): pages read with the same one are still valid. */
@@ -3468,7 +3486,17 @@ export function sanitizeQueueCounts(value: unknown): LiveQueueCounts | null {
         }
         return out;
     };
-    return { research: map(r.research, researchDirectionRef), branch: map(r.branch, researchBranchRef), next, parked, rev: r.rev };
+    // A kind not known here counts under `other` (a newer research's kind).
+    const kind: Partial<Record<QueueTaskKind, number>> = {};
+    for (const [k, v] of Object.entries(asRecord(r.kind) ?? {}).slice(0, MAX_COUNTED)) {
+        const key = queueTaskKindOf(k);
+        const n = asCount(v);
+        if (key && n !== null && n > 0) kind[key] = Math.min(10_000_000, (kind[key] ?? 0) + n);
+    }
+    return {
+        research: map(r.research, researchDirectionRef), branch: map(r.branch, researchBranchRef),
+        ...(Object.keys(kind).length > 0 ? { kind } : {}), next, parked, rev: r.rev,
+    };
 }
 
 /** What works in the research now (`/status.busy`). */
@@ -3811,6 +3839,7 @@ export function sanitizeQueue(value: unknown, offLine = false, branches = false,
         const pos = state === 'next' && typeof r.pos === 'number' && Number.isInteger(r.pos) && r.pos >= 1 && r.pos <= 10_000_000 ? r.pos : null;
         // What it makes (a story, history): only the kinds known here.
         const kind = r.kind === 'story' || r.kind === 'history' ? r.kind : null;
+        const taskKind = queueTaskKindOf(r.taskKind);
         // The book of the task (spec 105): only a valid id.
         const book = researchBookRef(r.book);
         const sameBook = researchBookRef(r.sameBook);
@@ -3818,7 +3847,7 @@ export function sanitizeQueue(value: unknown, offLine = false, branches = false,
             id, text, state, ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(off ? { offLine: off } : {}), ...(helps ? { helps } : {}),
             ...(branch ? { branch } : {}), ...(own ? { own } : {}), ...(why ? { why } : {}), ...(pos ? { pos } : {}),
-            ...(kind ? { kind } : {}), ...(book ? { book } : {}), ...(sameBook ? { sameBook } : {}),
+            ...(kind ? { kind } : {}), ...(taskKind ? { taskKind } : {}), ...(book ? { book } : {}), ...(sameBook ? { sameBook } : {}),
         });
     }
     return out;

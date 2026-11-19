@@ -25,7 +25,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId, ResearchHypothesis } from '../types.js';
 import { acceptBatch, acceptBatchRowResult } from '../research-hypothesis-waiting.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveBook, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, booksOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
+import { LiveBook, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, type QueueTaskKind, booksOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
 import { bookById, bookHeadTitle, bookImagesText, bookMetaParts, bookOfferText, bookTitle, bookWebUrl, urgentBooks, urgentBooksShown } from '../research-books.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
@@ -54,15 +54,16 @@ import {
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
 import {
-    WorkingLine, directionDragActive, directionGlyph, directionPersonIds, directionRedrawHeld, keepLineFocus, taskDirectionName, workingLineCount, workingLineGroups,
+    WorkingLine, directionDragActive, directionGlyph, directionPersonIds, directionRedrawHeld, keepLineFocus, setQueueDirectionFilter, taskDirectionName, workingLineCount, workingLineGroups,
 } from './research-directions-ui.js';
 import { conflictValueSaid, researchValueText } from './person-research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { isOpenHypothesis } from '../view-links.js';
-import { focusQueueMoved, waitBranchText, workingWhyText } from './research-offline-ui.js';
+import { focusQueueMoved, setQueueBranchFilter, waitBranchText, workingWhyText } from './research-offline-ui.js';
+import { setQueueKindFilter } from './queue-kind-ui.js';
 import { beginQueueSlots, endQueueSlots } from '../research-queue-pages.js';
 import { KnowsKind, knowsKindChoice, knowsKindShows } from '../knows-kind.js';
-import { activeQueueSearch } from './queue-search-ui.js';
+import { activeQueueSearch, clearQueueSearch } from './queue-search-ui.js';
 import { overviewSearches, focusFirstSectionRow, type SectionSearch } from './section-search.js';
 import { appendSearchOutcome, keepSheetOverKeyboard, mountSectionSearch, paintSearchChip, searchHitTag, searchSummaryEl } from './section-search-view.js';
 import { fieldVisible, foldSearch2, idNumber, tokenize, type SearchDoc, type SearchHit } from '../section-search-match.js';
@@ -481,6 +482,33 @@ export const researchOverviewMethods = uiModule({
         if (!body || !heading) return;
         scrollHeadingToTop(body, heading);
         heading.focus({ preventScroll: true });
+    },
+
+    /**
+     * The overview's Queue narrowed to one kind of work (`queue.kind`; "Show in the queue" beside "Waiting for
+     * verification"): every line and branch, no search, the kind's chip picked, the heading at the top and the
+     * chip focused. The overview in its own window comes to the front as it is.
+     */
+    showOverviewQueueKind(kind: QueueTaskKind): void {
+        if (overviewInWindow()) {
+            this.openResearchOverview();
+            return;
+        }
+        if (!this.isResearchOverviewOpen()) this.openResearchOverview();
+        const s = drawnSession();
+        if (!s) return;
+        setQueueBranchFilter(s, null);
+        setQueueDirectionFilter('all');
+        clearQueueSearch(false);
+        setQueueKindFilter(s, kind);
+        this.unfoldOverviewSection('queue');
+        this.renderLivePanel();
+        const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
+        const heading = body?.querySelector<HTMLElement>('[aria-controls="ov-sec-queue"]');
+        if (!body || !heading) return;
+        scrollHeadingToTop(body, heading);
+        const chip = body.querySelector<HTMLElement>(`.research-overview__queue-kinds [data-task-kind="${kind}"]`);
+        (chip ?? heading).focus({ preventScroll: true });
     },
 
     /** "Awaiting action" in the open overview, shown until it closes (the choice stays), in view and focused. */

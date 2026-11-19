@@ -13,7 +13,7 @@
  * the others forgotten. A request for a list no longer shown is aborted.
  */
 
-import { LiveQueueItem, sanitizeQueue, withAppVersion } from './research-link.js';
+import { LiveQueueItem, QUEUE_TASK_KINDS, sanitizeQueue, withAppVersion, type QueueTaskKind } from './research-link.js';
 import { BRIDGE_ANSWER_MS } from './bridge-ask.js';
 
 /** Tasks asked per page. */
@@ -37,6 +37,8 @@ export interface QueueFilter {
     branch?: string;
     research?: string;
     state?: 'next' | 'parked';
+    /** The tasks of one kind of work (`queue.kind`, spec 065 K7.4); sent only to a research that has the feature. */
+    kind?: QueueTaskKind;
     /**
      * Searched text (`queue.search`, Strom Research 1.32): the tasks the bridge finds by it, after the
      * other filters (trimmed, 1–100 characters; never kept anywhere).
@@ -90,12 +92,13 @@ export type QueuePageResult =
         match?: Record<string, QueueMatch>; elsewhere?: QueueElsewhere }
     | { ok: false; code: 'busy' | 'failed' | 'aborted' };
 
-/** A filter's key (`branch=B-P0004&research=…&state=…&q=…`, '' = the whole queue). */
+/** A filter's key (`branch=B-P0004&research=…&state=…&kind=…&q=…`, '' = the whole queue). */
 export function queueFilterKey(f: QueueFilter): string {
     const parts: string[] = [];
     if (f.branch) parts.push(`branch=${f.branch}`);
     if (f.research) parts.push(`research=${f.research}`);
     if (f.state) parts.push(`state=${f.state}`);
+    if (f.kind) parts.push(`kind=${f.kind}`);
     if (f.q) parts.push(`q=${encodeURIComponent(f.q)}`);
     return parts.join('&');
 }
@@ -137,18 +140,27 @@ const asRecord = (v: unknown): Record<string, unknown> | null =>
 const asCount = (v: unknown): number | null =>
     typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 10_000_000 ? v : null;
 
-/** One page of the queue (`GET <token>/queue?from=…&count=…&…`). Never throws. */
-export async function fetchQueuePage(base: string, filter: QueueFilter, from: number, count: number,
-    signal?: AbortSignal): Promise<QueuePageResult> {
-    if (typeof fetch !== 'function' || !base) return { ok: false, code: 'failed' };
+/** The query of one page (`from=…&count=…&branch=…&research=…&state=…&kind=…&q=…`). */
+export function queuePageQuery(filter: QueueFilter, from: number, count: number): URLSearchParams {
     const q = new URLSearchParams();
     if (from > 0) q.set('from', String(from));
     q.set('count', String(Math.max(1, Math.min(QUEUE_PAGE_MAX, count))));
     if (filter.branch) q.set('branch', filter.branch);
     if (filter.research) q.set('research', filter.research);
     if (filter.state) q.set('state', filter.state);
+    // Only a kind known here: the bridge refuses any other word (400 queue.query).
+    if (filter.kind && (QUEUE_TASK_KINDS as readonly string[]).includes(filter.kind)) q.set('kind', filter.kind);
     const query = filter.q ? queueQuery(filter.q) : '';
     if (query) q.set('q', query);
+    return q;
+}
+
+/** One page of the queue (`GET <token>/queue?from=…&count=…&…`). Never throws. */
+export async function fetchQueuePage(base: string, filter: QueueFilter, from: number, count: number,
+    signal?: AbortSignal): Promise<QueuePageResult> {
+    if (typeof fetch !== 'function' || !base) return { ok: false, code: 'failed' };
+    const q = queuePageQuery(filter, from, count);
+    const query = q.get('q') ?? '';
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), QUEUE_PAGE_TIMEOUT_MS) : null;
     const onAbort = (): void => ctl?.abort();

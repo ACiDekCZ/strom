@@ -951,6 +951,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         section: 'Weryfikacja',
         pendingRow: (n: number) => `Czeka na weryfikację: ${nPl(n, 'dana', 'dane', 'danych')}`,
         pendingRowSub: 'weryfikowane po kolei, najbliżsi przodkowie najpierw',
+        pendingQueue: 'Pokaż w kolejce',
         stop: 'Zatrzymaj',
         stopped: 'Weryfikacja zatrzymana.',
         queuedToast: (n: number) => `${nPl(n, 'dana z oryginałem czeka', 'dane z oryginałem czekają', 'danych z oryginałem czeka')} na weryfikację, po kolei.`,

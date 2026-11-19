@@ -51,7 +51,7 @@ import {
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
     LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, LiveWork, ResearchCaps, BrowserInfo, LiveOffLine, LiveBooks, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
-    LiveQueueCounts, QUEUE_PAGE_FEATURE, QUEUE_SEARCH_FEATURE,
+    LiveQueueCounts, QUEUE_PAGE_FEATURE, QUEUE_SEARCH_FEATURE, type QueueTaskKind,
     researchLinkMark, researchUrlMark, researchMediaKeys, MEDIA_BASE_MAX, researchMediaSentAfterReturn,
 } from '../research-link.js';
 import { keepImports } from '../import-origin.js';
@@ -87,6 +87,7 @@ import {
 import {
     QueueSearch, activeQueueSearch, clearQueueSearch, markQueueSearchPending, queueSearchFor, queueSearchOffered, sayQueueSearch,
 } from './queue-search-ui.js';
+import { queueKindFilter, queueKindName, queueKindRow, setQueueKindFilter } from './queue-kind-ui.js';
 import { parseDeepLink } from '../deep-link.js';
 import { followNotice, researchNameBeside, FOLLOW_NOTICE_MS, FOLLOW_HIGHLIGHT_MS, FollowTreeRef } from '../research-follow.js';
 import { SettingsManager } from '../settings.js';
@@ -5277,8 +5278,6 @@ export const researchUiMethods = uiModule({
         const multi = directions && (directionsMulti(s) || dirFilter !== 'all');
         // The overview narrowed to one branch outside the directions ("All N tasks in the queue ›").
         const branch = directions ? queueBranchFilter(s) : null;
-        const inFilter = (q: LiveQueueItem): boolean => branch ? q.branch === branch
-            : dirFilter === 'all' || q.research === dirFilter;
         const allNext = s.queue.filter(q => q.state === 'next');
         const counts = s.queueCounts;
         if (s.queue.length === 0 && s.queueMore === 0 && !(counts && counts.next + counts.parked > 0)) return;
@@ -5288,9 +5287,14 @@ export const researchUiMethods = uiModule({
         // The overview reads the whole queue by pages through the bridge (`queue.page`): a filter's
         // tasks from all of it, the rest of the queue by "Load more"; never while the section is folded.
         const paged = directions && !fold.collapsed && !!counts && queuePaged(s);
+        // The kind of work picked (`queue.kind`, spec 065 K7.4): with the line or the branch, read by pages only.
+        const kind = paged ? queueKindFilter(s) : null;
+        const inFilter = (q: LiveQueueItem): boolean => (branch ? q.branch === branch
+            : dirFilter === 'all' || q.research === dirFilter) && (!kind || q.taskKind === kind);
         const base = s.bridge.base;
+        const lineF: QueueFilter | null = branch ? { branch } : dirFilter !== 'all' ? { research: dirFilter } : null;
         const filter: QueueFilter | null = !paged ? null
-            : branch ? { branch } : dirFilter !== 'all' ? { research: dirFilter } : null;
+            : kind ? { ...lineF, kind } : lineF;
         const whole: QueueFilter = { state: 'next' };
         // A filter's list is read when shown; the whole queue's only once "Load more" was asked.
         const read = filter ? requestQueueList(base, filter, 'queue')
@@ -5370,7 +5374,10 @@ export const researchUiMethods = uiModule({
             pills.prepend(chip);
             pills.scrollLeft = 0;
         }
-        if (search && this.appendQueueSearchResult(host, s, search, { base, branch, dirFilter, multi })) return;
+        // The kinds of work (`queue.kind`): their own row of chips under the lines' ones, the same chips.
+        const kinds = paged ? queueKindRow(s, (k) => this.pickQueueKind(s, k)) : null;
+        if (kinds) host.appendChild(kinds);
+        if (search && this.appendQueueSearchResult(host, s, search, { base, branch, dirFilter, multi, kind })) return;
         const ul = el('ul', 'live-panel-list live-queue');
         host.appendChild(ul);
         if (loadingFirst) {
@@ -5460,7 +5467,9 @@ export const researchUiMethods = uiModule({
             // How far the list goes: "Load more" (a page) while there is more, the cap said at its end.
             // Only the tasks up next count, as the chips do: a filter's list holds the set-aside ones
             // after them (the research's order), never part of "N of M shown".
+            // A kind with a line or a branch: the count of the list read (the status counts each alone).
             const filterNext = !filter ? counts.next
+                : filter.kind ? (filter.branch || filter.research ? undefined : counts.kind?.[filter.kind] ?? 0)
                 : filter.branch ? counts.branch[filter.branch] : filter.research ? counts.research[filter.research] : undefined;
             const total = list ? filterNext ?? list.total ?? 0 : counts.next;
             const has = list ? next.length : allNext.length;
@@ -5530,13 +5539,22 @@ export const researchUiMethods = uiModule({
         return this.queueWorkHead(s);
     },
 
+    /** A kind's chip picked (null: every kind again): the queue drawn anew, the focus kept on that chip. */
+    pickQueueKind(s: LiveSession, kind: QueueTaskKind | null): void {
+        const was = (document.activeElement as HTMLElement | null)?.dataset?.taskKind;
+        setQueueKindFilter(s, kind);
+        this.renderResearchOverview();
+        const sel = was ? `#research-overview .research-overview__queue-kinds [data-task-kind="${CSS.escape(was)}"]` : null;
+        if (sel) document.querySelector<HTMLElement>(sel)?.focus({ preventScroll: true });
+    },
+
     /**
      * The search's answer under the field (`queue.search`): the line saying what
      * was found, then its tasks. False: nothing searched (or the first answer not
      * read yet), the queue itself is drawn (dimmed while a search is typed or read).
      */
     appendQueueSearchResult(host: HTMLElement, s: LiveSession, search: QueueSearch,
-        o: { base: string; branch: string | null; dirFilter: string; multi: boolean }): boolean {
+        o: { base: string; branch: string | null; dirFilter: string; multi: boolean; kind: QueueTaskKind | null }): boolean {
         const L = strings.live;
         if (!search.applied) {
             search.shown = null;
@@ -5544,8 +5562,11 @@ export const researchUiMethods = uiModule({
             return false;
         }
         // The chips narrow the search too: the tasks of the chip that match the text.
-        const filter: QueueFilter = o.branch ? { branch: o.branch, q: search.applied }
-            : o.dirFilter !== 'all' ? { research: o.dirFilter, q: search.applied } : { q: search.applied };
+        const filter: QueueFilter = {
+            ...(o.branch ? { branch: o.branch } : o.dirFilter !== 'all' ? { research: o.dirFilter } : {}),
+            ...(o.kind ? { kind: o.kind } : {}), q: search.applied,
+        };
+        const kindName = o.kind ? queueKindName(o.kind) : '';
         const list = requestQueueList(o.base, filter, 'search');
         const read = list.total !== null;
         if (read) search.shown = list;
@@ -5583,7 +5604,8 @@ export const researchUiMethods = uiModule({
         const total = drawn.total;
         let said: string;
         if (total > 0 || drawn.items.length > 0) {
-            said = L.queueSearchFound(total) + (narrowed ? ` · ${L.queueSearchInDir(narrowed)}` : '');
+            said = L.queueSearchFound(total) + (narrowed ? ` · ${L.queueSearchInDir(narrowed)}` : '')
+                + (kindName ? ` · ${L.queueSearchInKind(kindName)}` : '');
             line.appendChild(el('span', 'research-overview__queue-result-text', said));
         } else if (drawn.elsewhere) {
             // A task's number outside the queue: where it is now.
@@ -5591,8 +5613,20 @@ export const researchUiMethods = uiModule({
             said = L.queueSearchElsewhere(drawn.elsewhere.id, state);
             line.append(el('span', 'research-overview__queue-result-text', said), cancel());
         } else {
-            said = narrowed ? L.queueSearchNoneDir(narrowed) : L.queueSearchNone;
+            said = narrowed ? L.queueSearchNoneDir(narrowed) : kindName ? L.queueSearchNoneKind(kindName) : L.queueSearchNone;
             line.appendChild(el('span', 'research-overview__queue-result-text', said));
+            if (!narrowed && kindName) {
+                // The same text among every kind: the kind's chip cleared.
+                const all = el('button', 'link-button research-overview__queue-all', L.queueSearchAllKinds);
+                all.type = 'button';
+                all.dataset.do = 'all-kinds';
+                all.onclick = () => {
+                    setQueueKindFilter(s, null);
+                    this.renderResearchOverview();
+                    activeQueueSearch()?.input.focus({ preventScroll: true });
+                };
+                line.appendChild(all);
+            }
             if (narrowed) {
                 // The same text in the whole queue: the chip back on All.
                 const all = el('button', 'link-button research-overview__queue-all', L.queueSearchAllDirs);

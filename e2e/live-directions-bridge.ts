@@ -123,6 +123,8 @@ const queueRev = (b: ManagedBridge): string => (b.paged?.rev ?? 0).toString(16).
 function queueCounts(b: ManagedBridge): Record<string, unknown> {
     const research: Record<string, number> = {};
     const branch: Record<string, number> = {};
+    // `queue.kind` (spec 065 K7.4): tasks up next by their `taskKind`, only kinds with a task.
+    const kind: Record<string, number> = {};
     let next = 0;
     let parked = 0;
     for (const q of b.queue) {
@@ -130,8 +132,9 @@ function queueCounts(b: ManagedBridge): Record<string, unknown> {
         next++;
         if (typeof q.research === 'string') research[q.research] = (research[q.research] ?? 0) + 1;
         if (typeof q.branch === 'string') branch[q.branch] = (branch[q.branch] ?? 0) + 1;
+        if (typeof q.taskKind === 'string') kind[q.taskKind] = (kind[q.taskKind] ?? 0) + 1;
     }
-    return { research, branch, next, parked, rev: queueRev(b) };
+    return { research, branch, ...(Object.keys(kind).length > 0 ? { kind } : {}), next, parked, rev: queueRev(b) };
 }
 
 /** Lower case without diacritics, as the research compares a searched text. */
@@ -159,14 +162,22 @@ function searchQueue(rows: Record<string, unknown>[], q: string): { rows: Record
     return { rows: found, match };
 }
 
-/** `GET /queue?from&count&branch&research&state&q`, as the research answers it. */
+/** The kinds of work `GET /queue?kind=` takes (`queue.kind`). */
+const QUEUE_KINDS = ['history', 'story', 'verify', 'places', 'material', 'request', 'enrich', 'records', 'other'];
+
+/** `GET /queue?from&count&branch&research&state&kind&q`, as the research answers it. */
 function queuePage(b: ManagedBridge, query: URLSearchParams): BridgeReply {
     const from = Number(query.get('from') ?? 0);
     const count = Math.min(100, Number(query.get('count') ?? 50));
+    const kind = query.has('kind') ? (query.get('kind') ?? '').toLowerCase() : null;
+    if (kind !== null && !QUEUE_KINDS.includes(kind)) {
+        return { status: 400, body: { ok: false, code: 'queue.query', error: `kind: one of ${QUEUE_KINDS.join(', ')}` } };
+    }
     let rows = queueWithPlaces(b)
         .filter(q => !query.get('branch') || q.branch === query.get('branch'))
         .filter(q => !query.get('research') || q.research === query.get('research'))
-        .filter(q => !query.get('state') || q.state === query.get('state'));
+        .filter(q => !query.get('state') || q.state === query.get('state'))
+        .filter(q => kind === null || q.taskKind === kind);
     const q = query.get('q');
     let found: Record<string, unknown> = {};
     if (q) {

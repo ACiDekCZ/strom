@@ -1153,6 +1153,13 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         queueSearchNoneDir: (d: string) => `W linii ${d} nic nie znaleziono.`,
         queueSearchCancel: 'Wyczyść wyszukiwanie',
         queueSearchAllDirs: 'Szukaj we wszystkich liniach',
+        taskKinds: { verify: 'Weryfikacja', records: 'Metryki', material: 'Materiał', places: 'Miejsca', enrich: 'Źródła poza metrykami',
+            request: 'Zapytania', story: 'Opowieści', history: 'Historia', other: 'Inne' } as Record<string, string>,
+        taskKindLabel: 'Rodzaj zadania',
+        taskKindClear: 'Pokaż wszystkie rodzaje zadań',
+        queueSearchInKind: (k: string) => `rodzaj ${k}`,
+        queueSearchNoneKind: (k: string) => `Wśród zadań rodzaju ${k} nic nie znaleziono.`,
+        queueSearchAllKinds: 'Szukaj we wszystkich rodzajach zadań',
         // The search of a section of the overview (spec 083 §3); a section's name comes from its title.
         waitingSearchPlaceholder: 'Szukaj osoby, miejsca, archiwum, zadania…',
         waitingSearchAria: (section: string) => `Szukaj w „${section}”`,

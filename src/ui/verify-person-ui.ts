@@ -19,7 +19,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
 import { shownName } from '../person-name.js';
 import type { LifeEvent, Partnership, PartnershipId, PersonId } from '../types.js';
-import type { LiveStatus } from '../research-link.js';
+import { QUEUE_KIND_FEATURE, type LiveStatus } from '../research-link.js';
 import { FactHolder, factCitations, factsOf, isPartnership } from '../import-origin.js';
 import { factReliability, ReliabilityStepName } from '../reliability.js';
 import {
@@ -575,8 +575,11 @@ export const verifyPersonMethods = uiModule({
 
     // ==================== The "Verifying" section ====================
 
-    /** The tree's verification now: waiting facts, Stop and the bulk dialog (null: the research does not verify). */
-    treeVerifyNow(): { waiting: number; stop: boolean; bulk: boolean } | null {
+    /**
+     * The tree's verification now: waiting facts, Stop, the bulk dialog and the way into the queue narrowed to
+     * Verification (`queue.kind`) (null: the research does not verify).
+     */
+    treeVerifyNow(): { waiting: number; stop: boolean; bulk: boolean; queue?: boolean } | null {
         const now = this.verifyBridgeNow();
         if (!now || !researchVerifies(now.research, VERIFY_FEATURE) || DataManager.isViewMode()) return null;
         const v = now.status.verify;
@@ -585,17 +588,23 @@ export const verifyPersonMethods = uiModule({
             waiting: v?.waiting ?? 0,
             stop: researchVerifies(now.research, VERIFY_STOP_FEATURE),
             bulk: researchVerifies(now.research, VERIFY_BULK_FEATURE),
+            // Said only when offered (a snapshot for the overview's own window carries it then).
+            ...(researchVerifies(now.research, QUEUE_KIND_FEATURE) ? { queue: true } : {}),
         };
     },
 
-    /** The rows of "Verifying" (HTML): waiting facts with Stop, the bulk verification. `pending`: the count said. */
-    verifyRowsHtml(pending: number, opts: { stop: boolean; bulk: boolean }): string {
+    /**
+     * The rows of "Verifying" (HTML): waiting facts with "Show in the queue" (stays in the app, no mark) and Stop,
+     * the bulk verification. `pending`: the count said.
+     */
+    verifyRowsHtml(pending: number, opts: { stop: boolean; bulk: boolean; queue?: boolean }): string {
         const v = strings.verify;
         const rows: string[] = [];
         if (pending > 0) {
             // Stop's `data-action` is its identity: its "Stopping…" follows it when the section is drawn anew.
             rows.push(`<div class="vfy-sec-row vfy-sec-pending"><span class="vfy-sec-main"><span class="vfy-sec-title">${esc(v.pendingRow(pending))}</span>`
                 + `<span class="vfy-sec-sub">${esc(v.pendingRowSub)}</span></span>`
+                + (opts.queue ? `<button type="button" class="link-button vfy-sec-queue" data-verify-act="queue">${esc(v.pendingQueue)}</button>` : '')
                 + (opts.stop ? `<button type="button" class="link-button vfy-sec-stop" data-verify-act="stop" data-action="verify-stop">${researchBridgeActionLabel(v.stop, 'verify-stop')}</button>` : '')
                 + '</div>');
         }
@@ -618,25 +627,31 @@ export const verifyPersonMethods = uiModule({
         return `<section class="person-research-section vfy-section" data-verify-section="person"><h3 class="menu-section-header">${esc(strings.verify.section)}</h3>${rows}</section>`;
     },
 
-    /** The tree's "Verifying" block (DOM), or null when there is nothing to say. */
-    treeVerifyBlock(onBulk?: () => void): HTMLElement | null {
+    /**
+     * The tree's "Verifying" block (DOM), or null when there is nothing to say. `onBulk`: before the bulk dialog
+     * opens; `onQueue`: before the overview's queue is shown.
+     */
+    treeVerifyBlock(onBulk?: () => void, onQueue?: () => void): HTMLElement | null {
         const tree = this.treeVerifyNow();
         if (!tree || (tree.waiting === 0 && !tree.bulk)) return null;
         const block = document.createElement('div');
         block.className = 'vfy-section vfy-section--tree';
         block.dataset.verifySection = 'tree';
         block.innerHTML = `<h4 class="vfy-section-head">${esc(strings.verify.section)}</h4>${this.verifyRowsHtml(tree.waiting, tree)}`;
-        this.bindVerifySection(block, onBulk);
+        this.bindVerifySection(block, onBulk, onQueue);
         return block;
     },
 
-    /** The section's Stop and its way into the bulk dialog. */
-    bindVerifySection(host: HTMLElement, onBulk?: () => void): void {
+    /** The section's Stop, its way into the bulk dialog and into the queue narrowed to Verification. */
+    bindVerifySection(host: HTMLElement, onBulk?: () => void, onQueue?: () => void): void {
         host.addEventListener('click', (e) => {
             const act = (e.target as HTMLElement).closest<HTMLElement>('[data-verify-act]');
             if (!act || !host.contains(act)) return;
             if (act.dataset.verifyAct === 'stop') void this.verifyStop(act as HTMLButtonElement);
-            else if (act.dataset.verifyAct === 'bulk') {
+            else if (act.dataset.verifyAct === 'queue') {
+                onQueue?.();
+                this.showOverviewQueueKind('verify');
+            } else if (act.dataset.verifyAct === 'bulk') {
                 onBulk?.();
                 this.showVerifyBulkDialog();
             }
@@ -755,7 +770,8 @@ export const verifyPersonMethods = uiModule({
             </div>
             <div class="vfy-body"></div>
             <div class="buttons vfy-foot"><button type="button" class="secondary" data-dismiss data-vfy="close">${esc(strings.buttons.close)}</button></div>`;
-        const block = this.treeVerifyBlock(() => removeDialog(VERIFY_TREE_DIALOG_ID, null, this));
+        const close = (): void => removeDialog(VERIFY_TREE_DIALOG_ID, null, this);
+        const block = this.treeVerifyBlock(close, close);
         const body = modal.querySelector<HTMLElement>('.vfy-body')!;
         if (block) body.appendChild(block);
         else body.innerHTML = `<p class="vfy-loading">${esc(strings.verify.nothing)}</p>`;

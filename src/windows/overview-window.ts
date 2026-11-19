@@ -24,7 +24,7 @@
 
 import type { TreeId } from '../types.js';
 import type { LiveSession, OverviewViewing } from '../ui/research-ui.js';
-import { RESEARCH_LINK_ACTIONS, type ResearchLinkAction } from '../research-link.js';
+import { QUEUE_TASK_KINDS, RESEARCH_LINK_ACTIONS, type QueueTaskKind, type ResearchLinkAction } from '../research-link.js';
 import { sanitizeTaskOrderWas, type TaskOrderWas } from '../research-directions-write.js';
 import { queueQuery, type QueueFilter } from '../research-queue-pages.js';
 
@@ -111,6 +111,8 @@ export interface OverviewVerifyState {
     waiting: number;
     stop: boolean;
     bulk: boolean;
+    /** "Show in the queue" beside the waiting facts (`queue.kind`); absent: not offered. */
+    queue?: boolean;
 }
 
 /** A highlight of people in the main window's tree (evidence-ui's group: `changed`, `direction`, `direction-found`, …). */
@@ -408,6 +410,7 @@ function queueFilter(v: unknown): QueueFilter | null {
     if (f.branch !== undefined) { if (!str(f.branch)) return null; out.branch = f.branch; }
     if (f.research !== undefined) { if (!str(f.research)) return null; out.research = f.research; }
     if (f.state !== undefined) { if (f.state !== 'next' && f.state !== 'parked') return null; out.state = f.state; }
+    if (f.kind !== undefined) { if (!(QUEUE_TASK_KINDS as readonly unknown[]).includes(f.kind)) return null; out.kind = f.kind as QueueTaskKind; }
     if (f.q !== undefined) {
         // A searched text as the bridge takes it (trimmed, at most 100 characters); an empty one: the queue's pages.
         if (typeof f.q !== 'string') return null;
