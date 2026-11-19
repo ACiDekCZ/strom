@@ -119,9 +119,14 @@ test.describe('History of places: the manager', () => {
         await fakeBridge(page, { features: HISTORY_R1_FEATURES, history, treeGed: ged, links: LINKS });
         const isRead = (url: URL) => url.pathname.endsWith('/history');
         // The research's bridge answers its status but not the read.
-        await page.route(isRead, () => { /* never answers */ });
+        let asked = 0;
+        await page.route(isRead, () => { asked++; /* never answers */ });
         await openResearch(page, { ged });
         await poll(page);
+        // The status's own read on its way first (after the device copy is loaded): the manager's read on opening
+        // joins it. Opened before it, the status's read (with its rev) would follow the timed-out one and hang,
+        // and Try again below would only join that one ("Loading…" until it times out too).
+        await expect.poll(() => asked).toBe(1);
         await page.evaluate(() => (window.Strom.UI as unknown as { openHistoryManage(o: object): void }).openHistoryManage({}));
         await expect(modal(page)).toBeVisible();
         await expect(stateText(page)).toHaveText('Loading history…');
