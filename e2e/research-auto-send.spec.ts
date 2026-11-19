@@ -2663,6 +2663,8 @@ test('following the research: Add to list in the person menu, a Table row and Li
     await added.locator('.undo-toast-btn').click();
     await expect.poll(listIds).toEqual([]);
     await expect(page.locator('.toast', { hasText: 'locked' })).toHaveCount(0);
+    // The undone toast is gone before the Table's own toast is looked for.
+    await expect(added).toHaveCount(0);
 
     // A Table row's menu.
     await page.locator('#view-mode-table').click();
