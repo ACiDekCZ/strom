@@ -271,3 +271,59 @@ test.describe('phone (390)', () => {
         expect(right).toBeLessThanOrEqual(390);
     });
 });
+
+/**
+ * A list as the Table's scope keeps its name on a tight bar: German at a
+ * computer's and a tablet's width made the steps hide it, leaving the list's
+ * kind icon alone (verification of 3.30.0). The name is cut with "…", the
+ * Columns count goes first; a computer's row stays one line.
+ */
+test.describe('a long list name in German', () => {
+    test.use({ locale: 'de-DE' });
+    const LIST = 'Briefe an die Verwandtschaft in Schwaben';
+
+    for (const [width, height] of [[1440, 900], [1024, 768]] as const) {
+        test(`Scope ▾ shows the list's name, cut, on one row (@${width})`, async ({ page }) => {
+            await page.setViewportSize({ width, height });
+            await openApp(page);
+            await page.evaluate(() => window.Strom.UI.loadDemoTree());
+            await expect(page.locator('.person-card').first()).toBeVisible();
+            await page.evaluate((name) => {
+                const dm = window.Strom.DataManager;
+                const ids = Object.keys(dm.getData().persons).slice(0, 5);
+                dm.createPersonList({ name, dynamic: false, personIds: ids as never[], sort: 'manual' });
+                window.Strom.UI.setDisplayViewMode('table');
+            }, LIST);
+            await page.locator('#table-container .tv-scope-btn').click();
+            await page.locator('.tv-menu .tv-menu-item', { hasText: 'Briefe' }).click();
+            const name = page.locator('#table-container .tv-scope-btn .tv-scope-name');
+            await expect(name).toHaveText(LIST);
+            const fit = await page.evaluate(() => {
+                const row = document.querySelector<HTMLElement>('#table-container .tv-bar-row1')!;
+                const n = row.querySelector<HTMLElement>('.tv-scope-name')!;
+                const tops = [...row.children].filter(c => (c as HTMLElement).offsetParent !== null)
+                    .map(c => Math.round(c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2));
+                // The table's search keeps its placeholder whole while a name step still helps (step 5 last).
+                const input = row.querySelector<HTMLInputElement>('.tv-slot-search input')!;
+                const cs = getComputedStyle(input);
+                const ctx = document.createElement('canvas').getContext('2d')!;
+                ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+                const room = input.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+                return {
+                    phShort: row.classList.contains('tv-fit-5') ? 0 : Math.ceil(ctx.measureText(input.placeholder).width - room),
+                    step: row.className,
+                    shown: getComputedStyle(n).display !== 'none' ? Math.round(n.getBoundingClientRect().width) : 0,
+                    rows: new Set(tops.map(t => Math.round(t / 10))).size,
+                    over: row.scrollWidth - row.clientWidth,
+                    page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                };
+            });
+            expect(fit.shown, 'the list name is drawn, a few letters at the least').toBeGreaterThanOrEqual(40);
+            // A computer's bar keeps one line (a tablet's has its view buttons on a line of their own).
+            if (width > 1024) expect(fit.rows, 'row 1 stays one line').toBe(1);
+            expect(fit.over).toBeLessThanOrEqual(0);
+            expect(fit.page).toBeLessThanOrEqual(0);
+            expect(fit.phShort, `the table's search shows "In Tabelle suchen" whole (${fit.step})`).toBeLessThanOrEqual(0);
+        });
+    }
+});

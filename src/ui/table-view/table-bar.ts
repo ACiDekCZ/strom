@@ -176,12 +176,14 @@ export function updateScope(bar: HTMLElement, shown: ScopeShown): void {
  * The steps row 1 takes on a computer and at a tablet's width before it would wrap (⧉ and ⋯ alone on
  * a second row): 1 the labels Scope and View hidden, the whole tree as a list
  * glyph; 2 the search, the list's name and the view's name narrower (…);
- * 3 a list as its kind's icon + ▾ (its name in the title and the label);
- * 4 the search at 80 px. One class at a time (index.html reads each step as
+ * 3 the Columns count hidden, both names narrower still; 4 the names at
+ * their narrowest, a changed view's mark as its ● alone; 5 the search at
+ * 80 px (its placeholder kept whole until then). A list keeps its name (cut
+ * with "…"; as its kind's icon alone it said nothing in de). One class at a time (index.html reads each step as
  * including the ones before). Measured, not by width thresholds: a changed
  * view's buttons, a list's name, the language and the font decide what fits.
  */
-const FIT_STEPS = ['tv-fit-1', 'tv-fit-2', 'tv-fit-3', 'tv-fit-4'] as const;
+const FIT_STEPS = ['tv-fit-1', 'tv-fit-2', 'tv-fit-3', 'tv-fit-4', 'tv-fit-5'] as const;
 
 /** Row 1 on more than one line, or past its edge. */
 function rowWraps(row: HTMLElement): boolean {

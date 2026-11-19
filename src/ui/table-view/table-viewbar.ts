@@ -54,7 +54,7 @@ export class ViewBar {
             + '<button type="button" class="tv-view-btn" aria-haspopup="menu">'
             + '<span class="tv-view-name"></span><span class="tv-view-dot" aria-hidden="true" hidden>●</span><span class="tv-view-caret" aria-hidden="true">▾</span></button>'
             + `<span class="tv-view-note" role="status" title="${esc(t.researchFilterOff)}" hidden><span class="tv-view-note-dot" aria-hidden="true"></span><span class="tv-view-note-text">${esc(t.researchFilterOff)}</span></span>`
-            + `<button type="button" class="tv-view-changed" hidden>● ${esc(t.changed)}</button>`
+            + `<button type="button" class="tv-view-changed" hidden>● <span class="tv-view-changed-word">${esc(t.changed)}</span></button>`
             + `<button type="button" class="tv-view-act tv-view-save" hidden>${esc(t.save)}</button>`
             + `<button type="button" class="tv-view-act tv-view-saveas" hidden>${esc(t.saveAs)}</button>`
             + `<button type="button" class="tv-view-discard" hidden>${esc(t.discard)}</button>`;
@@ -88,8 +88,8 @@ export class ViewBar {
         // Only a built-in view's mark says something more (why no Save).
         this.changed.disabled = !s.builtin;
         this.changed.classList.toggle('is-note', s.builtin);
-        if (s.builtin) this.changed.title = t.builtinNote;
-        else this.changed.removeAttribute('title');
+        // The word in the title too: a tight bar shows the mark as its ● alone (fitBarRow step 4).
+        this.changed.title = s.builtin ? t.builtinNote : t.changed;
         this.save.hidden = !s.changed || s.builtin || s.readOnly;
         this.saveAs.hidden = !s.changed || s.readOnly;
         this.discard.hidden = !s.changed;
