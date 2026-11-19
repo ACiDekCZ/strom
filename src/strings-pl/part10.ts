@@ -1,11 +1,12 @@
 /**
- * Polish strings of the one "working" state (src/ui/busy.ts, waiting buttons §1, §10, §12).
+ * Polish strings of the one "working" state (src/ui/busy.ts, waiting buttons §1, §10, §12)
+ * and of the photos that come after the tree (spec 116).
  */
 
 import type { StringsType } from '../strings.js';
 import { plPl } from './helpers.js';
 
-export const plPart10: Pick<StringsType, 'busy'> = {
+export const plPart10: Pick<StringsType, 'busy' | 'photos'> = {
     busy: {
         generic: 'Wczytywanie…',
         saving: 'Zapisywanie…',
@@ -126,5 +127,14 @@ export const plPart10: Pick<StringsType, 'busy'> = {
         adoptWaitingSub: 'Zakładanie kończy się w terminalu.',
         stopWaiting: 'Przerwij oczekiwanie',
         adoptWaitEnd: 'Badanie przejmie drzewo, gdy zostanie założone w terminalu.',
+    },
+    /** Photos that come after the tree (spec 116, src/ui/image-slot.ts). */
+    photos: {
+        loading: 'Wczytywanie zdjęcia…',
+        loadingNew: 'Wczytywanie nowego zdjęcia…',
+        failed: 'Zdjęcie nie zostało wczytane.',
+        failedNew: 'Nowe zdjęcie nie zostało wczytane.',
+        ariaLoading: 'zdjęcie się wczytuje',
+        ariaFailed: 'zdjęcie nie wczytane',
     },
 };

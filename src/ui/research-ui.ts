@@ -30,7 +30,7 @@ import { setResearchActionLabel, researchActionMark } from './research-open-mark
 import { DataManager, migrateData } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
-import { imageLoads, pendingFromNotes, personsByNearness, startImageLoad, takePendingImages, windowEmit, withArrivedImages, type PendingImage } from '../image-loads.js';
+import { imageLoads, pendingFromNotes, startImageLoad, takePendingImages, windowEmit, withArrivedImages, type PendingImage } from '../image-loads.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { researchHypothesisLogLine } from '../research-hypotheses.js';
@@ -3631,16 +3631,14 @@ export const researchUiMethods = uiModule({
             imageLoadsWired = true;
             window.addEventListener('strom:tree-switched', () => imageLoads.onTreeSwitch(DataManager.getCurrentTreeId()));
         }
-        const data = DataManager.getData();
-        const focus = TreeRenderer.getFocusPersonId();
-        const shown = [...TreeRenderer.getVisiblePersonIds()];
         // The history from now on takes the images that come (undo, redo never bring the older ones back: I3).
         DataManager.noteImageLoadStart(treeId, o.history);
         const q = startImageLoad({
             treeId,
             url: o.url,
             pending: waiting,
-            priority: personsByNearness(data, focus, shown),
+            // The cards on screen first, then around the focus (K1.6); a pan or a zoom orders them anew (TreeRenderer).
+            priority: TreeRenderer.imagePriority(),
             deps: {
                 fetch: imageDeps,
                 currentTreeId: () => DataManager.getCurrentTreeId(),
@@ -3655,7 +3653,7 @@ export const researchUiMethods = uiModule({
                     if (inStep && link?.fingerprint) TreeManager.patchResearchLink(id as TreeId, { fingerprint: fingerprintLike(DataManager.getData(), link.fingerprint) });
                     const backup = researchAutoState(id).loadBackup;
                     if (backup?.fingerprint === before) patchResearchAutoState(id, { loadBackup: { ...backup, fingerprint: after } });
-                    TreeRenderer.render();
+                    // No redraw: the cards take the images in place (strom:images-arrived, TreeRenderer.updateCardImages).
                     return written;
                 },
                 store: id => DataManager.storeArrivedImages(id as TreeId),

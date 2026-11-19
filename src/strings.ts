@@ -10619,6 +10619,20 @@ const stringsEN = {
         stopWaiting: 'Stop waiting',
         adoptWaitEnd: 'The research takes the tree over once it is set up in the terminal.',
     },
+    /** Photos that come after the tree (spec 116, src/ui/image-slot.ts): the state of a place with an image. */
+    photos: {
+        /** The tooltip row of a photo on its way. */
+        loading: 'Loading the photo…',
+        /** The tooltip row of a newer photo on its way over the one kept. */
+        loadingNew: 'Loading the new photo…',
+        /** The tooltip row of a photo that did not come. */
+        failed: 'The photo did not load.',
+        /** The tooltip row of a kept photo whose newer one did not come. */
+        failedNew: 'The new photo did not load.',
+        /** The end of a card's aria-label. */
+        ariaLoading: 'photo loading',
+        ariaFailed: 'photo not loaded',
+    },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {
         focusFromWindow: 'Centre chosen in another window',
@@ -20834,6 +20848,15 @@ const stringsCZ: StringsType = {
         stopWaiting: 'Zrušit čekání',
         adoptWaitEnd: 'Výzkum strom převezme, až se v terminálu založí.',
     },
+    /** Photos that come after the tree (spec 116, src/ui/image-slot.ts): the state of a place with an image. */
+    photos: {
+        loading: 'Fotka se načítá…',
+        loadingNew: 'Načítá se nová fotka…',
+        failed: 'Fotka se nenačetla.',
+        failedNew: 'Nová fotka se nenačetla.',
+        ariaLoading: 'fotka se načítá',
+        ariaFailed: 'fotka se nenačetla',
+    },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {
         focusFromWindow: 'Střed vybrán v dalším okně',
@@ -30967,6 +30990,15 @@ const stringsDE: StringsType = {
         adoptWaitingSub: 'Das Anlegen wird im Terminal abgeschlossen.',
         stopWaiting: 'Warten beenden',
         adoptWaitEnd: 'Die Forschung übernimmt den Stammbaum, sobald sie im Terminal angelegt ist.',
+    },
+    /** Photos that come after the tree (spec 116, src/ui/image-slot.ts): the state of a place with an image. */
+    photos: {
+        loading: 'Foto wird geladen…',
+        loadingNew: 'Neues Foto wird geladen…',
+        failed: 'Das Foto wurde nicht geladen.',
+        failedNew: 'Das neue Foto wurde nicht geladen.',
+        ariaLoading: 'Foto wird geladen',
+        ariaFailed: 'Foto nicht geladen',
     },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {

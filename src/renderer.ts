@@ -4,7 +4,8 @@
  */
 
 import { DataManager } from './data.js';
-import { imageLoads } from './image-loads.js';
+import { IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, imageLoads, personsByNearness } from './image-loads.js';
+import { cardAvatarHtml, cardImageRowHtml, cardImageView, cardTooltipPhotoHtml, imgPhaseDelay, imgStateOf, setImgState, withImgAria, type CardImageView } from './ui/image-slot.js';
 import { UI } from './ui.js';
 import { cardStatusAria, cardStatusWords, statusMarkHtml } from './ui/fact-status.js';
 import { ZoomPan } from './zoom.js';
@@ -195,7 +196,7 @@ interface OutputLayout {
     omittedEdges: OmittedEdge[];
     box: CardBox;
     custom: CustomCardMetrics | null;
-    /** The photo size its cards were laid out with (spec 096): the screen's, small when nobody it draws has a photo. */
+    /** The photo size its cards were laid out with (spec 096): the screen's, small when nobody it draws has an avatar (viewHasAvatar). */
     photo: CardPhotoSize;
 }
 
@@ -302,10 +303,54 @@ function cardSignature(card: HTMLElement): string {
  */
 export function imageBySha(shell: string, inner: string): string {
     if (!inner.includes('data-img-sha="')) return shell + inner;
-    return shell.replace(/(class="[^"]*?) has-photo\b/, '$1')
-        + inner.replace(/(<div class="card-avatar"[^>]*\bdata-img-sha="[^"]*"[^>]*>)[\s\S]*?<\/div>/g, '$1</div>')
-            .replace(/<div class="card-tooltip(?: has-photo)?"( data-img-sha="[^"]*")>(?:<img class="tt-photo"[^>]*>)?/g, '<div class="card-tooltip"$1>');
+    // The state of the portrait on its way (spec 116 §1.3, §2: the avatar's
+    // state and phase, the tooltip's column and row, the aria-label's end)
+    // is no change either, drawn anew or set in place (updateCardImages).
+    return withImgAria(shell.replace(/(class="[^"]*?) has-photo\b/, '$1'), null)
+        + inner.replace(/<div class="card-avatar"[^>]*?\sdata-img-sha="([^"]*)"[^>]*>[\s\S]*?<\/div>/g, '<div class="card-avatar" data-img-sha="$1"></div>')
+            .replace(/<div class="card-tooltip(?: has-photo)?"( data-img-sha="[^"]*")>(?:<img class="tt-photo"[^>]*>|<span class="tt-photo"[^>]*><span class="avatar-initials">[^<]*<\/span><\/span>)?/g, '<div class="card-tooltip"$1>')
+            .replace(/<div class="tt-line tt-img-state[^"]*">[\s\S]*?<\/div>/g, '');
 }
+
+/** How often a view drawn its own way is drawn again while images come (ms). */
+const IMAGE_VIEW_REDRAW_MS = 600;
+/** How often a pan or a zoom orders the queue of images anew (ms). */
+const IMAGE_PRIORITY_MS = 250;
+
+/**
+ * The cards (world rectangles) that stand in the view of `view` (the
+ * container's size, px) under the pan and zoom `t`, nearest the view's
+ * middle first (spec 116 K1.6: the images on screen come first).
+ */
+export function cardsOnScreen<T extends string>(cards: ReadonlyArray<{ id: T; x: number; y: number; w: number; h: number }>,
+    t: { scale: number; tx: number; ty: number }, view: { width: number; height: number }): T[] {
+    if (view.width <= 0 || view.height <= 0 || t.scale <= 0) return [];
+    const cx = view.width / 2, cy = view.height / 2;
+    const out: Array<{ id: T; d: number }> = [];
+    for (const c of cards) {
+        const left = c.x * t.scale + t.tx, top = c.y * t.scale + t.ty;
+        const right = left + c.w * t.scale, bottom = top + c.h * t.scale;
+        if (right < 0 || bottom < 0 || left > view.width || top > view.height) continue;
+        const dx = (left + right) / 2 - cx, dy = (top + bottom) / 2 - cy;
+        out.push({ id: c.id, d: dx * dx + dy * dy });
+    }
+    return out.sort((a, b) => a.d - b.d).map(o => o.id);
+}
+
+/**
+ * Whether the cards of `persons` take the view's photo size (spec 096 D3):
+ * someone has an avatar — a photo, the initials (spec 103 K2.1), a portrait
+ * still on its way alike (spec 116 §1.3: the cards do not grow when it
+ * comes); the Compact card never has one.
+ */
+export function viewHasAvatar(persons: Iterable<Pick<Person, 'isPlaceholder'> | null | undefined>, density: string): boolean {
+    if (density === 'compact') return false;
+    for (const person of persons) if (person && !person.isPlaceholder) return true;
+    return false;
+}
+
+/** A placeholder's portrait: none, nothing on its way. */
+const NO_CARD_IMAGE: CardImageView = cardImageView('none', false);
 
 /** The texts of a card's rows, for marking the ones a live load changed (.live-field). */
 function cardRows(card: HTMLElement): Array<[HTMLElement, string]> {
@@ -1707,12 +1752,7 @@ class TreeRendererClass {
 
     /** Whether someone laid out has an avatar, a photo or the initials (not a placeholder; spec 096 D3, 103 K2.1). */
     private avatarInView(positions: ReadonlyMap<PersonId, Position>): boolean {
-        if (SettingsManager.getCardDensity() === 'compact') return false;
-        for (const id of positions.keys()) {
-            const person = DataManager.getPerson(id);
-            if (person && !person.isPlaceholder) return true;
-        }
-        return false;
+        return viewHasAvatar([...positions.keys()].map(id => DataManager.getPerson(id)), SettingsManager.getCardDensity());
     }
 
     /**
@@ -5032,6 +5072,12 @@ class TreeRendererClass {
         canvas.querySelectorAll('.edge-link-pill, .view-link-label').forEach(el => el.remove());
         // The agent's arcs turn in step (one phase for every card, kept across redraws).
         const spinDelay = sharedPhaseDelay(AGENT_SPIN_MS, document.timeline?.currentTime as number ?? performance.now());
+        // The veils of portraits on their way pulse in one phase (spec 116 §1.1): the canvas's, each host's own
+        // too (a card kept by a live load keeps its phase), so a veil drawn later pulses with the others.
+        const imgPhase = imgPhaseDelay();
+        canvas.style.setProperty('--img-phase', imgPhase);
+        this.wireImageLoads();
+        this.scheduleImagePriority();
         const renderedAt = Date.now();
         this.observeTreeOnScreen();
         // The lines of details the card type draws (Detailed, Register, Custom), null for Compact and Normal.
@@ -5057,6 +5103,9 @@ class TreeRendererClass {
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
             if (!person) continue;
+            // The portrait a load of images brings (spec 116): its state on the avatar, in the tooltip and the aria-label.
+            const imgView = person.isPlaceholder ? NO_CARD_IMAGE
+                : cardImageView(imgStateOf(`person:${id}:photo`, !!person.photo), !!person.photo);
 
             const card = document.createElement('div');
             let classes = 'person-card';
@@ -5069,10 +5118,11 @@ class TreeRendererClass {
             // (initials by default); a photo just fills it instead. `has-photo`
             // marks the photo case for styling/tests; `has-avatar` every card
             // with the avatar, which takes the view's photo size (index.html
-            // body[data-card-photo], spec 103 K2.1).
+            // body[data-card-photo], spec 103 K2.1). A portrait on its way
+            // counts as a photo (spec 116 §1.3).
             if (!person.isPlaceholder && SettingsManager.getCardDensity() !== 'compact') {
                 classes += ' has-avatar';
-                if (person.photo) classes += ' has-photo';
+                if (imgView.photo) classes += ' has-photo';
             }
             // Add focused class if this is the focus person
             if (this.focusPersonId && id === this.focusPersonId) {
@@ -5389,13 +5439,10 @@ class TreeRendererClass {
                 dotHtml = `<span class="card-signal-dot card-done" style="${fade}" aria-hidden="true"></span>`;
             }
 
-            const avatarInner = showPhoto
-                ? `<img src="${this.escapeHtml(person.photo ?? '')}" alt="">`
-                : `<span class="avatar-initials">${this.escapeHtml(initials)}</span>`;
-            // The portrait a load of images brings: the card tells it by its hash (cardSignature, I7).
+            // The portrait a load of images brings: the card tells it by its hash (cardSignature, I7), its state on the avatar (spec 116).
             const imgSha = showAvatar ? imageLoads.entryOf(`person:${id}:photo`)?.sha : undefined;
             const avatarHtml = showAvatar
-                ? `<div class="card-avatar-wrap"><div class="card-avatar"${imgSha ? ` data-img-sha="${this.escapeHtml(imgSha)}"` : ''}>${avatarInner}</div>${badgeHtml}</div>` : '';
+                ? `<div class="card-avatar-wrap">${cardAvatarHtml(imgView, showPhoto ? person.photo : undefined, initials, imgSha, imgPhase)}${badgeHtml}</div>` : '';
             const nameAttrs = `title="${this.escapeHtml(fullTitle)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}"`;
             const nameHtml = `<div class="name"><span class="name-text" ${nameAttrs}>${this.escapeHtml(fullName)}</span></div>`;
             const head = customLines ? this.customHeads.get(id) : undefined;
@@ -5604,7 +5651,9 @@ class TreeRendererClass {
             const ttViewLink = ghostOf
                 ? `<div class="tt-line tt-view-link"><span class="view-link-icon" aria-hidden="true"></span>${this.escapeHtml(strings.viewLinks.tooltip(ghostOf.hypo, ghostOf.variant))}</div>`
                 : '';
-            if (ttBirthLine || ttDeathLine || ttRelLines.length > 0 || ttSignals || ttViewLink) {
+            // The portrait's state (spec 116 §2): on its way or not come.
+            const ttImgRow = cardImageRowHtml(imgView.ttRow);
+            if (ttBirthLine || ttDeathLine || ttRelLines.length > 0 || ttSignals || ttViewLink || ttImgRow) {
                 const rows = [
                     `<div class="tt-name">${this.escapeHtml(fullTitle)}</div>`,
                     ttBirthLine ? `<div class="tt-line">${this.escapeHtml(ttBirthLine)}</div>` : '',
@@ -5615,18 +5664,22 @@ class TreeRendererClass {
                     // The sibling order, shown here only when its pill had to give way (index.html .so-retreat).
                     siblingOrder ? `<div class="tt-line tt-so">${this.escapeHtml(strings.focus.siblingOrderTooltip(siblingOrder.n, siblingOrder.total))}</div>` : '',
                     ttViewLink,
+                    ttImgRow,
                     `<div class="tt-foot">${this.escapeHtml(strings.card.ttFooter)}</div>`,
                 ].filter(Boolean).join('');
                 // A photo (round 9): reuse the SAME thumbnail the card avatar shows
                 // (person.photo) — no extra load, so the hover card never waits on
                 // a fresh fetch. No photo → no column at all (initials live on the
-                // card below the tooltip, not here).
-                const ttHasPhoto = !person.isPlaceholder && !!person.photo;
-                const ttPhoto = ttHasPhoto ? `<img class="tt-photo" src="${this.escapeHtml(person.photo ?? '')}" alt="">` : '';
+                // card below the tooltip, not here). A portrait on its way keeps
+                // its column with the initials (it comes without a jump, spec 116 §2).
+                const ttPhoto = cardTooltipPhotoHtml(imgView, person.photo, initials);
+                const ttHasPhoto = ttPhoto !== '';
                 const ttSha = imageLoads.entryOf(`person:${id}:photo`)?.sha;
                 html += `<div class="card-tooltip${ttHasPhoto ? ' has-photo' : ''}"${ttSha ? ` data-img-sha="${this.escapeHtml(ttSha)}"` : ''}>${ttPhoto}<div class="tt-body">${rows}</div></div>`;
             }
 
+            // The portrait's state at the end of the card's accessible name (spec 116 §2).
+            if (imgView.aria) card.setAttribute('aria-label', withImgAria(card.getAttribute('aria-label') ?? '', imgView.aria));
             card.innerHTML = html;
             const edgeButton = card.querySelector<HTMLElement>('.research-edge');
             if (edgeButton) UI.bindResearchEdge(id, edgeButton);
@@ -6471,6 +6524,153 @@ class TreeRendererClass {
     }
 
     private treeObserver: IntersectionObserver | null = null;
+
+    private imageLoadsWired = false;
+    private cardImagesQueued = false;
+    private imageRenderTimer: ReturnType<typeof setTimeout> | null = null;
+    private imagePriorityTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /**
+     * Images coming after the tree (spec 116): a state or an image that came
+     * updates the cards in place (no redraw of the tree, the photo fades in);
+     * the views drawn their own way are drawn again, now and then. A pan or
+     * a zoom orders the queue anew by the cards on screen (K1.6).
+     */
+    private wireImageLoads(): void {
+        if (this.imageLoadsWired || typeof window === 'undefined') return;
+        this.imageLoadsWired = true;
+        const onImages = (arrived: boolean) => {
+            if (STANDALONE_VIEWS.includes(this.viewMode)) {
+                if (arrived) this.scheduleImageRender();
+                return;
+            }
+            this.scheduleCardImages();
+        };
+        window.addEventListener(IMAGES_ARRIVED_EVENT, () => onImages(true));
+        window.addEventListener(IMAGES_STATE_EVENT, () => onImages(false));
+        ZoomPan.onChange(() => this.scheduleImagePriority());
+    }
+
+    private scheduleCardImages(): void {
+        if (this.cardImagesQueued) return;
+        this.cardImagesQueued = true;
+        requestAnimationFrame(() => {
+            this.cardImagesQueued = false;
+            this.updateCardImages();
+        });
+    }
+
+    /** A view drawn its own way (table, fan, timeline, map) draws the images that came at most every IMAGE_VIEW_REDRAW_MS. */
+    private scheduleImageRender(): void {
+        if (this.imageRenderTimer) return;
+        this.imageRenderTimer = setTimeout(() => {
+            this.imageRenderTimer = null;
+            if (STANDALONE_VIEWS.includes(this.viewMode)) this.render();
+        }, IMAGE_VIEW_REDRAW_MS);
+    }
+
+    /**
+     * The cards' portraits as the load of images has them now (spec 116
+     * §1.3, §2), set in place: the state on the avatar, the image that came
+     * (fading in), `has-photo`, the tooltip's column and row, the end of the
+     * aria-label. Writes only what differs; cards no load concerns are
+     * passed by.
+     */
+    updateCardImages(): void {
+        const canvas = document.getElementById('tree-canvas');
+        if (!canvas || STANDALONE_VIEWS.includes(this.viewMode)) return;
+        canvas.querySelectorAll<HTMLElement>(':scope > .person-card[data-id]').forEach(card => {
+            const id = card.dataset.id as PersonId;
+            const person = DataManager.getPerson(id);
+            if (!person || person.isPlaceholder) return;
+            const entry = imageLoads.entryOf(`person:${id}:photo`);
+            const avatar = card.querySelector<HTMLElement>('.card-avatar');
+            const tooltip = card.querySelector<HTMLElement>('.card-tooltip');
+            if (!entry && !avatar?.hasAttribute('data-img-sha') && !tooltip?.hasAttribute('data-img-sha')) return;
+            const photo = person.photo || undefined;
+            const view = cardImageView(imgStateOf(`person:${id}:photo`, !!photo), !!photo);
+            const initials = () => personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?';
+            if (entry) {
+                if (avatar && avatar.getAttribute('data-img-sha') !== entry.sha) avatar.setAttribute('data-img-sha', entry.sha);
+                if (tooltip && tooltip.getAttribute('data-img-sha') !== entry.sha) tooltip.setAttribute('data-img-sha', entry.sha);
+            }
+            if (card.classList.contains('has-avatar') && card.classList.contains('has-photo') !== view.photo) {
+                card.classList.toggle('has-photo', view.photo);
+            }
+            if (avatar) {
+                if (view.avatar === 'loading' || view.avatar === 'refresh') {
+                    if (view.avatar === 'loading' && avatar.querySelector('img')) {
+                        avatar.innerHTML = `<span class="avatar-initials">${this.escapeHtml(initials())}</span>`;
+                    }
+                    setImgState(avatar, view.avatar);
+                } else if (photo) {
+                    setImgState(avatar, 'loaded', photo);
+                } else {
+                    setImgState(avatar, 'none');
+                    if (avatar.querySelector('img')) avatar.innerHTML = `<span class="avatar-initials">${this.escapeHtml(initials())}</span>`;
+                }
+            }
+            const label = card.getAttribute('aria-label');
+            if (label !== null) {
+                const next = withImgAria(label, view.aria);
+                if (next !== label) card.setAttribute('aria-label', next);
+            }
+            if (tooltip) this.updateTooltipImage(tooltip, view, photo, initials);
+        });
+    }
+
+    /** The tooltip's photo column and its row of the portrait's state, set in place. */
+    private updateTooltipImage(tooltip: HTMLElement, view: CardImageView, photo: string | undefined, initials: () => string): void {
+        const col = tooltip.querySelector<HTMLElement>(':scope > .tt-photo');
+        const want = view.ttPhoto === 'img' && !photo ? null : view.ttPhoto;
+        const same = want === null ? !col
+            : want === 'img' ? col?.tagName === 'IMG' && col.getAttribute('src') === photo
+                : col?.tagName === 'SPAN';
+        if (!same) {
+            col?.remove();
+            const html = cardTooltipPhotoHtml(view, photo, want === 'initials' ? initials() : '');
+            if (html) tooltip.insertAdjacentHTML('afterbegin', html);
+        }
+        if (tooltip.classList.contains('has-photo') !== (want !== null)) tooltip.classList.toggle('has-photo', want !== null);
+        const body = tooltip.querySelector<HTMLElement>(':scope > .tt-body');
+        if (!body) return;
+        const row = body.querySelector<HTMLElement>(':scope > .tt-img-state');
+        const rowHtml = cardImageRowHtml(view.ttRow);
+        if ((row?.outerHTML ?? '') === rowHtml) return;
+        row?.remove();
+        if (!rowHtml) return;
+        const foot = body.querySelector<HTMLElement>(':scope > .tt-foot');
+        if (foot) foot.insertAdjacentHTML('beforebegin', rowHtml);
+        else body.insertAdjacentHTML('beforeend', rowHtml);
+    }
+
+    /**
+     * The people whose images a load asks for first (K1.6): the cards on
+     * screen now (nearest the middle of the view first), then the focus and
+     * those around it by generations, then the rest of the view.
+     */
+    imagePriority(): string[] {
+        return personsByNearness(DataManager.getData(), this.focusPersonId, [...this.onScreenPersonIds(), ...this.positions.keys()]);
+    }
+
+    /** The drawn cards on screen now (the tree's container), nearest the middle of the view first. */
+    onScreenPersonIds(): PersonId[] {
+        const container = document.getElementById('tree-container');
+        if (!container || STANDALONE_VIEWS.includes(this.viewMode)) return [];
+        const view = { width: container.clientWidth, height: container.clientHeight };
+        const w = this.config.cardWidth;
+        return cardsOnScreen([...this.positions].map(([id, p]) => ({ id, x: p.x, y: p.y, w, h: this.cardHeightOf(id) })),
+            ZoomPan.getTransform(), view);
+    }
+
+    /** After a pan or a zoom (at most every IMAGE_PRIORITY_MS): the queue of a load running takes the cards on screen first. */
+    private scheduleImagePriority(): void {
+        if (this.imagePriorityTimer || imageLoads.snapshot().phase !== 'running') return;
+        this.imagePriorityTimer = setTimeout(() => {
+            this.imagePriorityTimer = null;
+            if (imageLoads.snapshot().phase === 'running') imageLoads.setPriority(this.imagePriority());
+        }, IMAGE_PRIORITY_MS);
+    }
 
     /**
      * The agent's arcs stop turning while the tree is off screen (one

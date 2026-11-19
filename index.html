@@ -2139,6 +2139,45 @@
             line-height: 1;
             color: var(--text-light);
         }
+        /* Photo states (spec 116): one look for every image slot (avatar and tile).
+           data-img-state on the element that holds the <img>: "loading" (initials or
+           a glyph under a slowly pulsing veil), "refresh" (the stored photo under the
+           same veil while a newer one comes), "failed" (tiles only: the card stays
+           calm), "loaded" (set in place while the photo fades in). Every veil pulses
+           in one phase (--img-phase, src/ui/image-slot.ts), so hundreds of cards
+           neither ripple nor flicker. Opacity only: the compositor's work. */
+        [data-img-state] { position: relative; }
+        [data-img-state="loading"]::after, [data-img-state="refresh"]::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            pointer-events: none;
+            animation: img-wait 1.6s ease-in-out var(--img-phase, 0s) infinite alternate;
+        }
+        [data-img-state="loading"]::after { background: color-mix(in srgb, var(--text-ghost) 30%, transparent); }
+        [data-img-state="refresh"]::after { background: color-mix(in srgb, var(--surface) 45%, transparent); }
+        @keyframes img-wait { from { opacity: 0; } to { opacity: 1; } }
+        [data-img-state="loading"] :is(.avatar-initials, .pm-avatar-initials, .pp-initials-text) { color: var(--text-faint); }
+        .img-slot-glyph {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            color: var(--text-faint);
+        }
+        .img-slot-note { font-size: 11px; line-height: 1.2; color: var(--text-light); text-align: center; }
+        [data-img-state] img { transition: opacity .15s ease-out; }
+        [data-img-state] img.is-arriving { opacity: 0; }
+        @media (prefers-reduced-motion: reduce) {
+            [data-img-state]::after { animation: none; opacity: .55; }
+            [data-img-state] img { transition: none; }
+        }
+        /* A safeguard: no output ever carries a state (spec 116 §8), print shows no veil. */
+        @media print {
+            [data-img-state]::after { display: none; }
+        }
         /* Body column: name + meta, ellipsized within the remaining width. */
         .card-body {
             flex: 1 1 auto;
@@ -31237,6 +31276,23 @@
         .card-tooltip .tt-line { color: var(--text-light); }
         .card-tooltip .tt-rel { color: var(--text-faint); }
         .card-tooltip .tt-warn { color: var(--warning-text); font-size: 12px; }
+        /* A portrait on its way keeps the photo's column with the initials (it comes
+           without a jump); the row of its state, faint (spec 116 §2). */
+        .card-tooltip span.tt-photo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: var(--avatar-bg);
+        }
+        .card-tooltip span.tt-photo .avatar-initials { font-size: 20px; }
+        .card-tooltip .tt-img-state {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-faint);
+        }
+        .card-tooltip .tt-img-state .ui-icon { flex: 0 0 auto; }
         .card-tooltip .tt-foot {
             margin-top: 6px;
             padding-top: 5px;
