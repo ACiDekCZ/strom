@@ -683,7 +683,7 @@ describe('a highlighted line on the poster, the image and paper (§7, test 10)',
 
     it('the window\'s print: the dimmed sectors at full opacity, their fills toward white', () => {
         const { model, a } = setup();
-        const svg = buildFanSvg(model, { ...opts, uid: 'w', rodColors: a });
+        const svg = buildFanSvg(model, { ...opts, uid: 'w', rodColors: a, printHighlight: true });
         const print = svg.slice(svg.indexOf('@media print{'));
         expect(print).toContain(':is(.fan-sector,.fan-focus):is(.evidence-dim,.evidence-faint){opacity:1!important}');
         const centre = fanRodSlotColor(a.slotOf.get(rodOf(a.index, model.focus.id)!)!, 'light');
@@ -691,6 +691,14 @@ describe('a highlighted line on the poster, the image and paper (§7, test 10)',
         expect(print).toContain(`{fill:${fanMixWhite(centre, FAN_PRINT_DIM)}}`);
         // The screen's drawing has no layer of its own (the renderer adds it by class).
         expect(svg).not.toContain('fan-hl-layer');
+    });
+
+    it('a fan that never highlights (the person page) has no print rules of a highlight', () => {
+        const { model, a } = setup();
+        const svg = buildFanSvg(model, { ...opts, uid: 'p', rodColors: a });
+        expect(svg).toContain('@media print{');
+        expect(svg).not.toContain('evidence-dim');
+        expect(svg).not.toContain('evidence-faint');
     });
 });
 

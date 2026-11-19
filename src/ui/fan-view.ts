@@ -377,6 +377,7 @@ export class FanViewController {
         chart.innerHTML = buildFanSvg(model, {
             esc: this.host.esc,
             editable: this.host.editable(),
+            printHighlight: true,
             addParentLabel: this.host.addParentLabel(),
             showKekule: this.host.showKekule(),
             relTypeLabel: this.host.relTypeLabel,

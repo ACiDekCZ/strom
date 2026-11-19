@@ -398,6 +398,12 @@ export interface FanSvgOptions {
     ppu?: number;
     /** The visible part (fan units): the viewBox; labels only for sectors in it (+ a ring's margin). Default: the whole fan. */
     viewport?: FanBounds;
+    /**
+     * The window's print of a highlighted group (spec 114 §7): the dimmed sectors
+     * printed as lighter fills. Only the fan window highlights; the person page's
+     * fan never does and keeps its styles as they were.
+     */
+    printHighlight?: boolean;
     colorMode?: FanColorMode;
     /** A living person whose name and dates stay hidden ("Living person"). */
     protect?: (person: Person) => boolean;
@@ -759,7 +765,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         css = themeRules(scope, FAN_PALETTES.light, fillsA, opts.editable)
             + themeRules(`[data-theme="dark"] ${scope}`, FAN_PALETTES.dark, fillsB, opts.editable)
             + `@media print{${themeRules(`[data-theme="dark"] ${scope}`, FAN_PALETTES.print, fillsA, opts.editable)}`
-            + printHighlightRules(scope, fillsA) + '}';
+            + (opts.printHighlight ? printHighlightRules(scope, fillsA) : '') + '}';
     }
     css += `${scope} text{pointer-events:none}`;
 
