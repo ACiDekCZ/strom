@@ -17,7 +17,7 @@ import {
     FAN_ROD_MAX_STRONG, FAN_ROD_LEGEND_MAIN, FanRodAssignment, FanRodInfo, FanRodModel,
 } from '../fan-rod-assign.js';
 import {
-    FanRodSlot, fanRodSlotColor, deltaE, deltaEDeutan, parseFanRodSlot, FAN_PALETTES, fanMixWhite, FAN_PRINT_DIM, FAN_PRINT_EDGE,
+    FanRodSlot, FAN_ROD_SLOTS, fanRodSlotColor, deltaE, deltaEDeutan, parseFanRodSlot, FAN_PALETTES, fanMixWhite, FAN_PRINT_DIM, FAN_PRINT_EDGE,
 } from '../fan-colors.js';
 import { buildFanModel, buildFanSvg, buildFanPosterSvg, fanPosterGeometry, FanShape, FanHighlight } from '../fan-chart.js';
 import { buildLineages, LineageIndex, RodId, rodOf, rodLabels, realRodMembers } from '../lineage.js';
@@ -92,7 +92,11 @@ describe('the reference (sample data of the design)', () => {
         expect(Object.fromEntries(a.rods.map(r => [r.id, r.group]))).toEqual(s.groups);
         expect(Object.fromEntries(a.rods.map(r => [r.id, r.count]))).toEqual(s.counts);
         expect(a.slotOf.size).toBe(a.rods.length);
-        expect(obj(a.memory)).toEqual(obj(a.slotOf));
+        // Remembered: every line drawn with its slot, and the lines out of view with theirs from before (K1.2).
+        for (const [id, slot] of a.slotOf) expect(a.memory.get(id)).toBe(slot);
+        const before = s.after ? got.get(s.after)!.memory : new Map<RodId, FanRodSlot>();
+        for (const [id, slot] of before) if (!a.slotOf.has(id)) expect(a.memory.get(id), `${name} ${id}`).toBe(slot);
+        expect(a.memory.size).toBe(new Set([...a.slotOf.keys(), ...before.keys()]).size);
         // The strong lines on their group's strong shades: the reference's slot (the table widened after it, K1.7).
         for (const r of a.rods) {
             const ref = s.slots[r.id] ? parseFanRodSlot(s.slots[r.id]) : null;
@@ -268,17 +272,25 @@ describe('slots (§1 steps 2–8)', () => {
         }
     });
 
-    it('memory: a line keeps its slot, also drawn once; a line gone frees it; a neighbour holding it moves the later one', () => {
+    it('memory: a line keeps its slot, also drawn once; a line gone frees it but is remembered; a neighbour holding it moves the later one', () => {
         const first = assignFanRodSlots([info('a', 4, 'M'), info('b', 3, 'M')], []);
         expect(obj(first.slotOf)).toEqual({ a: 'MS0', b: 'MS1' });
         // b seen once: still coloured on its slot (muted tier now, the slot kept), c takes a fresh one.
         const second = assignFanRodSlots([info('a', 4, 'M'), info('b', 1, 'M'), info('c', 3, 'M')], [], first.memory);
         expect(obj(second.slotOf)).toEqual({ a: 'MS0', b: 'MS1', c: 'MS2' });
         expect(obj(second.memory)).toEqual(obj(second.slotOf));
-        // b gone: the slot is free for anybody.
+        // b and c gone: remembered with their slots (K1.2); a new line takes a shade nobody remembers.
         const third = assignFanRodSlots([info('a', 4, 'M'), info('d', 3, 'M')], [], second.memory);
-        expect(third.memory.has('b' as RodId)).toBe(false);
-        expect(third.slotOf.get('d' as RodId)).toBe('MS1');
+        expect(obj(third.memory)).toEqual({ a: 'MS0', b: 'MS1', c: 'MS2', d: 'MS3' });
+        expect(obj(third.slotOf)).toEqual({ a: 'MS0', d: 'MS3' });
+        // b back: its own slot again, beside d.
+        const fourth = assignFanRodSlots([info('a', 4, 'M'), info('b', 3, 'M'), info('d', 3, 'M')], [], third.memory);
+        expect(obj(fourth.slotOf)).toEqual({ a: 'MS0', b: 'MS1', d: 'MS3' });
+        // Every shade of the group remembered by a line out of view: a new line still takes a free one (held by nobody drawn).
+        const full = new Map(FAN_ROD_SLOTS.M.S.map((_, i) => [`m${i}` as RodId, `MS${i}` as FanRodSlot]));
+        const fresh = assignFanRodSlots([info('e', 3, 'M')], [], full);
+        expect(fresh.slotOf.get('e' as RodId)).toBe('MS0');
+        expect(fresh.memory.size).toBe(full.size + 1);
         // Two lines remembering one slot (a repeat) become neighbours: the larger keeps it.
         const shared = new Map([['x' as RodId, 'MT0' as FanRodSlot], ['y' as RodId, 'MT0' as FanRodSlot]]);
         const out = assignFanRodSlots([info('x', 3, 'M'), info('y', 2, 'M')], [['x' as RodId, 'y' as RodId]], shared);
@@ -394,6 +406,16 @@ function nearRepeats(a: FanRodAssignment, model: FanRodModel): number {
     return fanRodNear(model, a.index).filter(([x, y]) => a.slotOf.get(x) === a.slotOf.get(y)).length;
 }
 
+/**
+ * The same, leaving out pairs of two remembered slots: a kept slot yields only
+ * to a neighbour (§3 step 4), so two lines kept from earlier states may end
+ * one sector apart; a slot handed out now never does.
+ */
+function nearRepeatsAssigned(a: FanRodAssignment, model: FanRodModel): number {
+    const kept = new Set(a.rods.filter(r => r.kept).map(r => r.id));
+    return fanRodNear(model, a.index).filter(([x, y]) => a.slotOf.get(x) === a.slotOf.get(y) && !(kept.has(x) && kept.has(y))).length;
+}
+
 describe('K1.1 (property, test 4)', () => {
     it('200 random trees and fans with re-centring: every line coloured, the larger ones strong, neighbours never alike, slots kept', () => {
         const r = rng(114);
@@ -410,11 +432,12 @@ describe('K1.1 (property, test 4)', () => {
                 const a = assignFanRodColors(model, index, memory);
                 checkK17(a, model, `tree ${t} step ${step}`);
                 if (a.rods.some(x => x.shared)) shared++;
-                near += nearRepeats(a, model);
+                near += nearRepeatsAssigned(a, model);
                 // K1.2: a line seen before keeps its slot (unless a neighbour holds it now).
                 for (const [id, s] of memory ?? []) if (a.slotOf.has(id)) { seenAgain++; if (a.slotOf.get(id) === s) kept++; }
-                // Remembered slots: only lines in this fan.
-                for (const id of a.memory.keys()) expect(a.rods.some(x => x.id === id)).toBe(true);
+                // Remembered slots: the lines in this fan with theirs, the lines seen before and out of view now with theirs.
+                for (const [id, s] of a.slotOf) expect(a.memory.get(id)).toBe(s);
+                for (const [id, s] of memory ?? []) if (!a.slotOf.has(id)) expect(a.memory.get(id)).toBe(s);
                 memory = a.memory;
                 centre = people[Math.floor(r() * people.length)];
                 states++;
@@ -843,6 +866,32 @@ describe('shapes and a dense fan (§8)', () => {
             }
             memory = a.memory;
             prev = a;
+        }
+    });
+
+    it('there and back (K1.2): after the father, the mother and a child as centre, the first centre shows every line in its colours again', () => {
+        const { data, focus } = dense();
+        const index = buildLineages(data);
+        const [father, mother] = focus.parentIds;
+        const child = Object.values(data.persons).find(p => p.parentIds.includes(focus.id))!.id;
+        for (const shape of ['full', 'two'] as const) {
+            const draw = (centre: PersonId, memory: ReadonlyMap<RodId, FanRodSlot> | null) => {
+                const model = buildFanModel(data, centre, { generations: 8, shape, descGenerations: 2 })!;
+                const a = assignFanRodColors(model, index, memory);
+                checkK17(a, model, `${shape} ${centre}`);
+                expect(nearRepeatsAssigned(a, model), `${shape} ${centre}`).toBe(0);
+                return a;
+            };
+            const first = draw(focus.id, null);
+            expect(first.rods.length).toBeGreaterThan(60);
+            expect(nearRepeats(first, buildFanModel(data, focus.id, { generations: 8, shape, descGenerations: 2 })!)).toBe(0);
+            let memory = first.memory;
+            for (const away of [father, mother, child]) {
+                const there = draw(away, memory);
+                const back = draw(focus.id, there.memory);
+                expect(obj(back.slotOf), `${shape} via ${away}`).toEqual(obj(first.slotOf));
+                memory = back.memory;
+            }
         }
     });
     const opts = () => ({ esc: (t: string) => t, editable: false, addParentLabel: '', colorMode: 'rod' as const });

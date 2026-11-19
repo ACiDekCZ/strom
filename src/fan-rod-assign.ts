@@ -211,7 +211,8 @@ const byRank = (a: FanRodInfo, b: FanRodInfo) => b.count - a.count || b.tree - a
 /**
  * Steps 2–8: the slots of the lines (mutated: rank, tier, slot, kept,
  * borrowed, down, shared) and the memory for the next state. Every line gets
- * a slot (K1.7). `near`: the pairs of lines near each other besides the
+ * a slot (K1.7). The memory keeps the lines out of view too, so a line
+ * coming back finds its slot. `near`: the pairs of lines near each other besides the
  * neighbours (fanRodNear); without it, a neighbour's neighbour.
  */
 export function assignFanRodSlots(
@@ -254,6 +255,10 @@ export function assignFanRodSlots(
     /** Whether a line within `within` (its neighbours, or the lines near) already holds the slot. */
     const clash = (r: FanRodInfo, s: FanRodSlot, within: Set<RodId>) => (holders.get(s) ?? []).some(id => within.has(id));
     const reserveCentre = ranked.some(r => r.focus);
+    // Slots remembered by lines out of view now (K1.2).
+    const drawn = new Set(ranked.map(r => r.id));
+    const away = new Set<FanRodSlot>();
+    for (const [id, s] of mem) if (!drawn.has(id)) away.add(s);
     // PS0 is the centre's alone: never shared, never handed to another line.
     const closed = (r: FanRodInfo, s: FanRodSlot) => s === CENTRE_SLOT && (holders.has(s) || (reserveCentre && !r.focus));
 
@@ -281,7 +286,11 @@ export function assignFanRodSlots(
             borO.push(...slotsOf(ng, other).reverse());
         }
         const open = (pl: FanRodSlot[]) => pl.filter(c => !closed(r, c));
-        const fresh = (pl: FanRodSlot[]) => open(pl).filter(c => !holders.has(c));
+        // Shades nobody holds: first those no line out of view remembers, so that line finds its own back.
+        const fresh = (pl: FanRodSlot[]) => {
+            const free = open(pl).filter(c => !holders.has(c));
+            return [...free.filter(c => !away.has(c)), ...free.filter(c => away.has(c))];
+        };
         // Shades used already: the least used first, then in the palette's order.
         const again = (pl: FanRodSlot[]) => open(pl).filter(c => holders.has(c))
             .map((c, i) => [c, i] as const)
@@ -319,8 +328,11 @@ export function assignFanRodSlots(
         }
     }
 
-    // Step 8: what the window remembers is every line's slot.
-    return { slotOf, memory: new Map(slotOf), ranked };
+    // Step 8: what the window remembers is every line's slot, also of the lines out of view now
+    // (K1.2: going back to an earlier centre shows the same colours); a line drawn now updates its entry.
+    const next = new Map(mem);
+    for (const [id, s] of slotOf) next.set(id, s);
+    return { slotOf, memory: next, ranked };
 }
 
 /**
