@@ -2136,13 +2136,32 @@ const DECLARED_ENCODINGS: Record<string, GedcomEncoding> = {
     'ISO-8859-2': 'iso-8859-2', 'ISO8859-2': 'iso-8859-2', 'LATIN2': 'iso-8859-2', 'LATIN-2': 'iso-8859-2',
 };
 
-function isValidUtf8(bytes: Uint8Array): boolean {
+/** The text of `bytes` when they are valid UTF-8, else null (decoded once, natively). */
+function strictUtf8(bytes: Uint8Array): string | null {
     try {
-        new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-        return true;
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     } catch {
-        return false;
+        return null;
     }
+}
+
+/**
+ * Whether any byte is outside ASCII. Four bytes at a time: a callback per
+ * byte (Array.some) took about half a second on a 200 MB file with photos.
+ */
+export function hasNonAscii(bytes: Uint8Array): boolean {
+    const n = bytes.length;
+    let i = 0;
+    // Up to a 4-byte boundary of the underlying buffer, then whole words.
+    while (i < n && (bytes.byteOffset + i) % 4 !== 0) if (bytes[i++] >= 0x80) return true;
+    const words = Math.floor((n - i) / 4);
+    if (words > 0) {
+        const view = new Uint32Array(bytes.buffer, bytes.byteOffset + i, words);
+        for (let w = 0; w < words; w++) if (view[w] & 0x80808080) return true;
+        i += words * 4;
+    }
+    while (i < n) if (bytes[i++] >= 0x80) return true;
+    return false;
 }
 
 // Byte classes for telling Windows-1250 (Central Europe) from Windows-1252
@@ -2220,15 +2239,15 @@ function decodeAs(bytes: Uint8Array, encoding: GedcomEncoding): string {
  */
 export function decodeGedcomBytes(buffer: ArrayBuffer, forced?: GedcomEncoding): GedcomDecoding {
     const bytes = new Uint8Array(buffer);
-    const nonAscii = bytes.some(b => b >= 0x80);
+    const nonAscii = hasNonAscii(bytes);
 
     // Peek HEAD for "1 CHAR <value>". NULs are stripped so a BOM-less UTF-16
     // header still matches; latin1 maps every byte so decoding cannot throw.
     const head = new TextDecoder('latin1').decode(bytes.subarray(0, 4096)).replace(/\0/g, '');
     const charMatch = /^\s*1\s+CHAR\s+(.+?)\s*$/m.exec(head);
     const declared = charMatch?.[1] ?? null;
-    const result = (encoding: GedcomEncoding, how: GedcomDecoding['how'], body: Uint8Array = bytes): GedcomDecoding =>
-        ({ text: decodeAs(body, encoding), encoding, declared, how, nonAscii });
+    const result = (encoding: GedcomEncoding, how: GedcomDecoding['how'], body: Uint8Array = bytes, text?: string): GedcomDecoding =>
+        ({ text: text ?? decodeAs(body, encoding), encoding, declared, how, nonAscii });
 
     if (forced) {
         // A forced single-byte or UTF-8 reading must not keep a BOM as text.
@@ -2250,7 +2269,9 @@ export function decodeGedcomBytes(buffer: ArrayBuffer, forced?: GedcomEncoding):
     // UTF-8, ANSI, ASCII, unknown or no CHAR: valid UTF-8 is UTF-8 (a
     // single-byte Central European text is practically never valid UTF-8).
     if (!nonAscii) return result(named ?? 'utf-8', named ? 'declared' : 'content');
-    if (isValidUtf8(bytes)) return result('utf-8', named === 'utf-8' ? 'declared' : 'content');
+    // Valid UTF-8 is decoded once: the strict pass's text is the text.
+    const utf8 = strictUtf8(bytes);
+    if (utf8 !== null) return result('utf-8', named === 'utf-8' ? 'declared' : 'content', bytes, utf8);
     return result(guessSingleByteEncoding(bytes), 'content');
 }
 

@@ -29,6 +29,10 @@ vi.mock('../storage.js', () => ({
             storeOf(store).set(key, value);
             return Promise.resolve();
         },
+        setTogether(writes: { store: string; key: string; value: unknown }[]): Promise<void> {
+            for (const w of writes) storeOf(w.store).set(w.key, w.value);
+            return Promise.resolve();
+        },
         async delete(store: string, key: string): Promise<void> {
             storeOf(store).delete(key);
         },

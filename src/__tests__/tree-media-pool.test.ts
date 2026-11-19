@@ -26,6 +26,10 @@ vi.mock('../storage.js', () => ({
             st(store).set(key, structuredClone(value));
             return Promise.resolve();
         },
+        setTogether(writes: { store: string; key: string; value: unknown }[]): Promise<void> {
+            for (const w of writes) st(w.store).set(w.key, structuredClone(w.value));
+            return Promise.resolve();
+        },
         async delete(store: string, key: string): Promise<void> {
             st(store).delete(key);
         },
@@ -134,10 +138,17 @@ describe('stored trees and the image pool', () => {
 
     it('another save writes only the images the pool does not have yet', async () => {
         await save('t1', tree('Anna', [image(1), image(2)]));
-        const setSpy = vi.spyOn((await import('../storage.js')).StorageManager, 'set');
+        const { StorageManager } = await import('../storage.js');
+        const setSpy = vi.spyOn(StorageManager, 'set');
+        const togetherSpy = vi.spyOn(StorageManager, 'setTogether');
         await save('t1', tree('Anna B.', [image(1), image(2), image(3)]));
-        expect(setSpy.mock.calls.filter(c => c[0] === 'media')).toHaveLength(1);
+        const mediaWrites = [
+            ...setSpy.mock.calls.filter(c => c[0] === 'media').map(c => c[1]),
+            ...togetherSpy.mock.calls.flatMap(c => c[0].filter(w => w.store === 'media').map(w => w.key)),
+        ];
+        expect(mediaWrites).toHaveLength(1);
         setSpy.mockRestore();
+        togetherSpy.mockRestore();
     });
 
     it('trees and backups share images; the cleanup keeps what anything names', async () => {

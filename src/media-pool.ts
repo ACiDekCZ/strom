@@ -23,8 +23,9 @@
 
 import { StorageManager } from './storage.js';
 import { CryptoSession, EncryptedData } from './crypto.js';
-import { bytesToBase64, base64ToBytes } from './base64.js';
+import { bytesToBase64, base64ToBytes, canonicalBase64Bytes } from './base64.js';
 import { sha256Bytes } from './sha256.js';
+import { takeImageBytes } from './known-image-bytes.js';
 
 /** Strings at least this long starting with "data:" go to the pool. */
 export const POOL_MIN_LENGTH = 1024;
@@ -151,25 +152,25 @@ async function contentIds(urls: Set<string>, encrypted: boolean, scope: string):
 
 // ---- storing images ----
 
+/** The bytes as an ArrayBuffer of exactly their length (a view may sit in a larger one). */
+function ownBuffer(bytes: Uint8Array): ArrayBuffer {
+    return bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+        ? bytes.buffer as ArrayBuffer
+        : bytes.slice().buffer as ArrayBuffer;
+}
+
 async function encodeMedia(url: string, encrypted: boolean): Promise<{ record: StoredMedia; size: number }> {
+    const known = takeImageBytes(url);
     if (encrypted) {
         const enc = await CryptoSession.encrypt(url);
         return { record: { encrypted: enc }, size: enc.data.length };
     }
     const comma = url.indexOf(',');
     const head = url.slice(0, comma + 1);
-    const b64 = url.slice(comma + 1);
-    if (head.endsWith(';base64,') && b64.length > 0 && b64.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(b64)) {
-        try {
-            const bytes = base64ToBytes(b64);
-            // atob accepts stray bits in the last group; only store bytes that
-            // give back exactly the same text.
-            const lastGroup = (b64.length / 4 - 1) * 3;
-            if (bytesToBase64(bytes.subarray(lastGroup)) === b64.slice(-4)) {
-                return { record: { head, bytes: bytes.buffer as ArrayBuffer }, size: bytes.byteLength };
-            }
-        } catch { /* not base64 after all: kept as text */ }
-    }
+    if (!head.endsWith(';base64,')) return { record: { text: url }, size: url.length };
+    // Only bytes that give back exactly the same text are stored as bytes.
+    const bytes = known ?? canonicalBase64Bytes(url.slice(comma + 1));
+    if (bytes) return { record: { head, bytes: ownBuffer(bytes) }, size: bytes.byteLength };
     return { record: { text: url }, size: url.length };
 }
 
@@ -191,6 +192,11 @@ function storedSize(record: StoredMedia): number {
     return record.text?.length ?? 0;
 }
 
+/** New images written in one transaction: at most this many bytes … */
+const MEDIA_BATCH_BYTES = 16 * 1024 * 1024;
+/** … or this many images. */
+const MEDIA_BATCH_COUNT = 256;
+
 /** Stored sizes of images seen in this session (saves reading them back). */
 const sizeOfStored = new Map<string, number>();
 
@@ -208,6 +214,18 @@ export async function storeImages(urls: Set<string>, encrypted: boolean, scope: 
     const ids = await contentIds(urls, encrypted, scope);
     const stored = new Set(await StorageManager.keys('media'));
     const media: Record<string, number> = {};
+    // New images go in a few transactions, not one each (a transaction per
+    // image took 1.5 s for a thousand photos; one took 0.2 s).
+    let batch: { store: 'media'; key: string; value: StoredMedia }[] = [];
+    let batchBytes = 0;
+    const writeBatch = async (): Promise<void> => {
+        if (!batch.length) return;
+        const writes = batch;
+        batch = [];
+        batchBytes = 0;
+        await StorageManager.setTogether(writes);
+        for (const w of writes) sizeOfStored.set(w.key, media[w.key]);
+    };
     for (const [url, id] of ids) {
         if (media[id] !== undefined) continue;
         if (stored.has(id)) {
@@ -217,10 +235,12 @@ export async function storeImages(urls: Set<string>, encrypted: boolean, scope: 
             if (record) { media[id] = storedSize(record); sizeOfStored.set(id, media[id]); continue; }
         }
         const { record, size } = await encodeMedia(url, encrypted);
-        await StorageManager.set('media', id, record);
+        batch.push({ store: 'media', key: id, value: record });
+        batchBytes += size;
         media[id] = size;
-        sizeOfStored.set(id, size);
+        if (batchBytes >= MEDIA_BATCH_BYTES || batch.length >= MEDIA_BATCH_COUNT) await writeBatch();
     }
+    await writeBatch();
     return { ids, media };
 }
 

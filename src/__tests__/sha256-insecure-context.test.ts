@@ -13,6 +13,10 @@ vi.mock('../storage.js', () => ({
         async init() {},
         async get<T>(_store: string, key: string): Promise<T | null> { return (media.get(key) as T) ?? null; },
         set(_store: string, key: string, value: unknown): Promise<void> { media.set(key, value); return Promise.resolve(); },
+        setTogether(writes: { key: string; value: unknown }[]): Promise<void> {
+            for (const w of writes) media.set(w.key, w.value);
+            return Promise.resolve();
+        },
         async delete(_store: string, key: string): Promise<void> { media.delete(key); },
         async keys(): Promise<string[]> { return [...media.keys()]; },
         async getAll<T>(): Promise<T[]> { return [...media.values()] as T[]; },

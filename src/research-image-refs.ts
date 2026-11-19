@@ -34,7 +34,8 @@
  * dependencies (tests, a real bridge).
  */
 
-import { base64ToBytes, bytesToBase64 } from './base64.js';
+import { base64ToBytes, bytesToBase64, canonicalBase64Bytes } from './base64.js';
+import { rememberImageBytes, forgetImageBytes } from './known-image-bytes.js';
 import { sha256Bytes } from './sha256.js';
 
 /** A FILE value that names an image by its hash. */
@@ -307,14 +308,22 @@ export async function fetchImagesByHash(url: string, refs: readonly ImageRef[], 
             if (!ref || !open.delete(sha)) continue;
             const mime = img.mime.toLowerCase();
             if (mime !== ref.mime || !SAFE_IMAGE_MIME.test(mime)) throw new ImagesNotResolved(`unexpected type ${img.mime}`);
-            let bytes: Uint8Array | null = null;
-            try {
-                bytes = base64ToBytes(img.data);
-            } catch {
-                bytes = null;
+            // Canonical base64 (what the bridge sends) is kept as it came; any
+            // other is written anew from its bytes, as a file would carry it.
+            let bytes: Uint8Array | null = canonicalBase64Bytes(img.data);
+            const canonical = bytes !== null;
+            if (!bytes) {
+                try {
+                    bytes = base64ToBytes(img.data);
+                } catch {
+                    bytes = null;
+                }
             }
             if (bytes && await deps.sha256Hex(bytes) === sha) {
-                out.set(sha, `data:${mime};base64,${bytesToBase64(bytes)}`);
+                const dataUrl = `data:${mime};base64,${canonical ? img.data : bytesToBase64(bytes)}`;
+                out.set(sha, dataUrl);
+                // Storing the tree takes these checked bytes instead of decoding the text again.
+                rememberImageBytes(dataUrl, bytes);
                 continue;
             }
             if (mismatched.has(sha)) throw new ImagesNotResolved(`image does not give its hash: ${sha}`);
@@ -385,6 +394,8 @@ export async function resolveImageRefs(
 ): Promise<ImagesResolved> {
     const researchId = o.researchId ? o.researchId.toLowerCase() : null;
     const known = researchId && held?.researchId === researchId ? held.bySha : null;
+    // Bytes left from an earlier load that was never stored are no use now.
+    forgetImageBytes();
     const images = new Map<string, string>();
     const want = new Map<string, ImageRef>();
     for (const ref of o.refs) {
