@@ -446,11 +446,14 @@ describe('selection', () => {
         other.stop();
     });
 
-    it('send mode (spec 110 §1): a choice says focus or mark and its rising number; off sends nothing; a change is told to the main window', async () => {
+    it('send mode (spec 110 §1): a Table focuses by default; a choice says focus or mark and its rising number; off sends nothing; a change is told to the main window', async () => {
         await connect();
         const said = vi.fn();
         sat.on('send-mode', said);
-        expect(sat.sendMode).toBe('mark');
+        // A Table focuses until another is chosen; mark chosen there is kept as chosen.
+        expect(sat.sendMode).toBe('focus');
+        sat.sendMode = 'mark';
+        expect(session.get(sendModeKey(SAT))).toBe('mark');
         sat.announceSelection('p1');
         sat.sendMode = 'focus';
         expect(session.get(sendModeKey(SAT))).toBe('focus');
@@ -461,7 +464,7 @@ describe('selection', () => {
         expect(sel.map(m => [m.personId, m.intent])).toEqual([['p1', 'mark'], ['p2', 'focus'], ['p3', 'focus']]);
         expect(sel[1].seq!).toBeGreaterThan(sel[0].seq!);
         expect(sel[2].seq!).toBeGreaterThan(sel[1].seq!);
-        expect(of('send-mode')).toEqual([expect.objectContaining({ windowId: SAT, mode: 'focus' })]);
+        expect(of('send-mode')).toEqual([expect.objectContaining({ windowId: SAT, mode: 'mark' }), expect.objectContaining({ windowId: SAT, mode: 'focus' })]);
         // A view without it (Family) marks only: the main window hears the run of this window end.
         sat.setKind('family');
         expect(sat.sendMode).toBe('mark');
@@ -473,8 +476,8 @@ describe('selection', () => {
         sat.announceSelection('p4');
         await settle();
         expect(of('select')).toHaveLength(3);
-        expect(of('send-mode').map(m => m.mode)).toEqual(['focus', 'mark', 'focus', 'mark']);
-        expect(said.mock.calls).toEqual([['focus'], ['mark'], ['focus'], ['mark']]);
+        expect(of('send-mode').map(m => m.mode)).toEqual(['mark', 'focus', 'mark', 'focus', 'mark']);
+        expect(said.mock.calls).toEqual([['mark'], ['focus'], ['mark'], ['focus'], ['mark']]);
         // A reload starts its numbers above the earlier ones (the clock).
         vi.advanceTimersByTime(1000);
         const again = new SatelliteClient({ kind: 'table', treeId: TREE, windowId: SAT, newId: false }, { bus: new WindowBus(SAT, hub.channel()), storage: { getItem: k => session.get(k) ?? null, setItem: () => {} }, locks: noLocks(), closeSelf: () => {}, hasFocus: () => true, bounds: () => undefined });

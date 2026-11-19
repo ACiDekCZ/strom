@@ -247,9 +247,9 @@ export class SatelliteClient {
         return this.followMode !== 'off';
     }
 
-    /** The send mode chosen in this window (spec 110 §1), whatever view shows now and also while "off". */
+    /** The send mode chosen in this window (spec 110 §1), also while "off"; none chosen: the default of the view shown now. */
     get sendModeChoice(): SendMode {
-        return getSendModeChoice(this.windowId, this.storage);
+        return getSendModeChoice(this.windowId, this._kind, this.storage);
     }
 
     /**

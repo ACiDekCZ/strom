@@ -44,7 +44,9 @@ async function openMain(page: Page): Promise<string> {
 async function openSatellite(context: BrowserContext, treeId: string): Promise<Page> {
     const sat = await context.newPage();
     await sat.clock.setFixedTime(new Date('2026-06-15T10:00:00Z'));
-    await sat.goto(`/strom.html?okno=table&tree=${encodeURIComponent(treeId)}&w=t1`);
+    // These tests share a choice by marking (a Table window's default, Focus: windows-send-focus.spec.ts).
+    await sat.addInitScript(() => { if (sessionStorage.getItem('strom.win.send.st01aa') === null) sessionStorage.setItem('strom.win.send.st01aa', 'mark'); });
+    await sat.goto(`/strom.html?okno=table&tree=${encodeURIComponent(treeId)}&w=st01aa`);
     await expect(tv(sat, '.tv-status-count')).toHaveText(`${EXTRA + 3} of ${EXTRA + 3} people`);
     // Connected to the main window (editable).
     await expect(tv(sat, '.tv-status-ro')).toBeHidden();

@@ -36,13 +36,13 @@ async function openMain(page: Page, context: BrowserContext): Promise<string> {
     return page.evaluate(() => window.Strom.DataManager.getCurrentTreeId() as string);
 }
 
-async function openTable(context: BrowserContext, treeId: string, w: string, send: 'focus' | 'mark', errors: string[]): Promise<Page> {
+async function openTable(context: BrowserContext, treeId: string, w: string, send: 'focus' | 'mark' | 'default', errors: string[], view = 'table'): Promise<Page> {
     const sat = await context.newPage();
-    sat.on('pageerror', e => errors.push(`table: ${e.message}`));
-    // The send mode as the header's choice keeps it (A2's menu sets the same key).
-    if (send === 'focus') await sat.addInitScript((key) => { sessionStorage.setItem(key, 'focus'); }, `strom.win.send.${w}`);
+    sat.on('pageerror', e => errors.push(`${view}: ${e.message}`));
+    // The send mode as the header's choice keeps it (A2's menu sets the same key); 'default': none chosen.
+    if (send !== 'default') await sat.addInitScript(([key, mode]) => { if (sessionStorage.getItem(key) === null) sessionStorage.setItem(key, mode); }, [`strom.win.send.${w}`, send]);
     await sat.setViewportSize({ width: 1200, height: 800 });
-    await sat.goto(`/strom.html?okno=table&tree=${encodeURIComponent(treeId)}&w=${w}`);
+    await sat.goto(`/strom.html?okno=${view}&tree=${encodeURIComponent(treeId)}&w=${w}`);
     await expect(sat.locator('html')).not.toHaveClass(/app-loading/);
     await expect(sat.locator('.sat-header-title')).toHaveText('Sample: the Berg family');
     return sat;
@@ -197,33 +197,20 @@ test('focus of a person the main window\'s Table leaves out: the centre stays, t
 const control = (p: Page) => p.locator('.sat-follow');
 const menu = (p: Page) => p.locator('.sat-follow-menu');
 
-test('"Selection" in a Table window: mark only by default, Focus chosen in the menu makes the main window\'s centre; off greys the main window\'s group and sends nothing; the choice is kept; a Family view has no such group; without the main window it is greyed', async ({ page, context }) => {
+test('"Selection" in a Table window: Focus by default (the chosen row makes the main window\'s centre), Mark chosen in the menu is kept as chosen; off greys the main window\'s group and sends nothing; the choice is kept; a Family view has no such group; without the main window it is greyed', async ({ page, context }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
     const treeId = await openMain(page, context);
-    const sat = await openTable(context, treeId, 'sf04aa', 'mark', errors);
+    const sat = await openTable(context, treeId, 'sf04aa', 'default', errors);
 
-    // Mark only by default; at 1200 px both directions in words, no "Selection:".
-    await expect(control(sat)).toHaveAttribute('data-send', 'mark');
-    await expect(control(sat)).toHaveAttribute('aria-label', 'Person selection between windows. From other windows: mark only. To the main window: mark only.');
+    // Focus by default (none chosen yet); at 1200 px both directions in words, no "Selection:".
+    expect(await sat.evaluate(() => sessionStorage.getItem('strom.win.send.sf04aa'))).toBeNull();
+    await expect(control(sat)).toHaveAttribute('data-send', 'focus');
+    await expect(control(sat)).toHaveAttribute('aria-label', 'Person selection between windows. From other windows: mark only. To the main window: focus.');
     await expect(control(sat)).toHaveAttribute('aria-haspopup', 'menu');
     await expect(sat.locator('.sat-follow-label')).toBeHidden();
     await expect(sat.locator('.sat-follow-state')).toHaveText('mark only');
-    await expect(sat.locator('.sat-follow-send-state')).toHaveText('mark only');
-
-    // The menu: two groups, Focus named as the card's Focus.
-    await control(sat).click();
-    await expect(control(sat)).toHaveAttribute('aria-expanded', 'true');
-    await expect(menu(sat).locator('[role="group"]')).toHaveCount(2);
-    await expect(menu(sat).locator('[role="group"]').nth(0)).toHaveAttribute('aria-label', 'This window');
-    await expect(menu(sat).locator('[role="group"]').nth(1)).toHaveAttribute('aria-label', 'Main window');
-    await expect(menu(sat).locator('[data-send="mark"]')).toHaveAttribute('aria-checked', 'true');
-    await expect(menu(sat).locator('[data-send="focus"] .view-window-item-label')).toHaveText('focus');
-    await menu(sat).locator('[data-send="focus"]').click();
-    await expect(menu(sat)).toHaveCount(0);
-    await expect(control(sat)).toHaveAttribute('data-send', 'focus');
     await expect(sat.locator('.sat-follow-send-state')).toHaveText('focus');
-    expect(await sat.evaluate(() => sessionStorage.getItem('strom.win.send.sf04aa'))).toBe('focus');
 
     // A row chosen now makes the main window's centre.
     const target = await undrawn(page);
@@ -232,6 +219,25 @@ test('"Selection" in a Table window: mark only by default, Focus chosen in the m
     await r.click();
     await expect.poll(() => focusOf(page)).toBe(target);
     expect((await selects(page)).at(-1)).toBe(`focus:${target}`);
+
+    // The menu: two groups, Focus named as the card's Focus and checked; Mark chosen is kept as chosen.
+    await control(sat).click();
+    await expect(control(sat)).toHaveAttribute('aria-expanded', 'true');
+    await expect(menu(sat).locator('[role="group"]')).toHaveCount(2);
+    await expect(menu(sat).locator('[role="group"]').nth(0)).toHaveAttribute('aria-label', 'This window');
+    await expect(menu(sat).locator('[role="group"]').nth(1)).toHaveAttribute('aria-label', 'Main window');
+    await expect(menu(sat).locator('[data-send="focus"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(menu(sat).locator('[data-send="focus"] .view-window-item-label')).toHaveText('focus');
+    await menu(sat).locator('[data-send="mark"]').click();
+    await expect(menu(sat)).toHaveCount(0);
+    await expect(control(sat)).toHaveAttribute('data-send', 'mark');
+    await expect(sat.locator('.sat-follow-send-state')).toHaveText('mark only');
+    expect(await sat.evaluate(() => sessionStorage.getItem('strom.win.send.sf04aa'))).toBe('mark');
+    // And Focus again.
+    await control(sat).click();
+    await menu(sat).locator('[data-send="focus"]').click();
+    await expect(control(sat)).toHaveAttribute('data-send', 'focus');
+    expect(await sat.evaluate(() => sessionStorage.getItem('strom.win.send.sf04aa'))).toBe('focus');
 
     // Off: the main window's group stays, greyed, Focus still checked, with its note; a click there does nothing; nothing sent.
     await setFollowMode(sat, 'off');
@@ -271,6 +277,10 @@ test('"Selection" in a Table window: mark only by default, Focus chosen in the m
     await expect(menu(sat)).toHaveCount(0);
     await expect(control(sat)).toHaveAttribute('data-send', 'mark');
     await expect(control(sat)).toBeFocused();
+    // Mark chosen in a Table outlives a reload (not the Table's default, Focus).
+    await sat.reload();
+    await expect(sat.locator('html')).not.toHaveClass(/app-loading/);
+    await expect(control(sat)).toHaveAttribute('data-send', 'mark');
 
     // A Family view: the window's own direction alone, no main window's group.
     await sat.locator('.sat-view-segment [data-view="family"]').click();
@@ -288,5 +298,18 @@ test('"Selection" in a Table window: mark only by default, Focus chosen in the m
     await control(sat).click();
     await expect(menu(sat).locator('[role="group"]').nth(1)).toHaveAttribute('aria-disabled', 'true');
     await expect(menu(sat).locator('.sat-follow-note')).toHaveText('The main window is not open.');
+    expect(errors).toEqual([]);
+});
+
+test('a new Timeline or Map window marks by default: its choice keeps the main window\'s centre', async ({ page, context }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    const treeId = await openMain(page, context);
+    for (const [view, w] of [['timeline', 'sf05aa'], ['map', 'sf06aa']] as const) {
+        const sat = await openTable(context, treeId, w, 'default', errors, view);
+        await expect(control(sat)).toHaveAttribute('data-send', 'mark');
+        await expect(sat.locator('.sat-follow-send-state')).toHaveText('mark only');
+        await sat.close();
+    }
     expect(errors).toEqual([]);
 });
