@@ -148,6 +148,12 @@ function forgetResearchKeysOfGoneTrees(ids: ReadonlySet<string>): void {
 /** A tree's data were stored with another research base than this window's link (see ResearchBase). */
 export const RESEARCH_BASE_EVENT = 'strom:research-base-changed';
 
+/**
+ * Window event: the backup before a stored tree's data update could not be
+ * written, so the tree was left as stored (updateStoredData); detail: { treeId }.
+ */
+export const UPDATE_BACKUP_FAILED_EVENT = 'strom:update-backup-failed';
+
 /** The research base stored with a tree's data (store `researchBases`, key = tree id). */
 interface StoredResearchBase extends ResearchBase {
     researchId: string;
@@ -197,7 +203,9 @@ function slugify(text: string): string {
  * tree of 3.26 with sources made only for another QUAY (v19), and from v20
  * on every tree with persons (shared events, spec 085: the backup is taken
  * even though nothing is joined, as the data version changes). An empty tree
- * needs nothing.
+ * needs nothing. Such a tree is never stored updated without that backup:
+ * when it cannot be written, the read leaves the tree as stored, and so does
+ * its first write here (takePreMigrationBackup).
  */
 function needsDataUpdate(data: StromData, version: number): boolean {
     if (version < 19 && qualityOnlySources(data.sources).size > 0) return true;
@@ -726,7 +734,8 @@ class TreeManagerClass {
 
     /**
      * A tree an older app stored that is read here as it was (no update on
-     * reading, see needsDataUpdate) still changes when this window first
+     * reading, see needsDataUpdate, or one left for want of its backup, see
+     * updateStoredData) still changes when this window first
      * writes it: the data are moved over in memory (data v24: attachments
      * become records of the tree's files) and the first save stamps this
      * version. The state as stored is kept until then, and that first write
@@ -748,7 +757,14 @@ class TreeManagerClass {
         });
     }
 
-    /** The first write of a newer data version over a tree kept by notePreMigrationState: its backup first. */
+    /**
+     * The first write of a newer data version over a tree kept by
+     * notePreMigrationState: its backup first. A tree its read would have
+     * updated (needsDataUpdate: kept so because that backup failed then) is
+     * not written without the backup either: the write fails (the "saving
+     * failed" notice), the state stays kept and the next write tries the
+     * backup again. Any other tree is written as before, its backup best-effort.
+     */
     private async takePreMigrationBackup(id: TreeId, writing: StromData): Promise<void> {
         const kept = this.preMigrationStates.get(id);
         if (!kept || (writing.version ?? 1) <= kept.version) return;
@@ -757,6 +773,9 @@ class TreeManagerClass {
             await createSnapshot(id, kept.data, 'pre-migration', Date.now(), kept.base);
         } catch (err) {
             console.warn('The backup before the data update could not be written', err);
+            if (!needsDataUpdate(kept.data, kept.version)) return;
+            if (!this.preMigrationStates.has(id)) this.preMigrationStates.set(id, kept);
+            throw err;
         }
     }
 
@@ -777,13 +796,26 @@ class TreeManagerClass {
      * A tree in step with the research before stays in step (its fingerprint
      * follows), and the kept copies of the research's version change the
      * same way.
+     * Without the backup nothing is updated (Milan, 19 Nov 2026): when it
+     * cannot be written (storage full, encryption on but locked) the data are
+     * returned as read, nothing is saved (neither the tree nor the research's
+     * fingerprints and copies), a notice says so (UPDATE_BACKUP_FAILED_EVENT)
+     * and the next read tries again, backup first. Until then the tree is kept
+     * as stored (notePreMigrationState), so its first write here takes that
+     * backup too or is not written (takePreMigrationBackup). Automatic backups
+     * turned off do not matter: this backup is taken all the same.
      */
     private async updateStoredData(id: TreeId, tree: TreeMetadata | undefined, data: StromData, version: number): Promise<StromData> {
         try {
             await createSnapshot(id, data, 'pre-migration', Date.now(), this.backupResearchBase(id, this.researchBaseOf(id)));
         } catch (err) {
-            console.warn('The backup before the data update could not be written', err);
+            console.warn('The backup before the data update could not be written: the tree stays as stored', err);
+            this.notePreMigrationState(id, data, version);
+            dispatchUpdateBackupFailed(id);
+            return data;
         }
+        // Backed up: the save below is not backed up a second time.
+        this.preMigrationStates.delete(id);
         const next = structuredClone(data);
         const joined = version < 19 ? joinQualityOnlySources(next) : 0;
         const censuses = version < 20 ? convertLegacyCensusEvents(next) : 0;
@@ -1937,6 +1969,12 @@ function dispatchSaveFailed(treeId: TreeId | null, err: unknown): void {
     window.dispatchEvent(new CustomEvent('strom:save-failed', {
         detail: { treeId, reason: err instanceof Error ? err.message : String(err) },
     }));
+}
+
+/** Raise UPDATE_BACKUP_FAILED_EVENT (its notice in main.ts). */
+function dispatchUpdateBackupFailed(treeId: TreeId): void {
+    if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return;
+    window.dispatchEvent(new CustomEvent(UPDATE_BACKUP_FAILED_EVENT, { detail: { treeId } }));
 }
 
 /** Window event: a tree's file-copy state changed; detail: { treeId }. */

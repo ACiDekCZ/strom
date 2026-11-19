@@ -722,6 +722,7 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         reload: 'Wczytaj ponownie',
         storageInitFailed: 'Nie udało się otworzyć pamięci przeglądarki, dlatego danych nie można wczytać ani zapisać. Pomaga zamknięcie pozostałych kart aplikacji, sprawdzenie, czy tryb prywatny nie blokuje pamięci, i ponowne wczytanie strony.',
         storageBlocked: 'Pamięć blokuje inna karta ze starszą wersją aplikacji. Aby kontynuować, wymagane jest jej zamknięcie.',
+        updateBackupFailed: (name: string) => `Przed dostosowaniem danych do nowej wersji nie udało się zapisać kopii zapasowej drzewa „${name}”, dlatego drzewo pozostało bez zmian. Dostosowanie zostanie ponowione przy następnym otwarciu.`,
         storageClosed: 'Aplikacja została zaktualizowana w innej karcie. Przed kolejnymi zmianami wymagane jest ponowne wczytanie tej karty.',
         treeLocked: 'To drzewo jest zablokowane. Cofanie i ponawianie zmian jest możliwe dopiero po odblokowaniu w zarządzaniu drzewami.',
         importedSuffix: (date: string, time: string) => `import z dnia ${date} ${time}`,

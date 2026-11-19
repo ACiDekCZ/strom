@@ -27,7 +27,7 @@ import { strings, getCurrentLanguage } from './strings.js';
 import { onTreeSavedElsewhere } from './tab-sync.js';
 import { StorageManager } from './storage.js';
 import { PERSISTENCE_EVENT } from './persistence.js';
-import { FILE_COPY_EVENT, RESEARCH_BASE_EVENT } from './tree-manager.js';
+import { FILE_COPY_EVENT, RESEARCH_BASE_EVENT, UPDATE_BACKUP_FAILED_EVENT } from './tree-manager.js';
 import { SNAPSHOTS_TRIMMED_EVENT, SNAPSHOT_CREATED_EVENT, SnapshotTrim } from './snapshots.js';
 import { collectPoolGarbage } from './media-pool.js';
 import { keepLifelineChipsFor } from './lifeline-view.js';
@@ -732,6 +732,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // fire while the database is opening).
     window.addEventListener('strom:storage-blocked', () => {
         UI.showStorageNotice('storage-blocked-notice', strings.storageSafety.storageBlocked);
+    });
+    // A stored tree left as it was, as the backup before its data update
+    // failed (registered before init: the start reads the open tree).
+    window.addEventListener(UPDATE_BACKUP_FAILED_EVENT, (e) => {
+        const treeId = (e as CustomEvent<{ treeId?: TreeId }>).detail?.treeId;
+        const name = treeId ? TreeManager.getTreeMetadata(treeId)?.name ?? '' : '';
+        UI.showStorageNotice('update-backup-notice', strings.storageSafety.updateBackupFailed(name));
     });
     window.addEventListener('strom:storage-closed', () => {
         UI.showStorageNotice('storage-closed-notice', strings.storageSafety.storageClosed, {
