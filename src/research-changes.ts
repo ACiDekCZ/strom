@@ -572,12 +572,21 @@ export function otherRowCount(o: OtherChanges | null): number {
 /**
  * "What will be sent" cannot tell its list exactly: there is no base to compare with (`persons` null — the copy
  * not read yet, a restore before loading, a send taken back with no copy before it), the caller knows the base
- * moved (`opts.inexact`), or, about to send, nothing it could name although the tree is not where the
- * research's version is. An empty list of people with other rows is exact.
+ * moved (`opts.inexact`), or nothing it could name although the tree is not where the research's version is
+ * ("0 people" with Send would say nothing changed). An empty list of people with other rows is exact, and so is
+ * an empty list of a tree in step with the research (`opts.inStep`: nothing to send, previewNothing).
  */
-export function previewInexact(persons: readonly PersonChange[] | null, other: OtherChanges | null, opts: { confirm?: boolean; inexact?: boolean } = {}): boolean {
+export function previewInexact(persons: readonly PersonChange[] | null, other: OtherChanges | null, opts: { inStep?: boolean; inexact?: boolean } = {}): boolean {
     if (persons === null || opts.inexact) return true;
-    return !!opts.confirm && persons.length === 0 && otherRowCount(other) === 0;
+    return !opts.inStep && persons.length === 0 && otherRowCount(other) === 0;
+}
+
+/**
+ * "What will be sent" has nothing to send: the tree is where the research's version is (`inStep`: just
+ * loaded from it, or the last send written and nothing edited since) and nothing is listed — no Send there.
+ */
+export function previewNothing(persons: readonly PersonChange[] | null, other: OtherChanges | null, inStep: boolean, opts: { inexact?: boolean } = {}): boolean {
+    return inStep && !opts.inexact && persons !== null && persons.length === 0 && otherRowCount(other) === 0;
 }
 
 // ==================== WHAT THE RESEARCH DOES NOT READ ====================

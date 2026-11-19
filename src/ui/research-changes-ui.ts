@@ -15,7 +15,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId, StromData, TreeId } from '../types.js';
 import { formatLiveClock } from '../live-time.js';
 import {
-    ChangeKind, PersonChange, diffByPerson, baseCopy, diffOther, otherRowCount, previewInexact, OtherChanges, SourceChange, CoupleChange,
+    ChangeKind, PersonChange, diffByPerson, baseCopy, diffOther, otherRowCount, previewInexact, previewNothing, OtherChanges, SourceChange, CoupleChange,
     SourceChangeKind, CoupleChangeKind, PlaceChange, VariantChange, SentOtherRow, sentOtherRows, sanitizeSentOtherRow,
     sourceAppOnly, coupleAppOnly, placesAppOnly, variantsAppOnly, lineageAppOnly, pairNotWritten, RESEARCH_UNREAD_KINDS,
     NotWrittenItem, PairedNotWritten, withWrittenMedia, MEDIA_APP_READ_KINDS, gateMediaChanges, docSentRows, type MediaWrites,
@@ -903,13 +903,22 @@ export const researchChangesMethods = uiModule({
             const since = [lastSent, researchAutoState(ctx.treeId).lastWritten?.at ?? '', ctx.link.syncedAt]
                 .filter(t => Number.isFinite(Date.parse(t))).sort((a, b) => Date.parse(b) - Date.parse(a))[0];
             const o = otherRowCount(other);
+            // In step with the research: its version just loaded, or the last send written (or waiting in its
+            // inbox) and nothing edited since.
+            const sent = ctx.link.sent;
+            const fps = this.researchSyncFingerprints(ctx.treeId, ctx.link);
+            const inStep = fps.matchesBase || (!!sent && (sent.state === 'written' || sent.state === 'pending') && fps.current === sent.fingerprint);
             // No count when the exact list cannot be told: no base to compare with (a restore before loading, a send
-            // taken back with no copy before it, the copy not read yet) — or, about to send, nothing it could
-            // name although the tree is not where the research's version is ("0 people" would say nothing changed).
-            inexact = previewInexact(now, other, opts);
-            sub = inexact ? c.changedSince(clock(since)) : auto ? c.willSendAutoSub(list.length, o) : c.willSendSub(list.length, o, clock(since));
-            footPair = !(auto && !opts.confirm);
-            foot = auto && !opts.confirm
+            // taken back with no copy before it, the copy not read yet) — or nothing it could name although the
+            // tree is not where the research's version is ("0 people" with Send would say nothing changed).
+            inexact = previewInexact(now, other, { inexact: opts.inexact, inStep });
+            // Nothing to send (a tree just taken from the research, unchanged): said so, and no Send.
+            const nothing = previewNothing(now, other, inStep, opts);
+            sub = nothing ? c.nothingToSend : inexact ? c.changedSince(clock(since)) : auto ? c.willSendAutoSub(list.length, o) : c.willSendSub(list.length, o, clock(since));
+            footPair = !nothing && !(auto && !opts.confirm);
+            foot = nothing
+                ? `<button type="button" class="secondary btn-sm" data-act="close">${esc(strings.buttons.close)}</button>`
+                : auto && !opts.confirm
                 ? `<button type="button" class="research-sync-link" data-act="send">${esc(s.sendNow)}</button>`
                 : (opts.confirm && !ctx.link.previewDue
                     ? `<label class="research-changes-skip"><input type="checkbox" id="research-changes-skip"> ${esc(c.skipPreview)}</label>` : '')

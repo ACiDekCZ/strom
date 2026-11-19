@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { diffByPerson, diffOther, baseCopy, markOlderCopy, otherRowCount, previewInexact, OtherChanges } from '../research-changes.js';
+import { diffByPerson, diffOther, baseCopy, markOlderCopy, otherRowCount, previewInexact, previewNothing, OtherChanges } from '../research-changes.js';
 import { researchAutoState } from '../research-device.js';
 import { getStringsForLang } from '../strings.js';
 import { normalizeSingleParents } from '../single-parent.js';
@@ -222,16 +222,34 @@ describe('the preview\'s subtitle and "cannot be told exactly"', () => {
     it('no base (copy not read yet, a restore before loading, a send taken back with no copy before it): inexact', () => {
         // All three leave researchChangesBase() without a base: no list of people, nothing beyond them.
         expect(previewInexact(null, null)).toBe(true);
-        expect(previewInexact(null, null, { confirm: true })).toBe(true);
+        expect(previewInexact(null, null, { inStep: true })).toBe(true);
         expect(previewInexact([], other(0), { inexact: true })).toBe(true);
+        expect(previewInexact([], other(0), { inexact: true, inStep: true })).toBe(true);
     });
 
     it('no people but other changes: exact', () => {
-        expect(previewInexact([], other(2), { confirm: true })).toBe(false);
         expect(previewInexact([], other(2))).toBe(false);
-        expect(previewInexact([{ personId: P('p1'), name: 'Karel', kinds: ['name'] }], other(0), { confirm: true })).toBe(false);
-        // About to send with nothing to name at all although the tree differs: said so.
-        expect(previewInexact([], other(0), { confirm: true })).toBe(true);
+        expect(previewInexact([{ personId: P('p1'), name: 'Karel', kinds: ['name'] }], other(0))).toBe(false);
+        // Nothing to name at all although the tree differs: said so (never "0 people" with Send).
+        expect(previewInexact([], other(0))).toBe(true);
+    });
+
+    it('a tree in step with the research and nothing listed: nothing to send, exact, no Send', () => {
+        expect(previewInexact([], other(0), { inStep: true })).toBe(false);
+        expect(previewNothing([], other(0), true)).toBe(true);
+        // Something listed, the tree not in step, no base, or the base moved: not "nothing".
+        expect(previewNothing([], other(1), true)).toBe(false);
+        expect(previewNothing([{ personId: P('p1'), name: 'Karel', kinds: ['name'] }], other(0), true)).toBe(false);
+        expect(previewNothing([], other(0), false)).toBe(false);
+        expect(previewNothing(null, null, true)).toBe(false);
+        expect(previewNothing([], other(0), true, { inexact: true })).toBe(false);
+    });
+
+    it('nothing to send is said in every language', () => {
+        expect(getStringsForLang('en').changes.nothingToSend).toBe('Nothing to send: the tree is in step with the research.');
+        expect(getStringsForLang('cs').changes.nothingToSend).toBe('Není co poslat: strom je v souladu s výzkumem.');
+        expect(getStringsForLang('de').changes.nothingToSend).toBe('Nichts zu senden: Der Stammbaum ist mit der Forschung abgeglichen.');
+        expect(getStringsForLang('pl').changes.nothingToSend).toBe('Nie ma nic do wysłania: drzewo jest zgodne z badaniem.');
     });
 });
 

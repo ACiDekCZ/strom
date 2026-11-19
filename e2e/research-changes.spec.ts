@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test';
-import { card, reloadApp } from './helpers.js';
-import { fakeBridge, openResearch, openResearchMenu, poll, block, editJan, researchGed, NEW_HEAD } from './research-bridge.js';
+import { test, expect, Page } from '@playwright/test';
+import { card, reloadApp, openApp } from './helpers.js';
+import { fakeBridge, openResearch, openResearchMenu, poll, block, editJan, researchGed, NEW_HEAD, BRIDGE } from './research-bridge.js';
 
 /**
  * Changes per person (A2): what the user changed since the research's
@@ -10,6 +10,23 @@ import { fakeBridge, openResearch, openResearchMenu, poll, block, editJan, resea
  */
 
 const DESKTOP = { width: 1440, height: 900 };
+
+/** "What will be sent" opened (by the block's link, or `confirm`: as before a send), read and closed. */
+async function shownChanges(page: Page, confirm = false): Promise<{ sub: string | null; inexact: number; send: number }> {
+    const panel = page.locator('#research-changes-panel');
+    // The panel is the first thing to ask for the changes (after a reload: the copy of the research's version not read yet).
+    await page.evaluate((confirm) => {
+        if (confirm) window.Strom.UI.showResearchChanges('send', { confirm: true });
+        else window.Strom.UI.researchSyncAction('showChanges');
+    }, confirm);
+    await expect(panel.locator('.research-changes-title')).toHaveText('What will be sent');
+    const sub = await panel.locator('.research-changes-sub').textContent();
+    const inexact = await panel.locator('.research-changes-inexact').count();
+    const send = await panel.locator('[data-act="send"]').count();
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    return { sub, inexact, send };
+}
 
 test.describe('changes per person', () => {
     test.use({ viewport: DESKTOP });
@@ -249,23 +266,37 @@ test.describe('changes per person', () => {
         await openResearch(page);
         await fakeBridge(page);
         await poll(page);
-        const panel = page.locator('#research-changes-panel');
-        const shown = async () => {
-            // The panel is the first thing to ask for the changes (the copy of the research's version not read yet).
-            await page.evaluate(() => window.Strom.UI.researchSyncAction('showChanges'));
-            await expect(panel.locator('.research-changes-title')).toHaveText('What will be sent');
-            const sub = await panel.locator('.research-changes-sub').textContent();
-            const inexact = await panel.locator('.research-changes-inexact').count();
-            await page.keyboard.press('Escape');
-            await expect(panel).toHaveCount(0);
-            return { sub, inexact };
-        };
-        const before = await shown();
-        expect(before.sub).toMatch(/^0 people · changed since /);
-        expect(before.inexact).toBe(0);
+        const before = await shownChanges(page);
+        // A tree just taken from the research, unchanged: nothing to send, and no Send.
+        expect(before).toEqual({ sub: 'Nothing to send: the tree is in step with the research.', inexact: 0, send: 0 });
         await reloadApp(page);
         await expect(card(page, 'Jan')).toBeVisible();
-        expect(await shown()).toEqual(before);
+        expect(await shownChanges(page)).toEqual(before);
+    });
+
+    test('a tree taken from the research over ?import-url=: nothing to send right away and after a reload, never "0 people" with Send', async ({ page }) => {
+        await openApp(page);
+        await fakeBridge(page);
+        await page.goto(`/strom.html?import-url=${encodeURIComponent(`${BRIDGE}/tree.ged`)}`);
+        await expect(card(page, 'Jan')).toBeVisible();
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head ?? '')).not.toBe('');
+        // Sending by hand chosen, so the one-time question does not come over the panel (its own tests take it).
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager;
+            const id = tm.getActiveTreeId()!;
+            tm.patchResearchLink(id, { sendMode: 'manual' });
+            localStorage.setItem(`strom-research-auto:${id}`, JSON.stringify({ ...JSON.parse(localStorage.getItem(`strom-research-auto:${id}`) ?? '{}'), modeAsked: true }));
+        });
+        const nothing = { sub: 'Nothing to send: the tree is in step with the research.', inexact: 0, send: 0 };
+        expect(await shownChanges(page)).toEqual(nothing);
+        // Asked about to send too (the tree's settings, "What will be sent" first): the same.
+        expect(await shownChanges(page, true)).toEqual(nothing);
+        await reloadApp(page);
+        await expect(card(page, 'Jan')).toBeVisible();
+        expect(await shownChanges(page)).toEqual(nothing);
+        // An edit: listed, with Send.
+        await editJan(page, 'Kolín');
+        expect(await shownChanges(page)).toEqual({ sub: expect.stringMatching(/^1 person · changed since /), inexact: 0, send: 1 });
     });
 });
 

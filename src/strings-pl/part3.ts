@@ -8,6 +8,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         whatWasWritten: 'Co zostało zapisane ›',
         showWhat: (n: number, o = 0) => `Pokaż, co zostanie wysłane (${sendCountPl(n, o)})`,
         willSendTitle: 'Co zostanie wysłane',
+        nothingToSend: 'Nie ma nic do wysłania: drzewo jest zgodne z badaniem.',
         inexact: 'Dokładnej listy zmian nie można teraz tutaj ustalić. Drzewo zostanie wysłane w obecnej postaci; badanie zapisze tylko to, co się różni.',
         skipPreview: 'Odtąd wysyłanie bez podglądu',
         willSendSub: (n: number, o: number, t: string) => `${sendCountPl(n, o)}${t ? ` · zmieniono od ${t}` : ''}`,
