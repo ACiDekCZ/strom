@@ -254,12 +254,19 @@ test.describe('desktop', () => {
         const treeId = await follow(page);
         const sat = await openTableWindow(context, treeId, true);
         await expect(await rowOf(sat, 'P0001')).toHaveClass(/\bis-agent\b/);
+        // The agent on a Kmínek seen near the top (no scroll), so the search below keeps the agent's row.
+        await agentTo(bridge, sat, 'P0100');
+        await expect(await rowOf(sat, 'P0100')).toHaveClass(/\bis-agent\b/);
 
         // The search keeps the Kmíneks only (the window's own filter: no pause).
         await sat.locator('#table-container .tv-search-q').fill('Kmínek');
-        await expect(sat.locator('#table-container .tv-body .tv-row[data-key]').first()).toBeVisible();
+        // The search lands after its delay: wait for it (the match count, the first rows gone) before the agent
+        // moves on, else the agent's row is still in the rows and scrolled to before the filter hides it.
+        await expect(sat.locator('#table-container .tv-matches')).toHaveText('60 matches');
+        await expect(await rowOf(sat, 'P0001')).toHaveCount(0);
+        await expect(await rowOf(sat, 'P0100')).toHaveClass(/\bis-agent\b/);
         await expect(note(sat)).toBeHidden();
-        const at = await scrollTop(sat);
+        const at = await settled(sat);
 
         // The agent on a person the filter hides: no scroll, the note in the status line.
         await agentTo(bridge, sat, 'P0300');

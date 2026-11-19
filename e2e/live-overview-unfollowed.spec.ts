@@ -442,11 +442,14 @@ test.describe('closing the Research overview without following', () => {
     /** ⤡ takes the click (nothing lies over it), the overview goes and the next ask of the bridge leaves it closed. */
     async function closeStaysClosed(page: Page): Promise<void> {
         const close = ov(page).locator('.research-overview__close');
-        const hit = await close.evaluate((b) => {
+        // Looked up and hit-tested in one go: a regular ask of the bridge draws the overview anew (its ⤡ a new
+        // button), so a button held from before could be detached by then.
+        await expect.poll(() => page.evaluate(() => {
+            const b = document.querySelector<HTMLElement>('#research-overview .research-overview__close');
+            if (!b) return false;
             const r = b.getBoundingClientRect();
             return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === b;
-        });
-        expect(hit).toBe(true);
+        })).toBe(true);
         await close.click();
         await expect(ov(page)).toHaveCount(0);
         await poll(page);

@@ -401,6 +401,12 @@ test.describe('A source from material only in the archive', () => {
 
     test('the research stopped: the action is off for material outside the tree', async ({ page }) => {
         const { bridge } = await research(page, [materialFile(1, { title: 'Křest' })]);
+        // The list is asked for after the poll, not within it: it is remembered (the window shows its tile)
+        // before the research stops, else the bridge is down before it answers and there is nothing to show.
+        await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+        await expect(tile(page, 'Křest')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(win(page)).toHaveCount(0);
         bridge.down = true;
         await poll(page);
         await view(page, 'Křest');
