@@ -245,7 +245,8 @@ test.describe('Sort with the agent', () => {
         await item.click();
         await expect(sortDialog(page)).toContainText('3 files from the batch Krabice od babičky');
         await sortDialog(page).locator('.mdlg-sort-go').click();
-        expect(material.sorts).toHaveLength(1);
+        // The request reaches the bridge after the click, not with it.
+        await expect.poll(() => material.sorts?.length ?? 0).toBe(1);
         expect([...(material.sorts![0].ids as string[])].sort()).toEqual(['I0001', 'I0002', 'I0003']);
         // B: it works and nothing waits: no ×, Cancel only; the same with and without the filter.
         await expect(strip(page)).toHaveAttribute('data-state', 'B');
