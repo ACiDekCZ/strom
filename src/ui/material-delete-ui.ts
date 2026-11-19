@@ -114,7 +114,7 @@ export const materialDeleteMethods = uiModule({
         box.type = 'checkbox';
         box.name = 'mdlg-delete-understand';
         const checkText = h('span', 'mdlg-check-text');
-        checkText.append(h('span', '', d.understand), h('span', 'mdlg-check-hint', mc.agent ? d.understandHint : d.understandHintArchive));
+        checkText.append(h('span', '', d.understand), h('span', 'mdlg-check-hint', mc.agent ? d.understandHint(n) : d.understandHintArchive(n)));
         check.append(box, checkText);
         dialog.body.append(note, list, text, check);
 
@@ -208,7 +208,10 @@ export const materialDeleteMethods = uiModule({
             });
             dialog.foot.append(hide);
         }
-        dialog.foot.append(cancel, go);
+        // Cancel and the danger button as one group: a footer that has to wrap never leaves the danger button alone.
+        const acts = h('div', 'mdlg-foot-acts');
+        acts.append(cancel, go);
+        dialog.foot.append(acts);
         box.addEventListener('change', () => {
             state = deleteTicked(state, box.checked);
             go.disabled = !deleteCanGo(state);
@@ -278,7 +281,7 @@ export const materialDeleteMethods = uiModule({
             if (s.people.length) {
                 const names = s.people.slice(0, PEOPLE_SHOWN).map(r => this.materialPersonName(r));
                 const more = s.people.length - names.length;
-                row('people', d.rowPeople(s.people.length), `${names.join(', ')}${more > 0 ? `, + ${more}` : ''}`, d.subPeople);
+                row('people', d.rowPeople(s.people.length), `${names.join(', ')}${more > 0 ? `, + ${more}` : ''}`, d.subPeople(s.peopleFiles, n));
             }
             if (s.tasks.length) row('tasks', d.rowTasks, d.tasksN(s.tasks.length), d.subTasks);
             sec.append(head, grid);

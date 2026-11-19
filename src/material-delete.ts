@@ -36,6 +36,8 @@ export interface DeleteSummary {
     /** Places in the app's tree taken off. */
     links: number;
     people: string[];
+    /** Files that belong to at least one of `people` (the people row's "N files leave their materials"). */
+    peopleFiles: number;
     tasks: string[];
     /** Files whose bytes stay (the same content kept by another file or another research); `other`: some by another research. */
     kept: number;
@@ -59,7 +61,7 @@ export function deleteSummary(impacts: readonly DeleteImpact[]): DeleteSummary {
     const sources = new Map<string, DeleteSourceRow>();
     const people: string[] = [];
     const tasks: string[] = [];
-    let excerpts = 0, links = 0, kept = 0, keptOther = false, withRefs = 0;
+    let excerpts = 0, links = 0, kept = 0, keptOther = false, withRefs = 0, peopleFiles = 0;
     for (const i of impacts) {
         if (deleteHasRefs(i)) withRefs++;
         for (const s of i.sources) {
@@ -79,12 +81,13 @@ export function deleteSummary(impacts: readonly DeleteImpact[]): DeleteSummary {
             if (i.keptWhy === 'otherResearch') keptOther = true;
         }
         links += i.links;
+        if (i.people.length) peopleFiles++;
         for (const p of i.people) if (!people.includes(p)) people.push(p);
         for (const t of i.tasks) if (!tasks.includes(t)) tasks.push(t);
     }
     // The sources losing most first (their link to the file, then an image), each kind in the research's order.
     const rows = [...sources.values()].sort((a, b) => EFFECT_RANK[b.effect] - EFFECT_RANK[a.effect]);
-    return { files: impacts.length, withRefs, sources: rows, excerpts, links, people, tasks, kept, keptOther };
+    return { files: impacts.length, withRefs, sources: rows, excerpts, links, people, peopleFiles, tasks, kept, keptOther };
 }
 
 /** Does the warning above the list speak (something beyond the file itself changes)? */

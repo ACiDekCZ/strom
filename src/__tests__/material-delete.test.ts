@@ -149,6 +149,7 @@ describe('what the dialog says of the list', () => {
         expect(s.excerpts).toBe(3);
         expect(s.links).toBe(1);
         expect(s.people).toEqual(['P0042', 'P0043']);
+        expect(s.peopleFiles).toBe(2);
         expect(s.tasks).toEqual(['t1']);
         expect(s.kept).toBe(1);
         expect(s.keptOther).toBe(true);
@@ -173,9 +174,53 @@ describe('what the dialog says of the list', () => {
         expect(d.more(7)).toBe('a 7 dalších');
         expect(d.toast(12)).toBe('Smazáno natrvalo: 12 souborů.');
         expect(d.understand).toBe('Rozumím, smazání nejde v aplikaci vrátit');
-        expect(d.understandHint).toMatch(/dřívějších zálohách výzkumu/);
+        expect(d.understandHint(1)).toMatch(/dřívějších zálohách výzkumu/);
         setLanguage('pl');
         expect(strings.materials.del.toast(5)).toBe('Usunięto trwale: 5 plików.');
+    });
+
+    it('the hint under the box and the people row follow the count of files (verification of sorting, findings 1)', () => {
+        setLanguage('cs');
+        let d = strings.materials.del;
+        expect(d.understandHint(1)).toMatch(/^Soubor zůstane jen /);
+        for (const n of [2, 4, 5, 12]) {
+            expect(d.understandHint(n)).toMatch(/^Soubory zůstanou jen v dřívějších zálohách výzkumu\./);
+            expect(d.understandHintArchive(n)).toMatch(/^Soubory zůstanou jen v dřívějších zálohách archivu\./);
+        }
+        expect(d.understandHintArchive(1)).toMatch(/^Soubor zůstane /);
+        expect(d.subPeople(1, 1)).toBe('soubor zmizí z jejich materiálů');
+        expect(d.subPeople(1, 12)).toBe('1 soubor zmizí z jejich materiálů');
+        expect(d.subPeople(3, 12)).toBe('3 soubory zmizí z jejich materiálů');
+        expect(d.subPeople(7, 12)).toBe('7 souborů zmizí z jejich materiálů');
+
+        setLanguage('en');
+        d = strings.materials.del;
+        expect(d.understandHint(1)).toMatch(/^The file stays /);
+        expect(d.understandHint(3)).toMatch(/^The files stay /);
+        expect(d.understandHintArchive(7)).toMatch(/^The files stay only in earlier backups of the archive\./);
+        expect(d.subPeople(1, 1)).toBe('the file leaves their materials');
+        expect(d.subPeople(1, 12)).toBe('1 file leaves their materials');
+        expect(d.subPeople(7, 12)).toBe('7 files leave their materials');
+
+        setLanguage('de');
+        d = strings.materials.del;
+        expect(d.understandHint(1)).toMatch(/^Die Datei bleibt /);
+        expect(d.understandHint(3)).toMatch(/^Die Dateien bleiben /);
+        expect(d.understandHintArchive(12)).toMatch(/^Die Dateien bleiben nur in früheren Sicherungen des Archivs\./);
+        expect(d.subPeople(1, 12)).toBe('1 Datei verschwindet aus ihren Materialien');
+        expect(d.subPeople(7, 12)).toBe('7 Dateien verschwinden aus ihren Materialien');
+
+        setLanguage('pl');
+        d = strings.materials.del;
+        expect(d.understandHint(1)).toMatch(/^Plik zostanie /);
+        for (const n of [2, 5, 22, 25]) expect(d.understandHint(n)).toMatch(/^Pliki zostaną /);
+        expect(d.understandHintArchive(25)).toMatch(/^Pliki zostaną tylko we wcześniejszych kopiach zapasowych archiwum\./);
+        expect(d.subPeople(1, 1)).toBe('plik zniknie z ich materiałów');
+        expect(d.subPeople(1, 30)).toBe('1 plik zniknie z ich materiałów');
+        expect(d.subPeople(3, 30)).toBe('3 pliki znikną z ich materiałów');
+        expect(d.subPeople(5, 30)).toBe('5 plików zniknie z ich materiałów');
+        expect(d.subPeople(22, 30)).toBe('22 pliki znikną z ich materiałów');
+        expect(d.subPeople(25, 30)).toBe('25 plików zniknie z ich materiałów');
     });
 
     it('only the research\'s files can be deleted (not the tree\'s own attachments)', () => {

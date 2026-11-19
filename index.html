@@ -30940,9 +30940,16 @@
         .mdlg-delete-list { display: flex; flex-direction: column; gap: 12px; }
         .mdlg-delete-list:empty, .mdlg-delete-note[hidden] { display: none; }
         .mdlg--delete .mdlg-check:has(input:disabled) { cursor: default; color: var(--text-faint); }
+        /* The footer: a long Only hide (de) wraps in its own place beside Cancel and Delete; when even that
+           cannot fit, it takes a row of its own and Cancel stays with Delete (verification of sorting, finding 2). */
+        .mdlg--delete .mdlg-foot { align-items: center; }
+        .mdlg--delete .mdlg-foot .link-button { flex: 1 1 7em; min-width: 0; text-align: left; line-height: 1.35; }
+        .mdlg-foot-acts { display: flex; gap: 10px; margin-left: auto; flex: none; }
+        .mdlg-foot-acts .mdlg-btn { white-space: nowrap; }
         @media (max-width: 640px) {
             /* A sheet from below: Cancel and Delete side by side, Only hide under them (Tel-smazat). */
-            .mdlg--delete .mdlg-foot .link-button { order: 1; flex-basis: 100%; margin-right: 0; min-height: 44px; }
+            .mdlg--delete .mdlg-foot .link-button { order: 1; flex-basis: 100%; margin-right: 0; min-height: 44px; text-align: center; }
+            .mdlg-foot-acts { flex: 1 1 100%; margin-left: 0; }
             .mdlg--delete .mv-uses-head { flex-wrap: wrap; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {

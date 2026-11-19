@@ -3,6 +3,7 @@ import {
     fakeBridge, fakeMaterial, materialFile, MATERIAL_FEATURES, openResearch, poll, researchGed, UUID, BRIDGE,
     type FakeMaterial, type FakeMaterialFile,
 } from './research-bridge.js';
+import { seedSetting } from './helpers.js';
 
 /**
  * Delete permanently (spec 102 §9, K1.17; the research's gate
@@ -257,4 +258,56 @@ test.describe('Delete permanently on a narrow screen', () => {
         await expect(toast(page)).toContainText('Deleted permanently: 1 file.');
         expectOnlyConfirmed(material);
     });
+});
+
+/**
+ * The footer in German (verification of sorting, finding 2): the long "Only
+ * hide" wraps in its own place; Cancel and the danger button stay side by
+ * side, the danger button never alone on a row of its own, nothing overflows.
+ * A wider font (CI) included.
+ */
+test.describe('Delete permanently: the footer in German', () => {
+    const WIDE_FONT = '.mdlg { font-family: Verdana, "DejaVu Sans", sans-serif !important; }';
+    for (const vp of [DESKTOP, { width: 1024, height: 768 }, PHONE]) {
+        for (const wide of [false, true]) {
+            test(`${vp.width}px${wide ? ', a wide font' : ''}: Cancel and the danger button on one row`, async ({ page }) => {
+                await page.setViewportSize(vp);
+                await seedSetting(page, 'language', 'de');
+                const files = Array.from({ length: 12 }, (_, k) => materialFile(k + 1, { persons: k < 7 ? ['P0042'] : [] }));
+                await research(page, GATED, files);
+                if (wide) await page.addStyleTag({ content: WIDE_FONT });
+                await win(page).locator('[data-mw="select"]').click();
+                for (let k = 1; k <= 12; k++) await tile(page, `scan-${k}.jpg`).click();
+                await win(page).locator('[data-mw="sel-more"]').click();
+                await page.locator('.mw-pop-selMenu [data-action="sel-delete"]').click();
+                await expect(go(page)).toHaveText('Endgültig löschen (12)');
+                // The count of files speaks in the hint and in the people row (finding 1).
+                await expect(dialog(page).locator('.mdlg-check-hint')).toContainText('Die Dateien bleiben nur in früheren Sicherungen der Forschung.');
+                await expect(dialog(page).locator('[data-delete-row="people"] .mv-use-sub')).toHaveText('7 Dateien verschwinden aus ihren Materialien');
+                const foot = dialog(page).locator('.mdlg-foot');
+                const hideLink = foot.locator('.link-button');
+                await expect(hideLink).toHaveText('Nur ausblenden – lässt sich rückgängig machen');
+                const cancel = (await foot.getByRole('button', { name: 'Abbrechen', exact: true }).boundingBox())!;
+                const del = (await go(page).boundingBox())!;
+                const hide = (await hideLink.boundingBox())!;
+                const fb = (await foot.boundingBox())!;
+                expect(Math.round(cancel.y)).toBe(Math.round(del.y));
+                expect(cancel.x + cancel.width).toBeLessThanOrEqual(del.x);
+                expect(del.x + del.width).toBeLessThanOrEqual(fb.x + fb.width + 0.5);
+                if (vp.width > 640) {
+                    // One row: the link beside the buttons, its middle on their row.
+                    const mid = hide.y + hide.height / 2;
+                    expect(mid).toBeGreaterThan(del.y);
+                    expect(mid).toBeLessThan(del.y + del.height);
+                    expect(hide.x + hide.width).toBeLessThanOrEqual(cancel.x);
+                } else {
+                    // The sheet: Only hide under the buttons.
+                    expect(hide.y).toBeGreaterThan(del.y + del.height - 1);
+                }
+                expect(await foot.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+                expect(await go(page).evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+                await expect(page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).resolves.toBe(true);
+            });
+        }
+    }
 });
