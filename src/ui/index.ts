@@ -52,6 +52,7 @@ import { bottomSheetMethods } from './bottom-sheet.js';
 
 import { personModalMethods } from './person-modal.js';
 import { portraitActionsMethods, PendingPortrait } from './portrait-actions-ui.js';
+import { openPhotoModel, type PhotoModel } from './person-photo-model.js';
 import { unionPhotoMethods } from './union-photo-ui.js';
 import { personEventsMethods } from './person-events.js';
 import { sharedEventMethods } from './shared-event-ui.js';
@@ -336,6 +337,17 @@ export class UIClass {
      * portrait's source on Save (spec 107 §1, §2, §4); dropped on the next open.
      */
     pendingPortrait: PendingPortrait | null = null;
+    /**
+     * Person modal: its portrait as a value of its own (spec 116 I2) — never
+     * read from the preview; Save writes it only when changed in the dialog.
+     */
+    photoModel: PhotoModel = openPhotoModel(null, undefined);
+    /** Person modal: listening to images that come after the tree (once). */
+    personModalImagesWired: boolean = false;
+    /** Relationships panel: couple's photos changed in its session — no longer waited for once it is saved. */
+    relPhotoDrops: Set<import('../image-loads.js').FieldKey> = new Set();
+    /** Relationships panel: listening to images that come after the tree (once). */
+    relImagesWired: boolean = false;
 
     // Debounce timer for the live search filter/highlight.
     searchFilterTimer: ReturnType<typeof setTimeout> | null = null;

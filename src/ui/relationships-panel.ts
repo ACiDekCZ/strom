@@ -53,7 +53,10 @@ import { extraParticipantRole } from '../godparents.js';
 import { chipCitations, sourceChipOpenHtml } from './sources.js';
 import { offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate } from './event-details-ui.js';
 import { shownName, shownNameOrEmpty, nameHtml } from '../person-name.js';
-import { canEditUnionPhoto, photoKb } from './union-photo-ui.js';
+import { canEditUnionPhoto, photoKb, unionPhotoKey } from './union-photo-ui.js';
+import { IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, imageLoads, type ImagesArrivedDetail } from '../image-loads.js';
+import { imgStateOf, imgGlyphHtml, imgPhaseStyle, setImgState, type ImgState } from './image-slot.js';
+import { busySpinHtml } from './busy.js';
 import { unionPhotoCaption } from '../union-photo.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
@@ -218,22 +221,8 @@ export const relationshipsPanelMethods = uiModule({
         });
 
         // The couple's photo (spec 107 §6): changes join the panel's session, the panel is drawn anew.
-        const redraw = () => this.refreshRelationshipsPanel();
-        content.querySelectorAll<HTMLElement>('.pg-photo-thumb').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const pid = btn.dataset.partnershipId as PartnershipId;
-                this.openUnionPhotoViewer(pid, { readOnly: !btn.closest('.pg-photo')?.querySelector('.pg-photo-make'), done: redraw });
-            });
-        });
-        content.querySelectorAll<HTMLElement>('.pg-photo-choose').forEach(btn => {
-            btn.addEventListener('click', () => this.chooseUnionPhoto(btn.dataset.partnershipId as PartnershipId, redraw));
-        });
-        content.querySelectorAll<HTMLElement>('.pg-photo-make').forEach(btn => {
-            btn.addEventListener('click', () => { void this.makeUnionPortraits(btn.dataset.partnershipId as PartnershipId, redraw); });
-        });
-        content.querySelectorAll<HTMLElement>('.pg-photo-remove').forEach(btn => {
-            btn.addEventListener('click', () => { void this.removeUnionPhoto(btn.dataset.partnershipId as PartnershipId, redraw); });
-        });
+        this.bindUnionPhotoRows(content);
+        this.wireRelationshipsImages();
 
         // Attach event listeners for partnership notes (pending change)
         content.querySelectorAll('.partnership-note').forEach(textarea => {
@@ -456,26 +445,125 @@ export const relationshipsPanelMethods = uiModule({
      * Without a photo "Choose photo" and a hint; with one its thumbnail (a
      * click zooms it), Choose photo (another), Make portraits…, Remove and
      * its size. A locked person or tree shows the thumbnail and size only.
+     * A photo still coming from the research (spec 116 §4.2): the thumbnail
+     * waits in its shape with Choose photo and a sentence (Make portraits…
+     * and Remove once it is here); one that did not come says so with Try
+     * again.
      */
     partnershipPhotoRowHtml(partnership: Partnership, locked: boolean): string {
         const id = this.escapeHtml(partnership.id);
         const r = strings.relationships;
+        const p = strings.photos;
         const photo = partnership.photo;
-        if (!photo && locked) return '';
+        const state = this.unionPhotoRowState(partnership);
+        const waiting = state === 'loading' || state === 'refresh';
+        const failed = state === 'failed';
+        if (!photo && locked && !waiting && !failed) return '';
         const btn = (cls: string, label: string) => `<button type="button" class="secondary ${cls}" data-partnership-id="${id}">${this.escapeHtml(label)}</button>`;
-        const thumb = photo
-            ? `<button type="button" class="pg-photo-thumb" data-partnership-id="${id}" aria-label="${this.escapeHtml(unionPhotoCaption(DataManager.getData(), partnership))}"><img src="${this.escapeHtml(photo)}" alt=""></button>`
-            : '';
-        const size = photo ? `<span class="pg-photo-size">${this.escapeHtml(photoKb(photo))}</span>` : '';
-        const actions = locked ? size
-            : photo
-                ? btn('pg-photo-choose', strings.labels.photoChoose) + btn('pg-photo-make', r.makePortraits) + btn('pg-photo-remove', strings.labels.photoRemove) + size
-                : btn('pg-photo-choose', strings.labels.photoChoose) + `<span class="pg-photo-hint">${this.escapeHtml(r.unionPhotoHint)}</span>`;
+        const caption = this.escapeHtml(unionPhotoCaption(DataManager.getData(), partnership));
+        // The waiting thumbnail keeps the coming photo's shape (its width from the evidence's width / height).
+        const ref = imageLoads.entryOf(unionPhotoKey(partnership.id))?.ref;
+        const ratio = ref?.width && ref?.height ? Math.min(Math.max(ref.width / ref.height, 0.5), 96 / 56) : 4 / 3;
+        const shape = `--pg-ratio:${ratio.toFixed(3)}`;
+        let thumb = '';
+        if (state === 'refresh' && photo) {
+            thumb = `<span class="pg-photo-thumb" data-img-state="refresh" style="${shape};${imgPhaseStyle()}"><img src="${this.escapeHtml(photo)}" alt=""></span>`;
+        } else if (photo) {
+            thumb = `<button type="button" class="pg-photo-thumb" data-partnership-id="${id}" aria-label="${caption}"><img src="${this.escapeHtml(photo)}" alt=""></button>`;
+        } else if (waiting) {
+            thumb = `<span class="pg-photo-thumb pg-photo-wait" data-img-state="loading" role="img" aria-label="${this.escapeHtml(p.ariaLoading)}" style="${shape};${imgPhaseStyle()}">${imgGlyphHtml('image', undefined, 18)}</span>`;
+        } else if (failed) {
+            thumb = `<span class="pg-photo-thumb pg-photo-wait" data-img-state="failed" role="img" aria-label="${this.escapeHtml(p.ariaFailed)}" style="${shape}">${imgGlyphHtml('image-off', undefined, 18)}</span>`;
+        }
+        const size = photo && !waiting ? `<span class="pg-photo-size">${this.escapeHtml(photoKb(photo))}</span>` : '';
+        const sentence = waiting
+            ? `<span class="busy-st pg-photo-state" role="status">${busySpinHtml(12)}${this.escapeHtml(photo ? p.loadingNew : p.loading)}</span>`
+            : failed
+                ? `<div class="busy-msg pg-photo-state" role="status"><span>${this.escapeHtml(photo ? p.failedNew : p.failed)}</span><button type="button" class="link pg-photo-retry" data-partnership-id="${id}">${this.escapeHtml(strings.busy.retry)}</button></div>`
+                : '';
+        const actions = locked ? size + sentence
+            : waiting || (failed && !photo)
+                ? btn('pg-photo-choose', strings.labels.photoChoose) + sentence
+                : photo
+                    ? btn('pg-photo-choose', strings.labels.photoChoose) + btn('pg-photo-make', r.makePortraits) + btn('pg-photo-remove', strings.labels.photoRemove) + size + sentence
+                    : btn('pg-photo-choose', strings.labels.photoChoose) + `<span class="pg-photo-hint">${this.escapeHtml(r.unionPhotoHint)}</span>`;
         return `
-                <div class="pg-row pg-photo${photo ? ' has-photo' : ''}" data-partnership-id="${id}">
+                <div class="pg-row pg-photo${photo ? ' has-photo' : ''}" data-partnership-id="${id}" data-look="${state}${locked ? '-locked' : ''}">
                     <span class="pg-label">${this.escapeHtml(r.unionPhoto)}</span>
                     <div class="pg-span pg-photo-body">${thumb}<div class="pg-photo-actions">${actions}</div></div>
                 </div>`;
+    },
+
+    /**
+     * The couple's photo row's state: as the evidence says, unless the photo
+     * was set or removed in this panel (it waits no more, once saved).
+     */
+    unionPhotoRowState(partnership: Partnership): ImgState {
+        const key = unionPhotoKey(partnership.id);
+        if (this.relPhotoDrops.has(key)) return 'none';
+        const state = imgStateOf(key, !!partnership.photo);
+        return state === 'loaded' ? 'none' : state;
+    },
+
+    /** The couple's photo rows' buttons (the whole panel, or one row drawn again). */
+    bindUnionPhotoRows(scope: ParentNode): void {
+        const redraw = () => this.refreshRelationshipsPanel();
+        scope.querySelectorAll<HTMLElement>('button.pg-photo-thumb').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const pid = btn.dataset.partnershipId as PartnershipId;
+                this.openUnionPhotoViewer(pid, { readOnly: !btn.closest('.pg-photo')?.querySelector('.pg-photo-make'), done: redraw });
+            });
+        });
+        scope.querySelectorAll<HTMLElement>('.pg-photo-choose').forEach(btn => {
+            btn.addEventListener('click', () => this.chooseUnionPhoto(btn.dataset.partnershipId as PartnershipId, redraw));
+        });
+        scope.querySelectorAll<HTMLElement>('.pg-photo-make').forEach(btn => {
+            btn.addEventListener('click', () => { void this.makeUnionPortraits(btn.dataset.partnershipId as PartnershipId, redraw); });
+        });
+        scope.querySelectorAll<HTMLElement>('.pg-photo-remove').forEach(btn => {
+            btn.addEventListener('click', () => { void this.removeUnionPhoto(btn.dataset.partnershipId as PartnershipId, redraw); });
+        });
+        scope.querySelectorAll<HTMLElement>('.pg-photo-retry').forEach(btn => {
+            btn.addEventListener('click', () => imageLoads.retry([unionPhotoKey(btn.dataset.partnershipId!)]));
+        });
+    },
+
+    /**
+     * Photos coming while the panel is open (spec 116 §4.2): a couple's photo
+     * row is drawn again in place (the rest of the panel, with what is typed
+     * there, stays); a photo that came fades in.
+     */
+    wireRelationshipsImages(): void {
+        if (this.relImagesWired) return;
+        this.relImagesWired = true;
+        const update = (arrived: readonly string[]) => {
+            const content = document.getElementById('relationships-content');
+            if (!this.relationshipsPanelPersonId || !content) return;
+            content.querySelectorAll<HTMLElement>('.pg-row.pg-photo[data-partnership-id]').forEach(row => {
+                const pid = row.dataset.partnershipId as PartnershipId;
+                const partnership = DataManager.getPartnership(pid);
+                if (!partnership) return;
+                const key = unionPhotoKey(pid);
+                const locked = this.coupleEventsReadOnly(this.relationshipsPanelPersonId!) || !canEditUnionPhoto(pid);
+                const html = this.partnershipPhotoRowHtml(partnership, locked).trim();
+                const came = arrived.includes(key) && !!partnership.photo && !this.relPhotoDrops.has(key);
+                const look = /data-look="([^"]*)"/.exec(html)?.[1] ?? '';
+                if (!came && look === row.dataset.look) return;
+                const box = document.createElement('div');
+                box.innerHTML = html;
+                const fresh = box.firstElementChild as HTMLElement | null;
+                if (!fresh) { row.remove(); return; }
+                row.replaceWith(fresh);
+                this.bindUnionPhotoRows(fresh);
+                const thumb = fresh.querySelector<HTMLElement>('.pg-photo-thumb');
+                if (came && thumb && partnership.photo) {
+                    thumb.replaceChildren();
+                    setImgState(thumb, 'loaded', partnership.photo);
+                }
+            });
+        };
+        window.addEventListener(IMAGES_ARRIVED_EVENT, (e) => update((e as CustomEvent<ImagesArrivedDetail>).detail?.keys ?? []));
+        window.addEventListener(IMAGES_STATE_EVENT, () => update([]));
     },
 
     /** A couple's events are edited unless the person or the tree is locked. */
@@ -874,6 +962,9 @@ export const relationshipsPanelMethods = uiModule({
             this.relSessionOwned = false;
             DataManager.commitEditSession(null);
         }
+        // A couple's photo set or removed here: one on its way no longer comes over it (spec 116 I2).
+        for (const key of this.relPhotoDrops) imageLoads.drop(key);
+        this.relPhotoDrops.clear();
 
         // Re-render tree
         TreeRenderer.render();
@@ -885,6 +976,7 @@ export const relationshipsPanelMethods = uiModule({
     /** Open the panel's DataManager edit session (see beginEditSession). */
     beginRelationshipsSession(): void {
         if (this.relSessionOwned) DataManager.rollbackEditSession();
+        this.relPhotoDrops.clear();
         this.relSessionOwned = DataManager.beginEditSession();
         if (this.relSessionListener) return;
         this.relSessionListener = true;
@@ -913,6 +1005,8 @@ export const relationshipsPanelMethods = uiModule({
 
     /** Discard the session's changes (no-op when nothing was changed). */
     endRelationshipsSession(): void {
+        // Leaving without Save: a photo on its way still comes (spec 116 I2).
+        this.relPhotoDrops.clear();
         if (!this.relSessionOwned) return;
         this.relSessionOwned = false;
         if (DataManager.rollbackEditSession()) {

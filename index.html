@@ -2215,6 +2215,18 @@
             height: 100%;
             object-fit: cover;
         }
+        /* A portrait still coming (spec 116 §4.1): the initials on the avatar's ground under the veil. */
+        .photo-preview:has(> .pm-avatar-initials) {
+            background: var(--avatar-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        [data-theme="dark"] .photo-preview:has(> .pm-avatar-initials) { background: var(--surface-2); }
+        .photo-preview .pm-avatar-initials { font-size: 22px; }
+        /* Its sentence on a line of its own under the buttons. */
+        .photo-actions .photo-state { flex-basis: 100%; margin-top: 0; }
+        .photo-actions .busy-st.photo-state { font-size: 12.5px; color: var(--text-light); }
         .photo-actions {
             display: flex;
             flex-wrap: wrap;
@@ -4513,6 +4525,14 @@
             background: var(--surface-2); cursor: zoom-in;
         }
         .pg-photo-thumb img { display: block; height: 100%; width: auto; max-width: 96px; object-fit: cover; }
+        /* A couple's photo still coming (spec 116 §4.2): its shape from the evidence (--pg-ratio), a glyph inside. */
+        span.pg-photo-thumb { cursor: default; position: relative; }
+        .pg-photo-thumb.pg-photo-wait {
+            display: flex; align-items: center; justify-content: center;
+            width: calc(56px * var(--pg-ratio, 1.333));
+        }
+        .pg-photo-actions .pg-photo-state { flex-basis: 100%; margin-top: 0; }
+        .pg-photo-actions .busy-st.pg-photo-state { font-size: 12.5px; color: var(--text-light); }
         .pg-photo-thumb:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .pg-photo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
         .pg-photo-actions button.secondary { margin: 0; }
@@ -4521,6 +4541,7 @@
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .partnership-grid .pg-photo .pg-label { padding-top: 0; }
             .pg-photo-thumb { height: 48px; }
+            .pg-photo-thumb.pg-photo-wait { width: calc(48px * var(--pg-ratio, 1.333)); }
         }
         @media (pointer: coarse) {
             .pg-photo-actions button.secondary { min-height: 44px; }
@@ -30542,6 +30563,18 @@
             font-size: 13.5px; text-align: center; pointer-events: none;
         }
         .image-viewer-card[hidden] { display: none; }
+        /* An image still coming, or one that did not come (spec 116 §4.4): words in the middle of the stage. */
+        .image-viewer-msg {
+            pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 10px;
+            color: #fff; font-size: 14px; text-align: center; max-width: 320px;
+        }
+        .image-viewer-msg .busy-spin { color: #fff; }
+        .image-viewer-msg button.link {
+            background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: 600;
+            color: #fff; text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+        }
+        .image-viewer-msg button.link:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 2px; }
+        @media (pointer: coarse) { .image-viewer-msg button.link { min-height: 44px; padding: 0 8px; } }
         .is-list .image-viewer-card {
             position: absolute; top: 0; bottom: 0; left: 0; right: var(--iv-panel);
             display: flex; align-items: center; justify-content: center; padding: 64px 72px 32px;

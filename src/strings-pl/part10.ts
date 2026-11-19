@@ -136,5 +136,6 @@ export const plPart10: Pick<StringsType, 'busy' | 'photos'> = {
         failedNew: 'Nowe zdjęcie nie zostało wczytane.',
         ariaLoading: 'zdjęcie się wczytuje',
         ariaFailed: 'zdjęcie nie wczytane',
+        recropWait: 'Kadr można edytować po wczytaniu zdjęcia.',
     },
 };

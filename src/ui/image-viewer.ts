@@ -14,6 +14,8 @@
  */
 
 import { strings } from '../strings.js';
+import { iconSvg } from '../icons.js';
+import { busySpinHtml } from './busy.js';
 import {
     ZoomView, ZoomBox, fitView, clampView, zoomAt, panBy, zoomPercent, isFitted, scaleLimits, ZOOM_STEP,
 } from '../image-zoom.js';
@@ -508,6 +510,12 @@ export interface ViewerSlots {
     image: (src: string, preview?: string | null, failed?: () => void) => void;
     /** A card in place of the image (a file the browser does not show). */
     card: (content: HTMLElement) => void;
+    /**
+     * An image still on its way after the tree (spec 116 §4.4): the spinner
+     * with "Loading the photo…", or one that did not come with Try again
+     * (`retry`). The caller draws the item again when it comes.
+     */
+    wait: (state: 'loading' | 'failed', retry?: () => void) => void;
     /** The position line on top ("3 / 14 · Materials of Jan Novák"). */
     pos: (text: string) => void;
     /** A label over the bottom of the image ("Stored preview…"); null: none. */
@@ -596,6 +604,33 @@ function listCard(content: HTMLElement, token: number): void {
     dismissHint();
 }
 
+/** The stage's words for an image on its way or one that did not come (white, as the viewer's tools). */
+export function waitMessage(state: 'loading' | 'failed', retry?: () => void): HTMLElement {
+    const box = document.createElement('div');
+    box.className = 'image-viewer-msg';
+    box.setAttribute('role', 'status');
+    const p = strings.photos;
+    if (state === 'loading') {
+        box.innerHTML = busySpinHtml(16);
+        box.append(document.createElement('span'));
+        box.lastElementChild!.textContent = p.loading;
+        return box;
+    }
+    box.innerHTML = iconSvg('image-off', { size: 28, strokeWidth: 1.4 });
+    const text = document.createElement('span');
+    text.textContent = p.failed;
+    box.appendChild(text);
+    if (retry) {
+        const again = document.createElement('button');
+        again.type = 'button';
+        again.className = 'link';
+        again.textContent = strings.busy.retry;
+        again.addEventListener('click', retry);
+        box.appendChild(again);
+    }
+    return box;
+}
+
 /** On a phone the panel is a sheet under the image: the stage ends above it (collapsed). */
 function sheetHeight(): void {
     const ov = overlay();
@@ -644,6 +679,7 @@ function drawListItem(): void {
     l.show(l.index, {
         image: (src, preview, failed) => { if (token === listToken) listImage(src, preview, failed, token); },
         card: (content) => listCard(content, token),
+        wait: (state, retry) => listCard(waitMessage(state, retry), token),
         pos: (text) => { const p = el('image-viewer-pos'); if (p && token === listToken) p.textContent = text; },
         note: (text) => { if (token === listToken) listNote(text); },
         panel,
@@ -677,6 +713,7 @@ export function redrawViewerList(opts: { stage?: boolean } = {}): void {
     l.show(l.index, {
         image: () => { /* the stage stays */ },
         card: () => { /* the stage stays */ },
+        wait: () => { /* the stage stays */ },
         note: () => { /* the stage stays */ },
         pos: (text) => { const p = el('image-viewer-pos'); if (p && token === listToken) p.textContent = text; },
         panel,

@@ -16,6 +16,8 @@ import { dataUrlByteSize } from '../photo.js';
 import { shownName } from '../person-name.js';
 import { openPortraitEditor, PortraitEditorInput } from './portrait-editor.js';
 import { uiModule } from './module.js';
+import { imageLoads } from '../image-loads.js';
+import { personPhotoKey } from './person-photo-model.js';
 
 /** Where a portrait comes from that is already in the tree: an attachment of the person or the couple's photo. */
 export type PortraitOrigin = { attachmentId: string } | { partnershipId: NonNullable<PortraitSource['partnershipId']> };
@@ -113,7 +115,7 @@ export const portraitActionsMethods = uiModule({
     portraitSourceAttachmentShown(person: Person): string | null {
         const dialog = document.getElementById('person-modal');
         if (this.currentId === person.id && dialog?.classList.contains('active')) {
-            const preview = dialog.querySelector<HTMLImageElement>('#photo-preview img')?.getAttribute('src') || undefined;
+            const preview = this.photoModel.value;
             if (!preview) return null;
             const pending = this.pendingPortraitFor(preview);
             if (pending) return pending.origin && 'attachmentId' in pending.origin ? pending.origin.attachmentId : null;
@@ -186,6 +188,8 @@ export const portraitActionsMethods = uiModule({
                 photoSource: origin && !input.squareOnly ? { ...origin, ...step.crop } : undefined,
             });
         }, toast);
+        // The person's own portrait: one still on its way no longer comes over it (spec 116 I2).
+        this.dropImageWait(personPhotoKey(personId));
         if (file && original) await this.sendPortraitOriginal(personId, original, file);
     },
 
@@ -197,6 +201,11 @@ export const portraitActionsMethods = uiModule({
     editPersonPortrait(personId: PersonId): void {
         const person = DataManager.getPerson(personId);
         if (!person?.photo || !canEditPortrait(personId)) return;
+        // Not over the older portrait while a newer one is on its way (spec 116 §4.3).
+        if (imageLoads.isPending(personPhotoKey(personId))) {
+            this.showToast(strings.photos.recropWait);
+            return;
+        }
         const origin = person.photoSource ? portraitOriginOf(person.photoSource) : null;
         const original = portraitOriginImage(person, origin);
         if (original && person.photoSource) {

@@ -19,8 +19,10 @@ import { shownName, shownNameOrEmpty } from '../person-name.js';
 import { unionPartnersInOrder, unionPhotoCaption } from '../union-photo.js';
 import { openPortraitEditor, PortraitEditorStep } from './portrait-editor.js';
 import { canEditPortrait, pickImageFile, portraitCropOf } from './portrait-actions-ui.js';
-import { openViewerList, closeImageViewer } from './image-viewer.js';
+import { openViewerList, closeImageViewer, redrawViewerList, viewerListOpen } from './image-viewer.js';
 import { uiModule } from './module.js';
+import { IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, imageLoads, type FieldKey } from '../image-loads.js';
+import { personPhotoKey } from './person-photo-model.js';
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
     const el = document.createElement(tag);
@@ -49,6 +51,16 @@ export function canEditUnionPhoto(pid: PartnershipId): boolean {
     return ![u.person1Id, u.person2Id].some(id => DataManager.getPerson(id) && DataManager.isPersonLocked(id));
 }
 
+/** The evidence key of a couple's photo (spec 116). */
+export function unionPhotoKey(pid: string): FieldKey {
+    return `union:${pid}:photo`;
+}
+
+/** The couple's photo is still on its way after the tree (not the older one kept meanwhile: that can be shown). */
+export function unionPhotoWaits(pid: string): boolean {
+    return imageLoads.isPending(unionPhotoKey(pid));
+}
+
 /** The partners whose portrait may be cut from the couple's photo, in the card's order. */
 function portraitPartners(pid: PartnershipId): Person[] {
     const u = DataManager.getPartnership(pid);
@@ -57,6 +69,17 @@ function portraitPartners(pid: PartnershipId): Person[] {
 }
 
 export const unionPhotoMethods = uiModule({
+    /**
+     * A photo set or removed by the person: an image on its way to that place
+     * no longer comes over it (spec 116 I2). In the relationships panel's
+     * session only once the panel is saved (leaving without Save keeps
+     * waiting for it).
+     */
+    dropImageWait(key: FieldKey): void {
+        if (this.relSessionOwned && DataManager.isEditSessionActive()) this.relPhotoDrops.add(key);
+        else imageLoads.drop(key);
+    },
+
     /** "Choose photo" of a union (6a, 6b): a new photo, shrunk as an attachment (EXIF turned upright). */
     chooseUnionPhoto(pid: PartnershipId, done?: () => void): void {
         if (!canEditUnionPhoto(pid)) return;
@@ -83,6 +106,7 @@ export const unionPhotoMethods = uiModule({
         DataManager.runBatch(strings.undo.unionPhoto(a, b), () => {
             DataManager.updatePartnership(pid, { photo, photoOriginalName: file.name, ...(original ? { photoOriginal: original } : {}) });
         });
+        this.dropImageWait(unionPhotoKey(pid));
         if (original && DataManager.getPartnership(pid)?.photoOriginal?.sha256 === original.sha256) {
             const outcome = await this.queueOriginal(original, file, { partnershipId: pid });
             this.noteOriginalOutcome(outcome, file.size, { partnershipId: pid });
@@ -102,6 +126,7 @@ export const unionPhotoMethods = uiModule({
         DataManager.runBatch(strings.undo.unionPhoto(a, b), () => {
             DataManager.updatePartnership(pid, { photo: '' });
         });
+        this.dropImageWait(unionPhotoKey(pid));
         done?.();
     },
 
@@ -115,6 +140,11 @@ export const unionPhotoMethods = uiModule({
     async makeUnionPortraits(pid: PartnershipId, done?: () => void): Promise<void> {
         const union = DataManager.getPartnership(pid);
         if (!union?.photo || DataManager.isReadOnly()) return;
+        // Not over a photo still on its way (the button waits for it, spec 116 §4.3).
+        if (unionPhotoWaits(pid)) {
+            this.showToast(strings.photos.recropWait);
+            return;
+        }
         const partners = portraitPartners(pid);
         if (!partners.length) return;
         const both = unionPartnersInOrder(DataManager.getData(), union).filter(Boolean).length;
@@ -156,6 +186,7 @@ export const unionPhotoMethods = uiModule({
                 });
             }
         }, { text });
+        for (const m of writable) this.dropImageWait(personPhotoKey(m.id));
         // In the relationships panel the change waits for its Save (one step there): the sentence alone.
         if (inSession) this.showToast(text);
         done?.();
@@ -168,14 +199,34 @@ export const unionPhotoMethods = uiModule({
      */
     openUnionPhotoViewer(pid: PartnershipId, opts: { readOnly?: boolean; done?: () => void } = {}): void {
         const union = DataManager.getPartnership(pid);
-        if (!union?.photo) return;
-        const photo = union.photo;
+        const key = unionPhotoKey(pid);
+        const waitState = (): 'loading' | 'failed' | null => {
+            const st = imageLoads.stateOf(key);
+            return st === 'pending' ? 'loading' : st === 'failed' ? 'failed' : null;
+        };
+        // A photo still on its way opens too (spec 116 §4.4): the viewer says so and shows it when it comes.
+        if (!union || (!union.photo && !waitState())) return;
         const caption = unionPhotoCaption(DataManager.getData(), union);
+        // What the stage shows: the photo, or the words of one on its way; drawn again when that changes.
+        const look = (): string => DataManager.getPartnership(pid)?.photo ? 'photo' : waitState() ?? 'none';
+        let shown = '';
+        const onImages = () => { if (viewerListOpen() && look() !== shown) redrawViewerList({ stage: true }); };
+        window.addEventListener(IMAGES_ARRIVED_EVENT, onImages);
+        window.addEventListener(IMAGES_STATE_EVENT, onImages);
+        const unwire = () => {
+            window.removeEventListener(IMAGES_ARRIVED_EVENT, onImages);
+            window.removeEventListener(IMAGES_STATE_EVENT, onImages);
+        };
         openViewerList({
             count: 1,
             index: 0,
             show: (_i, slots) => {
-                if (!slots.redraw) slots.image(photo);
+                const photo = DataManager.getPartnership(pid)?.photo ?? '';
+                if (!slots.redraw) {
+                    shown = look();
+                    if (photo) slots.image(photo);
+                    else slots.wait(waitState() ?? 'failed', () => imageLoads.retry([key]));
+                }
                 slots.pos(caption);
                 slots.note(null);
                 const panel = slots.panel;
@@ -184,6 +235,11 @@ export const unionPhotoMethods = uiModule({
                 const title = h('h2', 'mv-title', caption);
                 title.id = 'uv-title';
                 head.appendChild(title);
+                // On its way: the caption alone (its size, Download and Make portraits… once it is here).
+                if (!photo) {
+                    panel.appendChild(head);
+                    return;
+                }
                 const fresh = DataManager.getPartnership(pid);
                 if (fresh?.photoOriginalName) head.appendChild(h('div', 'mv-name', fresh.photoOriginalName));
                 head.appendChild(h('div', 'mv-summary', photoKb(photo)));
@@ -207,6 +263,6 @@ export const unionPhotoMethods = uiModule({
                 foot.appendChild(actions);
                 panel.append(head, h('div', 'mv-gap'), foot);
             },
-        });
+        }, unwire);
     },
 });

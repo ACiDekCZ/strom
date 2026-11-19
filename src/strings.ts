@@ -10632,6 +10632,8 @@ const stringsEN = {
         /** The end of a card's aria-label. */
         ariaLoading: 'photo loading',
         ariaFailed: 'photo not loaded',
+        /** The portrait editor waits for the photo it would open on (the crop, Make portraits…). */
+        recropWait: 'The crop can be edited once the photo has loaded.',
     },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {
@@ -20856,6 +20858,7 @@ const stringsCZ: StringsType = {
         failedNew: 'Nová fotka se nenačetla.',
         ariaLoading: 'fotka se načítá',
         ariaFailed: 'fotka se nenačetla',
+        recropWait: 'Výřez půjde upravit po načtení fotky.',
     },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {
@@ -30999,6 +31002,7 @@ const stringsDE: StringsType = {
         failedNew: 'Das neue Foto wurde nicht geladen.',
         ariaLoading: 'Foto wird geladen',
         ariaFailed: 'Foto nicht geladen',
+        recropWait: 'Der Ausschnitt lässt sich bearbeiten, sobald das Foto geladen ist.',
     },
     /** The notice at the bottom of the main window's tree about another window's choice (spec 110, src/ui/window-notice.ts). */
     mainNotice: {
