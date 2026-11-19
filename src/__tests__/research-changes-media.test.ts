@@ -6,7 +6,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { diffByPerson, diffOther, baseCopy, gateMediaChanges, docSentRows, type SentOtherRow } from '../research-changes.js';
+import {
+    diffByPerson, diffOther, baseCopy, gateMediaChanges, docSentRows, splitPersonAppOnly, personAppOnly, sanitizeSentOtherRow, type SentOtherRow,
+} from '../research-changes.js';
 import { addPersonMedia } from '../media.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
@@ -122,6 +124,32 @@ describe('what a research writes of the tree\'s files (media.app, material.links
         const g = gateMediaChanges(diffByPerson(base, cur), diffOther(base, cur), { photos: false, links: false });
         expect(g.older).toBe(false);
         expect(of(g.list, 'p1').kinds).toEqual(['name']);
+    });
+
+    it('without media.app a person\'s attachments are app only: they leave the written row, a row of only files goes (verification of 3.30.0, research 1.34, N1)', () => {
+        const base = baseCopy(tree());
+        const cur = tree();
+        addPersonMedia(cur, 'p1' as PersonId, { id: 'a3', name: 'mill.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,CCCC', sizeBytes: 3 });
+        cur.persons['p1' as PersonId].notes = 'Worked at the mill.';
+        addPersonMedia(cur, 'p2' as PersonId, { id: 'a4', name: 'letter.png', mimeType: 'image/png', dataUrl: 'data:image/png;base64,DDDD', sizeBytes: 3 });
+        const w = { photos: false, links: false };
+        const g = gateMediaChanges(diffByPerson(base, cur), null, w);
+        expect(of(g.list, 'p1').kinds).toEqual(['attachment', 'note']);
+        expect(personAppOnly(of(g.list, 'p2').kinds, w)).toBe(true);
+        expect(personAppOnly(of(g.list, 'p1').kinds, w)).toBe(false);
+        const split = splitPersonAppOnly(g.list, w);
+        expect(split.list.map(c => [c.personId, c.kinds])).toEqual([['p1', ['note']]]);
+        expect([...split.appOnly].sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+            { type: 'person', id: 'p1', title: of(g.list, 'p1').name, kinds: ['attachment'], appOnly: true },
+            { type: 'person', id: 'p2', title: of(g.list, 'p2').name, kinds: ['attachment'], appOnly: true },
+        ]);
+        // Kept for "What was written" and read back.
+        expect(split.appOnly.map(sanitizeSentOtherRow)).toEqual(split.appOnly);
+        expect(sanitizeSentOtherRow({ type: 'person', id: 'p1', title: 'x', kinds: ['attachment', 'birth', 7], appOnly: true })?.kinds).toEqual(['attachment']);
+        // A research with media.app writes them (or not known yet: nothing held back).
+        expect(splitPersonAppOnly(g.list, { photos: true, links: false }).appOnly).toEqual([]);
+        expect(splitPersonAppOnly(g.list, null).list).toEqual(g.list);
+        expect(personAppOnly(['attachment'], { photos: true, links: true })).toBe(false);
     });
 
     it('a written send\'s source rows: their files named evidence for a research with material.links', () => {

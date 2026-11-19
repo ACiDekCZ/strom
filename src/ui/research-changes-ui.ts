@@ -19,6 +19,7 @@ import {
     SourceChangeKind, CoupleChangeKind, PlaceChange, VariantChange, SentOtherRow, sentOtherRows, sanitizeSentOtherRow,
     sourceAppOnly, coupleAppOnly, placesAppOnly, variantsAppOnly, lineageAppOnly, pairNotWritten, RESEARCH_UNREAD_KINDS,
     NotWrittenItem, PairedNotWritten, withWrittenMedia, MEDIA_APP_READ_KINDS, gateMediaChanges, docSentRows, type MediaWrites,
+    splitPersonAppOnly, personAppOnly,
 } from '../research-changes.js';
 import { lifeEventLabel } from '../person-sources.js';
 import { researchKeepsAppMedia, MATERIAL_LINKS_FEATURE, type SyncMediaWritten } from '../research-link.js';
@@ -379,14 +380,14 @@ function rowLine(nameHtml: string, type: string, appOnly: boolean): string {
         + (appOnly ? `<span class="research-changes-tag" title="${esc(c.appOnlyTitle)}">${esc(c.appOnly)}</span>` : '') + '</span>';
 }
 
-/** A person's row: a ring before a send, a tick once written. */
-function personRowOf(ch: PersonChange, mode: 'send' | 'written'): string {
+/** A person's row: a ring before a send, a tick once written. `appOnly`: the research does not write any of it (its tag). */
+function personRowOf(ch: PersonChange, mode: 'send' | 'written', appOnly = false): string {
     const name = ch.deleted || !DataManager.getPerson(ch.personId)
         ? `<span class="research-changes-name is-deleted">${esc(ch.name)}</span>`
         : `<button type="button" class="research-changes-name" data-person="${esc(ch.personId)}">${esc(ch.name)}</button>`;
     return `<li class="research-changes-row" data-kind="person">`
         + `<span class="research-changes-icon ${mode === 'written' ? 'is-check' : 'is-ring'}" aria-hidden="true">${mode === 'written' ? '✓' : ''}</span>`
-        + `<span class="research-changes-text">${name}<span class="research-changes-kinds">${esc(changeKindsText(ch.kinds, ch))}</span></span>`
+        + `<span class="research-changes-text">${rowLine(name, '', appOnly)}<span class="research-changes-kinds">${esc(changeKindsText(ch.kinds, ch))}</span></span>`
         + photoPic(ch) + '</li>';
 }
 
@@ -406,7 +407,14 @@ function otherRowOf(r: SentOtherRow, as: 'written' | 'appOnly', data: StromData)
     let name: string;
     let type: string;
     let kinds = '';
-    if (r.type === 'source') {
+    if (r.type === 'person') {
+        // A person's files a research without `media.app` does not write: the person (a link while in the tree), the files' kinds.
+        type = '';
+        kinds = changeKindsText(r.kinds as ChangeKind[]);
+        name = data.persons[r.id as PersonId]
+            ? `<button type="button" class="research-changes-name" data-person="${esc(r.id)}">${esc(rowPersonName(r.id as PersonId, data))}</button>`
+            : `<span class="research-changes-name is-deleted">${esc(r.title)}</span>`;
+    } else if (r.type === 'source') {
         type = c.typeSource;
         kinds = sourceKindsText(r.kinds as SourceChangeKind[]);
         name = !r.deleted && data.sources?.[r.id]
@@ -600,8 +608,11 @@ export const researchChangesMethods = uiModule({
         // What the research does not write of the tree's files is not promised as written (spec 102 §10, R10 b).
         const w = this.researchMediaWritesOf(treeId);
         const gated = now && w ? gateMediaChanges(now, this.researchOtherNow(), w) : null;
-        const list = gated ? gated.list : now;
-        const other = list ? sentOtherRows(gated ? gated.other : this.researchOtherNow(), researchUnread(surnamesReadByResearch(treeId), lineageReadByResearch(treeId), keepsMedia)) : [];
+        // The files at a person a research without `media.app` does not write: "app only", never "written".
+        const split = gated ? splitPersonAppOnly(gated.list, w) : null;
+        const list = split ? split.list : now;
+        const other = list ? [...(split?.appOnly ?? []),
+            ...sentOtherRows(gated ? gated.other : this.researchOtherNow(), researchUnread(surnamesReadByResearch(treeId), lineageReadByResearch(treeId), keepsMedia))] : [];
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         const stands = [link?.fingerprint ?? '', link?.sent?.state === 'written' ? link.sent.fingerprint : ''].filter(Boolean);
         pendingSent.set(treeId, { fingerprint, data: baseCopy(data), list, other, stands, ...(keepsMedia ? { keepsMedia: true as const } : {}),
@@ -905,7 +916,9 @@ export const researchChangesMethods = uiModule({
                     + `<button type="button" class="secondary btn-sm" data-act="close">${esc(strings.buttons.close)}</button>`
                     + `<button type="button" class="primary btn-sm" data-act="send">${esc(s.barSend)}</button>`;
         }
-        const personRow = (ch: PersonChange): string => personRowOf(ch, mode);
+        // About to send to a research without `media.app`: a person with only files is tagged "app only" (as a source is).
+        const writes = mode === 'send' ? this.researchMediaWritesOf(ctx.treeId) : null;
+        const personRow = (ch: PersonChange): string => personRowOf(ch, mode, personAppOnly(ch.kinds, writes));
         // The sections of "What will be sent": the rows of each kind, a long one grouped ("+ N more" adds GROUP_STEP).
         const groups = new Map<string, { rows: (() => string)[]; shown: number }>();
         const section = (key: string, head: string, rows: (() => string)[]): string => {

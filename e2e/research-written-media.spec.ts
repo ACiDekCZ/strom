@@ -93,6 +93,61 @@ test.describe('what was written of the tree\'s own files', () => {
         await expect(panel.locator('.research-changes-body .research-changes-note')).toHaveText(/does not write photos of people and unions/);
     });
 
+    /** Jan gets an attachment and a new note, Anna an attachment only. */
+    async function addAttachments(page: Page): Promise<void> {
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const d = dm.getData();
+            const find = (n: string) => (Object.values(d.persons) as any[]).find(p => p.firstName === n);
+            dm.addAttachment(find('Jan').id, { name: 'mlyn.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAAA', sizeBytes: 3 });
+            dm.updatePerson(find('Jan').id, { notes: 'Worked at the mill.' });
+            dm.addAttachment(find('Anna').id, { name: 'list.png', mimeType: 'image/png', dataUrl: 'data:image/png;base64,BBBB', sizeBytes: 3 });
+        });
+    }
+
+    test('a research without media.app: a person\'s attachment stays in the app only, never written (verification of 3.30.0 with research 1.34, N1)', async ({ page }) => {
+        const b = await researchTree(page, []);
+        await addAttachments(page);
+        const panel = page.locator('#research-changes-panel');
+        // About to send: Anna's row (only a file) is tagged "app only", as a source's file is; Jan's note goes.
+        await page.evaluate(() => window.Strom.UI.showResearchChanges('send'));
+        await expect(panel.locator('[data-kind="person"]').filter({ hasText: 'Anna' }).locator('.research-changes-tag')).toHaveText('app only');
+        await expect(panel.locator('[data-kind="person"]').filter({ hasText: 'Jan Fíšek' }).locator('.research-changes-tag')).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeResearchChanges());
+        await sendAndShowWritten(page, b);
+        expect(b.postQueries?.[0].get('media')).toBeNull();
+        // Written: Jan's note alone; the attachments of both under "App only".
+        const written = panel.locator('.research-changes-list:not([data-group="appOnly"]) [data-kind="person"]');
+        await expect(written).toHaveCount(1);
+        await expect(written.locator('.research-changes-kinds')).toHaveText('note');
+        await expect(panel.locator('[data-section="appOnly"]')).toHaveText('App only · 2');
+        const appOnly = panel.locator('[data-group="appOnly"] [data-kind="person"]');
+        await expect(appOnly).toHaveCount(2);
+        await expect(appOnly.filter({ hasText: 'Jan Fíšek' }).locator('.research-changes-kinds')).toHaveText('+ attachment');
+        await expect(appOnly.filter({ hasText: 'Anna' }).locator('.research-changes-kinds')).toHaveText('+ attachment');
+        await expect(panel.locator('[data-group="appOnly"] .research-changes-icon.is-check')).toHaveCount(0);
+    });
+
+    test('a research with media.app: a person\'s attachment is written as its answer names it, nothing in the app only', async ({ page }) => {
+        const b = await researchTree(page, ['media.app'], {
+            media: [
+                { kind: 'media.attachment', person: 'P0003', record: 'I0042', title: 'mlyn.jpg' },
+                { kind: 'media.attachment', person: 'P0002', record: 'I0043', title: 'list.png' },
+            ],
+            mediaCount: 2,
+        });
+        await addAttachments(page);
+        await page.evaluate(() => window.Strom.UI.showResearchChanges('send'));
+        const panel = page.locator('#research-changes-panel');
+        await expect(panel.locator('[data-kind="person"]').filter({ hasText: 'Anna' })).toHaveCount(1);
+        await expect(panel.locator('.research-changes-tag')).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeResearchChanges());
+        await sendAndShowWritten(page, b);
+        expect(b.postQueries?.[0].get('media')).toBe('app');
+        await expect(panel.locator('[data-kind="person"]').filter({ hasText: 'Jan Fíšek' }).locator('.research-changes-kinds')).toContainText('+ attachment');
+        await expect(panel.locator('[data-section="appOnly"]')).toHaveCount(0);
+    });
+
     test('a research with material.links: a file\'s title, its new place and a source\'s evidence are told as they are', async ({ page }) => {
         const b = await researchTree(page, ['media.app', 'material.links']);
         await page.evaluate(() => {

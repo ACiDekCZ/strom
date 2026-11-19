@@ -681,6 +681,38 @@ export function gateMediaChanges(list: readonly PersonChange[], other: OtherChan
     return { list: persons, other: { ...other, sources, couples }, older };
 }
 
+/** A person's kinds that are the tree's own files at the person: written only by a research with `media.app` (spec 108). */
+const PERSON_FILE_KINDS: ReadonlySet<ChangeKind> = new Set<ChangeKind>(['attachment', 'attachmentRemoved', 'attachmentEdited']);
+
+/**
+ * Every one of a person's kinds is a file at the person a research of `w`
+ * does not write (without `photos`, i.e. `media.app`): the row is "app only".
+ */
+export function personAppOnly(kinds: readonly ChangeKind[], w: MediaWrites | null): boolean {
+    return !!w && !w.photos && kinds.length > 0 && kinds.every(k => PERSON_FILE_KINDS.has(k));
+}
+
+/**
+ * The people of a send as a research of `w` writes them: without `photos`
+ * (`media.app`, e.g. research 1.34) the files at a person are not written
+ * there, so they leave the person's row (a row left without a kind goes) and
+ * become an "app only" row of that person (verification of 3.30.0 with
+ * research 1.34, N1). With `media.app` (or not known) nothing changes.
+ */
+export function splitPersonAppOnly(list: readonly PersonChange[], w: MediaWrites | null): { list: PersonChange[]; appOnly: SentOtherRow[] } {
+    if (!w || w.photos) return { list: [...list], appOnly: [] };
+    const out: PersonChange[] = [];
+    const appOnly: SentOtherRow[] = [];
+    for (const ch of list) {
+        const files = ch.deleted ? [] : ch.kinds.filter(k => PERSON_FILE_KINDS.has(k));
+        if (!files.length) { out.push(ch); continue; }
+        appOnly.push({ type: 'person', id: ch.personId, title: ch.name, kinds: [...files], appOnly: true });
+        const kinds = ch.kinds.filter(k => !PERSON_FILE_KINDS.has(k));
+        if (kinds.length) out.push({ ...ch, kinds });
+    }
+    return { list: out, appOnly };
+}
+
 /** A written send's rows beyond the people with a source's files named its evidence (`material.links`). */
 export function docSentRows(rows: readonly SentOtherRow[], links: boolean): SentOtherRow[] {
     if (!links) return [...rows];
@@ -696,10 +728,11 @@ export function docSentRows(rows: readonly SentOtherRow[], links: boolean): Sent
  * (their count). `appOnly`: the research does not read it.
  */
 export interface SentOtherRow {
-    type: 'source' | 'couple' | 'places' | 'variants' | 'lineage';
-    /** The source's id, the partnership's id; '' for a summary. */
+    /** `person`: a person's files a research without `media.app` does not write (always `appOnly`, splitPersonAppOnly). */
+    type: 'source' | 'couple' | 'places' | 'variants' | 'lineage' | 'person';
+    /** The source's id, the partnership's id, the person's id; '' for a summary. */
     id: string;
-    /** The source's title as sent ('' for the others: told from the tree). */
+    /** The source's title as sent, the person's name ('' for the others: told from the tree). */
     title: string;
     kinds: string[];
     p1?: PersonId;
@@ -743,13 +776,16 @@ export function sentOtherRows(other: OtherChanges | null, unread: ReadonlySet<st
 export function sanitizeSentOtherRow(v: unknown): SentOtherRow | null {
     const r = v as Record<string, unknown> | null;
     if (!r || typeof r !== 'object') return null;
-    const type = r.type === 'source' || r.type === 'couple' || r.type === 'places' || r.type === 'variants' || r.type === 'lineage' ? r.type : null;
+    const type = r.type === 'source' || r.type === 'couple' || r.type === 'places' || r.type === 'variants' || r.type === 'lineage' || r.type === 'person' ? r.type : null;
     if (!type) return null;
     const str = (x: unknown, max: number): string => (typeof x === 'string' ? x.slice(0, max) : '');
     const count = typeof r.count === 'number' && r.count > 0 ? Math.floor(r.count) : undefined;
+    let kinds = Array.isArray(r.kinds) ? r.kinds.filter((k): k is string => typeof k === 'string').slice(0, 12) : [];
+    // A person's row names only its files (told by their labels).
+    if (type === 'person') kinds = kinds.filter(k => PERSON_FILE_KINDS.has(k as ChangeKind));
     return {
         type, id: str(r.id, 80), title: str(r.title, 300),
-        kinds: Array.isArray(r.kinds) ? r.kinds.filter((k): k is string => typeof k === 'string').slice(0, 12) : [],
+        kinds,
         ...(typeof r.p1 === 'string' ? { p1: r.p1 as PersonId } : {}),
         ...(typeof r.p2 === 'string' ? { p2: r.p2 as PersonId } : {}),
         ...(count ? { count } : {}),
