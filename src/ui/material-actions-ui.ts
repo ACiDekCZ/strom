@@ -618,7 +618,7 @@ export const materialActionsMethods = uiModule({
             input.type = 'radio';
             input.name = 'mdlg-hide-reason';
             input.value = reason;
-            input.checked = reason === 'unrelated';
+            input.checked = reason === (ctx.hideReason ?? 'unrelated');
             label.append(input, h('span', '', m.reason[reason]));
             set.appendChild(label);
         }

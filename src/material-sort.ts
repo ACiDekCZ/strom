@@ -106,6 +106,16 @@ export interface SortNextOpts {
     sourceOf?: boolean;
 }
 
+/**
+ * The batches a run of the research takes (spec 102 §3): the files in their
+ * order, 50 to a batch (the research cuts them so), at most SORT_MAX_BATCHES.
+ */
+export function sortRunBatches(ids: readonly string[]): string[][] {
+    const out: string[][] = [];
+    for (let i = 0; i < ids.length && out.length < SORT_MAX_BATCHES; i += SORT_MAX_FILES) out.push(ids.slice(i, i + SORT_MAX_FILES));
+    return out;
+}
+
 export interface SortNext {
     /** Every file to send, in order: pictures and PDFs first, then the others, text and data last; a folder's files together. */
     send: MaterialItem[];

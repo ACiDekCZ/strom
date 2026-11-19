@@ -2071,6 +2071,14 @@ export const materialsWindowMethods = uiModule({
         this.mwRebuild();
     },
 
+    /** The files the agent left unassigned, shown with their filter (the sorting dialog's Show in Materials, spec 102 §2). */
+    mwShowLeft(): void {
+        const w = win;
+        if (!w) return;
+        w.filters.left = true;
+        this.mwFiltersChanged();
+    },
+
     mwClearFilters(): void {
         const w = win;
         if (!w) return;

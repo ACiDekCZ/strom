@@ -15,7 +15,7 @@
 
 import { DataManager } from '../data.js';
 import { allMedia } from '../media.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
 import type { Attachment, MaterialKind, MediaPlace, PersonId } from '../types.js';
 import {
     MaterialItem, MaterialError, SortJob, SortLink, SORT_MAX_FILES, SORT_MAX_TEXT, type EditRequest,
@@ -25,7 +25,7 @@ import {
 import { overviewItems, nameWithoutYears } from '../materials-overview.js';
 import {
     sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
-    sortNext, sortLeftMap, sortCopyOf, sortStripState, sortProposalCounts, sortLeftIds, sortBackRow,
+    sortNext, sortLeftMap, sortCopyOf, sortStripState, sortRunBatches, sortProposalCounts, sortLeftIds, sortBackRow,
     type SortNext, type SortNextOpts, type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite, type SortCounts, type SortStripState,
 } from '../material-sort.js';
 import { researchPersonRef } from '../research-link.js';
@@ -44,6 +44,11 @@ const POLL_MS = 2_000;
 const POLL_HIDDEN_MS = 10_000;
 const POLL_DOWN_MS = 15_000;
 const PREVIEWS = 6;
+/** Over this many batches the dialog says the cost loudly and offers First 50 only (spec 102 §2, §12). */
+const SORT_MANY_BATCHES = 10;
+
+/** What the dialog sorts (spec 102 §2): every unsorted file, the selected ones, a batch's, the first 50 only. */
+type SortScope = 'all' | 'selection' | 'batch' | 'first';
 const TOAST_MS = 8000;
 
 /** Whether sorting is offered: on, offered but off (not running), only said (an older research), or not at all. */
@@ -302,27 +307,75 @@ export const materialSortMethods = uiModule({
         const mc = this.materialsContext();
         if (!mc || this.materialSortGate() !== 'on' || this.materialSortBusy()) return;
         const s = strings.materials.agentSort;
-        // In the order of spec 102 §4 (pictures first, a folder together; copies, sources' files and what the agent
-        // left unassigned not again, unless selected); one sorting takes at most SORT_MAX_FILES (the batches: §2, §3).
-        const next = this.materialSortNext(target.items, {
-            scope: target.selection ? 'selection' : 'all', all: [...this.materialSortItemMap(mc.treeId).values()],
-        });
-        const send = next.send.slice(0, SORT_MAX_FILES);
-        const over = next.send.length - send.length;
-        if (!send.length) return;
-        const n = send.length;
-        const dialog = materialDialog({ title: s.title(n), sub: s.what(n, target.batch), modifier: 'sort' });
+        // The research keeps a run of batches (material.sortRun); an older one takes one batch, the rest is for the next.
+        const runs = !!mc.caps.sortRun;
+        const all = [...this.materialSortItemMap(mc.treeId).values()];
+        // The scopes (spec 102 §2): the one it came from first; every file without a title or a person always.
+        const base: SortScope = target.selection ? 'selection' : target.batch ? 'batch' : 'all';
+        const plans = new Map<string, SortNext>();
+        const planOf = (scope: SortScope, withText: boolean): SortNext => {
+            const key = `${scope}:${withText}`;
+            const known = plans.get(key);
+            if (known) return known;
+            const from = scope === 'selection' || scope === 'batch' ? target.items : all;
+            // A batch's files come with the target: over them as over everything.
+            let plan = this.materialSortNext(from, { scope: scope === 'selection' ? 'selection' : 'all', all, withText });
+            if (!runs || scope === 'first') {
+                const first = plan.batches.slice(0, 1);
+                plan = { ...plan, batches: first, over: plan.send.length - (first[0]?.length ?? 0) };
+            }
+            plans.set(key, plan);
+            return plan;
+        };
+        const filesOf = (p: SortNext) => p.batches.flat();
+        // The research cuts a run 50 to a batch, in the order sent.
+        const batchesOf = (p: SortNext) => sortRunBatches(filesOf(p).map(i => i.file!.id)).length;
+        const candidates = (p: SortNext) => p.send.length + p.skipped.copies.length + p.skipped.text.length + p.skipped.sources.length + p.skipped.left.length;
+        if (!filesOf(planOf(base, false)).length && !filesOf(planOf(base, true)).length) return;
+        const scopes: SortScope[] = base === 'all' ? ['all'] : [base, 'all'];
+        // Many batches: First 50 only, to try (§12).
+        if (runs && batchesOf(planOf('all', false)) > SORT_MANY_BATCHES) scopes.splice(scopes.indexOf('all') + 1, 0, 'first');
+        const marks = this.materialSortMarks(all);
+        const flagged = (i: MaterialItem) => marks.copyOf.has(i.file!.id) || (!!mc.caps.sourceOf && !!i.file!.uses?.of?.length);
+
+        let scope: SortScope = base;
+        let withText = false;
+        let open = false;
+        const dialog = materialDialog({ title: s.title(0), sub: ' ', modifier: 'sort' });
         dialog.box.classList.add('mdlg--sort');
+        const title = dialog.box.querySelector<HTMLElement>('.mdlg-title')!;
+        const sub = dialog.box.querySelector<HTMLElement>('.mdlg-sub')!;
+
+        const set = h('fieldset', 'mdlg-radios mdlg-scopes');
+        set.appendChild(h('legend', '', s.scopeLegend));
+        for (const sc of scopes) {
+            const off = planOf(sc, false);
+            const nb = batchesOf(off);
+            const label = h('label', 'mdlg-scope sel-opt');
+            label.dataset.selForm = 'tile';
+            label.dataset.scope = sc;
+            const input = h('input');
+            input.type = 'radio';
+            input.name = 'mdlg-sort-scope';
+            input.value = sc;
+            input.checked = sc === scope;
+            input.addEventListener('change', () => { if (input.checked) { scope = sc; draw(); } });
+            const name = h('span', 'mdlg-scope-name', sc === 'all' ? s.scopeAll : sc === 'selection' ? s.scopeSel : sc === 'batch' ? s.scopeBatch(target.batch ?? '') : s.scopeFirst);
+            const subText = sc === 'first' ? s.scopeFirstSub : runs && nb > SORT_MANY_BATCHES ? s.scopeRun(nb) : '';
+            if (subText) name.appendChild(h('span', 'mdlg-scope-sub', subText));
+            const n = sc === 'first' ? filesOf(off).length : candidates(off);
+            label.append(input, name, h('span', 'mdlg-scope-n', n.toLocaleString(getCurrentLanguage())));
+            set.appendChild(label);
+        }
+        dialog.body.appendChild(set);
 
         const strip = h('div', 'mdlg-sort-previews');
-        for (const item of send.slice(0, PREVIEWS)) {
-            const tile = previewEl(mc.treeId, item, 'mdlg-sort-preview');
-            tile.title = item.title;
-            strip.appendChild(tile);
-        }
-        if (n > PREVIEWS) strip.appendChild(h('span', 'mdlg-sort-more', s.more(n - PREVIEWS)));
-        dialog.body.appendChild(strip);
-        if (over) dialog.body.appendChild(h('p', 'mdlg-note', s.tooMany(n)));
+        const plan = h('p', 'mdlg-note mdlg-sort-note mdlg-sort-plan');
+        const over = h('p', 'mdlg-note mdlg-sort-over');
+        const big = h('p', 'mdlg-note mdlg-sort-note is-warn mdlg-sort-big');
+        const warn = h('div', 'mdlg-warn mdlg-sort-warn');
+        const left = h('div', 'mdlg-left');
+        dialog.body.append(strip, plan, over, big, warn, left);
 
         const field = h('label', 'mdlg-sort-know');
         field.appendChild(h('span', 'mdlg-sort-know-label', s.know));
@@ -339,11 +392,11 @@ export const materialSortMethods = uiModule({
         dialog.body.appendChild(h('p', 'mdlg-text', s.will));
         dialog.body.appendChild(h('p', 'mdlg-text', s.keep));
         const note = h('p', 'mdlg-note mdlg-sort-note');
-        note.append(h('span', 'mdlg-sort-privacy', s.privacy), document.createTextNode(' '), h('span', 'mdlg-sort-cost', s.cost));
+        const cost = h('span', 'mdlg-sort-cost');
+        note.append(h('span', 'mdlg-sort-privacy', s.privacy), document.createTextNode(' '), cost);
         dialog.body.appendChild(note);
 
         const go = button(s.go, 'is-primary mdlg-sort-go', () => void run());
-        go.innerHTML = researchBridgeActionLabel(s.go, 'material-sort');
         dialog.foot.append(button(strings.buttons.cancel, '', () => dialog.close()), go);
         dialog.box.addEventListener('keydown', e => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -351,6 +404,109 @@ export const materialSortMethods = uiModule({
                 if (!go.disabled) go.click();
             }
         });
+
+        // What is not sent (§2, §4): one sentence; Details says each reason with its action.
+        const drawLeft = (p: SortNext, text: number) => {
+            left.replaceChildren();
+            const k = p.skipped;
+            const total = k.copies.length + k.text.length + k.sources.length + k.left.length;
+            left.hidden = !total && !text;
+            if (total) {
+                const head = h('div', 'mdlg-left-head');
+                const sum = h('span', 'mdlg-left-sum');
+                sum.appendChild(h('b', '', open ? s.leftHead(total) : `${s.leftHead(total)}:`));
+                if (!open) sum.append(' ', s.leftShort(k.copies.length, k.text.length, k.sources.length, k.left.length));
+                const toggle = h('button', 'link-button mdlg-left-toggle', open ? s.detailsHide : s.details);
+                toggle.type = 'button';
+                toggle.setAttribute('aria-expanded', String(open));
+                toggle.setAttribute('aria-controls', 'mdlg-left-list');
+                toggle.addEventListener('click', () => {
+                    open = !open;
+                    draw();
+                    left.querySelector<HTMLElement>('.mdlg-left-toggle')?.focus();
+                });
+                head.append(sum, toggle);
+                const list = h('div', 'mdlg-left-list');
+                list.id = 'mdlg-left-list';
+                list.hidden = !open;
+                const files = (items: MaterialItem[]) => {
+                    const names = items.slice(0, 5).map(i => i.name);
+                    if (items.length > 5) names.push(s.more(items.length - 5));
+                    list.appendChild(h('span', 'mdlg-left-files', names.join(' · ')));
+                };
+                const row = (text: string, act?: HTMLElement) => list.append(h('span', '', text), act ?? h('span'));
+                const link = (label: string, cls: string, act: () => void) => {
+                    const b = h('button', `link-button ${cls}`, label);
+                    b.type = 'button';
+                    b.addEventListener('click', act);
+                    return b;
+                };
+                const readOnly = DataManager.isReadOnly();
+                if (k.copies.length) {
+                    // The copies hidden as duplicates; the dialog comes back after.
+                    row(s.leftCopies(k.copies.length), readOnly ? undefined : link(s.hideCopies(k.copies.length), 'mdlg-left-hide',
+                        () => { dialog.close(); this.materialAction('hide', k.copies, { where: 'window', hideReason: 'duplicate', back: () => this.openSortDialog(target) }); }));
+                    files(k.copies);
+                }
+                if (k.text.length) { row(s.leftText(k.text.length)); files(k.text); }
+                if (k.sources.length) row(s.leftSources(k.sources.length));
+                if (k.left.length) {
+                    row(s.leftLeft(k.left.length), materialsWindowOpen()
+                        ? link(s.showLeft, 'mdlg-left-show', () => { dialog.close(); this.mwShowLeft(); }) : undefined);
+                }
+                left.append(head, list);
+            }
+            if (text) {
+                const check = h('label', 'mdlg-check mdlg-sort-withtext');
+                const input = h('input');
+                input.type = 'checkbox';
+                input.checked = withText;
+                input.addEventListener('change', () => {
+                    withText = input.checked;
+                    draw();
+                    left.querySelector<HTMLInputElement>('.mdlg-sort-withtext input')?.focus();
+                });
+                const words = h('span', 'mdlg-check-text');
+                words.append(h('span', '', s.withText(text)), h('span', 'mdlg-check-hint', s.withTextHint));
+                check.append(input, words);
+                left.appendChild(check);
+            }
+        };
+
+        const draw = () => {
+            const p = planOf(scope, withText);
+            const off = planOf(scope, false);
+            const files = filesOf(p);
+            const n = files.length;
+            const nb = batchesOf(p);
+            title.textContent = s.title(n);
+            sub.textContent = scope === 'selection' ? s.what(n, null)
+                : scope === 'batch' ? s.what(candidates(off), target.batch) : s.stripWhole(candidates(planOf('all', false)));
+            strip.replaceChildren();
+            for (const item of files.slice(0, PREVIEWS)) {
+                const tile = previewEl(mc.treeId, item, 'mdlg-sort-preview');
+                tile.title = item.title;
+                strip.appendChild(tile);
+            }
+            if (n > PREVIEWS) strip.appendChild(h('span', 'mdlg-sort-more', s.more(n - PREVIEWS)));
+            plan.textContent = nb > 1 ? s.plan(n, nb) : s.planOne(n);
+            plan.hidden = !n;
+            // Over 30 batches the rest is for the next sorting; an older research takes 50 at once.
+            over.textContent = scope === 'first' || !p.over ? '' : runs ? s.overRun(n) : s.olderRun;
+            over.hidden = !over.textContent;
+            big.textContent = nb > SORT_MANY_BATCHES ? s.costBig(nb) : '';
+            big.hidden = !big.textContent;
+            // A selection sends everything selected; copies and sources' files are said.
+            const odd = scope === 'selection' ? files.filter(flagged).length : 0;
+            warn.replaceChildren(...(odd ? [h('p', 'mdlg-warn-text', s.selWarn(odd))] : []));
+            warn.hidden = !odd;
+            drawLeft(p, off.skipped.text.length);
+            cost.textContent = nb > SORT_MANY_BATCHES ? '' : nb > 1 ? s.costRun(nb) : s.cost;
+            const label = nb > 1 ? s.goRun(nb) : s.go;
+            go.innerHTML = researchBridgeActionLabel(label, 'material-sort');
+            go.disabled = !n;
+        };
+        draw();
         area.focus();
 
         let sent = false;
@@ -361,12 +517,19 @@ export const materialSortMethods = uiModule({
                 dialog.error(s.offRun);
                 return;
             }
+            const ids = filesOf(planOf(scope, withText)).map(i => i.file!.id);
+            const batches = sortRunBatches(ids);
+            const many = batches.length > 1;
+            if (!ids.length) return;
+            if (many && !now.caps.sortRun) {
+                dialog.error(s.older);
+                return;
+            }
             sent = true;
             dialog.busy(true, strings.busy.sending);
             dialog.error(null);
-            const ids = send.map(i => i.file!.id);
             const text = area.value.trim().slice(0, SORT_MAX_TEXT);
-            const res = await startMaterialSort(now.base, { ids, text });
+            const res = await startMaterialSort(now.base, { ids: batches.flat(), text, ...(many ? { run: true } : {}) });
             dialog.busy(false);
             if (!res.ok) {
                 sent = false;
@@ -374,8 +537,12 @@ export const materialSortMethods = uiModule({
                 return;
             }
             const remembered: ResearchSortRemembered = {
-                id: res.value.id, files: ids, text, at: new Date().toISOString(), decided: {},
-                ...(target.batch ? { batch: target.batch } : {}),
+                id: res.value.id, files: batches[0], text, at: new Date().toISOString(), decided: {},
+                ...(scope === 'batch' && target.batch ? { batch: target.batch } : {}),
+                // A run (spec 102 §3): the research keeps it; the app reads how far it is.
+                ...(many && res.value.run && res.value.parts ? {
+                    run: { id: res.value.run, batches, sorts: res.value.parts.slice(0, batches.length), next: 0, scope: scope === 'first' ? 'all' : scope },
+                } : {}),
             };
             // A new sorting: the last proposal's "Done: …" line goes.
             patchResearchAutoState(now.treeId, { materialSort: remembered, sortClosed: undefined });
@@ -749,10 +916,10 @@ export const materialSortMethods = uiModule({
         };
         // The window steps aside for a dialog that brings it back (it does not close the proposal then).
         let handover = false;
-        const hide = (items: MaterialItem[]) => {
+        const hide = (items: MaterialItem[], hideReason?: 'duplicate') => {
             if (!items.length) return;
             handover = true;
-            this.materialAction('hide', items, { where: 'window', back: reopen });
+            this.materialAction('hide', items, { where: 'window', back: reopen, ...(hideReason ? { hideReason } : {}) });
         };
         /** Hide… and Restore here: the research's write on material, while it runs. */
         const hideCan = (): 'yes' | 'off' | null => {
@@ -1057,6 +1224,20 @@ export const materialSortMethods = uiModule({
                 if (gate === 'offRun') { go.disabled = true; go.title = s.offRun; }
                 acts.appendChild(go);
                 if (fifty) acts.appendChild(h('p', 'mdlg-note', s.olderRun));
+            }
+            // The copies of the files sent that were not sent themselves (§2, §5): hidden as duplicates from here.
+            const known = [...this.materialSortItemMap(mc.treeId).values()];
+            const copyOf = this.materialSortMarks(known).copyOf;
+            const sentIds = new Set(r.run ? r.run.batches.flat() : r.files);
+            const copies = known.filter(i => !i.hidden && !!i.file && sentIds.has(copyOf.get(i.file.id) ?? '') && !i.attachment?.places?.length);
+            if (copies.length) {
+                const { acts } = sec(s.copiesLine(copies.length));
+                const can = readOnly ? null : hideCan();
+                if (can) {
+                    const b = button(s.hideCopies(copies.length), 'msp-hide-copies', () => hide(copies, 'duplicate'));
+                    b.disabled = can === 'off';
+                    acts.appendChild(b);
+                } else acts.remove();
             }
             if (unassigned.length) {
                 const { el, acts } = sec(s.leftLine(unassigned.length), s.leftNote);

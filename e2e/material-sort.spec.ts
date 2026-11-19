@@ -1089,3 +1089,212 @@ test.describe('What the next sorting sends and the proposal\'s own chips (spec 1
         await expect(page.locator('.pe-overlay')).toHaveCount(0);
     });
 });
+
+/**
+ * The dialog's scope and batches (spec 102 §2): what to sort as tiles of the
+ * Line, each with its count; what is sent in how many batches and what it
+ * costs; what is not sent (copies, text and data files, sources' files, what
+ * the agent left unassigned) in one sentence with its details and actions;
+ * text and data files only when asked. Behind material.sortRun a run of
+ * batches; without it one batch of 50, as before. Invented data.
+ */
+test.describe('Sort with the agent: the dialog\'s scope and batches (spec 102 §2)', () => {
+    test.use({ viewport: DESKTOP });
+    const RUN = [...SORT_FEATURES, 'material.sortRun', 'material.left', 'material.sourceOf'];
+    const OTHER = { id: 'b-87654321', name: 'Dopisy Quellmayer', at: '2026-11-12T09:00:00Z' };
+    /** n photos without a title or a person in the batch OTHER, from I0100. */
+    const photos = (n: number) => Array.from({ length: n }, (_, i) => materialFile(100 + i, { batch: OTHER.id, path: `Talvanen/${String(i).padStart(4, '0')}.jpg` }));
+    /** A copy, a text file, a source's file, one the agent left: none of them goes by itself. */
+    const odd = (): FakeMaterialFile[] => [
+        materialFile(4, { batch: BATCH.id, left: { at: '2026-11-18T10:00:00Z', why: 'nothing-said' } }),
+        materialFile(5, { batch: BATCH.id, sha: materialSha('I0001'), name: 'scan-1 (1).jpg' }),
+        materialFile(6, { batch: BATCH.id, name: 'notes-Talvanen.md', mime: 'text/markdown' }),
+        materialFile(7, { batch: BATCH.id, uses: { excerpts: 0, sources: [], tasks: 0, of: [{ source: 'S0001', via: 'input', title: 'Parish register of Talvany' }] } }),
+    ];
+    const scope = (page: Page, s: string) => sortDialog(page).locator(`.mdlg-scope[data-scope="${s}"]`);
+
+    test('the scope as the Line, the plan in batches, what is not sent with its details; text files only when asked; a run sends once', async ({ page }) => {
+        const material = await setup(page, { features: RUN, batches: [OTHER], files: [...odd(), ...photos(55)] });
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        const d = sortDialog(page);
+        await expect(d.locator('.mdlg-scopes legend')).toHaveText('What to sort');
+        await expect(d.locator('.mdlg-scope')).toHaveCount(1);
+        const all = scope(page, 'all');
+        await expect(all).toHaveClass(/sel-opt/);
+        await expect(all).toHaveAttribute('data-sel-form', 'tile');
+        await expect(all.locator('input[type="radio"]')).toBeChecked();
+        await expect(all.locator('.mdlg-scope-name')).toHaveText('All unsorted');
+        // Every file without a title or a person: the 58 sent and the 4 not.
+        await expect(all.locator('.mdlg-scope-n')).toHaveText('62');
+        await expect(d.locator('.mdlg-title')).toHaveText('Sort with the agent · 58 files');
+        await expect(d.locator('.mdlg-sort-plan')).toHaveText('58 files are sent in 2 batches of at most 50. The batches run one after another; each finished batch’s proposal can be gone through at once.');
+        await expect(d.locator('.mdlg-sort-cost')).toHaveText('Each batch uses the subscription or credit: 2 batches.');
+        await expect(d.locator('.mdlg-sort-big')).toBeHidden();
+        const go = d.locator('.mdlg-sort-go');
+        await expect(go).toContainText('Sort with the agent · 2 batches');
+        await expect(go.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(go.locator('.research-open-mark')).toHaveCount(0);
+
+        // What is not sent: one sentence, its details on demand.
+        const left = d.locator('.mdlg-left');
+        await expect(left.locator('.mdlg-left-sum')).toHaveText('4 not sent: 1 copy · 1 text and data · 1 file of a source · 1 left unassigned');
+        const toggle = left.locator('.mdlg-left-toggle');
+        await expect(toggle).toHaveText('Details');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(left.locator('.mdlg-left-list')).toBeHidden();
+        await toggle.click();
+        await expect(left.locator('.mdlg-left-toggle')).toHaveText('Hide details');
+        await expect(left.locator('.mdlg-left-toggle')).toHaveAttribute('aria-expanded', 'true');
+        await expect(left.locator('.mdlg-left-toggle')).toBeFocused();
+        const list = left.locator('.mdlg-left-list');
+        await expect(list).toContainText('1 copy with the same content (only one is sent)');
+        await expect(list).toContainText('scan-1 (1).jpg');
+        await expect(list).toContainText('1 text and data file (.md, .txt, .json, .csv)');
+        await expect(list).toContainText('notes-Talvanen.md');
+        await expect(list).toContainText('1 is the file of a source');
+        await expect(list).toContainText('1 left unassigned by the agent last time');
+        await expect(list.locator('.mdlg-left-hide')).toHaveText('Hide as Duplicate (1)…');
+        await expect(list.locator('.mdlg-left-show')).toHaveText('Show in Materials');
+
+        // Text and data files: only when asked, last.
+        const withText = left.locator('.mdlg-sort-withtext');
+        await expect(withText).toContainText('Send text and data files too (1)');
+        await expect(withText).toContainText('They go last, after photos and scans.');
+        await withText.locator('input').check();
+        await expect(d.locator('.mdlg-title')).toHaveText('Sort with the agent · 59 files');
+        await expect(left.locator('.mdlg-left-sum')).toHaveText('3 not sent');
+        await expect(withText.locator('input')).toBeFocused();
+        await withText.locator('input').uncheck();
+        await expect(d.locator('.mdlg-title')).toHaveText('Sort with the agent · 58 files');
+
+        // Hide as Duplicate: the hide dialog with Duplicate chosen; cancelled, the sorting's dialog comes back.
+        await list.locator('.mdlg-left-hide').click();
+        const hide = page.locator('.mdlg', { hasText: 'Reason' });
+        await expect(hide.locator('input[value="duplicate"]')).toBeChecked();
+        await hide.getByRole('button', { name: 'Cancel', exact: true }).click();
+        await expect(d.locator('.mdlg-title')).toHaveText('Sort with the agent · 58 files');
+        // Show in Materials: the filter of the files the agent left.
+        await d.locator('.mdlg-left-toggle').click();
+        await d.locator('.mdlg-left-show').click();
+        await expect(d).toHaveCount(0);
+        await expect(win(page).locator('.mw-toggle[data-mw="left"]')).toHaveAttribute('aria-pressed', 'true');
+        await win(page).locator('.mw-toggle[data-mw="left"]').click();
+
+        // Sent: one POST of the whole run, nothing that was not to go.
+        await strip(page).locator('[data-sort="sort"]').click();
+        await d.locator('.mdlg-sort-go').click();
+        await expect.poll(() => material.sorts?.length).toBe(1);
+        const ids = material.sorts![0].ids as string[];
+        expect(ids).toHaveLength(58);
+        expect(ids).not.toEqual(expect.arrayContaining(['I0004']));
+        for (const no of ['I0004', 'I0005', 'I0006', 'I0007']) expect(ids).not.toContain(no);
+        expect(material.sortRuns?.size).toBe(1);
+    });
+
+    test('a selection first, everything beside it; copies and sources\' files selected are said and sent; a batch\'s scope from its menu', async ({ page }) => {
+        await setup(page, { features: RUN, batches: [OTHER], files: [...odd(), ...photos(3)] });
+        await openWindow(page);
+        await win(page).locator('.mw-canvas .mw-tile').first().focus();
+        await page.keyboard.press('ControlOrMeta+a');
+        await win(page).locator('.mw-selbar [data-mw="sel-sort"]').click();
+        const d = sortDialog(page);
+        await expect(d.locator('.mdlg-scope')).toHaveCount(2);
+        await expect(d.locator('.mdlg-scope').first()).toHaveAttribute('data-scope', 'selection');
+        await expect(scope(page, 'selection').locator('.mdlg-scope-name')).toHaveText('Selected only');
+        await expect(scope(page, 'selection').locator('input')).toBeChecked();
+        await expect(scope(page, 'selection').locator('.mdlg-scope-n')).toHaveText('10');
+        await expect(d.locator('.mdlg-title')).toHaveText('Sort with the agent · 10 files');
+        await expect(d.locator('.mdlg-sort-plan')).toHaveText('10 files are sent in 1 batch.');
+        // The copy and the source's file go too, and the dialog says so.
+        await expect(d.locator('.mdlg-sort-warn')).toHaveText('2 selected files have the same content as others or are the file of a source. They are sent too.');
+        await expect(d.locator('.mdlg-left')).toBeHidden();
+        await expect(d.locator('.mdlg-sort-go')).toContainText('Sort with the agent');
+        await expect(d.locator('.mdlg-sort-go')).not.toContainText('·');
+        // Arrows move between the scopes as in a radio group.
+        await scope(page, 'selection').locator('input').focus();
+        await page.keyboard.press('ArrowDown');
+        await expect(scope(page, 'all').locator('input')).toBeChecked();
+        await expect(d.locator('.mdlg-title')).toHaveText('Sort with the agent · 6 files');
+        await expect(d.locator('.mdlg-sort-warn')).toBeHidden();
+        await expect(d.locator('.mdlg-left')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+
+        // A batch's ⋯: its scope first, its name in it.
+        await win(page).locator('.mw-canvas .mw-group', { hasText: OTHER.name }).locator('[data-mw="batch-menu"]').click();
+        await page.locator('.mw-pop-batchMenu [data-action="sort"]').click();
+        await expect(d.locator('.mdlg-scope').first()).toHaveAttribute('data-scope', 'batch');
+        await expect(scope(page, 'batch').locator('.mdlg-scope-name')).toHaveText('Batch “Dopisy Quellmayer” only');
+        await expect(scope(page, 'batch').locator('.mdlg-scope-n')).toHaveText('3');
+        await expect(d.locator('.mdlg-title')).toHaveText('Sort with the agent · 3 files');
+    });
+
+    test('many batches: the cost said loudly and First 50 only to try; over 1,500 the rest is for the next sorting', async ({ page }) => {
+        const material = await setup(page, { features: RUN, batches: [OTHER], files: photos(1530) });
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        const d = sortDialog(page);
+        await expect(d.locator('.mdlg-scope')).toHaveCount(2);
+        await expect(scope(page, 'all').locator('.mdlg-scope-sub')).toHaveText('30 batches of 50');
+        await expect(scope(page, 'first').locator('.mdlg-scope-name')).toContainText('First 50 only');
+        await expect(scope(page, 'first').locator('.mdlg-scope-sub')).toHaveText('1 batch; the rest later with “Sort the next”');
+        await expect(scope(page, 'first').locator('.mdlg-scope-n')).toHaveText('50');
+        await expect(d.locator('.mdlg-title')).toHaveText('Sort with the agent · 1,500 files');
+        await expect(d.locator('.mdlg-sort-big')).toHaveText('30 batches: each uses the subscription or credit. If the limit runs out, the run stops and finished proposals stay. “First 50 only” is enough to try.');
+        await expect(d.locator('.mdlg-sort-big')).toHaveClass(/is-warn/);
+        await expect(d.locator('.mdlg-sort-over')).toHaveText('The first 30 batches (1,500 files) are sent; the rest later with “Sort the next”.');
+        await expect(d.locator('.mdlg-sort-cost')).toHaveText('');
+        await expect(d.locator('.mdlg-sort-go')).toContainText('Sort with the agent · 30 batches');
+        await scope(page, 'first').click();
+        await expect(d.locator('.mdlg-title')).toHaveText('Sort with the agent · 50 files');
+        await expect(d.locator('.mdlg-sort-big')).toBeHidden();
+        await expect(d.locator('.mdlg-sort-over')).toBeHidden();
+        await expect(d.locator('.mdlg-sort-cost')).toHaveText('Uses the subscription or credit.');
+        await d.locator('.mdlg-sort-go').click();
+        await expect.poll(() => material.sorts?.length).toBe(1);
+        expect(material.sorts![0].ids as string[]).toHaveLength(50);
+        expect(material.sortRuns?.size ?? 0).toBe(0);
+    });
+
+    test('without the research\'s run: one batch of 50 as before, the rest for the next sorting', async ({ page }) => {
+        const material = await setup(page, { batches: [OTHER], files: photos(55) });
+        await openWindow(page);
+        await strip(page).locator('[data-sort="sort"]').click();
+        const d = sortDialog(page);
+        await expect(scope(page, 'all').locator('.mdlg-scope-n')).toHaveText('58');
+        await expect(d.locator('.mdlg-title')).toHaveText('Sort with the agent · 50 files');
+        await expect(d.locator('.mdlg-sort-plan')).toHaveText('50 files are sent in 1 batch.');
+        await expect(d.locator('.mdlg-sort-over')).toHaveText('The agent takes at most 50 files at once. A newer version of the research sorts in batches.');
+        await expect(scope(page, 'first')).toHaveCount(0);
+        await expect(d.locator('.mdlg-sort-go')).toContainText('Sort with the agent');
+        await expect(d.locator('.mdlg-sort-go')).not.toContainText('·');
+        await d.locator('.mdlg-sort-go').click();
+        await expect.poll(() => material.sorts?.length).toBe(1);
+        expect(material.sorts![0].ids as string[]).toHaveLength(50);
+    });
+
+    test.describe('on a phone (390 px)', () => {
+        test.use({ viewport: { width: 390, height: 844 } });
+
+        test('the dialog from below in German: the scope tiles 44 px, nothing wider than the screen', async ({ page }) => {
+            await setup(page, { features: RUN, batches: [OTHER], files: [...odd(), ...photos(55)] });
+            await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+            await openWindow(page);
+            await page.evaluate(() => (window.Strom.UI as unknown as { openSortDialog(t: unknown): void }).openSortDialog({ items: [], batch: null, whole: true }));
+            const d = sortDialog(page);
+            await expect(d.locator('.mdlg-title')).toHaveText('Mit dem Agenten sortieren · 58 Dateien');
+            await expect(scope(page, 'all').locator('.mdlg-scope-name')).toHaveText('Alle nicht eingeordneten');
+            await expect(d.locator('.mdlg-left-sum')).toHaveText('4 werden nicht gesendet: 1 Kopie · 1 Text und Daten · 1 Datei einer Quelle · 1 nicht zugeordnet');
+            await d.locator('.mdlg-left-toggle').click();
+            await expect(d.locator('.mdlg-left-hide')).toHaveText('Als Duplikat ausblenden (1)…');
+            const box = await d.boundingBox();
+            expect(box!.x).toBeGreaterThanOrEqual(0);
+            expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+            const wide = await d.evaluate(el => [...el.querySelectorAll('*')].filter(x => (x as HTMLElement).scrollWidth > (x as HTMLElement).clientWidth + 1 && getComputedStyle(x).overflowX !== 'visible').length);
+            expect(wide).toBe(0);
+            expect((await scope(page, 'all').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            await expect(d.locator('.mdlg-sort-go')).toContainText('Mit dem Agenten sortieren · 2 Stapel');
+        });
+    });
+});

@@ -90,6 +90,8 @@ export interface MaterialActionCtx {
      * toast: the text, "Try again" when it may help, one more way (Reload, the research's own way).
      */
     refused?: (end: MaterialRefusal) => void;
+    /** Hide…: the reason chosen first (the sorting's copies: Duplicate, spec 102 §2). */
+    hideReason?: 'unrelated' | 'duplicate';
 }
 
 /** A refused write's end at its element (`retry`: "Try again"; `alt`: one more action with its research mark). */

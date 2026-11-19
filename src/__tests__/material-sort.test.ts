@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseSortJob, parseMaterialFile, startMaterialSort, type MaterialItem, type SortLink } from '../materials.js';
-import { sortNeeds, sortNeedy, sortNext, sortLeftMap, sortCopyOf, sortIsText, SORT_MAX_BATCHES, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, sortBackRow, parseSortRevert, sortUnrelatedHideable, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
+import { parseSortJob, parseMaterialFile, startMaterialSort, parseSortRun, type MaterialItem, type SortLink } from '../materials.js';
+import { sortNeeds, sortNeedy, sortNext, sortLeftMap, sortCopyOf, sortIsText, SORT_MAX_BATCHES, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, sortBackRow, parseSortRevert, sortUnrelatedHideable, sortRunBatches, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
 import type { PartnershipId } from '../types.js';
 import type { Attachment, PersonId } from '../types.js';
 
@@ -560,5 +560,54 @@ describe('the back side and the portrait as chips of a proposal (spec 102 §10)'
         const edited = sortBackRow(row, rub, { edit: { title: 'Svatba 1924' } })!;
         expect(sortWrite(edited.row, edited.choice)!.title).toEqual({ value: 'Svatba 1924 (rub)', by: 'user' });
         expect(sortBackRow({ ...row, back: undefined }, rub)).toBeNull();
+    });
+});
+
+describe('a run of batches (spec 102 §3, material.sortRun)', () => {
+    const ids = (n: number, from = 1) => Array.from({ length: n }, (_, i) => `I${String(i + from).padStart(4, '0')}`);
+
+    it('the research cuts the files 50 to a batch in their order, at most 30 batches', () => {
+        expect(sortRunBatches(ids(116)).map(b => b.length)).toEqual([50, 50, 16]);
+        expect(sortRunBatches(ids(116))[1][0]).toBe('I0051');
+        expect(sortRunBatches(ids(12))).toEqual([ids(12)]);
+        expect(sortRunBatches([])).toEqual([]);
+        expect(sortRunBatches(ids(1600))).toHaveLength(SORT_MAX_BATCHES);
+    });
+
+    it('over 50 files only as a run: its id and its batches\' sortings come back, a run without them is refused', async () => {
+        const calls: { url: string; body: unknown }[] = [];
+        let answer: Record<string, unknown> = { id: 'sort-20261119080000-0001', state: 'queued', run: 'run-20261119080000-ab12', parts: ['sort-20261119080000-0001', 'sort-20261119080000-0002', 'sort-20261119080000-0003'] };
+        const fetchImpl = async (url: string, init?: RequestInit) => {
+            calls.push({ url, body: JSON.parse(String(init?.body ?? '{}')) });
+            return new Response(JSON.stringify(answer), { status: 202 });
+        };
+        // Without the run's word the app sends at most 50 (an older research).
+        expect((await startMaterialSort('http://b/x', { ids: ids(116), text: '' }, { fetchImpl })).ok).toBe(false);
+        expect(calls).toHaveLength(0);
+        const res = await startMaterialSort('http://b/x', { ids: ids(116), text: 'Talvanen box', run: true }, { fetchImpl });
+        expect(res.ok && res.value).toEqual({ id: 'sort-20261119080000-0001', state: 'queued', run: 'run-20261119080000-ab12', parts: ['sort-20261119080000-0001', 'sort-20261119080000-0002', 'sort-20261119080000-0003'] });
+        expect((calls[0].body as { ids: string[] }).ids).toHaveLength(116);
+        expect((await startMaterialSort('http://b/x', { ids: ids(1501), text: '', run: true }, { fetchImpl })).ok).toBe(false);
+        answer = { id: 'sort-20261119080000-0001', state: 'queued' };
+        expect((await startMaterialSort('http://b/x', { ids: ids(116), text: '', run: true }, { fetchImpl })).ok).toBe(false);
+    });
+
+    it('reads a run: its parts in order, how far, why it waits; a sorting\'s id is not a run', () => {
+        const run = parseSortRun({
+            id: 'run-20261119080000-ab12', run: true, state: 'working', files: 116, filesDone: 62,
+            parts: [
+                { id: 'sort-b', part: 2, state: 'working', files: 50, filesDone: 12 },
+                { id: 'sort-a', part: 1, state: 'done', files: 50, filesDone: 50 },
+                { id: 'sort-c', part: 3, state: 'queued', files: 16 },
+                { id: 'nonsense', part: 4, state: 'queued', files: 1 },
+            ],
+            waiting: { why: 'read.app', retry: 60 },
+        });
+        expect(run?.parts.map(p => p.id)).toEqual(['sort-a', 'sort-b', 'sort-c']);
+        expect(run?.parts[2].filesDone).toBeUndefined();
+        expect(run?.filesDone).toBe(62);
+        expect(run?.waiting).toEqual({ why: 'read.app', retry: 60 });
+        expect(parseSortRun({ id: 'sort-20261119080000-0001', state: 'done', parts: [] })).toBeNull();
+        expect(parseSortRun({ id: 'run-1', state: 'whatever', parts: [] })).toBeNull();
     });
 });

@@ -1418,7 +1418,18 @@ export interface FakeMaterial {
     /** Every sorting cancelled (`POST /material/sort/<id>/cancel`). */
     cancels?: string[];
     /** The sortings, by id; a new one starts `working` (or `done` with `sortDoneAt` 0). */
-    sortJobs?: Map<string, { id: string; state: string; files: string[]; at: string; polls: number; proposals?: unknown[]; reason?: string; filesDone?: number; unproposed?: unknown[] }>;
+    sortJobs?: Map<string, { id: string; state: string; files: string[]; at: string; polls: number; proposals?: unknown[]; reason?: string; filesDone?: number; unproposed?: unknown[]; run?: string; part?: number; parts?: number }>;
+    /**
+     * Runs of batches (`material.sortRun`, spec 102 §3): `POST /material/sort` with 51–1500 files; each batch of 50
+     * is a sorting of `sortJobs`. Each GET of the run moves it one step: the next batch starts (12 files judged),
+     * then ends; `sortRunHold` keeps it where it is.
+     */
+    sortRuns?: Map<string, { id: string; parts: string[] }>;
+    sortRunHold?: boolean;
+    /** The batch (1…) of a run that fails: the readers' limit. */
+    sortRunFail?: number;
+    /** Every run cancelled (`POST /material/sort/<run-…>/cancel`). */
+    runCancels?: string[];
     /** What the agent proposes for each sorting (by default none: every file unassigned). */
     sortProposals?: Record<string, unknown>[];
     /** The sorting is done after this many GETs (default 1). */
@@ -1597,10 +1608,53 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
             }
             if (m.sortRefuse) return refusal(429, m.sortRefuse);
             const files = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === 'string') : [];
-            if (!files.length || files.length > 50 || files.some(f => !m.files.some(x => x.id === f))) return refusal(400, 'sort.ids');
+            const most = features.includes('material.sortRun') ? 1500 : 50;
+            if (!files.length || files.length > most || files.some(f => !m.files.some(x => x.id === f))) return refusal(400, 'sort.ids');
+            if (files.length > 50) {
+                // A run: batches of 50 in the order sent, each its own sorting.
+                const runs = (m.sortRuns ??= new Map());
+                const runId = `run-20261117120000-${String(runs.size + 1).padStart(4, '0')}`;
+                const parts: string[] = [];
+                const n = Math.ceil(files.length / 50);
+                for (let k = 0; k < n; k++) {
+                    const part = { id: `sort-20261117120000-${String(jobs.size + 1).padStart(4, '0')}`, state: 'queued', files: files.slice(k * 50, k * 50 + 50), at: '2026-11-17T12:00:00Z', polls: 0, run: runId, part: k + 1, parts: n };
+                    jobs.set(part.id, part);
+                    parts.push(part.id);
+                }
+                runs.set(runId, { id: runId, parts });
+                return { status: 202, body: { id: parts[0], state: 'queued', run: runId, parts } };
+            }
             const job = { id: `sort-20261117120000-${String(jobs.size + 1).padStart(4, '0')}`, state: m.sortDoneAt === 0 ? 'done' : 'queued', files, at: '2026-11-17T12:00:00Z', polls: 0 };
             jobs.set(job.id, job);
             return { status: 202, body: { id: job.id, state: job.state } };
+        }
+        const run = m.sortRuns?.get(id);
+        if (run) {
+            const parts = run.parts.map(p => jobs.get(p)!);
+            const live = (j: { state: string }) => j.state === 'queued' || j.state === 'working';
+            const runState = () => parts.some(j => j.state === 'working') ? 'working' : parts.some(j => j.state === 'queued') ? 'queued'
+                : parts.some(j => j.state === 'cancelled') ? 'cancelled' : parts.some(j => j.state === 'done') ? 'done' : 'failed';
+            if (cancel) {
+                if (method !== 'POST') return { status: 404, body: '' };
+                (m.runCancels ??= []).push(id);
+                let stopped = false;
+                for (const j of parts) if (live(j)) { j.state = 'cancelled'; stopped = true; }
+                return { status: 200, body: { id, state: runState(), cancelled: stopped } };
+            }
+            if (method !== 'GET') return { status: 404, body: '' };
+            const at = parts.find(live);
+            if (at && !m.sortRunHold) {
+                if (at.state === 'queued') { at.state = 'working'; at.filesDone = Math.min(12, at.files.length); }
+                else if (m.sortRunFail === at.part) { at.state = 'failed'; at.reason = 'The readers’ limit is used up.'; }
+                else { at.state = 'done'; at.filesDone = at.files.length; }
+            }
+            const done = (j: typeof parts[number]) => j.state === 'done' ? j.files.length : j.filesDone ?? 0;
+            return {
+                status: 200, body: {
+                    id, run: true, state: runState(), files: parts.reduce((t, j) => t + j.files.length, 0), filesDone: parts.reduce((t, j) => t + done(j), 0),
+                    parts: parts.map(j => ({ id: j.id, part: j.part, state: j.state, files: j.files.length, ...(j.filesDone !== undefined ? { filesDone: j.filesDone } : {}) })),
+                },
+            };
         }
         const job = jobs.get(id);
         if (!job) return refusal(404, 'sort.none');
@@ -1612,9 +1666,11 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         }
         if (method !== 'GET') return { status: 404, body: '' };
         job.polls++;
-        if ((job.state === 'queued' || job.state === 'working') && job.polls >= (m.sortDoneAt ?? 1)) job.state = 'done';
+        // A batch of a run moves with its run's GETs.
+        if (job.run) { /* as the run says */ }
+        else if ((job.state === 'queued' || job.state === 'working') && job.polls >= (m.sortDoneAt ?? 1)) job.state = 'done';
         else if (job.state === 'queued') job.state = 'working';
-        if (job.state === 'working' && m.sortFilesDone !== undefined) job.filesDone = m.sortFilesDone;
+        if (job.state === 'working' && m.sortFilesDone !== undefined && !job.run) job.filesDone = m.sortFilesDone;
         if (job.state === 'working' && m.sortWorkingProposals) {
             job.proposals = (m.sortProposals ?? []).filter(p => job.files.includes(String(p.id))).slice(0, m.sortWorkingProposals);
         }

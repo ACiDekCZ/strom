@@ -1447,15 +1447,22 @@ export function parseSortJob(raw: unknown): SortJob | null {
  * Start the agent's sorting (`POST /material/sort {ids, text}`). Sent once
  * (never retried quietly): it uses the subscription or credit.
  */
-export async function startMaterialSort(base: string, req: { ids: string[]; text: string }, opts: BridgeOptions = {}): Promise<MaterialResult<{ id: string; state: SortState }>> {
-    if (!req.ids.length || req.ids.length > SORT_MAX_FILES || !req.ids.every(f => FILE_ID.test(f))) return bodyError();
+export async function startMaterialSort(base: string, req: { ids: string[]; text: string; run?: boolean }, opts: BridgeOptions = {}): Promise<MaterialResult<{ id: string; state: SortState; run?: string; parts?: string[] }>> {
+    // Over 50 files only as a run of batches (behind material.sortRun, spec 102 §3).
+    const most = req.run ? SORT_RUN_MAX_FILES : SORT_MAX_FILES;
+    if (!req.ids.length || req.ids.length > most || !req.ids.every(f => FILE_ID.test(f))) return bodyError();
     const text = req.text.slice(0, SORT_MAX_TEXT);
     const answer = await request(withAppVersion(`${base}/material/sort`), postInit({ ids: req.ids, text }), opts);
     if ('kind' in answer) return { ok: false, error: answer };
     if ((answer.status === 202 || answer.status === 200) && answer.body && typeof answer.body === 'object') {
         const b = answer.body as Record<string, unknown>;
-        if (isSortId(b.id)) return { ok: true, value: { id: b.id, state: SORT_STATES.includes(b.state as SortState) ? b.state as SortState : 'queued' } };
-        return bodyError();
+        if (!isSortId(b.id)) return bodyError();
+        const state = SORT_STATES.includes(b.state as SortState) ? b.state as SortState : 'queued';
+        if (req.ids.length <= SORT_MAX_FILES) return { ok: true, value: { id: b.id, state } };
+        // A run: its id and the sortings of its batches, in order (the first is `id`).
+        const parts = Array.isArray(b.parts) ? b.parts.filter(isSortId) : [];
+        if (!isRunId(b.run) || !parts.length || parts[0] !== b.id) return bodyError();
+        return { ok: true, value: { id: b.id, state, run: b.run, parts } };
     }
     return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
 }
@@ -1475,6 +1482,81 @@ export async function fetchMaterialSort(base: string, id: string, opts: BridgeOp
 /** Stop a sorting (`POST /material/sort/<id>/cancel`). */
 export async function cancelMaterialSort(base: string, id: string, opts: BridgeOptions = {}): Promise<MaterialResult<true>> {
     if (!isSortId(id)) return bodyError();
+    const answer = await request(withAppVersion(`${base}/material/sort/${encodeURIComponent(id)}/cancel`), postInit({}), opts);
+    if ('kind' in answer) return { ok: false, error: answer };
+    if (answer.status >= 200 && answer.status < 300) return { ok: true, value: true };
+    return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+}
+
+/** One batch of a run as the run says it (spec 102 §3). */
+export interface SortRunPart {
+    id: string;
+    /** 1…n */
+    part: number;
+    state: SortState;
+    files: number;
+    filesDone?: number;
+}
+
+/** A run of batches (`GET /material/sort/<run-…>`, behind material.sortRun). */
+export interface SortRunState {
+    id: string;
+    state: SortState;
+    files: number;
+    filesDone: number;
+    parts: SortRunPart[];
+    /** Why a batch waits to start (the readers' limit, read.app…) and when it tries again (s). */
+    waiting?: { why: string; retry?: number };
+}
+
+const RUN_ID = /^run-[0-9A-Za-z-]{1,60}$/;
+/** The most files one run takes (30 batches of 50). */
+export const SORT_RUN_MAX_FILES = 1500;
+
+export function isRunId(id: unknown): id is string {
+    return typeof id === 'string' && RUN_ID.test(id);
+}
+
+const runCount = (v: unknown): number | undefined => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : undefined;
+
+export function parseSortRun(raw: unknown): SortRunState | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    if (!isRunId(o.id) || !SORT_STATES.includes(o.state as SortState)) return null;
+    const seen = new Set<string>();
+    const parts = (Array.isArray(o.parts) ? o.parts : []).map((p): SortRunPart | null => {
+        if (!p || typeof p !== 'object') return null;
+        const q = p as Record<string, unknown>;
+        if (!isSortId(q.id) || seen.has(q.id) || !SORT_STATES.includes(q.state as SortState)) return null;
+        seen.add(q.id);
+        const done = runCount(q.filesDone);
+        return { id: q.id, part: runCount(q.part) ?? seen.size, state: q.state as SortState, files: runCount(q.files) ?? 0, ...(done !== undefined ? { filesDone: done } : {}) };
+    }).filter((p): p is SortRunPart => !!p).sort((a, b) => a.part - b.part);
+    const w = o.waiting && typeof o.waiting === 'object' ? o.waiting as Record<string, unknown> : null;
+    const why = w ? cleanText(w.why, 80) : '';
+    const retry = w ? runCount(w.retry) : undefined;
+    return {
+        id: o.id, state: o.state as SortState, files: runCount(o.files) ?? parts.reduce((t, p) => t + p.files, 0),
+        filesDone: runCount(o.filesDone) ?? 0, parts,
+        ...(w ? { waiting: { why, ...(retry !== undefined ? { retry } : {}) } } : {}),
+    };
+}
+
+/** A run's state (`GET /material/sort/<run-…>`); each finished batch's proposal is its own sorting's. */
+export async function fetchMaterialSortRun(base: string, id: string, opts: BridgeOptions = {}): Promise<MaterialResult<SortRunState>> {
+    if (!isRunId(id)) return bodyError();
+    const answer = await request(withAppVersion(`${base}/material/sort/${encodeURIComponent(id)}`), { method: 'GET' }, opts);
+    if ('kind' in answer) return { ok: false, error: answer };
+    if (answer.status === 200) {
+        const run = parseSortRun(answer.body);
+        return run ? { ok: true, value: run } : bodyError();
+    }
+    return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+}
+
+/** Stop a whole run (`POST /material/sort/<run-…>/cancel`): the batch at work stops, the waiting ones do not start. */
+export async function cancelMaterialSortRun(base: string, id: string, opts: BridgeOptions = {}): Promise<MaterialResult<true>> {
+    if (!isRunId(id)) return bodyError();
     const answer = await request(withAppVersion(`${base}/material/sort/${encodeURIComponent(id)}/cancel`), postInit({}), opts);
     if ('kind' in answer) return { ok: false, error: answer };
     if (answer.status >= 200 && answer.status < 300) return { ok: true, value: true };
