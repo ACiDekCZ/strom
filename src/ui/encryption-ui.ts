@@ -49,6 +49,7 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { overviewChanged } from '../windows/overview-window.js';
+import { watchStorageNotices } from './notice-place.js';
 
 /** A button on a storage notice. */
 interface NoticeAction { label: string; run: () => void; /** A quiet text link instead of a button. */ link?: boolean }
@@ -602,6 +603,8 @@ export const encryptionUiMethods = uiModule({
         close.addEventListener('click', () => el.remove());
         el.appendChild(close);
         document.body.appendChild(el);
+        // In the Table view it stands below the table's controls (P1a).
+        watchStorageNotices();
         requestAnimationFrame(() => el.classList.add('show'));
     },
 

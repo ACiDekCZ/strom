@@ -28,6 +28,7 @@ import { activatedElement, runBusy } from './busy.js';
 import { holdLeave } from './busy-leave.js';
 import { whilePicking } from './file-pick.js';
 import { iconSvg } from '../icons.js';
+import { watchStorageNotices } from './notice-place.js';
 
 /** Last known storage state (refreshed on every check; best-effort until known). */
 let knownState: PersistenceState = 'best-effort';
@@ -333,6 +334,8 @@ export const fileCopyMethods = uiModule({
         });
         el.append(icon, body, close);
         document.body.appendChild(el);
+        // In the Table view it stands below the table's controls (P1a).
+        watchStorageNotices();
         requestAnimationFrame(() => el.classList.add('show'));
     },
 
