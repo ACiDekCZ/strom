@@ -89,6 +89,7 @@ describe('what a send carried beyond the people', () => {
     it('a kept row comes back checked', () => {
         for (const r of sentOtherRows(other)) expect(sanitizeSentOtherRow(JSON.parse(JSON.stringify(r)))).toEqual(r);
         expect(sanitizeSentOtherRow({ type: 'person', id: 'x' })).toBeNull();
+        expect(sanitizeSentOtherRow({ type: 'event', id: 'x', kinds: ['x'] })).toBeNull();
         expect(sanitizeSentOtherRow({ type: 'places', count: -1, kinds: [1, 'x'] })).toEqual({ type: 'places', id: '', title: '', kinds: ['x'] });
     });
 });

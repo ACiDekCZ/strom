@@ -782,7 +782,11 @@ export function sanitizeSentOtherRow(v: unknown): SentOtherRow | null {
     const count = typeof r.count === 'number' && r.count > 0 ? Math.floor(r.count) : undefined;
     let kinds = Array.isArray(r.kinds) ? r.kinds.filter((k): k is string => typeof k === 'string').slice(0, 12) : [];
     // A person's row names only its files (told by their labels).
-    if (type === 'person') kinds = kinds.filter(k => PERSON_FILE_KINDS.has(k as ChangeKind));
+    if (type === 'person') {
+        kinds = kinds.filter(k => PERSON_FILE_KINDS.has(k as ChangeKind));
+        // Without a person or a file it names nothing.
+        if (typeof r.id !== 'string' || !r.id || !kinds.length) return null;
+    }
     return {
         type, id: str(r.id, 80), title: str(r.title, 300),
         kinds,
