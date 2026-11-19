@@ -150,7 +150,21 @@ describe('summary', () => {
     it('counts files, batches, files without a person and hidden ones', () => {
         const l = sample();
         expect(overviewSummary(overviewItems(l, [rec(att('t'), ['P1'])]), l, true))
-            .toMatchObject({ files: 7, batches: 2, noPerson: 3, hidden: 1 });
+            .toMatchObject({ files: 8, batches: 2, noPerson: 3, hidden: 1 });
+    });
+
+    it('beside an older research the header counts every tile: a portrait it does not keep too (verification of 3.30.0, N6)', () => {
+        // Research 1.34: the attachment sent from the app is its file (joined), one file only in the archive;
+        // a portrait from a new file has no original there and stays the tree's own.
+        const original = { sha256: sha(1), name: 'letter.png', mimeType: 'image/png', bytes: 1 };
+        const l = list([file(1, { name: 'letter.png', persons: ['P0001'] }), file(2, { name: 'wedding-1908.jpg' })]);
+        const items = overviewItems(l, [
+            rec(att('letter', { original, places: [{ personId: 'p1' as never }] }), ['P0001']),
+            rec(att('portrait', { places: [{ personId: 'p1' as never }] }), ['P0001']),
+        ]);
+        const tiles = items.filter(i => passesFilters(i, filters()));
+        expect(tiles.map(i => i.key)).toEqual(['m:I0001', 'm:I0002', 'a:portrait']);
+        expect(overviewSummary(items, l, true)).toMatchObject({ files: tiles.length, noPerson: 1, inTree: 2, onlyArchive: 1 });
     });
 
     it('takes the batches’ own counts while their files are not known', () => {
@@ -293,9 +307,7 @@ describe('groups of a tree without an archive (spec 102 §1)', () => {
             rec(att('b4', { places: [{ personId: 'p2' as never }] }), []),
         ]);
         expect(tree.filter(itemWithoutPerson).map(i => i.key)).toEqual(['a:b2', 'a:b3']);
-        expect(overviewSummary(tree, null, true, true)).toMatchObject({ files: 4, batches: 0, noPerson: 2, hidden: 0 });
-        // With an archive the tree's own files stay out of the archive's counts.
-        expect(overviewSummary(tree, null, true).files).toBe(0);
+        expect(overviewSummary(tree, null, true)).toMatchObject({ files: 4, batches: 0, noPerson: 2, hidden: 0 });
     });
 
     it('the person filter and the search apply by person too', () => {

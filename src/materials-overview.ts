@@ -239,7 +239,7 @@ export function passesFilters(item: MaterialItem, f: OverviewFilters, words: str
 // ==================== SUMMARY ====================
 
 export interface OverviewSummary {
-    /** Files of the research, without hidden ones. */
+    /** Files shown (the research's and the tree's own, one per file), without hidden ones. */
     files: number;
     batches: number;
     /** Files without a person (without hidden ones). */
@@ -255,22 +255,22 @@ export interface OverviewSummary {
 }
 
 /**
- * The window's header counts. While only some files are known (the whole
- * list not loaded yet), the batches' own counts stand in for theirs.
+ * The window's header counts: every file it shows, the tree's own beside an
+ * archive too (a file an older research does not keep, e.g. a portrait without
+ * an original: its tile is there, so is its count). While only some files are
+ * known (the whole list not loaded yet), the batches' own counts stand in for theirs.
  */
-export function overviewSummary(items: readonly MaterialItem[], list: MaterialList | null, full: boolean, withTree = false): OverviewSummary {
+export function overviewSummary(items: readonly MaterialItem[], list: MaterialList | null, full: boolean): OverviewSummary {
     let files = 0, noPerson = 0, hidden = 0, noTitle = 0, noSource = 0, inTree = 0, onlyArchive = 0, left = 0;
     const loadedPerBatch = new Map<string, number>();
     for (const item of items) {
-        // The tree's own files count only where they are the whole list (a tree without an archive).
-        // The review counts are over every file shown (the tree's own too: the filters reach them).
+        // Every count is over the files shown (the tree's own too: they are tiles, the filters reach them).
         if (!item.hidden) {
             if (!item.titled) noTitle++;
             if (!item.source) noSource++;
             if (itemInTree(item)) inTree++; else onlyArchive++;
             if (item.agentLeft) left++;
         }
-        if (item.origin === 'tree' && !withTree) continue;
         if (item.hidden) { hidden++; continue; }
         files++;
         if (itemWithoutPerson(item)) noPerson++;

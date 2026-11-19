@@ -627,7 +627,7 @@ export const materialsWindowMethods = uiModule({
         // A research without assigning never sends hidden files; "Show hidden" is not offered.
         if (!ctx.caps.assign) w.filters.showHidden = false;
         this.mwSortMarks();
-        w.summary = overviewSummary(w.items, list, !!rec?.full, model === 'app');
+        w.summary = overviewSummary(w.items, list, !!rec?.full);
         // "Not assigned by the agent" is offered only while there is such a file: its filter goes with the last one.
         if (!w.summary.left) w.filters.left = false;
         w.groups = overviewGroups({
