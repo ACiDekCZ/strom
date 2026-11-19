@@ -506,6 +506,7 @@ class TreeManagerClass {
         // the delete below (review S20). Then drain the tree's queue.
         this.index.trees.splice(idx, 1);
         this.unreadableTrees.delete(id);
+        this.preMigrationStates.delete(id);
         await this.flush(id);
         forgetRescues(id);
 
@@ -641,6 +642,8 @@ class TreeManagerClass {
             if (!this.isTreeNewer(id) && hasUnvaluedResearchConfirmations(result.data)) await this.valueResearchConfirmations(id, result.data);
             if (!this.isTreeNewer(id) && version < STROM_DATA_VERSION && needsDataUpdate(result.data, version)) {
                 result.data = await this.updateStoredData(id, tree, result.data, version);
+            } else {
+                this.notePreMigrationState(id, result.data, version);
             }
             const count = realPersonCount(result.data);
             if (tree && tree.personCount !== count) {
@@ -719,6 +722,42 @@ class TreeManagerClass {
         // Before the tree is shown: its changes per person are read against the copy.
         await unknownSexInResearchCopies(id, sexU);
         return next ?? data;
+    }
+
+    /**
+     * A tree an older app stored that is read here as it was (no update on
+     * reading, see needsDataUpdate) still changes when this window first
+     * writes it: the data are moved over in memory (data v24: attachments
+     * become records of the tree's files) and the first save stamps this
+     * version. The state as stored is kept until then, and that first write
+     * takes the backup "Before the data update of a new version" from it
+     * (takePreMigrationBackup) — once per tree and data version, as the
+     * stored version is this one afterwards; a tree only opened is not
+     * backed up. An empty tree needs nothing. Any later version step works
+     * the same, the encrypted profile too (the backup is encrypted).
+     */
+    private notePreMigrationState(id: TreeId, data: StromData, version: number): void {
+        if (this.isTreeNewer(id) || version >= STROM_DATA_VERSION || Object.keys(data.persons ?? {}).length === 0) {
+            this.preMigrationStates.delete(id);
+            return;
+        }
+        // The copy shares its strings (photos, scans) with the read data: cheap even for a large tree.
+        this.preMigrationStates.set(id, {
+            data: cloneTreeDataAsJson(data), version,
+            base: this.backupResearchBase(id, this.researchBaseOf(id)),
+        });
+    }
+
+    /** The first write of a newer data version over a tree kept by notePreMigrationState: its backup first. */
+    private async takePreMigrationBackup(id: TreeId, writing: StromData): Promise<void> {
+        const kept = this.preMigrationStates.get(id);
+        if (!kept || (writing.version ?? 1) <= kept.version) return;
+        this.preMigrationStates.delete(id);
+        try {
+            await createSnapshot(id, kept.data, 'pre-migration', Date.now(), kept.base);
+        } catch (err) {
+            console.warn('The backup before the data update could not be written', err);
+        }
     }
 
     /**
@@ -1002,6 +1041,9 @@ class TreeManagerClass {
     /** The research base this window last read or wrote with each tree (researchBaseKnownMatches). */
     private storedBases = new Map<TreeId, ResearchBase & { researchId: string }>();
 
+    /** A tree's state as an older app stored it, until its first write here (notePreMigrationState). */
+    private preMigrationStates = new Map<TreeId, { data: StromData; version: number; base: SnapshotResearchBase | null }>();
+
     /** How many states were handed to the queue per tree (a read can tell a write made meanwhile). */
     private queuedWrites = new Map<TreeId, number>();
 
@@ -1184,6 +1226,7 @@ class TreeManagerClass {
                 this.settle(id, pending);
                 return;
             }
+            await this.takePreMigrationBackup(id, latest);
             const images = collectPoolable(latest);
             if (images.size > 0) {
                 await this.writePooledTree(id, latest, images, pending.base);
