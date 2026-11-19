@@ -8,7 +8,7 @@
  * browser), so the decisions here stay testable without one.
  */
 
-import { addPersonMedia } from './media.js';
+import { addPersonMedia, givePortraitsRecords } from './media.js';
 import { PersonId, PartnershipId, StromData, uniqueIdSuffix } from './types.js';
 import { MAX_PDF_BYTES } from './attachments.js';
 import { dropMediaLink } from './import-origin.js';
@@ -64,6 +64,8 @@ export async function attachGedcomMediaFile(
                 person.photo = await read.portrait(file);
                 person.photoOriginalName = file.name;
                 if (ref.date) person.photoDate = ref.date;
+                // Every portrait is in a record of the tree's files (data v25).
+                givePortraitsRecords(data, typeof data.researchAsOf === 'string');
                 kind = 'portrait';
             } else {
                 addPersonMedia(data, person.id, {

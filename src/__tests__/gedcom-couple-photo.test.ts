@@ -315,11 +315,13 @@ describe('connecting a file to the import (attachGedcomMediaFile)', () => {
         expect(await attachGedcomMediaFile(data, ref, jpegFile('b.jpg'), fakeReaders(OTHER_JPEG))).toBe('portrait');
         expect(he.photo).toBe(PORTRAIT_JPEG);
         expect(he.photoDate).toBe('1920');
+        // The portrait is in a record of the tree's files too (data v25).
+        expect(personMedia(data, he.id)).toEqual([expect.objectContaining({ name: 'b.jpg', dataUrl: PORTRAIT_JPEG, kind: 'photo', date: '1920' })]);
         expect(await attachGedcomMediaFile(data, ref, jpegFile('c.jpg'), fakeReaders(OTHER_JPEG))).toBe('attachment');
-        expect(personMedia(data, he.id)[0]).toMatchObject({ name: 'Bratrolib 1920', dataUrl: OTHER_JPEG, date: '1920' });
+        expect(personMedia(data, he.id)[1]).toMatchObject({ name: 'Bratrolib 1920', dataUrl: OTHER_JPEG, date: '1920' });
         const pdf = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], 'd.pdf', { type: 'application/pdf' });
         expect(await attachGedcomMediaFile(data, ref, pdf, fakeReaders(OTHER_JPEG))).toBe('attachment');
-        expect(personMedia(data, he.id)).toHaveLength(2);
+        expect(personMedia(data, he.id)).toHaveLength(3);
     });
 
     it('the sentence after connecting splits the count only when a couple’s photo came in', () => {

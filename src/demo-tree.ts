@@ -35,6 +35,7 @@ import {
 import { strings } from './strings.js';
 import { localAge } from './recorded-age.js';
 import { placeKey } from './places.js';
+import { givePortraitsRecords } from './media.js';
 
 /** A drawn register entry: the page it sits on and the crop of the entry. */
 export interface DemoEntryImage {
@@ -158,7 +159,7 @@ class DemoFamily {
     build(): StromData {
         const places: Record<string, PlaceGeo> = {};
         for (const [name, geo] of Object.entries(PLACES)) places[placeKey(name)] = geo;
-        return {
+        const data: StromData = {
             version: STROM_DATA_VERSION,
             persons: this.persons,
             partnerships: this.partnerships,
@@ -167,6 +168,9 @@ class DemoFamily {
             places,
             surnameVariants: [['Berg', 'Bergh']],
         };
+        // Every portrait is in a record of the tree's files (data v25).
+        givePortraitsRecords(data);
+        return data;
     }
 }
 

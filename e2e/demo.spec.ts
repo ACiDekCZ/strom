@@ -25,11 +25,15 @@ test('empty state offers a demo tree that loads with a focus, a hint, the Regist
         const persons = Object.values(d.persons);
         return {
             photos: persons.filter(p => p.photo?.startsWith('data:image/jpeg')).length,
-            pages: Object.values(d.media ?? {}).filter(a => a.places.some(pl => 'personId' in pl)).length,
+            // Each portrait is a record of the tree's files at its person (data v25).
+            portraitRecords: persons.filter(p => Object.values(d.media ?? {})
+                .some(a => a.dataUrl === p.photo && a.places.some(pl => 'personId' in pl && pl.personId === p.id))).length,
+            pages: Object.values(d.media ?? {}).filter(a => a.places.some(pl => 'personId' in pl)
+                && !persons.some(p => p.photo === a.dataUrl)).length,
             crops: Object.values(d.sources ?? {}).flatMap(s => s.excerpts ?? []).length,
         };
     });
-    expect(media).toEqual({ photos: 4, pages: 1, crops: 3 });
+    expect(media).toEqual({ photos: 4, portraitRecords: 4, pages: 1, crops: 3 });
 });
 
 test('the sample keeps a card density the user already chose', async ({ page }) => {

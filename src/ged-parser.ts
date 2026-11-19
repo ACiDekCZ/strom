@@ -106,7 +106,7 @@ import { imageRefSha, resolveImageFile } from './research-image-refs';
 import { normalizeSha256 } from './sha256';
 import { isConfirmDay, isTranscriptMark } from './source-confirm';
 import { ORIGINAL_ONLY_DATA_URL } from './validation';
-import { samePlace } from './media';
+import { samePlace, givePortraitsRecords } from './media';
 import { parseRegion, regionFromStored } from './originals';
 import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } from './gedcom-names';
 import { appUnknownIsNoSurname } from './app-version';
@@ -7133,6 +7133,13 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
     // Only valid shares of two copies or more (a copy alone, of a subtree or
     // an edited file, is an ordinary event), roles of persons in the tree.
     cleanEventShares(data);
+
+    // A file the user imports: every portrait is in a record of the tree's
+    // files (data v25), as a tree read from storage has it; the same picture
+    // at several people is one record. A research tree's person with its
+    // REFN keeps the portrait as the archive's file. A GEDCOM read for a
+    // research (no import origin) stays as the research has it.
+    if (origin) givePortraitsRecords(data, typeof data.researchAsOf === 'string');
 
     const result: GedcomConversionResult = {
         externalMedia,

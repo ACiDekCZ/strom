@@ -190,7 +190,8 @@ describe('a picture’s _DATE', () => {
         const r = load(MYHERITAGE);
         const p = byName(r.data, 'Mlhoslav');
         expect(p.photoDate).toBe('3 MAR 1931');
-        expect(personMedia(r.data, p.id).map(a => [a.name, a.date])).toEqual([['Dopis z Kořenova', 'ABT 1925']]);
+        // The attachment, and the portrait's own record (data v25) with the portrait's date.
+        expect(personMedia(r.data, p.id).map(a => [a.name, a.date])).toEqual([['Dopis z Kořenova', 'ABT 1925'], ['portrait.jpg', '3 MAR 1931']]);
         // The files the GEDCOM only names: the date waits with them (attach / download).
         expect(r.externalMedia.map(m => [m.fileName, m.date])).toEqual([
             ['mlhoslav.jpg', '24 JUL 2007'], ['statek.jpg', '1 JAN 1930'],
@@ -231,7 +232,7 @@ describe('a picture’s _DATE', () => {
         const next = structuredClone(previous);
         const p = byName(next, 'Mlhoslav');
         delete p.photoDate;
-        for (const a of personMedia(next, p.id)) {
+        for (const a of personMedia(next, p.id).filter(a => a.dataUrl !== p.photo)) {
             delete a.date;
             delete next.media![a.id];
             a.id = 'att_research';
@@ -240,7 +241,7 @@ describe('a picture’s _DATE', () => {
         const keptData = keepImports(next, previous);
         const kept = byName(keptData, 'Mlhoslav');
         expect(kept.photoDate).toBe('3 MAR 1931');
-        expect(personMedia(keptData, kept.id)[0]?.date).toBe('ABT 1925');
+        expect(personMedia(keptData, kept.id).find(a => a.dataUrl !== kept.photo)?.date).toBe('ABT 1925');
         // Another picture in the research's version: no date carried over to it.
         const other = structuredClone(previous);
         byName(other, 'Mlhoslav').photo = LETTER;

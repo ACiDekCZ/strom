@@ -111,7 +111,9 @@ async function readBack(page: Page, first: string, last: string) {
         return {
             photo: p.photo ?? null,
             photoName: p.photoOriginalName ?? null,
-            attachments: window.Strom.DataManager.personMedia(p.id).map(a => ({
+            // The portrait's own record (data v25): the same picture, apart from the attachments.
+            portraitRecords: window.Strom.DataManager.personMedia(p.id).filter(a => a.dataUrl === p.photo).length,
+            attachments: window.Strom.DataManager.personMedia(p.id).filter(a => a.dataUrl !== p.photo).map(a => ({
                 name: a.name, mimeType: a.mimeType, dataUrl: a.dataUrl, note: a.note ?? null,
                 linkedToSource: !!src && a.places.some(pl => 'sourceId' in pl && pl.sourceId === src.id),
             })),
@@ -141,6 +143,7 @@ test('GEDCOM export carries the images and a re-import brings them back', { tag:
     const back = await readBack(page, tree.first, tree.last);
     expect(back.photo).toBe(img.photo);
     expect(back.photoName).toBe('jan.jpg');
+    expect(back.portraitRecords).toBe(1);
     expect(back.attachments).toEqual([{
         name: 'matrika-fol12.jpg', mimeType: 'image/jpeg', dataUrl: img.scan, note: 'Kniha narozených 12', linkedToSource: true,
     }]);
@@ -169,6 +172,7 @@ test('importing the same GEDCOM without images keeps the data, leaves the images
     await importGedcom(page, gedPath, 'Without images', false);
     const back = await readBack(page, tree.first, tree.last);
     expect(back.photo).toBeNull();
+    expect(back.portraitRecords).toBe(0);
     expect(back.attachments).toEqual([]);
     expect(back.source?.title).toBe('Křest Jana 1850');
     expect(back.source?.transcript).toBe('Johann, ehelicher Sohn');

@@ -190,13 +190,17 @@ export interface ImageCount {
 /** Count photos, attachments and source excerpts with their total payload size. */
 export function countImages(data: StromData): ImageCount {
     const out: ImageCount = { photos: 0, attachments: 0, excerpts: 0, bytes: 0 };
+    const portraits = new Set<string>();
     for (const person of Object.values(data.persons)) {
         if (person.photo) {
             out.photos++;
             out.bytes += dataUrlByteSize(person.photo);
+            portraits.add(person.photo);
         }
     }
     for (const att of allMedia(data)) {
+        // A portrait's own record (data v25) is the same picture: counted once, as the portrait.
+        if (att.dataUrl && portraits.has(att.dataUrl)) continue;
         out.attachments++;
         out.bytes += att.sizeBytes || dataUrlByteSize(att.dataUrl);
     }

@@ -7,7 +7,10 @@
 import { describe, it, expect } from 'vitest';
 import { migrateData } from '../data.js';
 import { exportToGedcom } from '../ged-exporter.js';
+import { parseGedcom, convertToStrom } from '../ged-parser.js';
+import { getDemoTree, DEMO_FOCUS, type DemoImageMaker } from '../demo-tree.js';
 import { personMedia, allMedia } from '../media.js';
+import { countImages } from '../attachments.js';
 import { STROM_DATA_VERSION, type PersonId, type StromData } from '../types.js';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
@@ -120,5 +123,56 @@ describe('data v25: every portrait is in a record of the files', () => {
         // Oskar: portrait + letter; Edvin: portrait. No record of the portrait besides.
         expect(objes).toHaveLength(3);
         expect(ged.match(/_STROM_KIND photo/g)).toHaveLength(2);
+    });
+});
+
+describe('portraits that come in without a data update get their record too', () => {
+    it('the sample tree: each drawn portrait is a record of kind photo at its person', () => {
+        const jpeg = (n: number) => 'data:image/jpeg;base64,' + String.fromCharCode(65 + n).repeat(64);
+        const maker: DemoImageMaker = {
+            entry: (_text, n) => ({
+                page: { dataUrl: jpeg(10 + n), width: 1000, height: 1300, sizeBytes: 48 },
+                excerpt: { dataUrl: jpeg(20 + n), width: 920, height: 132, sizeBytes: 48 },
+                region: { x: 0.04, y: 0.5, w: 0.92, h: 0.1 },
+            }),
+            portrait: seed => jpeg(seed),
+        };
+        const data = getDemoTree(maker);
+        const withPhoto = Object.values(data.persons).filter(p => p.photo);
+        expect(withPhoto).toHaveLength(4);
+        for (const p of withPhoto) {
+            const records = allMedia(data).filter(a => a.dataUrl === p.photo);
+            expect(records).toHaveLength(1);
+            expect(records[0]).toMatchObject({ kind: 'photo', mimeType: 'image/jpeg', places: [{ personId: p.id }] });
+        }
+        // Johan's register page stays his first file, his portrait's record beside it.
+        expect(personMedia(data, DEMO_FOCUS).map(a => a.dataUrl)).toEqual([jpeg(11), data.persons[DEMO_FOCUS].photo]);
+        // Without pictures nothing is made.
+        expect(getDemoTree().media).toBeUndefined();
+    });
+
+    it('a GEDCOM import: a portrait gets its record, the same picture one record; exported again it is written once', () => {
+        const ged = exportToGedcom(migrateData(v21Tree()), 'T').content;
+        const imported = convertToStrom(parseGedcom(ged), { importOrigin: { at: '2026-11-19', file: 't.ged' } }).data;
+        const [oskar, edvin] = ['Oskar', 'Edvin'].map(n => Object.values(imported.persons).find(p => p.firstName === n)!);
+        expect(oskar.photo).toBe(PNG);
+        expect(edvin.photo).toBe(PNG);
+        const records = portraitRecords(imported);
+        expect(records).toHaveLength(1);
+        expect(records[0]).toMatchObject({ kind: 'photo', name: 'oskar.png', mimeType: 'image/png' });
+        expect(records[0].places.map(pl => 'personId' in pl && pl.personId)).toEqual([oskar.id, edvin.id]);
+        expect(allMedia(imported)).toHaveLength(2);
+        // The import's summary counts the picture once, as the portraits it is (the letter a document).
+        expect(countImages(imported)).toMatchObject({ photos: 2, attachments: 1 });
+        // Loaded (no data update to make) and exported again: the portrait once at each person.
+        const again = exportToGedcom(migrateData(imported), 'T').content;
+        expect(again.match(/_STROM_KIND photo/g)).toHaveLength(2);
+        expect(allMedia(migrateData(imported))).toHaveLength(2);
+    });
+
+    it('a GEDCOM read for a research (no import of a file) is left as it comes', () => {
+        const ged = exportToGedcom(migrateData(v21Tree()), 'T').content;
+        const read = convertToStrom(parseGedcom(ged)).data;
+        expect(portraitRecords(read)).toEqual([]);
     });
 });
