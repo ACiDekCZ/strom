@@ -131,6 +131,8 @@ interface QueuedEdit {
     json: string;
     label: string;
     context?: unknown;
+    /** Only the lists of people changed (N2). */
+    listsOnly?: true;
 }
 
 export class SatelliteClient {
@@ -229,6 +231,20 @@ export class SatelliteClient {
         return this._connection !== 'connected' || !this.hasTree || !s || s.readOnly || s.live || s.locked;
     }
 
+    /** Undo / redo from here goes: the main window has a step, and the copy may be edited or the step is a list's the main window lets go (N2). */
+    stepOpen(which: 'undo' | 'redo'): boolean {
+        const s = this._status;
+        if (!s || !(which === 'undo' ? s.canUndo : s.canRedo)) return false;
+        return !this.readOnly() || (!this.listsReadOnly() && (which === 'undo' ? s.undoOpen : s.redoOpen) === true);
+    }
+
+    /** The lists of people may not be changed here: as readOnly, but open while the main window says so (N2: it follows a research). */
+    listsReadOnly(): boolean {
+        const s = this._status;
+        if (this._connection !== 'connected' || !this.hasTree || !s || s.locked) return true;
+        return (s.readOnly || s.live) && s.listsOpen !== true;
+    }
+
     /** What another window's choice does here (K2.1): the window's choice, else its view's default. */
     get followMode(): FollowMode {
         return effectiveFollowMode(this.followChoice(), this._kind);
@@ -308,12 +324,13 @@ export class SatelliteClient {
         if (this.started) return;
         this.started = true;
         const sink: WindowEditSink = {
-            edit: (label, context) => this.queueEdit(label, context),
+            edit: (label, context, listsOnly) => this.queueEdit(label, context, listsOnly),
             undo: () => this.undo(),
             redo: () => this.redo(),
-            canUndo: () => !this.readOnly() && !!this._status?.canUndo,
-            canRedo: () => !this.readOnly() && !!this._status?.canRedo,
+            canUndo: () => this.stepOpen('undo'),
+            canRedo: () => this.stepOpen('redo'),
             readOnly: () => this.readOnly(),
+            listsReadOnly: () => this.listsReadOnly(),
             sessionEnded: () => this.takeHeld(),
         };
         this.data.setWindowSink(sink);
@@ -407,11 +424,11 @@ export class SatelliteClient {
     }
 
     undo(): void {
-        if (this.mainId && !this.readOnly()) this.bus.post({ type: 'undo' });
+        if (this.mainId && (!this.readOnly() || this.stepOpen('undo'))) this.bus.post({ type: 'undo' });
     }
 
     redo(): void {
-        if (this.mainId && !this.readOnly()) this.bus.post({ type: 'redo' });
+        if (this.mainId && (!this.readOnly() || this.stepOpen('redo'))) this.bus.post({ type: 'redo' });
     }
 
     /**
@@ -632,9 +649,9 @@ export class SatelliteClient {
         }
     }
 
-    private queueEdit(label: string, context?: unknown): void {
+    private queueEdit(label: string, context?: unknown, listsOnly?: boolean): void {
         if (!this.hasTree) return;
-        this.queue.push({ json: this.data.windowDataJson(), label, ...(context !== undefined ? { context } : {}) });
+        this.queue.push({ json: this.data.windowDataJson(), label, ...(context !== undefined ? { context } : {}), ...(listsOnly ? { listsOnly: true as const } : {}) });
         this.sendNext();
     }
 
@@ -643,7 +660,7 @@ export class SatelliteClient {
         const next = this.queue.shift()!;
         const editId = newWindowId();
         this.inFlight = { editId, ...(next.context !== undefined ? { context: next.context } : {}) };
-        this.bus.post({ type: 'edit', windowId: this.windowId, editId, treeId: this._treeId, baseRevision: this._revision, json: next.json, label: next.label });
+        this.bus.post({ type: 'edit', windowId: this.windowId, editId, treeId: this._treeId, baseRevision: this._revision, json: next.json, label: next.label, ...(next.listsOnly ? { listsOnly: true as const } : {}) });
     }
 
     private onEditResult(m: MessageOf<'edit-result'>): void {

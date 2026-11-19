@@ -23,6 +23,8 @@ export interface WindowStatus {
     locked: boolean;
     /** Nothing may be edited now (live, locked, a newer app's tree, the tree locked against edits). */
     readOnly: boolean;
+    /** The lists of people may be changed, also while `readOnly` because the tree follows a research (N2). */
+    listsOpen?: boolean;
     /** The research's state for the overview window (K3); null = no research. */
     researchState: unknown;
     /** The main window has a tree open that exists. */
@@ -34,6 +36,9 @@ export interface WindowStatus {
     revision: number;
     canUndo: boolean;
     canRedo: boolean;
+    /** The step to undo / redo goes also while `readOnly` (a list's step while following a research, N2). */
+    undoOpen?: boolean;
+    redoOpen?: boolean;
     /** The satellites the main window knows (one missing from it says hello again: a main window after its reload). */
     windows: string[];
     /**
@@ -84,7 +89,7 @@ export type WindowMessageBody =
     /** main → all: the tree after a save (any: own edit, a satellite's, undo, the research). */
     | { type: 'patch'; treeId: TreeId; revision: number; json: string }
     /** sat → main: an edit made on the copy of revision `baseRevision`; `json` = the whole data after it. */
-    | { type: 'edit'; windowId: string; editId: string; treeId: TreeId; baseRevision: number; json: string; label: string }
+    | { type: 'edit'; windowId: string; editId: string; treeId: TreeId; baseRevision: number; json: string; label: string; listsOnly?: true }
     /** main → sat: the edit's result; `ok: false` = not applied (a fresh `tree` follows to that window). */
     | { type: 'edit-result'; to: string; editId: string; ok: boolean; revision: number; reason?: EditRefusal }
     /**

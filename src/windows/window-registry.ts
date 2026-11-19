@@ -31,7 +31,8 @@ export interface MainWindowHost {
     /** Values that change whenever the open tree changes (compared item by item, by identity). */
     stateStamp(): readonly unknown[];
     /** Save a satellite's edit as an edit of this window (one undo step named `label`). */
-    applyEdit(json: string, label: string): boolean;
+    /** `listsOnly`: the edit changed only the lists of people (N2): only those are taken. */
+    applyEdit(json: string, label: string, listsOnly?: boolean): boolean;
     /** A staged dialog is open here: no edit from outside now. */
     busy(): boolean;
     undo(): void;
@@ -41,6 +42,10 @@ export interface MainWindowHost {
     live(): boolean;
     locked(): boolean;
     readOnly(): boolean;
+    /** The lists of people may be changed (also while readOnly because the tree follows a research, N2). */
+    listsOpen?(): boolean;
+    /** Undo / redo would be refused now (DataManager.undoLocked: a list's step goes while following, N2). */
+    undoLocked?(which: 'undo' | 'redo'): boolean;
     researchState(): unknown;
     /** Subscribe to every save of the open tree; returns the unsubscribe. */
     onSaved(cb: () => void): () => void;
@@ -63,7 +68,7 @@ export function dataManagerHost(overrides: Partial<MainWindowHost> = {}): MainWi
         treeExists: (id) => TreeManager.getTrees().some(t => t.id === id),
         storedJson: () => DataManager.storedDataJson(),
         stateStamp: () => [DataManager.getCurrentTreeId(), DataManager.getData(), DataManager.getContentRevision(), DataManager.isLocked()],
-        applyEdit: (json, label) => DataManager.applyWindowEdit(json, label),
+        applyEdit: (json, label, listsOnly) => DataManager.applyWindowEdit(json, label, listsOnly),
         busy: () => DataManager.isEditSessionActive(),
         undo: () => { if (DataManager.undo()) changed(); },
         redo: () => { if (DataManager.redo()) changed(); },
@@ -72,6 +77,8 @@ export function dataManagerHost(overrides: Partial<MainWindowHost> = {}): MainWi
         live: () => DataManager.isLiveFollowing(),
         locked: () => DataManager.isLocked(),
         readOnly: () => DataManager.isReadOnly() || DataManager.isTreeLocked(),
+        listsOpen: () => !DataManager.listsReadOnly(),
+        undoLocked: (which) => DataManager.undoLocked(which),
         researchState: () => null,
         onSaved: (cb) => DataManager.onTreeSaved(cb),
         focusSelf: () => { if (typeof window !== 'undefined') window.focus(); },
@@ -552,6 +559,7 @@ export class WindowRegistry {
             live: this.host.live(),
             locked: this.host.locked(),
             readOnly: this.host.readOnly(),
+            listsOpen: this.host.listsOpen?.() ?? !this.host.readOnly(),
             researchState: this.host.researchState(),
             treeExists: !!treeId && this.host.treeExists(treeId),
             treeId,
@@ -559,6 +567,8 @@ export class WindowRegistry {
             revision: this.rev,
             canUndo: this.host.canUndo(),
             canRedo: this.host.canRedo(),
+            undoOpen: this.host.canUndo() && !(this.host.undoLocked?.('undo') ?? this.host.readOnly()),
+            redoOpen: this.host.canRedo() && !(this.host.undoLocked?.('redo') ?? this.host.readOnly()),
             windows: [...this.entries.keys()],
             agentRev: this.agentRev,
             ...this.agentsField(),
@@ -641,10 +651,12 @@ export class WindowRegistry {
             this.postStatus(true);
         };
         if (m.treeId !== this.host.treeId()) return refuse('tree');
-        if (this.host.readOnly() || this.host.locked()) return refuse('read-only');
+        // A change of the lists alone also while the tree follows a research (N2).
+        const listsOnly = m.listsOnly === true;
+        if (this.host.locked() || (this.host.readOnly() && !(listsOnly && this.host.listsOpen?.()))) return refuse('read-only');
         if (this.host.busy()) return refuse('busy');
         if (m.baseRevision !== this.rev) return refuse('revision');
-        if (!this.host.applyEdit(m.json, m.label)) return refuse('invalid');
+        if (!this.host.applyEdit(m.json, m.label, listsOnly)) return refuse('invalid');
         this.checkRevision();
         this.bus.post({ type: 'edit-result', to: m.from, editId: m.editId, ok: true, revision: this.rev });
         this.postStatus(false);

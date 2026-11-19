@@ -152,8 +152,10 @@ export interface WindowEditSink {
      * An undoable mutation was committed here (already applied to this copy);
      * `label` names the step, `context` is what the editor said about it
      * (runWithEditContext: what to bring back if the main window refuses it).
+     * `listsOnly`: the step changed only the lists of people (N2: taken while
+     * the main window follows a research).
      */
-    edit(label: string, context?: unknown): void;
+    edit(label: string, context?: unknown, listsOnly?: boolean): void;
     /** Undo / redo run in the main window, from its history. */
     undo(): void;
     redo(): void;
@@ -161,6 +163,8 @@ export interface WindowEditSink {
     canRedo(): boolean;
     /** The copy may not be edited (the main window follows a research, the tree is locked there, or it is closed). */
     readOnly(): boolean;
+    /** The lists of people may not be changed here (as readOnly, but open while the main window follows a research, N2). */
+    listsReadOnly?(): boolean;
     /** A staged dialog ended (committed or rolled back): data held back meanwhile may come in. */
     sessionEnded(): void;
 }
@@ -1536,14 +1540,29 @@ class DataManagerClass {
      * work stands here (the last focus, the default person and view) stays
      * this window's: the satellite's copy may hold an older one.
      */
-    applyWindowEdit(json: string, label: string): boolean {
+    applyWindowEdit(json: string, label: string, listsOnly = false): boolean {
         if (this.windowSink || this.isReadOnly() || !this.currentTreeId) return false;
-        if (this.isTreeLocked() || this.editSession || this.batchActive) return false;
+        if (this.editSession || this.batchActive) return false;
+        if (listsOnly ? this.listsReadOnly() : this.isTreeLocked()) return false;
         let next: StromData;
         try {
             next = migrateData(JSON.parse(json) as StromData);
         } catch {
             return false;
+        }
+        if (listsOnly) {
+            // A change of the lists of people alone (N2): only the lists are taken
+            // from the satellite's copy, also while this window follows a research.
+            this.beginMutation();
+            this.pendingListsOnly = true;
+            if (next.personLists?.length) this.data.personLists = next.personLists; else delete this.data.personLists;
+            if (next.personListsDropped?.length) this.data.personListsDropped = next.personListsDropped; else delete this.data.personListsDropped;
+            this.commitMutation(label, true);
+            AuditLogManager.log(this.currentTreeId, 'window.edit', label);
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent<DataChangedDetail>('strom:data-changed', { detail: { source: 'window' } }));
+            }
+            return true;
         }
         for (const key of WINDOW_STATE_KEYS) {
             if (this.data[key] === undefined) delete next[key];
@@ -1600,7 +1619,7 @@ class DataManagerClass {
             this.pendingBefore = null;
             this.save();
             this.noteUserChange();
-            this.windowSink.edit(description, this.windowEditContext ?? undefined);
+            this.windowSink.edit(description, this.windowEditContext ?? undefined, listsOnly);
             this.onUndoRedoChanged?.();
             if (!silent) this.onMutationCommitted?.(description, toast);
             return;
@@ -1942,6 +1961,8 @@ class DataManagerClass {
      */
     undoLocked(which: 'undo' | 'redo'): boolean {
         if (!this.isTreeLocked()) return false;
+        // A satellite window: the main window's history, as its status says.
+        if (this.windowSink) return !(which === 'undo' ? this.windowSink.canUndo() : this.windowSink.canRedo());
         UndoManager.setActiveTree(this.currentTreeId);
         return !UndoManager.peekListsOnly(which) || this.listsReadOnly();
     }
@@ -2167,14 +2188,17 @@ class DataManagerClass {
 
     /**
      * Lists cannot be changed (Q1): a read-only or locked tree, a newer app's
-     * data, another window's read-only copy. A tree that follows a research
+     * data; in a satellite window as the main window says (its lists open
+     * while it follows a research, N2). A tree that follows a research
      * keeps its lists open (N2): they are the tree's own, the research never
      * has them nor sends them back (keepPersonListData).
      */
     listsReadOnly(): boolean {
         if (this.isReadOnly()) return true;
+        // A satellite window (spec 079): as the main window says.
+        if (this.windowSink) return this.windowSink.listsReadOnly?.() ?? this.windowSink.readOnly();
         if (!this.isTreeLocked()) return false;
-        return !this.isLiveFollowing() || !!this.windowSink?.readOnly() || TreeManager.getActiveTreeMetadata()?.isLocked === true;
+        return !this.isLiveFollowing() || TreeManager.getActiveTreeMetadata()?.isLocked === true;
     }
 
     /** The tree's lists, the ready-made "Added in the last 30 days" first while it is not stored. */

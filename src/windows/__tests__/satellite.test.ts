@@ -326,6 +326,37 @@ describe('the main window\'s state', () => {
         expect(DataManager.canUndo()).toBe(false);
     });
 
+    it('a followed tree: the lists of people open when the main window says so; their edit goes as a list\'s, undo of a list\'s step from here (N2)', async () => {
+        await connect();
+        main.post({ type: 'status', ...status({ live: true, readOnly: true }) });
+        await settle();
+        // An older main window that does not say it: closed.
+        expect(DataManager.listsReadOnly()).toBe(true);
+        expect(DataManager.createPersonList({ name: 'Picked', dynamic: false, personIds: ['p1' as PersonId] })).toBeNull();
+
+        main.post({ type: 'status', ...status({ live: true, readOnly: true, listsOpen: true }) });
+        await settle();
+        expect(sat.readOnly()).toBe(true);
+        expect(DataManager.listsReadOnly()).toBe(false);
+        expect(DataManager.createPersonList({ name: 'Picked', dynamic: false, personIds: ['p1' as PersonId] })).not.toBeNull();
+        await settle();
+        const edit = of('edit')[of('edit').length - 1];
+        expect(edit.listsOnly).toBe(true);
+        expect((JSON.parse(edit.json) as StromData).personLists?.map(l => l.name)).toEqual(['Picked']);
+
+        // Undo: the main window's step, open here only while it lets it go.
+        expect(DataManager.canUndo()).toBe(false);
+        expect(DataManager.undoLocked('undo')).toBe(true);
+        main.post({ type: 'status', ...status({ live: true, readOnly: true, listsOpen: true, revision: 101, undoOpen: true }) });
+        await settle();
+        expect(DataManager.canUndo()).toBe(true);
+        expect(DataManager.undoLocked('undo')).toBe(false);
+        DataManager.undo();
+        await settle();
+        expect(of('undo')).toHaveLength(1);
+        expectNoStorage();
+    });
+
     it('the tree renamed in the main window: the name follows its status', async () => {
         const renamed = vi.fn();
         sat.on('renamed', renamed);

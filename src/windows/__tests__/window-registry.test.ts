@@ -236,6 +236,31 @@ describe('edits from a satellite', () => {
         expect(last(sat.of('status'))).toMatchObject({ live: true, readOnly: true });
     });
 
+    it('while following a research a satellite\'s change of the lists alone is taken: only the lists, a list\'s step undone (N2)', async () => {
+        const sat = await connect();
+        DataManager.setLiveTree(TREE);
+        const copy = treeOf(last(sat.of('tree'))!.json);
+        const list = { id: 'pl_1', name: 'Picked', dynamic: false, personIds: Object.keys(copy.persons), created: '2026-11-12T10:00:00.000Z', updated: '2026-11-12T10:00:00.000Z' };
+        // Anything else in the copy (a person renamed) is not taken with the lists.
+        const pid = Object.keys(copy.persons)[0];
+        const edited = { ...copy, personLists: [list], persons: { ...copy.persons, [pid]: { ...copy.persons[pid as never], firstName: 'Jiná' } } };
+        sat.bus.post({ type: 'edit', windowId: sat.id, editId: 'e4', treeId: TREE, baseRevision: registry.revision, json: JSON.stringify(edited), label: 'Add to list', listsOnly: true });
+        await settle(PATCH_INTERVAL_MS);
+        expect(last(sat.of('edit-result'))).toMatchObject({ ok: true });
+        expect(DataManager.getPersonLists().map(l => l.name)).toContain('Picked');
+        expect(DataManager.getAllPersons()[0].firstName).toBe('Zdislava');
+        expect(last(sat.of('status'))).toMatchObject({ live: true, readOnly: true, listsOpen: true, undoOpen: true });
+        // The same edit without the mark is refused, as any other.
+        sat.bus.post({ type: 'edit', windowId: sat.id, editId: 'e5', treeId: TREE, baseRevision: registry.revision, json: JSON.stringify(edited), label: 'x' });
+        await settle();
+        expect(last(sat.of('edit-result'))).toMatchObject({ ok: false, reason: 'read-only' });
+        // Undo from the satellite takes the list's step back.
+        sat.bus.post({ type: 'undo' });
+        await settle(PATCH_INTERVAL_MS);
+        expect(DataManager.getPersonLists().map(l => l.name)).not.toContain('Picked');
+        DataManager.setLiveTree(null);
+    });
+
     it('undo from a satellite runs here; the result reaches the windows as a patch', async () => {
         const sat = await connect();
         DataManager.createPerson({ firstName: 'Bořivoj', lastName: 'Hrachovec', gender: 'male' });
