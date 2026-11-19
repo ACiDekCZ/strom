@@ -560,11 +560,12 @@ test.describe('the search field beside the view tabs (de-DE, no research)', () =
  * the switch) and a field that still cannot have it becomes the magnifier,
  * which opens the field over the bar. Before, only a research tree was
  * measured: without one, de and pl at 1300 px kept a stub of 8-36 px. The
- * field of every tree is as wide as its placeholder where it can be (before,
- * only a research tree's: de showed "Person suche" over the sample tree). On a
+ * placeholder shows whole: in full where it fits, else its short form ("Suchen…";
+ * before, de showed "Person suche" over the sample tree). On a
  * phone the magnifier opens the field over the bar as well. Nothing runs
  * over the bar and its controls do not overlap.
  */
+const FULL_PLACEHOLDER: Record<string, string> = { 'de-DE': 'Person suchen…', 'pl-PL': 'Szukaj osoby…' };
 for (const locale of ['de-DE', 'pl-PL']) {
     test.describe(`the search field keeps its minimum (${locale})`, () => {
         test.use({ locale });
@@ -596,6 +597,7 @@ for (const locale of ['de-DE', 'pl-PL']) {
                 }
                 // The placeholder ("Person suchen…") against the field's room for text.
                 let phShort = 0;
+                const ph = (input as HTMLInputElement | null)?.placeholder ?? '';
                 if (shown(input)) {
                     const el = input as HTMLInputElement, cs = getComputedStyle(el);
                     const ctx = document.createElement('canvas').getContext('2d')!;
@@ -606,6 +608,7 @@ for (const locale of ['de-DE', 'pl-PL']) {
                 return {
                     field: shown(input) ? Math.round(input.getBoundingClientRect().width) : 0,
                     phShort,
+                    ph,
                     magnifier: shown(magnifier),
                     overflow: tb.scrollWidth - tb.clientWidth,
                     page: document.documentElement.scrollWidth - window.innerWidth,
@@ -633,8 +636,10 @@ for (const locale of ['de-DE', 'pl-PL']) {
                     await expect(page.locator('body')).not.toHaveClass(/search-open/);
                 } else {
                     expect(s.field, `${at}: the search field (${s.field}px) keeps 80 px`).toBeGreaterThanOrEqual(80);
-                    // Its placeholder shows whole: de cut "Person suchen…" to "Person suche" (verification of 3.30.0).
-                    expect(s.phShort, `${at}: the placeholder fits the field`).toBeLessThanOrEqual(0);
+                    // Its placeholder shows whole, in full or its short form ("Suchen…"): de cut "Person
+                    // suchen…" to "Person suche" (verification of 3.30.0). A computer's width has the full one.
+                    expect(s.phShort, `${at}: the placeholder (${s.ph}) fits the field`).toBeLessThanOrEqual(0);
+                    if (width === 1440) expect(s.ph, `${at}: the full placeholder`).toBe(FULL_PLACEHOLDER[locale]);
                 }
             }
         }

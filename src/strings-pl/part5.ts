@@ -635,6 +635,8 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         birth: (surname: string) => `z d. ${surname}`,
         former: (surname: string) => `dawniej ${surname}`,
         placeholder: 'Szukaj osoby…',
+        /** The toolbar's search field too narrow for the placeholder (verification of 3.30.0). */
+        placeholderShort: 'Szukaj…',
         noResults: 'Nic nie znaleziono',
         multipleResults: 'Znaleziono kilka wyników',
         toList: 'Wyniki do listy',

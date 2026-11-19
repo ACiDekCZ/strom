@@ -5513,6 +5513,8 @@ const stringsEN = {
         birth: (surname: string) => `née ${surname}`,
         former: (surname: string) => `formerly ${surname}`,
         placeholder: 'Search person…',
+        /** The toolbar's search field too narrow for the placeholder (verification of 3.30.0). */
+        placeholderShort: 'Search…',
         noResults: 'No results',
         multipleResults: 'Multiple results found',
         toList: 'Results to a list',
@@ -15770,6 +15772,8 @@ const stringsCZ: StringsType = {
         birth: (surname: string) => `roz. ${surname}`,
         former: (surname: string) => `dříve ${surname}`,
         placeholder: 'Hledat osobu…',
+        /** The toolbar's search field too narrow for the placeholder (verification of 3.30.0). */
+        placeholderShort: 'Hledat…',
         noResults: 'Nic nenalezeno',
         multipleResults: 'Nalezeno více výsledků',
         toList: 'Výsledky do seznamu',
@@ -25912,6 +25916,8 @@ const stringsDE: StringsType = {
         birth: (surname: string) => `geb. ${surname}`,
         former: (surname: string) => `früher ${surname}`,
         placeholder: 'Person suchen…',
+        /** The toolbar's search field too narrow for the placeholder (verification of 3.30.0). */
+        placeholderShort: 'Suchen…',
         noResults: 'Keine Ergebnisse',
         multipleResults: 'Mehrere Ergebnisse gefunden',
         toList: 'Ergebnisse in eine Liste',
