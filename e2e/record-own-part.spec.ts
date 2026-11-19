@@ -75,7 +75,7 @@ test.describe('a part recorded as an own event', () => {
         await village(page);
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('p_hm' as never));
         const modal = personModal(page);
-        await modal.locator('.event-row.derived', { hasText: 'Godparent' }).locator('.derived-more').click();
+        await modal.locator('.event-row.derived', { hasText: 'Godfather' }).locator('.derived-more').click();
         await expect(menu(page).locator('.sw-menu-label')).toHaveText(['Open baptism (Bolemír Pšeničný)', 'Also record as an own event']);
         await expect(menu(page).locator('.sw-menu-hint')).toHaveText(['Creates a godparent event linked to the baptism, with the same source.']);
         await menu(page).getByRole('menuitem', { name: /Also record/ }).click();
@@ -117,7 +117,7 @@ test.describe('a part recorded as an own event', () => {
         await village(page);
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('p_hm' as never));
         const modal = personModal(page);
-        await modal.locator('.event-row.derived', { hasText: 'Godparent' }).locator('.derived-more').click();
+        await modal.locator('.event-row.derived', { hasText: 'Godfather' }).locator('.derived-more').click();
         await menu(page).getByRole('menuitem', { name: /Also record/ }).click();
         const ed = editor(page);
         await expect(ed.locator('#event-prefill-bar')).toBeVisible();
@@ -125,7 +125,7 @@ test.describe('a part recorded as an own event', () => {
         await expect(ed).not.toHaveClass(/active/);
         await expect(page.locator('#unsaved-editor-modal.active, .unsaved-dialog.active')).toHaveCount(0);
         expect((await eventsOf(page, 'p_hm')).map((e: { id: string }) => e.id)).toEqual(['ev_res']);
-        await expect(modal.locator('.event-row.derived', { hasText: 'Godparent' })).toHaveCount(1);
+        await expect(modal.locator('.event-row.derived', { hasText: 'Godfather' })).toHaveCount(1);
         await page.evaluate(() => window.Strom.UI.showAddEventModal());
         await expect(ed.locator('#event-prefill-bar')).toBeHidden();
         await expect(ed.locator('#event-roleat-group')).toBeHidden();
@@ -164,7 +164,7 @@ test.describe('a part recorded as an own event', () => {
         await expect(personModal(page).locator('#events-list')).toContainText('Residence');
         await ed.getByRole('button', { name: 'Save' }).click();
         expect((await eventsOf(page, 'p_hm')).map((e: { type: string }) => e.type)).toEqual(['residence', 'godparent']);
-        await expect(personModal(page).locator('.event-row.derived', { hasText: 'Godparent' })).toHaveCount(0);
+        await expect(personModal(page).locator('.event-row.derived', { hasText: 'Godfather' })).toHaveCount(0);
     });
 
     test('the chip of a witness in the wedding witnesses\' dialog: record as a wedding witness event', async ({ page }) => {
