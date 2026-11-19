@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { INBOX_ASIDE_FEATURE, asideWaiting, asideWaitingId, sanitizeBookAside, sanitizeLiveStatus } from '../research-link.js';
+import { INBOX_ASIDE_FEATURE, asideFileName, asideWaiting, asideWaitingId, sanitizeBookAside, sanitizeLiveStatus } from '../research-link.js';
 import { BOOK_GROUP_PREFIX, groupWaiting, waitingChips, waitingPhases, waitingTodoCount } from '../research-waiting.js';
 import { noteResearchWaiting, storedResearchWaiting } from '../research-device.js';
 import { answerBookAside, asideAnswers, asideOutcomeOf, asideWaitingText, readAsideOutcome } from '../research-aside.js';
@@ -126,14 +126,38 @@ describe('files of a book\'s inbox set aside', () => {
     it('say the file, the saved image and the book (its title, else its id)', () => {
         const T = strings.live.aside;
         const [o, sm] = asideWaiting({ aside: [sanitizeBookAside(other)!, sanitizeBookAside(same)!] });
-        expect(asideWaitingText(o, 'Matrika Lhota 1', T)).toBe(T.other('3.jpg.other-than-M0042', 3, 'M0042', 'Matrika Lhota 1'));
+        // The file by the name it came with, never the research's mark of it.
+        expect(asideWaitingText(o, 'Matrika Lhota 1', T)).toBe(T.other('3.jpg', 3, 'M0042', 'Matrika Lhota 1'));
         expect(asideWaitingText(o, null, T)).toContain('B0001');
-        expect(asideWaitingText(sm, 'Matrika Lhota 1', T)).toBe(T.same('10.jpg.same-as-M0041', 'M0041'));
+        expect(asideWaitingText(sm, 'Matrika Lhota 1', T)).toBe(T.same('10.jpg', 'M0041'));
         expect(asideWaitingId(other)).toBe('aside:B0001/3.jpg.other-than-M0042');
         // No item text addresses anyone (CLAUDE.md: impersonal texts).
         for (const t of [T.other('a', 3, 'M1', 'b'), T.same('a', 'M1'), T.folderHint, T.keep(3), T.take(3), T.another, T.numLabel, T.bin, T.taken(3), T.sameOnly, T.notSaved]) {
             expect(t).not.toMatch(/\b(you|your)\b/i);
         }
+    });
+
+    it('show the name the file came with (`name`), else the file without the research\'s mark; its id and answer keep the file', () => {
+        const T = strings.live.aside;
+        const named = { ...other, name: 'sken 3 (opraveny).jpg' };
+        // The name passes the check and is kept; one that is no plain name is left out.
+        expect(sanitizeBookAside(named)).toEqual(named);
+        expect(sanitizeBookAside({ ...other, name: '../x.jpg' })).toEqual(other);
+        expect(sanitizeBookAside({ ...other, name: ' x.jpg' })).toEqual(other);
+        expect(sanitizeBookAside({ ...other, name: 7 })).toEqual(other);
+        const [w] = asideWaiting({ aside: [sanitizeBookAside(named)!] });
+        expect(w.what).toBe('sken 3 (opraveny).jpg');
+        expect(asideWaitingText(w, 'Matrika Lhota 1', T)).toBe(T.other('sken 3 (opraveny).jpg', 3, 'M0042', 'Matrika Lhota 1'));
+        expect(w.id).toBe('aside:B0001/3.jpg.other-than-M0042');
+        expect(w.aside?.file).toBe('3.jpg.other-than-M0042');
+        // Without a name: the mark cut off; a file without one as it is.
+        expect(asideWaiting({ aside: [sanitizeBookAside(other)!, sanitizeBookAside(same)!] }).map(x => x.what)).toEqual(['3.jpg', '10.jpg']);
+        expect(asideFileName({ file: 'scan.other-than-M0001' })).toBe('scan');
+        expect(asideFileName({ file: 'scan.jpg' })).toBe('scan.jpg');
+        expect(asideFileName({ file: '.other-than-M0001' })).toBe('.other-than-M0001');
+        // Kept on this device with its name (the stored items are read through the same check).
+        const s = sanitizeLiveStatus(status(['books', INBOX_ASIDE_FEATURE], [named, same]))!;
+        expect(s.books?.aside?.[0].name).toBe('sken 3 (opraveny).jpg');
     });
 
     it('a refused answer: 404 gone at once, 409 the number taken or the bin only, busy with Try again', () => {

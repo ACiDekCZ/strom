@@ -3326,10 +3326,13 @@ export const INBOX_ASIDE_FEATURE = 'inbox.aside';
 /**
  * A file of a book's inbox folder the research did not take in: 'other' — another scan than the image saved under
  * its number (`image`); 'same' — the same scan as an image saved under another number. `media`: the saved image
- * it is compared with ("M0042"); `at`: when the file was saved.
+ * it is compared with ("M0042"); `at`: when the file was saved. `file` is its name in the inbox folder as the
+ * research keeps it ("3.jpg.other-than-M0001"), the key of the answer; `name` the name it came with ("3.jpg"),
+ * the one shown (asideFileName).
  */
 export interface LiveBookAside {
     file: string;
+    name?: string;
     recordset: string;
     image?: number;
     kind: 'other' | 'same';
@@ -3351,7 +3354,21 @@ export function sanitizeBookAside(value: unknown): LiveBookAside | null {
     if (!file || file === '.' || file === '..' || !recordset || !kind || !media) return null;
     const image = imageNumber(r.image);
     const at = cleanText(r.at, 40);
-    return { file, recordset, ...(image !== null ? { image } : {}), kind, media, at: Number.isFinite(Date.parse(at)) ? at : '' };
+    const name = typeof r.name === 'string' && r.name.length <= 255 && !/[\\/\u0000-\u001f]/.test(r.name) && r.name.trim() === r.name ? r.name : '';
+    return {
+        file, ...(name ? { name } : {}), recordset, ...(image !== null ? { image } : {}), kind, media,
+        at: Number.isFinite(Date.parse(at)) ? at : '',
+    };
+}
+
+/**
+ * The name a file set aside is shown by: the name it came with (`name`), else its name in the inbox folder
+ * without the mark the research gave it (".other-than-M0001", ".same-as-M0042").
+ */
+export function asideFileName(a: Pick<LiveBookAside, 'file' | 'name'>): string {
+    if (a.name) return a.name;
+    const bare = a.file.replace(/\.(?:other-than|same-as)-[^.]+$/, '');
+    return bare || a.file;
 }
 
 /** `/status.books.aside`: each file once (the first said), at most MAX_ASIDE. */
@@ -3374,11 +3391,11 @@ export function asideWaitingId(a: Pick<LiveBookAside, 'recordset' | 'file'>): st
 
 /**
  * The files set aside as items of Awaiting action (a decision, under their book), newest first. Their text is
- * the file's name here; the app's words come where they are drawn (asideWaitingText).
+ * the file's name here (asideFileName); the app's words come where they are drawn (asideWaitingText).
  */
 export function asideWaiting(books: Pick<LiveBooks, 'aside'> | null | undefined): LiveWaiting[] {
     return (books?.aside ?? []).map(a => ({
-        id: asideWaitingId(a), what: a.file, on: '', at: a.at, kind: 'aside' as const, section: 'decide' as const, book: a.recordset, aside: a,
+        id: asideWaitingId(a), what: asideFileName(a), on: '', at: a.at, kind: 'aside' as const, section: 'decide' as const, book: a.recordset, aside: a,
     }));
 }
 

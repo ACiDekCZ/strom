@@ -13,7 +13,7 @@
  * elsewhere meanwhile (the item just goes).
  */
 
-import { LiveBookAside, LiveWaiting, imageNumber, sanitizeBooksAside } from './research-link.js';
+import { LiveBookAside, LiveWaiting, asideFileName, imageNumber, sanitizeBooksAside } from './research-link.js';
 import { researchBridgeWrite, type BridgeWriteResult, type DirectionWriteRefused } from './research-directions-write.js';
 import type { strings } from './strings.js';
 
@@ -33,7 +33,8 @@ export function asideAnswers(a: Pick<LiveBookAside, 'kind' | 'image'>): AsideDo[
 export function asideWaitingText(w: Pick<LiveWaiting, 'aside' | 'what'>, bookTitle: string | null, T: AsideTexts): string {
     const a = w.aside;
     if (!a) return w.what;
-    return a.kind === 'same' ? T.same(a.file, a.media) : T.other(a.file, a.image ?? null, a.media, bookTitle || a.recordset);
+    const file = asideFileName(a);
+    return a.kind === 'same' ? T.same(file, a.media) : T.other(file, a.image ?? null, a.media, bookTitle || a.recordset);
 }
 
 /** What a written answer says: what was done and the files set aside now. */

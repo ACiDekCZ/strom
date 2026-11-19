@@ -25,13 +25,15 @@ const archive = { key: 'repo:R0001', name: 'Archiv v Lhotě', kind: 'archive' };
 const minAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOString();
 
 const LONG_BOOK = 'Matrika Lhota u Lhotáku 12, N O Z';
-const LONG_FILE = '0003_matrika-lhota-u-lhotaku-sken-strana-203-opraveny.jpg.other-than-M0042';
+const LONG_NAME = '0003_matrika-lhota-u-lhotaku-sken-strana-203-opraveny.jpg';
+const LONG_FILE = `${LONG_NAME}.other-than-M0042`;
 
 interface Opts { long?: boolean; features?: string[]; width?: number; lang?: string }
 
 function asideList(long = false): Record<string, unknown>[] {
     return [
-        { file: long ? LONG_FILE : '3.jpg.other-than-M0042', recordset: 'B0001', image: 3, kind: 'other', media: 'M0042', at: minAgo(10) },
+        // The name it came with said by the research (`name`); the other one without it (the mark cut off here).
+        { file: long ? LONG_FILE : '3.jpg.other-than-M0042', name: long ? LONG_NAME : '3.jpg', recordset: 'B0001', image: 3, kind: 'other', media: 'M0042', at: minAgo(10) },
         { file: '10.jpg.same-as-M0041', recordset: 'B0001', image: 10, kind: 'same', media: 'M0041', at: minAgo(25) },
     ];
 }
@@ -139,7 +141,7 @@ test.describe('files of a book\'s inbox set aside in Awaiting action', () => {
         await expect(sec(page).locator('.research-overview__waiting-filters .research-overview__filter')).toHaveText([/^All\s*3$/, /^Decisions\s*2$/, /^Images\s*1$/]);
 
         const other = await openItem(page, '3.jpg.other-than-M0042');
-        await expect(other.locator('.research-overview__waiting-row')).toContainText('3.jpg.other-than-M0042: a different scan than image 3 of the book Matrika Lhota 1, N');
+        await expect(other.locator('.research-overview__waiting-row')).toContainText('3.jpg: a different scan than image 3 of the book Matrika Lhota 1, N');
         await expect(other.locator('.research-overview__waiting-inbox')).toHaveText('Saved image 3: M0042');
         const folder = other.locator('.research-overview__book-folder');
         await expect(folder).toHaveText('Open the book’s folder');
@@ -152,7 +154,7 @@ test.describe('files of a book\'s inbox set aside in Awaiting action', () => {
         await expect(other.locator('.research-overview__aside-actions .research-open-mark, .research-overview__aside-actions .research-ai-badge')).toHaveCount(0);
 
         const same = await openItem(page, '10.jpg.same-as-M0041');
-        await expect(same.locator('.research-overview__waiting-row')).toContainText('10.jpg.same-as-M0041: the same scan as image M0041 under another number – one of the numbers is wrong');
+        await expect(same.locator('.research-overview__waiting-row')).toContainText('10.jpg: the same scan as image M0041 under another number – one of the numbers is wrong');
         await expect(same.locator('.research-overview__aside-actions button')).toHaveText(['File to the bin']);
         // Never "Answer (research)" here.
         await expect(sec(page).locator(`.research-overview__waiting-item[data-id^="aside:"] [data-action="answer"]`)).toHaveCount(0);
@@ -268,7 +270,7 @@ test.describe('files of a book\'s inbox set aside in Awaiting action', () => {
             await research(page, { width, long: true, lang: 'de' });
             await openOverview(page);
             const item = await openItem(page, LONG_FILE);
-            await expect(item.locator('.research-overview__waiting-row')).toContainText(`${LONG_FILE}: ein anderer Scan als Bild 3 des Buchs ${LONG_BOOK}`);
+            await expect(item.locator('.research-overview__waiting-row')).toContainText(`${LONG_NAME}: ein anderer Scan als Bild 3 des Buchs ${LONG_BOOK}`);
             await item.locator('[data-action="aside-another"]').click();
             await item.locator('.research-overview__aside-number input').fill('7');
             for (const scheme of ['light', 'dark'] as const) {
@@ -306,7 +308,7 @@ test.describe('files of a book\'s inbox set aside in Awaiting action', () => {
         await research(page, { width: 1024, lang: 'cs' });
         await openOverview(page);
         const item = await openItem(page, '3.jpg.other-than-M0042');
-        await expect(item.locator('.research-overview__waiting-row')).toContainText('3.jpg.other-than-M0042: jiný sken než snímek 3 knihy Matrika Lhota 1, N');
+        await expect(item.locator('.research-overview__waiting-row')).toContainText('3.jpg: jiný sken než snímek 3 knihy Matrika Lhota 1, N');
         await expect(item.locator('.research-overview__waiting-inbox')).toHaveText('Zapsaný snímek 3: M0042');
         await expect(item.locator('.research-overview__aside-actions button')).toHaveText(['Ponechat snímek 3', 'Nový soubor je snímek 3', 'Jiné číslo…']);
         if (process.env.SNIMKY_DIR) await page.screenshot({ path: `${process.env.SNIMKY_DIR}/aside-cs-1024.png` });

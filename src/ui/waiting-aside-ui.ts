@@ -10,7 +10,7 @@
  */
 
 import { strings } from '../strings.js';
-import { LiveWaiting, MAX_IMAGE_NUMBER, asideWaiting, imageNumber, researchLinkMark, type LiveBookAside } from '../research-link.js';
+import { LiveWaiting, MAX_IMAGE_NUMBER, asideFileName, asideWaiting, imageNumber, researchLinkMark, type LiveBookAside } from '../research-link.js';
 import { bookById, bookTitle } from '../research-books.js';
 import { withBusyRetry } from '../research-directions.js';
 import { answerBookAside, asideAnswers, asideOutcomeOf, asideWaitingText, type AsideDo, type AsideOutcome } from '../research-aside.js';
@@ -158,7 +158,7 @@ export const waitingAsideMethods = {
         field.style.setProperty('--ph-len', String(Math.max(3, field.placeholder.length)));
         field.value = typed.get(w.id) ?? '';
         field.dataset.focusKey = `aside-num:${w.id}`;
-        field.setAttribute('aria-label', `${a.file}: ${T.numLabel}`);
+        field.setAttribute('aria-label', `${asideFileName(a)}: ${T.numLabel}`);
         const label = el('label', 'research-overview__aside-numlabel', T.numLabel);
         const id = `aside-num-${w.id.replace(/[^A-Za-z0-9_-]/g, '_')}`;
         field.id = id;
