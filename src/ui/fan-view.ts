@@ -23,7 +23,9 @@ import type { PersonId, StromData } from '../types.js';
 import {
     buildFanModel, buildFanSvg, fanLineages, FanModel, FanShape, FanSvgOptions,
 } from '../fan-chart.js';
-import { FanColorMode, FanTheme, fanLegend, fanHasRepeats, fanRodColors, FanLegendItem } from '../fan-colors.js';
+import { FanColorMode, FanTheme, fanLegend, fanHasRepeats, FanLegendItem, FanRodSlot, parseFanRodSlot } from '../fan-colors.js';
+import { assignFanRodColors, FanRodAssignment } from '../fan-rod-assign.js';
+import type { RodId } from '../lineage.js';
 import { fanScreenSizes, clearFanMeasureCache } from '../fan-labels.js';
 import { FanZoom, FanView as FanZoomView, FanZoomPoint } from '../fan-zoom.js';
 import { fanNavNodes, fanNavMove, FanNavDir } from '../fan-nav.js';
@@ -89,6 +91,11 @@ export interface FanViewHost {
     remembersPrefs?(): boolean;
     /** The person selected in another window (spec 079 §2): their sectors outlined. */
     windowSelected?(): string | null;
+    /**
+     * The family lines' slots the view remembers changed (spec 114 §3): the
+     * main window tells its satellites; empty when the memory was forgotten.
+     */
+    rodColorsChanged?(memory: Array<[string, string]>): void;
 }
 
 /** One sector's menu (§5.4). */
@@ -182,6 +189,10 @@ export class FanViewController {
     private flashTimer: ReturnType<typeof setTimeout> | null = null;
     /** The next draw puts the keyboard focus (if it is in the fan) on the focus disc. */
     private refocusDisc = false;
+    /** The family lines' slots of the previous states (spec 114 §3), while the view stays open on this tree. */
+    private rodColorMemory = new Map<RodId, FanRodSlot>();
+    /** The family lines' colours of the current model (computed once per model, rod mode only). */
+    private rodAssignment: FanRodAssignment | null = null;
 
     constructor(host: FanViewHost) {
         this.host = host;
@@ -197,6 +208,66 @@ export class FanViewController {
     /** The zoom of the view (null before the first draw). */
     getZoom(): FanZoom | null {
         return this.zoom;
+    }
+
+    // ------------------------------------------------------------ family-line colours (spec 114)
+
+    /**
+     * The family lines' colours of the current model in rod mode (null in the
+     * other modes): assigned once per model, from the memory of the previous
+     * states; the drawing, the legend, print and the poster read them.
+     */
+    getRodAssignment(): FanRodAssignment | null {
+        return this.rodColors();
+    }
+
+    private rodColors(): FanRodAssignment | null {
+        const model = this.model;
+        if (!model || this.host.settings().colorMode !== 'rod') return null;
+        const index = fanLineages(model.data);
+        if (this.rodAssignment && this.rodAssignmentModel === model && this.rodAssignment.index === index) return this.rodAssignment;
+        const a = assignFanRodColors(model, index, this.rodColorMemory);
+        this.rodAssignment = a;
+        this.rodAssignmentModel = model;
+        const before = this.rodColorMemory;
+        // A state drawn after another one: the memory is this view's own from now on.
+        if (before.size) this.rodMemoryOwn = true;
+        this.rodColorMemory = new Map(a.memory);
+        const same = before.size === a.memory.size && [...a.memory].every(([id, s]) => before.get(id) === s);
+        if (!same) this.host.rodColorsChanged?.([...a.memory]);
+        return a;
+    }
+
+    private rodAssignmentModel: FanModel | null = null;
+    /** The memory came from states this view drew one after another (no longer taken from the main window). */
+    private rodMemoryOwn = false;
+
+    /** The memory goes with the view or the tree (§3): the next opening is deterministic again. */
+    private forgetRodColors(): void {
+        this.rodAssignment = null;
+        this.rodAssignmentModel = null;
+        this.rodMemoryOwn = false;
+        if (!this.rodColorMemory.size) return;
+        this.rodColorMemory = new Map();
+        this.host.rodColorsChanged?.([]);
+    }
+
+    /**
+     * The main window's memory of the slots (a satellite window, spec 114 §3):
+     * taken as this view's starting memory while it has none of its own
+     * (only its first state drawn); slots that do not fit here are assigned anew.
+     */
+    adoptRodColors(memory: ReadonlyArray<readonly [string, string]>): void {
+        if (this.rodMemoryOwn) return;
+        const mem = new Map<RodId, FanRodSlot>();
+        for (const [id, slot] of memory) {
+            if (typeof id === 'string' && typeof slot === 'string' && parseFanRodSlot(slot)) mem.set(id as RodId, slot as FanRodSlot);
+        }
+        if (!mem.size) return;
+        this.rodColorMemory = mem;
+        this.rodAssignment = null;
+        this.rodAssignmentModel = null;
+        if (this.host.active() && this.host.settings().colorMode === 'rod') this.redraw();
     }
 
     // ------------------------------------------------------------ drawing
@@ -223,6 +294,8 @@ export class FanViewController {
         });
         this.model = model;
         if (!model) { chart.innerHTML = ''; this.renderLegend(); return; }
+        // The colours of the new state from the memory before anything is drawn (§3: never drawn without it, then fixed).
+        this.rodColors();
         const zoom = this.ensureZoom(chart, model);
         // §1.6: a new focus, shape or depth (or a frame that grew) starts from the whole fan.
         const b = model.bounds;
@@ -260,6 +333,7 @@ export class FanViewController {
             showKekule: this.host.showKekule(),
             relTypeLabel: this.host.relTypeLabel,
             colorMode: this.host.settings().colorMode,
+            ...(this.rodColors() ? { rodColors: this.rodColors()! } : {}),
             ppu: vb.ppu,
             viewport: { x: vb.x, y: vb.y, w: vb.w, h: vb.h },
             sizes: fanScreenSizes(isMobile()),
@@ -382,6 +456,7 @@ export class FanViewController {
      * renderer calls it on every render of another view.
      */
     deactivate(): void {
+        this.forgetRodColors();
         if (!this.origin && !this.shown && !this.menuKey && !this.swap && !this.flashKey) return;
         this.origin = null;
         this.shown = null;
@@ -1231,7 +1306,7 @@ export class FanViewController {
         const model = this.model;
         if (!model) return [];
         const mode = this.host.settings().colorMode;
-        const rc = mode === 'rod' ? fanRodColors(fanLineages(model.data)) : null;
+        const rc = this.rodColors();
         const of = (theme: FanTheme) => fanLegend(model, mode, theme, rc);
         const light = of('light'), dark = of('dark'), print = of('print');
         return light.map((item, i) => ({ item, light: item, dark: dark[i] ?? item, print: print[i] ?? item }));

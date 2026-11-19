@@ -6,12 +6,15 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-    FAN_PALETTES, FanTheme, oklchToHex, contrastRatio, fanLineColor, fanRodColor, fanFill, fanLegend, fanRodColors, fanHasRepeats,
-    LINE_HUE, parentLineColor, descLineColor,
+    FAN_PALETTES, FanTheme, oklchToHex, contrastRatio, fanLineColor, fanFill, fanLegend, fanHasRepeats,
+    LINE_HUE, parentLineColor, descLineColor, fanRodSlots, fanRodSlotColor, fanRodSlotOklch, fanRodFill, parseFanRodSlot,
+    FAN_ROD_GROUPS, FanRodSlot, oklab, deltaE, deltaEDeutan,
 } from '../fan-colors.js';
+import { assignFanRodColors } from '../fan-rod-assign.js';
 import { buildFanModel, buildFanSvg } from '../fan-chart.js';
 import { buildLineages } from '../lineage.js';
 import { StromData, Person, PersonId, Gender } from '../types.js';
+import { readFileSync as readFixture } from 'node:fs';
 
 function person(id: string, gender: Gender, parentIds: string[] = [], o: Partial<Person> = {}): Person {
     return { id: id as PersonId, firstName: id, lastName: 'Kvítek', gender, isPlaceholder: false, parentIds: parentIds as PersonId[], childIds: [], partnerships: [], ...o };
@@ -26,7 +29,7 @@ function allFills(theme: FanTheme): string[] {
     const T = FAN_PALETTES[theme];
     const out = [T.male, T.female, T.unknown, T.grey];
     for (let g = 2; g <= 10; g++) for (let line = 0; line < 4; line++) out.push(fanLineColor(line, g, theme));
-    for (let r = 0; r < 10; r++) out.push(fanRodColor(r, theme));
+    for (const slot of fanRodSlots()) out.push(fanRodSlotColor(slot, theme));
     const p = person('p', 'male');
     for (const ah of [2, 3]) out.push(fanFill({ kind: 'anc', person: p, generation: 1, ahnentafel: ah }, 'line', theme));
     out.push(fanFill({ kind: 'desc', person: p }, 'line', theme), fanFill({ kind: 'partner', person: p }, 'line', theme));
@@ -100,6 +103,59 @@ describe('line mode in the P2 lineage hues (spec 112 §3)', () => {
     });
 });
 
+describe('family-line palette (spec 114 §2)', () => {
+    const REF: { hex: Record<string, [string, string]> } = JSON.parse(readFixture(new URL('./fixtures/fan-rod-reference.json', import.meta.url), 'utf8'));
+    const slots = fanRodSlots();
+    const of = (g: string, t: string) => slots.filter(s => s.startsWith(g + t));
+
+    it('has the slots of the table: P 6 strong + 5 muted, M 6 + 4, D 3 + 2', () => {
+        expect(slots.length).toBe(26);
+        expect(FAN_ROD_GROUPS.map(g => [of(g, 'S').length, of(g, 'T').length])).toEqual([[6, 5], [6, 4], [3, 2]]);
+        expect(slots.every(s => parseFanRodSlot(s))).toBe(true);
+        for (const bad of ['PS6', 'MT4', 'DS3', 'XS0', 'PS', 'ps0', 'PS00x']) expect(parseFanRodSlot(bad), bad).toBeNull();
+    });
+
+    it('equals the hex table of §2 in the light (= print) and the dark theme (test 2)', () => {
+        expect(Object.keys(REF.hex).sort()).toEqual([...slots].sort());
+        for (const s of slots) {
+            expect(fanRodSlotColor(s, 'light'), s).toBe(REF.hex[s][0]);
+            expect(fanRodSlotColor(s, 'print'), s).toBe(REF.hex[s][0]);
+            expect(fanRodSlotColor(s, 'dark'), s).toBe(REF.hex[s][1]);
+        }
+        expect(fanRodSlotColor('PS0', 'light')).toBe('#8bbff9');
+        expect(fanRodSlotColor('MS1', 'dark')).toBe('#7b432c');
+        expect(fanRodSlotOklch('PS0', 'light')).toEqual([0.79, 0.1, 252]);
+        expect(fanRodFill(null, 'light')).toBe(FAN_PALETTES.light.grey);
+        expect(fanRodFill(null, 'dark')).toBe('#3a372f');
+        expect(fanRodFill('DS0', 'print')).toBe('#ddbf80');
+    });
+
+    it('keeps the slots apart (test 3): the first strong ones of a group, strong × muted, the groups\' cores', () => {
+        const minPair = (xs: FanRodSlot[], ys: FanRodSlot[], theme: 'light' | 'dark') => {
+            let m = 9;
+            for (const x of xs) for (const y of ys) if (x !== y) m = Math.min(m, deltaE(fanRodSlotColor(x, theme), fanRodSlotColor(y, theme)));
+            return m;
+        };
+        for (const g of FAN_ROD_GROUPS) {
+            const first = of(g, 'S').slice(0, 4);
+            expect(minPair(first, first, 'light'), `${g} light`).toBeGreaterThanOrEqual(0.038);
+            expect(minPair(first, first, 'dark'), `${g} dark`).toBeGreaterThanOrEqual(0.030);
+            for (const th of ['light', 'dark'] as const) expect(minPair(of(g, 'S'), of(g, 'T'), th), `${g} S×T ${th}`).toBeGreaterThanOrEqual(0.045);
+        }
+        const cores: FanRodSlot[] = ['PS0', 'MS0', 'DS0'];
+        for (const th of ['light', 'dark'] as const) expect(minPair(cores, cores, th), `cores ${th}`).toBeGreaterThanOrEqual(0.10);
+    });
+
+    it('measures colours in OKLab, also as a deuteranope sees them', () => {
+        expect(oklab('#ffffff')[0]).toBeCloseTo(1, 3);
+        expect(oklab('#000000')[0]).toBeCloseTo(0, 6);
+        expect(deltaE('#8bbff9', '#8bbff9')).toBe(0);
+        expect(deltaE('#ff0000', '#00ff00')).toBeGreaterThan(0.4);
+        // Red and green, far apart, come close for a deuteranope.
+        expect(deltaEDeutan('#ff0000', '#00ff00')).toBeLessThan(deltaE('#ff0000', '#00ff00') / 2);
+    });
+});
+
 describe('tokens in index.html', () => {
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     const token = (block: string, name: string) => block.match(new RegExp(`--fan-${name}:\\s*(#[0-9a-f]{6})`, 'i'))?.[1].toLowerCase();
@@ -142,8 +198,8 @@ describe('fills and legend', () => {
         expect(lines.map(i => i.who)).toEqual(['Václav Kvítek', 'Marie Zrzavá', 'Jan Ostružník', 'Anna Lobkovcová']);
         expect(lines[0].color).toBe(fanLineColor(0, 2, 'dark'));
         expect(lines[0].color2).toBe(fanLineColor(0, 4, 'dark'));
-        const rc = fanRodColors(buildLineages(d));
-        expect(fanRodColors(buildLineages(d)).rank.size).toBe(rc.rank.size);
+        const rc = assignFanRodColors(m, buildLineages(d));
+        expect([...assignFanRodColors(m, buildLineages(d)).slotOf]).toEqual([...rc.slotOf]);
         const rods = fanLegend(m, 'rod', 'light', rc);
         const total = rods.reduce((a, i) => a + parseInt(i.who!, 10), 0);
         expect(total).toBe(7);

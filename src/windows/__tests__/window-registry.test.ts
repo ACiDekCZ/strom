@@ -442,3 +442,34 @@ describe('links and research actions from other windows', () => {
         expect(handler).toHaveBeenCalledTimes(2);
     });
 });
+
+describe('the fan\'s family-line colours (spec 114 §3)', () => {
+    it('go to every window after a change; a fan window saying hello or switching to the fan gets the last ones; empty forgets them', async () => {
+        const table = await connect();
+        const mem: Array<[string, string]> = [['rod-a', 'PS0'], ['rod-b', 'MS1']];
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:fan-rod-colors', { detail: mem }));
+        else registry.postFanRodColors(mem);
+        await settle();
+        expect(table.of('fan-rod-colors')).toEqual([expect.objectContaining({ treeId: TREE, memory: mem })]);
+        // A fan window opened later: the memory with its hello, to it alone.
+        const id = registry.openSatellite('fan')!;
+        const fan = listener(hub, id);
+        fan.bus.post({ type: 'hello', windowId: id, kind: 'fan', treeId: TREE });
+        await settle();
+        expect(fan.of('fan-rod-colors')).toEqual([expect.objectContaining({ to: id, treeId: TREE, memory: mem })]);
+        expect(table.of('fan-rod-colors')).toHaveLength(1);
+        // The table window switches to the fan: it gets them too.
+        table.bus.post({ type: 'view', windowId: table.id, kind: 'fan' });
+        await settle();
+        expect(last(table.of('fan-rod-colors'))).toMatchObject({ to: table.id, memory: mem });
+        // Forgotten (the fan closed here): an empty memory to all, nothing for the next window.
+        registry.postFanRodColors([]);
+        await settle();
+        expect(last(fan.of('fan-rod-colors'))).toMatchObject({ memory: [] });
+        const id2 = registry.openSatellite('fan')!;
+        const fan2 = listener(hub, id2);
+        fan2.bus.post({ type: 'hello', windowId: id2, kind: 'fan', treeId: TREE });
+        await settle();
+        expect(fan2.of('fan-rod-colors')).toHaveLength(0);
+    });
+});

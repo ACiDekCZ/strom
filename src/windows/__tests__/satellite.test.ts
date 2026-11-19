@@ -540,6 +540,16 @@ describe('the Research overview in its own window (K3)', () => {
         expect(states).toEqual([{ v: 1, at: 5 }]);
     });
 
+    it('the fan\'s family-line colours from the main window reach the fan (spec 114 §3); another window\'s do not', async () => {
+        await connect();
+        const got: unknown[] = [];
+        sat.on('fan-rod-colors', (m) => got.push(m));
+        main.post({ type: 'fan-rod-colors', treeId: TREE, memory: [['rod-a', 'PS0']] });
+        new WindowBus('other-sat', hub.channel()).post({ type: 'fan-rod-colors', treeId: TREE, memory: [['rod-a', 'MS0']] });
+        await settle();
+        expect(got).toEqual([{ treeId: TREE, memory: [['rod-a', 'PS0']] }]);
+    });
+
     it('an action whose outcome it waits for: the answer to this window, null when the main window is silent', async () => {
         await connect();
         const sent = sat.researchActionResult('waiting-answer', { itemId: 'W1', text: 'Yes' }, 300);

@@ -20,13 +20,14 @@ import { shownName, shownNameFull } from './person-name.js';
 import { strings } from './strings.js';
 import { compareMarriages, marriageDates } from './marriage-order.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
-import { LineageIndex, buildLineages } from './lineage.js';
+import { LineageIndex, RodId, buildLineages, rodOf, rodLabels } from './lineage.js';
 import {
     posterFooterSvg, posterFooterHeight, PosterFooterMeta, POSTER_PADDING, POSTER_FONT, POSTER_BG,
 } from './export-image.js';
 import {
-    FanColorMode, FanTheme, FanPalette, FAN_PALETTES, fanFill, fanRodColors, FanRodColors, fanLegend, fanHasRepeats,
+    FanColorMode, FanTheme, FanPalette, FAN_PALETTES, fanFill, fanLegend, fanHasRepeats,
 } from './fan-colors.js';
+import { assignFanRodColors, fanRodLegend, FanRodAssignment } from './fan-rod-assign.js';
 import {
     FanLabelSizes, FanMeasure, fanScreenSizes, fanPrintSizes, fanBaseSize, defaultFanMeasure, fanLabelBox, fitFanLabel, fitFanSectorLabel,
     fanLabelSvg, fanCenteredRowsSvg, fanRadialRotation, fanYears, FanLabelBox,
@@ -408,6 +409,12 @@ export interface FanSvgOptions {
     uid?: string;
     /** The tree's family lines (rod colours); built from the model's data when missing. */
     rodIndex?: LineageIndex;
+    /**
+     * The family lines' colours as the window assigned them (spec 114 §3):
+     * the drawing, the poster and print take them as they are. Missing: the
+     * fan's own assignment, without memory.
+     */
+    rodColors?: FanRodAssignment;
     /** Sector keys to outline (e.g. a first occurrence). */
     marks?: Iterable<string>;
     /** An extra row in the focus disc and its tooltip (the way back after re-centring). */
@@ -434,6 +441,11 @@ export function fanWedgePath(r1: number, r2: number, lo: number, hi: number): st
 }
 
 let uidCounter = 0;
+
+/** The family lines' colours of a drawing: the window's, or the fan's own (deterministic). */
+function fanRodColorsOf(model: FanModel, opts: Pick<FanSvgOptions, 'rodColors' | 'rodIndex'>): FanRodAssignment {
+    return opts.rodColors ?? assignFanRodColors(model, opts.rodIndex ?? lineagesOf(model.data));
+}
 const lineagesByData = new WeakMap<StromData, LineageIndex>();
 
 /** The tree's family lines (cached per data object): the rod colours and the legend's rows. */
@@ -496,7 +508,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
     const protect = (p: Person | null) => !!p && !!opts.protect && opts.protect(p);
     const embedded = !!opts.embedStyles;
     const embedTheme: FanTheme = opts.theme ?? 'light';
-    const rc: FanRodColors | null = mode === 'rod' ? fanRodColors(opts.rodIndex ?? lineagesOf(model.data)) : null;
+    const rc: FanRodAssignment | null = mode === 'rod' ? fanRodColorsOf(model, opts) : null;
     const marks = new Set(opts.marks ?? []);
 
     // Fill classes: one per distinct colour pair (light/dark) or embedded colour.
@@ -752,11 +764,35 @@ function posterScale(model: FanModel): number {
 
 interface PosterLegendItem { text: string; color?: string; color2?: string; hatch?: boolean }
 
-function posterLegendItems(model: FanModel, mode: FanColorMode, rodIndex?: LineageIndex): PosterLegendItem[] {
-    const rc = mode === 'rod' ? fanRodColors(rodIndex ?? lineagesOf(model.data)) : null;
-    const items: PosterLegendItem[] = fanLegend(model, mode, 'print', rc)
-        .map(i => ({ text: i.who ? `${i.label} · ${i.who}` : i.label, color: i.color, color2: i.color2 }));
+function posterLegendItems(model: FanModel, mode: FanColorMode, opts: Pick<FanSvgOptions, 'rodColors' | 'rodIndex'>): PosterLegendItem[] {
+    const rc = mode === 'rod' ? fanRodColorsOf(model, opts) : null;
+    const items: PosterLegendItem[] = rc && rc.index.data !== model.data
+        ? rodLegendOfCopy(model, rc)
+        : fanLegend(model, mode, 'print', rc).map(i => ({ text: i.who ? `${i.label} · ${i.who}` : i.label, color: i.color, color2: i.color2 }));
     if (fanHasRepeats(model)) items.push({ text: strings.fan.legendRepeats, hatch: true });
+    return items;
+}
+
+/**
+ * The legend of a poster drawn from a copy of the data (the living hidden):
+ * the window's colours, but each line named as the copy names it (through a
+ * drawn member), so a hidden surname never reaches the poster.
+ */
+function rodLegendOfCopy(model: FanModel, rc: FanRodAssignment): PosterLegendItem[] {
+    const own = lineagesOf(model.data);
+    const ownLabels = rodLabels(own);
+    const drawn = [model.focus, ...model.sectors.map(s => s.person), ...model.desc.map(s => s.person)];
+    const labelOf = (id: RodId): string => {
+        for (const p of drawn) {
+            if (!p || rodOf(rc.index, p.id) !== id) continue;
+            const r = rodOf(own, p.id);
+            if (r) return ownLabels.get(r) ?? '–';
+        }
+        return '–';
+    };
+    const legend = fanRodLegend(rc, 'print', labelOf);
+    const items: PosterLegendItem[] = legend.groups.flatMap(g => g.items).map(i => ({ text: `${i.label} · ${i.who}`, color: i.color }));
+    if (legend.otherPeople) items.push({ text: `${strings.fan.legendOtherRods} · ${legend.otherPeople}×`, color: FAN_PALETTES.print.grey });
     return items;
 }
 
@@ -772,8 +808,8 @@ interface PosterLayout {
     subtitle: string;
 }
 
-function posterLayout(model: FanModel, mode: FanColorMode, meta: PosterFooterMeta, measure: FanMeasure, rodIndex?: LineageIndex,
-    protect?: (p: Person) => boolean): PosterLayout {
+function posterLayout(model: FanModel, mode: FanColorMode, meta: PosterFooterMeta, measure: FanMeasure,
+    rods: Pick<FanSvgOptions, 'rodColors' | 'rodIndex'>, protect?: (p: Person) => boolean): PosterLayout {
     const s = posterScale(model);
     const b = model.bounds;
     const fanW = b.w * s, fanH = b.h * s;
@@ -790,7 +826,7 @@ function posterLayout(model: FanModel, mode: FanColorMode, meta: PosterFooterMet
     const headerH = POSTER_TITLE_FS * 1.2 + 8 + POSTER_SUB_FS * 1.3;
 
     // Legend: one row, wrapping when the poster is narrow.
-    const items = posterLegendItems(model, mode, rodIndex);
+    const items = posterLegendItems(model, mode, rods);
     const rows: PosterLayout['legend']['rows'] = [];
     let row: PosterLayout['legend']['rows'][number] = [];
     let x = 0;
@@ -847,8 +883,8 @@ function posterOccupancy(model: FanModel, L: PosterLayout): FanOccupancy {
  * for tile skipping.
  */
 export function fanPosterGeometry(model: FanModel, meta: PosterFooterMeta,
-    opts?: Pick<FanSvgOptions, 'colorMode' | 'measure' | 'rodIndex' | 'protect'>): FanPosterGeometry {
-    const L = posterLayout(model, opts?.colorMode ?? 'gender', meta, opts?.measure ?? defaultFanMeasure, opts?.rodIndex, opts?.protect);
+    opts?: Pick<FanSvgOptions, 'colorMode' | 'measure' | 'rodIndex' | 'rodColors' | 'protect'>): FanPosterGeometry {
+    const L = posterLayout(model, opts?.colorMode ?? 'gender', meta, opts?.measure ?? defaultFanMeasure, opts ?? {}, opts?.protect);
     return { width: L.width, height: L.height, hasContent: posterOccupancy(model, L) };
 }
 
@@ -861,7 +897,7 @@ export function fanPosterGeometry(model: FanModel, meta: PosterFooterMeta,
 export function buildFanPosterSvg(model: FanModel, opts: FanPosterOptions, meta: PosterFooterMeta): string {
     const mode = opts.colorMode ?? 'gender';
     const measure = opts.measure ?? defaultFanMeasure;
-    const L = posterLayout(model, mode, meta, measure, opts.rodIndex, opts.protect);
+    const L = posterLayout(model, mode, meta, measure, opts, opts.protect);
     const { esc } = opts;
 
     // Never editable (no "+" slots), always self-contained print colours.

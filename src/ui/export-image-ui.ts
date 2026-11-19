@@ -364,7 +364,14 @@ function buildCurrentPoster(): PosterBuild | null {
         });
         if (!model) return null;
         const colorMode = TreeRenderer.getFanColorMode();
+        // The family lines in the colours the view shows (spec 114 §7), not assigned anew.
+        const view = TreeRenderer.getFanView();
+        const shown = view?.getModel();
+        const rodColors = colorMode === 'rod' && shown && shown.focus.id === focusId && shown.shape === model.shape
+            && shown.generations === model.generations && shown.descGenerations === model.descGenerations
+            ? view?.getRodAssignment() ?? null : null;
         const svg = buildFanPosterSvg(model, {
+            ...(rodColors ? { rodColors } : {}),
             esc: escapeXml,
             editable: false,
             addParentLabel: '',
@@ -373,7 +380,7 @@ function buildCurrentPoster(): PosterBuild | null {
             mmPerPx: MM_PER_PX,
             fontFaceCss: appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]),
         }, meta);
-        const geom = fanPosterGeometry(model, meta, { colorMode });
+        const geom = fanPosterGeometry(model, meta, { colorMode, ...(rodColors ? { rodColors } : {}) });
         return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };
     }
 

@@ -211,6 +211,8 @@ export class WindowRegistry {
     private readonly heldLinks: { link: { search?: string; files?: unknown[] }; from: string }[] = [];
     private readonly heldActions: HeldAction[] = [];
     private readonly helloListeners = new Set<(id: string, kind: SatelliteKind) => void>();
+    /** The fan's family-line slots last told (spec 114 §3). */
+    private fanRodColors: Array<[string, string]> | null = null;
     private readonly agentReqListeners = new Set<(id: string) => void>();
     /** The agent's state's revision sent last (spec 097 K1.3; null: none). */
     private agentRev: number | null = null;
@@ -269,6 +271,8 @@ export class WindowRegistry {
         if (typeof window !== 'undefined') {
             const sync = () => this.sync();
             const bye = () => this.bus.post({ type: 'main-bye' });
+            const rodColors = (e: Event) => this.postFanRodColors((e as CustomEvent<Array<[string, string]>>).detail);
+            window.addEventListener('strom:fan-rod-colors', rodColors);
             window.addEventListener('strom:data-changed', sync);
             window.addEventListener('strom:tree-switched', sync);
             window.addEventListener('strom:tree-renamed', sync);
@@ -277,6 +281,7 @@ export class WindowRegistry {
                 window.removeEventListener('strom:data-changed', sync);
                 window.removeEventListener('strom:tree-switched', sync);
                 window.removeEventListener('strom:tree-renamed', sync);
+                window.removeEventListener('strom:fan-rod-colors', rodColors);
                 window.removeEventListener('pagehide', bye);
             });
         }
@@ -427,6 +432,17 @@ export class WindowRegistry {
     onWindowHello(cb: (id: string, kind: SatelliteKind) => void): () => void {
         this.helloListeners.add(cb);
         return () => this.helloListeners.delete(cb);
+    }
+
+    /**
+     * The fan's family-line slots this window remembers (spec 114 §3), to every
+     * satellite; kept for a window that says hello later. Empty: forgotten.
+     */
+    postFanRodColors(memory: Array<[string, string]> | null | undefined, to?: string): void {
+        if (!to) this.fanRodColors = Array.isArray(memory) && memory.length ? memory : null;
+        const mem = to ? memory : this.fanRodColors;
+        const treeId = this.host.treeId();
+        this.bus.post(to ? { type: 'fan-rod-colors', to, treeId, memory: mem ?? [] } : { type: 'fan-rod-colors', treeId, memory: mem ?? [] });
     }
 
     /** The research's state for an overview window (K3). */
@@ -610,6 +626,7 @@ export class WindowRegistry {
         this.checkRevision();
         this.sendTreeTo(id);
         this.postStatus(true);
+        if (this.fanRodColors && m.kind === 'fan') this.postFanRodColors(this.fanRodColors, id);
         this.emitChange();
         for (const cb of [...this.helloListeners]) {
             try { cb(id, entry.kind); } catch (err) { console.error('hello listener failed', err); }
@@ -648,6 +665,7 @@ export class WindowRegistry {
         }
         if (entry.kind === m.kind) return;
         entry.kind = m.kind;
+        if (m.kind === 'fan' && this.fanRodColors) this.postFanRodColors(this.fanRodColors, entry.id);
         this.emitChange();
     }
 

@@ -400,6 +400,10 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     wireAgentFollow(client, agentFollow, () => states.update());
     // A refused edit was not applied: its Undo pill (standing or waiting) goes before the toast says so.
     client.on('conflict', () => UI.dismissUndoToast());
+    // The fan starts from the main window's colours of the family lines (spec 114 §3).
+    client.on('fan-rod-colors', (m) => {
+        if (m.treeId === client.treeId) TreeRenderer.getFanView()?.adoptRodColors(m.memory);
+    });
     // The main window closed while it followed a research (§7): one window takes over, the others say so once it is there.
     const takeover = new Takeover(client, {
         researchId: () => mirror.live()?.researchId ?? mirror.status()?.researchId ?? null,

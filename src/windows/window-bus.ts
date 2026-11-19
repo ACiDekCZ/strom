@@ -130,6 +130,12 @@ export type WindowMessageBody =
      * No bridge address or token crosses.
      */
     | { type: 'agent-state'; to?: string; state: unknown }
+    /**
+     * main → sat: the slots of the fan's family lines the main window remembers
+     * (spec 114 §3), after every change of them (to one window after its
+     * hello); a satellite starts its fan from them. Empty: forgotten.
+     */
+    | { type: 'fan-rod-colors'; to?: string; treeId: TreeId | null; memory: Array<[string, string]> }
     /** sat → main: the whole agent's state for this window (its mirror missed a revision, a new main window). */
     | { type: 'agent-state-req'; windowId: string }
     /** sat → main: the window switched its view (its kind in the main window's list, its address), or its following of the agent changed. */
@@ -166,7 +172,7 @@ export interface ChannelLike {
 }
 
 const TYPES = new Set<string>(['hello', 'init', 'tree', 'patch', 'edit', 'edit-result', 'select', 'send-mode', 'undo', 'redo', 'status',
-    'focus-req', 'focused', 'research-action', 'research-action-result', 'research-menu-req', 'research-menu', 'research-state', 'agent-state', 'agent-state-req', 'view', 'spawn', 'bye', 'main-bye', 'taking-over', 'link', 'close']);
+    'focus-req', 'focused', 'research-action', 'research-action-result', 'research-menu-req', 'research-menu', 'research-state', 'agent-state', 'agent-state-req', 'fan-rod-colors', 'view', 'spawn', 'bye', 'main-bye', 'taking-over', 'link', 'close']);
 
 function isWindowMessage(data: unknown): data is WindowMessage {
     if (!data || typeof data !== 'object') return false;

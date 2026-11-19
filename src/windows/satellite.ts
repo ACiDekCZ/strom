@@ -64,6 +64,8 @@ export interface SatelliteEvents {
     'research-state': unknown;
     /** The agent's state from the main window (spec 097 K1.3, agent-state.ts: an AgentMirrorStore takes it in). */
     'agent-state': unknown;
+    /** The main window's slots of the fan's family lines (spec 114 §3). */
+    'fan-rod-colors': { treeId: TreeId | null; memory: Array<[string, string]> };
     /** Another window selected a person (only while following the selection). */
     select: { personId: string | null; origin: string };
     /** "Follow selection" was switched on or off in this window (off: the mark of another window's choice goes). */
@@ -331,6 +333,9 @@ export class SatelliteClient {
             b.on('research-action-result', m => this.actionWaiters.get(m.reqId)?.(m.result)),
             b.on('research-state', m => { if (!this.mainId || m.from === this.mainId) this.emit('research-state', m.state); }),
             b.on('agent-state', m => { if (!this.mainId || m.from === this.mainId) this.emit('agent-state', m.state); }),
+            b.on('fan-rod-colors', m => {
+                if ((!this.mainId || m.from === this.mainId) && Array.isArray(m.memory)) this.emit('fan-rod-colors', { treeId: m.treeId, memory: m.memory });
+            }),
             b.on('taking-over', m => this.emit('taking-over', { windowId: m.windowId || m.from })),
         );
         if (typeof window !== 'undefined') {

@@ -265,6 +265,43 @@ test('fan view: a tap after zooming in re-centres the person under it; a drag mo
     await expect.poll(async () => (await viewBox(page))[2]).toBeGreaterThan(whole[2] * 0.9);
 });
 
+test('fan view: family-line colours stay when the fan re-centres (spec 114 §3)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openFan(page);
+    await page.locator('#fan-toolbar [data-fan-color="rod"]').click();
+    await expect(page.locator('#fan-toolbar [data-fan-color="rod"]')).toHaveAttribute('aria-checked', 'true');
+    // Each drawn person's fill (the first sector of a repeated one).
+    const fills = () => page.evaluate(() => {
+        const out: Record<string, string> = {};
+        for (const g of document.querySelectorAll<SVGGElement>('#fan-chart [data-fan-person]')) {
+            const fill = g.querySelector('.fan-fill');
+            const id = g.dataset.fanPerson!;
+            if (fill && !(id in out)) out[id] = getComputedStyle(fill).fill;
+        }
+        return out;
+    });
+    // Two-way: Johan's descendants too, and Johan below his father once the fan is on him.
+    await page.locator('#fan-toolbar [role="radio"]', { hasText: 'Two-way' }).click();
+    await expect(page.locator('#fan-chart [data-fan-kind="desc"]').first()).toBeAttached();
+    const before = await fills();
+    expect(Object.keys(before).length).toBeGreaterThan(5);
+    const peter = await sectorPoint(page, 'Peter');
+    await page.mouse.click(peter.x, peter.y);
+    await expect(page.locator('.fan-focus')).toContainText('Peter');
+    await expect.poll(async () => Object.keys(await fills()).length).toBeGreaterThan(0);
+    const onPeter = await fills();
+    // Back on Johan: every person in both fans keeps the colour.
+    const johan = await sectorPoint(page, 'Johan');
+    await page.mouse.click(johan.x, johan.y);
+    await expect(page.locator('.fan-focus')).toContainText('Johan');
+    await expect.poll(async () => Object.keys(await fills()).length).toBe(Object.keys(before).length);
+    const after = await fills();
+    for (const id of Object.keys(before)) expect(after[id], id).toBe(before[id]);
+    const both = Object.keys(onPeter).filter(id => id in before);
+    expect(both.length).toBeGreaterThan(1);
+    for (const id of both) expect(onPeter[id], id).toBe(before[id]);
+});
+
 test('fan view: three shapes, kept after a reload; the descendants stepper only for two-way (1-5) (1031)', async ({ page }) => {
     await openFan(page);
     const svg = page.locator('#fan-chart .fan-svg');

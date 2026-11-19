@@ -7137,6 +7137,10 @@ class TreeRendererClass {
                 hideMenuSheet: () => UI.hideBottomSheet(),
                 remembersPrefs: () => !DataManager.isWindowCopy(),
                 windowSelected: () => this.windowSelectedId,
+                // The main window tells its satellites the family lines' colours it remembers (spec 114 §3).
+                rodColorsChanged: memory => {
+                    if (!DataManager.isWindowCopy()) window.dispatchEvent(new CustomEvent('strom:fan-rod-colors', { detail: memory }));
+                },
             });
         }
         this.fanView.render(container);
