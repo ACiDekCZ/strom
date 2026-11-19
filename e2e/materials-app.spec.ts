@@ -205,15 +205,21 @@ test.describe('Materials window without a research', () => {
 test.describe('Materials window without a research: phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-    test('the window fills the screen; ⓘ stays by the title, the places count on the tile', async ({ page }) => {
+    test('the window fills the screen; ⓘ in the header\'s ⋯ by the title (spec 102 §11), the places count on the tile', async ({ page }) => {
         await tree(page);
         await files(page);
         await page.evaluate(() => window.Strom.UI.openMaterials());
         await expect(win(page)).toBeVisible();
-        const info = win(page).locator('.mw-where');
-        await expect(info).toBeVisible();
-        const [title, i] = await Promise.all([win(page).locator('#materials-title').boundingBox(), info.boundingBox()]);
+        await expect(win(page).locator('.mw-where')).toBeHidden();
+        const more = win(page).locator('.mw-head-more');
+        await expect(more).toBeVisible();
+        const [title, i] = await Promise.all([win(page).locator('#materials-title').boundingBox(), more.boundingBox()]);
         expect(Math.abs((title!.y + title!.height / 2) - (i!.y + i!.height / 2))).toBeLessThan(12);
+        await more.tap();
+        await expect(page.locator('.mw-pop-headMenu').getByRole('menuitem')).toHaveText(['Where the files are']);
+        await page.locator('.mw-pop-headMenu').getByRole('menuitem').tap();
+        await expect(page.locator('.mw-pop-where')).toBeVisible();
+        await page.keyboard.press('Escape');
         await expect(win(page).locator('.mw-tile', { hasText: 'svatba.png' }).locator('.mw-places')).toBeVisible();
         const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(scroll).toBeLessThanOrEqual(0);

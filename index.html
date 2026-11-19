@@ -29797,6 +29797,14 @@
         .mw-selhead { display: none; flex: 1; min-width: 0; align-items: center; gap: 12px; font-weight: 600; }
         .mw-selhead-count { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .materials-window .mw-head .close-btn { order: 2; }
+        /* Add materials… (spec 102 §8): a secondary button as tall as the search, before the ×; a phone has it in the header's ⋯. */
+        .materials-window .mw-head .mw-add { order: 1; flex-shrink: 0; height: 32px; padding: 0 14px; font-size: 13px; white-space: nowrap; }
+        .materials-window .mw-head-more { display: none; order: 1; align-items: center; justify-content: center; }
+        .mw-pop-headMenu .bottom-sheet-handle { display: none; }
+        /* Files dragged onto the window (§8): the app's .drop-overlay over the window alone. */
+        .materials-window { position: relative; }
+        .materials-window .drop-overlay.mw-drop { position: absolute; z-index: 20; border-radius: inherit; }
+        .materials-window .mw-drop .drop-overlay-box { font-weight: 400; max-width: min(520px, calc(100% - 32px)); box-sizing: border-box; }
         .mw-toolbar { order: 3; flex-basis: 100%; display: flex; align-items: center; gap: 8px; min-width: 0; }
         #materials-modal .mw-search {
             width: 210px; flex-shrink: 0; height: 32px; box-sizing: border-box; padding: 0 10px; font: inherit; font-size: 13px;
@@ -30043,6 +30051,7 @@
             .mw-check-row { min-height: 44px; }
             .mw-check { width: 26px; height: 26px; }
             .materials-window .mw-where { width: 44px; height: 44px; }
+            .materials-window .mw-head .mw-add { height: 44px; }
             .mw-lh { height: 44px; }
             .materials-window .mw-lh-btn { height: 44px; min-width: 44px; }
             .mdlg-input { height: 44px; }
@@ -30135,6 +30144,18 @@
             .mw-selcount { white-space: normal; line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
             .materials-window .mw-selbar .mw-selclear { white-space: normal; line-height: 1.2; }
             .mw-pop-sheet { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
+        }
+        /* A phone, upright or sideways (spec 102 §8, §11): Add materials… and ⓘ go into the header's ⋯, a list from below. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .materials-window .mw-head .mw-add, .materials-window .mw-head .mw-where { display: none; }
+            .materials-window .mw-head-more { display: inline-flex; width: 44px; height: 44px; }
+            #materials-modal.is-selecting .mw-head-more { display: none; }
+            .mw-pop-headMenu {
+                left: 0 !important; right: 0; top: auto !important; bottom: 0; width: 100%; max-width: 100%; max-height: 85vh; max-height: 85dvh;
+                border-radius: var(--r-lg) var(--r-lg) 0 0; padding: 0 8px calc(16px + env(safe-area-inset-bottom));
+            }
+            .mw-pop-headMenu .bottom-sheet-handle { display: block; }
+            .mw-pop-headMenu .materials-item-menu-row { min-height: 52px; padding: 10px 16px; font-size: 16px; border-radius: var(--r-lg); }
         }
         @media (hover: hover) {
             .material-row:hover { background: var(--hover-bg); }

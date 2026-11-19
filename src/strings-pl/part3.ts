@@ -346,6 +346,10 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         batchRemoveTitle: 'Odłączanie osoby od całej partii',
         batchRemoveText: (batch: string, n: number) => `Partia ${batch} (${nPl(n, 'plik', 'pliki', 'plików')}).`,
         // The materials of every tree (spec 102 §1) and where a file is used (§3)
+        // Add materials in the window (spec 102 §8): the header's button (a phone: its ⋯) and a drop onto the window
+        addMaterials: 'Dodaj materiały…',
+        dropTitleMaterials: 'Upuść tutaj: dodaj do materiałów',
+        dropSubMaterials: 'Pliki i foldery. Otworzy się „Dodaj materiały” z nimi; nic nie zostanie wysłane bez potwierdzenia.',
         whereTitle: 'Gdzie są pliki',
         whereArchive: 'Pliki są w Archiwum Strom na tym komputerze, w aplikacji są pomniejszone kopie.',
         whereArchiveResearch: 'Pliki są w badaniu na tym komputerze, w aplikacji są pomniejszone kopie.',

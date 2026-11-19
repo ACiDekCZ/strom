@@ -41,6 +41,7 @@ import { openImageViewer } from './image-viewer.js';
 import { materialDetailsEdit } from './material-details-ui.js';
 import { uiModule } from './module.js';
 import { canEditPortrait } from './portrait-actions-ui.js';
+import { windowAddOffered } from '../materials-overview.js';
 
 const MODAL_ID = 'materials-modal';
 const SECTION_ID = 'materials-section';
@@ -331,6 +332,14 @@ export const materialsMethods = uiModule({
     },
 
     /**
+     * "Add materials…" in the window's header (spec 102 §8): the research
+     * menu's own batch wizard, beside a research archive, the tree writable.
+     */
+    materialsAddOffered(): boolean {
+        return windowAddOffered({ model: this.materialsListOn() ? 'archive' : 'app', batches: this.batchAvailable(), readOnly: DataManager.isReadOnly() });
+    },
+
+    /**
      * The Materials window is offered (spec 102 §1): every tree but the
      * read-only page of an exported HTML file. Without a research that lists
      * materials it shows the tree's own files (the `app` model).
@@ -419,6 +428,8 @@ export const materialsMethods = uiModule({
         overlay.dataset.group = group ?? (archive ? 'batch' : 'added');
         overlay.dataset.model = archive ? 'archive' : 'app';
         const m = strings.materials;
+        // Add materials… (spec 102 §8): no symbol, the bridge's own wizard; on a phone in the header's ⋯.
+        const add = this.materialsAddOffered();
         overlay.innerHTML = `
             <div class="modal modal--lg materials-window" role="dialog" aria-modal="true" aria-labelledby="materials-title">
                 <div class="modal-header mw-head">
@@ -431,6 +442,8 @@ export const materialsMethods = uiModule({
                         <span class="mw-selhead-count" role="status"></span>
                         <button type="button" class="link-button mw-selhead-done">${esc(m.done)}</button>
                     </div>
+                    <button type="button" class="secondary mw-add" data-mw="add"${add ? '' : ' hidden'}>${esc(m.addMaterials)}</button>
+                    <button type="button" class="mw-more mw-head-more" data-mw="head-menu" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(m.moreActions)}" title="${esc(m.moreActions)}">⋯</button>
                     <div class="mw-toolbar">
                         <input type="search" id="materials-search" class="mw-search" placeholder="${esc(m.search)}" aria-label="${esc(m.search)}" autocomplete="off" spellcheck="false">
                         <div class="mw-tools"></div>

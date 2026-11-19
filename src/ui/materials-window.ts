@@ -42,6 +42,7 @@ import {
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, personsShort, nameWithoutYears, parseViewPrefs,
     itemWithoutPerson, OverviewSummary, inMaterialFolder, firstFolderLine, ViewPrefs,
     ListSort, ListColumn, SortChoice, sortOverviewGroups, chooseSort, storedFilters, itemInTree,
+    WindowHeadAction, windowHeadMenu, dragCarriesFiles,
 } from '../materials-overview.js';
 import { materialThumbs, ThumbSnapshot } from '../material-thumbs.js';
 import {
@@ -137,7 +138,7 @@ function writeListPrefs(sort: ListSort | null, filters: OverviewFilters): void {
 /** The window's model: the research's archive with the tree's files, or the tree's own files alone. */
 type WindowModel = 'archive' | 'app';
 
-type PopKind = 'person' | 'kind' | 'batch' | 'sheet' | 'batchMenu' | 'folderMenu' | 'selMenu' | 'where';
+type PopKind = 'person' | 'kind' | 'batch' | 'sheet' | 'batchMenu' | 'folderMenu' | 'selMenu' | 'headMenu' | 'where';
 
 /** A batch's reading: done, stopped (its menu closed, the window gone) or refused with the research's error. */
 type BatchLoad = { ok: true } | { ok: false; stopped: true } | { ok: false; error: MaterialError; stopped?: undefined };
@@ -378,6 +379,7 @@ export const materialsWindowMethods = uiModule({
         }
         this.mwWireHeader();
         this.mwWireBody();
+        this.mwWireDrop();
         this.mwRebuild({ items: true });
         void primeMaterials(ctx.treeId).then(() => {
             if (!alive(w.gen)) return;
@@ -441,6 +443,9 @@ export const materialsWindowMethods = uiModule({
         if (!ctx || ctx.treeId !== w.treeId) return;
         const cameUp = ctx.caps.bridgeUp && !w.bridgeUp;
         w.bridgeUp = ctx.caps.bridgeUp;
+        // Add materials… comes and goes with the research's batches and the tree's lock (spec 102 §8).
+        const addBtn = w.overlay.querySelector<HTMLElement>('.mw-add');
+        if (addBtn) addBtn.hidden = !this.materialsAddOffered();
         // The agent's sorting moves on its own (its progress, its proposal ready).
         this.mwSortStrip();
         const changed = capsKey(ctx.caps, ctx.base) !== w.drawnCaps || (cachedMaterials(w.treeId)?.list ?? null) !== w.list
@@ -797,6 +802,8 @@ export const materialsWindowMethods = uiModule({
             }
         } else {
             view = this.materialSortStripView(w.items, { phone: isPhoneBar(), added: w.sortAdded });
+            // "N files added" is A's only: once the sorting moved on, A says the whole archive again.
+            if (view.state && view.state !== 'A') w.sortAdded = 0;
             // Closed with its ×: back once the state is another one.
             if (w.sortClosedState && view.state !== w.sortClosedState) w.sortClosedState = null;
             if (!(view.state && view.state === w.sortClosedState)) { html = view.html; mod = view.mod; }
@@ -1662,7 +1669,7 @@ export const materialsWindowMethods = uiModule({
         const m = strings.materials;
         const pop = document.createElement('div');
         pop.className = `mw-pop mw-pop-${kind}`;
-        const menu = kind === 'batchMenu' || kind === 'folderMenu' || kind === 'selMenu';
+        const menu = kind === 'batchMenu' || kind === 'folderMenu' || kind === 'selMenu' || kind === 'headMenu';
         pop.setAttribute('role', menu ? 'menu' : 'dialog');
         if (!menu) pop.setAttribute('aria-label', kind === 'where' ? m.whereTitle : kind === 'sheet' ? m.filtersTitle : kind === 'person' ? m.fPerson : kind === 'kind' ? m.fKind : m.fBatch);
         w.overlay.appendChild(pop);
@@ -1671,6 +1678,7 @@ export const materialsWindowMethods = uiModule({
         w.popAnchor = anchor;
         anchor.setAttribute('aria-expanded', 'true');
         if (kind === 'selMenu') this.mwFillSelMenu(pop);
+        else if (kind === 'headMenu') this.mwFillHeadMenu(pop);
         else if (menu) this.mwFillMenu(pop, data);
         else if (kind === 'where') this.mwFillWhere(pop);
         else this.mwFillFilters(pop, kind);
@@ -1776,6 +1784,96 @@ export const materialsWindowMethods = uiModule({
         this.mwClosePop();
         back?.focus();
         await this.mwBatchAction(action, group, folder);
+    },
+
+    /** The header's ⋯ on a phone (spec 102 §8, §11): Add materials… (no symbol) and Where the files are. */
+    mwFillHeadMenu(pop: HTMLElement): void {
+        const m = strings.materials;
+        const labels: Record<WindowHeadAction, string> = { add: m.addMaterials, where: m.whereTitle };
+        pop.innerHTML = '<div class="bottom-sheet-handle" aria-hidden="true"></div>'
+            + windowHeadMenu({ add: this.materialsAddOffered() })
+                .map(a => `<button type="button" role="menuitem" class="materials-item-menu-row" data-head="${a}">${esc(labels[a])}</button>`).join('');
+        pop.querySelectorAll<HTMLButtonElement>('[data-head]').forEach(btn => btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const anchor = win?.popAnchor ?? null;
+            this.mwClosePop();
+            if (btn.dataset.head === 'add') this.mwAddMaterials();
+            else if (anchor) this.mwOpenPop('where', anchor);
+        }));
+    },
+
+    /** Add materials… (spec 102 §8): the research's batch wizard over the window, with dropped files when there are some. */
+    mwAddMaterials(files?: { file: File; path: string }[]): void {
+        if (!win || !this.materialsAddOffered()) return;
+        this.mwClosePop();
+        this.showBatchDialog(files?.length ? { files } : {});
+    },
+
+    /**
+     * Files dragged onto the window (spec 102 §8): its own drop, `.drop-overlay`
+     * over the window, the files and folders into Add materials. The window's
+     * events stay here, so the app's drop (which waits while a dialog is open)
+     * does not refuse them; a phone has no drop.
+     */
+    mwWireDrop(): void {
+        const w = win!;
+        const box = w.overlay.querySelector<HTMLElement>('.materials-window');
+        if (!box) return;
+        let depth = 0;
+        const m = strings.materials;
+        const show = (on: boolean): void => {
+            let node = box.querySelector<HTMLElement>('.mw-drop');
+            if (!on) { node?.classList.remove('active'); return; }
+            if (!node) {
+                node = document.createElement('div');
+                node.className = 'drop-overlay mw-drop';
+                node.setAttribute('aria-hidden', 'true');
+                node.innerHTML = `<div class="drop-overlay-box"><div class="drop-overlay-title">${esc(m.dropTitleMaterials)}</div>`
+                    + `<div class="drop-overlay-sub">${esc(m.dropSubMaterials)}</div></div>`;
+                box.appendChild(node);
+            }
+            node.classList.add('active');
+        };
+        const ours = (e: DragEvent): boolean => alive(w.gen) === w && dragCarriesFiles(e.dataTransfer?.types)
+            && !media(MQ_MOBILE) && this.materialsAddOffered();
+        w.overlay.addEventListener('dragenter', (e) => {
+            if (!ours(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            depth++;
+            show(true);
+        });
+        w.overlay.addEventListener('dragover', (e) => {
+            if (!ours(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        });
+        w.overlay.addEventListener('dragleave', (e) => {
+            if (!ours(e)) return;
+            e.stopPropagation();
+            depth = Math.max(0, depth - 1);
+            if (depth === 0) show(false);
+        });
+        w.overlay.addEventListener('drop', (e) => {
+            if (!ours(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            depth = 0;
+            show(false);
+            // The entries are read now (a drop's data is gone after this event), the folders walked after.
+            void this.batchFilesFromDrop(e.dataTransfer).then(files => { if (files.length && alive(w.gen)) this.mwAddMaterials(files); });
+        });
+    },
+
+    /** A batch added while the window is open (spec 102 §1 A, §8): "N files added" until the sorting moves on, the list read again. */
+    materialsBatchAdded(count: number): void {
+        const w = win;
+        if (!w || w.model !== 'archive' || count <= 0 || !document.getElementById(MODAL_ID)) return;
+        w.sortAdded = count;
+        w.sortClosedState = null;
+        this.mwSortStrip();
+        void this.mwLoad();
     },
 
     /** ⓘ "Where the files are": one sentence by the model, a second one for an encrypted tree (1c, 1d). */
@@ -2024,7 +2122,7 @@ export const materialsWindowMethods = uiModule({
         });
         w.overlay.querySelector('.mw-selhead-done')?.addEventListener('click', () => this.clearMaterialsSelection());
         w.overlay.querySelector('.mw-head')?.addEventListener('click', (e) => {
-            const btn = (e.target as HTMLElement).closest<HTMLElement>('.mw-tools [data-mw], .mw-where');
+            const btn = (e.target as HTMLElement).closest<HTMLElement>('.mw-tools [data-mw], .mw-where, .mw-add, .mw-head-more');
             if (!btn) return;
             this.mwToolAction(btn);
         });
@@ -2041,6 +2139,8 @@ export const materialsWindowMethods = uiModule({
             case 'sheet': this.mwOpenPop('sheet', btn); return;
             case 'sort-menu': this.mwSortMenu(btn); return;
             case 'where': this.mwOpenPop('where', btn); return;
+            case 'add': this.mwAddMaterials(); return;
+            case 'head-menu': this.mwOpenPop('headMenu', btn); return;
             case 'clear-person': f.person = null; break;
             case 'clear-kind': f.kinds = []; break;
             case 'clear-batch': f.batch = null; w.focusBatch = null; break;

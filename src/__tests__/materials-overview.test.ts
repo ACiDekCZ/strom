@@ -12,7 +12,7 @@ import { MaterialFile, MaterialList, MaterialResult, ThumbSize, researchMakesThu
 import {
     overviewItems, overviewGroups, overviewRows, overviewSummary, emptyFilters, passesFilters, activeFilterCount,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, nameWithoutYears, personsShort, parseViewPrefs, localDay,
-    parseFilters, storedFilters, sortOverviewGroups, chooseSort, itemInTree,
+    parseFilters, storedFilters, sortOverviewGroups, chooseSort, itemInTree, windowAddOffered, windowHeadMenu, dragCarriesFiles,
     fromKey, OverviewFilters, RowMetrics, firstFolderLine, inMaterialFolder, TreeRecord, itemWithoutPerson,
 } from '../materials-overview.js';
 import { MaterialThumbQueue, ThumbDeps, thumbSource } from '../material-thumbs.js';
@@ -641,5 +641,30 @@ describe('The archive window header without batches', () => {
             expect(strings.materials.summary(3, 0, 1)).toBe(none);
             expect(strings.materials.summary(3, 2, 1)).toBe(two);
         }
+    });
+});
+
+describe('add materials in the window (spec 102 §8)', () => {
+    it('is offered over a research archive that takes batches, the tree writable', () => {
+        expect(windowAddOffered({ model: 'archive', batches: true, readOnly: false })).toBe(true);
+    });
+
+    it('is not offered over a tree without a research, without batches, or read-only', () => {
+        // The attachments' window: a file is added at its person.
+        expect(windowAddOffered({ model: 'app', batches: true, readOnly: false })).toBe(false);
+        expect(windowAddOffered({ model: 'archive', batches: false, readOnly: false })).toBe(false);
+        expect(windowAddOffered({ model: 'archive', batches: true, readOnly: true })).toBe(false);
+    });
+
+    it('the phone\'s ⋯: Add first when offered, Where the files are always', () => {
+        expect(windowHeadMenu({ add: true })).toEqual(['add', 'where']);
+        expect(windowHeadMenu({ add: false })).toEqual(['where']);
+    });
+
+    it('only a drag of files opens the drop', () => {
+        expect(dragCarriesFiles(['Files'])).toBe(true);
+        expect(dragCarriesFiles(['text/plain', 'Files'])).toBe(true);
+        expect(dragCarriesFiles(['text/uri-list', 'text/plain'])).toBe(false);
+        expect(dragCarriesFiles(null)).toBe(false);
     });
 });

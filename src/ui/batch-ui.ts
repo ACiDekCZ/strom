@@ -850,6 +850,8 @@ export const batchMethods = uiModule({
         r.finished = true;
         window.removeEventListener('beforeunload', onLeave);
         writeUnfinished(r.treeId, null);
+        // The Materials window open under it says the batch in its strip and reads the list again (spec 102 §8).
+        this.materialsBatchAdded(r.result?.inputs ?? r.received);
         if (r.hidden || !document.getElementById(DIALOG_ID)) {
             const link = this.researchOriginalsLink();
             const archive = !!link && this.researchModeOf(link.researchId) === 'archive';

@@ -2849,6 +2849,10 @@ const stringsEN = {
         batchRemoveTitle: 'Remove a person from the whole batch',
         batchRemoveText: (batch: string, n: number) => `Batch ${batch} (${nEn(n, 'file', 'files')}).`,
         // The materials of every tree (spec 102 §1) and where a file is used (§3)
+        // Add materials in the window (spec 102 §8): the header's button (a phone: its ⋯) and a drop onto the window
+        addMaterials: 'Add materials…',
+        dropTitleMaterials: 'Drop here: add to materials',
+        dropSubMaterials: 'Files and folders. Add materials opens with them; nothing is sent without confirming.',
         whereTitle: 'Where the files are',
         whereArchive: 'The files are in the Strom archive on this computer; the app holds reduced copies.',
         whereArchiveResearch: 'The files are in the research on this computer; the app holds reduced copies.',
@@ -13018,6 +13022,10 @@ const stringsCZ: StringsType = {
         batchRemoveTitle: 'Odebrat osobu z celé dávky',
         batchRemoveText: (batch: string, n: number) => `Dávka ${batch} (${nCs(n, 'soubor', 'soubory', 'souborů')}).`,
         // The materials of every tree (spec 102 §1) and where a file is used (§3)
+        // Add materials in the window (spec 102 §8): the header's button (a phone: its ⋯) and a drop onto the window
+        addMaterials: 'Přidat materiály…',
+        dropTitleMaterials: 'Pustit sem: přidat do materiálů',
+        dropSubMaterials: 'Soubory i složky. Otevře se Přidat materiály do výzkumu s nimi, nic se nepošle bez potvrzení.',
         whereTitle: 'Kde soubory jsou',
         whereArchive: 'Soubory jsou v Archivu Stromu na tomto počítači, v aplikaci jsou zmenšené kopie.',
         whereArchiveResearch: 'Soubory jsou ve výzkumu na tomto počítači, v aplikaci jsou zmenšené kopie.',
@@ -23040,6 +23048,10 @@ const stringsDE: StringsType = {
         batchRemoveTitle: 'Person vom ganzen Stapel entfernen',
         batchRemoveText: (batch: string, n: number) => `Stapel ${batch} (${nDe(n, 'Datei', 'Dateien')}).`,
         // The materials of every tree (spec 102 §1) and where a file is used (§3)
+        // Add materials in the window (spec 102 §8): the header's button (a phone: its ⋯) and a drop onto the window
+        addMaterials: 'Materialien hinzufügen…',
+        dropTitleMaterials: 'Hier loslassen: zu den Materialien hinzufügen',
+        dropSubMaterials: 'Dateien und Ordner. „Materialien hinzufügen“ öffnet sich mit ihnen; nichts wird ohne Bestätigung gesendet.',
         whereTitle: 'Wo die Dateien liegen',
         whereArchive: 'Die Dateien liegen im Strom-Archiv auf diesem Computer, in der App sind verkleinerte Kopien.',
         whereArchiveResearch: 'Die Dateien liegen in der Forschung auf diesem Computer, in der App sind verkleinerte Kopien.',

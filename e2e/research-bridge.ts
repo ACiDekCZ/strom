@@ -1427,6 +1427,8 @@ export interface FakeMaterial {
     sortUnproposed?: Record<string, unknown>[];
     /** `POST /material/sort` refuses with this code (`sort.limit`, `sort.queue`, `sort.not-ready`). */
     sortRefuse?: string;
+    /** A batch closed (`POST /batch/<id>/done`) lists its new files and itself, as the research does (spec 102 §8). */
+    listBatches?: boolean;
 }
 
 /**
@@ -2150,6 +2152,15 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             try { body = JSON.parse(route.request().postData() ?? '{}'); } catch { /* keep empty */ }
             (b.batchDone ??= []).push({ id: decodeURIComponent(done[1]), body });
             const files = b.mediaPuts.filter(p => p.headers['x-strom-batch'] === decodeURIComponent(done[1])).length;
+            const mat = b.material;
+            if (mat?.listBatches && files) {
+                const id = decodeURIComponent(done[1]);
+                mat.batches.push({ id, name: String(body.name ?? id), at: new Date().toISOString() });
+                b.mediaPuts.filter(p => p.headers['x-strom-batch'] === id).forEach((p, i) => {
+                    const n = 500 + mat.files.length + i;
+                    mat.files.push(materialFile(n, { batch: id, path: p.headers['x-strom-path'], name: (p.headers['x-strom-path'] ?? `scan-${n}.jpg`).split('/').pop()! }));
+                });
+            }
             return json(200, { batch: done[1], name: body.name, inputs: files, known: 0, refused: 0, nested: [], tasks: files ? ['T0101'] : [], head: b.head,
                 ...(b.material?.writeParent ? { parent: b.head } : {}) });
         }

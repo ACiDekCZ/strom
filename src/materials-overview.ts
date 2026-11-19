@@ -806,3 +806,26 @@ export function parseViewPrefs(raw: string | null | undefined): ViewPrefs {
     } catch { /* not ours: the defaults */ }
     return prefs;
 }
+
+// ==================== ADD MATERIALS (spec 102 §8) ====================
+
+/**
+ * "Add materials…" in the window: beside a research that takes batches
+ * (`batches`, the research menu's own condition), over its archive (a tree
+ * without one adds attachments at a person) and only when the tree writes.
+ */
+export function windowAddOffered(o: { model: 'archive' | 'app'; batches: boolean; readOnly: boolean }): boolean {
+    return o.model === 'archive' && o.batches && !o.readOnly;
+}
+
+export type WindowHeadAction = 'add' | 'where';
+
+/** The header's ⋯ on a phone (§8, §11): Add materials… when offered, then Where the files are (the ⓘ's place there). */
+export function windowHeadMenu(o: { add: boolean }): WindowHeadAction[] {
+    return o.add ? ['add', 'where'] : ['where'];
+}
+
+/** A drag that carries files (not text or a link dragged out of the page). */
+export function dragCarriesFiles(types: ArrayLike<string> | null | undefined): boolean {
+    return !!types && Array.prototype.indexOf.call(types, 'Files') >= 0;
+}
