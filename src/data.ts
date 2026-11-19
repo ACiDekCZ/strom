@@ -4,7 +4,7 @@
  */
 
 import { rewriteStorySources, storySourceIds } from './story-sources.js';
-import { imageLoads } from './image-loads.js';
+import { applyImageFills, imageLoads, type FieldKey, type ImageFill } from './image-loads.js';
 import { CitationRef, citationFact, cleanTreeSourceEvents } from './citation-order.js';
 import {
     CitationHolder, citationMainOf, cleanCitationMain, cleanCitationQuay, cleanTreeCitationQuay, joinQualityOnlySources, putCitationMain, setCitationQuality, unionCitations,
@@ -1422,9 +1422,66 @@ class DataManagerClass {
         return out;
     }
 
+    /**
+     * Images that came put into the open tree `treeId` (applyImageFills, as
+     * applyImageArrivals) and into the other states of it the user can come
+     * back to: the undo and redo steps recorded since the load began, the
+     * state an open dialog or batch would go back to — going back never
+     * brings the older image or none again (spec 116, I2/I3). The keys
+     * written; null when `treeId` is not the open tree.
+     */
+    writeArrivedImages(treeId: TreeId, fills: readonly ImageFill[]): FieldKey[] | null {
+        const written = this.applyImageArrivals(treeId, d => applyImageFills(d, fills));
+        if (!written?.length) return written;
+        const keys = new Set(written);
+        const done = fills.filter(f => keys.has(f.entry.key));
+        const patch = (d: StromData): void => { if (d !== this.data) applyImageFills(d, done); };
+        const h = this.imageHistory;
+        if (h && h.treeId === treeId) {
+            UndoManager.setActiveTree(treeId);
+            UndoManager.patchHistory(h.since, patch);
+        }
+        if (this.pendingBefore) patch(this.pendingBefore);
+        if (this.editSession && this.editSession.treeId === treeId) patch(this.editSession.before);
+        return written;
+    }
+
+    /**
+     * A load of images into the open tree `treeId` begins (spec 116, I3):
+     * the images go into the history recorded from now on (`from: 'all'`:
+     * into all of it — images noted with the stored tree, asked again).
+     * An undo back over this point (to the state before the research's
+     * version came) ends the load.
+     */
+    noteImageLoadStart(treeId: TreeId, from: 'now' | 'all' = 'now'): void {
+        if (this.currentTreeId !== treeId) return;
+        UndoManager.setActiveTree(treeId);
+        this.imageHistory = { treeId, since: from === 'all' ? -Infinity : UndoManager.historyStamp() };
+    }
+
+    /** Where the history takes the images of the current load (noteImageLoadStart). */
+    private imageHistory: { treeId: TreeId; since: number } | null = null;
+
+    /** Images came while a staged dialog held the saves: stored when it ends (also when it is thrown away). */
+    private imagesUnstored = false;
+
     /** Store the open tree `treeId` with the images that came (one save after them all). */
     storeArrivedImages(treeId: TreeId): void {
-        if (this.currentTreeId === treeId) this.save('content');
+        if (this.currentTreeId !== treeId) return;
+        if (this.editSession) this.imagesUnstored = true;
+        this.save('content');
+    }
+
+    /**
+     * The data of tree `treeId` were replaced as a whole (a load, a backup
+     * restored, an undo back over a research's version): the images still on
+     * their way go nowhere, and what was noted for them goes (spec 116).
+     */
+    private imagesReplaced(treeId: TreeId | null): void {
+        imageLoads.onDataReplaced(treeId);
+        if (!treeId) return;
+        if (this.imageHistory?.treeId === treeId) this.imageHistory = null;
+        TreeManager.setPendingImages(treeId, null);
     }
 
     /**
@@ -1796,7 +1853,12 @@ class DataManagerClass {
         }
         AuditLogManager.flushHold();
         this.batchDepth = 1;   // an operation left unbalanced must not keep it open
+        const unstored = this.imagesUnstored;
+        this.imagesUnstored = false;
+        const rev = this.revision;
         this.commitBatch(description, false);
+        // Nothing changed in the dialog (no save of its own): the images that came are stored.
+        if (unstored && this.revision === rev) this.save('content');
         this.windowSink?.sessionEnded();
     }
 
@@ -1811,7 +1873,11 @@ class DataManagerClass {
         this.editSession = null;
         this.resetBatchState();
         AuditLogManager.dropHold();
+        const unstored = this.imagesUnstored;
+        this.imagesUnstored = false;
         if (this.currentTreeId !== s.treeId || JSON.stringify(this.data) === JSON.stringify(s.before)) {
+            // Images that came meanwhile are in both: stored now (the session held the save).
+            if (unstored && this.currentTreeId === s.treeId) this.save('content');
             this.windowSink?.sessionEnded();
             return false;
         }
@@ -1844,7 +1910,14 @@ class DataManagerClass {
         // first edit after every reload does not replace the day's backup
         // with a later state.
         const research = TreeManager.backupResearchBase(treeId, base);
-        void hasAutoSnapshotOnDay(treeId, now)
+        // Images of the tree still on their way: the backup waits for them, and has those that came (spec 116, I5).
+        const load = imageLoads.current();
+        const waiting = load && load.treeId === treeId && !load.isAborted() && load.snapshot().phase === 'running' ? load : null;
+        const ready = waiting
+            ? waiting.whenIdle().then(() => { applyImageFills(before, waiting.fillsWritten()); })
+            : Promise.resolve();
+        void ready
+            .then(() => hasAutoSnapshotOnDay(treeId, now))
             .then(exists => exists ? undefined : createSnapshot(treeId, before, 'auto', now, research))
             .catch(() => {});
     }
@@ -1911,6 +1984,7 @@ class DataManagerClass {
             migrated = unknownSex;
         }
         TreeManager.restoreResearchBase(this.currentTreeId, restoredBase);
+        this.imagesReplaced(this.currentTreeId);
         this.data = migrated;
         this.commitMutation(strings.undo.restoreBackup, true);
         AuditLogManager.log(this.currentTreeId, 'data.load', strings.auditLog.restoredBackup);
@@ -1950,6 +2024,9 @@ class DataManagerClass {
         UndoManager.setActiveTree(this.currentTreeId);
         const restored = UndoManager.undo(cloneTreeData(this.data), TreeManager.researchBaseOf(this.currentTreeId));
         if (!restored) return null;
+        // Back to before the research's version whose images still come: they go nowhere now.
+        const h = this.imageHistory;
+        if (h && h.treeId === this.currentTreeId && (restored.seq ?? 0) <= h.since) this.imagesReplaced(this.currentTreeId);
         this.applyRestoredData(restored.data, restored.base);
         AuditLogManager.log(this.currentTreeId, 'undo', strings.auditLog.undoAction(restored.description));
         return { description: restored.description };
@@ -5319,7 +5396,7 @@ class DataManagerClass {
         // Undo choke point (see clearData) — an accidental import-over is
         // now one Ctrl+Z away instead of silently corrupting the stack.
         // Images still on their way into the data replaced go nowhere (spec 116).
-        imageLoads.onDataReplaced(this.currentTreeId);
+        this.imagesReplaced(this.currentTreeId);
         this.beginMutation();
         this.data = migrateData(newData);
         this.commitMutation(strings.undo.loadedData, true);
@@ -5348,7 +5425,7 @@ class DataManagerClass {
         if (this.isReadOnly() || !this.currentTreeId) return false;
         // The tree shown until now: the drawing goes from it to the new one (spec 055).
         const previous = this.data;
-        imageLoads.onDataReplaced(treeId);
+        this.imagesReplaced(treeId);
         this.data = migrateData(newData);
         this.save();
         UndoManager.setActiveTree(this.currentTreeId);

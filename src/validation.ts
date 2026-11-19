@@ -944,23 +944,28 @@ export function cleanPortraitSources(data: StromData): number {
     let dropped = 0;
     for (const person of Object.values(data.persons ?? {}) as Person[]) {
         if (!person || typeof person !== 'object' || person.photoSource === undefined) continue;
-        const src = person.photoSource as unknown;
-        let image: string | undefined;
-        if (person.photo && isPortraitSourceShape(src) && isValidRegion(src.region)) {
-            if (src.attachmentId) {
-                const att = personMediaById(data, person.id, src.attachmentId);
-                if (att && !isOriginalOnlyAttachment(att) && SAFE_IMAGE_DATA_URL.test(att.dataUrl)) image = att.dataUrl;
-            } else if (src.partnershipId) {
-                const union = data.partnerships?.[src.partnershipId];
-                if (union?.photo && (union.person1Id === person.id || union.person2Id === person.id)) image = union.photo;
-            }
-        }
-        const size = image ? dataUrlImageSize(image) : null;
-        if (image && (!size || isPortraitRegionSquare((src as PortraitSource).region, size.w, size.h, (src as PortraitSource).quarterTurns))) continue;
+        if (portraitSourceHolds(data, person)) continue;
         delete person.photoSource;
         dropped++;
     }
     return dropped;
+}
+
+/** The person's portrait source (photoSource) holds in `data`, by the rules of cleanPortraitSources. */
+export function portraitSourceHolds(data: StromData, person: Person): boolean {
+    const src = person.photoSource as unknown;
+    let image: string | undefined;
+    if (person.photo && isPortraitSourceShape(src) && isValidRegion(src.region)) {
+        if (src.attachmentId) {
+            const att = personMediaById(data, person.id, src.attachmentId);
+            if (att && !isOriginalOnlyAttachment(att) && SAFE_IMAGE_DATA_URL.test(att.dataUrl)) image = att.dataUrl;
+        } else if (src.partnershipId) {
+            const union = data.partnerships?.[src.partnershipId];
+            if (union?.photo && (union.person1Id === person.id || union.person2Id === person.id)) image = union.photo;
+        }
+    }
+    const size = image ? dataUrlImageSize(image) : null;
+    return !!image && (!size || isPortraitRegionSquare((src as PortraitSource).region, size.w, size.h, (src as PortraitSource).quarterTurns));
 }
 
 /** A crop region in fractions of the image: inside 0–1 with a positive size. */

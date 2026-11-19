@@ -19,7 +19,7 @@
  * dependencies (tests, the app's wiring in ui/research-ui.ts).
  */
 
-import type { Attachment, MediaPlace, PartnershipId, PersonId, SourceExcerpt, StromData } from './types.js';
+import type { Attachment, MediaPlace, PartnershipId, PersonId, PortraitSource, SourceExcerpt, StromData } from './types.js';
 import { personSourceIds } from './types.js';
 import {
     IMAGE_BATCH, IMAGE_CONCURRENCY, ImageBatchFailed, fetchImageBatch, isPendingImageUrl, pendingImageOf,
@@ -27,6 +27,7 @@ import {
 } from './research-image-refs.js';
 import { imageSizeFromDataUrl } from './excerpts.js';
 import { dataUrlByteSize } from './photo.js';
+import { portraitSourceHolds } from './validation.js';
 
 export type { ImageFailReason } from './research-image-refs.js';
 
@@ -85,6 +86,13 @@ export interface PendingImage {
     mediaAfter?: string[];
     /** A crop waiting aside (key `excerpt:`), with the ids of the crops before it in its source. */
     excerpt?: { record: SourceExcerpt; after: string[] };
+    /**
+     * Where portraits were cut from that need this image (its file, the
+     * couple's photo, the person's own portrait not there yet): kept aside,
+     * as validation would drop them, and put back once all they need is
+     * here (spec 116).
+     */
+    portraits?: { personId: PersonId; source: PortraitSource }[];
 }
 
 /** One image put into the data. */
@@ -233,7 +241,31 @@ export function takePendingImages(data: StromData, previous?: StromData | null, 
         const { excerpts: _all, ...rest } = src;
         out.sources![sid] = kept.length ? { ...rest, excerpts: kept } : rest;
     }
+    if (pending.length) portraitsAside(out, pending, data);
     return { data: pending.length ? out : data, pending };
+}
+
+/**
+ * A portrait cut from an image still on its way (a file, a couple's photo)
+ * or whose own image is not there yet: its source waits aside with each of
+ * the images it needs (`out` gets fresh person records without it).
+ */
+function portraitsAside(out: StromData, pending: PendingImage[], input: StromData): void {
+    const byKey = new Map(pending.map(p => [p.key, p]));
+    for (const [id, p] of Object.entries(out.persons ?? {})) {
+        const src = p?.photoSource;
+        if (!src) continue;
+        const needs = [
+            byKey.get(`person:${id}:photo`),
+            src.attachmentId ? byKey.get(`media:${src.attachmentId}`) : undefined,
+            src.partnershipId ? byKey.get(`union:${src.partnershipId}:photo`) : undefined,
+        ].filter((e): e is PendingImage => !!e && (e.key.startsWith('media:') || e.expect === undefined));
+        if (!needs.length) continue;
+        for (const e of needs) (e.portraits ??= []).push({ personId: id as PersonId, source: src });
+        if (out.persons === input.persons) out.persons = { ...input.persons };
+        const { photoSource: _aside, ...rest } = p;
+        out.persons[id as PersonId] = rest;
+    }
 }
 
 /**
@@ -315,7 +347,95 @@ export function applyImageFills(data: StromData, fills: readonly ImageFill[]): F
         } else continue;
         written.push(entry.key);
     }
+    // A portrait's source back once all it was cut from is here (none of the user's in its place).
+    for (const { entry } of fills) {
+        if (!entry.portraits || !written.includes(entry.key)) continue;
+        for (const { personId, source } of entry.portraits) {
+            const p = data.persons?.[personId];
+            if (!p || p.photoSource || !realImage(p.photo)) continue;
+            p.photoSource = source;
+            if (!portraitSourceHolds(data, p)) delete p.photoSource;
+        }
+    }
     return written;
+}
+
+// ==================== NOTED FOR THE NEXT TIME ====================
+
+/**
+ * An image of a load that had not come when the tree was stored, noted in
+ * the tree's metadata (TreeMetadata.pendingImages, the index — never the
+ * data): the next connect to the research asks for it (spec 116, I1).
+ */
+export interface PendingImageNote {
+    ref: ImageRef;
+    owner: ImageOwner;
+    /** The field held an older image meanwhile: its tag (the image goes in only over that one). */
+    expectTag?: string;
+    /** A file waiting aside, without its image (none when the tree is encrypted: the index is not). */
+    media?: Omit<Attachment, 'dataUrl'>;
+    mediaAfter?: string[];
+    /** A crop waiting aside, without its image (likewise). */
+    excerpt?: { record: Omit<SourceExcerpt, 'dataUrl'>; after: string[] };
+    portraits?: { personId: PersonId; source: PortraitSource }[];
+}
+
+export type PendingImageNotes = Record<FieldKey, PendingImageNote>;
+
+/** A short tag of an image (FNV-1a over its text, with its length): the same image, the same tag. */
+export function imageTag(url: string): string {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < url.length; i++) {
+        h ^= url.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+    }
+    return `${url.length.toString(36)}.${(h >>> 0).toString(36)}`;
+}
+
+/** The note of an image still to come; `records`: with the file's or crop's record (not when the tree is encrypted). */
+export function noteOf(p: PendingImage & { expectTag?: string }, records: boolean): PendingImageNote {
+    const note: PendingImageNote = { ref: p.ref, owner: p.owner };
+    if (p.expect !== undefined) note.expectTag = p.expectTag ?? imageTag(p.expect);
+    if (records && p.media) {
+        const { dataUrl: _standIn, ...m } = p.media;
+        note.media = m;
+        if (p.mediaAfter?.length) note.mediaAfter = p.mediaAfter;
+    }
+    if (records && p.excerpt) {
+        const { dataUrl: _standIn, ...r } = p.excerpt.record;
+        note.excerpt = { record: r, after: p.excerpt.after };
+    }
+    if (p.portraits?.length) note.portraits = p.portraits;
+    return note;
+}
+
+/**
+ * The images `notes` names that `data` still waits for: the field holds
+ * what it held then (the same older image, or none), the person or couple
+ * is there, the file or crop is not there yet and its record was noted.
+ */
+export function pendingFromNotes(data: StromData, notes: PendingImageNotes | undefined): PendingImage[] {
+    const out: PendingImage[] = [];
+    for (const [key, n] of Object.entries(notes ?? {})) {
+        if (!n?.ref?.sha) continue;
+        const [kind, id, sub] = key.split(':');
+        const base = { key, ref: n.ref, owner: n.owner ?? { personIds: [] }, ...(n.portraits?.length ? { portraits: n.portraits } : {}) };
+        if (kind === 'person' || kind === 'union') {
+            const rec = kind === 'person' ? data.persons?.[id as PersonId] : data.partnerships?.[id as PartnershipId];
+            if (!rec) continue;
+            const now = realImage(rec.photo) ? rec.photo : undefined;
+            if (n.expectTag ? !now || imageTag(now) !== n.expectTag : now !== undefined) continue;
+            out.push({ ...base, ...(now !== undefined ? { expect: now } : {}) });
+        } else if (kind === 'media') {
+            if (!n.media || data.media?.[id]) continue;
+            out.push({ ...base, media: { ...n.media, dataUrl: '' } as Attachment, ...(n.mediaAfter ? { mediaAfter: n.mediaAfter } : {}) });
+        } else if (kind === 'excerpt') {
+            const src = data.sources?.[id];
+            if (!n.excerpt || !src || src.excerpts?.some(e => e?.id === sub)) continue;
+            out.push({ ...base, excerpt: { record: { ...n.excerpt.record, dataUrl: '' } as SourceExcerpt, after: n.excerpt.after ?? [] } });
+        }
+    }
+    return out;
 }
 
 // ==================== PRIORITY ====================
@@ -382,6 +502,8 @@ export interface ImageLoadDeps {
 
 interface Item extends PendingImage {
     state: ImageLoadState;
+    /** imageTag(expect), once asked for. */
+    expectTag?: string;
     reason?: ImageFailReason;
     order: number;
 }
@@ -518,6 +640,32 @@ export class ImageLoadQueue {
 
     failedKeys(): FieldKey[] {
         return [...this.items.values()].filter(it => it.state === 'failed').map(it => it.key);
+    }
+
+    /**
+     * What has not come (still to come or failed), as noted with the stored
+     * tree (I1); empty once all came. `records`: with the records of files
+     * and crops (not for an encrypted tree).
+     */
+    notes(records: boolean): PendingImageNotes {
+        const out: PendingImageNotes = {};
+        if (this.aborted) return out;
+        for (const it of this.items.values()) {
+            if (it.state === 'loaded') continue;
+            if (it.expect !== undefined) it.expectTag ??= imageTag(it.expect);
+            out[it.key] = noteOf(it, records);
+        }
+        return out;
+    }
+
+    /** The images put into the tree so far, each where it went (for other copies of the data: I3, I5). */
+    fillsWritten(): ImageFill[] {
+        const out: ImageFill[] = [];
+        for (const it of this.items.values()) {
+            const url = it.state === 'loaded' ? this.arrived.get(it.ref.sha) : undefined;
+            if (url) out.push({ entry: it, url });
+        }
+        return out;
     }
 
     snapshot(): ImageLoadSnapshot {

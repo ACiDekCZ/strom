@@ -30,7 +30,7 @@ import { setResearchActionLabel, researchActionMark } from './research-open-mark
 import { DataManager, migrateData } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
-import { applyImageFills, imageLoads, personsByNearness, startImageLoad, takePendingImages, windowEmit, withArrivedImages, type PendingImage } from '../image-loads.js';
+import { imageLoads, pendingFromNotes, personsByNearness, startImageLoad, takePendingImages, windowEmit, withArrivedImages, type PendingImage } from '../image-loads.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { researchHypothesisLogLine } from '../research-hypotheses.js';
@@ -3625,7 +3625,7 @@ export const researchUiMethods = uiModule({
      * `appMedia`: the base of the tree's own files is noted again with the
      * images that came. Once all came or failed, `o.onDone`.
      */
-    researchLoadImagesLater(treeId: TreeId, researchId: string | null | undefined, waiting: readonly PendingImage[], o: { url: string; onDone?(r: { treeId: TreeId; failed: number }): void },
+    researchLoadImagesLater(treeId: TreeId, researchId: string | null | undefined, waiting: readonly PendingImage[], o: { url: string; onDone?(r: { treeId: TreeId; failed: number }): void; history?: 'now' | 'all' },
         appMedia: { researchId: string; research: StromData; carried: number } | null): void {
         if (!imageLoadsWired) {
             imageLoadsWired = true;
@@ -3634,7 +3634,9 @@ export const researchUiMethods = uiModule({
         const data = DataManager.getData();
         const focus = TreeRenderer.getFocusPersonId();
         const shown = [...TreeRenderer.getVisiblePersonIds()];
-        startImageLoad({
+        // The history from now on takes the images that come (undo, redo never bring the older ones back: I3).
+        DataManager.noteImageLoadStart(treeId, o.history);
+        const q = startImageLoad({
             treeId,
             url: o.url,
             pending: waiting,
@@ -3646,7 +3648,7 @@ export const researchUiMethods = uiModule({
                     const link = TreeManager.getTreeMetadata(id as TreeId)?.research;
                     const before = contentFingerprint(DataManager.getData());
                     const inStep = !!link?.fingerprint && fingerprintLike(DataManager.getData(), link.fingerprint) === link.fingerprint;
-                    const written = DataManager.applyImageArrivals(id as TreeId, d => applyImageFills(d, fills)) ?? [];
+                    const written = DataManager.writeArrivedImages(id as TreeId, fills) ?? [];
                     if (!written.length) return written;
                     const after = contentFingerprint(DataManager.getData());
                     // Images coming are no change: the tree in step with the research stays so, and the load stays undoable.
@@ -3677,6 +3679,26 @@ export const researchUiMethods = uiModule({
                 o.onDone?.({ treeId, failed });
             },
         });
+        // Noted with the tree at once: a page closed before they came asks for them at the next connect (I1).
+        if (q) TreeManager.setPendingImages(treeId, q.notes(!SettingsManager.isEncryptionEnabled()));
+    },
+
+    /**
+     * The images noted with the open tree `treeId` as not come (a page closed
+     * or a bridge gone while they came, spec 116 I1): those the tree still
+     * waits for are asked from the research's bridge `imagesUrl` again —
+     * unless a load of the tree runs already. What no longer waits is let go.
+     */
+    researchResumePendingImages(treeId: TreeId, researchId: string, imagesUrl: string): void {
+        if (DataManager.getCurrentTreeId() !== treeId || imageLoads.current()?.treeId === treeId) return;
+        const notes = TreeManager.getTreeMetadata(treeId)?.pendingImages;
+        if (!notes) return;
+        const waiting = pendingFromNotes(DataManager.getData(), notes);
+        if (!waiting.length) {
+            TreeManager.setPendingImages(treeId, null);
+            return;
+        }
+        this.researchLoadImagesLater(treeId, researchId, waiting, { url: imagesUrl, history: 'all' }, null);
     },
 
     researchKeepTreeEtag(treeId: TreeId, researchId: string, tag: string, images: boolean, variant: TreeImagesVariant = 'data', media = false): void {
@@ -3975,6 +3997,8 @@ export const researchUiMethods = uiModule({
                 passive();
                 return;
             }
+            // Images of an earlier load the tree still lacks (the page closed while they came): asked again (spec 116, I1).
+            if (bridgeGivesImagesByHash(status.features)) this.researchResumePendingImages(treeId, status.treeId, imagesUrlOf(bridge.ged));
             // An archive has no agent to follow: the tree opens for editing, its
             // bridge remembered (the changes go to it by themselves).
             if (statusAgentless(status)) {

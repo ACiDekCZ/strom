@@ -47,6 +47,7 @@ import { browserMediaFingerprint } from './browser-media.js';
 import { looksLikeSampleTree } from './demo-sample.js';
 import { announceTreeSaved, clearTreeStale, isTreeStale } from './tab-sync.js';
 import { cloneTreeDataAsJson, estimateJsonBytes } from './clone.js';
+import { imageLoads, type PendingImageNotes } from './image-loads.js';
 import {
     withPoolLock, collectPoolable, storeImages, stringifyPooled, replacePooled,
     unpoolJson, unpoolObject, registerPoolReferences, forgetPoolScope, seedPoolScope, notePoolSizes,
@@ -301,6 +302,21 @@ class TreeManagerClass {
             console.error('Saving the tree index failed', err);
             dispatchSaveFailed(null, err);
         });
+    }
+
+    /**
+     * Note the images of the research's version the stored tree still lacks
+     * (spec 116, I1); none or empty: the note goes. The index is stored only
+     * when the note changed.
+     */
+    setPendingImages(id: TreeId, notes: PendingImageNotes | null): void {
+        const tree = this.index.trees.find(t => t.id === id);
+        if (!tree) return;
+        const next = notes && Object.keys(notes).length ? notes : undefined;
+        if (JSON.stringify(tree.pendingImages ?? null) === JSON.stringify(next ?? null)) return;
+        if (next) tree.pendingImages = next;
+        else delete tree.pendingImages;
+        this.saveIndex();
     }
 
     /**
@@ -1254,6 +1270,11 @@ class TreeManagerClass {
         // shares strings (photos, scans) with the live data, so it is cheap
         // even for a tree carrying tens of MB of images.
         const snapshot = cloneTreeDataAsJson(data);
+        // Images of a load still to come are not in the data stored (a field
+        // keeps its older image, or has none): noted with the tree, the next
+        // connect to the research asks for them (spec 116, I1).
+        const load = imageLoads.current();
+        if (load && load.treeId === id && !load.isAborted()) this.setPendingImages(id, load.notes(!SettingsManager.isEncryptionEnabled()));
         // The counts follow the data at once: the write lands later, and a
         // dialog opened meanwhile (deleting the tree) said "0 people".
         // Stored with the index when the write lands (updateMetadata).

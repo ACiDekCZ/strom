@@ -2729,6 +2729,12 @@ export interface TreeMetadata {
      */
     legacySexU?: { map: Record<string, string>; at: number };
     /**
+     * Images of the research's version that had not come when the tree was
+     * stored (spec 116, I1): by their place in the tree, what the next
+     * connect to the research asks for. Gone once they came.
+     */
+    pendingImages?: import('./image-loads.js').PendingImageNotes;
+    /**
      * The tree was downloaded to move to another browser for the research
      * (research-transfer.ts), or from a phone to a computer (`mobile`). The
      * copy left here says so (banner, then a question at every opening) until

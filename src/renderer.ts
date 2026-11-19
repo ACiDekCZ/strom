@@ -4,6 +4,7 @@
  */
 
 import { DataManager } from './data.js';
+import { imageLoads } from './image-loads.js';
 import { UI } from './ui.js';
 import { cardStatusAria, cardStatusWords, statusMarkHtml } from './ui/fact-status.js';
 import { ZoomPan } from './zoom.js';
@@ -291,7 +292,19 @@ function cardSignature(card: HTMLElement): string {
     const shell = (card.cloneNode(false) as HTMLElement).outerHTML;
     card.style.left = left;
     card.style.top = top;
-    return (shell + card.innerHTML).replace(/animation-delay:[^;"]*/g, '');
+    return imageBySha(shell, card.innerHTML).replace(/animation-delay:[^;"]*/g, '');
+}
+
+/**
+ * A card's shell and content with its portrait told by the image's hash
+ * where the portrait is one a load brings (data-img-sha): the image that
+ * came is no change of the research's (spec 116, I7).
+ */
+export function imageBySha(shell: string, inner: string): string {
+    if (!inner.includes('data-img-sha="')) return shell + inner;
+    return shell.replace(/(class="[^"]*?) has-photo\b/, '$1')
+        + inner.replace(/(<div class="card-avatar"[^>]*\bdata-img-sha="[^"]*"[^>]*>)[\s\S]*?<\/div>/g, '$1</div>')
+            .replace(/<div class="card-tooltip(?: has-photo)?"( data-img-sha="[^"]*")>(?:<img class="tt-photo"[^>]*>)?/g, '<div class="card-tooltip"$1>');
 }
 
 /** The texts of a card's rows, for marking the ones a live load changed (.live-field). */
@@ -5379,8 +5392,10 @@ class TreeRendererClass {
             const avatarInner = showPhoto
                 ? `<img src="${this.escapeHtml(person.photo ?? '')}" alt="">`
                 : `<span class="avatar-initials">${this.escapeHtml(initials)}</span>`;
+            // The portrait a load of images brings: the card tells it by its hash (cardSignature, I7).
+            const imgSha = showAvatar ? imageLoads.entryOf(`person:${id}:photo`)?.sha : undefined;
             const avatarHtml = showAvatar
-                ? `<div class="card-avatar-wrap"><div class="card-avatar">${avatarInner}</div>${badgeHtml}</div>` : '';
+                ? `<div class="card-avatar-wrap"><div class="card-avatar"${imgSha ? ` data-img-sha="${this.escapeHtml(imgSha)}"` : ''}>${avatarInner}</div>${badgeHtml}</div>` : '';
             const nameAttrs = `title="${this.escapeHtml(fullTitle)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}"`;
             const nameHtml = `<div class="name"><span class="name-text" ${nameAttrs}>${this.escapeHtml(fullName)}</span></div>`;
             const head = customLines ? this.customHeads.get(id) : undefined;
@@ -5608,7 +5623,8 @@ class TreeRendererClass {
                 // card below the tooltip, not here).
                 const ttHasPhoto = !person.isPlaceholder && !!person.photo;
                 const ttPhoto = ttHasPhoto ? `<img class="tt-photo" src="${this.escapeHtml(person.photo ?? '')}" alt="">` : '';
-                html += `<div class="card-tooltip${ttHasPhoto ? ' has-photo' : ''}">${ttPhoto}<div class="tt-body">${rows}</div></div>`;
+                const ttSha = imageLoads.entryOf(`person:${id}:photo`)?.sha;
+                html += `<div class="card-tooltip${ttHasPhoto ? ' has-photo' : ''}"${ttSha ? ` data-img-sha="${this.escapeHtml(ttSha)}"` : ''}>${ttPhoto}<div class="tt-body">${rows}</div></div>`;
             }
 
             card.innerHTML = html;

@@ -15,6 +15,7 @@
  */
 
 import { DataManager } from '../data.js';
+import { IMAGES_ARRIVED_EVENT } from '../image-loads.js';
 import { TreeManager } from '../tree-manager.js';
 import type { TreeId } from '../types.js';
 import { WindowBus, answerWhenFocused, FOCUS_WAIT_MS, type MessageOf, type WindowBounds, type WindowStatus, type EditRefusal } from './window-bus.js';
@@ -283,11 +284,14 @@ export class WindowRegistry {
             window.addEventListener('strom:data-changed', sync);
             window.addEventListener('strom:tree-switched', sync);
             window.addEventListener('strom:tree-renamed', sync);
+            // Images that came after the tree (spec 116, I6): to the satellites as any change of the data, no edit.
+            window.addEventListener(IMAGES_ARRIVED_EVENT, sync);
             window.addEventListener('pagehide', bye);
             this.unsubscribe.push(() => {
                 window.removeEventListener('strom:data-changed', sync);
                 window.removeEventListener('strom:tree-switched', sync);
                 window.removeEventListener('strom:tree-renamed', sync);
+                window.removeEventListener(IMAGES_ARRIVED_EVENT, sync);
                 window.removeEventListener('strom:fan-rod-colors', rodColors);
                 window.removeEventListener('pagehide', bye);
             });

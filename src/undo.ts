@@ -27,6 +27,11 @@ export interface UndoSnapshot {
      * research (its other steps wait until following ends).
      */
     listsOnly?: true;
+    /**
+     * When the state was recorded (UndoManager sets it, rising): a load
+     * of images goes only into the states after its start (spec 116, I3).
+     */
+    seq?: number;
 }
 
 /** A step named beyond its description: its kind, when it was done, how many things it changed. */
@@ -44,6 +49,7 @@ class UndoManagerClass {
     private undoStack: UndoSnapshot[] = [];
     private redoStack: UndoSnapshot[] = [];
     private activeTreeId: TreeId | null = null;
+    private seq = 0;
 
     /**
      * Point the manager at a tree. When the tree changes, both stacks are
@@ -62,7 +68,7 @@ class UndoManagerClass {
      * stack (standard behavior).
      */
     push(snapshot: UndoSnapshot): void {
-        this.undoStack.push(snapshot);
+        this.undoStack.push({ ...snapshot, seq: ++this.seq });
         if (this.undoStack.length > MAX_UNDO_STEPS) {
             this.undoStack.shift();
         }
@@ -114,6 +120,22 @@ class UndoManagerClass {
         return this.redoStack.length > 0;
     }
 
+    /** The stamp of the history now: every state recorded later has a higher `seq`. */
+    historyStamp(): number {
+        return this.seq;
+    }
+
+    /**
+     * Change in place the data of every state on both stacks recorded after
+     * `since` (images that came in the background go into the states the
+     * user can go back or forth to, spec 116 I3).
+     */
+    patchHistory(since: number, fn: (data: StromData) => void): void {
+        for (const s of [...this.undoStack, ...this.redoStack]) {
+            if ((s.seq ?? 0) > since) fn(s.data);
+        }
+    }
+
     /** Test/utility: drop all history for the current tree. */
     clear(): void {
         this.undoStack = [];
@@ -128,6 +150,8 @@ function stepLike(snapshot: UndoSnapshot, data: StromData, base: ResearchBase | 
         ...(base !== undefined ? { base } : {}),
         ...(snapshot.mark ? { mark: snapshot.mark } : {}),
         ...(snapshot.listsOnly ? { listsOnly: true as const } : {}),
+        // The same step, seen from its other side: recorded when the step was.
+        ...(snapshot.seq !== undefined ? { seq: snapshot.seq } : {}),
     };
 }
 
