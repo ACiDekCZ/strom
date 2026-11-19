@@ -21,9 +21,10 @@ import {
     MaterialItem, MaterialError, SortJob, SortLink, SORT_MAX_FILES, SORT_MAX_TEXT, type EditRequest,
     startMaterialSort, fetchMaterialSort, cancelMaterialSort, fetchMaterialSortRun, cancelMaterialSortRun, fetchMaterial, cachedMaterialList,
     type SortRunState,
-    getCachedThumb, fileExt, mergeIntoCache, materialErrorText, materialKindLabel, isPortraitCandidate, materialType,
+    fileExt, mergeIntoCache, materialErrorText, materialKindLabel, isPortraitCandidate, materialType,
 } from '../materials.js';
 import { overviewItems, nameWithoutYears } from '../materials-overview.js';
+import { materialThumbs } from '../material-thumbs.js';
 import {
     sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
     sortNext, sortLeftMap, sortCopyOf, sortStripState, sortRunBatches, sortProposalCounts, sortLeftIds, sortBackRow,
@@ -212,23 +213,43 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
     return el;
 }
 
-/** A preview: the research's cached one, else the file's extension in letters. */
-export function previewEl(treeId: string, item: MaterialItem | null, cls: string): HTMLElement {
+/** The previews' size: the Materials window's tiles' (one cache and one queue for both). */
+const PREVIEW_PX = 256;
+
+/**
+ * A preview as the Materials window's tile draws it: a tree's image from the
+ * app's own storage; a research's image or PDF from the shared preview queue
+ * (the research's cache, else asked of the research or made here, also for a
+ * file whose tile was never drawn); else the file's extension in letters.
+ */
+export function previewEl(mc: Pick<MaterialsContext, 'treeId' | 'base' | 'caps'>, item: MaterialItem | null, cls: string): HTMLElement {
     const box = h('span', cls);
     box.setAttribute('aria-hidden', 'true');
     const name = item?.name ?? '';
     box.textContent = (fileExt(name) || '?').slice(0, 4).toUpperCase();
-    const sha = item?.file?.sha;
-    if (sha) {
-        void getCachedThumb(treeId, sha, 256).then(blob => {
-            if (!blob || !box.isConnected) return;
-            const img = h('img');
-            img.alt = '';
-            img.src = URL.createObjectURL(blob);
-            img.onload = () => URL.revokeObjectURL(img.src);
-            box.replaceChildren(img);
-        }).catch(() => { /* letters stay */ });
+    const show = (src: string): void => {
+        const img = h('img');
+        img.alt = '';
+        img.src = src;
+        box.replaceChildren(img);
+    };
+    const att = item?.attachment;
+    if (att && !att.originalOnly && att.mimeType.startsWith('image/') && att.dataUrl) {
+        show(att.dataUrl);
+        return box;
     }
+    const sha = item ? item.file?.sha ?? att?.original?.sha256 ?? null : null;
+    if (!item || !sha || item.origin === 'tree' || !['image', 'pdf'].includes(materialType(item.mime, item.name))) return box;
+    const queue = materialThumbs();
+    const ready = queue.urlOf(sha, PREVIEW_PX);
+    if (ready) {
+        show(ready);
+        return box;
+    }
+    queue.setEnv({ treeId: mc.treeId, base: mc.base, thumb: mc.caps.thumb, bridgeUp: mc.caps.bridgeUp });
+    queue.want({ sha, px: PREVIEW_PX, mime: item.mime, name: item.file?.name ?? item.name, bytes: item.bytes },
+        url => { if (url) show(url); },
+        () => box.isConnected);
     return box;
 }
 
@@ -609,7 +630,7 @@ export const materialSortMethods = uiModule({
                 : scope === 'batch' ? s.what(candidates(off), target.batch) : s.stripWhole(candidates(planOf('all', false)));
             strip.replaceChildren();
             for (const item of files.slice(0, PREVIEWS)) {
-                const tile = previewEl(mc.treeId, item, 'mdlg-sort-preview');
+                const tile = previewEl(mc, item, 'mdlg-sort-preview');
                 tile.title = item.title;
                 strip.appendChild(tile);
             }
@@ -1348,7 +1369,7 @@ export const materialSortMethods = uiModule({
             const key = `${row.id}|${row.item?.file?.sha ?? row.item?.name ?? ''}`;
             let el = thumbs.get(key);
             if (!el) {
-                el = previewEl(mc.treeId, row.item, 'msp-thumb');
+                el = previewEl(mc, row.item, 'msp-thumb');
                 thumbs.set(key, el);
             }
             return el;
@@ -1414,7 +1435,7 @@ export const materialSortMethods = uiModule({
                         }
                         chips.appendChild(chip);
                     };
-                    if (back) own('is-back', s.rubChip, back.item.name, 'back', previewEl(mc.treeId, back.item, 'msp-chip-thumb'));
+                    if (back) own('is-back', s.rubChip, back.item.name, 'back', previewEl(mc, back.item, 'msp-chip-thumb'));
                     if (portraitOn(row)) own('is-person', s.portraitChip, row.portrait!.name, 'portrait');
                     main.appendChild(chips);
                 }

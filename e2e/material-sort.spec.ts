@@ -554,6 +554,31 @@ test.describe('Sort with the agent: the progress and the open proposal', () => {
     });
 });
 
+test.describe('Sort with the agent: previews of the proposal', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('a file whose tile the window never drew has its image in the proposal, asked of the research as its tile would be', async ({ page }) => {
+        // An older batch: its group stays closed in the window, its tiles are not drawn.
+        const older = { id: 'b-11112222', name: 'Old letters', at: '2026-10-01T09:00:00Z' };
+        const material = await setup(page, {
+            batches: [older],
+            files: [materialFile(9, { batch: older.id })],
+            proposals: [...PROPOSALS, { id: 'I0009', title: 'Letter from grandfather', links: [{ type: 'person', ref: 'P0003' }], why: 'A signature', sure: 'high' }],
+        });
+        await openWindow(page);
+        await expect(win(page).locator('[data-key="m:I0009"]')).toHaveCount(0);
+        expect(material.thumbAsks).not.toContain(`${materialSha('I0009')}@256`);
+        await strip(page).locator('[data-sort="sort"]').click();
+        await sortDialog(page).locator('.mdlg-sort-go').click();
+        await strip(page).locator('[data-sort="open"]').click();
+        const row = proposal(page).locator('.msp-row[data-id="I0009"]');
+        await expect(row).toHaveCount(1);
+        await expect(row.locator('.msp-thumb img')).toBeVisible();
+        await expect(row.locator('.msp-thumb')).not.toContainText('JPG');
+        expect(material.thumbAsks).toContain(`${materialSha('I0009')}@256`);
+    });
+});
+
 test.describe('Sort with the agent: the one strip over the whole archive (spec 102 §1)', () => {
     test.use({ viewport: DESKTOP });
     const top = strip;

@@ -95,7 +95,7 @@ export const materialDeleteMethods = uiModule({
         if (!one) {
             const strip = h('div', 'mdlg-sort-previews');
             for (const item of files.slice(0, PREVIEWS)) {
-                const tile = previewEl(mc.treeId, item, 'mdlg-sort-preview');
+                const tile = previewEl(mc, item, 'mdlg-sort-preview');
                 tile.title = item.title;
                 strip.appendChild(tile);
             }
