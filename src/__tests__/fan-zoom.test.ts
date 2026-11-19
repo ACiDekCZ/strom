@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { transformSync } from 'esbuild';
 import {
     fanFitView, fanBasePpu, clampFanView, fanViewBox, fanZoomAt, fanPanBy, fanWheelFactor, fanPinchStep,
-    fanEase, fanLerpView, fanZoomInlineScript, fanReservedBounds, fanReserveGrowPx, FAN_ZOOM_MIN, FAN_ZOOM_MAX, FAN_VIEW_OVERSCROLL, FanView,
+    fanEase, fanLerpView, fanZoomInlineScript, fanReservedBounds, fanReserveGrowPx, fanInsetBounds, FAN_ZOOM_MIN, FAN_ZOOM_MAX, FAN_VIEW_OVERSCROLL, FanView,
 } from '../fan-zoom.js';
 import type { FanBounds } from '../fan-chart.js';
 
@@ -235,5 +235,45 @@ describe('fanZoomInlineScript (§6.3)', () => {
         expect(src).toContain('[data-fan-zoom]');
         expect(src).toContain('[data-fan-zoom-act]');
         expect(src).toContain('[data-fan-zoom-hint]');
+    });
+});
+
+describe('fan zoom: the whole fan keeps clear of a pill over it (spec 114 §6)', () => {
+    // A half circle of five generations (R = 452, the focus disc 56 under y = 0, a pad of 10).
+    const F: FanBounds = { x: -462, y: -462, w: 924, h: 528 };
+    /** The drawn frame F on the surface at z = 1 (screen px). */
+    const onScreen = (b: FanBounds, W: number, H: number) => {
+        const vb = fanViewBox(fanFitView(b), b, W, H);
+        return { top: (F.y - vb.y) * vb.ppu, bottom: (F.y + F.h - vb.y) * vb.ppu, left: (F.x - vb.x) * vb.ppu, right: (F.x + F.w - vb.x) * vb.ppu };
+    };
+
+    it('a pill at the top: the fan stands under it, as large as the band allows, centred', () => {
+        for (const [W, H, top] of [[1568, 621, 56], [1440, 788, 52], [768, 282, 48], [1024, 600, 60]]) {
+            const b = fanInsetBounds(F, W, H, top, 0);
+            const r = onScreen(b, W, H);
+            expect(r.top, `${W}×${H}`).toBeGreaterThanOrEqual(top - 1e-6);
+            expect(r.bottom, `${W}×${H}`).toBeLessThanOrEqual(H + 1e-6);
+            expect(r.left).toBeGreaterThanOrEqual(-1e-6);
+            expect(r.right).toBeLessThanOrEqual(W + 1e-6);
+            // The largest scale the band allows: it touches the band's edges (height) or the sides (width).
+            const fillsBand = Math.abs(r.bottom - r.top - (H - top)) < 1e-6;
+            const fillsWidth = Math.abs(r.right - r.left - W) < 1e-6;
+            expect(fillsBand || fillsWidth, `${W}×${H}`).toBe(true);
+            expect(Math.abs((r.left + r.right) / 2 - W / 2)).toBeLessThan(1e-6);
+        }
+    });
+
+    it('a pill at the bottom (a phone): the fan stands above it', () => {
+        const b = fanInsetBounds(F, 390, 560, 0, 70);
+        const r = onScreen(b, 390, 560);
+        expect(r.bottom).toBeLessThanOrEqual(560 - 70 + 1e-6);
+        expect(r.top).toBeGreaterThanOrEqual(-1e-6);
+    });
+
+    it('keeps the frame where the fit leaves the room already, and where nothing would help', () => {
+        // A width-limited fan with the room above it.
+        expect(fanInsetBounds(F, 600, 900, 60, 0)).toBe(F);
+        expect(fanInsetBounds(F, 1568, 621, 0, 0)).toBe(F);
+        expect(fanInsetBounds(F, 1568, 50, 60, 0)).toBe(F);
     });
 });

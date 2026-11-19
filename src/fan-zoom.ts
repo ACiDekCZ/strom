@@ -144,6 +144,24 @@ export function fanReservePx(surface: HTMLElement, el: HTMLElement | null | unde
 }
 
 /**
+ * The frame for a W × H surface whose top `top` px and bottom `bottom` px are
+ * covered (a pill over the fan, spec 114 §6): the whole fan (z = 1) fits the
+ * band between them, centred in it, at the largest scale the band allows.
+ * The unchanged frame when the fit already leaves that much free.
+ */
+export function fanInsetBounds(b: FanBounds, W: number, H: number, top: number, bottom: number): FanBounds {
+    const t = Math.max(0, top || 0), d = Math.max(0, bottom || 0);
+    if (!(t + d > 0 && W > 0 && H > 0 && b.w > 0 && b.h > 0)) return b;
+    const room = H - t - d;
+    if (!(room > 0)) return b;
+    const u0 = fanBasePpu(b, W, H), free0 = (H - b.h * u0) / 2;
+    if (free0 >= t && free0 >= d) return b;
+    const u = Math.min(W / b.w, room / b.h);
+    const yTop = t + (room - b.h * u) / 2;
+    return { x: b.x, w: b.w, y: b.y - yTop / u, h: H / u };
+}
+
+/**
  * z within [1, 8]; the centre keeps the view inside the frame (a larger view
  * is centred), widened on each side by `over` × min(view, frame) (the Fan
  * view's overscroll; 0 = strict).
@@ -269,6 +287,12 @@ export interface FanZoomOptions {
      * `floor`: the lowest y of the drawing beside the focus disc.
      */
     reserve?: { el: HTMLElement; floor: number } | null;
+    /**
+     * The px covered at the top and the bottom of the surface (a pill standing
+     * over it), measured with every new size and on `refit()`: the whole fan
+     * keeps clear of them (fanInsetBounds).
+     */
+    insets?: () => { top: number; bottom: number };
 }
 
 interface Press {
@@ -417,6 +441,23 @@ export class FanZoom {
         this.apply(true);
     }
 
+    /**
+     * The covered bands changed (a pill came or went): the frame is measured
+     * again; the whole fan stays the whole fan, a zoomed-in view stays put.
+     */
+    refit(): void {
+        if (!this.o.surface.clientWidth || !this.o.surface.clientHeight) return;
+        const before = this.bounds;
+        const wasFit = sameFanView(this.view, fanFitView(before));
+        this.measure();
+        const b = this.bounds;
+        if (b.x === before.x && b.y === before.y && b.w === before.w && b.h === before.h) return;
+        this.stopAnim();
+        if (wasFit) this.view = fanFitView(b);
+        this.apply(true);
+        this.scheduleViewChange(0);
+    }
+
     /** Put a view (clamped), e.g. back after printing. */
     setView(v: FanView, notify = true): void {
         this.stopAnim();
@@ -492,8 +533,14 @@ export class FanZoom {
         this.reserveCorner();
     }
 
-    /** The frame for this size: grown so the whole fan keeps clear of the corner's buttons. */
+    /** The frame for this size: the whole fan keeps clear of the corner's buttons and of the pills over it. */
     private reserveCorner(): void {
+        this.reserveBottomCorner();
+        const ins = this.o.insets && this.W && this.H ? this.o.insets() : null;
+        if (ins) this.bounds = fanInsetBounds(this.bounds, this.W, this.H, ins.top, ins.bottom);
+    }
+
+    private reserveBottomCorner(): void {
         const r = this.o.reserve;
         if (!r || !this.W || !this.H) { this.bounds = this.frameBounds; return; }
         const s = this.o.surface;

@@ -426,8 +426,27 @@ export class FanViewController {
             onLongPress: (target, point) => this.pressMenu(target, point, 'sheet'),
             onContextMenu: (target, point, e) => this.pressMenu(target, point, 'context', e),
             onViewChange: () => this.scheduleRedraw(),
+            insets: () => this.pillInsets(chart),
         });
         return this.zoom;
+    }
+
+    /**
+     * The bands of the surface the tree's highlight pill covers (spec 114 §6:
+     * a family line's pill stood over the fan's top ring, on a phone it stands
+     * over its bottom): the whole fan keeps clear of them.
+     */
+    private pillInsets(chart: HTMLElement): { top: number; bottom: number } {
+        const out = { top: 0, bottom: 0 };
+        const pill = document.getElementById('evidence-pill');
+        if (!pill || pill.hidden || pill.getClientRects().length === 0) return out;
+        const p = pill.getBoundingClientRect(), s = chart.getBoundingClientRect();
+        if (!(p.width > 0 && p.height > 0 && s.height > 0) || p.right <= s.left || p.left >= s.right) return out;
+        if (p.bottom <= s.top || p.top >= s.bottom) return out;
+        const GAP = 8;
+        if (p.top + p.height / 2 < s.top + s.height / 2) out.top = Math.ceil(p.bottom - s.top + GAP);
+        else out.bottom = Math.ceil(s.bottom - p.top + GAP);
+        return out;
     }
 
     // ------------------------------------------------------------ taps
@@ -839,6 +858,8 @@ export class FanViewController {
             this.placeHome();
             if (!pill.hidden) this.placePill();
             if (this.centrePin && !this.centrePin.hidden) this.placePill(this.centrePin);
+            // The highlight's pill came or went: the whole fan keeps clear of it.
+            if (this.host.active()) this.zoom?.refit();
         };
         if (typeof MutationObserver === 'function') new MutationObserver(replace).observe(document.body, { childList: true });
         if (typeof ResizeObserver === 'function') {

@@ -466,3 +466,71 @@ test('fan family lines: print and the poster carry the highlight (spec 114 §7)'
     expect(svg).toContain('class="fan-poster-strong"');
     expect(svg).toContain(">Father's side</text>");
 });
+
+/**
+ * The sectors of the highlighted line under the highlight's pill (sampled on a
+ * 6px grid over its rectangle; elementsFromPoint sees through the pill).
+ */
+function hitUnderPill(page: Page): Promise<number> {
+    return page.evaluate(() => {
+        const pill = document.getElementById('evidence-pill')!.getBoundingClientRect();
+        let n = 0;
+        for (let y = pill.top + 1; y < pill.bottom; y += 6) {
+            for (let x = pill.left + 1; x < pill.right; x += 6) {
+                if (document.elementsFromPoint(x, y).some(e => e.closest('#fan-chart [data-fan-person].evidence-hit'))) n++;
+            }
+        }
+        return n;
+    });
+}
+
+/** The line of the sector at the top of the drawn fan, beside its middle (where the pill stands). */
+function topRod(page: Page): Promise<string> {
+    return page.evaluate(() => {
+        const chart = document.getElementById('fan-chart')!;
+        const sectors = [...chart.querySelectorAll<SVGGElement>('[data-fan-person]')].map(g => ({ g, r: g.getBoundingClientRect() }));
+        const top = Math.min(...sectors.map(s => s.r.top));
+        const mid = chart.getBoundingClientRect().left + chart.getBoundingClientRect().width / 2;
+        const el = document.elementFromPoint(mid + 12, top + 6)?.closest<SVGGElement>('[data-fan-person]');
+        const a = window.Strom.TreeRenderer.getFanView()!.getRodAssignment()!;
+        return a.index.rodByPerson.get(el!.dataset.fanPerson!)!;
+    });
+}
+
+for (const vp of [
+    { name: 'desktop 1568×729', width: 1568, height: 729, touch: false },
+    { name: 'phone sideways 844×390', width: 844, height: 390, touch: true },
+    { name: 'phone 390×844', width: 390, height: 844, touch: true },
+]) {
+    test.describe(vp.name, () => {
+        test.use({ viewport: { width: vp.width, height: vp.height }, hasTouch: vp.touch, isMobile: vp.touch });
+
+        test(`fan family lines: the highlight's pill covers none of the line's sectors; the whole fan keeps clear of it (spec 114 §6, ${vp.name})`, async ({ page }) => {
+            await openRodFanTouch(page);
+            // The standalone file's banner (as in the finding): the pill stands lower, over the fan's top ring.
+            await page.evaluate(() => {
+                document.body.classList.add('embedded-mode');
+                document.getElementById('embedded-mode-banner')!.classList.add('visible');
+            });
+            await page.evaluate(() => { window.Strom.TreeRenderer.setFanShape('half'); window.Strom.TreeRenderer.setFanGenerations(4); });
+            await expect(page.locator('#fan-chart svg.fan-svg')).toHaveAttribute('data-fan-shape', 'half');
+            const before = await page.locator('#fan-chart svg.fan-svg').getAttribute('viewBox');
+            const rod = await topRod(page);
+            await page.evaluate((id) => window.Strom.UI.selectRodFromFan(id), rod);
+            await expect(page.locator('#evidence-pill')).toBeVisible();
+            await expect.poll(async () => (await highlight(page)).hit.length).toBeGreaterThan(1);
+            await expect.poll(() => hitUnderPill(page)).toBe(0);
+            // No sector at all under the pill: the whole fan stands beside it.
+            expect(await page.evaluate(() => {
+                const p = document.getElementById('evidence-pill')!.getBoundingClientRect();
+                return [...document.querySelectorAll('#fan-chart [data-fan-person], #fan-chart .fan-focus-disc')]
+                    .flatMap(g => [...g.querySelectorAll('path, circle')])
+                    .filter(e => { const r = e.getBoundingClientRect(); return r.left < p.right && r.right > p.left && r.top < p.bottom && r.bottom > p.top; }).length;
+            })).toBe(0);
+            // The highlight ends: the whole fan as before.
+            await page.evaluate(() => window.Strom.UI.selectRodFromFan(null));
+            await expect(page.locator('#evidence-pill')).toHaveCount(0);
+            await expect.poll(() => page.locator('#fan-chart svg.fan-svg').getAttribute('viewBox')).toBe(before);
+        });
+    });
+}
