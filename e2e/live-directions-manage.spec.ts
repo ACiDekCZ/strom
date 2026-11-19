@@ -125,9 +125,10 @@ test.describe('directions managed through the bridge', () => {
         await more.click();
         const menu = page.locator('#live-direction-menu');
         await expect(menu.locator('.research-direction-menu__item')).toHaveText([
-            /^Edit/, /^Pause/, /^End…/, /^Move up/, /^Move to the top/, /^Work on this direction/,
+            /^Edit/, /^Pause/, /^End…/, /^Move up/, /^Move to the top/, /^Save as list…/, /^Work on this direction/,
         ]);
-        await expect(menu.locator('[role="separator"]')).toHaveCount(2);
+        // Lists of people are the app's own: Save as list… also while the tree follows the research.
+        await expect(menu.locator('[role="separator"]')).toHaveCount(3);
         await expect(menu.locator('[data-do="pause"] .research-open-mark')).toHaveCount(0);
         await expect(menu.locator('[data-do="work"] .research-open-mark')).toHaveCount(1);
         await menu.locator('[data-do="done"]').click();

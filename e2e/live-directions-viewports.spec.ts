@@ -343,14 +343,17 @@ test.describe('directions on every screen', () => {
         await expect(row.locator('.research-direction__actions .research-open-mark')).toHaveCount(0);
         await noSideways(page, '390 unfolded');
 
-        // More…: End… and Work on it (its agent in the terminal), above the sheet; the 2nd row has no Move to the top.
+        // More…: End…, Save as list… and Work on it (its agent in the terminal), above the sheet; the 2nd row has no Move to the top.
         await row.locator('[data-do="more"]').click();
         const menu = page.locator('#live-direction-menu');
         await expect(menu).toHaveAttribute('role', 'menu');
-        await expect(menu.locator('[role="menuitem"]')).toHaveCount(2);
-        await expect(menu.locator('[data-do]')).toHaveText([/^End…/, /Work on this direction/]);
+        // Save as list… too: lists of people are the app's own, open while the tree follows the research.
+        await expect(menu.locator('[role="menuitem"]')).toHaveCount(3);
+        await expect(menu.locator('[data-do]')).toHaveText([/^End…/, /^Save as list…/, /Work on this direction/]);
         await expect(menu.locator('[data-do="work"] .research-ai-badge')).toHaveCount(1);
         await expect(menu.locator('[data-do="work"] .research-open-mark')).toHaveCount(1);
+        await page.keyboard.press('ArrowDown');
+        await expect(menu.locator('[data-do="save-list"]')).toBeFocused();
         await page.keyboard.press('ArrowDown');
         await expect(menu.locator('[data-do="work"]')).toBeFocused();
         await page.keyboard.press('Escape');
@@ -360,7 +363,7 @@ test.describe('directions on every screen', () => {
         const third = directionRow(page, 'G0004');
         await third.locator('.research-direction__head').click();
         await third.locator('[data-do="more"]').click();
-        await expect(menu.locator('[data-do]')).toHaveText([/^End…/, 'Move to the top']);
+        await expect(menu.locator('[data-do]')).toHaveText([/^End…/, 'Move to the top', /^Save as list…/]);
         await menu.locator('[data-do="top"]').click();
         await expect.poll(() => directionWrites(b).length).toBe(1);
         expect(directionWrites(b)[0]).toMatchObject({ path: 'directions/order', body: { order: ['G0004', 'G0001', 'G0006', 'G0002'] } });
