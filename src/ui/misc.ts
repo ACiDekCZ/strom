@@ -1964,8 +1964,9 @@ export const miscMethods = uiModule({
      */
     performUndo(): void {
         this.dismissUndoToast();
-        // A locked tree is read-only: say why nothing happens (review S21).
-        if (DataManager.isTreeLocked() && !DataManager.isViewMode() && DataManager.canUndo()) {
+        // A locked tree is read-only: say why nothing happens (review S21); a list's step
+        // while following a research goes (N2).
+        if (DataManager.undoLocked('undo') && !DataManager.isViewMode() && DataManager.canUndo()) {
             this.showToast(strings.storageSafety.treeLocked);
             return;
         }
@@ -1985,7 +1986,7 @@ export const miscMethods = uiModule({
     /** Replay the last undone mutation. Symmetric to performUndo(). */
     performRedo(): void {
         this.dismissUndoToast();
-        if (DataManager.isTreeLocked() && !DataManager.isViewMode() && DataManager.canRedo()) {
+        if (DataManager.undoLocked('redo') && !DataManager.isViewMode() && DataManager.canRedo()) {
             this.showToast(strings.storageSafety.treeLocked);
             return;
         }

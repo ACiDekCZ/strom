@@ -525,6 +525,8 @@ class DataManagerClass {
     private pendingBefore: StromData | null = null;
     /** The research base of `pendingBefore` (it goes on the undo step with it). */
     private pendingBase: ResearchBase | null = null;
+    /** The mutation being committed changes only lists of people (an undo step allowed while following a research). */
+    private pendingListsOnly = false;
     /** True while a batch (multiple mutations → one undo step) is in progress. */
     private batchActive = false;
     /** Nesting depth of beginBatch/commitBatch (a batch may run inside a batch). */
@@ -1580,6 +1582,8 @@ class DataManagerClass {
      * mutation methods. During a batch this defers to commitBatch (no push/save).
      */
     private commitMutation(description: string, silent = false, mark?: UndoMark, toast?: MutationToast): void {
+        const listsOnly = this.pendingListsOnly;
+        this.pendingListsOnly = false;
         // The files' places name only what is still in the tree (a person, couple, event or source deleted).
         pruneMedia(this.data);
         if (this.batchActive) {
@@ -1601,7 +1605,7 @@ class DataManagerClass {
         if (this.pendingBefore) {
             // Auto-backup the FIRST mutation of the day (state before it).
             this.maybeAutoSnapshot(this.pendingBefore, this.pendingBase);
-            UndoManager.push({ data: this.pendingBefore, description, base: this.pendingBase, ...(mark ? { mark } : {}) });
+            UndoManager.push({ data: this.pendingBefore, description, base: this.pendingBase, ...(mark ? { mark } : {}), ...(listsOnly ? { listsOnly } : {}) });
             this.pendingBefore = null;
         }
         this.save();
@@ -1899,7 +1903,7 @@ class DataManagerClass {
         // A staged dialog is open: its own Save/Discard settle the data.
         if (this.editSession) return null;
         // A locked tree is read-only — undo would rewrite it (review S21).
-        if (this.isTreeLocked()) return null;
+        if (this.undoLocked('undo')) return null;
         UndoManager.setActiveTree(this.currentTreeId);
         const restored = UndoManager.undo(cloneTreeData(this.data), TreeManager.researchBaseOf(this.currentTreeId));
         if (!restored) return null;
@@ -1917,13 +1921,25 @@ class DataManagerClass {
         if (this.isReadOnly() || !this.currentTreeId) return null;
         // A staged dialog is open: its own Save/Discard settle the data.
         if (this.editSession) return null;
-        if (this.isTreeLocked()) return null;
+        if (this.undoLocked('redo')) return null;
         UndoManager.setActiveTree(this.currentTreeId);
         const restored = UndoManager.redo(cloneTreeData(this.data), TreeManager.researchBaseOf(this.currentTreeId));
         if (!restored) return null;
         this.applyRestoredData(restored.data, restored.base);
         AuditLogManager.log(this.currentTreeId, 'redo', strings.auditLog.redoAction(restored.description));
         return { description: restored.description };
+    }
+
+    /**
+     * A locked tree takes no undo or redo (it would rewrite the tree), except
+     * a step of its lists of people while the lock is only that it follows a
+     * research: the research never has the lists, and a version it sends
+     * clears the history, so the step's state is the research's version now.
+     */
+    undoLocked(which: 'undo' | 'redo'): boolean {
+        if (!this.isTreeLocked()) return false;
+        UndoManager.setActiveTree(this.currentTreeId);
+        return !UndoManager.peekListsOnly(which) || this.listsReadOnly();
     }
 
     /** Swap in restored data and persist it, without recording a new undo step. */
@@ -2145,9 +2161,16 @@ class DataManagerClass {
         return index;
     }
 
-    /** Lists cannot be changed (Q1): a read-only or locked tree, a live research's tree, a newer app's data, another window's read-only copy. */
+    /**
+     * Lists cannot be changed (Q1): a read-only or locked tree, a newer app's
+     * data, another window's read-only copy. A tree that follows a research
+     * keeps its lists open (N2): they are the tree's own, the research never
+     * has them nor sends them back (keepPersonListData).
+     */
     listsReadOnly(): boolean {
-        return this.isReadOnly() || this.isTreeLocked();
+        if (this.isReadOnly()) return true;
+        if (!this.isTreeLocked()) return false;
+        return !this.isLiveFollowing() || !!this.windowSink?.readOnly() || TreeManager.getActiveTreeMetadata()?.isLocked === true;
     }
 
     /** The tree's lists, the ready-made "Added in the last 30 days" first while it is not stored. */
@@ -2178,6 +2201,7 @@ class DataManagerClass {
     /** Stores a changed list (the ready-made one is stored the first time it changes) in one undo step. */
     private storePersonList(list: PersonList, description: string, silent: boolean, toast?: MutationToast, audit = false): void {
         this.beginMutation();
+        this.pendingListsOnly = true;
         const stored = this.data.personLists ?? [];
         const at = stored.findIndex(l => l.id === list.id);
         const copy = structuredClone(list);
@@ -2269,6 +2293,7 @@ class DataManagerClass {
         if (list.builtin && !this.data.personListsDropped?.includes(list.builtin)) {
             this.data.personListsDropped = [...(this.data.personListsDropped ?? []), list.builtin];
         }
+        this.pendingListsOnly = true;
         this.commitMutation(strings.lists.undo.delete(name), false, undefined, { text: strings.lists.toast.deleted(name) });
         if (this.currentTreeId) AuditLogManager.log(this.currentTreeId, 'personList.delete', strings.lists.audit.deleted(name));
         return true;

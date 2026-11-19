@@ -1589,6 +1589,9 @@ export const researchSyncMethods = uiModule({
         // "Restore the state before loading" stands until the next edit of the tree (O2, V-H): never offered
         // again, not even when an undo brings the tree back to what was loaded.
         if (researchAutoState(treeId).loadBackup) patchResearchAutoState(treeId, { loadBackup: undefined });
+        // Following the research: the one edit open is a list of people (N2), which the research never gets —
+        // nothing waits to be sent and nothing goes.
+        if (DataManager.getCurrentTreeId() === treeId && DataManager.isLiveFollowing()) return;
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link || !this.researchSyncCapable(link.id)) return;
         fpCache = null;

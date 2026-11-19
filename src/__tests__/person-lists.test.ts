@@ -556,6 +556,51 @@ describe('DataManager', () => {
         expect(DataManager.deletePersonList(ADDED30_ID)).toBe(false);
     });
 
+    it('a tree that follows a research keeps its lists open, their steps undone and redone; other steps wait (N2)', () => {
+        const before = DataManager.createPersonList({ name: 'Before', dynamic: false })!;
+        DataManager.setPersonListSort(before.id, 'name');
+        // A step of the tree itself, done before following.
+        DataManager.updatePerson(id('ada'), { firstName: 'Adela' });
+        DataManager.setLiveTree(TREE);
+        try {
+            expect(DataManager.isTreeLocked()).toBe(true);
+            expect(DataManager.listsReadOnly()).toBe(false);
+            const l = DataManager.createPersonList({ name: 'Archive visit', dynamic: false })!;
+            expect(DataManager.addPersonsToList(l.id, [id('ada'), id('emil')])).toBe(true);
+            expect(toasts[toasts.length - 1]?.toast?.text).toBe('2 people added to “Archive visit”.');
+            expect(DataManager.undoLocked('undo')).toBe(false);
+            expect(DataManager.undo()?.description).toBe('changing the list: Archive visit');
+            expect(DataManager.getPersonListIds(l.id)).toEqual([]);
+            expect(DataManager.undoLocked('redo')).toBe(false);
+            expect(DataManager.redo()).not.toBeNull();
+            expect(DataManager.getPersonListIds(l.id)).toEqual(['ada', 'emil']);
+            DataManager.undo();
+            DataManager.undo();
+            expect(DataManager.getPersonList(l.id)).toBeUndefined();
+            // The step of the tree under them waits until following ends: the tree stays the research's.
+            expect(DataManager.undoLocked('undo')).toBe(true);
+            expect(DataManager.undo()).toBeNull();
+            expect(DataManager.getPerson(id('ada'))?.firstName).toBe('Adela');
+            // Locked for another reason too: the lists are closed as well.
+            vi.spyOn(TreeManager, 'getActiveTreeMetadata').mockReturnValue({ isLocked: true } as never);
+            expect(DataManager.listsReadOnly()).toBe(true);
+            expect(DataManager.createPersonList({ name: 'Y', dynamic: false })).toBeNull();
+        } finally {
+            DataManager.setLiveTree(null);
+        }
+        vi.spyOn(TreeManager, 'getActiveTreeMetadata').mockReturnValue(null);
+        expect(DataManager.undoLocked('undo')).toBe(false);
+    });
+
+    it('another window\'s copy of a followed tree keeps the lists closed (its edits go to the main window)', () => {
+        const sink: WindowEditSink = {
+            edit: () => {}, undo: () => {}, redo: () => {}, canUndo: () => false, canRedo: () => false,
+            readOnly: () => true, sessionEnded: () => {},
+        } as WindowEditSink;
+        DataManager.setWindowSink(sink);
+        expect(DataManager.listsReadOnly()).toBe(true);
+    });
+
     it('another window sends its list edits to the main window', () => {
         const edits: string[] = [];
         const sink: WindowEditSink = {

@@ -2630,3 +2630,52 @@ test.describe('the research not running, on tablet and phone (audit 017 a-D6)', 
         await expect(moreCount(page)).toBeHidden();
     });
 });
+
+test('following the research: Add to list in the person menu, a Table row and Lists of people; its undo goes; nothing waits to be sent, nothing goes (N2)', async ({ page }) => {
+    const bridge = await autoTree(page, {}, MIDDAY);
+    await page.route(`${BRIDGE}/events`, () => new Promise<void>(() => { /* never answers */ }));
+    await page.evaluate(base => window.Strom.UI.startLiveFollow(base, { follow: true }), BRIDGE);
+    await expect(page.locator('#live-panel')).toBeVisible();
+    expect(await page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(true);
+    const posts = bridge.posts.length;
+    const jan = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
+    const listIds = () => page.evaluate(() => {
+        const l = window.Strom.DataManager.getPersonLists().find(x => x.name === 'Letters to write');
+        return l ? window.Strom.DataManager.getPersonListIds(l.id) : null;
+    });
+
+    // Lists of people: no "read only", New list… offered.
+    await page.evaluate(() => window.Strom.UI.showPersonLists());
+    const lists = page.locator('#person-lists-modal');
+    await expect(lists.locator('.pl-head')).toBeVisible();
+    await expect(lists.locator('.pl-ro')).toHaveCount(0);
+    await expect(lists.locator('.pl-new').first()).toBeVisible();
+    await lists.locator('.pl-close').click();
+    await page.evaluate(() => window.Strom.DataManager.createPersonList({ name: 'Letters to write', dynamic: false }));
+
+    // The person menu: Add to list ›, and Undo on its toast takes it back.
+    await card(page, 'Jan').click();
+    await page.locator('.context-menu [data-menu="add-to-list"]').click();
+    await page.locator('.context-submenu [data-action^="list-toggle:"]').click();
+    const added = page.locator('.undo-toast', { hasText: 'Jan Fíšek added to “Letters to write”.' });
+    await expect(added).toBeVisible();
+    expect(await listIds()).toEqual([jan]);
+    await added.locator('.undo-toast-btn').click();
+    await expect.poll(listIds).toEqual([]);
+    await expect(page.locator('.toast', { hasText: 'locked' })).toHaveCount(0);
+
+    // A Table row's menu.
+    await page.locator('#view-mode-table').click();
+    await page.locator(`#table-container .tv-body .tv-row[data-key="p:${jan}"] .tv-name`).click({ button: 'right' });
+    await page.locator('.tv-menu .tv-menu-item', { hasText: 'Add to list' }).click();
+    await page.locator('.tv-menu .tv-menu-item', { hasText: 'Letters to write' }).click();
+    await expect(page.locator('.undo-toast', { hasText: 'Jan Fíšek added to “Letters to write”.' })).toBeVisible();
+    expect(await listIds()).toEqual([jan]);
+
+    // Nothing for the research: no edit counted, nothing sent after the quiet time.
+    const auto = await page.evaluate((id) => JSON.parse(localStorage.getItem(`strom-research-auto:${id}`) ?? '{}'), await treeId(page));
+    expect(auto.edits).toBeUndefined();
+    expect(auto.unsentSince).toBeUndefined();
+    await page.clock.fastForward(QUIET + 1000);
+    expect(bridge.posts.length).toBe(posts);
+});
