@@ -1901,6 +1901,22 @@ export const tableMethods = uiModule({
     },
 
     /**
+     * Whether the Table on screen leaves the person out (spec 110 §7): its
+     * filter, search or list shows no row of theirs (persons, unions, events),
+     * nor a pinned row or one shown for now. False when the Table is not shown
+     * or shows sources (about no one).
+     */
+    tableHidesPerson(personId: string): boolean {
+        const tree = treeKey();
+        if (TreeRenderer.getViewMode() !== 'table' || !document.getElementById('table-container')) return false;
+        if (!view || view.tree !== tree || view.type === 'sources') return false;
+        const pid = personId as PersonId;
+        if (tempShown && tempShown.tree === tree && tempShown.person === pid) return false;
+        if (mounted?.pinOutside.has(`p:${pid}`)) return false;
+        return !view.result.rows.some(r => rowPeople(r).includes(pid));
+    },
+
+    /**
      * A person selected in another window (spec 079 §2): their row here is
      * the selected one (the row kept if it is theirs), scrolled to only when
      * out of view. During a cell's edit it waits for the edit's end; a person

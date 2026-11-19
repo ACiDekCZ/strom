@@ -199,8 +199,9 @@ function mainFocusDeps(): MainFocusDeps {
     return {
         focusId: () => TreeRenderer.getFocusPersonId(),
         exists: (id) => !!DataManager.getPerson(id),
-        // No person is hidden in a window yet (privacy hides only in an export): nothing to say.
-        hidden: () => false,
+        // Hidden here (§7): the main window's Table leaves the person out (its filter, search or list).
+        // The charts hide no one (privacy hides only in an export).
+        hidden: (id) => UI.tableHidesPerson(id),
         followingAgent: () => mainFollowsAgent(),
         focus: (id, history) => focusFromWindow(id, history),
         showNotice: (n, announce, actions) => showWindowNotice(n, announce, actions),

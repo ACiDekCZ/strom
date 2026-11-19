@@ -152,6 +152,48 @@ test('mark keeps the main window\'s centre (the card ringed); off sends nothing'
     expect(errors).toEqual([]);
 });
 
+/** Spec 110 §7: the main window's Table leaves the chosen person out (its search) — the centre stays, a notice without the name. */
+test('focus of a person the main window\'s Table leaves out: the centre stays, the notice names no one', async ({ page, context }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    const treeId = await openMain(page, context);
+    const before = await focusOf(page);
+    // The other window first (its Table starts with the tree's stored search, none yet).
+    const sat = await openTable(context, treeId, 'sf04aa', 'focus', errors);
+    // The main window in the Table, its search leaving out everyone but the centre.
+    await page.bringToFront();
+    const name = await page.evaluate((id) => window.Strom.DataManager.getPerson(id as never)?.firstName ?? '', before);
+    expect(name).not.toBe('');
+    await page.locator('#view-mode-table').click();
+    await expect(page.locator('#table-container .tv-grid[role="treegrid"]')).toBeVisible();
+    await page.locator('#table-container .tv-search-q').fill(name);
+    await expect(page.locator('#table-container .tv-status')).not.toContainText('29 of 29');
+    await expect(page.locator(`#table-container .tv-body .tv-row[data-key="p:${before}"]`)).toHaveCount(1);
+    // A person with a row in the other window's Table and none in the main window's.
+    const mainKeys = await page.locator('#table-container .tv-body .tv-row[data-key^="p:"]')
+        .evaluateAll(els => els.map(e => (e as HTMLElement).dataset.key));
+    const satKeys = await sat.locator('#table-container .tv-body .tv-row[data-key^="p:"]')
+        .evaluateAll(els => els.map(e => (e as HTMLElement).dataset.key));
+    const left = satKeys.find(k => k && !mainKeys.includes(k))?.slice(2) ?? null;
+    expect(left).not.toBeNull();
+    const fullName = await page.evaluate((id) => {
+        const p = window.Strom.DataManager.getPerson(id as never);
+        return p ? `${p.firstName} ${p.lastName}`.trim() : '';
+    }, left);
+
+    const r = row(sat, left!);
+    await r.scrollIntoViewIfNeeded();
+    await r.click();
+    const notice = page.locator('#window-notice .wn-box[data-kind="hidden"]');
+    await expect(notice).toBeVisible();
+    await expect(notice).toHaveText('The selected person is hidden in this window.');
+    expect(await notice.textContent()).not.toContain(fullName);
+    expect((await selects(page)).at(-1)).toBe(`focus:${left}`);
+    await page.waitForTimeout(400);
+    expect(await focusOf(page)).toBe(before);
+    expect(errors).toEqual([]);
+});
+
 const control = (p: Page) => p.locator('.sat-follow');
 const menu = (p: Page) => p.locator('.sat-follow-menu');
 
