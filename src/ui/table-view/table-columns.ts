@@ -30,6 +30,8 @@ import {
     researchCell, sourceImageCell, sourceResearchIdCell, unionResearchCell, unionResearchIdCell, type ResearchColumnId, type UnionResearchColumnId,
 } from './table-research.js';
 import { addedTime } from '../../person-lists-data.js';
+import type { FieldKey } from '../../image-loads.js';
+import { imgStateOf } from '../image-slot.js';
 import { dateNumber, type CellName, type CellValue, type EventRow, type PersonRow, type RowType, type SourceRow, type TableContext, type TableModel, type TableRow, type UnionRow } from './table-model.js';
 
 export type ColumnKind = 'text' | 'date' | 'age' | 'number' | 'percent' | 'pill' | 'link' | 'thumb';
@@ -77,7 +79,12 @@ export function emptyCell(computed = false): CellValue {
  * A picture's cell (spec 107 §8): shown small, "yes" in a copy or an export;
  * with a picture it sorts before the cells without one in both directions.
  */
-export function thumbCell(dataUrl: string | undefined): CellValue {
+export function thumbCell(dataUrl: string | undefined, key?: FieldKey): CellValue {
+    // A picture on its way after the tree (or one that did not come) is the tree's picture: "yes", sorted with them (spec 116 §5).
+    const state = key ? imgStateOf(key, !!dataUrl) : 'none';
+    if (state === 'loading' || state === 'refresh' || (state === 'failed' && !dataUrl)) {
+        return { ...EMPTY, empty: false, text: strings.table.yes, sortKey: 0, thumb: dataUrl ?? '', thumbState: state };
+    }
     return dataUrl ? { ...EMPTY, empty: false, text: strings.table.yes, sortKey: 0, thumb: dataUrl } : emptyCell();
 }
 
@@ -775,7 +782,7 @@ export const UNION_COLUMNS: readonly ColumnDef[] = cols('unions', [
     { id: 'uLen', group: 'uextra', label: 'uLen', width: 96, kind: 'age', computed: true, get: (c, r) => unionLength(c, asUnion(r).union) },
     { id: 'srcCount', group: 'uextra', label: 'srcCount', width: 92, kind: 'number', computed: true, get: (_c, r) => numberCell(partnershipSourceIds(asUnion(r).union).length) },
     { id: 'uComp', group: 'uextra', label: 'uComp', width: 124, kind: 'percent', computed: true, get: (c, r) => unionComp(asUnion(r).union, unionPartners(c, asUnion(r)).p2) },
-    { id: 'uPhoto', group: 'uextra', label: 'uPhoto', width: 64, kind: 'thumb', get: (_c, r) => thumbCell(asUnion(r).union.photo) },
+    { id: 'uPhoto', group: 'uextra', label: 'uPhoto', width: 64, kind: 'thumb', get: (_c, r) => thumbCell(asUnion(r).union.photo, `union:${asUnion(r).union.id}:photo`) },
     // Research (16zg): only in a research tree
     ...UNION_RESEARCH_DEFS.map(([id, width]): Def => ({
         id, group: 'research', label: id, width, get: (c, r) => c.research ? unionResearchCell(c.research, asUnion(r).union, id) : emptyCell(),

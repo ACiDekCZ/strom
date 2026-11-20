@@ -12,6 +12,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { isPendingImageUrl } from '../research-image-refs.js';
 import { DataManager } from '../data.js';
 import { Attachment, MediaPlace, PartnershipId, Person, PersonId, Source } from '../types.js';
 import { strings } from '../strings.js';
@@ -124,7 +125,8 @@ export const materialAttachMethods = uiModule({
         if (one) {
             dialog.box.querySelector('.mdlg-title')!.textContent = one.title;
             const att = treeRecord(one);
-            if (att?.dataUrl && att.mimeType.startsWith('image/') && !att.originalOnly) {
+            // A stand-in of a file on its way is never drawn as an image (spec 116 §5): the head without one.
+            if (att?.dataUrl && att.mimeType.startsWith('image/') && !att.originalOnly && !isPendingImageUrl(att.dataUrl)) {
                 const img = h('img', 'mdlg-attach-thumb');
                 img.alt = '';
                 img.src = att.dataUrl;

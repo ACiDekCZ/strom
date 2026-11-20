@@ -85,6 +85,8 @@ export interface CellValue {
     percent?: number;
     /** A picture shown small in the cell (spec 107 §8: the couple's photo, a data URL); its text is "yes" for exports. */
     thumb?: string;
+    /** The picture on its way after the tree ('loading'; 'refresh': the older one meanwhile) or not come ('failed'; spec 116 §5). */
+    thumbState?: 'loading' | 'refresh' | 'failed';
     /** The cell's tooltip, when it says more than the text. */
     title?: string;
     /** A date's qualifier as a short word shown before the text ("abt.", §5.3). */

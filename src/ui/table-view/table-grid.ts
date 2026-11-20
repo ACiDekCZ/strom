@@ -51,6 +51,7 @@ import { PERSON_FINDINGS_COLUMNS } from './table-checks.js';
 import { sharedEventMarkSvg } from '../../icons.js';
 import { pinSvg } from './table-pins.js';
 import { branchSignsHtml } from '../../branch-sign.js';
+import { imgStateAttr, waitingTileHtml } from '../image-slot.js';
 import { BRANCH_MARKERS, type BranchMarker } from '../../types.js';
 
 export interface GridInput {
@@ -478,12 +479,25 @@ function thumbUrl(dataUrl: string): string {
     return url;
 }
 
+/**
+ * A picture's cell (spec 107 §8): the picture, a click zooms it. On its way
+ * after the tree: the empty tile under the veil (the older picture under it
+ * meanwhile); not come: the struck-through picture, its title says so
+ * (spec 116 §5).
+ */
+export function thumbHtml(value: Pick<CellValue, 'thumb' | 'thumbState'>, col: ColumnDef): string {
+    const label = esc(columnLabel(col));
+    const st = value.thumbState;
+    if (st === 'failed' && !value.thumb) {
+        return waitingTileHtml('failed', { tag: 'span', cls: 'tv-thumb', px: 0, glyph: 11, attrs: ` role="img" aria-label="${label}"` });
+    }
+    const img = value.thumb ? `<img src="${esc(thumbUrl(value.thumb))}" loading="lazy" decoding="async" alt="">` : '';
+    return `<button type="button" class="tv-thumb" tabindex="-1" aria-label="${label}"${imgStateAttr(st === 'failed' ? 'none' : st ?? 'none')}>${img}</button>`;
+}
+
 function cellValueCore(value: CellValue, col: ColumnDef, hit = '', links = false): string {
     // A picture (spec 107 §8: the couple's photo): small, a click zooms it.
-    if (value.thumb && !value.na) {
-        return `<button type="button" class="tv-thumb" tabindex="-1" aria-label="${esc(columnLabel(col))}">`
-            + `<img src="${esc(thumbUrl(value.thumb))}" loading="lazy" decoding="async" alt=""></button>`;
-    }
+    if ((value.thumb || value.thumbState) && !value.na) return thumbHtml(value, col);
     // A work list's Done (spec 084 §13d): a box ticked off or not.
     if (value.check !== undefined) {
         return `<span class="tv-check${value.check ? ' is-on' : ''}" role="checkbox" aria-checked="${value.check}" aria-label="${esc(strings.table.col.done)}">`

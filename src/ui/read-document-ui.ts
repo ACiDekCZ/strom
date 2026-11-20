@@ -11,6 +11,7 @@
  * what they read with when it is not the default (`read.with`, spec 059).
  */
 
+import { tileFailedHtml, TILE_NOTE_MIN_PX } from './image-slot.js';
 import { researchActionLabel, researchBridgeAgentLabel } from './research-open-mark.js';
 import { barHtml } from './prog-bar.js';
 import { DataManager } from '../data.js';
@@ -2662,7 +2663,10 @@ export const readDocumentMethods = uiModule({
         const img = sheet?.querySelector<HTMLImageElement>('img');
         img?.addEventListener('load', () => this.layoutReadScan());
         img?.addEventListener('error', () => {
-            img.replaceWith(Object.assign(document.createElement('span'), { className: 'read-scan-noimg', textContent: strings.read.noImage }));
+            // Did not load: the struck-through picture with "Not loaded", as the tree's photos say it (spec 116 §5).
+            const failed = Object.assign(document.createElement('span'), { className: 'read-scan-noimg', title: strings.photos.failed });
+            failed.innerHTML = tileFailedHtml(TILE_NOTE_MIN_PX);
+            img.replaceWith(failed);
             overlay.querySelector('.read-scan-zoom')?.remove();
         });
         // A line under the mouse shows on the scan (only with a mouse: a touch picks it by its click).

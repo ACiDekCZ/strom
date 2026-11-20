@@ -1054,6 +1054,23 @@ export const imageLoads = {
         const waiting = q.notIn();
         return waiting.length ? withWaitingImages(data, waiting) : data;
     },
+    /**
+     * The crops of source `sourceId` not in the open tree yet (on their way,
+     * or did not come), in their order: what a source's thumbnail, viewer and
+     * editor show for them (spec 116 §5). Display only.
+     */
+    waitingExcerpts(sourceId: string): { key: FieldKey; state: ImageLoadState; ref: ImageRef; record: SourceExcerpt }[] {
+        const q = currentLoad;
+        if (!q || q.isAborted() || !q.holdsOpenTree()) return [];
+        const prefix = `excerpt:${sourceId}:`;
+        const out: { key: FieldKey; state: ImageLoadState; ref: ImageRef; record: SourceExcerpt }[] = [];
+        for (const p of q.notIn()) {
+            if (!p.key.startsWith(prefix) || !p.excerpt) continue;
+            const state = q.stateOf(p.key);
+            if (state && state !== 'loaded') out.push({ key: p.key, state, ref: p.ref, record: p.excerpt.record });
+        }
+        return out;
+    },
     setPriority(personIds: readonly string[]): void {
         currentLoad?.setPriority(personIds);
     },

@@ -34,6 +34,9 @@ import { dataUrlByteSize } from '../photo.js';
 import { totalExcerptBytes } from '../attachments.js';
 import { excerptFromDataUrl, excerptImageUrl } from '../excerpts.js';
 import { shownExcerpts } from '../research-images.js';
+import { imageLoads, type FieldKey } from '../image-loads.js';
+import { isPendingImageUrl, type ImageRef } from '../research-image-refs.js';
+import { imgGlyphHtml, imgStateAttr, waitingTileHtml } from './image-slot.js';
 import { openCropEditor, compressWholeImage, CropRegion } from './crop-editor.js';
 import { coupleEventLabel } from '../events.js';
 import { eventTypeLabel } from './person-events.js';
@@ -107,6 +110,31 @@ export function qualityLabel(q: number | undefined): string {
     return q >= 3 ? strings.sources.quality3 : q === 2 ? strings.sources.quality2 : strings.sources.quality1;
 }
 
+/** A crop of a source on its way after the tree, or one that did not come (imageLoads.waitingExcerpts). */
+export interface WaitingExcerpt { key: FieldKey; state: 'pending' | 'failed' | 'loaded'; ref: ImageRef; record: SourceExcerpt }
+
+/** The ratio of an image of the research (`_WIDTH/_HEIGHT`) for its place while it comes (spec 116 §1.4). */
+export function refRatioStyle(ref: Pick<ImageRef, 'width' | 'height'>): string {
+    return ref.width && ref.height ? ` style="aspect-ratio: ${ref.width} / ${ref.height}"` : '';
+}
+
+/**
+ * A crop as the source's viewer and editor show it while it comes or once it
+ * did not (spec 116 §5, as §4.4): its place in the image's ratio under the
+ * veil with "Loading the photo…"; the struck-through picture with "Not
+ * loaded" and, under it, "The photo did not load." with Try again.
+ */
+export function waitingExcerptHtml(w: WaitingExcerpt, cls: string): string {
+    const ph = strings.photos;
+    const loading = w.state === 'pending';
+    const box = `<div class="${cls} excerpt-wait"${imgStateAttr(loading ? 'loading' : 'failed')}${refRatioStyle(w.ref)} role="img"`
+        + ` aria-label="${esc(loading ? ph.ariaLoading : ph.ariaFailed)}">`
+        + `${loading ? imgGlyphHtml('image', ph.loading) : imgGlyphHtml('image-off', ph.tileFailed)}</div>`;
+    if (loading) return box;
+    return `${box}<div class="busy-msg excerpt-wait-msg" role="status"><span>${esc(ph.failed)}</span>`
+        + `<button type="button" class="link" data-excerpt-retry="${esc(w.key)}">${esc(strings.busy.retry)}</button></div>`;
+}
+
 /** Thumbnail (or document icon) for a source, in one of the three sizes. */
 export function sourceThumbHtml(src: Source, kind: 'chip' | 'row' | 'picker'): string {
     // Excerpts of the file first, then those loaded from the research.
@@ -116,6 +144,12 @@ export function sourceThumbHtml(src: Source, kind: 'chip' | 'row' | 'picker'): s
     // Putting every excerpt into the markup parsed and escaped ~100 MB of
     // text for a catalog of a few hundred scans.
     if (first) return `<img class="source-${kind}-thumb" data-thumb-source="${esc(src.id)}" alt="">`;
+    // Its crop is on its way after the tree, or did not come (spec 116 §5): small, so no glyph while it comes.
+    const waiting = imageLoads.waitingExcerpts(src.id)[0];
+    if (waiting) {
+        return waitingTileHtml(waiting.state === 'pending' ? 'loading' : 'failed',
+            { tag: 'span', cls: `source-${kind}-thumb is-waiting`, px: 0, glyph: kind === 'chip' ? 11 : 12, attrs: ' aria-hidden="true"' });
+    }
     // The image is only in the research: a dashed outline in its place.
     if (src.imageHeld && src.imageHeld !== 'missing') {
         return `<span class="source-${kind}-thumb is-held" title="${esc(strings.researchImages.held[heldReasonKey(src.imageHeld)])}" aria-hidden="true"></span>`;
@@ -126,6 +160,13 @@ export function sourceThumbHtml(src: Source, kind: 'chip' | 'row' | 'picker'): s
 /** The sentence key of a held image's reason (unknown reasons read as "other"). */
 export function heldReasonKey(held: Source['imageHeld']): 'scope' | 'limit' | 'later' | 'other' {
     return held === 'scope' || held === 'limit' || held === 'later' ? held : 'other';
+}
+
+/** "Try again" under a crop that did not come: asks for it again (spec 116 §2). */
+function wireExcerptRetry(root: HTMLElement): void {
+    root.querySelectorAll<HTMLElement>('[data-excerpt-retry]').forEach(btn => btn.addEventListener('click', () => {
+        imageLoads.retry([btn.dataset.excerptRetry as FieldKey]);
+    }));
 }
 
 /** One observer per list, replaced on every render. */
@@ -588,9 +629,12 @@ export const sourcesMethods = uiModule({
                     ${loaded ? this.researchExcerptExtrasHtml(exc, src) : exc.caption ? `<figcaption>${esc(exc.caption)}</figcaption>` : ''}
                 </figure>${this.excerptFromHtml(exc)}${again ? `<div class="viewer-excerpt-links">${full}${again}</div>` : full}`);
         });
+        // The crops on their way after the tree, or not come (spec 116 §5).
+        const waiting = imageLoads.waitingExcerpts(src.id);
+        for (const w of waiting) chunks.push(`<figure class="viewer-excerpt">${waitingExcerptHtml(w, 'viewer-excerpt-box')}</figure>`);
         // What is only in the research: loading slots, one line with a button, or why not here.
         chunks.push(this.researchImagesViewerHtml(src));
-        if (excerpts.length === 0 && editable && !src.imageHeld) {
+        if (excerpts.length === 0 && waiting.length === 0 && editable && !src.imageHeld) {
             chunks.push(`<button type="button" class="secondary viewer-add-excerpt">${esc(s.addExcerpt)}</button>`);
         }
         const pageUrl = safeHttpUrl(excerpts[0]?.pageUrl) ?? safeHttpUrl(src.url);
@@ -687,6 +731,7 @@ export const sourcesMethods = uiModule({
             });
         });
         body.querySelector('.viewer-add-excerpt')?.addEventListener('click', () => this.editFromSourceViewer(true));
+        wireExcerptRetry(body);
         body.querySelectorAll<HTMLElement>('.viewer-cite [data-cite-act]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const act = btn.dataset.citeAct;
@@ -767,6 +812,8 @@ export const sourcesMethods = uiModule({
         const titleInput = document.getElementById('input-source-title') as HTMLInputElement | null;
         if (titleInput) titleInput.placeholder = titlePlaceholder;
         this.excerptDrafts = (src.excerpts ?? []).map(e => ({ excerpt: structuredClone(e) }));
+        // Its crops on their way: shown, and one that comes meanwhile is kept by Save (spec 116 §5).
+        this.excerptsWaitingAtOpen = new Set(imageLoads.waitingExcerpts(src.id ?? '').flatMap(w => w.record.id ? [w.record.id] : []));
         // The files it is taken from (spec 102 §5/§6): staged until Save.
         this.resetSourceDocs(src);
         this.sourceQualityDraft = src.quality;
@@ -1035,6 +1082,11 @@ export const sourcesMethods = uiModule({
                 }
                 return exc;
             });
+            // A crop that came while the editor was open is the source's: Save keeps it (spec 116 §5).
+            const came = editingId ? DataManager.getData().sources?.[editingId]?.excerpts ?? [] : [];
+            for (const e of came) {
+                if (this.excerptsWaitingAtOpen.has(e.id) && !excerpts.some(x => x.id === e.id)) excerpts.push(e);
+            }
             if (excerpts.length > 0) payload.excerpts = excerpts;
             if (editingId) {
                 // A confirmation of the research's transcript holds for its wording only (spec 022):
@@ -1126,13 +1178,22 @@ export const sourcesMethods = uiModule({
                     ${this.excerptFromHtml(d.excerpt)}
                 </div>`;
         }).join('');
-        const count = this.excerptDrafts.length;
+        // Its crops on their way after the tree, or not come: shown, not edited until they come (spec 116 §5).
+        const waits = this.editingSourceId ? imageLoads.waitingExcerpts(this.editingSourceId) : [];
+        const waitItems = waits.map(w => `
+                <div class="excerpt-item is-waiting">
+                    ${waitingExcerptHtml(w, 'excerpt-img')}
+                    ${w.record.caption ? `<div class="excerpt-bar"><span class="excerpt-caption-text">${esc(w.record.caption)}</span></div>` : ''}
+                </div>`).join('');
+        const count = this.excerptDrafts.length + waits.length;
         const adder = count === 0
             ? this.excerptAdderHtml(-1, true)
             : count < MAX_EXCERPTS_UI
                 ? `<button type="button" class="link-button excerpt-add-second" data-action="add-second">+ ${esc(s.excerptAddSecond)}</button>`
                 : '';
-        box.innerHTML = items + adder;
+        box.innerHTML = items + waitItems + adder;
+        box.dataset.waits = waits.map(w => `${w.key}~${w.state}`).join(',');
+        wireExcerptRetry(box);
         const material = document.getElementById('source-editor-material');
         if (material) material.hidden = !this.editingSourceId || !this.materialAvailable();
         box.querySelectorAll<HTMLElement>('.media-full-quality[data-excerpt-full]').forEach(el => el.addEventListener('click', () => {
@@ -1345,7 +1406,8 @@ export const sourcesMethods = uiModule({
 
     showAttachmentPagePicker(anchor: HTMLElement, target: number, only?: { id: string; dataUrl: string; name: string; title?: string }[]): void {
         document.querySelector('.excerpt-page-picker')?.remove();
-        const pages = only ?? this.excerptContextPages();
+        // A page still on its way is not offered for cutting (spec 116 §5).
+        const pages = (only ?? this.excerptContextPages()).filter(p => !isPendingImageUrl(p.dataUrl));
         if (pages.length === 0) return;
         const grid = document.createElement('div');
         grid.className = 'excerpt-page-picker';

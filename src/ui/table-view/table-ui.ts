@@ -20,6 +20,7 @@
  * error" there marks it as Data quality does, with the same toast and Undo.
  */
 
+import { imageLoads } from '../../image-loads.js';
 import { auditPersonName, DataManager } from '../../data.js';
 import { TreeManager } from '../../tree-manager.js';
 import { TreeRenderer } from '../../renderer.js';
@@ -379,6 +380,9 @@ const BRIDGE_TOAST_MS = 8000;
 let mounted: Mounted | null = null;
 
 /** From this many cells the export says its state at once (building it takes longer than 120 ms). */
+/** The load of the tree's images the couples' photo cells were drawn with (seq, phase, failed). */
+let tableImagesKey = '';
+
 export const TABLE_EXPORT_SHOWN_AT_ONCE = 30_000;
 /** The coverage row's cells (§6.1) for the rows last drawn; computed when a column is first drawn. */
 let coverage: { rows: readonly TableRow[]; cells: Map<string, CoverageCell> } | null = null;
@@ -888,6 +892,13 @@ export const tableMethods = uiModule({
             model = buildTableModel(data, { rev, homeId, lang, reliability: this.reliabilityOptionsNow() });
         }
         const m = model;
+        // The couples' photos on their way or not come (spec 116 §5): a change of the load draws their cells anew.
+        const images = imageLoads.snapshot();
+        const imagesKey = `${images.seq}:${images.phase}:${images.failed}`;
+        if (imagesKey !== tableImagesKey) {
+            tableImagesKey = imagesKey;
+            for (const row of m.unions) row.cache.delete('uPhoto');
+        }
         const tree = treeKey();
         const index = this.tableChecksFor(tree, data, rev);
         applyChecks(m, index);

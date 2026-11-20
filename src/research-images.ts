@@ -595,6 +595,11 @@ export class ResearchImageQueue {
     get active(): boolean { return this.state.phase === 'running' || this.state.phase === 'paused'; }
     /** Source ids still to load (not reached yet). */
     get remaining(): string[] { return this.tasks.slice(this.index).map(t => t.sourceRef); }
+    /** The source being downloaded now (its row's thumbnail under the veil, spec 116 §5); null when none. */
+    get current(): string | null { return this.state.phase === 'running' && this.index < this.tasks.length ? this.tasks[this.index].sourceRef : null; }
+    /** The sources some of whose images did not come in this run (their rows' struck-through picture). */
+    hasFailed(sourceRef: string): boolean { return this.failedRefs.has(sourceRef); }
+    private readonly failedRefs = new Set<string>();
 
     subscribe(fn: (s: QueueSnapshot) => void): () => void {
         this.listeners.add(fn);
@@ -676,8 +681,10 @@ export class ResearchImageQueue {
             if (!reachedEnd) { this.end('bridgeOff'); return; }
             this.index++;
             this.state.done++;
-            if (failedHere) this.state.failedSources++;
-            else this.state.loaded++;
+            if (failedHere) {
+                this.state.failedSources++;
+                this.failedRefs.add(task.sourceRef);
+            } else this.state.loaded++;
             this.emit();
         }
         this.end('done');

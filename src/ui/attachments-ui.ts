@@ -29,6 +29,8 @@ import { emptyStateHtml } from './empty-state.js';
 
 import { iconSvg } from '../icons.js';
 import { imageLoads } from '../image-loads.js';
+import { personMedia as shownPersonMedia } from '../media.js';
+import { standInState, waitingTileHtml } from './image-slot.js';
 
 /** Kinds the app cannot preview: only the original, for a research that takes it. */
 const ORIGINAL_ONLY_TYPES = ['image/tiff', 'image/heic', 'image/heif'];
@@ -117,7 +119,8 @@ export const attachmentsMethods = uiModule({
         const person = DataManager.getPerson(this.currentId);
         if (!person) return;
 
-        const attachments = DataManager.personMedia(person.id);
+        // The files still on their way after the tree are the person's too: their rows wait (spec 116 §5).
+        const attachments = shownPersonMedia(imageLoads.view(DataManager.getData()), person.id);
         const locked = DataManager.isPersonLocked(this.currentId);
         // The attachment the portrait is cut from: its tag, and no "As portrait…" (spec 107 §4).
         const sourceId = this.portraitSourceAttachmentShown(person);
@@ -134,6 +137,16 @@ export const attachmentsMethods = uiModule({
         } else {
             container.innerHTML = attachments.map(att => {
                 if (att.originalOnly) return this.originalOnlyRowHtml(att, locked);
+                // On its way (or did not come): its tile waits, the row is read only until it comes (spec 116 §5).
+                const waits = standInState(att.dataUrl);
+                if (waits !== 'none') return `
+                    <div class="attachment-row is-waiting">
+                        ${waitingTileHtml(waits, { tag: 'span', cls: 'attachment-thumb', px: 40, glyph: 16 })}
+                        <div class="attachment-main">
+                            <span class="attachment-name-row">${attachmentNameHtml(att, esc)}</span>
+                            <span class="attachment-size">${esc(attachmentMeta(att, formatBytes(att.sizeBytes)))}</span>
+                        </div>
+                    </div>`;
                 const thumb = isImage(att)
                     ? `<span class="attachment-thumb" data-attachment-id="${esc(att.id)}"><img src="${esc(att.dataUrl)}" alt=""></span>`
                     : `<span class="attachment-thumb" title="PDF" data-attachment-id="${esc(att.id)}">${iconSvg('file', { size: 18 })}</span>`;

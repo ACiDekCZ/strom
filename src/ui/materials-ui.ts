@@ -21,7 +21,7 @@ import { TreeRenderer } from '../renderer.js';
 import { Attachment, Person, PersonId, TreeId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { setMaterialsCountProvider } from '../card-signals.js';
-import { personMediaIndex, treeMedia, placeKey, personMediaCount } from '../media.js';
+import { personMediaIndex, treeMedia, placeKey, personMediaCount, personMedia } from '../media.js';
 import { researchPersonRef, parseLiveBridge, researchLinkMark } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } from '../research-device.js';
 import {
@@ -35,6 +35,8 @@ import {
     clearMaterialsCache, mergeIntoCache, markBatchOpened, materialDate,
 } from '../materials.js';
 import { materialThumbs } from '../material-thumbs.js';
+import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT } from '../image-loads.js';
+import { setTileState, standInState, waitingTileHtml, type ImgState } from './image-slot.js';
 import { formatBytesShort } from './originals-ui.js';
 import { onComputer } from './research-ui.js';
 import { openImageViewer } from './image-viewer.js';
@@ -268,26 +270,39 @@ const DIVIDER_BEFORE: MaterialActionId[] = ['openSystem', 'removeFromTree'];
 
 /** The person's items as drawn in the section (by key), for the ⋯ menu and opening. */
 let sectionItems = new Map<string, MaterialItem>();
-/** An attachment with what the rows show of it (its title, kind, date and note; spec 102 §2). */
-const attachmentKey = (a: Attachment): string => [a.id, a.title ?? '', a.kind ?? '', a.date ?? '', a.note ?? ''].join('\u0001');
+/**
+ * The state of an item's own file of the tree while the tree's images come
+ * (spec 116 §5): 'loading' / 'failed' for a file still on its way (shown
+ * from imageLoads.view), 'none' for any other. Such an item is shown and
+ * opened, never acted on (its record is not in the tree yet).
+ */
+export function materialImageWait(item: Pick<MaterialItem, 'attachment'>): ImgState {
+    return standInState(item.attachment?.dataUrl);
+}
+/** An attachment with what the rows show of it (its title, kind, date and note; spec 102 §2; a file on its way: its state). */
+const attachmentKey = (a: Attachment): string => [a.id, a.title ?? '', a.kind ?? '', a.date ?? '', a.note ?? '', standInState(a.dataUrl)].join('\u0001');
+
+/** The tree's data as the materials show them: with the files still on its way (spec 116 §5; never stored). */
+const shownData = () => imageLoads.view(DataManager.getData());
 
 /** Which files the tree holds and where: a change redraws what shows them (window, section, viewer). */
 export function treeAttachmentsKey(): string {
     const parts: string[] = [];
-    const index = personMediaIndex(DataManager.getData());
+    const data = shownData();
+    const index = personMediaIndex(data);
     for (const p of DataManager.getAllPersons()) {
         const atts = index.get(p.id);
         if (!atts?.length) continue;
         parts.push(`${p.id}|${p.refn ?? ''}|${atts.map(attachmentKey).join(',')}`);
     }
     // Every file with its places (a file only at a source or a union counts too; spec 102 §1).
-    for (const att of treeMedia(DataManager.getData())) parts.push(`${att.id}@${att.places.map(placeKey).join(',')}`);
+    for (const att of treeMedia(data)) parts.push(`${att.id}@${att.places.map(placeKey).join(',')}~${standInState(att.dataUrl)}`);
     return parts.join(';');
 }
 
 /** The attachments the open person's section and list were drawn with (ids). */
 let sectionAttachments = '';
-const personAttachmentIds = (p: Person): string => DataManager.personMedia(p.id).map(attachmentKey).join(',');
+const personAttachmentIds = (p: Person): string => personMedia(shownData(), p.id).map(attachmentKey).join(',');
 /** People whose `?person=` is being asked now (REFN). */
 const personLoading = new Set<string>();
 /** Trees whose whole list was asked in this page (once per page; later answers come per person). */
@@ -380,7 +395,7 @@ export const materialsMethods = uiModule({
         const person = DataManager.getPerson(personId);
         if (!person) return [];
         const ctx = this.materialsContext();
-        return personMaterials(materialPerson(DataManager.getData(), person), ctx?.caps.list ? cachedMaterialList(ctx.treeId) : null);
+        return personMaterials(materialPerson(shownData(), person), ctx?.caps.list ? cachedMaterialList(ctx.treeId) : null);
     },
 
     /** The person menu's "Materials N" (0: no row; only where materials are shown). */
@@ -596,9 +611,17 @@ export const materialsMethods = uiModule({
         const imgPreview = att && !att.originalOnly && att.mimeType.startsWith('image/') && att.dataUrl;
         const sha = materialItemSha(item);
         const lazy = !imgPreview && !!sha && item.origin !== 'tree' && ['image', 'pdf'].includes(materialType(item.mime, item.title));
-        const thumb = imgPreview
-            ? `<span class="material-thumb"><img src="${esc(att.dataUrl)}" alt=""></span>`
-            : `<span class="material-thumb"${lazy ? ` data-sha="${esc(sha)}"` : ''}><span class="material-row-tile">${esc(materialTileLetters(item))}</span></span>`;
+        const letters = `<span class="material-row-tile">${esc(materialTileLetters(item))}</span>`;
+        // A file on its way after the tree, or a preview that did not come: one look with the tree's photos (spec 116 §5).
+        const waits = materialImageWait(item);
+        const queue = materialThumbs();
+        const thumb = waits !== 'none'
+            ? waitingTileHtml(waits, { tag: 'span', cls: 'material-thumb', px: 48, content: letters })
+            : lazy && queue.isBroken(sha!, THUMB_PX)
+                ? waitingTileHtml('failed', { tag: 'span', cls: 'material-thumb', px: 48 })
+                : imgPreview
+                    ? `<span class="material-thumb"><img src="${esc(att.dataUrl)}" alt=""></span>`
+                    : `<span class="material-thumb"${lazy ? ` data-sha="${esc(sha)}"` : ''}${lazy && queue.isWaiting(sha!, THUMB_PX) ? ' data-img-state="loading"' : ''}>${letters}</span>`;
         // The attachment the person's portrait is cut from (spec 107 §4).
         const owner = this.currentId ? DataManager.getPerson(this.currentId) : null;
         const isSource = !!att && !!owner && this.portraitSourceAttachmentShown(owner) === att.id;
@@ -606,7 +629,7 @@ export const materialsMethods = uiModule({
         const where = `<span class="material-line3"><span class="material-where">${esc(batchFolderLabel(item))}</span>${refn && item.viaBatch.includes(refn) ? `<span class="material-via">${esc(m.viaBatch)}</span>` : ''}${portraitTag}</span>`;
         // A tree attachment keeps its own note field (editable as before); the research's note is shown.
         let note = '';
-        if (item.origin === 'tree' && att && !locked) {
+        if (item.origin === 'tree' && att && !locked && waits === 'none') {
             note = `<input type="text" class="attachment-note-input material-note-input" value="${esc(att.note ?? '')}" placeholder="${esc(strings.attachments.notePlaceholder)}" data-attachment-id="${esc(att.id)}" aria-label="${esc(strings.attachments.notePlaceholder)}">`;
         } else if (item.noteUser) {
             note = `<span class="material-note">${esc(strings.materials.quoted(item.noteUser))}</span>`;
@@ -623,7 +646,7 @@ export const materialsMethods = uiModule({
                 </span>
                 <span class="material-side">
                     <span class="material-at">${esc(at)}</span>
-                    <button type="button" class="material-more" data-act="menu" aria-haspopup="menu" aria-label="${esc(strings.materials.menu)}: ${esc(item.title)}">⋯</button>
+                    ${waits !== 'none' ? '' : `<button type="button" class="material-more" data-act="menu" aria-haspopup="menu" aria-label="${esc(strings.materials.menu)}: ${esc(item.title)}">⋯</button>`}
                 </span>
             </div>`;
     },
@@ -808,6 +831,8 @@ export const materialsMethods = uiModule({
     showMaterialItemMenu(item: MaterialItem, anchor: HTMLElement, caps: MaterialCaps, opts: { open?: () => void } = {}): void {
         const ctx = this.materialsContext();
         this.closeMaterialsItemMenu();
+        // A file still on its way has no actions until it comes (spec 116 §5).
+        if (materialImageWait(item) !== 'none') return;
         const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
         const refn = researchPersonRef(person?.refn);
         const locked = !!this.currentId && DataManager.isPersonLocked(this.currentId);
@@ -932,11 +957,18 @@ export const materialsMethods = uiModule({
             queue.want(
                 { sha, px: THUMB_PX, mime: item?.mime, name: item?.file?.name ?? item?.title, bytes: item?.bytes, where: strings.materials.title },
                 url => {
-                    if (!url || !el.isConnected) return;
+                    if (!el.isConnected) return;
+                    if (!url) {
+                        // Did not come: the struck-through picture; no preview to be had: the letters (spec 116 §5).
+                        setTileState(el, queue.isBroken(sha, THUMB_PX) ? 'failed' : 'none', 48);
+                        return;
+                    }
                     el.innerHTML = `<img src="${esc(url)}" alt="">`;
+                    el.removeAttribute('data-img-state');
                     el.classList.add('has-thumb');
                 },
                 () => el.isConnected && el.dataset.vis !== '0',
+                () => { if (el.isConnected) setTileState(el, 'loading', 48); },
             );
         };
         if (typeof IntersectionObserver !== 'function') {
@@ -1057,5 +1089,19 @@ export const materialsMethods = uiModule({
         };
         window.addEventListener('strom:tree-switched', prime);
         prime();
+        // The tree's files coming after the tree (spec 116 §5): what shows them follows once a frame.
+        let queued = false;
+        const follow = () => {
+            if (queued) return;
+            queued = true;
+            requestAnimationFrame(() => {
+                queued = false;
+                this.materialsTreeChanged();
+            });
+        };
+        window.addEventListener(IMAGES_ARRIVED_EVENT, follow);
+        window.addEventListener(IMAGES_STATE_EVENT, follow);
+        // The sources' crops the same way (their chips, lists, viewer and editor).
+        this.sourceImagesListen();
     },
 });

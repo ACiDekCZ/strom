@@ -395,6 +395,8 @@ export class UIClass {
     citationFactChoice = false;
     /** Excerpts staged in the source editor (saved with the form, one undo step). */
     excerptDrafts: ExcerptDraft[] = [];
+    /** The crops of the edited source on their way when the editor opened (spec 116 §5): Save keeps those that came. */
+    excerptsWaitingAtOpen: Set<string> = new Set();
     /** Reliability picked in the source editor (QUAY 1–3, 0 kept from import). */
     sourceQualityDraft: number | undefined = undefined;
     /** The source as it was when the editor opened (Transcription verified, the research's reading). */

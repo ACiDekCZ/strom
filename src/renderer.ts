@@ -6539,9 +6539,13 @@ class TreeRendererClass {
     private wireImageLoads(): void {
         if (this.imageLoadsWired || typeof window === 'undefined') return;
         this.imageLoadsWired = true;
+        let failed = 0;
         const onImages = (arrived: boolean) => {
             if (STANDALONE_VIEWS.includes(this.viewMode)) {
-                if (arrived) this.scheduleImageRender();
+                // Images that came, or that did not (a table's photo cell says so, spec 116 §5).
+                const now = imageLoads.snapshot().failed;
+                if (arrived || now !== failed) this.scheduleImageRender();
+                failed = now;
                 return;
             }
             this.scheduleCardImages();

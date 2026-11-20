@@ -16,6 +16,8 @@ import { uiModule } from './module.js';
 import { runBusy } from './busy.js';
 import { onComputer } from './research-ui.js';
 import { heldReasonKey } from './sources.js';
+import { setTileState } from './image-slot.js';
+import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, type ImagesArrivedDetail } from '../image-loads.js';
 import { storedResearchBridge } from '../research-device.js';
 import { parseLiveBridge } from '../research-link.js';
 import { helpMark } from './help-mark.js';
@@ -61,6 +63,8 @@ let lastModeKey = '';
 
 /** The bulk load (one per tab). */
 let queue: ResearchImageQueue | null = null;
+/** sourceImagesListen ran. */
+let sourceImagesListening = false;
 let queueTreeId: string | null = null;
 let bulkView: 'line' | 'warn' | 'progress' | 'summary' = 'line';
 let bulkPlan: { list: MissingList | null; free: number | null; images: number; sources: number; bytes: number; ready: number } | null = null;
@@ -75,6 +79,12 @@ let exportImagesTreeId: string | null = null;
 
 function sentenceJoin(parts: string[]): string {
     return parts.filter(Boolean).join(' ');
+}
+
+/** A held row's thumbnail during a bulk load (spec 116 §5): the source downloaded now, one that did not come, else as it is. */
+export function heldRowState(q: Pick<ResearchImageQueue, 'current' | 'hasFailed'>, sourceRef: string): 'loading' | 'failed' | null {
+    if (q.hasFailed(sourceRef)) return 'failed';
+    return q.current === sourceRef ? 'loading' : null;
 }
 
 export const researchImagesMethods = uiModule({
@@ -105,6 +115,39 @@ export const researchImagesMethods = uiModule({
         if (treeId) void primeResearchImages(treeId);
     },
 
+    /** Listen once for the tree's crops coming after the tree, or not (spec 116 §5): what shows sources follows once a frame. */
+    sourceImagesListen(): void {
+        if (sourceImagesListening || typeof window === 'undefined') return;
+        sourceImagesListening = true;
+        let raf = 0;
+        let failedToken = '';
+        const follow = () => {
+            if (raf) return;
+            raf = requestAnimationFrame(() => {
+                raf = 0;
+                this.onResearchImagesChanged(DataManager.getCurrentTreeId() ?? undefined);
+                this.refreshSourceEditorWaits();
+            });
+        };
+        window.addEventListener(IMAGES_ARRIVED_EVENT, (e) => {
+            if ((e as CustomEvent<ImagesArrivedDetail>).detail?.sourceIds?.length) follow();
+        });
+        window.addEventListener(IMAGES_STATE_EVENT, () => {
+            const token = imageLoads.failedKeys().filter(k => k.startsWith('excerpt:')).join(',');
+            if (token === failedToken) return;
+            failedToken = token;
+            follow();
+        });
+    },
+
+    /** The source editor's crops on their way: drawn again once one came or did not (spec 116 §5). */
+    refreshSourceEditorWaits(): void {
+        if (!document.getElementById('source-editor-modal')?.classList.contains('active') || !this.editingSourceId) return;
+        const box = document.getElementById('source-excerpts');
+        const now = imageLoads.waitingExcerpts(this.editingSourceId).map(w => `${w.key}~${w.state}`).join(',');
+        if (box && (box.dataset.waits ?? '') !== now) this.renderExcerptBlock();
+    },
+
     /** Read the open tree's stored images (a no-op once read); views redraw when they come. */
     ensureResearchImages(): void {
         this.researchImagesListen();
@@ -126,7 +169,11 @@ export const researchImagesMethods = uiModule({
         if (document.getElementById('sources-modal')?.classList.contains('active')) {
             // While the bulk load runs, rows stay where they are: only their thumbnails and the count change.
             if (queue?.active && this.sourcesFilter === 'imageHeld') this.refreshHeldRows();
-            else this.renderSourcesList();
+            else {
+                this.renderSourcesList();
+                // The rows whose images did not come in the last run keep saying so (spec 116 §5).
+                if (queue && this.sourcesFilter === 'imageHeld') this.refreshHeldRows();
+            }
         }
         this.refreshCitationChips();
         // The person's sources panel: its thumbnails too.
@@ -421,7 +468,7 @@ export const researchImagesMethods = uiModule({
         return bytes > 0 ? ` · ${strings.researchImages.sizeFromResearch(size(bytes))}` : '';
     },
 
-    /** Rows of the filtered list: thumbnails filled in place, the filter count updated (no reordering). */
+    /** Rows of the filtered list: thumbnails filled in place (the one downloaded under the veil), the filter count updated (no reordering). */
     refreshHeldRows(): void {
         const container = document.getElementById('sources-list');
         if (!container) return;
@@ -430,7 +477,7 @@ export const researchImagesMethods = uiModule({
             const id = row.querySelector<HTMLElement>('.source-row-open')?.dataset.sourceId;
             const src = id ? DataManager.getData().sources?.[id] : undefined;
             const first = src ? shownExcerpts(treeId, src)[0] : undefined;
-            const icon = row.querySelector('.source-row-icon, .source-row-thumb.is-held');
+            const icon = row.querySelector<HTMLElement>('.source-row-icon, .source-row-thumb.is-held, span.source-row-thumb[data-img-state]');
             if (src && first && icon) {
                 const img = document.createElement('img');
                 img.className = 'source-row-thumb';
@@ -438,6 +485,15 @@ export const researchImagesMethods = uiModule({
                 img.src = first.dataUrl;
                 icon.replaceWith(img);
                 row.querySelector('.source-held-tag')?.remove();
+            } else if (src && icon?.classList.contains('source-row-thumb')) {
+                // Spec 116 §5: the one being downloaded under the veil (not the dashed frame too); one that did not come struck through.
+                const ref = sourceRefOf(src);
+                const state = queue && queueTreeId === treeId && ref ? heldRowState(queue, ref) : null;
+                if (state && icon.dataset.imgState !== state) {
+                    icon.classList.remove('is-held');
+                    if (state === 'failed') setTileState(icon, 'failed', 0, null, 12);
+                    else setTileState(icon, 'loading', 0);
+                }
             }
         });
         const chip = document.querySelector<HTMLElement>('#sources-filter [data-filter="imageHeld"]');
@@ -601,7 +657,11 @@ export const researchImagesMethods = uiModule({
         bulkView = 'progress';
         q.subscribe(() => {
             this.refreshResearchMenu();
-            if (document.getElementById('sources-modal')?.classList.contains('active')) this.renderResearchImagesBulk();
+            if (document.getElementById('sources-modal')?.classList.contains('active')) {
+                this.renderResearchImagesBulk();
+                // The row being downloaded under the veil, one that did not come struck through (spec 116 §5).
+                if (this.sourcesFilter === 'imageHeld') this.refreshHeldRows();
+            }
         });
         void q.start().then(end => {
             lastSummary = end;

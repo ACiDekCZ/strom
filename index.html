@@ -11400,6 +11400,9 @@
             overflow: hidden; background: var(--surface-2); cursor: zoom-in;
         }
         .tv-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+        /* Spec 116 §5: the couple's photo on its way (the veil) or not come (the struck-through picture). */
+        .tv-thumb[data-img-state] { display: flex; align-items: center; justify-content: center; }
+        span.tv-thumb[data-img-state="failed"] { cursor: default; }
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .tv-thumb { width: 48px; }
         }
@@ -29083,6 +29086,23 @@
         }
         .source-row-thumb.is-held::after, .source-picker-thumb.is-held::after, .source-chip-thumb.is-held::after {
             content: ''; width: 12px; height: 9px; border: 1px solid var(--text-faint); border-radius: 2px;
+        }
+        /* Spec 116 §5: a source's crop on its way after the tree (the veil, no glyph) or not come (the
+           struck-through picture); a held thumbnail being downloaded swaps .is-held for the veil, so the
+           dashed frame's ::after and the veil's never meet. */
+        :is(.source-row-thumb, .source-picker-thumb, .source-chip-thumb)[data-img-state] {
+            display: inline-flex; align-items: center; justify-content: center; overflow: hidden;
+        }
+        /* The crop in the viewer and the editor: its place in the image's ratio, the glyph and the word in it. */
+        .excerpt-wait {
+            display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+            width: 100%; min-height: 96px; max-height: 240px; border-radius: 8px; background: var(--surface-2); cursor: default;
+        }
+        .excerpt-img.excerpt-wait { max-height: 160px; }
+        .excerpt-wait-msg { margin-top: 6px; }
+        .excerpt-item.is-waiting .excerpt-caption-text { font-size: 13px; color: var(--text-secondary); }
+        @media (max-width: 640px) {
+            #source-viewer-modal .viewer-excerpt .excerpt-wait { border-radius: 0; }
         }
         /* On its own line at the title's left edge (a long title or meta never moves it). */
         .source-held-tag {

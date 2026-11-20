@@ -136,6 +136,86 @@ export function pageImageWait(src: string, key?: string): { state: ImgState; w?:
     return { state: key ? imgStateOf(key as FieldKey, true) : 'none' };
 }
 
+// ==================== TILES OF LISTS ====================
+
+/** The smallest tile that says "Not loaded" under its glyph; a smaller one shows the glyph alone. */
+export const TILE_NOTE_MIN_PX = 64;
+
+/**
+ * The state of a stand-in of the shown data (imageLoads.view: a file, a
+ * crop, a portrait on its way): 'loading' while it comes, 'failed' once it
+ * did not; 'none' for any other value (an image, nothing).
+ */
+export function standInState(url: unknown): ImgState {
+    const pend = pendingImageOf(url);
+    if (!pend) return 'none';
+    return imageLoads.stateOfSha(pend.sha)?.state === 'pending' ? 'loading' : 'failed';
+}
+
+/** A tile's glyph when its image did not come: the struck-through picture, "Not loaded" under it from 64 px up. */
+export function tileFailedHtml(tilePx: number, glyphPx = tilePx >= TILE_NOTE_MIN_PX ? 24 : 16): string {
+    return imgGlyphHtml('image-off', tilePx >= TILE_NOTE_MIN_PX ? strings.photos.tileFailed : undefined, glyphPx);
+}
+
+/** What a tile of a list carries in a state (waitingTileHtml). */
+export interface WaitingTile {
+    /** The element and its class (`span`, `button`…). */
+    tag: string;
+    cls: string;
+    /** The tile's size (the shorter side, px): "Not loaded" only from 64 px up. */
+    px: number;
+    /** The glyph's size when the image did not come (24 px with the word, else 16). */
+    glyph?: number;
+    /** What the tile shows while the image comes (the type's letters; nothing: an empty tile). */
+    content?: string;
+    /** What stays in the tile in every state (marks, a check box). */
+    extra?: string;
+    /** More attributes of the host (` data-x="…"`, escaped by the caller). */
+    attrs?: string;
+}
+
+/**
+ * A tile of a list (materials, files, sources, a table's cell) whose image
+ * is on its way or did not come (spec 116 §5): its own content under the
+ * veil while it comes; the struck-through picture with the title "The photo
+ * did not load." when it did not ('failed'). '' for any other state: the
+ * place draws its tile as always.
+ */
+export function waitingTileHtml(state: ImgState, t: WaitingTile): string {
+    if (state !== 'loading' && state !== 'failed') return '';
+    const attrs = t.attrs ?? '';
+    if (state === 'loading') {
+        return `<${t.tag} class="${t.cls}"${attrs}${imgStateAttr('loading')}>${t.content ?? ''}${t.extra ?? ''}</${t.tag}>`;
+    }
+    return `<${t.tag} class="${t.cls}"${attrs}${imgStateAttr('failed')} title="${esc(strings.photos.failed)}">`
+        + `${tileFailedHtml(t.px, t.glyph)}${t.extra ?? ''}</${t.tag}>`;
+}
+
+/**
+ * A tile in the DOM whose preview is asked for now (the materials' preview
+ * queue): under the veil until it comes ('loading'), the struck-through
+ * picture when it did not ('failed', `replace`: the child it takes the place
+ * of, else the whole content), or calm again ('none': no preview to be had,
+ * the type's letters stay).
+ */
+export function setTileState(host: HTMLElement, state: 'loading' | 'failed' | 'none', px: number, replace?: Element | null, glyph?: number): void {
+    if (state !== 'failed') {
+        setImgState(host, state);
+        return;
+    }
+    const doc = host.ownerDocument ?? document;
+    const tpl = doc.createElement('template');
+    tpl.innerHTML = tileFailedHtml(px, glyph);
+    const node = tpl.content.firstElementChild;
+    if (node) {
+        if (replace && replace.parentNode === host) replace.replaceWith(node);
+        else if (!replace) host.replaceChildren(node);
+        else host.prepend(node);
+    }
+    host.setAttribute(ATTR, 'failed');
+    host.title = strings.photos.failed;
+}
+
 // ==================== THE CARD ====================
 
 /** How a tree card shows its portrait in a state (spec 116 §1.3, §2). */

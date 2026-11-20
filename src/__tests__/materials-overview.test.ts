@@ -476,6 +476,42 @@ describe('preview queue', () => {
         expect(asked).toHaveLength(2);
     });
 
+    it('spec 116 §5: a preview that did not come is told from one not to be had; the tile asked for waits under the veil', async () => {
+        const gate: ((r: MaterialResult<Blob>) => void)[] = [];
+        const { deps } = fakeDeps(() => new Promise(resolve => gate.push(resolve)));
+        const q = new MaterialThumbQueue(deps);
+        q.setEnv(ENV);
+        const queued: number[] = [];
+        const got: (string | null)[] = [];
+        q.want({ sha: sha(1), px: 256, mime: 'image/jpeg' }, url => got.push(url), undefined, () => queued.push(1));
+        q.want({ sha: sha(2), px: 256, mime: 'image/bmp' }, url => got.push(url), undefined, () => queued.push(2));
+        // A second tile of the same preview joins the wait, under the veil too.
+        q.want({ sha: sha(1), px: 256, mime: 'image/jpeg' }, url => got.push(url), undefined, () => queued.push(3));
+        await tick();
+        expect([...queued].sort()).toEqual([1, 2, 3]);
+        expect(q.isWaiting(sha(1), 256)).toBe(true);
+        gate[0]({ ok: false, error: { kind: 'unknown', status: 500 } });
+        gate[1]({ ok: false, error: { kind: 'type', status: 415 } });
+        await tick(); await tick();
+        expect(got).toEqual([null, null, null]);
+        expect(q.isWaiting(sha(1), 256)).toBe(false);
+        // An error: "Not loaded"; a type without a preview: its letters, calm.
+        expect(q.isBroken(sha(1), 256)).toBe(true);
+        expect(q.isBroken(sha(2), 256)).toBe(false);
+        // A preview in the cache is never under the veil.
+        const cached = fakeDeps(ok);
+        cached.cache.set(`${sha(4)}@256`, new Blob(['x']));
+        const q2 = new MaterialThumbQueue(cached.deps);
+        q2.setEnv(ENV);
+        const veiled: number[] = [];
+        q2.want({ sha: sha(4), px: 256, mime: 'image/jpeg' }, () => undefined, undefined, () => veiled.push(4));
+        await tick();
+        expect(veiled).toEqual([]);
+        // The window opened again: asked anew.
+        q.resetFailures();
+        expect(q.isBroken(sha(1), 256)).toBe(false);
+    });
+
     it('a busy research (503) is waited for, then asked again', async () => {
         let busy = true;
         const { deps, asked, sleeps, gates } = fakeDeps(() => (busy ? { ok: false, error: { kind: 'busy', status: 503, retry: 2 } } : ok()));

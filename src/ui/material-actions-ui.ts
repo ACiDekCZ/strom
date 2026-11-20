@@ -11,6 +11,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { materialImageWait } from './materials-ui.js';
 import { mediaPersonId } from '../media.js';
 import { researchMarkFlags, setResearchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
@@ -204,6 +205,9 @@ export const materialActionsMethods = uiModule({
      */
     materialAction(id: MaterialActionId, items: MaterialItem[], ctx: MaterialActionCtx = {}): boolean {
         if (!['assign', 'attach', 'removeFromPerson', 'hide', 'restore'].includes(id)) return false;
+        // A file of the tree still on its way is not acted on until it comes (spec 116 §5).
+        items = items.filter(i => materialImageWait(i) === 'none');
+        if (!items.length) { ctx.settled?.(); return true; }
         const mc = this.materialsContext();
         // The tree's own writes (spec 102 §4, §9): Link to… for files, Restore of files taken out of the tree.
         if (id === 'attach') {

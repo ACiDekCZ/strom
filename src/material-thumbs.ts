@@ -72,7 +72,7 @@ export interface ThumbSnapshot {
 }
 
 type Deliver = (url: string | null) => void;
-interface Waiter { deliver: Deliver; wanted: () => boolean }
+interface Waiter { deliver: Deliver; wanted: () => boolean; queued?: () => void }
 
 const key = (sha: string, px: number) => `${sha}@${px}`;
 
@@ -93,6 +93,8 @@ export class MaterialThumbQueue {
     private env: ThumbEnv | null = null;
     private readonly urls = new Map<string, string>();
     private readonly failed = new Set<string>();
+    /** Of the failed: those that did not come (an error), not those the research or the app cannot preview (spec 116 §5). */
+    private readonly broken = new Set<string>();
     private readonly waiters = new Map<string, Waiter[]>();
     /** Waiting for the bridge, in wish order (the newest is taken first). */
     private readonly pending = new Map<string, ThumbTask>();
@@ -129,23 +131,41 @@ export class MaterialThumbQueue {
     }
 
     /**
-     * Wish for a preview. `deliver` gets the URL, or null (the type's icon
-     * stays). `wanted`: is it still on screen (checked before asking the bridge).
+     * The preview did not come (an error of the research or of its file):
+     * its tile says "Not loaded" (spec 116 §5). A type that cannot be
+     * previewed (415, not decodable here) is not one: its letters stay.
      */
-    want(task: ThumbTask, deliver: Deliver, wanted: () => boolean = () => true): void {
+    isBroken(sha: string, px: number): boolean {
+        return this.broken.has(key(sha, px));
+    }
+
+    /** The preview is asked of the research now (waiting or on its way): its tile is under the veil. */
+    isWaiting(sha: string, px: number): boolean {
+        const k = key(sha, px);
+        return this.pending.has(k) || this.active.has(k);
+    }
+
+    /**
+     * Wish for a preview. `deliver` gets the URL, or null (the type's icon
+     * stays; isBroken tells one that did not come). `wanted`: is it still on
+     * screen (checked before asking the bridge). `queued`: the research is
+     * asked for it (not in the cache): its tile waits under the veil.
+     */
+    want(task: ThumbTask, deliver: Deliver, wanted: () => boolean = () => true, queued?: () => void): void {
         const k = key(task.sha, task.px);
         const ready = this.urls.get(k);
         if (ready) { deliver(ready); return; }
         if (this.failed.has(k)) { deliver(null); return; }
         const list = this.waiters.get(k);
         if (list) {
-            list.push({ deliver, wanted });
+            list.push({ deliver, wanted, queued });
             // Wished again: to the front of the line.
             const t = this.pending.get(k);
             if (t) { this.pending.delete(k); this.pending.set(k, t); }
+            if (this.pending.has(k) || this.active.has(k)) queued?.();
             return;
         }
-        this.waiters.set(k, [{ deliver, wanted }]);
+        this.waiters.set(k, [{ deliver, wanted, queued }]);
         const env = this.env;
         if (!env) { this.finish(k, null); return; }
         void this.deps.getCached(env.treeId, task.sha, task.px).catch(() => null).then(blob => {
@@ -154,6 +174,8 @@ export class MaterialThumbQueue {
             if (!now || !thumbSource(task, now)) { this.finish(k, null); return; }
             this.pending.set(k, task);
             this.total++;
+            // Asked of the research now: every tile waiting for it under the veil (spec 116 §5).
+            for (const w of this.waiters.get(k) ?? []) w.queued?.();
             this.pump();
             this.emit();
         });
@@ -164,7 +186,7 @@ export class MaterialThumbQueue {
     resume(): void { this.paused = false; this.pump(); this.emit(); }
 
     /** A new opening of the window: failed previews may be tried again. */
-    resetFailures(): void { this.failed.clear(); }
+    resetFailures(): void { this.failed.clear(); this.broken.clear(); }
 
     /** Let go of everything (another tree; tests). */
     clear(): void {
@@ -172,6 +194,7 @@ export class MaterialThumbQueue {
         for (const url of this.urls.values()) this.deps.revokeUrl(url);
         this.urls.clear();
         this.failed.clear();
+        this.broken.clear();
         this.paused = false;
         this.emit();
     }
@@ -216,8 +239,9 @@ export class MaterialThumbQueue {
         return url;
     }
 
-    private finish(k: string, url: string | null, fail = false): void {
+    private finish(k: string, url: string | null, fail = false, broken = false): void {
         if (fail) this.failed.add(k);
+        if (broken) this.broken.add(k);
         const list = this.waiters.get(k) ?? [];
         this.waiters.delete(k);
         for (const w of list) w.deliver(url);
@@ -260,6 +284,8 @@ export class MaterialThumbQueue {
         if (!source || !base) { this.done++; this.finish(k, null); return; }
         try {
             let blob: Blob | null = null;
+            // Did not come (an error), not merely a type without a preview (415, not decodable here).
+            let broken = false;
             if (source === 'research') {
                 const answer = await this.deps.fetchThumb(base, task.sha, task.px);
                 if (answer.ok) blob = answer.value;
@@ -275,19 +301,22 @@ export class MaterialThumbQueue {
                     this.done++;
                     this.finish(k, null);
                     return;
+                } else if (answer.error.kind !== 'type' && answer.error.kind !== 'size') {
+                    broken = true;
                 }
             } else {
                 const file = await this.deps.fetchFile(base, task.sha);
+                broken = !file;
                 blob = file ? await this.deps.shrink(file, task.px) : null;
             }
             this.done++;
-            if (!blob) { this.finish(k, null, true); return; }
+            if (!blob) { this.finish(k, null, true, broken); return; }
             const url = this.remember(k, blob);
             void this.deps.putCached(env.treeId, task.sha, task.px, blob).catch(() => undefined);
             this.finish(k, url);
         } catch {
             this.done++;
-            this.finish(k, null, true);
+            this.finish(k, null, true, true);
         }
     }
 }

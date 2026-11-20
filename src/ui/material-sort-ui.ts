@@ -25,6 +25,7 @@ import {
 } from '../materials.js';
 import { overviewItems, nameWithoutYears } from '../materials-overview.js';
 import { materialThumbs } from '../material-thumbs.js';
+import { setTileState, standInState } from './image-slot.js';
 import {
     sortNeedy, sortRows, sortRowProposes, sortWrite, sortTreeIndex, sortChip, parseSortRevert, sortUnrelatedHideable,
     sortNext, sortLeftMap, sortCopyOf, sortStripState, sortRunBatches, sortProposalCounts, sortLeftIds, sortBackRow,
@@ -234,6 +235,13 @@ export function previewEl(mc: Pick<MaterialsContext, 'treeId' | 'base' | 'caps'>
         box.replaceChildren(img);
     };
     const att = item?.attachment;
+    // The previews are small (56 px and less): the struck-through picture alone when one did not come (spec 116 §5).
+    const tilePx = cls === 'msp-thumb' ? 64 : 56;
+    const waits = standInState(att?.dataUrl);
+    if (waits === 'loading' || waits === 'failed') {
+        setTileState(box, waits, waits === 'failed' ? 0 : tilePx);
+        return box;
+    }
     if (att && !att.originalOnly && att.mimeType.startsWith('image/') && att.dataUrl) {
         show(att.dataUrl);
         return box;
@@ -246,10 +254,20 @@ export function previewEl(mc: Pick<MaterialsContext, 'treeId' | 'base' | 'caps'>
         show(ready);
         return box;
     }
+    if (queue.isBroken(sha, PREVIEW_PX)) {
+        setTileState(box, 'failed', 0);
+        return box;
+    }
     queue.setEnv({ treeId: mc.treeId, base: mc.base, thumb: mc.caps.thumb, bridgeUp: mc.caps.bridgeUp });
     queue.want({ sha, px: PREVIEW_PX, mime: item.mime, name: item.file?.name ?? item.name, bytes: item.bytes },
-        url => { if (url) show(url); },
-        () => box.isConnected);
+        url => {
+            if (url) {
+                show(url);
+                box.removeAttribute('data-img-state');
+            } else setTileState(box, queue.isBroken(sha, PREVIEW_PX) ? 'failed' : 'none', 0);
+        },
+        () => box.isConnected,
+        () => setTileState(box, 'loading', tilePx));
     return box;
 }
 

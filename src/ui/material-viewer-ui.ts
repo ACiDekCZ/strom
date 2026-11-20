@@ -12,6 +12,9 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { isPendingImageUrl } from '../research-image-refs.js';
+import { imageLoads } from '../image-loads.js';
+import { materialImageWait } from './materials-ui.js';
 import { mediaPersonId, treeMedia } from '../media.js';
 import { setResearchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
@@ -58,6 +61,8 @@ interface ViewerState {
     usesOpen: boolean;
     /** Go through (spec 102 §8c): the files saved, the shown file's unsaved change (saved when going on). */
     review: { saved: Set<string>; pending: (() => Promise<void>) | null; index: number } | null;
+    /** The stage waits for a file of the tree still on its way (spec 116 §5): its coming draws the stage again. */
+    stageWaits?: boolean;
 }
 
 /**
@@ -179,12 +184,13 @@ function isViewableImage(item: MaterialItem): boolean {
 /** The attachment's own image (a data URL), when it has one. */
 function attachmentImage(item: MaterialItem): string | null {
     const att = item.attachment;
-    return att && !att.originalOnly && att.mimeType.startsWith('image/') && att.dataUrl ? att.dataUrl : null;
+    // A stand-in of a file still on its way is never an image to show (spec 116 §5).
+    return att && !att.originalOnly && att.mimeType.startsWith('image/') && att.dataUrl && !isPendingImageUrl(att.dataUrl) ? att.dataUrl : null;
 }
 
 export function attachmentPdf(item: MaterialItem): { dataUrl: string; mimeType: string } | null {
     const att = item.attachment;
-    return att && !att.originalOnly && att.dataUrl && att.mimeType === 'application/pdf' ? { dataUrl: att.dataUrl, mimeType: att.mimeType } : null;
+    return att && !att.originalOnly && att.dataUrl && !isPendingImageUrl(att.dataUrl) && att.mimeType === 'application/pdf' ? { dataUrl: att.dataUrl, mimeType: att.mimeType } : null;
 }
 
 export function openPdfBlob(pdf: { dataUrl: string; mimeType: string }): boolean {
@@ -366,7 +372,9 @@ export const materialViewerMethods = uiModule({
         const key = treeAttachmentsKey();
         if (key === viewer.drawnAttachments) return;
         viewer.drawnAttachments = key;
-        redrawKeepingDraft(viewer);
+        // The shown file was on its way: it came (its image) or did not (Try again) — the stage too.
+        if (viewer.stageWaits) redrawViewerList({ stage: true });
+        else redrawKeepingDraft(viewer);
     },
 
     /** The item as it is now (the remembered list changed after an action; an attachment may be gone). */
@@ -374,7 +382,8 @@ export const materialViewerMethods = uiModule({
         let attachment = item.attachment;
         // The tree's file as it is now (its title, kind or date may have changed).
         if (attachment) {
-            const now = DataManager.getMedia(attachment.id);
+            // A file still on its way is the tree's too (spec 116 §5: the view's record, its stand-in).
+            const now = DataManager.getMedia(attachment.id) ?? imageLoads.view(DataManager.getData()).media?.[attachment.id];
             attachment = now?.places.length ? now : undefined;
         }
         if (!item.file) return attachment ? { ...attachmentItem(attachment, item.persons), ...(item.uses !== undefined ? { uses: item.uses } : {}) } : item;
@@ -579,6 +588,15 @@ export const materialViewerMethods = uiModule({
         const startUrl = this.researchStartUrl();
         const start: CardButton[] = startUrl ? [{ label: strings.sync.startResearch, run: () => this.researchSyncAction('startResearch'), primary: true, research: this.researchSyncActionMark('startResearch') !== 'none' }] : [];
         const fallback = () => slots.card(viewerCard(letters, m.openSystemText(ext), openSystem));
+
+        // A file of the tree still on its way (spec 116 §5, as §4.4): "Loading the photo…", or not come with Try again.
+        const waits = materialImageWait(item);
+        st.stageWaits = waits !== 'none';
+        if (waits === 'loading' || waits === 'failed') {
+            const id = item.attachment?.id;
+            slots.wait(waits, waits === 'failed' && id ? () => imageLoads.retry([`media:${id}`]) : undefined);
+            return;
+        }
 
         // Only in the tree: its own copy.
         if (!inArchive) {
@@ -868,6 +886,11 @@ export const materialViewerMethods = uiModule({
         if (actions.childElementCount) foot.appendChild(actions);
 
         panel.append(head, body, h('div', 'mv-gap'), more);
+        // A file still on its way: its details only, no actions until it comes (spec 116 §5).
+        if (materialImageWait(item) !== 'none') {
+            head.querySelector('.mv-edit')?.remove();
+            return;
+        }
         if (foot.childElementCount) panel.appendChild(foot);
     },
 

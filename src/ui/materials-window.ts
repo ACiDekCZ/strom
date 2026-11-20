@@ -45,6 +45,9 @@ import {
     WindowHeadAction, windowHeadMenu, dragCarriesFiles,
 } from '../materials-overview.js';
 import { materialThumbs, ThumbSnapshot } from '../material-thumbs.js';
+import { imageLoads } from '../image-loads.js';
+import { setTileState, waitingTileHtml } from './image-slot.js';
+import { materialImageWait } from './materials-ui.js';
 import {
     MaterialsOpenOptions, MaterialActionCtx, fileNameBreakParts, materialShortDate, materialStaleTime, materialTileLetters, materialItemSha, treeAttachmentsKey,
 } from './materials-ui.js';
@@ -60,6 +63,9 @@ import { closeHeadMenu, openHeadMenu, SEP, type MenuEntry } from './table-view/t
 const MODAL_ID = 'materials-modal';
 const VIEW_KEY = 'strom.materials.view';
 const THUMB_PX = 256;
+/** The tiles' sizes as drawn (a grid's tile, a list row's): "Not loaded" under the glyph only on the grid's (spec 116 §5). */
+const MW_TILE_PX = 120;
+const MW_SMALL_TILE_PX = 36;
 const SEARCH_DEBOUNCE_MS = 150;
 const LONG_PRESS_MS = 500;
 /** Rows drawn above and below the view (px). */
@@ -234,7 +240,8 @@ const alive = (gen: number): Win | null => (win && win.gen === gen ? win : null)
  * yet left out; else their PersonId) and how many places it is used in.
  */
 export function treeRecords(byRefn: boolean): TreeRecord[] {
-    const data = DataManager.getData();
+    // The files still on their way are the tree's too: their tiles wait for them (spec 116 §5).
+    const data = imageLoads.view(DataManager.getData());
     const uses = mediaUsesIndex(data);
     const key = (id: PersonId): string | null => (byRefn ? researchPersonRef(DataManager.getPerson(id)?.refn) : id);
     // With an archive a file taken out of the tree stays with it (Hidden · Removed from the tree, spec 102 §9).
@@ -435,7 +442,7 @@ export const materialsWindowMethods = uiModule({
     materialsSelection(): MaterialItem[] {
         const w = win;
         if (!w) return [];
-        return w.items.filter(i => w.selected.has(i.key));
+        return w.items.filter(i => w.selected.has(i.key) && !this.mwWaits(i));
     },
 
     /** The remembered list or the bridge changed: redraw (quietly), ask again once the bridge runs. */
@@ -1098,16 +1105,24 @@ export const materialsWindowMethods = uiModule({
             ? `<span class="mw-intree">${esc(m.inTreeTag)}</span>` : '';
         const places = item.uses ? `<span class="mw-places" aria-label="${esc(m.places(item.uses))}" title="${esc(m.places(item.uses))}">${item.uses.toLocaleString(getCurrentLanguage())}</span>` : '';
         const marks = `${label}${inTree}${places}${check}`;
+        const letters = `<span class="mw-type">${esc(materialTileLetters(item))}</span>`;
+        const px = small ? MW_SMALL_TILE_PX : MW_TILE_PX;
+        // A file of the tree on its way after the tree, or one that did not come (spec 116 §5).
+        const waits = waitingTileHtml(materialImageWait(item), { tag: 'span', cls, px, content: letters, extra: marks });
+        if (waits) return waits;
         if (att && !att.originalOnly && att.mimeType.startsWith('image/') && att.dataUrl) {
             return `<span class="${cls} has-thumb"><img src="${esc(att.dataUrl)}" alt="" loading="lazy">${marks}</span>`;
         }
         const sha = materialItemSha(item);
-        const letters = `<span class="mw-type">${esc(materialTileLetters(item))}</span>`;
         const lazy = !!sha && item.origin !== 'tree' && ['image', 'pdf'].includes(materialType(item.mime, item.name));
         if (!lazy || !sha) return `<span class="${cls}">${letters}${marks}</span>`;
-        const ready = materialThumbs().urlOf(sha, THUMB_PX);
+        const thumbs = materialThumbs();
+        // A preview that did not come says so; one asked for now waits under the veil (spec 116 §5).
+        if (thumbs.isBroken(sha, THUMB_PX)) return waitingTileHtml('failed', { tag: 'span', cls, px, extra: marks });
+        const ready = thumbs.urlOf(sha, THUMB_PX);
         const img = ready ? `<img src="${esc(ready)}" alt="">` : letters;
-        return `<span class="${cls}${ready ? ' has-thumb' : ''}"${ready ? '' : ` data-sha="${esc(sha)}" data-group="${esc(group.key)}" data-item="${esc(item.key)}"`}>${img}${marks}</span>`;
+        const veil = !ready && thumbs.isWaiting(sha, THUMB_PX) ? ' data-img-state="loading"' : '';
+        return `<span class="${cls}${ready ? ' has-thumb' : ''}"${ready ? '' : ` data-sha="${esc(sha)}" data-group="${esc(group.key)}" data-item="${esc(item.key)}"`}${veil}>${img}${marks}</span>`;
     },
 
     mwAriaLabel(item: MaterialItem): string {
@@ -1308,18 +1323,28 @@ export const materialsWindowMethods = uiModule({
         if (!w || !sha || el.classList.contains('has-thumb')) return;
         const item = w.items.find(i => i.key === el.dataset.item);
         const group = w.groups.find(g => g.key === el.dataset.group);
-        materialThumbs().want(
+        const thumbs = materialThumbs();
+        const px = el.closest('.mw-li') ? MW_SMALL_TILE_PX : MW_TILE_PX;
+        thumbs.want(
             { sha, px: THUMB_PX, mime: item?.mime, name: item?.file?.name ?? item?.title, bytes: item?.bytes, where: group ? this.mwGroupName(group) : '' },
             url => {
-                if (!url || !el.isConnected) return;
+                if (!el.isConnected) return;
                 const type = el.querySelector('.mw-type');
+                if (!url) {
+                    // Did not come: "Not loaded"; no preview to be had: the letters stay, calm (spec 116 §5).
+                    setTileState(el, thumbs.isBroken(sha, THUMB_PX) ? 'failed' : 'none', px, type);
+                    if (thumbs.isBroken(sha, THUMB_PX)) el.removeAttribute('data-sha');
+                    return;
+                }
                 const img = document.createElement('img');
                 img.src = url;
                 img.alt = '';
                 if (type) type.replaceWith(img); else el.prepend(img);
                 el.classList.add('has-thumb');
+                el.removeAttribute('data-img-state');
             },
             () => el.isConnected && el.dataset.vis === '1',
+            () => { if (el.isConnected) setTileState(el, 'loading', px); },
         );
     },
 
@@ -1427,11 +1452,16 @@ export const materialsWindowMethods = uiModule({
         return { label: strings.materials.selectBatch(ofBatch.length), keys: ofBatch.map(i => i.key) };
     },
 
+    /** A file of the tree still on its way (or not come): shown, opened, never selected nor acted on (spec 116 §5). */
+    mwWaits(item: MaterialItem | null | undefined): boolean {
+        return !!item && materialImageWait(item) !== 'none';
+    },
+
     mwToggleSelect(key: string, on?: boolean): void {
         const w = win;
         if (!w) return;
         w.selecting = true;
-        const next = on ?? !w.selected.has(key);
+        const next = (on ?? !w.selected.has(key)) && !this.mwWaits(this.mwItem(key));
         if (next) w.selected.add(key); else w.selected.delete(key);
         w.anchor = key;
         this.mwSelectionChanged();
@@ -1441,7 +1471,7 @@ export const materialsWindowMethods = uiModule({
         const w = win;
         if (!w) return;
         w.selecting = true;
-        for (const k of keys) w.selected.add(k);
+        for (const k of keys) if (!this.mwWaits(this.mwItem(k))) w.selected.add(k);
         this.mwSelectionChanged();
     },
 
@@ -1684,7 +1714,7 @@ export const materialsWindowMethods = uiModule({
         const w = win;
         if (!w) return [];
         this.mwRebuild();
-        return w.items.filter(i => i.batch?.id === batch.id && !i.hidden
+        return w.items.filter(i => i.batch?.id === batch.id && !i.hidden && !this.mwWaits(i)
             && (folderLabel === undefined || inMaterialFolder(i.path, folderLabel)));
     },
 
