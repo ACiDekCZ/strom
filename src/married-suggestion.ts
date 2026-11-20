@@ -11,8 +11,7 @@
  */
 
 import { Gender, Partnership, Person, PersonId, StromData } from './types.js';
-import { parseFlexDate } from './dates.js';
-import { marriagesInOrder } from './marriage-order.js';
+import { marriagesLatestFirst } from './marriage-order.js';
 import { feminineForm, feminineFormIn, masculineFormIn, surnameKey } from './surnames.js';
 
 export interface MarriedSurnameSuggestion {
@@ -41,19 +40,15 @@ export interface MarriedSuggestionState {
  * The spouses of a person's marriages (a union that is or was a marriage),
  * the one a married surname comes from first: the marriages with a wedding
  * date from the latest wedding back, then the undated ones from the last in
- * order (marriagesInOrder). One rule for the editor's suggestion and for the
+ * order (marriagesLatestFirst). One rule for the editor's suggestion and for the
  * married surname read from a file (spec 010, K4.1).
  */
 function marriagePartnersLatestFirst(data: StromData, personId: PersonId): { union: Partnership; partner: Person }[] {
-    const all = marriagesInOrder(data, personId)
+    return marriagesLatestFirst(data, personId)
         .map(id => data.partnerships[id])
         .filter(u => u && (u.status === 'married' || u.status === 'divorced'))
         .map(u => ({ union: u, partner: data.persons[u.person1Id === personId ? u.person2Id : u.person1Id] }))
         .filter(e => !!e.partner);
-    // marriagesInOrder keeps the dated ones in the order of their weddings.
-    const dated = all.filter(e => parseFlexDate(e.union.startDate));
-    const undated = all.filter(e => !parseFlexDate(e.union.startDate));
-    return [...dated.reverse(), ...undated.reverse()];
 }
 
 /**

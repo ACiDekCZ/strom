@@ -58,6 +58,7 @@ import {
 } from './surnames.js';
 import { parseFlexDate, yearOf } from './dates.js';
 import { placeKey } from './places.js';
+import { marriagesLatestFirst } from './marriage-order.js';
 
 /** A lineage's id: the id of the person at the top of its line. */
 export type RodId = string & { readonly __brand: 'RodId' };
@@ -820,11 +821,8 @@ export type PersonRodRow =
 /** Per index: each spouse who married in → the lineages they married into (see spouseRodsOf). */
 const spouseRodsCache = new WeakMap<LineageIndex, Map<PersonId, { rodId: RodId; partnershipId: PartnershipId }[]>>();
 
-/**
- * The lineages a person is a spouse in (each lineage's `spouses`, as the
- * overview shows them), in the order of the person's unions.
- */
-export function spouseRodsOf(index: LineageIndex, personId: PersonId): RodId[] {
+/** The cached map of spouseRodsCache for this index. */
+function spouseRodsMap(index: LineageIndex): Map<PersonId, { rodId: RodId; partnershipId: PartnershipId }[]> {
     let map = spouseRodsCache.get(index);
     if (!map) {
         map = new Map();
@@ -837,12 +835,48 @@ export function spouseRodsOf(index: LineageIndex, personId: PersonId): RodId[] {
         }
         spouseRodsCache.set(index, map);
     }
+    return map;
+}
+
+/**
+ * The lineages a person is a spouse in (each lineage's `spouses`, as the
+ * overview shows them), in the order of the person's unions.
+ */
+export function spouseRodsOf(index: LineageIndex, personId: PersonId): RodId[] {
+    const map = spouseRodsMap(index);
     const unions = index.data.persons[personId]?.partnerships ?? [];
-    const pos = (uid: PartnershipId): number => { const i = unions.indexOf(uid); return i < 0 ? unions.length : i; };
-    const list = [...(map.get(personId) ?? [])].sort((a, b) => pos(a.partnershipId) - pos(b.partnershipId));
+    const list = inUnionOrder(map.get(personId) ?? [], unions);
     const out: RodId[] = [];
     for (const e of list) if (!out.includes(e.rodId)) out.push(e.rodId);
     return out;
+}
+
+/** The entries in the order of the given unions (one not among them last), a stable sort. */
+function inUnionOrder<T extends { partnershipId: PartnershipId }>(list: readonly T[], unions: readonly PartnershipId[]): T[] {
+    const pos = (uid: PartnershipId): number => { const i = unions.indexOf(uid); return i < 0 ? unions.length : i; };
+    return [...list].sort((a, b) => pos(a.partnershipId) - pos(b.partnershipId));
+}
+
+/**
+ * The entries (each of one of the person's unions) the last marriage first:
+ * the latest wedding by date, else the last in order (marriagesLatestFirst,
+ * the rule of the married surname, spec 010 K4.1).
+ */
+export function byLatestMarriage<T extends { partnershipId: PartnershipId }>(data: StromData, personId: PersonId, list: readonly T[]): T[] {
+    return inUnionOrder(list, marriagesLatestFirst(data, personId));
+}
+
+/**
+ * The lineage a person is told a spouse in ("wife in the Novák line"): of the
+ * lineages they married into that `accept` keeps, a big one before a small
+ * one, and of those the one of the last marriage (byLatestMarriage), the same
+ * marriage the married surname comes from. Null: none. The person stays a
+ * spouse in every lineage they married into (spouseRodsOf); this only picks
+ * the one a single sentence names.
+ */
+export function spouseRodOf(index: LineageIndex, personId: PersonId, accept: (rodId: RodId) => boolean = () => true): RodId | null {
+    const list = byLatestMarriage(index.data, personId, spouseRodsMap(index).get(personId) ?? []).map(e => e.rodId).filter(accept);
+    return list.find(id => !index.rods.get(id)?.small) ?? list[0] ?? null;
 }
 
 /**
@@ -863,7 +897,7 @@ export function personRodRow(index: LineageIndex, personId: PersonId): PersonRod
     const big = into.filter(id => !index.rods.get(id)!.small);
     const asSpouse = into.length > 0 && (!own || own.solitary || (own.small && big.length > 0));
     if (asSpouse) {
-        const rodId = big[0] ?? into[0];
+        const rodId = spouseRodOf(index, personId, id => id !== ownId) ?? big[0] ?? into[0];
         return { kind: 'spouse', rodId, birthRodId: own && !own.solitary && own.id !== rodId ? own.id : null };
     }
     if (!own || own.solitary) return null;
@@ -893,20 +927,19 @@ export function rodOfPersonForCrumbs(index: LineageIndex, personId: PersonId): C
     if (!p || p.isPlaceholder) return { rodId: null, unionId: null };
     const ownId = rodOf(index, personId);
     const own = ownId ? index.rods.get(ownId) ?? null : null;
-    // The last marriage into another big lineage (by year, else by the order of the unions).
-    let best: { rodId: RodId; unionId: PartnershipId; year: number; at: number } | null = null;
-    p.partnerships.forEach((uid, at) => {
+    // The last marriage into another big lineage (byLatestMarriage: the latest wedding by date, else the last in order).
+    const candidates: { rodId: RodId; unionId: PartnershipId; partnershipId: PartnershipId }[] = [];
+    for (const uid of p.partnerships) {
         const u = data.partnerships[uid];
-        if (!u) return;
+        if (!u) continue;
         const spouseId = u.person1Id === personId ? u.person2Id : u.person1Id;
-        if (!spouseId || lineCarrier(data, u) !== spouseId) return;
+        if (!spouseId || lineCarrier(data, u) !== spouseId) continue;
         const rodId = rodOf(index, spouseId);
         const rod = rodId ? index.rods.get(rodId) : undefined;
-        if (!rod || rod.small || rodId === ownId) return;
-        const year = yearOf(u.startDate) ?? -Infinity;
-        if (!best || year > best.year || (year === best.year && at > best.at)) best = { rodId: rod.id, unionId: uid, year, at };
-    });
-    const into = best as { rodId: RodId; unionId: PartnershipId } | null;
+        if (!rod || rod.small || rodId === ownId) continue;
+        candidates.push({ rodId: rod.id, unionId: uid, partnershipId: uid });
+    }
+    const into = byLatestMarriage(data, personId, candidates)[0] ?? null;
     const row = personRodRow(index, personId);
     if (row?.kind === 'spouse') {
         if (into) return { rodId: into.rodId, unionId: into.unionId };

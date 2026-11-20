@@ -16,7 +16,7 @@ import { Partnership, PartnershipId, Person, PersonId, PlaceGeo, StromData } fro
 import { getStringsForLang, Language } from './strings.js';
 import { sourceEntryText } from './source-location.js';
 import { formatFlexDate, yearOf } from './dates.js';
-import { Rod, RodId, rods as allRods, ancestorSlots, marriedInto, rodGenerations, rodNameForms, sortByBirth } from './lineage.js';
+import { Rod, RodId, rods as allRods, ancestorSlots, byLatestMarriage, marriedInto, rodGenerations, rodNameForms, sortByBirth } from './lineage.js';
 import { sortCoupleEvents } from './events.js';
 import { shownCitationsOn } from './citation-order.js';
 import { shownNameOrEmpty, shownNameParts, shownSurnameIsBirth } from './person-name.js';
@@ -286,7 +286,8 @@ function hubPageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
 function selPersonNote(r: Render, ctx: BookCtx, p: Person): string {
     const F = r.S.familyPages;
     const index = r.set.protectedTree.lineages;
-    const into = marriedInto(index, p.id).find(m => !index.rods.get(m.rodId)?.small);
+    // The last marriage (byLatestMarriage), as the person's own row names it.
+    const into = byLatestMarriage(index.data, p.id, marriedInto(index, p.id)).find(m => !index.rods.get(m.rodId)?.small);
     if (into) {
         const label = rodLabel(r, ctx, into.rodId);
         if (label) return F.spouseIn[gKey(p)](label);

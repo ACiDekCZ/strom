@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildLineages, rodLabels, rodOf, personRodRow, spouseRodsOf, RodId, LineageIndex } from '../lineage.js';
+import { buildLineages, rodLabels, rodOf, personRodRow, rodOfPersonForCrumbs, spouseRodsOf, RodId, LineageIndex } from '../lineage.js';
 import { personRodRowValue, rodRowText, rodRowShown } from '../lineage-row.js';
 import { StromData, PersonId, Person, Partnership, PartnershipId } from '../types.js';
 import { Language } from '../strings.js';
@@ -191,5 +191,57 @@ describe('person family line row: privacy of the living (§3.4)', () => {
 
     it('the dead have it in every mode', () => {
         for (const m of ['full', 'minimal', 'initials', 'anonymous'] as const) expect(rodRowShown(m, false)).toBe(true);
+    });
+});
+
+describe('person family line row: a wife married more than once is told in the lineage of her last marriage (spec 010, K4.1)', () => {
+    // Sandmark and Vallgren are lineages over the small threshold; Elin, with
+    // no parents, married into both. `order`: the husbands in the order of her
+    // unions; `dates`: their wedding dates.
+    function twice(order: ['s' | 'v', 's' | 'v'] | ['s' | 'v'], dates: Partial<Record<'s' | 'v', string>>): LineageIndex {
+        const people: Record<string, Spec> = { e: { first: 'Elin', last: 'Torsby', sex: 'female', born: '1960' } };
+        const unions: [string, string, string, string[]][] = [];
+        for (const [k, last] of [['s', 'Sandmark'], ['v', 'Vallgren']] as const) {
+            people[`${k}0`] = { first: 'Edvard', last, sex: 'male', born: '1930' };
+            people[`${k}1`] = { first: 'Gustav', last, sex: 'male', born: '1958', parents: [`${k}0`] };
+            for (const i of [2, 3, 4]) people[`${k}${i}`] = { first: `Kid${i}`, last, sex: 'male', born: '1962', parents: [`${k}0`] };
+            unions.push([`${k}u0`, `${k}0`, `${k}w`, [`${k}1`, `${k}2`, `${k}3`, `${k}4`]]);
+            people[`${k}w`] = { first: 'Hedda', last: 'Eklöv', sex: 'female', born: '1932' };
+        }
+        for (const k of order) unions.push([`u_${k}`, `${k}1`, 'e', []]);
+        const d = tree(people, unions);
+        for (const k of order) if (dates[k]) d.partnerships[`u_${k}` as PartnershipId]!.startDate = dates[k];
+        return buildLineages(d);
+    }
+    const said = (idx: LineageIndex, id: string): string | null => {
+        const v = personRodRowValue(idx, rodLabels(idx), P(id), 'cs');
+        return v ? rodRowText(v.parts) : null;
+    };
+
+    it('two dated marriages: the lineage of the latest wedding, not the first union in order', () => {
+        const idx = twice(['s', 'v'], { s: '1988', v: '2001' });
+        expect(idx.rods.get(rodOf(idx, P('s1'))!)!.small).toBe(false);
+        expect(idx.rods.get(rodOf(idx, P('v1'))!)!.small).toBe(false);
+        expect(personRodRow(idx, P('e'))).toMatchObject({ kind: 'spouse', rodId: rodOf(idx, P('v1')) });
+        expect(said(idx, 'e')).toBe('manželka v rodu Vallgren');
+        // Breadcrumbs of the whole tree's pages stand under the same lineage and that marriage.
+        expect(rodOfPersonForCrumbs(idx, P('e'))).toEqual({ rodId: rodOf(idx, P('v1')), unionId: 'u_v' });
+        // She stays a spouse in both lineages (the lineage's list of spouses).
+        expect(spouseRodsOf(idx, P('e'))).toEqual([rodOf(idx, P('s1')), rodOf(idx, P('v1'))]);
+    });
+
+    it('the date wins over the order of the unions', () => {
+        const idx = twice(['v', 's'], { s: '1988', v: '2001' });
+        expect(said(idx, 'e')).toBe('manželka v rodu Vallgren');
+    });
+
+    it('no wedding dates: the last marriage in order', () => {
+        expect(said(twice(['s', 'v'], {}), 'e')).toBe('manželka v rodu Vallgren');
+        expect(said(twice(['v', 's'], {}), 'e')).toBe('manželka v rodu Sandmark');
+    });
+
+    it('one marriage: its lineage, as before', () => {
+        expect(said(twice(['s'], { s: '1988' }), 'e')).toBe('manželka v rodu Sandmark');
+        expect(said(twice(['v'], {}), 'e')).toBe('manželka v rodu Vallgren');
     });
 });

@@ -109,6 +109,20 @@ export function marriagesInOrder(data: StromData, personId: PersonId): Partnersh
         .map(e => e.id);
 }
 
+/**
+ * The person's unions (ids) the last marriage first (spec 010, K4.1): the
+ * ones with a wedding date from the latest wedding back, then the undated
+ * ones from the last in order (marriagesInOrder). One rule for the married
+ * surname (married-suggestion.ts) and for the lineage a spouse is told in
+ * ("wife in the Novák line", lineage.ts).
+ */
+export function marriagesLatestFirst(data: StromData, personId: PersonId): PartnershipId[] {
+    const all = marriagesInOrder(data, personId);
+    const dated = all.filter(id => parseFlexDate(data.partnerships[id]?.startDate));
+    const undated = all.filter(id => !parseFlexDate(data.partnerships[id]?.startDate));
+    return [...dated.reverse(), ...undated.reverse()];
+}
+
 /** One union of a person as the hover card lists it (T37). */
 export interface UnionSummary {
     partnershipId: PartnershipId;

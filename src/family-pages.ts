@@ -25,7 +25,7 @@ export { isGapOnlyName };
 import { asciiSlug } from './filenames.js';
 import { normalizeSearchText, searchableSurnames, alternateNames } from './name-search.js';
 import {
-    LineageIndex, Rod, RodId, Selection, otherFamilyRods, rodGenerations, rodNameForms, rodOfPersonForCrumbs, rods as allRods, selection,
+    LineageIndex, Rod, RodId, Selection, otherFamilyRods, rodGenerations, rodNameForms, rodOfPersonForCrumbs, rods as allRods, selection, spouseRodOf,
 } from './lineage.js';
 import { BookSelectionSpec, lineageSpec } from './book-model.js';
 import { sortRods } from './rods-overview.js';
@@ -764,9 +764,9 @@ function buildSearchIndex(set: PageSet, rods: readonly Rod[]): SearchEntry[] {
         if (!f) { const nf = rodNameForms(rod, tree); f = [...nf.forms, ...nf.feminine]; forms.set(rod.id, f); }
         return f;
     };
-    // A married-in spouse's lineage: the member's they married.
-    const spouseRod = new Map<PersonId, RodId>();
-    for (const rod of rods) for (const s of rod.spouses) if (!spouseRod.has(s.personId)) spouseRod.set(s.personId, rod.id);
+    // A married-in spouse's lineage: of the set's lineages they married into, the one the
+    // person's row names (spouseRodOf: a big one first, the last marriage).
+    const spouseRod = (id: PersonId): RodId | null => spouseRodOf(prot.lineages, id, r => rodById.has(r));
     const memberSet = new Set(set.selection.memberIds);
 
     const out: SearchEntry[] = [];
@@ -795,7 +795,7 @@ function buildSearchIndex(set: PageSet, rods: readonly Rod[]): SearchEntry[] {
             const canon = [rod.surname, feminineForm(rod.surname) ?? ''].filter(Boolean).map(normalizeSearchText);
             if (last && !canon.includes(normalizeSearchText(last))) t += ` · ${F.recordedAs[genderKey(p)](last)}`;
         } else {
-            const sr = spouseRod.get(id);
+            const sr = spouseRod(id);
             if (sr) t = F.spouseIn[genderKey(p)](set.rodLabels.get(sr) || F.rodGeneric);
         }
         out.push({ s: set.personSlug.get(id) ?? '', n, y: yearsOf(p), t, k: keys.join(' '), o: surnameFirst(p) });
