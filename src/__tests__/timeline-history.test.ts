@@ -595,7 +595,8 @@ describe('the history row on a large tree', () => {
         // Each run computes the residences again (a changed tree): the cold path.
         const compute = measureAgainstBudget(() => computeTimelineHistory(tree, ids, p, 'cs'), {
             budgetMs: COMPUTE_BUDGET_MS, calibrationRounds: COMPUTE_CALIBRATION_ROUNDS, referenceMs: COMPUTE_CALIBRATION_REFERENCE_MS,
-            maxWallMs: 4_000,
+            // On a loaded machine a pair takes over half a second: room for enough pairs to catch a calm moment.
+            maxPairs: 15, maxWallMs: 20_000,
         });
         console.log(budgetReport('computeTimelineHistory 3000 × 600', compute, COMPUTE_BUDGET_MS));
         if (compute.judged) expect(compute.ms).toBeLessThan(COMPUTE_BUDGET_MS);
@@ -608,5 +609,5 @@ describe('the history row on a large tree', () => {
         });
         console.log(budgetReport('filterTimelineHistory', filtered, FILTER_BUDGET_MS));
         if (filtered.judged) expect(filtered.ms).toBeLessThan(FILTER_BUDGET_MS);
-    });
+    }, 120_000);
 });
