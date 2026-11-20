@@ -38,6 +38,7 @@ import { sessionTone } from '../live-follow-targets.js';
 import { hasFollowPrefs, resetFollowPrefs, restoreFollowPrefs } from '../live-follow-prefs.js';
 import { helpMark } from './help-mark.js';
 import type { HelpTopic } from '../help/topics.js';
+import { deletedSourcesToSend } from '../source-retract.js';
 import { StromData, TreeId, PersonId, SourceExcerpt, TreeImagesVariant } from '../types.js';
 import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate } from '../ged-parser.js';
 import { formatFlexDate, instantLocalDay } from '../dates.js';
@@ -2981,7 +2982,7 @@ export const researchUiMethods = uiModule({
         const releaseLeave = holdLeave('send', tree.id);
         let res: Response;
         try {
-            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts }, researchGedcomTitles(status), researchSendsReadings(status), researchSendsSourceFields(status), researchCitationsOut(status)), 120000);
+            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts, deletedSources: deletedSourcesToSend(link) }, researchGedcomTitles(status), researchSendsReadings(status), researchSendsSourceFields(status), researchCitationsOut(status)), 120000);
         } catch (err) {
             releaseLeave();
             console.warn('Sending to the research failed', err);
@@ -3583,7 +3584,7 @@ export const researchUiMethods = uiModule({
             await this.showAlert(strings.storageSafety.treeLocked, 'warning');
             return;
         }
-        const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(meta.research).transcripts };
+        const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(meta.research).transcripts, deletedSources: deletedSourcesToSend(meta.research) };
         const blob = new Blob([researchGedcom(data, meta.name, research, researchGedcomTitles(this.researchStatusOf(meta.research.id)), researchSendsReadings(this.researchStatusOf(meta.research.id)), researchSendsSourceFields(this.researchStatusOf(meta.research.id)), researchCitationsOut(this.researchStatusOf(meta.research.id)), researchMediaOut(this.researchStatusOf(meta.research.id)))], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

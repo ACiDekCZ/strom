@@ -12,7 +12,7 @@
 
 import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark, researchSourceRef } from '../research-link.js';
-import { sourceRetractOffered } from '../source-retract.js';
+import { rememberDeletedSource, sourceRetractEditMode, sourceRetractOffered } from '../source-retract.js';
 import { DataManager, CitedFact, personCitationField, SourceCitationRef } from '../data.js';
 import { bookReference, entryDateLine, sameBookReference } from '../source-page.js';
 import { sourcePlaceSearchText, recognizeLocation, imageWord, hasPlaceFields, sourcePlaceParts, sourcePlaceLine } from '../source-location.js';
@@ -500,6 +500,13 @@ export const sourcesMethods = uiModule({
             if (sourceRetractOffered() === 'on') void this.openSourceRetractDialog(sourceId);
             return;
         }
+        const refn = DataManager.getData().sources?.[sourceId]?.refn;
+        // A source of the research in a tree tied to it but not followed (spec 117 §4): the research's list when it answers.
+        const editMode = sourceRetractEditMode(refn);
+        if (editMode === 'preview' && this.researchSyncLink()) {
+            await this.openSourceRetractDialog(sourceId, { editMode: true });
+            return;
+        }
         const count = DataManager.countSourceCitations(sourceId);
         // Name what is being deleted — several rows would otherwise get the
         // same sentence and the wrong one is one click away.
@@ -509,11 +516,18 @@ export const sourcesMethods = uiModule({
         const at = (p: MediaPlace) => 'sourceId' in p && p.sourceId === sourceId;
         const archive = !!this.materialsContext()?.caps.list;
         const files = treeMedia(DataManager.getData()).filter(a => a.places.some(at) && (archive || !a.places.every(at))).length;
-        const message = [count > 0 ? d.sourceCited(count) : '', files ? strings.sources.deleteFiles(files) : '', d.undoHint].filter(Boolean).join(' ');
+        // What the research does with it: retracts it with the next write (the gate), or keeps it (an older one).
+        const R = strings.sources.retract;
+        const fate = editMode === 'preview' || editMode === 'plain' ? R.editMode : editMode === 'old' ? R.editModeOld : '';
+        const message = [count > 0 ? d.sourceCited(count) : '', files ? strings.sources.deleteFiles(files) : '', fate, d.undoHint].filter(Boolean).join(' ');
         const confirmed = await this.showConfirm(message, d.deleteSourceTitle(title),
             { confirmLabel: d.deleteSource, variant: 'danger' });
         if (!confirmed) return;
         DataManager.removeSource(sourceId);
+        // Said deleted to the research with the next write (only to one with the gate: the send decides, §4).
+        const treeId = DataManager.getCurrentTreeId();
+        const ref = typeof refn === 'string' ? refn.trim() : '';
+        if (treeId && ref && editMode && editMode !== 'old') rememberDeletedSource(treeId, ref);
         this.renderSourcesList();
         // Any open citation chips may now be stale.
         this.refreshCitationChips();

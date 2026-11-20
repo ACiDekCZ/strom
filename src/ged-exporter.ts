@@ -1063,6 +1063,18 @@ export function backSourceRecordCount(data: StromData, backTo: string | undefine
     }).length;
 }
 
+/**
+ * The research header with only the deleted sources the file really lacks
+ * (spec 117 §4): one still in the tree under its research id (S42 = S0042),
+ * e.g. brought back by Undo or by a merge, is not said deleted.
+ */
+function withDeletedSourcesMissing(research: ResearchHeaderInfo | undefined, data: StromData): ResearchHeaderInfo | undefined {
+    if (!research?.deletedSources?.length) return research;
+    const num = (ref: unknown) => typeof ref === 'string' && /^S\d{1,9}$/i.test(ref.trim()) ? String(Number(ref.trim().slice(1))) : '';
+    const present = new Set(Object.values(data.sources ?? {}).map(s => num(s.refn)).filter(Boolean));
+    return { ...research, deletedSources: research.deletedSources.filter(id => num(id) && !present.has(num(id))) };
+}
+
 export function exportToGedcom(data: StromData, treeName?: string, options: GedcomExportOptions = {}): GedcomExportResult {
     // Before the content options: a family link stays even without the notes.
     const alsoChild = alsoChildLinks(data);
@@ -1368,7 +1380,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     lines.push('2 VERS 5.5.1');
     lines.push('2 FORM LINEAGE-LINKED');
     lines.push('1 CHAR UTF-8');
-    lines.push(...researchHeaderLines(options.research));
+    lines.push(...researchHeaderLines(withDeletedSourcesMissing(options.research, data)));
     lines.push(STROM_SEX_U_LINE);
 
     // The files the tree's facts came from (spec 066): one record per loaded

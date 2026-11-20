@@ -18,7 +18,7 @@ import { strings } from '../strings.js';
 import type { FactStatus } from '../types.js';
 import { researchSourceRef } from '../research-link.js';
 import {
-    restoreSource, retractCanGo, retractChanged, retractExpired, retractFailed, retractListed, retractNotSent,
+    rememberDeletedSource, restoreSource, retractCanGo, retractChanged, retractExpired, retractFailed, retractListed, retractNotSent,
     retractSending, retractSource, retractSourceDry, retractStart, retractSummary, retractTaskTitles, sourceRetractOffered,
     type RestoreDone, type RetractError, type RetractResult, type RetractState, type RetractSummary,
 } from '../source-retract.js';
@@ -86,14 +86,18 @@ export function restoreToastEnd(res: RetractResult<RestoreDone> | null, title: s
 export const sourceRetractMethods = uiModule({
     /**
      * The dialog "Delete source?" (spec 117 §2) for a source of the followed
-     * tree. True once the source is deleted in the research.
+     * tree. True once the source is deleted in the research. `editMode`: a
+     * tree tied to its research but not followed (§4) — the list still comes
+     * from the research, but deleting is the app's own (Undo works) and the
+     * research retracts the source with the next write of changes.
      */
-    async openSourceRetractDialog(sourceId: string): Promise<boolean> {
+    async openSourceRetractDialog(sourceId: string, opts: { editMode?: boolean } = {}): Promise<boolean> {
         const R = strings.sources.retract;
+        const editMode = !!opts.editMode;
         const src = DataManager.getData().sources?.[sourceId];
         const ref = researchSourceRef(src?.refn);
         const ctx = this.researchSyncLink();
-        if (!src || !ref || !ctx || sourceRetractOffered() !== 'on') return false;
+        if (!src || !ref || !ctx || (!editMode && sourceRetractOffered() !== 'on')) return false;
         const researchId = ctx.link.id;
         const title = src.title;
 
@@ -141,7 +145,12 @@ export const sourceRetractMethods = uiModule({
             changed.textContent = state.note === 'changed' ? R.changed : state.note === 'expired' ? R.expired : '';
             list.replaceChildren();
             const impact = state.impacts.find(i => i.id === ref) ?? state.impacts[0];
-            if (!impact) {
+            if (!impact && editMode && state.phase === 'failed') {
+                // Edit mode without the research's list: what the app knows, deleting still the app's own.
+                const count = DataManager.countSourceCitations(sourceId);
+                if (count > 0) list.appendChild(h('p', 'mdlg-text', strings.danger.sourceCited(count)));
+                list.appendChild(h('p', 'mdlg-note', `${R.editMode} ${strings.danger.undoHint}`));
+            } else if (!impact) {
                 if (state.phase === 'failed') list.appendChild(h('p', 'mdlg-note', R.failedPreview));
                 else {
                     const p = h('p', 'mdlg-note');
@@ -152,11 +161,14 @@ export const sourceRetractMethods = uiModule({
                 }
             } else {
                 list.append(...this.sourceRetractList(retractSummary(impact, DataManager.getData())));
-                list.appendChild(h('p', 'mdlg-note', R.undoLater));
+                list.appendChild(h('p', 'mdlg-note', editMode ? `${R.editMode} ${strings.danger.undoHint}` : R.undoLater));
             }
             go.hidden = stopped;
-            go.disabled = stopped || !retractCanGo(state);
+            go.disabled = stopped || !(editMode ? editCanGo() : retractCanGo(state));
         };
+
+        // Edit mode: deleting here once the research's list is read (or could not be: the app's counts).
+        const editCanGo = () => state.phase !== 'loading' && (state.impacts.length > 0 || state.phase === 'failed');
 
         // Nothing more can be deleted here: the danger button goes, Cancel becomes Close.
         const stop = () => {
@@ -190,6 +202,8 @@ export const sourceRetractMethods = uiModule({
             if (done || abort.signal.aborted || mine !== asked) return;
             if (!res || !res.ok) {
                 state = state.impacts.length ? { ...state, phase: 'ready', confirm: null } : retractFailed(state);
+                // Edit mode: the list only informs; without it, the app's own counts (deleting stays here).
+                if (editMode) { draw(); return; }
                 showError(res ? res.error : { kind: 'down', status: 0 }, () => void dry());
                 return;
             }
@@ -198,6 +212,17 @@ export const sourceRetractMethods = uiModule({
         };
 
         const send = async () => {
+            if (editMode) {
+                if (!editCanGo()) return;
+                // Deleted here (Undo works); the research retracts it with the next write of changes (§4).
+                done = true;
+                DataManager.removeSource(sourceId);
+                rememberDeletedSource(ctx.treeId, ref);
+                dialog.close();
+                this.renderSourcesList();
+                this.refreshCitationChips();
+                return;
+            }
             if (!retractCanGo(state)) return;
             // The research went back to a version without deleting meanwhile.
             if (sourceRetractOffered() === null) {
@@ -422,6 +447,29 @@ export const sourceRetractMethods = uiModule({
     },
 
     /** The toast's Undo (§3): the source put back in the research, its version loaded. */
+    /**
+     * "Restore the source in the research" of a "What was written" row (§4):
+     * through the bridge, said in a toast; the row's action goes once done.
+     */
+    async sourceRestoreFromChanges(btn: HTMLButtonElement): Promise<void> {
+        const ref = btn.dataset.restoreSource ?? '';
+        const title = btn.dataset.title || ref;
+        if (!ref || btn.disabled) return;
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        const res = await this.postResearchBridgeWrite(base => restoreSource(base, [ref]), { load: false });
+        btn.removeAttribute('aria-busy');
+        const end = restoreToastEnd(res, title);
+        // Not retracted there (any more): it is there, as restoring would leave it.
+        if (end === 'reload' || end.ok) {
+            btn.remove();
+            this.showToast(end === 'reload' ? strings.sources.retract.restored(title) : end.text, TOAST_MS, { closable: true });
+            return;
+        }
+        btn.disabled = false;
+        this.showToast(end.text, TOAST_MS, { closable: true });
+    },
+
     async sourceRetractUndo(ref: string, title: string): Promise<ToastWorkEnd | void> {
         const ctx = this.researchSyncLink();
         const res = ctx ? await this.postResearchBridgeWrite(base => restoreSource(base, [ref]), { load: false }) : null;

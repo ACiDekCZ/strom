@@ -323,6 +323,8 @@ export interface SourceChange {
     deleted?: boolean;
     /** An attachment whose source is in neither version: the row stands for the attachment alone (no link). */
     attachmentOnly?: boolean;
+    /** A deleted one's research id (its REFN in the research's version, S0042): retracted there when deleted in edit mode (spec 117 §4). */
+    refn?: string;
 }
 
 /** A couple's change that the people's rows do not tell. */
@@ -460,7 +462,8 @@ export function diffOther(base: StromData | null, current: StromData): OtherChan
         const b = cs[sid];
         const kinds = new Set<SourceChangeKind>();
         if (!b) {
-            sources.push({ sourceId: sid, title: a.title?.trim() || sid, kinds: ['deleted'], citedBy: { persons: 0 }, deleted: true });
+            const refn = typeof a.refn === 'string' && /^S\d{1,9}$/.test(a.refn.trim()) ? a.refn.trim() : '';
+            sources.push({ sourceId: sid, title: a.title?.trim() || sid, kinds: ['deleted'], citedBy: { persons: 0 }, deleted: true, ...(refn ? { refn } : {}) });
             continue;
         }
         if (!a) {
@@ -751,6 +754,10 @@ export interface SentOtherRow {
     surname?: string;
     deleted?: true;
     appOnly?: true;
+    /** A deleted source's research id (S0042), when it had one (spec 117 §4). */
+    refn?: string;
+    /** That source retracted in the research by the write (its `retracted`). */
+    retracted?: true;
 }
 
 /** The rows beyond the people a send carries, in the panel's order. */
@@ -759,7 +766,8 @@ export function sentOtherRows(other: OtherChanges | null, unread: ReadonlySet<st
     const out: SentOtherRow[] = [];
     for (const s of other.sources) {
         out.push({ type: 'source', id: s.sourceId, title: s.title, kinds: [...s.kinds],
-            ...(s.deleted || s.attachmentOnly ? { deleted: true as const } : {}), ...(sourceAppOnly(s.kinds, unread) ? { appOnly: true as const } : {}) });
+            ...(s.deleted || s.attachmentOnly ? { deleted: true as const } : {}), ...(sourceAppOnly(s.kinds, unread) ? { appOnly: true as const } : {}),
+            ...(s.deleted && s.refn ? { refn: s.refn } : {}) });
     }
     for (const c of other.couples) {
         out.push({ type: 'couple', id: c.partnershipId, title: '', kinds: [...c.kinds], p1: c.p1, p2: c.p2,
@@ -805,7 +813,20 @@ export function sanitizeSentOtherRow(v: unknown): SentOtherRow | null {
         ...(typeof r.surname === 'string' && r.surname ? { surname: r.surname.slice(0, 120) } : {}),
         ...(r.deleted === true ? { deleted: true as const } : {}),
         ...(r.appOnly === true ? { appOnly: true as const } : {}),
+        ...(type === 'source' && typeof r.refn === 'string' && /^S\d{1,9}$/.test(r.refn) ? { refn: r.refn } : {}),
+        ...(type === 'source' && r.retracted === true ? { retracted: true as const } : {}),
     };
+}
+
+/**
+ * The written rows with the deleted sources the write retracted marked
+ * (`retracted` of its answer, S42 = S0042; spec 117 §4).
+ */
+export function withRetractedRows(rows: readonly SentOtherRow[], retracted: readonly string[]): SentOtherRow[] {
+    const num = (id: string) => String(Number(id.slice(1)));
+    const gone = new Set(retracted.filter(id => /^S\d{1,9}$/.test(id)).map(num));
+    if (!gone.size) return [...rows];
+    return rows.map(r => (r.type === 'source' && r.deleted && r.refn && gone.has(num(r.refn)) ? { ...r, retracted: true as const } : r));
 }
 
 // ==================== WHAT A WRITE WROTE OF THE TREE'S OWN FILES ====================

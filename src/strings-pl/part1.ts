@@ -1309,6 +1309,9 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             restoredPart: (n: number) => `Źródło wróciło; ${nPl(n, 'cytowania', 'cytowań', 'cytowań')} nie dało się przywrócić (dana zmieniła się w międzyczasie).`,
             restoreDown: 'Cofnięcie jest teraz niemożliwe, badanie nie odpowiada. Źródło można przywrócić w badaniu.',
             notRestorable: 'Tego źródła nie można przywrócić (w badaniu zostało scalone lub wycofane inaczej).',
+            /** Edit mode (§4): the research retracts the source with the next write; an older research keeps it. */
+            editMode: 'Badanie wycofa źródło przy następnym zapisie zmian.',
+            editModeOld: 'Badanie zachowa źródło; wróci przy następnym wczytaniu.',
         },
     },
 };

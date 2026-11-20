@@ -59,6 +59,12 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         hide: 'Ukryj ⌃',
         kindSourceAdded: 'nowe',
         kindSourceDeleted: 'usunięte',
+        /** spec 117 §4: a source deleted here in edit mode, retracted by the research with the write (or waiting there for review). */
+        sourceDeleted: 'Usunięte źródło',
+        retracted: 'źródło wycofane w badaniu',
+        reviewWait: 'czeka w badaniu na potwierdzenie',
+        restoreSource: 'Przywróć źródło w badaniu',
+        restoreLater: 'źródło można przywrócić w badaniu',
         kindTitle: 'tytuł',
         kindTranscript: 'transkrypcja',
         kindPage: 'strona',

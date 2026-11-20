@@ -101,6 +101,39 @@ export function sourceRetractOffered(): SourceRetractOffer {
 }
 
 /**
+ * Deleting a source of a tree tied to its research but not followed (edit
+ * mode, §4): `preview` — the research has the gate and its bridge answers
+ * (the §2 dialog, its list from the research, deleting here); `plain` — the
+ * gate without the bridge (today's confirmation, "retracted with the next
+ * write"); `old` — a research that said its features without the gate (it
+ * keeps the source); `unknown` — features never said (today's confirmation).
+ */
+export type SourceRetractEditMode = 'preview' | 'plain' | 'old' | 'unknown';
+
+export function sourceRetractEditModeIn(bridge: SourceRetractBridge | null): SourceRetractEditMode {
+    if (sourceRetractTaken(bridge?.features)) return bridge!.bridgeUp && !bridge!.readOnly ? 'preview' : 'plain';
+    return bridge?.features ? 'old' : 'unknown';
+}
+
+/** The same for a source of the open tree (its REFN): null when it is not the research's source or the tree is not tied in edit mode. */
+export function sourceRetractEditMode(refn: unknown): SourceRetractEditMode | null {
+    const link = TreeManager.getActiveTreeMetadata()?.research;
+    if (!link?.id || link.copy || !ref(refn, SOURCE_REF) || DataManager.isLiveFollowing()) return null;
+    return sourceRetractEditModeIn(bridgeOf(link.id.toLowerCase()));
+}
+
+/**
+ * Restoring a retracted source in the research from the app (§4, "What was
+ * written"): the gate, the bridge answering, the research writable from here.
+ */
+export function sourceRestoreOffered(): boolean {
+    const link = TreeManager.getActiveTreeMetadata()?.research;
+    if (!link?.id || link.copy || DataManager.isReadOnly()) return false;
+    const bridge = bridgeOf(link.id.toLowerCase());
+    return !!bridge && bridge.bridgeUp && !bridge.readOnly && sourceRetractTaken(bridge.features);
+}
+
+/**
  * "Decision stands" on a decided conflict marked for review (§8, §9): only
  * with the gate, the bridge answering and the research writable from here,
  * in an app that takes edits. Following the tree live is not needed (a
@@ -801,10 +834,35 @@ export function withDeletedSource(ids: readonly string[], id: string): string[] 
     return s && !all.includes(s) ? [...all, s] : all;
 }
 
-/** The list without those the research retracted. */
+/** A research source id by its number (S42 and S0042 are one source, as the research reads them). */
+const sourceNum = (id: unknown): string => (typeof id === 'string' && /^S\d{1,9}$/i.test(id.trim()) ? String(Number(id.trim().slice(1))) : '');
+
+/** The list without those the research retracted (S42 = S0042). */
 export function withoutDeletedSources(ids: readonly string[], gone: readonly string[]): string[] {
-    const out = new Set(gone);
-    return sourceIds(ids).filter(i => !out.has(i));
+    const out = new Set(gone.map(sourceNum).filter(Boolean));
+    return sourceIds(ids).filter(i => !out.has(sourceNum(i)));
+}
+
+/** Of the deleted sources, those back in the tree (Undo, a load): their research id is a source's REFN again. */
+export function deletedSourcesBack(ids: readonly string[], data: Pick<StromData, 'sources'>): string[] {
+    const present = new Set(Object.values(data.sources ?? {}).map(s => sourceNum(s.refn)).filter(Boolean));
+    return sourceIds(ids).filter(i => present.has(sourceNum(i)));
+}
+
+/**
+ * What a file for the research says deleted (`_STROM_SOURCE_DELETED`): the
+ * remembered ones, only to a research with `source.retract` (else nothing;
+ * an older one keeps the source and it comes back with the next load).
+ */
+export function deletedSourcesToSend(link: Pick<ResearchLink, 'id' | 'deletedSources'> | undefined): string[] {
+    const ids = deletedSourcesOf(link);
+    return ids.length && link?.id && sourceRetractTaken(bridgeOf(link.id.toLowerCase())?.features) ? ids : [];
+}
+
+/** Forget the deleted sources that are back in the tree's data (Undo after deleting): never sent as deleted. */
+export function forgetDeletedSourcesBack(treeId: TreeId, data: Pick<StromData, 'sources'>): void {
+    const back = deletedSourcesBack(deletedSourcesOf(TreeManager.getTreeMetadata(treeId)?.research), data);
+    if (back.length) forgetDeletedSources(treeId, back);
 }
 
 /** Remember a source deleted in edit mode on the tree's research link (no link, no research id: nothing). */

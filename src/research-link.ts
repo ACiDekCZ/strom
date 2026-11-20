@@ -2893,6 +2893,8 @@ export interface ResearchSendRecord {
      */
     media?: SyncMediaWritten[];
     mediaCount?: number;
+    /** The sources deleted in the app a written send retracted (`retracted`, spec 117 §4); absent = none said. */
+    retracted?: string[];
 }
 
 const SEND_STATES = new Set(['pending', 'written', 'discarded', 'replaced', 'nothing', 'undone', 'failed']);
@@ -2929,6 +2931,7 @@ export function sanitizeSends(value: unknown, codes = false): ResearchSendRecord
             ...(r.resent === true || r.again === true ? { again: 'yes' } : headerToken(r.again) ? { again: headerToken(r.again)! } : {}),
             ...(codes && (r.state === 'written' || r.state === 'nothing') ? sendNotWritten(r) : {}),
             ...(r.state === 'written' ? sendMedia(r) : {}),
+            ...(r.state === 'written' && retractedSources(r.retracted).length ? { retracted: retractedSources(r.retracted) } : {}),
         });
     }
     return out;
@@ -4832,7 +4835,16 @@ export interface ResearchHeaderInfo {
      * Only to a bridge that says `sync.since`.
      */
     since?: string;
+    /**
+     * The research's sources deleted here in edit mode (`_STROM_SOURCE_DELETED S…`,
+     * spec 117 §4): only to a research with `source.retract`, only those the
+     * file really lacks (the exporter leaves out any still in the tree).
+     */
+    deletedSources?: readonly string[];
 }
+
+/** At most this many `_STROM_SOURCE_DELETED` lines in one file (the research reads no more). */
+export const SOURCE_DELETED_MOST = 50;
 
 /** `_STROM_SENT` / `_STROM_APP_TREE` values: what the research accepts (at most 64 of [A-Za-z0-9._:-]). */
 function headerToken(value: unknown): string | null {
@@ -4847,9 +4859,11 @@ export function researchHeaderLines(link: ResearchHeaderInfo | null | undefined)
     const appTree = headerToken(link?.appTree);
     const sent = headerToken(link?.sent);
     const since = headerToken(link?.since);
+    const deleted = [...new Set((link?.deletedSources ?? []).filter(s => typeof s === 'string' && /^S\d{1,9}$/.test(s)))].slice(0, SOURCE_DELETED_MOST);
     return [
         `1 ${STROM_TREE_TAG} ${id}`,
         ...(head ? [`1 ${STROM_HEAD_TAG} ${head}`] : []),
+        ...deleted.map(s => `1 _STROM_SOURCE_DELETED ${s}`),
         ...(appTree ? [`1 _STROM_APP_TREE ${appTree}`] : []),
         ...(link?.transcripts === 'evidence' || link?.transcripts === 'lead' ? [`1 _STROM_TRANSCRIPTS ${link.transcripts}`] : []),
         ...(sent ? [`1 _STROM_SENT ${sent}`] : []),
@@ -4920,6 +4934,8 @@ export interface SyncReply {
     media: SyncMediaWritten[];
     /** How many of them it wrote in all (the listed ones at least; 0 = none). */
     mediaCount: number;
+    /** The sources deleted in the app it retracted with this write (`retracted`, spec 117 §4; S ids); [] = none said. */
+    retracted: string[];
 }
 
 /** The kinds of a change of the tree's own files a write names (`media[].kind`, spec 108). */
@@ -5145,7 +5161,7 @@ export function sanitizeSkipped(value: unknown, codes: boolean): SyncReply['skip
 export function sanitizeSyncReply(value: unknown, features?: readonly string[] | null): SyncReply {
     const codes = !!features?.includes(SYNC_NW_CODES_FEATURE);
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], personConflicts: [], ids: null, readings: [], media: [], mediaCount: 0 };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], personConflicts: [], ids: null, readings: [], media: [], mediaCount: 0, retracted: [] };
     const idsRec = asRecord(r.ids);
     const idPersons = adoptIdMap(idsRec?.persons, /^P\d{1,9}$/);
     const idSources = adoptIdMap(idsRec?.sources, /^S\d{1,9}$/);
@@ -5176,7 +5192,15 @@ export function sanitizeSyncReply(value: unknown, features?: readonly string[] |
         readings: sanitizeSyncReadings(r.readings),
         media,
         mediaCount: mediaCountOf(r.mediaCount, r.media, media.length),
+        retracted: retractedSources(r.retracted),
     };
+}
+
+/** The `retracted` of a write (sources deleted in the app, retracted by it): research source ids, each once, at most 50. */
+export function retractedSources(value: unknown): string[] {
+    return Array.isArray(value)
+        ? [...new Set(value.slice(0, 200).filter((v): v is string => typeof v === 'string' && /^S\d{1,9}$/.test(v.trim())).map(v => v.trim()))].slice(0, SOURCE_DELETED_MOST)
+        : [];
 }
 
 /** `/status.features`: a send's answer says a person removed by an earlier send (`why: removed`) and asks whether they come back or go. */
