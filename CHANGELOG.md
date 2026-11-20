@@ -2,6 +2,17 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.31.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Photos from the research come after the tree**: a tree followed live from the research shows at once, and its photos come in afterwards, the cards on screen first, with a *Photos k / n* indicator; a click on it says how many are left. A card, the person dialog, the person and family pages and the Materials show a photo on its way under a calm veil and one that did not come as *Not loaded* with *Try again*. A print, a file, the family book or a backup asked for meanwhile waits for the photos (*Waiting for photos · k of n*, with *Cancel*), and when some did not come it offers *Try again*, *Continue without N photos* or *Cancel*. No photo is lost while they load. The first save of a tree with many photos and reading a GEDCOM file with photos in it take about half the time.
+- **Verifying with the research**: in *Verify facts in the tree…*, *Try on N people first* puts the try at the head of the research's queue; while the research is not working, the notice offers *Process now*, which starts it in the research's terminal. The queue in the *Research overview* gets a *Task type* filter with counts beside the lines, and *Waiting to be verified* leads to the queue narrowed to verification with *Show in the queue*. Needs a research version that offers it.
+- **The research's inbox and what is sent**: files that the research set aside from a book's inbox are decisions in *Awaiting action* under their book: another scan under a number already taken can be kept, taken as that image or saved under another number. *What will be sent* says *Nothing to send* for a tree in step with the research, right after the hand-over and after a reload too.
+- **Lists of people while following a research**: lists belong to the tree, not to the research, so *Add to list ›*, *Lists of people…* and a direction's *Save as list…* stay open while the tree follows a research, in other windows too.
+- **Data**: data version 25 (every portrait has a record among the tree's files, also in the sample tree and after a GEDCOM import); older versions of the app open such a tree read-only. A tree is not converted when its backup before the update fails, and a notice says so; the backup is taken also when the first save of an older tree comes from its rescue copy.
+- **Fixes**: a poster too wide for an image is scaled down or refused with a clear message, never saved as an empty file, and the first poster of a large family view no longer freezes the page; the *Materials* header counts every file the window shows; *What was written* lists a person's files that the research does not keep under *App only*; a proposal of *Sort with the agent* shows the picture instead of its file extension; a set-aside file is shown by the name it came with; the size of the images a research version brings counts each picture once; *Work on the queue* numbers the following tasks 1., 2., 3.; on a phone a long given name stays inside the fan's centre; a storage notice no longer covers *Scope* in the Table, and a list as the scope keeps its name on a narrow bar; the toolbar's search field is as wide as its placeholder, with a short form where it does not fit; in English a woman godparent is called godmother and a man godfather.
+
 ## 3.30.0
 
 *Released 19 November 2026.*

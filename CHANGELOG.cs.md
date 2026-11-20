@@ -2,6 +2,17 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.31.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Fotky z výzkumu přicházejí po stromu**: strom sledovaný živě z výzkumu se ukáže hned a fotky přibývají potom, nejdřív na kartách na obrazovce, s ukazatelem *Fotky k / n*; po kliknutí řekne, kolik jich zbývá. Karta, dialog osoby, stránky osoby a rodiny i Materiály ukazují fotku na cestě pod klidným závojem a fotku, která nepřišla, jako *Nenačteno* s *Zkusit znovu*. Tisk, soubor, rodinná kniha nebo záloha vyžádané mezitím na fotky počkají (*Čeká se na fotky · k z n*, se *Zrušit*), a když některé nepřišly, nabídnou *Zkusit znovu*, *Pokračovat bez N fotek* nebo *Zrušit*. Během načítání se žádná fotka neztratí. První uložení stromu s mnoha fotkami a načtení souboru GEDCOM s fotkami trvá zhruba polovinu času.
+- **Ověřování s výzkumem**: v *Ověřit údaje ve stromu…* dá *Nejdřív vyzkoušet na N osobách* zkoušku na začátek fronty výzkumu; když výzkum nepracuje, hláška nabídne *Zpracovat hned*, které ji spustí v terminálu výzkumu. Fronta v *Přehledu výzkumu* má vedle linií filtr *Druh úkolu* s počty a *Čeká na ověření* vede přes *Ukázat ve frontě* na frontu zúženou na ověřování. Potřebuje verzi výzkumu, která to nabízí.
+- **Schránka výzkumu a co se pošle**: soubory, které výzkum odložil ze schránky knihy, jsou rozhodnutí v *Čeká na vyřízení* pod svou knihou: jiný sken pod už obsazeným číslem lze ponechat, vzít jako ten snímek nebo uložit pod jiné číslo. *Co se pošle* u stromu v souladu s výzkumem řekne *Není co poslat*, hned po předání i po znovunačtení.
+- **Seznamy osob při sledování výzkumu**: seznamy patří stromu, ne výzkumu, takže *Přidat do seznamu ›*, *Seznamy osob…* a *Uložit jako seznam…* v nabídce směru zůstávají otevřené i během sledování výzkumu, i v dalších oknech.
+- **Data**: datová verze 25 (každý portrét má záznam mezi soubory stromu, i v ukázkovém stromu a po importu GEDCOM); starší verze aplikace takový strom otevřou jen ke čtení. Když se nepodaří záloha před úpravou dat, strom se nepřevede a upozornění to řekne; záloha vznikne i tehdy, když první uložení staršího stromu přijde z jeho záchranné kopie.
+- **Opravy**: plakát příliš široký pro obrázek se zmenší nebo odmítne se srozumitelnou zprávou, nikdy se neuloží jako prázdný soubor, a první plakát velkého rodinného pohledu už stránku nezamrazí; záhlaví *Materiálů* počítá všechny soubory, které okno ukazuje; *Co se zapsalo* uvádí soubory osoby, které výzkum neuchovává, pod *Jen v aplikaci*; návrh *Roztřídit agentem* ukazuje obrázek místo přípony souboru; odložený soubor se ukazuje pod jménem, se kterým přišel; velikost obrázků, které přináší verze výzkumu, počítá každý obrázek jednou; *Práce na frontě* čísluje další úkoly 1., 2., 3.; na telefonu zůstane dlouhé křestní jméno uvnitř středu vějíře; upozornění úložiště v Tabulce už nezakrývá *Rozsah* a seznam jako rozsah si v úzké liště nechá svůj název; pole hledání v liště je široké jako jeho nápověda, a kde se nevejde, ukáže krátký tvar; v angličtině se kmotra jmenuje godmother a kmotr godfather.
+
 ## 3.30.0
 
 *Vydáno 19. listopadu 2026.*

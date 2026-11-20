@@ -4,6 +4,17 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
+## 3.31.0
+
+*Ta wersja jest w przygotowaniu; ta sekcja rośnie z każdą wersją testową.*
+
+- **Zdjęcia z badania przychodzą po drzewie**: drzewo śledzone na żywo z badania pojawia się od razu, a zdjęcia dochodzą potem, najpierw na kartach na ekranie, ze wskaźnikiem *Zdjęcia k / n*; kliknięcie w niego mówi, ile jeszcze zostało. Karta, okno osoby, strony osoby i rodziny oraz Materiały pokazują zdjęcie w drodze pod spokojną zasłoną, a takie, które nie przyszło, jako *Nie wczytano* z *Spróbuj ponownie*. Wydruk, plik, księga rodzinna lub kopia zapasowa zamówione w tym czasie czekają na zdjęcia (*Oczekiwanie na zdjęcia · k z n*, z *Anuluj*), a gdy niektóre nie przyszły, proponują *Spróbuj ponownie*, *Kontynuuj bez N zdjęć* lub *Anuluj*. Podczas wczytywania żadne zdjęcie nie ginie. Pierwszy zapis drzewa z wieloma zdjęciami i wczytanie pliku GEDCOM ze zdjęciami trwają mniej więcej o połowę krócej.
+- **Weryfikacja z badaniem**: w *Zweryfikuj dane w drzewie…* opcja *Najpierw wypróbuj na N osobach* stawia próbę na początku kolejki badania; gdy badanie nie pracuje, komunikat proponuje *Przetwórz teraz*, które uruchamia ją w terminalu badania. Kolejka w *Przeglądzie badania* dostaje obok linii filtr *Rodzaj zadania* z liczbami, a *Czeka na weryfikację* prowadzi przez *Pokaż w kolejce* do kolejki zawężonej do weryfikacji. Wymaga wersji badania, która to oferuje.
+- **Skrzynka badania i to, co zostanie wysłane**: pliki, które badanie odłożyło ze skrzynki księgi, są decyzjami w *Czeka na załatwienie* pod swoją księgą: inny skan pod zajętym już numerem można zachować, przyjąć jako ten obraz lub zapisać pod innym numerem. *Co zostanie wysłane* przy drzewie zgodnym z badaniem mówi *Nie ma nic do wysłania*, zaraz po przekazaniu i także po ponownym wczytaniu.
+- **Listy osób podczas śledzenia badania**: listy należą do drzewa, nie do badania, więc *Dodaj do listy ›*, *Listy osób…* i *Zapisz jako listę…* w menu kierunku pozostają otwarte, gdy drzewo śledzi badanie, także w innych oknach.
+- **Dane**: wersja danych 25 (każdy portret ma wpis wśród plików drzewa, także w drzewie przykładowym i po imporcie GEDCOM); starsze wersje aplikacji otwierają takie drzewo tylko do odczytu. Gdy kopia zapasowa przed aktualizacją danych się nie uda, drzewo nie zostaje przekształcone, a komunikat to mówi; kopia powstaje też wtedy, gdy pierwszy zapis starszego drzewa pochodzi z jego kopii ratunkowej.
+- **Poprawki**: plakat zbyt szeroki na obraz zostaje pomniejszony lub odrzucony z jasnym komunikatem, nigdy nie jest zapisany jako pusty plik, a pierwszy plakat dużego widoku rodziny nie zawiesza już strony; nagłówek *Materiałów* liczy wszystkie pliki, które pokazuje okno; *Co zostało zapisane* podaje pliki osoby, których badanie nie przechowuje, pod *Tylko w aplikacji*; propozycja *Uporządkuj agentem* pokazuje obraz zamiast rozszerzenia pliku; odłożony plik jest pokazany pod nazwą, z którą przyszedł; rozmiar obrazów, które przynosi wersja badania, liczy każdy obraz raz; *Praca nad kolejką* numeruje kolejne zadania 1., 2., 3.; na telefonie długie imię mieści się w środku wachlarza; komunikat o pamięci w Tabeli nie zakrywa już *Zakresu*, a lista jako zakres zachowuje swoją nazwę na wąskim pasku; pole wyszukiwania na pasku jest tak szerokie jak jego podpowiedź, a gdzie się nie mieści, pokazuje krótką formę; po angielsku kobieta chrzestna to godmother, a mężczyzna godfather.
+
 ## 3.30.0
 
 *Wydano 19 listopada 2026.*
