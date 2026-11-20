@@ -7542,14 +7542,15 @@ class TreeRendererClass {
             // A cluster of the history row (§9): the card on its first event, a sheet on a phone.
             const histCluster = (e: Event): boolean => {
                 const c = (e.target as Element).closest('.tl-hist[data-hist-ids]');
-                const personId = c?.closest('[data-hist-person]')?.getAttribute('data-hist-person');
-                if (!c || !personId) return false;
+                if (!c) return false;
                 const ids = (c.getAttribute('data-hist-ids') ?? '').split(' ').filter(Boolean).map(decodeURIComponent);
-                UI.openTimelineHistory(personId, ids);
+                UI.openTimelineHistoryRow(ids, this.focusPersonId);
                 return true;
             };
             container.addEventListener('click', (e) => {
                 if (histCluster(e)) return;
+                // The row's label (spec 121 §5: its options come with the next step) is not a row of a person.
+                if ((e.target as Element).closest('.tl-hist-row')) return;
                 const g = (e.target as Element).closest('[data-person-id]') as HTMLElement | null;
                 if (g?.dataset.personId) this.setFocus(g.dataset.personId as PersonId);
             });
@@ -7567,8 +7568,8 @@ class TreeRendererClass {
 
         const ids = [...this.positions.keys()] as unknown as string[];
         const todayYear = new Date().getFullYear();
-        // Only the focused person's history (the card's events): nothing is computed for the others.
-        const history = UI.timelineHistory(this.focusPersonId);
+        // The history row of the whole timeline (spec 121 §1): kept while the rows and the data stay, the focus only its line.
+        const history = UI.timelineHistoryAll(ids, this.focusPersonId);
         const model = computeTimelineModel(DataManager.getData(), ids, todayYear, history ? { history } : {});
         const S = strings.timeline;
 

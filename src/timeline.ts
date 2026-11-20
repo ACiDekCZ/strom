@@ -12,7 +12,7 @@ import { yearOf, parseFlexDate, yearFraction } from './dates.js';
 import { eventValueIsOnTag, isPosthumousEvent } from './events.js';
 import { isLivingPerson } from './privacy.js';
 import { shownNameOrEmpty, shownNameFull } from './person-name.js';
-import type { HistoryKind, HistoryScope } from './history.js';
+import { HISTORY_KINDS, type HistoryKind, type HistoryScope } from './history.js';
 import type { DerivedParticipation } from './derived-participations.js';
 
 export interface TimelineEvent {
@@ -51,14 +51,16 @@ export interface TimelineRow {
     /** False for a deceased person without a recorded death date. */
     endKnown: boolean;
     events: TimelineEvent[];
+    /** Local history on the line (spec 121 §6), only with the option on; sorted by year. */
+    local?: TimelineLocalItem[];
 }
 
 export interface TimelineAxis { minYear: number; maxYear: number; }
 
 /**
- * One history event of the focused person on the timeline's history row
- * (DEV symboly-dejin §9, variant 9a): the same events the person card shows
- * (computePersonHistory: hidings, deletions and the origin switches applied).
+ * One regional history event on the timeline's history row (spec 121 §0):
+ * an event of a place where at least one person with a row lived in its year
+ * (a period: in one of its years), not hidden for that person.
  */
 export interface TimelineHistoryItem {
     /** The event's id (the card opens on its row). */
@@ -72,33 +74,86 @@ export interface TimelineHistoryItem {
     scope: HistoryScope;
     /** The event's text in the UI language (the tooltip, the phone's sheet). */
     text: string;
+    /** The region's name in the UI language, only when the row's events come from two regions or more. */
+    region?: string;
+    /** The region's id (the region filter). */
+    regionId?: string;
+    /** The ids of the rows it concerns, in the rows' order. */
+    persons: string[];
 }
 
-/** The history row of the focused person: drawn only with at least one event and a row of that person. */
+/**
+ * A local history event on a person's life line (spec 121 §6): the history of
+ * a place or a finding from the research's records, in the place where the
+ * person lived in its year. Drawn only with the option "on the life lines".
+ */
+export interface TimelineLocalItem {
+    id: string;
+    /** The year of the symbol: the start, or the first year of a period the person lived there. */
+    year: number;
+    /** A period's last year, when it ends after `year`. */
+    year2?: number;
+    kind: HistoryKind;
+    scope: 'place' | 'local';
+    /** The tree's spelling of the place. */
+    place: string;
+    text: string;
+    /** A finding's citation (scope local). */
+    source?: string;
+    /** The person moved there during the period: the symbol is later than its start. */
+    moved?: boolean;
+}
+
+/** The kinds and the region the history row is filtered by (absent: all). */
+export interface TimelineHistoryFilter {
+    kinds?: readonly HistoryKind[];
+    region?: string;
+    /** The region's name in the UI language (the row's label). */
+    regionName?: string;
+}
+
+/**
+ * The history row of the whole timeline (spec 121 §1): drawn while it has an
+ * event of a region, or a person's line has a local one (or a filter leaves
+ * nothing: the row says so).
+ */
 export interface TimelineHistory {
-    personId: string;
-    /** The person's shown name (the row's label). */
-    name: string;
-    /** The person's life span on the axis (the row's tint). */
-    startYear: number;
-    endYear: number;
-    /** Sorted by year (a period by its start); same-year order as given. */
+    /** Sorted by year (a period by its start); same-year order as given. The filter applied. */
     events: TimelineHistoryItem[];
+    /** The focused person's life on the row (its line); absent: the focused person has no row. */
+    focus?: { personId: string; startYear: number; endYear: number };
+    /** How many regions the row's events come from (before the filter). */
+    regions: number;
+    /** How many events the row has before the filter. */
+    total: number;
+    /** The filter in effect (nothing when it filters nothing). */
+    filtered: { kinds?: HistoryKind[]; region?: string; regionName?: string };
 }
 
 export interface TimelineModel {
     axis: TimelineAxis;
     rows: TimelineRow[];
     omittedCount: number;
-    /** The focused person's history row; absent: no row at all (no research, the layer off, no events). */
+    /** The history row; absent: no row at all (no research, the layer off, no events). */
     history?: TimelineHistory;
     /** Shared events of two rows or more, by their first row and year. */
     shared: TimelineSharedMark[];
 }
 
+/** What the UI computed for the history row (src/ui/timeline-history-ui.ts): the model sorts it and trims it to the rows. */
+export interface TimelineHistoryInput {
+    /** The row's events before the filter. */
+    events: readonly TimelineHistoryItem[];
+    /** Local events per person id; only with the option "on the life lines" on. */
+    local?: ReadonlyMap<string, readonly TimelineLocalItem[]>;
+    /** The filter (an unknown region already dropped). */
+    filter?: TimelineHistoryFilter;
+    /** The focused person (only the line of the life on the row). */
+    focusId?: string | null;
+}
+
 export interface TimelineModelOptions {
-    /** The focused person's history events (only that person's: nothing is computed for the others). */
-    history?: { personId: string; events: readonly TimelineHistoryItem[] };
+    history?: TimelineHistoryInput;
 }
 
 /** Round down / up to the enclosing decade so the axis has tidy gridlines. */
@@ -187,16 +242,7 @@ export function computeTimelineModel(
     }
     if (!isFinite(minYear)) { minYear = todayYear; maxYear = todayYear; }
 
-    // The history row: the focused person's events, only while that person has a row.
-    const h = opts.history;
-    const focusRow = h && h.events.length > 0 ? rows.find(r => r.personId === h.personId) : undefined;
-    const history: TimelineHistory | undefined = h && focusRow ? {
-        personId: focusRow.personId,
-        name: focusRow.name,
-        startYear: focusRow.startYear,
-        endYear: focusRow.endYear,
-        events: h.events.map((e, i) => ({ e, i })).sort((a, b) => a.e.year - b.e.year || a.i - b.i).map(x => x.e),
-    } : undefined;
+    const history = opts.history ? timelineHistoryRow(opts.history, rows) : undefined;
 
     return {
         axis: { minYear: floorDecade(minYear), maxYear: ceilDecade(maxYear) },
@@ -205,6 +251,64 @@ export function computeTimelineModel(
         ...(history ? { history } : {}),
         shared,
     };
+}
+
+/**
+ * The history row from what the UI computed (spec 121 §0): only the rows that
+ * are drawn count (a person without a row — no birth year, living under
+ * privacy — concerns nothing), the persons in the rows' order, the region
+ * named only while two regions or more are on the row, the local events put
+ * on their rows (the kind filter applies to them too), then the filter.
+ * Undefined when there is nothing: no event of a region and no local one.
+ */
+function timelineHistoryRow(h: TimelineHistoryInput, rows: TimelineRow[]): TimelineHistory | undefined {
+    const index = new Map(rows.map((r, i) => [r.personId, i]));
+    const trimmed: TimelineHistoryItem[] = [];
+    h.events.forEach(e => {
+        const persons = e.persons.filter(id => index.has(id)).sort((a, b) => index.get(a)! - index.get(b)!);
+        if (persons.length) trimmed.push({ ...e, persons });
+    });
+    const sorted = trimmed.map((e, i) => ({ e, i })).sort((a, b) => a.e.year - b.e.year || a.i - b.i).map(x => x.e);
+    const regions = new Set(sorted.map(e => e.regionId).filter((id): id is string => !!id)).size;
+    if (regions < 2) for (const e of sorted) delete e.region;
+    const kinds = h.filter?.kinds ? new Set(h.filter.kinds) : null;
+    const kindsOn = kinds && HISTORY_KINDS.some(k => !kinds.has(k)) ? kinds : null;
+    let anyLocal = false;
+    if (h.local) {
+        for (const r of rows) {
+            const items = (h.local.get(r.personId) ?? []).filter(e => !kindsOn || kindsOn.has(e.kind));
+            if (!items.length) continue;
+            r.local = [...items].sort((a, b) => a.year - b.year);
+            anyLocal = true;
+        }
+    }
+    if (!sorted.length && !anyLocal) return undefined;
+    const region = h.filter?.region || undefined;
+    const filter: TimelineHistoryFilter = { ...(kindsOn ? { kinds: [...kindsOn] } : {}), ...(region ? { region } : {}) };
+    const focusRow = h.focusId ? rows.find(r => r.personId === h.focusId) : undefined;
+    return {
+        events: filterTimelineHistory(sorted, filter),
+        ...(focusRow ? { focus: { personId: focusRow.personId, startYear: focusRow.startYear, endYear: focusRow.endYear } } : {}),
+        regions,
+        total: sorted.length,
+        filtered: {
+            ...(kindsOn ? { kinds: HISTORY_KINDS.filter(k => kindsOn.has(k)) } : {}),
+            ...(region ? { region, ...(h.filter?.regionName ? { regionName: h.filter.regionName } : {}) } : {}),
+        },
+    };
+}
+
+/**
+ * The history row's events with the filter applied (spec 121 §5): the kinds
+ * chosen, and of a region only its events (the history of a place and a
+ * finding have no region: a region filter leaves them out of the row). Pure,
+ * on the finished list: no new reading of the research's events.
+ */
+export function filterTimelineHistory(events: readonly TimelineHistoryItem[], filter: TimelineHistoryFilter = {}): TimelineHistoryItem[] {
+    const kinds = filter.kinds ? new Set(filter.kinds) : null;
+    const region = filter.region;
+    if (!kinds && !region) return [...events];
+    return events.filter(e => (!kinds || kinds.has(e.kind)) && (!region || e.regionId === region));
 }
 
 /**
@@ -237,6 +341,48 @@ export interface TimelineHistoryCluster {
     x: number;
     /** Members in year order; the first one's symbol stands for the cluster. */
     items: TimelineHistoryItem[];
+}
+
+/**
+ * The kind that stands for a cluster (spec 121 §3): the most frequent one,
+ * on a tie the one that comes first in the cluster's order. Its colour is the
+ * origin of the first event of that kind.
+ */
+export function timelineClusterKind(items: readonly TimelineHistoryItem[]): { kind: HistoryKind; scope: HistoryScope } {
+    const counts = new Map<HistoryKind, { n: number; scope: HistoryScope; at: number }>();
+    items.forEach((e, at) => {
+        const c = counts.get(e.kind);
+        if (c) c.n++;
+        else counts.set(e.kind, { n: 1, scope: e.scope, at });
+    });
+    let best: { kind: HistoryKind; n: number; scope: HistoryScope; at: number } | null = null;
+    for (const [kind, c] of counts) {
+        if (!best || c.n > best.n || (c.n === best.n && c.at < best.at)) best = { kind, ...c };
+    }
+    return best ? { kind: best.kind, scope: best.scope } : { kind: 'other', scope: 'region' };
+}
+
+/**
+ * The kinds of a cluster in the events' order, at most three, and how many
+ * more there are (the cluster's name; like the card's historyClusterKinds).
+ */
+export function timelineClusterKinds(items: readonly TimelineHistoryItem[], max = 3): { kinds: HistoryKind[]; more: number } {
+    const all: HistoryKind[] = [];
+    for (const e of items) if (!all.includes(e.kind)) all.push(e.kind);
+    return { kinds: all.slice(0, max), more: Math.max(0, all.length - max) };
+}
+
+/**
+ * The tracks of the history row's periods (spec 121 §4): in the order given,
+ * a period goes to track 0 when the last period there ended more than 1 px
+ * before it starts, else to track 1 (a third overlap goes to track 1 too).
+ */
+export function timelinePeriodTracks(periods: readonly { x1: number; x2: number }[]): (0 | 1)[] {
+    let end0 = -Infinity;
+    return periods.map(p => {
+        if (end0 < p.x1 - 1) { end0 = p.x2; return 0; }
+        return 1;
+    });
 }
 
 /**

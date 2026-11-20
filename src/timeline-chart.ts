@@ -16,6 +16,7 @@
 import {
     TimelineModel, TimelineRow, TimelineEvent, TimelineHistory, TimelineHistoryItem, TimelineSharedMark,
     yearToFraction, axisTicks, axisLabelStep, clusterTimelineHistory, timelineHistoryYears,
+    timelineClusterKind, timelineClusterKinds, timelinePeriodTracks,
 } from './timeline.js';
 import { strings } from './strings.js';
 import { historyKindSvg } from './history-symbols.js';
@@ -97,7 +98,7 @@ export interface TimelineSvgOptions {
     femaleColor?: string;
     /** Life-bar fill for a sex the records do not give. Screen: 'var(--unknown)'. Poster: resolved hex. */
     unknownColor?: string;
-    /** A phone's narrow layout: the history row 26 px, its clusters 22 px apart, its label without the name. */
+    /** A phone's narrow layout: the history row 26 px, its clusters 22 px apart. */
     narrow?: boolean;
     /** A shared mark's label width in px as drawn (screen: measured in the page's font); default an estimate. */
     measureLabel?: (text: string) => number;
@@ -129,14 +130,25 @@ function historyKindName(e: TimelineHistoryItem): string {
     return strings.history.kinds[e.kind] ?? strings.history.kinds.other;
 }
 
+/** The label's filter: "· 3 kinds", "· Valdorie", "· 2 filters" (spec 121 §5); empty without a filter. */
+function historyFilterText(h: TimelineHistory): string {
+    const S = strings.history;
+    const { kinds, region, regionName } = h.filtered;
+    if (kinds && region) return S.timelineFilterBoth(2);
+    if (kinds) return S.timelineFilterKinds(kinds.length);
+    if (region) return regionName ?? region;
+    return '';
+}
+
 /**
- * The focused person's history row under the axis band (§9, variant 9a): the
- * label "History · name" in the name column, a tint over the person's life,
- * each cluster the first event's kind symbol coloured by its origin, a count
- * badge for more, a period's 3 px stripe, the list on hover (<title>). A
- * cluster is a button (Enter / a click: the renderer opens the card or, on a
- * phone, a sheet) with a 44 × 44 touch target. Screen only: never printed,
- * never on the poster.
+ * The history row of the whole timeline under the axis band (spec 121 §1):
+ * the label "History ▾" as the options' button (the filter in it), a tint
+ * across the whole axis, the focused person's life as a thin line at its
+ * bottom, the periods' stripes in two tracks (§4), each cluster the kind
+ * most of its events have, coloured by its origin, a count badge for more,
+ * an event a line on hover (<title>). A cluster is a button (Enter / a
+ * click: the renderer opens the card or, on a phone, a sheet) with a 44 × 44
+ * touch target. Screen only: never printed, never on the poster.
  */
 function historyRowSvg(
     h: TimelineHistory, opts: TimelineSvgOptions, xOf: (y: number) => number, rowH: number, plotX0: number,
@@ -145,26 +157,35 @@ function historyRowSvg(
     const narrow = !!opts.narrow;
     const S = strings.history;
     const cy = TOP + rowH / 2;
-    const who = `${S.timelineRowLabel} · ${h.name}`;
+    const filterText = historyFilterText(h);
     const label = `<foreignObject x="2" y="${TOP}" width="${labelW - 6}" height="${rowH}">`
-        + `<div xmlns="http://www.w3.org/1999/xhtml" class="tl-hist-label" title="${esc(who)}"><span class="tl-hist-txt">`
-        + `<b>${esc(S.timelineRowLabel)}</b>${narrow || !h.name ? '' : ` · ${esc(h.name)}`}</span></div></foreignObject>`;
-    const bx1 = Math.max(plotX0 - 4, xOf(h.startYear) - 10);
-    const bx2 = Math.min(W - 2, xOf(h.endYear) + 10);
-    const band = `<rect class="tl-hist-band" x="${bx1.toFixed(1)}" y="${TOP + 3}" width="${Math.max(0, bx2 - bx1).toFixed(1)}"`
+        + `<div xmlns="http://www.w3.org/1999/xhtml" class="tl-hist-label">`
+        + `<button type="button" class="tl-hist-btn${filterText ? ' is-filtered' : ''}" aria-haspopup="dialog" aria-expanded="false"`
+        + ` title="${esc(filterText ? `${S.timelineOptionsAria} (${filterText})` : S.timelineOptionsAria)}">`
+        + `<b>${esc(S.timelineRowLabel)}</b>${filterText ? `<span class="tl-hist-meta">· ${esc(filterText)}</span>` : ''}`
+        + `<span class="tl-hist-caret" aria-hidden="true">▾</span></button></div></foreignObject>`;
+    const bx1 = plotX0 - 4;
+    const band = `<rect class="tl-hist-band" x="${bx1.toFixed(1)}" y="${TOP + 3}" width="${Math.max(0, W - 2 - bx1).toFixed(1)}"`
         + ` height="${rowH - 6}" rx="6"/>`;
-    const periods = h.events.filter(e => e.year2 !== undefined).map(e => {
-        const x1 = xOf(e.year), x2 = xOf(e.year2!);
-        return `<rect class="tl-hist-period is-${e.scope}" x="${x1.toFixed(1)}" y="${(cy + 8).toFixed(1)}"`
-            + ` width="${Math.max(2, x2 - x1).toFixed(1)}" height="3" rx="1.5"/>`;
-    }).join('');
+    const life = h.focus
+        ? `<rect class="tl-hist-life" x="${xOf(h.focus.startYear).toFixed(1)}" y="${TOP + rowH - 5}"`
+            + ` width="${Math.max(2, xOf(h.focus.endYear) - xOf(h.focus.startYear)).toFixed(1)}" height="2" rx="1"/>`
+        : '';
+    const spans = h.events.filter(e => e.year2 !== undefined).map(e => ({ e, x1: xOf(e.year), x2: xOf(e.year2!) }));
+    const tracks = timelinePeriodTracks(spans);
+    const periods = spans.map(({ e, x1, x2 }, i) =>
+        `<rect class="tl-hist-period is-${e.scope}" x="${x1.toFixed(1)}" y="${(cy + 7 + tracks[i] * 3.5).toFixed(1)}"`
+        + ` width="${Math.max(2, x2 - x1).toFixed(1)}" height="2.5" rx="1.25"/>`).join('');
     const clusters = clusterTimelineHistory(h.events, xOf, historyClusterGap(narrow)).map(c => {
-        const first = c.items[0];
+        const main = timelineClusterKind(c.items);
         const x = c.x;
-        const kinds = [...new Set(c.items.map(historyKindName))].join(', ');
-        const aria = S.timelineClusterAria(timelineHistoryYears(c.items), kinds);
-        const tip = c.items.map(e => `${historyItemYears(e)} ${historyKindName(e)} – ${e.text}`).join('\n');
-        const sym = historyKindSvg(first.kind, 12).replace('<svg ', `<svg x="${(x - 6).toFixed(1)}" y="${(cy - 6).toFixed(1)}" `);
+        const { kinds, more } = timelineClusterKinds(c.items);
+        const names = kinds.map(k => S.kinds[k] ?? S.kinds.other);
+        if (more) names.push(S.clusterMore(more));
+        const persons = new Set(c.items.flatMap(e => e.persons)).size;
+        const aria = S.timelineClusterAria(timelineHistoryYears(c.items), names.join(', '), persons);
+        const tip = c.items.map(e => S.timelineEventLine(historyItemYears(e), historyKindName(e), e.region, e.text)).join('\n');
+        const sym = historyKindSvg(main.kind, 12).replace('<svg ', `<svg x="${(x - 6).toFixed(1)}" y="${(cy - 6).toFixed(1)}" `);
         const n = c.items.length;
         let badge = '';
         if (n > 1) {
@@ -175,13 +196,13 @@ function historyRowSvg(
                 + ` text-anchor="middle" dominant-baseline="central" aria-hidden="true">${n}</text>`;
         }
         const ids = c.items.map(e => encodeURIComponent(e.id)).join(' ');
-        return `<g class="tl-hist is-${first.scope}" role="button" tabindex="0" aria-label="${esc(aria)}" data-hist-ids="${esc(ids)}">`
+        return `<g class="tl-hist is-${main.scope}" role="button" tabindex="0" aria-label="${esc(aria)}" data-hist-ids="${esc(ids)}">`
             + `<title>${esc(tip)}</title>`
             + `<rect class="tl-hist-hit" x="${(x - 22).toFixed(1)}" y="${(cy - 22).toFixed(1)}" width="44" height="44" fill="transparent"/>`
             + `<rect class="tl-hist-ring" x="${(x - 9).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="18" height="18" rx="5"/>`
             + `${sym}${badge}</g>`;
     }).join('');
-    return `<g class="tl-hist-row" data-hist-person="${esc(h.personId)}">${label}${band}`
+    return `<g class="tl-hist-row">${label}${band}${life}`
         + `<g aria-hidden="true">${periods}</g>${clusters}</g>`;
 }
 
@@ -418,7 +439,7 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
     const { width: W, rowH: ROW_H, labelW: LABEL_W, mode } = opts;
     const plotX0 = LABEL_W;
     const plotW = Math.max(40, W - LABEL_W - PAD_R);
-    // The focused person's history row (screen only): under the axis band, the rows below it.
+    // The history row of the whole timeline (screen only): under the axis band, the rows below it.
     const hist = mode === 'screen' ? model.history : undefined;
     const histH = hist ? historyRowHeight(!!opts.narrow) : 0;
     const H = TOP + histH + model.rows.length * ROW_H + 12;

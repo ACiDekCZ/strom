@@ -13,7 +13,7 @@
 
 import type { StromData, Person } from './types.js';
 import { placeKey } from './places.js';
-import { computePersonLifeline, type LifelinePoint } from './timeline.js';
+import { computePersonLifeline, type LifelinePoint, type TimelineHistoryItem, type TimelineLocalItem } from './timeline.js';
 import { yearOf } from './dates.js';
 import { isResidenceEventType } from './events.js';
 import { getStringsForLang, type Language } from './strings.js';
@@ -1322,6 +1322,221 @@ export function computePersonHistory(
 
     const state = cardState(p, env, { items: items.length, hidden: hidden.length, placesPending, placesMissing, kindOff: kindOff > 0 });
     return { items, hidden, placesPending, placesMissing, hasPlaces: true, state };
+}
+
+// ─── The Timeline's history row (spec 121 §0) ──────────────────────────────
+
+/** Where a person lived and the years of the life (the card's bounds), kept per person while the data stays. */
+export interface PersonResidence {
+    residence: ResidencePoint[];
+    lo: number | null;
+    hi: number | null;
+}
+
+/** A person's residence and life bounds (what computePersonHistory reads first). */
+export function personResidence(data: StromData, personId: string): PersonResidence {
+    const person = data.persons[personId as keyof typeof data.persons] as Person | undefined;
+    if (!person) return { residence: [], lo: null, hi: null };
+    const points = computePersonLifeline(data, personId);
+    const { lo, hi } = lifeBounds(person, points);
+    return { residence: residencePoints(points, person.birthPlace), lo, hi };
+}
+
+/**
+ * The region filter of the Timeline's history row (spec 121 §0): the stored
+ * region with its name in the UI language, or undefined (all regions) when
+ * none is stored or the research no longer knows it.
+ */
+export function timelineHistoryRegion(
+    p: HistoryPayload, region: string | undefined, lang: Language, regionList: readonly { id: string; name: string }[] = [],
+): { region: string; regionName: string } | undefined {
+    if (!region) return undefined;
+    const known = p.regions?.[region];
+    const ev = p.events.find(e => e.region?.id === region);
+    if (!known && !ev) return undefined;
+    const regionName = regionList.find(r => r.id === region)?.name
+        ?? pickHistoryText(known?.name ?? ev?.region?.name, lang, p.lang)?.text
+        ?? region;
+    return { region, regionName };
+}
+
+export interface TimelineHistoryEnv {
+    /** Local hide queue (§4.5). */
+    queue?: readonly HistoryHideOp[];
+    /** The origins switched on in Settings (historyKindsShown); absent: all. */
+    kinds?: HistoryKinds;
+    /** The persons' residences by id, kept by the caller while the data stays (filled here). */
+    residences?: Map<string, PersonResidence>;
+}
+
+export interface TimelineHistoryComputed {
+    /** The events of regions on the row, by year (same year: the payload's order); `persons` in the order given. */
+    events: TimelineHistoryItem[];
+    /** The history of places and the findings on each person's line, by year. */
+    local: Map<string, TimelineLocalItem[]>;
+    /** The regions of the row's events, the most events first (the options' list). */
+    regionList: { id: string; name: string; count: number }[];
+}
+
+/**
+ * The history of the whole timeline in one pass (spec 121 §0): for each
+ * person of a row the places of the life (matched to the payload once per
+ * place), each event of those places when the person lived there in its year
+ * (a period: its first year the person lived there, within the life), as the
+ * card decides it: the first of the person's places that does not hide it
+ * shows it; hidden in the whole tree or for the whole region it is nowhere.
+ * Events of a region go to the row (with the persons they concern), the
+ * history of a place and the findings to the persons' lines. The origins
+ * switched off in Settings stay out. Pure.
+ */
+export function computeTimelineHistory(
+    data: StromData, personIds: readonly string[], p: HistoryPayload, lang: Language, env: TimelineHistoryEnv = {},
+): TimelineHistoryComputed {
+    const hiddenList = effectiveHidden(p, env.queue ?? []);
+    const regionHidden = new Set<string>();
+    const treeHidden = new Set<string>();
+    const hidByEvent = new Map<string, EffectiveHidden[]>();
+    for (const h of hiddenList) {
+        if (!h.event) { if (h.region) regionHidden.add(h.region); continue; }
+        if (h.tree) { treeHidden.add(h.event); continue; }
+        const list = hidByEvent.get(h.event) ?? [];
+        list.push(h);
+        hidByEvent.set(h.event, list);
+    }
+    const order = new Map<string, number>();
+    const byId = new Map<string, HistoryEvent>();
+    p.events.forEach((e, i) => { byId.set(e.id, e); order.set(e.id, i); });
+    const texts = new Map<string, string | null>();
+    const textOf = (ev: HistoryEvent): string | null => {
+        let t = texts.get(ev.id);
+        if (t === undefined) { t = pickHistoryText(ev.text, lang, p.lang)?.text ?? null; texts.set(ev.id, t); }
+        return t;
+    };
+    const kinds = env.kinds;
+    const keyCache = new Map<string, string>();
+    const keyOf = (place: string): string => {
+        let k = keyCache.get(place);
+        if (k === undefined) { k = placeKey(place); keyCache.set(place, k); }
+        return k;
+    };
+    const matched = new Map<string, string | null>();
+    const residences = env.residences ?? new Map<string, PersonResidence>();
+    const row = new Map<string, { ev: HistoryEvent; persons: string[] }>();
+    const local = new Map<string, TimelineLocalItem[]>();
+    const placeEvents = new Map<string, Set<string>>();
+    const eventsOf = (key: string): Set<string> => {
+        let set = placeEvents.get(key);
+        if (!set) { set = new Set(p.places[key].events); placeEvents.set(key, set); }
+        return set;
+    };
+
+    for (const pid of personIds) {
+        const person = data.persons[pid as keyof typeof data.persons] as Person | undefined;
+        if (!person || person.isPlaceholder) continue;
+        let res = residences.get(pid);
+        if (!res) { res = personResidence(data, pid); residences.set(pid, res); }
+        const { residence, lo, hi } = res;
+        if (!residence.length) continue;
+
+        // The person's places matched to the payload, each key with the tree's spellings that lead to it.
+        const keys = new Map<string, string[]>();
+        for (const r of residence) {
+            const k = keyOf(r.place);
+            let key = matched.get(k);
+            if (key === undefined) { key = matchHistoryPlace(p, r.place); matched.set(k, key); }
+            if (!key) continue;
+            const spellings = keys.get(key) ?? [];
+            if (!spellings.some(s => keyOf(s) === k)) spellings.push(r.place);
+            keys.set(key, spellings);
+        }
+        if (!keys.size) continue;
+
+        const yearPlaces = new Map<number, string[]>();
+        const lived = (y: number): string[] => {
+            let v = yearPlaces.get(y);
+            if (!v) { v = placesInYear(residence, y).map(keyOf); yearPlaces.set(y, v); }
+            return v;
+        };
+        // The first year of the event the person lived in the place (within the life), or null.
+        const livedYear = (ev: HistoryEvent, place: string): number | null => {
+            const k = keyOf(place);
+            const last = ev.to !== undefined && ev.to > ev.from ? ev.to : ev.from;
+            const from = lo !== null ? Math.max(ev.from, lo) : ev.from;
+            const to = hi !== null ? Math.min(last, hi) : last;
+            for (let y = from; y <= to; y++) if (lived(y).includes(k)) return y;
+            return null;
+        };
+
+        // Each event once per person: the candidates by key, the first one that does not hide it shows it.
+        const seen = new Set<string>();
+        for (const [key, spellings] of keys) {
+            for (const id of p.places[key].events) {
+                if (seen.has(id)) continue;
+                const ev = byId.get(id);
+                if (!ev) continue;
+                // Outside the life: nowhere on it (before any place is looked at).
+                if (hi !== null && ev.from > hi) { seen.add(id); continue; }
+                if (lo !== null && (ev.to !== undefined && ev.to > ev.from ? ev.to : ev.from) < lo) { seen.add(id); continue; }
+                if (kinds && !kinds[ev.scope]) continue;
+                if (treeHidden.has(ev.id)) continue;
+                if (ev.scope === 'region' && ev.region && regionHidden.has(ev.region.id)) continue;
+                seen.add(id);
+                if (textOf(ev) === null) continue;
+                const hid = hidByEvent.get(ev.id) ?? [];
+                let open: { place: string; key: string; year: number } | null = null;
+                for (const [k2, sp2] of keys) {
+                    if (k2 !== key && !eventsOf(k2).has(id)) continue;
+                    for (const place of sp2) {
+                        const y = livedYear(ev, place);
+                        if (y === null) continue;
+                        if (hid.length && hidingFor(hid, p, ev, k2, person)) continue;
+                        if (!open || y < open.year) open = { place, key: k2, year: y };
+                    }
+                }
+                if (!open) continue;
+                if (ev.scope === 'region') {
+                    const r = row.get(ev.id);
+                    if (r) r.persons.push(pid);
+                    else row.set(ev.id, { ev, persons: [pid] });
+                } else {
+                    const item: TimelineLocalItem = {
+                        id: ev.id, year: open.year, kind: ev.kind, scope: ev.scope, place: open.place, text: textOf(ev)!,
+                    };
+                    if (ev.to !== undefined && ev.to > open.year) item.year2 = ev.to;
+                    if (open.year > ev.from) item.moved = true;
+                    if (ev.scope === 'local' && ev.local?.cite) item.source = ev.local.cite;
+                    const list = local.get(pid) ?? [];
+                    list.push(item);
+                    local.set(pid, list);
+                }
+            }
+        }
+    }
+
+    const all = [...row.values()].sort((a, b) => a.ev.from - b.ev.from || order.get(a.ev.id)! - order.get(b.ev.id)!);
+    const counts = new Map<string, { name: string; count: number }>();
+    for (const { ev } of all) {
+        if (!ev.region) continue;
+        const c = counts.get(ev.region.id);
+        if (c) c.count++;
+        else counts.set(ev.region.id, { name: pickHistoryText(ev.region.name, lang, p.lang)?.text ?? ev.region.id, count: 1 });
+    }
+    const named = counts.size >= 2;
+    const events: TimelineHistoryItem[] = all.map(({ ev, persons }) => ({
+        id: ev.id,
+        year: ev.from,
+        ...(ev.to !== undefined && ev.to > ev.from ? { year2: ev.to } : {}),
+        kind: ev.kind,
+        scope: ev.scope,
+        text: textOf(ev)!,
+        ...(ev.region ? { regionId: ev.region.id } : {}),
+        ...(named && ev.region ? { region: counts.get(ev.region.id)!.name } : {}),
+        persons,
+    }));
+    for (const list of local.values()) list.sort((a, b) => a.year - b.year || order.get(a.id)! - order.get(b.id)!);
+    const regionList = [...counts].map(([id, c]) => ({ id, ...c }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    return { events, local, regionList };
 }
 
 /**

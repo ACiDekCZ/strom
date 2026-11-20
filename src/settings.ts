@@ -8,6 +8,7 @@ import { AppSettings, BranchMarker, BRANCH_MARKERS, ThemeMode, SurnameDisplay, S
 import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields, normalizeCardPhoto } from './card-fields.js';
 import { initLanguage, Language } from './strings.js';
 import { MapKind, MAP_KINDS, isMapKind, readPlacesSort, type PlacesSort } from './places.js';
+import { HISTORY_KINDS, isHistoryKind, type HistoryKind } from './history.js';
 
 /** How many recently cited sources the picker remembers per tree. */
 export const RECENT_SOURCES_MAX = 5;
@@ -62,6 +63,17 @@ export function migrateCardSignals(stored: Record<string, unknown>,
 export interface LifelineDefaults {
     childEvents: boolean;
     history: boolean;
+}
+
+/**
+ * The Timeline's history options in a tree (spec 121 §0): the kinds shown
+ * (absent: all), the region (absent: all) and local history on the life lines
+ * (default off). This device only: never in the tree, an export, GEDCOM or a backup.
+ */
+export interface TimelineHistoryOptions {
+    kinds?: HistoryKind[];
+    region?: string;
+    local: boolean;
 }
 
 /** Per device, apart from the other settings. */
@@ -279,7 +291,38 @@ class SettingsManagerClass {
     setLifelineDefaults(treeId: string, defaults: LifelineDefaults): void {
         const all = (this.settings.lifelineByTree ??= {});
         const kinds = all[treeId]?.kinds;
-        all[treeId] = { childEvents: defaults.childEvents, history: defaults.history, ...(kinds ? { kinds } : {}) };
+        const timeline = all[treeId]?.timeline;
+        all[treeId] = { childEvents: defaults.childEvents, history: defaults.history, ...(kinds ? { kinds } : {}), ...(timeline ? { timeline } : {}) };
+        this.save();
+    }
+
+    /**
+     * The Timeline's history options of a tree (spec 121 §0), read
+     * defensively: unknown kinds dropped, all nine (or none valid) = no
+     * filter. A region the research no longer has is the caller's to drop.
+     */
+    getTimelineHistory(treeId: string | null): TimelineHistoryOptions {
+        const own = treeId ? this.settings.lifelineByTree?.[treeId]?.timeline : undefined;
+        const kinds = Array.isArray(own?.kinds) ? HISTORY_KINDS.filter(k => own!.kinds!.some(v => isHistoryKind(v) && v === k)) : null;
+        const region = typeof own?.region === 'string' && own.region ? own.region : undefined;
+        return {
+            ...(kinds && kinds.length < HISTORY_KINDS.length && (kinds.length || own!.kinds!.length === 0) ? { kinds } : {}),
+            ...(region ? { region } : {}),
+            local: own?.local === true,
+        };
+    }
+
+    setTimelineHistory(treeId: string, o: TimelineHistoryOptions): void {
+        const all = (this.settings.lifelineByTree ??= {});
+        const entry = (all[treeId] ??= {});
+        const kinds = o.kinds ? HISTORY_KINDS.filter(k => o.kinds!.includes(k)) : null;
+        const timeline = {
+            ...(kinds && kinds.length < HISTORY_KINDS.length ? { kinds } : {}),
+            ...(o.region ? { region: o.region } : {}),
+            ...(o.local ? { local: true } : {}),
+        };
+        if (Object.keys(timeline).length) entry.timeline = timeline;
+        else delete entry.timeline;
         this.save();
     }
 

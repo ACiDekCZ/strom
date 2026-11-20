@@ -476,6 +476,33 @@ export const historyMethods = uiModule({
     },
 
     /**
+     * What the Timeline's history row reads (spec 121 §0): the payload in use,
+     * the hidings waiting and the origins switched on, when the card would
+     * show the layer and its "History" chip is on (the tree's default);
+     * undefined otherwise (the layer off, no research, nothing read, the
+     * search off without events, encryption locked).
+     */
+    historyTimelineSource(): { researchId: string; payload: HistoryPayload; queue: readonly HistoryHideOp[]; kinds: HistoryKinds } | undefined {
+        if (!SettingsManager.isHistoryLayer()) return undefined;
+        const rid = activeResearchId();
+        if (!rid) return undefined;
+        if (!cache.has(rid)) {
+            void this.ensureHistoryCache(rid).then(() => this.historyChanged());
+            return undefined;
+        }
+        const payload = cache.get(rid) ?? null;
+        if (!payload) return undefined;
+        const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
+        const searchOn = this.historySearchOnNow(rid);
+        if (!historyCardShows(payload, {
+            ...(searchOn !== undefined ? { searchOn } : {}),
+            ...(status?.treeState ? { treeState: status.treeState } : {}),
+        })) return undefined;
+        if (!lifelineChips(DataManager.getCurrentTreeId()).history) return undefined;
+        return { researchId: rid, payload, queue: displayQueue(rid), kinds: this.historyKindsNow().kinds };
+    },
+
+    /**
      * The history the person page (spec 025) reads: the payload and the
      * environment the card uses, when the card would show a history layer at
      * all (the page has its own switch, on by default; the card's chip does

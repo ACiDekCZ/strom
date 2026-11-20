@@ -1,22 +1,28 @@
 /**
- * History in the Timeline view (DEV symboly-dejin §9, variant 9a): the
- * focused person's history events for the view's history row, and what a
- * cluster of that row opens — on a computer the person card on the first
- * event's row (its year unfolded), on a phone or a touch screen a bottom
- * sheet listing the cluster's events with "Open in the person card".
+ * History in the Timeline view (spec 121, after DEV symboly-dejin §9): the
+ * history row of the whole timeline — every event of a region where a person
+ * with a row lived in its year — and the history of places and the findings
+ * per person (for their life lines), and what a cluster of the row opens: on a
+ * computer the person card on the first event's row (its year unfolded), on a
+ * phone or a touch screen a bottom sheet listing the cluster's events with
+ * "Open in the person card".
  *
- * The events are the card's (historyForPerson: the layer, the tie to a
- * research, the card's "History" chip, hidings and the origin switches);
- * the row is drawn by src/timeline-chart.ts.
+ * The events are computed in one pass (computeTimelineHistory, src/history.ts)
+ * and kept until the data, the payload, the rows or the settings change: a
+ * change of focus computes nothing. The kinds and the region filter apply to
+ * the finished list (the model). The row is drawn by src/timeline-chart.ts.
  */
 
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
 import { DataManager } from '../data.js';
+import { SettingsManager } from '../settings.js';
 import { shownName } from '../person-name.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
-import { timelineHistoryYears, type TimelineHistoryItem } from '../timeline.js';
+import { yearOf } from '../dates.js';
+import { timelineHistoryYears, type TimelineHistoryItem, type TimelineHistoryInput } from '../timeline.js';
+import { computeTimelineHistory, timelineHistoryRegion, type HistoryPayload, type PersonResidence, type TimelineHistoryComputed } from '../history.js';
 import { historyKindSvg } from '../history-symbols.js';
-import type { PersonId } from '../types.js';
+import type { PersonId, StromData } from '../types.js';
 import { uiModule } from './module.js';
 
 function esc(text: string): string {
@@ -31,28 +37,69 @@ function wantsSheet(): boolean {
     return matchMedia(MQ_PHONE_BAR).matches || matchMedia('(pointer: coarse)').matches;
 }
 
+/** The persons' residences, kept while the tree's content stays (a change of focus keeps them). */
+let residences: { data: StromData; rev: number; map: Map<string, PersonResidence> } | null = null;
+/** The last computed history and what it was computed for. */
+let computed: { key: string; payload: HistoryPayload; data: StromData; result: TimelineHistoryComputed } | null = null;
+/** The events of the row last drawn (a cluster's sheet reads them). */
+let lastEvents: readonly TimelineHistoryItem[] = [];
+
+/** A person who gets a row on the Timeline (computeTimelineModel): a birth year, not a placeholder. */
+function hasRow(data: StromData, id: string): boolean {
+    const p = data.persons[id as keyof typeof data.persons];
+    return !!p && !p.isPlaceholder && yearOf(p.birthDate) !== null;
+}
+
 export const timelineHistoryMethods = uiModule({
     /**
-     * The focused person's events for the Timeline's history row, or
+     * The Timeline's history row for the given row ids (spec 121 §0), or
      * undefined when the row is not drawn at all: the layer off, the tree
      * not tied to a research, the card's "History" chip off, nothing read
-     * yet, or no event.
+     * yet. The focused person is only `focusId` (the line of the life).
      */
-    timelineHistory(personId: string | null | undefined): { personId: string; events: TimelineHistoryItem[] } | undefined {
-        if (!personId) return undefined;
-        const view = this.historyForPerson(personId);
-        if (!view?.chipOn || !view.history?.items.length) return undefined;
+    timelineHistoryAll(rowIds: readonly string[], focusId?: string | null): TimelineHistoryInput | undefined {
+        const src = this.historyTimelineSource();
+        if (!src) { lastEvents = []; return undefined; }
+        const data = DataManager.getData();
+        const rev = DataManager.getContentRevision();
+        const treeId = DataManager.getCurrentTreeId();
+        if (!residences || residences.data !== data || residences.rev !== rev) residences = { data, rev, map: new Map() };
+        const ids = rowIds.filter(id => hasRow(data, id));
+        const lang = getCurrentLanguage();
+        const key = JSON.stringify([treeId, rev, src.researchId, src.queue, src.kinds, lang, ids]);
+        if (!computed || computed.key !== key || computed.payload !== src.payload || computed.data !== data) {
+            computed = {
+                key, payload: src.payload, data,
+                result: computeTimelineHistory(data, ids, src.payload, lang, { queue: src.queue, kinds: src.kinds, residences: residences.map }),
+            };
+        }
+        const opts = SettingsManager.getTimelineHistory(treeId);
+        const region = timelineHistoryRegion(src.payload, opts.region, lang, computed.result.regionList);
+        const filter = { ...(opts.kinds ? { kinds: opts.kinds } : {}), ...(region ?? {}) };
+        lastEvents = computed.result.events;
         return {
-            personId,
-            events: view.history.items.map(i => ({
-                id: i.ev.id,
-                year: i.year,
-                ...(i.ev.to !== undefined && i.ev.to > i.ev.from ? { year2: i.ev.to } : {}),
-                kind: i.ev.kind,
-                scope: i.ev.scope,
-                text: i.text,
-            })),
+            events: computed.result.events,
+            ...(opts.local ? { local: computed.result.local } : {}),
+            ...(Object.keys(filter).length ? { filter } : {}),
+            ...(focusId ? { focusId } : {}),
         };
+    },
+
+    /** The regions of the row's events, the most events first (the options' list). */
+    timelineHistoryRegions(): readonly { id: string; name: string; count: number }[] {
+        return computed?.result.regionList ?? [];
+    },
+
+    /**
+     * A cluster of the Timeline's history row: the card (a computer) or the
+     * sheet (a phone, touch) of a person it concerns — the focused person
+     * when the first event concerns them, else the first of its rows.
+     */
+    openTimelineHistoryRow(ids: readonly string[], focusId?: string | null): void {
+        const first = lastEvents.find(e => e.id === ids[0]);
+        if (!first?.persons.length) return;
+        const personId = focusId && first.persons.includes(focusId) ? focusId : first.persons[0];
+        this.openTimelineHistory(personId, ids.filter(id => lastEvents.some(e => e.id === id && e.persons.includes(personId))));
     },
 
     /** A cluster of the Timeline's history row: the card (a computer) or the sheet (a phone, touch). */
@@ -77,7 +124,7 @@ export const timelineHistoryMethods = uiModule({
 
     /** The phone's sheet (§9 9g): "History 1886–1892 · name", the events (year · symbol · text), "Open in the person card". */
     showTimelineHistorySheet(personId: string, ids: readonly string[]): void {
-        const all = this.timelineHistory(personId)?.events ?? [];
+        const all = lastEvents;
         const items = ids.map(id => all.find(e => e.id === id)).filter((e): e is TimelineHistoryItem => !!e);
         if (!items.length) return;
         const h = strings.history;

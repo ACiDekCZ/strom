@@ -2650,7 +2650,11 @@ export interface AppSettings {
      * Per tree (spec 020 K4.5): the card timeline's default set in the tree's settings; absent = the two values above.
      * `kinds` (K8.6): only the kinds of history this tree shows otherwise than the three values below.
      */
-    lifelineByTree?: Record<string, { childEvents?: boolean; history?: boolean; kinds?: { region?: boolean; place?: boolean; local?: boolean } }>;
+    lifelineByTree?: Record<string, {
+        childEvents?: boolean; history?: boolean; kinds?: { region?: boolean; place?: boolean; local?: boolean };
+        /** The Timeline's history options (spec 121 §0): the kinds and the region shown, local history on the life lines. */
+        timeline?: { kinds?: string[]; region?: string; local?: boolean };
+    }>;
     /** Per tree (spec 039): the family line chosen in the tree view (its id), kept until ended by ×. A view setting of this device, not tree data. */
     rodByTree?: Record<string, string>;
     historyKindRegion?: boolean;  // default: true - the card's timeline shows regional history (spec 1028 §6)
