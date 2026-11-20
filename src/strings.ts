@@ -10643,6 +10643,8 @@ const stringsEN = {
         /** Its detail (a click on the indicator). */
         detailLeft: (left: number, failed: number) => `${left} to go · ${failed} not loaded`,
         detailEditable: 'The tree can be edited meanwhile.',
+        /** The same while the tree is read-only (following a research live). */
+        detailViewOnly: 'The tree can be viewed meanwhile.',
         /** The notice once the photos that did not load are known (§7): the title, and why when the research lacks them. */
         someFailed: (n: number) => `Some photos did not load (${n}).`,
         whyMissing: 'The research does not have these photos.',
@@ -20892,6 +20894,7 @@ const stringsCZ: StringsType = {
         chipFailed: (n: number) => `· ${n} nenačteno`,
         detailLeft: (left: number, failed: number) => `Zbývá ${left} · nenačteno ${failed}`,
         detailEditable: 'Strom lze mezitím upravovat.',
+        detailViewOnly: 'Strom se mezitím dá prohlížet.',
         someFailed: (n: number) => `Některé fotky se nenačetly (${n}).`,
         whyMissing: 'Výzkum tyto fotky nemá.',
         waiting: 'Čeká se na fotky',
@@ -31056,6 +31059,7 @@ const stringsDE: StringsType = {
         chipFailed: (n: number) => `· ${n} nicht geladen`,
         detailLeft: (left: number, failed: number) => `Noch ${left} · ${failed} nicht geladen`,
         detailEditable: 'Der Stammbaum kann inzwischen bearbeitet werden.',
+        detailViewOnly: 'Der Stammbaum kann inzwischen angesehen werden.',
         someFailed: (n: number) => `Einige Fotos wurden nicht geladen (${n}).`,
         whyMissing: 'Die Forschung hat diese Fotos nicht.',
         waiting: 'Warten auf Fotos',

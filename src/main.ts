@@ -894,7 +894,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     UI.initResearchPromo();
 
     // The tree's photos on their way: "Photos k / n" and the notice of those that did not load (spec 116 §6, §7).
-    initImageLoadChip(() => DataManager.getCurrentTreeId());
+    initImageLoadChip(() => DataManager.getCurrentTreeId(), () => DataManager.isReadOnly() || DataManager.isTreeLocked());
 
     // History in the life timeline (on by default): bridge statuses, tree switches.
     UI.initHistoryLayer();

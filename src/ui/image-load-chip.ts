@@ -226,7 +226,12 @@ export function suspendImageLoadChip(): () => void {
 }
 
 /** The indicator in the page (the main window, once). `currentTreeId`: the tree open now. */
-export function initImageLoadChip(currentTreeId: () => string | null): void {
+/** The detail's closing line: what can be done with the tree while its photos come (read-only while a research is followed live). */
+export function detailNote(readOnly: boolean): string {
+    return readOnly ? strings.photos.detailViewOnly : strings.photos.detailEditable;
+}
+
+export function initImageLoadChip(currentTreeId: () => string | null, readOnly: () => boolean = () => false): void {
     if (model || typeof document === 'undefined') return;
     const chip = document.createElement('button');
     chip.type = 'button';
@@ -268,7 +273,7 @@ export function initImageLoadChip(currentTreeId: () => string | null): void {
         left.textContent = P.detailLeft(view.left, view.failed);
         const note = document.createElement('span');
         note.className = 'img-load-pop-note';
-        note.textContent = P.detailEditable;
+        note.textContent = detailNote(readOnly());
         pop.replaceChildren(head, left, note);
         placePop();
     };

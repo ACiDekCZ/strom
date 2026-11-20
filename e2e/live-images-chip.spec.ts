@@ -140,13 +140,13 @@ test.describe('"Photos k / n" and the notice of photos not loaded (spec 116 §6,
         expect(Math.abs(box.x + box.width / 2 - 720)).toBeLessThan(2);
         expect(box.y).toBeLessThan(200);
 
-        // Its detail: what is left, and that the tree can be edited; Esc closes it, a click beside too.
+        // Its detail: what is left, and that the tree (read-only while followed live) can be viewed; Esc closes it, a click beside too.
         await chip.click();
         const pop = page.locator('#img-load-pop');
         await expect(pop).toBeVisible();
         await expect(pop).toContainText('Photos 0 / 3');
         await expect(pop).toContainText('3 to go · 0 not loaded');
-        await expect(pop).toContainText('The tree can be edited meanwhile.');
+        await expect(pop).toContainText('The tree can be viewed meanwhile.');
         await expect(chip).toHaveAttribute('aria-expanded', 'true');
         await page.keyboard.press('Escape');
         await expect(pop).toBeHidden();

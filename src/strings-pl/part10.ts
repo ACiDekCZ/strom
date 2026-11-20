@@ -143,6 +143,7 @@ export const plPart10: Pick<StringsType, 'busy' | 'photos'> = {
         chipFailed: (n: number) => `· nie wczytano: ${n}`,
         detailLeft: (left: number, failed: number) => `Pozostało ${left} · nie wczytano: ${failed}`,
         detailEditable: 'Drzewo można w tym czasie edytować.',
+        detailViewOnly: 'Drzewo można w tym czasie przeglądać.',
         someFailed: (n: number) => `Niektóre zdjęcia nie zostały wczytane (${n}).`,
         whyMissing: 'Badanie nie ma tych zdjęć.',
         waiting: 'Oczekiwanie na zdjęcia',

@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-    CHIP_SHOW_MS, ImageLoadChipModel, chipWords, failedReasonText, type ChipDeps, type ChipView,
+    CHIP_SHOW_MS, ImageLoadChipModel, chipWords, detailNote, failedReasonText, type ChipDeps, type ChipView,
 } from '../ui/image-load-chip.js';
 import { BUSY_DONE_MS } from '../ui/busy.js';
 import { IMAGE_ANSWER_MS } from '../research-image-refs.js';
@@ -58,6 +58,20 @@ describe('the indicator\'s words', () => {
         expect(getStringsForLang('de').photos.chipLabel).toBe('Fotos');
         expect(getStringsForLang('pl').photos.chipLabel).toBe('Zdjęcia');
         expect(getStringsForLang('pl').photos.chipFailed(3)).toBe('· nie wczytano: 3');
+    });
+
+    it('the detail says the tree can only be viewed while it is read-only (following live), edited otherwise', () => {
+        setLanguage('en');
+        expect(detailNote(true)).toBe('The tree can be viewed meanwhile.');
+        expect(detailNote(false)).toBe('The tree can be edited meanwhile.');
+        setLanguage('cs');
+        expect(detailNote(true)).toBe('Strom se mezitím dá prohlížet.');
+        expect(detailNote(false)).toBe('Strom lze mezitím upravovat.');
+        for (const lang of ['de', 'pl'] as const) {
+            const P = getStringsForLang(lang).photos;
+            expect(P.detailViewOnly).not.toBe(P.detailEditable);
+            expect(P.detailViewOnly.length).toBeGreaterThan(0);
+        }
     });
 });
 
