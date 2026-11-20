@@ -122,6 +122,6 @@ describe('a research file whose variants say what the tree records already (_INT
         const there = stabilizeIds(data, here);
         expect(Object.keys(there.persons).sort()).toEqual(Object.keys(here.persons).sort());
         expect(diffByPerson(here, there)).toEqual([]);
-        expect(diffValues(here, there)).toEqual({ rows: [], addedPersons: 0, addedFacts: 0, filled: [] });
+        expect(diffValues(here, there)).toEqual({ rows: [], addedPersons: 0, addedFacts: 0, filled: [], numbersAdded: { image: 0, folio: 0 } });
     });
 });

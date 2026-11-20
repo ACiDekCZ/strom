@@ -78,6 +78,7 @@ const FOLIO_WORDS = ['folium', 'folio', 'fol\\.?', 'f\\.', 'pag\\.?', 'p\\.', 's
 const IMAGE_WORDS = ['snímek', 'snimek', 'sn\\.', 'image', 'img\\.?', 'scan', 'skan', 'bild', 'obraz', 'obr\\.', 'kadr'];
 const FOLIO = new RegExp(`${START}(?:${FOLIO_WORDS.join('|')})(?![\\p{L}\\p{M}])\\s*(${FOLIO_NUMBER})`, 'iu');
 const IMAGE = new RegExp(`${START}(?:${IMAGE_WORDS.join('|')})(?![\\p{L}\\p{M}])\\s*(?:(?:č\\.|c\\.|nr\\.?|no\\.)\\s*)?(${IMAGE_NUMBER})`, 'iu');
+const IMAGE_ALL = new RegExp(IMAGE.source, 'giu');
 const BARE_FOLIO = new RegExp(`^\\s*(${FOLIO_NUMBER})\\s*$`, 'iu');
 
 /** A part of a location: as it stands, its number, where it is in the text. */
@@ -193,6 +194,31 @@ export function recognizeLocation(
 
 // ---- Composing the PAGE ----
 
+/** The numbers of an image or range of them ("54" → [54], "54–55" → [54, 55]); null for another form ("34a") or a range too long. */
+function imageNumbers(text: string): number[] | null {
+    const m = /^\s*(\d+)\s*(?:[-–—]\s*(\d+)\s*)?$/u.exec(text);
+    if (!m) return null;
+    const from = Number(m[1]);
+    const to = m[2] !== undefined ? Number(m[2]) : from;
+    if (to < from || to - from > 500) return null;
+    return Array.from({ length: to - from + 1 }, (_, k) => from + k);
+}
+
+/**
+ * Whether a location says the image itself: an image part of it with the same
+ * number, or (a range) every number of the range named by its image parts
+ * ("fol. 55 (obr. 54 …) – fol. 56 (obr. 55 …)" says image 54–55).
+ */
+function namesImage(text: string, image: string, imagePart: string): boolean {
+    const t = text.normalize('NFC');
+    const named = [...t.matchAll(IMAGE_ALL)].map(m => m[1]!);
+    if (named.some(n => sameNumber(n, image)) || says(t, imagePart)) return true;
+    const want = imageNumbers(image);
+    if (!want || want.length < 2) return false;
+    const have = new Set(named.flatMap(n => imageNumbers(n) ?? []));
+    return want.every(n => have.has(n));
+}
+
 /** The word of an image in a language ("snímek", "image", "Bild", "skan"): the PAGE's and the long place line's. */
 export function imageWord(lang: Language = getCurrentLanguage()): string {
     return getStringsForLang(lang).sources.imageWord;
@@ -208,8 +234,11 @@ export function imageWord(lang: Language = getCurrentLanguage()): string {
  * another word ("scan 101" beside image 101), stays as the reference says it;
  * another number gives way to the field (given later, on purpose). The
  * reference itself is never changed (`_STROM_LOCATOR` carries it whole).
+ * An image the research found from its scans (`imageDerived`) cuts nothing:
+ * it is added when the location does not name it (a range when it names
+ * each of its numbers).
  */
-export function composePage(s: Pick<Source, 'folio' | 'image' | 'reference'>, lang: Language = getCurrentLanguage()): string | undefined {
+export function composePage(s: Pick<Source, 'folio' | 'image' | 'reference' | 'imageDerived'>, lang: Language = getCurrentLanguage()): string | undefined {
     const folio = s.folio?.trim();
     const image = s.image?.trim();
     if (!folio && !image) return s.reference;
@@ -226,8 +255,11 @@ export function composePage(s: Pick<Source, 'folio' | 'image' | 'reference'>, la
             if (n !== undefined && sameNumber(n, f.number)) folioSaid = true;
             else rest = cut(rest, f);
         } else if (folio && /\p{L}/u.test(folio) && says(t, folio)) folioSaid = true;
-        const i = image ? part(IMAGE, rest) : undefined;
-        if (i) {
+        // An image the research found from its scans (imageDerived): another image the location names
+        // stays (an index's page, said on purpose); the image is added only when the location does not say it.
+        const i = image && !s.imageDerived ? part(IMAGE, rest) : undefined;
+        if (image && s.imageDerived) imageSaid = namesImage(rest, image, imagePart!);
+        else if (i) {
             if (sameNumber(image!, i.number)) imageSaid = true;
             else rest = cut(rest, i);
         } else if (imagePart && says(rest, imagePart)) imageSaid = true;
@@ -331,7 +363,7 @@ export function sourcePlaceSearchText(s: SourcePlace): string {
  * research given the PAGE gives it back as the whole location). Without the
  * call number, which is the book's and lived in the note before.
  */
-export function sourcePlaceKey(s: Pick<Source, 'folio' | 'image' | 'reference'>, lang: Language = getCurrentLanguage()): string {
+export function sourcePlaceKey(s: Pick<Source, 'folio' | 'image' | 'reference' | 'imageDerived'>, lang: Language = getCurrentLanguage()): string {
     return (composePage(s, lang) ?? '').trim();
 }
 

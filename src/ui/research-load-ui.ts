@@ -135,6 +135,9 @@ export const researchLoadMethods = uiModule({
         const overwrite = !decided && (!!opts.off || (opts.notWritten ?? 0) > 0);
         const warn = [opts.off ? s.offOverwrite : '', (opts.notWritten ?? 0) > 0 ? s.loadOverNotWritten(opts.notWritten!) : ''].filter(Boolean);
         const added = diff.addedPersons + diff.addedFacts > 0 ? s.loadAdded(diff.addedPersons, diff.addedFacts) : '';
+        // A number only added to sources' places: a sentence each, not a row at every citation (not counted as changes).
+        const numbers = [diff.numbersAdded.image ? s.loadImageNumbers(diff.numbersAdded.image) : '',
+            diff.numbersAdded.folio ? s.loadFolioNumbers(diff.numbersAdded.folio) : ''].filter(Boolean);
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = LOAD_ID;
@@ -158,6 +161,7 @@ export const researchLoadMethods = uiModule({
                     </div>
                     ${more ? `<button type="button" class="link-button research-load-more" id="research-load-more" aria-expanded="false" data-more-label="${esc(s.loadMore(more))}">${esc(s.loadMore(more))}</button>` : ''}`
                     : `<p class="research-load-nothing">${esc(s.nothingOverwritten)}</p>`}
+                    ${numbers.map(n => `<p class="research-load-numbers">${esc(n)}</p>`).join('')}
                     ${added ? `<p class="research-load-added">${esc(added)}</p>` : ''}
                     ${opts.images ? `
                     <label class="research-load-images"><input type="checkbox" id="research-load-images"${opts.images.checked ? ' checked' : ''}>

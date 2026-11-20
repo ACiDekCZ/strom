@@ -1442,6 +1442,8 @@ interface RawSource {
     /** `1 _STROM_FOLIO` / `_STROM_IMAGE` / `_STROM_LOCATOR` (spec 075): with any of them the fields hold, not PAGE. */
     folio?: string;
     image?: string;
+    /** `2 _STROM_DERIVED Y` under `_STROM_IMAGE`: the research found the image from its scans. */
+    imageDerived?: boolean;
     locator?: string;
     /** The record carried any of the `_STROM_FOLIO/_IMAGE/_LOCATOR` lines (its PAGE is composed of them). */
     placeFields?: boolean;
@@ -4207,6 +4209,8 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
                 } else if (currentSubTag === IMPORT_TAG && ORIGINAL_ID_TAGS.has(tag) && value.trim()
                     && (src.importIdLines?.length ?? 0) < ID_LINES_MAX) {
                     (src.importIdLines ??= []).push({ tag, value: value.trim() });
+                } else if (currentSubTag === '_STROM_IMAGE' && tag === '_STROM_DERIVED') {
+                    if (value.trim().toUpperCase() === 'Y') src.imageDerived = true;
                 } else if (currentSubTag === '_STROM_IMG_OMITTED' && tag === '_STROM_CLIP') {
                     const mark = value.trim();
                     if (/^[A-Za-z0-9-]{1,32}$/.test(mark) && !src.heldClips?.includes(mark)) {
@@ -5657,6 +5661,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
         if (raw.callNumber) src.callNumber = raw.callNumber;
         if (raw.folio) src.folio = raw.folio;
         if (raw.image) src.image = raw.image;
+        if (raw.image && raw.imageDerived) src.imageDerived = true;
         if (raw.reference) src.reference = raw.reference;
         if (raw.url) src.url = raw.url;
         if (raw.note) src.note = raw.note;

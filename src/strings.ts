@@ -2110,6 +2110,10 @@ const stringsEN = {
         loadColChange: 'here → from research',
         loadMore: (n: number) => `and ${n} more`,
         loadHide: 'Hide',
+        /** Sources the research's version only adds an image number to (the location the same): one sentence, no rows. */
+        loadImageNumbers: (n: number) => `Image number added in ${nEn(n, 'source', 'sources')}.`,
+        /** The same for a folio. */
+        loadFolioNumbers: (n: number) => `Folio added in ${nEn(n, 'source', 'sources')}.`,
         loadAdded: (p: number, f: number) => `Added from the research: ${[p ? `+ ${nEn(p, 'person', 'people')}` : '', f ? nEn(f, 'fact', 'facts') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Nothing here will be overwritten.',
         /** A person whose sex the research leaves unknown (SEX U): the tree's stays. */
@@ -12520,6 +12524,8 @@ const stringsCZ: StringsType = {
         loadColChange: 'tady → z výzkumu',
         loadMore: (n: number) => `a dalších ${n}`,
         loadHide: 'Skrýt',
+        loadImageNumbers: (n: number) => `U ${nCs(n, 'pramene', 'pramenů', 'pramenů')} přibylo číslo snímku.`,
+        loadFolioNumbers: (n: number) => `U ${nCs(n, 'pramene', 'pramenů', 'pramenů')} přibylo folium.`,
         loadAdded: (p: number, f: number) => `Z výzkumu přibude: ${[p ? `+ ${nCs(p, 'osoba', 'osoby', 'osob')}` : '', f ? nCs(f, 'údaj', 'údaje', 'údajů') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Tady se nic nepřepíše.',
         loadBackupNote: 'Před načtením se uloží záloha, půjde vrátit.',
@@ -22750,6 +22756,8 @@ const stringsDE: StringsType = {
         loadColChange: 'hier → aus der Forschung',
         loadMore: (n: number) => `und ${n} weitere`,
         loadHide: 'Ausblenden',
+        loadImageNumbers: (n: number) => `Bei ${nDe(n, 'Quelle', 'Quellen')} ist die Bildnummer hinzugekommen.`,
+        loadFolioNumbers: (n: number) => `Bei ${nDe(n, 'Quelle', 'Quellen')} ist das Folio hinzugekommen.`,
         loadAdded: (p: number, f: number) => `Aus der Forschung kommen hinzu: ${[p ? `+ ${nDe(p, 'Person', 'Personen')}` : '', f ? nDe(f, 'Angabe', 'Angaben') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Hier wird nichts überschrieben.',
         loadBackupNote: 'Vor dem Laden wird gesichert; ein Zurück ist möglich.',

@@ -232,3 +232,32 @@ test.describe('loading the research version: a note line by line', () => {
         expect(await note.locator('del').evaluate(e => getComputedStyle(e).textDecorationLine)).toBe('line-through');
     });
 });
+
+test.describe('loading the research version: a number added to a source', () => {
+    const CITED = ['1 BIRT', '2 DATE 1866', '2 SOUR @S0001@', '1 OCCU kovář', '2 SOUR @S0001@'];
+    const withImage = (ged: string): string => ged.replace('1 PAGE fol. 41\n1 REFN S0001',
+        '1 PAGE fol. 41\n1 _STROM_IMAGE 51\n2 _STROM_DERIVED Y\n1 _STROM_LOCATOR fol. 41\n1 REFN S0001');
+    for (const width of [1440, 390]) {
+        test(`${width} px: the image found from the scans is one sentence, no row at each citation; loaded, the source has it`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 900 });
+            await page.clock.install();
+            await openResearch(page, { ged: researchGed(undefined, CITED) });
+            const bridge = await fakeBridge(page, { accepts: ACCEPTS });
+            await poll(page);
+            bridge.head = NEW_HEAD;
+            bridge.treeGed = withImage(researchGed(NEW_HEAD, CITED));
+            await poll(page);
+            await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+            await expect(dialog(page)).toBeVisible();
+            await expect(dialog(page).locator('tbody tr')).toHaveCount(0);
+            await expect(dialog(page).locator('.research-load-nothing')).toBeVisible();
+            await expect(dialog(page).locator('.research-load-numbers')).toHaveText(['Image number added in 1 source.']);
+            expect(await dialog(page).locator('.modal').evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
+            await dialog(page).locator('#research-load-ok').click();
+            await expect.poll(() => head(page)).toBe(NEW_HEAD);
+            const src = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().sources ?? {}) as any[])
+                .find(s => s.title === 'Oddací matrika Čapkov'));
+            expect(src).toMatchObject({ image: '51', imageDerived: true, reference: 'fol. 41' });
+        });
+    }
+});

@@ -2345,7 +2345,11 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // The place field by field, for a Strom app and a research that read them (an empty one is not written).
         if (options.sourceFields !== false && !options.backTo && hasEntryFields(source)) {
             if (source.folio?.trim()) pushWrapped(lines, 1, '_STROM_FOLIO', source.folio.trim());
-            if (source.image?.trim()) pushWrapped(lines, 1, '_STROM_IMAGE', source.image.trim());
+            if (source.image?.trim()) {
+                pushWrapped(lines, 1, '_STROM_IMAGE', source.image.trim());
+                // The research's own image (found from its scans) stays its own on the way back.
+                if (source.imageDerived) lines.push('2 _STROM_DERIVED Y');
+            }
             if (source.reference?.trim()) pushLongValue(lines, 1, '_STROM_LOCATOR', source.reference);
         }
         if (source.refn) pushWrapped(lines, 1, 'REFN', source.refn);

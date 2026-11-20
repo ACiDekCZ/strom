@@ -12,7 +12,7 @@ import { collectPlaces } from './places.js';
 import { factValueSignature, handedConfirmations } from './verify.js';
 import type { FactHolder } from './import-origin.js';
 import { getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
-import { sourcePlaceDiffers, sourcePlaceKey } from './source-location.js';
+import { composePage, sourcePlaceDiffers, sourcePlaceKey } from './source-location.js';
 
 export type ChangeKind =
     | 'added' | 'deleted' | 'name' | 'gender' | 'birth' | 'death' | 'marriage' | 'event'
@@ -478,8 +478,8 @@ export function diffOther(base: StromData | null, current: StromData): OtherChan
             if ([...ea.keys()].some(id => !eb.has(id))) kinds.add('excerptRemoved');
             // Anything else of the entry (the archive, the date, a re-cropped excerpt, the reading…).
             // Not the user's: the record it was in a loaded file, its author and tags as written there.
-            const { title: _t1, transcript: _r1, reference: _p1, callNumber: _c1, folio: _f1, image: _i1, excerpts: ex1, originalIds: _o1, gedcomAuthor: _a1, gedcomText: _x1, gedcomExtra: _g1, ...restA } = a;
-            const { title: _t2, transcript: _r2, reference: _p2, callNumber: _c2, folio: _f2, image: _i2, excerpts: ex2, originalIds: _o2, gedcomAuthor: _a2, gedcomText: _x2, gedcomExtra: _g2, ...restB } = b;
+            const { title: _t1, transcript: _r1, reference: _p1, callNumber: _c1, folio: _f1, image: _i1, imageDerived: _d1, excerpts: ex1, originalIds: _o1, gedcomAuthor: _a1, gedcomText: _x1, gedcomExtra: _g1, ...restA } = a;
+            const { title: _t2, transcript: _r2, reference: _p2, callNumber: _c2, folio: _f2, image: _i2, imageDerived: _d2, excerpts: ex2, originalIds: _o2, gedcomAuthor: _a2, gedcomText: _x2, gedcomExtra: _g2, ...restB } = b;
             const sameExcerpts = (ex1 ?? []).filter(e => eb.has(e.id)).every(e => !differs(e, eb.get(e.id)));
             if (differs(restA, restB) || !sameExcerpts) kinds.add('other');
         }
@@ -1084,6 +1084,12 @@ export interface ValueDiff {
      * it comes as a row with `here` empty, not here.
      */
     filled: ValueChange[];
+    /**
+     * Sources whose place the research's version only adds a number to (an
+     * image or a folio it lacked here, the location otherwise the same): said
+     * as one sentence each, never as citation rows (placeNumberAdded).
+     */
+    numbersAdded: { image: number; folio: number };
 }
 
 const str = (v: unknown): string => typeof v === 'string' ? v.trim() : '';
@@ -1127,13 +1133,38 @@ function citedKey(id: string, sources: Record<string, Source>): string {
 }
 
 /**
+ * What the place of `b` only adds to that of `a`: an image or a folio `a` has
+ * not (each other field the same: the call number, the folio or image both
+ * have), the location otherwise the same — its rest as written, or the page
+ * composed without what was added. Null when `b` changes anything else of the
+ * place, or adds nothing.
+ */
+export function placeNumberAdded(a: Source, b: Source): { image: boolean; folio: boolean } | null {
+    const t = (v: string | undefined): string => (v ?? '').trim();
+    if (t(a.callNumber) !== t(b.callNumber)) return null;
+    const added = { image: false, folio: false };
+    for (const k of ['image', 'folio'] as const) {
+        if (t(a[k]) === t(b[k])) continue;
+        if (t(a[k]) || !t(b[k])) return null;
+        added[k] = true;
+    }
+    if (!added.image && !added.folio) return null;
+    if (t(a.reference) === t(b.reference)) return added;
+    const key = sourcePlaceKey(a);
+    const without = (folio: boolean): string => (composePage({ ...b, ...(added.image ? { image: undefined } : {}),
+        ...(folio && added.folio ? { folio: undefined } : {}) }) ?? '').trim();
+    return without(false) === key || without(true) === key ? added : null;
+}
+
+/**
  * The same source record names another page there (the page of a record's first citation is kept on the
- * record itself, so the research changing it keeps the id).
+ * record itself, so the research changing it keeps the id). A number only added to the place is no other
+ * page (placeNumberAdded: a sentence of the dialog, not a row at every citation).
  */
 function pageMoved(id: string, as: Record<string, Source>, bs: Record<string, Source>): boolean {
     const x = as[id];
     const y = bs[id];
-    return !!x && !!y && sourcePlaceDiffers(x, y);
+    return !!x && !!y && sourcePlaceDiffers(x, y) && !placeNumberAdded(x, y);
 }
 
 /**
@@ -1313,5 +1344,13 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
     }
     const added = Object.values(tp).filter(p => !p.isPlaceholder && !hp[p.id]);
     addedFacts += added.reduce((n, p) => n + factsOf(p), 0);
-    return { rows, addedPersons: added.length, addedFacts, filled };
+    // Sources the research's version only adds an image or a folio to: counted, one sentence each.
+    const numbersAdded = { image: 0, folio: 0 };
+    for (const [id, a] of Object.entries(hs)) {
+        const b = ts[id];
+        const more = b && sourcePlaceDiffers(a, b) ? placeNumberAdded(a, b) : null;
+        if (more?.image) numbersAdded.image++;
+        if (more?.folio) numbersAdded.folio++;
+    }
+    return { rows, addedPersons: added.length, addedFacts, filled, numbersAdded };
 }

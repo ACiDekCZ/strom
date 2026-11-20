@@ -254,7 +254,7 @@ export function remapCitations(data: StromData, remap: ReadonlyMap<string, strin
  * — or was changed by hand since — and is never joined.
  */
 const DERIVED_FIELDS = new Set([
-    'id', 'title', 'repository', 'callNumber', 'folio', 'image', 'reference', 'url', 'note', 'quality',
+    'id', 'title', 'repository', 'callNumber', 'folio', 'image', 'imageDerived', 'reference', 'url', 'note', 'quality',
     'recordDate', 'importId', 'originalIds', 'gedcomExtra', 'gedcomAuthor',
 ]);
 

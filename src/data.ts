@@ -3598,6 +3598,8 @@ class DataManagerClass {
         if (updates.title !== undefined && !updates.title.trim()) return false;
 
         this.beginMutation();
+        // An image changed by hand is no longer the one the research found from its scans.
+        if ('image' in updates && (updates.image ?? '').trim() !== (src.image ?? '').trim()) updates = { ...updates, imageDerived: undefined };
         Object.assign(src, updates);
         // Explicit undefined = field emptied (see updateLifeEvent).
         dropUndefinedKeys(src);

@@ -575,6 +575,8 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         loadColChange: 'tutaj → z badania',
         loadMore: (n: number) => `i ${n} więcej`,
         loadHide: 'Ukryj',
+        loadImageNumbers: (n: number) => `Przy ${nPl(n, 'źródle', 'źródłach', 'źródłach')} przybył numer skanu.`,
+        loadFolioNumbers: (n: number) => `Przy ${nPl(n, 'źródle', 'źródłach', 'źródłach')} przybyło folio.`,
         loadAdded: (p: number, f: number) => `Z badania przybędzie: ${[p ? `+ ${nPl(p, 'osoba', 'osoby', 'osób')}` : '', f ? nPl(f, 'dana', 'dane', 'danych') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Nic tutaj nie zostanie nadpisane.',
         loadBackupNote: 'Przed wczytaniem zapisywana jest kopia zapasowa; można ją przywrócić.',

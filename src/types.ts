@@ -415,6 +415,15 @@ export interface Source {
      */
     image?: string;
     /**
+     * The image number is the research's, found from the scans it keeps of the
+     * entry, not written by anyone (GEDCOM `2 _STROM_DERIVED Y` under
+     * `_STROM_IMAGE`). The location may then name another image (an index's
+     * page) on purpose: composing the PAGE cuts nothing of it, it only adds
+     * the image when the location does not say it (src/source-location.ts).
+     * Dropped when the image is changed by hand.
+     */
+    imageDerived?: boolean;
+    /**
      * "Further location" — the rest of where the entry stands (its number, a
      * column) when the source has any of callNumber / folio / image; without
      * them (an older source) the whole location as written ("fol. 12v, č. 5,
@@ -1756,6 +1765,9 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  * Person.marriedFirstName (3.26) came without a bump too: an older app keeps
  * it on a re-save and shows the married name with the person's own given
  * name meanwhile; its GEDCOM export writes that name so.
+ * Source.imageDerived (3.31) came without a bump too: an older app keeps
+ * sources whole, so the mark stays on a re-save; it only composes the PAGE as
+ * it did before (cutting another image number the location names).
  * Source.reading / readingEntry / readingSha (3.14) came without a bump too: an
  * older app loads sources whole (migrateData) and edits them in place
  * (updateSource), so it keeps the reading's marks on a re-save. Its merge keeps

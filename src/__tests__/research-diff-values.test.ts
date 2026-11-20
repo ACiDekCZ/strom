@@ -63,6 +63,7 @@ describe('values the research version would overwrite', () => {
         expect(diffValues(here, there)).toEqual({
             rows: [], addedPersons: 0, addedFacts: 1,
             filled: [{ personId: 'a', name: 'Ida Berg', field: 'birthDate', here: '', there: '1825', date: true }],
+            numbersAdded: { image: 0, folio: 0 },
         });
     });
 
@@ -81,7 +82,7 @@ describe('values the research version would overwrite', () => {
             ev('t3', { type: 'occupation', note: 'sedlák' }),
             ev('t4', { type: 'residence', place: 'Voss', date: '1950' }),
         ] })]);
-        expect(diffValues(here, same)).toEqual({ rows: [], addedPersons: 0, addedFacts: 0, filled: [] });
+        expect(diffValues(here, same)).toEqual({ rows: [], addedPersons: 0, addedFacts: 0, filled: [], numbersAdded: { image: 0, folio: 0 } });
         // Changed there: the occupation's value (one of its type each side), the residence's place (same date);
         // the custom one gone; a new one added.
         const there = tree([person('a', 'Ida', { events: [
