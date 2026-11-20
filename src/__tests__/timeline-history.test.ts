@@ -13,7 +13,8 @@ import {
 } from '../history.js';
 import {
     computeTimelineModel, filterTimelineHistory, timelineHistoryRowState, timelineHistoryFacets, timelineFilterKindCount,
-    toggleTimelineKind, clearTimelineFilter, timelineLocalOptionState,
+    toggleTimelineKind, clearTimelineFilter, timelineLocalOptionState, timelineLocalX, layoutTimelineLocal,
+    LOCAL_DENSE_PX_PER_YEAR, type TimelineLocalItem,
 } from '../timeline.js';
 import { buildTimelineSvg, historyFilterText } from '../timeline-chart.js';
 import { setLanguage } from '../strings.js';
@@ -395,6 +396,132 @@ describe('the options of the history row (§5) and its states (§10)', () => {
         expect(timelineLocalOptionState({ place: false, local: false }, true)).toBe('off');
         expect(timelineLocalOptionState({ place: true, local: false }, false)).toBe('none');
         expect(timelineLocalOptionState({ place: false, local: true }, true)).toBe('ok');
+    });
+});
+
+describe('local history on the life lines (§4, §6–§8)', () => {
+    const r = computeTimelineHistory(d, ALL, payload(base), 'en');
+    const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const model = (kinds?: ('war' | 'epidemic' | 'disaster')[]) => computeTimelineModel(d, ALL, 2026, { history: {
+        events: r.events, local: r.local, ...(kinds ? { filter: { kinds } } : {}),
+    } });
+    const svg = (m: ReturnType<typeof model>, o: { width?: number; narrow?: boolean; mode?: 'screen' | 'poster' } = {}) => buildTimelineSvg(m, {
+        esc, width: o.width ?? 900, rowH: o.narrow ? 28 : 30, labelW: o.narrow ? 96 : 160, mode: o.mode ?? 'screen', narrow: !!o.narrow,
+    });
+    /** The row group of a person: from its opening tag to the next row's. */
+    const rowOf = (s: string, id: string): string => {
+        const i = s.indexOf(`data-person-id="${id}"`);
+        const j = s.indexOf('<g class="timeline-bar', i);
+        return s.slice(i, j < 0 ? undefined : j);
+    };
+    const xOf = (axis: { minYear: number; maxYear: number }, width: number, labelW: number) => (y: number) =>
+        labelW + (y - axis.minYear) / (axis.maxYear - axis.minYear) * (width - labelW - 16);
+
+    it('a symbol 10 px or nearer a dot goes 11 px right of it, or left when the right leaves the bar; never past the bar\'s end', () => {
+        expect(timelineLocalX(105, [100], 50, 300)).toBe(111);
+        expect(timelineLocalX(95, [100], 50, 300)).toBe(111);
+        expect(timelineLocalX(110, [100], 50, 300)).toBe(110);
+        // The right would leave the bar: the left.
+        expect(timelineLocalX(103, [100], 50, 105)).toBe(89);
+        // The right meets another dot, the left is free.
+        expect(timelineLocalX(102, [100, 113], 50, 300)).toBe(89);
+        // Past the bar's end (a living person's arrow, a fading end): at the end, then aside from a dot there.
+        expect(timelineLocalX(320, [], 50, 300)).toBe(300);
+        expect(timelineLocalX(320, [296], 50, 300)).toBe(285);
+    });
+
+    it('a line groups its symbols like the history row (16 px, a phone 22 px); below 1.5 px per year one symbol with them all', () => {
+        const item = (id: string, year: number, o: Partial<TimelineLocalItem> = {}): TimelineLocalItem =>
+            ({ id, year, kind: 'disaster', scope: 'place', place: 'Zelvar', text: id, ...o });
+        const items = [item('a', 1850), item('b', 1855), item('c', 1857), item('d', 1880)];
+        const at = (px: number) => (y: number) => 200 + (y - 1800) * px;
+        const desk = layoutTimelineLocal(items, { xOf: at(3), barX1: 200, barX2: 800, obstacles: [], gap: 16, pxPerYear: 3 });
+        expect(desk.marks.map(m => [m.x, m.items.map(e => e.id)])).toEqual([[350, ['a', 'b']], [371, ['c']], [440, ['d']]]);
+        const phone = layoutTimelineLocal(items, { xOf: at(3), barX1: 200, barX2: 800, obstacles: [], gap: 22, pxPerYear: 3 });
+        expect(phone.marks.map(m => m.items.map(e => e.id))).toEqual([['a', 'b', 'c'], ['d']]);
+        // A symbol stepped aside is grouped where it stands, the group at its first symbol.
+        const aside = layoutTimelineLocal(items, { xOf: at(3), barX1: 200, barX2: 800, obstacles: [352], gap: 16, pxPerYear: 3 });
+        expect(aside.marks.map(m => [m.x, m.items.map(e => e.id)])).toEqual([[363, ['a', 'b', 'c']], [440, ['d']]]);
+        // 1.4 px per year: one symbol at the first event, all four in it.
+        const dense = layoutTimelineLocal(items, { xOf: at(1.4), barX1: 200, barX2: 800, obstacles: [], gap: 22, pxPerYear: 1.4 });
+        expect(dense.marks).toHaveLength(1);
+        expect(dense.marks[0].x).toBeCloseTo(270);
+        expect(dense.marks[0].items.map(e => e.id)).toEqual(['a', 'b', 'c', 'd']);
+        expect(LOCAL_DENSE_PX_PER_YEAR).toBe(1.5);
+    });
+
+    it('a period\'s stripe runs from the year the person came (moved) to its end, at most to the bar\'s end', () => {
+        const at = (y: number) => 100 + (y - 1800) * 4;
+        const moved: TimelineLocalItem = { id: 'p', year: 1866, year2: 1870, moved: true, kind: 'economy', scope: 'place', place: 'Zelvar', text: 'p' };
+        const l = layoutTimelineLocal([moved], { xOf: at, barX1: 100, barX2: 900, obstacles: [], gap: 16, pxPerYear: 4 });
+        expect(l.periods.map(p => [p.x1, p.x2])).toEqual([[at(1866), at(1870)]]);
+        const cut = layoutTimelineLocal([moved], { xOf: at, barX1: 100, barX2: at(1868), obstacles: [], gap: 16, pxPerYear: 4 });
+        expect(cut.periods.map(p => [p.x1, p.x2])).toEqual([[at(1866), at(1868)]]);
+        // Drawn: Dora came to Quellnitz in 1866, during its period 1860–1870 — the symbol and the stripe from 1866.
+        const dora = person('dora', { birthDate: '1866', birthPlace: 'Quellnitz', deathDate: '1910', deathPlace: 'Quellnitz' });
+        const dd = data([dora]);
+        const rr = computeTimelineHistory(dd, ['dora'], payload({
+            ...base, events: [...base.events, placeEvent('P-1860', 1860, { to: 1870 })],
+            places: { ...base.places, Quellnitz: { events: [...base.places.Quellnitz.events, 'P-1860'] } },
+        }), 'en');
+        const m = computeTimelineModel(dd, ['dora'], 2026, { history: { events: rr.events, local: rr.local } });
+        const x = xOf(m.axis, 900, 160);
+        const s = svg(m);
+        expect(s).toContain(`<rect class="tl-loc-period is-place" x="${x(1866).toFixed(1)}" y="64.0" width="${(x(1870) - x(1866)).toFixed(1)}" height="2.5"`);
+        expect(s).toContain(`<rect class="tl-loc-box" x="${(x(1866) - 7).toFixed(1)}" y="48"`);
+    });
+
+    it('draws a symbol per line on a box over the bar, after the dots, named and titled; the kind filter applies, the poster has none', () => {
+        setLanguage('en');
+        const m = model();
+        const s = svg(m);
+        const anna = rowOf(s, 'anna');
+        expect(anna).toContain('class="tl-loc is-local" role="img"');
+        expect(anna).toContain('data-hist-ids="L-1870 P-1870"');
+        expect(anna).toContain('aria-label="1870 · epidemic · Zelvar: Local L-1870; 1870 · disaster · Quellnitz: Village P-1870"');
+        expect(anna).toContain('<title>1870 · epidemic · Zelvar – Local L-1870\nfrom records: Matrika zemřelých Zelvar\n'
+            + '1870 · disaster · Quellnitz – Village P-1870</title>');
+        expect(anna).toContain('class="tl-loc-box"');
+        expect(anna).toContain('width="14" height="14" rx="3" aria-hidden="true"');
+        // Bar, dots, then the local symbols.
+        expect(anna.indexOf('tl-bar-rect')).toBeLessThan(anna.indexOf('tl-dot'));
+        expect(anna.lastIndexOf('tl-dot')).toBeLessThan(anna.indexOf('tl-loc'));
+        // The move of 1870 is a dot: L-1870 and P-1870 step 11 px aside of it and share one symbol with a badge of 2.
+        const x = xOf(m.axis, 900, 160);
+        expect(anna).toContain(`<rect class="tl-loc-box" x="${(x(1870) + 11 - 7).toFixed(1)}"`);
+        expect(anna).toMatch(/class="tl-loc-n-txt"[^>]*>2<\/text>/);
+        // The target: the row high, at most 24 px, off the dot beside it.
+        const hit = /<rect class="tl-loc-hit" x="([\d.]+)" y="(\d+)" width="([\d.]+)" height="30"/.exec(anna)!;
+        expect(Number(hit[3])).toBeLessThanOrEqual(24);
+        expect(Number(hit[1])).toBeGreaterThan(x(1870) + 3);
+        // Cyril's period 1900–1902 has its stripe under the bar.
+        expect(rowOf(s, 'cyril')).toMatch(/<rect class="tl-loc-period is-place" x="[\d.]+" y="[\d.]+" width="[\d.]+" height="2.5" rx="1.25"\/>/);
+        // The kind filter: disasters only — Anna keeps P-1870, the epidemic of the register is gone.
+        const f = svg(model(['disaster']));
+        expect(rowOf(f, 'anna')).toContain('data-hist-ids="P-1870"');
+        expect(f).not.toContain('L-1870');
+        // The poster draws no local history (P2).
+        expect(svg(m, { mode: 'poster' })).not.toContain('tl-loc');
+    });
+
+    it('a phone\'s long axis (under 1.5 px per year): one symbol per line with the count of all', () => {
+        const wide = { ...base, events: [...base.events, placeEvent('P-1850', 1850), placeEvent('P-1880', 1880)],
+            places: { ...base.places, Zelvar: { events: [...base.places.Zelvar.events, 'P-1850', 'P-1880'] } } };
+        // An ancestor of the 18th century widens the axis to some 220 years.
+        const dd = data([anna, bert, cyril, person('ezra', { birthDate: '1700', birthPlace: 'Brdovec', deathDate: '1760' })]);
+        const ids = [...ALL, 'ezra'];
+        const rr = computeTimelineHistory(dd, ids, payload(wide), 'en');
+        const m = computeTimelineModel(dd, ids, 2026, { history: { events: rr.events, local: rr.local } });
+        const span = m.axis.maxYear - m.axis.minYear;
+        // 390 px wide, 96 px names: under the threshold.
+        expect((390 - 96 - 16) / span).toBeLessThan(1.5);
+        const phone = svg(m, { width: 390, narrow: true });
+        const line = rowOf(phone, 'bert');
+        expect(line.match(/class="tl-loc /g)).toHaveLength(1);
+        expect(line).toContain('data-hist-ids="P-1850 L-1870 P-1880"');
+        expect(line).toMatch(/class="tl-loc-n-txt"[^>]*>3<\/text>/);
+        // A computer: the same line in groups.
+        expect(rowOf(svg(m, { width: 1440 }), 'bert').match(/class="tl-loc /g)!.length).toBeGreaterThan(1);
     });
 });
 

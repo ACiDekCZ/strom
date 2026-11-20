@@ -8862,6 +8862,9 @@ const stringsEN = {
         timelineClearFilter: 'Clear filter',
         timelineEmptyFilter: 'No history for the chosen kinds',
         timelineEmptyFilterShort: 'No history',
+        // spec 121 §6, §7: a local symbol on a life line — its name for screen readers, a finding's source in its tooltip.
+        timelineLocalAria: (year: string, kind: string, place: string, text: string) => `${year} · ${kind} · ${place}: ${text}`,
+        timelineLocalSource: (source: string) => `from records: ${source}`,
         openInCard: 'Open in the person card',
         source: 'Source:',
         sourceChecked: (d: string) => `checked ${d}`,
@@ -19347,6 +19350,9 @@ const stringsCZ: StringsType = {
         timelineClearFilter: 'Zrušit filtr',
         timelineEmptyFilter: 'Žádné dějiny pro zvolené druhy',
         timelineEmptyFilterShort: 'Žádné dějiny',
+        // spec 121 §6, §7: a local symbol on a life line — its name for screen readers, a finding's source in its tooltip.
+        timelineLocalAria: (year: string, kind: string, place: string, text: string) => `${year} · ${kind} · ${place}: ${text}`,
+        timelineLocalSource: (source: string) => `z pramenů: ${source}`,
         openInCard: 'Otevřít v kartě osoby',
         source: 'Zdroj:',
         sourceChecked: (d: string) => `ověřeno ${d}`,
@@ -29695,6 +29701,9 @@ const stringsDE: StringsType = {
         timelineClearFilter: 'Filter aufheben',
         timelineEmptyFilter: 'Keine Ereignisse für die gewählten Arten',
         timelineEmptyFilterShort: 'Keine Ereignisse',
+        // spec 121 §6, §7: a local symbol on a life line — its name for screen readers, a finding's source in its tooltip.
+        timelineLocalAria: (year: string, kind: string, place: string, text: string) => `${year} · ${kind} · ${place}: ${text}`,
+        timelineLocalSource: (source: string) => `aus Quellen: ${source}`,
         openInCard: 'In der Personenkarte öffnen',
         source: 'Quelle:',
         sourceChecked: (d: string) => `geprüft am ${d}`,

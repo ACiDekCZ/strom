@@ -75,6 +75,8 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         timelineClearFilter: 'Wyczyść filtr',
         timelineEmptyFilter: 'Brak wydarzeń dla wybranych rodzajów',
         timelineEmptyFilterShort: 'Brak wydarzeń',
+        timelineLocalAria: (year: string, kind: string, place: string, text: string) => `${year} · ${kind} · ${place}: ${text}`,
+        timelineLocalSource: (source: string) => `ze źródeł: ${source}`,
         openInCard: 'Otwórz w karcie osoby',
         source: 'Źródło:',
         sourceChecked: (d: string) => `sprawdzono ${d}`,

@@ -54,11 +54,11 @@ function crowdGed(): string {
         .replace('1 CHIL @P0003@', ['1 CHIL @P0003@', ...CROWD.map(([id]) => `1 CHIL @${id}@`)].join('\n'));
 }
 
-async function setup(page: Page, opts: { width?: number; height?: number; crowd?: boolean; edit?: (h: FakeHistory) => void } = {}): Promise<void> {
+async function setup(page: Page, opts: { width?: number; height?: number; crowd?: boolean; ged?: string; edit?: (h: FakeHistory) => void } = {}): Promise<void> {
     if (opts.width) await page.setViewportSize({ width: opts.width, height: opts.height ?? 844 });
     const history = timelineHistory();
     opts.edit?.(history);
-    const ged = opts.crowd ? crowdGed() : timelineGed();
+    const ged = opts.ged ?? (opts.crowd ? crowdGed() : timelineGed());
     await fakeBridge(page, { features: HISTORY_R1_FEATURES, history, treeGed: ged, links: LINKS });
     await openResearch(page, { ged });
     await poll(page);
@@ -499,4 +499,185 @@ test.describe('Timeline: the history row\'s label on touch', () => {
         await expect(page.locator('.bottom-sheet.tl-osheet')).toBeVisible();
         expect(Math.round((await page.locator('.tl-osheet .hd-chip').first().boundingBox())!.height)).toBeGreaterThanOrEqual(44);
     });
+});
+
+// ==================== local history on the life lines (spec 121 §6–§8) ====================
+
+/**
+ * Two more invented events of Čapkov for the lines: a flood of 1855 (the
+ * place's own history) and a finding of 1890 — with the fire of 1880 the
+ * crowd's lines (1850–1900) have three, Jan's (1860–1910) two.
+ */
+function moreLocal(h: FakeHistory): void {
+    (h.payload.events as Record<string, unknown>[]).push(
+        { id: 'E10', from: 1855, kind: 'disaster', scope: 'place',
+            text: { cs: 'Povodeň v Čapkovi.', en: 'A flood in Čapkov.', de: 'Hochwasser in Čapkov.' },
+            source: { title: 'Invented chronicle', url: 'https://example.org/flood-1855', checked: '2026-10-01' } },
+        { id: 'E11', from: 1890, kind: 'economy', scope: 'local',
+            text: { cs: 'Nová cihelna.', en: 'A new brickworks.', de: 'Eine neue Ziegelei.' },
+            local: { source: 'S0001', cite: 'Oddací matrika Čapkov, fol. 77' } },
+    );
+    const place = h.payload.places['Čapkov'] as Record<string, unknown>;
+    place.events = [...(place.events as string[]), 'E10', 'E11'];
+}
+
+/** The crowd's tree with an invented forebear of 1700–1765 (Josef's father): an axis of some 210 years. */
+function wideGed(): string {
+    return crowdGed()
+        .replace('0 @F0001@ FAM', ['0 @P0009@ INDI', '1 NAME Brumlík /Zelvarský/', '1 SEX M', '1 REFN P0009', '2 TYPE strom-research',
+            '1 BIRT', '2 DATE 1700', '2 PLAC Opava', '1 DEAT', '2 DATE 1765', '1 FAMS @F0009@',
+            '0 @F0009@ FAM', '1 HUSB @P0009@', '1 CHIL @P0001@', '0 @F0001@ FAM'].join('\n'))
+        .replace('1 NAME Josef /Fíšek/', '1 NAME Josef /Fíšek/\n1 FAMC @F0009@');
+}
+
+/** The local option on for the tree before the Timeline is drawn. */
+async function localOn(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const S = window.Strom;
+        S.SettingsManager.setTimelineHistory(S.DataManager.getCurrentTreeId(), { local: true });
+    });
+}
+
+/** A person's row on the Timeline. */
+async function lineOf(page: Page, first: string) {
+    const id = await page.evaluate((first) => (Object.values(window.Strom.DataManager.getData().persons) as { id: string; firstName: string }[])
+        .find(x => x.firstName === first)!.id, first);
+    return page.locator(`#timeline-container .timeline-bar[data-person-id="${id}"]`);
+}
+
+/**
+ * Within each line: no symbol's box or badge over another's (the badges of
+ * one group sit on its own box's corner), all of them past the names' column.
+ */
+const localClashes = (page: Page) => page.evaluate(() => {
+    const out: string[] = [];
+    for (const row of document.querySelectorAll('#timeline-container .timeline-bar')) {
+        const marks = [...row.querySelectorAll('.tl-loc')].map(g => ({
+            id: g.getAttribute('data-hist-ids'),
+            boxes: [...g.querySelectorAll('.tl-loc-box, .tl-loc-n')].map(el => el.getBoundingClientRect()),
+        }));
+        const name = row.querySelector('foreignObject')!.getBoundingClientRect();
+        marks.forEach((a, i) => {
+            for (const r of a.boxes) if (r.left < name.right - 0.5) out.push(`${a.id} in the names`);
+            marks.slice(i + 1).forEach(b => {
+                for (const r of a.boxes) for (const q of b.boxes) {
+                    if (r.left < q.right - 0.5 && q.left < r.right - 0.5 && r.top < q.bottom - 0.5 && q.top < r.bottom - 0.5) out.push(`${a.id} × ${b.id}`);
+                }
+            });
+        });
+    }
+    return out;
+});
+
+test.describe('Timeline: local history on the life lines (spec 121 §6–§8)', () => {
+    test('the option draws the fire on Jan\'s line: a box over the bar with its tooltip, out of Tab; a click opens his card on its row', async ({ page }) => {
+        await setup(page, { width: 1440, height: 900 });
+        await focusOn(page, 'Josef');
+        await timelineView(page);
+        const jan = await lineOf(page, 'Jan');
+        await expect(page.locator('#timeline-container .tl-loc')).toHaveCount(0);
+        // On in the options.
+        await histBtn(page).click();
+        await page.locator('.tl-pop.tl-pop-opts .tl-pop-check input[type="checkbox"]').check();
+        await page.keyboard.press('Escape');
+        const fire = jan.locator('g.tl-loc');
+        await expect(fire).toHaveCount(1);
+        await expect(fire).toHaveClass(/is-local/);
+        await expect(fire).toHaveAttribute('data-hist-ids', 'E4');
+        await expect(fire).toHaveAttribute('aria-label', '1880 · disaster · Čapkov: A fire in Čapkov.');
+        await expect(fire.locator('title')).toHaveText('1880 · disaster · Čapkov – A fire in Čapkov.\nfrom records: Oddací matrika Čapkov, fol. 41');
+        await expect(fire).not.toHaveAttribute('tabindex', /.*/);
+        // Josef died 1869: nothing on his line.
+        await expect((await lineOf(page, 'Josef')).locator('.tl-loc')).toHaveCount(0);
+        // The box lies on the bar, after (over) its dots in the SVG; the target is the row high, at most 24 px wide.
+        const boxBar = await jan.evaluate(g => {
+            const at = (sel: string, a: string) => Number(g.querySelector(sel)!.getAttribute(a));
+            return { h: at('.tl-loc-box', 'height'), w: at('.tl-loc-box', 'width'), y: at('.tl-loc-box', 'y'), barY: at('.tl-bar-rect', 'y') };
+        });
+        expect(boxBar).toEqual({ h: 14, w: 14, y: boxBar.barY, barY: boxBar.barY });
+        const hit = (await fire.locator('.tl-loc-hit').boundingBox())!;
+        expect(hit.width).toBeLessThanOrEqual(24.01);
+        expect(Math.round(hit.height)).toBe(30);
+        expect(await jan.evaluate(g => [...g.children].findIndex(c => c.matches('g.tl-loc')) > [...g.children].findIndex(c => c.matches('.tl-bar-rect')))).toBe(true);
+
+        // A click: Jan's card on the fire's row; the focus of the Timeline stays.
+        await fire.click();
+        await expect(page.locator('#person-modal')).toHaveClass(/active/);
+        await expect(page.locator('#input-firstname')).toHaveValue('Jan');
+        await expect(page.locator('#pm-lifeline-body .pm-lifeline-row[data-history-id="E4"]')).toBeVisible();
+    });
+
+    test('a kind filter applies to the lines too; the history of a place and the findings each in its colour', async ({ page }) => {
+        await setup(page, { width: 1440, height: 900, crowd: true, edit: moreLocal });
+        await localOn(page);
+        await focusOn(page, 'Jan');
+        await timelineView(page);
+        const jan = await lineOf(page, 'Jan');
+        await expect(jan.locator('g.tl-loc')).toHaveCount(2);
+        await expect(jan.locator('g.tl-loc[data-hist-ids="E4"]')).toHaveClass(/is-local/);
+        // Ilsa's line from 1854: the flood of 1855 is the place's own history.
+        await expect((await lineOf(page, 'Ilsa')).locator('g.tl-loc[data-hist-ids="E10"]')).toHaveClass(/is-place/);
+        // Economy only: the brickworks stays, the fire goes.
+        await page.evaluate(() => {
+            const S = window.Strom;
+            S.SettingsManager.setTimelineHistory(S.DataManager.getCurrentTreeId(), { kinds: ['economy'], local: true });
+            window.dispatchEvent(new Event('strom:timeline-history-options'));
+        });
+        await expect(jan.locator('g.tl-loc')).toHaveCount(1);
+        await expect(jan.locator('g.tl-loc')).toHaveAttribute('data-hist-ids', 'E11');
+    });
+
+    test('phone 390 on a long axis: one symbol per line with the count of all; a tap opens the sheet with them and the card', async ({ page }) => {
+        await setup(page, { width: 390, height: 844, ged: wideGed(), edit: moreLocal });
+        await localOn(page);
+        await focusOn(page, 'Jan');
+        await timelineView(page);
+        const jan = await lineOf(page, 'Jan');
+        const one = jan.locator('g.tl-loc');
+        await expect(one).toHaveCount(1);
+        await expect(one).toHaveAttribute('data-hist-ids', 'E4 E11');
+        await expect(one.locator('.tl-loc-n-txt')).toHaveText('2');
+        await expect((await lineOf(page, 'Ilsa')).locator('g.tl-loc .tl-loc-n-txt')).toHaveText('3');
+        await one.click();
+        const sheet = page.locator('.bottom-sheet.tl-lsheet');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.tl-hsheet-title')).toHaveText('History 1880–1890 · Jan Fíšek');
+        await expect(sheet.locator('.tl-hsheet-row')).toHaveCount(2);
+        await expect(sheet.locator('.tl-hsheet-row').first()).toContainText('A fire in Čapkov.');
+        await expect(sheet.locator('.tl-hsheet-row').first().locator('.tl-hsheet-meta').first()).toHaveText('disaster · Čapkov');
+        await sheet.getByRole('button', { name: 'Open in the person card ›' }).click();
+        await expect(page.locator('#person-modal')).toHaveClass(/active/);
+        await expect(page.locator('#input-firstname')).toHaveValue('Jan');
+        await expect(page.locator('#pm-lifeline-body .pm-lifeline-row[data-history-id="E4"]')).toBeVisible();
+    });
+
+    for (const [w, h] of [[390, 844], [844, 390], [1024, 768], [1440, 900]] as const) {
+        for (const theme of ['light', 'dark'] as const) {
+            test(`${w} × ${h}, ${theme}, German, a long name: nothing wider than the window, no symbol or badge over another`, async ({ page }) => {
+                await setup(page, { width: w, height: h, ged: wideGed(), edit: moreLocal });
+                await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+                if (theme === 'dark') await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+                await localOn(page);
+                await focusOn(page, 'Bartholomäus');
+                await timelineView(page);
+                await expect(page.locator('#timeline-container g.tl-loc').first()).toBeVisible();
+                expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+                expect(await localClashes(page)).toEqual([]);
+                // The box takes the surface over the bar in its origin's colour (a token: light and dark differ).
+                const fill = await page.locator('#timeline-container .tl-loc-box').first().evaluate(el => getComputedStyle(el).fill);
+                const surface = await page.evaluate(() => {
+                    const probe = document.createElement('div');
+                    probe.style.color = 'var(--surface)';
+                    document.body.appendChild(probe);
+                    const c = getComputedStyle(probe).color;
+                    probe.remove();
+                    return c;
+                });
+                expect(fill).toBe(surface);
+                // The tooltip in German, a finding's source under it.
+                await expect(page.locator('#timeline-container g.tl-loc[data-hist-ids~="E4"] title').first())
+                    .toHaveText(/1880 · Katastrophe · Čapkov – A fire in Čapkov\.\naus Quellen: Oddací matrika Čapkov, fol\. 41/);
+            });
+        }
+    }
 });

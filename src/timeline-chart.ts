@@ -14,9 +14,10 @@
  */
 
 import {
-    TimelineModel, TimelineRow, TimelineEvent, TimelineHistory, TimelineHistoryItem, TimelineSharedMark,
+    TimelineModel, TimelineRow, TimelineEvent, TimelineHistory, TimelineHistoryItem, TimelineSharedMark, TimelineLocalItem,
     yearToFraction, axisTicks, axisLabelStep, clusterTimelineHistory, timelineHistoryYears,
     timelineClusterKind, timelineClusterKinds, timelinePeriodTracks, timelineHistoryRowState, timelineFilterKindCount,
+    layoutTimelineLocal,
 } from './timeline.js';
 import { strings } from './strings.js';
 import { historyKindSvg } from './history-symbols.js';
@@ -374,6 +375,7 @@ function sharedMarkSvg(g: SharedMarkGeom, spot: SharedLabelSpot | null, rows: re
 /** SVG for one timeline row (name label + life-bar + event dots). */
 function rowSvg(
     r: TimelineRow, i: number, opts: TimelineSvgOptions, xOf: (y: number) => number, marked: ReadonlySet<string> = new Set(),
+    plot: { x0: number; pxPerYear: number } = { x0: opts.labelW, pxPerYear: Infinity },
 ): string {
     const { esc, rowH, labelW, width: rowWidth, mode } = opts;
     const y = TOP + i * rowH;
@@ -442,7 +444,72 @@ function rowSvg(
         + `<rect x="0" y="${y}" width="${rowWidth}" height="${rowH}" class="tl-rowhit" fill="transparent"/>`
         + label
         + `<rect x="${x1.toFixed(1)}" y="${barY}" width="${w.toFixed(1)}" height="14" rx="3" fill="${color}" class="tl-bar-rect"/>`
-        + `${fade}${arrow}${dots}</g>`;
+        + `${fade}${arrow}${dots}${localSvg(r, opts, xOf, y, barY, x1, x1 + w, plot)}</g>`;
+}
+
+/** A local event's year text: "1891", a period "1845–1847". */
+function localItemYears(e: TimelineLocalItem): string {
+    return e.year2 !== undefined ? `${e.year}–${e.year2}` : String(e.year);
+}
+
+/** A finding's source in a local symbol's tooltip is cut to this many characters. */
+const LOCAL_SOURCE_MAX = 60;
+
+/**
+ * A life line's local history (spec 121 §4, §6–§8), screen only: each symbol
+ * on a 14 px box over the bar in its origin's colour, stepped aside from the
+ * line's dots and shared marks, grouped like the history row with a count
+ * badge at its top left (below 1.5 px per year one symbol with them all), a
+ * period's stripe under the bar. A symbol is clicked, not tabbed to: its
+ * target is 24 px wide and the row high, kept off the dots beside it; a line
+ * per event on hover, a finding's source under it.
+ */
+function localSvg(
+    r: TimelineRow, opts: TimelineSvgOptions, xOf: (y: number) => number, y: number, barY: number, barX1: number, barX2: number,
+    plot: { x0: number; pxPerYear: number },
+): string {
+    if (opts.mode !== 'screen' || !r.local?.length) return '';
+    const { esc, rowH } = opts;
+    const S = strings.history;
+    const obstacles = r.events.map(ev => xOf(ev.year));
+    const layout = layoutTimelineLocal(r.local, {
+        xOf, barX1, barX2, obstacles, gap: historyClusterGap(!!opts.narrow), pxPerYear: plot.pxPerYear,
+    });
+    const periods = layout.periods.map(({ item, x1, x2 }) =>
+        `<rect class="tl-loc-period is-${item.scope}" x="${x1.toFixed(1)}" y="${(barY + 16).toFixed(1)}"`
+        + ` width="${Math.max(2, x2 - x1).toFixed(1)}" height="2.5" rx="1.25"/>`).join('');
+    // The dots a symbol's target must leave to their own tooltips.
+    const dots = r.events.map(ev => ({ x: xOf(ev.year), r: ev.type === 'wedding' ? 5.5 : 3 }));
+    const marks = layout.marks.map(m => {
+        const x = m.x;
+        const first = m.items[0];
+        const kind = (e: TimelineLocalItem): string => S.kinds[e.kind] ?? S.kinds.other;
+        const aria = m.items.map(e => S.timelineLocalAria(localItemYears(e), kind(e), e.place, e.text)).join('; ');
+        const tip = m.items.map(e => S.timelineEventLine(localItemYears(e), kind(e), e.place, e.text)
+            + (e.scope === 'local' && e.source ? `\n${S.timelineLocalSource(truncate(e.source, LOCAL_SOURCE_MAX))}` : '')).join('\n');
+        let hx1 = x - 12, hx2 = x + 12;
+        for (const d of dots) {
+            if (d.x <= x) hx1 = Math.max(hx1, Math.min(x - 4, d.x + d.r + 1));
+            else hx2 = Math.min(hx2, Math.max(x + 4, d.x - d.r - 1));
+        }
+        const sym = historyKindSvg(first.kind, 10).replace('<svg ', `<svg x="${(x - 5).toFixed(1)}" y="${(barY + 2).toFixed(1)}" `);
+        const n = m.items.length;
+        let badge = '';
+        if (n > 1) {
+            const bw = Math.max(11, 4 + String(n).length * 5);
+            const bx = Math.max(plot.x0, x - 9), by = barY - 6;
+            badge = `<rect class="tl-loc-n" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw}" height="11" rx="5.5" aria-hidden="true"/>`
+                + `<text class="tl-loc-n-txt" x="${(bx + bw / 2).toFixed(1)}" y="${(by + 5.5).toFixed(1)}"`
+                + ` text-anchor="middle" dominant-baseline="central" aria-hidden="true">${n}</text>`;
+        }
+        const ids = m.items.map(e => encodeURIComponent(e.id)).join(' ');
+        return `<g class="tl-loc is-${first.scope}" role="img" aria-label="${esc(aria)}" data-hist-ids="${esc(ids)}">`
+            + `<title>${esc(tip)}</title>`
+            + `<rect class="tl-loc-hit" x="${hx1.toFixed(1)}" y="${y}" width="${(hx2 - hx1).toFixed(1)}" height="${rowH}" fill="transparent" aria-hidden="true"/>`
+            + `<rect class="tl-loc-box" x="${(x - 7).toFixed(1)}" y="${barY}" width="14" height="14" rx="3" aria-hidden="true"/>`
+            + `${sym}${badge}</g>`;
+    }).join('');
+    return (periods ? `<g aria-hidden="true">${periods}</g>` : '') + marks;
 }
 
 /**
@@ -481,7 +548,9 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
         rowH: ROW_H, rowCount: model.rows.length, plotX0, plotX1: plotX0 + plotW, measure: opts.measureLabel ?? estimateLabelWidth,
     });
     const marks = geoms.map((g, i) => sharedMarkSvg(g, spots[i], model.rows, opts)).join('');
-    const rowsSvg = model.rows.map((r, i) => rowSvg(r, i, opts, xOf, marked)).join('') + marks;
+    // Local history on the lines (spec 121 §8): below 1.5 px per year one symbol per line.
+    const plot = { x0: plotX0, pxPerYear: plotW / Math.max(1, model.axis.maxYear - model.axis.minYear) };
+    const rowsSvg = model.rows.map((r, i) => rowSvg(r, i, opts, xOf, marked, plot)).join('') + marks;
     // Shifted by the history row; print drops the row and the shift (index.html @media print).
     const rows = hist ? `<g class="tl-rows" transform="translate(0 ${histH})">${rowsSvg}</g>` : rowsSvg;
     // Drawn after the rows: a cluster's touch target may reach into the first row.

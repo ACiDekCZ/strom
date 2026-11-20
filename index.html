@@ -10720,6 +10720,16 @@
         @media (hover: hover) { .tl-hist:hover .tl-hist-ring { fill: var(--surface); stroke: var(--border); stroke-width: 1; } }
         .tl-hist-n { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
         .tl-hist-n-txt { fill: var(--text); font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        /* spec 121 §6–§8: local history on a life line — the kind's symbol on a box over the bar in its
+           origin's colour, a count badge at its top left, a period's stripe under the bar. Clicked, not tabbed to. */
+        .tl-loc { cursor: pointer; color: var(--hist-text); }
+        .tl-loc.is-place, .tl-loc-period.is-place { color: var(--hist-place-text); }
+        .tl-loc.is-local, .tl-loc-period.is-local { color: var(--hist-local-text); }
+        .tl-loc-box { fill: var(--surface); stroke: currentColor; stroke-width: 1; }
+        .tl-loc-period { fill: currentColor; opacity: 0.6; }
+        .tl-loc-n { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+        .tl-loc-n-txt { fill: var(--text); font-size: 8.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        @media (hover: hover) { .tl-loc:hover .tl-loc-box { stroke-width: 2; } }
         /* The phone's sheet of a cluster (9g): year · symbol · text, "Open in the person card". */
         .tl-hsheet-title { padding: 2px 16px 8px; font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
         .tl-hsheet-list { list-style: none; margin: 0; padding: 0 16px 6px; display: flex; flex-direction: column; gap: 8px; }
@@ -31925,6 +31935,8 @@
             /* The history row is the screen's (one person's, by the focus): not printed, the rows back up. */
             .tl-hist-row { display: none !important; }
             .tl-rows { transform: none !important; }
+            /* Nor the local history on the lines (spec 121 §11: the print with history comes later). */
+            .tl-loc, .tl-loc-period { display: none !important; }
 
             #canvas { transform: none !important; position: relative !important; }
             #tree-container { overflow: visible !important; height: auto !important; }

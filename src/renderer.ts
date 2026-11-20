@@ -7557,6 +7557,14 @@ class TreeRendererClass {
                 if (histBtn) { UI.toggleTimelineHistoryOptions(histBtn); return; }
                 if ((e.target as Element).closest('.tl-hist-clear')) { UI.clearTimelineHistoryFilter(); return; }
                 if ((e.target as Element).closest('.tl-hist-row')) return;
+                // A local symbol on a life line (spec 121 §7): that person's card on the event's row, a sheet on touch.
+                const loc = (e.target as Element).closest('.tl-loc[data-hist-ids]');
+                const locRow = loc?.closest<SVGGElement>('[data-person-id]');
+                if (loc && locRow?.dataset.personId) {
+                    const ids = (loc.getAttribute('data-hist-ids') ?? '').split(' ').filter(Boolean).map(decodeURIComponent);
+                    UI.openTimelineHistory(locRow.dataset.personId, ids);
+                    return;
+                }
                 const g = (e.target as Element).closest('[data-person-id]') as HTMLElement | null;
                 if (g?.dataset.personId) this.setFocus(g.dataset.personId as PersonId);
             });

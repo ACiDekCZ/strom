@@ -476,6 +476,80 @@ export function timelinePeriodTracks(periods: readonly { x1: number; x2: number 
     });
 }
 
+/** Below this many px per year a life line shows its local history as one symbol with the count of all (spec 121 §8). */
+export const LOCAL_DENSE_PX_PER_YEAR = 1.5;
+/** A local symbol closer than this (px) to a dot or a shared mark on its line steps aside (spec 121 §6). */
+export const LOCAL_CLEAR_PX = 10;
+/** How far (px) from that dot or mark the symbol's centre goes. */
+export const LOCAL_STEP_PX = 11;
+
+/** One symbol of local history on a life line: its centre and the events it stands for (the first one's kind). */
+export interface TimelineLocalMark {
+    x: number;
+    items: TimelineLocalItem[];
+}
+
+/** Where a line's local history goes (spec 121 §4, §6, §8). */
+export interface TimelineLocalLayout {
+    marks: TimelineLocalMark[];
+    /** A period's stripe under the bar: from its symbol's year to its end or the bar's end. */
+    periods: { item: TimelineLocalItem; x1: number; x2: number }[];
+}
+
+/**
+ * The centre of a local symbol at `x` on a bar from `barX1` to `barX2`
+ * (spec 121 §6): kept on the bar (never over the living's arrow or the
+ * fading end); closer than 10 px to a dot or a shared mark it goes to
+ * 11 px right of it, or 11 px left when the right would leave the bar (or
+ * meet another dot while the left is free).
+ */
+export function timelineLocalX(x: number, obstacles: readonly number[], barX1: number, barX2: number): number {
+    const cx = Math.min(Math.max(x, barX1), barX2);
+    let near: number | null = null;
+    for (const d of obstacles) {
+        if (Math.abs(cx - d) < LOCAL_CLEAR_PX && (near === null || Math.abs(cx - d) < Math.abs(cx - near))) near = d;
+    }
+    if (near === null) return cx;
+    const right = near + LOCAL_STEP_PX, left = near - LOCAL_STEP_PX;
+    const free = (v: number): boolean => obstacles.every(d => Math.abs(v - d) >= LOCAL_CLEAR_PX);
+    if (right <= barX2 && free(right)) return right;
+    if (left >= barX1 && free(left)) return left;
+    return right <= barX2 ? right : left;
+}
+
+/**
+ * A life line's local history laid out (spec 121 §4, §6, §8): each symbol
+ * stepped aside from the line's dots and shared marks, then grouped like the
+ * history row (an event closer than `gap` px to a group's first one joins it;
+ * the group's symbol is its first event's, where that one stands). Below
+ * 1.5 px per year (a phone's long axis) one symbol at the first event with all
+ * of them. A period also gets a stripe from its symbol's year to its end (at
+ * most the bar's end). `items` sorted by year.
+ */
+export function layoutTimelineLocal(
+    items: readonly TimelineLocalItem[],
+    o: { xOf: (year: number) => number; barX1: number; barX2: number; obstacles: readonly number[]; gap: number; pxPerYear: number },
+): TimelineLocalLayout {
+    if (!items.length) return { marks: [], periods: [] };
+    const clamp = (x: number): number => Math.min(Math.max(x, o.barX1), o.barX2);
+    const periods = items.filter(e => e.year2 !== undefined).map(item => {
+        const x1 = clamp(o.xOf(item.year));
+        return { item, x1, x2: Math.max(x1, clamp(o.xOf(item.year2!))) };
+    });
+    if (o.pxPerYear < LOCAL_DENSE_PX_PER_YEAR) {
+        return { marks: [{ x: timelineLocalX(o.xOf(items[0].year), o.obstacles, o.barX1, o.barX2), items: [...items] }], periods };
+    }
+    const placed = items.map((item, i) => ({ item, i, x: timelineLocalX(o.xOf(item.year), o.obstacles, o.barX1, o.barX2) }))
+        .sort((a, b) => a.x - b.x || a.i - b.i);
+    const marks: TimelineLocalMark[] = [];
+    for (const p of placed) {
+        const last = marks[marks.length - 1];
+        if (last && p.x - last.x < o.gap) last.items.push(p.item);
+        else marks.push({ x: p.x, items: [p.item] });
+    }
+    return { marks, periods };
+}
+
 /**
  * Whom an event of the history row names in the popover (spec 121 §2): the
  * persons in the rows' order with the focused person first, at most `max`
@@ -533,7 +607,7 @@ export function placeTimelinePop(
  * A cluster's years: "1866", or the first year to the last (a period's end
  * counts) — "1886–1892".
  */
-export function timelineHistoryYears(items: readonly TimelineHistoryItem[]): string {
+export function timelineHistoryYears(items: readonly { year: number; year2?: number }[]): string {
     if (!items.length) return '';
     const from = items[0].year;
     const to = Math.max(...items.map(e => e.year2 ?? e.year));

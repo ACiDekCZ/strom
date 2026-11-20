@@ -22,7 +22,7 @@ import { yearOf } from '../dates.js';
 import {
     timelineHistoryYears, timelineConcernPersons, timelineClusterPersons, placeTimelinePop,
     timelineHistoryFacets, toggleTimelineKind, clearTimelineFilter, timelineLocalOptionState,
-    type TimelineHistoryItem, type TimelineHistoryInput, type TimelineHistory, type TimelineHistoryChoice,
+    type TimelineHistoryItem, type TimelineHistoryInput, type TimelineHistory, type TimelineHistoryChoice, type TimelineLocalItem,
 } from '../timeline.js';
 import {
     computeTimelineHistory, timelineHistoryRegion, isHistoryKind,
@@ -104,7 +104,7 @@ function clusterKey(ids: readonly string[]): string {
 }
 
 /** "1880" or a period "1882–1890". */
-function historyYears(e: TimelineHistoryItem): string {
+function historyYears(e: { year: number; year2?: number }): string {
     return e.year2 !== undefined ? `${e.year}–${e.year2}` : String(e.year);
 }
 
@@ -505,6 +505,54 @@ export const timelineHistoryMethods = uiModule({
     /** The Timeline's popover, closed (a view left, the row redrawn without it). */
     closeTimelinePopover(refocus = false): void {
         pop?.close(refocus);
+    },
+
+    /**
+     * A local symbol on a person's life line (spec 121 §7): on a computer the
+     * person's card on the first event's row; on a phone or a touch screen the
+     * sheet with its events and "Open in the person card".
+     */
+    openTimelineHistory(personId: string, ids: readonly string[]): void {
+        if (!ids.length) return;
+        if (wantsSheet()) this.showTimelineLocalSheet(personId, ids);
+        else this.openTimelineHistoryInCard(personId, ids[0]);
+    },
+
+    /**
+     * The sheet of a local symbol (spec 121 §7, 7b–7c): "History 1891 · name",
+     * the events (year · symbol · text, "kind · place" under it, a finding's
+     * source), "Open in the person card ›" on the first event's row.
+     */
+    showTimelineLocalSheet(personId: string, ids: readonly string[]): void {
+        const own = computed?.result.local.get(personId) ?? [];
+        const items = ids.map(id => own.find(e => e.id === id)).filter((e): e is TimelineLocalItem => !!e)
+            .sort((a, b) => a.year - b.year);
+        const person = DataManager.getPerson(personId as PersonId);
+        if (!items.length || !person) return;
+        const h = strings.history;
+        const title = h.timelineSheetTitle(timelineHistoryYears(items), shownName(person));
+        const rows = items.map(e => {
+            const kind = h.kinds[e.kind] ?? h.kinds.other;
+            const source = e.scope === 'local' && e.source ? `<span class="tl-hsheet-meta">${esc(h.timelineLocalSource(e.source))}</span>` : '';
+            return `<li class="tl-hsheet-row">`
+                + `<span class="tl-hsheet-year">${historyYears(e)}</span>`
+                + `<span class="tl-hsheet-sym hist-kind is-${e.scope}" title="${esc(kind)}">${historyKindSvg(e.kind, 14)}</span>`
+                + `<span class="tl-hsheet-text">${esc(e.text)}<span class="tl-hsheet-meta">${esc(`${kind} · ${e.place}`)}</span>${source}</span></li>`;
+        }).join('');
+        const sheet = this.showLifelineHistorySheet('tl-hsheet tl-lsheet', 'dialog', title,
+            `<div class="tl-hsheet-title">${esc(title)}</div><ul class="tl-hsheet-list">${rows}</ul>`
+            + `<button type="button" class="bottom-sheet-item tl-hsheet-open">${esc(h.openInCard)} ›</button>`
+            + `<button type="button" class="bottom-sheet-item pm-lifeline-hsheet-cancel">${esc(strings.buttons.close)}</button>`);
+        sheet.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('.tl-hsheet-open')) {
+                this.hideBottomSheet();
+                this.openTimelineHistoryInCard(personId, items[0].id);
+            } else if (target.closest('.pm-lifeline-hsheet-cancel')) {
+                this.hideBottomSheet();
+            }
+        });
+        sheet.querySelector<HTMLElement>('.tl-hsheet-open')?.focus({ preventScroll: true });
     },
 
     /** The person card, its life timeline on the event's row (the year unfolded, the row lit). */
