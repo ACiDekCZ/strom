@@ -13675,6 +13675,65 @@
         .fan-look-mark { position: absolute; top: -4px; right: 1px; font-size: 15px; line-height: 1; color: var(--accent-text); pointer-events: none; }
         .fan-look-mark[hidden] { display: none; }
         .fan-sheet-tab .fan-look-mark { top: 6px; right: -9px; }
+        /* Settings › Fan (§10): the styles as the lineage markers' rows (a small fan before each name). */
+        fieldset.fan-set-style { margin: 0; border: 0; min-width: 0; }
+        .fan-set-style > legend.settings-text { display: flex; float: left; width: 100%; padding: 0; margin: 0; }
+        .fan-set-style > legend + .fan-set-opts { clear: both; }
+        .fan-set-opts { display: flex; flex-direction: column; margin-top: 10px; min-width: 0; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+        .modal label.fan-set-opt { display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 44px; margin: 0; padding: 6px 12px; box-sizing: border-box; font-size: 14px; cursor: pointer; }
+        .fan-set-opts > .fan-set-opt.sel-opt:last-child { border-bottom: 0; }
+        .fan-set-opt input[type="radio"] { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--text); }
+        .fan-set-opt:has(> input:focus-visible) { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .fan-set-opt input[type="radio"]:focus-visible { outline: none; }
+        .fan-set-prev { flex: none; display: flex; justify-content: center; width: 70px; height: 20px; }
+        .fan-set-prev .fan-look-prev { width: 70px; height: 20px; margin: 0; }
+        .fan-set-name { flex: 1; min-width: 0; color: var(--text); overflow-wrap: anywhere; line-height: 1.3; }
+        .fan-set-hint { flex: none; font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+        .fan-set-seg .settings-radio span { overflow-wrap: anywhere; line-height: 1.25; }
+        @media (pointer: coarse) { .modal label.fan-set-opt { min-height: 48px; } }
+        /* Phone (and a phone held sideways): the hint may wrap at the row's right, the name keeps its room. */
+        @media (max-width: 640px) {
+            .modal label.fan-set-opt { min-height: 48px; }
+            .fan-set-hint { flex: 0 1 auto; max-width: 42%; white-space: normal; text-align: right; line-height: 1.3; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .modal label.fan-set-opt { min-height: 48px; }
+        }
+        /* The poster dialog (fan view, §10): the poster's own look with a preview; only for this output. */
+        .poster-look[hidden] { display: none; }
+        .poster-look-h { display: block; margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text); }
+        .poster-look-body { display: flex; gap: 16px; align-items: flex-start; }
+        .poster-look-prev { flex: none; width: 132px; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+        .poster-look-prev img { display: block; width: 132px; height: 187px; object-fit: contain; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); box-shadow: var(--shadow-sm); }
+        .poster-look-prev figcaption { font-size: 11.5px; color: var(--text-faint); text-align: center; }
+        .poster-look-opts { flex: 1; min-width: 0; }
+        .poster-look-opts .form-group { margin-bottom: 10px; }
+        .modal .poster-look-opts .form-row { margin-bottom: 10px; }
+        .poster-look-note .link-button[hidden] { display: none; }
+        .poster-look-opts select { width: 100%; min-width: 0; }
+        .poster-look-opts select:disabled { opacity: 0.55; cursor: default; }
+        .modal .poster-look-opts label.settings-checkbox { display: flex; align-items: center; gap: 10px; padding: 4px 0; margin: 0; }
+        .poster-look-note { margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-faint); }
+        .poster-look-note .link-button { font-size: 12px; padding: 0; margin-left: 4px; }
+        .modal button.poster-look-sum { display: none; }
+        /* Phone: folded to one row (the preview small, the choices in words); a tap unfolds it. */
+        @media (max-width: 640px) {
+            .modal button.poster-look-sum {
+                display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 12px; margin: 0; box-sizing: border-box;
+                border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer;
+            }
+            .poster-look-sum img { flex: none; width: 34px; height: 48px; object-fit: contain; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); }
+            .poster-look-sum-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+            .poster-look-sum-t .settings-desc { font-size: 12px; overflow-wrap: anywhere; }
+            .poster-look-sum-arrow { flex: none; color: var(--text-light); font-size: 12px; }
+            .poster-look:not(.is-open) .poster-look-body, .poster-look:not(.is-open) .poster-look-note { display: none; }
+            .poster-look.is-open .poster-look-body { margin-top: 12px; }
+            .poster-look > .poster-look-h { display: none; }
+            .poster-look-body { gap: 12px; }
+            .poster-look-prev { width: 104px; }
+            .poster-look-prev img { width: 104px; height: 147px; }
+            .modal .poster-look-opts label.settings-checkbox { min-height: 44px; }
+        }
         /* The fan's hover and pointer (the SVG carries its own colours,
            fan-colors.ts, both themes, scoped to its id). */
         .fan-kekule { dominant-baseline: middle; }
@@ -34235,6 +34294,84 @@
                     <div class="view-links-settings" id="view-links-settings" hidden></div>
                 </div>
             </section>
+            <!-- The fan's default look (spec 118 §10): every start begins with it; the Appearance panel changes
+                 it for the current work only, the poster dialog for its output only (src/ui/misc.ts syncFanDefaultSetting). -->
+            <section class="settings-group" aria-labelledby="settings-group-fan">
+                <h3 class="settings-group-title" id="settings-group-fan" data-i18n="settings.groupFan"></h3>
+                <div class="settings-group-body">
+                    <fieldset class="settings-row fan-set-style" id="fan-set-style">
+                        <legend class="settings-text">
+                            <span class="settings-name" data-i18n="fan.defaultStyle"></span>
+                            <span class="settings-desc" data-i18n="fan.defaultsDesc"></span>
+                        </legend>
+                        <div class="fan-set-opts">
+                            <label class="sel-opt fan-set-opt" data-sel-form="row">
+                                <input type="radio" name="fan-default-style" value="color" onchange="window.Strom.UI.setFanDefaultLook('style', this.value)">
+                                <span class="fan-set-prev" data-fan-style-prev="color" aria-hidden="true"></span>
+                                <span class="fan-set-name" data-i18n="fan.styleColor"></span>
+                                <span class="fan-set-hint" data-i18n="fan.styleHintColor"></span>
+                            </label>
+                            <label class="sel-opt fan-set-opt" data-sel-form="row">
+                                <input type="radio" name="fan-default-style" value="pastel" onchange="window.Strom.UI.setFanDefaultLook('style', this.value)">
+                                <span class="fan-set-prev" data-fan-style-prev="pastel" aria-hidden="true"></span>
+                                <span class="fan-set-name" data-i18n="fan.stylePastel"></span>
+                                <span class="fan-set-hint" data-i18n="fan.styleHintPastel"></span>
+                            </label>
+                            <label class="sel-opt fan-set-opt" data-sel-form="row">
+                                <input type="radio" name="fan-default-style" value="antique" onchange="window.Strom.UI.setFanDefaultLook('style', this.value)">
+                                <span class="fan-set-prev" data-fan-style-prev="antique" aria-hidden="true"></span>
+                                <span class="fan-set-name" data-i18n="fan.styleAntique"></span>
+                                <span class="fan-set-hint" data-i18n="fan.styleHintAntique"></span>
+                            </label>
+                            <label class="sel-opt fan-set-opt" data-sel-form="row">
+                                <input type="radio" name="fan-default-style" value="mono" onchange="window.Strom.UI.setFanDefaultLook('style', this.value)">
+                                <span class="fan-set-prev" data-fan-style-prev="mono" aria-hidden="true"></span>
+                                <span class="fan-set-name" data-i18n="fan.styleMono"></span>
+                                <span class="fan-set-hint" data-i18n="fan.styleHintMono"></span>
+                            </label>
+                        </div>
+                    </fieldset>
+                    <div class="settings-row settings-row-stacked fan-set-rods">
+                        <span class="settings-name" id="fan-set-rods-label" data-i18n="fan.lookRods"></span>
+                        <div class="settings-options settings-segment sel-seg fan-set-seg" role="radiogroup" aria-labelledby="fan-set-rods-label" aria-describedby="fan-set-rods-note">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
+                                <input type="radio" name="fan-default-scope" value="all" onchange="window.Strom.UI.setFanDefaultLook('rodScope', this.value)">
+                                <span data-i18n="fan.scopeAll"></span>
+                            </label>
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
+                                <input type="radio" name="fan-default-scope" value="main" onchange="window.Strom.UI.setFanDefaultLook('rodScope', this.value)">
+                                <span data-i18n="fan.scopeMain"></span>
+                            </label>
+                        </div>
+                        <span class="settings-desc" id="fan-set-rods-note" data-i18n="fan.scopeNote"></span>
+                    </div>
+                    <div class="settings-row settings-row-stacked fan-set-text">
+                        <span class="settings-name" id="fan-set-text-label" data-i18n="fan.lookText"></span>
+                        <div class="settings-options settings-segment sel-seg fan-set-seg" role="radiogroup" aria-labelledby="fan-set-text-label" aria-describedby="fan-set-text-note">
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
+                                <input type="radio" name="fan-default-content" value="years" onchange="window.Strom.UI.setFanDefaultLook('content', this.value)">
+                                <span data-i18n="fan.contentYears"></span>
+                            </label>
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
+                                <input type="radio" name="fan-default-content" value="places" onchange="window.Strom.UI.setFanDefaultLook('content', this.value)">
+                                <span data-i18n="fan.contentPlaces"></span>
+                            </label>
+                            <label class="settings-radio sel-opt" data-sel-form="seg">
+                                <input type="radio" name="fan-default-content" value="names" onchange="window.Strom.UI.setFanDefaultLook('content', this.value)">
+                                <span data-i18n="fan.contentNames"></span>
+                            </label>
+                        </div>
+                        <span class="settings-desc" id="fan-set-text-note" data-i18n="fan.textNote"></span>
+                    </div>
+                    <label class="settings-checkbox settings-row">
+                        <input type="checkbox" id="fan-default-portraits" onchange="window.Strom.UI.setFanDefaultLook('portraits', this.checked)">
+                        <span class="settings-text">
+                            <span class="settings-name" data-i18n="fan.portraits"></span>
+                            <span class="settings-desc" data-i18n="fan.portraitsSub"></span>
+                        </span>
+                    </label>
+                </div>
+            </section>
             <section class="settings-group" aria-labelledby="settings-group-notifications">
                 <h3 class="settings-group-title" id="settings-group-notifications" data-i18n="settings.groupNotifications"></h3>
                 <div class="settings-group-body">
@@ -34825,6 +34962,58 @@
             </div>
             <p class="modal-description" data-i18n="poster.description"></p>
             <p class="poster-view-line" id="poster-view-label"></p>
+            <!-- The fan's poster (spec 118 §10): its own look for this output only, prefilled from the screen; the preview
+                 is the output itself made small (src/ui/export-image-ui.ts). Only in the fan view; folded to one row on a phone. -->
+            <div class="form-group poster-look" id="poster-look" hidden>
+                <button type="button" class="poster-look-sum" id="poster-look-sum" aria-expanded="false" aria-controls="poster-look-body" onclick="window.Strom.UI.togglePosterLook()">
+                    <img id="poster-look-sum-img" alt="">
+                    <span class="poster-look-sum-t">
+                        <span data-i18n="poster.lookTitle"></span>
+                        <span class="settings-desc" id="poster-look-sum-desc"></span>
+                    </span>
+                    <span class="poster-look-sum-arrow" id="poster-look-sum-arrow" aria-hidden="true">▸</span>
+                </button>
+                <span class="poster-look-h" id="poster-look-h" data-i18n="poster.lookTitle"></span>
+                <div class="poster-look-body" id="poster-look-body" role="group" aria-labelledby="poster-look-h">
+                    <figure class="poster-look-prev">
+                        <img id="poster-look-img" alt="">
+                        <figcaption data-i18n="poster.lookPreview"></figcaption>
+                    </figure>
+                    <div class="poster-look-opts">
+                        <div class="form-row">
+                            <div class="form-group half">
+                                <label for="poster-look-style" data-i18n="fan.lookStyle"></label>
+                                <select id="poster-look-style" onchange="window.Strom.UI.setPosterLook('style', this.value)">
+                                    <option value="color" data-i18n="fan.styleColor"></option>
+                                    <option value="pastel" data-i18n="fan.stylePastel"></option>
+                                    <option value="antique" data-i18n="fan.styleAntique"></option>
+                                    <option value="mono" data-i18n="fan.styleMono"></option>
+                                </select>
+                            </div>
+                            <div class="form-group half">
+                                <label for="poster-look-scope" data-i18n="fan.lookRods"></label>
+                                <select id="poster-look-scope" onchange="window.Strom.UI.setPosterLook('rodScope', this.value)">
+                                    <option value="all" data-i18n="fan.scopeAll"></option>
+                                    <option value="main" data-i18n="fan.scopeMain"></option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="poster-look-content" data-i18n="fan.lookText"></label>
+                            <select id="poster-look-content" onchange="window.Strom.UI.setPosterLook('content', this.value)">
+                                <option value="years" data-i18n="fan.contentYears"></option>
+                                <option value="places" data-i18n="fan.contentPlaces"></option>
+                                <option value="names" data-i18n="fan.contentNames"></option>
+                            </select>
+                        </div>
+                        <label class="settings-checkbox">
+                            <input type="checkbox" role="switch" id="poster-look-portraits" onchange="window.Strom.UI.setPosterLook('portraits', this.checked)">
+                            <span data-i18n="fan.portraits"></span>
+                        </label>
+                    </div>
+                </div>
+                <p class="settings-desc poster-look-note" id="poster-look-note"><span data-i18n="poster.lookOnlyHere"></span><button type="button" class="link-button" id="poster-look-reset" data-i18n="poster.lookAsScreen" onclick="window.Strom.UI.resetPosterLook()" hidden></button></p>
+            </div>
             <div class="form-group">
                 <label for="poster-privacy-mode" data-i18n="privacy.label"></label>
                 <select id="poster-privacy-mode" onchange="window.Strom.UI.updatePosterSheets()">

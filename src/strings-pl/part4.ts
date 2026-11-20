@@ -795,6 +795,10 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         lookResetDefault: 'Przywróć domyślny',
         lookSavedToast: 'Zapisano jako domyślny wygląd wachlarza.',
         lookDiffersAria: (label: string) => `${label}, różni się od domyślnego`,
+        defaultStyle: 'Domyślny styl',
+        defaultsDesc: 'Każde uruchomienie zaczyna się od tego wyglądu; w panelu Wygląd można go zmienić tylko na bieżącą pracę.',
+        textNote: 'Gdy tekst się nie mieści, jest skracany.',
+        portraitsWord: 'portrety',
         posterGenerations: (gens: number, desc: number | null) => desc == null
             ? nPl(gens, 'pokolenie', 'pokolenia', 'pokoleń')
             : `${nPl(gens, 'pokolenie', 'pokolenia', 'pokoleń')} przodków, ${nPl(desc, 'pokolenie', 'pokolenia', 'pokoleń')} potomków`,

@@ -4769,6 +4769,12 @@ const stringsEN = {
         lookResetDefault: 'Back to default',
         lookSavedToast: 'Saved as the default fan appearance.',
         lookDiffersAria: (label: string) => `${label}, differs from the default`,
+        /** Settings › Fan (spec 118 §10): the default look. */
+        defaultStyle: 'Default style',
+        defaultsDesc: 'Every start begins with this appearance; the Appearance panel changes it for the current work only.',
+        textNote: 'Where the text does not fit, it is shortened.',
+        /** The poster dialog's folded row on a phone (with the style, the lines and the text). */
+        portraitsWord: 'portraits',
         posterGenerations: (gens: number, desc: number | null) => desc == null
             ? nEn(gens, 'generation', 'generations')
             : `${nEn(gens, 'generation', 'generations')} of ancestors, ${desc} of descendants`,
@@ -6152,6 +6158,7 @@ const stringsEN = {
         optMarried: 'Married surname',
         surnameHint: 'The birth surname is shown when there is no married surname or when the birth surname is chosen for the person.',
         groupTree: 'Tree view',
+        groupFan: 'Fan',
         groupNotifications: 'Notifications',
         groupCard: 'Person card',
         groupExperiments: 'Experimental features',
@@ -7889,6 +7896,12 @@ const stringsEN = {
         pngTooLarge: 'The tree is too large for a PNG image: scaled down to fit, it would not be readable. SVG or Print / PDF can be chosen here instead.',
         pageLabel: (row: number, col: number) => `row ${row} · col ${col}`,
         guideOption: 'Add an assembly-guide first page',
+        /** The fan's poster: its own look for this output only (spec 118 §10). */
+        lookTitle: 'Poster appearance',
+        lookPreview: 'Preview',
+        lookOnlyHere: 'Applies to this output only; the screen and the default stay as they are.',
+        lookAsScreen: 'As on screen',
+        lookChanged: 'changed for this output only',
         guideTitle: 'Assembly guide',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
             `${nEn(pages, 'sheet', 'sheets')} (${rows} × ${cols}), ${overlap} mm overlap — glue by the grid below.`,
@@ -15191,6 +15204,10 @@ const stringsCZ: StringsType = {
         lookResetDefault: 'Vrátit na výchozí',
         lookSavedToast: 'Uloženo jako výchozí vzhled vějíře.',
         lookDiffersAria: (label: string) => `${label}, liší se od výchozího`,
+        defaultStyle: 'Výchozí styl',
+        defaultsDesc: 'Každé spuštění začne s tímto vzhledem; v panelu Vzhled jde změnit jen pro aktuální práci.',
+        textNote: 'Kde se text nevejde, zkrátí se.',
+        portraitsWord: 'portréty',
         posterGenerations: (gens: number, desc: number | null) => desc == null
             ? nCs(gens, 'generace', 'generace', 'generací')
             : `${nCs(gens, 'generace', 'generace', 'generací')} předků, ${desc} potomků`,
@@ -16525,6 +16542,7 @@ const stringsCZ: StringsType = {
         optMarried: 'Po sňatku',
         surnameHint: 'Bez příjmení po sňatku, nebo když je u osoby zvolené rodné, se ukazuje rodné příjmení.',
         groupTree: 'Zobrazení stromu',
+        groupFan: 'Vějíř',
         groupNotifications: 'Upozornění',
         groupCard: 'Karta osoby',
         groupExperiments: 'Experimentální funkce',
@@ -18244,6 +18262,11 @@ const stringsCZ: StringsType = {
         pngTooLarge: 'Strom je na obrázek PNG příliš velký: zmenšený do limitu by nebyl čitelný. Místo toho lze zvolit SVG nebo Tisk / PDF.',
         pageLabel: (row: number, col: number) => `řádek ${row} · sloupec ${col}`,
         guideOption: 'Přidat úvodní stranu s návodem na slepení',
+        lookTitle: 'Vzhled plakátu',
+        lookPreview: 'Náhled',
+        lookOnlyHere: 'Platí jen pro tento výstup; obrazovka ani výchozí vzhled se nemění.',
+        lookAsScreen: 'Jako na obrazovce',
+        lookChanged: 'změněno jen pro tisk',
         guideTitle: 'Návod na slepení',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
             `${nCs(pages, 'list', 'listy', 'listů')} (${rows} × ${cols}), přesah ${overlap} mm — lepí se podle mřížky níže.`,
@@ -25452,6 +25475,10 @@ const stringsDE: StringsType = {
         lookResetDefault: 'Auf Standard zurücksetzen',
         lookSavedToast: 'Als Standarddarstellung des Fächers gespeichert.',
         lookDiffersAria: (label: string) => `${label}, weicht vom Standard ab`,
+        defaultStyle: 'Standardstil',
+        defaultsDesc: 'Jeder Start beginnt mit dieser Darstellung; im Bereich „Darstellung“ lässt sie sich nur für die aktuelle Arbeit ändern.',
+        textNote: 'Wo der Text nicht passt, wird er gekürzt.',
+        portraitsWord: 'Porträts',
         posterGenerations: (gens: number, desc: number | null) => desc == null
             ? nDe(gens, 'Generation', 'Generationen')
             : `${nDe(gens, 'Generation', 'Generationen')} Vorfahren, ${nDe(desc, 'Generation', 'Generationen')} Nachkommen`,
@@ -26751,6 +26778,7 @@ const stringsDE: StringsType = {
         optMarried: 'Ehename',
         surnameHint: 'Der Geburtsname wird angezeigt, wenn kein Ehename vorhanden ist oder bei der Person der Geburtsname gewählt ist.',
         groupTree: 'Stammbaumansicht',
+        groupFan: 'Fächer',
         groupNotifications: 'Hinweise',
         groupCard: 'Personenkarte',
         groupExperiments: 'Experimentelle Funktionen',
@@ -28452,6 +28480,11 @@ const stringsDE: StringsType = {
         pngTooLarge: 'Der Stammbaum ist für ein PNG-Bild zu groß: auf das Limit verkleinert wäre er nicht lesbar. Stattdessen kann SVG oder Druck / PDF gewählt werden.',
         pageLabel: (row: number, col: number) => `Zeile ${row} · Spalte ${col}`,
         guideOption: 'Eine erste Seite mit Zusammenbau-Anleitung hinzufügen',
+        lookTitle: 'Darstellung des Posters',
+        lookPreview: 'Vorschau',
+        lookOnlyHere: 'Gilt nur für diese Ausgabe; Bildschirm und Standard bleiben unverändert.',
+        lookAsScreen: 'Wie auf dem Bildschirm',
+        lookChanged: 'nur für diese Ausgabe geändert',
         guideTitle: 'Zusammenbau-Anleitung',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
             `${nDe(pages, 'Blatt', 'Blätter')} (${rows} × ${cols}), ${overlap} mm Überlappung — nach dem Raster unten zusammenkleben.`,

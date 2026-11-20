@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    FAN_LOOK_DEFAULT, FanLook, FanLookState, FanLookStore, fanLookFrom, fanStylePreviewSvg, parseFanLook, readFanLookDefault, sameFanLook,
+    FAN_LOOK_DEFAULT, FanLook, FanLookState, FanLookStore, PosterLook, fanLookFrom, fanStylePreviewSvg, parseFanLook, readFanLookDefault, sameFanLook,
 } from '../fan-look.js';
 import { FAN_STORAGE_KEYS, FAN_LOOK_SESSION_KEY } from '../storage-keys.js';
 import { FAN_STYLES } from '../fan-colors.js';
@@ -142,5 +142,54 @@ describe('fan look (spec 118 §10)', () => {
         const old = parseViewState('fan', { ...sent, style: undefined, rodScope: undefined, content: undefined, portraits: undefined })!;
         applyViewStateBeforeDraw(old, { ...target, hasPerson: () => false });
         expect(got).toEqual({ generations: 5, descGenerations: 3, shape: 'half', colorMode: 'rod' });
+    });
+
+    it('the poster dialog\'s look: prefilled from the screen, changed for the output only, "As on screen" returns it (§10)', () => {
+        const local = memStore({ [FAN_STORAGE_KEYS.style]: 'color' });
+        const session = memStore();
+        const state = new FanLookState({ local: () => local, session: () => session });
+        const before = { local: new Map(local.map), session: new Map(session.map) };
+        const poster = new PosterLook(() => state.look());
+        expect(poster.look()).toEqual(FAN_LOOK_DEFAULT);
+        expect(poster.own()).toBeNull();
+
+        expect(poster.set({ style: 'antique' })).toBe(true);
+        expect(poster.set({ rodScope: 'main', portraits: true })).toBe(true);
+        expect(poster.set({ style: 'antique' })).toBe(false);
+        expect(poster.set({ content: 'nonsense' })).toBe(false);
+        expect(poster.look()).toEqual({ style: 'antique', rodScope: 'main', content: 'years', portraits: true });
+        expect(poster.own()).not.toBeNull();
+        // The screen, the session and the default stay as they were.
+        expect(state.look()).toEqual(FAN_LOOK_DEFAULT);
+        expect(state.defaults()).toEqual(FAN_LOOK_DEFAULT);
+        expect(state.differs()).toBe(false);
+        expect(local.map).toEqual(before.local);
+        expect(session.map).toEqual(before.session);
+
+        // Back to the screen's choices one by one: as on screen again (null).
+        poster.set({ style: 'color', rodScope: 'all', portraits: false });
+        expect(poster.own()).toBeNull();
+
+        // "As on screen" (and a new opening) follows the screen as it is then.
+        poster.set({ style: 'mono' });
+        state.set({ style: 'pastel' });
+        poster.reset();
+        expect(poster.own()).toBeNull();
+        expect(poster.look()).toEqual(PASTEL);
+    });
+
+    it('Settings change the default: the screen follows only while it showed the default (§10)', () => {
+        const local = memStore();
+        const session = memStore();
+        const state = new FanLookState({ local: () => local, session: () => session });
+        expect(state.setDefault({ style: 'pastel' })).toBe(true);
+        expect(local.map.get(FAN_STORAGE_KEYS.style)).toBe('pastel');
+        expect(state.look()).toEqual(PASTEL);
+        // Changed in the panel: a later default leaves the current look as it is.
+        state.set({ style: 'mono' });
+        expect(state.setDefault({ content: 'names' })).toBe(true);
+        expect(local.map.get(FAN_STORAGE_KEYS.content)).toBe('names');
+        expect(state.look()).toEqual({ ...PASTEL, style: 'mono' });
+        expect(state.differs()).toBe(true);
     });
 });

@@ -421,6 +421,11 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         pngTooLarge: 'Drzewo jest za duże na obraz PNG: zmniejszone do limitu nie byłoby czytelne. Zamiast tego można wybrać SVG albo Druk / PDF.',
         pageLabel: (row: number, col: number) => `wiersz ${row} · kolumna ${col}`,
         guideOption: 'Dodaj stronę początkową z instrukcją sklejania',
+        lookTitle: 'Wygląd plakatu',
+        lookPreview: 'Podgląd',
+        lookOnlyHere: 'Dotyczy tylko tego wydruku; ekran i wygląd domyślny się nie zmieniają.',
+        lookAsScreen: 'Jak na ekranie',
+        lookChanged: 'zmienione tylko dla wydruku',
         guideTitle: 'Instrukcja sklejania',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
             `${nPl(pages, 'arkusz', 'arkusze', 'arkuszy')} (${rows} × ${cols}), zakładka ${overlap} mm – skleja się według siatki poniżej.`,

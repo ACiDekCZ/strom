@@ -210,6 +210,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         optMarried: 'Po ślubie',
         surnameHint: 'Gdy brak nazwiska po ślubie albo gdy dla osoby wybrano rodowe, wyświetlane jest nazwisko rodowe.',
         groupTree: 'Wyświetlanie drzewa',
+        groupFan: 'Wachlarz',
         groupNotifications: 'Powiadomienia',
         groupCard: 'Karta osoby',
         groupExperiments: 'Funkcje eksperymentalne',

@@ -178,6 +178,42 @@ export class FanLookState {
     }
 }
 
+/**
+ * The poster dialog's own look (spec 118 §10): prefilled from the screen and
+ * changed for this output only. `own()` is null while it is the screen's
+ * ("As on screen"). It writes nowhere: the screen's look, the session and the
+ * default stay as they are; every opening of the dialog starts from the screen.
+ */
+export class PosterLook {
+    private mine: FanLook | null = null;
+
+    constructor(private readonly screen: () => FanLook) {}
+
+    /** The look of the output. */
+    look(): FanLook {
+        return this.mine ? { ...this.mine } : this.screen();
+    }
+
+    /** The output's own look, or null: as on screen. */
+    own(): FanLook | null {
+        return this.mine ? { ...this.mine } : null;
+    }
+
+    /** A choice changed for this output (each invalid field ignored); false when nothing changed. */
+    set(partial: Partial<Record<keyof FanLook, unknown>>): boolean {
+        const cur = this.look();
+        const next = fanLookFrom(partial, cur);
+        if (sameFanLook(next, cur)) return false;
+        this.mine = sameFanLook(next, this.screen()) ? null : next;
+        return true;
+    }
+
+    /** "As on screen" (and a new opening of the dialog). */
+    reset(): void {
+        this.mine = null;
+    }
+}
+
 /** The sectors of the style preview: per ring, the father's half then the mother's (outer rings wider). */
 const PREVIEW_RINGS: ReadonlyArray<readonly FanRodSlot[]> = [
     ['PS0', 'MS0'],

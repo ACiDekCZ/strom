@@ -11,13 +11,18 @@ import { strings } from '../strings.js';
 import {
     buildTreeSvg, computeBounds, escapeXml, PosterOptions, PosterFooterMeta, posterFooterHeight, POSTER_PADDING, posterPngScales, PNG_SCALE,
 } from '../export-image.js';
-import { buildFanModel, buildFanPosterSvg, fanPosterGeometry } from '../fan-chart.js';
+import { buildFanModel, buildFanPosterSvg, fanPosterGeometry, fanLineages } from '../fan-chart.js';
+import { fanStyleFont } from '../fan-colors.js';
+import { fanMeasureFor } from '../fan-labels.js';
+import { assignFanRodColors } from '../fan-rod-assign.js';
+import { FanLook, PosterLook } from '../fan-look.js';
+import { fanPhotoPortrait } from './fan-view.js';
 import { computeTimelineModel } from '../timeline.js';
 import { buildTimelinePosterSvg, timelinePosterGeometry } from '../timeline-chart.js';
 import { uiModule } from './module.js';
 import { runBusy, activatedElement, nextPaint } from './busy.js';
 import { imagesBeforeOutput } from './output-images.js';
-import { LayoutConfig, StromData, TreeSpacing, ViewMode, layoutConfigFor, personCardHeight } from '../types.js';
+import { LayoutConfig, Person, StromData, TreeSpacing, ViewMode, layoutConfigFor, personCardHeight } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
 import { classifyBranches, BranchSet } from '../branch-colors.js';
 import { computeIndirectIds } from '../indirect.js';
@@ -318,7 +323,14 @@ async function posterBusy(work: () => void | Promise<void>, el: HTMLElement | nu
         { heavy: cards >= POSTER_SHOWN_AT_ONCE ? 'now' : true, label: strings.busy.savingFile });
 }
 
-function buildCurrentPoster(): PosterBuild | null {
+/**
+ * The fan poster's own look (spec 118 §10): prefilled from the screen at each
+ * opening of the dialog, changed for this output only (never kept).
+ */
+const posterLook = new PosterLook(() => TreeRenderer.getFanLook());
+
+/** The poster of the current view; `look`: the fan's look of this output (default: the screen's). */
+function buildCurrentPoster(look?: FanLook): PosterBuild | null {
     const mode = TreeRenderer.getViewMode();
     if (mode === 'map' || mode === 'table') return null; // not printable
 
@@ -362,14 +374,22 @@ function buildCurrentPoster(): PosterBuild | null {
         });
         if (!model) return null;
         const colorMode = TreeRenderer.getFanColorMode();
-        // The family lines in the colours the view shows (spec 114 §7), not assigned anew.
+        // The look of this output (spec 118 §10): the dialog's own, else the screen's.
+        const screen = TreeRenderer.getFanLook();
+        const fanLook = look ?? screen;
+        const { style, rodScope: scope, content } = fanLook;
+        // The family lines in the colours the view shows (spec 114 §7), not assigned anew; in another
+        // style or scope assigned from the view's memory, so each line keeps the screen's slot (spec 118 §10).
         const view = TreeRenderer.getFanView();
         const shown = view?.getModel();
-        const rodColors = colorMode === 'rod' && shown && shown.focus.id === focusId && shown.shape === model.shape
-            && shown.generations === model.generations && shown.descGenerations === model.descGenerations
-            ? view?.getRodAssignment() ?? null : null;
+        const sameModel = !!shown && shown.focus.id === focusId && shown.shape === model.shape
+            && shown.generations === model.generations && shown.descGenerations === model.descGenerations;
+        const rodColors = colorMode !== 'rod' || !view ? null
+            : sameModel && style === screen.style && scope === screen.rodScope ? view.getRodAssignment()
+                : assignFanRodColors(model, fanLineages(DataManager.getData()), view.rodMemory(), { style, scope });
         // A highlighted family line prints as it is seen (spec 114 §7).
         const highlight = view?.getPrintHighlight() ?? null;
+        const measure = fanMeasureFor(fanStyleFont(style));
         const svg = buildFanPosterSvg(model, {
             ...(rodColors ? { rodColors } : {}),
             ...(highlight ? { highlight } : {}),
@@ -378,10 +398,15 @@ function buildCurrentPoster(): PosterBuild | null {
             addParentLabel: '',
             showKekule: SettingsManager.isFanKekuleEnabled(),
             colorMode,
+            style,
+            content,
+            // The stored photos (after imagesBeforeOutput), never the veil of one on its way (spec 118 §6).
+            ...(fanLook.portraits ? { portrait: (p: Person) => fanPhotoPortrait(p, false) } : {}),
+            measure,
             mmPerPx: MM_PER_PX,
             fontFaceCss: appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]),
         }, meta);
-        const geom = fanPosterGeometry(model, meta, { colorMode, ...(rodColors ? { rodColors } : {}), ...(highlight ? { highlight } : {}) });
+        const geom = fanPosterGeometry(model, meta, { colorMode, style, measure, ...(rodColors ? { rodColors } : {}), ...(highlight ? { highlight } : {}) });
         return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };
     }
 
@@ -418,6 +443,85 @@ function svgDataUrl(svg: string): string {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+/** The preview of the fan poster's look: built after the choices settle (150 ms), in a URL of its own. */
+let previewTimer: ReturnType<typeof setTimeout> | null = null;
+let previewUrl: string | null = null;
+/** Each built preview's number: a build that a newer one overtook is dropped. */
+let previewSeq = 0;
+
+function dropPreview(): void {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = null;
+    previewSeq++;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = null;
+    for (const id of ['poster-look-img', 'poster-look-sum-img']) document.getElementById(id)?.removeAttribute('src');
+}
+
+/** The preview: the very poster the output builds (the same function and look), made small. */
+function drawPreview(): void {
+    previewTimer = null;
+    const seq = ++previewSeq;
+    if (!document.getElementById('poster-modal')?.classList.contains('active') || TreeRenderer.getViewMode() !== 'fan') return;
+    const poster = buildCurrentPoster(posterLook.look());
+    if (seq !== previewSeq) return;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = poster ? URL.createObjectURL(new Blob([poster.svg], { type: 'image/svg+xml' })) : null;
+    for (const id of ['poster-look-img', 'poster-look-sum-img']) {
+        const img = document.getElementById(id) as HTMLImageElement | null;
+        if (!img) continue;
+        if (previewUrl) img.src = previewUrl; else img.removeAttribute('src');
+    }
+}
+
+function schedulePreview(delay = 150): void {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(drawPreview, delay);
+}
+
+/** The dialog's choices, its note and "As on screen", and the phone's folded row, as the poster's look stands. */
+function renderPosterLook(): void {
+    const box = document.getElementById('poster-look');
+    if (!box || box.hidden) return;
+    const look = posterLook.look();
+    const changed = posterLook.own() !== null;
+    const S = strings.fan;
+    const value = (id: string, v: string) => {
+        const el = document.getElementById(id) as HTMLSelectElement | null;
+        if (el) el.value = v;
+    };
+    value('poster-look-style', look.style);
+    value('poster-look-scope', look.rodScope);
+    value('poster-look-content', look.content);
+    // The family lines' scope only for the colours by family line (as in the Appearance panel).
+    const rodOn = TreeRenderer.getFanColorMode() === 'rod';
+    const scope = document.getElementById('poster-look-scope') as HTMLSelectElement | null;
+    if (scope) {
+        scope.disabled = !rodOn;
+        if (rodOn) scope.removeAttribute('title'); else scope.title = S.scopeOff;
+    }
+    const portraits = document.getElementById('poster-look-portraits') as HTMLInputElement | null;
+    if (portraits) portraits.checked = look.portraits;
+    const reset = document.getElementById('poster-look-reset');
+    if (reset) reset.hidden = !changed;
+    // The phone's folded row: the choices in words.
+    const styleName = { color: S.styleColor, pastel: S.stylePastel, antique: S.styleAntique, mono: S.styleMono }[look.style];
+    const contentName = { years: S.contentYears, places: S.contentPlaces, names: S.contentNames }[look.content];
+    const words = [styleName, ...(rodOn ? [look.rodScope === 'main' ? S.scopeMain : S.scopeAll] : []), contentName,
+        ...(look.portraits ? [S.portraitsWord] : []), ...(changed ? [strings.poster.lookChanged] : [])];
+    const desc = document.getElementById('poster-look-sum-desc');
+    if (desc) desc.textContent = words.join(' · ');
+}
+
+/** The phone's folded row: open or closed (closed at each opening of the dialog). */
+function foldPosterLook(open: boolean): void {
+    const box = document.getElementById('poster-look');
+    box?.classList.toggle('is-open', open);
+    document.getElementById('poster-look-sum')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+    const arrow = document.getElementById('poster-look-sum-arrow');
+    if (arrow) arrow.textContent = open ? '▾' : '▸';
+}
+
 export const exportImageMethods = uiModule({
     showPosterDialog(): void {
         this.closeMobileMenu();
@@ -448,11 +552,43 @@ export const exportImageMethods = uiModule({
         // Spacing: only for the tree of cards (the fan and the timeline have their own layout).
         const spacingRow = document.getElementById('poster-spacing');
         if (spacingRow) spacingRow.hidden = !isTreePosterView(TreeRenderer.getViewMode());
+        // The fan poster's own look (spec 118 §10): from the screen at each opening, only in the fan view.
+        posterLook.reset();
+        dropPreview();
+        const lookBox = document.getElementById('poster-look');
+        if (lookBox) lookBox.hidden = TreeRenderer.getViewMode() !== 'fan' || info.blocked;
+        foldPosterLook(false);
+        renderPosterLook();
+        if (lookBox && !lookBox.hidden) schedulePreview(0);
         const current = SettingsManager.getPosterSpacing();
         document.querySelectorAll<HTMLInputElement>('input[name="poster-spacing"]').forEach(radio => {
             radio.checked = radio.value === current;
         });
         this.updatePosterSheets();
+    },
+
+    /**
+     * A choice of the fan poster's look (spec 118 §10): for this output only,
+     * the screen, the session and the default stay as they are.
+     */
+    setPosterLook(field: 'style' | 'rodScope' | 'content' | 'portraits', value: string | boolean): void {
+        if (!posterLook.set({ [field]: value })) return;
+        renderPosterLook();
+        schedulePreview();
+    },
+
+    /** "As on screen": the poster's look is the screen's again. */
+    resetPosterLook(): void {
+        posterLook.reset();
+        renderPosterLook();
+        schedulePreview();
+        // The link goes with the change: the focus to the first choice.
+        document.getElementById('poster-look-style')?.focus({ preventScroll: true });
+    },
+
+    /** The phone's folded "Poster appearance" row: a tap unfolds the preview and the choices. */
+    togglePosterLook(): void {
+        foldPosterLook(!document.getElementById('poster-look')?.classList.contains('is-open'));
     },
 
     /** The export's spacing (spec 069 §4): remembered on this device at once; the screen stays as it is. */
@@ -465,6 +601,8 @@ export const exportImageMethods = uiModule({
      * and orientation (the guide page's count); none when both print on as many.
      */
     updatePosterSheets(): void {
+        // The privacy mode changes the fan poster's names: its preview follows.
+        if (!document.getElementById('poster-look')?.hidden && previewUrl) schedulePreview();
         const labels = document.querySelectorAll<HTMLElement>('#poster-spacing .poster-sheets');
         const mode = TreeRenderer.getViewMode();
         const counts = new Map<TreeSpacing, number>();
@@ -486,6 +624,7 @@ export const exportImageMethods = uiModule({
     },
 
     closePosterDialog(): void {
+        dropPreview();
         document.getElementById('poster-modal')?.classList.remove('active');
         this.clearDialogStack();
     },
@@ -496,7 +635,7 @@ export const exportImageMethods = uiModule({
         const el = activatedElement();
         if (await imagesBeforeOutput(strings.photos.out.svg, { el }) === 'cancelled') return;
         await posterBusy(() => {
-            const poster = buildCurrentPoster();
+            const poster = buildCurrentPoster(posterLook.look());
             if (!poster) {
                 this.showAlert(strings.poster.empty, 'warning');
                 return;
@@ -511,7 +650,7 @@ export const exportImageMethods = uiModule({
         const el = activatedElement();
         if (await imagesBeforeOutput(strings.photos.out.png, { el }) === 'cancelled') return;
         await posterBusy(async () => {
-            const poster = buildCurrentPoster();
+            const poster = buildCurrentPoster(posterLook.look());
             if (!poster) {
                 this.showAlert(strings.poster.empty, 'warning');
                 return;
@@ -586,7 +725,7 @@ export const exportImageMethods = uiModule({
     async printPosterPdf(): Promise<void> {
         // The tree's photos still on their way: the print waits for them, its row says so (spec 116 §8, 8a).
         if (await imagesBeforeOutput(strings.photos.out.poster) === 'cancelled') return;
-        const poster = buildCurrentPoster();
+        const poster = buildCurrentPoster(posterLook.look());
         if (!poster) {
             this.showAlert(strings.poster.empty, 'warning');
             return;

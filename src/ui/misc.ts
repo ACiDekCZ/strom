@@ -63,6 +63,8 @@ import { showToast as showToastNow, putToast as putToastNow, showProgressToast a
 import { helpMark, setHelpMarkTopic } from './help-mark.js';
 import { HELP_TOPICS, type HelpTopic } from '../help/topics.js';
 import { openHelp } from './help-ui.js';
+import { fanStylePreviewSvg } from '../fan-look.js';
+import { FAN_STYLES } from '../fan-colors.js';
 import { syncControlBlock } from './minimap.js';
 import { addLender, cancelWaiting, removeLender, watchToasts, whenFree } from '../toast-slot.js';
 import { defaultFocusKey, focusDefaultPerson, isDefaultFocusContext, updateDefaultFocusButtons } from './default-focus.js';
@@ -302,7 +304,8 @@ export const miscMethods = uiModule({
     },
 
     // ---- SETTINGS DIALOG ----
-    showSettingsDialog(): void {
+    /** Settings; `section` 'fan': scrolled to the fan's group (the Appearance panel's link, spec 118 §10). */
+    showSettingsDialog(section?: 'fan'): void {
         const modal = document.getElementById('settings-modal');
         if (!modal) return;
         // A fresh opening (not a redraw while open, as on a language change): no
@@ -382,6 +385,7 @@ export const miscMethods = uiModule({
         this.renderResearchEdgeSettings();
         const kekuleToggle = document.getElementById('fan-kekule-toggle') as HTMLInputElement | null;
         if (kekuleToggle) kekuleToggle.checked = SettingsManager.isFanKekuleEnabled();
+        this.syncFanDefaultSetting();
         const titlesToggle = document.getElementById('show-titles-toggle') as HTMLInputElement | null;
         if (titlesToggle) titlesToggle.checked = SettingsManager.isShowTitles();
         const relCardToggle = document.getElementById('reliability-card-toggle') as HTMLInputElement | null;
@@ -415,6 +419,26 @@ export const miscMethods = uiModule({
         this.renderResearchLiveSettings();
         modal.classList.add('active');
         this.fitSurnameDisplaySetting();
+        if (section === 'fan') document.getElementById('settings-group-fan')?.scrollIntoView({ block: 'start' });
+    },
+
+    /**
+     * Settings › Fan (spec 118 §10): the default look's choices as the device
+     * keeps them, each style's row with its small fan (drawn once).
+     */
+    syncFanDefaultSetting(): void {
+        const look = TreeRenderer.getFanLookDefault();
+        document.querySelectorAll<HTMLElement>('#settings-modal [data-fan-style-prev]').forEach(el => {
+            const style = FAN_STYLES.find(s => s === el.dataset.fanStylePrev);
+            if (style && !el.firstElementChild) el.innerHTML = fanStylePreviewSvg(style);
+        });
+        const check = (name: string, value: string) => document.querySelectorAll<HTMLInputElement>(`#settings-modal input[name="${name}"]`)
+            .forEach(radio => { radio.checked = radio.value === value; });
+        check('fan-default-style', look.style);
+        check('fan-default-scope', look.rodScope);
+        check('fan-default-content', look.content);
+        const portraits = document.getElementById('fan-default-portraits') as HTMLInputElement | null;
+        if (portraits) portraits.checked = look.portraits;
     },
 
     /** Experimental features: the group shows only while it has a row (none at the moment). */

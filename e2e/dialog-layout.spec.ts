@@ -503,7 +503,7 @@ for (const width of [1440, 1024, 390]) {
                             counts: el.querySelectorAll('.poster-sheets:not([hidden])').length,
                             glyphs: [...seg.querySelectorAll<HTMLElement>('.spacing-glyph')].map(g => `${g.offsetWidth}x${g.offsetHeight}`),
                             minHeight: Math.min(...opts.map(o => o.getBoundingClientRect().height)),
-                            fields: Math.min(...[...dialog.querySelectorAll<HTMLElement>('select')].map(s => s.getBoundingClientRect().height)),
+                            fields: Math.min(...[...dialog.querySelectorAll<HTMLElement>('select')].filter(s => s.getClientRects().length > 0).map(s => s.getBoundingClientRect().height)),
                             dialogScroll: dialog.scrollWidth > dialog.clientWidth,
                             pageScroll: document.documentElement.scrollWidth > window.innerWidth,
                         };

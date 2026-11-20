@@ -7465,10 +7465,7 @@ class TreeRendererClass {
                     UI.showToast(strings.fan.lookSavedToast, 3000);
                 },
                 resetLookToDefault: () => this.resetFanLookToDefault(),
-                openSettings: () => {
-                    UI.showSettingsDialog();
-                    document.getElementById('settings-group-fan')?.scrollIntoView({ block: 'start' });
-                },
+                openSettings: () => UI.showSettingsDialog('fan'),
                 active: () => this.viewMode === 'fan',
                 setFocus: id => this.setFocus(id),
                 addParent: (childId, gender) => UI.addRelation(childId, 'parent', gender),

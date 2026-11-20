@@ -310,6 +310,15 @@ export class FanViewController {
     }
 
     /**
+     * The window's memory of the family lines' slots (spec 114 §3): an output
+     * in another style or scope assigns its colours from it (spec 118 §10),
+     * so its lines keep the screen's slots.
+     */
+    rodMemory(): ReadonlyMap<RodId, FanRodSlot> {
+        return this.rodColorMemory;
+    }
+
+    /**
      * The highlighted family line as a poster or an image prints it (spec 114
      * §7): its id and its people in the tree, or null when no line's highlight
      * is on.
