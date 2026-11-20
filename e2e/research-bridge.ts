@@ -1561,6 +1561,17 @@ export interface FakeMaterial {
     deleteImpacts?: Record<string, Record<string, unknown>>;
     /** Right before the next confirmation, the research changes: these impacts replace the ones of their files (409 `material.delete-changed`). */
     deleteChangeOnce?: Record<string, Record<string, unknown>>;
+    /**
+     * What deleting a source with its family tree file leaves behind (`retractSources`, spec 117 §7): S… → its
+     * impact as `/source/retract` lists it (default: its title from the file's `uses.of`, no citations).
+     */
+    deleteSourceImpacts?: Record<string, Record<string, unknown>>;
+    /** Right before the next confirmation, these source impacts replace theirs (409 `material.delete-changed` with `sourceImpacts`). */
+    deleteSourceChangeOnce?: Record<string, Record<string, unknown>>;
+    /** The next confirmation is refused with this answer instead (e.g. 500 `material.failed`): nothing is deleted. */
+    deleteFailOnce?: { status: number; body: unknown };
+    /** Sources deleted with their files so far (a second deletion of one: 409 `source.retracted`). */
+    deleteRetracted?: string[];
 }
 
 /**
@@ -1896,11 +1907,27 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         }));
         const signed = (deleteConfirms.get(b) ?? new Map<string, string>());
         deleteConfirms.set(b, signed);
+        // The sources deleted first (spec 117 §7, research U3): only those of `blockedBy`, each standing in the tree.
+        const retract = body.retractSources === undefined ? [] : body.retractSources;
+        if (!Array.isArray(retract) || retract.length > 50 || !retract.every(x => typeof x === 'string' && /^S\d+$/.test(x))) return refusal(400, 'material.body');
+        const blocked = new Set((files as FakeMaterialFile[]).flatMap(liveOf));
+        if ((retract as string[]).some(x => !blocked.has(x))) return refusal(400, 'material.body');
+        const xrefOf = (id: string) => new RegExp(`0 @([^@]+)@ SOUR\\n(?:[1-9].*\\n)*?1 REFN ${id}\\b`).exec(b.treeGed)?.[1] ?? null;
+        for (const id of retract as string[]) {
+            if (xrefOf(id)) continue;
+            return (m.deleteRetracted ?? []).includes(id)
+                ? { status: 409, body: { error: 'Already retracted.', code: 'source.retracted', text: 'retracted', params: { id } } }
+                : { status: 404, body: { error: 'No such source.', code: 'source.unknown', text: 'unknown', params: { id } } };
+        }
+        const titleOf = (id: string) => (files as FakeMaterialFile[]).flatMap(f => f.uses?.of ?? []).find(o => o.source === id)?.title ?? id;
+        const sourceImpacts = () => (retract as string[]).map(id => ({ id, title: titleOf(id), counts: {}, ...(m.deleteSourceImpacts?.[id] ?? {}) }));
+        const both = retract.length ? { retractSources: retract } : {};
         if (body.dryRun === true) {
             const confirm = `confirm-${signed.size + 1}`;
             const list = impacts();
-            signed.set(confirm, JSON.stringify({ ids, list }));
-            return { status: 200, body: { files: ids, dryRun: true, impacts: list, confirm } };
+            const srcList = retract.length ? sourceImpacts() : undefined;
+            signed.set(confirm, JSON.stringify({ ids, list, srcList }));
+            return { status: 200, body: { files: ids, ...both, dryRun: true, impacts: list, ...(srcList ? { sourceImpacts: srcList } : {}), confirm } };
         }
         const was = signed.get(body.confirm as string);
         if (!was || JSON.stringify((JSON.parse(was) as { ids: unknown }).ids) !== JSON.stringify(ids)) return refusal(400, 'material.body');
@@ -1908,18 +1935,36 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
             m.deleteImpacts = { ...(m.deleteImpacts ?? {}), ...m.deleteChangeOnce };
             delete m.deleteChangeOnce;
         }
-        const list = impacts();
-        if (JSON.stringify((JSON.parse(was) as { list: unknown }).list) !== JSON.stringify(list)) {
-            return { status: 409, body: { error: 'changed', code: 'material.delete-changed', text: 'changed', impacts: list } };
+        if (m.deleteSourceChangeOnce) {
+            m.deleteSourceImpacts = { ...(m.deleteSourceImpacts ?? {}), ...m.deleteSourceChangeOnce };
+            delete m.deleteSourceChangeOnce;
         }
-        const retract = Array.isArray(body.retractSources) ? body.retractSources as string[] : [];
-        const live = [...new Set((files as FakeMaterialFile[]).flatMap(liveOf))].filter(x => !retract.includes(x));
+        const list = impacts();
+        const srcList = retract.length ? sourceImpacts() : undefined;
+        const signedFor = JSON.parse(was) as { list: unknown; srcList?: unknown };
+        if (JSON.stringify(signedFor.list) !== JSON.stringify(list) || JSON.stringify(signedFor.srcList) !== JSON.stringify(srcList)) {
+            return { status: 409, body: { error: 'changed', code: 'material.delete-changed', text: 'changed', impacts: list, ...(srcList ? { sourceImpacts: srcList } : {}) } };
+        }
+        const live = [...blocked].filter(x => !(retract as string[]).includes(x));
         if (live.length) {
             return { status: 409, body: { error: 'source-live', code: 'material.source-live', text: 'source-live', params: { sources: live.join(',') }, sources: live } };
         }
+        if (m.deleteFailOnce) {
+            // The research's write is whole (R7): a failure anywhere writes nothing.
+            const fail = m.deleteFailOnce;
+            delete m.deleteFailOnce;
+            return fail;
+        }
         signed.delete(body.confirm as string);
         m.files = m.files.filter(f => !(ids as string[]).includes(f.id));
-        return { status: 200, body: { files: ids, deleted: ids, impacts: list, ...commitWrite(b) } };
+        for (const id of retract as string[]) {
+            b.treeGed = gedWithoutSource(b.treeGed, xrefOf(id)!);
+            (m.deleteRetracted ??= []).push(id);
+        }
+        return {
+            status: 200,
+            body: { files: ids, deleted: ids, ...(retract.length ? { retracted: retract } : {}), impacts: list, ...(srcList ? { sourceImpacts: srcList } : {}), ...commitWrite(b) },
+        };
     }
     if (rest === '/material/edit') {
         (m.edits ??= []).push(body);

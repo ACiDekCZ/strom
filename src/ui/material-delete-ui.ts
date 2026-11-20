@@ -19,12 +19,14 @@ import {
     type DeleteImpact, type MaterialItem,
 } from '../materials.js';
 import {
-    deletableFiles, deleteCanGo, deleteChanged, deleteListed, deleteStart, deleteSummary, deleteTicked, deleteWarns,
-    treeFileSource, type DeleteState,
+    bothRetractNext, deletableFiles, deleteBlockedBy, deleteBothCanGo, deleteCanGo, deleteChanged, deleteListed, deleteSourceRefusal,
+    deleteStart, deleteSummary, deleteTicked, deleteWarns, treeFileSource, type DeleteState,
 } from '../material-delete.js';
-import { button, materialDialog } from './material-actions-ui.js';
+import { parseSourceImpacts, retractSummary } from '../source-retract.js';
+import { button, materialDialog, type MaterialDialog } from './material-actions-ui.js';
 import { previewEl } from './material-sort-ui.js';
 import { materialTileLetters, type MaterialActionCtx } from './materials-ui.js';
+import { formatBytesShort } from './originals-ui.js';
 import { uiModule } from './module.js';
 
 const TOAST_MS = 8000;
@@ -46,6 +48,25 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
 export interface DeleteDialogOpts {
     leave?: () => void;
     ctx?: MaterialActionCtx;
+}
+
+/** The rows of the source's part (spec 117 §7): what the source leaves behind, not its citations one by one. */
+const BOTH_SOURCE_ROWS = ['bare', 'lowered', 'conflicts', 'tasks'] as const;
+/** How often the two-part dialog follows the research's `blockedBy` to a new set of sources before it says it failed. */
+const BOTH_REASKS = 2;
+
+/** The head of a dialog about one family tree file: its extension's letters (no preview) and its name. */
+function treeFileHead(dialog: MaterialDialog, item: MaterialItem, after = ''): void {
+    const headEl = dialog.box.querySelector<HTMLElement>('.mdlg-head')!;
+    const type = h('span', 'mdlg-attach-type', materialTileLetters(item));
+    type.setAttribute('aria-hidden', 'true');
+    headEl.prepend(type);
+    headEl.classList.add('has-thumb');
+    const subEl = headEl.querySelector<HTMLElement>('.mdlg-sub');
+    if (subEl) {
+        subEl.replaceChildren(h('span', 'mdlg-sub-file', item.name));
+        if (after) subEl.append(` · ${after}`);
+    }
 }
 
 /** Does deleting touch the tree (its places, its sources): the research's next version is then loaded, not taken as its own. */
@@ -74,11 +95,274 @@ export const materialDeleteMethods = uiModule({
     /**
      * The two-part dialog "first the source, then the file" (spec 117 §7): the file `item`
      * and the live source `sourceRef` (S…) made of it, deleted in one write
-     * (`retractSources`). Until it is drawn, today's dialog: its dry run names the source in
-     * `blockedBy`, and a confirmation without it is refused (409 `material.source-live`).
+     * (`retractSources`, one confirmation of both lists). The sources follow the dry run's
+     * `blockedBy`; no live source left: the dialog of the file alone takes over.
      */
-    openTreeFileDeleteDialog(item: MaterialItem, _sourceRef: string, opts: DeleteDialogOpts = {}): Promise<boolean> {
-        return this.openDeleteDialog([item], opts);
+    async openTreeFileDeleteDialog(item: MaterialItem, sourceRef: string, opts: DeleteDialogOpts = {}): Promise<boolean> {
+        const m = strings.materials;
+        const d = m.del;
+        const R = strings.sources.retract;
+        const mc = this.materialsContext();
+        const file = item.file;
+        if (!mc || !mc.caps.delete || !mc.caps.bridgeUp || !mc.base || DataManager.isReadOnly() || !file || !item.tree) return false;
+        const base = mc.base;
+        const ids = [file.id];
+        // The sources deleted first: the one Materials named, then those the research's dry run names (`blockedBy`).
+        let retract = [sourceRef];
+        let reasks = 0;
+        const named = treeFileSource(item);
+        let title = named?.source === sourceRef && named.title ? named.title : sourceRef;
+
+        const dialog = materialDialog({ title: d.bothTitle, sub: item.name, modifier: 'remove' });
+        dialog.box.classList.add('mdlg--delete', 'mdlg--source', 'mdlg--both');
+        dialog.box.dataset.deleteBoth = sourceRef;
+        treeFileHead(dialog, item);
+
+        const intro = h('p', 'mdlg-text', d.bothIntro(title));
+        // "Changed meanwhile" / "ran out": one sentence above both parts (the dialog's one warning stays the bare facts').
+        const changed = h('p', 'mdlg-changed');
+        changed.setAttribute('role', 'status');
+        const waiting = h('p', 'mdlg-note mdlg-both-wait');
+        waiting.setAttribute('aria-live', 'polite');
+        const partSource = h('section', 'mdlg-part');
+        partSource.dataset.part = 'source';
+        const partFile = h('section', 'mdlg-part');
+        partFile.dataset.part = 'file';
+        const check = h('label', 'mdlg-check');
+        const box = h('input');
+        box.type = 'checkbox';
+        box.name = 'mdlg-delete-understand';
+        const checkText = h('span', 'mdlg-check-text');
+        checkText.append(h('span', '', d.understandFile), h('span', 'mdlg-check-hint', d.understandHint(1)));
+        check.append(box, checkText);
+        dialog.body.append(intro, changed, waiting, partSource, partFile, check);
+
+        let state: DeleteState = deleteStart();
+        let done = false;
+        let stopped = false;
+        let asked = 0;
+        // No live source any more: the dialog of the file alone takes over.
+        let next: Promise<boolean> | null = null;
+
+        const cancel = button(strings.buttons.cancel, '', () => dialog.close());
+        const go = button(d.bothGo, 'is-danger', () => void send());
+        go.disabled = true;
+        // Cancel and the danger button as one group; no "Only hide" (a family tree file cannot be hidden).
+        const acts = h('div', 'mdlg-foot-acts');
+        acts.append(cancel, go);
+        dialog.foot.append(acts);
+
+        const partHead = (part: HTMLElement, titleText: string, sub: string, file = false) => {
+            const head = h('div', 'mdlg-part-head');
+            head.append(h('h3', 'mdlg-part-title', titleText), h('span', `mdlg-part-sub${file ? ' is-file' : ''}`, sub));
+            part.appendChild(head);
+        };
+
+        const draw = () => {
+            const sources = state.sourceImpacts ?? [];
+            const listed = state.impacts.length > 0 && sources.length > 0;
+            intro.textContent = d.bothIntro(title);
+            changed.hidden = !state.note;
+            changed.textContent = state.note === 'changed' ? d.bothChanged : state.note === 'expired' ? d.expired : '';
+            waiting.hidden = listed;
+            waiting.replaceChildren();
+            if (!listed && state.phase === 'failed') waiting.textContent = d.failed;
+            else if (!listed) {
+                const spin = h('i', 'busy-spin s12');
+                spin.setAttribute('aria-hidden', 'true');
+                waiting.append(spin, ' ', d.bothLoading);
+            }
+            partSource.hidden = !listed;
+            partFile.hidden = !listed;
+            partSource.replaceChildren();
+            partFile.replaceChildren();
+            if (listed) {
+                // 1. The source first: what it leaves behind (the facts without a source, the less certain, conflicts, tasks).
+                const data = DataManager.getData();
+                sources.forEach((impact, i) => {
+                    const sub = `${impact.title} · ${impact.id}`;
+                    if (i === 0) partHead(partSource, d.partSource, sub);
+                    else partSource.appendChild(h('span', 'mdlg-part-sub', sub));
+                    partSource.append(...this.sourceRetractList(retractSummary(impact, data), { rows: BOTH_SOURCE_ROWS, lowered: 1, head: false }));
+                });
+                partSource.appendChild(h('p', 'mdlg-note', d.laterNoFile));
+                // 2. Then the file: what refers to it (the source deleted in the first step) and that it cannot come back.
+                const bytes = item.bytes ?? file.bytes;
+                partHead(partFile, d.partFile, [item.name, bytes ? formatBytesShort(bytes) : ''].filter(Boolean).join(' · '), true);
+                const uses = h('section', 'mv-uses');
+                uses.dataset.deleteRefs = '';
+                const usesHead = h('div', 'mv-uses-head');
+                usesHead.appendChild(h('h3', 'mv-uses-title', d.refs(1)));
+                const grid = h('div', 'mv-uses-grid');
+                for (const impact of sources) {
+                    const cell = h('span', 'mv-use-main');
+                    cell.dataset.deleteRow = 'source';
+                    cell.append(h('span', 'mv-use-text', impact.title), h('span', 'mv-use-sub', d.fileSourceSub));
+                    grid.append(h('span', 'mv-use-type', d.rowSource), cell, h('span'));
+                }
+                uses.append(usesHead, grid);
+                partFile.append(uses, h('p', 'mdlg-text', d.textTree));
+            }
+            box.checked = state.understood;
+            box.disabled = stopped || state.phase !== 'ready' || !listed;
+            go.hidden = stopped;
+            go.disabled = stopped || !deleteBothCanGo(state);
+        };
+
+        // Nothing more can be deleted here: the danger button goes, Cancel becomes Close.
+        const stop = () => {
+            stopped = true;
+            cancel.textContent = strings.buttons.close;
+        };
+
+        // The source gone in the research meanwhile, or deleted already: said, and the tree and the list loaded again.
+        const sourceRefused = (why: 'gone' | 'already') => {
+            stop();
+            state = { ...state, phase: state.impacts.length ? 'ready' : 'failed', confirm: null };
+            draw();
+            dialog.error(why === 'gone' ? R.gone : R.already, {
+                label: m.reload,
+                run: () => {
+                    dialog.close();
+                    void this.reloadMaterialList();
+                    void this.materialTreeLoadAfterDelete('');
+                },
+            });
+        };
+
+        const fallBack = () => {
+            if (done || next) return;
+            done = true;
+            next = Promise.resolve().then(() => this.openDeleteDialog([item], opts));
+            dialog.close();
+        };
+
+        // The dry run of both: what deleting the source and the file would take now, one confirmation of both lists.
+        const dry = async (): Promise<void> => {
+            const mine = ++asked;
+            if (!state.impacts.length) state = { ...state, phase: 'loading' };
+            draw();
+            dialog.error(null);
+            const res = await deleteMaterialDry(base, ids, { retractSources: retract });
+            if (done || mine !== asked) return;
+            if (!res.ok) {
+                const refused = deleteSourceRefusal(res.error);
+                if (refused) return sourceRefused(refused);
+                // The sources asked are no longer those the file waits for: asked again as the file alone.
+                if (res.error.kind === 'body' && reasks < BOTH_REASKS) {
+                    reasks++;
+                    const alone = await deleteMaterialDry(base, ids);
+                    if (done || mine !== asked) return;
+                    if (alone.ok) {
+                        const blocked = deleteBlockedBy(alone.value.impacts);
+                        if (!blocked.length) return fallBack();
+                        retract = blocked;
+                        return dry();
+                    }
+                }
+                state = { ...state, phase: state.impacts.length ? 'ready' : 'failed', confirm: null };
+                draw();
+                this.materialErrorInDialog(dialog, mc, res.error, () => void dry());
+                return;
+            }
+            const more = bothRetractNext(retract, res.value.impacts);
+            if (more && reasks < BOTH_REASKS) {
+                reasks++;
+                retract = more;
+                return dry();
+            }
+            const sources = parseSourceImpacts(res.value.sourceImpacts);
+            if (!sources.length) {
+                // The research said nothing of the source: never the file alone.
+                state = { ...state, phase: state.impacts.length ? 'ready' : 'failed', confirm: null };
+                draw();
+                dialog.error(m.errGeneric, { label: m.retry, run: () => void dry() });
+                return;
+            }
+            title = sources.find(x => x.id === sourceRef)?.title || sources[0].title || title;
+            state = deleteListed(state, res.value.impacts, res.value.confirm, sources);
+            draw();
+        };
+
+        const send = async () => {
+            if (!deleteBothCanGo(state)) return;
+            const confirm = state.confirm!;
+            state = { ...state, phase: 'sending' };
+            dialog.error(null);
+            dialog.busy(true, d.bothSending);
+            const res = await deleteMaterial(base, ids, confirm, { retractSources: retract });
+            dialog.busy(false);
+            if (done) return;
+            if (!res.ok) {
+                if (res.changed) {
+                    // Changed meanwhile: both new lists at once, the box unticked, asked again.
+                    state = deleteChanged(state, 'changed', res.changed, parseSourceImpacts(res.changedSources));
+                    draw();
+                    void dry();
+                    return;
+                }
+                if (res.error.kind === 'body' && res.error.code === 'material.body') {
+                    state = deleteChanged(state, 'expired');
+                    draw();
+                    void dry();
+                    return;
+                }
+                if (res.live?.length) {
+                    // Another source made of the file meanwhile: deleted with it too, once the person saw it.
+                    retract = [...new Set([...retract, ...res.live])];
+                    state = deleteChanged(state, 'changed');
+                    draw();
+                    void dry();
+                    return;
+                }
+                const refused = deleteSourceRefusal(res.error);
+                if (refused) return sourceRefused(refused);
+                state = { ...state, phase: 'ready' };
+                draw();
+                const k = res.error.kind;
+                // The research's write is whole: a failure deletes nothing (sent again with the same confirmation).
+                if (k === 'down' || k === 'aborted' || k === 'readonly' || k === 'held' || k === 'busy' || k === 'missing') {
+                    this.materialErrorInDialog(dialog, mc, res.error, () => void send());
+                } else {
+                    dialog.error(d.bothNone, { label: m.retry, run: () => { dialog.error(null); void send(); } });
+                }
+                return;
+            }
+            done = true;
+            const deleted = res.value.deleted.length ? res.value.deleted : ids;
+            // The deletion changes the tree (its source): the research's new version is loaded, never taken as the tree's own.
+            this.researchTakeOwnWriteHead(mc.researchId, '', res.value.head);
+            dialog.close();
+            await dropFromCache(mc.treeId, deleted);
+            this.materialSortDropFiles(deleted);
+            // Nothing to undo here: the file cannot come back in the app (the source can, in the research).
+            this.showToast(d.bothToast(title, item.name), TOAST_MS, { closable: true, kind: 'materials' });
+            opts.leave?.();
+            this.materialActionDone(opts.ctx ?? {});
+            void this.materialTreeLoadAfterDelete(res.value.head);
+        };
+
+        box.addEventListener('change', () => {
+            state = deleteTicked(state, box.checked);
+            go.disabled = stopped || !deleteBothCanGo(state);
+        });
+        cancel.focus();
+        return new Promise<boolean>((resolve) => {
+            const close = dialog.close;
+            dialog.close = () => { close(); resolve(next ?? done); };
+            void dry();
+        });
+    },
+
+    /**
+     * The tree after its research deleted a source with its file (spec 117 §7): a followed tree takes the
+     * research's version at once, a tied one loads it as from its menu (the usual path asks when the tree
+     * has changes); the Sources window and the citation chips redrawn.
+     */
+    async materialTreeLoadAfterDelete(head: string): Promise<void> {
+        if (!(await this.liveLoadAfterWrite(head))) await this.researchLoadNewer();
+        if (document.getElementById('sources-modal')?.classList.contains('active')) this.renderSourcesList();
+        this.refreshCitationChips();
     },
 
     /**
@@ -111,18 +395,7 @@ export const materialDeleteMethods = uiModule({
         dialog.box.dataset.delete = '';
 
         // One family tree file: the extension's letters in the head (no preview), its name in the file's type.
-        if (one && trees) {
-            const headEl = dialog.box.querySelector<HTMLElement>('.mdlg-head')!;
-            const type = h('span', 'mdlg-attach-type', materialTileLetters(one));
-            type.setAttribute('aria-hidden', 'true');
-            headEl.prepend(type);
-            headEl.classList.add('has-thumb');
-            const subEl = headEl.querySelector<HTMLElement>('.mdlg-sub');
-            if (subEl) {
-                subEl.replaceChildren(h('span', 'mdlg-sub-file', one.name));
-                if (batchName) subEl.append(` · ${batchName}`);
-            }
-        }
+        if (one && trees) treeFileHead(dialog, one, batchName);
         // One file: its thumbnail in the head; several: the first few and "and N more".
         else if (one?.file?.sha) {
             const headEl = dialog.box.querySelector<HTMLElement>('.mdlg-head')!;
@@ -166,6 +439,15 @@ export const materialDeleteMethods = uiModule({
         let state: DeleteState = deleteStart();
         let done = false;
         let asked = 0;
+        // A family tree file a live source was made of after all (its `uses.of` not said yet): the two-part dialog instead.
+        let next: Promise<boolean> | null = null;
+        const handOff = (ref: string) => {
+            if (!one || done || next) return;
+            done = true;
+            // Opened once this one is closed (the promise of this dialog is the other one's).
+            next = Promise.resolve().then(() => this.openTreeFileDeleteDialog(one, ref, opts));
+            dialog.close();
+        };
 
         const draw = () => {
             note.replaceChildren();
@@ -192,6 +474,11 @@ export const materialDeleteMethods = uiModule({
                 state = { ...state, phase: state.impacts.length ? 'ready' : 'failed', confirm: null };
                 draw();
                 this.materialErrorInDialog(dialog, mc, res.error, () => void dry());
+                return;
+            }
+            const blocked = one?.tree ? deleteBlockedBy(res.value.impacts) : [];
+            if (blocked.length) {
+                handOff(blocked[0]);
                 return;
             }
             state = deleteListed(state, res.value.impacts, res.value.confirm);
@@ -222,6 +509,18 @@ export const materialDeleteMethods = uiModule({
                     state = deleteChanged(state, 'expired');
                     draw();
                     void dry();
+                    return;
+                }
+                // The safety net of a live source (409 `material.source-live`): never the file alone; one file goes to the
+                // two-part dialog, several are said as not deleted (the research's write is whole: nothing was).
+                if (res.live?.length) {
+                    if (one?.tree) {
+                        handOff(res.live[0]);
+                        return;
+                    }
+                    state = { ...state, phase: 'ready' };
+                    draw();
+                    dialog.error(d.bothNone, { label: m.reload, run: () => { dialog.close(); void this.reloadMaterialList(); } });
                     return;
                 }
                 state = { ...state, phase: 'ready' };
@@ -265,7 +564,7 @@ export const materialDeleteMethods = uiModule({
         cancel.focus();
         return new Promise<boolean>((resolve) => {
             const close = dialog.close;
-            dialog.close = () => { close(); resolve(done); };
+            dialog.close = () => { close(); resolve(next ?? done); };
             void dry();
         });
     },

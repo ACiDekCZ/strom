@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import {
-    fakeBridge, fakeMaterial, materialFile, MATERIAL_FEATURES, openResearch, poll, researchGed, UUID, BRIDGE,
-    type FakeMaterial, type FakeMaterialFile,
+    fakeBridge, fakeMaterial, materialFile, MATERIAL_FEATURES, openResearch, poll, researchGed, UUID, BRIDGE, HEAD,
+    type FakeBridge, type FakeMaterial, type FakeMaterialFile,
 } from './research-bridge.js';
 
 /**
@@ -11,7 +11,11 @@ import {
  * one, a menu of Details and Delete permanently… (a sheet from below on a
  * phone), Details without a preview, and Delete permanently… of a file no
  * source was made of (its letters in the head, no "Only hide"). Without the
- * gate the research is not asked for them. Invented data.
+ * gate the research is not asked for them. A file a live source was made of
+ * goes to the two-part dialog (spec 117 §7): the source first, then the file,
+ * one write (`retractSources`, one confirmation), the source gone from the
+ * tree afterwards, a toast without Undo; a list changed meanwhile unticks the
+ * box, a failed write deletes nothing. Invented data.
  */
 
 const DESKTOP = { width: 1440, height: 900 };
@@ -32,6 +36,19 @@ const dialog = (page: Page) => page.locator('.mdlg-overlay .mdlg--delete');
 const go = (page: Page) => dialog(page).locator('.mdlg-foot .mdlg-btn.is-danger');
 const box = (page: Page) => dialog(page).locator('input[name="mdlg-delete-understand"]');
 const toast = (page: Page) => page.locator('.toast[data-kind="materials"]');
+const both = (page: Page) => page.locator('.mdlg-overlay .mdlg--both');
+const bothGo = (page: Page) => both(page).locator('.mdlg-foot-acts .is-danger');
+const bothBox = (page: Page) => both(page).locator('input[name="mdlg-delete-understand"]');
+const part = (page: Page, which: 'source' | 'file') => both(page).locator(`.mdlg-part[data-part="${which}"]`);
+const hasSource = (page: Page, refn: string) => page.evaluate(r => Object.values(window.Strom.DataManager.getData().sources ?? {}).some(s => s.refn === r), refn);
+
+/** Delete permanently… of quellmayer.ged from its menu: the two-part dialog, both lists read. */
+async function openBoth(page: Page): Promise<void> {
+    await tile(page, 'quellmayer.ged').click();
+    await itemMenu(page).locator('[data-action="delete"]').click();
+    await expect(both(page)).toBeVisible();
+    await expect(part(page, 'source')).toBeVisible();
+}
 
 /** Two photos, a family tree file no source was made of and one a live source was made of. */
 function files(): FakeMaterialFile[] {
@@ -46,10 +63,29 @@ function files(): FakeMaterialFile[] {
     ];
 }
 
-async function research(page: Page, features: string[], list: FakeMaterialFile[] = files()): Promise<FakeMaterial> {
-    const material = fakeMaterial({ files: list, batches: [], people: PEOPLE });
-    await fakeBridge(page, { accepts: MEDIA_ACCEPTS, features, material, treeGed: researchGed() });
-    await openResearch(page, { media: true });
+/** The source made of quellmayer.ged stands in the tree: its record and a citation on Jan's birth. */
+const TREE_GED = researchGed(HEAD, ['1 BIRT', '2 DATE 1865', '2 SOUR @S0012@', '0 @S0012@ SOUR', '1 TITL Quellmayer family tree 1990', '1 REFN S0012']);
+const SOURCE_TITLE = 'Quellmayer family tree 1990';
+
+/** What deleting S0012 leaves behind, as the research lists it (`sourceImpacts`). */
+const SOURCE_IMPACT = {
+    id: 'S0012', title: SOURCE_TITLE, input: 'I0004',
+    counts: { names: 0, events: 3, families: 0, stories: 0 },
+    cites: [{ owner: 'P0003', fact: 'BIRT', others: 0, main: true }],
+    stories: [], bare: [{ owner: 'P0003', fact: 'BIRT' }],
+    lowered: [
+        { owner: 'P0001', fact: 'BIRT', from: 'proven', to: 'probable' },
+        { owner: 'P0002', fact: 'BIRT', from: 'proven', to: 'probable' },
+    ],
+    conflicts: [], tasks: [{ id: 'T0020', state: 'open', becomes: 'dropped' }], files: ['I0004'], images: 0, more: {},
+};
+
+let lastBridge: FakeBridge | null = null;
+
+async function research(page: Page, features: string[], list: FakeMaterialFile[] = files(), init: Partial<FakeMaterial> = {}): Promise<FakeMaterial> {
+    const material = fakeMaterial({ files: list, batches: [], people: PEOPLE, deleteSourceImpacts: { S0012: SOURCE_IMPACT }, ...init });
+    lastBridge = await fakeBridge(page, { accepts: MEDIA_ACCEPTS, features, material, treeGed: TREE_GED });
+    await openResearch(page, { media: true, ged: TREE_GED });
     await page.evaluate(({ uuid, base, accepts }) => {
         localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts }));
     }, { uuid: UUID, base: BRIDGE, accepts: MEDIA_ACCEPTS });
@@ -154,6 +190,118 @@ test.describe('Family tree files in Materials (material.trees)', () => {
         await expect(dialog(page).locator('.mdlg-foot .link-button')).toHaveCount(0);
     });
 
+    test('a file a live source was made of: the two-part dialog, both deleted in one write, the source gone from the tree, no Undo', async ({ page }) => {
+        const material = await research(page, GATED);
+        expect(await hasSource(page, 'S0012')).toBe(true);
+        await openBoth(page);
+        const d = both(page);
+        await expect(d.locator('.mdlg-title')).toHaveText('Delete the source and the file?');
+        await expect(d.locator('.mdlg-head.has-thumb .mdlg-attach-type')).toHaveText('GED');
+        await expect(d.locator('.mdlg-sub .mdlg-sub-file')).toHaveText('quellmayer.ged');
+        await expect(d.locator('.mdlg-body > .mdlg-text').first())
+            .toHaveText(`The source ${SOURCE_TITLE} was made from this file. The file is deleted after the source, both at once.`);
+        await expect(d.locator('.mdlg-changed')).toBeHidden();
+        // 1. The source: its counts, the one warning, only what it leaves behind (one less certain fact shown).
+        const src = part(page, 'source');
+        await expect(src.locator('.mdlg-part-title')).toHaveText('First the source is deleted');
+        await expect(src.locator('.mdlg-part-sub')).toHaveText(`${SOURCE_TITLE} · S0012`);
+        await expect(src.locator('.mdlg-src-sum-parts')).toHaveText('events 3');
+        await expect(d.locator('.mdlg-warn')).toHaveCount(1);
+        await expect(src.locator('.mdlg-warn')).toHaveText('1 fact is left without a source. The facts stay, only without a citation.');
+        await expect(src.locator('.mv-uses-head')).toHaveCount(0);
+        await expect(src.locator('[data-retract-row]')).toHaveCount(3);
+        await expect(src.locator('[data-retract-row="bare"]')).toContainText('Jan Fíšek');
+        await expect(src.locator('[data-retract-row="lowered"] .mv-use-text')).toHaveText('2 facts become less certain');
+        await expect(src.locator('[data-retract-row="lowered"] .mv-use-item')).toHaveCount(1);
+        await expect(src.locator('[data-retract-row="lowered"] .mv-use-more')).toHaveText('and 1 more');
+        await expect(src.locator('[data-retract-row="tasks"] [data-task]')).toHaveText('T0020');
+        await expect(src.locator('[data-retract-row="cites"], [data-retract-row="files"]')).toHaveCount(0);
+        await expect(src.locator('> .mdlg-note')).toHaveText('The source can be restored in the research later, but without the file.');
+        // 2. The file: what refers to it, the sentence of the archive.
+        const fil = part(page, 'file');
+        await expect(fil.locator('.mdlg-part-title')).toHaveText('Then the file is deleted');
+        await expect(fil.locator('.mdlg-part-sub')).toHaveText('quellmayer.ged · 180 kB');
+        await expect(fil.locator('.mv-uses-title')).toHaveText('What refers to the file');
+        await expect(fil.locator('[data-delete-row="source"]')).toHaveText(`${SOURCE_TITLE}deleted in the first step`);
+        await expect(fil.locator('.mdlg-text')).toHaveText('The family tree file is deleted from the research archive. This cannot be undone in the app.');
+        // One box, one danger button; no Only hide; through the bridge: no mark.
+        await expect(d.locator('.mdlg-check')).toContainText('I understand the file cannot be brought back in the app');
+        await expect(d.locator('.mdlg-foot .link-button')).toHaveCount(0);
+        await expect(bothGo(page)).toHaveText('Delete source and file');
+        await expect(bothGo(page).locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
+        await expect(bothGo(page)).toBeDisabled();
+        expect(material.deletes).toEqual([{ files: ['I0004'], retractSources: ['S0012'], dryRun: true }]);
+
+        await bothBox(page).check();
+        await bothGo(page).click();
+        await expect(both(page)).toHaveCount(0);
+        expect((material.deletes ?? []).filter(b => b.dryRun !== true)).toEqual([{ files: ['I0004'], retractSources: ['S0012'], confirm: 'confirm-1' }]);
+        await expect(toast(page)).toContainText(`Deleted the source ${SOURCE_TITLE} and the file quellmayer.ged.`);
+        await expect(toast(page).locator('.toast-action')).toHaveCount(0);
+        await expect(tile(page, 'quellmayer.ged')).toHaveCount(0);
+        await expect(tiles(page)).toHaveCount(3);
+        // The research's new version loaded (a tied tree: the usual question), the source gone from the tree.
+        expect(lastBridge!.treeGed).not.toContain('REFN S0012');
+        await page.getByRole('dialog', { name: 'Load the research version?' }).getByRole('button', { name: 'Load' }).click();
+        await expect.poll(() => hasSource(page, 'S0012')).toBe(false);
+    });
+
+    test('changed meanwhile: one sentence above both parts, the box unticked, the new list confirmed again', async ({ page }) => {
+        const material = await research(page, GATED, files(), {
+            deleteSourceChangeOnce: { S0012: { bare: [{ owner: 'P0003', fact: 'BIRT' }, { owner: 'P0001', fact: 'BIRT' }] } },
+        });
+        await openBoth(page);
+        await bothBox(page).check();
+        await bothGo(page).click();
+        const changed = both(page).locator('.mdlg-changed');
+        await expect(changed).toHaveText('What refers to the source and the file has changed meanwhile. The list below is new; the deletion needs to be confirmed again.');
+        await expect(both(page).locator('.mdlg-changed')).toHaveCount(1);
+        await expect(part(page, 'source').locator('.mdlg-warn')).toHaveText('2 facts are left without a source. The facts stay, only without a citation.');
+        await expect(bothBox(page)).not.toBeChecked();
+        await expect(bothGo(page)).toBeDisabled();
+        expect(await hasSource(page, 'S0012')).toBe(true);
+        await expect(tile(page, 'quellmayer.ged')).toHaveCount(1);
+        // Asked again: a new confirmation of the new list.
+        await expect.poll(() => (material.deletes ?? []).filter(b => b.dryRun === true).length).toBe(2);
+        await bothBox(page).check();
+        await bothGo(page).click();
+        await expect(both(page)).toHaveCount(0);
+        expect((material.deletes ?? []).filter(b => b.dryRun !== true).map(b => b.confirm)).toEqual(['confirm-1', 'confirm-2']);
+        await expect(toast(page)).toContainText(`Deleted the source ${SOURCE_TITLE}`);
+    });
+
+    test('a failed write (500): nothing deleted, said so, Try again sends the same confirmation', async ({ page }) => {
+        const material = await research(page, GATED, files(), { deleteFailOnce: { status: 500, body: { error: 'failed', code: 'material.failed', text: 'failed' } } });
+        await openBoth(page);
+        await bothBox(page).check();
+        await bothGo(page).click();
+        const err = both(page).locator('.mdlg-error');
+        await expect(err).toContainText('Writing to the research failed. Nothing was deleted.');
+        // Atomic: the file and the source are both still there.
+        await expect(tile(page, 'quellmayer.ged')).toHaveCount(1);
+        expect(lastBridge!.treeGed).toContain('REFN S0012');
+        expect(await hasSource(page, 'S0012')).toBe(true);
+        await expect(bothBox(page)).toBeChecked();
+        await err.getByRole('button', { name: 'Try again' }).click();
+        await expect(both(page)).toHaveCount(0);
+        expect((material.deletes ?? []).filter(b => b.dryRun !== true).map(b => b.confirm)).toEqual(['confirm-1', 'confirm-1']);
+        await expect(tile(page, 'quellmayer.ged')).toHaveCount(0);
+    });
+
+    test('the source deleted elsewhere already (409 source.retracted): said, Reload, the danger button gone', async ({ page }) => {
+        const material = await research(page, GATED);
+        await openBoth(page);
+        // The research's tree loses the source in between (deleted with another window).
+        lastBridge!.treeGed = lastBridge!.treeGed.replace(/0 @S0012@ SOUR\n1 TITL [^\n]*\n1 REFN S0012\n/, '');
+        material.deleteRetracted = ['S0012'];
+        await bothBox(page).check();
+        await bothGo(page).click();
+        await expect(both(page).locator('.mdlg-error')).toContainText('The source is already retracted in the research.');
+        await expect(bothGo(page)).toBeHidden();
+        await expect(both(page).locator('.mdlg-error').getByRole('button', { name: 'Reload' })).toBeVisible();
+        await expect(tile(page, 'quellmayer.ged')).toHaveCount(1);
+    });
+
     test('without the gate the research is not asked for family tree files, nor is there a Kind row', async ({ page }) => {
         const material = await research(page, [...MATERIAL_FEATURES, 'material.delete', 'material.sourceOf']);
         expect(material.asks.some(q => q.split('&').includes('trees=1'))).toBe(false);
@@ -168,16 +316,26 @@ test.describe('Family tree files on a narrow screen', () => {
     // A touch phone shows the research's material only on the computer (the window's note); the width alone here.
     test.use({ viewport: PHONE });
 
-    test('a tap opens the sheet from below; Delete permanently… opens the dialog with its letters', async ({ page }) => {
+    test('a tap opens the sheet from below; Delete permanently… of a file no source was made of opens the dialog with its letters', async ({ page }) => {
         await research(page, GATED);
+        // The file a source was made of: the sheet names the source (its Delete permanently… is the two-part dialog's, below).
         await tile(page, 'quellmayer.ged').click();
         const sheet = page.locator('.bottom-sheet-menu');
         await expect(sheet.locator('.bottom-sheet-menu-title')).toHaveText('quellmayer.ged');
         await expect(sheet.locator('.bottom-sheet-menu-sub')).toHaveText('Family tree file · 180 kB · the file of the source Quellmayer family tree 1990');
         await expect(sheet.locator('.bottom-sheet-item .bottom-sheet-label')).toHaveText(['Details', 'Delete permanently…']);
         await expect(sheet.locator('.bottom-sheet-item.danger')).toHaveCount(1);
+        await page.keyboard.press('Escape');
+        await expect(sheet).toHaveCount(0);
+
+        // The plain one: the sheet without the source, the dialog of the file alone.
+        await tile(page, 'talvanen.ged').click();
+        await expect(sheet.locator('.bottom-sheet-menu-title')).toHaveText('talvanen.ged');
+        await expect(sheet.locator('.bottom-sheet-menu-sub')).toHaveText('Family tree file · 61 kB');
         await sheet.locator('.bottom-sheet-item.danger').click();
         await expect(dialog(page)).toBeVisible();
+        await expect(dialog(page)).not.toHaveClass(/mdlg--both/);
+        await expect(dialog(page).locator('.mdlg-title')).toHaveText('Delete permanently?');
         await expect(dialog(page).locator('.mdlg-attach-type')).toHaveText('GED');
         // The dialog a sheet from below, its letters beside the title.
         const sheetBox = await dialog(page).boundingBox();
@@ -189,12 +347,29 @@ test.describe('Family tree files on a narrow screen', () => {
         await dialog(page).getByRole('button', { name: 'Cancel', exact: true }).click();
         await expect(dialog(page)).toHaveCount(0);
 
-        // The plain one: the sheet without the source, the Filters sheet with the Kind row.
-        await tile(page, 'talvanen.ged').click();
-        await expect(sheet.locator('.bottom-sheet-menu-sub')).toHaveText('Family tree file · 61 kB');
-        await page.keyboard.press('Escape');
-        await expect(sheet).toHaveCount(0);
+        // The Filters sheet with the Kind row.
         await win(page).locator('[data-mw="sheet"]').click();
         await expect(page.locator('.mw-pop-sheet input[data-pop="kind"][value="tree"]')).toHaveCount(1);
+    });
+
+    test('the two-part dialog a sheet from below: both parts one under the other with their headings, nothing too wide', async ({ page }) => {
+        await research(page, GATED);
+        await tile(page, 'quellmayer.ged').click();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item.danger').click();
+        await expect(part(page, 'file')).toBeVisible();
+        const sheetBox = await both(page).boundingBox();
+        expect(sheetBox!.width).toBe(PHONE.width);
+        expect(Math.round(sheetBox!.y + sheetBox!.height)).toBe(PHONE.height);
+        await expect(part(page, 'source').locator('.mdlg-part-title')).toBeVisible();
+        const a = await part(page, 'source').boundingBox();
+        const b = await part(page, 'file').boundingBox();
+        expect(b!.y).toBeGreaterThanOrEqual(a!.y + a!.height - 1);
+        expect(Math.abs(a!.x - b!.x)).toBeLessThan(1);
+        expect(await both(page).evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        // Cancel and the danger button side by side.
+        const cancel = await both(page).getByRole('button', { name: 'Cancel', exact: true }).boundingBox();
+        const go2 = await bothGo(page).boundingBox();
+        expect(Math.abs(cancel!.y - go2!.y)).toBeLessThan(2);
     });
 });

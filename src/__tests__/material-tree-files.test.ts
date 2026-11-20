@@ -12,7 +12,10 @@ import {
     parseMaterialFile, materialFileItem, materialCaps, materialActions, deleteMaterialDry, deleteMaterial,
     type MaterialEnv, type MaterialItem,
 } from '../materials.js';
-import { selectionDeletable, treeFileSource, withoutTreeFiles, deleteBlockedBy, deleteStart, deleteListed, deleteTicked, deleteBothCanGo, deleteChanged } from '../material-delete.js';
+import {
+    selectionDeletable, treeFileSource, withoutTreeFiles, deleteBlockedBy, deleteStart, deleteListed, deleteTicked, deleteBothCanGo, deleteChanged,
+    bothRetractNext, deleteSourceRefusal, inputIsTreeFile,
+} from '../material-delete.js';
 import { sortable, sortNeedy } from '../material-sort.js';
 import { itemKindFilter, overviewItems } from '../materials-overview.js';
 
@@ -141,5 +144,47 @@ describe('deleting the file and its source (§7)', () => {
         const changed = deleteChanged(s, 'changed', [], []);
         expect(changed.sourceImpacts).toEqual([{ id: 'S0042' }]);
         expect(deleteBothCanGo(changed)).toBe(false);
+    });
+});
+
+describe('the two-part dialog follows the research (§7)', () => {
+    const impact = (blockedBy?: string[]) => ({
+        id: 'I0007', name: 'strom-ostrovid.ged', sha: '', sources: [], excerpts: 0, people: [], links: 0, tasks: [],
+        bytes: 'deleted' as const, sameAs: [], ...(blockedBy ? { blockedBy } : {}),
+    });
+
+    it('asks again with the sources the dry run names in blockedBy; the same set or none: as asked', () => {
+        expect(bothRetractNext(['S0042'], [impact(['S0042'])])).toBeNull();
+        expect(bothRetractNext(['S0042'], [impact()])).toBeNull();
+        expect(bothRetractNext(['S0042'], [impact(['S0042', 'S0043'])])).toEqual(['S0042', 'S0043']);
+        expect(bothRetractNext(['S0042', 'S0043'], [impact(['S0043'])])).toEqual(['S0043']);
+        // The order of the research's list does not count as a change.
+        expect(bothRetractNext(['S0043', 'S0042'], [impact(['S0042']), impact(['S0043', 'S0042'])])).toBeNull();
+    });
+
+    it('a source gone meanwhile (404 source.unknown) or deleted already (409 source.retracted); anything else is no such refusal', async () => {
+        expect(deleteSourceRefusal({ code: 'source.unknown' })).toBe('gone');
+        expect(deleteSourceRefusal({ code: 'source.retracted' })).toBe('already');
+        expect(deleteSourceRefusal({ code: 'material.source-live' })).toBeNull();
+        expect(deleteSourceRefusal({ code: undefined })).toBeNull();
+        // As the bridge answers it: never waited out as busy, the code kept.
+        const f = fakeFetch([
+            [404, { error: 'No such source.', code: 'source.unknown', text: 'unknown', params: { id: 'S0042' } }],
+            [409, { error: 'Already retracted.', code: 'source.retracted', text: 'retracted', params: { id: 'S0042' } }],
+        ]);
+        const dry = await deleteMaterialDry(BASE, ['I0007'], { fetchImpl: f.impl, retractSources: ['S0042'] });
+        const done = await deleteMaterial(BASE, ['I0007'], 'signed-1', { fetchImpl: f.impl, retractSources: ['S0042'] });
+        expect(!dry.ok && deleteSourceRefusal(dry.error)).toBe('gone');
+        expect(!done.ok && deleteSourceRefusal(done.error)).toBe('already');
+        expect(f.calls).toHaveLength(2);
+    });
+
+    it('the file a source was made of is a family tree file only as the list with them says it (R.fileTree, §2)', () => {
+        const files = [{ id: 'I0004', tree: true }, { id: 'I0005' }];
+        expect(inputIsTreeFile(files, 'I0004')).toBe(true);
+        expect(inputIsTreeFile(files, 'I0005')).toBe(false);
+        expect(inputIsTreeFile(files, 'I0009')).toBe(false);
+        expect(inputIsTreeFile(files, undefined)).toBe(false);
+        expect(inputIsTreeFile(null, 'I0004')).toBe(false);
     });
 });

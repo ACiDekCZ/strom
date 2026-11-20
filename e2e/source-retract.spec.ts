@@ -1,5 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
-import { BRIDGE, HEAD, UUID, fakeBridge, fakeSourceRetract, poll, FakeBridge, FakeSourceRetract } from './research-bridge.js';
+import {
+    BRIDGE, HEAD, MATERIAL_FEATURES, UUID, fakeBridge, fakeMaterial, fakeSourceRetract, materialFile, poll, FakeBridge, FakeMaterial, FakeSourceRetract,
+} from './research-bridge.js';
 import { seedResearchPromoSeen, seedSetting, seedWhatsNewSeen } from './helpers.js';
 
 /**
@@ -55,7 +57,7 @@ const IMPACT_CHANGED = {
 const FEATURES = ['source.retract'];
 
 /** The research followed from its bridge (`?live=`), the tree locked meanwhile; the bridge's status asked once. */
-async function follow(page: Page, opts: { features?: string[]; size?: { width: number; height: number } } = {}): Promise<{ bridge: FakeBridge; sr: FakeSourceRetract }> {
+async function follow(page: Page, opts: { features?: string[]; size?: { width: number; height: number }; impact?: Record<string, unknown>; material?: FakeMaterial } = {}): Promise<{ bridge: FakeBridge; sr: FakeSourceRetract }> {
     await page.setViewportSize(opts.size ?? { width: 1280, height: 900 });
     await page.addInitScript(() => {
         // The bridge's events: the hello is the status (the routed fetch); nothing else comes.
@@ -81,11 +83,12 @@ async function follow(page: Page, opts: { features?: string[]; size?: { width: n
     await seedWhatsNewSeen(page);
     await seedSetting(page, 'fileCopyReminders', false);
     await seedSetting(page, 'onThisDay', false);
-    const sr = fakeSourceRetract({ impacts: { S0042: IMPACT } });
+    const sr = fakeSourceRetract({ impacts: { S0042: opts.impact ?? IMPACT } });
     const bridge = await fakeBridge(page, {
         features: opts.features ?? FEATURES,
         treeGed: GED(),
         sourceRetract: sr,
+        ...(opts.material ? { material: opts.material } : {}),
         // The research's queue names one of the tasks; the other one only by its id.
         statusExtra: { queue: [{ id: 'T0012', text: 'Narození Jana 1865', state: 'next' }] },
     });
@@ -279,6 +282,35 @@ test.describe('deleting a source of a followed tree (spec 117 §1–§3)', () =>
         await dialog(page).locator('.mdlg-error button').click();
         await expect(dialog(page).locator('[data-retract-sum]')).toBeVisible();
         await expect(go(page)).toBeEnabled();
+    });
+
+    test('made of a family tree file: its files row says so, as the research\'s list of Materials with them says it (R.fileTree)', async ({ page }) => {
+        const material = fakeMaterial({
+            files: [materialFile(7, { name: 'chlumy-1990.ged', mime: 'text/plain', bytes: 40_000, kind: 'tree', state: 'processed' })],
+            batches: [], people: {},
+        });
+        await follow(page, {
+            features: [...FEATURES, ...MATERIAL_FEATURES, 'material.delete', 'material.trees'],
+            impact: { ...IMPACT, input: 'I0007' },
+            material,
+        });
+        // The list of Materials read once (with the family tree files), then the dialog.
+        await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+        await expect(page.locator('#materials-modal .mw-canvas .mw-tile')).toHaveCount(1);
+        expect(material.asks.some(q => q.split('&').includes('trees=1'))).toBe(true);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#materials-modal.active')).toHaveCount(0);
+        await openDialog(page);
+        const files = dialog(page).locator('[data-retract-row="files"]');
+        await expect(files).toContainText('I0007');
+        await expect(files).toContainText('The family tree file the source was made from. The file itself can be deleted in Materials.');
+    });
+
+    test('made of a file that is no family tree file: no such sentence', async ({ page }) => {
+        await follow(page, { impact: { ...IMPACT, input: 'I0007' } });
+        await openDialog(page);
+        await expect(dialog(page).locator('[data-retract-row="files"]')).toContainText('I0007');
+        await expect(dialog(page).locator('[data-retract-row="files"]')).not.toContainText('The family tree file the source was made from.');
     });
 
     test('the research not running: the trash at rest says why and does nothing', async ({ page }) => {

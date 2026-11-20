@@ -7,7 +7,7 @@
  * asks again. Pure: the dialog is in src/ui/material-delete-ui.ts.
  */
 
-import type { DeleteImpact, DeleteImpactSource, MaterialItem, MaterialSourceOf } from './materials.js';
+import type { DeleteImpact, DeleteImpactSource, MaterialError, MaterialFile, MaterialItem, MaterialSourceOf } from './materials.js';
 import type { SourceImpact } from './source-retract.js';
 
 /** The files deleting can take: the research's files (the tree's own attachments are removed from the tree instead). */
@@ -175,4 +175,31 @@ export function deleteBothCanGo(s: DeleteState): boolean {
 /** The sources a family tree file waits for (`blockedBy` of its dry run): deleted with it in the two-part dialog. */
 export function deleteBlockedBy(impacts: readonly DeleteImpact[]): string[] {
     return [...new Set(impacts.flatMap(i => i.blockedBy ?? []))];
+}
+
+/**
+ * The sources the two-part dialog deletes with the file (spec 117 §7): those its dry run names in
+ * `blockedBy` now (the research takes no other), else the ones asked so far. Null: the same as asked.
+ */
+export function bothRetractNext(asked: readonly string[], impacts: readonly DeleteImpact[]): string[] | null {
+    const blocked = deleteBlockedBy(impacts);
+    if (!blocked.length) return null;
+    const same = blocked.length === asked.length && blocked.every(x => asked.includes(x));
+    return same ? null : blocked;
+}
+
+/** A source of the two-part dialog gone in the research meanwhile (404 `source.unknown`) or deleted already (409 `source.retracted`). */
+export function deleteSourceRefusal(err: Pick<MaterialError, 'code'>): 'gone' | 'already' | null {
+    if (err.code === 'source.unknown') return 'gone';
+    if (err.code === 'source.retracted') return 'already';
+    return null;
+}
+
+/**
+ * The file a source was made of (`impact.input`, I…) is a family tree file (spec 117 §2, `R.fileTree`):
+ * as the research's list with its family tree files (`?trees=1`) says it; unknown → false.
+ */
+export function inputIsTreeFile(files: readonly Pick<MaterialFile, 'id' | 'tree'>[] | null | undefined, input: string | undefined): boolean {
+    if (!input || !files) return false;
+    return !!files.find(f => f.id === input)?.tree;
 }

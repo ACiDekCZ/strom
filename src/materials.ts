@@ -1461,10 +1461,13 @@ function deleteRefusal(answer: RawAnswer): DeleteResult<never> | null {
     return null;
 }
 
-/** Busy is waited out quietly; a changed list or a file held by its live source never (the person has to see it). */
+/**
+ * Busy is waited out quietly; a changed list, a file held by its live source or a source
+ * deleted already (`source.*`, spec 117 §7) never (the person has to see it).
+ */
 const busyOnly = (a: RawAnswer): boolean => {
     const code = a.body && typeof a.body === 'object' ? (a.body as Record<string, unknown>).code : undefined;
-    return code !== 'material.delete-changed' && code !== 'material.source-live';
+    return code !== 'material.delete-changed' && code !== 'material.source-live' && !(typeof code === 'string' && code.startsWith('source.'));
 };
 
 /** Which sources a deletion also deletes first (spec 117 §7: only those its dry run named in `blockedBy`). */
@@ -1480,7 +1483,7 @@ export async function deleteMaterialDry(base: string, files: string[], opts: Bri
     const sources = retractList(opts.retractSources);
     if (!files.length || files.length > DELETE_MAX_FILES || !files.every(f => FILE_ID.test(f)) || !sources) return bodyError();
     const body = { files, ...(sources.length ? { retractSources: sources } : {}), dryRun: true };
-    const answer = await withBusyRetry(withAppVersion(`${base}/material/delete`), postInit(body), opts);
+    const answer = await withBusyRetry(withAppVersion(`${base}/material/delete`), postInit(body), opts, false, busyOnly);
     if ('kind' in answer) return { ok: false, error: answer };
     if (answer.status === 200 && answer.body && typeof answer.body === 'object') {
         const b = answer.body as Record<string, unknown>;

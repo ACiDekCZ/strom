@@ -22,7 +22,8 @@ import {
     retractSending, retractSource, retractSourceDry, retractStart, retractSummary, retractTaskTitles, sourceRetractOffered,
     type RestoreDone, type RetractError, type RetractResult, type RetractState, type RetractSummary,
 } from '../source-retract.js';
-import type { BridgeOptions } from '../materials.js';
+import { cachedMaterialList, primeMaterials, type BridgeOptions } from '../materials.js';
+import { inputIsTreeFile } from '../material-delete.js';
 import type { ToastWorkEnd } from './toast.js';
 import { factStatusHtml } from './fact-status.js';
 import { researchConflictTitle, researchFactLabel } from './person-research-ui.js';
@@ -40,6 +41,21 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
     if (cls) el.className = cls;
     if (text !== undefined) el.textContent = text;
     return el;
+}
+
+/** The rows of "What rests on the source" (§2 body). */
+export type RetractRowKind = 'cites' | 'bare' | 'lowered' | 'stories' | 'conflicts' | 'tasks' | 'files';
+
+/**
+ * How the list is drawn: `inputIsTree` its file is a family tree file (`R.fileTree`); `rows` only
+ * these rows, `lowered` that many of the facts becoming less certain, `head` without its title
+ * (the source's part of the two-part dialog, spec 117 §7).
+ */
+export interface RetractListOpts {
+    inputIsTree?: boolean;
+    rows?: readonly RetractRowKind[];
+    lowered?: number;
+    head?: boolean;
 }
 
 /** What an error leaves of the dialog: send again, load the tree again, or nothing (the danger button gone). */
@@ -160,7 +176,9 @@ export const sourceRetractMethods = uiModule({
                     list.appendChild(p);
                 }
             } else {
-                list.append(...this.sourceRetractList(retractSummary(impact, DataManager.getData())));
+                // Made of a family tree file (spec 117 §2): as the research's list of Materials with them says it.
+                const inputIsTree = inputIsTreeFile(cachedMaterialList(ctx.treeId)?.files, impact.input);
+                list.append(...this.sourceRetractList(retractSummary(impact, DataManager.getData()), { inputIsTree }));
                 list.appendChild(h('p', 'mdlg-note', editMode ? `${R.editMode} ${strings.danger.undoHint}` : R.undoLater));
             }
             go.hidden = stopped;
@@ -274,6 +292,8 @@ export const sourceRetractMethods = uiModule({
         };
 
         cancel.focus();
+        // The remembered list of Materials (whether the source's file is a family tree file) read once.
+        void primeMaterials(ctx.treeId).then(() => { if (!done && !abort.signal.aborted && state.impacts.length) draw(); }).catch(() => undefined);
         return new Promise<boolean>((resolve) => {
             const close = dialog.close;
             dialog.close = () => { abort.abort(); close(); resolve(done); };
@@ -287,9 +307,10 @@ export const sourceRetractMethods = uiModule({
      * source) and "What rests on the source" with its rows. Plain names: a
      * dialog that deletes never leads elsewhere.
      */
-    sourceRetractList(sum: RetractSummary, opts: { inputIsTree?: boolean } = {}): HTMLElement[] {
+    sourceRetractList(sum: RetractSummary, opts: RetractListOpts = {}): HTMLElement[] {
         const R = strings.sources.retract;
         const out: HTMLElement[] = [];
+        const shows = (kind: RetractRowKind) => !opts.rows || opts.rows.includes(kind);
         if (sum.noCites) {
             out.push(h('p', 'mdlg-text', R.noCites));
         } else {
@@ -339,7 +360,7 @@ export const sourceRetractMethods = uiModule({
             return span.firstElementChild as HTMLElement ?? span;
         };
 
-        if (sum.cites.length) {
+        if (sum.cites.length && shows('cites')) {
             row('cites', R.rows.cites, items(sum.cites.map(c => {
                 const main = c.main ? h('span', 'person-source-main', '★︎') : null;
                 if (main) {
@@ -352,7 +373,7 @@ export const sourceRetractMethods = uiModule({
                 return item(line(person(c.owner.name), fact(c.fact), main, c.locator ? h('span', 'is-faint', c.locator) : null), sub);
             }), sum.citesMore));
         }
-        if (sum.bare > 0) {
+        if (sum.bare > 0 && shows('bare')) {
             const sub = h('span', 'mv-use-sub');
             sum.bareRows.forEach((b, i) => {
                 if (i) sub.append(', ');
@@ -362,18 +383,19 @@ export const sourceRetractMethods = uiModule({
             if (sum.bareMore > 0) sub.append(sum.bareRows.length ? `, ${R.more(sum.bareMore)}` : R.more(sum.bareMore));
             row('bare', R.rows.bare, h('span', 'mv-use-text', R.bareN(sum.bare)), sub);
         }
-        if (sum.lowered > 0) {
-            row('lowered', R.rows.lowered, h('span', 'mv-use-text', R.lowered(sum.lowered)), items(sum.loweredRows.map(l => {
+        if (sum.lowered > 0 && shows('lowered')) {
+            const shown = opts.lowered !== undefined ? sum.loweredRows.slice(0, Math.max(0, opts.lowered)) : sum.loweredRows;
+            row('lowered', R.rows.lowered, h('span', 'mv-use-text', R.lowered(sum.lowered)), items(shown.map(l => {
                 const s = h('span', 'mv-use-step');
                 s.append(step(l.from), h('span', '', '→'), step(l.to));
                 return item(line(person(l.owner.name), fact(l.fact), s));
-            }), sum.loweredMore));
+            }), sum.loweredMore + sum.loweredRows.length - shown.length));
         }
-        if (sum.stories > 0) {
+        if (sum.stories > 0 && shows('stories')) {
             row('stories', R.rows.stories, h('span', 'mv-use-text', R.storiesN(sum.stories)),
                 h('span', 'mv-use-sub', sum.storyInText ? `${R.storyKeep} ${R.storyCode}` : R.storyKeep));
         }
-        if (sum.conflicts.length) {
+        if (sum.conflicts.length && shows('conflicts')) {
             const list = sum.conflicts.map(c => {
                 const decided = c.status === 'decided';
                 const tag = h('span', `person-research-open-tag${decided ? ' prc-tag--done' : ''}`,
@@ -384,7 +406,7 @@ export const sourceRetractMethods = uiModule({
             list.push(h('span', 'mv-use-sub', R.conflictNever));
             row('conflicts', R.rows.conflicts, items(list, 0));
         }
-        if (sum.tasks.length) {
+        if (sum.tasks.length && shows('tasks')) {
             // The task's name where the research said it (its queue, its waiting list); else its id.
             const titles = this.sourceRetractTaskTitles();
             const list = sum.tasks.map(t => {
@@ -398,7 +420,7 @@ export const sourceRetractMethods = uiModule({
             list.push(h('span', 'mv-use-sub', R.tasksBack));
             row('tasks', R.rows.tasks, items(list, 0));
         }
-        if (sum.files.length || sum.images > 0) {
+        if ((sum.files.length || sum.images > 0) && shows('files')) {
             const said = [sum.files.length ? R.filesStay : '', sum.images > 0 ? R.images(sum.images) : ''].filter(Boolean).join(' · ');
             row('files', R.rows.files,
                 sum.files.length ? h('span', 'mv-use-text mv-use-files', sum.files.join(', ')) : null,
@@ -408,9 +430,12 @@ export const sourceRetractMethods = uiModule({
         if (grid.childElementCount) {
             const sec = h('section', 'mv-uses');
             sec.dataset.retractUses = '';
-            const head = h('div', 'mv-uses-head');
-            head.appendChild(h('h3', 'mv-uses-title', R.usesTitle));
-            sec.append(head, grid);
+            if (opts.head !== false) {
+                const head = h('div', 'mv-uses-head');
+                head.appendChild(h('h3', 'mv-uses-title', R.usesTitle));
+                sec.appendChild(head);
+            }
+            sec.appendChild(grid);
             out.push(sec);
         }
         return out;
