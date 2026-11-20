@@ -24,9 +24,14 @@ export function sortNeeds(items: readonly MaterialItem[]): { n: number; t: numbe
     return { n: items.length, t, p };
 }
 
+/** A file sorting can take: the research's material, never a family tree file (spec 117 §5). */
+export function sortable(i: Pick<MaterialItem, 'file' | 'tree'>): boolean {
+    return !!i.file && !i.tree;
+}
+
 /** The files a sorting over the whole window takes: the research's files, not hidden, without a title of their own or a person. */
 export function sortNeedy(items: readonly MaterialItem[]): MaterialItem[] {
-    return items.filter(i => !!i.file && !i.hidden && (!i.titled || (!i.persons.length && !i.viaBatch.length)));
+    return items.filter(i => sortable(i) && !i.hidden && (!i.titled || (!i.persons.length && !i.viaBatch.length)));
 }
 
 /** The most batches one action sends (1500 files, the research's `SORT_RUN_MOST_FILES`, spec 102 K1.12). */
@@ -144,7 +149,7 @@ export function sortNext(items: readonly MaterialItem[], opts: SortNextOpts): So
     const isLeft = (id: string) => left instanceof Set || left instanceof Map ? left.has(id) : Object.prototype.hasOwnProperty.call(left, id);
     const selection = opts.scope === 'selection';
     const pool = selection
-        ? items.filter(i => !!i.file && !i.hidden)
+        ? items.filter(i => sortable(i) && !i.hidden)
         : sortNeedy(opts.scope === 'batch' ? items.filter(i => i.batch?.id === opts.batchId || i.file?.batch === opts.batchId) : items);
     const take: { item: MaterialItem; group: number; i: number }[] = [];
     pool.forEach((item, i) => {

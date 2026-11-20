@@ -718,7 +718,7 @@ export const materialsMethods = uiModule({
         const ctx = this.materialsContext();
         if (!ctx?.caps.list || !ctx.caps.bridgeUp || !ctx.base || fullAsked.has(ctx.treeId)) return;
         fullAsked.add(ctx.treeId);
-        const answer = await fetchMaterial(ctx.base, {});
+        const answer = await fetchMaterial(ctx.base, { trees: ctx.caps.trees });
         if (answer.ok) await saveMaterialList(ctx.treeId, answer.value, { kind: 'all' });
         else fullAsked.delete(ctx.treeId);
     },

@@ -57,7 +57,8 @@ import type { SortStripState } from '../material-sort.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { barHtml } from './prog-bar.js';
-import { deletableFiles } from '../material-delete.js';
+import { selectionDeletable, treeFileSource, withoutTreeFiles } from '../material-delete.js';
+import { formatBytesShort } from './originals-ui.js';
 import { closeHeadMenu, openHeadMenu, SEP, type MenuEntry } from './table-view/table-headmenu.js';
 
 const MODAL_ID = 'materials-modal';
@@ -488,7 +489,7 @@ export const materialsWindowMethods = uiModule({
         w.loading = true;
         w.loadError = null;
         try {
-            const head = await fetchMaterial(base, { files0: true });
+            const head = await fetchMaterial(base, { files0: true, trees: ctx.caps.trees });
             if (!alive(gen)) return;
             if (!head.ok) {
                 w.loadError = head.error;
@@ -501,7 +502,7 @@ export const materialsWindowMethods = uiModule({
                 await this.mwLoadBatch(id);
                 if (!alive(gen)) return;
             }
-            const all = await fetchMaterial(base, {});
+            const all = await fetchMaterial(base, { trees: ctx.caps.trees });
             if (!alive(gen)) return;
             if (all.ok) await saveMaterialList(w.treeId, all.value, { kind: 'all' });
         } finally {
@@ -534,7 +535,7 @@ export const materialsWindowMethods = uiModule({
         if (!reading) {
             reading = (async (): Promise<BatchLoad> => {
                 try {
-                    const answer = await fetchMaterial(base, { batch: id }, { signal: opts.signal, timeoutMs: opts.timeoutMs });
+                    const answer = await fetchMaterial(base, { batch: id, trees: ctx.caps.trees }, { signal: opts.signal, timeoutMs: opts.timeoutMs });
                     if (!alive(gen)) return { ok: false, stopped: true };
                     if (!answer.ok) return opts.signal?.aborted ? { ok: false, stopped: true } : { ok: false, error: answer.error };
                     w.loadedBatches.add(id);
@@ -1486,12 +1487,22 @@ export const materialsWindowMethods = uiModule({
      * Archive writes (assign, hide) act on the research's files only; Title… /
      * Kind… / Date… on the files that can change here.
      */
-    mwSelActions(items: MaterialItem[]): SelAction[] {
+    mwSelActions(selection: MaterialItem[]): SelAction[] {
         const ctx = this.materialsWindowContext();
         const m = strings.materials;
         if (!ctx) return [];
-        const n = items.length;
         const readOnly = DataManager.isReadOnly();
+        const deleteAction = (): SelAction[] => {
+            if (!ctx.caps.delete || readOnly) return [];
+            const files = selectionDeletable(selection).length;
+            const why = !ctx.caps.bridgeUp ? m.actionsWhenRunning : !selection.length ? m.nothingSelected : !files ? m.selUnchanged(selection.length)
+                : files > DELETE_MAX_FILES ? m.del.tooMany(DELETE_MAX_FILES) : null;
+            return [{ id: 'sel-delete', label: m.del.forever, why }];
+        };
+        // Only family tree files selected (spec 117 §5): Delete permanently… alone; else they are left out of every action.
+        if (selection.length && selection.every(i => i.tree)) return deleteAction();
+        const items = withoutTreeFiles(selection);
+        const n = items.length;
         const archive = items.filter(i => i.origin !== 'tree');
         const editable = items.filter(i => this.bulkEditable(i, ctx)).length;
         const editWhy = !n ? m.nothingSelected : editable ? null : readOnly ? strings.materials.treeReadOnly : archive.length && !ctx.caps.bridgeUp ? m.actionsWhenRunning : m.selUnchanged(n);
@@ -1530,7 +1541,7 @@ export const materialsWindowMethods = uiModule({
         }
         // Delete permanently… (spec 102 §9): the last one, behind `material.delete`, never in a tree that is read only.
         if (ctx.caps.delete && !readOnly) {
-            const files = deletableFiles(items).length;
+            const files = selectionDeletable(items).length;
             const why = !ctx.caps.bridgeUp ? m.actionsWhenRunning : !n ? m.nothingSelected : !files ? m.skippedTree(n)
                 : files > DELETE_MAX_FILES ? m.del.tooMany(DELETE_MAX_FILES) : null;
             out.push({ id: 'sel-delete', label: m.del.forever, why });
@@ -1564,7 +1575,13 @@ export const materialsWindowMethods = uiModule({
     mwSelAction(id: string): void {
         const w = win;
         if (!w) return;
-        const items = this.mwOrdered(this.materialsSelection());
+        const selection = this.mwOrdered(this.materialsSelection());
+        // Family tree files only ever go with Delete permanently… (spec 117 §5).
+        if (id === 'sel-delete') {
+            void this.openDeleteDialog(selectionDeletable(selection), { ctx: { selection: true, where: 'window' } });
+            return;
+        }
+        const items = withoutTreeFiles(selection);
         const end = () => { if (alive(w.gen)) this.clearMaterialsSelection(); };
         switch (id) {
             case 'sel-review': this.mwReview(items); return;
@@ -1574,7 +1591,6 @@ export const materialsWindowMethods = uiModule({
             case 'sel-kind': this.openBulkEditDialog('kind', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
             case 'sel-date': this.openBulkEditDialog('date', items, { done: end, refused: r => this.mwShowRefused(r) }); return;
             case 'sel-remove': void this.openRemoveManyFromTreeDialog(items).then(ok => { if (ok) end(); }); return;
-            case 'sel-delete': void this.openDeleteDialog(items, { ctx: { selection: true, where: 'window' } }); return;
             case 'sel-remove-person':
                 this.openSelRemovePersonDialog(items, {
                     done: end,

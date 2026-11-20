@@ -69,7 +69,8 @@ export function treeFileOf(item: MaterialItem): string | null {
 
 /** May the item's title, kind and date change here, and how. */
 export function materialDetailsEdit(item: MaterialItem, ctx: MaterialsContext | null): DetailsEdit {
-    if (DataManager.isReadOnly()) return null;
+    // A family tree file has no title, kind or date to give (spec 117 §5).
+    if (DataManager.isReadOnly() || item.tree) return null;
     const own = treeFileOf(item);
     if (own) return DataManager.canEditMedia(own) ? 'on' : null;
     if (!item.file || !ctx?.caps.list) return null;

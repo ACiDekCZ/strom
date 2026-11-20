@@ -49,8 +49,11 @@ const NOT_VERB_END = /(?:ním|tím)$/u;
  * ("Rozumím" to a notice, "Nevím" among the answers to the agent's question).
  */
 const OWN_ANSWERS = new Set(['Rozumím', 'Nevím']);
-/** A box the person ticks in their own words (Delete permanently's "Rozumím, smazání nejde v aplikaci vrátit", spec 102 §9). */
-const OWN_WORDS_PATHS = new Set(['materials.del.understand']);
+/**
+ * A box the person ticks in their own words (Delete permanently's "Rozumím, smazání nejde v aplikaci vrátit",
+ * spec 102 §9; the family tree file's "Rozumím, soubor nejde v aplikaci vrátit", spec 117 §7).
+ */
+const OWN_WORDS_PATHS = new Set(['materials.del.understand', 'materials.del.understandFile']);
 const NOT_VERBS = new Set(['Přím', 'Rám', 'Tím', 'Nám', 'Vám', 'Sám', 'Jím', 'Kterým', 'Jejím', 'Mým', 'Tvým', 'Svým', 'Jakým', 'Všem', 'Dlouhým', 'Prvním', 'Posledním', 'Novým', 'Starým', 'Jiným', 'Každým', 'Takovým', 'Dalším', 'Ostatním', 'Hlavním', 'Celým', 'Jediným', 'Vlastním', 'Stejným', 'Tímto', 'Pouhým', 'Nejbližším']);
 
 describe('impersonal Czech texts (§12.2)', () => {

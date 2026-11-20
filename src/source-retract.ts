@@ -22,19 +22,15 @@ import { DataManager } from './data.js';
 import { TreeManager } from './tree-manager.js';
 import { shownName } from './person-name.js';
 import { isResearchHead, withAppVersion } from './research-link.js';
-import { BridgeOptions, RawAnswer, postInit, withBusyRetry } from './materials.js';
+import { BridgeOptions, MATERIAL_TREES_FEATURE, RawAnswer, postInit, withBusyRetry } from './materials.js';
 import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
 
 // ==================== GATES ====================
 
 /** The research retracts a source the person deleted (preview, deletion, restore, conflict/keep, the marks of review). */
 export const SOURCE_RETRACT_FEATURE = 'source.retract';
-/**
- * The research lists its family tree files in Materials and deletes them for
- * good together with their source. Announced only with `source.retract` and
- * `material.delete`: the app takes it as all three.
- */
-export const MATERIAL_TREES_FEATURE = 'material.trees';
+/** Family tree files in Materials (kept in src/materials.ts, which the Materials gates read). */
+export { MATERIAL_TREES_FEATURE };
 
 /** The research of a tree: its features as its bridge says them now (else last in this page), whether it answers now, its seal. */
 export interface SourceRetractBridge {

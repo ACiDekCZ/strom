@@ -7,11 +7,37 @@
  * asks again. Pure: the dialog is in src/ui/material-delete-ui.ts.
  */
 
-import type { DeleteImpact, DeleteImpactSource, MaterialItem } from './materials.js';
+import type { DeleteImpact, DeleteImpactSource, MaterialItem, MaterialSourceOf } from './materials.js';
+import type { SourceImpact } from './source-retract.js';
 
 /** The files deleting can take: the research's files (the tree's own attachments are removed from the tree instead). */
 export function deletableFiles<T extends Pick<MaterialItem, 'origin' | 'file'>>(items: readonly T[]): T[] {
     return items.filter(i => i.origin !== 'tree' && !!i.file);
+}
+
+/**
+ * The live source a family tree file was made of (spec 117 §7): `uses.of` with `via: "input"`
+ * (the research says it only of a source standing). Null for any other file.
+ */
+export function treeFileSource(item: Pick<MaterialItem, 'tree' | 'file'>): MaterialSourceOf | null {
+    if (!item.tree) return null;
+    return item.file?.uses?.of?.find(o => o.via === 'input') ?? null;
+}
+
+/**
+ * What Delete permanently… takes of a selection (spec 117 §5): only family tree files → those without
+ * a live source (one alone with its source goes to the two-part dialog); else the material only — the
+ * family tree files are left out of the selection's actions.
+ */
+export function selectionDeletable<T extends Pick<MaterialItem, 'origin' | 'file' | 'tree'>>(items: readonly T[]): T[] {
+    const files = deletableFiles(items);
+    if (files.length && files.every(i => i.tree)) return files.length === 1 ? files : files.filter(i => !treeFileSource(i));
+    return files.filter(i => !i.tree);
+}
+
+/** The selection's actions other than Delete permanently… act on these (never on a family tree file, spec 117 §5). */
+export function withoutTreeFiles<T extends Pick<MaterialItem, 'tree'>>(items: readonly T[]): T[] {
+    return items.filter(i => !i.tree);
 }
 
 /** What happens to a source: it loses its link to the file, the image of the same content, or nothing (the bytes stay). */
@@ -104,6 +130,8 @@ export function deleteWarns(s: DeleteSummary): boolean {
 export interface DeleteState {
     phase: 'loading' | 'ready' | 'sending' | 'failed';
     impacts: DeleteImpact[];
+    /** A family tree file deleted with its source (spec 117 §7): what rests on the source, as `/source/retract` says it. */
+    sourceImpacts?: SourceImpact[];
     /** The bridge's confirmation of exactly the list shown (null: none yet). */
     confirm: string | null;
     understood: boolean;
@@ -115,8 +143,8 @@ export function deleteStart(): DeleteState {
 }
 
 /** The dry run answered: its list and its confirmation (the box stays as it was: unticked before the first list). */
-export function deleteListed(s: DeleteState, impacts: DeleteImpact[], confirm: string): DeleteState {
-    return { ...s, phase: 'ready', impacts, confirm };
+export function deleteListed(s: DeleteState, impacts: DeleteImpact[], confirm: string, sourceImpacts?: SourceImpact[]): DeleteState {
+    return { ...s, phase: 'ready', impacts, confirm, ...(sourceImpacts ? { sourceImpacts } : {}) };
 }
 
 /**
@@ -125,8 +153,9 @@ export function deleteListed(s: DeleteState, impacts: DeleteImpact[], confirm: s
  * shown stays until the new dry run answers), the box unticked, no
  * confirmation until a new dry run gives one.
  */
-export function deleteChanged(s: DeleteState, why: 'changed' | 'expired', impacts?: DeleteImpact[]): DeleteState {
-    return { phase: 'ready', impacts: impacts?.length ? impacts : s.impacts, confirm: null, understood: false, note: why };
+export function deleteChanged(s: DeleteState, why: 'changed' | 'expired', impacts?: DeleteImpact[], sourceImpacts?: SourceImpact[]): DeleteState {
+    const sources = sourceImpacts?.length ? sourceImpacts : s.sourceImpacts;
+    return { phase: 'ready', impacts: impacts?.length ? impacts : s.impacts, confirm: null, understood: false, note: why, ...(sources ? { sourceImpacts: sources } : {}) };
 }
 
 export function deleteTicked(s: DeleteState, on: boolean): DeleteState {
@@ -136,4 +165,14 @@ export function deleteTicked(s: DeleteState, on: boolean): DeleteState {
 /** The danger button works: the list shown with the bridge's confirmation, and the box ticked. */
 export function deleteCanGo(s: DeleteState): boolean {
     return s.phase === 'ready' && !!s.confirm && s.understood && s.impacts.length > 0;
+}
+
+/** The two-part dialog (spec 117 §7) also needs the source's list: the file is never deleted without its source. */
+export function deleteBothCanGo(s: DeleteState): boolean {
+    return deleteCanGo(s) && !!s.sourceImpacts?.length;
+}
+
+/** The sources a family tree file waits for (`blockedBy` of its dry run): deleted with it in the two-part dialog. */
+export function deleteBlockedBy(impacts: readonly DeleteImpact[]): string[] {
+    return [...new Set(impacts.flatMap(i => i.blockedBy ?? []))];
 }

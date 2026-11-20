@@ -253,7 +253,7 @@ describe('gates', () => {
         expect(matThumb({ ...env, bridgeUp: false })).toBe(false);
         expect(matThumb({ ...env, features: ['material.list', 'material.assign'] })).toBe(false);
         expect(materialCaps({ ...env, onComputer: false })).toEqual({
-            list: false, assign: false, thumb: false, bridgeUp: true, links: false, edit: false, uses: false, sort: false, sortRun: false, sourceOf: false, left: false, sameAs: false, delete: false, mediaApp: false,
+            list: false, assign: false, thumb: false, bridgeUp: true, links: false, edit: false, uses: false, sort: false, sortRun: false, sourceOf: false, left: false, sameAs: false, delete: false, trees: false, mediaApp: false,
         });
     });
 });

@@ -298,7 +298,7 @@ export const materialActionsMethods = uiModule({
     async reloadMaterialList(): Promise<void> {
         const mc = this.materialsContext();
         if (!mc?.base) return;
-        const res = await fetchMaterial(mc.base, {});
+        const res = await fetchMaterial(mc.base, { trees: mc.caps.trees });
         if (res.ok) await saveMaterialList(mc.treeId, res.value, { kind: 'all' });
     },
 

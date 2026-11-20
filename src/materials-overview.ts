@@ -20,8 +20,15 @@ export type OverviewGroupMode = 'batch' | 'date' | 'added' | 'person';
 export type ArchiveGroupMode = 'batch' | 'date';
 export type AppGroupMode = 'added' | 'person';
 export type OverviewView = 'grid' | 'list';
-export type KindFilter = MaterialKind | 'none';
+/** `tree`: the family tree files (spec 117 §5), a row of its own only when there is one. */
+export type KindFilter = MaterialKind | 'none' | 'tree';
 export const KIND_FILTERS: KindFilter[] = ['photo', 'document', 'record', 'other', 'none'];
+const KNOWN_KINDS: readonly KindFilter[] = [...KIND_FILTERS, 'tree'];
+
+/** The item's row in the Kind filter. */
+export function itemKindFilter(item: Pick<MaterialItem, 'kind' | 'tree'>): KindFilter {
+    return item.tree ? 'tree' : item.kind ?? 'none';
+}
 
 /** Days after which received files are shown together as "Earlier" (by date). */
 export const EARLIER_DAYS = 60;
@@ -63,7 +70,7 @@ export function parseFilters(raw: unknown): Partial<OverviewFilters> {
     const out: Partial<OverviewFilters> = {};
     if (!raw || typeof raw !== 'object') return out;
     const r = raw as Record<string, unknown>;
-    if (Array.isArray(r.kinds)) out.kinds = r.kinds.filter((k): k is KindFilter => (KIND_FILTERS as readonly unknown[]).includes(k));
+    if (Array.isArray(r.kinds)) out.kinds = r.kinds.filter((k): k is KindFilter => (KNOWN_KINDS as readonly unknown[]).includes(k));
     for (const k of ['noPerson', 'noTitle', 'noSource', 'showHidden'] as const) if (r[k] === true) out[k] = true;
     if (r.where === 'tree' || r.where === 'archive') out.where = r.where;
     return out;
@@ -191,8 +198,8 @@ export function queryWords(query: string): string[] {
  * union; a person the research does not know yet still counts as one).
  */
 export function itemWithoutPerson(item: MaterialItem): boolean {
-    // The file of a source is assigned (spec 102 §7): "Without a person" does not show it.
-    if (item.persons.length > 0 || item.sourceOf?.length) return false;
+    // The file of a source is assigned (spec 102 §7): "Without a person" does not show it; nor a family tree file (spec 117 §5).
+    if (item.persons.length > 0 || item.sourceOf?.length || item.tree) return false;
     return item.origin !== 'tree' || !item.attachment?.places?.some(p => 'personId' in p);
 }
 
@@ -222,11 +229,12 @@ export function sourceOfPersons(item: Pick<MaterialItem, 'persons' | 'sourceOf'>
 export function passesFilters(item: MaterialItem, f: OverviewFilters, words: string[] = queryWords(f.query)): boolean {
     if (item.hidden && !f.showHidden) return false;
     if (f.person && !item.persons.includes(f.person)) return false;
-    if (f.kinds.length && !f.kinds.includes(item.kind ?? 'none')) return false;
+    if (f.kinds.length && !f.kinds.includes(itemKindFilter(item))) return false;
     if (f.batch && item.batch?.id !== f.batch) return false;
     if (f.noPerson && !itemWithoutPerson(item)) return false;
-    if (f.noTitle && item.titled) return false;
-    if (f.noSource && item.source) return false;
+    // A family tree file has no title nor source to give (spec 117 §5): the review filters leave it out.
+    if (f.noTitle && (item.titled || item.tree)) return false;
+    if (f.noSource && (item.source || item.tree)) return false;
     if (f.where && (f.where === 'tree') !== itemInTree(item)) return false;
     if (f.left && !item.agentLeft) return false;
     if (words.length) {
@@ -266,8 +274,8 @@ export function overviewSummary(items: readonly MaterialItem[], list: MaterialLi
     for (const item of items) {
         // Every count is over the files shown (the tree's own too: they are tiles, the filters reach them).
         if (!item.hidden) {
-            if (!item.titled) noTitle++;
-            if (!item.source) noSource++;
+            if (!item.titled && !item.tree) noTitle++;
+            if (!item.source && !item.tree) noSource++;
             if (itemInTree(item)) inTree++; else onlyArchive++;
             if (item.agentLeft) left++;
         }

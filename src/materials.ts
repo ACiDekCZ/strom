@@ -45,6 +45,12 @@ export const MATERIAL_LEFT_FEATURE = 'material.left';
 export const MATERIAL_SAME_AS_FEATURE = 'material.sameAs';
 /** `POST /material/delete` with `dryRun` and the bridge's `confirm`: a file deleted for good (spec 102 K1.17). */
 export const MATERIAL_DELETE_FEATURE = 'material.delete';
+/**
+ * The research lists its family tree files in Materials (`?trees=1`, `kind: "tree"`) and deletes them for
+ * good together with their source (spec 117 §5–§7). Announced only with `source.retract` and
+ * `material.delete`: the app takes it as all three.
+ */
+export const MATERIAL_TREES_FEATURE = 'material.trees';
 
 /** Preview sizes the bridge makes (longer side, px). */
 export const THUMB_SIZES = [128, 256, 512] as const;
@@ -107,6 +113,8 @@ export interface MaterialFile {
     left?: MaterialLeft;
     /** The oldest other file of the material with the same content (`material.sameAs`, spec 102 K1.13). */
     sameAs?: string;
+    /** A family tree file (`kind: "tree"`, only with `?trees=1` and `material.trees`, spec 117 §5): never sorted nor edited. */
+    tree?: boolean;
 }
 
 /** A file the agent left unassigned, as the research says it (`left`). */
@@ -217,6 +225,8 @@ export interface MaterialItem {
     copyOf?: string;
     /** The sources whose file it is (`material.sourceOf`, spec 102 §7; set by the overview with the gate): it counts as assigned. */
     sourceOf?: MaterialSourceOf[];
+    /** A family tree file of the research (spec 117 §5): only Details and Delete permanently…, outside sorting and bulk actions. */
+    tree?: boolean;
 }
 
 // ==================== READING THE BRIDGE'S ANSWER ====================
@@ -311,6 +321,8 @@ export function parseMaterialFile(raw: unknown): MaterialFile | null {
     const title = text(r.title, 300);
     if (title) file.title = title;
     if (typeof r.kind === 'string' && (KINDS as readonly string[]).includes(r.kind)) file.kind = r.kind as MaterialKind;
+    // A family tree file (spec 117 §5): its kind stays outside KINDS, so sorting and bulk edits never take it.
+    else if (r.kind === 'tree') file.tree = true;
     const date = text(r.date, 60);
     if (date) file.date = date;
     const hidden = hiddenOf(r.hidden);
@@ -485,8 +497,9 @@ function rawImageSuffix(mime: string | undefined, name: string | undefined): str
 }
 
 /** The kind as a label: its kind (Photo, Document…), else by type (Image TIFF, PDF, Audio, File). */
-export function materialKindLabel(item: Pick<MaterialItem, 'kind' | 'mime' | 'file' | 'attachment'> & { name?: string; title?: string }): string {
+export function materialKindLabel(item: Pick<MaterialItem, 'kind' | 'mime' | 'file' | 'attachment'> & { name?: string; title?: string; tree?: boolean }): string {
     const m = strings.materials;
+    if (item.tree || item.file?.tree) return m.treeFile;
     if (item.kind) return m.kind[item.kind] ?? m.kind.other;
     const name = item.file?.name ?? item.attachment?.name ?? item.name ?? item.title;
     const type = materialType(item.mime, name);
@@ -586,6 +599,7 @@ export function materialFileItem(
     if (note) item.noteUser = note;
     if (file.hidden) item.hidden = file.hidden.reason ? { reason: file.hidden.reason } : {};
     if (file.state) item.state = file.state;
+    if (file.tree) item.tree = true;
     return item;
 }
 
@@ -745,6 +759,11 @@ export function matDelete(env: MaterialEnv): boolean {
     return matList(env) && has(env, MATERIAL_DELETE_FEATURE);
 }
 
+/** The research lists its family tree files and deletes them (`material.trees`, taken only with `material.delete`). */
+export function matTrees(env: MaterialEnv): boolean {
+    return matDelete(env) && has(env, MATERIAL_TREES_FEATURE);
+}
+
 export interface MaterialCaps {
     list: boolean;
     assign: boolean;
@@ -768,6 +787,8 @@ export interface MaterialCaps {
     sameAs: boolean;
     /** The research deletes a file for good (`material.delete`). */
     delete: boolean;
+    /** The research lists its family tree files and deletes them with their source (`material.trees`, spec 117 §5). */
+    trees?: boolean;
     /** The research keeps the tree's own files (`media.app`). */
     mediaApp: boolean;
     /** Links into the research open (`/status.links`, also remembered); default yes. */
@@ -779,7 +800,7 @@ export function materialCaps(env: MaterialEnv & { openLinks?: boolean }): Materi
         list: matList(env), assign: matAssign(env), thumb: matThumb(env), bridgeUp: env.bridgeUp,
         links: env.linked && has(env, MATERIAL_LINKS_FEATURE),
         edit: matEdit(env), uses: matUses(env), sort: matSort(env),
-        sortRun: matSortRun(env), sourceOf: matSourceOf(env), left: matLeft(env), sameAs: matSameAs(env), delete: matDelete(env),
+        sortRun: matSortRun(env), sourceOf: matSourceOf(env), left: matLeft(env), sameAs: matSameAs(env), delete: matDelete(env), trees: matTrees(env),
         mediaApp: env.linked && has(env, MEDIA_APP_FEATURE),
     };
     if (env.openLinks !== undefined) caps.openLinks = env.openLinks;
@@ -856,6 +877,8 @@ export function isPortraitCandidate(att: Attachment | undefined): boolean {
 /** The actions of one item (P1). */
 export function materialActions(item: MaterialItem, caps: MaterialCaps, ctx: MaterialActionContext = {}): MaterialAction[] {
     const out: MaterialAction[] = [];
+    // A family tree file (spec 117 §5): Details only; Delete permanently… is the menu's own last row.
+    if (item.tree) return [{ id: 'open' }];
     for (const row of ACTION_ROWS) {
         if (!row.when(item, caps, ctx)) continue;
         const action: MaterialAction = { id: row.id, ...(row.extra?.(item, ctx) ?? {}) };
@@ -1132,6 +1155,8 @@ export interface MaterialQuery {
     batch?: string;
     /** Only batches and people, no files. */
     files0?: boolean;
+    /** The family tree files too (`?trees=1`, only with `material.trees`, spec 117 §5). */
+    trees?: boolean;
 }
 
 /** The URL of `GET /material` with its filters, or null when a filter is not valid (never the whole list instead). */
@@ -1148,6 +1173,7 @@ export function materialUrl(base: string, q: MaterialQuery = {}): string | null 
         params.push(`batch=${encodeURIComponent(batch)}`);
     }
     if (q.files0) params.push('files=0');
+    if (q.trees) params.push('trees=1');
     return withAppVersion(`${base}/material${params.length ? `?${params.join('&')}` : ''}`);
 }
 
@@ -1330,6 +1356,11 @@ export interface DeleteImpact {
     keptWhy?: 'sameAs' | 'otherResearch';
     /** The files of the research with the same content that keep the bytes. */
     sameAs: string[];
+    /**
+     * A family tree file a live source was made of (spec 117 §7): the sources (S…) that
+     * have to be deleted with it (`retractSources`), else the file is never deleted.
+     */
+    blockedBy?: string[];
 }
 
 /** The research's list of what a deletion takes, file by file (anything not understood left out). */
@@ -1355,11 +1386,13 @@ export function parseDeleteImpacts(raw: unknown): DeleteImpact[] {
         const sameAs = Array.isArray(o.sameAs)
             ? [...new Set(o.sameAs.filter((t): t is string => typeof t === 'string' && FILE_ID.test(t) && t !== id))] : [];
         const keptWhy = o.keptWhy === 'sameAs' || o.keptWhy === 'otherResearch' ? o.keptWhy : undefined;
+        const blockedBy = sourceRefs(o.blockedBy);
         out.push({
             id, name: text(o.name, 300) ?? id, sha: typeof o.sha === 'string' && SHA.test(o.sha) ? o.sha : '',
             sources, excerpts: count(o.excerpts), people: refs(o.people), links: count(o.links), tasks,
             // Not said as kept: the bytes go (the strict reading — the dialog never promises they stay).
             bytes: o.bytes === 'kept' ? 'kept' : 'deleted', ...(o.bytes === 'kept' && keptWhy ? { keptWhy } : {}), sameAs,
+            ...(blockedBy.length ? { blockedBy } : {}),
         });
     }
     return out;
@@ -1370,6 +1403,12 @@ export interface DeleteDry {
     files: string[];
     impacts: DeleteImpact[];
     confirm: string;
+    /**
+     * With `retractSources` (spec 117 §7): the sources deleted first, and the research's list of
+     * what rests on them as `/source/retract` says it (read by `parseSourceImpacts` in src/source-retract.ts).
+     */
+    retractSources?: string[];
+    sourceImpacts?: unknown;
 }
 
 /** The deletion's answer. */
@@ -1379,50 +1418,101 @@ export interface DeleteDone {
     impacts: DeleteImpact[];
     /** The research's head after the write ('' = not said). */
     head: string;
+    /** With `retractSources`: the sources deleted with the files (spec 117 §7). */
+    retracted?: string[];
 }
 
 /**
  * A refused deletion; `changed`: the research changed since the list was
- * shown (409 `material.delete-changed`), with the new list to show and confirm again.
+ * shown (409 `material.delete-changed`), with the new list to show and confirm again
+ * (`changedSources`: the sources' new list, spec 117 §7); `live`: a family tree file
+ * a live source was made of, asked without that source (409 `material.source-live`).
  */
-export type DeleteResult<T> = { ok: true; value: T } | { ok: false; error: MaterialError; changed?: DeleteImpact[] };
+export type DeleteResult<T> = { ok: true; value: T }
+    | { ok: false; error: MaterialError; changed?: DeleteImpact[]; changedSources?: unknown; live?: string[] };
 
 const ids = (v: unknown): string[] => (Array.isArray(v) ? [...new Set(v.filter((f): f is string => typeof f === 'string' && FILE_ID.test(f)))] : []);
+/** Sources (S…), from a list or the research's "S1,S2" of `params.sources`. */
+const sourceRefs = (v: unknown): string[] => {
+    const list = typeof v === 'string' ? v.split(',').map(x => x.trim()) : Array.isArray(v) ? v : [];
+    return [...new Set(list.filter((x): x is string => typeof x === 'string' && SOURCE_REF.test(x)))].slice(0, 50);
+};
 
-/** Busy is waited out quietly; a changed list never (the person has to see it). */
-const busyOnly = (a: RawAnswer): boolean => !(a.body && typeof a.body === 'object' && (a.body as Record<string, unknown>).code === 'material.delete-changed');
+/** The sources a deletion is asked to take with it (spec 117 §7): none, or 1–50 S…. */
+const retractList = (v: readonly string[] | undefined): string[] | null => {
+    if (!v?.length) return [];
+    return v.length <= 50 && v.every(x => SOURCE_REF.test(x)) ? [...new Set(v)] : null;
+};
 
-/** What deleting files would take with them (`POST /material/delete {files, dryRun: true}`): nothing is written. */
-export async function deleteMaterialDry(base: string, files: string[], opts: BridgeOptions = {}): Promise<DeleteResult<DeleteDry>> {
-    if (!files.length || files.length > DELETE_MAX_FILES || !files.every(f => FILE_ID.test(f))) return bodyError();
-    const answer = await withBusyRetry(withAppVersion(`${base}/material/delete`), postInit({ files, dryRun: true }), opts);
+/** What a 409 of a deletion carries beside its code: the new lists, or the live sources. */
+function deleteRefusal(answer: RawAnswer): DeleteResult<never> | null {
+    const b = answer.body && typeof answer.body === 'object' ? answer.body as Record<string, unknown> : {};
+    if (answer.status === 409 && b.code === 'material.delete-changed') {
+        return {
+            ok: false, error: { kind: 'body', status: 409, code: 'material.delete-changed' }, changed: parseDeleteImpacts(b.impacts),
+            ...(b.sourceImpacts !== undefined ? { changedSources: b.sourceImpacts } : {}),
+        };
+    }
+    if (answer.status === 409 && b.code === 'material.source-live') {
+        const params = b.params && typeof b.params === 'object' ? (b.params as Record<string, unknown>).sources : undefined;
+        const live = sourceRefs(b.sources);
+        return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter), live: live.length ? live : sourceRefs(params) };
+    }
+    return null;
+}
+
+/** Busy is waited out quietly; a changed list or a file held by its live source never (the person has to see it). */
+const busyOnly = (a: RawAnswer): boolean => {
+    const code = a.body && typeof a.body === 'object' ? (a.body as Record<string, unknown>).code : undefined;
+    return code !== 'material.delete-changed' && code !== 'material.source-live';
+};
+
+/** Which sources a deletion also deletes first (spec 117 §7: only those its dry run named in `blockedBy`). */
+export interface DeleteWith {
+    retractSources?: string[];
+}
+
+/**
+ * What deleting files would take with them (`POST /material/delete {files, dryRun: true}`): nothing is written.
+ * With `retractSources` (a family tree file and the live source made of it, spec 117 §7) also what rests on the sources.
+ */
+export async function deleteMaterialDry(base: string, files: string[], opts: BridgeOptions & DeleteWith = {}): Promise<DeleteResult<DeleteDry>> {
+    const sources = retractList(opts.retractSources);
+    if (!files.length || files.length > DELETE_MAX_FILES || !files.every(f => FILE_ID.test(f)) || !sources) return bodyError();
+    const body = { files, ...(sources.length ? { retractSources: sources } : {}), dryRun: true };
+    const answer = await withBusyRetry(withAppVersion(`${base}/material/delete`), postInit(body), opts);
     if ('kind' in answer) return { ok: false, error: answer };
     if (answer.status === 200 && answer.body && typeof answer.body === 'object') {
         const b = answer.body as Record<string, unknown>;
         const confirm = typeof b.confirm === 'string' && b.confirm.length <= 4096 ? b.confirm : '';
         if (b.dryRun !== true || !confirm) return bodyError();
-        return { ok: true, value: { files: ids(b.files), impacts: parseDeleteImpacts(b.impacts), confirm } };
+        const value: DeleteDry = { files: ids(b.files), impacts: parseDeleteImpacts(b.impacts), confirm };
+        if (sources.length) {
+            value.retractSources = sourceRefs(b.retractSources);
+            value.sourceImpacts = b.sourceImpacts;
+        }
+        return { ok: true, value };
     }
-    return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+    return deleteRefusal(answer) ?? { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
 }
 
 /**
  * Delete files for good (`POST /material/delete {files, confirm}`): only with
  * the confirmation of a dry run whose list the person saw and confirmed.
  */
-export async function deleteMaterial(base: string, files: string[], confirm: string, opts: BridgeOptions = {}): Promise<DeleteResult<DeleteDone>> {
-    if (!files.length || files.length > DELETE_MAX_FILES || !files.every(f => FILE_ID.test(f)) || !confirm) return bodyError();
-    const answer = await withBusyRetry(withAppVersion(`${base}/material/delete`), postInit({ files, confirm }), opts, false, busyOnly);
+export async function deleteMaterial(base: string, files: string[], confirm: string, opts: BridgeOptions & DeleteWith = {}): Promise<DeleteResult<DeleteDone>> {
+    const sources = retractList(opts.retractSources);
+    if (!files.length || files.length > DELETE_MAX_FILES || !files.every(f => FILE_ID.test(f)) || !confirm || !sources) return bodyError();
+    const body = { files, ...(sources.length ? { retractSources: sources } : {}), confirm };
+    const answer = await withBusyRetry(withAppVersion(`${base}/material/delete`), postInit(body), opts, false, busyOnly);
     if ('kind' in answer) return { ok: false, error: answer };
     if (answer.status === 200 && answer.body && typeof answer.body === 'object') {
         const b = answer.body as Record<string, unknown>;
-        return { ok: true, value: { files: ids(b.files), deleted: ids(b.deleted), impacts: parseDeleteImpacts(b.impacts), head: isResearchHead(b.head) ?? '' } };
+        const value: DeleteDone = { files: ids(b.files), deleted: ids(b.deleted), impacts: parseDeleteImpacts(b.impacts), head: isResearchHead(b.head) ?? '' };
+        if (sources.length) value.retracted = sourceRefs(b.retracted);
+        return { ok: true, value };
     }
-    const b = answer.body && typeof answer.body === 'object' ? answer.body as Record<string, unknown> : {};
-    if (answer.status === 409 && b.code === 'material.delete-changed') {
-        return { ok: false, error: { kind: 'body', status: 409, code: 'material.delete-changed' }, changed: parseDeleteImpacts(b.impacts) };
-    }
-    return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
+    return deleteRefusal(answer) ?? { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
 }
 
 /** Files deleted for good leave the remembered list (and their batches' counts). */
