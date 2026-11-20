@@ -11,7 +11,8 @@
  */
 
 import { researchActionLabel } from './research-open-mark.js';
-import { researchLinkMark } from '../research-link.js';
+import { researchLinkMark, researchSourceRef } from '../research-link.js';
+import { sourceRetractOffered } from '../source-retract.js';
 import { DataManager, CitedFact, personCitationField, SourceCitationRef } from '../data.js';
 import { bookReference, entryDateLine, sameBookReference } from '../source-page.js';
 import { sourcePlaceSearchText, recognizeLocation, imageWord, hasPlaceFields, sourcePlaceParts, sourcePlaceLine } from '../source-location.js';
@@ -285,7 +286,8 @@ export const sourcesMethods = uiModule({
 
     /** The sources manager; `focusSourceId` (the Table view's Sources rows): that source's row marked, scrolled to and focused. */
     showSourcesDialog(focusSourceId?: string): void {
-        if (DataManager.isTreeLocked()) return;
+        // A followed tree: only read, deleting through its research (spec 117 §1); without that, not at all.
+        if (DataManager.isTreeLocked() && sourceRetractOffered() === null) return;
         const search = document.getElementById('sources-search') as HTMLInputElement | null;
         if (search) {
             search.value = '';
@@ -328,8 +330,10 @@ export const sourcesMethods = uiModule({
         const all = Object.values(DataManager.getData().sources ?? {});
         // The empty state carries "Add source" itself; the footer copy hides
         // meanwhile so the dialog keeps a single primary action.
+        // A followed tree's window only reads (spec 117 §1): no adding, editing or edit filters.
+        const readOnly = this.sourcesReadOnly();
         const addBtn = document.querySelector<HTMLElement>('#sources-modal .sources-footer .primary');
-        if (addBtn) addBtn.hidden = all.length === 0;
+        if (addBtn) addBtn.hidden = all.length === 0 || readOnly;
         const search = document.getElementById('sources-search') as HTMLInputElement | null;
         if (search) search.hidden = all.length <= 10;
         const totalEl = document.getElementById('sources-total');
@@ -344,8 +348,7 @@ export const sourcesMethods = uiModule({
             container.innerHTML = emptyStateHtml({
                 title: strings.emptyStates.sourcesTitle,
                 text: strings.emptyStates.sourcesText,
-                actionLabel: strings.sources.add,
-                actionId: 'sources-empty-add',
+                ...(readOnly ? {} : { actionLabel: strings.sources.add, actionId: 'sources-empty-add' }),
                 className: 'sources-empty',
             });
             document.getElementById('sources-empty-add')
@@ -361,14 +364,40 @@ export const sourcesMethods = uiModule({
         const unverified = new Set(unverifiedOlderSources(DataManager.getData(), link).map(src => src.id));
         // "Image in research": sources whose image the research left out and the app can still load.
         const held = new Set(this.heldSources().map(h => h.src.id));
+        if (readOnly) this.sourcesFilter = 'all';
         if (this.sourcesFilter === 'unverifiedTranscript' && unverified.size === 0) this.sourcesFilter = 'all';
         if (this.sourcesFilter === 'imageHeld' && held.size === 0 && !this.researchImagesBulkBusy()) this.sourcesFilter = 'all';
-        this.renderSourcesFilter(unverified.size > 0, held.size);
+        this.renderSourcesFilter(!readOnly && unverified.size > 0, readOnly ? 0 : held.size);
         const filtered = this.sourcesFilter === 'unverifiedTranscript' ? all.filter(src => unverified.has(src.id))
             : this.sourcesFilter === 'imageHeld' ? all.filter(src => held.has(src.id)) : all;
         const sources = filtered.filter(s => this.sourceMatches(s, query)).sort((a, b) => a.title.localeCompare(b.title));
         const counts = DataManager.sourceCitationCounts();
         const phone = (() => { try { return window.matchMedia?.(MQ_MOBILE).matches ?? false; } catch { return false; } })();
+        // Deleting a followed tree's source goes through its research: offered, at rest while its bridge is down, or not.
+        const retract = readOnly ? sourceRetractOffered() : null;
+        // On touch one ⋯ per row opens its sheet (a local tree keeps its two 44 px buttons).
+        const rowMenu = readOnly && retract !== null && (phone || isCoarsePointer());
+        const R = strings.sources.retract;
+        const actions = (src: Source): string => {
+            const id = esc(src.id);
+            if (!readOnly) {
+                return `<button type="button" class="source-edit-btn" title="${esc(strings.sources.edit)}" aria-label="${esc(strings.sources.edit)}"
+                            data-source-id="${id}">${iconSvg('pencil')}</button>
+                        <button type="button" class="source-delete-btn" title="${esc(strings.danger.deleteSource)}" aria-label="${esc(strings.danger.deleteSource)}"
+                            data-source-id="${id}">${iconSvg('trash')}</button>`;
+            }
+            // Only a source the research knows (its REFN) can be deleted there.
+            if (retract === null || !researchSourceRef(src.refn)) return '';
+            if (rowMenu) {
+                return `<button type="button" class="source-more-btn" aria-haspopup="menu" aria-label="${esc(R.rowMenu(src.title))}"
+                            data-source-id="${id}">⋯</button>`;
+            }
+            // Not working now (its bridge is down): it stays, can be focused and says why; never `disabled`.
+            const off = retract === 'off';
+            return `<button type="button" class="source-delete-btn" title="${esc(off ? R.trashOff : strings.danger.deleteSource)}"
+                            aria-label="${esc(strings.danger.deleteSource)}"${off ? ' aria-disabled="true"' : ''}
+                            data-source-id="${id}">${iconSvg('trash')}</button>`;
+        };
         container.innerHTML = sources.map(src => {
             const count = counts.get(src.id) ?? 0;
             // The place on one line (spec 075 §2): on a phone without the archive when the call number names the book.
@@ -384,23 +413,26 @@ export const sourcesMethods = uiModule({
                         ${count > 0 ? `<span class="source-count">${esc(strings.sources.citations(count))}</span>` : ''}
                     </div>
                     <div class="source-actions">
-                        <button type="button" class="source-edit-btn" title="${esc(strings.sources.edit)}" aria-label="${esc(strings.sources.edit)}"
-                            data-source-id="${esc(src.id)}">${iconSvg('pencil')}</button>
-                        <button type="button" class="source-delete-btn" title="${esc(strings.danger.deleteSource)}" aria-label="${esc(strings.danger.deleteSource)}"
-                            data-source-id="${esc(src.id)}">${iconSvg('trash')}</button>
+                        ${actions(src)}
                     </div>
                 </div>`;
         }).join('');
         // Source ids come from data files: handlers via data attributes, never
         // inline JS (&#39; is decoded back to a quote inside an attribute).
         container.querySelectorAll<HTMLElement>('.source-row-open[data-source-id]').forEach(btn => {
-            btn.addEventListener('click', () => this.showSourceViewer(btn.dataset.sourceId ?? '', null));
+            btn.addEventListener('click', () => this.showSourceViewer(btn.dataset.sourceId ?? '', null, readOnly ? { readOnly: true } : {}));
+        });
+        container.querySelectorAll<HTMLElement>('.source-more-btn[data-source-id]').forEach(btn => {
+            btn.addEventListener('click', () => this.openSourceRowSheet(btn.dataset.sourceId ?? ''));
         });
         container.querySelectorAll<HTMLElement>('.source-edit-btn[data-source-id]').forEach(btn => {
             btn.addEventListener('click', () => this.showEditSourceModal(btn.dataset.sourceId ?? ''));
         });
         container.querySelectorAll<HTMLElement>('.source-delete-btn[data-source-id]').forEach(btn => {
-            btn.addEventListener('click', () => { void this.deleteSource(btn.dataset.sourceId ?? ''); });
+            btn.addEventListener('click', () => {
+                if (btn.getAttribute('aria-disabled') === 'true') return;
+                void this.deleteSource(btn.dataset.sourceId ?? '');
+            });
         });
         hydrateThumbs(container);
         this.renderResearchImagesBulk();
@@ -439,7 +471,35 @@ export const sourcesMethods = uiModule({
         return [src.title, sourceMeta(src), sourcePlaceSearchText(src), src.transcript ?? ''].some(t => t.toLowerCase().includes(query));
     },
 
+    /** The Sources window of a followed tree: only read (spec 117 §1), deleting goes through its research. */
+    sourcesReadOnly(): boolean {
+        return DataManager.isTreeLocked();
+    },
+
+    /** A followed tree's source row on touch (⋯): its sheet with Open and Delete (at rest, with why, while the bridge is down). */
+    openSourceRowSheet(sourceId: string): void {
+        const src = DataManager.getData().sources?.[sourceId];
+        const ref = researchSourceRef(src?.refn);
+        const offer = sourceRetractOffered();
+        if (!src || !ref || offer === null) return;
+        const R = strings.sources.retract;
+        const count = DataManager.sourceCitationCounts().get(sourceId) ?? 0;
+        this.presentMenuSheet(src.title, [
+            { rows: [{ label: R.menuOpen, id: 'source-sheet-open', run: () => this.showSourceViewer(sourceId, null, { readOnly: true }) }] },
+            { divider: true, rows: [{
+                label: R.menuDelete, id: 'source-sheet-delete', danger: true,
+                run: () => { void this.openSourceRetractDialog(sourceId); },
+                ...(offer === 'off' ? { disabled: true, why: R.trashOff } : {}),
+            }] },
+        ], { subtitle: count > 0 ? `${ref} · ${strings.sources.citations(count)}` : ref });
+    },
+
     async deleteSource(sourceId: string): Promise<void> {
+        // A followed tree: deleted in its research (spec 117 §2), only while that works.
+        if (this.sourcesReadOnly()) {
+            if (sourceRetractOffered() === 'on') void this.openSourceRetractDialog(sourceId);
+            return;
+        }
         const count = DataManager.countSourceCitations(sourceId);
         // Name what is being deleted — several rows would otherwise get the
         // same sentence and the wrong one is one click away.

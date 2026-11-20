@@ -328,6 +328,12 @@ export const sourceSplitMethods = uiModule({
     renderSourceSplitBar(): void {
         const box = document.getElementById('sources-split-bulk');
         if (!box) return;
+        // A followed tree's Sources window only reads (spec 117 §1).
+        if (this.sourcesReadOnly()) {
+            box.hidden = true;
+            box.innerHTML = '';
+            return;
+        }
         this.sourceSplitBridgeFresh(() => this.renderSourceSplitBar());
         const offer = splitOffer(this.sourceSplitState(), 'sources');
         const t = strings.sources.split;

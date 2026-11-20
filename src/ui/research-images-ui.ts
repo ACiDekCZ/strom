@@ -504,6 +504,12 @@ export const researchImagesMethods = uiModule({
     renderResearchImagesBulk(): void {
         const box = document.getElementById('sources-bulk');
         if (!box) return;
+        // A followed tree's Sources window only reads (spec 117 §1).
+        if (this.sourcesReadOnly()) {
+            box.hidden = true;
+            box.innerHTML = '';
+            return;
+        }
         const r = strings.researchImages;
         const env = this.researchImagesEnv();
         const mine = queue && queueTreeId === env.treeId ? queue : null;

@@ -41,6 +41,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
+import { sourceRetractOffered } from '../source-retract.js';
 import { dropLifelineChips } from '../lifeline-view.js';
 import { HISTORY_PLACE_FEATURE } from '../research-link.js';
 import { historyKindLocked, historyKindsShown, HISTORY_SCOPE_KINDS, type HistoryKinds } from '../history.js';
@@ -691,9 +692,11 @@ export const treeManagementMethods = uiModule({
      * without a way to manage sources they already have.
      */
     isSourcesMenuOffered(): boolean {
-        if (DataManager.isReadOnly() || DataManager.isTreeLocked()) return false;
-        return SettingsManager.isAdvancedFields()
-            || Object.keys(DataManager.getData().sources ?? {}).length > 0;
+        if (DataManager.isReadOnly()) return false;
+        const any = Object.keys(DataManager.getData().sources ?? {}).length > 0;
+        // A followed tree: read-only, with deleting through its research (spec 117 §1), when that is offered.
+        if (DataManager.isTreeLocked()) return any && sourceRetractOffered() !== null;
+        return SettingsManager.isAdvancedFields() || any;
     },
     treeActionSources(): void {
         this.closeActionsMenu();

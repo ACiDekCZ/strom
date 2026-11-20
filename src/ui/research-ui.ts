@@ -4250,6 +4250,25 @@ export const researchUiMethods = uiModule({
         if (s) this.researchStatusAfterWrite(s);
     },
 
+    /**
+     * A write of this page through the bridge changed the followed tree (a
+     * source deleted or put back): its new version loaded now, not when the
+     * stream says it (the stream's own event for the same head is then
+     * nothing new). No head said: the status is asked, a new head loads.
+     * False: the tree is not followed here.
+     */
+    async liveLoadAfterWrite(head: string): Promise<boolean> {
+        const s = live;
+        if (!s || s.ended || DataManager.getCurrentTreeId() !== s.treeId) return false;
+        if (!head) {
+            this.liveStatusSoon(s);
+            return true;
+        }
+        this.enqueueLive(s, () => this.onLiveChange(s, { head, what: [], at: '' }));
+        await s.chain;
+        return true;
+    },
+
     /** The bridge answered: following goes on (after a silence: say so by redrawing). */
     liveBridgeBack(s: LiveSession): void {
         s.failures = 0;

@@ -4110,6 +4110,9 @@
         /* With a note ("roz. …", "dříve …") the name wraps, the note as one piece. */
         .bottom-sheet-person .bottom-sheet-menu-title:has(.pn-note) { white-space: normal; text-wrap: pretty; }
         .bottom-sheet-sub { display: block; font-size: 12px; color: var(--text-faint); font-weight: 400; }
+        /* A row offered but not working now, and why (spec 117 §1). */
+        .bottom-sheet-item[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
+        .bottom-sheet-why { display: block; font-size: 12.5px; color: var(--text-faint); font-weight: 400; line-height: 1.4; }
         .bottom-sheet-menu .bottom-sheet-label { flex: 1; }
         .bottom-sheet-pair { display: flex; gap: 8px; padding: 0 8px; }
         /* A tile's name may shrink to the tile and wrap inside it (flex: none
@@ -28024,7 +28027,14 @@
             border: none; background: none; cursor: pointer; padding: 2px 6px;
             font-size: 15px; line-height: 1; color: var(--text-secondary, #777);
         }
-        @media (hover: hover) { .source-actions button:hover { color: var(--text-primary, #222); } }
+        @media (hover: hover) {
+            .source-actions button:hover { color: var(--text-primary, #222); }
+            .source-actions button[aria-disabled="true"]:hover { color: var(--text-ghost); }
+        }
+        /* Deleting at rest (spec 117 §1): its research is not running; it stays, can be focused and says why. */
+        .source-actions button[aria-disabled="true"] { color: var(--text-ghost); cursor: default; }
+        /* A followed tree on touch: one ⋯ per row opens its sheet. */
+        .source-actions .source-more-btn { min-width: 44px; min-height: 44px; padding: 8px; font-size: 17px; }
         /* Inline "no sources" line (person modal chips, picker); the dialog's
            empty state is an .empty-block and overrides size/padding. */
         .sources-empty { color: var(--text-light); font-size: 13px; padding: 4px 0; }
@@ -31306,6 +31316,40 @@
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .mdlg--delete .mdlg-body { gap: 8px; }
             .mdlg--delete .mdlg-sort-preview { width: 40px; height: 40px; }
+        }
+        /* Delete source of a followed tree (spec 117 §2, §7): the research's list of what rests on the source. */
+        .mdlg--remove.mdlg--source { width: 560px; }
+        .mdlg-sub-id { color: var(--text-faint); white-space: nowrap; }
+        .mdlg > .mdlg-error, .mdlg > .mdlg-busy-prog { margin: 0 24px 12px; }
+        .mdlg > .mdlg-busy-prog[hidden] { display: none; }
+        .mdlg-src-list { display: flex; flex-direction: column; gap: 12px; }
+        .mdlg-src-list:empty { display: none; }
+        .mdlg-src-sum { display: flex; flex-direction: column; gap: 2px; }
+        .mdlg-src-sum-line { font-size: 13.5px; line-height: 1.45; color: var(--text); }
+        .mdlg-src-sum-parts { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .mv-use-items { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+        .mv-use-item { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        .mv-use-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: 13px; line-height: 1.35; color: var(--text); }
+        .mv-use-line .is-person, .mv-use-sub .is-person { font-family: var(--font-serif); font-size: 14px; }
+        .mv-use-line .is-faint { color: var(--text-faint); font-size: 12px; overflow-wrap: anywhere; }
+        .mv-use-step { display: inline-flex; align-items: center; gap: 4px; color: var(--text-light); font-size: 12px; }
+        .mv-use-sub .is-bare { color: var(--warning-text); }
+        .mv-use-more { font-size: 12px; color: var(--text-faint); }
+        .mv-use-files { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12.5px; overflow-wrap: anywhere; }
+        .mdlg-changed { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--warning-text); text-wrap: pretty; }
+        .mdlg-changed[hidden] { display: none; }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .mdlg--remove.mdlg--source { width: 560px; }
+        }
+        @media (max-width: 640px) {
+            .mdlg > .mdlg-error, .mdlg > .mdlg-busy-prog { margin: 0 16px 10px; }
+            .mdlg--remove.mdlg--source { width: 100%; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            /* Centred, not a sheet: a one-line head, the body scrolls. */
+            .mdlg--source .mdlg-head { display: flex; flex-direction: row; align-items: baseline; gap: 10px; min-width: 0; }
+            .mdlg--source .mdlg-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+            .mdlg--source .mdlg-body { gap: 8px; }
         }
         .mv-uses-attach { font-size: 13px; }
         @media (hover: hover) {

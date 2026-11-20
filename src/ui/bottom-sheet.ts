@@ -59,6 +59,10 @@ interface MenuRow {
     iconHtml?: string;
     /** A second line of the row's own (the tree's research marks). */
     extra?: HTMLElement;
+    /** Offered but not working now (`aria-disabled`, never `disabled`: it can be focused and read); a click does nothing. */
+    disabled?: boolean;
+    /** Why it does not work now: a quiet line under the label. */
+    why?: string;
 }
 /** The prominent "Strom: {name}" row that opens the second-level tree sheet
  *  (serif name + chevron + tinted background — mirrors the desktop submenu row). */
@@ -584,6 +588,12 @@ export const bottomSheetMethods = uiModule({
                 label.appendChild(sub);
             }
             if (row.extra) label.appendChild(row.extra);
+            if (row.why) {
+                const why = document.createElement('span');
+                why.className = 'bottom-sheet-why';
+                why.textContent = row.why;
+                label.appendChild(why);
+            }
             btn.appendChild(label);
             if (row.treeId) btn.dataset.treeId = row.treeId;
             if (row.value) {
@@ -634,6 +644,10 @@ export const bottomSheetMethods = uiModule({
                 chevron.textContent = '›';
                 btn.appendChild(chevron);
                 btn.addEventListener('click', () => showSubPage(btn, page));
+                return btn;
+            }
+            if (row.disabled) {
+                btn.setAttribute('aria-disabled', 'true');
                 return btn;
             }
             btn.addEventListener('click', () => {
