@@ -3181,12 +3181,23 @@ export const researchSyncMethods = uiModule({
      * while the tree has portraits, couples' photos or attachments no file
      * copy holds: the research does not keep those (spec 108 K1b.1) — unless
      * it keeps them and a write handed them over (researchArchiveHoldsMedia).
+     * `photos`: it holds everything but those (the indicator says it is the
+     * photos; `until`, if any, is when the rest stops being held too).
      */
-    researchHoldsTree(treeId: TreeId, now = Date.now()): { holds: boolean; until?: number } {
+    researchHoldsTree(treeId: TreeId, now = Date.now()): { holds: boolean; until?: number; photos?: boolean } {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!link || !onComputer() || !researchLinksEnabled() || !this.researchSyncCapable(link.id)) return { holds: false };
-        if (!browserMediaSafe(this.researchTreeMediaFp(treeId, meta), meta.fileCopyMediaFp, this.researchArchiveHoldsMedia(treeId))) return { holds: false };
+        const rest = this.researchHoldsTreeText(treeId, now);
+        if (browserMediaSafe(this.researchTreeMediaFp(treeId, meta), meta.fileCopyMediaFp, this.researchArchiveHoldsMedia(treeId))) return rest;
+        return rest.holds ? { holds: false, photos: true, ...(rest.until ? { until: rest.until } : {}) } : { holds: false };
+    },
+
+    /** researchHoldsTree without the pictures: the tree's data is in the research or on its way (a linked tree only). */
+    researchHoldsTreeText(treeId: TreeId, now: number): { holds: boolean; until?: number } {
+        const meta = TreeManager.getTreeMetadata(treeId);
+        const link = meta?.research;
+        if (!meta || !link) return { holds: false };
         const st = researchAutoState(treeId);
         const sentGone = link.sent?.state === 'discarded' || link.sent?.state === 'undone';
         let unsent: boolean;

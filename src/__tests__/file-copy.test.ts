@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    hasUnsavedChanges, shouldShowNotice, shouldShowUnsavedIndicator, unsavedTrees, storageAdvice, isIosDevice, browserFamily,
+    hasUnsavedChanges, shouldShowNotice, shouldShowUnsavedIndicator, unsavedTrees, unsavedKind, storageAdvice, isIosDevice, browserFamily,
     FILE_COPY_NOTICE_MIN_PERSONS, FILE_COPY_NOTICE_PAUSE_MS,
 } from '../file-copy.js';
 
@@ -70,6 +70,16 @@ describe('unsavedTrees / shouldShowUnsavedIndicator', () => {
         expect(shouldShowUnsavedIndicator({ ...base, state: 'persistent' })).toBe(false);
         expect(shouldShowUnsavedIndicator({ ...base, unsavedCount: 0 })).toBe(false);
         expect(shouldShowUnsavedIndicator({ ...base, viewMode: true })).toBe(false);
+    });
+});
+
+describe('unsavedKind (spec 108 K1b.1)', () => {
+    it('speaks of the photos only when every tree counted is held by its research but for them', () => {
+        expect(unsavedKind([])).toBe('changes');
+        expect(unsavedKind([{ photos: true }])).toBe('photos');
+        expect(unsavedKind([{ photos: true }, { photos: true }])).toBe('photos');
+        expect(unsavedKind([{ photos: true }, {}])).toBe('changes');
+        expect(unsavedKind([{ photos: false }])).toBe('changes');
     });
 });
 

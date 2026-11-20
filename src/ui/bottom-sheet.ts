@@ -391,7 +391,7 @@ export const bottomSheetMethods = uiModule({
         if (!isView && this.isUnsavedInBrowser()) {
             // (A storage row comes before its block's divider: the next block separates it.)
             blocks.push({ rows: [], storageRow: {
-                title: s.fileCopy.menuUnsaved,
+                title: this.isUnsavedPhotosOnly() ? s.fileCopy.photosShort : s.fileCopy.menuUnsaved,
                 run: () => { void this.showStorageStatusDialog(); },
             } });
         }

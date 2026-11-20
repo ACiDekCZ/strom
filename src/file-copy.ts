@@ -93,6 +93,15 @@ export function shouldShowUnsavedIndicator(input: {
  *   Chrome/Edge for the installed app;
  * - `file`: nothing better than saving to a file regularly (installed apps, others).
  */
+/**
+ * What the "only in browser" indicator speaks of (spec 108 K1b.1): only the
+ * photos — portraits, couples' photos, attachments — when every tree it counts
+ * is one its research holds but for those; else the changes.
+ */
+export function unsavedKind(trees: readonly { photos?: boolean }[]): 'photos' | 'changes' {
+    return trees.length > 0 && trees.every(t => t.photos === true) ? 'photos' : 'changes';
+}
+
 export type StorageAdvice = 'install' | 'install-menu' | 'mac-dock' | 'firefox' | 'ios-safari' | 'ios-app' | 'file';
 
 export type BrowserFamily = 'chromium' | 'safari' | 'firefox' | 'other';

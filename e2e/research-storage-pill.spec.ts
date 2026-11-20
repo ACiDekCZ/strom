@@ -58,6 +58,15 @@ test.describe('the storage pill on a research tree', () => {
         await setPortrait('A');
         await page.clock.fastForward(1_000);
         await expect(pill(page)).toBeVisible();
+        // The research holds the rest: the pill, its title and the dialog say it is the photos.
+        await expect(pill(page)).toHaveText('Photos only in browser');
+        await expect(pill(page)).toHaveAttribute('aria-label', /not its portraits, couples’ photos and attachments/);
+        await page.evaluate(() => window.Strom.UI.showStorageStatusDialog());
+        const body = page.locator('#storage-status-body');
+        await expect(body.locator('.storage-pill')).toHaveText('Photos only in browser');
+        // Opened from a file: what came since is only here.
+        await expect(body).toContainText('The research holds the tree, but portraits, couples’ photos and attachments added since then are only in the browser.');
+        await page.evaluate(() => window.Strom.UI.closeStorageStatusDialog());
 
         // A full export to a file carries the portrait: the pill goes, and an edit of the text after it stays with the research.
         await page.evaluate(() => window.Strom.DataManager.exportTreeJSON(window.Strom.TreeManager.getActiveTreeId()!));
@@ -86,10 +95,11 @@ test.describe('the storage pill on a research tree', () => {
             dm.updatePerson(jan.id, { photo: `data:image/jpeg;base64,${fill.repeat(3000)}` });
         }, fill);
 
-        // Not handed over yet: only in this browser.
+        // Not handed over yet: only in this browser — the photos (the research holds the rest).
         await setPortrait('A');
         await page.clock.fastForward(1_000);
         await expect(pill(page)).toBeVisible();
+        await expect(pill(page)).toHaveText('Photos only in browser');
 
         // Written with its files: the research holds them.
         await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
@@ -103,6 +113,26 @@ test.describe('the storage pill on a research tree', () => {
         await expect(pill(page)).toBeHidden();
         await page.clock.fastForward(10 * 60_000 + 1_000);
         await expect(pill(page)).toBeVisible();
+        // The edit itself is only here now too: the changes, not just the photos.
+        await expect(pill(page)).toHaveText('Only in browser');
+    });
+
+    // The research holds the tree's data but for a portrait; once the edit with it stays unsent for 10 minutes,
+    // the data is only here too and the pill speaks of the changes again (its own timer, no other event).
+    test('photos only in browser turns into only in browser when the edit stays unsent', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-11-20T10:30:00Z') });
+        await fakeBridge(page, { accepts: { sync: { auto: 'write' }, sources: true, verified: true, media: null } });
+        await openResearch(page);
+        await poll(page);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const jan = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
+            dm.updatePerson(jan.id, { photo: `data:image/jpeg;base64,${'C'.repeat(3000)}` });
+        });
+        await page.clock.fastForward(1_000);
+        await expect(pill(page)).toHaveText('Photos only in browser');
+        await page.clock.fastForward(10 * 60_000 + 1_000);
+        await expect(pill(page)).toHaveText('Only in browser');
     });
 
     // An index saved before spec 108 knows no fingerprint of a research tree's pictures (N1): a tree
