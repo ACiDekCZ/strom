@@ -266,4 +266,29 @@ test.describe('outputs wait for the photos (spec 116 §8)', () => {
         for (const img of imgs) expect(json).toContain(img.b64.slice(0, 60));
         expect(json).not.toContain('strom-image:');
     });
+
+    test('person page, Save as HTML: waits for the photos first, the export dialog only once they came (K1.7)', async ({ page }) => {
+        const imgs = await makeImages(page);
+        const bridge = await follow(page, imgs);
+        await page.evaluate(() => {
+            const p = window.Strom.DataManager.getAllPersons().find(x => x.firstName === 'Hostivít')!;
+            window.Strom.UI.showPersonPage(p.id);
+        });
+        const pp = page.locator('#person-page-modal');
+        await expect(pp).toBeVisible();
+        await pp.locator('.pp-save').click();
+        const toast = page.locator('.toast', { has: page.locator('.toast-title', { hasText: 'Person page' }) });
+        await expect(toast).toBeVisible();
+        await expect(toast).toContainText('Waiting for photos');
+        await expect(toast).toContainText('0 of 3');
+        // No dialog while the photos are on their way: the file would be built without them.
+        await expect(page.locator('#person-page-export-modal')).toHaveCount(0);
+        expect(await photos(page)).toBe(0);
+
+        bridge.release();
+        await expect(page.locator('#person-page-export-modal .pp-export')).toBeVisible();
+        expect(await photos(page)).toBe(3);
+        await expect(toast).toHaveCount(0);
+        await expect(page.locator('.toast[data-kind="images-failed"]')).toHaveCount(0);
+    });
 });
