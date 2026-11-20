@@ -10729,8 +10729,57 @@
         .tl-hsheet-sym.is-place { color: var(--hist-place-text); }
         .tl-hsheet-sym.is-local { color: var(--hist-local-text); }
         .tl-hsheet-text { min-width: 0; overflow-wrap: anywhere; }
-        .tl-hsheet .bottom-sheet-item.tl-hsheet-open { font-size: 15px; color: var(--primary); border-top: 1px solid var(--divider); border-radius: 0; }
         .tl-hsheet .bottom-sheet-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        /* spec 121 §2 (2d, 2e): "kind · region" under an event; "Open in the person card" and a row per person. */
+        .tl-hsheet-meta { display: block; font-size: 12px; color: var(--hist-meta); }
+        .tl-hsheet-sub { padding: 10px 16px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-text); border-top: 1px solid var(--divider); }
+        .tl-hsheet-people { display: flex; flex-direction: column; }
+        .tl-hsheet .bottom-sheet-item.tl-hsheet-person { min-height: 48px; justify-content: space-between; font-family: var(--font-serif); font-size: 15px; color: var(--text); }
+        .tl-hsheet-person span:first-child { min-width: 0; overflow-wrap: anywhere; }
+        .tl-hsheet-person span:last-child { flex: none; color: var(--text-faint); font-family: var(--font-sans); }
+        .tl-hsheet .bottom-sheet-item.tl-hsheet-more { min-height: 48px; font-size: 14px; color: var(--text-light); }
+        .tl-hsheet .bottom-sheet-item.pm-lifeline-hsheet-cancel { border-top: 1px solid var(--divider); border-radius: 0; }
+        /*
+         * spec 121 §2 (2a–2c), §5: a popover of the history row, the shape of
+         * .fan-look-panel. Placed in the window's pixels (placeTimelinePop):
+         * under the row, above it where there is no room, clipped into the
+         * window. Width from the code (380 a cluster, 400 the options). A
+         * computer and a tablet with a mouse; a phone and touch get the sheet.
+         */
+        .tl-pop {
+            position: fixed; z-index: 300; box-sizing: border-box; width: 380px; max-width: calc(100vw - 16px);
+            overflow: auto; overscroll-behavior: contain; padding: 4px 14px 12px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+            color: var(--text); font-size: 13px; text-align: left; outline: none;
+        }
+        .tl-pop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; }
+        .tl-pop-title { min-width: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+        .tl-pop-x {
+            flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-md); background: none;
+            font: inherit; font-size: 20px; line-height: 1; color: var(--text-light); cursor: pointer;
+        }
+        .tl-pop-x:focus-visible, .tl-pop .link-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) { .tl-pop-x:hover { background: var(--hover-bg); color: var(--text); } }
+        .tl-pop-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+        .tl-pop-ev { display: grid; grid-template-columns: 70px 16px minmax(0, 1fr); column-gap: 8px; padding: 8px 0; border-top: 1px solid var(--divider); }
+        .tl-pop-ev:first-child { border-top: 0; }
+        .tl-pop-y { color: var(--hist-meta); font-variant-numeric: tabular-nums; font-size: 13px; padding-top: 1px; }
+        .tl-pop-sym { display: flex; padding-top: 2px; color: var(--hist-text); }
+        .tl-pop-sym.is-place { color: var(--hist-place-text); }
+        .tl-pop-sym.is-local { color: var(--hist-local-text); }
+        .tl-pop-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .tl-pop-text { font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
+        .tl-pop-meta { font-size: 12px; color: var(--hist-meta); overflow-wrap: anywhere; }
+        .tl-pop-who { font-size: 12.5px; line-height: 1.5; color: var(--text-light); overflow-wrap: anywhere; }
+        .tl-pop-who .link-button { display: inline; padding: 0; font-size: 13px; font-family: var(--font-serif); text-align: left; white-space: normal; overflow-wrap: anywhere; }
+        @media (max-width: 1024px) {
+            /* A tablet with a mouse: the same popover, kept off the bottom bar by its placement. */
+            .tl-pop { max-width: calc(100vw - 16px); }
+        }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            /* A phone (upright or sideways) shows the sheet; a popover left open from a wider window shrinks with it. */
+            .tl-pop { max-height: calc(100dvh - 16px); }
+        }
 
         /* Fan chart view */
         /* ---- Map view (A6) ---- */

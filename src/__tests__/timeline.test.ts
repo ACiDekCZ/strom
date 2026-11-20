@@ -6,7 +6,9 @@ import { describe, it, expect } from 'vitest';
 import {
     computeTimelineModel, yearToFraction, axisTicks, axisLabelStep, clusterTimelineHistory, timelineHistoryYears, TimelineHistoryItem,
     filterTimelineHistory, timelineClusterKind, timelineClusterKinds, timelinePeriodTracks,
+    timelineConcernPersons, timelineClusterPersons, placeTimelinePop,
 } from '../timeline.js';
+import { setLanguage, strings } from '../strings.js';
 import { HISTORY_KINDS } from '../history.js';
 import { historyKindSvg } from '../history-symbols.js';
 import { buildTimelineSvg, buildTimelinePosterSvg, historyRowHeight, historyClusterGap, placeSharedLabels } from '../timeline-chart.js';
@@ -702,5 +704,75 @@ describe('a shared event on the family timeline (spec 085 §2e)', () => {
         const poster = buildTimelinePosterSvg(model, { esc }, { treeName: 'T' });
         expect(poster).toContain('.tl-shared-mark{fill:#3f6b4f');
         expect(poster.match(/class="tl-shared-mark"/g)).toHaveLength(2);
+    });
+});
+
+// ==================== A CLUSTER'S POPOVER AND SHEET (spec 121 §2) ====================
+
+describe('timeline history: whom a cluster concerns', () => {
+    const ev = (id: string, persons: string[]): TimelineHistoryItem =>
+        ({ id, year: 1880, kind: 'census', scope: 'region', text: id, persons });
+
+    it("an event names at most two persons in the rows' order, the focused person first, and how many more", () => {
+        expect(timelineConcernPersons(['a', 'b', 'c', 'd'])).toEqual({ shown: ['a', 'b'], more: 2 });
+        expect(timelineConcernPersons(['a', 'b', 'c', 'd'], 'c')).toEqual({ shown: ['c', 'a'], more: 2 });
+        expect(timelineConcernPersons(['a', 'b'], 'z')).toEqual({ shown: ['a', 'b'], more: 0 });
+        expect(timelineConcernPersons(['a'], 'a')).toEqual({ shown: ['a'], more: 0 });
+        expect(timelineConcernPersons([], 'a')).toEqual({ shown: [], more: 0 });
+    });
+
+    it("the sheet's persons: everyone of the cluster in the rows' order, the focused first, each with the first event that concerns them", () => {
+        const items = [ev('E1', ['c', 'a']), ev('E2', ['b', 'c']), ev('E3', ['x'])];
+        const order = ['a', 'b', 'c'];
+        expect(timelineClusterPersons(items, order)).toEqual([
+            { personId: 'a', eventId: 'E1' }, { personId: 'b', eventId: 'E2' }, { personId: 'c', eventId: 'E1' },
+            { personId: 'x', eventId: 'E3' },
+        ]);
+        expect(timelineClusterPersons(items, order, 'b').map(p => p.personId)).toEqual(['b', 'a', 'c', 'x']);
+        expect(timelineClusterPersons([ev('E1', ['a'])], order, 'c')).toEqual([{ personId: 'a', eventId: 'E1' }]);
+    });
+
+    it('"Concerns: …" and "and N more" in all four languages', async () => {
+        const said = (lang: 'en' | 'cs' | 'de' | 'pl', n: number) => { setLanguage(lang); return strings.history.timelineConcerns('A, B', n); };
+        try {
+            expect(said('en', 2)).toBe('Concerns: A, B and 2 more');
+            expect(said('en', 0)).toBe('Concerns: A, B');
+            expect(said('cs', 2)).toBe('Týká se: A, B a 2 další');
+            expect(said('cs', 5)).toBe('Týká se: A, B a 5 dalších');
+            expect(said('de', 1)).toBe('Betrifft: A, B und 1 weitere');
+            expect(said('pl', 2)).toBe('Dotyczy: A, B i 2 innych');
+            setLanguage('cs');
+            expect(strings.history.timelineYearsTitle('1880–1891')).toBe('Dějiny 1880–1891');
+            expect(strings.history.timelinePeopleMore(2)).toBe('a 2 další');
+            setLanguage('de');
+            expect(strings.history.timelinePeopleMore(1)).toBe('und 1 weitere');
+        } finally {
+            setLanguage('en');
+        }
+    });
+});
+
+describe('timeline history: where the popover goes', () => {
+    const view = { width: 1440, height: 900 };
+    const size = { width: 380, height: 300 };
+
+    it('under the row, 6 px below it, at the cluster x − 40', () => {
+        expect(placeTimelinePop({ x: 600, top: 100, bottom: 128 }, size, view)).toEqual({ left: 560, top: 134, above: false, maxHeight: null });
+    });
+
+    it('clipped into the window, 8 px from its edges', () => {
+        expect(placeTimelinePop({ x: 20, top: 100, bottom: 128 }, size, view).left).toBe(8);
+        expect(placeTimelinePop({ x: 1430, top: 100, bottom: 128 }, size, view).left).toBe(1440 - 380 - 8);
+    });
+
+    it('above the row where there is no room below (the bottom bar counts)', () => {
+        expect(placeTimelinePop({ x: 600, top: 700, bottom: 728 }, size, view)).toEqual({ left: 560, top: 394, above: true, maxHeight: null });
+        expect(placeTimelinePop({ x: 600, top: 500, bottom: 528 }, size, { ...view, bottomInset: 120 }).above).toBe(true);
+    });
+
+    it('no room on either side: the side with more, its height limited', () => {
+        const tall = { width: 380, height: 800 };
+        expect(placeTimelinePop({ x: 600, top: 300, bottom: 328 }, tall, view)).toEqual({ left: 560, top: 334, above: false, maxHeight: 900 - 8 - 334 });
+        expect(placeTimelinePop({ x: 600, top: 600, bottom: 628 }, tall, view)).toEqual({ left: 560, top: 8, above: true, maxHeight: 600 - 6 - 8 });
     });
 });

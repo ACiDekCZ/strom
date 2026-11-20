@@ -1048,6 +1048,8 @@ class TreeRendererClass {
         const active = standalone[this.viewMode];
         // §5.2: leaving the Fan view forgets its way back.
         if (this.viewMode !== 'fan') this.fanView?.deactivate();
+        // The Timeline's history popover (spec 121 §2) belongs to that view only.
+        if (this.viewMode !== 'timeline') UI.closeTimelinePopover?.();
         // Chrome that belongs to some views only (the evidence pill) reads it here.
         // A followed research's card stood below the Fan or the Table view's bar: back at the top it is placed again.
         const leftFan = (document.body.dataset.viewMode === 'fan' && this.viewMode !== 'fan') || document.body.dataset.viewMode === 'table';
@@ -7539,12 +7541,12 @@ class TreeRendererClass {
         // Delegate bar clicks once (safe against odd person ids in JSON imports).
         if (!container.dataset.wired) {
             container.dataset.wired = '1';
-            // A cluster of the history row (§9): the card on its first event, a sheet on a phone.
+            // A cluster of the history row (spec 121 §2): a popover at it, a sheet on a phone.
             const histCluster = (e: Event): boolean => {
                 const c = (e.target as Element).closest('.tl-hist[data-hist-ids]');
                 if (!c) return false;
                 const ids = (c.getAttribute('data-hist-ids') ?? '').split(' ').filter(Boolean).map(decodeURIComponent);
-                UI.openTimelineHistoryRow(ids, this.focusPersonId);
+                UI.openTimelineHistoryRow(ids, this.focusPersonId, c);
                 return true;
             };
             container.addEventListener('click', (e) => {
@@ -7571,6 +7573,7 @@ class TreeRendererClass {
         // The history row of the whole timeline (spec 121 §1): kept while the rows and the data stay, the focus only its line.
         const history = UI.timelineHistoryAll(ids, this.focusPersonId);
         const model = computeTimelineModel(DataManager.getData(), ids, todayYear, history ? { history } : {});
+        UI.setTimelineHistoryDrawn(model.history?.events ?? [], model.rows.map(r => r.personId));
         const S = strings.timeline;
 
         const isMobile = isMobileViewport();

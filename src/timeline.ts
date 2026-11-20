@@ -386,6 +386,59 @@ export function timelinePeriodTracks(periods: readonly { x1: number; x2: number 
 }
 
 /**
+ * Whom an event of the history row names in the popover (spec 121 §2): the
+ * persons in the rows' order with the focused person first, at most `max`
+ * of them, and how many more there are ("and 2 more").
+ */
+export function timelineConcernPersons(
+    persons: readonly string[], focusId?: string | null, max = 2,
+): { shown: string[]; more: number } {
+    const ordered = focusId && persons.includes(focusId) ? [focusId, ...persons.filter(id => id !== focusId)] : [...persons];
+    return { shown: ordered.slice(0, max), more: Math.max(0, ordered.length - max) };
+}
+
+/**
+ * The persons a cluster concerns (spec 121 §2, the phone's sheet): every
+ * person one of its events concerns, in the rows' order (`rowOrder`; a person
+ * not in it after the others, as met), the focused person first, each with
+ * the first event of the cluster that concerns them (the card opens on it).
+ */
+export function timelineClusterPersons(
+    items: readonly TimelineHistoryItem[], rowOrder: readonly string[], focusId?: string | null,
+): { personId: string; eventId: string }[] {
+    const first = new Map<string, string>();
+    for (const e of items) for (const id of e.persons) if (!first.has(id)) first.set(id, e.id);
+    const index = new Map(rowOrder.map((id, i) => [id, i]));
+    const met = [...first.keys()];
+    const at = (id: string): number => index.get(id) ?? rowOrder.length + met.indexOf(id);
+    const ids = [...met].sort((a, b) => (a === focusId ? -1 : b === focusId ? 1 : at(a) - at(b)));
+    return ids.map(personId => ({ personId, eventId: first.get(personId)! }));
+}
+
+/**
+ * Where a popover of the history row goes (spec 121 §2, §5), in the window's
+ * pixels: `left` = the anchor's x − 40 clipped into the window (8 px from its
+ * edges), below the row (its bottom + 6 px), above the row (its top − 6 px)
+ * where below has no room; where neither has room, the side with more and a
+ * `maxHeight` (the popover scrolls).
+ */
+export function placeTimelinePop(
+    anchor: { x: number; top: number; bottom: number },
+    size: { width: number; height: number },
+    view: { width: number; height: number; bottomInset?: number },
+    margin = 8,
+): { left: number; top: number; above: boolean; maxHeight: number | null } {
+    const left = Math.max(margin, Math.min(anchor.x - 40, view.width - size.width - margin));
+    const floor = view.height - (view.bottomInset ?? 0) - margin;
+    const below = floor - (anchor.bottom + 6);
+    const above = anchor.top - 6 - margin;
+    if (size.height <= below) return { left, top: anchor.bottom + 6, above: false, maxHeight: null };
+    if (size.height <= above) return { left, top: anchor.top - 6 - size.height, above: true, maxHeight: null };
+    if (below >= above) return { left, top: anchor.bottom + 6, above: false, maxHeight: Math.max(0, below) };
+    return { left, top: margin, above: true, maxHeight: Math.max(0, above) };
+}
+
+/**
  * A cluster's years: "1866", or the first year to the last (a period's end
  * counts) — "1886–1892".
  */

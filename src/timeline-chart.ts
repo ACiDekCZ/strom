@@ -147,7 +147,7 @@ function historyFilterText(h: TimelineHistory): string {
  * bottom, the periods' stripes in two tracks (§4), each cluster the kind
  * most of its events have, coloured by its origin, a count badge for more,
  * an event a line on hover (<title>). A cluster is a button (Enter / a
- * click: the renderer opens the card or, on a phone, a sheet) with a 44 × 44
+ * click: the renderer opens a popover or, on a phone, a sheet) with a 44 × 44
  * touch target. Screen only: never printed, never on the poster.
  */
 function historyRowSvg(
@@ -196,7 +196,7 @@ function historyRowSvg(
                 + ` text-anchor="middle" dominant-baseline="central" aria-hidden="true">${n}</text>`;
         }
         const ids = c.items.map(e => encodeURIComponent(e.id)).join(' ');
-        return `<g class="tl-hist is-${main.scope}" role="button" tabindex="0" aria-label="${esc(aria)}" data-hist-ids="${esc(ids)}">`
+        return `<g class="tl-hist is-${main.scope}" role="button" tabindex="0" aria-haspopup="dialog" aria-label="${esc(aria)}" data-hist-ids="${esc(ids)}">`
             + `<title>${esc(tip)}</title>`
             + `<rect class="tl-hist-hit" x="${(x - 22).toFixed(1)}" y="${(cy - 22).toFixed(1)}" width="44" height="44" fill="transparent"/>`
             + `<rect class="tl-hist-ring" x="${(x - 9).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="18" height="18" rx="5"/>`
