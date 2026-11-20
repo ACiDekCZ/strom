@@ -1268,7 +1268,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             loading: 'Sprawdzanie w badaniu, co odwołuje się do źródła…',
             failedPreview: 'Nie udało się sprawdzić w badaniu, co odwołuje się do źródła, więc teraz nie można nic usunąć.',
             usesTitle: 'Co opiera się na źródle',
-            counts: (a: number, b: number) => `Cytowane ${a} ${a === 1 ? 'raz' : 'razy'} przy danych i w ${nPl(b, 'opowieści', 'opowieściach', 'opowieściach')}.`,
+            counts: (a: number, b: number) => b === 0 ? `Cytowane ${a} ${a === 1 ? 'raz' : 'razy'} przy danych.` : a === 0 ? `Cytowane w ${nPl(b, 'opowieści', 'opowieściach', 'opowieściach')}.` : `Cytowane ${a} ${a === 1 ? 'raz' : 'razy'} przy danych i w ${nPl(b, 'opowieści', 'opowieściach', 'opowieściach')}.`,
             parts: { names: 'imiona', events: 'wydarzenia', families: 'rodziny', stories: 'opowieści' },
             rows: { cites: 'Dane', bare: 'Bez źródła', lowered: 'Mniej pewne', stories: 'Opowieści', conflicts: 'Rozbieżności', tasks: 'Zadania', files: 'Pliki' },
             bare: (n: number) => `${nPl(n, 'dana zostanie', 'dane zostaną', 'danych zostanie')} bez źródła. Dane pozostaną, tylko bez cytowania.`,

@@ -83,16 +83,21 @@ describe('texts (§11)', () => {
         const setLanguage = S.setLanguage;
         setLanguage('cs');
         expect(S.strings.sources.retract.counts(34, 16)).toBe('Cituje ho 34 citací u údajů a 16 vyprávění.');
+        expect(S.strings.sources.retract.counts(4, 0)).toBe('Cituje ho 4 citace u údajů.');
         expect(S.strings.sources.retract.bare(9)).toBe('9 údajů tím zůstane bez pramene. Údaje zůstanou, jen bez citace.');
         expect(S.strings.sources.retract.lowered(3)).toBe('3 údaje budou méně jisté');
         expect(S.strings.sources.retract.more(5)).toBe('a 5 dalších');
         setLanguage('de');
         expect(S.strings.sources.retract.counts(34, 16)).toBe('Die Quelle wird 34-mal bei Angaben und in 16 Erzählungen zitiert.');
+        expect(S.strings.sources.retract.counts(4, 0)).toBe('Die Quelle wird 4-mal bei Angaben zitiert.');
+        expect(S.strings.sources.retract.counts(0, 2)).toBe('Die Quelle wird in 2 Erzählungen zitiert.');
         setLanguage('pl');
         expect(S.strings.sources.retract.bare(9)).toBe('9 danych zostanie bez źródła. Dane pozostaną, tylko bez cytowania.');
         expect(S.strings.sources.retract.lowered(3)).toBe('3 dane staną się mniej pewne');
         setLanguage('en');
         expect(S.strings.sources.retract.counts(34, 16)).toBe('It is cited 34 times on facts and in 16 stories.');
+        expect(S.strings.sources.retract.counts(2, 0)).toBe('It is cited 2 times on facts.');
+        expect(S.strings.sources.retract.counts(0, 1)).toBe('It is cited in 1 story.');
         expect(S.strings.sources.retract.bare(9)).toBe('9 facts are left without a source. The facts stay, only without a citation.');
     });
 

@@ -88,7 +88,7 @@ test.describe('deleting a source in edit mode (spec 117 §4)', () => {
         await expect(d).toBeVisible();
         await expect(d.locator('.mdlg-title')).toHaveText('Delete source?');
         await expect(d.locator('[data-retract-sum]')).toBeVisible();
-        await expect(d.locator('.mdlg-src-sum-line')).toHaveText('It is cited 2 times on facts and in 0 stories.');
+        await expect(d.locator('.mdlg-src-sum-line')).toHaveText('It is cited 2 times on facts.');
         await expect(d.locator('.mdlg-src-list .mdlg-note').last())
             .toHaveText('The research retracts the source with the next write of changes. The Undo button brings it back.');
         await expect(go(page)).toBeEnabled();
