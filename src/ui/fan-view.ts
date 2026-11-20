@@ -43,6 +43,7 @@ import { syncDepthStepper } from './depth-stepper.js';
 import { syncFanLegendLift } from './legend-lift.js';
 import { isMobile } from '../breakpoints.js';
 import { FAN_STORAGE_KEYS } from '../storage-keys.js';
+import { fanStylePreviewSvg } from '../fan-look.js';
 
 export interface FanViewSettings {
     generations: number;
@@ -87,6 +88,19 @@ export interface FanViewHost {
     setDescGenerations(n: number): void;
     setShape(shape: FanShape): void;
     setColorMode(mode: FanColorMode): void;
+    /** The Appearance panel (spec 118 §1): the current look, for the work until the app is closed (§10). */
+    setStyle(style: FanStyle): void;
+    setRodScope(scope: FanRodScope): void;
+    setContent(content: FanContent): void;
+    setPortraits(on: boolean): void;
+    /** The current look is not the default (§10: the panel's foot and its mark). */
+    lookDiffers(): boolean;
+    /** "Save as default" (a short confirmation follows). */
+    saveLookAsDefault(): void;
+    /** "Back to default". */
+    resetLookToDefault(): void;
+    /** Settings, at the fan's group. */
+    openSettings(): void;
     /** The Fan view is the one shown. */
     active(): boolean;
     /** Re-centre the app (and the fan) on a person. */
@@ -217,6 +231,12 @@ export class FanViewController {
     private printView: FanZoomView | null = null;
     private printing = false;
     private sheetReturn: HTMLElement | null = null;
+    /** The sheet's tab (spec 118 §1): it opens on the last one used (in the view's memory only). */
+    private sheetTab: 'colors' | 'look' = 'colors';
+    /** The Appearance panel is open. */
+    private lookOpen = false;
+    /** The strings the panel's sections were built with (a change of language builds them again). */
+    private lookStrings: unknown = null;
     /** Redraws on a change of the load of images, while portraits are shown (spec 118 §6). */
     private imagesListener: (() => void) | null = null;
 
@@ -407,7 +427,7 @@ export class FanViewController {
 
     /** Redraw the SVG for the current zoom (colours, labels after a gesture). */
     redraw(): void {
-        if (!this.model || !this.chart) return;
+        if (!this.model || !this.chart) { this.syncLook(); return; }
         this.draw();
         this.syncToolbar();
         this.renderLegend();
@@ -447,6 +467,7 @@ export class FanViewController {
             ...this.svgExtras(),
         });
         this.setupSectors(keyFocused);
+        this.syncPortraitState();
         this.host.afterDraw();
     }
 
@@ -612,6 +633,7 @@ export class FanViewController {
     deactivate(): void {
         this.forgetRodColors();
         this.setPreview(null);
+        this.closeLook(false);
         if (!this.origin && !this.shown && !this.menuKey && !this.swap && !this.flashKey) return;
         this.origin = null;
         this.shown = null;
@@ -1374,6 +1396,7 @@ export class FanViewController {
         this.wirePill(container);
         container.addEventListener('click', (e) => {
             const t = e.target as Element;
+            if (this.lookClick(t)) return;
             const shape = t.closest<HTMLElement>('.fan-shape-btn');
             if (shape?.dataset.fanShape) { this.host.setShape(shape.dataset.fanShape as FanShape); return; }
             const color = t.closest<HTMLElement>('.fan-color-btn');
@@ -1391,8 +1414,18 @@ export class FanViewController {
             if (t.closest('#fan-legend-chip')) { this.openSheet(); return; }
             if (t.closest('[data-fan-sheet-close]')) { this.closeSheet(); return; }
         });
+        container.addEventListener('change', (e) => {
+            const input = (e.target as Element).closest?.<HTMLInputElement>('input[data-fan-portraits]');
+            if (input) this.host.setPortraits(input.checked);
+        });
+        // The panel closes on a press outside it (its button toggles it).
+        document.addEventListener('pointerdown', (e) => {
+            if (this.lookOpen && !(e.target as Element | null)?.closest?.('.fan-look')) this.closeLook(false);
+        }, true);
         container.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.lookOpen) { e.preventDefault(); e.stopPropagation(); this.closeLook(true); return; }
             if (e.key === 'Escape' && this.sheetOpen()) { e.preventDefault(); e.stopPropagation(); this.closeSheet(); return; }
+            if (this.sheetTabKeys(e)) return;
             if (this.legendRowKeys(e)) return;
             this.radioKeys(e);
         });
@@ -1429,10 +1462,11 @@ export class FanViewController {
         // The pills of the tree stand below the toolbar (it may wrap).
         if (typeof ResizeObserver === 'function') {
             const bar = container.querySelector<HTMLElement>('#fan-toolbar');
-            if (bar) new ResizeObserver(() => this.publishToolbarBottom()).observe(bar);
+            if (bar) new ResizeObserver(() => { this.fitLook(); this.publishToolbarBottom(); }).observe(bar);
         }
         // It also moves without changing size (the top bar gives way to the side bar held sideways).
         window.addEventListener('resize', () => {
+            if (this.lookOpen) this.placeLook();
             this.publishToolbarBottom();
             requestAnimationFrame(() => this.publishToolbarBottom());
         });
@@ -1492,7 +1526,256 @@ export class FanViewController {
         c.dataset.fanShape = set.shape;
         const colorSel = c.querySelector<HTMLSelectElement>('#fan-color-select');
         if (colorSel) colorSel.value = set.colorMode;
+        this.syncLook();
+        this.fitLook();
         this.publishToolbarBottom();
+    }
+
+    // ------------------------------------------------------------ the Appearance panel (spec 118 §1, §10)
+
+    /**
+     * The panel's sections, one source for the toolbar's panel and the phone
+     * sheet's tab (`prefix` keeps their ids apart): the styles as tiles, the
+     * family lines' scope as a segment, the sectors' text as rows, the
+     * portraits' switch with its state, and the foot (the default or not).
+     */
+    private lookSectionsHtml(prefix: string): string {
+        const S = strings.fan;
+        const esc = this.host.esc;
+        const id = (k: string) => `${prefix}-${k}`;
+        const radio = (form: string, attr: string, value: string, cls: string, inner: string) =>
+            `<button type="button" role="radio" class="${cls} sel-opt" data-sel-form="${form}" ${attr}="${value}" aria-checked="false" tabindex="-1">${inner}</button>`;
+        const styles: Array<[FanStyle, string, string]> = [
+            ['color', S.styleColor, S.styleHintColor], ['pastel', S.stylePastel, S.styleHintPastel],
+            ['antique', S.styleAntique, S.styleHintAntique], ['mono', S.styleMono, S.styleHintMono],
+        ];
+        const tiles = styles.map(([v, name, hint]) => radio('tile', 'data-fan-style', v, 'fan-look-tile',
+            fanStylePreviewSvg(v) + `<span class="fan-look-tname">${esc(name)}</span><span class="fan-look-thint">${esc(hint)}</span>`)).join('');
+        const scopes = ([['all', S.scopeAll], ['main', S.scopeMain]] as Array<[FanRodScope, string]>)
+            .map(([v, name]) => radio('seg', 'data-fan-scope', v, 'fan-look-scope', esc(name))).join('');
+        const contents = ([['years', S.contentYears, S.contentYearsEx], ['places', S.contentPlaces, S.contentPlacesEx], ['names', S.contentNames, S.contentNamesEx]] as Array<[FanContent, string, string]>)
+            .map(([v, name, ex]) => radio('row', 'data-fan-content', v, 'fan-look-row',
+                `<span class="fan-look-row-name">${esc(name)}</span><span class="fan-look-row-ex">${esc(ex)}</span>`)).join('');
+        const head = (k: string, text: string) => `<span class="fan-look-h" id="${id(`h-${k}`)}">${esc(text)}</span>`;
+        return `<div class="fan-look-sec" data-look-sec="style">${head('style', S.lookStyle)}`
+            + `<div class="fan-look-tiles" role="radiogroup" aria-labelledby="${id('h-style')}">${tiles}</div></div>`
+            + `<div class="fan-look-sec" data-look-sec="rods">${head('rods', S.lookRods)}`
+            + `<div class="fan-look-seg sel-seg" role="radiogroup" aria-labelledby="${id('h-rods')}" aria-describedby="${id('rods-note')}">${scopes}</div>`
+            + `<p class="fan-look-note" id="${id('rods-note')}"></p></div>`
+            + `<div class="fan-look-sec" data-look-sec="text">${head('text', S.lookText)}`
+            + `<div class="fan-look-rows" role="radiogroup" aria-labelledby="${id('h-text')}">${contents}</div></div>`
+            + `<div class="fan-look-sec" data-look-sec="portraits"><label class="settings-checkbox">`
+            + `<input type="checkbox" role="switch" id="${id('portraits')}" data-fan-portraits>`
+            + `<span>${esc(S.portraits)}<span class="fan-look-sub">${esc(S.portraitsSub)}</span></span></label>`
+            + `<p class="fan-look-state" data-fan-look-state aria-live="polite" hidden></p></div>`
+            + '<div class="fan-look-foot" data-fan-look-foot></div>';
+    }
+
+    /** The panel's and the sheet's choices, the foot and the mark as the look stands. */
+    private syncLook(): void {
+        const c = this.container;
+        if (!c) return;
+        const S = strings.fan;
+        const esc = this.host.esc;
+        const holders = [c.querySelector<HTMLElement>('#fan-look-panel'), c.querySelector<HTMLElement>('#fan-sheet-look')]
+            .filter((e): e is HTMLElement => !!e);
+        if (this.lookStrings !== strings.fan || holders.some(h => !h.firstElementChild)) {
+            this.lookStrings = strings.fan;
+            for (const h of holders) h.innerHTML = this.lookSectionsHtml(h.id === 'fan-look-panel' ? 'fan-look' : h.id);
+        }
+        const set = this.host.settings();
+        const look = { style: set.style ?? 'color', scope: set.rodScope ?? 'all', content: set.content ?? 'years' };
+        const rodOn = set.colorMode === 'rod';
+        const differs = this.host.lookDiffers();
+        const foot = differs
+            ? `<p class="fan-look-foot-state">${esc(S.lookDiffers)}</p>`
+                + `<button type="button" class="fan-look-save" data-fan-look-save>${esc(S.lookSaveDefault)}</button>`
+                + `<button type="button" class="link-button" data-fan-look-reset>${esc(S.lookResetDefault)}</button>`
+            : `<p class="fan-look-foot-state">${esc(S.lookIsDefault)} <button type="button" class="link-button" data-fan-look-settings>${esc(S.lookIsDefaultLink)}</button></p>`;
+        for (const h of holders) {
+            const radios = (attr: string, value: string) => h.querySelectorAll<HTMLElement>(`[${attr}]`).forEach(b => {
+                const on = b.getAttribute(attr) === value;
+                b.setAttribute('aria-checked', on ? 'true' : 'false');
+                b.tabIndex = on ? 0 : -1;
+                b.classList.toggle('is-on', on);
+            });
+            radios('data-fan-style', look.style);
+            radios('data-fan-scope', look.scope);
+            radios('data-fan-content', look.content);
+            // §1: the family lines' scope stays in view outside the family-line colours, inactive.
+            h.querySelector('[data-look-sec="rods"]')?.classList.toggle('is-off', !rodOn);
+            h.querySelectorAll<HTMLElement>('[data-fan-scope]').forEach(b => {
+                if (rodOn) b.removeAttribute('aria-disabled'); else b.setAttribute('aria-disabled', 'true');
+            });
+            const note = h.querySelector<HTMLElement>('.fan-look-note');
+            if (note) note.textContent = rodOn ? S.scopeNote : S.scopeOff;
+            const sw = h.querySelector<HTMLInputElement>('input[data-fan-portraits]');
+            if (sw) sw.checked = !!set.portraits;
+            const f = h.querySelector<HTMLElement>('[data-fan-look-foot]');
+            if (f && f.innerHTML !== foot) {
+                // The foot's control with the focus hands it to the foot's new one (save → the Settings link).
+                const had = f.contains(document.activeElement);
+                f.innerHTML = foot;
+                if (had) f.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
+            }
+        }
+        this.syncPortraitState();
+        // "Differs from the default": the copper bullet on the button and the sheet's tab.
+        const btn = c.querySelector<HTMLElement>('#fan-look-btn');
+        if (btn) {
+            btn.setAttribute('aria-label', differs ? S.lookDiffersAria(S.look) : S.look);
+            btn.title = S.look;
+        }
+        c.querySelectorAll<HTMLElement>('.fan-look-mark').forEach(m => { m.hidden = !differs; });
+        c.querySelector<HTMLElement>('#fan-sheet-tab-look')?.setAttribute('aria-label', differs ? S.lookDiffersAria(S.look) : S.look);
+    }
+
+    /** The portraits' state under the switch (§6): nobody has one, or how many are in. */
+    private syncPortraitState(): void {
+        const c = this.container;
+        if (!c) return;
+        const states = c.querySelectorAll<HTMLElement>('[data-fan-look-state]');
+        if (!states.length) return;
+        let text = '';
+        if (this.host.settings().portraits) {
+            const n = this.portraitCounts();
+            if (n && n.total === 0) text = strings.fan.portraitsNone;
+            else if (n && n.ready < n.total) text = strings.fan.portraitsLoading(n.ready, n.total);
+        }
+        states.forEach(el => {
+            if (el.textContent !== text) el.textContent = text;
+            el.hidden = !text;
+        });
+    }
+
+    /** A click of the panel's or the sheet's controls (true: handled). */
+    private lookClick(t: Element): boolean {
+        if (t.closest('#fan-look-btn')) { this.toggleLook(); return true; }
+        const tab = t.closest<HTMLElement>('[data-fan-sheet-tab]');
+        if (tab) { this.setSheetTab(tab.dataset.fanSheetTab === 'look' ? 'look' : 'colors', true); return true; }
+        const style = t.closest<HTMLElement>('[data-fan-style]');
+        if (style) { this.host.setStyle(style.dataset.fanStyle as FanStyle); return true; }
+        const scope = t.closest<HTMLElement>('[data-fan-scope]');
+        if (scope) {
+            if (scope.getAttribute('aria-disabled') !== 'true') this.host.setRodScope(scope.dataset.fanScope as FanRodScope);
+            return true;
+        }
+        const content = t.closest<HTMLElement>('[data-fan-content]');
+        if (content) { this.host.setContent(content.dataset.fanContent as FanContent); return true; }
+        if (t.closest('[data-fan-look-save]')) { this.host.saveLookAsDefault(); return true; }
+        if (t.closest('[data-fan-look-reset]')) { this.host.resetLookToDefault(); return true; }
+        if (t.closest('[data-fan-look-settings]')) {
+            this.closeLook(false);
+            this.closeSheet(false);
+            this.host.openSettings();
+            return true;
+        }
+        return false;
+    }
+
+    private toggleLook(): void {
+        if (this.lookOpen) this.closeLook(true);
+        else this.openLook();
+    }
+
+    private openLook(): void {
+        const c = this.container;
+        const panel = c?.querySelector<HTMLElement>('#fan-look-panel');
+        const btn = c?.querySelector<HTMLElement>('#fan-look-btn');
+        if (!panel || !btn) return;
+        this.closeMenu(false);
+        this.lookOpen = true;
+        this.syncLook();
+        panel.hidden = false;
+        btn.setAttribute('aria-expanded', 'true');
+        btn.classList.add('is-on');
+        this.placeLook();
+        panel.querySelector<HTMLElement>('[data-fan-style][aria-checked="true"]')?.focus({ preventScroll: true });
+    }
+
+    private closeLook(refocus: boolean): void {
+        if (!this.lookOpen) return;
+        this.lookOpen = false;
+        const c = this.container;
+        const panel = c?.querySelector<HTMLElement>('#fan-look-panel');
+        const btn = c?.querySelector<HTMLElement>('#fan-look-btn');
+        if (panel) panel.hidden = true;
+        btn?.setAttribute('aria-expanded', 'false');
+        btn?.classList.remove('is-on');
+        if (refocus) btn?.focus();
+    }
+
+    /** The panel and the sheet again (the look changed while the view is not shown). */
+    refreshLook(): void {
+        this.syncLook();
+    }
+
+    /**
+     * §1: the open panel keeps clear of the highlight's pill (#evidence-pill,
+     * fixed above the stage) where the two overlap side by side: it starts 6px
+     * below the pill and is no taller than the room left.
+     */
+    private placeLook(): void {
+        const c = this.container;
+        const look = c?.querySelector<HTMLElement>('#fan-look');
+        const panel = c?.querySelector<HTMLElement>('#fan-look-panel');
+        if (!look || !panel) return;
+        panel.style.removeProperty('--fan-look-top');
+        panel.style.removeProperty('max-height');
+        const pill = document.getElementById('evidence-pill');
+        if (!pill || pill.hidden || pill.getClientRects().length === 0) return;
+        const p = pill.getBoundingClientRect(), r = panel.getBoundingClientRect();
+        if (p.right <= r.left || p.left >= r.right || p.bottom + 6 <= r.top || p.top >= r.bottom) return;
+        const top = Math.ceil(p.bottom + 6);
+        panel.style.setProperty('--fan-look-top', `${top - Math.round(look.getBoundingClientRect().top)}px`);
+        panel.style.maxHeight = `calc(100dvh - ${top}px - var(--bottom-bar-h, 0px) - 16px)`;
+    }
+
+    /**
+     * §1: where the toolbar would wrap with the button's label (a computer),
+     * the button keeps its icon only; the toolbar wraps as before only when
+     * not even the icon fits.
+     */
+    private fitLook(): void {
+        const c = this.container;
+        const look = c?.querySelector<HTMLElement>('#fan-look');
+        const first = c?.querySelector<HTMLElement>('#fan-toolbar')?.firstElementChild as HTMLElement | null | undefined;
+        if (!look || !first || first === look) return;
+        look.classList.remove('is-compact');
+        if (look.getClientRects().length === 0 || look.offsetParent === null) return;
+        if (typeof matchMedia === 'function' && matchMedia('(max-width: 1024px)').matches) return;
+        if (look.getBoundingClientRect().top >= first.getBoundingClientRect().bottom - 1) look.classList.add('is-compact');
+    }
+
+    /** The phone sheet's tab: Colours (the legend) or Appearance (the panel's sections). */
+    private setSheetTab(tab: 'colors' | 'look', focus: boolean): void {
+        this.sheetTab = tab;
+        const c = this.container;
+        if (!c) return;
+        c.querySelectorAll<HTMLElement>('[data-fan-sheet-tab]').forEach(b => {
+            const on = b.dataset.fanSheetTab === tab;
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+            b.tabIndex = on ? 0 : -1;
+        });
+        const colors = c.querySelector<HTMLElement>('#fan-sheet-colors');
+        const look = c.querySelector<HTMLElement>('#fan-sheet-look');
+        if (colors) colors.hidden = tab !== 'colors';
+        if (look) look.hidden = tab !== 'look';
+        c.querySelector<HTMLElement>('.fan-sheet-panel')?.setAttribute('aria-labelledby', `fan-sheet-tab-${tab}`);
+        if (tab === 'look') this.syncLook();
+        if (focus) c.querySelector<HTMLElement>(`#fan-sheet-tab-${tab}`)?.focus();
+    }
+
+    /** ← / → / Home / End between the sheet's tabs. */
+    private sheetTabKeys(e: KeyboardEvent): boolean {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return false;
+        const tab = (e.target as Element).closest?.<HTMLElement>('[data-fan-sheet-tab]');
+        if (!tab) return false;
+        e.preventDefault();
+        e.stopPropagation();
+        const next = e.key === 'Home' ? 'colors' : e.key === 'End' ? 'look' : tab.dataset.fanSheetTab === 'look' ? 'colors' : 'look';
+        this.setSheetTab(next, true);
+        return true;
     }
 
     // ------------------------------------------------------------ legend
@@ -1614,7 +1897,13 @@ export class FanViewController {
                 if (L.light.noRod) html += noRod(true);
             }
         } else if (L.light.noRod) html += noRod(false);
-        return html ? `<div class="fan-legend-rods" role="group" aria-label="${esc(S.legendRowsAria)}">${html}</div>` : '';
+        // §3: the scope of the colours where its effect shows (one state with the panel).
+        const scope = this.host.settings().rodScope ?? 'all';
+        const scopeBtn = (v: FanRodScope, name: string) => `<button type="button" role="radio" class="sel-opt${scope === v ? ' is-on' : ''}" data-sel-form="seg"`
+            + ` data-fan-scope="${v}" data-fan-legend="scope-${v}" aria-checked="${scope === v}" tabindex="${scope === v ? 0 : -1}">${esc(name)}</button>`;
+        const seg = `<div class="fan-legend-scope sel-seg" role="radiogroup" aria-label="${esc(S.lookRods)}">`
+            + scopeBtn('all', S.scopeAll) + scopeBtn('main', S.scopeMain) + '</div>';
+        return seg + (html ? `<div class="fan-legend-rods" role="group" aria-label="${esc(S.legendRowsAria)}">${html}</div>` : '');
     }
 
     /** The chip's three dots: the first line of each side; a side missing takes the father's side's next line (§4). */
@@ -1772,16 +2061,18 @@ export class FanViewController {
         if (!c || !sheet) return;
         this.sheetReturn = c.querySelector<HTMLElement>('#fan-legend-chip');
         sheet.hidden = false;
+        this.setSheetTab(this.sheetTab, false);
         this.sheetReturn?.setAttribute('aria-expanded', 'true');
-        c.querySelector<HTMLElement>('.fan-sheet [role="radio"][aria-checked="true"]')?.focus();
+        const pane = this.sheetTab === 'look' ? '#fan-sheet-look' : '#fan-sheet-colors';
+        c.querySelector<HTMLElement>(`${pane} [role="radio"][aria-checked="true"]`)?.focus();
     }
 
-    private closeSheet(): void {
+    private closeSheet(refocus = true): void {
         const sheet = this.container?.querySelector<HTMLElement>('#fan-sheet');
         if (!sheet || sheet.hidden) return;
         sheet.hidden = true;
         this.sheetReturn?.setAttribute('aria-expanded', 'false');
-        this.sheetReturn?.focus();
+        if (refocus) this.sheetReturn?.focus();
         this.sheetReturn = null;
     }
 

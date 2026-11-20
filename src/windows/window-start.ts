@@ -443,6 +443,7 @@ const appViewStateSource: ViewStateSource = {
         descGenerations: TreeRenderer.getFanDescGenerations(),
         shape: TreeRenderer.getFanShape(),
         colorMode: TreeRenderer.getFanColorMode(),
+        ...TreeRenderer.getFanLook(),
     }),
     map: () => ({
         scope: UI.mapScope,

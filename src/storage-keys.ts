@@ -44,7 +44,18 @@ export const FAN_STORAGE_KEYS = {
     legendOpen: 'strom-fan-legend-open',
     /** "Other" (the smaller family lines) of the legend expanded: '1' / '0' (spec 114 §4). */
     legendOtherOpen: 'strom-fan-legend-other',
+    /** The default look (spec 118 §7, §10; Settings and "Save as default" write them): 'color' / 'pastel' / 'antique' / 'mono'. */
+    style: 'strom-fan-style',
+    /** 'all' / 'main' (the 10 largest family lines coloured). */
+    rodScope: 'strom-fan-rod-scope',
+    /** 'years' / 'places' / 'names'. */
+    content: 'strom-fan-content',
+    /** Portraits in the centre and the rings 1–2: '1' / '0'. */
+    portraits: 'strom-fan-portraits',
 } as const;
+
+/** sessionStorage: the fan's current look while it differs from the default (JSON FanLook, spec 118 §10). */
+export const FAN_LOOK_SESSION_KEY = 'strom-fan-look-session';
 
 /** The tree view's folding of the minimap and the legend (localStorage, one choice for all trees on this device). */
 export const TREE_UI_STORAGE_KEYS = {

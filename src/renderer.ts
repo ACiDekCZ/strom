@@ -78,7 +78,10 @@ import {
     FanShape, FAN_SHAPES, FAN_MIN_GENERATIONS, FAN_MAX_GENERATIONS, FAN_DEFAULT_GENERATIONS,
     FAN_MIN_DESC_GENERATIONS, FAN_MAX_DESC_GENERATIONS, FAN_DEFAULT_DESC_GENERATIONS,
 } from './fan-chart.js';
-import { FanColorMode, FAN_COLOR_MODES } from './fan-colors.js';
+import { FanColorMode, FAN_COLOR_MODES, FanStyle } from './fan-colors.js';
+import { FanRodScope } from './fan-rod-assign.js';
+import { FanContent } from './fan-labels.js';
+import { FanLook, FanLookState, FanLookStore } from './fan-look.js';
 import { FanViewController } from './ui/fan-view.js';
 import { FAN_STORAGE_KEYS } from './storage-keys.js';
 import { computeIndirectIds } from './indirect.js';
@@ -426,6 +429,11 @@ function readFanSetting<T>(key: string, parse: (v: string) => T | null, fallback
     } catch { return fallback; }
 }
 
+/** localStorage or sessionStorage, or null where the browser blocks it. */
+function webStore(kind: 'local' | 'session'): FanLookStore | null {
+    try { return kind === 'local' ? localStorage : sessionStorage; } catch { return null; }
+}
+
 /** A fan setting kept on the device; a satellite window keeps its own in its memory only (spec 079 §0). */
 function writeFanSetting(key: string, value: string): void {
     if (DataManager.isWindowCopy()) return;
@@ -736,6 +744,15 @@ class TreeRendererClass {
     /** Fan chart: colour by sex, by grandparent lines or by family lines. */
     private fanColorMode: FanColorMode = readFanSetting(FAN_STORAGE_KEYS.color,
         v => (FAN_COLOR_MODES as readonly string[]).includes(v) ? v as FanColorMode : null, 'gender');
+    /**
+     * Fan chart: the look (spec 118 §10): the default on the device (Settings),
+     * the current one in the session (the Appearance panel). A satellite window
+     * keeps its current look in its memory; only "Save as default" writes there.
+     */
+    private fanLookState = new FanLookState({
+        local: () => webStore('local'),
+        session: () => DataManager.isWindowCopy() ? null : webStore('session'),
+    });
 
     /**
      * Set debug options for pipeline visualization.
@@ -4138,11 +4155,13 @@ class TreeRendererClass {
     }
 
     /** A satellite window's start: the fan as the main window had it, kept in this window only (nothing stored). */
-    setWindowFan(fan: { generations: number; descGenerations: number; shape: string; colorMode: string }): void {
+    setWindowFan(fan: { generations: number; descGenerations: number; shape: string; colorMode: string } & Partial<Record<keyof FanLook, unknown>>): void {
         if (Number.isFinite(fan.generations)) this.fanGenerations = Math.max(FAN_MIN_GENERATIONS, Math.min(FAN_MAX_GENERATIONS, Math.floor(fan.generations)));
         if (Number.isFinite(fan.descGenerations)) this.fanDescGenerations = Math.max(FAN_MIN_DESC_GENERATIONS, Math.min(FAN_MAX_DESC_GENERATIONS, Math.floor(fan.descGenerations)));
         if ((FAN_SHAPES as readonly string[]).includes(fan.shape)) this.fanShape = fan.shape as FanShape;
         if ((FAN_COLOR_MODES as readonly string[]).includes(fan.colorMode)) this.fanColorMode = fan.colorMode as FanColorMode;
+        // The main window's current look (spec 118 §10); each invalid field keeps this window's.
+        this.fanLookState.set({ style: fan.style, rodScope: fan.rodScope, content: fan.content, portraits: fan.portraits });
     }
 
     /** Switch the display view mode and re-render. Persisted per tree. */
@@ -7361,6 +7380,58 @@ class TreeRendererClass {
         if (this.viewMode === 'fan') this.fanView?.redraw();
     }
 
+    // ---- the fan's look (spec 118 §10): no edit of the tree, so it works read-only, while following and in a saved page
+
+    /** The current look of the fan (the screen). */
+    getFanLook(): FanLook {
+        return this.fanLookState.look();
+    }
+
+    /** The current look changed (the panel): kept in the session (a satellite window: in its memory), the fan drawn again with its zoom. */
+    setFanLook(partial: Partial<FanLook>): void {
+        if (this.fanLookState.set(partial)) this.fanLookChanged();
+    }
+
+    /** The default look (Settings). */
+    getFanLookDefault(): FanLook {
+        return this.fanLookState.defaults();
+    }
+
+    /** The default changed (Settings): the current look follows only when it did not differ from the old default. */
+    setFanLookDefault(look: Partial<FanLook>): void {
+        if (this.fanLookState.setDefault(look)) this.fanLookChanged();
+    }
+
+    /** "Save as default" of the panel. */
+    saveFanLookAsDefault(): void {
+        if (this.fanLookState.saveAsDefault()) this.fanLookChanged();
+    }
+
+    /** "Back to default" of the panel. */
+    resetFanLookToDefault(): void {
+        if (this.fanLookState.resetToDefault()) this.fanLookChanged();
+    }
+
+    /** The current look is not the default (the panel's mark). */
+    fanLookDiffers(): boolean {
+        return this.fanLookState.differs();
+    }
+
+    getFanStyle(): FanStyle { return this.fanLookState.look().style; }
+    getFanRodScope(): FanRodScope { return this.fanLookState.look().rodScope; }
+    getFanContent(): FanContent { return this.fanLookState.look().content; }
+    getFanPortraits(): boolean { return this.fanLookState.look().portraits; }
+    setFanStyle(style: FanStyle): void { this.setFanLook({ style }); }
+    setFanRodScope(rodScope: FanRodScope): void { this.setFanLook({ rodScope }); }
+    setFanContent(content: FanContent): void { this.setFanLook({ content }); }
+    setFanPortraits(portraits: boolean): void { this.setFanLook({ portraits }); }
+
+    /** The look does not move a sector: the fan is drawn again with the zoom kept (the panel's state with it). */
+    private fanLookChanged(): void {
+        if (this.viewMode === 'fan') this.fanView?.redraw();
+        else this.fanView?.refreshLook();
+    }
+
     /** The Fan view (toolbar, zoom, legend, print): created on its first draw. */
     private fanView: FanViewController | null = null;
 
@@ -7378,11 +7449,26 @@ class TreeRendererClass {
                 settings: () => ({
                     generations: this.fanGenerations, descGenerations: this.fanDescGenerations,
                     shape: this.fanShape, colorMode: this.fanColorMode,
+                    ...this.fanLookState.look(),
                 }),
                 setGenerations: n => this.setFanGenerations(n),
                 setDescGenerations: n => this.setFanDescGenerations(n),
                 setShape: shape => this.setFanShape(shape),
                 setColorMode: mode => this.setFanColorMode(mode),
+                setStyle: style => this.setFanStyle(style),
+                setRodScope: scope => this.setFanRodScope(scope),
+                setContent: content => this.setFanContent(content),
+                setPortraits: on => this.setFanPortraits(on),
+                lookDiffers: () => this.fanLookDiffers(),
+                saveLookAsDefault: () => {
+                    this.saveFanLookAsDefault();
+                    UI.showToast(strings.fan.lookSavedToast, 3000);
+                },
+                resetLookToDefault: () => this.resetFanLookToDefault(),
+                openSettings: () => {
+                    UI.showSettingsDialog();
+                    document.getElementById('settings-group-fan')?.scrollIntoView({ block: 'start' });
+                },
                 active: () => this.viewMode === 'fan',
                 setFocus: id => this.setFocus(id),
                 addParent: (childId, gender) => UI.addRelation(childId, 'parent', gender),

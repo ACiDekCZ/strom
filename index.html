@@ -13581,7 +13581,6 @@
         }
         .fan-sheet-grab { display: block; width: 36px; height: 4px; margin: 0 auto 8px; border-radius: 2px; background: var(--border); }
         .fan-sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-        .fan-sheet-title { font-size: 17px; font-weight: 600; }
         .fan-sheet-close {
             width: 44px; height: 44px; padding: 0; margin: 0 -10px 0 0; min-width: 0; border: 0; background: none; box-shadow: none;
             color: var(--text-light); font-size: 24px; cursor: pointer;
@@ -13593,6 +13592,89 @@
         /* The sheet scrolls as a whole (its head goes with it): the sides' headings stick to its top edge,
            not 28px under it (the card's head), where the rows showed above them. */
         .fan-sheet-items .fan-legend-group { top: -8px; }
+        /* ---- Fan view: the look (spec 118 §1–§6, §10) ----
+           The Appearance button at the toolbar's end opens a floating panel (a computer and a tablet);
+           on a phone and a phone held sideways the legend chip's sheet carries it as its second tab. */
+        .fan-look { position: relative; display: inline-flex; flex: none; }
+        .fan-look-btn.sel-opt {
+            display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+            height: 30px; padding: 0 10px 0 9px; margin: 0; min-width: 0;
+            font-family: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
+            color: var(--text); -webkit-tap-highlight-color: transparent;
+        }
+        .fan-look-icon { width: 18px; height: 18px; flex: none; }
+        .fan-look-caret { font-size: 10px; color: var(--text-faint); }
+        .fan-look-panel {
+            position: absolute; right: 0; top: var(--fan-look-top, calc(100% + 6px)); z-index: 6;
+            width: 360px; max-width: calc(100vw - 24px);
+            max-height: calc(100dvh - var(--fan-toolbar-bottom, 112px) - var(--bottom-bar-h, 0px) - 16px); overflow: auto; overscroll-behavior: contain;
+            box-sizing: border-box; padding: 4px 14px 14px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+            color: var(--text); font-size: 13px; text-align: left;
+        }
+        .fan-look-panel[hidden] { display: none; }
+        .fan-toolbar:has(.fan-look-btn[aria-expanded="true"]) { z-index: 5; }
+        .fan-look.is-compact .fan-look-label, .fan-look.is-compact .fan-look-caret { display: none; }
+        .fan-look.is-compact .fan-look-btn.sel-opt { width: 30px; padding: 0; }
+        .fan-look-sec { padding-top: 10px; }
+        .fan-look-sec + .fan-look-sec { margin-top: 12px; border-top: 1px solid var(--divider); }
+        .fan-look-h { display: block; margin: 0 0 8px; font-size: 11.5px; font-weight: 600; color: var(--text-light); }
+        .fan-look-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .fan-look-tile.sel-opt { display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 0; padding: 8px 10px 9px; margin: 0; font: inherit; text-align: left; cursor: pointer; }
+        .fan-look-prev { display: block; width: 100%; height: 40px; margin-bottom: 6px; }
+        /* The previews' sectors carry their light and dark fills; the gaps are the style's own. */
+        .fan-look-prev path { fill: var(--l); stroke: var(--el); stroke-width: 1; }
+        [data-theme="dark"] .fan-look-prev path { fill: var(--d); stroke: var(--ed); }
+        .fan-look-tname { font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+        .fan-look-thint { font-size: 11.5px; font-weight: 400; color: var(--text-light); overflow-wrap: anywhere; }
+        .fan-look-seg.sel-seg { display: flex; overflow: hidden; }
+        .fan-look-seg > .sel-opt { flex: 1 1 0; min-width: 0; height: 30px; padding: 0 8px; margin: 0; font: inherit; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+        .fan-look-note { margin: 6px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .fan-look-sec.is-off .fan-look-note { color: var(--text-faint); }
+        .fan-look-rows { display: flex; flex-direction: column; }
+        .fan-look-row.sel-opt { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; width: 100%; min-height: 40px; margin: 0; padding: 4px 8px; box-sizing: border-box; font: inherit; text-align: left; cursor: pointer; }
+        .fan-look-row-name { font-size: 13px; color: var(--text); }
+        .fan-look-row-ex { font-size: 11.5px; font-weight: 400; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        :is(.fan-look-panel, .fan-sheet-look) .settings-checkbox { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; gap: 12px; padding: 2px 0; margin: 0; cursor: pointer; }
+        :is(.fan-look-panel, .fan-sheet-look) .settings-checkbox > span { display: flex; flex-direction: column; gap: 1px; font-size: 13px; }
+        .fan-look-sub { font-size: 11.5px; color: var(--text-light); }
+        .fan-look-state { margin: 6px 0 0; font-size: 12px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .fan-look-state[hidden] { display: none; }
+        .fan-legend-scope.sel-seg { display: flex; overflow: hidden; margin: 4px 0 2px; }
+        /* Each half as wide as its word needs (German's long words), the rest shared. */
+        .fan-legend-scope > .sel-opt { flex: 1 1 auto; min-width: 0; height: 26px; padding: 0 5px; margin: 0; font: inherit; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+        .fan-sheet-items .fan-legend-scope { margin: 0 0 8px; }
+        .fan-sheet-items .fan-legend-scope > .sel-opt { height: 36px; font-size: 14px; }
+        .fan-sheet-tabs { display: flex; gap: 20px; }
+        .fan-sheet-tab.sel-tab { height: 44px; padding: 0 2px; margin: 0; border: 0; background: none; font: inherit; font-size: 16px; cursor: pointer; }
+        .fan-sheet-tab.sel-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .fan-sheet-look .fan-look-sec:first-child { padding-top: 2px; }
+        .fan-sheet-look .fan-look-tile.sel-opt { min-height: 44px; }
+        .fan-sheet-look .fan-look-seg > .sel-opt { height: 40px; font-size: 14px; }
+        .fan-sheet-look .fan-look-row.sel-opt { min-height: 48px; }
+        .fan-sheet-look .fan-look-row-name, .fan-sheet-look .fan-look-tname { font-size: 14px; }
+        .fan-sheet-look .settings-checkbox { min-height: 48px; }
+        .fan-sheet-look .settings-checkbox > span { font-size: 14px; }
+        /* The panel's foot: whether the look is the default, and the two actions when it is not (§10). */
+        .fan-look-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--divider); }
+        .fan-look-foot-state { flex: 1 1 100%; margin: 0; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .fan-look-foot-state .link-button, .fan-look-foot > .link-button { font-size: 12.5px; padding: 0; }
+        .fan-look-save {
+            height: 30px; padding: 0 12px; margin: 0; box-sizing: border-box; cursor: pointer;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: transparent;
+            color: var(--text); font: inherit; font-size: 13px; white-space: nowrap;
+        }
+        @media (hover: hover) { .fan-look-save:hover { background: var(--hover-bg); } }
+        .fan-look-save:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .fan-sheet-look .fan-look-save { height: 40px; font-size: 14px; }
+        @media (pointer: coarse) {
+            .fan-look-foot > .link-button, .fan-look-foot-state .link-button { min-height: 40px; }
+        }
+        /* "Differs from the default": a copper bullet at the button's (and the sheet tab's) top right, no shape of its own. */
+        .fan-look-btn.sel-opt, .fan-sheet-tab { position: relative; }
+        .fan-look-mark { position: absolute; top: -4px; right: 1px; font-size: 15px; line-height: 1; color: var(--accent-text); pointer-events: none; }
+        .fan-look-mark[hidden] { display: none; }
+        .fan-sheet-tab .fan-look-mark { top: 6px; right: -9px; }
         /* The fan's hover and pointer (the SVG carries its own colours,
            fan-colors.ts, both themes, scoped to its id). */
         .fan-kekule { dominant-baseline: middle; }
@@ -13616,11 +13698,14 @@
         @media (max-width: 1024px) {
             .fan-color-seg.sel-seg, .fan-colors-label { display: none; }
             .fan-color-drop { display: inline-flex; }
+            /* The Appearance button: its icon only, as tall as the colours' dropdown. */
+            .fan-look-btn.sel-opt { width: 34px; height: 34px; padding: 0; }
+            .fan-look-label, .fan-look-caret { display: none; }
         }
         /* Phone: two rows — shapes (icons) and generations, then descendants on the right. */
         @media (max-width: 640px) {
             .fan-toolbar { gap: 6px 10px; padding: 8px 12px; min-height: 0; }
-            .fan-toolbar-spacer, .fan-colors { display: none; }
+            .fan-toolbar-spacer, .fan-colors, .fan-look { display: none; }
             .fan-shape-btn { width: 44px; height: 36px; padding: 0; }
             .fan-shape-icon { width: 22px; height: 22px; }
             .fan-shape-label { display: none; }
@@ -13640,7 +13725,7 @@
         /* A phone held sideways: one 48px row of icons and steppers; colours behind the chip. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .fan-toolbar { flex-wrap: nowrap; gap: 12px; min-height: 48px; padding: 4px 12px; }
-            .fan-colors { display: none; }
+            .fan-colors, .fan-look { display: none; }
             .fan-shape-btn { width: 40px; height: 32px; padding: 0; }
             .fan-shape-icon { width: 20px; height: 20px; }
             .fan-shape-label { display: none; }
@@ -14538,8 +14623,8 @@
             font-size: 13px;
             color: var(--text);
             background: var(--hover-bg, #f1f1ee);
-            border-radius: 8px;
-            border-left: 3px solid var(--primary, #5a9a5a);
+            /* A plain tinted line, without a bar at its left edge (spec 118 §10). */
+            border-radius: var(--r-md);
         }
 
         /* Sub-dialogs that appear above merge-modal */
@@ -31536,6 +31621,8 @@
                a highlighted smaller line keeps its row. */
             .fan-legend .fan-legend-sub:not([aria-pressed="true"]) { display: none !important; }
             .fan-legend .fan-legend-centre { color: #555; }
+            /* The scope of the family lines' colours is a control (spec 118 §3); the panel too. */
+            .fan-legend-scope, .fan-look-panel { display: none !important; }
             /* The screen's controls: the highlight's pill and the file's banner (fixed, in every view they
                printed over each page) and the fan's ⌂ / pinned-centre pills. */
             .evidence-pill, .embedded-mode-banner, .fan-home-pill, .fan-center-pin { display: none !important; }
@@ -33006,6 +33093,11 @@
                     <div class="fan-color-seg sel-seg" role="radiogroup" aria-labelledby="fan-colors-label"><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="gender" aria-checked="false" data-i18n="fan.colorGender"></button><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="line" aria-checked="false" data-i18n="fan.colorLine"></button><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="rod" aria-checked="false" data-i18n="fan.colorRod"></button></div>
                     <label class="fan-color-drop"><span class="fan-color-drop-label" data-i18n="fan.colorsColon"></span><select id="fan-color-select"><option value="gender" data-i18n="fan.colorGender"></option><option value="line" data-i18n="fan.colorLine"></option><option value="rod" data-i18n="fan.colorRod"></option></select></label>
                 </div>
+                <!-- The Appearance panel (spec 118 §1, §10): style, family lines, the sectors' text, portraits; fan-view.ts fills it. -->
+                <div class="fan-look" id="fan-look">
+                    <button type="button" id="fan-look-btn" class="fan-look-btn sel-opt" data-sel-form="chip" aria-haspopup="dialog" aria-controls="fan-look-panel" aria-expanded="false" data-i18n-title="fan.look" data-i18n-aria-label="fan.look"><svg class="fan-look-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15 L2 15 A8 8 0 0 1 6 8.07 Z" fill="currentColor"/><path d="M10 15 L6 8.07 A8 8 0 0 1 14 8.07 Z" fill="currentColor" fill-opacity="0.6"/><path d="M10 15 L14 8.07 A8 8 0 0 1 18 15 Z" fill="currentColor" fill-opacity="0.3"/></svg><span class="fan-look-label" data-i18n="fan.look"></span><span class="fan-look-caret" aria-hidden="true">&#x25BE;</span><span class="fan-look-mark" aria-hidden="true" hidden>&bull;</span></button>
+                    <div class="fan-look-panel" id="fan-look-panel" role="dialog" data-i18n-aria-label="fan.lookTitle" hidden></div>
+                </div>
             </div>
             <div class="fan-stage" id="fan-stage">
                 <div id="fan-chart" class="fan-chart" tabindex="0"></div>
@@ -33024,11 +33116,14 @@
                 <button type="button" class="fan-legend-chip" id="fan-legend-chip" aria-haspopup="dialog" aria-expanded="false"></button>
                 <div class="fan-sheet" id="fan-sheet" hidden>
                     <div class="fan-sheet-scrim" data-fan-sheet-close></div>
-                    <div class="fan-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="fan-sheet-title">
+                    <div class="fan-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="fan-sheet-tab-colors">
                         <span class="fan-sheet-grab" aria-hidden="true"></span>
-                        <div class="fan-sheet-head"><span class="fan-sheet-title" id="fan-sheet-title" data-i18n="fan.colors"></span><button type="button" class="fan-sheet-close" data-fan-sheet-close data-i18n-aria-label="buttons.close">&times;</button></div>
-                        <div class="fan-sheet-seg fan-color-seg-sheet sel-seg" role="radiogroup" aria-labelledby="fan-sheet-title"><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="gender" aria-checked="false" data-i18n="fan.colorGender"></button><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="line" aria-checked="false" data-i18n="fan.colorLine"></button><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="rod" aria-checked="false" data-i18n="fan.colorRod"></button></div>
+                        <div class="fan-sheet-head"><div class="fan-sheet-tabs" role="tablist"><button type="button" role="tab" class="fan-sheet-tab sel-tab" id="fan-sheet-tab-colors" data-fan-sheet-tab="colors" aria-selected="true" aria-controls="fan-sheet-colors"><span data-i18n="fan.colors"></span></button><button type="button" role="tab" class="fan-sheet-tab sel-tab" id="fan-sheet-tab-look" data-fan-sheet-tab="look" aria-selected="false" aria-controls="fan-sheet-look" tabindex="-1"><span data-i18n="fan.look"></span><span class="fan-look-mark" aria-hidden="true" hidden>&bull;</span></button></div><button type="button" class="fan-sheet-close" data-fan-sheet-close data-i18n-aria-label="buttons.close">&times;</button></div>
+                        <div id="fan-sheet-colors" role="tabpanel" aria-labelledby="fan-sheet-tab-colors">
+                        <div class="fan-sheet-seg fan-color-seg-sheet sel-seg" role="radiogroup" aria-labelledby="fan-sheet-tab-colors"><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="gender" aria-checked="false" data-i18n="fan.colorGender"></button><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="line" aria-checked="false" data-i18n="fan.colorLine"></button><button type="button" role="radio" class="fan-color-btn sel-opt" data-sel-form="seg" data-fan-color="rod" aria-checked="false" data-i18n="fan.colorRod"></button></div>
                         <div class="fan-sheet-items" id="fan-sheet-items"></div>
+                        </div>
+                        <div class="fan-sheet-look" id="fan-sheet-look" role="tabpanel" aria-labelledby="fan-sheet-tab-look" hidden></div>
                     </div>
                 </div>
             </div>

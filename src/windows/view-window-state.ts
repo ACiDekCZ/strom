@@ -8,8 +8,9 @@
  * - Family and Descendants: the zoom and the point in the middle of the view
  *   (the satellite's view is smaller: the same point stands in its middle);
  *   Descendants also "whole families";
- * - Fan: its rings, the descendants' rings of the two-way shape, the shape
- *   and the colours;
+ * - Fan: its rings, the descendants' rings of the two-way shape, the shape,
+ *   the colours and the current look (spec 118 §10: style, family lines,
+ *   the sectors' text, portraits);
  * - Timeline: no range of its own (the years follow the persons shown);
  * - Map: what it shows (this view / the whole tree), its centre and zoom, the
  *   kinds of places on and the time layer (on, its year).
@@ -56,6 +57,23 @@ export interface FanWindowState extends ViewStateBase {
     descGenerations: number;
     shape: string;
     colorMode: string;
+    /** The current look (spec 118 §10), checked where it is applied. */
+    style?: string;
+    rodScope?: string;
+    content?: string;
+    portraits?: boolean;
+}
+
+/** The fan's settings a window carries over. */
+export interface FanWindowSettings {
+    generations: number;
+    descGenerations: number;
+    shape: string;
+    colorMode: string;
+    style?: string;
+    rodScope?: string;
+    content?: string;
+    portraits?: boolean;
 }
 
 export interface TimelineWindowState extends ViewStateBase {
@@ -91,7 +109,7 @@ export interface ViewStateSource {
     /** The chart's zoom, only while Family or Descendants is shown (another view's frame is not theirs). */
     chartZoom(): ChartZoom | null;
     fullFamilies(): boolean;
-    fan(): { generations: number; descGenerations: number; shape: string; colorMode: string };
+    fan(): FanWindowSettings;
     map(): { scope: 'view' | 'tree'; center: { lat: number; lon: number } | null; zoom: number; kinds: string[]; time: MapTimeState };
 }
 
@@ -102,7 +120,7 @@ export interface ViewStateTarget {
     setFocus(id: PersonId, depthUp: number, depthDown: number): void;
     setWindowSelected(id: PersonId): void;
     setFullFamilies(on: boolean): void;
-    setFan(fan: { generations: number; descGenerations: number; shape: string; colorMode: string }): void;
+    setFan(fan: FanWindowSettings): void;
     setMap(map: Omit<MapWindowState, keyof ViewStateBase | 'view'>): void;
     /** After the first drawing: the chart's zoom and middle. */
     restoreZoom(zoom: ChartZoom): void;
@@ -170,7 +188,13 @@ export function parseViewState(kind: SatelliteKind, raw: unknown): ViewWindowSta
         }
         case 'fan':
             if (!num(raw.generations) || !num(raw.descGenerations) || typeof raw.shape !== 'string' || typeof raw.colorMode !== 'string') return null;
-            return { ...base, view: 'fan', generations: raw.generations, descGenerations: raw.descGenerations, shape: raw.shape, colorMode: raw.colorMode };
+            return {
+                ...base, view: 'fan', generations: raw.generations, descGenerations: raw.descGenerations, shape: raw.shape, colorMode: raw.colorMode,
+                ...(typeof raw.style === 'string' ? { style: raw.style } : {}),
+                ...(typeof raw.rodScope === 'string' ? { rodScope: raw.rodScope } : {}),
+                ...(typeof raw.content === 'string' ? { content: raw.content } : {}),
+                ...(typeof raw.portraits === 'boolean' ? { portraits: raw.portraits } : {}),
+            };
         case 'timeline':
             return { ...base, view: 'timeline' };
         case 'map': {
@@ -206,7 +230,13 @@ export function applyViewStateBeforeDraw(state: ViewWindowState, target: ViewSta
             target.setFullFamilies(state.fullFamilies);
             break;
         case 'fan':
-            target.setFan({ generations: state.generations, descGenerations: state.descGenerations, shape: state.shape, colorMode: state.colorMode });
+            target.setFan({
+                generations: state.generations, descGenerations: state.descGenerations, shape: state.shape, colorMode: state.colorMode,
+                ...(state.style !== undefined ? { style: state.style } : {}),
+                ...(state.rodScope !== undefined ? { rodScope: state.rodScope } : {}),
+                ...(state.content !== undefined ? { content: state.content } : {}),
+                ...(state.portraits !== undefined ? { portraits: state.portraits } : {}),
+            });
             break;
         case 'timeline':
             break;
