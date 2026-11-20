@@ -162,22 +162,41 @@ function searchQueue(rows: Record<string, unknown>[], q: string): { rows: Record
     return { rows: found, match };
 }
 
-/** The kinds of work `GET /queue?kind=` takes (`queue.kind`). */
+/** The kinds of work `GET /queue?kind=` takes (`queue.kind`; the first list of spec 065). */
 const QUEUE_KINDS = ['history', 'story', 'verify', 'places', 'material', 'request', 'enrich', 'records', 'other'];
 
-/** `GET /queue?from&count&branch&research&state&kind&q`, as the research answers it. */
-function queuePage(b: ManagedBridge, query: URLSearchParams): BridgeReply {
+/** The parameters `GET /queue` takes: any other one turns the whole page down (400 queue.query), as the research does. */
+const QUEUE_PARAMS = ['from', 'count', 'branch', 'research', 'state', 'kind', 'q'];
+
+/**
+ * `GET /queue?from&count&branch&research&state&kind&q`, as the research answers it. With `census` in `features`
+ * (spec 106 §2.4) it takes the kind `census` and `known=` with `kind=other`: `other` without `known` is `other`
+ * and every kind beyond the first list, `known` words take theirs out of it (unknown words ignored, ≤ 20 of
+ * `[a-z.]{1,32}`); without the feature `census` and `known` are a query it does not read (400).
+ */
+function queuePage(b: ManagedBridge, query: URLSearchParams, features: readonly string[] = []): BridgeReply {
+    const census = features.includes('census');
+    const refuse = (error: string): BridgeReply => ({ status: 400, body: { ok: false, code: 'queue.query', error } });
+    const params = census ? [...QUEUE_PARAMS, 'known'] : QUEUE_PARAMS;
+    const foreign = [...query.keys()].find(k => !params.includes(k));
+    if (foreign) return refuse(`${foreign}: not a parameter of /queue`);
+    const kinds = census ? [...QUEUE_KINDS, 'census'] : QUEUE_KINDS;
     const from = Number(query.get('from') ?? 0);
     const count = Math.min(100, Number(query.get('count') ?? 50));
     const kind = query.has('kind') ? (query.get('kind') ?? '').toLowerCase() : null;
-    if (kind !== null && !QUEUE_KINDS.includes(kind)) {
-        return { status: 400, body: { ok: false, code: 'queue.query', error: `kind: one of ${QUEUE_KINDS.join(', ')}` } };
-    }
+    if (kind !== null && !kinds.includes(kind)) return refuse(`kind: one of ${kinds.join(', ')}`);
+    const knownRaw = query.get('known');
+    const known = knownRaw === null ? [] : knownRaw.split(',');
+    if (known.length > 20 || known.some(w => !/^[a-z.]{1,32}$/.test(w))) return refuse('known: words of a-z and dots');
+    // `other`: its own tasks and every kind beyond the first list, but those `known` names.
+    const isKind = (t: unknown): boolean => kind === 'other'
+        ? t === 'other' || (typeof t === 'string' && !QUEUE_KINDS.includes(t) && !known.includes(t))
+        : t === kind;
     let rows = queueWithPlaces(b)
         .filter(q => !query.get('branch') || q.branch === query.get('branch'))
         .filter(q => !query.get('research') || q.research === query.get('research'))
         .filter(q => !query.get('state') || q.state === query.get('state'))
-        .filter(q => kind === null || q.taskKind === kind);
+        .filter(q => kind === null || isKind(q.taskKind));
     const q = query.get('q');
     let found: Record<string, unknown> = {};
     if (q) {
@@ -491,7 +510,7 @@ export async function followManaged(page: Page, opts: {
             query.delete('app');
             b.queueReads.push(query.toString());
             if (b.queueHold) await b.queueHold;
-            const r = b.queueReplies.shift() ?? queuePage(b, query);
+            const r = b.queueReplies.shift() ?? queuePage(b, query, opts.features);
             return route.fulfill(json(r.body, r.status, r.headers));
         }
         if (/^verify\//.test(path) && req.method() === 'POST') {

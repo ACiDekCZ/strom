@@ -16,10 +16,10 @@ import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
 import {
-    researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, HYPOTHESES_DECIDE_FEATURE, researchLinkMark, researchUrlMark,
+    researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, HYPOTHESES_DECIDE_FEATURE, CENSUS_FEATURE, researchLinkMark, researchUrlMark,
     booksOn, BOOKS_MIN_TASKS_DEFAULT, BOOKS_SAME_BOOK_DEFAULT, type ResearchHypothesesDecide, type LiveBooksSettings,
 } from '../research-link.js';
-import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask, postBridgeBooks, type BooksSettingBody } from '../history-bridge.js';
+import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask, postBridgeBooks, postBridgeCensus, type BooksSettingBody } from '../history-bridge.js';
 import { booksSettingHtml, booksMinTasksInput, type BooksSettingNote } from './books-setting-view.js';
 import { READ_SOURCE_TASK_FEATURE, type ReadTaskSetting } from '../research-read-task.js';
 import { readTaskSettingHtml, type ReadTaskSettingNote } from './read-task-setting-view.js';
@@ -49,6 +49,13 @@ const stories: { rid: string; note?: { text: string; link?: ResearchNoteLink }; 
 let storiesListening = false;
 
 /**
+ * "Census records" (spec 106 §4.1): the same parts as `stories` — the sentence under the row (a refusal), the
+ * value asked until the research's status says it (`want`) with the tasks set aside its reply said (`wantHeld`),
+ * a write on its way (`busy`, `sending`), the row gone after the research said the tree is an archive (`gone`).
+ */
+const census: { rid: string; note?: string; want?: boolean; wantHeld?: number | null; busy?: boolean; sending?: boolean; gone?: boolean } = { rid: '' };
+
+/**
  * "Who decides hypotheses" (spec 060): the same parts as `stories` — the
  * research's answer under the row (`link`: its terminal confirms the agent),
  * the value asked until the status says it (`want`), a write on its way (`busy`).
@@ -68,6 +75,7 @@ const readTask: { rid: string; note?: ReadTaskSettingNote; want?: ReadTaskSettin
 const HYPOS_PEND = 'tree:hypos';
 const READ_TASK_PEND = 'tree:readtask';
 const STORIES_PEND = 'tree:stories';
+const CENSUS_PEND = 'tree:census';
 /** How long the group stays highlighted when a link opens the dialog at it. */
 const READ_TASK_FLASH_MS = 1500;
 
@@ -349,6 +357,7 @@ export const researchTreeSettingsMethods = uiModule({
                 ${originalsHtml}
                 <div class="research-images-host" id="research-images-host"></div>
                 <div class="research-stories-host" id="research-stories-host"></div>
+                ${archive || agentAway ? '' : `<div class="research-census-host" id="research-census-host"></div>`}
                 ${archive || agentAway ? '' : `<div class="research-hypos-host" id="research-hypos-host"></div>`}
                 ${archive || agentAway ? '' : `<div class="research-readtask-host" id="research-readtask-host"></div>`}
                 ${archive || agentAway ? '' : `<div class="research-books-host" id="research-books-host"></div>`}
@@ -483,6 +492,9 @@ export const researchTreeSettingsMethods = uiModule({
         stories.rid = link.id;
         delete stories.note; delete stories.want; delete stories.busy;
         this.renderResearchStoriesRow();
+        census.rid = link.id;
+        delete census.note; delete census.want; delete census.wantHeld; delete census.busy; delete census.sending; delete census.gone;
+        this.renderResearchCensusRow();
         hypos.rid = link.id;
         delete hypos.note; delete hypos.want; delete hypos.busy;
         this.renderResearchHypothesesRow();
@@ -500,6 +512,7 @@ export const researchTreeSettingsMethods = uiModule({
             onBridgeStatus((rid) => {
                 if (rid !== stories.rid) return;
                 this.renderResearchStoriesRow();
+                this.renderResearchCensusRow();
                 this.renderResearchHypothesesRow();
                 this.renderResearchReadTaskRow();
                 this.renderResearchBooksRow();
@@ -597,6 +610,92 @@ export const researchTreeSettingsMethods = uiModule({
             stories.note = { text: r.reason || (r.held ? this.researchWriteHeldText(r.held, false).toast : strings.live.waitingWrite.writeFailed) };
         }
         this.renderResearchStoriesRow();
+    },
+
+    /**
+     * Spec 106 §4.1: "Census records" under Sources — only with `census` (not in an archive nor a research waiting
+     * for its agent: no host there, and gone once the research says so); the switch follows `/status.census`, the
+     * tasks it set aside said under it while off; without the bridge inactive with its sentence. No mark: the
+     * write goes through the bridge, no terminal.
+     */
+    renderResearchCensusRow(): void {
+        const host = document.querySelector<HTMLElement>(`#${SETTINGS_ID} #research-census-host`);
+        if (!host) return;
+        const rid = census.rid;
+        const ctx = this.historyManageContext();
+        const last = (ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid)) ?? lastBridgeStatus(rid);
+        const features = ctx?.researchId === rid ? ctx.features : last?.features ?? [];
+        if (census.gone || !features.includes(CENSUS_FEATURE) || (rid && this.researchAgentlessFor(rid))) {
+            host.innerHTML = '';
+            return;
+        }
+        const h = strings.history;
+        const up = this.researchBridgeUp(rid);
+        // Null: the research has the feature but did not say a valid state (the row off, no sentence of tasks).
+        const said = last?.census ?? null;
+        if (census.want !== undefined && said?.on === census.want) { delete census.want; delete census.wantHeld; }
+        const on = census.sending ?? census.want ?? said?.on === true;
+        const held = census.want !== undefined ? census.wantHeld ?? null : said?.held ?? null;
+        const note = !up ? h.storiesBridgeDown
+            : census.note ?? (!on && census.sending === undefined && held !== null && held > 0 ? h.censusHeld(held) : '');
+        const focused = document.activeElement?.id === 'research-census-on';
+        // On its way (6.1): the new state at once, dashed and locked (keeping its focus), its words after 120 ms.
+        const pend = !!census.busy;
+        host.innerHTML = `
+            <fieldset class="research-transcripts research-census">
+                <legend>${esc(h.censusSection)}</legend>
+                <label class="settings-checkbox research-census-row"${pend ? pendAttrs(CENSUS_PEND).replace(' aria-disabled="true"', '') : ''}>
+                    <input type="checkbox" id="research-census-on"${on ? ' checked' : ''}${!up ? ' disabled' : pend ? ' aria-disabled="true"' : ''}>
+                    <span class="settings-text">
+                        <span class="settings-name">${esc(h.censusTitle)}</span>
+                        <span class="settings-desc">${esc(h.censusDesc)}</span>${pend ? pendStatusHtml(CENSUS_PEND) : ''}
+                    </span>
+                </label>
+                ${note ? `<p class="research-stories-note research-census-note" id="research-census-note"><span>${esc(note)}</span></p>` : ''}
+            </fieldset>`;
+        const input = host.querySelector<HTMLInputElement>('#research-census-on');
+        // Locked while on its way: a click changes nothing (the row drawn again as it stands).
+        input?.addEventListener('change', () => {
+            if (census.busy) { this.renderResearchCensusRow(); return; }
+            void this.setResearchCensus(input.checked);
+        });
+        if (focused) input?.focus({ preventScroll: true });
+    },
+
+    /**
+     * Spec 106 §4.1: `POST /census {on}` at once, both ways; a refusal says why under the row and the switch stays
+     * as the research says (an archive: the row goes).
+     */
+    async setResearchCensus(on: boolean): Promise<void> {
+        const rid = census.rid;
+        const ctx = this.historyManageContext();
+        const base = ctx?.researchId === rid ? ctx.base : null;
+        if (!base || census.busy) { this.renderResearchCensusRow(); return; }
+        census.busy = true;
+        census.sending = on;
+        delete census.note;
+        startPend(CENSUS_PEND, { redraw: () => this.renderResearchCensusRow() });
+        this.renderResearchCensusRow();
+        const r = await postBridgeCensus(base, on, ctx!.features);
+        if (census.rid !== rid) { dropPend(CENSUS_PEND); return; }
+        await endPend(CENSUS_PEND);
+        delete census.busy;
+        delete census.sending;
+        if (r.ok) {
+            census.want = r.census?.on ?? on;
+            census.wantHeld = r.census?.held ?? null;
+        } else {
+            const W = strings.live.waitingWrite;
+            switch (r.code) {
+                case 'archive': census.gone = true; break;
+                case 'busy': census.note = strings.history.errBusy; break;
+                case 'held': census.note = this.researchWriteHeldText(r.held!, false).toast; break;
+                case 'locked': census.note = W.locked; break;
+                case 'full': census.note = r.reason || W.fileFull; break;
+                default: census.note = r.reason || W.writeFailed;
+            }
+        }
+        this.renderResearchCensusRow();
     },
 
     /**

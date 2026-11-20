@@ -114,6 +114,12 @@ export interface FakeBridge {
      * `hypotheses.link` (the terminal confirms; a test does it by changing `decide`); `reply` answers instead.
      */
     hypotheses?: { decide?: string; writes: Record<string, unknown>[]; reply?: { status: number; body: unknown }; link?: string };
+    /**
+     * Census records (spec 106): `/status.census` (`census`, sent as it is — a test may break it; the app reads it
+     * only with `census` in `features`), every `POST /census` body (`posts`). A valid `{on}` is written and said
+     * back with `held` = `heldOff` while off (0 on); `replies` answer instead, first first (a refusal, a 200 of its own).
+     */
+    census?: FakeCensus;
     /** Stuck (SIGSTOP): `/status` never answers. */
     statusHang?: boolean;
     /**
@@ -197,6 +203,20 @@ export interface FakeBridge {
      * `POST /live {"do": "stop"}` with `live.stop` (202, then the bridge is down).
      */
     live?: FakeLive;
+}
+
+/** Census records of the fake bridge (spec 106 §2.1–2.2). */
+export interface FakeCensus {
+    census: unknown;
+    /** The census tasks set aside while census is off (`held` after a write that switched it off). */
+    heldOff: number;
+    posts: unknown[];
+    replies: { status: number; body: unknown }[];
+}
+
+/** A research's census records: off with `held` tasks set aside (on: `held` 0). */
+export function fakeCensus(on: boolean, held = 0): FakeCensus {
+    return { census: { on, held: on ? 0 : held }, heldOff: held, posts: [], replies: [] };
 }
 
 /** The bridge's live choice and what was posted to `/live` (ZADANI_VYZKUM vyzkum-zapnuty, "Odpověď výzkumu"). */
@@ -2342,6 +2362,21 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             b.books.books = { ...b.books.books, settings: set };
             return json(200, { books: { settings: set }, head: b.head, parent: b.head });
         }
+        // Census records (spec 106 §2.2): `{"on": bool}` exactly, written for this tree; the same value again writes nothing.
+        if (b.census && method === 'POST' && /\/census$/.test(url.pathname) && b.features?.includes('census')) {
+            let body: unknown = null;
+            try { body = JSON.parse(route.request().postData() ?? ''); } catch { /* not JSON */ }
+            b.census.posts.push(body);
+            const said = b.census.replies.shift();
+            if (said) return json(said.status, said.body);
+            const r = body && typeof body === 'object' ? body as Record<string, unknown> : null;
+            if (!r || Object.keys(r).length !== 1 || typeof r.on !== 'boolean') {
+                return json(400, { error: 'Not a body /census takes.', code: 'census.body' });
+            }
+            const was = (b.census.census as { on?: unknown } | null)?.on;
+            b.census.census = { on: r.on, held: r.on ? 0 : b.census.heldOff };
+            return json(200, { census: b.census.census, ...(was === r.on ? { head: b.head, parent: b.head } : commitWrite(b)) });
+        }
         // A heavy part apart (research 1.26.0, `status.parts`): its rev and its fields as the full status has them.
         const partPath = /\/status\/([A-Za-z]+)$/.exec(url.pathname);
         if (partPath && method === 'GET' && b.features?.includes('status.parts')) {
@@ -2387,6 +2422,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 } : {}),
                 ...(b.quality ? { quality: { rev: b.quality.rev } } : {}),
                 ...(b.hypotheses?.decide !== undefined ? { hypotheses: { decide: b.hypotheses.decide } } : {}),
+                ...(b.census ? { census: b.census.census } : {}),
                 ...(b.live ? { live: { idleMinutes: b.live.idleMinutes, idleChoices: b.live.idleChoices ?? [0, 120] } } : {}),
                 ...(b.handoffs ? { handoffs: b.handoffs } : {}),
                 ...(b.statusExtra ?? {}),
