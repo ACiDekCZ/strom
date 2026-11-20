@@ -273,4 +273,45 @@ test.describe('on a phone (spec 116 §6.1, 6e)', () => {
         expect(c.x).toBeGreaterThanOrEqual(0);
         expect(c.x + c.width).toBeLessThanOrEqual(390);
     });
+
+    test('a message at the bottom: the indicator above it while it shows, back down when it goes', async ({ page }) => {
+        const imgs = await makeImages(page);
+        await follow(page, imgs, { phone: true });
+        const chip = page.locator('#img-load-chip');
+        await expect(chip).toBeVisible();
+        await page.evaluate(() => document.querySelectorAll('.toast').forEach(t => t.remove()));
+        await expect.poll(async () => (await chip.boundingBox())!.y).toBeGreaterThan(0);
+        const rest = (await chip.boundingBox())!.y;
+        await page.evaluate(() => window.Strom.UI.showToast('A message long enough to take two lines on a phone held upright', 10000));
+        const toast = page.locator('.toast').last();
+        await expect(toast).toBeVisible();
+        // Under the message it stood unseen (the message is drawn over it).
+        await expect.poll(async () => {
+            const c = (await chip.boundingBox())!;
+            const t = (await toast.boundingBox())!;
+            return c.y + c.height <= t.y + 1;
+        }).toBe(true);
+        expect((await chip.boundingBox())!.y).toBeLessThan(rest);
+        await page.evaluate(() => document.querySelectorAll('.toast').forEach(t => t.remove()));
+        await expect.poll(async () => (await chip.boundingBox())!.y).toBe(rest);
+    });
+
+    test('the count with photos not loaded wraps whole, not a word a line', async ({ page }) => {
+        const imgs = await makeImages(page);
+        await follow(page, imgs, { phone: true });
+        const chip = page.locator('#img-load-chip');
+        await expect(chip).toBeVisible();
+        // The count as it reads once some did not come while others still wait (German, the longest).
+        await page.evaluate(() => {
+            const n = document.querySelector('#img-load-chip .img-load-n')!;
+            const f = document.createElement('span');
+            f.className = 'img-load-f';
+            f.textContent = '· 2 nicht geladen';
+            n.replaceChildren('1 / 8', ' ', f);
+        });
+        const f = (await chip.locator('.img-load-f').boundingBox())!;
+        // One line of the piece ("· 3 not loaded"), not two.
+        const lh = await chip.locator('.img-load-n').evaluate(el => parseFloat(getComputedStyle(el).lineHeight));
+        expect(f.height).toBeLessThan(lh * 1.5);
+    });
 });

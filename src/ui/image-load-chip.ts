@@ -19,6 +19,7 @@
 import { strings } from '../strings.js';
 import { IMAGES_STATE_EVENT, imageLoads, type ImageFailReason, type ImageLoadSnapshot } from '../image-loads.js';
 import { IMAGE_ANSWER_MS } from '../research-image-refs.js';
+import { onToastChange, shownToast } from '../toast-slot.js';
 import { BUSY_DONE_MS, announceBusy } from './busy.js';
 import { barEl, setBarShare } from './prog-bar.js';
 import { showToast, type ToastHandle } from './toast.js';
@@ -36,7 +37,10 @@ export type ChipView =
 /** The indicator's words for a view. */
 export interface ChipWords {
     label: string;
+    /** The whole count ("846 / 860 · 3 not loaded"): `main`, then `failed` after a space where some did not load. */
     count: string;
+    main: string;
+    failed: string;
     aria: string;
     /** The bar's share 0…1 (null: no bar, the ✓ view). */
     share: number | null;
@@ -44,10 +48,17 @@ export interface ChipWords {
 
 export function chipWords(v: ChipView): ChipWords {
     const P = strings.photos;
-    if (v.kind === 'ok') return { label: P.chipLabel, count: `${v.total} / ${v.total}`, aria: P.chipAria(v.total, v.total), share: null };
+    if (v.kind === 'ok') {
+        const all = `${v.total} / ${v.total}`;
+        return { label: P.chipLabel, count: all, main: all, failed: '', aria: P.chipAria(v.total, v.total), share: null };
+    }
+    const main = `${v.done} / ${v.total}`;
+    const failed = v.failed > 0 ? P.chipFailed(v.failed) : '';
     return {
         label: P.chipLabel,
-        count: `${v.done} / ${v.total}${v.failed > 0 ? ` ${P.chipFailed(v.failed)}` : ''}`,
+        count: failed ? `${main} ${failed}` : main,
+        main,
+        failed,
         aria: P.chipAria(v.done, v.total),
         share: v.total > 0 ? v.done / v.total : 0,
     };
@@ -308,6 +319,10 @@ export function initImageLoadChip(currentTreeId: () => string | null): void {
             if (r.top < vh / 2) below = Math.max(below, r.bottom + 8);
             else above = Math.max(above, vh - r.top + 8);
         }
+        // A message at the bottom (at most 1024 wide the indicator stands there too): above it while it shows,
+        // not under it. Its place without the slide it comes in with (offsetTop leaves the transform out).
+        const t = shownToast();
+        if (t?.isConnected && t.offsetHeight > 0 && t.offsetTop > vh / 2) above = Math.max(above, vh - t.offsetTop + 8);
         chip.style.setProperty('--img-chip-below', `${Math.round(below)}px`);
         chip.style.setProperty('--img-chip-above', `${Math.round(above)}px`);
     };
@@ -323,7 +338,14 @@ export function initImageLoadChip(currentTreeId: () => string | null): void {
         }
         const w = chipWords(v);
         label.textContent = w.label;
-        count.textContent = w.count;
+        // "· 3 not loaded" its own piece: on a phone it goes to the next line whole, not a word a line.
+        count.replaceChildren(w.main);
+        if (w.failed) {
+            const f = document.createElement('span');
+            f.className = 'img-load-f';
+            f.textContent = w.failed;
+            count.append(' ', f);
+        }
         chip.setAttribute('aria-label', w.aria);
         ok.hidden = v.kind !== 'ok';
         bar.hidden = w.share === null;
@@ -368,6 +390,7 @@ export function initImageLoadChip(currentTreeId: () => string | null): void {
     window.addEventListener(IMAGES_STATE_EVENT, (e) => model?.update((e as CustomEvent<ImageLoadSnapshot>).detail));
     window.addEventListener('strom:tree-switched', () => model?.treeSwitched());
     window.addEventListener('resize', () => { if (view) { clearOfPills(); placePop(); } });
+    onToastChange(() => { if (view) { clearOfPills(); placePop(); } });
     // A load already under way (the indicator came later than the tree).
     const now = imageLoads.snapshot();
     if (now.phase === 'running') model.update(now);

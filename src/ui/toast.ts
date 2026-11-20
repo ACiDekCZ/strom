@@ -146,6 +146,9 @@ function fillToast(toast: HTMLElement, message: string, opts: ToastOptions, onAc
             actions.appendChild(act);
         }
         toast.appendChild(actions);
+        // Three actions (an output's "Try again · Continue without N photos · Cancel", spec 116 §8) do not fit
+        // beside the sentence: the group goes under it, so the sentence keeps the toast's width.
+        if (acts.length >= 3) toast.classList.add('toast--actions-below');
     }
     if (opts.closable) {
         const close = document.createElement('button');

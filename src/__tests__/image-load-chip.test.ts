@@ -42,8 +42,11 @@ describe('the indicator\'s words', () => {
     it('counts the whole tree, with those not loaded beside, and says it in full for the reader', () => {
         setLanguage('en');
         expect(chipWords({ kind: 'run', done: 120, total: 860, failed: 0, left: 740 }))
-            .toEqual({ label: 'Photos', count: '120 / 860', aria: 'Loading photos: 120 of 860', share: 120 / 860 });
+            .toEqual({ label: 'Photos', count: '120 / 860', main: '120 / 860', failed: '', aria: 'Loading photos: 120 of 860', share: 120 / 860 });
         expect(chipWords({ kind: 'run', done: 846, total: 860, failed: 3, left: 11 }).count).toBe('846 / 860 · 3 not loaded');
+        // The failed part its own piece (a phone wraps it whole).
+        expect(chipWords({ kind: 'run', done: 846, total: 860, failed: 3, left: 11 })).toMatchObject({ main: '846 / 860', failed: '· 3 not loaded' });
+        expect(chipWords({ kind: 'run', done: 846, total: 860, failed: 0, left: 14 })).toMatchObject({ main: '846 / 860', failed: '' });
         expect(chipWords({ kind: 'ok', total: 860 })).toMatchObject({ count: '860 / 860', share: null });
     });
 

@@ -19568,6 +19568,14 @@
         .toast--progress .bar > i { background: currentColor; }
         .toast--progress .toast-actions[hidden], .toast--progress [hidden] { display: none; }
         .toast--progress > .ok { margin-right: 8px; }
+        /* Three actions (spec 116 §8, 9a): the group under the sentence, wrapping as a whole where a line is too
+           short; beside it they squeezed the sentence to a letter a line. */
+        .toast--rich.toast--actions-below { flex-wrap: wrap; row-gap: 8px; }
+        .toast--actions-below > .toast-body { flex: 1 1 100%; min-width: 0; }
+        .toast--actions-below > .toast-actions {
+            flex: 1 1 100%; display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 6px; margin-left: 0;
+        }
+        .toast--actions-below > .toast-actions > .toast-action:not([hidden]) ~ .toast-action:not([hidden]) { margin-left: 0; }
         /* A toast's Undo worked in the toast (§4, 4d): its end's mark (✓, !) before the words. */
         .toast--marked > .ok, .toast-line > .ok { margin-right: 8px; font-weight: 700; flex: none; }
         .toast-line { display: flex; align-items: baseline; min-width: 0; }
@@ -25162,8 +25170,15 @@
         /* Phones: in the middle between back / forward (16–112 from the left) and the zoom's column (12 + 48 from the
            right); the count wraps rather than run under them. */
         @media (max-width: 640px) {
-            .img-load-chip { left: calc((120px + 100vw - 64px) / 2); max-width: calc(100vw - 184px); }
+            /* max-content: placed from its centre right of the middle, it would otherwise shrink to the room right of
+               that point (a word a line) instead of the room it has between back / forward and the zoom. */
+            .img-load-chip { left: calc((120px + 100vw - 64px) / 2); width: max-content; max-width: calc(100vw - 184px); }
             .img-load-chip .img-load-n { white-space: normal; min-width: 0; line-height: 1.25; }
+            /* With photos not loaded the bar takes a row of its own under the words, so "· 3 nicht geladen" has the
+               room to go to the next line whole (not a word a line). */
+            .img-load-chip .img-load-f { display: inline-block; }
+            .img-load-chip:has(.img-load-f) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 7px; }
+            .img-load-chip:has(.img-load-f) .bar { flex: 1 1 100%; width: auto; }
         }
         /* Held sideways: at the bottom of the tree, in the middle of what the side bar leaves. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {

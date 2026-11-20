@@ -213,6 +213,13 @@ test.describe('outputs wait for the photos (spec 116 §8)', () => {
         await expect(alert).toContainText('Some photos did not load (3). The research is not running.');
         await expect(alert.locator('.toast-action')).toHaveText(['Try again', 'Continue without 3 photos', 'Cancel']);
         await expect(alert.locator('.toast-close')).toHaveCount(0);
+        // The three actions go under the sentence: beside it they squeezed it to a letter a line, the alert
+        // taller than the screen.
+        const body = (await alert.locator('.toast-body').boundingBox())!;
+        const acts = (await alert.locator('.toast-actions').boundingBox())!;
+        expect(acts.y).toBeGreaterThanOrEqual(body.y + body.height - 1);
+        expect(body.width).toBeGreaterThan(300);
+        expect((await alert.boundingBox())!.height).toBeLessThan(200);
         // Through the bridge, no terminal, no agent: no mark.
         await expect(alert.locator('.research-open-mark, .ai-badge')).toHaveCount(0);
         // The output asks; the indicator's own notice does not ask again.
