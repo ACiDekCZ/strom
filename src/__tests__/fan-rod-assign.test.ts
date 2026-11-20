@@ -24,6 +24,7 @@ import { buildFanModel, buildFanSvg, buildFanPosterSvg, fanPosterGeometry, FanSh
 import { buildLineages, LineageIndex, RodId, rodOf, rodLabels, realRodMembers } from '../lineage.js';
 import { strings } from '../strings.js';
 import { StromData, Person, PersonId, Gender, PartnershipId, Partnership } from '../types.js';
+import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
 
 // ---------------------------------------------------------------- the reference
 
@@ -417,19 +418,57 @@ function nearRepeatsAssigned(a: FanRodAssignment, model: FanRodModel): number {
     return fanRodNear(model, a.index).filter(([x, y]) => a.slotOf.get(x) === a.slotOf.get(y) && !(kept.has(x) && kept.has(y))).length;
 }
 
+/** One random tree and the four fans the property test draws on it, each re-centred on a random person. */
+interface RandomCase { index: LineageIndex; models: FanRodModel[] }
+
+/** The 200 random trees of the property test: the same generator, the same order of draws. */
+function randomCases(): RandomCase[] {
+    const r = rng(114);
+    const shapes: FanShape[] = ['half', 'full', 'two'];
+    const cases: RandomCase[] = [];
+    for (let t = 0; t < 200; t++) {
+        const { data, focus, people } = randomTree(r);
+        const models: FanRodModel[] = [];
+        let centre = focus;
+        for (let step = 0; step < 4; step++) {
+            const opts = { generations: 3 + Math.floor(r() * 8), shape: shapes[Math.floor(r() * 3)], descGenerations: 1 + Math.floor(r() * 3) };
+            models.push(buildFanModel(data, centre, opts)!);
+            centre = people[Math.floor(r() * people.length)];
+        }
+        cases.push({ index: buildLineages(data), models });
+    }
+    return cases;
+}
+
+/** Colours every fan of every case, each with the memory of the previous fan of its tree. */
+function assignAll(cases: RandomCase[]): number {
+    let lines = 0;
+    for (const { index, models } of cases) {
+        let memory: ReadonlyMap<RodId, FanRodSlot> | null = null;
+        for (const model of models) {
+            const a = assignFanRodColors(model, index, memory);
+            lines += a.slotOf.size;
+            memory = a.memory;
+        }
+    }
+    return lines;
+}
+
+// The assignment's speed against a budget that holds on a loaded machine (helpers/perf-budget.ts):
+// 800 assignments take about 60 ms on the reference machine at rest.
+const ASSIGN_BUDGET_MS = 400;
+// About as long as the measured work (the calibration's best time on the reference machine at rest).
+const ASSIGN_CALIBRATION_ROUNDS = 32;
+const ASSIGN_CALIBRATION_REFERENCE_MS = 176;
+
 describe('K1.1 (property, test 4)', () => {
+    // Correctness only: the time the 800 fans take is judged by the budget test below,
+    // so a loaded machine (the whole suite at once) cannot fail this one.
     it('200 random trees and fans with re-centring: every line coloured, the larger ones strong, neighbours never alike, slots kept', () => {
-        const r = rng(114);
-        const shapes: FanShape[] = ['half', 'full', 'two'];
         let states = 0, shared = 0, near = 0, seenAgain = 0, kept = 0;
-        for (let t = 0; t < 200; t++) {
-            const { data, focus, people } = randomTree(r);
-            const index = buildLineages(data);
+        randomCases().forEach(({ index, models }, t) => {
             let memory: ReadonlyMap<RodId, FanRodSlot> | null = null;
-            let centre = focus;
-            for (let step = 0; step < 4; step++) {
-                const opts = { generations: 3 + Math.floor(r() * 8), shape: shapes[Math.floor(r() * 3)], descGenerations: 1 + Math.floor(r() * 3) };
-                const model = buildFanModel(data, centre, opts)!;
+            models.forEach((model, step) => {
                 const a = assignFanRodColors(model, index, memory);
                 checkK17(a, model, `tree ${t} step ${step}`);
                 if (a.rods.some(x => x.shared)) shared++;
@@ -440,16 +479,26 @@ describe('K1.1 (property, test 4)', () => {
                 for (const [id, s] of a.slotOf) expect(a.memory.get(id)).toBe(s);
                 for (const [id, s] of memory ?? []) if (!a.slotOf.has(id)) expect(a.memory.get(id)).toBe(s);
                 memory = a.memory;
-                centre = people[Math.floor(r() * people.length)];
                 states++;
-            }
-        }
+            });
+        });
         expect(states).toBe(800);
         // The generator runs some groups out of fresh shades (else the repeats would not be tested).
         expect(shared).toBeGreaterThan(0);
         expect(near).toBe(0);
         expect(kept / seenAgain).toBeGreaterThan(0.99);
-    });
+    }, 600_000);
+
+    it('colours the 800 fans within the time budget, judged against the machine\'s load', () => {
+        const cases = randomCases();
+        expect(assignAll(cases)).toBeGreaterThan(800);
+        const m = measureAgainstBudget(() => assignAll(cases), {
+            budgetMs: ASSIGN_BUDGET_MS, calibrationRounds: ASSIGN_CALIBRATION_ROUNDS, referenceMs: ASSIGN_CALIBRATION_REFERENCE_MS,
+            minPairs: 2, maxPairs: 5, maxWallMs: 20_000,
+        });
+        console.log(budgetReport('fan line colours, 800 fans', m, ASSIGN_BUDGET_MS));
+        if (m.judged) expect(m.ms).toBeLessThan(ASSIGN_BUDGET_MS);
+    }, 600_000);
 });
 
 describe('sides on a real tree (§1)', () => {
