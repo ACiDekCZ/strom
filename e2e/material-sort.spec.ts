@@ -1469,6 +1469,9 @@ test.describe('Sort with the agent: a run of batches as it goes (spec 102 §3)',
         await strip(page).locator('[data-sort="open"]').click();
         await proposal(page).locator('.msp-list .msp-row').first().locator('.msp-accept').click();
         await expect.poll(() => (material.edits ?? []).length).toBeGreaterThan(0);
+        // The edit goes out before the accept ends: the decision is kept (and the tab redrawn) only after the bridge's
+        // writes, so the reload waits for it to show under Done.
+        await expect(proposal(page).locator('.msp-tab[data-tab="done"]')).toHaveText('Done · 1');
 
         await page.reload();
         await expect(page.locator('.person-card').first()).toBeVisible();
