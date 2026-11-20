@@ -311,3 +311,82 @@ test.describe('Delete permanently: the footer in German', () => {
         }
     }
 });
+
+/**
+ * The window stays after a deletion (Milan, 20 Nov 2026): files found by a
+ * word in the search, deleted for good, then the word in the search field
+ * selected to clear it closed the whole window (a press in the field
+ * released beside the window fired the click on the backdrop). The window
+ * closes only with its × or Esc; no press inside it, nor a click beside it,
+ * closes it.
+ */
+test.describe('Delete permanently: the window stays open afterwards', () => {
+    test.use({ viewport: DESKTOP });
+
+    const named = (n: number, name: string) => materialFile(n, { name });
+    const search = (page: Page) => win(page).locator('.mw-search');
+
+    async function deleteSelected(page: Page, n: number): Promise<void> {
+        await win(page).locator('[data-mw="sel-more"]').click();
+        await page.locator('.mw-pop-selMenu [data-action="sel-delete"]').click();
+        await box(page).check();
+        await go(page).click();
+        await expect(dialog(page)).toHaveCount(0);
+        await expect(toast(page)).toContainText(`Deleted permanently: ${n} file`);
+    }
+
+    /** A press at `from` released at `to` (a drag, e.g. selecting text past the window's edge). */
+    async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }): Promise<void> {
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        await page.mouse.move(to.x, to.y, { steps: 6 });
+        await page.mouse.up();
+    }
+
+    test('three files found by the search: the word selected past the window\'s edge, then a click into the field', async ({ page }) => {
+        const material = await research(page, GATED, [
+            named(1, 'dopis-kvapilec-1.jpg'), named(2, 'dopis-kvapilec-2.jpg'), named(3, 'dopis-kvapilec-3.jpg'),
+            named(4, 'scan-4.jpg'), named(5, 'scan-5.jpg'),
+        ]);
+        await search(page).fill('kvapilec');
+        await expect(tiles(page)).toHaveCount(3);
+        await win(page).locator('[data-mw="select"]').click();
+        for (let k = 1; k <= 3; k++) await tile(page, `dopis-kvapilec-${k}.jpg`).click();
+        await deleteSelected(page, 3);
+
+        const modal = (await win(page).locator('.materials-window').boundingBox())!;
+        const field = (await search(page).boundingBox())!;
+        const y = field.y + field.height / 2;
+        // From the word's end to the left, past the window's edge onto the backdrop.
+        await drag(page, { x: field.x + 60, y }, { x: modal.x - 30, y });
+        await expect(win(page)).toBeVisible();
+        await search(page).click();
+        await expect(win(page)).toBeVisible();
+        await expect(search(page)).toBeFocused();
+        await page.keyboard.press('ControlOrMeta+a');
+        await page.keyboard.press('Backspace');
+        await expect(tiles(page)).toHaveCount(2);
+        await expect(win(page)).toBeVisible();
+        expectOnlyConfirmed(material);
+    });
+
+    test('one file without a search: a press on a tile released beside the window, then a click beside it, keep it; Esc closes', async ({ page }) => {
+        await research(page, GATED, [1, 2, 3].map(n => materialFile(n)));
+        await win(page).locator('[data-mw="select"]').click();
+        await tile(page, 'scan-2.jpg').click();
+        await deleteSelected(page, 1);
+        await expect(tiles(page)).toHaveCount(2);
+
+        const modal = (await win(page).locator('.materials-window').boundingBox())!;
+        const t = (await tile(page, 'scan-1.jpg').boundingBox())!;
+        await drag(page, { x: t.x + t.width / 2, y: t.y + t.height / 2 }, { x: modal.x - 40, y: t.y + t.height / 2 });
+        await expect(win(page)).toBeVisible();
+        // The backdrop itself: the work window stays (× or Esc only).
+        await page.mouse.click(modal.x - 40, modal.y + 200);
+        await expect(win(page)).toBeVisible();
+        await expect(tiles(page)).toHaveCount(2);
+        await search(page).click();
+        await page.keyboard.press('Escape');
+        await expect(win(page)).toHaveCount(0);
+    });
+});

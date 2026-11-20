@@ -161,6 +161,27 @@ test('info dialogs close on the backdrop and on Close; forms ignore the backdrop
     await expect(form).toBeHidden();
 });
 
+// A press inside a dialog released on its backdrop (text selected by dragging past the edge) fires the
+// click on the backdrop: it closes nothing; a click on the backdrop itself still does.
+test('a press inside a dialog released on the backdrop keeps it open', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await page.evaluate(() => window.Strom.UI.showSurnamesDialog());
+    const dlg = page.locator('#surnames-modal');
+    const field = dlg.locator('#surname-other');
+    await expect(field).toBeVisible();
+    await field.fill('Kvapilecký');
+    const box = (await dlg.locator('.modal').boundingBox())!;
+    const f = (await field.boundingBox())!;
+    await page.mouse.move(f.x + f.width - 10, f.y + f.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(Math.max(2, box.x - 20), f.y + f.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await expect(dlg).toBeVisible();
+    await page.mouse.click(5, 5);
+    await expect(dlg).toHaveCount(0);
+});
+
 // 600px is a phone too (the phone band runs to 640px, like the phone chrome).
 for (const [id, width] of [['storage-status-modal', 360], ['storage-status-modal', 600]] as const) {
     test(`${width}px: ${id} footer stacks full width, primary on top`, async ({ page }) => {

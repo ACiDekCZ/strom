@@ -71,6 +71,9 @@ import { defaultFocusKey, focusDefaultPerson, isDefaultFocusContext, updateDefau
 
 
 
+/** Dialog backdrops: a click on one closes its dialog (their own handlers, the info dialogs' below). */
+const BACKDROP = '.modal-overlay, .bottom-sheet-overlay';
+
 /** The sample name under Settings > Surname display (no titles shown). */
 const SURNAME_SAMPLE = { firstName: 'Marie', lastName: 'Dvořáková', marriedSurname: 'Nováková' };
 
@@ -836,7 +839,21 @@ export const miscMethods = uiModule({
         // dialog (a text selection dragged out) is not a backdrop click, and
         // overlays wiring their own backdrop handler keep it.
         let pressTarget: EventTarget | null = null;
-        document.addEventListener('pointerdown', (e) => { pressTarget = e.target; }, true);
+        let pressBackdrop: Element | null = null;
+        window.addEventListener('pointerdown', (e) => {
+            pressTarget = e.target;
+            pressBackdrop = e.target instanceof Element ? e.target.closest(BACKDROP) : null;
+        }, true);
+        // A backdrop's click counts only when the press started on the backdrop itself. A press inside the
+        // dialog released on the backdrop (a word in a field selected by dragging past the dialog's edge),
+        // or one whose element was drawn anew before the release, makes the browser fire the click on the
+        // nearest common ancestor: the backdrop. Stopped here, before every overlay's own close handler.
+        window.addEventListener('click', (e) => {
+            const t = e.target;
+            if (!e.isTrusted || !(t instanceof Element) || !t.matches(BACKDROP)) return;
+            if (pressBackdrop !== t || pressTarget === t) return;
+            e.stopImmediatePropagation();
+        }, true);
         document.addEventListener('click', (e) => {
             const overlay = e.target;
             if (!(overlay instanceof HTMLElement) || pressTarget !== overlay) return;

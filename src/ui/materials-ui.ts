@@ -470,7 +470,8 @@ export const materialsMethods = uiModule({
                 <div class="modal-content materials-window-body" id="materials-window-body"></div>
             </div>`;
         document.body.appendChild(overlay);
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeMaterials(); });
+        // A work window: it closes with its × or Esc only, never with a click beside it (filters, a selection
+        // and a search would go with a stray click).
         overlay.querySelector('.close-btn')?.addEventListener('click', () => this.closeMaterials());
         this.pushDialog(MODAL_ID);
         if (batch && archive) {
