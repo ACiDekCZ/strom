@@ -20,7 +20,7 @@ import { shownName } from '../person-name.js';
 import {
     VIEW_LINK_VIEWS, ViewLink, ViewLinkCandidate, ViewLinkChoice, ViewLinkOffer, isViewLinksMaster, loadViewLinks, saveViewLinks,
     setViewLinksMaster, showViewLink, unlinkViewLink, viewLinkCandidates, viewLinkContext, viewLinkDependents, viewLinkIsland, viewLinkPeopleCount,
-    viewLinkOffers,
+    viewLinkOffers, viewLinkChildOf, viewLinkChoiceOf, viewLinkHolder, viewLinkTreeSide,
 } from '../view-links.js';
 import { uiModule } from './module.js';
 import type { PersonMenuAction } from './context-menu.js';
@@ -65,11 +65,15 @@ function clip(text: string, max = 70): string {
 const touch = (): boolean => window.matchMedia?.('(pointer: coarse)').matches === true;
 
 export const viewLinksUiMethods = uiModule({
-    /** "parents of Václav Horák" / "partner of Rozálie Dvořáčková": whom a view link concerns, for its notices. */
-    viewLinkWho(link: Pick<ViewLink, 'kind' | 'anchorId' | 'islandIds'>): string {
+    /**
+     * "parents of Václav Horák" / "child of Antonín and Ludmila Dvořáček" /
+     * "partner of Rozálie Dvořáčková": whom a view link concerns, for its notices.
+     */
+    viewLinkWho(link: Pick<ViewLink, 'kind' | 'anchorId' | 'coParentId' | 'islandIds'>): string {
         const v = strings.viewLinks;
         const name = personName(link.anchorId);
         if (link.kind === 'partners') return v.whoPartner(name);
+        if (link.kind === 'parent') return v.whoChild(viewLinkTreeSide(link).map(personName));
         return link.islandIds.length === 1 ? v.whoParent(name) : v.whoParents(name);
     },
 
@@ -77,7 +81,7 @@ export const viewLinksUiMethods = uiModule({
     viewLinkOffersFor(hypo: string): ViewLinkOffer[] {
         const treeId = DataManager.getCurrentTreeId();
         if (!treeId) return [];
-        return viewLinkOffers(DataManager.getData(), loadViewLinks(treeId), isViewLinksMaster(treeId), hypo);
+        return viewLinkOffers(DataManager.getData(), loadViewLinks(treeId, DataManager.getData()), isViewLinksMaster(treeId), hypo);
     },
 
     /**
@@ -95,7 +99,7 @@ export const viewLinksUiMethods = uiModule({
         this.closeViewLinkPopups();
         const data = DataManager.getData();
         const ctx = viewLinkContext(data);
-        const before = loadViewLinks(treeId);
+        const before = loadViewLinks(treeId, DataManager.getData());
         const change = showViewLink(data, before, choice, Date.now(), ctx);
         const apply = (): void => {
             saveViewLinks(treeId, change.links);
@@ -144,7 +148,7 @@ export const viewLinksUiMethods = uiModule({
         if (!treeId) return false;
         const data = DataManager.getData();
         const ctx = viewLinkContext(data);
-        const before = loadViewLinks(treeId);
+        const before = loadViewLinks(treeId, DataManager.getData());
         const link = before.find(l => l.hypo === hypo);
         if (!link) return false;
         const dependents = viewLinkDependents(data, before, hypo, ctx);
@@ -285,10 +289,11 @@ export const viewLinksUiMethods = uiModule({
         if (!VIEW_LINK_VIEWS.includes(TreeRenderer.getViewMode())) return out;
         const shown = TreeRenderer.getViewLayer()?.links ?? [];
         for (const link of shown) {
-            if (link.anchorId !== personId) continue;
+            if (!viewLinkTreeSide(link).includes(personId)) continue;
             out.afterFocus.push({
                 action: `view-link-unlink:${link.hypo}`, sheetTop: true,
-                label: link.kind === 'partners' ? v.unlinkPartner : link.islandIds.length === 1 ? v.unlinkParent : v.unlinkParents,
+                label: link.kind === 'partners' ? v.unlinkPartner : link.kind === 'parent' ? v.unlinkChild
+                    : link.islandIds.length === 1 ? v.unlinkParent : v.unlinkParents,
             });
         }
         // A person of a family off the tree offers its links only while that family stands in the view (chained).
@@ -296,7 +301,7 @@ export const viewLinksUiMethods = uiModule({
         const data = DataManager.getData();
         const ctx = viewLinkContext(data);
         const offers = viewLinkCandidates(data, ctx)
-            .filter(c => c.anchorId === personId && c.state === 'draw' && !shown.some(l => l.hypo === c.hypo));
+            .filter(c => viewLinkTreeSide(c).includes(personId) && c.state === 'draw' && !shown.some(l => l.hypo === c.hypo));
         if (offers.length === 1) {
             const c = offers[0];
             out.afterFocus.push({ action: `view-link-show:${c.hypo}:${c.variant}`, label: v.show, sheetTop: true, kind: 'place' });
@@ -327,19 +332,18 @@ export const viewLinksUiMethods = uiModule({
         }
         if (what === 'about') {
             const treeId = DataManager.getCurrentTreeId();
-            const link = treeId ? loadViewLinks(treeId).find(l => l.hypo === hypo) : null;
+            const link = treeId ? loadViewLinks(treeId, DataManager.getData()).find(l => l.hypo === hypo) : null;
             this.clearDialogStack();
             // The menu is gone: the card it was opened on gets the keyboard back when the dialog closes.
             if (!document.activeElement || document.activeElement === document.body) {
                 document.querySelector<HTMLElement>(`.person-card[data-id="${CSS.escape(personId)}"]`)?.focus({ preventScroll: true });
             }
-            this.showPersonResearchDialog(link?.anchorId ?? personId, { hypo: { id: hypo, ...(link ? { variant: link.variant } : {}) } });
+            this.showPersonResearchDialog(link ? viewLinkHolder(DataManager.getData(), link) : personId, { hypo: { id: hypo, ...(link ? { variant: link.variant } : {}) } });
             return;
         }
         const c = viewLinkCandidates(DataManager.getData()).find(x => x.hypo === hypo && x.variant === variant && x.state === 'draw');
         if (!c) return;
-        const { kind, anchorId, islandIds } = c;
-        void this.viewLinkShow({ hypo, variant: c.variant, kind, anchorId, islandIds }, { focusLabel: true });
+        void this.viewLinkShow(viewLinkChoiceOf(c), { focusLabel: true });
     },
 
     /**
@@ -389,12 +393,20 @@ export const viewLinksUiMethods = uiModule({
         };
         for (const link of layer.links) {
             let text = '';
-            if (link.anchorId === personId) {
-                if (link.kind === 'partners') text = v.viewOnlyRow(v.role.partner, personName(link.islandIds[0]), link.hypo, link.variant);
-                else if (link.islandIds.length === 1) text = v.viewOnlyRow(role(link.islandIds[0], 'parent'), personName(link.islandIds[0]), link.hypo, link.variant);
-                else text = v.viewOnlyRow(v.role.parents, v.names(link.islandIds.map(personName)), link.hypo, link.variant);
+            const family = viewLinkChildOf(link);
+            if (family) {
+                // A child's row names its shown parents, a parent's row the shown child.
+                if (family.child === personId) {
+                    text = family.parents.length === 1
+                        ? v.viewOnlyRow(role(family.parents[0], 'parent'), personName(family.parents[0]), link.hypo, link.variant)
+                        : v.viewOnlyRow(v.role.parents, v.names(family.parents.map(personName)), link.hypo, link.variant);
+                } else if (family.parents.includes(personId)) {
+                    text = v.viewOnlyRow(role(family.child, 'child'), personName(family.child), link.hypo, link.variant);
+                }
+            } else if (link.anchorId === personId) {
+                text = v.viewOnlyRow(v.role.partner, personName(link.islandIds[0]), link.hypo, link.variant);
             } else if (link.islandIds.includes(personId)) {
-                text = v.viewOnlyRow(role(link.anchorId, link.kind === 'partners' ? 'partner' : 'child'), personName(link.anchorId), link.hypo, link.variant);
+                text = v.viewOnlyRow(v.role.partner, personName(link.anchorId), link.hypo, link.variant);
             }
             if (!text) continue;
             rows.push(`<div class="pm-view-link-row" data-view-hypo="${e(link.hypo)}"><span class="pm-view-link-text">${e(text)}</span>`
@@ -405,7 +417,7 @@ export const viewLinksUiMethods = uiModule({
 
     /** The note of the "Add" dialog for a person whose parents are shown in the view only (null: none). */
     viewLinkShownParents(personId: PersonId): ViewLink | null {
-        return TreeRenderer.getViewLayer()?.links.find(l => l.kind === 'child' && l.anchorId === personId) ?? null;
+        return TreeRenderer.getViewLayer()?.links.find(l => viewLinkChildOf(l)?.child === personId) ?? null;
     },
 
     /**
@@ -417,8 +429,9 @@ export const viewLinksUiMethods = uiModule({
     linkShownParents(personId: PersonId): boolean {
         const link = this.viewLinkShownParents(personId);
         if (!link || DataManager.isReadOnly()) return false;
-        const parents = link.islandIds.filter(id => this.canLinkRelation(personId, id, 'parent'));
-        if (parents.length !== link.islandIds.length) {
+        const shownParents = viewLinkChildOf(link)!.parents;
+        const parents = shownParents.filter(id => this.canLinkRelation(personId, id, 'parent'));
+        if (parents.length !== shownParents.length) {
             this.showLinkRefused();
             return false;
         }
@@ -596,7 +609,7 @@ export const viewLinksUiMethods = uiModule({
         const v = strings.viewLinks;
         const variants = DataManager.getPerson(personId)?.research?.edge?.hypos.find(h => h.id === hypo)?.variants;
         const offers = !TreeRenderer.viewLinksOffered() ? [] : this.viewLinkOffersFor(hypo)
-            .filter(o => o.choice?.anchorId === personId && (!variants?.length || variants.includes(o.variant)));
+            .filter(o => !!o.choice && viewLinkTreeSide(o.choice).includes(personId) && (!variants?.length || variants.includes(o.variant)));
         const items: ViewLinkMenuItem[] = [];
         const shown = offers.find(o => o.shown);
         if (shown?.choice) {
@@ -634,8 +647,7 @@ export const viewLinksUiMethods = uiModule({
      */
     showViewLinkFromIsland(btn: HTMLElement, offers: readonly ViewLinkCandidate[]): void {
         const pick = (c: ViewLinkCandidate): void => {
-            const { hypo, variant, kind, anchorId, islandIds } = c;
-            void this.viewLinkShow({ hypo, variant, kind, anchorId, islandIds }, { returnToTree: true, focusLabel: true });
+            void this.viewLinkShow(viewLinkChoiceOf(c), { returnToTree: true, focusLabel: true });
         };
         if (offers.length === 1) {
             pick(offers[0]);

@@ -883,7 +883,7 @@ export const personResearchMethods = uiModule({
             const find = target.closest<HTMLButtonElement>('.prv-find');
             if (find) {
                 const treeId = DataManager.getCurrentTreeId();
-                const link = treeId ? loadViewLinks(treeId).find(l => l.hypo === hypo) : null;
+                const link = treeId ? loadViewLinks(treeId, DataManager.getData()).find(l => l.hypo === hypo) : null;
                 if (!link) return;
                 // A123, 8a: the dialog closes, the tree is laid out anew under the canvas overlay (painted first).
                 this.closePersonResearchDialog();

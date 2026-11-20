@@ -14,6 +14,10 @@
  * - `child`, one shown parent and no real one: a family of that parent and a
  *   "?" stand-in (the shape every single parent has in the data; the diagram
  *   leaves the empty "?" out).
+ * - `parent`: the same with the roles turned — the shown family's person is
+ *   the child, the anchor (and its second parent) the parents in the tree; the
+ *   child joins their family as one more child (their couple's family, or a
+ *   new one when they have none).
  * - `partners`: a partnership of the anchor and the shown partner.
  *
  * Only copies of what a link touches are made; the rest of the copy shares
@@ -26,7 +30,7 @@
 
 import { Person, PersonId, PartnershipId, Partnership, StromData, oppositeGender } from '../../types.js';
 import { isPurePlaceholder } from '../../single-parent.js';
-import { ViewLink, ViewLinkContext, viewLinkContext, viewLinkIsland } from '../../view-links.js';
+import { ViewLink, ViewLinkContext, viewLinkChildOf, viewLinkContext, viewLinkIsland, viewLinkTreeSide } from '../../view-links.js';
 import { LayoutModel, LayoutResult, LayoutViewLayer } from './types.js';
 
 /** A derived copy of the data with the view links applied, and what the flags need. */
@@ -37,7 +41,7 @@ export interface ViewLayer {
     links: ViewLink[];
     /** Each person of a shown family (and each "?" stand-in a link made) → its link. */
     ghostOf: Map<PersonId, ViewLink>;
-    /** The anchor of each applied `child` link → its link. */
+    /** The child of each applied `child` or `parent` link → its link. */
     childAnchors: Map<PersonId, ViewLink>;
     /** The couples of the tree's data ("a|b", ids sorted): a partner line between others exists only in the view. */
     realCouples: Set<string>;
@@ -95,18 +99,22 @@ export function buildViewLayer(data: StromData, links: readonly ViewLink[] | und
     const touchedStandIns = new Set<PersonId>();
 
     for (const link of links) {
-        const anchor = persons[link.anchorId];
-        if (!anchor || link.islandIds.length === 0 || link.islandIds.some(id => !persons[id] || id === link.anchorId)) continue;
+        const treeSide = viewLinkTreeSide(link);
+        if (treeSide.some(id => !persons[id]) || link.islandIds.length === 0
+            || link.islandIds.some(id => !persons[id] || treeSide.includes(id))) continue;
         const groups = link.islandIds.map(id => context.group.get(id)).filter((g): g is number => g !== undefined);
-        const anchorGroup = context.group.get(link.anchorId);
+        const treeGroups = new Set(treeSide.map(id => context.group.get(id)));
         // One family, one place; a family already joined to the anchor is not shown again.
-        if (groups.some(g => shownGroups.has(g) || g === anchorGroup)) continue;
+        if (groups.some(g => shownGroups.has(g) || treeGroups.has(g))) continue;
 
-        if (link.kind === 'partners') {
+        const family = viewLinkChildOf(link);
+        if (!family) {
             newUnion(link.hypo, link.anchorId, link.islandIds[0], []);
         } else {
-            const shown = link.islandIds;
-            const a = person(link.anchorId);
+            // `child`: the anchor gets the shown parents; `parent`: the shown child gets the anchor's.
+            const childId = family.child;
+            const shown = family.parents;
+            const a = person(childId);
             const realParents = a.parentIds.filter(id => persons[id] && !persons[id].isPlaceholder && !shown.includes(id));
             const standIns = a.parentIds.filter(id => persons[id]?.isPlaceholder);
             if (realParents.length + shown.length > 2) continue;
@@ -114,7 +122,7 @@ export function buildViewLayer(data: StromData, links: readonly ViewLink[] | und
                 // A real parent and a shown one: the shown parent takes the "?" place.
                 const real = realParents[0];
                 const p = shown[0];
-                const family = Object.values(partnerships).find(u => u.childIds.includes(link.anchorId)
+                const family = Object.values(partnerships).find(u => u.childIds.includes(childId)
                     && (u.person1Id === real || u.person2Id === real));
                 const other = family ? (family.person1Id === real ? family.person2Id : family.person1Id) : undefined;
                 if (family && other && standIns.includes(other)) {
@@ -128,17 +136,17 @@ export function buildViewLayer(data: StromData, links: readonly ViewLink[] | und
                         stand.partnerships = stand.partnerships.filter(x => x !== u.id);
                     } else {
                         const u = union(family.id);
-                        u.childIds = without(u.childIds, link.anchorId);
-                        newUnion(link.hypo, real, p, [link.anchorId]);
+                        u.childIds = without(u.childIds, childId);
+                        newUnion(link.hypo, real, p, [childId]);
                     }
-                    stand.childIds = without(stand.childIds, link.anchorId);
+                    stand.childIds = without(stand.childIds, childId);
                     a.parentIds = a.parentIds.map(x => (x === other ? p : x));
                 } else {
-                    if (family) union(family.id).childIds = without(family.childIds, link.anchorId);
-                    newUnion(link.hypo, real, p, [link.anchorId]);
+                    if (family) union(family.id).childIds = without(family.childIds, childId);
+                    newUnion(link.hypo, real, p, [childId]);
                     a.parentIds.push(p);
                 }
-                person(p).childIds.push(link.anchorId);
+                person(p).childIds.push(childId);
             } else {
                 if (realParents.length > 0) continue;
                 // The shown parents are all the anchor has: it leaves the "?" families.
@@ -146,33 +154,45 @@ export function buildViewLayer(data: StromData, links: readonly ViewLink[] | und
                     touchedStandIns.add(s);
                     const stand = person(s);
                     for (const uid of stand.partnerships) {
-                        if (partnerships[uid]?.childIds.includes(link.anchorId)) union(uid).childIds = without(partnerships[uid].childIds, link.anchorId);
+                        if (partnerships[uid]?.childIds.includes(childId)) union(uid).childIds = without(partnerships[uid].childIds, childId);
                     }
-                    stand.childIds = without(stand.childIds, link.anchorId);
+                    stand.childIds = without(stand.childIds, childId);
                     a.parentIds = without(a.parentIds, s);
                 }
                 if (shown.length === 2) {
                     const [p1, p2] = shown;
                     const couple = Object.values(partnerships).find(u =>
                         (u.person1Id === p1 && u.person2Id === p2) || (u.person1Id === p2 && u.person2Id === p1));
-                    if (couple) union(couple.id).childIds.push(link.anchorId);
-                    else newUnion(link.hypo, p1, p2, [link.anchorId]);
+                    if (couple) union(couple.id).childIds.push(childId);
+                    else newUnion(link.hypo, p1, p2, [childId]);
                 } else {
                     const p = shown[0];
-                    const standId = freshId(`vl_p_${link.hypo}`, persons) as PersonId;
-                    persons[standId] = {
-                        id: standId, firstName: '?', lastName: '', gender: oppositeGender(persons[p].gender),
-                        isPlaceholder: true, partnerships: [], parentIds: [], childIds: [link.anchorId],
-                    };
-                    ownP.add(standId);
-                    newUnion(link.hypo, p, standId, [link.anchorId]);
-                    a.parentIds.push(standId);
-                    ghostOf.set(standId, link);
+                    // A parent in the tree alone with a "?" already: the child joins that family.
+                    const single = link.kind === 'parent' ? persons[p].partnerships.map(uid => partnerships[uid]).find(u => {
+                        const other = u && (u.person1Id === p ? u.person2Id : u.person1Id);
+                        return !!other && !!persons[other]?.isPlaceholder;
+                    }) : undefined;
+                    if (single) {
+                        const standId = single.person1Id === p ? single.person2Id : single.person1Id;
+                        union(single.id).childIds.push(childId);
+                        person(standId).childIds.push(childId);
+                        a.parentIds.push(standId);
+                    } else {
+                        const standId = freshId(`vl_p_${link.hypo}`, persons) as PersonId;
+                        persons[standId] = {
+                            id: standId, firstName: '?', lastName: '', gender: oppositeGender(persons[p].gender),
+                            isPlaceholder: true, partnerships: [], parentIds: [], childIds: [childId],
+                        };
+                        ownP.add(standId);
+                        newUnion(link.hypo, p, standId, [childId]);
+                        a.parentIds.push(standId);
+                        ghostOf.set(standId, link);
+                    }
                 }
                 a.parentIds.push(...shown);
-                for (const p of shown) person(p).childIds.push(link.anchorId);
+                for (const p of shown) person(p).childIds.push(childId);
             }
-            childAnchors.set(link.anchorId, link);
+            childAnchors.set(childId, link);
         }
 
         applied.push(link);
@@ -204,7 +224,7 @@ export function buildViewLayer(data: StromData, links: readonly ViewLink[] | und
 
 /**
  * Flag the laid out persons and lines (the result is changed in place):
- * a drop to a link's anchor from a family of its shown parents is `virtual`,
+ * a drop to a link's child from a family of the parents it gives is `virtual`,
  * a family line whose every drop is virtual is `virtual` as a whole, one of
  * a shown family's own parents `ghost` (its other drops too); a partner line
  * between two people who are no couple in the data is `virtual`, one between
@@ -219,7 +239,7 @@ export function flagViewLayer(result: LayoutResult, model: LayoutModel, layer: V
         const parents = [u.partnerA, u.partnerB].filter((id): id is PersonId => !!id);
         for (const drop of conn.drops) {
             const link = layer.childAnchors.get(drop.personId);
-            if (link && parents.some(p => link.islandIds.includes(p))) drop.view = 'virtual';
+            if (link && parents.some(p => viewLinkChildOf(link)!.parents.includes(p))) drop.view = 'virtual';
         }
         const drawnParents = parents.filter(id => !model.hiddenPersonIds?.has(id) && !(layer.data.persons[id]?.isPlaceholder && ghost(id)));
         if (conn.drops.length > 0 && conn.drops.every(d => d.view === 'virtual')) conn.view = 'virtual';
@@ -234,7 +254,7 @@ export function flagViewLayer(result: LayoutResult, model: LayoutModel, layer: V
         if (!u) continue;
         const parents = [u.partnerA, u.partnerB].filter((id): id is PersonId => !!id);
         const link = layer.childAnchors.get(edge.childId);
-        if (link && parents.some(p => link.islandIds.includes(p))) edge.view = 'virtual';
+        if (link && parents.some(p => viewLinkChildOf(link)!.parents.includes(p))) edge.view = 'virtual';
         else if (edge.parentIds.length > 0 && edge.parentIds.every(ghost)) edge.view = 'ghost';
     }
     for (const line of result.spouseLines) {

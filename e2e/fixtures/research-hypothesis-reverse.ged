@@ -1,0 +1,110 @@
+0 HEAD
+1 SOUR STROM_RESEARCH
+2 VERS 1.14.0
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+1 DATE 20 NOV 2026
+1 _STROM_TREE 2c8e5b41-7a90-4d3f-b612-9e4f0c7d5a18
+1 _STROM_HEAD 9a1c3e5f7b2d4f6a8c0e1b3d5f7a9c2e4b6d8f0a
+1 _STROM_ASOF 2026-11-20
+1 NOTE Výzkum Kvítkových
+0 @P0001@ INDI
+1 NAME Pavel /Kvítek/
+1 SEX M
+1 REFN P0001
+2 TYPE strom-research
+1 BIRT
+2 DATE 1890
+1 FAMC @F0001@
+0 @P0002@ INDI
+1 NAME Věra /Kvítková/
+1 SEX F
+1 REFN P0002
+2 TYPE strom-research
+1 BIRT
+2 DATE 1893
+1 FAMC @F0001@
+0 @P0010@ INDI
+1 NAME Bohumil /Kvítek/
+1 SEX M
+1 REFN P0010
+2 TYPE strom-research
+1 BIRT
+2 DATE 1860
+1 FAMS @F0001@
+0 @P0011@ INDI
+1 NAME Hedvika /Kvítková/
+1 SEX F
+1 REFN P0011
+2 TYPE strom-research
+1 BIRT
+2 DATE 1864
+1 FAMS @F0001@
+0 @P0200@ INDI
+1 NAME Ondřej /Kvítek/
+1 SEX M
+1 REFN P0200
+2 TYPE strom-research
+1 BIRT
+2 DATE 1888
+1 FAMS @F0050@
+1 _STROM_HYPO H0048
+2 TITL Byl Ondřej Kvítek synem Bohumila a Hedviky?
+2 STAT open
+2 NOTE A: syn Bohumila a Hedviky Kvítkových
+3 CONT B: syn Bohumila Kvítka z prvního manželství
+2 _VAR A
+3 TITL syn Bohumila a Hedviky Kvítkových
+3 _LINK child
+4 _PERS @P0200@
+4 _FAM @F0001@
+2 _VAR B
+3 TITL syn Bohumila Kvítka z prvního manželství
+3 _LINK child
+4 _PERS @P0200@
+4 _PAR @P0010@
+1 _STROM_ISLAND 3
+2 _HYPO H0048
+3 _JOIN P0010
+3 _VAR A
+3 _VAR B
+2 _HELD 0
+0 @P0201@ INDI
+1 NAME Libuše /Habáňová/
+1 SEX F
+1 REFN P0201
+2 TYPE strom-research
+1 BIRT
+2 DATE 1891
+1 FAMS @F0050@
+1 _STROM_ISLAND 3
+2 _HYPO H0048
+3 _JOIN P0010
+3 _VAR A
+3 _VAR B
+2 _HELD 0
+0 @P0202@ INDI
+1 NAME Zdeněk /Kvítek/
+1 SEX M
+1 REFN P0202
+2 TYPE strom-research
+1 BIRT
+2 DATE 1915
+1 FAMC @F0050@
+1 _STROM_ISLAND 3
+2 _HYPO H0048
+3 _JOIN P0010
+3 _VAR A
+3 _VAR B
+2 _HELD 0
+0 @F0001@ FAM
+1 HUSB @P0010@
+1 WIFE @P0011@
+1 CHIL @P0001@
+1 CHIL @P0002@
+0 @F0050@ FAM
+1 HUSB @P0200@
+1 WIFE @P0201@
+1 CHIL @P0202@
+0 TRLR

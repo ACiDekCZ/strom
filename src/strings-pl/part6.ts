@@ -1342,6 +1342,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         whoParents: (name: string) => `rodzice osoby ${name}`,
         whoParent: (name: string) => `rodzic osoby ${name}`,
         whoPartner: (name: string) => `partner osoby ${name}`,
+        whoChild: (names: string[]) => names.length > 1 ? `dziecko osób ${names.slice(0, -1).join(', ')} i ${names[names.length - 1]}` : `dziecko osoby ${names[0] ?? ''}`,
         shownToast: (who: string, h: string, v: string) => `Pokazano jako połączone: ${who} (${h}, wersja ${v}). Nieudokumentowane.`,
         movedToast: (surname: string | null, who: string, h: string, v: string) => `${surname ? `Rodzina o nazwisku ${surname}` : 'Rodzina'} jest teraz pokazana przy osobie ${who} (${h}, wersja ${v}).`,
         unlinkedToast: 'Odłączono',
@@ -1354,6 +1355,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         unlinkParents: 'Odłącz pokazanych rodziców',
         unlinkParent: 'Odłącz pokazanego rodzica',
         unlinkPartner: 'Odłącz pokazanego partnera',
+        unlinkChild: 'Odłącz pokazane dziecko',
         aboutLink: 'Co wie badanie o powiązaniu',
         caption: (h: string, v: string) => `Połączone tylko w widoku · ${h} ${v}`,
         version: (v: string) => `Wersja ${v}`,
@@ -1364,6 +1366,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         findAria: (who: string) => `Znajdź w drzewie: ${who}`,
         real: 'Teraz połączone naprawdę',
         invalid: (r: string) => `Już nieważne: ${r}`,
+        unreached: 'Nie pokazano: nic w drzewie do niej nie prowadzi',
         reason: {
             decidedOther: 'hipoteza rozstrzygnięta inaczej',
             cancelled: 'hipoteza anulowana',

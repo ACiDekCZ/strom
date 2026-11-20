@@ -20,8 +20,13 @@ import type { Person, PersonId, ResearchHypothesis, ResearchVariantLink, StromDa
 
 // ==================== MODEL ====================
 
-/** What a view link draws: whose child (`child`: anchor is the child) or whose partner. */
-export type ViewLinkKind = 'child' | 'partners';
+/**
+ * What a view link draws: whose child or whose partner. `child`: the anchor
+ * is the child, the shown family its parents'; `parent`: the anchor (and
+ * `coParentId`) are the parents, the shown family the child's — a person off
+ * the tree attached under parents in it, as their child.
+ */
+export type ViewLinkKind = 'child' | 'parent' | 'partners';
 
 export interface ViewLink {
     /** The hypothesis ("H0022"). */
@@ -29,9 +34,11 @@ export interface ViewLink {
     /** Its variant ("B"). */
     variant: string;
     kind: ViewLinkKind;
-    /** The person it attaches to (`child`: the child; `partners`: the partner on the tree's side). */
+    /** The person it attaches to (`child`: the child; `parent`: a parent; `partners`: the partner on the tree's side). */
     anchorId: PersonId;
-    /** The people it attaches: the parents (one or two) or the partner (one). */
+    /** `parent` only: the second parent on the tree's side. */
+    coParentId?: PersonId;
+    /** The people it attaches: the parents (one or two), the child (one) or the partner (one). */
     islandIds: PersonId[];
     /** Drawn (with the main switch on); off keeps the row. */
     on: boolean;
@@ -40,7 +47,35 @@ export interface ViewLink {
 }
 
 /** A view link to choose: everything but its switch and time. */
-export type ViewLinkChoice = Pick<ViewLink, 'hypo' | 'variant' | 'kind' | 'anchorId' | 'islandIds'>;
+export type ViewLinkChoice = Pick<ViewLink, 'hypo' | 'variant' | 'kind' | 'anchorId' | 'islandIds' | 'coParentId'>;
+
+/** A record's choice (what showing it again would show). */
+export function viewLinkChoiceOf(link: ViewLinkChoice): ViewLinkChoice {
+    const { hypo, variant, kind, anchorId, islandIds, coParentId } = link;
+    return { hypo, variant, kind, anchorId, islandIds: [...islandIds], ...(coParentId ? { coParentId } : {}) };
+}
+
+/** The people on the tree's side of a link: its anchor (and a `parent` link's second parent). */
+export function viewLinkTreeSide(link: Pick<ViewLink, 'anchorId' | 'coParentId'>): PersonId[] {
+    return link.coParentId ? [link.anchorId, link.coParentId] : [link.anchorId];
+}
+
+/**
+ * The person whose research holds a link's hypothesis (its dialog opens
+ * there): the anchor, else the first of the link's people that carries it
+ * (a `parent` link's hypothesis is about the child off the tree).
+ */
+export function viewLinkHolder(data: StromData, link: Pick<ViewLink, 'hypo' | 'anchorId' | 'coParentId' | 'islandIds'>): PersonId {
+    const people = [link.anchorId, ...link.islandIds, ...(link.coParentId ? [link.coParentId] : [])];
+    return people.find(id => data.persons?.[id]?.research?.hypotheses?.some(h => h.id === link.hypo)) ?? link.anchorId;
+}
+
+/** Child and parents of a `child` or `parent` link (null: partners). */
+export function viewLinkChildOf(link: Pick<ViewLink, 'kind' | 'anchorId' | 'coParentId' | 'islandIds'>): { child: PersonId; parents: PersonId[] } | null {
+    if (link.kind === 'child') return { child: link.anchorId, parents: link.islandIds };
+    if (link.kind === 'parent') return { child: link.islandIds[0], parents: viewLinkTreeSide(link) };
+    return null;
+}
 
 /** Why a view link no longer holds. */
 export type ViewLinkInvalidReason = 'decidedOther' | 'cancelled' | 'gone' | 'noLink' | 'personGone' | 'joined' | 'hasParents';
@@ -91,13 +126,21 @@ export function sanitizeViewLinks(value: unknown): ViewLink[] {
         const r = raw as Record<string, unknown>;
         if (typeof r.hypo !== 'string' || !HYPO_ID.test(r.hypo)) continue;
         if (typeof r.variant !== 'string' || !VARIANT_ID.test(r.variant)) continue;
-        if (r.kind !== 'child' && r.kind !== 'partners') continue;
+        if (r.kind !== 'child' && r.kind !== 'parent' && r.kind !== 'partners') continue;
         if (!isPersonId(r.anchorId)) continue;
         if (!Array.isArray(r.islandIds) || !r.islandIds.every(isPersonId)) continue;
         const islandIds = [...new Set(r.islandIds as PersonId[])];
         if (islandIds.length < 1 || islandIds.length > (r.kind === 'child' ? 2 : 1) || islandIds.includes(r.anchorId)) continue;
+        let coParentId: PersonId | undefined;
+        if (r.kind === 'parent' && r.coParentId !== undefined) {
+            if (!isPersonId(r.coParentId) || r.coParentId === r.anchorId || islandIds.includes(r.coParentId)) continue;
+            coParentId = r.coParentId;
+        }
         const addedAt = typeof r.addedAt === 'number' && Number.isFinite(r.addedAt) && r.addedAt >= 0 ? r.addedAt : 0;
-        const link: ViewLink = { hypo: r.hypo, variant: r.variant, kind: r.kind, anchorId: r.anchorId, islandIds, on: r.on === true, addedAt };
+        const link: ViewLink = {
+            hypo: r.hypo, variant: r.variant, kind: r.kind, anchorId: r.anchorId, ...(coParentId ? { coParentId } : {}),
+            islandIds, on: r.on === true, addedAt,
+        };
         const twin = out.findIndex(l => l.hypo === link.hypo);
         if (twin < 0) out.push(link);
         else if (link.addedAt >= out[twin].addedAt) out[twin] = link;
@@ -109,12 +152,21 @@ function storage(): Storage | null {
     try { return typeof localStorage === 'undefined' ? null : localStorage; } catch { return null; }
 }
 
-/** The tree's records on this device. */
-export function loadViewLinks(treeId: string): ViewLink[] {
+/**
+ * The tree's records on this device. Given the tree's data, a record kept in
+ * an older shape is brought to the one its variant has now
+ * (migrateViewLinks), and kept so when anything changed.
+ */
+export function loadViewLinks(treeId: string, data?: StromData): ViewLink[] {
+    let links: ViewLink[];
     try {
         const raw = storage()?.getItem(viewLinksKey(treeId));
-        return raw ? sanitizeViewLinks(JSON.parse(raw)) : [];
+        links = raw ? sanitizeViewLinks(JSON.parse(raw)) : [];
     } catch { return []; }
+    if (!data || links.length === 0) return links;
+    const migrated = migrateViewLinks(data, links);
+    if (migrated !== links) saveViewLinks(treeId, migrated);
+    return migrated;
 }
 
 /** Keep the tree's records (none: the key goes). */
@@ -277,6 +329,9 @@ const offTree = (p: Person | undefined): boolean => !!p?.research?.island;
 /**
  * What a variant's link would show, in the app's ids (null: a kind that is
  * only text — same, siblings — or someone not in the tree's data).
+ * `child`: the parents are shown at the child (`child`), unless the child is
+ * the one off the tree and none of its parents is — then the child's family
+ * is shown under the parents (`parent`, anchored at the first parent).
  * `partners`: the island side is the partner whose island names the
  * hypothesis; else the one off the tree; else the second.
  */
@@ -289,6 +344,10 @@ export function viewLinkShape(data: StromData, hypo: string, link: ResearchVaria
         const anchorId = id(link.child);
         const islandIds = link.parents.map(id);
         if (!anchorId || islandIds.length === 0 || !islandIds.every((x): x is PersonId => !!x)) return null;
+        if (offTree(data.persons[anchorId]) && !islandIds.some(pid => offTree(data.persons[pid]))) {
+            const [first, second] = islandIds;
+            return { kind: 'parent', anchorId: first, ...(second ? { coParentId: second } : {}), islandIds: [anchorId] };
+        }
         return { kind: 'child', anchorId, islandIds };
     }
     if (link.kind !== 'partners' || link.persons.length !== 2) return null;
@@ -305,6 +364,37 @@ export function viewLinkShape(data: StromData, hypo: string, link: ResearchVaria
 
 const sameSet = (a: readonly string[], b: readonly string[]): boolean =>
     a.length === b.length && a.every(x => b.includes(x));
+
+/** Two shapes draw the same link (the parents on the tree's side in any order). */
+function sameShape(a: Omit<ViewLinkChoice, 'hypo' | 'variant'>, b: Omit<ViewLinkChoice, 'hypo' | 'variant'>): boolean {
+    if (a.kind !== b.kind || !sameSet(a.islandIds, b.islandIds)) return false;
+    return a.kind === 'parent' ? sameSet(viewLinkTreeSide(a), viewLinkTreeSide(b)) : a.anchorId === b.anchorId;
+}
+
+/**
+ * Records kept in an older shape brought to the shape their variant has now:
+ * a `child` record whose child is the one off the tree (stored before the
+ * child's family could be shown under parents in the tree) becomes the
+ * `parent` record of the same people. Nothing else changes and nothing goes;
+ * the same array when nothing changed.
+ */
+export function migrateViewLinks(data: StromData, links: readonly ViewLink[], ctx: ViewLinkContext = viewLinkContext(data)): ViewLink[] {
+    let changed = false;
+    const out = links.map(link => {
+        if (link.kind !== 'child') return link;
+        const variant = ctx.hypotheses.get(link.hypo)?.variants?.find(v => v.id === link.variant);
+        for (const l of variant?.links ?? []) {
+            const shape = viewLinkShape(data, link.hypo, l, ctx);
+            if (!shape || shape.kind !== 'parent') continue;
+            const family = viewLinkChildOf(shape)!;
+            if (family.child !== link.anchorId || !sameSet(family.parents, link.islandIds)) continue;
+            changed = true;
+            return { ...link, ...shape, islandIds: [...shape.islandIds] };
+        }
+        return link;
+    });
+    return changed ? out : links as ViewLink[];
+}
 
 // ==================== RESOLVING ====================
 
@@ -326,10 +416,11 @@ function role(p: Person | undefined): 'father' | 'mother' | 'either' {
 export function resolveViewLink(data: StromData, link: ViewLink, ctx: ViewLinkContext = viewLinkContext(data)): ViewLinkState {
     const persons = data.persons ?? {};
     const anchor = persons[link.anchorId];
-    if (!anchor || link.islandIds.some(id => !persons[id])) return { state: 'invalid', reason: 'personGone' };
+    if (!anchor || [...viewLinkTreeSide(link), ...link.islandIds].some(id => !persons[id])) return { state: 'invalid', reason: 'personGone' };
 
-    if (link.kind === 'child') {
-        if (link.islandIds.every(id => anchor.parentIds?.includes(id))) return { state: 'real' };
+    const family = viewLinkChildOf(link);
+    if (family) {
+        if (family.parents.every(id => persons[family.child].parentIds?.includes(id))) return { state: 'real' };
     } else if (Object.values(data.partnerships ?? {}).some(u => u
         && ((u.person1Id === link.anchorId && u.person2Id === link.islandIds[0])
             || (u.person2Id === link.anchorId && u.person1Id === link.islandIds[0])))) {
@@ -344,7 +435,7 @@ export function resolveViewLink(data: StromData, link: ViewLink, ctx: ViewLinkCo
     const variant = h.variants?.find(v => v.id === link.variant);
     const same = (l: ResearchVariantLink): boolean => {
         const shape = viewLinkShape(data, link.hypo, l, ctx);
-        return !!shape && shape.kind === link.kind && shape.anchorId === link.anchorId && sameSet(shape.islandIds, link.islandIds);
+        return !!shape && sameShape(shape, link);
     };
     if (!(variant?.links ?? []).some(same)) {
         // The couple as a pair: which side was off the tree may have changed once linked.
@@ -355,12 +446,13 @@ export function resolveViewLink(data: StromData, link: ViewLink, ctx: ViewLinkCo
         return recorded ? { state: 'real' } : { state: 'invalid', reason: 'noLink' };
     }
 
-    const anchorGroup = ctx.group.get(link.anchorId);
-    if (link.islandIds.some(id => ctx.group.get(id) === anchorGroup)) return { state: 'invalid', reason: 'joined' };
+    const treeGroups = new Set(viewLinkTreeSide(link).map(id => ctx.group.get(id)));
+    if (link.islandIds.some(id => treeGroups.has(ctx.group.get(id)))) return { state: 'invalid', reason: 'joined' };
 
-    if (link.kind === 'child') {
-        const real = (anchor.parentIds ?? []).map(id => persons[id]).filter(p => p && !p.isPlaceholder);
-        const shown = link.islandIds.map(id => role(persons[id]));
+    if (family) {
+        const real = (persons[family.child].parentIds ?? []).filter(id => !family.parents.includes(id))
+            .map(id => persons[id]).filter(p => p && !p.isPlaceholder);
+        const shown = family.parents.map(id => role(persons[id]));
         const clash = real.some(p => {
             const r = role(p);
             return shown.some(s => s === 'either' || r === 'either' || s === r);
@@ -395,8 +487,11 @@ export function activeViewLinks(data: StromData, resolved: readonly ResolvedView
         grew = false;
         for (const link of candidates) {
             if (active.includes(link)) continue;
-            const g = ctx.group.get(link.anchorId);
-            if (offTree(data.persons[link.anchorId]) && (g === undefined || !shownGroups.has(g))) continue;
+            const reached = viewLinkTreeSide(link).every(id => {
+                const g = ctx.group.get(id);
+                return !offTree(data.persons[id]) || (g !== undefined && shownGroups.has(g));
+            });
+            if (!reached) continue;
             active.push(link);
             for (const x of islandGroups(link, ctx)) shownGroups.add(x);
             grew = true;
@@ -407,16 +502,23 @@ export function activeViewLinks(data: StromData, resolved: readonly ResolvedView
 
 // ==================== THE LIST ====================
 
-/** The rows of the list "Linked in the view only": drawable rows switched on (n) of the drawable ones (m). */
-export function viewLinkCounts(resolved: readonly ResolvedViewLink[]): { on: number; drawable: number; invalid: number } {
-    let on = 0, drawable = 0, invalid = 0;
+/**
+ * The rows of the list "Linked in the view only": drawable rows switched on
+ * (n) of the drawable ones (m). Given what the tree draws (activeViewLinks),
+ * a row switched on that it cannot draw — nothing in the tree leads to it —
+ * is not counted as on (`unreached`).
+ */
+export function viewLinkCounts(resolved: readonly ResolvedViewLink[], drawn?: readonly ViewLink[]): { on: number; drawable: number; invalid: number; unreached: number } {
+    let on = 0, drawable = 0, invalid = 0, unreached = 0;
     for (const r of resolved) {
         if (r.state === 'draw') {
             drawable++;
-            if (r.link.on) on++;
+            if (!r.link.on) continue;
+            if (drawn && !drawn.includes(r.link)) unreached++;
+            else on++;
         } else if (r.state === 'invalid') invalid++;
     }
-    return { on, drawable, invalid };
+    return { on, drawable, invalid, unreached };
 }
 
 /**
@@ -477,8 +579,7 @@ export function viewLinkDependents(data: StromData, links: readonly ViewLink[], 
         const parentGroups = islandGroups(queue.shift()!, ctx);
         for (const l of ordered) {
             if (l === root || !l.on || out.includes(l)) continue;
-            const g = ctx.group.get(l.anchorId);
-            if (g === undefined || !parentGroups.has(g)) continue;
+            if (!viewLinkTreeSide(l).some(id => { const g = ctx.group.get(id); return g !== undefined && parentGroups.has(g); })) continue;
             out.push(l);
             queue.push(l);
         }
@@ -493,8 +594,7 @@ function disconnectDependents(data: StromData, before: readonly ViewLink[], afte
         for (const dep of viewLinkDependents(data, before, d.hypo, ctx)) {
             const at = after.findIndex(l => l.hypo === dep.hypo);
             if (at < 0 || !after[at].on) continue;
-            const g = ctx.group.get(dep.anchorId);
-            if (g !== undefined && kept.has(g)) {
+            if (viewLinkTreeSide(dep).every(id => { const g = ctx.group.get(id); return g !== undefined && kept.has(g); })) {
                 for (const x of islandGroups(dep, ctx)) kept.add(x);
                 continue;
             }
@@ -513,7 +613,7 @@ function disconnectDependents(data: StromData, before: readonly ViewLink[], afte
  * (`disconnected`). The input is not changed.
  */
 export function showViewLink(data: StromData, links: readonly ViewLink[], choice: ViewLinkChoice, now: number = Date.now(), ctx: ViewLinkContext = viewLinkContext(data)): ViewLinksChange {
-    const next: ViewLink = { ...choice, islandIds: [...choice.islandIds], on: true, addedAt: now };
+    const next: ViewLink = { ...viewLinkChoiceOf(choice), on: true, addedAt: now };
     const groups = islandGroups(next, ctx);
     const removed = links.filter(l => l.hypo !== choice.hypo && [...islandGroups(l, ctx)].some(g => groups.has(g)));
     const previous = links.find(l => l.hypo === choice.hypo);
@@ -537,8 +637,7 @@ export function setViewLinkOn(data: StromData, links: readonly ViewLink[], hypo:
     const link = links.find(l => l.hypo === hypo);
     if (!link) return { links: [...links], removed: [], disconnected: [] };
     if (!on) return unlinkViewLink(data, links, hypo, ctx);
-    const { hypo: h, variant, kind, anchorId, islandIds } = link;
-    return showViewLink(data, links, { hypo: h, variant, kind, anchorId, islandIds }, now, ctx);
+    return showViewLink(data, links, viewLinkChoiceOf(link), now, ctx);
 }
 
 /** Remove records (× in the list, "Remove invalid", "Remove all"); what hung on them is switched off. */

@@ -47,6 +47,7 @@ import { uiModule } from './module.js';
 
 import { chainLinkSvg } from '../icons.js';
 import { shownNameOrEmpty } from '../person-name.js';
+import { viewLinkChildOf } from '../view-links.js';
 export const relationModalMethods = uiModule({
     // ---- RELATION MODAL ----
     addRelation(personId: PersonId, relationType: RelationType, gender?: Gender): void {
@@ -300,7 +301,7 @@ export const relationModalMethods = uiModule({
         btn.type = 'button';
         btn.className = 'secondary rel-view-link-note__link';
         btn.innerHTML = chainLinkSvg({ size: 13 });
-        btn.append(` ${v.linkShown(v.names(shown.islandIds.map(id => shownNameOrEmpty(DataManager.getPerson(id)!))))}`);
+        btn.append(` ${v.linkShown(v.names(viewLinkChildOf(shown)!.parents.map(id => shownNameOrEmpty(DataManager.getPerson(id)!))))}`);
         btn.onclick = () => {
             if (!this.linkShownParents(personId)) return;
             this.closeRelationModal();

@@ -18,7 +18,7 @@ import { StromData, TreeId } from '../types.js';
 import { shownName } from '../person-name.js';
 import {
     ResolvedViewLink, ViewLink, isViewLinksMaster, loadViewLinks, newlyInvalidViewLinks, orderViewLinkRows, removeViewLinks,
-    resolveViewLinks, saveViewLinks, setViewLinkOn, setViewLinksMaster, unlinkViewLink, viewLinkContext, viewLinkCounts,
+    activeViewLinks, resolveViewLinks, saveViewLinks, setViewLinkOn, setViewLinksMaster, unlinkViewLink, viewLinkContext, viewLinkCounts,
     viewLinkDependents, viewLinkPeopleCount, viewLinksTreeOfKey,
 } from '../view-links.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
@@ -157,14 +157,17 @@ export const viewLinksListMethods = uiModule({
     viewLinksResolved(): ResolvedViewLink[] {
         const treeId = DataManager.getCurrentTreeId();
         if (!treeId) return [];
-        return resolveViewLinks(DataManager.getData(), loadViewLinks(treeId));
+        return resolveViewLinks(DataManager.getData(), loadViewLinks(treeId, DataManager.getData()));
     },
 
     /** The shown links as the menus count them: drawable and switched on, the main switch on (0 where the feature does not show). */
     viewLinksShownCount(): number {
         const treeId = DataManager.getCurrentTreeId();
         if (!treeId || !TreeRenderer.viewLinksOffered() || !isViewLinksMaster(treeId)) return 0;
-        return viewLinkCounts(this.viewLinksResolved()).on;
+        const data = DataManager.getData();
+        const ctx = viewLinkContext(data);
+        const resolved = resolveViewLinks(data, loadViewLinks(treeId, data), ctx);
+        return viewLinkCounts(resolved, activeViewLinks(data, resolved, true, ctx)).on;
     },
 
     /**
@@ -349,9 +352,11 @@ export const viewLinksListMethods = uiModule({
         const toast = panel.querySelector('.view-links-panel__toast');
         const data = DataManager.getData();
         const ctx = viewLinkContext(data);
-        const resolved = resolveViewLinks(data, loadViewLinks(treeId), ctx);
+        const resolved = resolveViewLinks(data, loadViewLinks(treeId, data), ctx);
         const master = isViewLinksMaster(treeId);
-        const counts = viewLinkCounts(resolved);
+        // A row switched on that the tree cannot draw (nothing in it leads there) is not counted as on.
+        const drawn = activeViewLinks(data, resolved, true, ctx);
+        const counts = viewLinkCounts(resolved, drawn);
         const positions = TreeRenderer.getPositions();
         const rows = orderViewLinkRows(resolved, id => positions.get(id));
 
@@ -404,7 +409,7 @@ export const viewLinksListMethods = uiModule({
             empty.append(how, help);
             list.appendChild(empty);
         }
-        for (const r of rows) list.appendChild(this.viewLinkRow(r, data, ctx));
+        for (const r of rows) list.appendChild(this.viewLinkRow(r, data, ctx, drawn));
 
         const foot = el('div', 'view-links-panel__foot');
         if (counts.invalid > 0) {
@@ -447,17 +452,20 @@ export const viewLinksListMethods = uiModule({
     /**
      * One row: its switch (drawable), a dashed outline (linked for real) or the
      * same outline quiet (no longer valid); whom it concerns, "H0022 · version
-     * B: claim", "+ 5 people" / "Now linked for real" / "No longer valid:
-     * reason"; Find (not for an invalid one); × removes.
+     * B: claim", "+ 5 people" / "Not shown: nothing in the tree leads to it"
+     * (switched on, but not in `drawn`) / "Now linked for real" / "No longer
+     * valid: reason"; Find (not for an invalid one); × removes.
      */
-    viewLinkRow(r: ResolvedViewLink, data: StromData, ctx: ReturnType<typeof viewLinkContext>): HTMLElement {
+    viewLinkRow(r: ResolvedViewLink, data: StromData, ctx: ReturnType<typeof viewLinkContext>, drawn: readonly ViewLink[]): HTMLElement {
         const v = strings.viewLinks;
         const link = r.link;
         const key = link.hypo;
         const row = el('div', `view-links-row view-links-row--${r.state}`);
         row.dataset.hypo = link.hypo;
         row.dataset.state = r.state;
+        const unreached = r.state === 'draw' && link.on && !drawn.includes(link);
         if (r.state === 'draw') row.classList.toggle('is-off', !link.on);
+        row.classList.toggle('is-unreached', unreached);
         const who = capitalize(this.viewLinkWho(link));
         const whoId = `${PANEL_ID}-who-${key}`;
 
@@ -480,7 +488,8 @@ export const viewLinksListMethods = uiModule({
         const claim = el('span', 'view-links-row__claim', v.rowVariant(link.hypo, link.variant, title));
         claim.title = claim.textContent ?? '';
         text.append(name, claim);
-        if (r.state === 'draw') text.appendChild(el('span', 'view-links-row__people', v.people(viewLinkPeopleCount(data, link, ctx))));
+        if (unreached) text.appendChild(el('span', 'view-links-row__status view-links-row__status--unreached', v.unreached));
+        else if (r.state === 'draw') text.appendChild(el('span', 'view-links-row__people', v.people(viewLinkPeopleCount(data, link, ctx))));
         else if (r.state === 'real') text.appendChild(el('span', 'view-links-row__status view-links-row__status--real', v.real));
         else text.appendChild(el('span', 'view-links-row__status view-links-row__status--invalid', v.invalid(v.reason[r.reason])));
 
@@ -515,7 +524,7 @@ export const viewLinksListMethods = uiModule({
         if (!treeId) return;
         const data = DataManager.getData();
         const ctx = viewLinkContext(data);
-        const before = loadViewLinks(treeId);
+        const before = loadViewLinks(treeId, DataManager.getData());
         const link = before.find(l => l.hypo === hypo);
         if (!link) return;
         if (!on) {
@@ -551,7 +560,7 @@ export const viewLinksListMethods = uiModule({
     viewLinksRemove(hypos: readonly string[]): void {
         const treeId = DataManager.getCurrentTreeId();
         if (!treeId || hypos.length === 0) return;
-        const before = loadViewLinks(treeId);
+        const before = loadViewLinks(treeId, DataManager.getData());
         const change = removeViewLinks(DataManager.getData(), before, hypos);
         if (change.removed.length === 0) return;
         const v = strings.viewLinks;
@@ -639,7 +648,7 @@ export const viewLinksListMethods = uiModule({
      */
     noteViewLinksAfterLoad(treeId: TreeId, before: StromData): void {
         if (DataManager.getCurrentTreeId() !== treeId || !this.viewLinksListOffered()) return;
-        const fresh = newlyInvalidViewLinks(before, DataManager.getData(), loadViewLinks(treeId))
+        const fresh = newlyInvalidViewLinks(before, DataManager.getData(), loadViewLinks(treeId, DataManager.getData()))
             .filter(r => !toldInvalid.has(`${treeId}|${r.link.hypo}|${r.link.variant}`));
         if (fresh.length === 0) return;
         for (const r of fresh) toldInvalid.add(`${treeId}|${r.link.hypo}|${r.link.variant}`);

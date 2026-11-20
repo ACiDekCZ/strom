@@ -208,7 +208,7 @@ export const hypothesisWaitMethods = uiModule({
         if (others.size === 0) return;
         const data = DataManager.getData();
         const ctx = viewLinkContext(data);
-        let links = loadViewLinks(treeId);
+        let links = loadViewLinks(treeId, DataManager.getData());
         const off = links.filter(l => l.on && others.has(l.hypo));
         if (off.length === 0) return;
         for (const l of off) links = unlinkViewLink(data, links, l.hypo, ctx).links;

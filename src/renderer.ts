@@ -114,6 +114,7 @@ import { syncDepthStepper } from './ui/depth-stepper.js';
 import { rememberOpenedFocus, updateDefaultFocusButtons } from './ui/default-focus.js';
 import {
     ViewLink, ViewLinkCandidate, loadViewLinks, isViewLinksMaster, viewLinksToDraw, viewLinksAvailable, viewLinkContext, viewLinkCandidates, familyGroups,
+    viewLinkChildOf, viewLinkHolder,
 } from './view-links.js';
 import { LineSegment, chainSegments, labelSpot, polylinePath, splitBus } from './view-link-lines.js';
 import { maxGenerationsWithSiblings } from './focus-depth.js';
@@ -1412,7 +1413,7 @@ class TreeRendererClass {
         if (!treeId || this.printing) return [];
         return viewLinksToDraw(DataManager.getData(), {
             viewMode: this.viewMode,
-            links: loadViewLinks(treeId),
+            links: loadViewLinks(treeId, DataManager.getData()),
             master: isViewLinksMaster(treeId),
             bridge: this.viewLinksBridge?.() ?? null,
         });
@@ -1618,9 +1619,10 @@ class TreeRendererClass {
         for (const link of layer.links) {
             if (ids.includes(link.anchorId) && ids.some(id => link.islandIds.includes(id))) return link;
         }
-        // A line down to a link's anchor (the shown parents' drop).
+        // A line down to a link's child (the drop from the parents it gives).
         for (const link of layer.links) {
-            if (link.kind === 'child' && ids.includes(link.anchorId)) return link;
+            const family = viewLinkChildOf(link);
+            if (family && ids.includes(family.child)) return link;
         }
         for (const id of ids) {
             const link = layer.ghostOf.get(id);
@@ -6251,8 +6253,8 @@ class TreeRendererClass {
         if (mode === 'off') return out;
         // Parents shown "linked in the view only" stand where the stub would: it comes back when they are
         // unlinked, or in a view that does not draw them (the Descendants of the person).
-        const shownParents = new Set(this.viewLayer?.links
-            .filter(l => l.kind === 'child' && l.islandIds.some(pid => this.positions.has(pid))).map(l => l.anchorId) ?? []);
+        const shownParents = new Set((this.viewLayer?.links ?? []).map(viewLinkChildOf)
+            .filter(f => !!f && f.parents.some(pid => this.positions.has(pid))).map(f => f!.child));
         for (const id of this.positions.keys()) {
             const p = DataManager.getPerson(id);
             const edge = p?.research?.edge;
@@ -7052,10 +7054,10 @@ class TreeRendererClass {
                 }
             }
 
-            // Horizontal bus (branch) - only over children. A shown family's
-            // bus that also reaches a link's anchor: the stretch out to the
-            // anchor exists only in the view.
-            const anchorDrops = conn.view === 'ghost' ? conn.drops.filter(d => d.view === 'virtual') : [];
+            // Horizontal bus (branch) - only over children. A family's bus
+            // (shown, or of the tree) that also reaches a link's child: the
+            // stretch out to that child exists only in the view.
+            const anchorDrops = conn.view !== 'virtual' ? conn.drops.filter(d => d.view === 'virtual') : [];
             if (anchorDrops.length > 0) {
                 const junctionX = conn.connectorFromX !== conn.connectorToX ? conn.connectorToX : conn.stemX;
                 const own = conn.drops.filter(d => d.view !== 'virtual').map(d => d.x);
@@ -7257,7 +7259,7 @@ class TreeRendererClass {
             label.style.top = `${spot.y}px`;
             label.onclick = (e) => {
                 e.stopPropagation();
-                UI.showPersonResearchDialog(link.anchorId, { hypo: { id: link.hypo, variant: link.variant } });
+                UI.showPersonResearchDialog(viewLinkHolder(DataManager.getData(), link), { hypo: { id: link.hypo, variant: link.variant } });
             };
         }
     }

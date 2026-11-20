@@ -45,6 +45,7 @@ import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { shownName } from '../person-name.js';
 import { personMedia, placePersonId } from '../media.js';
+import { viewLinkTreeSide } from '../view-links.js';
 
 /** Options of UI.showConfirm (see there). */
 export interface ConfirmOptions {
@@ -373,7 +374,7 @@ export const dialogsMethods = uiModule({
         }
         const links = d.personLinks(person.gender, person.parentIds.length, partners.size, person.childIds.length);
         // A link "linked in the view only" that stands on the person: it no longer holds afterwards.
-        const shown = (TreeRenderer.getViewLayer()?.links ?? []).filter(l => l.anchorId === personId || l.islandIds.includes(personId));
+        const shown = (TreeRenderer.getViewLayer()?.links ?? []).filter(l => viewLinkTreeSide(l).includes(personId) || l.islandIds.includes(personId));
         const viewLinks = shown.map(l => strings.viewLinks.deleteNote(l.hypo, l.variant)).join(' ');
         // Its files (spec 102 §9g): those with other places stay without it, those only with it go with it.
         const files = personMedia(DataManager.getData(), personId);

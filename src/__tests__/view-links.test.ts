@@ -333,8 +333,8 @@ describe('the list and keeping in step', () => {
             link({ hypo: 'H0026', variant: 'B', kind: 'child', anchorId: ROZALIE, islandIds: [ANTONIN, LUDMILA] }, { addedAt: 3 }),
             link({ hypo: 'H0027', variant: 'A', kind: 'child', anchorId: KAREL, islandIds: [JAN] }, { addedAt: 4 }),
         ]);
-        expect(viewLinkCounts(resolved)).toEqual({ on: 1, drawable: 2, invalid: 1 });
-        expect(viewLinkCounts([])).toEqual({ on: 0, drawable: 0, invalid: 0 });
+        expect(viewLinkCounts(resolved)).toEqual({ on: 1, drawable: 2, invalid: 1, unreached: 0 });
+        expect(viewLinkCounts([])).toEqual({ on: 0, drawable: 0, invalid: 0, unreached: 0 });
     });
 
     it('order: drawable by place in the view (top down, left to right; not drawn after, by time), then real, then invalid', () => {

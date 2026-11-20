@@ -8,7 +8,7 @@
 import { findRelationship, KinshipResult } from './kinship.js';
 import { buildViewLayer } from './layout/pipeline/view-layer.js';
 import type { PersonId, StromData } from './types.js';
-import type { ViewLink } from './view-links.js';
+import { viewLinkTreeSide, type ViewLink } from './view-links.js';
 
 export interface ViewOnlyRelationship {
     /** The relationship as the view shows it. */
@@ -17,9 +17,10 @@ export interface ViewOnlyRelationship {
     via: ViewLink[];
 }
 
-/** One step of a path crosses a view link: anchor and one of its island people, either way. */
+/** One step of a path crosses a view link: a person of its tree's side and one of its island people, either way. */
 function crosses(link: ViewLink, a: PersonId, b: PersonId): boolean {
-    return (a === link.anchorId && link.islandIds.includes(b)) || (b === link.anchorId && link.islandIds.includes(a));
+    const side = viewLinkTreeSide(link);
+    return (side.includes(a) && link.islandIds.includes(b)) || (side.includes(b) && link.islandIds.includes(a));
 }
 
 /**
