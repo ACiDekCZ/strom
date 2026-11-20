@@ -555,7 +555,7 @@ function lineagesOf(data: StromData): LineageIndex {
  * px in fan units): the names drawn over a pattern get an outline in their
  * sector's fill, so they stay legible.
  */
-function themeRules(scope: string, T: FanPalette, fills: readonly string[], editable: boolean, halo = 0, pats = false): string {
+function themeRules(scope: string, T: FanPalette, fills: readonly string[], editable: boolean, halo = 0, pats = false, photos = false): string {
     let css = `${scope} .fan-fill{stroke:${T.bg}}`
         + `${scope} .fan-name{fill:${T.text}}`
         + `${scope} .fan-years,${scope} .fan-kekule{fill:${T.text}}`
@@ -565,8 +565,8 @@ function themeRules(scope: string, T: FanPalette, fills: readonly string[], edit
         + `${scope} .fan-focus-disc{fill:${T.surface};stroke:${T.primary}}`
         + `${scope} .fan-mark{stroke:${T.primary}}`
         + `${scope} .fan-back{fill:${T.primary}}`
-        + `${scope} .fan-photo-ring{stroke:${T.surface}}${scope} .fan-photo-wait{fill:${T.grey}}`
-        + `${scope} .fan-photo-initials{fill:${T.textLight}}${scope} .fan-photo-veil{fill:${T.textLight};fill-opacity:.3}`
+        + (photos ? `${scope} .fan-photo-ring{stroke:${T.surface}}${scope} .fan-photo-wait{fill:${T.grey}}`
+            + `${scope} .fan-photo-initials{fill:${T.textLight}}${scope} .fan-photo-veil{fill:${T.textLight};fill-opacity:.3}` : '')
         + (pats ? `${scope} .fan-pat-ink{stroke:${T.text};fill:${T.text}}` : '');
     fills.forEach((c, i) => { css += `${scope} .fc${i}{fill:${c}}`; });
     if (halo > 0) {
@@ -933,19 +933,21 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
     // Black and white: the names over a pattern carry a halo of their sector's fill (3 px).
     const halo = style === 'mono' ? 3 / ppu : 0;
     const pats = patsUsed.size > 0;
+    // The photo rules only where a portrait (or its wait) is drawn: a drawing without one stays as it was.
+    const photos = photoCount > 0;
     let css: string;
     if (embedded) {
         const T = fanPalette(embedTheme, style);
-        css = themeRules(scope, T, fillsA, opts.editable, halo, pats);
+        css = themeRules(scope, T, fillsA, opts.editable, halo, pats, photos);
         if (hl) {
             css += `${scope} .fan-hl-dim :is(.fan-name,.fan-years,.fan-kekule){fill:${T.textLight}}`
                 + `${scope} .fan-hl-edge{fill:none;stroke:${style === 'mono' ? T.text : FAN_PRINT_EDGE};stroke-width:${fmt(2.5 / ppu)};`
                 + `stroke-dasharray:${fmt(5 / ppu)} ${fmt(3 / ppu)};stroke-linejoin:round}`;
         }
     } else {
-        css = themeRules(scope, fanPalette('light', style), fillsA, opts.editable, halo, pats)
-            + themeRules(`[data-theme="dark"] ${scope}`, fanPalette('dark', style), fillsB, opts.editable, halo, pats)
-            + `@media print{${themeRules(`[data-theme="dark"] ${scope}`, fanPalette('print', style), fillsA, opts.editable, halo, pats)}`
+        css = themeRules(scope, fanPalette('light', style), fillsA, opts.editable, halo, pats, photos)
+            + themeRules(`[data-theme="dark"] ${scope}`, fanPalette('dark', style), fillsB, opts.editable, halo, pats, photos)
+            + `@media print{${themeRules(`[data-theme="dark"] ${scope}`, fanPalette('print', style), fillsA, opts.editable, halo, pats, photos)}`
             + (opts.printHighlight ? printHighlightRules(scope, fillsA, style) : '') + '}';
     }
     css += `${scope} text{pointer-events:none}`;

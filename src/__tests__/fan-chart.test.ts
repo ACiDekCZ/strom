@@ -815,6 +815,12 @@ describe('portraits (spec 118 §6)', () => {
         expect(svg).toMatch(/\.fan-photo-ring\{stroke:/);
     });
 
+    it('the photo rules only where a portrait is drawn: without one the drawing (and the person page) stays as it was', () => {
+        const m = buildFanModel(withPhotos(5), 'a1' as PersonId, { generations: 5, shape: 'half' })!;
+        expect(buildFanSvg(m, { ...svgOpts, uid: 'pn', measure: estimate, ppu: 2 })).not.toContain('fan-photo');
+        expect(buildFanSvg(m, { ...svgOpts, uid: 'pn', measure: estimate, ppu: 2, portrait: () => null })).not.toContain('fan-photo');
+    });
+
     it('two-way: the centre and the ancestors only, never the descendants', () => {
         const d = withPhotos(3);
         d.persons['k1' as PersonId] = person('k1', 'male', ['a1'], { photo: PHOTO });
