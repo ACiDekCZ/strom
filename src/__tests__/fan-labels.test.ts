@@ -6,10 +6,12 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
     fanLabelBox, fanRadialRotation, fitFanLabel, fanScreenSizes, fanPrintSizes, fanBaseSize, fanFullDate, fanFullDates, fanYears,
-    estimateFanMeasure as measure, defaultFanMeasure, clearFanMeasureCache, FanLabelBox,
+    estimateFanMeasure as measure, defaultFanMeasure, clearFanMeasureCache, FanLabelBox, fanShortPlace, fanPlaceRows, FAN_CONTENTS,
+    fitFanSectorLabel, FanContent,
 } from '../fan-labels.js';
+import { buildFanModel, FanModel } from '../fan-chart.js';
 import { setLanguage } from '../strings.js';
-import { Person, PersonId } from '../types.js';
+import { Person, PersonId, StromData } from '../types.js';
 
 function person(o: Partial<Person> = {}): Person {
     return {
@@ -207,4 +209,127 @@ describe('measure', () => {
         expect(defaultFanMeasure('Laroulek', 10, true)).toBeCloseTo(measure('Laroulek', 10, true));
         clearFanMeasureCache();
     });
+});
+
+describe('content of the sectors (spec 118 §5)', () => {
+    const placed = (o: Partial<Person> = {}) => person({
+        firstName: 'Ilsa', lastName: 'Quellmayer', gender: 'female', birthDate: '1888-11-22', deathDate: '1960-01-25',
+        birthPlace: 'Kessenau, okres Dolní Lhota', deathPlace: 'Tálov', ...o,
+    });
+
+    it('writes a place as its first part', () => {
+        expect(fanShortPlace('Horní Vrbná, okres X')).toBe('Horní Vrbná');
+        expect(fanShortPlace('  Tálov ')).toBe('Tálov');
+        expect(fanShortPlace(undefined)).toBe('');
+    });
+
+    it('rows of birth and death: a place without a date stays, nothing without places', () => {
+        setLanguage('cs');
+        expect(fanPlaceRows(placed())).toEqual(['* 22. 11. 1888 Kessenau', '† 25. 1. 1960 Tálov']);
+        // Only the place.
+        expect(fanPlaceRows(placed({ birthDate: undefined, deathDate: undefined, deathPlace: undefined }))).toEqual(['* Kessenau']);
+        // The death's date with the birth's place: both rows, each with what it has.
+        expect(fanPlaceRows(placed({ birthDate: undefined, deathPlace: undefined }))).toEqual(['* Kessenau', '† 25. 1. 1960']);
+        // Only dates: no places, the years say the rest.
+        expect(fanPlaceRows(placed({ birthPlace: undefined, deathPlace: undefined }))).toEqual([]);
+        expect(fanPlaceRows(person({ birthDate: undefined, deathDate: undefined }))).toEqual([]);
+    });
+
+    it("'places' writes the name with two rows of dates and places where they fit (step 0)", () => {
+        setLanguage('cs');
+        const l = fit(placed(), box(400, 80), { content: 'places' })!;
+        expect(l.level).toBe(0);
+        expect(texts(l)).toEqual(['Ilsa Quellmayer', '* 22. 11. 1888 Kessenau', '† 25. 1. 1960 Tálov']);
+        // The dates' rows as the years: lighter and smaller than the name.
+        expect(l.rows.slice(1).every(r => !r.bold && r.fs < l.rows[0].fs)).toBe(true);
+    });
+
+    it("'places' in a small box is the same label as 'years'", () => {
+        for (const [len, cross] of [[110, 40], [110, 28], [60, 14], [38, 14], [140, 30]]) {
+            expect(fit(placed(), box(len, cross), { content: 'places' })).toEqual(fit(placed(), box(len, cross)));
+        }
+    });
+
+    it("'places' without any place is the same label as 'years'", () => {
+        const p = placed({ birthPlace: undefined, deathPlace: undefined });
+        expect(fit(p, box(400, 80), { content: 'places' })).toEqual(fit(p, box(400, 80)));
+    });
+
+    it("'names' never writes a row of dates or years", () => {
+        for (const [len, cross] of [[400, 80], [400, 60], [110, 40], [110, 28], [60, 30], [60, 14], [38, 14]]) {
+            const l = fit(placed(), box(len, cross), { content: 'names' });
+            expect(l, `${len}×${cross}`).not.toBeNull();
+            expect(l!.rows.every(r => r.bold), `${len}×${cross}`).toBe(true);
+            expect(l!.rows.some(r => /\d/.test(r.text)), `${len}×${cross}`).toBe(false);
+        }
+    });
+
+    it('a protected living person stays "Living person" whatever the content', () => {
+        const p = placed({ deathDate: undefined, deathPlace: undefined });
+        const years = fit(p, box(400, 80), { protect: true });
+        for (const content of FAN_CONTENTS) expect(fit(p, box(400, 80), { protect: true, content })).toEqual(years);
+        expect(texts(years)).toEqual(['Living person']);
+    });
+});
+
+describe('no text overflows its sector (spec 118 §5, large fans)', () => {
+    /** A complete pedigree of `gens` rings, everybody with dates and places. */
+    function pedigree(gens: number): StromData {
+        const persons: Record<string, Person> = {};
+        const names = ['Laroulek', 'Quellmayer', 'Oberwaldenburger-Kreuzfeldt', 'Ostružník', 'Kvítek'];
+        for (let n = 1; n < 2 ** (gens + 1); n++) {
+            const g = Math.floor(Math.log2(n));
+            const born = 2000 - 27 * g;
+            persons[`a${n}`] = person({
+                id: `a${n}` as PersonId, gender: n === 1 || n % 2 === 0 ? 'male' : 'female',
+                firstName: n % 2 === 0 ? 'Bohumil Karel' : 'Anna', lastName: names[n % names.length],
+                parentIds: n < 2 ** gens ? [`a${2 * n}`, `a${2 * n + 1}`] as PersonId[] : [],
+                birthDate: `${born}-11-22`, deathDate: `${born + 60}-01-25`,
+                birthPlace: n % 3 ? 'Horní Vrbná, okres X' : 'Kessenau', deathPlace: n % 4 ? 'Tálov' : undefined,
+            });
+        }
+        return { persons, partnerships: {} } as unknown as StromData;
+    }
+    const LINE = 1.18;
+
+    function check(model: FanModel, ppu: number, content: FanContent): { places: number; labels: number } {
+        const sizes = fanScreenSizes(false);
+        let places = 0, labels = 0;
+        for (const s of model.sectors) {
+            if (!s.person) continue;
+            const r = fitFanSectorLabel(s.person, s, ppu, {
+                base: fanBaseSize(sizes, 'anc', s.generation) + (content === 'names' ? 1 : 0), min: sizes.min,
+                yearsDrop: sizes.yearsDrop, content, measure,
+            });
+            if (!r) continue;
+            labels++;
+            if (r.label.level === 0) places++;
+            const w = Math.max(...r.label.rows.map(row => measure(row.text, row.fs, row.bold)));
+            const h = r.label.rows.reduce((a, row) => a + row.fs * LINE, 0);
+            const at = `${content} a${s.ahnentafel} @${ppu}`;
+            expect(w, at).toBeLessThanOrEqual(r.box.len + 1e-6);
+            // A single cut row (steps 7, 8) may use the full line height of the minimum.
+            expect(h, at).toBeLessThanOrEqual(Math.max(r.box.cross, sizes.min * LINE) + 1e-6);
+            if (content === 'names') expect(r.label.rows.every(row => row.bold), at).toBe(true);
+        }
+        return { places, labels };
+    }
+
+    for (const gens of [8, 10]) {
+        it(`${gens} rings, every content, at the whole fan and zoomed in`, () => {
+            const d = pedigree(gens);
+            for (const shape of ['half', 'full'] as const) {
+                const model = buildFanModel(d, 'a1' as PersonId, { generations: gens, shape })!;
+                for (const ppu of [0.6, 1.5, 4]) {
+                    for (const content of FAN_CONTENTS) check(model, ppu, content);
+                }
+            }
+            // The places show where they fit: the inner rings when zoomed in, never the outermost at the whole fan.
+            const half = buildFanModel(d, 'a1' as PersonId, { generations: gens, shape: 'half' })!;
+            expect(check(half, 4, 'places').places).toBeGreaterThan(0);
+            const outer = half.sectors.filter(s => s.generation === gens);
+            const sizes = fanScreenSizes(false);
+            expect(outer.some(s => fitFanSectorLabel(s.person!, s, 0.6, { base: sizes.base, min: sizes.min, content: 'places', measure })?.label.level === 0)).toBe(false);
+        });
+    }
 });

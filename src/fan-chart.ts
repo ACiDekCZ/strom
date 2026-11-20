@@ -31,7 +31,7 @@ import {
 import { assignFanRodColors, fanRodLegend, FanRodAssignment } from './fan-rod-assign.js';
 import {
     FanLabelSizes, FanMeasure, fanScreenSizes, fanPrintSizes, fanBaseSize, defaultFanMeasure, fanLabelBox, fitFanLabel, fitFanSectorLabel,
-    fanLabelSvg, fanCenteredRowsSvg, fanFocusFallbackRows, fanRadialRotation, fanYears, FanLabelBox,
+    fanLabelSvg, fanCenteredRowsSvg, fanFocusFallbackRows, fanRadialRotation, fanYears, FanLabelBox, FanContent,
 } from './fan-labels.js';
 
 // ==================== GEOMETRY ====================
@@ -375,6 +375,43 @@ export function buildFanModel(data: StromData, focusId: PersonId, opts: number |
 
 // ==================== SVG RENDERING ====================
 
+/**
+ * A person's portrait in the fan (spec 118 §6): the photo (`href`, a square
+ * data URL), or a photo on its way — the initials on grey under a veil, or
+ * the stored photo under it while a newer one comes (spec 116).
+ */
+export type FanPortrait = { href: string; loading?: false } | { loading: true; initials: string; href?: string };
+
+/** Ancestor rings with portraits (parents and grandparents), besides the focus disc. */
+export const FAN_PORTRAIT_RINGS = 2;
+/** A portrait smaller than this (screen px, poster px ≈ 7 mm) is not drawn: the text comes first. */
+export const FAN_PORTRAIT_MIN_PX = 26;
+/** The largest portrait in a sector, fan units. */
+const PORTRAIT_MAX_U = 46;
+/** Between a sector's portrait and its text, px. */
+const PORTRAIT_GAP_PX = 4;
+/** The focus disc's portrait: radius and centre (above the middle) as parts of FOCUS_R. */
+const FOCUS_PHOTO_R = 0.36;
+const FOCUS_PHOTO_Y = -0.38;
+/** The focus disc's text under its portrait: the centre of its rows, as a part of FOCUS_R. */
+const FOCUS_TEXT_Y = 0.36;
+
+/**
+ * The people a fan may show a portrait of (spec 118 §6): the focus and the
+ * ancestors of the rings 1–2 (never the descendants of the two-way fan),
+ * each once, without the protected living. Their photos are the caller's.
+ */
+export function fanPortraitPeople(model: FanModel, protect?: (p: Person) => boolean): Person[] {
+    const seen = new Set<PersonId>();
+    const out: Person[] = [];
+    for (const p of [model.focus, ...model.sectors.filter(s => s.generation <= FAN_PORTRAIT_RINGS).map(s => s.person)]) {
+        if (!p || seen.has(p.id) || protect?.(p)) continue;
+        seen.add(p.id);
+        out.push(p);
+    }
+    return out;
+}
+
 export interface FanSvgOptions {
     /** Escape function for text content (renderer supplies its own). */
     esc: (text: string) => string;
@@ -412,6 +449,18 @@ export interface FanSvgOptions {
     style?: FanStyle;
     /** A living person whose name and dates stay hidden ("Living person"). */
     protect?: (person: Person) => boolean;
+    /**
+     * What the sectors and the focus disc write besides the names (spec 118
+     * §5): years (default, the ladder as always), dates with places where they
+     * fit, or names alone (one pixel larger).
+     */
+    content?: FanContent;
+    /**
+     * Portraits (spec 118 §6) in the focus disc and the rings 1–2: a person's
+     * photo, or null (the sector stays as it is). Missing: no portraits. Never
+     * asked for a protected person.
+     */
+    portrait?: (person: Person) => FanPortrait | null;
     /** A link per person (saved pages): the sector becomes an `<a>`. */
     linkFor?: (personId: PersonId) => string | null;
     /** Font sizes (default: screen sizes, desktop minimum). */
@@ -516,6 +565,8 @@ function themeRules(scope: string, T: FanPalette, fills: readonly string[], edit
         + `${scope} .fan-focus-disc{fill:${T.surface};stroke:${T.primary}}`
         + `${scope} .fan-mark{stroke:${T.primary}}`
         + `${scope} .fan-back{fill:${T.primary}}`
+        + `${scope} .fan-photo-ring{stroke:${T.surface}}${scope} .fan-photo-wait{fill:${T.grey}}`
+        + `${scope} .fan-photo-initials{fill:${T.textLight}}${scope} .fan-photo-veil{fill:${T.textLight};fill-opacity:.3}`
         + (pats ? `${scope} .fan-pat-ink{stroke:${T.text};fill:${T.text}}` : '');
     fills.forEach((c, i) => { css += `${scope} .fc${i}{fill:${c}}`; });
     if (halo > 0) {
@@ -581,6 +632,9 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
     const embedTheme: FanTheme = opts.theme ?? 'light';
     const rc: FanRodAssignment | null = mode === 'rod' ? fanRodColorsOf(model, opts) : null;
     const marks = new Set(opts.marks ?? []);
+    const content: FanContent = opts.content ?? 'years';
+    // Names only: one pixel more for them (spec 118 §5).
+    const namesBoost = content === 'names' ? 1 : 0;
     // A printed highlight (spec 114 §7): the line's sectors outlined over all, the rest toward white.
     const hl = embedded ? fanDrawnHighlight(model, opts.highlight) : null;
     const dimmed = (p: Person | null) => !!hl && !(p && hl.hit.has(p.id));
@@ -651,6 +705,58 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         };
     };
 
+    // ---- portraits (spec 118 §6)
+    const photoFilter = style === 'antique' ? 'sepia' : style === 'mono' ? 'grey' : null;
+    let photoFilterUsed = false;
+    let photoCount = 0;
+    /** A round photo (or its wait) centred at (cx, cy), radius r — fan units. */
+    const photoSvg = (ph: FanPortrait, cx: number, cy: number, r: number): string => {
+        const clip = `${uid}c${photoCount++}`;
+        const c = `cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r)}"`;
+        defs.push(`<clipPath id="${clip}"><circle ${c}/></clipPath>`);
+        let out = '';
+        if (ph.href) {
+            if (photoFilter) photoFilterUsed = true;
+            out += `<image href="${esc(ph.href)}" x="${fmt(cx - r)}" y="${fmt(cy - r)}" width="${fmt(2 * r)}" height="${fmt(2 * r)}"`
+                + ` preserveAspectRatio="xMidYMid slice" clip-path="url(#${clip})"${photoFilter ? ` filter="url(#${uid}${photoFilter})"` : ''}/>`;
+        } else if (ph.loading) {
+            out += `<circle class="fan-photo-wait" ${c}/>`
+                + `<text class="fan-photo-initials" x="${fmt(cx)}" y="${fmt(cy + 0.28 * r)}" font-size="${fmt(0.8 * r)}" font-family="${SERIF}"`
+                + ` font-weight="600" text-anchor="middle">${esc(ph.initials)}</text>`;
+        }
+        // One slow veil for every photo on its way, in the window's phase (index.html, spec 116).
+        if (ph.loading) out += `<circle class="fan-photo-veil" ${c}/>`;
+        out += `<circle class="fan-photo-ring" ${c} fill="none" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+        const state = ph.loading ? ` data-img-state="${ph.href ? 'refresh' : 'loading'}"` : '';
+        return `<g class="fan-photo"${state} pointer-events="none">${out}</g>`;
+    };
+    /**
+     * The portrait of an ancestor in the rings 1–2: a circle at the sector's
+     * inner edge, at the angle of its text, which moves outward past it.
+     * Null where there is none or it would be too small.
+     */
+    const portraitOf = (p: Person, s: FanSector): { box: (b: FanLabelBox) => FanLabelBox; svg: (b: FanLabelBox) => string } | null => {
+        if (!opts.portrait || s.generation > FAN_PORTRAIT_RINGS || protect(p)) return null;
+        const ph = opts.portrait(p);
+        if (!ph) return null;
+        const w = s.r2 - s.r1;
+        const dU = Math.min(0.5 * w, 0.62 * rad(s.hi - s.lo) * (s.r1 + w / 3), PORTRAIT_MAX_U);
+        const dPx = dU * ppu;
+        if (dPx < FAN_PORTRAIT_MIN_PX) return null;
+        const shift = dPx + PORTRAIT_GAP_PX;
+        return {
+            box: b => b.curved
+                ? { ...b, rc: b.rc + shift / 2 / ppu, cross: b.cross - shift }
+                : { ...b, rc: b.rc + shift / 2 / ppu, len: b.len - shift },
+            // `b` is the box the portrait made: the photo stands where its room began.
+            svg: b => {
+                const inner = b.rc * ppu - (b.curved ? b.cross : b.len) / 2 - shift;
+                const [cx, cy] = pt((inner + dPx / 2) / ppu, b.anchor);
+                return photoSvg(ph, cx, cy, dU / 2);
+            },
+        };
+    };
+
     // ---- ancestors
     for (const s of model.sectors) {
         const d = fanWedgePath(s.r1, s.r2, s.lo, s.hi);
@@ -687,11 +793,16 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         if (withLabels && inView(s)) {
             const k = kekuleSvg(s);
             kek = k.svg;
-            const fit = fitFanSectorLabel(p, s, ppu, {
-                base: fanBaseSize(sizes, 'anc', s.generation), min: sizes.min, yearsDrop: sizes.yearsDrop,
-                protect: prot, repeat: rep, measure,
-            }, k.box);
-            if (fit) label = fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
+            const lopts = {
+                base: fanBaseSize(sizes, 'anc', s.generation) + namesBoost, min: sizes.min, yearsDrop: sizes.yearsDrop,
+                protect: prot, repeat: rep, content, measure,
+            };
+            // The text comes first: a portrait only while the label stays at step 6 or better.
+            const por = portraitOf(p, s);
+            let fit = por ? fitFanSectorLabel(p, s, ppu, lopts, b => por.box(k.box(b))) : null;
+            if (por && fit && fit.label.level <= 6) label = por.svg(fit.box);
+            else fit = fitFanSectorLabel(p, s, ppu, lopts, k.box);
+            if (fit) label += fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
         }
         if (marks.has(s.key)) over.push(`<path class="fan-mark" d="${d}" fill="none" stroke-width="3" vector-effect="non-scaling-stroke" pointer-events="none"/>`);
         body.push(wrap(p.id, `<g class="fan-sector ${p.gender}${nonBio}${rep ? ' fan-repeat' : ''}${dim ? ' fan-hl-dim' : ''}" data-fan-key="${s.key}" data-fan-kind="anc"`
@@ -747,8 +858,8 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
                 }
             } else {
                 const fit = fitFanSectorLabel(p, s, ppu, {
-                    base: fanBaseSize(sizes, 'desc', s.depth), min: sizes.min, yearsDrop: sizes.yearsDrop,
-                    protect: prot, repeat: rep, measure,
+                    base: fanBaseSize(sizes, 'desc', s.depth) + namesBoost, min: sizes.min, yearsDrop: sizes.yearsDrop,
+                    protect: prot, repeat: rep, content, measure,
                 });
                 if (fit) label = fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
             }
@@ -768,11 +879,28 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
     let flabel = '';
     if (withLabels) {
         const back = opts.focusBack;
-        const box: FanLabelBox = {
+        const fbox = (len: number, cross: number): FanLabelBox => ({
             curved: false, anchor: 0, aspan: 0, upper: false, mid: 0, rc: 0,
-            len: FOCUS_R * 1.7 * ppu - 6, cross: FOCUS_R * 1.25 * ppu - (back ? 14 : 0),
-        };
-        const fit = fitFanLabel(f, box, { base: sizes.focus, min: sizes.min, yearsDrop: sizes.yearsDrop, protect: fprot, measure });
+            len: FOCUS_R * len * ppu - 6, cross: FOCUS_R * cross * ppu - (back ? 14 : 0),
+        });
+        const fopts = { base: sizes.focus + namesBoost, min: sizes.min, yearsDrop: sizes.yearsDrop, protect: fprot, content, measure };
+        // The portrait (spec 118 §6) in the disc's upper part, the text below it — while the text
+        // keeps step 6 or better; else the disc as without it.
+        const fph = opts.portrait && !fprot ? opts.portrait(f) : null;
+        const photoR = FOCUS_PHOTO_R * FOCUS_R;
+        let photo = '';
+        let box = fbox(1.7, 1.25);
+        let fit: ReturnType<typeof fitFanLabel> = null;
+        if (fph && 2 * photoR * ppu >= FAN_PORTRAIT_MIN_PX) {
+            const pbox = fbox(1.55, 0.62);
+            const pfit = fitFanLabel(f, pbox, fopts);
+            if (pfit && pfit.level <= 6) {
+                photo = photoSvg(fph, 0, FOCUS_PHOTO_Y * FOCUS_R, photoR);
+                box = pbox;
+                fit = pfit;
+            }
+        }
+        if (!photo) fit = fitFanLabel(f, box, fopts);
         // A cut surname or the initials name the focus worse than the given name below;
         // the given name with the surname's initial stays (1101).
         const lab = fit && (fit.level < 7 || fprot || !f.firstName) ? fit : null;
@@ -780,7 +908,8 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
             ? lab.rows.slice()
             : fanFocusFallbackRows(fprot ? strings.fan.living : (f.firstName || shownNameFull(f)), box, sizes.min, measure);
         if (back) rows.push({ text: back.row, fs: Math.max(sizes.min, 11), bold: true, cls: 'fan-name fan-back' });
-        flabel = fanCenteredRowsSvg(rows, ppu, esc);
+        const text = fanCenteredRowsSvg(rows, ppu, esc);
+        flabel = photo ? `${photo}<g transform="translate(0 ${fmt(FOCUS_TEXT_Y * FOCUS_R)})">${text}</g>` : text;
     }
     const ftitle = `#1 · ${sectorTitle(f, { protect: fprot, extra: [] })}${opts.focusBack ? ` · ${opts.focusBack.title}` : ''}`;
     const fdim = dimmed(f);
@@ -791,6 +920,13 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         + `<title>${esc(ftitle)}</title></g>`));
 
     for (const p of patsUsed) defs.push(fanPatternDef(patId(p), p, ppu));
+    // The photos in the antique style sepia, in black and white grey (spec 118 §6).
+    if (photoFilterUsed && photoFilter === 'sepia') {
+        defs.push(`<filter id="${uid}sepia" color-interpolation-filters="sRGB"><feColorMatrix type="matrix"`
+            + ` values="0.393 0.769 0.189 0 0 0.349 0.686 0.168 0 0 0.272 0.534 0.131 0 0 0 0 0 1 0"/></filter>`);
+    } else if (photoFilterUsed && photoFilter === 'grey') {
+        defs.push(`<filter id="${uid}grey" color-interpolation-filters="sRGB"><feColorMatrix type="saturate" values="0"/></filter>`);
+    }
 
     // ---- styles
     const scope = `#${uid}`;

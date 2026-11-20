@@ -19,9 +19,9 @@
  * where it first appears.
  */
 
-import type { PersonId, StromData } from '../types.js';
+import type { Person, PersonId, StromData } from '../types.js';
 import {
-    buildFanModel, buildFanSvg, fanLineages, FanHighlight, FanModel, FanShape, FanSvgOptions,
+    buildFanModel, buildFanSvg, fanLineages, FanHighlight, FanModel, FanShape, FanSvgOptions, FanPortrait, fanPortraitPeople,
 } from '../fan-chart.js';
 import {
     FanColorMode, FanTheme, FanStyle, fanLegend, fanHasRepeats, FanLegendItem, FanRodGroup, FanRodSlot, parseFanRodSlot, fanPalette, fanRodOtherSwatch,
@@ -29,11 +29,15 @@ import {
 } from '../fan-colors.js';
 import { assignFanRodColors, FanRodAssignment, FanRodLegend, FanRodScope, fanRodLegend } from '../fan-rod-assign.js';
 import { RodId, rodLabels, rodOf, realRodMembers, realRodSpouses } from '../lineage.js';
-import { fanScreenSizes, clearFanMeasureCache, fanMeasureFor } from '../fan-labels.js';
+import { fanScreenSizes, clearFanMeasureCache, fanMeasureFor, FanContent } from '../fan-labels.js';
+import { IMAGES_STATE_EVENT } from '../image-loads.js';
+import { isPendingImageUrl } from '../research-image-refs.js';
+import { imgStateOf, imgPhaseDelay } from './image-slot.js';
+import { personInitials } from '../initials.js';
 import { FanZoom, FanView as FanZoomView, FanZoomPoint } from '../fan-zoom.js';
 import { fanNavNodes, fanNavMove, FanNavDir } from '../fan-nav.js';
 import { fanYears } from '../fan-labels.js';
-import { shownNameFull } from '../person-name.js';
+import { shownNameFull, shownNameParts } from '../person-name.js';
 import { strings } from '../strings.js';
 import { syncDepthStepper } from './depth-stepper.js';
 import { syncFanLegendLift } from './legend-lift.js';
@@ -49,6 +53,29 @@ export interface FanViewSettings {
     style?: FanStyle;
     /** Which family lines are coloured (spec 118 §2); default all. */
     rodScope?: FanRodScope;
+    /** What the sectors write besides the names (spec 118 §5); default years. */
+    content?: FanContent;
+    /** Portraits in the centre and the rings 1–2 (spec 118 §6); default off. */
+    portraits?: boolean;
+}
+
+/**
+ * A person's portrait in the fan (spec 118 §6): the stored photo (a data
+ * URL, never the stand-in of an image still on its way); with `live`, the
+ * cards' states of a load of images (spec 116): on its way = the initials
+ * under the veil (or the stored photo under it), failed without a photo =
+ * none. `live` false (outputs, after imagesBeforeOutput): the photo or none.
+ */
+export function fanPhotoPortrait(p: Person, live = true): FanPortrait | null {
+    const raw = p.photo;
+    const photo = typeof raw === 'string' && raw.startsWith('data:image/') && !isPendingImageUrl(raw) ? raw : undefined;
+    if (!live) return photo ? { href: photo } : null;
+    const state = imgStateOf(`person:${p.id}:photo`, !!photo);
+    if (state === 'loading' || state === 'refresh') {
+        const initials = personInitials(p.firstName, shownNameParts(p, '', false).surname) || '?';
+        return photo ? { loading: true, initials, href: photo } : { loading: true, initials };
+    }
+    return photo ? { href: photo } : null;
 }
 
 /** What the view needs of the app (the renderer). */
@@ -190,6 +217,8 @@ export class FanViewController {
     private printView: FanZoomView | null = null;
     private printing = false;
     private sheetReturn: HTMLElement | null = null;
+    /** Redraws on a change of the load of images, while portraits are shown (spec 118 §6). */
+    private imagesListener: (() => void) | null = null;
 
     // ---- re-centring (§5.2)
     /** The person the view opened with (null outside the view). */
@@ -392,6 +421,12 @@ export class FanViewController {
         const active = document.activeElement;
         const keyFocused = active instanceof Element && active !== chart && chart.contains(active)
             ? active.closest('[data-fan-key]')?.getAttribute('data-fan-key') ?? null : null;
+        const set = this.host.settings();
+        const portraits = !!set.portraits;
+        this.listenImages(portraits);
+        // The veils of photos on their way pulse in the window's one phase (spec 116).
+        if (portraits) chart.style.setProperty('--img-phase', imgPhaseDelay());
+        else chart.style.removeProperty('--img-phase');
         chart.innerHTML = buildFanSvg(model, {
             esc: this.host.esc,
             editable: this.host.editable(),
@@ -401,6 +436,8 @@ export class FanViewController {
             relTypeLabel: this.host.relTypeLabel,
             colorMode: this.host.settings().colorMode,
             style: this.style(),
+            content: set.content ?? 'years',
+            ...(portraits ? { portrait: (p: Person) => fanPhotoPortrait(p) } : {}),
             ...(this.rodColors() ? { rodColors: this.rodColors()! } : {}),
             measure: fanMeasureFor(fanStyleFont(this.style())),
             ppu: vb.ppu,
@@ -411,6 +448,35 @@ export class FanViewController {
         });
         this.setupSectors(keyFocused);
         this.host.afterDraw();
+    }
+
+    /** Follow the load of images (the photos' states) only while portraits are shown. */
+    private listenImages(on: boolean): void {
+        if (typeof window === 'undefined') return;
+        if (on && !this.imagesListener) {
+            this.imagesListener = () => { if (this.host.active()) this.scheduleRedraw(); };
+            window.addEventListener(IMAGES_STATE_EVENT, this.imagesListener);
+        } else if (!on && this.imagesListener) {
+            window.removeEventListener(IMAGES_STATE_EVENT, this.imagesListener);
+            this.imagesListener = null;
+        }
+    }
+
+    /**
+     * The portraits of the fan drawn (spec 118 §6, the panel's state): of the
+     * focus and the rings 1–2, the people with a photo or one on its way
+     * (`total`) and those whose photo is in (`ready`). Null without a model.
+     */
+    portraitCounts(): { ready: number; total: number } | null {
+        if (!this.model) return null;
+        let ready = 0, total = 0;
+        for (const p of fanPortraitPeople(this.model)) {
+            const ph = fanPhotoPortrait(p);
+            if (!ph) continue;
+            total++;
+            if (!ph.loading) ready++;
+        }
+        return { ready, total };
     }
 
     /** Extra options of the drawing: the outlined first occurrence, the way back in the focus disc. */

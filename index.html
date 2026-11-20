@@ -13696,6 +13696,11 @@
         /* Keys: one sector in the tab order; its outline instead of the browser's ring. */
         #fan-chart [data-fan-key]:focus { outline: none; }
         #fan-chart .fan-key-ring { stroke: var(--primary); stroke-width: 2.5px; }
+        /* Portraits on their way (spec 118 §6): the cards' slow veil, in the window's phase (--img-phase on #fan-chart). */
+        #fan-chart .fan-photo-veil { animation: img-wait 1.6s ease-in-out var(--img-phase, 0s) infinite alternate; }
+        @media (prefers-reduced-motion: reduce) {
+            #fan-chart .fan-photo-veil { animation: none; opacity: .55; }
+        }
 
         /* ==================== FOLLOWING THE AGENT IN THE FAN (spec 043 §3, §4) ====================
            Session colours: session 1 the app's green (dark: the fan's lighter green), the others copper;
@@ -31549,6 +31554,8 @@
                the other sectors' fills go toward white (fan-chart.ts, printHighlightRules). */
             #fan-chart .fan-hl-edge { stroke: #8a5528 !important; stroke-width: 2.5px !important; }
             #fan-chart .fan-svg[data-fan-style="mono"] .fan-hl-edge { stroke: #1a1a1a !important; }
+            /* No veil of a photo on its way reaches paper (spec 116 §8). */
+            #fan-chart .fan-photo-veil { display: none; }
 
             /* Timeline prints fully (not just the on-screen viewport slice),
                and both extra views force light colours even from dark mode. */

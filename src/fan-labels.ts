@@ -266,6 +266,38 @@ function initials(given: string): string {
     return given.split(/\s+/).filter(Boolean).map(w => `${[...w][0]}.`).join(' ');
 }
 
+// ---------------------------------------------------------------- content
+
+/**
+ * What a sector writes besides the name (spec 118 §5): the years (as
+ * always), the full dates with the places of birth and death where they
+ * fit, or the names alone (a pixel larger).
+ */
+export type FanContent = 'years' | 'places' | 'names';
+export const FAN_CONTENTS: readonly FanContent[] = ['years', 'places', 'names'];
+
+/** A place as the fan writes it: the part before the first comma ("Horní Vrbná, okres X" → "Horní Vrbná"). */
+export function fanShortPlace(place?: string): string {
+    return (place ?? '').split(',')[0].trim();
+}
+
+/**
+ * The rows of birth and death with their places (spec 118 §5):
+ * "* 22. 11. 1888 Kessenau", "† 25. 1. 1960 Tálov"; a place without a date
+ * stays ("* Horní Vrbná"), empty parts and rows are left out. [] without any
+ * place (the years say the rest). Only birth and death, as the dates: a
+ * baptism's place is not a birthplace.
+ */
+export function fanPlaceRows(p: Person): string[] {
+    const bp = fanShortPlace(p.birthPlace), dp = fanShortPlace(p.deathPlace);
+    if (!bp && !dp) return [];
+    const row = (mark: string, date: string | undefined, place: string) => {
+        const parts = [date ? fanFullDate(date) : '', place].filter(Boolean);
+        return parts.length ? `${mark} ${parts.join(' ')}` : '';
+    };
+    return [row('*', p.birthDate, bp), row('†', p.deathDate, dp)].filter(Boolean);
+}
+
 // ---------------------------------------------------------------- ladder
 
 export interface FanLabelRow {
@@ -278,7 +310,8 @@ export interface FanLabelRow {
 export interface FanLabel {
     rows: FanLabelRow[];
     /**
-     * Ladder step (§4.4): 1 full name + full dates, 2 name + years, 3 initials
+     * Ladder step (§4.4): 0 name + dates with places (spec 118 §5, content
+     * 'places' only), 1 full name + full dates, 2 name + years, 3 initials
      * + years, 4 name without years, 5 surname, 6 given name + the surname's
      * initial ("Jan D.", with the years where they fit), 7 cut surname, 8 the
      * initials alone (1101).
@@ -297,6 +330,8 @@ export interface FitFanLabelOptions {
     protect?: boolean;
     /** A repeated person (implex): the text starts with "↻ ". */
     repeat?: boolean;
+    /** What the label writes besides the name (spec 118 §5); default years. */
+    content?: FanContent;
     measure?: FanMeasure;
 }
 
@@ -315,13 +350,15 @@ function labelChars(l: FanLabel): number {
 interface Candidate {
     lines: string[];
     sub: string | null;
+    /** A second row of dates (the death with its place, step 0). */
+    sub2?: string | null;
     note: string | null;
     level: number;
-    /** The full-dates step may shrink only 2 px under the base. */
+    /** The full-dates steps (0, 1) may shrink only 2 px under the base. */
     floor2: boolean;
 }
 
-function candidates(p: Person, repeat: boolean): Candidate[] {
+function candidates(p: Person, repeat: boolean, content: FanContent): Candidate[] {
     const parts = shownNameParts(p, '?');
     const given = parts.given.trim();
     const surname = parts.surname.trim();
@@ -342,6 +379,17 @@ function candidates(p: Person, repeat: boolean): Candidate[] {
         if (!lines || (level <= 3 && !sub)) return;
         out.push({ lines, sub, note: n, level, floor2: level === 1 });
     };
+    // Step 0 (spec 118 §5): the name with the dates and places of birth and death, two rows.
+    const places = content === 'places' ? fanPlaceRows(p) : [];
+    const placed = (n: string | null) => {
+        for (const lines of [[rep + full], two, three]) {
+            if (lines) out.push({ lines, sub: places[0], sub2: places[1] ?? null, note: n, level: 0, floor2: true });
+        }
+    };
+    if (places.length) {
+        if (note) placed(note);
+        placed(null);
+    }
     const named = (n: string | null) => {
         push([rep + full], fd, n, 1);
         push(two, fd, n, 1);
@@ -385,10 +433,11 @@ function candidates(p: Person, repeat: boolean): Candidate[] {
         if (yr) shortForms(yr);
         shortForms(null);
     }
-    // Only exact repeats go (same rows and the same font floor).
+    // Only exact repeats go (same rows and the same font floor); names only: no step with dates.
     const seen = new Set<string>();
     return out.filter(c => {
-        const k = JSON.stringify([c.lines, c.sub, c.note, c.floor2]);
+        if (content === 'names' && c.sub) return false;
+        const k = JSON.stringify([c.lines, c.sub, c.sub2 ?? null, c.note, c.floor2]);
         if (seen.has(k)) return false;
         seen.add(k);
         return true;
@@ -408,22 +457,24 @@ export function fitFanLabel(p: Person, box: FanLabelBox, opts: FitFanLabelOption
 
     const list: Candidate[] = opts.protect
         ? [{ lines: [strings.fan.living], sub: null, note: null, level: 4, floor2: false }]
-        : candidates(p, !!opts.repeat);
+        : candidates(p, !!opts.repeat, opts.content ?? 'years');
 
     for (const c of list) {
         const lo = c.floor2 ? Math.max(min, base - 2) : min;
         for (let fs = base; fs >= lo - 0.01; fs -= 0.5) {
             const sfs = Math.max(min, fs - drop);
-            const extra = (c.sub ? 1 : 0) + (c.note ? 1 : 0);
+            const extra = (c.sub ? 1 : 0) + (c.sub2 ? 1 : 0) + (c.note ? 1 : 0);
             if (c.lines.length * fs * LINE_HEIGHT + extra * sfs * LINE_HEIGHT > box.cross) continue;
             let w = 0;
             for (const l of c.lines) w = Math.max(w, measure(l, fs, true));
             if (c.note) w = Math.max(w, measure(c.note, sfs, false));
             if (c.sub) w = Math.max(w, measure(c.sub, sfs, false));
+            if (c.sub2) w = Math.max(w, measure(c.sub2, sfs, false));
             if (w <= box.len) {
                 const rows: FanLabelRow[] = c.lines.map(text => ({ text, fs, bold: true }));
                 if (c.note) rows.push({ text: c.note, fs: sfs, bold: false });
                 if (c.sub) rows.push({ text: c.sub, fs: sfs, bold: false });
+                if (c.sub2) rows.push({ text: c.sub2, fs: sfs, bold: false });
                 return { rows, level: c.level };
             }
         }
