@@ -23,6 +23,7 @@ import { onToastChange, shownToast } from '../toast-slot.js';
 import { BUSY_DONE_MS, announceBusy } from './busy.js';
 import { barEl, setBarShare } from './prog-bar.js';
 import { showToast, type ToastHandle } from './toast.js';
+import { IMAGE_CHIP_SHOWN_EVENT } from './landscape-panel-fold.js';
 
 /** Photos on their way this long before the indicator shows (§6.2). */
 export const CHIP_SHOW_MS = 400;
@@ -359,6 +360,8 @@ export function initImageLoadChip(currentTreeId: () => string | null, readOnly: 
         if (chip.hidden) {
             chip.hidden = false;
             pills?.observe(document.body, { childList: true, attributes: true, attributeFilter: ['class', 'data-view-mode'] });
+            // A phone held sideways: the followed research's panel makes room (landscape-panel-fold.ts).
+            window.dispatchEvent(new CustomEvent(IMAGE_CHIP_SHOWN_EVENT));
         }
         clearOfPills();
         if (v.kind === 'ok') closePop();

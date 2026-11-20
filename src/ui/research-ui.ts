@@ -4711,6 +4711,20 @@ export const researchUiMethods = uiModule({
         this.renderLivePanel();
     },
 
+    /** The followed research's panel shows unfolded (a phone held sideways folds it for the photos' indicator or a message). */
+    livePanelOpen(): boolean {
+        return !!live && !live.ended && !live.collapsed && !(document.getElementById('live-panel')?.hidden ?? true);
+    },
+
+    /** Fold the panel to its strip for something it would cover; not remembered as the computer's choice, no unfolding later. */
+    foldLivePanelForOverlay(): void {
+        if (!live || live.ended || live.collapsed) return;
+        live.collapsed = true;
+        live.seenChanges = live.changes.length;
+        waitingFocus = null;
+        this.renderLivePanel();
+    },
+
     syncLivePanelVisibility(): void {
         this.renderResearchOverview();
         const panel = document.getElementById('live-panel');

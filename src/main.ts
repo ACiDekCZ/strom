@@ -48,6 +48,7 @@ import { formatLiveClock } from './live-time.js';
 import { startedAgainAsMain } from './resume-view.js';
 import { initWindowControls } from './windows/window-controls.js';
 import { initImageLoadChip } from './ui/image-load-chip.js';
+import { watchLandscapePanelFold } from './ui/landscape-panel-fold.js';
 import { windowTitle } from './windows/window-title.js';
 import { mountSatHeader, SAT_VIEWS } from './windows/sat-header.js';
 import { followSatelliteView, openAnotherWindow } from './windows/sat-views.js';
@@ -895,6 +896,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // The tree's photos on their way: "Photos k / n" and the notice of those that did not load (spec 116 §6, §7).
     initImageLoadChip(() => DataManager.getCurrentTreeId(), () => DataManager.isReadOnly() || DataManager.isTreeLocked());
+    // A phone held sideways: the followed research's panel folds for that indicator and for messages (spec 116).
+    watchLandscapePanelFold(() => UI.livePanelOpen(), () => UI.foldLivePanelForOverlay());
 
     // History in the life timeline (on by default): bridge statuses, tree switches.
     UI.initHistoryLayer();

@@ -138,6 +138,8 @@ test.describe('"Photos k / n" and the notice of photos not loaded (spec 116 §6,
         // Under the top bar in the middle.
         const box = (await chip.boundingBox())!;
         expect(Math.abs(box.x + box.width / 2 - 720)).toBeLessThan(2);
+        // A computer: the followed research's panel stays as it is (it folds only on a phone held sideways).
+        await expect(page.locator('#live-panel')).not.toHaveClass(/\bcollapsed\b/);
         expect(box.y).toBeLessThan(200);
 
         // Its detail: what is left, and that the tree (read-only while followed live) can be viewed; Esc closes it, a click beside too.
@@ -313,5 +315,38 @@ test.describe('on a phone (spec 116 §6.1, 6e)', () => {
         // One line of the piece ("· 3 not loaded"), not two.
         const lh = await chip.locator('.img-load-n').evaluate(el => parseFloat(getComputedStyle(el).lineHeight));
         expect(f.height).toBeLessThan(lh * 1.5);
+    });
+});
+
+test.describe('on a phone held sideways (spec 116, Milan 20 Nov 2026)', () => {
+    test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+    test('the unfolded panel folds to its strip for the indicator and for a message, and does not unfold by itself', async ({ page }) => {
+        const imgs = await makeImages(page);
+        const bridge = await follow(page, imgs, { phone: true });
+        const panel = page.locator('#live-panel');
+        const chip = page.locator('#img-load-chip');
+        await expect(chip).toBeVisible();
+        // Folded for "Photos k / n": the indicator stands clear of it.
+        await expect(panel).toHaveClass(/\bcollapsed\b/);
+        await expect(panel.locator('.live-panel-body')).toBeHidden();
+        const apart = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+            a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+        expect(apart((await chip.boundingBox())!, (await panel.boundingBox())!)).toBe(true);
+
+        // The photos came: the indicator goes, the panel stays folded.
+        bridge.release();
+        await expect(chip).toBeHidden({ timeout: 10_000 });
+        await expect(panel).toHaveClass(/\bcollapsed\b/);
+
+        // Unfolded by a tap on its head; a message folds it again, and its going leaves it folded.
+        await panel.locator('.live-panel-toggle').click();
+        await expect(panel).not.toHaveClass(/\bcollapsed\b/);
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 1500));
+        await expect(panel).toHaveClass(/\bcollapsed\b/);
+        const toast = page.locator('body > .toast').last();
+        expect(apart((await toast.boundingBox())!, (await panel.boundingBox())!)).toBe(true);
+        await expect(toast).toBeHidden({ timeout: 10_000 });
+        await expect(panel).toHaveClass(/\bcollapsed\b/);
     });
 });
