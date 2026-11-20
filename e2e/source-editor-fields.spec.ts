@@ -161,6 +161,15 @@ test.describe('source editor: where the entry stands', () => {
         expect(await source(page, 's1')).toMatchObject({ image: '4', reference: 'image 9' });
     });
 
+    test('an image the research found from its scans is no conflict with another image in the location, until the field changes', async ({ page }) => {
+        await tree(page, { s1: { title: 'Baptism – John Example, 1834', callNumber: 'N 7', image: '4', imageDerived: true, reference: 'fol. 12, image 3' } });
+        await page.evaluate(() => window.Strom.UI.showEditSourceModal('s1'));
+        await expect(note(page)).toBeHidden();
+        await editor(page).locator('#input-source-image').fill('5');
+        await expect(note(page)).toHaveClass(/is-conflict/);
+        await expect(note(page)).toContainText('The location names image 3, the Image field says 5. GED uses the field.');
+    });
+
     test('a folio conflict names the folio; emptied fields are removed from the source', async ({ page }) => {
         await tree(page, { s1: { title: 'Burial', callNumber: 'N 7', folio: 'fol. 12v', image: '34', reference: 'fol. 13' } });
         await page.evaluate(() => window.Strom.UI.showEditSourceModal('s1'));

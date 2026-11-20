@@ -1617,7 +1617,11 @@ export const sourcesMethods = uiModule({
         }
         if (v.folio || v.image) {
             const overlap = recognizeLocation({ folio: v.folio, image: v.image, reference: v.reference })?.overlap;
-            const text = overlap?.image && !overlap.image.same ? s.conflictImage(overlap.image.named, v.image)
+            // An image the research found from its scans (imageDerived, unchanged in the field): GEDCOM keeps the
+            // location whole and only adds the image (composePage), so another image named there is no conflict
+            const stored = this.editingSourceId ? DataManager.getData().sources?.[this.editingSourceId] : undefined;
+            const derivedImage = !!stored?.imageDerived && (stored.image ?? '').trim() === v.image;
+            const text = overlap?.image && !overlap.image.same && !derivedImage ? s.conflictImage(overlap.image.named, v.image)
                 : overlap?.folio && !overlap.folio.same ? s.conflictFolio(overlap.folio.named, v.folio) : '';
             if (overlap && text) {
                 const fix = overlap.rest ? s.conflictFix(overlap.rest) : s.conflictFixEmpty;
