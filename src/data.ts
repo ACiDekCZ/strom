@@ -3001,6 +3001,8 @@ class DataManagerClass {
 
         const lastNameBefore = person.lastName ?? '';
         const firstNameBefore = person.firstName;
+        const marriedBefore = person.marriedSurname?.trim() ?? '';
+        const marriedFirstBefore = person.marriedFirstName?.trim() ?? '';
         if (updates.firstName !== undefined) person.firstName = updates.firstName;
         if (updates.lastName !== undefined) person.lastName = updates.lastName;
         // A placeholder that got a real name — first OR last — is a person now
@@ -3056,6 +3058,21 @@ class DataManagerClass {
         if (updates.nameVariants !== undefined) {
             const kept = updates.nameVariants.map(v => v.trim()).filter(Boolean);
             person.nameVariants = kept.length > 0 ? kept : undefined;
+        }
+        // A married surname changed for another one (an earlier marriage's
+        // name made the current one, spec 010 K4.2) keeps the one it replaces
+        // as another spelling of the name: nothing the research has is lost.
+        // The one chosen leaves the spellings: the field holds it now.
+        const marriedNow = person.marriedSurname?.trim() ?? '';
+        if (marriedNow && surnameKey(marriedBefore) !== surnameKey(marriedNow)) {
+            // Given names of the married name went with the one replaced.
+            if (marriedBefore) delete person.marriedFirstName;
+            const key = (v: string): string => v.replace(/\s+/g, ' ').trim().normalize('NFC').toLocaleLowerCase();
+            const chosen = key(`${person.marriedFirstName?.trim() || person.firstName || ''} ${marriedNow}`);
+            let variants = (person.nameVariants ?? []).filter(v => key(v) !== chosen);
+            const spelled = `${marriedFirstBefore || firstNameBefore || ''} ${marriedBefore}`.replace(/\s+/g, ' ').trim();
+            if (marriedBefore && !variants.some(v => key(v) === key(spelled))) variants = [...variants, spelled];
+            person.nameVariants = variants.length > 0 ? variants : undefined;
         }
         // The narrative: an empty text means there is none.
         if ('story' in updates) {

@@ -110,6 +110,7 @@ import { samePlace, givePortraitsRecords } from './media';
 import { parseRegion, regionFromStored } from './originals';
 import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } from './gedcom-names';
 import { appUnknownIsNoSurname } from './app-version';
+import { lastMarriageSurnameIndex } from './married-suggestion';
 import { researchClaimValue } from './research-claim';
 import {
     addGedcomExtra, addOriginalIds, CITE_TAG, gedcomHtmlText, joinedBlock, NOTED_TAG, notedBlock, notedStructures, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
@@ -1648,6 +1649,12 @@ interface GedcomIndividual {
     marnm: string[];
     /** The surname after marriage (Person.marriedSurname), set after the names are read. */
     marriedSurname?: string;
+    /**
+     * With two or more names after marriage: all of them in file order, the
+     * last the one readMarriedSurname took. The one of the last marriage is
+     * chosen once the families are read (chooseLastMarriageNames, spec 010 K4.1).
+     */
+    marriedNames?: MarriedNameRead[];
     /** The given names of that married name when they are not the person's own (Person.marriedFirstName). */
     marriedFirstName?: string;
     /**
@@ -1876,6 +1883,13 @@ export interface ParsedGedcom {
     surnameMarkers?: { groups: boolean; rejections: boolean };
     /** Header `1 _STROM_LINES`: the file says which lineage corrections there are. */
     lineageMarker?: boolean;
+    /**
+     * Header `1 _STROM_MARRIED_LAST Y` (Strom Research): the file puts each
+     * person's current name after marriage last (by the last marriage, or as
+     * the user chose it), so the last one is taken as it is; without it the
+     * one of the last marriage is chosen (spec 010, K4.1–K4.2).
+     */
+    marriedLast?: boolean;
     /** Header `1 SOUR STROM_RESEARCH`: written by Strom Research. */
     stromResearch?: boolean;
     /** Header `1 _STROM_ASOF`: when the research wrote it (as written). */
@@ -2454,13 +2468,58 @@ const NAME_PART_TAGS = new Map<string, keyof GedcomNameParts>([
  * The surname after marriage of a person whose names are read (after the swap
  * of a married name put first): the LAST NAME with TYPE married in file order
  * takes it, and that name leaves the other spellings (earlier married names
- * stay there); without one, the last _MARNM (level 1 or under a NAME). A
+ * stay there); without one, the last _MARNM (level 1 or under a NAME). With
+ * several, the one of the last marriage is chosen once the families are read
+ * (chooseLastMarriageName; indi.marriedNames keeps them all). A
  * person whose primary name is the married one with no birth name beside it
  * keeps it as the surname, the field stays empty (the birth surname is not
  * known). Another spelling that is just the given name with the married
  * surname (an older Strom's or research's file wrote it so) is dropped too:
  * it would only repeat the field.
  */
+/** The header tag of a file that puts each person's current name after marriage last (ParsedGedcom.marriedLast). */
+export const MARRIED_LAST_TAG = '_STROM_MARRIED_LAST';
+
+/** A name after marriage of a person's file (a NAME with TYPE married, or a _MARNM). */
+interface MarriedNameRead {
+    surname: string;
+    /** Its given names when they are not the person's own (Person.marriedFirstName). */
+    given?: string;
+    /** The NAME as written: one not taken stays among the other spellings so. None for a _MARNM. */
+    text?: string;
+    /** It carries Strom's mark of the name the person goes by. */
+    marked?: boolean;
+}
+
+/**
+ * The married surname of a person with several names after marriage (`names`
+ * in file order, the last one taken by readMarriedSurname) becomes the one of
+ * her last marriage (lastMarriageSurnameIndex). The one it replaces stays as
+ * another spelling of the name, as the other names after marriage do; the
+ * chosen one leaves them. The mark of the name the person goes by follows the
+ * names: on the chosen one it is the married surname, on the one replaced it
+ * says nothing any more.
+ */
+function chooseLastMarriageName(data: StromData, person: Person, names: readonly MarriedNameRead[]): void {
+    const at = lastMarriageSurnameIndex(data, person.id, names.map(n => n.surname));
+    if (at < 0 || at === names.length - 1) return;
+    const was = names[names.length - 1];
+    const now = names[at];
+    const spelled = (v: string): string => v.replace(/\//g, ' ').replace(/\s+/g, ' ').trim();
+    const key = (v: string): string => spelled(v).normalize('NFC').toLocaleLowerCase();
+    person.marriedSurname = now.surname;
+    if (now.given) person.marriedFirstName = now.given;
+    else delete person.marriedFirstName;
+    const gone = new Set([key(`${now.given || person.firstName} ${now.surname}`), ...(now.text ? [key(now.text)] : [])]);
+    const variants = (person.nameVariants ?? []).filter(v => !gone.has(key(v)));
+    const back = spelled(was.text ?? `${was.given || person.firstName} ${was.surname}`);
+    if (back && !variants.some(v => key(v) === key(back))) variants.push(back);
+    if (variants.length > 0) person.nameVariants = variants;
+    else delete person.nameVariants;
+    if (now.marked) person.primaryName = 'married';
+    else if (person.primaryName === 'married') delete person.primaryName;
+}
+
 function readMarriedSurname(
     indi: GedcomIndividual,
     opts: { fromStrom: boolean; unknownIsNoSurname: boolean },
@@ -2479,23 +2538,31 @@ function readMarriedSurname(
         if (indi.primaryMark === k) { markedMarried = true; indi.primaryMark = undefined; }
         else indi.primaryMark--;
     };
-    for (let k = indi.variantNameTypes.length - 1; k >= 0; k--) {
+    // Every name after marriage in file order; the last one is taken here.
+    const names: MarriedNameRead[] = [];
+    let takenAt = -1;
+    for (let k = 0; k < indi.variantNameTypes.length; k++) {
         if (indi.variantNameTypes[k] !== 'married') continue;
         const read = readGedcomName(indi.nameVariants[k], indi.variantNameParts[k], { ...opts, descriptions: false });
         if (!read.lastName) continue;
-        married = read.lastName;
         // Given names of its own ("Jana Kateřina /Nováková/" beside "Jana /…/") stay with it.
-        if (read.firstName && read.firstName !== '?' && read.firstName.trim() !== (indi.firstName ?? '').trim()) marriedGiven = read.firstName.trim();
-        dropVariant(k);
-        break;
+        const given = read.firstName && read.firstName !== '?' && read.firstName.trim() !== (indi.firstName ?? '').trim() ? read.firstName.trim() : '';
+        names.push({ surname: read.lastName, ...(given ? { given } : {}), text: indi.nameVariants[k], ...(indi.primaryMark === k ? { marked: true } : {}) });
+        takenAt = k;
     }
-    if (!married) {
-        for (let k = indi.marnm.length - 1; k >= 0 && !married; k--) {
-            const v = indi.marnm[k];
-            married = (v.includes('/') ? readGedcomName(v, {}, { ...opts, descriptions: false }).lastName : v.replace(/\s+/g, ' ')).trim();
+    if (takenAt >= 0) {
+        married = names[names.length - 1].surname;
+        marriedGiven = names[names.length - 1].given ?? '';
+        dropVariant(takenAt);
+    } else {
+        for (const v of indi.marnm) {
+            const surname = (v.includes('/') ? readGedcomName(v, {}, { ...opts, descriptions: false }).lastName : v.replace(/\s+/g, ' ')).trim();
+            if (surname) names.push({ surname });
         }
+        married = names[names.length - 1]?.surname ?? '';
     }
     if (!married) return;
+    if (names.length > 1) indi.marriedNames = names;
     indi.marriedSurname = married;
     if (marriedGiven) indi.marriedFirstName = marriedGiven;
     // "Marie Nováková" beside the field says nothing more.
@@ -3312,6 +3379,7 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
     const headDirectionBlocks: (RawResearchBlock & { tag: string })[] = [];
     let openHeadDirection: (RawResearchBlock & { tag: string }) | null = null;
     let lineageMarker = false;
+    let marriedLast = false;
     /** The _STROM_CONFLICT / _HYPO / _SEARCHED block being read. */
     let currentResearch: OpenResearch | null = null;
     /** The research's `_STROM_WAS` being read (its `3 _STROM_IMPORT`, `_PART`, `_REF` follow). */
@@ -4095,6 +4163,7 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
                 else if (tag === '_STROM_ASOF') researchAsOf = value.trim();
                 else if (tag === '_STROM_DIRECTIONS') headDirectionsComplete = value.trim().toUpperCase() === 'Y';
                 else if (tag === '_STROM_LINES') lineageMarker = true;
+                else if (tag === MARRIED_LAST_TAG) marriedLast = /^(y|yes)$/i.test(value.trim());
                 openHeadDirection = null;
                 if ((tag === '_STROM_DIRECTION' || tag === '_STROM_BRANCH') && headDirectionBlocks.length < 5000) {
                     openHeadDirection = { tag, value, lines: [] };
@@ -5473,6 +5542,7 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
         ...(surnameRejections.length > 0 ? { surnameRejections } : {}),
         ...(surnameMarkers.groups || surnameMarkers.rejections ? { surnameMarkers } : {}),
         ...(lineageMarker ? { lineageMarker } : {}),
+        ...(marriedLast ? { marriedLast } : {}),
         ...(stromResearch ? {
             stromResearch,
             ...(researchAsOf ? { researchAsOf } : {}),
@@ -6883,6 +6953,16 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
             // (even an empty one) is what it says; without it, nothing said.
             ...(lineageOverrides || gedcom.lineageMarker ? { lineageOverrides: lineageOverrides ?? {} } : {}),
     };
+
+    // A person with several names after marriage keeps the one of her last
+    // marriage (spec 010, K4.1), not the last one written; a research's file
+    // that says it puts the current one last is taken as it is (K4.2).
+    if (!gedcom.marriedLast) {
+        for (const [gedId, indi] of validIndividuals) {
+            const pid = personIdMap.get(gedId);
+            if (pid && persons[pid] && indi.marriedNames) chooseLastMarriageName(data, persons[pid], indi.marriedNames);
+        }
+    }
 
     // Where the facts came from (spec 066), only when the caller asks.
     let importId: string | undefined;

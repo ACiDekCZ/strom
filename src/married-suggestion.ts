@@ -10,10 +10,10 @@
  * sex, the surname fields and the spellings as they are being typed).
  */
 
-import { Gender, Person, PersonId, StromData } from './types.js';
+import { Gender, Partnership, Person, PersonId, StromData } from './types.js';
 import { parseFlexDate } from './dates.js';
 import { marriagesInOrder } from './marriage-order.js';
-import { feminineFormIn, surnameKey } from './surnames.js';
+import { feminineForm, feminineFormIn, masculineFormIn, surnameKey } from './surnames.js';
 
 export interface MarriedSurnameSuggestion {
     /** The suggested married surname ("Nováková"). */
@@ -38,21 +38,66 @@ export interface MarriedSuggestionState {
 }
 
 /**
+ * The spouses of a person's marriages (a union that is or was a marriage),
+ * the one a married surname comes from first: the marriages with a wedding
+ * date from the latest wedding back, then the undated ones from the last in
+ * order (marriagesInOrder). One rule for the editor's suggestion and for the
+ * married surname read from a file (spec 010, K4.1).
+ */
+function marriagePartnersLatestFirst(data: StromData, personId: PersonId): { union: Partnership; partner: Person }[] {
+    const all = marriagesInOrder(data, personId)
+        .map(id => data.partnerships[id])
+        .filter(u => u && (u.status === 'married' || u.status === 'divorced'))
+        .map(u => ({ union: u, partner: data.persons[u.person1Id === personId ? u.person2Id : u.person1Id] }))
+        .filter(e => !!e.partner);
+    // marriagesInOrder keeps the dated ones in the order of their weddings.
+    const dated = all.filter(e => parseFlexDate(e.union.startDate));
+    const undated = all.filter(e => !parseFlexDate(e.union.startDate));
+    return [...dated.reverse(), ...undated.reverse()];
+}
+
+/**
  * The husband a married surname comes from: of the person's marriages (a
  * union that is or was a marriage, the partner a man), the one with the
  * latest wedding date; without any dates the last one in order. A living
  * partnership without a wedding gives no married surname.
  */
 export function suggestionHusband(data: StromData, personId: PersonId): Person | null {
-    const husbands = marriagesInOrder(data, personId)
-        .map(id => data.partnerships[id])
-        .filter(u => u && (u.status === 'married' || u.status === 'divorced'))
-        .map(u => ({ union: u, partner: data.persons[u.person1Id === personId ? u.person2Id : u.person1Id] }))
-        .filter(e => e.partner?.gender === 'male');
-    if (husbands.length === 0) return null;
-    // marriagesInOrder keeps the dated ones in the order of their weddings.
-    const dated = husbands.filter(e => parseFlexDate(e.union.startDate));
-    return (dated.length > 0 ? dated[dated.length - 1] : husbands[husbands.length - 1]).partner;
+    return marriagePartnersLatestFirst(data, personId).find(e => e.partner.gender === 'male')?.partner ?? null;
+}
+
+/** Is this married surname the spouse's surname, or a wife's form of it (Nováková of Novák, Jaworska of Jaworski)? */
+function surnameOfSpouse(married: string, spouseSurname: string, data: StromData): boolean {
+    const spouse = spouseSurname.trim();
+    if (!married.trim() || !spouse) return false;
+    const key = surnameKey(married);
+    if (surnameKey(spouse) === key || surnameKey(wifeSurnameOf(spouse, data)) === key) return true;
+    // The rules of this tree may not give the wife's form; the name itself still says whose it is.
+    const feminine = feminineForm(spouse);
+    if (feminine && surnameKey(feminine) === key) return true;
+    const masculine = masculineFormIn(married, data);
+    return !!masculine && surnameKey(masculine) === surnameKey(spouse);
+}
+
+/**
+ * Which of a person's married surnames is the one after the last marriage
+ * (spec 010, K4.1): the one of the spouse of the latest wedding by date,
+ * else of the last marriage in order (the order of marriagePartnersLatestFirst);
+ * a surname no spouse of the person carries comes after them. Ties and a
+ * person whose surnames match no spouse: the last in the given order (the
+ * file's). Returns the index into `surnames` (-1 for an empty list).
+ */
+export function lastMarriageSurnameIndex(data: StromData, personId: PersonId, surnames: readonly string[]): number {
+    const spouses = marriagePartnersLatestFirst(data, personId).map(e => e.partner.lastName ?? '');
+    let best = -1;
+    let bestRank = Infinity;
+    surnames.forEach((surname, i) => {
+        const at = spouses.findIndex(s => surnameOfSpouse(surname, s, data));
+        const rank = at < 0 ? Infinity : at;
+        // In order, so a tie goes to the later one.
+        if (best < 0 || rank <= bestRank) { best = i; bestRank = rank; }
+    });
+    return best;
 }
 
 /**
