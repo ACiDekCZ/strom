@@ -283,7 +283,7 @@ export const contextMenuMethods = uiModule({
         const satResearch = satelliteResearchMenu();
         const research = satResearch
             ? satResearch.rows(personId)
-            : submenuRow('research', strings.research.personSection, this.personResearchMenuItems(personId));
+            : submenuRow('research', strings.research.personSection, this.researchRowsBesideSignals(personId));
         // A satellite's rows stand last, under their own heading (not in a group with "More ›").
         const researchInGroup = satResearch ? [] : research;
         const researchAfter = satResearch ? research : [];
@@ -510,9 +510,9 @@ export const contextMenuMethods = uiModule({
         const isViewMode = DataManager.isReadOnly();
         // "Research ›": what the research knows, then its actions — on every
         // variant of the menu (nothing there changes the app).
-        // The person's signals above already lead there with the conflicts and the question (signal-knows).
-        const signals = TreeRenderer.cardSignalsFor(personId);
-        const knows = signals && (signals.conflicts > 0 || signals.question) ? null : this.personResearchKnows(personId);
+        // Always here, even when a signal above the menu (signal-knows) leads to the same dialog:
+        // "Research ›" is where it is looked for (Milan, 20 Nov 2026).
+        const knows = this.personResearchKnows(personId);
         const researchActions = this.personResearchActions(personId);
         // Files about the person, to the research (right after what it knows).
         // In an archive whose materials are shown: "Add material…" (it is kept, not sent to an agent).
@@ -534,6 +534,18 @@ export const contextMenuMethods = uiModule({
             ...inLine,
             ...rest.map((a, i) => (i === 0 && inLine.length ? { ...a, divider: true } : a)),
         ];
+    },
+
+    /**
+     * "Research ›" in the person menu: its rows, except "What the research
+     * knows" standing alone (no submenu, e.g. on a phone) right beside the
+     * signal that leads to the same dialog (signal-knows): not twice in a row.
+     */
+    researchRowsBesideSignals(personId: PersonId): PersonMenuAction[] {
+        const items = this.personResearchMenuItems(personId);
+        if (items.length !== 1 || items[0].action !== 'research-knows') return items;
+        const signals = TreeRenderer.cardSignalsFor(personId);
+        return signals && (signals.conflicts > 0 || signals.question) ? [] : items;
     },
 
     /** Run a person menu action (shared by context menu + bottom sheet). */

@@ -390,17 +390,18 @@ test.describe('live panel: up next, update, spend', () => {
 });
 
 test.describe('What the research knows', () => {
-    test('first in "Research ›" only with data and without the signal above; Find descendants under Find ancestors', async ({ page }) => {
+    test('first in "Research ›" with data, the signal above or not; Find descendants under Find ancestors', async ({ page }) => {
         await setup(page);
-        // Jan: his conflicts lead there from the signal at the top (signal-knows), so "Research ›" does not repeat it.
+        // Jan: his conflicts lead there from the signal at the top (signal-knows), and "Research ›" has it too, with its count.
         const actions = await menuActions(page, 'Jan');
         expect(actions).not.toContain('research-knows');
         expect(actions).toContain('signal-knows');
         const row = page.locator('.context-menu [data-menu="research"]');
-        await expect(row.locator('.menu-item-tag')).toHaveCount(0);
+        await expect(row.locator('.menu-item-tag')).toHaveText('2 conflicts');
         const sub = await openPersonSubmenu(page, 'research');
         expect(await sub.locator('[data-action]').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action)))
-            .toEqual(['research-review', 'research-ancestors', 'research-descendants', 'research-ask']);
+            .toEqual(['research-knows', 'research-review', 'research-ancestors', 'research-descendants', 'research-ask']);
+        await expect(sub.locator('[data-action="research-knows"] .menu-item-tag')).toHaveText('2 conflicts');
         await sub.locator('[data-action="research-descendants"]').click();
         expect(await launched(page)).toEqual([`strom-research://research?tree=${UUID}&person=P0012&direction=descendants`]);
 
@@ -493,7 +494,8 @@ test.describe('What the research knows', () => {
         await dropFile(page, researchGed());
         await expect(card(page, 'Jan')).toBeVisible();
         await card(page, 'Jan').click();
-        // No research links on a phone; Jan's conflicts lead to "What the research knows" from the signal at the top.
+        // No research links on a phone; Jan's conflicts lead to "What the research knows" from the signal at the top
+        // (a "Research ›" of that one row alone would only repeat it).
         await expect(page.locator('.bottom-sheet [data-menu="research"]')).toHaveCount(0);
         await expect(page.locator('.bottom-sheet [data-action="research-knows"]')).toHaveCount(0);
         const item = page.locator('.bottom-sheet [data-action="signal-knows"]');
