@@ -14,10 +14,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
     assignFanRodColors, assignFanRodSlots, fanRodSides, fanRodAdjacency, fanRodNear, fanRodLegend, fanRodSlotOf,
-    FAN_ROD_MAX_STRONG, FAN_ROD_LEGEND_MAIN, FanRodAssignment, FanRodInfo, FanRodModel,
+    FAN_ROD_MAX_STRONG, FAN_ROD_LEGEND_MAIN, FanRodAssignment, FanRodInfo, FanRodModel, FAN_ROD_MAIN, fanRodMainSet,
 } from '../fan-rod-assign.js';
 import {
     FanRodSlot, FAN_ROD_SLOTS, fanRodSlotColor, deltaE, deltaEDeutan, parseFanRodSlot, FAN_PALETTES, fanMixWhite, FAN_PRINT_DIM, FAN_PRINT_EDGE,
+    fanRodSlotDistance, fanFill,
 } from '../fan-colors.js';
 import { buildFanModel, buildFanSvg, buildFanPosterSvg, fanPosterGeometry, FanShape, FanHighlight } from '../fan-chart.js';
 import { buildLineages, LineageIndex, RodId, rodOf, rodLabels, realRodMembers } from '../lineage.js';
@@ -895,4 +896,90 @@ describe('shapes and a dense fan (§8)', () => {
         }
     });
     const opts = () => ({ esc: (t: string) => t, editable: false, addParentLabel: '', colorMode: 'rod' as const });
+});
+
+describe('styles and the main lines (spec 118 §2, §4)', () => {
+    const label = (id: RodId) => REF.label[id];
+
+    // Two lines that both keep their remembered slots (§3 step 4) may come closer than the
+    // thresholds: keeping a colour across re-centring wins (as in the colour style).
+    it.each(['color', 'pastel', 'antique', 'mono'] as const)('neighbours in the %s style stay distinct (or differ in pattern)', style => {
+        const out = new Map<string, FanRodAssignment>();
+        for (const s of REF.states) {
+            const memory = s.after ? out.get(s.after)!.memory : null;
+            const a = assignFanRodColors(refModel(s), refIndex(), memory, { style });
+            out.set(s.name, a);
+            expect(a.style).toBe(style);
+            const kept = new Set(a.rods.filter(r => r.kept).map(r => r.id));
+            for (const [x, y] of fanRodAdjacency(refModel(s), refIndex())) {
+                const sx = a.slotOf.get(x), sy = a.slotOf.get(y);
+                if (!sx || !sy || (kept.has(x) && kept.has(y))) continue;
+                for (const th of ['light', 'dark'] as const) {
+                    expect(fanRodSlotDistance(sx, sy, th, style), `${s.name} ${th}: ${label(x)} ${sx} × ${label(y)} ${sy}`).toBeGreaterThanOrEqual(1);
+                }
+            }
+        }
+    });
+
+    it('the main lines: the 10 largest by rank, the centre\'s always in place of the tenth; fewer than 10 lines: all', () => {
+        const rods = Array.from({ length: 14 }, (_, i) => info(`r${String(i).padStart(2, '0')}`, 20 - i));
+        const { ranked } = assignFanRodSlots(rods, []);
+        expect([...fanRodMainSet(ranked)].sort()).toEqual(rods.slice(0, FAN_ROD_MAIN).map(r => r.id).sort());
+        const withMe = assignFanRodSlots([...rods, info('me', 1, 'P', { focus: true })], []).ranked;
+        const main = fanRodMainSet(withMe);
+        expect(main.size).toBe(FAN_ROD_MAIN);
+        expect(main.has('me' as RodId)).toBe(true);
+        expect([...main].filter(id => id !== 'me').sort()).toEqual(rods.slice(0, FAN_ROD_MAIN - 1).map(r => r.id).sort());
+        const few = assignFanRodSlots(rods.slice(0, 4), []).ranked;
+        expect(fanRodMainSet(few).size).toBe(4);
+    });
+
+    it('the main-lines scope keeps every slot and only greys the rest, in the fill and the legend', () => {
+        const s = state('two8');
+        const all = assignFanRodColors(refModel(s), refIndex());
+        const main = assignFanRodColors(refModel(s), refIndex(), null, { scope: 'main' });
+        expect(all.main).toBeUndefined();
+        expect(obj(main.slotOf)).toEqual(obj(all.slotOf));
+        expect(main.main!.size).toBe(FAN_ROD_MAIN);
+        const focus = main.rods.find(r => r.focus)!;
+        expect(main.main!.has(focus.id)).toBe(true);
+        const outside = main.rods.find(r => !main.main!.has(r.id))!;
+        const inside = main.rods.find(r => main.main!.has(r.id) && !r.focus)!;
+        const sector = (rod: RodId) => {
+            const pid = Object.keys(REF.persons).find(p => REF.persons[p] === rod)!;
+            return { kind: 'anc' as const, person: refPerson(pid), generation: 3, ahnentafel: 9 };
+        };
+        expect(fanFill(sector(outside.id), 'rod', 'light', main)).toBe(FAN_PALETTES.light.grey);
+        expect(fanFill(sector(outside.id), 'rod', 'light', all)).toBe(fanRodSlotColor(all.slotOf.get(outside.id)!, 'light'));
+        expect(fanFill(sector(inside.id), 'rod', 'dark', main)).toBe(fanRodSlotColor(main.slotOf.get(inside.id)!, 'dark'));
+
+        const L = fanRodLegend(main, 'light', label);
+        expect(L.grey).toBe(true);
+        const shown = L.groups.flatMap(g => g.items.map(i => i.key));
+        expect(shown.sort()).toEqual([...main.main!].sort());
+        expect(L.otherRods).toBe(main.rods.length - FAN_ROD_MAIN);
+        for (const i of L.other) {
+            expect(i.color).toBe(FAN_PALETTES.light.grey);
+            expect(i.slot).toBeUndefined();
+        }
+        expect(legendSum(main, label)).toBe(s.model.sectors.length + s.model.desc.length + 1);
+        expect(fanRodLegend(all, 'light', label).grey).toBeUndefined();
+    });
+
+    it('re-centring there and back gives the lines the same colours in the main-lines scope', () => {
+        const look = { scope: 'main' as const };
+        const a1 = assignFanRodColors(refModel(state('A')), refIndex(), null, look);
+        const b = assignFanRodColors(refModel(state('B')), refIndex(), a1.memory, look);
+        const a2 = assignFanRodColors(refModel(state('A')), refIndex(), b.memory, look);
+        expect(obj(a2.slotOf)).toEqual(obj(a1.slotOf));
+        expect([...a2.main!].sort()).toEqual([...a1.main!].sort());
+    });
+
+    it('the poster: "Other lines (N)" in grey and the main lines\' colours in the subtitle', () => {
+        const s = state('two8');
+        const rc = assignFanRodColors(refModel(s), refIndex(), null, { scope: 'main' });
+        expect(strings.fan.legendOtherGrey(4)).toBe('Other lines (4)');
+        expect(strings.fan.posterColorsMain).toBe('colours of the main lines');
+        expect(rc.main).toBeDefined();
+    });
 });

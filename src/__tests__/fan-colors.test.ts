@@ -9,6 +9,7 @@ import {
     FAN_PALETTES, FanTheme, oklchToHex, contrastRatio, fanLineColor, fanFill, fanLegend, fanHasRepeats,
     LINE_HUE, parentLineColor, descLineColor, fanRodSlots, fanRodSlotColor, fanRodSlotOklch, fanRodFill, parseFanRodSlot,
     FAN_ROD_GROUPS, FanRodSlot, oklab, deltaE, deltaEDeutan,
+    FAN_STYLES, FanStyle, fanPalette, fanStyleFont, fanRodSlotPattern, FAN_PATTERNS, FanPatternId, fanPatternSvg, fanFillLook, fanRodSlotDistance,
 } from '../fan-colors.js';
 import { assignFanRodColors } from '../fan-rod-assign.js';
 import { buildFanModel, buildFanSvg } from '../fan-chart.js';
@@ -221,5 +222,92 @@ describe('fills and legend', () => {
         expect(fanFill({ kind: 'focus', person: d.persons['me' as PersonId] }, 'rod', 'dark')).toBe(FAN_PALETTES.dark.surface);
         expect(fanFill({ kind: 'partner', person: null }, 'gender', 'print')).toBe(FAN_PALETTES.print.unknown);
         expect(FAN_PALETTES.print.bg).toBe('#ffffff');
+    });
+});
+
+describe('styles (spec 118 §4)', () => {
+    const p = person('p', 'male');
+
+    /** Every fill the fan can compute in a style and theme. */
+    function styleFills(style: FanStyle, theme: FanTheme): string[] {
+        const T = fanPalette(theme, style);
+        const out = [T.male, T.female, T.unknown, T.grey];
+        for (let g = 2; g <= 10; g++) for (let line = 0; line < 4; line++) out.push(fanLineColor(line, g, theme, style));
+        for (const slot of fanRodSlots()) out.push(fanRodSlotColor(slot, theme, style));
+        out.push(parentLineColor(true, theme, style), parentLineColor(false, theme, style));
+        out.push(descLineColor(false, theme, style), descLineColor(true, theme, style));
+        return out;
+    }
+
+    it('keeps the names at least 7:1 on every light and print fill and 4.6:1 on every dark one, in every style', () => {
+        expect([...FAN_STYLES]).toEqual(['color', 'pastel', 'antique', 'mono']);
+        for (const style of FAN_STYLES) {
+            for (const [theme, minRatio] of [['light', 7], ['print', 7], ['dark', 4.6]] as const) {
+                const text = fanPalette(theme, style).text;
+                for (const fill of styleFills(style, theme)) {
+                    expect(contrastRatio(text, fill), `${style} ${theme} ${text} on ${fill}`).toBeGreaterThanOrEqual(minRatio);
+                }
+            }
+        }
+    });
+
+    it('leaves the colour style as it was: the same palettes and slots', () => {
+        for (const theme of ['light', 'dark', 'print'] as const) {
+            expect(fanPalette(theme)).toEqual(FAN_PALETTES[theme]);
+            expect(fanPalette(theme, 'color')).toEqual(FAN_PALETTES[theme]);
+            for (const slot of fanRodSlots()) expect(fanRodSlotColor(slot, theme, 'color')).toBe(fanRodSlotColor(slot, theme));
+        }
+        expect(fanStyleFont()).toBe('sans');
+        expect(fanStyleFont('antique')).toBe('serif');
+        expect(fanStyleFont('mono')).toBe('sans');
+    });
+
+    it('equals the hex table of the design (appendix C) in samples of each style', () => {
+        const C: Array<[FanStyle, FanRodSlot, string, string]> = [
+            ['pastel', 'PS0', '#b7d8fd', '#395677'], ['pastel', 'MS0', '#f7cdde', '#5f3d4c'], ['pastel', 'DT3', '#fff0e4', '#47382c'],
+            ['antique', 'PS0', '#b8c499', '#566039'], ['antique', 'MS2', '#f4c8c3', '#724d49'], ['antique', 'DT3', '#f2e4d1', '#4a3f2f'],
+            ['mono', 'PS0', '#b7b7b7', '#696969'], ['mono', 'MS6', '#bebebe', '#636363'], ['mono', 'DS2', '#eeeeee', '#383838'],
+        ];
+        for (const [style, slot, light, dark] of C) {
+            expect(fanRodSlotColor(slot, 'light', style), `${style} ${slot}`).toBe(light);
+            expect(fanRodSlotColor(slot, 'print', style), `${style} ${slot}`).toBe(light);
+            expect(fanRodSlotColor(slot, 'dark', style), `${style} ${slot}`).toBe(dark);
+        }
+        expect([fanLineColor(0, 2, 'light', 'pastel'), fanLineColor(0, 10, 'light', 'pastel')]).toEqual(['#c6d4e8', '#e0eeff']);
+        expect([fanLineColor(3, 2, 'light', 'antique'), fanLineColor(3, 10, 'light', 'antique')]).toEqual(['#e0b9b9', '#ffdddd']);
+        expect([parentLineColor(true, 'light', 'antique'), parentLineColor(false, 'light', 'antique')]).toEqual(['#c1c0a2', '#d5b6a9']);
+        expect([descLineColor(false, 'light', 'pastel'), descLineColor(true, 'light', 'pastel')]).toEqual(['#efe3cf', '#f5eee0']);
+        expect([fanLineColor(1, 6, 'light', 'mono'), parentLineColor(true, 'light', 'mono'), descLineColor(true, 'light', 'mono')])
+            .toEqual(['#e8e8e8', '#bebebe', '#f8f8f8']);
+        expect(fanPalette('print', 'antique').surface).toBe('#ffffff');
+        expect(fanPalette('print', 'mono')).toEqual(fanPalette('light', 'mono'));
+    });
+
+    it('black and white: a pattern on every strong slot, none on a muted one, none at the repeats\' 45° or 135°', () => {
+        for (const slot of fanRodSlots()) {
+            const pat = fanRodSlotPattern(slot, 'mono');
+            if (parseFanRodSlot(slot)!.tier === 'S') expect(pat, slot).toBeDefined();
+            else expect(pat, slot).toBeUndefined();
+            for (const style of ['color', 'pastel', 'antique'] as const) expect(fanRodSlotPattern(slot, style)).toBeUndefined();
+        }
+        for (const [id, pat] of Object.entries(FAN_PATTERNS)) {
+            expect([45, 135], id).not.toContain(((pat.angle % 180) + 180) % 180);
+            expect(fanPatternSvg(id as FanPatternId, '#1a1a1a'), id).toMatch(/^<svg [^>]*width="\d+(\.\d+)?" height="\d+(\.\d+)?"/);
+        }
+        expect(Object.keys(FAN_PATTERNS).length).toBeLessThanOrEqual(8);
+        // The female sector carries the dot; a family line outside the patterns has none.
+        expect(fanFillLook({ kind: 'anc', person: person('w', 'female'), generation: 1, ahnentafel: 3 }, 'gender', 'light', null, 'mono'))
+            .toEqual({ fill: fanPalette('light', 'mono').female, pattern: 'dot' });
+        expect(fanFillLook({ kind: 'anc', person: p, generation: 1, ahnentafel: 2 }, 'gender', 'light', null, 'mono').pattern).toBeUndefined();
+        expect(fanFillLook({ kind: 'anc', person: p, generation: 1, ahnentafel: 2 }, 'gender', 'light', null, 'pastel').pattern).toBeUndefined();
+    });
+
+    it('measures distinctness in the style; different patterns are always distinct', () => {
+        expect(fanRodSlotDistance('PS0', 'PS1', 'light', 'mono')).toBe(9);
+        expect(fanRodSlotDistance('PS0', 'PS3', 'light', 'mono')).toBeLessThan(9);
+        expect(fanRodSlotDistance('PS0', 'PS1', 'light')).toBe(Math.min(
+            deltaE(fanRodSlotColor('PS0', 'light'), fanRodSlotColor('PS1', 'light')) / 0.04,
+            deltaEDeutan(fanRodSlotColor('PS0', 'light'), fanRodSlotColor('PS1', 'light')) / 0.02,
+        ));
     });
 });

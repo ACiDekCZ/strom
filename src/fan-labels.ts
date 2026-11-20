@@ -58,7 +58,11 @@ export type FanMeasure = (text: string, fs: number, bold: boolean) => number;
 /** A plain estimate (0.58 em per character) — tests and environments without a canvas. */
 export const estimateFanMeasure: FanMeasure = (text, fs) => 0.58 * fs * [...text].length;
 
-const FONT_STACK = '"Instrument Sans", -apple-system, "Segoe UI", sans-serif';
+/** The type faces of the fan's names: the app's sans, and Strom Serif of the antique style (spec 118 §4). */
+const FONT_STACKS = {
+    sans: '"Instrument Sans", -apple-system, "Segoe UI", sans-serif',
+    serif: '"Strom Serif", Georgia, serif',
+} as const;
 const widthCache = new Map<string, number>();
 let canvasCtx: CanvasRenderingContext2D | null | undefined;
 
@@ -72,22 +76,36 @@ function context(): CanvasRenderingContext2D | null {
     return canvasCtx;
 }
 
-/** Measures with the app font on a canvas at 100 px, cached by (weight, text). */
-export const defaultFanMeasure: FanMeasure = (text, fs, bold) => {
-    const key = (bold ? 'b' : 'n') + text;
-    let w = widthCache.get(key);
-    if (w == null) {
-        const ctx = context();
-        if (ctx) {
-            ctx.font = `${bold ? 600 : 400} 100px ${FONT_STACK}`;
-            w = ctx.measureText(text).width / 100;
-        } else {
-            w = 0.58 * [...text].length;
-        }
-        widthCache.set(key, w);
+const measurers = new Map<'sans' | 'serif', FanMeasure>();
+
+/** Measures with a face of the fan on a canvas at 100 px, cached by (face, weight, text). */
+export function fanMeasureFor(family: 'sans' | 'serif'): FanMeasure {
+    let m = measurers.get(family);
+    if (!m) {
+        const stack = FONT_STACKS[family];
+        const prefix = family === 'serif' ? 's' : '';
+        m = (text, fs, bold) => {
+            const key = prefix + (bold ? 'b' : 'n') + text;
+            let w = widthCache.get(key);
+            if (w == null) {
+                const ctx = context();
+                if (ctx) {
+                    ctx.font = `${bold ? 600 : 400} 100px ${stack}`;
+                    w = ctx.measureText(text).width / 100;
+                } else {
+                    w = 0.58 * [...text].length;
+                }
+                widthCache.set(key, w);
+            }
+            return w * fs;
+        };
+        measurers.set(family, m);
     }
-    return w * fs;
-};
+    return m;
+}
+
+/** Measures with the app font on a canvas at 100 px, cached by (weight, text). */
+export const defaultFanMeasure: FanMeasure = fanMeasureFor('sans');
 
 /** Forget measured widths (after the web fonts have loaded, `document.fonts.ready`). */
 export function clearFanMeasureCache(): void {

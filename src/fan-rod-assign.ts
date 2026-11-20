@@ -24,17 +24,22 @@
 import type { Person, PersonId } from './types.js';
 import { LineageIndex, RodId, rodOf, rodLabels } from './lineage.js';
 import {
-    FanRodGroup, FanRodTier, FanRodSlot, FanTheme, FanLegendItem, FAN_ROD_GROUPS, FAN_ROD_SLOTS, FAN_PALETTES,
-    fanRodSlotColor, deltaE, deltaEDeutan, parseFanRodSlot,
+    FanRodGroup, FanRodTier, FanRodSlot, FanTheme, FanLegendItem, FanStyle, FAN_ROD_GROUPS, FAN_ROD_SLOTS,
+    fanRodSlotColor, fanRodSlotPattern, fanRodSlotDistance, fanPalette, parseFanRodSlot,
 } from './fan-colors.js';
 
 /** At most this many strong lines (besides the centre's). */
 export const FAN_ROD_MAX_STRONG = 10;
 /** The legend's rows before "Other", the collapsible group of the smaller lines (§4). */
 export const FAN_ROD_LEGEND_MAIN = 20;
-/** Smallest ΔE OK between neighbouring lines (light, dark) and with deuteranopia (both themes). */
-const MIN_DE = { light: 0.04, dark: 0.03 } as const;
-const MIN_DE_DEUTAN = 0.02;
+/**
+ * Which lines are coloured (spec 118 §2): all of them, or the main ones only
+ * (the 10 largest of the drawn fan, the centre's always), the others grey.
+ */
+export type FanRodScope = 'all' | 'main';
+export const FAN_ROD_SCOPES: readonly FanRodScope[] = ['all', 'main'];
+/** The main lines of the main-lines scope. */
+export const FAN_ROD_MAIN = 10;
 /** The groups a group borrows from, nearest band first. */
 const BORROW_FROM: Record<FanRodGroup, readonly FanRodGroup[]> = { P: ['D', 'M'], M: ['D', 'P'], D: ['M', 'P'] };
 const CENTRE_SLOT: FanRodSlot = 'PS0';
@@ -79,6 +84,10 @@ export interface FanRodAssignment {
     noRod: number;
     /** What the window remembers for the next state (§3 step 8). */
     memory: ReadonlyMap<RodId, FanRodSlot>;
+    /** The main-lines scope (spec 118 §2): the lines shown in colour; the others are grey (their slots kept). */
+    main?: ReadonlySet<RodId>;
+    /** The style the slots were chosen for (distinctness is measured in it). */
+    style?: FanStyle;
 }
 
 /** What the colours need of a fan model (structural: FanModel has it). */
@@ -193,15 +202,11 @@ export function fanRodNear(model: FanRodModel, index: LineageIndex): Array<[RodI
 
 const slotsOf = (g: FanRodGroup, t: FanRodTier): FanRodSlot[] => FAN_ROD_SLOTS[g][t].map((_, i) => `${g}${t}${i}` as FanRodSlot);
 
-/** How far a slot is from the neighbours' slots, as a share of the thresholds (>= 1: distinct enough). */
-function distinctness(slot: FanRodSlot, neighbours: readonly FanRodSlot[]): number {
+/** How far a slot is from the neighbours' slots in a style, as a share of the thresholds (>= 1: distinct enough). */
+function distinctness(slot: FanRodSlot, neighbours: readonly FanRodSlot[], style: FanStyle): number {
     let worst = 9;
     for (const th of ['light', 'dark'] as const) {
-        const c = fanRodSlotColor(slot, th);
-        for (const n of neighbours) {
-            const o = fanRodSlotColor(n, th);
-            worst = Math.min(worst, deltaE(c, o) / MIN_DE[th], deltaEDeutan(c, o) / MIN_DE_DEUTAN);
-        }
+        for (const n of neighbours) worst = Math.min(worst, fanRodSlotDistance(slot, n, th, style));
     }
     return worst;
 }
@@ -213,13 +218,15 @@ const byRank = (a: FanRodInfo, b: FanRodInfo) => b.count - a.count || b.tree - a
  * borrowed, down, shared) and the memory for the next state. Every line gets
  * a slot (K1.7). The memory keeps the lines out of view too, so a line
  * coming back finds its slot. `near`: the pairs of lines near each other besides the
- * neighbours (fanRodNear); without it, a neighbour's neighbour.
+ * neighbours (fanRodNear); without it, a neighbour's neighbour. `style`: the
+ * colours (and patterns) the distinctness is measured in.
  */
 export function assignFanRodSlots(
     rods: Iterable<FanRodInfo>,
     adjacency: ReadonlyArray<readonly [RodId, RodId]>,
     memory?: ReadonlyMap<RodId, FanRodSlot> | null,
     nearPairs?: ReadonlyArray<readonly [RodId, RodId]>,
+    style: FanStyle = 'color',
 ): { slotOf: Map<RodId, FanRodSlot>; memory: Map<RodId, FanRodSlot>; ranked: FanRodInfo[] } {
     const ranked = [...rods].sort(byRank);
     const mem = new Map<RodId, FanRodSlot>();
@@ -306,7 +313,7 @@ export function assignFanRodSlots(
         // Distinct from the neighbours and held by no line near; then by no neighbour; then the most distinct.
         for (const ok of [(c: FanRodSlot) => !clash(r, c, nearBy), (c: FanRodSlot) => !clash(r, c, next)]) {
             for (const pl of pools) {
-                pick = pl.find(c => ok(c) && distinctness(c, nbr) >= 1) ?? null;
+                pick = pl.find(c => ok(c) && distinctness(c, nbr, style) >= 1) ?? null;
                 if (pick) break;
             }
             if (pick) break;
@@ -315,7 +322,7 @@ export function assignFanRodSlots(
             let best = -1;
             const all = pools.flat();
             for (const c of [...all.filter(c => !clash(r, c, next)), ...all]) {
-                const d = distinctness(c, nbr);
+                const d = distinctness(c, nbr, style);
                 if (d > best) { best = d; pick = c; }
             }
         }
@@ -336,13 +343,34 @@ export function assignFanRodSlots(
 }
 
 /**
+ * The main lines (spec 118 §2): the first 10 by rank (count, size in the
+ * tree, id) of the whole drawn fan, the centre's line always (it takes the
+ * tenth place when it is not among them). Fewer than 10 lines: all of them.
+ */
+export function fanRodMainSet(ranked: readonly FanRodInfo[]): Set<RodId> {
+    const order = ranked.some(r => r.rank == null) ? [...ranked].sort(byRank) : [...ranked].sort((a, b) => a.rank! - b.rank!);
+    const main = order.slice(0, FAN_ROD_MAIN).map(r => r.id);
+    const focus = order.find(r => r.focus);
+    if (focus && !main.includes(focus.id)) main[FAN_ROD_MAIN - 1] = focus.id;
+    return new Set(main);
+}
+
+/**
  * The slots of the lines in a drawn fan (§1–§3). `memory`: what the window
  * remembers from its previous state (none: deterministic from the fan alone).
+ * `look`: the style the slots are chosen for and the scope (spec 118 §2: the
+ * slots are the same in both scopes; the main-lines scope only greys the rest).
  */
-export function assignFanRodColors(model: FanRodModel, index: LineageIndex, memory?: ReadonlyMap<RodId, FanRodSlot> | null): FanRodAssignment {
+export function assignFanRodColors(
+    model: FanRodModel, index: LineageIndex, memory?: ReadonlyMap<RodId, FanRodSlot> | null,
+    look?: { style?: FanStyle; scope?: FanRodScope },
+): FanRodAssignment {
+    const style = look?.style ?? 'color';
     const { rods, noRod } = fanRodSides(model, index);
-    const { slotOf, memory: next, ranked } = assignFanRodSlots(rods.values(), fanRodAdjacency(model, index), memory, fanRodNear(model, index));
-    return { index, slotOf, rods: ranked, noRod, memory: next };
+    const { slotOf, memory: next, ranked } = assignFanRodSlots(rods.values(), fanRodAdjacency(model, index), memory, fanRodNear(model, index), style);
+    const a: FanRodAssignment = { index, slotOf, rods: ranked, noRod, memory: next, style };
+    if (look?.scope === 'main') a.main = fanRodMainSet(ranked);
+    return a;
 }
 
 /** The slot of a person's line, or null (grey). */
@@ -364,24 +392,34 @@ export interface FanRodLegend {
     otherPeople: number;
     /** Drawn people without a family line. */
     noRod: number;
+    /** The main-lines scope (spec 118 §3): the parts hold the main lines only, "other" the grey rest. */
+    grey?: boolean;
 }
 
 /**
  * The legend's rows of an assignment. `labelOf`: the name of a line (default:
- * the tree's names of its lines, rodLabels).
+ * the tree's names of its lines, rodLabels). `style`: the swatches' style
+ * (default: the assignment's). In the main-lines scope (spec 118 §3) the
+ * parts hold the main lines, the others go to "other" in grey, without a slot.
  */
-export function fanRodLegend(a: FanRodAssignment, theme: FanTheme, labelOf?: (id: RodId) => string): FanRodLegend {
+export function fanRodLegend(a: FanRodAssignment, theme: FanTheme, labelOf?: (id: RodId) => string, style?: FanStyle): FanRodLegend {
     let labels: Map<RodId, string> | null = null;
     const label = labelOf ?? ((id: RodId) => (labels ??= rodLabels(a.index)).get(id) ?? '');
+    const st = style ?? a.style ?? 'color';
+    const grey = fanPalette(theme, st).grey;
     const item = (r: FanRodInfo): FanLegendItem => {
-        const slot = a.slotOf.get(r.id);
+        const slot = !a.main || a.main.has(r.id) ? a.slotOf.get(r.id) : undefined;
+        const pattern = slot ? fanRodSlotPattern(slot, st) : undefined;
         return {
             key: r.id, label: label(r.id), who: `${r.count}×`, count: r.count,
-            color: slot ? fanRodSlotColor(slot, theme) : FAN_PALETTES[theme].grey,
-            ...(slot ? { slot } : {}), ...(r.focus ? { focus: true } : {}),
+            color: slot ? fanRodSlotColor(slot, theme, st) : grey,
+            ...(slot ? { slot } : {}), ...(pattern ? { pattern } : {}), ...(r.focus ? { focus: true } : {}),
         };
     };
-    const main = (r: FanRodInfo) => r.focus || ((r.rank ?? FAN_ROD_LEGEND_MAIN) < FAN_ROD_LEGEND_MAIN && r.count >= 2);
+    const mainSet = a.main;
+    const main = mainSet
+        ? (r: FanRodInfo) => mainSet.has(r.id)
+        : (r: FanRodInfo) => r.focus || ((r.rank ?? FAN_ROD_LEGEND_MAIN) < FAN_ROD_LEGEND_MAIN && r.count >= 2);
     const first = a.rods.filter(main);
     const groups = FAN_ROD_GROUPS
         .map(group => ({
@@ -394,5 +432,5 @@ export function fanRodLegend(a: FanRodAssignment, theme: FanTheme, labelOf?: (id
     const other = a.rods.filter(r => !main(r)).map(item)
         .sort((x, y) => (y.count ?? 0) - (x.count ?? 0) || x.label.localeCompare(y.label));
     const otherPeople = other.reduce((n, i) => n + (i.count ?? 0), 0) + a.noRod;
-    return { groups, other, otherRods: other.length, otherPeople, noRod: a.noRod };
+    return { groups, other, otherRods: other.length, otherPeople, noRod: a.noRod, ...(mainSet ? { grey: true } : {}) };
 }

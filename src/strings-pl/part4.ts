@@ -718,6 +718,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         legendMotherSide: 'Strona matki',
         legendDescendants: 'Potomkowie',
         legendOther: (rods: number) => `Pozostałe · ${nPl(rods, 'ród', 'rody', 'rodów')}`,
+        legendOtherGrey: (rods: number) => `Pozostałe rody (${rods})`,
         legendNoRod: 'bez rodu',
         legendCentre: 'środek',
         legendRowsAria: 'Rody w wachlarzu',
@@ -758,6 +759,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         posterTitle: (name: string, withDescendants: boolean) => `${name} · ${withDescendants ? 'przodkowie i potomkowie' : 'przodkowie'}`,
         posterShape: { half: 'półkole', full: 'pełne koło', two: 'dwustronny' } as Record<'half' | 'full' | 'two', string>,
         posterColors: { gender: 'kolory według płci', line: 'kolory według linii', rod: 'kolory według rodów' } as Record<'gender' | 'line' | 'rod', string>,
+        posterColorsMain: 'kolory głównych rodów',
         posterGenerations: (gens: number, desc: number | null) => desc == null
             ? nPl(gens, 'pokolenie', 'pokolenia', 'pokoleń')
             : `${nPl(gens, 'pokolenie', 'pokolenia', 'pokoleń')} przodków, ${nPl(desc, 'pokolenie', 'pokolenia', 'pokoleń')} potomków`,

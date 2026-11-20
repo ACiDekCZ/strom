@@ -24,11 +24,12 @@ import {
     buildFanModel, buildFanSvg, fanLineages, FanHighlight, FanModel, FanShape, FanSvgOptions,
 } from '../fan-chart.js';
 import {
-    FanColorMode, FanTheme, fanLegend, fanHasRepeats, FanLegendItem, FanRodGroup, FanRodSlot, parseFanRodSlot, FAN_PALETTES, fanRodOtherSwatch,
+    FanColorMode, FanTheme, FanStyle, fanLegend, fanHasRepeats, FanLegendItem, FanRodGroup, FanRodSlot, parseFanRodSlot, fanPalette, fanRodOtherSwatch,
+    fanPatternSvg, fanStyleFont,
 } from '../fan-colors.js';
-import { assignFanRodColors, FanRodAssignment, FanRodLegend, fanRodLegend } from '../fan-rod-assign.js';
+import { assignFanRodColors, FanRodAssignment, FanRodLegend, FanRodScope, fanRodLegend } from '../fan-rod-assign.js';
 import { RodId, rodLabels, rodOf, realRodMembers, realRodSpouses } from '../lineage.js';
-import { fanScreenSizes, clearFanMeasureCache } from '../fan-labels.js';
+import { fanScreenSizes, clearFanMeasureCache, fanMeasureFor } from '../fan-labels.js';
 import { FanZoom, FanView as FanZoomView, FanZoomPoint } from '../fan-zoom.js';
 import { fanNavNodes, fanNavMove, FanNavDir } from '../fan-nav.js';
 import { fanYears } from '../fan-labels.js';
@@ -44,6 +45,10 @@ export interface FanViewSettings {
     descGenerations: number;
     shape: FanShape;
     colorMode: FanColorMode;
+    /** The style of the drawing (spec 118 §4); default colour. */
+    style?: FanStyle;
+    /** Which family lines are coloured (spec 118 §2); default all. */
+    rodScope?: FanRodScope;
 }
 
 /** What the view needs of the app (the renderer). */
@@ -269,14 +274,25 @@ export class FanViewController {
         return hit.size ? { rodId, hit } : null;
     }
 
+    /** The style of the drawing (spec 118 §4). */
+    private style(): FanStyle {
+        return this.host.settings().style ?? 'color';
+    }
+
     private rodColors(): FanRodAssignment | null {
         const model = this.model;
-        if (!model || this.host.settings().colorMode !== 'rod') return null;
+        const set = this.host.settings();
+        if (!model || set.colorMode !== 'rod') return null;
         const index = fanLineages(model.data);
-        if (this.rodAssignment && this.rodAssignmentModel === model && this.rodAssignment.index === index) return this.rodAssignment;
-        const a = assignFanRodColors(model, index, this.rodColorMemory);
+        const style = set.style ?? 'color';
+        const scope = set.rodScope ?? 'all';
+        // Computed again for another model, style or scope (spec 118 §2); the memory of the slots stays.
+        const key = `${style}|${scope}`;
+        if (this.rodAssignment && this.rodAssignmentModel === model && this.rodAssignment.index === index && this.rodAssignmentKey === key) return this.rodAssignment;
+        const a = assignFanRodColors(model, index, this.rodColorMemory, { style, scope });
         this.rodAssignment = a;
         this.rodAssignmentModel = model;
+        this.rodAssignmentKey = key;
         const before = this.rodColorMemory;
         // A state drawn after another one: the memory is this view's own from now on.
         if (before.size) this.rodMemoryOwn = true;
@@ -287,6 +303,8 @@ export class FanViewController {
     }
 
     private rodAssignmentModel: FanModel | null = null;
+    /** The style and scope of the current assignment. */
+    private rodAssignmentKey = '';
     /** The memory came from states this view drew one after another (no longer taken from the main window). */
     private rodMemoryOwn = false;
 
@@ -382,7 +400,9 @@ export class FanViewController {
             showKekule: this.host.showKekule(),
             relTypeLabel: this.host.relTypeLabel,
             colorMode: this.host.settings().colorMode,
+            style: this.style(),
             ...(this.rodColors() ? { rodColors: this.rodColors()! } : {}),
+            measure: fanMeasureFor(fanStyleFont(this.style())),
             ppu: vb.ppu,
             viewport: { x: vb.x, y: vb.y, w: vb.w, h: vb.h },
             sizes: fanScreenSizes(isMobile()),
@@ -1422,7 +1442,8 @@ export class FanViewController {
         if (!model) return [];
         const mode = this.host.settings().colorMode;
         const rc = this.rodColors();
-        const of = (theme: FanTheme) => fanLegend(model, mode, theme, rc);
+        const style = this.style();
+        const of = (theme: FanTheme) => fanLegend(model, mode, theme, rc, style);
         const light = of('light'), dark = of('dark'), print = of('print');
         return light.map((item, i) => ({ item, light: item, dark: dark[i] ?? item, print: print[i] ?? item }));
     }
@@ -1446,9 +1467,21 @@ export class FanViewController {
 
     private rodLabelCache: { index: FanRodAssignment['index']; labels: Map<RodId, string> } | null = null;
 
+    /**
+     * A legend swatch in the three themes. A black-and-white row's pattern
+     * (spec 118 §4) comes along as `data-pat` and a data-URI image per theme
+     * (`--slp`, `--sdp`, `--spp`) in that theme's ink.
+     */
     private swatch(r: { light: FanLegendItem; dark: FanLegendItem; print: FanLegendItem }): string {
         const v = (name: string, a: FanLegendItem) => `--${name}:${a.color};--${name}2:${a.color2 ?? a.color};`;
-        return `<span class="fan-sw" aria-hidden="true" style="${v('sl', r.light)}${v('sd', r.dark)}${v('sp', r.print)}"></span>`;
+        const pat = r.light.pattern;
+        let p = '';
+        if (pat) {
+            const style = this.style();
+            const img = (theme: FanTheme) => `url('data:image/svg+xml,${encodeURIComponent(fanPatternSvg(pat, fanPalette(theme, style).text))}')`;
+            p = `--slp:${img('light')};--sdp:${img('dark')};--spp:${img('print')};`;
+        }
+        return `<span class="fan-sw" aria-hidden="true"${pat ? ` data-pat="${pat}"` : ''} style="${v('sl', r.light)}${v('sd', r.dark)}${v('sp', r.print)}${p}"></span>`;
     }
 
     private legendItemsHtml(): string {
@@ -1481,7 +1514,7 @@ export class FanViewController {
         const small = sel !== null && L.light.other.some(i => i.key === sel);
         const pressed = coloured || (small && this.legendOtherOpen) ? sel : null;
         const heads: Record<FanRodGroup, string> = { P: S.legendFatherSide, M: S.legendMotherSide, D: S.legendDescendants };
-        const greyOf = (theme: FanTheme): FanLegendItem => ({ key: '', label: '', color: FAN_PALETTES[theme].grey });
+        const greyOf = (theme: FanTheme): FanLegendItem => ({ key: '', label: '', color: fanPalette(theme, this.style()).grey });
         const greySw = this.swatch({ light: greyOf('light'), dark: greyOf('dark'), print: greyOf('print') });
         const arrow = (a: string) => `<span class="fan-legend-arrow" aria-hidden="true">${a}</span>`;
         const row = (r: { light: FanLegendItem; dark: FanLegendItem; print: FanLegendItem }, sub: boolean): string => {
@@ -1508,7 +1541,7 @@ export class FanViewController {
             const otherSw = this.swatch({ light: otherOf(L.light), dark: otherOf(L.dark), print: otherOf(L.print) });
             html += `<button type="button" class="fan-legend-row fan-legend-other sel-opt${small && !open ? ' is-selected' : ''}" data-sel-form="row"`
                 + ` data-fan-legend="rodOther" aria-expanded="${open}" tabindex="-1">${otherSw}`
-                + `<span class="fan-legend-label">${esc(S.legendOther(L.light.otherRods))}</span>`
+                + `<span class="fan-legend-label">${esc(L.light.grey ? S.legendOtherGrey(L.light.otherRods) : S.legendOther(L.light.otherRods))}</span>`
                 + `<span class="fan-legend-who">${L.light.otherPeople}×</span>${arrow(open ? '▾' : '▸')}</button>`;
             if (open) {
                 L.light.other.forEach((light, k) => { html += row({ light, dark: L.dark.other[k] ?? light, print: L.print.other[k] ?? light }, true); });
@@ -1526,7 +1559,7 @@ export class FanViewController {
         const dots = L.light.groups.map((_, gi) => pick(gi, 0));
         const p = L.light.groups.findIndex(g => g.group === 'P');
         for (let k = 1; dots.length < 3 && p >= 0 && k < L.light.groups[p].items.length; k++) dots.push(pick(p, k));
-        if (!dots.length) dots.push({ light: FAN_PALETTES.light.grey, dark: FAN_PALETTES.dark.grey });
+        if (!dots.length) dots.push({ light: fanPalette('light', this.style()).grey, dark: fanPalette('dark', this.style()).grey });
         return dots.slice(0, 3);
     }
 

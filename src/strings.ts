@@ -4692,6 +4692,7 @@ const stringsEN = {
         legendDescendants: 'Descendants',
         /** The row of the grey family lines (spec 114 §4). */
         legendOther: (rods: number) => `Other · ${nEn(rods, 'line', 'lines')}`,
+        legendOtherGrey: (rods: number) => `Other lines (${rods})`,
         legendNoRod: 'no family line',
         /** After the centre person's line in the legend. */
         legendCentre: 'centre',
@@ -4732,6 +4733,7 @@ const stringsEN = {
         posterTitle: (name: string, withDescendants: boolean) => `${name} · ${withDescendants ? 'ancestors and descendants' : 'ancestors'}`,
         posterShape: { half: 'half circle', full: 'full circle', two: 'two-way' } as Record<'half' | 'full' | 'two', string>,
         posterColors: { gender: 'coloured by sex', line: 'coloured by lines', rod: 'coloured by family lines' } as Record<'gender' | 'line' | 'rod', string>,
+        posterColorsMain: 'colours of the main lines',
         posterGenerations: (gens: number, desc: number | null) => desc == null
             ? nEn(gens, 'generation', 'generations')
             : `${nEn(gens, 'generation', 'generations')} of ancestors, ${desc} of descendants`,
@@ -15077,6 +15079,7 @@ const stringsCZ: StringsType = {
         legendMotherSide: 'Matčina strana',
         legendDescendants: 'Potomci',
         legendOther: (rods: number) => `Ostatní · ${nCs(rods, 'rod', 'rody', 'rodů')}`,
+        legendOtherGrey: (rods: number) => `Ostatní rody (${rods})`,
         legendNoRod: 'bez rodu',
         legendCentre: 'střed',
         legendRowsAria: 'Rody ve vějíři',
@@ -15117,6 +15120,7 @@ const stringsCZ: StringsType = {
         posterTitle: (name: string, withDescendants: boolean) => `${name} · ${withDescendants ? 'předci a potomci' : 'předci'}`,
         posterShape: { half: 'půlkruh', full: 'celý kruh', two: 'oboustranný' } as Record<'half' | 'full' | 'two', string>,
         posterColors: { gender: 'barvy podle pohlaví', line: 'barvy podle linií', rod: 'barvy podle rodů' } as Record<'gender' | 'line' | 'rod', string>,
+        posterColorsMain: 'barvy hlavních rodů',
         posterGenerations: (gens: number, desc: number | null) => desc == null
             ? nCs(gens, 'generace', 'generace', 'generací')
             : `${nCs(gens, 'generace', 'generace', 'generací')} předků, ${desc} potomků`,
@@ -25302,6 +25306,7 @@ const stringsDE: StringsType = {
         legendMotherSide: 'Mütterliche Seite',
         legendDescendants: 'Nachkommen',
         legendOther: (rods: number) => `Weitere · ${nDe(rods, 'Stammlinie', 'Stammlinien')}`,
+        legendOtherGrey: (rods: number) => `Weitere Stammlinien (${rods})`,
         legendNoRod: 'ohne Stammlinie',
         legendCentre: 'Mitte',
         legendRowsAria: 'Stammlinien im Fächer',
@@ -25341,6 +25346,7 @@ const stringsDE: StringsType = {
         posterTitle: (name: string, withDescendants: boolean) => `${name} · ${withDescendants ? 'Vorfahren und Nachkommen' : 'Vorfahren'}`,
         posterShape: { half: 'Halbkreis', full: 'Vollkreis', two: 'beidseitig' } as Record<'half' | 'full' | 'two', string>,
         posterColors: { gender: 'Farben nach Geschlecht', line: 'Farben nach Linien', rod: 'Farben nach Stammlinien' } as Record<'gender' | 'line' | 'rod', string>,
+        posterColorsMain: 'Farben der Hauptstammlinien',
         posterGenerations: (gens: number, desc: number | null) => desc == null
             ? nDe(gens, 'Generation', 'Generationen')
             : `${nDe(gens, 'Generation', 'Generationen')} Vorfahren, ${nDe(desc, 'Generation', 'Generationen')} Nachkommen`,

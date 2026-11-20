@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
     buildFanModel, buildFanSvg, buildFanPosterSvg, fanPosterGeometry, FanModel, FOCUS_R, RING_W, ancestorRingRadii,
 } from '../fan-chart.js';
-import { FAN_PALETTES, fanLineColor } from '../fan-colors.js';
+import { FAN_PALETTES, fanLineColor, fanPalette } from '../fan-colors.js';
 import { estimateFanMeasure as estimate, fanScreenSizes } from '../fan-labels.js';
 import { StromData, Person, PersonId, Gender, Partnership, PartnershipId } from '../types.js';
 import { calibrationWorkload, machineFactor, normalizedMs } from './helpers/perf-budget.js';
@@ -676,5 +676,60 @@ describe('fan poster (spec 029 §9)', () => {
             expect(g.hasContent(cx - 5, cy + m.Rd * s + 25, 10, 10)).toBe(false); // below them
             expect(g.hasContent(cx + m.R * s - 30, cy + m.Rd * s + 5, 20, 20)).toBe(false);
         }
+    });
+});
+
+describe('styles of the drawing (spec 118 §4)', () => {
+    const d = data([
+        person('me', 'male', ['f', 'm']),
+        person('f', 'male', ['ff', 'fm']), person('m', 'female', ['mf', 'mm']),
+        person('ff'), person('fm', 'female'), person('mf'), person('mm', 'female'),
+    ]);
+    const model = buildFanModel(d, 'me' as PersonId, 4)!;
+    const draw = (o: Record<string, unknown> = {}) => buildFanSvg(model, { ...svgOpts, uid: 'st', measure: estimate, ...o });
+
+    it('draws the default as the colour style: the screen palettes, the sans face, no patterns', () => {
+        for (const mode of ['gender', 'line', 'rod'] as const) {
+            const svg = draw({ colorMode: mode });
+            expect(draw({ colorMode: mode, style: 'color' })).toBe(svg);
+            expect(svg).toContain('data-fan-style="color"');
+            expect(svg).toContain(`font-family="'Instrument Sans'`);
+            expect(svg).not.toContain('<pattern id="stp-');
+            expect(svg).not.toContain('fan-pat');
+            expect(svg).toContain(`#st .fan-years,#st .fan-kekule{fill:${FAN_PALETTES.light.text}}`);
+        }
+    });
+
+    it('draws the antique style in Strom Serif with its own palettes', () => {
+        const svg = draw({ style: 'antique' });
+        expect(svg).toContain('data-fan-style="antique"');
+        expect(svg).toContain(`font-family="'Strom Serif', Georgia, serif"`);
+        expect(svg).toContain(`fill:${fanPalette('light', 'antique').male}`);
+        expect(svg).toContain(`fill:${fanPalette('dark', 'antique').female}`);
+    });
+
+    it('black and white: the patterns once each in <defs> (at most 8), a halo for the names, the outline in the text colour', () => {
+        const gender = draw({ style: 'mono' });
+        expect(gender.match(/<pattern id="stp-/g)).toEqual(['<pattern id="stp-']);
+        expect(gender).toContain('fill="url(#stp-dot)"');
+        expect(gender).toContain('paint-order:stroke');
+        expect(gender).toContain(`#st .fan-pat-ink{stroke:${fanPalette('light', 'mono').text}`);
+        const rod = draw({ style: 'mono', colorMode: 'rod' });
+        const pats = rod.match(/<pattern id="stp-[a-z0-9]+"/g) ?? [];
+        expect(pats.length).toBeGreaterThan(0);
+        expect(pats.length).toBeLessThanOrEqual(8);
+        expect(new Set(pats).size).toBe(pats.length);
+        const hl = buildFanSvg(model, {
+            ...svgOpts, uid: 'st', measure: estimate, style: 'mono', embedStyles: true, theme: 'light',
+            highlight: { rodId: 'r' as never, hit: new Set(['f' as PersonId]) },
+        });
+        expect(hl).toContain(`.fan-hl-edge{fill:none;stroke:${fanPalette('light', 'mono').text}`);
+    });
+
+    it('the poster takes the style: the print palette, pattern swatches in the legend, the antique face', () => {
+        const mono = buildFanPosterSvg(model, { ...svgOpts, measure: estimate, style: 'mono' }, {});
+        expect(mono).toContain('fanposter-lp-dot');
+        const antique = buildFanPosterSvg(model, { ...svgOpts, measure: estimate, style: 'antique' }, {});
+        expect(antique).toContain(`class="fan-poster-legend" font-family="'Strom Serif', Georgia, serif"`);
     });
 });
