@@ -302,9 +302,10 @@ export const personPageMethods = uiModule({
         };
         window.addEventListener('strom:user-change', userChangeHandler);
         // An image the page waits for came, or did not: the page is drawn again (spec 116 §5).
+        // The portrait that did not come carries no data-img-state (its square is calm), only its own class.
         const redraw = userChangeHandler;
         imagesHandler = () => {
-            if (!bodyEl()?.querySelector('[data-img-state], .pp-img-wait, .sp-img-wait')) return;
+            if (!bodyEl()?.querySelector('[data-img-state], .pp-img-wait, .sp-img-wait, .pp-portrait--wait')) return;
             const failed = imageLoads.snapshot().failed;
             if (failed === imagesFailedShown && !imagesArrivedSince) return;
             imagesArrivedSince = false;
