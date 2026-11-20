@@ -3441,7 +3441,7 @@ export const researchUiMethods = uiModule({
         s.queue = status.queue;
         s.queueMore = status.queueMore;
         s.queueCounts = status.queueCounts;
-        if (status.queueCounts) noteQueueRev(s.bridge.base, status.queueCounts.rev);
+        if (status.queueCounts) noteQueueRev(s.bridge.base, status.queueCounts.rev, status.features);
         s.researches = status.researches;
         s.caps = status.caps;
         s.offLine = status.offLine;
@@ -4069,7 +4069,7 @@ export const researchUiMethods = uiModule({
             live.overview = viewed || this.researchOverviewRemembered();
             // Pages of the queue read through the bridge redraw the overview when they come.
             resetQueueLists();
-            if (live.queueCounts) noteQueueRev(bridge.base, live.queueCounts.rev);
+            if (live.queueCounts) noteQueueRev(bridge.base, live.queueCounts.rev, live.features);
             onQueueListsChange(() => this.queueListsChanged());
             // Which tree is followed now, said in the panel (never a toast): started, or moved from another tree.
             if (from) this.noteLiveFollowStarted(live, from);
@@ -4332,7 +4332,7 @@ export const researchUiMethods = uiModule({
         s.queueMore = status.queueMore;
         s.queueCounts = status.queueCounts;
         // A new order of the queue: the pages on screen are read again (after a pause), the others forgotten.
-        if (status.queueCounts) noteQueueRev(s.bridge.base, status.queueCounts.rev);
+        if (status.queueCounts) noteQueueRev(s.bridge.base, status.queueCounts.rev, status.features);
         s.researches = status.researches;
         s.caps = status.caps;
         s.offLine = status.offLine;

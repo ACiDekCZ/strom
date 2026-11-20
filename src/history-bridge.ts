@@ -14,7 +14,7 @@
 
 import {
     cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, type ResearchExperiment, type ResearchHypothesesDecide,
-    sanitizeBooksSettings, type LiveBooksSettings,
+    sanitizeBooksSettings, sanitizeCensus, type LiveBooksSettings, type LiveCensus,
 } from './research-link.js';
 import { writeHeldOfRefusal, type ResearchWriteHeld } from './research-write-held.js';
 import { READ_TASK_NAMES, READ_TASK_SETTING_PATH, readTaskSettingBody, sanitizeTaskSetting, type ReadTaskSetting } from './research-read-task.js';
@@ -701,6 +701,44 @@ export function booksSettingReply(status: number, body: unknown, features: reado
 export async function postBridgeBooks(base: string, body: BooksSettingBody, features: readonly string[] | null | undefined): Promise<BooksSettingResult> {
     const res = await postWrite(base, '/books', body);
     return res ? booksSettingReply(res.status, res.body, features) : { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
+}
+
+// ==================== CENSUS RECORDS (spec 106) ====================
+
+/**
+ * Why `POST /census {on}` did not go: `invalid` 400 census.body; `archive` 409 census.archive (an archive, or a
+ * research waiting for its agent); `held` sealed elsewhere / not downloaded / disk full (each with its feature);
+ * `full` 507 without the feature of a held write; `locked` 423 (written by a newer tree); `busy` 503 research.busy;
+ * `network` no answer; `unknown` anything else (500 census.failed: the bridge's sentence, if any, in `reason`).
+ */
+export type CensusWriteError = 'archive' | 'invalid' | 'busy' | 'locked' | 'held' | 'full' | 'network' | 'unknown';
+
+export type CensusWriteResult =
+    | { ok: true; census: LiveCensus | null; head: string; parent: string }
+    | { ok: false; code: CensusWriteError; status: number; reason: string; bridgeCode: string; held?: ResearchWriteHeld };
+
+/** The reply to `POST /census`, typed: the state the research keeps now (null: not said validly) and its commit. */
+export function censusReply(status: number, body: unknown, features: readonly string[] | null | undefined): CensusWriteResult {
+    const r = asRecord(body) ?? {};
+    if (status >= 200 && status < 300) return { ok: true, census: sanitizeCensus(r.census), ...headsOf(body) };
+    const reason = bridgeSentence(body);
+    const code = bridgeCode(body);
+    const out = (c: CensusWriteError, extra: { held?: ResearchWriteHeld } = {}): CensusWriteResult =>
+        ({ ok: false, code: c, status, reason, bridgeCode: code, ...extra });
+    const held = writeHeldOfRefusal(code, r.error, features, r.params);
+    if (held) return out('held', { held });
+    if (status === 400) return out('invalid');
+    if (status === 409 && code === 'census.archive') return out('archive');
+    if (status === 503 || code === 'research.busy' || code === 'busy') return out('busy');
+    if (status === 423 || code === 'locked') return out('locked');
+    if (status === 507 || code === 'disk.full') return out('full');
+    return out('unknown');
+}
+
+/** Census records on or off for this research (`POST <token>/census {"on": bool}`), written at once, no terminal. */
+export async function postBridgeCensus(base: string, on: boolean, features: readonly string[] | null | undefined): Promise<CensusWriteResult> {
+    const res = await postWrite(base, '/census', { on });
+    return res ? censusReply(res.status, res.body, features) : { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
 }
 
 // ==================== KINDS OF EVENTS (spec 035) ====================

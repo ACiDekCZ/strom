@@ -2635,6 +2635,12 @@ export interface LiveStatus {
     /** `stories.history` (with `stories.history` in `features`): the research may use the history of places in stories. */
     storiesHistory?: boolean;
     /**
+     * `census` (with `census` in `features`, spec 106): census records as a source for this research and how many
+     * census tasks are set aside while it is off. Null: the research has the feature but did not say a valid state
+     * (not known); absent: a research without the feature.
+     */
+    census?: LiveCensus | null;
+    /**
      * `hypotheses.decide` (with `hypotheses.decide` in `features`, spec 060): who decides the research's
      * hypotheses; a value the app does not know reads as `person`. Absent: not said (an archive, a research
      * waiting for its agent, an older research).
@@ -2782,6 +2788,26 @@ export const HISTORY_KINDS_FEATURE = 'history.kinds';
 export const HISTORY_ALIGN_FEATURE = 'history.align';
 /** `/status.features` (R7): `/status.stories.history` and `POST /stories {history}`. */
 export const STORIES_HISTORY_FEATURE = 'stories.history';
+/**
+ * `/status.features` (spec 106): census records as a source — `/status.census`, `POST /census {on}`, the task kind
+ * `census` and `known=` of `GET /queue?kind=other`.
+ */
+export const CENSUS_FEATURE = 'census';
+
+/** `/status.census`: census records on for this research, and the census tasks set aside (null: not known). */
+export interface LiveCensus {
+    on: boolean;
+    /** Open and waiting census tasks set aside while census is off (0 when on); null: not said validly. */
+    held: number | null;
+}
+
+/** `/status.census` (or the `census` of a `POST /census` reply), checked: `on` a boolean, else null (not known). */
+export function sanitizeCensus(value: unknown): LiveCensus | null {
+    const r = asRecord(value);
+    if (!r || typeof r.on !== 'boolean') return null;
+    const held = typeof r.held === 'number' && Number.isInteger(r.held) && r.held >= 0 && r.held <= 10_000_000 ? r.held : null;
+    return { on: r.on, held };
+}
 /**
  * `/status.features` (spec 060): `/status.hypotheses.decide`, `POST /hypotheses {decide}` and who decided a
  * hypothesis in the research's file (`_BY`, `DECI`, `_AT`).
@@ -3514,7 +3540,7 @@ export const WORK_LINK_FEATURE = 'work.link';
  */
 export const QUEUE_KIND_FEATURE = 'queue.kind';
 /** The kinds of work a queued task is, in the order their chips stand (`queue.kind`). */
-export const QUEUE_TASK_KINDS = ['verify', 'records', 'material', 'places', 'enrich', 'request', 'story', 'history', 'other'] as const;
+export const QUEUE_TASK_KINDS = ['verify', 'records', 'census', 'material', 'places', 'enrich', 'request', 'story', 'history', 'other'] as const;
 export type QueueTaskKind = typeof QUEUE_TASK_KINDS[number];
 /** A task's kind as the research says it: one known here, any other word `other` (a newer research), else null. */
 export function queueTaskKindOf(v: unknown): QueueTaskKind | null {
@@ -3576,7 +3602,8 @@ export function sanitizeQueueCounts(value: unknown): LiveQueueCounts | null {
         }
         return out;
     };
-    // A kind not known here counts under `other` (a newer research's kind).
+    // A kind not known here counts under `other` (a newer research's kind). `census` is a kind of its own: only a
+    // research with the feature `census` says it, and it never counts it under `other` (spec 106).
     const kind: Partial<Record<QueueTaskKind, number>> = {};
     for (const [k, v] of Object.entries(asRecord(r.kind) ?? {}).slice(0, MAX_COUNTED)) {
         const key = queueTaskKindOf(k);
@@ -4348,6 +4375,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
         ...(features?.includes(OFF_LINE_BRANCHES_FEATURE) && sanitizeOffLine(r.offLine) ? { offLine: sanitizeOffLine(r.offLine)! } : {}),
         ...(statusBooks(r.books, features) ? { books: statusBooks(r.books, features)! } : {}),
+        ...(features?.includes(CENSUS_FEATURE) ? { census: sanitizeCensus(r.census) } : {}),
         ...(features?.includes(QUEUE_PAGE_FEATURE) && sanitizeQueueCounts(r.queueCounts) ? { queueCounts: sanitizeQueueCounts(r.queueCounts)! } : {}),
         ...agentSaid(r.agent),
         ...(sanitizeBrowser(r) ? { browser: sanitizeBrowser(r)! } : {}),

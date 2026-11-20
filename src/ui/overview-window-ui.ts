@@ -360,7 +360,7 @@ export const overviewWindowMethods = uiModule({
             case 'queue-list': {
                 // A page of the queue or of its search, read from this window's bridge as the docked overview reads it.
                 if (!s || !queuePaged(s)) return Promise.resolve<QueuePageResult>({ ok: false, code: 'failed' });
-                return fetchQueuePage(s.bridge.base, a.args.filter, a.args.from, a.args.count);
+                return fetchQueuePage(s.bridge.base, a.args.filter, a.args.from, a.args.count, undefined, s.features);
             }
         }
     },

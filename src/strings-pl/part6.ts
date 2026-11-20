@@ -1154,7 +1154,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         queueSearchNoneDir: (d: string) => `W linii ${d} nic nie znaleziono.`,
         queueSearchCancel: 'Wyczyść wyszukiwanie',
         queueSearchAllDirs: 'Szukaj we wszystkich liniach',
-        taskKinds: { verify: 'Weryfikacja', records: 'Metryki', material: 'Materiał', places: 'Miejsca', enrich: 'Źródła poza metrykami',
+        taskKinds: { verify: 'Weryfikacja', records: 'Metryki', census: 'Spis ludności', material: 'Materiał', places: 'Miejsca', enrich: 'Źródła poza metrykami',
             request: 'Zapytania', story: 'Opowieści', history: 'Historia', other: 'Inne' } as Record<string, string>,
         taskKindLabel: 'Rodzaj zadania',
         taskKindClear: 'Pokaż wszystkie rodzaje zadań',

@@ -86,7 +86,7 @@ describe('the queue by kind of work (queue.kind)', () => {
     it('reads queueCounts.kind: kinds with a task, a newer kind counted as other; none said: none', () => {
         const c = sanitizeQueueCounts({
             research: {}, branch: {}, next: 190, parked: 3, rev: 'a1b2c3d4e5f60718',
-            kind: { records: 171, verify: 12, story: 3, letters: 2, census: 1, places: 0, '': 5, history: -1 },
+            kind: { records: 171, verify: 12, story: 3, letters: 2, inquest: 1, places: 0, '': 5, history: -1 },
         })!;
         expect(c.kind).toEqual({ records: 171, verify: 12, story: 3, other: 3 });
         expect(sanitizeQueueCounts({ research: {}, branch: {}, next: 1, parked: 0, rev: 'a1b2c3d4e5f60718' })!.kind).toBeUndefined();

@@ -271,6 +271,11 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         storiesDesc: 'Badanie może przy pisaniu opowieści użyć historii miejsc jako źródła; gotowe opowieści nie są z tego powodu przepisywane.',
         storiesSection: 'Opowieści',
         storiesBridgeDown: 'Badanie nie działa. Zmienić to będzie można, gdy zacznie działać.',
+        // Spisy ludności, Badanie dla tego drzewa → Źródła (spec 106 §4.2).
+        censusSection: 'Źródła',
+        censusTitle: 'Spisy ludności',
+        censusDesc: 'Badanie może używać spisów ludności jako źródła: gospodarstwo domowe w jednym roku pokazuje, kto mieszkał razem i skąd kto pochodził. Większość archiwów spisy tylko wyświetla, dlatego arkusze dostarcza się zwykle ręcznie jako zrzuty ekranu.',
+        censusHeld: (n: number) => `Odłożone: ${nPl(n, 'zadanie', 'zadania', 'zadań')} spisu. ${n === 1 ? 'Wróci' : 'Wrócą'} po włączeniu.`,
         hideAllMenu: 'Ukryj wszystko w tym drzewie',
         hideAllSub: 'także wydarzenia, które badanie znajdzie później',
         hideAllTitle: (r: string) => `Ukryć wszystko z regionu ${r}?`,
