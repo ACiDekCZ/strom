@@ -25,6 +25,7 @@ import { researchActionLabel, researchMarkFlags, researchLinkFlags } from './res
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { researchCitationsOut, setCitationFeaturesLookup } from '../citation-gates.js';
+import { setSourceRetractLookup } from '../source-retract.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { TreeId, PersonId, ResearchLink, ResearchSend, ResearchSendMode, StromData, TreeMetadata, ResearchConflict, ResearchHypothesis } from '../types.js';
@@ -461,6 +462,17 @@ export function researchBridgeDownNow(researchId: string, now = Date.now()): boo
 
 // The citation gates (main citation, removal, order) read the features from here.
 setCitationFeaturesLookup(id => (researchStatusNow(id) ?? lastBridgeStatus(id))?.features ?? null);
+
+// Deleting a source of a followed tree (spec 117 §1) reads the bridge from here: its features (now, else as last said),
+// whether it answers now with its address known, and whether the research can be written here (not sealed elsewhere).
+setSourceRetractLookup(id => {
+    const status = researchStatusNow(id) ?? lastBridgeStatus(id);
+    return {
+        features: status?.features ?? null,
+        bridgeUp: !!runtime.get(id)?.up && !!parseLiveBridge(storedResearchBridge(id)?.base),
+        readOnly: status?.seal === 'elsewhere',
+    };
+});
 
 /**
  * A satellite window (spec 097 K1.3): the research's status as the main

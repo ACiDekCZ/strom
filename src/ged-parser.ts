@@ -261,7 +261,7 @@ function toStory(raw: RawStory | undefined, mapRefs: (refs?: string[]) => string
  * only): conflicting sources, hypotheses, what was searched.
  */
 interface RawResearch {
-    conflicts: { id: string; fact: string; title: string; stat: string; take: string; kind?: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
+    conflicts: { id: string; fact: string; title: string; stat: string; take: string; kind?: string; review?: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
     hypotheses: RawResearchHypothesis[];
     searched: { title: string; date: string; resn: string; at: string }[];
     /** The _STROM_EDGE / _STROM_ISLAND block: its value and the lines under it (level, tag, value). */
@@ -285,6 +285,8 @@ interface RawResearchValue {
     /** 3 _STROM_SIDE / 3 _STROM_RAW under a conflict's value, as written. */
     side?: string;
     raw?: string;
+    /** 3 _STROM_RETRACTED S0042 under a value or the decision: a deleted source it stood on (spec 117 §8). */
+    retracted?: string[];
 }
 
 /** `1 _STROM_HYPO` as written (spec 060, 074). */
@@ -433,6 +435,16 @@ function toResearchVerify(raw: RawFactVerify | undefined): ResearchFactVerify | 
     });
 }
 
+/**
+ * A conflict's mark of review (GEDCOM 2 _STROM_REVIEW, spec 117 §8), as
+ * written: any word kept (one the app does not know reads as a plain "to
+ * review"), nothing that is not one word.
+ */
+function conflictReviewOf(value: string | undefined): string | undefined {
+    const v = value?.trim();
+    return v && /^[A-Za-z][\w.-]{0,59}$/.test(v) ? v : undefined;
+}
+
 /** Whose value a conflict proposes to change (GEDCOM 2 _STROM_KIND import | user); anything else says nothing. */
 function conflictKindOf(value: string | undefined): 'import' | 'user' | undefined {
     const v = value?.trim().toLowerCase();
@@ -444,7 +456,11 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
     const value = (v: RawResearchValue): ResearchConflictValue => {
         const ids = mapRefs(v.sourceRefs);
         // A batch's source label left in front of the claim goes (researchClaimValue).
-        return { value: researchClaimValue(v.value), ...(ids.length > 0 ? { sourceIds: ids } : {}) };
+        return {
+            value: researchClaimValue(v.value),
+            ...(ids.length > 0 ? { sourceIds: ids } : {}),
+            ...(v.retracted?.length ? { retracted: [...new Set(v.retracted)] } : {}),
+        };
     };
     const sideOf = (v: RawResearchValue): 'user' | 'research' | undefined => {
         const side = v.side?.trim().toLowerCase();
@@ -477,6 +493,7 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
                 ...(decided && c.decision?.value ? { decision: value(c.decision) } : {}),
                 ...(c.take.trim().toUpperCase() === 'Y' ? { take: true as const } : {}),
                 ...(conflictKindOf(c.kind) ? { kind: conflictKindOf(c.kind)! } : {}),
+                ...(conflictReviewOf(c.review) ? { review: conflictReviewOf(c.review)! } : {}),
             };
         })
         .filter(c => c.values.some(v => v.value));
@@ -4620,6 +4637,7 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
                         else if (tag === 'STAT') c.stat = value;
                         else if (tag === '_STROM_TAKE') c.take = value;
                         else if (tag === '_STROM_KIND') c.kind = value;
+                        else if (tag === '_STROM_REVIEW') c.review = value;
                         else if (tag === 'VAL') c.values.push({ value: value.trim(), sourceRefs: [] });
                         else if (tag === 'DECI') c.decision = { value: value.trim(), sourceRefs: [] };
                     } else if (level === 3) {
@@ -4628,6 +4646,8 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
                         else if (v && tag === 'SOUR' && GED_POINTER.test(value)) v.sourceRefs.push(value);
                         else if (v && open.sub === 'VAL' && tag === '_STROM_SIDE') v.side = value;
                         else if (v && open.sub === 'VAL' && tag === '_STROM_RAW') v.raw = value;
+                        // A deleted source the value or the decision stood on (spec 117 §8): its id, never a pointer.
+                        else if (v && tag === '_STROM_RETRACTED' && /^S\d{1,9}$/.test(value.trim())) (v.retracted ??= []).push(value.trim());
                         else if (v && tag === 'CONC') v.value += value;
                         else if (v && tag === 'CONT') v.value += ' ' + value;
                     }

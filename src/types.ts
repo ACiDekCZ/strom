@@ -1262,7 +1262,16 @@ export interface ResearchConflictValue {
     side?: 'user' | 'research';
     /** The sex as a machine value (GEDCOM 3 _STROM_RAW), SEX conflicts only: the value itself is in the research's words. */
     raw?: 'M' | 'F' | 'U';
+    /**
+     * Sources it stood on that the person deleted in the research (GEDCOM
+     * 3 _STROM_RETRACTED S0042, in place of its 3 SOUR; spec 117 §8): the
+     * value stays shown, its source as retracted.
+     */
+    retracted?: string[];
 }
+
+/** A conflict's mark of review: a source it stood on was deleted (spec 117 §8; any other word reads as a plain "to review"). */
+export const CONFLICT_REVIEW_SOURCE_RETRACTED = 'source.retracted';
 
 /** Sources that disagree about one fact. */
 export interface ResearchConflict {
@@ -1285,6 +1294,13 @@ export interface ResearchConflict {
     take?: true;
     /** Whose value the research proposes to change (GEDCOM 2 _STROM_KIND): from the family tree, or entered by a person. */
     kind?: 'import' | 'user';
+    /**
+     * To be looked at again, as the research wrote it (GEDCOM 2 _STROM_REVIEW):
+     * `source.retracted` (CONFLICT_REVIEW_SOURCE_RETRACTED) when a source it
+     * stood on was deleted; a word the app does not know reads as a plain
+     * "to review". Open or decided alike; its state stays (spec 117 §8).
+     */
+    review?: string;
 }
 
 /** A question the research works with ("Father: Václav, or Jan?"). */
@@ -2809,6 +2825,13 @@ export interface ResearchLink {
     copy?: boolean;
     /** The last send straight to the bridge and what became of it (a research that announces `accepts`). */
     sent?: ResearchSend;
+    /**
+     * Sources the person deleted in edit mode, by their research id (S0042;
+     * spec 117 §4): told to a research that retracts sources
+     * (`_STROM_SOURCE_DELETED`) until it says it did (`retracted` of `/sync`
+     * or `/status.sends`). Survives updates from the research.
+     */
+    deletedSources?: string[];
     /**
      * The bridge refused the last send at once, with its reason (cleared by the next good send or an update).
      * `held`: refused for what the research itself has to settle first (sealed elsewhere, files not downloaded,

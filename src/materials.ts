@@ -1077,7 +1077,8 @@ const defaultSleep = (ms: number, signal?: AbortSignal): Promise<void> => new Pr
     signal?.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
 });
 
-interface RawAnswer { status: number; body: unknown; retryAfter: string | null; res?: Response }
+/** A bridge's answer as read (also for the other writes of the bridge: source-retract.ts). */
+export interface RawAnswer { status: number; body: unknown; retryAfter: string | null; res?: Response }
 
 /** One request with a timeout; null body when the answer is not JSON (or `raw`: the response is kept unread). */
 async function request(url: string, init: RequestInit, opts: BridgeOptions, raw = false): Promise<RawAnswer | MaterialError> {
@@ -1105,7 +1106,7 @@ async function request(url: string, init: RequestInit, opts: BridgeOptions, raw 
  * A request that is asked again, quietly, while the research is busy (409):
  * three more times after 1, 2 and 4 s, or after what it asks for (capped).
  */
-async function withBusyRetry(url: string, init: RequestInit, opts: BridgeOptions, raw = false,
+export async function withBusyRetry(url: string, init: RequestInit, opts: BridgeOptions, raw = false,
     retryIf: (answer: RawAnswer) => boolean = () => true): Promise<RawAnswer | MaterialError> {
     const delays = opts.retryDelaysMs ?? BUSY_RETRY_DELAYS_MS;
     const sleep = opts.sleep ?? ((ms: number) => defaultSleep(ms, opts.signal));
@@ -1120,7 +1121,7 @@ async function withBusyRetry(url: string, init: RequestInit, opts: BridgeOptions
     }
 }
 
-function postInit(body: unknown): RequestInit {
+export function postInit(body: unknown): RequestInit {
     return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
 

@@ -1908,6 +1908,7 @@ class TreeManagerClass {
             if (prev?.sendMedia === false && link.sendMedia === undefined) kept.sendMedia = false;
             if (prev?.autoLoadImages === false && link.autoLoadImages === undefined) kept.autoLoadImages = false;
             if (prev?.titlesIn && link.titlesIn === undefined) kept.titlesIn = prev.titlesIn;
+            if (prev?.deletedSources?.length && link.deletedSources === undefined) kept.deletedSources = prev.deletedSources;
             tree.research = { ...kept, ...link, id };
         } else delete tree.research;
         this.saveIndex();
@@ -2021,8 +2022,8 @@ registerPoolReferences('trees', async () => {
     return ids;
 });
 
-/** A research link without the state of a send (a duplicate starts with none). */
+/** A research link without the state of a send (a duplicate starts with none, nor with sources waiting to be retracted). */
 function withoutSendState(link: ResearchLink): ResearchLink {
-    const { sent: _sent, refused: _refused, ...rest } = link;
+    const { sent: _sent, refused: _refused, deletedSources: _deleted, ...rest } = link;
     return rest;
 }
