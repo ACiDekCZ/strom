@@ -222,5 +222,13 @@ for (const width of [1440, 1024, 390]) {
         const group = page.locator('#settings-modal section[aria-labelledby="settings-group-fan"]');
         await expect(group.locator('.settings-group-title')).toHaveText('Fächer');
         expect(await overflows(page, '#settings-modal section[aria-labelledby="settings-group-fan"]')).toEqual([]);
+        // Each style's name keeps its words whole beside its hint (no "Schwarz | weiß" on a phone).
+        const split = await group.locator('.fan-set-name').evaluateAll(els => els.filter(el => {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const lines = new Set([...range.getClientRects()].map(r => Math.round(r.top))).size;
+            return lines > (el.textContent ?? '').trim().split(/\s+/).length;
+        }).map(el => el.textContent));
+        expect(split).toEqual([]);
     });
 }
