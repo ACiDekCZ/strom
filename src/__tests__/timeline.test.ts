@@ -11,7 +11,7 @@ import {
 import { setLanguage, strings } from '../strings.js';
 import { HISTORY_KINDS } from '../history.js';
 import { historyKindSvg } from '../history-symbols.js';
-import { buildTimelineSvg, buildTimelinePosterSvg, historyRowHeight, historyClusterGap, placeSharedLabels } from '../timeline-chart.js';
+import { buildTimelineSvg, buildTimelinePosterSvg, historyRowHeight, historyClusterGap, historyClusterClearance, placeSharedLabels } from '../timeline-chart.js';
 import { StromData, PersonId, PartnershipId, Person, Partnership, Gender, LifeEvent } from '../types.js';
 
 interface POpts {
@@ -553,6 +553,28 @@ describe('timeline history row', () => {
         expect(c22.map(c => c.items.map(e => e.id))).toEqual([['a', 'b', 'c'], ['d', 'e']]);
         // The same years with the computer's gap: more clusters.
         expect(clusterTimelineHistory([ev('a', 1866), ev('b', 1873), ev('c', 1876)], phone, 16).length).toBe(2);
+    });
+
+    it('a dense row (the whole timeline): a cluster pulled towards its neighbour merges with it, no badge over the next symbol', () => {
+        // An event a year at 6 px a year (1440 px, ~210 years): with the gap alone the means come 12–18 px apart
+        // and a badge (3 px right of the centre, 13 px wide) covers the next 12 px symbol.
+        const xOf = (y: number) => (y - 1830) * 6;
+        const evs = Array.from({ length: 80 }, (_, i) => ev(`e${i}`, 1832 + i));
+        const plain = clusterTimelineHistory(evs, xOf, 16);
+        const tight = (cs: { x: number; items: unknown[] }[]) => cs.slice(1).some((c, i) => c.x - cs[i].x < historyClusterClearance(cs[i].items.length));
+        expect(tight(plain)).toBe(true);
+        for (const gap of [16, 22]) {
+            const cs = clusterTimelineHistory(evs, xOf, gap, historyClusterClearance);
+            expect(tight(cs)).toBe(false);
+            // Every event stays, in order; the drawn boxes (symbol x ± 6, badge x + 3 … x + 3 + width) do not touch.
+            expect(cs.flatMap(c => c.items.map(e => e.id))).toEqual(evs.map(e => e.id));
+            for (let i = 1; i < cs.length; i++) {
+                const badgeRight = cs[i - 1].items.length > 1 ? cs[i - 1].x + historyClusterClearance(cs[i - 1].items.length) - 7 : cs[i - 1].x + 6;
+                expect(badgeRight).toBeLessThan(cs[i].x - 6);
+            }
+        }
+        // 1 digit: 13 px badge → 23 px; 2 digits: 17 px → 27 px; a single symbol 13 px.
+        expect([historyClusterClearance(1), historyClusterClearance(9), historyClusterClearance(10)]).toEqual([13, 23, 27]);
     });
 
     it("says a cluster's years, a period's end included", () => {

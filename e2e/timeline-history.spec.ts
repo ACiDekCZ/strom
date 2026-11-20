@@ -569,6 +569,57 @@ const localClashes = (page: Page) => page.evaluate(() => {
     return out;
 });
 
+/**
+ * Seventy invented events of a region in Čapkov 1832–1908, about one a year:
+ * the whole timeline's row at its densest.
+ */
+function denseRow(h: FakeHistory): void {
+    const kinds = ['war', 'epidemic', 'census', 'state', 'emigration', 'law', 'economy', 'disaster', 'other'];
+    const bohemia = { id: 'cz-bohemia', name: { cs: 'Čechy', en: 'Bohemia', de: 'Böhmen' } };
+    const ids: string[] = [];
+    for (let i = 0; i < 70; i++) {
+        ids.push(`D${i}`);
+        (h.payload.events as Record<string, unknown>[]).push({
+            id: `D${i}`, from: 1832 + ((i * 37) % 77), kind: kinds[(i * 5) % 9], scope: 'region', region: bohemia,
+            text: { cs: `Událost ${i}.`, en: `Event ${i}.`, de: `Ereignis ${i}.` },
+            source: { title: 'Invented chronicle', url: `https://example.org/d${i}`, checked: '2026-10-01' },
+        });
+    }
+    const place = h.payload.places['Čapkov'] as Record<string, unknown>;
+    place.events = [...(place.events as string[]), ...ids];
+}
+
+/** The history row: a cluster's symbol or badge over another cluster's, or over the label. */
+const rowClashes = (page: Page) => page.evaluate(() => {
+    const ov = (r: DOMRect, q: DOMRect) => r.left < q.right - 0.5 && q.left < r.right - 0.5 && r.top < q.bottom - 0.5 && q.top < r.bottom - 0.5;
+    const row = document.querySelector('#timeline-container .tl-hist-row')!;
+    const label = row.querySelector('.tl-hist-btn')!.getBoundingClientRect();
+    const cl = [...row.querySelectorAll('.tl-hist')].map(g => [...g.querySelectorAll('svg.hist-kind-svg, .tl-hist-n')].map(e => e.getBoundingClientRect()));
+    const out: string[] = [];
+    cl.forEach((a, i) => {
+        if (a.some(r => ov(r, label))) out.push(`${i} × label`);
+        cl.slice(i + 1).forEach((b, j) => { if (a.some(r => b.some(q => ov(r, q)))) out.push(`${i} × ${i + 1 + j}`); });
+    });
+    return out;
+});
+
+test.describe('Timeline: a dense history row (spec 121 §3)', () => {
+    for (const [w, h] of [[390, 844], [1440, 900]] as const) {
+        test(`${w} px, an event a year: no badge over another cluster's symbol or badge`, async ({ page }) => {
+            await setup(page, { width: w, height: h, ged: wideGed(), edit: denseRow });
+            await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+            await focusOn(page, 'Bartholomäus');
+            await timelineView(page);
+            await expect(clusters(page).first()).toBeVisible();
+            expect(await clusters(page).count()).toBeGreaterThan(w > 1000 ? 10 : 2);
+            expect(await rowClashes(page)).toEqual([]);
+            // Every event is still in one cluster.
+            const ids = await clusters(page).evaluateAll(els => els.flatMap(e => e.getAttribute('data-hist-ids')!.split(' ')));
+            expect(ids.filter(id => id.startsWith('D'))).toHaveLength(70);
+        });
+    }
+});
+
 test.describe('Timeline: local history on the life lines (spec 121 §6–§8)', () => {
     test('the option draws the fire on Jan\'s line: a box over the bar with its tooltip, out of Tab; a click opens his card on its row', async ({ page }) => {
         await setup(page, { width: 1440, height: 900 });

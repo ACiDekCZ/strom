@@ -620,9 +620,17 @@ export function timelineHistoryYears(items: readonly { year: number; year2?: num
  * cluster joins it; otherwise it starts a new one. The cluster sits at the
  * mean x of its members. 16 px on a computer, 22 px on a phone (the count
  * badges must not overlap).
+ *
+ * `clearance(n)`, when given, is how far the next cluster's x must be from a
+ * cluster of `n` events for their marks not to touch (its count badge sticks
+ * out to the right): a mean pulled towards its neighbour brings two clusters
+ * closer than `minGap`, and on a dense row (the whole timeline, spec 121 §3)
+ * a badge would cover the next symbol. Such neighbours merge, left to right,
+ * until every pair has room.
  */
 export function clusterTimelineHistory(
     events: readonly TimelineHistoryItem[], xOf: (year: number) => number, minGap: number,
+    clearance?: (count: number) => number,
 ): TimelineHistoryCluster[] {
     const out: { x0: number; xs: number[]; items: TimelineHistoryItem[] }[] = [];
     for (const e of events) {
@@ -631,7 +639,21 @@ export function clusterTimelineHistory(
         if (last && x - last.x0 < minGap) { last.items.push(e); last.xs.push(x); }
         else out.push({ x0: x, xs: [x], items: [e] });
     }
-    return out.map(c => ({ x: c.xs.reduce((a, b) => a + b, 0) / c.xs.length, items: c.items }));
+    const mean = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
+    if (!clearance) return out.map(c => ({ x: mean(c.xs), items: c.items }));
+    const merged: { xs: number[]; items: TimelineHistoryItem[]; x: number }[] = [];
+    for (const c of out) {
+        let cur = { xs: c.xs, items: c.items, x: mean(c.xs) };
+        let prev = merged[merged.length - 1];
+        while (prev && cur.x - prev.x < clearance(prev.items.length)) {
+            merged.pop();
+            const xs = [...prev.xs, ...cur.xs];
+            cur = { xs, items: [...prev.items, ...cur.items], x: mean(xs) };
+            prev = merged[merged.length - 1];
+        }
+        merged.push(cur);
+    }
+    return merged.map(c => ({ x: c.x, items: c.items }));
 }
 
 // ==================== PERSON LIFELINE (R2) ====================

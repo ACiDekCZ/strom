@@ -122,6 +122,20 @@ export function historyClusterGap(narrow: boolean): number {
     return narrow ? 22 : 16;
 }
 
+/** A history cluster's count badge width: 13 px, wider for more digits. */
+function historyBadgeWidth(n: number): number {
+    return Math.max(13, 5 + String(n).length * 6);
+}
+
+/**
+ * How far the next cluster of the history row must be from one of `n`
+ * events: its badge (3 px right of the centre, `historyBadgeWidth` wide)
+ * clear of the next 12 px symbol by 1 px; a single symbol clear of the next.
+ */
+export function historyClusterClearance(n: number): number {
+    return n > 1 ? 3 + historyBadgeWidth(n) + 6 + 1 : 13;
+}
+
 /** A history event's year text: "1866", a period "1897–1901". */
 function historyItemYears(e: TimelineHistoryItem): string {
     return e.year2 !== undefined ? `${e.year}–${e.year2}` : String(e.year);
@@ -181,7 +195,7 @@ function historyRowSvg(
     const periods = spans.map(({ e, x1, x2 }, i) =>
         `<rect class="tl-hist-period is-${e.scope}" x="${x1.toFixed(1)}" y="${(cy + 7 + tracks[i] * 3.5).toFixed(1)}"`
         + ` width="${Math.max(2, x2 - x1).toFixed(1)}" height="2.5" rx="1.25"/>`).join('');
-    const clusters = clusterTimelineHistory(h.events, xOf, historyClusterGap(narrow)).map(c => {
+    const clusters = clusterTimelineHistory(h.events, xOf, historyClusterGap(narrow), historyClusterClearance).map(c => {
         const main = timelineClusterKind(c.items);
         const x = c.x;
         const { kinds, more } = timelineClusterKinds(c.items);
@@ -194,7 +208,7 @@ function historyRowSvg(
         const n = c.items.length;
         let badge = '';
         if (n > 1) {
-            const bw = Math.max(13, 5 + String(n).length * 6);
+            const bw = historyBadgeWidth(n);
             const bx = x + 3, by = cy - 14;
             badge = `<rect class="tl-hist-n" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw}" height="13" rx="6.5"/>`
                 + `<text class="tl-hist-n-txt" x="${(bx + bw / 2).toFixed(1)}" y="${(by + 6.5).toFixed(1)}"`
