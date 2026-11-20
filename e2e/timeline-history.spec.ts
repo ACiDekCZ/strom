@@ -481,6 +481,37 @@ test.describe('Timeline: the history row\'s options (spec 121 §5, §10)', () =>
         await expect(text).toHaveAttribute('aria-label', 'Keine Ereignisse für die gewählten Arten');
         expect(await overflowing(page, '#timeline-container')).toEqual([]);
     });
+
+    test('phone 390 in German: a filter shows on the label by its tint even where "· 1 Art" does not fit; open adds the line under it', async ({ page }) => {
+        await setup(page, { width: 390, height: 844 });
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await focusOn(page, 'Jan');
+        await timelineView(page);
+        const look = () => histBtn(page).evaluate(el => {
+            const cs = getComputedStyle(el);
+            return { bg: cs.backgroundColor, shadow: cs.boxShadow };
+        });
+        const transparent = (c: string) => c === 'transparent' || /^rgba\(.*,\s*0\)$/.test(c);
+        await expect(histBtn(page)).not.toHaveClass(/is-filtered/);
+        const plain = await look();
+        expect(transparent(plain.bg)).toBe(true);
+        await page.evaluate(() => {
+            window.Strom.SettingsManager.setTimelineHistory(window.Strom.DataManager.getCurrentTreeId(), { kinds: ['war'], local: false });
+            window.Strom.UI.historyChanged();
+        });
+        await expect(histBtn(page)).toHaveClass(/is-filtered/);
+        const filtered = await look();
+        expect(transparent(filtered.bg)).toBe(false);
+        expect(filtered.bg).not.toBe(plain.bg);
+        expect(filtered.shadow).toBe('none');
+        // Open and filtered: the same tint, the line under it.
+        await histBtn(page).click();
+        await expect(page.locator('.bottom-sheet.tl-osheet')).toBeVisible();
+        await expect(histBtn(page)).toHaveClass(/is-open/);
+        const open = await look();
+        expect(open.bg).toBe(filtered.bg);
+        expect(open.shadow).not.toBe('none');
+    });
 });
 
 test.describe('Timeline: the history row\'s label on touch', () => {

@@ -296,11 +296,16 @@ describe('the options of the history row (§5) and its states (§10)', () => {
         width: 900, rowH: 30, labelW: narrow ? 96 : 160, mode: 'screen', narrow,
     });
 
-    it('the chips count the row and the lines: each kind (of the region chosen), each region (of the kinds chosen), the most first', () => {
+    it('the chips count the events on the timeline, each once: the row and the lines together, each kind (of the region chosen), each region (of the kinds chosen), the most first', () => {
         const f = timelineHistoryFacets(model().history!);
         expect(f.kinds.map(k => k.kind)).toEqual(['war', 'epidemic', 'census', 'state', 'emigration', 'law', 'economy', 'disaster', 'other']);
-        // war: V-1866, V-1870, V-1895; census: Q-1880; the lines' local ones: L-1870 twice (Anna, Bert), P-1870, P-1900.
-        expect(Object.fromEntries(f.kinds.filter(k => k.count).map(k => [k.kind, k.count]))).toEqual({ war: 3, epidemic: 2, census: 1, disaster: 2 });
+        // war: V-1866, V-1870, V-1895 (each on two persons, one event); census: Q-1880;
+        // the lines' local ones: L-1870 on two lines (Anna, Bert) is one event, P-1870, P-1900.
+        expect(Object.fromEntries(f.kinds.filter(k => k.count).map(k => [k.kind, k.count]))).toEqual({ war: 3, epidemic: 1, census: 1, disaster: 2 });
+        // A local event on many lines still counts once.
+        const many = new Map([...r.local].map(([id, items]) => [id, id === 'cyril' ? [...items, ...(r.local.get('anna') ?? [])] : items]));
+        const withMany = computeTimelineModel(d, ALL, 2026, { history: { events: r.events, local: many, filter: {} } });
+        expect(timelineHistoryFacets(withMany.history!).kinds.find(k => k.kind === 'epidemic')!.count).toBe(1);
         expect(f.regions).toEqual([{ id: 'xx-valdorie', count: 3 }, { id: 'xx-quellnitz', count: 1 }]);
         const inQuellnitz = timelineHistoryFacets(model({ region: 'xx-quellnitz' }).history!);
         expect(inQuellnitz.kinds.find(k => k.kind === 'war')!.count).toBe(0);

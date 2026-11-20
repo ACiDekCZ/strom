@@ -128,8 +128,8 @@ export interface TimelineHistory {
     total: number;
     /** The row's events before the filter (trimmed to the rows, sorted): the options' counts. */
     all: TimelineHistoryItem[];
-    /** The local events on the lines per kind before the kind filter; only with the option on. */
-    localKinds?: Partial<Record<HistoryKind, number>>;
+    /** The local events on the lines before the kind filter, each once (an event on many lines too); only with the option on. */
+    localEvents?: { id: string; kind: HistoryKind }[];
     /** The filter in effect (nothing when it filters nothing). */
     filtered: { kinds?: HistoryKind[]; region?: string; regionName?: string };
 }
@@ -279,11 +279,11 @@ function timelineHistoryRow(h: TimelineHistoryInput, rows: TimelineRow[]): Timel
     const kindsOn = kinds && HISTORY_KINDS.some(k => !kinds.has(k)) ? kinds : null;
     // A line's local events before the kind filter keep the row (5d): a filter leaving none says so on it.
     let anyLocal = false;
-    const localKinds: Partial<Record<HistoryKind, number>> = {};
+    const localEvents = new Map<string, HistoryKind>();
     if (h.local) {
         for (const r of rows) {
             const own = h.local.get(r.personId) ?? [];
-            for (const e of own) localKinds[e.kind] = (localKinds[e.kind] ?? 0) + 1;
+            for (const e of own) if (!localEvents.has(e.id)) localEvents.set(e.id, e.kind);
             if (own.length) anyLocal = true;
             const items = own.filter(e => !kindsOn || kindsOn.has(e.kind));
             if (items.length) r.local = [...items].sort((a, b) => a.year - b.year);
@@ -299,7 +299,7 @@ function timelineHistoryRow(h: TimelineHistoryInput, rows: TimelineRow[]): Timel
         regions,
         total: sorted.length,
         all: sorted,
-        ...(h.local ? { localKinds } : {}),
+        ...(h.local ? { localEvents: [...localEvents].map(([id, kind]) => ({ id, kind })) } : {}),
         filtered: {
             ...(kindsOn ? { kinds: HISTORY_KINDS.filter(k => kindsOn.has(k)) } : {}),
             ...(region ? { region, ...(h.filter?.regionName ? { regionName: h.filter.regionName } : {}) } : {}),
@@ -335,7 +335,11 @@ export function timelineHistoryRowState(h: TimelineHistory, rows: readonly Timel
 
 /** The options' chips (spec 121 §5): a count per kind, per region. */
 export interface TimelineHistoryFacets {
-    /** The nine kinds in HISTORY_KINDS order: the row's events (of the region chosen) and the lines' local ones. */
+    /**
+     * The nine kinds in HISTORY_KINDS order: the events on the timeline, each
+     * once (by id) — the row's (of the region chosen) and the lines' local ones
+     * together; a local event on three lines is one.
+     */
     kinds: { kind: HistoryKind; count: number }[];
     /** The regions of the row's events of the kinds chosen, the most first (same count: as met). */
     regions: { id: string; count: number }[];
@@ -344,15 +348,21 @@ export interface TimelineHistoryFacets {
 export function timelineHistoryFacets(h: TimelineHistory): TimelineHistoryFacets {
     const region = h.filtered.region;
     const kinds = h.filtered.kinds ? new Set(h.filtered.kinds) : null;
-    const byKind = new Map<HistoryKind, number>();
-    const byRegion = new Map<string, number>();
+    const byKind = new Map<HistoryKind, Set<string>>();
+    const addKind = (kind: HistoryKind, id: string): void => {
+        const ids = byKind.get(kind) ?? new Set<string>();
+        ids.add(id);
+        byKind.set(kind, ids);
+    };
+    const byRegion = new Map<string, Set<string>>();
     for (const e of h.all) {
-        if (!region || e.regionId === region) byKind.set(e.kind, (byKind.get(e.kind) ?? 0) + 1);
-        if (e.regionId && (!kinds || kinds.has(e.kind))) byRegion.set(e.regionId, (byRegion.get(e.regionId) ?? 0) + 1);
+        if (!region || e.regionId === region) addKind(e.kind, e.id);
+        if (e.regionId && (!kinds || kinds.has(e.kind))) byRegion.set(e.regionId, (byRegion.get(e.regionId) ?? new Set<string>()).add(e.id));
     }
+    for (const e of h.localEvents ?? []) addKind(e.kind, e.id);
     return {
-        kinds: HISTORY_KINDS.map(kind => ({ kind, count: (byKind.get(kind) ?? 0) + (h.localKinds?.[kind] ?? 0) })),
-        regions: [...byRegion].map(([id, count], at) => ({ id, count, at }))
+        kinds: HISTORY_KINDS.map(kind => ({ kind, count: byKind.get(kind)?.size ?? 0 })),
+        regions: [...byRegion].map(([id, ids], at) => ({ id, count: ids.size, at }))
             .sort((a, b) => b.count - a.count || a.at - b.at).map(({ id, count }) => ({ id, count })),
     };
 }
