@@ -15,7 +15,7 @@ import { strings } from '../../strings.js';
 import { markHtml, researchMarkHtml } from './table-grid.js';
 import type { CellSeverity, ResearchSignal } from './table-model.js';
 import { researchActionLabel } from '../research-open-mark.js';
-import { researchBubbleActions, type ResearchBubble, type ResearchBubbleAction } from './table-research-bubble.js';
+import { researchBubbleActions, type ResearchBubble, type ResearchBubbleAction, type ResearchBubbleItem } from './table-research-bubble.js';
 
 /** What a bubble shows (its class `tv-bubble--<kind>`). */
 export type BubbleKind = 'finding' | 'legend' | 'cites' | 'research' | 'ages';
@@ -48,6 +48,13 @@ export interface BubbleActions {
 
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** An item's tag after its title: "Decided", "to review" (a conflict marked for review, spec 117 §8). */
+function tagHtml(tag: NonNullable<ResearchBubbleItem['tags']>[number]): string {
+    return tag === 'review'
+        ? ` <span class="prc-review-tag">${esc(strings.research.review.reviewTag)}</span>`
+        : ` <span class="person-research-open-tag prc-tag--done">${esc(strings.conflict.decidedTag)}</span>`;
 }
 
 /** The level word over a finding: "error", "to check", "lead"; "Unusual, but checked" for a marked one. */
@@ -190,7 +197,7 @@ export function researchBubbleHtml(b: ResearchBubble, sheet: boolean, shown: (a:
             + `${s.signal ? researchMarkHtml(s.signal) : ''}<span class="tv-rbub-sec-title">${esc(s.title)}</span></div>`;
         for (const it of s.items) {
             html += `<div class="tv-rbub-item${it.fromOutside ? ' is-outside' : ''}"><div class="tv-rbub-item-title">${esc(it.title)}`
-                + `${it.ref ? ` <span class="tv-rbub-ref">${esc(it.ref)}</span>` : ''}</div>`
+                + `${it.ref ? ` <span class="tv-rbub-ref">${esc(it.ref)}</span>` : ''}${(it.tags ?? []).map(tagHtml).join('')}</div>`
                 + it.lines.map(l => `<div class="tv-rbub-line">${esc(l)}</div>`).join('')
                 + actionsHtml(it.actions, false) + '</div>';
         }

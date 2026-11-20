@@ -1389,6 +1389,18 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         needTitle: 'Co będzie potrzebne',
         needText: 'Komputer (Windows, Mac, Linux) i agent AI z kontem u producenta – zwykle subskrypcja; polecamy Claude. Strom Research i Strom są bezpłatne. Bez agenta Strom Research prowadzi dane jako Archiwum Strom.',
         openSite: 'Otwórz stronę Strom Research',
+        /** A conflict marked for review: a source it stood on was deleted in the research (spec 117 §8). */
+        review: {
+            reviewTag: 'do przejrzenia',
+            reviewNote: 'Źródło jednej z wartości zostało wycofane; rozbieżność czeka na przejrzenie.',
+            reviewNoteDecided: 'Decyzja opierała się też na wycofanym źródle; czeka na przejrzenie.',
+            retractedCell: 'źródło wycofane',
+            keep: 'Decyzja obowiązuje',
+            keepBusy: 'Zapisywanie…',
+            keepReadonly: 'Badanie jest tylko do odczytu; decyzji nie można tu potwierdzić.',
+            decideAgain: 'Rozstrzygnij ponownie w badaniu',
+            decisionRow: (value: string) => `rozstrzygnięto: ${value}`,
+        },
     },
 
     // A conflict made by an edit in the app, decided by a side ("What the research knows")

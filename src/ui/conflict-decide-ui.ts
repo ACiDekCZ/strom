@@ -32,7 +32,9 @@ import {
     ConflictCardState, ConflictCardView, ConflictDecidedValues, DecidedFact, DECIDED_CARD_MS, conflictCardView, conflictFactParts, conflictSentChanged,
     isDecidedRow, otherLoadChanges,
 } from '../research-conflict-card.js';
-import { conflictScope, conflictValueHtml, conflictValueSaid as said, researchConflictTitle, researchValueText } from './person-research-ui.js';
+import {
+    conflictScope, conflictUnderReview, conflictValueHtml, conflictValueSaid as said, researchConflictTitle, researchValueText, retractedSourceHtml, reviewTagHtml,
+} from './person-research-ui.js';
 import { readResearchTreeFile, researchDateLabel } from './research-ui.js';
 import { researchSendMode } from './research-sync-ui.js';
 import { uiModule } from './module.js';
@@ -214,9 +216,11 @@ export const conflictDecideMethods = uiModule({
 
         const sourceLink = (v: ResearchConflictValue, focus: string): string => {
             const sid = v.sourceIds?.find(s => sources[s]);
-            return sid
+            const link = sid
                 ? `<button type="button" class="link-button person-research-source prc-source" data-source="${esc(sid)}" data-focus="${focus}">${esc(sources[sid].title)}</button>`
-                : '<span class="person-research-nosource">–</span>';
+                : '';
+            // A source deleted in the research (spec 117 §8): said in its place, or after the other one.
+            return retractedSourceHtml(v, link) || link || '<span class="person-research-nosource">–</span>';
         };
 
         let body = '';
@@ -230,6 +234,8 @@ export const conflictDecideMethods = uiModule({
                 const importSource = which === 'user' && kind === 'import' ? this.originConflictImportSource(personId, c) : '';
                 const meta = which === 'research'
                     ? sourceLink(v, 'source')
+                    : v.retracted?.length
+                        ? retractedSourceHtml(v, '')
                     : importSource
                         ? `<span class="prc-meta">${esc(importSource)}</span>`
                     : view.unsent
@@ -281,6 +287,8 @@ export const conflictDecideMethods = uiModule({
                 </div>` : '';
         }
 
+        // Marked for review (spec 117 §8): a source one of its values stood on was deleted in the research.
+        const review = conflictUnderReview(c);
         const toAgent = view.agent;
         const links = view.researchLinks || toAgent ? `
             <div class="person-research-conflict-actions prc-links">${view.researchLinks ? `
@@ -293,9 +301,10 @@ export const conflictDecideMethods = uiModule({
             <div class="person-research-conflict prc" data-conflict-card="${esc(id)}" data-state="${view.row}" tabindex="-1">
                 <div class="person-research-conflict-head">
                     <span class="person-research-fact">${esc(researchConflictTitle(c))}</span>
-                    ${tag}
+                    ${tag}${review ? reviewTagHtml() : ''}
                 </div>
-                ${kindLine}${notice}${body}${links}
+                ${kindLine}${notice}${body}${review ? `
+                <p class="person-research-review-note">${esc(c.status === 'decided' ? r.review.reviewNoteDecided : r.review.reviewNote)}</p>` : ''}${links}
             </div>`;
     },
 
@@ -311,16 +320,17 @@ export const conflictDecideMethods = uiModule({
         if (!dialog) return;
         const personId = dialog.dataset.person as PersonId | undefined;
         if (!personId) return;
-        const sel = conflictId ? `[data-conflict-card="${CSS.escape(conflictId)}"]` : '[data-conflict-card]';
+        // A decided conflict marked for review is a card of its own (person-research-ui.ts), drawn again here too.
+        const sel = conflictId ? `[data-conflict-card="${CSS.escape(conflictId)}"], [data-review-card="${CSS.escape(conflictId)}"]` : '[data-conflict-card], [data-review-card]';
         dialog.querySelectorAll<HTMLElement>(sel).forEach(card => {
-            const id = card.dataset.conflictCard!;
+            const id = card.dataset.conflictCard ?? card.dataset.reviewCard!;
             const c = this.researchConflictsShown(personId).find(x => researchConflictRef(x.id) === id);
             const focused = card.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
             const focusKey = focused?.dataset.focus ?? '';
             const html = c && (canDecideInApp(c, DataManager.getPerson(personId)) || this.researchConflictCardState(id))
                 ? this.researchConflictCardHtml(personId, c).trim()
-                // Folded: today's decided row, as the data say it now.
-                : c?.status === 'decided' ? this.researchConflictDecidedRowHtml(c).trim() : '';
+                // Folded: today's decided row (a card while marked for review), as the data say it now.
+                : c?.status === 'decided' ? this.researchConflictDecidedHtml(personId, c).trim() : '';
             if (html && drawn.get(card) === html) return;
             const tmp = document.createElement('div');
             tmp.innerHTML = html;

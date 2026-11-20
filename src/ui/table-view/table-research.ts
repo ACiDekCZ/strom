@@ -307,6 +307,15 @@ export function researchOpenConflicts(env: ResearchTableEnv, p: Person): Researc
     return openConflicts(env, p);
 }
 
+/**
+ * A person's decided conflicts marked for review (spec 117 §8: a source the
+ * decision stood on was deleted in the research): shown in the bubble's
+ * conflicts, never counted in the column nor marked ≠ on a cell.
+ */
+export function researchReviewDecidedConflicts(env: ResearchTableEnv, p: Person): ResearchConflict[] {
+    return (env.input.conflictsOf?.(p.id) ?? p.research?.conflicts ?? []).filter(c => c.status === 'decided' && !!c.review);
+}
+
 /** What a conflict is about in words (§16.3, the ≠'s name): its fact's word, else its title. */
 export function researchConflictWhat(c: ResearchConflict): string {
     return factWord(c.fact.trim().toUpperCase(), c.title);

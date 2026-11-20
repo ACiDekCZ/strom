@@ -147,3 +147,15 @@ describe('the bubble\'s way to the waiting panel', () => {
         expect(getStringsForLang('de').table.res.bub.waitingPanel).toBe('Wartet auf Bearbeitung ›');
     });
 });
+
+describe('a conflict marked for review drawn (spec 117 §8)', () => {
+    it('the tags after the item title: Decided and to review', () => {
+        const { env, P } = setup({ conflictsOf: () => [{
+            id: 'X0001', fact: 'BIRT', title: 'Rok narození Marie', status: 'decided', review: 'source.retracted',
+            values: [{ value: '1853', retracted: ['S0042'] }, { value: '1854', sourceIds: ['S0014'] }], decision: { value: '1853' },
+        }] });
+        const html = researchBubbleHtml(researchBubble(env, P('P0006'), 'rConf')!, false);
+        expect(html).toContain('<span class="tv-rbub-ref">X0001</span> <span class="person-research-open-tag prc-tag--done">Decided</span> <span class="prc-review-tag">to review</span></div>');
+        expect(html).toContain('<div class="tv-rbub-line">1853 · source retracted</div>');
+    });
+});

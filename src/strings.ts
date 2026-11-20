@@ -1535,6 +1535,10 @@ const stringsEN = {
             n > 0
                 ? `Delete this source? It is cited in ${nEn(n, 'place', 'places')}; those citations will be removed.\n\n${title}`
                 : `Delete this source?\n\n${title}`,
+        /** Deleting a source of a followed tree in its research (spec 117). */
+        retract: {
+            failed: 'Writing to the research failed.',
+        },
     },
 
     // Crop editor (source excerpts; shared with the photo crop)
@@ -3909,6 +3913,18 @@ const stringsEN = {
         needTitle: 'What is needed',
         needText: 'A computer (Windows, Mac, Linux) and an AI agent with an account from its maker — usually a subscription; we recommend Claude. Strom Research and Strom are free. Without an agent, Strom Research keeps the data as a Strom archive.',
         openSite: 'Open the Strom Research page',
+        /** A conflict marked for review: a source it stood on was deleted in the research (spec 117 §8). */
+        review: {
+            reviewTag: 'to review',
+            reviewNote: 'The source of one of the values was retracted; the conflict awaits review.',
+            reviewNoteDecided: 'The decision also rested on the retracted source; it awaits review.',
+            retractedCell: 'source retracted',
+            keep: 'Decision stands',
+            keepBusy: 'Saving…',
+            keepReadonly: 'The research is read-only; the decision cannot be confirmed here.',
+            decideAgain: 'Decide again in the research',
+            decisionRow: (value: string) => `decided: ${value}`,
+        },
     },
 
     // A conflict made by an edit in the app, decided by a side ("What the research knows")
@@ -12013,6 +12029,10 @@ const stringsCZ: StringsType = {
             n > 0
                 ? `Smazat tento pramen? Je citován na ${nCs(n, 'místě', 'místech', 'místech')}; citace budou odebrány.\n\n${title}`
                 : `Smazat tento pramen?\n\n${title}`,
+        /** Deleting a source of a followed tree in its research (spec 117). */
+        retract: {
+            failed: 'Zápis ve výzkumu se nepovedl.',
+        },
     },
 
     // Ořezávač (výřezy pramenů; sdílený s ořezem fotky)
@@ -14353,6 +14373,18 @@ const stringsCZ: StringsType = {
         needTitle: 'Co bude potřeba',
         needText: 'Počítač (Windows, Mac, Linux) a AI agenta s účtem u výrobce — obvykle předplatné, doporučujeme Claude. Strom Research i Strom jsou zdarma. Bez agenta vede Strom Research data jako Archiv Stromu.',
         openSite: 'Otevřít stránku Strom Research',
+        /** A conflict marked for review: a source it stood on was deleted in the research (spec 117 §8). */
+        review: {
+            reviewTag: 'přezkoumat',
+            reviewNote: 'Pramen jedné z hodnot byl odvolán; rozpor čeká na přezkoumání.',
+            reviewNoteDecided: 'Rozhodnutí stálo i na odvolaném prameni; čeká na přezkoumání.',
+            retractedCell: 'pramen odvolán',
+            keep: 'Rozhodnutí platí',
+            keepBusy: 'Ukládá se…',
+            keepReadonly: 'Výzkum jde jen číst; rozhodnutí tu potvrdit nejde.',
+            decideAgain: 'Rozhodnout znovu ve výzkumu',
+            decisionRow: (value: string) => `rozhodnuto: ${value}`,
+        },
     },
 
     // Rozpor z úpravy v aplikaci, rozhodnutý stranou („Co ví výzkum“)
@@ -22297,6 +22329,10 @@ const stringsDE: StringsType = {
             n > 0
                 ? `Diese Quelle löschen? Sie ist an ${n} Stelle(n) zitiert; diese Zitate werden entfernt.\n\n${title}`
                 : `Diese Quelle löschen?\n\n${title}`,
+        /** Deleting a source of a followed tree in its research (spec 117). */
+        retract: {
+            failed: 'Das Schreiben in die Forschung ist fehlgeschlagen.',
+        },
     },
 
     // Zuschneiden (Quellenausschnitte; auch für das Foto)
@@ -24635,6 +24671,18 @@ const stringsDE: StringsType = {
         needTitle: 'Voraussetzungen',
         needText: 'Einen Computer (Windows, Mac, Linux) und einen KI-Agenten mit Konto beim Anbieter — meist ein Abo, wir empfehlen Claude. Strom Research und Strom sind kostenlos. Ohne Agenten führt Strom Research die Daten als Strom-Archiv.',
         openSite: 'Strom-Research-Seite öffnen',
+        /** A conflict marked for review: a source it stood on was deleted in the research (spec 117 §8). */
+        review: {
+            reviewTag: 'prüfen',
+            reviewNote: 'Die Quelle eines der Werte wurde zurückgezogen; der Widerspruch wartet auf Prüfung.',
+            reviewNoteDecided: 'Die Entscheidung stützte sich auch auf die zurückgezogene Quelle; sie wartet auf Prüfung.',
+            retractedCell: 'Quelle zurückgezogen',
+            keep: 'Entscheidung gilt',
+            keepBusy: 'Wird gespeichert…',
+            keepReadonly: 'Die Forschung lässt sich nur lesen; die Entscheidung lässt sich hier nicht bestätigen.',
+            decideAgain: 'In der Forschung neu entscheiden',
+            decisionRow: (value: string) => `entschieden: ${value}`,
+        },
     },
 
     // Ein Widerspruch aus einer Änderung in der App, nach einer Seite entschieden („Was die Forschung weiß“)

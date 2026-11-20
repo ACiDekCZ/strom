@@ -31365,6 +31365,29 @@
             .mdlg-head { padding: 12px 20px 4px; }
             .mdlg-foot { padding: 8px 20px; }
         }
+        /* A conflict marked for review (spec 117 §8): a source one of its values (or its decision) stood on was
+           deleted in the research. The tag beside its state, the sentence why, "source retracted" where the source
+           was, the decision's row, and the refusal of "Decision stands" under its actions. */
+        .prc-review-tag { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: var(--r-tag); background: var(--research-soft); color: var(--research); white-space: nowrap; }
+        .tv-rbub-item-title .prc-review-tag, .prc-panel-title .prc-review-tag { font-size: 10.5px; vertical-align: 1px; }
+        .tv-rbub-item-title .person-research-open-tag { font-size: 10.5px; vertical-align: 1px; }
+        .person-research-conflict-head { flex-wrap: wrap; }
+        .person-research-review-note { margin: 6px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .person-research-retracted { color: var(--text-faint); font-size: 13px; }
+        .prc-panel-main .person-research-retracted { font-size: 12.5px; }
+        .person-research-values tr.is-decision td { color: var(--text-light); font-size: 13px; }
+        .person-research-conflict-actions .prc-keep-err { flex-basis: 100%; font-size: 12.5px; color: var(--error-text); }
+        .person-research-conflict-actions .prc-keep.is-busy, .person-research-conflict-actions .prc-keep[aria-busy="true"] { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
+        @media (pointer: coarse) {
+            .person-research-review .person-research-conflict-actions .link-button { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .person-research-review .person-research-conflict-actions .link-button { min-height: 44px; }
+            .person-research-conflict-actions .prc-keep-err { font-size: 13px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .person-research-review-note { margin-top: 4px; }
+        }
         /* A material's title, kind and date (spec 102 §2): ✎ by the viewer's title, the fields
            (the viewer's in-place edit and the Attachment dialog share them), the file under a title. */
         .mv-title-row { display: flex; align-items: flex-start; gap: 8px; }

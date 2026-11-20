@@ -26,7 +26,7 @@ import { strings } from '../../strings.js';
 import type { ResearchSignal } from './table-model.js';
 import {
     personLineRole, researchBranchName, researchCell, researchConflictWhat, researchDayText, researchExternalWaits,
-    researchLineCounts, researchOpenConflicts, researchOriginItems, type PersonLineRole, type ResearchColumnId, type ResearchTableEnv,
+    researchLineCounts, researchOpenConflicts, researchOriginItems, researchReviewDecidedConflicts, type PersonLineRole, type ResearchColumnId, type ResearchTableEnv,
 } from './table-research.js';
 
 // ==================== TYPES ====================
@@ -93,6 +93,8 @@ export interface ResearchBubbleItem {
     actions: ResearchBubbleAction[];
     /** A sent item waiting for a reply from outside (§16.10 item 5): information only. */
     fromOutside?: boolean;
+    /** Tags after the title: "Decided", "to review" (a conflict marked for review, spec 117 §8). */
+    tags?: ('decided' | 'review')[];
 }
 
 export interface ResearchBubbleSection {
@@ -204,9 +206,11 @@ function waitSection(env: ResearchTableEnv, p: Person): ResearchBubbleSection | 
 /** A conflict's value in words: the value, then whose it is or its source. */
 function conflictValueText(env: ResearchTableEnv, v: ResearchConflictValue): string {
     const R = B();
-    const by = v.side === 'user' ? R.sideApp
-        : (v.sourceIds ?? []).map(id => sourceText(env, id)).find(Boolean) ?? (v.side === 'research' ? R.sideResearch : '');
-    return [v.value, by].filter(Boolean).join(' · ');
+    const source = (v.sourceIds ?? []).map(id => sourceText(env, id)).find(Boolean);
+    // A source deleted in the research (spec 117 §8): said after the value (and its other source).
+    const retracted = v.retracted?.length ? strings.research.review.retractedCell : '';
+    const by = v.side === 'user' ? R.sideApp : source ?? (v.side === 'research' && !retracted ? R.sideResearch : '');
+    return [v.value, by, retracted].filter(Boolean).join(' · ');
 }
 
 function conflictItem(env: ResearchTableEnv, owner: Person, c: ResearchConflict, own: boolean): ResearchBubbleItem {
@@ -214,14 +218,18 @@ function conflictItem(env: ResearchTableEnv, owner: Person, c: ResearchConflict,
     return {
         title: own ? title : `${title} (${shownName(owner)})`, ref: c.id,
         lines: c.values.map(v => conflictValueText(env, v)).filter(Boolean),
-        actions: [appAction('decide', B().decide, owner.id, { conflictId: c.id })],
+        // Decided, only marked for review (spec 117 §8): information; it is kept or decided again in "What the research knows".
+        actions: c.status === 'decided' ? [] : [appAction('decide', B().decide, owner.id, { conflictId: c.id })],
+        ...(c.status === 'decided' ? { tags: ['decided', 'review'] as const } : c.review ? { tags: ['review'] as const } : {}),
     };
 }
 
 function confSection(env: ResearchTableEnv, rowPerson: Person, list: readonly { person: Person; conflict: ResearchConflict }[]): ResearchBubbleSection | null {
     if (list.length === 0) return null;
     return {
-        id: 'conf', title: B().confTitle(list.length), signal: 'conf',
+        id: 'conf', title: B().confTitle(list.length),
+        // The mark only for an open one (a decided one marked for review is not counted in the column).
+        ...(list.some(x => x.conflict.status !== 'decided') ? { signal: 'conf' as const } : {}),
         items: list.map(x => conflictItem(env, x.person, x.conflict, x.person.id === rowPerson.id)), actions: [],
     };
 }
@@ -405,7 +413,7 @@ function infoSection(env: ResearchTableEnv, p: Person, col: ResearchColumnId): R
 function section(env: ResearchTableEnv, p: Person, id: ResearchBubbleSectionId, caps: ResearchBubbleCaps): ResearchBubbleSection | null {
     switch (id) {
         case 'wait': return waitSection(env, p);
-        case 'conf': return confSection(env, p, researchOpenConflicts(env, p).map(conflict => ({ person: p, conflict })));
+        case 'conf': return confSection(env, p, [...researchOpenConflicts(env, p), ...researchReviewDecidedConflicts(env, p)].map(conflict => ({ person: p, conflict })));
         case 'hyp': return hypSection(env, p);
         case 'agent': return agentSection(env, p);
         case 'tasks': return tasksSection(env, p);

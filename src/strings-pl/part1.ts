@@ -1256,5 +1256,9 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             n > 0
                 ? `Usunąć to źródło? Jest cytowane w ${nPl(n, 'miejscu', 'miejscach', 'miejscach')}; cytowania zostaną usunięte.\n\n${title}`
                 : `Usunąć to źródło?\n\n${title}`,
+        /** Deleting a source of a followed tree in its research (spec 117). */
+        retract: {
+            failed: 'Zapis w badaniu się nie powiódł.',
+        },
     },
 };

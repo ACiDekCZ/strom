@@ -13,7 +13,7 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { researchLinkMark, type LiveWaiting } from '../research-link.js';
 import { setLanguage, strings } from '../strings.js';
 import type { Person, StromData } from '../types.js';
-import { researchTableEnv, RESEARCH_COLUMNS, type ResearchTableInput } from '../ui/table-view/table-research.js';
+import { researchCell, researchTableEnv, RESEARCH_COLUMNS, type ResearchTableInput } from '../ui/table-view/table-research.js';
 import {
     researchBubble, researchBubbleActions, researchConflictBubble, RESEARCH_BUBBLE_ORDER, type ResearchBubble,
 } from '../ui/table-view/table-research-bubble.js';
@@ -335,5 +335,46 @@ describe('texts in every language', () => {
             expect(b.sections.every(s => s.title.length > 0)).toBe(true);
         }
         setLanguage('cs');
+    });
+});
+
+describe('conflicts marked for review (spec 117 §8)', () => {
+    const marked = (status: 'open' | 'decided') => ({
+        id: 'X0001', fact: 'BIRT', title: 'Rok narození Marie', status, review: 'source.retracted',
+        values: [{ value: '1853', retracted: ['S0042'] }, { value: '1854', sourceIds: ['S0014'], side: 'research' as const, retracted: ['S0043'] }],
+        ...(status === 'decided' ? { decision: { value: '1853', retracted: ['S0042'] } } : {}),
+    });
+
+    it('an open one: "to review" after the title, "source retracted" on its values, Decide stays', () => {
+        const { env, P } = setup({}, data => {
+            const c = byRefn(data, 'P0006').research!.conflicts![0];
+            c.review = 'source.retracted';
+            c.values[0].retracted = ['S0042'];
+            c.values[1].retracted = ['S0043'];
+        });
+        const s = researchBubble(env, P('P0006'), 'rConf')!.sections[0];
+        expect(s.items[0].tags).toEqual(['review']);
+        expect(s.items[0].lines).toEqual(['1853 · úprava v aplikaci · pramen odvolán', '1854 · S0014 Matrika N Lipová Stráň 1784–1830 · pramen odvolán']);
+        expect(researchBubble(setup({ conflictsOf: () => [marked('open')] }).env, P('P0006'), 'rConf')!.sections[0].items[0].lines)
+            .toEqual(['1853 · pramen odvolán', '1854 · pramen odvolán']);
+        expect(s.items[0].actions).toEqual([expect.objectContaining({ id: 'decide' })]);
+        expect(s.signal).toBe('conf');
+        const cell = researchConflictBubble(env, P('P0006'), [{ personId: P('P0006').id, conflictId: 'X0001' }])!;
+        expect(cell.sections[0].items[0].tags).toEqual(['review']);
+    });
+
+    it('a decided one: an item of its own (Decided, to review, no action), never counted nor on a ≠', () => {
+        const { env, P } = setup({ conflictsOf: () => [marked('decided')] });
+        const s = researchBubble(env, P('P0006'), 'rConf')!.sections[0];
+        expect(s.title).toBe('Rozpory pramenů · 1');
+        expect(s.signal).toBeUndefined();
+        expect(s.items[0]).toEqual(expect.objectContaining({ ref: 'X0001', tags: ['decided', 'review'], actions: [] }));
+        expect(researchConflictBubble(env, P('P0006'), [{ personId: P('P0006').id, conflictId: 'X0001' }])).toBeNull();
+        expect(researchCell(env, P('P0006'), 'rConf').research?.export).toBe('0');
+    });
+
+    it('a decided one without the mark stays out, as before', () => {
+        const { env, P } = setup({ conflictsOf: () => [{ ...marked('decided'), review: undefined }] });
+        expect(ids(researchBubble(env, P('P0006'), 'rConf'))).not.toContain('conf');
     });
 });

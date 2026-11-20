@@ -40,6 +40,7 @@ import { personSubtitle } from './person-sources-ui.js';
 import { helpMark } from './help-mark.js';
 import type { HelpTopic } from '../help/topics.js';
 import { researchClaimValue } from '../research-claim.js';
+import { conflictKeepOffered, conflictKeepOutcome, keepConflict, type KeepDone, type RetractResult } from '../source-retract.js';
 
 const DIALOG_ID = 'person-research-modal';
 /** How long a conflict's card opened at stays lit up (DEV §6.2). */
@@ -106,6 +107,55 @@ function esc(text: string): string {
     return text
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * "Decision stands" of a decided conflict marked for review (spec 117 §8),
+ * by `${treeId}|${conflictId}`: on its way, or what its refusal left (the
+ * action gone with its sentence, or the sentence beside it). Kept in this
+ * page only.
+ */
+const keepStates = new Map<string, 'busy' | 'readonly' | 'failed'>();
+/**
+ * Conflicts whose mark of review was taken off here (kept as decided), by
+ * the same key: drawn without it until the research's version without the
+ * mark is loaded (then the entry goes).
+ */
+const reviewKept = new Set<string>();
+const reviewKey = (conflictId: string): string => `${DataManager.getCurrentTreeId() ?? ''}|${conflictId}`;
+/** How long the research's status is waited for after it said the conflict had no mark (ms). */
+const KEEP_STATUS_TIMEOUT_MS = 16_000;
+
+/**
+ * A conflict marked for review (spec 117 §8: a source it stood on was
+ * deleted in the research), unless the mark was taken off here meanwhile.
+ * Any word of `review` reads as a plain "to review".
+ */
+export function conflictUnderReview(c: ResearchConflict): boolean {
+    const key = reviewKey(researchConflictRef(c.id) ?? c.id);
+    // The research's version without the mark is here: what was kept here is said by the data now.
+    if (!c.review) {
+        reviewKept.delete(key);
+        return false;
+    }
+    return !reviewKept.has(key);
+}
+
+/** The tag "to review" beside a conflict's state. */
+export function reviewTagHtml(): string {
+    return `<span class="prc-review-tag">${esc(strings.research.review.reviewTag)}</span>`;
+}
+
+/**
+ * Where a value's source would be: "source retracted" for a value whose
+ * source was deleted in the research (`retracted`) — after the link of
+ * another source it still has ("· source retracted"), else alone, plain.
+ * `link`: that other source's link ('' none). '' when nothing was retracted.
+ */
+export function retractedSourceHtml(v: ResearchConflictValue | undefined, link: string): string {
+    if (!v?.retracted?.length) return '';
+    const said = esc(strings.research.review.retractedCell);
+    return link ? `${link}<span class="person-research-retracted"> · ${said}</span>` : `<span class="person-research-retracted">${said}</span>`;
 }
 
 /** The fact a conflict is about, in words ("Birth", "Baptism", "Name", "Title before name"). */
@@ -259,11 +309,7 @@ export const personResearchMethods = uiModule({
         // An archive has no agent to leave a conflict to: deciding stays (in the research).
         const toAgent = !this.activeResearchNoAgent();
 
-        const sourceCell = (v: ResearchConflictValue): string => {
-            const id = v.sourceIds?.find(sid => sources[sid]);
-            if (!id) return '<span class="person-research-nosource">–</span>';
-            return `<button type="button" class="link-button person-research-source" data-source="${esc(id)}">${esc(sources[id].title)}</button>`;
-        };
+        const sourceCell = (v: ResearchConflictValue): string => this.researchConflictSourceCell(v);
         const openHtml = conflicts.filter(c => c.status === 'open' || this.researchConflictCardState(researchConflictRef(c.id) ?? '')).map(c => {
             const id = researchConflictRef(c.id);
             // Made by an edit here, both sides said: the two sides with their choices (conflict-decide-ui.ts).
@@ -273,13 +319,14 @@ export const personResearchMethods = uiModule({
                 <div class="person-research-conflict">
                     <div class="person-research-conflict-head">
                         <span class="person-research-fact">${esc(researchConflictTitle(c))}</span>
-                        <span class="person-research-open-tag">${esc(r.conflictOpen)}</span>
+                        <span class="person-research-open-tag">${esc(r.conflictOpen)}</span>${conflictUnderReview(c) ? reviewTagHtml() : ''}
                     </div>
                     <table class="person-research-values">
                         <thead><tr><th scope="col">${esc(r.conflictValue)}</th><th scope="col">${esc(r.conflictSource)}</th></tr></thead>
                         <tbody>${c.values.map(v => `<tr><td>${conflictValueHtml(researchValueText(c.fact, v.value))}</td><td>${sourceCell(v)}</td></tr>`).join('')}</tbody>
                     </table>
-                    <p class="person-research-sources-only">${esc(conflictFromEdit(c) ? strings.conflict.editOnly : strings.conflict.sourcesOnly)}</p>
+                    <p class="person-research-sources-only">${esc(conflictFromEdit(c) ? strings.conflict.editOnly : strings.conflict.sourcesOnly)}</p>${conflictUnderReview(c) ? `
+                    <p class="person-research-review-note">${esc(r.review.reviewNote)}</p>` : ''}
                     ${canDecide && id ? `
                     <div class="person-research-conflict-actions">
                         <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide">${researchActionLabel(r.decide, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>${toAgent ? `
@@ -289,7 +336,7 @@ export const personResearchMethods = uiModule({
                 </div>`;
         }).join('');
         const decidedHtml = conflicts.filter(c => c.status === 'decided' && !this.researchConflictCardState(researchConflictRef(c.id) ?? ''))
-            .map(c => this.researchConflictDecidedRowHtml(c)).join('');
+            .map(c => this.researchConflictDecidedHtml(personId, c)).join('');
         const hypotheses = research.hypotheses ?? [];
         const searched = [...(research.searched ?? [])].sort((a, b) => (a.from ?? a.to ?? 99999) - (b.from ?? b.to ?? 99999));
         const years = (from?: number, to?: number): string =>
@@ -361,6 +408,11 @@ export const personResearchMethods = uiModule({
             const action = target.closest<HTMLButtonElement>('[data-notice-action]');
             if (action && card) {
                 this.researchConflictNoticeAction(personId, card.dataset.conflictCard!, action.dataset.noticeAction ?? '');
+                return;
+            }
+            const keep = target.closest<HTMLButtonElement>('[data-keep]');
+            if (keep) {
+                if (keep.getAttribute('aria-disabled') !== 'true') void this.keepResearchConflict(keep.dataset.keep ?? '');
                 return;
             }
             const link = target.closest<HTMLButtonElement>('[data-conflict]');
@@ -968,6 +1020,106 @@ export const personResearchMethods = uiModule({
                     <span>${esc(researchConflictTitle(c))}: ${esc(values)}</span>
                     ${decision ? `<span class="person-research-decision">${esc(decision)}</span>` : ''}
                 </div>`;
+    },
+
+    /**
+     * A value's (or a decision's) source in a conflict's table: the first
+     * source of it in the tree as a link; a source deleted in the research
+     * as "source retracted" (after the link when it has another one too,
+     * spec 117 §8); else a dash.
+     */
+    researchConflictSourceCell(v: ResearchConflictValue): string {
+        const sources = DataManager.getData().sources ?? {};
+        const id = v.sourceIds?.find(sid => sources[sid]);
+        const link = id ? `<button type="button" class="link-button person-research-source" data-source="${esc(id)}">${esc(sources[id].title)}</button>` : '';
+        return retractedSourceHtml(v, link) || link || '<span class="person-research-nosource">–</span>';
+    },
+
+    /** A decided conflict in the dialog: as a card while it is marked for review (spec 117 §8), else today's row. */
+    researchConflictDecidedHtml(personId: PersonId, c: ResearchConflict): string {
+        return conflictUnderReview(c) ? this.researchConflictReviewCardHtml(personId, c) : this.researchConflictDecidedRowHtml(c);
+    },
+
+    /**
+     * The card of a decided conflict marked for review (spec 117 §8, 8a–8e):
+     * "Decided" and "to review", the values with their sources and the
+     * decision's row, the sentence why it waits, then "Decision stands"
+     * (through the bridge, no mark: only with the gate, the bridge running
+     * and the research writable — on its way "Saving…", refused its
+     * sentence) and "Decide again in the research" (the terminal's mark).
+     */
+    researchConflictReviewCardHtml(personId: PersonId, c: ResearchConflict): string {
+        const id = researchConflictRef(c.id);
+        if (!id) return this.researchConflictDecidedRowHtml(c);
+        const r = strings.research;
+        const C = r.review;
+        const state = keepStates.get(reviewKey(id));
+        const busy = state === 'busy';
+        const keepOn = busy || (state !== 'readonly' && conflictKeepOffered());
+        const canDecide = this.researchLinkAvailable('conflict') && this.personResearchRef(personId) !== null;
+        const values = c.values.map(v => `<tr><td>${conflictValueHtml(researchValueText(c.fact, v.value))}</td><td>${this.researchConflictSourceCell(v)}</td></tr>`).join('');
+        const decision = c.decision
+            ? `<tr class="is-decision"><td>${esc(C.decisionRow(conflictValueSaid(researchValueText(c.fact, c.decision.value))))}</td><td>${this.researchConflictSourceCell(c.decision)}</td></tr>` : '';
+        const keep = keepOn ? `
+                        <button type="button" class="link-button prc-keep" data-keep="${esc(id)}" data-focus="keep"${busy ? ' aria-busy="true" aria-disabled="true"' : ''}>${busy
+                            ? `<i class="busy-spin s12" aria-hidden="true"></i>${esc(C.keepBusy)}` : esc(C.keep)}</button>` : '';
+        const again = canDecide ? `
+                        <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide" data-focus="link-decide">${researchActionLabel(C.decideAgain, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>` : '';
+        const err = state === 'readonly' ? C.keepReadonly : state === 'failed' ? strings.sources.retract.failed : '';
+        const errHtml = err ? `
+                        <span class="prc-keep-err" role="status">${esc(err)}</span>` : '';
+        return `
+                <div class="person-research-conflict person-research-review" data-review-card="${esc(id)}" tabindex="-1">
+                    <div class="person-research-conflict-head">
+                        <span class="person-research-fact">${esc(researchConflictTitle(c))}</span>
+                        <span class="person-research-open-tag prc-tag--done">${esc(strings.conflict.decidedTag)}</span>${reviewTagHtml()}
+                    </div>
+                    <table class="person-research-values">
+                        <thead><tr><th scope="col">${esc(r.conflictValue)}</th><th scope="col">${esc(r.conflictSource)}</th></tr></thead>
+                        <tbody>${values}${decision}</tbody>
+                    </table>
+                    <p class="person-research-review-note">${esc(C.reviewNoteDecided)}</p>${keep || again || errHtml ? `
+                    <div class="person-research-conflict-actions">${keep}${again}${errHtml}
+                    </div>` : ''}
+                </div>`;
+    },
+
+    /**
+     * "Decision stands" (spec 117 §8): the decided conflict kept as decided
+     * through the research's bridge (`POST /conflict/keep`; a busy research
+     * is waited out there). Kept — or the research had no mark on it
+     * (`conflict.notMarked`) — the mark is gone here at once and the
+     * research's version loads quietly where it overwrites nothing
+     * (researchConflictKeptLoad); read-only: the action goes with its
+     * sentence; failed: the sentence, the action stays.
+     */
+    async keepResearchConflict(conflictId: string): Promise<void> {
+        const key = reviewKey(conflictId);
+        if (!conflictId || keepStates.get(key) === 'busy') return;
+        keepStates.set(key, 'busy');
+        this.refreshResearchConflictCards(conflictId);
+        let result: RetractResult<KeepDone> | null = null;
+        await this.postResearchBridgeWrite(async (base) => {
+            const res = await keepConflict(base, conflictId);
+            result = res;
+            return res.ok ? { ok: true, head: res.value.head } : { ok: false };
+        });
+        const answer = result as RetractResult<KeepDone> | null;
+        const outcome = answer ? conflictKeepOutcome(answer) : 'failed';
+        if (outcome === 'kept') {
+            keepStates.delete(key);
+            reviewKept.add(key);
+        } else {
+            keepStates.set(key, outcome);
+        }
+        // The research said there was no mark (or no such conflict): its version now, loaded quietly.
+        if (answer && !answer.ok && outcome === 'kept') {
+            const rid = this.activeResearchId();
+            const status = rid ? await this.askResearchBridge(rid, KEEP_STATUS_TIMEOUT_MS).catch(() => null) : null;
+            if (status?.head) void this.researchConflictKeptLoad(status.head).catch(() => undefined);
+        }
+        // (The panel by the edit form's field is drawn again with the cards.)
+        this.refreshResearchConflictCards(conflictId);
     },
 
     closePersonResearchDialog(): void {

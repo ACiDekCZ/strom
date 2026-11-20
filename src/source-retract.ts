@@ -100,6 +100,43 @@ export function sourceRetractOffered(): SourceRetractOffer {
     });
 }
 
+/**
+ * "Decision stands" on a decided conflict marked for review (§8, §9): only
+ * with the gate, the bridge answering and the research writable from here,
+ * in an app that takes edits. Following the tree live is not needed (a
+ * conflict is the research's, kept through its bridge).
+ */
+export function conflictKeepOfferedIn(bridge: SourceRetractBridge | null, appReadOnly: boolean): boolean {
+    return !!bridge && !appReadOnly && !bridge.readOnly && bridge.bridgeUp && sourceRetractTaken(bridge.features);
+}
+
+/** The same for the open tree's research, now. */
+export function conflictKeepOffered(): boolean {
+    const link = TreeManager.getActiveTreeMetadata()?.research;
+    if (!link?.id || link.copy) return false;
+    return conflictKeepOfferedIn(bridgeOf(link.id.toLowerCase()), DataManager.isReadOnly());
+}
+
+/**
+ * What an answer of "Decision stands" leaves on the card: kept (the mark is
+ * gone, also when the research says it had none: `notMarked`, the tree is
+ * loaded again quietly), read-only (the action goes, its sentence stays),
+ * failed (the action stays with the sentence: the bridge's refusal, a busy
+ * research waited out, no answer). A conflict the research no longer has
+ * reads as kept too: loading the tree says the rest.
+ */
+export type ConflictKeepOutcome = 'kept' | 'readonly' | 'failed';
+
+export function conflictKeepOutcome(result: RetractResult<KeepDone>): ConflictKeepOutcome {
+    if (result.ok) return 'kept';
+    switch (result.error.kind) {
+        case 'notMarked': case 'conflictGone': return 'kept';
+        case 'readonly': return 'readonly';
+        case 'held': return result.error.held?.kind === 'seal' ? 'readonly' : 'failed';
+        default: return 'failed';
+    }
+}
+
 // ==================== THE RESEARCH'S LIST OF IMPACTS ====================
 
 /** How many sources one call takes (the research's `RETRACT_MOST`); the app sends one. */

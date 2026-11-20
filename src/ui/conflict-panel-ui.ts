@@ -20,7 +20,7 @@ import { PersonId, ResearchConflict, ResearchConflictValue } from '../types.js';
 import { researchConflictRef, ResearchConflictTake, researchLinkMark } from '../research-link.js';
 import { canDecideInApp, conflictSides } from '../research-decide.js';
 import { isPhoneBar } from '../breakpoints.js';
-import { conflictValueHtml, researchConflictTitle, researchValueText } from './person-research-ui.js';
+import { conflictUnderReview, conflictValueHtml, researchConflictTitle, researchValueText, retractedSourceHtml, reviewTagHtml } from './person-research-ui.js';
 import { uiModule } from './module.js';
 
 const PANEL_ID = 'prc-panel';
@@ -233,7 +233,9 @@ export const conflictPanelMethods = uiModule({
         const takeLabel = kind ? o.accept : null;
         const sourceLink = (v: ResearchConflictValue): string => {
             const sid = v.sourceIds?.find(s => sources[s]);
-            return sid ? `<button type="button" class="link-button prc-panel-source" data-source="${esc(sid)}" data-focus="source">${esc(sources[sid].title)}</button>` : '';
+            const link = sid ? `<button type="button" class="link-button prc-panel-source" data-source="${esc(sid)}" data-focus="source">${esc(sources[sid].title)}</button>` : '';
+            // A source deleted in the research (spec 117 §8): said in its place, or after the other one.
+            return retractedSourceHtml(v, link) || link;
         };
         const row = (which: ResearchConflictTake): string => {
             const v = sides[which];
@@ -259,7 +261,7 @@ export const conflictPanelMethods = uiModule({
                         <span class="prc-side-label">${esc(which === 'research' ? (kind ? o.sideProposal : k.sideResearch)
                             : kind === 'import' ? o.sideImport : kind === 'user' ? o.sideUser : k.sideApp)}</span>
                         <span class="prc-panel-value">${conflictValueHtml(value)}</span>
-                        ${which === 'research' ? sourceLink(v) : importSource ? `<span class="prc-panel-meta">${esc(importSource)}</span>` : ''}
+                        ${which === 'research' ? sourceLink(v) : importSource ? `<span class="prc-panel-meta">${esc(importSource)}</span>` : retractedSourceHtml(v, '')}
                     </div>
                     ${choice}${note}
                 </div>`;
@@ -267,7 +269,7 @@ export const conflictPanelMethods = uiModule({
 
         return `
             <div class="prc-panel-head" data-row="${saveFirst ? 'saveFirst' : view.row}">
-                <h3 class="prc-panel-title" id="${PANEL_ID}-title">${esc(k.panelTitle(researchConflictTitle(c)))}</h3>
+                <h3 class="prc-panel-title" id="${PANEL_ID}-title">${esc(k.panelTitle(researchConflictTitle(c)))}${conflictUnderReview(c) ? ` ${reviewTagHtml()}` : ''}</h3>
                 <button type="button" class="prc-panel-close" data-focus="close" aria-label="${esc(strings.buttons.close)}">&times;</button>
             </div>
             ${kind ? `<p class="prc-kind">${esc(kind === 'import' ? o.proposeImport : o.proposeUser)}.</p>` : ''}${notice}

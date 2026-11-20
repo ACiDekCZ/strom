@@ -15,6 +15,7 @@ import {
     sourceRetractTaken, materialTreesTaken, retractStart, retractListed, retractChanged, retractExpired, retractSending,
     retractNotSent, retractFailed, retractCanGo, deletedSourcesOf, withDeletedSource, withoutDeletedSources,
     rememberDeletedSource, forgetDeletedSources, SOURCE_RETRACT_FEATURE, MATERIAL_TREES_FEATURE,
+    conflictKeepOfferedIn, conflictKeepOffered, conflictKeepOutcome,
     type SourceImpact, type SourceRetractEnv,
 } from '../source-retract.js';
 import { DataManager } from '../data.js';
@@ -574,5 +575,47 @@ describe('a conflict\'s marks of review in the research\'s file (spec 117 §8)',
             expect(c.review).toBeUndefined();
             for (const v of [...c.values, ...(c.decision ? [c.decision] : [])]) expect(v.retracted).toBeUndefined();
         }
+    });
+});
+
+describe('"Decision stands" (spec 117 §8)', () => {
+    afterEach(() => { vi.restoreAllMocks(); setSourceRetractLookup(() => null); });
+    const bridge = (over: Partial<{ features: string[] | null; bridgeUp: boolean; readOnly: boolean }> = {}) =>
+        ({ features: [SOURCE_RETRACT_FEATURE], bridgeUp: true, readOnly: false, ...over });
+
+    it('offered only with the gate, the bridge running and the research writable, in an app taking edits', () => {
+        expect(conflictKeepOfferedIn(bridge(), false)).toBe(true);
+        expect(conflictKeepOfferedIn(bridge({ bridgeUp: false }), false)).toBe(false);
+        expect(conflictKeepOfferedIn(bridge({ readOnly: true }), false)).toBe(false);
+        expect(conflictKeepOfferedIn(bridge({ features: ['conflict.decide'] }), false)).toBe(false);
+        expect(conflictKeepOfferedIn(bridge(), true)).toBe(false);
+        expect(conflictKeepOfferedIn(null, false)).toBe(false);
+    });
+
+    it('for the open tree: its research\'s bridge, a copy never, following live not needed', () => {
+        const meta = { id: 't1', research: { id: 'ABC-1', fingerprint: '', syncedAt: '' } } as unknown as TreeMetadata;
+        vi.spyOn(TreeManager, 'getActiveTreeMetadata').mockReturnValue(meta);
+        vi.spyOn(DataManager, 'isLiveFollowing').mockReturnValue(false);
+        const readOnly = vi.spyOn(DataManager, 'isReadOnly').mockReturnValue(false);
+        const asked: string[] = [];
+        setSourceRetractLookup(id => { asked.push(id); return bridge(); });
+        expect(conflictKeepOffered()).toBe(true);
+        expect(asked).toEqual(['abc-1']);
+        readOnly.mockReturnValue(true);
+        expect(conflictKeepOffered()).toBe(false);
+        readOnly.mockReturnValue(false);
+        vi.spyOn(TreeManager, 'getActiveTreeMetadata').mockReturnValue({ ...meta, research: { ...meta.research!, copy: true } });
+        expect(conflictKeepOffered()).toBe(false);
+    });
+
+    it('what an answer leaves: kept (also without a mark there), read-only, failed', () => {
+        const err = (kind: string, more: object = {}) => ({ ok: false as const, error: { kind, status: 409, ...more } as never });
+        expect(conflictKeepOutcome({ ok: true, value: { conflict: 'X0001', head: 'h', parent: null } as never })).toBe('kept');
+        expect(conflictKeepOutcome(err('notMarked'))).toBe('kept');
+        expect(conflictKeepOutcome(err('conflictGone'))).toBe('kept');
+        expect(conflictKeepOutcome(err('readonly'))).toBe('readonly');
+        expect(conflictKeepOutcome(err('held', { held: { kind: 'seal' } }))).toBe('readonly');
+        expect(conflictKeepOutcome(err('held', { held: { kind: 'disk' } }))).toBe('failed');
+        for (const kind of ['failed', 'busy', 'down', 'unknown', 'body']) expect(conflictKeepOutcome(err(kind))).toBe('failed');
     });
 });
