@@ -468,7 +468,8 @@ describe('timeline history row', () => {
         expect(m.history?.events.map(e => e.id)).toEqual(['a', 'b']);
         expect(m.history?.filtered).toEqual({ kinds: ['war', 'census', 'law'] });
         expect(svgOf(m)).toContain('class="tl-hist-btn is-filtered"');
-        expect(svgOf(m)).toContain('<span class="tl-hist-meta">· 3 kinds</span>');
+        // The label counts the kinds chosen the timeline has (law has no event here: §10's "0 kinds" when none).
+        expect(svgOf(m)).toContain('<span class="tl-hist-meta">· 2 kinds</span>');
         // All nine kinds: no filter.
         const all = computeTimelineModel(d, ids(d), TODAY_YEAR, { history: { events, filter: { kinds: [...HISTORY_KINDS] } } });
         expect(all.history?.filtered).toEqual({});
@@ -496,8 +497,11 @@ describe('timeline history row', () => {
         expect(m.rows.find(r => r.personId === 'jan')?.local).toBeUndefined();
         const f = computeTimelineModel(d, ids(d), TODAY_YEAR, { history: { events: [], local, filter: { kinds: ['disaster'] } } });
         expect(f.rows.find(r => r.personId === 'anna')?.local?.map(e => e.id)).toEqual(['L2']);
+        // A kind no line has: the row stays (§10, its filter can be cleared there), no line keeps one.
         const none = computeTimelineModel(d, ids(d), TODAY_YEAR, { history: { events: [], local, filter: { kinds: ['law'] } } });
-        expect(none.history).toBeUndefined();
+        expect(none.history?.events).toEqual([]);
+        expect(none.rows.every(r => !r.local)).toBe(true);
+        expect(svgOf(none)).toContain('class="link-button tl-hist-clear"');
     });
 
     it('a cluster stands for the kind most of its events have (a tie: the earlier); its name has up to three kinds and +n', () => {

@@ -3784,7 +3784,7 @@
         .hd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
         /* The facet chips (here, in the filter sheet and in the places' list) are .sel-opt chips (src/ui/sel-css.ts);
            their border and corner stated over the dialog's button rule, below the chosen state's. */
-        #history-modal button.hd-chip, .hd-fsheet button.hd-chip {
+        #history-modal button.hd-chip, .hd-fsheet button.hd-chip, .tl-pop button.hd-chip, .tl-osheet button.hd-chip {
             display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px;
             font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer;
         }
@@ -10772,6 +10772,44 @@
         .tl-pop-meta { font-size: 12px; color: var(--hist-meta); overflow-wrap: anywhere; }
         .tl-pop-who { font-size: 12.5px; line-height: 1.5; color: var(--text-light); overflow-wrap: anywhere; }
         .tl-pop-who .link-button { display: inline; padding: 0; font-size: 13px; font-family: var(--font-serif); text-align: left; white-space: normal; overflow-wrap: anywhere; }
+        /* spec 121 §5 (5a–5f): the row's options — three parts titled like the history detail's filter
+           sheet (.hd-fs-title), its kind chips (.hd-chip), a checkbox like .hd-hidden-only with a muted hint,
+           "Clear filter" under them. The same content in a phone's sheet (.tl-osheet), chips 34 px. */
+        .tl-pop-sec { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-top: 1px solid var(--divider); }
+        .tl-pop-sec:first-child { border-top: 0; padding-top: 2px; }
+        .tl-pop-check { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; font-weight: 400; color: var(--text); cursor: pointer; }
+        .tl-pop-check input { flex: none; width: 14px; height: 14px; margin: 2px 0 0; accent-color: var(--primary); }
+        .tl-pop-check.is-off { color: var(--text-faint); cursor: default; }
+        .tl-pop-hint { display: block; margin-top: 2px; font-size: 12px; line-height: 1.4; color: var(--hist-meta); }
+        .tl-pop-foot { display: flex; justify-content: flex-start; padding-top: 4px; }
+        .tl-pop-foot .link-button { font-size: 13px; padding: 2px 0; }
+        .tl-osheet-body { padding: 0 16px 8px; max-height: 70vh; overflow-y: auto; overscroll-behavior: contain; }
+        .tl-osheet button.hd-chip { height: 34px; padding: 0 12px; font-size: 13px; }
+        /* spec 121 §10: a filter that leaves nothing — a muted sentence and "Clear filter" in the row. */
+        .tl-hist-empty {
+            height: 100%; display: flex; align-items: center; gap: 12px; min-width: 0;
+            font-size: 12.5px; line-height: 1.2; color: var(--hist-meta); white-space: nowrap;
+        }
+        .tl-hist-empty-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .tl-hist-empty .link-button { flex: none; font-size: 12.5px; padding: 2px 0; }
+        .tl-hist-empty .link-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            /* A phone held sideways: the options' sheet scrolls within the low window. */
+            .tl-osheet-body { max-height: 60vh; }
+        }
+        @media (pointer: coarse) {
+            /* Touch: the label and "Clear filter" take a tap 44 px high without changing their look
+               (the row is 28 / 26 px: the target reaches past it, the foreignObject does not clip it). */
+            .tl-hist-row foreignObject { overflow: visible; }
+            .tl-hist-btn, .tl-hist-empty .link-button { position: relative; }
+            .tl-hist-btn::before, .tl-hist-empty .link-button::before {
+                content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%);
+            }
+            .tl-pop button.hd-chip, .tl-osheet button.hd-chip { min-height: 44px; }
+            .tl-pop-check { min-height: 44px; }
+            .tl-pop-check input { width: 20px; height: 20px; margin-top: 0; }
+            .tl-pop-foot .link-button { min-height: 44px; }
+        }
         @media (max-width: 1024px) {
             /* A tablet with a mouse: the same popover, kept off the bottom bar by its placement. */
             .tl-pop { max-width: calc(100vw - 16px); }

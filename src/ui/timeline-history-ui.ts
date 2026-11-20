@@ -21,9 +21,13 @@ import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { yearOf } from '../dates.js';
 import {
     timelineHistoryYears, timelineConcernPersons, timelineClusterPersons, placeTimelinePop,
-    type TimelineHistoryItem, type TimelineHistoryInput,
+    timelineHistoryFacets, toggleTimelineKind, clearTimelineFilter, timelineLocalOptionState,
+    type TimelineHistoryItem, type TimelineHistoryInput, type TimelineHistory, type TimelineHistoryChoice,
 } from '../timeline.js';
-import { computeTimelineHistory, timelineHistoryRegion, type HistoryPayload, type PersonResidence, type TimelineHistoryComputed } from '../history.js';
+import {
+    computeTimelineHistory, timelineHistoryRegion, isHistoryKind,
+    type HistoryPayload, type PersonResidence, type TimelineHistoryComputed,
+} from '../history.js';
 import { historyKindSvg } from '../history-symbols.js';
 import type { PersonId, StromData } from '../types.js';
 import { uiModule } from './module.js';
@@ -47,8 +51,29 @@ let computed: { key: string; payload: HistoryPayload; data: StromData; result: T
 /** The events of the row last drawn and the rows' order (a cluster's popover and sheet read them). */
 let lastEvents: readonly TimelineHistoryItem[] = [];
 let lastRowOrder: readonly string[] = [];
+/** The history row last drawn (its options read it), absent: no row. */
+let lastHistory: TimelineHistory | undefined;
 /** The open popover of the history row (one at a time). */
 let pop: { el: HTMLElement; key: string; close: (refocus: boolean) => void } | null = null;
+/** The row's options open: in the popover or the phone's sheet (its content is drawn anew on a change). */
+let options: { kind: 'pop' | 'sheet'; box: HTMLElement } | null = null;
+const OPTIONS_KEY = 'options';
+
+/**
+ * The Timeline's history options changed here (spec 121 §5): the renderer
+ * draws the timeline again from what it computed (nothing read anew). Another
+ * window (spec 079) follows the stored settings (SettingsManager.watchOtherWindows).
+ */
+export const TIMELINE_HISTORY_OPTIONS_EVENT = 'strom:timeline-history-options';
+
+/** The row's label, the options' button (redrawn with the row: looked up each time). */
+function optionsButton(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('#timeline-container .tl-hist-btn');
+}
+
+function capFirst(text: string): string {
+    return text ? text[0].toLocaleUpperCase() + text.slice(1) : text;
+}
 
 /** What a popover of the history row shows and where (openTimelinePopover). */
 export interface TimelinePopoverOptions {
@@ -164,9 +189,190 @@ export const timelineHistoryMethods = uiModule({
      * rows, the filter applied, a region named only with two or more) and
      * the rows' order — what a cluster's popover and sheet read.
      */
-    setTimelineHistoryDrawn(events: readonly TimelineHistoryItem[], rowOrder: readonly string[]): void {
+    setTimelineHistoryDrawn(events: readonly TimelineHistoryItem[], rowOrder: readonly string[], history?: TimelineHistory): void {
         lastEvents = events;
         lastRowOrder = rowOrder;
+        lastHistory = history;
+    },
+
+    /** The row's label after a redraw: "open" while its options are (`.is-open`, aria-expanded). */
+    syncTimelineHistoryButton(): void {
+        const btn = optionsButton();
+        if (!btn) return;
+        btn.classList.toggle('is-open', !!options);
+        btn.setAttribute('aria-expanded', String(!!options));
+    },
+
+    /** A click on the row's label: its options open, or close when they are. */
+    toggleTimelineHistoryOptions(anchor: HTMLElement): void {
+        if (options?.kind === 'pop' && pop?.key === OPTIONS_KEY) { pop.close(true); return; }
+        this.showTimelineHistoryOptions(anchor);
+    },
+
+    /**
+     * The history row's options (spec 121 §5, 5a–5f): on a computer a popover
+     * 400 px wide under the label, on a phone or a touch screen a bottom
+     * sheet. Three parts: the kinds (the history detail's chips: "All" and the
+     * nine kinds, each with its symbol and how many the timeline has; a kind
+     * without one can be chosen, the filter is kept for other timelines), the
+     * region (only with two or more on the row: "All" and the regions, the most
+     * events first, one choice), local history on the life lines (unavailable
+     * while Settings switch off both of its origins). "Clear filter" only with a
+     * filter. A change is stored for the tree and the timeline drawn again;
+     * the options stay open with the keyboard where it was.
+     */
+    showTimelineHistoryOptions(anchor: HTMLElement): void {
+        if (!lastHistory) return;
+        const h = strings.history;
+        if (wantsSheet()) {
+            const sheet = this.showLifelineHistorySheet('tl-hsheet tl-osheet', 'dialog', h.timelineOptionsAria,
+                `<div class="tl-hsheet-title">${esc(h.timelineRowLabel)}</div><div class="tl-osheet-body"></div>`
+                + `<button type="button" class="bottom-sheet-item pm-lifeline-hsheet-cancel">${esc(strings.buttons.close)}</button>`);
+            const box = sheet.querySelector<HTMLElement>('.tl-osheet-body')!;
+            options = { kind: 'sheet', box };
+            this.bottomSheetOnClose = () => {
+                if (options?.box !== box) return;
+                options = null;
+                this.syncTimelineHistoryButton();
+                // The label was drawn anew meanwhile: the keyboard goes to the new one.
+                requestAnimationFrame(() => {
+                    if (document.activeElement === document.body || !document.activeElement) optionsButton()?.focus({ preventScroll: true });
+                });
+            };
+            this.drawTimelineHistoryOptions();
+            sheet.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+                if (target.closest('.pm-lifeline-hsheet-cancel')) { this.hideBottomSheet(); return; }
+                this.timelineHistoryOptionsClick(target);
+            });
+            sheet.addEventListener('change', (e) => this.timelineHistoryOptionsChange(e.target as HTMLElement));
+            this.syncTimelineHistoryButton();
+            box.querySelector<HTMLElement>('button, input:not(:disabled)')?.focus({ preventScroll: true });
+            return;
+        }
+        const rect = anchor.getBoundingClientRect();
+        const el = this.openTimelinePopover({
+            anchor, key: OPTIONS_KEY, title: h.timelineRowLabel, body: '', width: 400, className: 'tl-pop-opts',
+            x: rect.left + 40,
+            returnFocus: optionsButton,
+            onClick: (target) => this.timelineHistoryOptionsClick(target),
+            onClose: () => {
+                if (options?.kind !== 'pop') return;
+                options = null;
+                this.syncTimelineHistoryButton();
+            },
+        });
+        el.setAttribute('aria-label', h.timelineOptionsAria);
+        options = { kind: 'pop', box: el.querySelector<HTMLElement>('.tl-pop-body')! };
+        el.addEventListener('change', (e) => this.timelineHistoryOptionsChange(e.target as HTMLElement));
+        this.drawTimelineHistoryOptions();
+        placePopover(el, anchor, rect.left + 40);
+        this.syncTimelineHistoryButton();
+        options.box.querySelector<HTMLElement>('button, input:not(:disabled)')?.focus({ preventScroll: true });
+    },
+
+    /** The options' content from the row last drawn; `focus` (a selector) gets the keyboard. */
+    drawTimelineHistoryOptions(focus?: string): void {
+        if (!options || !lastHistory) return;
+        const h = strings.history;
+        const hist = lastHistory;
+        const treeId = DataManager.getCurrentTreeId();
+        const choice = SettingsManager.getTimelineHistory(treeId);
+        const facets = timelineHistoryFacets(hist);
+        const chosen = hist.filtered.kinds ? new Set(hist.filtered.kinds) : null;
+        const kindChip = (kind: string, label: string, on: boolean, n: number | null, title = ''): string =>
+            `<button type="button" class="hd-chip sel-opt" data-tlo="kind" data-k="${esc(kind)}" aria-pressed="${on}"${title ? ` title="${esc(title)}"` : ''}>`
+            + `${kind && isHistoryKind(kind) ? historyKindSvg(kind, 12) : ''}${esc(label)}${n === null ? '' : ` <span class="hd-chip-n">${n}</span>`}</button>`;
+        const kinds = `<div class="tl-pop-sec"><span class="hd-fs-title">${esc(h.timelineOptKinds)}</span>`
+            + `<div class="hd-chips" role="group" aria-label="${esc(h.timelineOptKinds)}">`
+            + kindChip('', h.filterAll, !chosen, null)
+            + facets.kinds.map(k => kindChip(k.kind, capFirst(h.kinds[k.kind] ?? k.kind), !!chosen?.has(k.kind), k.count, h.kinds[k.kind] ?? k.kind)).join('')
+            + '</div></div>';
+        const names = new Map((computed?.result.regionList ?? []).map(r => [r.id, r.name]));
+        const region = hist.filtered.region;
+        const regionChip = (id: string, label: string, n: number | null): string =>
+            `<button type="button" class="hd-chip sel-opt" role="radio" data-tlo="region" data-r="${esc(id)}" aria-checked="${(region ?? '') === id}">`
+            + `${esc(label)}${n === null ? '' : ` <span class="hd-chip-n">${n}</span>`}</button>`;
+        const regions = hist.regions >= 2 || region
+            ? `<div class="tl-pop-sec"><span class="hd-fs-title">${esc(h.timelineOptRegion)}</span>`
+                + `<div class="hd-chips" role="radiogroup" aria-label="${esc(h.timelineOptRegion)}">`
+                + regionChip('', h.timelineOptAllRegions, null)
+                + facets.regions.map(r => regionChip(r.id, names.get(r.id) ?? hist.filtered.regionName ?? r.id, r.count)).join('')
+                + (region && !facets.regions.some(r => r.id === region) ? regionChip(region, hist.filtered.regionName ?? names.get(region) ?? region, 0) : '')
+                + '</div></div>'
+            : '';
+        const anyLocal = lastRowOrder.some(id => (computed?.result.local.get(id)?.length ?? 0) > 0);
+        const localState = timelineLocalOptionState(SettingsManager.getHistoryKinds(treeId), anyLocal);
+        const hint = localState === 'off' ? h.timelineOptLocalOff : localState === 'none' ? h.timelineOptLocalNone : h.timelineOptLocalHint;
+        const lines = `<div class="tl-pop-sec"><span class="hd-fs-title">${esc(h.timelineOptLines)}</span>`
+            + `<label class="tl-pop-check${localState === 'off' ? ' is-off' : ''}"><input type="checkbox" data-tlo="local"`
+            + `${choice.local && localState !== 'off' ? ' checked' : ''}${localState === 'off' ? ' disabled' : ''}>`
+            + `<span>${esc(h.timelineOptLocal)}<span class="tl-pop-hint">${esc(hint)}</span></span></label></div>`;
+        const clear = hist.filtered.kinds || region
+            ? `<div class="tl-pop-foot"><button type="button" class="link-button" data-tlo="clear">${esc(h.timelineClearFilter)}</button></div>`
+            : '';
+        options.box.innerHTML = kinds + regions + lines + clear;
+        if (focus) options.box.querySelector<HTMLElement>(focus)?.focus({ preventScroll: true });
+    },
+
+    /** A chip or "Clear filter" in the options. */
+    timelineHistoryOptionsClick(target: HTMLElement): void {
+        const btn = target.closest<HTMLElement>('button[data-tlo]');
+        if (!btn) return;
+        const o = SettingsManager.getTimelineHistory(DataManager.getCurrentTreeId());
+        const which = btn.dataset.tlo;
+        if (which === 'kind') {
+            const k = btn.dataset.k ?? '';
+            this.setTimelineHistoryChoice({ ...o, kinds: toggleTimelineKind(o.kinds, k && isHistoryKind(k) ? k : null) },
+                `[data-tlo="kind"][data-k="${CSS.escape(k)}"]`);
+        } else if (which === 'region') {
+            const r = btn.dataset.r ?? '';
+            const { region: _drop, ...rest } = o;
+            this.setTimelineHistoryChoice(r ? { ...rest, region: r } : rest, `[data-tlo="region"][data-r="${CSS.escape(r)}"]`);
+        } else if (which === 'clear') {
+            this.setTimelineHistoryChoice(clearTimelineFilter(o), '[data-tlo="kind"][data-k=""]');
+        }
+    },
+
+    /** The option "Local history on the life lines" switched. */
+    timelineHistoryOptionsChange(target: HTMLElement): void {
+        const input = target.closest<HTMLInputElement>('input[data-tlo="local"]');
+        if (!input) return;
+        const o = SettingsManager.getTimelineHistory(DataManager.getCurrentTreeId());
+        this.setTimelineHistoryChoice({ ...o, local: input.checked }, 'input[data-tlo="local"]');
+    },
+
+    /**
+     * "Clear filter" (the options, the empty row of §10): the kinds and the
+     * region in one step; the keyboard goes to the row's label.
+     */
+    clearTimelineHistoryFilter(): void {
+        const o = SettingsManager.getTimelineHistory(DataManager.getCurrentTreeId());
+        this.setTimelineHistoryChoice(clearTimelineFilter(o), '[data-tlo="kind"][data-k=""]');
+        if (!options) optionsButton()?.focus({ preventScroll: true });
+    },
+
+    /**
+     * Store the tree's options (this device; another window follows them) and
+     * draw the timeline again; open options drawn anew, the keyboard on `focus`.
+     * The row gone with it (local history off on a row that had nothing else):
+     * the options close.
+     */
+    setTimelineHistoryChoice(next: TimelineHistoryChoice, focus?: string): void {
+        const treeId = DataManager.getCurrentTreeId();
+        if (!treeId) return;
+        SettingsManager.setTimelineHistory(treeId, next);
+        window.dispatchEvent(new CustomEvent(TIMELINE_HISTORY_OPTIONS_EVENT));
+        if (!options) return;
+        const btn = optionsButton();
+        if (!lastHistory || !btn) {
+            if (options.kind === 'pop') pop?.close(false);
+            else this.hideBottomSheet();
+            return;
+        }
+        this.drawTimelineHistoryOptions(focus);
+        if (options.kind === 'pop' && pop) placePopover(pop.el, btn, btn.getBoundingClientRect().left + 40);
+        this.syncTimelineHistoryButton();
     },
 
     /**

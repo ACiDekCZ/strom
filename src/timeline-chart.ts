@@ -16,7 +16,7 @@
 import {
     TimelineModel, TimelineRow, TimelineEvent, TimelineHistory, TimelineHistoryItem, TimelineSharedMark,
     yearToFraction, axisTicks, axisLabelStep, clusterTimelineHistory, timelineHistoryYears,
-    timelineClusterKind, timelineClusterKinds, timelinePeriodTracks,
+    timelineClusterKind, timelineClusterKinds, timelinePeriodTracks, timelineHistoryRowState, timelineFilterKindCount,
 } from './timeline.js';
 import { strings } from './strings.js';
 import { historyKindSvg } from './history-symbols.js';
@@ -130,12 +130,16 @@ function historyKindName(e: TimelineHistoryItem): string {
     return strings.history.kinds[e.kind] ?? strings.history.kinds.other;
 }
 
-/** The label's filter: "· 3 kinds", "· Valdorie", "· 2 filters" (spec 121 §5); empty without a filter. */
-function historyFilterText(h: TimelineHistory): string {
+/**
+ * The label's filter: "· 3 kinds" (the kinds chosen the timeline has: "0 kinds"
+ * when it has none of them, §10), "· Valdorie", "· 2 filters" (spec 121 §5);
+ * empty without a filter.
+ */
+export function historyFilterText(h: TimelineHistory): string {
     const S = strings.history;
     const { kinds, region, regionName } = h.filtered;
     if (kinds && region) return S.timelineFilterBoth(2);
-    if (kinds) return S.timelineFilterKinds(kinds.length);
+    if (kinds) return S.timelineFilterKinds(timelineFilterKindCount(h));
     if (region) return regionName ?? region;
     return '';
 }
@@ -151,7 +155,7 @@ function historyFilterText(h: TimelineHistory): string {
  * touch target. Screen only: never printed, never on the poster.
  */
 function historyRowSvg(
-    h: TimelineHistory, opts: TimelineSvgOptions, xOf: (y: number) => number, rowH: number, plotX0: number,
+    h: TimelineHistory, rows: readonly TimelineRow[], opts: TimelineSvgOptions, xOf: (y: number) => number, rowH: number, plotX0: number,
 ): string {
     const { esc, labelW, width: W } = opts;
     const narrow = !!opts.narrow;
@@ -202,8 +206,19 @@ function historyRowSvg(
             + `<rect class="tl-hist-ring" x="${(x - 9).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="18" height="18" rx="5"/>`
             + `${sym}${badge}</g>`;
     }).join('');
+    // A filter that leaves nothing (§10): a muted sentence and "Clear filter" in the row (a phone: short, the whole in its name).
+    let empty = '';
+    if (timelineHistoryRowState(h, rows) === 'emptyFilter') {
+        const ex = plotX0 + 6;
+        const text = narrow
+            ? `<span class="tl-hist-empty-text" role="note" aria-label="${esc(S.timelineEmptyFilter)}" title="${esc(S.timelineEmptyFilter)}">${esc(S.timelineEmptyFilterShort)}</span>`
+            : `<span class="tl-hist-empty-text">${esc(S.timelineEmptyFilter)}</span>`;
+        empty = `<foreignObject x="${ex}" y="${TOP}" width="${Math.max(0, W - PAD_R - 6 - ex)}" height="${rowH}">`
+            + `<div xmlns="http://www.w3.org/1999/xhtml" class="tl-hist-empty">${text}`
+            + `<button type="button" class="link-button tl-hist-clear">${esc(S.timelineClearFilter)}</button></div></foreignObject>`;
+    }
     return `<g class="tl-hist-row">${label}${band}${life}`
-        + `<g aria-hidden="true">${periods}</g>${clusters}</g>`;
+        + `<g aria-hidden="true">${periods}</g>${clusters}${empty}</g>`;
 }
 
 /** Localized label for an event dot's tooltip (mirror of the renderer). */
@@ -470,7 +485,7 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
     // Shifted by the history row; print drops the row and the shift (index.html @media print).
     const rows = hist ? `<g class="tl-rows" transform="translate(0 ${histH})">${rowsSvg}</g>` : rowsSvg;
     // Drawn after the rows: a cluster's touch target may reach into the first row.
-    const histRow = hist ? historyRowSvg(hist, opts, xOf, histH, plotX0) : '';
+    const histRow = hist ? historyRowSvg(hist, model.rows, opts, xOf, histH, plotX0) : '';
 
     // Fade-out gradients for bars with an unknown end (deceased, no death date).
     const maleColor = opts.maleColor ?? FALLBACK_MALE;

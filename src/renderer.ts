@@ -64,6 +64,7 @@ import { yearOf, displayYear, formatFlexDate, shortYearRanges } from './dates.js
 import { computeTimelineModel } from './timeline.js';
 import { buildTimelineSvg, TimelineBranchSigns } from './timeline-chart.js';
 import { HISTORY_CHANGED_EVENT } from './ui/history-ui.js';
+import { TIMELINE_HISTORY_OPTIONS_EVENT } from './ui/timeline-history-ui.js';
 import { sortLifeEvents } from './events.js';
 import { classifyBranches, BranchSet } from './branch-colors.js';
 import { applyBranchMarkerAttrs, branchAriaId } from './branch-marker-attrs.js';
@@ -7551,7 +7552,10 @@ class TreeRendererClass {
             };
             container.addEventListener('click', (e) => {
                 if (histCluster(e)) return;
-                // The row's label (spec 121 §5: its options come with the next step) is not a row of a person.
+                // The row's label opens its options (spec 121 §5); "Clear filter" of an empty filter (§10).
+                const histBtn = (e.target as Element).closest<HTMLElement>('.tl-hist-btn');
+                if (histBtn) { UI.toggleTimelineHistoryOptions(histBtn); return; }
+                if ((e.target as Element).closest('.tl-hist-clear')) { UI.clearTimelineHistoryFilter(); return; }
                 if ((e.target as Element).closest('.tl-hist-row')) return;
                 const g = (e.target as Element).closest('[data-person-id]') as HTMLElement | null;
                 if (g?.dataset.personId) this.setFocus(g.dataset.personId as PersonId);
@@ -7563,9 +7567,12 @@ class TreeRendererClass {
                 histCluster(e);
             });
             // The history row follows what the card's layer shows (a read, a hiding, the chip, Settings).
-            window.addEventListener(HISTORY_CHANGED_EVENT, () => {
+            const redraw = (): void => {
                 if (this.viewMode === 'timeline' && container.isConnected) this.renderTimeline(container);
-            });
+            };
+            window.addEventListener(HISTORY_CHANGED_EVENT, redraw);
+            // The row's options changed (spec 121 §5): drawn from what was computed, nothing read anew.
+            window.addEventListener(TIMELINE_HISTORY_OPTIONS_EVENT, redraw);
         }
 
         const ids = [...this.positions.keys()] as unknown as string[];
@@ -7573,7 +7580,7 @@ class TreeRendererClass {
         // The history row of the whole timeline (spec 121 §1): kept while the rows and the data stay, the focus only its line.
         const history = UI.timelineHistoryAll(ids, this.focusPersonId);
         const model = computeTimelineModel(DataManager.getData(), ids, todayYear, history ? { history } : {});
-        UI.setTimelineHistoryDrawn(model.history?.events ?? [], model.rows.map(r => r.personId));
+        UI.setTimelineHistoryDrawn(model.history?.events ?? [], model.rows.map(r => r.personId), model.history);
         const S = strings.timeline;
 
         const isMobile = isMobileViewport();
@@ -7615,6 +7622,8 @@ class TreeRendererClass {
         const focusedCluster = (document.activeElement as Element | null)?.closest?.('#timeline-container .tl-hist')?.getAttribute('data-hist-ids');
         container.innerHTML = html;
         this.markTimelineWindowSelected();
+        // The row's label drawn anew: open while its options are.
+        UI.syncTimelineHistoryButton();
         if (focusedCluster) {
             container.querySelector<SVGGElement>(`.tl-hist[data-hist-ids="${CSS.escape(focusedCluster)}"]`)?.focus({ preventScroll: true });
         }

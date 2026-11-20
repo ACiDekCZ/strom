@@ -126,6 +126,10 @@ export interface TimelineHistory {
     regions: number;
     /** How many events the row has before the filter. */
     total: number;
+    /** The row's events before the filter (trimmed to the rows, sorted): the options' counts. */
+    all: TimelineHistoryItem[];
+    /** The local events on the lines per kind before the kind filter; only with the option on. */
+    localKinds?: Partial<Record<HistoryKind, number>>;
     /** The filter in effect (nothing when it filters nothing). */
     filtered: { kinds?: HistoryKind[]; region?: string; regionName?: string };
 }
@@ -273,13 +277,16 @@ function timelineHistoryRow(h: TimelineHistoryInput, rows: TimelineRow[]): Timel
     if (regions < 2) for (const e of sorted) delete e.region;
     const kinds = h.filter?.kinds ? new Set(h.filter.kinds) : null;
     const kindsOn = kinds && HISTORY_KINDS.some(k => !kinds.has(k)) ? kinds : null;
+    // A line's local events before the kind filter keep the row (5d): a filter leaving none says so on it.
     let anyLocal = false;
+    const localKinds: Partial<Record<HistoryKind, number>> = {};
     if (h.local) {
         for (const r of rows) {
-            const items = (h.local.get(r.personId) ?? []).filter(e => !kindsOn || kindsOn.has(e.kind));
-            if (!items.length) continue;
-            r.local = [...items].sort((a, b) => a.year - b.year);
-            anyLocal = true;
+            const own = h.local.get(r.personId) ?? [];
+            for (const e of own) localKinds[e.kind] = (localKinds[e.kind] ?? 0) + 1;
+            if (own.length) anyLocal = true;
+            const items = own.filter(e => !kindsOn || kindsOn.has(e.kind));
+            if (items.length) r.local = [...items].sort((a, b) => a.year - b.year);
         }
     }
     if (!sorted.length && !anyLocal) return undefined;
@@ -291,6 +298,8 @@ function timelineHistoryRow(h: TimelineHistoryInput, rows: TimelineRow[]): Timel
         ...(focusRow ? { focus: { personId: focusRow.personId, startYear: focusRow.startYear, endYear: focusRow.endYear } } : {}),
         regions,
         total: sorted.length,
+        all: sorted,
+        ...(h.local ? { localKinds } : {}),
         filtered: {
             ...(kindsOn ? { kinds: HISTORY_KINDS.filter(k => kindsOn.has(k)) } : {}),
             ...(region ? { region, ...(h.filter?.regionName ? { regionName: h.filter.regionName } : {}) } : {}),
@@ -309,6 +318,88 @@ export function filterTimelineHistory(events: readonly TimelineHistoryItem[], fi
     const region = filter.region;
     if (!kinds && !region) return [...events];
     return events.filter(e => (!kinds || kinds.has(e.kind)) && (!region || e.regionId === region));
+}
+
+/**
+ * What the history row shows (spec 121 §5, §10): its events; a thin row with
+ * the label alone (no event of a region, or the filter leaves none while a
+ * line shows a local one: the option stays reachable); or the empty filter's
+ * sentence with "Clear filter" (a filter leaves nothing on the row or the lines).
+ */
+export function timelineHistoryRowState(h: TimelineHistory, rows: readonly TimelineRow[] = []): 'events' | 'thin' | 'emptyFilter' {
+    if (h.events.length) return 'events';
+    const filtered = !!(h.filtered.kinds || h.filtered.region);
+    const localShown = rows.some(r => (r.local?.length ?? 0) > 0);
+    return filtered && !localShown ? 'emptyFilter' : 'thin';
+}
+
+/** The options' chips (spec 121 §5): a count per kind, per region. */
+export interface TimelineHistoryFacets {
+    /** The nine kinds in HISTORY_KINDS order: the row's events (of the region chosen) and the lines' local ones. */
+    kinds: { kind: HistoryKind; count: number }[];
+    /** The regions of the row's events of the kinds chosen, the most first (same count: as met). */
+    regions: { id: string; count: number }[];
+}
+
+export function timelineHistoryFacets(h: TimelineHistory): TimelineHistoryFacets {
+    const region = h.filtered.region;
+    const kinds = h.filtered.kinds ? new Set(h.filtered.kinds) : null;
+    const byKind = new Map<HistoryKind, number>();
+    const byRegion = new Map<string, number>();
+    for (const e of h.all) {
+        if (!region || e.regionId === region) byKind.set(e.kind, (byKind.get(e.kind) ?? 0) + 1);
+        if (e.regionId && (!kinds || kinds.has(e.kind))) byRegion.set(e.regionId, (byRegion.get(e.regionId) ?? 0) + 1);
+    }
+    return {
+        kinds: HISTORY_KINDS.map(kind => ({ kind, count: (byKind.get(kind) ?? 0) + (h.localKinds?.[kind] ?? 0) })),
+        regions: [...byRegion].map(([id, count], at) => ({ id, count, at }))
+            .sort((a, b) => b.count - a.count || a.at - b.at).map(({ id, count }) => ({ id, count })),
+    };
+}
+
+/**
+ * How many of the kinds chosen the timeline has (the label "History · 3 kinds";
+ * spec 121 §10: a filter of kinds the timeline does not have says "0 kinds").
+ */
+export function timelineFilterKindCount(h: TimelineHistory): number {
+    if (!h.filtered.kinds) return 0;
+    const on = new Set(timelineHistoryFacets(h).kinds.filter(k => k.count > 0).map(k => k.kind));
+    return h.filtered.kinds.filter(k => on.has(k)).length;
+}
+
+/** The Timeline's history options of a tree as the options change them (settings.ts TimelineHistoryOptions). */
+export interface TimelineHistoryChoice {
+    kinds?: HistoryKind[];
+    region?: string;
+    local: boolean;
+}
+
+/**
+ * A kind's chip clicked (spec 121 §5, like the history detail's facets):
+ * "All" (null) drops the filter; a kind is added or removed; none left or all
+ * nine chosen is no filter.
+ */
+export function toggleTimelineKind(kinds: readonly HistoryKind[] | undefined, kind: HistoryKind | null): HistoryKind[] | undefined {
+    if (!kind) return undefined;
+    const now = kinds ?? [];
+    const next = now.includes(kind) ? now.filter(k => k !== kind) : [...now, kind];
+    const ordered = HISTORY_KINDS.filter(k => next.includes(k));
+    return ordered.length && ordered.length < HISTORY_KINDS.length ? ordered : undefined;
+}
+
+/** "Clear filter" (spec 121 §5, §10): the kinds and the region in one step; the local option stays. */
+export function clearTimelineFilter(o: TimelineHistoryChoice): TimelineHistoryChoice {
+    return { local: o.local };
+}
+
+/**
+ * The option "Local history on the life lines" (spec 121 §5): unavailable
+ * ('off') while Settings switch off both the history of places and the
+ * findings; 'none' when the timeline has no local event; else 'ok'.
+ */
+export function timelineLocalOptionState(origins: { place: boolean; local: boolean }, anyLocal: boolean): 'off' | 'none' | 'ok' {
+    if (!origins.place && !origins.local) return 'off';
+    return anyLocal ? 'ok' : 'none';
 }
 
 /**

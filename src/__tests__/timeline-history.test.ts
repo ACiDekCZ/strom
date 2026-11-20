@@ -11,7 +11,12 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
     computeTimelineHistory, parseHistoryPayload, timelineHistoryRegion, type HistoryPayload, type PersonResidence,
 } from '../history.js';
-import { computeTimelineModel, filterTimelineHistory } from '../timeline.js';
+import {
+    computeTimelineModel, filterTimelineHistory, timelineHistoryRowState, timelineHistoryFacets, timelineFilterKindCount,
+    toggleTimelineKind, clearTimelineFilter, timelineLocalOptionState,
+} from '../timeline.js';
+import { buildTimelineSvg, historyFilterText } from '../timeline-chart.js';
+import { setLanguage } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { StromData, PersonId, Person, LifeEvent } from '../types.js';
 import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
@@ -274,6 +279,122 @@ describe('the options of the history row, per tree', () => {
         SettingsManager.forgetLifelineDefaults('brumla');
         expect(SettingsManager.getTimelineHistory('brumla')).toEqual({ local: false });
         expect(saved(store).lifelineByTree?.brumla).toBeUndefined();
+    });
+});
+
+describe('the options of the history row (§5) and its states (§10)', () => {
+    const r = computeTimelineHistory(d, ALL, payload(base), 'en');
+    const regionNames = { 'xx-valdorie': 'Valdoria', 'xx-quellnitz': 'Quellnitz Land' } as Record<string, string>;
+    const model = (filter: { kinds?: ('war' | 'census' | 'law' | 'epidemic' | 'disaster')[]; region?: string } = {}, local = true, events = r.events) =>
+        computeTimelineModel(d, ALL, 2026, { history: {
+            events, ...(local ? { local: r.local } : {}),
+            filter: { ...filter, ...(filter.region ? { regionName: regionNames[filter.region] } : {}) },
+        } });
+    const svg = (m: ReturnType<typeof model>, narrow = false) => buildTimelineSvg(m, {
+        esc: (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'),
+        width: 900, rowH: 30, labelW: narrow ? 96 : 160, mode: 'screen', narrow,
+    });
+
+    it('the chips count the row and the lines: each kind (of the region chosen), each region (of the kinds chosen), the most first', () => {
+        const f = timelineHistoryFacets(model().history!);
+        expect(f.kinds.map(k => k.kind)).toEqual(['war', 'epidemic', 'census', 'state', 'emigration', 'law', 'economy', 'disaster', 'other']);
+        // war: V-1866, V-1870, V-1895; census: Q-1880; the lines' local ones: L-1870 twice (Anna, Bert), P-1870, P-1900.
+        expect(Object.fromEntries(f.kinds.filter(k => k.count).map(k => [k.kind, k.count]))).toEqual({ war: 3, epidemic: 2, census: 1, disaster: 2 });
+        expect(f.regions).toEqual([{ id: 'xx-valdorie', count: 3 }, { id: 'xx-quellnitz', count: 1 }]);
+        const inQuellnitz = timelineHistoryFacets(model({ region: 'xx-quellnitz' }).history!);
+        expect(inQuellnitz.kinds.find(k => k.kind === 'war')!.count).toBe(0);
+        expect(timelineHistoryFacets(model({ kinds: ['census'] }).history!).regions).toEqual([{ id: 'xx-quellnitz', count: 1 }]);
+        // Without the option the lines count nothing.
+        expect(timelineHistoryFacets(model({}, false).history!).kinds.find(k => k.kind === 'disaster')!.count).toBe(0);
+    });
+
+    it('a kind clicked: added or taken away; "All", none left or all nine is no filter', () => {
+        expect(toggleTimelineKind(undefined, 'war')).toEqual(['war']);
+        expect(toggleTimelineKind(['war'], 'census')).toEqual(['war', 'census']);
+        expect(toggleTimelineKind(['census', 'war'], 'war')).toEqual(['census']);
+        expect(toggleTimelineKind(['war'], 'war')).toBeUndefined();
+        expect(toggleTimelineKind(['war', 'census'], null)).toBeUndefined();
+        expect(toggleTimelineKind([], 'law')).toEqual(['law']);
+        expect(toggleTimelineKind(['war', 'epidemic', 'census', 'state', 'emigration', 'law', 'economy', 'disaster'], 'other')).toBeUndefined();
+    });
+
+    it('"Clear filter" drops the kinds and the region in one step and keeps the local option, stored for the tree', () => {
+        expect(clearTimelineFilter({ kinds: ['war'], region: 'xx-valdorie', local: true })).toEqual({ local: true });
+        expect(clearTimelineFilter({ kinds: ['law'], local: false })).toEqual({ local: false });
+        const store = new Map<string, string>();
+        vi.stubGlobal('localStorage', {
+            getItem: (k: string) => store.get(k) ?? null,
+            setItem: (k: string, v: string) => { store.set(k, v); },
+            removeItem: (k: string) => { store.delete(k); },
+        });
+        try {
+            const sm = SettingsManager as unknown as { settings: Record<string, unknown> };
+            sm.settings = { theme: 'system', language: 'system', encryption: false, auditLog: false };
+            SettingsManager.setTimelineHistory('brumla', { kinds: ['war', 'census'], region: 'xx-valdorie', local: true });
+            SettingsManager.setTimelineHistory('brumla', clearTimelineFilter(SettingsManager.getTimelineHistory('brumla')));
+            expect(SettingsManager.getTimelineHistory('brumla')).toEqual({ local: true });
+            expect(JSON.parse(store.get('strom-settings')!).lifelineByTree.brumla.timeline).toEqual({ local: true });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('the label counts the kinds chosen the timeline has: a kind it does not have makes "0 kinds"', () => {
+        setLanguage('en');
+        expect(timelineFilterKindCount(model({ kinds: ['war', 'census'] }).history!)).toBe(2);
+        expect(timelineFilterKindCount(model({ kinds: ['war', 'law'] }).history!)).toBe(1);
+        expect(historyFilterText(model({ kinds: ['law'] }).history!)).toBe('0 kinds');
+        expect(historyFilterText(model({ region: 'xx-quellnitz' }).history!)).toBe('Quellnitz Land');
+        expect(historyFilterText(model({ kinds: ['war'], region: 'xx-valdorie' }).history!)).toBe('2 filters');
+        expect(historyFilterText(model().history!)).toBe('');
+        setLanguage('cs');
+        expect(historyFilterText(model({ kinds: ['law'] }).history!)).toBe('0 druhů');
+        setLanguage('en');
+    });
+
+    it('states: events; a filter leaving nothing says so with "Clear filter"; no event of a region but local ones is a thin row', () => {
+        setLanguage('en');
+        const all = model();
+        expect(timelineHistoryRowState(all.history!, all.rows)).toBe('events');
+        // A kind the timeline does not have: the row stays, its sentence and "Clear filter"; the lines keep none either.
+        const none = model({ kinds: ['law'] });
+        expect(none.history?.events).toEqual([]);
+        expect(none.rows.every(row => !row.local)).toBe(true);
+        expect(timelineHistoryRowState(none.history!, none.rows)).toBe('emptyFilter');
+        const drawn = svg(none);
+        expect(drawn).toContain('class="tl-hist-empty"');
+        expect(drawn).toContain('<span class="tl-hist-empty-text">No history for the chosen kinds</span>');
+        expect(drawn).toContain('class="link-button tl-hist-clear">Clear filter</button>');
+        expect(drawn).toContain('<span class="tl-hist-meta">· 0 kinds</span>');
+        // A phone: the short sentence, the whole one its name.
+        const phone = svg(none, true);
+        expect(phone).toContain('aria-label="No history for the chosen kinds"');
+        expect(phone).toContain('>No history</span>');
+        // A region filter with no event of the kinds there: the same.
+        const off = model({ kinds: ['war'], region: 'xx-quellnitz' });
+        expect(timelineHistoryRowState(off.history!, off.rows)).toBe('emptyFilter');
+        // The row's events filtered away while a line shows a local one of the kinds: thin, no sentence.
+        const local = model({ kinds: ['disaster'] });
+        expect(timelineHistoryRowState(local.history!, local.rows)).toBe('thin');
+        expect(svg(local)).not.toContain('tl-hist-empty');
+        // No event of a region (the origin off), local history on: a thin row with the label alone (5d).
+        const thin = model({}, true, []);
+        expect(thin.history?.events).toEqual([]);
+        expect(timelineHistoryRowState(thin.history!, thin.rows)).toBe('thin');
+        expect(svg(thin)).toContain('class="tl-hist-btn"');
+        expect(svg(thin)).not.toContain('tl-hist-empty');
+        // ... and a kind filter hiding every local one keeps it, saying so (the filter can be cleared).
+        const thinNone = model({ kinds: ['war'] }, true, []);
+        expect(thinNone.history).toBeDefined();
+        expect(timelineHistoryRowState(thinNone.history!, thinNone.rows)).toBe('emptyFilter');
+        // No event of a region and the local option off: no row at all.
+        expect(model({}, false, []).history).toBeUndefined();
+    });
+
+    it('the local option: unavailable with both of its origins off in Settings; "none" without a local event on the timeline', () => {
+        expect(timelineLocalOptionState({ place: false, local: false }, true)).toBe('off');
+        expect(timelineLocalOptionState({ place: true, local: false }, false)).toBe('none');
+        expect(timelineLocalOptionState({ place: false, local: true }, true)).toBe('ok');
     });
 });
 

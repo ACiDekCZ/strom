@@ -54,9 +54,10 @@ function crowdGed(): string {
         .replace('1 CHIL @P0003@', ['1 CHIL @P0003@', ...CROWD.map(([id]) => `1 CHIL @${id}@`)].join('\n'));
 }
 
-async function setup(page: Page, opts: { width?: number; height?: number; crowd?: boolean } = {}): Promise<void> {
+async function setup(page: Page, opts: { width?: number; height?: number; crowd?: boolean; edit?: (h: FakeHistory) => void } = {}): Promise<void> {
     if (opts.width) await page.setViewportSize({ width: opts.width, height: opts.height ?? 844 });
     const history = timelineHistory();
+    opts.edit?.(history);
     const ged = opts.crowd ? crowdGed() : timelineGed();
     await fakeBridge(page, { features: HISTORY_R1_FEATURES, history, treeGed: ged, links: LINKS });
     await openResearch(page, { ged });
@@ -286,5 +287,216 @@ test.describe('Timeline: the history row', () => {
         await page.getByRole('button', { name: 'Try a sample tree' }).click();
         await timelineView(page);
         await expect(page.locator('#timeline-container .tl-hist-row, #timeline-container .tl-rows')).toHaveCount(0);
+    });
+});
+
+/** The row's label, the options' button. */
+const histBtn = (page: Page) => histRow(page).locator('button.tl-hist-btn');
+/** The ids of the row's events drawn, sorted. */
+const drawnIds = (page: Page) => clusters(page).evaluateAll(els => els.flatMap(e => (e.getAttribute('data-hist-ids') ?? '').split(' ')).filter(Boolean).sort());
+/** Elements of `selector` whose content overflows them (plus the page itself). */
+const overflowing = (page: Page, selector: string) => page.evaluate((selector) => [document.documentElement, ...document.querySelectorAll(selector)]
+    .filter(el => el === document.documentElement ? el.scrollWidth > el.clientWidth : el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'visible')
+    .map(el => (el as HTMLElement).className || el.tagName), selector);
+
+test.describe('Timeline: the history row\'s options (spec 121 §5, §10)', () => {
+    test('the label opens them under it: kinds with counts, regions, the local option; a kind filters the row and stays open; Esc gives the keyboard back', async ({ page }) => {
+        await setup(page);
+        await focusOn(page, 'Jan');
+        await timelineView(page);
+        expect(await drawnIds(page)).toEqual(['E1', 'E3', 'E6']);
+        const btn = histBtn(page);
+        await btn.click();
+        const pop = page.locator('.tl-pop.tl-pop-opts[role="dialog"]');
+        await expect(pop).toHaveCount(1);
+        await expect(pop).toHaveAttribute('aria-label', 'History options on the timeline');
+        await expect(pop.locator('.tl-pop-title')).toHaveText('History');
+        await expect(btn).toHaveClass(/is-open/);
+        await expect(btn).toHaveAttribute('aria-expanded', 'true');
+        // 400 px wide, under the row, inside the window.
+        const box = (await pop.boundingBox())!;
+        const row = (await histRow(page).locator('.tl-hist-band').boundingBox())!;
+        expect(Math.round(box.width)).toBe(400);
+        expect(box.y).toBeGreaterThanOrEqual(row.y + row.height);
+        expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width - 7);
+        // The kinds: "All" pressed, then the nine with their symbol and count; one without an event can be chosen.
+        const kinds = pop.locator('.hd-chips[role="group"] > button.hd-chip');
+        await expect(kinds).toHaveCount(10);
+        await expect(kinds.first()).toHaveText('All');
+        await expect(kinds.first()).toHaveAttribute('aria-pressed', 'true');
+        const war = kinds.filter({ hasText: 'War' });
+        await expect(war).toHaveAttribute('aria-pressed', 'false');
+        await expect(war).toHaveAttribute('title', 'war');
+        await expect(war.locator('.hd-chip-n')).toHaveText('1');
+        await expect(war.locator('svg.hist-kind-svg')).toHaveAttribute('width', '12');
+        await expect(kinds.filter({ hasText: 'Law' }).locator('.hd-chip-n')).toHaveText('0');
+        // Two regions on the row: "All" and both, the most events first.
+        const regions = pop.locator('.hd-chips[role="radiogroup"] > button.hd-chip');
+        await expect(regions).toHaveText(['All', 'Bohemia 2', 'Austrian Empire 1']);
+        await expect(regions.first()).toHaveAttribute('aria-checked', 'true');
+        // The local option off, available (Jan's 1880 fire is on his line with it).
+        const local = pop.locator('.tl-pop-check input[type="checkbox"]');
+        await expect(local).not.toBeChecked();
+        await expect(local).toBeEnabled();
+        await expect(pop.locator('.tl-pop-check .tl-pop-hint')).toHaveText('Fires, floods and research findings in the place where the person lived that year.');
+        await expect(pop.getByRole('button', { name: 'Clear filter' })).toHaveCount(0);
+        await expect(pop.locator('.research-open-mark, .ai-badge')).toHaveCount(0);
+
+        // War: the row keeps 1866's war alone, the label says so; the options stay open, the keyboard on the chip.
+        await war.click();
+        await expect(histBtn(page).locator('.tl-hist-meta')).toHaveText('· 1 kind');
+        await expect(histBtn(page)).toHaveClass(/is-filtered/);
+        await expect(histBtn(page)).toHaveClass(/is-open/);
+        expect(await drawnIds(page)).toEqual(['E1']);
+        await expect(pop).toHaveCount(1);
+        await expect(kinds.filter({ hasText: 'War' })).toHaveAttribute('aria-pressed', 'true');
+        await expect(kinds.filter({ hasText: 'War' })).toBeFocused();
+        await expect(kinds.first()).toHaveAttribute('aria-pressed', 'false');
+        // The regions count within the kinds chosen.
+        await expect(regions).toHaveText(['All', 'Bohemia 1']);
+        await expect(pop.getByRole('button', { name: 'Clear filter' })).toHaveCount(1);
+        // Stored for the tree.
+        expect(await page.evaluate(() => window.Strom.SettingsManager.getTimelineHistory(window.Strom.DataManager.getCurrentTreeId()))).toEqual({ kinds: ['war'], local: false });
+
+        // Esc closes them, the keyboard on the label.
+        await page.keyboard.press('Escape');
+        await expect(pop).toHaveCount(0);
+        await expect(histBtn(page)).toBeFocused();
+        await expect(histBtn(page)).toHaveAttribute('aria-expanded', 'false');
+        await expect(histBtn(page)).not.toHaveClass(/is-open/);
+        // Enter opens them again; a second click on the label closes them.
+        await page.keyboard.press('Enter');
+        await expect(pop).toHaveCount(1);
+        await histBtn(page).click();
+        await expect(pop).toHaveCount(0);
+    });
+
+    test('a filter that leaves nothing: "0 kinds", the sentence and "Clear filter" in the row; it clears kinds and region at once', async ({ page }) => {
+        await setup(page);
+        await focusOn(page, 'Jan');
+        await timelineView(page);
+        await histBtn(page).click();
+        const pop = page.locator('.tl-pop.tl-pop-opts');
+        // A region, then a kind it has no event of.
+        await pop.locator('.hd-chips[role="radiogroup"] > button.hd-chip').filter({ hasText: 'Austrian Empire' }).click();
+        await expect(histBtn(page).locator('.tl-hist-meta')).toHaveText('· Austrian Empire');
+        expect(await drawnIds(page)).toEqual(['E3']);
+        await pop.locator('.hd-chips[role="group"] > button.hd-chip').filter({ hasText: 'Law' }).click();
+        await expect(histBtn(page).locator('.tl-hist-meta')).toHaveText('· 2 filters');
+        await expect(clusters(page)).toHaveCount(0);
+        // The kinds alone: "0 kinds" (law has no event on the timeline).
+        await pop.locator('.hd-chips[role="radiogroup"] > button.hd-chip').first().click();
+        await expect(histBtn(page).locator('.tl-hist-meta')).toHaveText('· 0 kinds');
+        const empty = histRow(page).locator('.tl-hist-empty');
+        await expect(empty).toContainText('No history for the chosen kinds');
+        await page.keyboard.press('Escape');
+        await expect(pop).toHaveCount(0);
+        // Region again (stored directly), then "Clear filter" in the row: both gone in one step, the local option kept.
+        await page.evaluate(() => {
+            const id = window.Strom.DataManager.getCurrentTreeId();
+            window.Strom.SettingsManager.setTimelineHistory(id, { kinds: ['law'], region: 'at-empire', local: true });
+        });
+        await page.evaluate(() => window.Strom.UI.historyChanged());
+        await expect(histBtn(page).locator('.tl-hist-meta')).toHaveText('· 2 filters');
+        await empty.getByRole('button', { name: 'Clear filter' }).click();
+        await expect(empty).toHaveCount(0);
+        await expect(histBtn(page).locator('.tl-hist-meta')).toHaveCount(0);
+        expect(await drawnIds(page)).toEqual(['E1', 'E3', 'E6']);
+        expect(await page.evaluate(() => window.Strom.SettingsManager.getTimelineHistory(window.Strom.DataManager.getCurrentTreeId()))).toEqual({ local: true });
+        await expect(histBtn(page)).toBeFocused();
+    });
+
+    test('one region on the row: no region part; local history off in Settings: the option unavailable, saying why', async ({ page }) => {
+        await setup(page, { edit: (h) => { h.payload.events = (h.payload.events as { id: string }[]).filter(e => e.id !== 'E3'); } });
+        await focusOn(page, 'Jan');
+        await timelineView(page);
+        expect(await drawnIds(page)).toEqual(['E1', 'E6']);
+        await histBtn(page).click();
+        const pop = page.locator('.tl-pop.tl-pop-opts');
+        await expect(pop.locator('.hd-chips[role="group"]')).toHaveCount(1);
+        await expect(pop.locator('.hd-chips[role="radiogroup"]')).toHaveCount(0);
+        await expect(pop.locator('.tl-pop-sec')).toHaveCount(2);
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => {
+            window.Strom.SettingsManager.setHistoryKind('place', false);
+            window.Strom.SettingsManager.setHistoryKind('local', false);
+            window.Strom.UI.historyChanged();
+        });
+        await histBtn(page).click();
+        const check = pop.locator('.tl-pop-check');
+        await expect(check).toHaveClass(/is-off/);
+        await expect(check.locator('input')).toBeDisabled();
+        await expect(check.locator('.tl-pop-hint')).toHaveText('Local history and research findings are off in Settings.');
+    });
+
+    test('German at 1024: the options fit, nothing overflows', async ({ page }) => {
+        await setup(page, { width: 1024, height: 768 });
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await focusOn(page, 'Jan');
+        await timelineView(page);
+        await histBtn(page).click();
+        const pop = page.locator('.tl-pop.tl-pop-opts');
+        await expect(pop.locator('.tl-pop-title')).toHaveText('Geschichte');
+        await pop.locator('.hd-chips[role="group"] > button.hd-chip').filter({ hasText: 'Krieg' }).click();
+        await expect(pop.getByRole('button', { name: 'Filter aufheben' })).toHaveCount(1);
+        expect(await overflowing(page, '.tl-pop, .tl-pop *')).toEqual([]);
+        const outside = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('.tl-pop *')].filter(el => {
+            const r = el.getBoundingClientRect(), p = el.closest('.tl-pop')!.getBoundingClientRect();
+            return r.width > 0 && (r.left < p.left - 0.5 || r.right > p.right + 0.5);
+        }).map(el => el.className));
+        expect(outside).toEqual([]);
+    });
+
+    test('phone 390: a bottom sheet with the same parts, 34 px chips; a chip keeps it open; Close gives the keyboard to the label', async ({ page }) => {
+        await setup(page, { width: 390, height: 844 });
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await focusOn(page, 'Jan');
+        await timelineView(page);
+        await histBtn(page).click();
+        await expect(page.locator('.tl-pop')).toHaveCount(0);
+        const sheet = page.locator('.bottom-sheet.tl-osheet');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.tl-hsheet-title')).toHaveText('Geschichte');
+        await expect(histBtn(page)).toHaveAttribute('aria-expanded', 'true');
+        const kinds = sheet.locator('.hd-chips[role="group"] > button.hd-chip');
+        await expect(kinds).toHaveCount(10);
+        expect(Math.round((await kinds.first().boundingBox())!.height)).toBeGreaterThanOrEqual(34);
+        await expect(sheet.locator('.hd-chips[role="radiogroup"]')).toHaveCount(1);
+        await kinds.filter({ hasText: 'Krieg' }).click();
+        await expect(sheet).toBeVisible();
+        await expect(kinds.filter({ hasText: 'Krieg' })).toHaveAttribute('aria-pressed', 'true');
+        await expect(histBtn(page).locator('.tl-hist-meta')).toHaveText('· 1 Art');
+        expect(await overflowing(page, '.tl-osheet, .tl-osheet *, #timeline-container')).toEqual([]);
+        await sheet.locator('.pm-lifeline-hsheet-cancel').click();
+        await expect(sheet).toHaveCount(0);
+        await expect(histBtn(page)).toHaveAttribute('aria-expanded', 'false');
+        await expect(histBtn(page)).toBeFocused();
+        // A filter leaving nothing on a phone: the short sentence, the whole one its name.
+        await page.evaluate(() => {
+            window.Strom.SettingsManager.setTimelineHistory(window.Strom.DataManager.getCurrentTreeId(), { kinds: ['law'], local: false });
+            window.Strom.UI.historyChanged();
+        });
+        const text = histRow(page).locator('.tl-hist-empty-text');
+        await expect(text).toHaveText('Keine Ereignisse');
+        await expect(text).toHaveAttribute('aria-label', 'Keine Ereignisse für die gewählten Arten');
+        expect(await overflowing(page, '#timeline-container')).toEqual([]);
+    });
+});
+
+test.describe('Timeline: the history row\'s label on touch', () => {
+    test('a tap target 44 px high without a change of look; a tap opens the sheet, its chips 44 px', async ({ page }) => {
+        await setup(page, { width: 390, height: 844 });
+        await focusOn(page, 'Jan');
+        await timelineView(page);
+        const look = await histBtn(page).boundingBox();
+        // Touch from here on (pointer: coarse), after the research is read.
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+        await expect.poll(() => page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+        expect(await histBtn(page).evaluate(el => getComputedStyle(el, '::before').height)).toBe('44px');
+        expect(await histBtn(page).boundingBox()).toEqual(look);
+        await histBtn(page).click();
+        await expect(page.locator('.bottom-sheet.tl-osheet')).toBeVisible();
+        expect(Math.round((await page.locator('.tl-osheet .hd-chip').first().boundingBox())!.height)).toBeGreaterThanOrEqual(44);
     });
 });
