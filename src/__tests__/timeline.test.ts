@@ -685,6 +685,26 @@ describe('a shared event on the family timeline (spec 085 §2e)', () => {
         expect(svg).toContain('<title>Census (1921)</title>');
     });
 
+    it('with the history row (spec 121): a mark from the first row keeps its label below that row, never in the history row', () => {
+        const hist: TimelineHistoryItem = { id: 'E1', year: 1890, kind: 'war', scope: 'region', text: 'War.', persons: ['sudivoj'] };
+        const model = computeTimelineModel(household(), ['sudivoj', 'radegunda', 'bohuchval'], TODAY_YEAR, { history: { events: [hist] } });
+        expect(model.shared[0].rows).toEqual([0, 1, 2]);
+        expect(model.history).toBeDefined();
+        const baselines = (svg: string) => [...svg.matchAll(/class="tl-shared-label" x="[\d.]+" y="([\d.]+)"/g)].map(m => Number(m[1]));
+        // Without the history row: centred above the first row, in the free gap under the axis.
+        const plain = buildTimelineSvg(computeTimelineModel(household(), ['sudivoj', 'radegunda', 'bohuchval'], TODAY_YEAR),
+            { esc, width: 1440, rowH: 30, labelW: 160, mode: 'screen' });
+        expect(baselines(plain)).toHaveLength(1);
+        expect(baselines(plain)[0]).toBeLessThan(40 + (30 - 14) / 2);
+        // With it: the rows move down under the row and the label's top stays below the first row's top (rows' own coordinates).
+        for (const narrow of [false, true]) {
+            const svg = buildTimelineSvg(model, { esc, width: 1440, rowH: 30, labelW: 160, mode: 'screen', narrow });
+            expect(svg).toContain('class="tl-hist-row"');
+            const [baseline] = baselines(svg);
+            expect(baseline).toBeGreaterThanOrEqual(40 + 30 + (30 - 14) / 2 - 6.5 - 0.01);
+        }
+    });
+
     it('labels of marks close together: none over a mark or another label, beside its own mark; "…" only without room (A-N3)', () => {
         // Census 1921 over rows 1–4 and 6–7, residence 1930 over rows 4, 5 and 8, emigration 1925 over rows 6–7 (the reported family).
         const rowH = 28, TOP = 40;

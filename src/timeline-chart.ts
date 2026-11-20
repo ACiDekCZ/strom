@@ -305,10 +305,12 @@ interface SharedLabelSpot { text: string; x1: number; baseline: number }
  * rows or below its last, the nearest such spot first; only when no spot
  * holds the whole label, the longest text cut with "…" that fits; none at
  * all when not even a few characters do (the tooltip still names it).
+ * `topTaken`: the gap above the first row is not free (the history row lies
+ * there, spec 121): a mark from the first row puts its label lower.
  */
 export function placeSharedLabels(
     geoms: readonly { x: number; bars: readonly Box[]; links: readonly Box[]; label: string; rows: readonly number[] }[],
-    o: { rowH: number; rowCount: number; plotX0: number; plotX1: number; measure: (text: string) => number },
+    o: { rowH: number; rowCount: number; plotX0: number; plotX1: number; measure: (text: string) => number; topTaken?: boolean },
 ): (SharedLabelSpot | null)[] {
     const obstacles: Box[] = geoms.flatMap(g => [...g.bars, ...g.links]);
     const placed: Box[] = [];
@@ -322,7 +324,7 @@ export function placeSharedLabels(
             const w = o.measure(text);
             if (w > o.plotX1 - o.plotX0) return null;
             let best: { spot: SharedLabelSpot; box: Box; cost: number } | null = null;
-            for (let gap = first; gap <= Math.min(last + 1, o.rowCount); gap++) {
+            for (let gap = o.topTaken ? Math.max(first, 1) : first; gap <= Math.min(last + 1, o.rowCount); gap++) {
                 const baseline = baselineOf(gap);
                 const y1 = baseline - SHARED_LABEL_ASC, y2 = baseline + SHARED_LABEL_DESC;
                 const inBand = [...obstacles, ...placed].filter(b => b.y1 < y2 && y1 < b.y2);
@@ -560,6 +562,7 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
     const geoms = shared.map(m => sharedMarkGeom(m, ROW_H, xOf));
     const spots = placeSharedLabels(geoms.map(g => ({ ...g, rows: g.mark.rows })), {
         rowH: ROW_H, rowCount: model.rows.length, plotX0, plotX1: plotX0 + plotW, measure: opts.measureLabel ?? estimateLabelWidth,
+        topTaken: !!hist,
     });
     const marks = geoms.map((g, i) => sharedMarkSvg(g, spots[i], model.rows, opts)).join('');
     // Local history on the lines (spec 121 §8): below 1.5 px per year one symbol per line.
