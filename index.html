@@ -10679,7 +10679,7 @@
         .timeline-bar.search-dim { opacity: 0.28; }
         .timeline-bar.search-hit .tl-bar-rect { stroke: #f5a623; stroke-width: 2.5; }
         .tl-dot { fill: var(--text-color, #444); }
-        .tl-dot-wedding { fill: #fff; stroke: #d4a017; stroke-width: 2; }
+        .tl-dot-wedding { fill: var(--surface); stroke: var(--warning); stroke-width: 2; }
         .tl-arrow { fill: var(--text-light, #aaa); }
         /* A shared event across the rows of its persons (spec 085 §2e): one mark, its label once above. */
         .tl-shared-mark { fill: var(--primary); opacity: 0.9; }
@@ -10689,15 +10689,28 @@
             paint-order: stroke; stroke: var(--bg-color, #fff); stroke-width: 3px; stroke-linejoin: round;
         }
         .tl-omitted { font-size: 12px; color: var(--text-light, #888); padding: 4px 12px; font-style: italic; }
-        /* The focused person's history row (DEV symboly-dejin §9, 9a): under the axis band;
-           the kind's symbol coloured by the origin, a count badge, a period's stripe. */
+        /* The history row of the whole timeline (spec 121 §1): under the axis band; the label is the
+           options' button ("History ▾", the filter in it); the kind most of a cluster's events have,
+           coloured by the origin, a count badge, the periods' stripes in two tracks; the focused
+           person's life as a thin line at the bottom of the tint. */
         .tl-hist-label {
             height: 100%; display: flex; align-items: center; box-sizing: border-box; padding-right: 4px;
-            font-size: 11.5px; line-height: 1.2; color: var(--hist-meta);
+            font-size: 11.5px; line-height: 1.2; color: var(--hist-meta); min-width: 0;
         }
-        .tl-hist-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .tl-hist-txt b { font-weight: 600; color: var(--text); }
+        .tl-hist-btn {
+            display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; height: 24px;
+            margin-left: -4px; padding: 0 6px 0 4px; border: 0; border-radius: var(--r-md); background: none;
+            font: inherit; font-size: 11.5px; color: var(--hist-meta); cursor: pointer;
+        }
+        .tl-hist-btn b { flex: none; font-weight: 600; color: var(--text); }
+        .tl-hist-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tl-hist-btn.is-filtered .tl-hist-meta { color: var(--text); font-weight: 600; }
+        .tl-hist-caret { flex: none; font-size: 10px; color: var(--text-faint); }
+        .tl-hist-btn.is-open { background: var(--sel-fill); box-shadow: inset 0 calc(-1 * var(--sel-line-w)) 0 var(--sel-line); }
+        .tl-hist-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (hover: hover) { .tl-hist-btn:not(.is-open):hover { background: var(--hover-bg); } }
         .tl-hist-band { fill: var(--hist-bg); }
+        .tl-hist-life { fill: var(--hist-meta); opacity: 0.7; }
         .tl-hist { cursor: pointer; outline: none; color: var(--hist-text); }
         .tl-hist-period { fill: currentColor; opacity: 0.6; color: var(--hist-text); }
         .tl-hist.is-place, .tl-hist-period.is-place { color: var(--hist-place-text); }

@@ -5,12 +5,13 @@ import {
 import { openApp } from './helpers.js';
 
 /**
- * The Timeline view's history row (DEV symboly-dejin §9, variant 9a): one
- * row "History · name" under the axis band for the FOCUSED person only, the
- * card's events (the layer, the tie to a research, the card's chip), each
- * cluster the first event's kind symbol with a count; a click opens the card
- * on the first event's year, a phone shows a sheet. Nothing without a
- * research. Invented data: Jan lived in Čapkov 1860–1910, Josef 1830–1869.
+ * The Timeline view's history row (spec 121 §1, after DEV symboly-dejin §9):
+ * one row "History ▾" under the axis band for the WHOLE timeline — every event
+ * of a region where a person with a row lived in its year — the focused
+ * person's life a thin line in it, each cluster the kind most of its events
+ * have with a count; a click opens the card on the first event's year, a
+ * phone shows a sheet. Nothing without a research. Invented data: Jan lived
+ * in Čapkov 1860–1910, Josef 1830–1869, Anna has no years.
  */
 
 const LINKS = ['send', 'open', 'live', 'app', 'setup', 'experiment'];
@@ -60,37 +61,46 @@ const histRow = (page: Page) => page.locator('#timeline-container .tl-hist-row')
 const clusters = (page: Page) => histRow(page).locator('.tl-hist');
 
 test.describe('Timeline: the history row', () => {
-    test('only the focused person, under the axis; a change of focus changes the row; the rows move down by it', async ({ page }) => {
+    test('the whole timeline, under the axis; a change of focus moves only the life line; the rows move down by it', async ({ page }) => {
         await setup(page);
         await focusOn(page, 'Jan');
         await timelineView(page);
         await expect(histRow(page)).toHaveCount(1);
-        await expect(histRow(page).locator('.tl-hist-label')).toHaveText('History · Jan Fíšek');
+        // The label: "History ▾", the options' button (no name: the row is the whole timeline's).
+        const btn = histRow(page).locator('.tl-hist-label button.tl-hist-btn');
+        await expect(btn.locator('b')).toHaveText('History');
+        await expect(btn).toHaveAttribute('aria-haspopup', 'dialog');
+        await expect(btn).toHaveAttribute('aria-expanded', 'false');
+        await expect(btn).toHaveAttribute('title', 'History options on the timeline');
         await expect(page.locator('#timeline-container .tl-rows')).toHaveAttribute('transform', 'translate(0 28)');
-        // 1866 (war + epidemic) one cluster: the first event's symbol and a count.
+        // 1866 (war + epidemic) one cluster: one symbol, a count, both persons.
         const y1866 = clusters(page).and(page.locator('[aria-label^="1866"]'));
-        await expect(y1866).toHaveAttribute('aria-label', /^1866(–1867)?: war, epidemic/);
+        await expect(y1866).toHaveAttribute('aria-label', /^1866(–1867)?: war, epidemic.*; concerns 2 people$/);
         await expect(y1866).toHaveAttribute('role', 'button');
         await expect(y1866.locator('svg.hist-kind-svg')).toHaveCount(1);
         await expect(y1866.locator('svg.hist-kind-svg')).toHaveAttribute('aria-hidden', 'true');
         await expect(y1866.locator('.tl-hist-n-txt')).not.toHaveText('');
-        // The local finding (1880 fire) coloured by its origin.
-        const fire = clusters(page).and(page.locator('[aria-label^="1880"]'));
-        await expect(fire).toHaveClass(/is-local/);
+        // Two regions (Bohemia, the Austrian Empire): each event's line names its region.
+        await expect(y1866.locator('title')).toContainText('1866 · war · Bohemia – ');
+        // The local finding (1880 fire) is not the row's: it belongs on Jan's own line.
         const janIds = await clusters(page).evaluateAll(els => els.map(e => e.getAttribute('data-hist-ids')).join(' '));
-        expect(janIds).toContain('E4');
+        expect(janIds).not.toContain('E4');
+        expect(janIds).toContain('E1');
+        const life = histRow(page).locator('.tl-hist-life');
+        await expect(life).toHaveCount(1);
+        const janLife = await life.getAttribute('x');
 
-        // Josef: only his years (1866–1867), his name in the label.
+        // Josef: the same events, the line of his life instead.
         await focusOn(page, 'Josef');
-        await expect(histRow(page).locator('.tl-hist-label')).toHaveText('History · Josef Fíšek');
+        await expect(life).not.toHaveAttribute('x', janLife!);
         const josefIds = await clusters(page).evaluateAll(els => els.map(e => e.getAttribute('data-hist-ids')).join(' '));
-        expect(josefIds).not.toContain('E4');
-        expect(josefIds).toContain('E1');
+        expect(josefIds).toBe(janIds);
 
-        // Anna has no years: no row, the rows back up.
+        // Anna has no years: the row stays (the others' events), no line of a life.
         await focusOn(page, 'Anna');
-        await expect(histRow(page)).toHaveCount(0);
-        await expect(page.locator('#timeline-container .tl-rows')).toHaveCount(0);
+        await expect(histRow(page)).toHaveCount(1);
+        await expect(life).toHaveCount(0);
+        await expect(page.locator('#timeline-container .tl-rows')).toHaveAttribute('transform', 'translate(0 28)');
     });
 
     test("the card's History chip off: no row; on again: the row", async ({ page }) => {
@@ -118,22 +128,23 @@ test.describe('Timeline: the history row', () => {
         const group = page.locator('#pm-lifeline-body .k-historyGroup[data-history-year="1866"]');
         await expect(group).toHaveAttribute('aria-expanded', 'true');
         await expect(page.locator('#pm-lifeline-body .pm-lifeline-row.k-history[data-history-id="E1"]')).toBeVisible();
-        // Keyboard: Enter on a focused cluster.
+        // Keyboard: Enter on a focused cluster; the focused person's card when the event concerns them.
         await page.keyboard.press('Escape');
         await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
-        const fire = clusters(page).and(page.locator('[aria-label^="1880"]'));
-        await fire.focus();
+        await focusOn(page, 'Josef');
+        await y1866.focus();
         await page.keyboard.press('Enter');
         await expect(page.locator('#person-modal')).toHaveClass(/active/);
-        await expect(page.locator('#pm-lifeline-body .pm-lifeline-row.k-history[data-history-id="E4"]')).toBeVisible();
+        await expect(page.locator('#input-firstname')).toHaveValue('Josef');
+        await expect(page.locator('#pm-lifeline-body .pm-lifeline-row.k-history[data-history-id="E1"]')).toBeVisible();
     });
 
-    test('phone 390: "History" alone, a sheet with the cluster\'s events and "Open in the person card"; nothing overflows', async ({ page }) => {
+    test('phone 390: "History ▾", a sheet with the cluster\'s events and "Open in the person card"; nothing overflows', async ({ page }) => {
         await setup(page, { width: 390, height: 844 });
         await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
         await focusOn(page, 'Jan');
         await timelineView(page);
-        await expect(histRow(page).locator('.tl-hist-label')).toHaveText('Geschichte');
+        await expect(histRow(page).locator('.tl-hist-btn b')).toHaveText('Geschichte');
         await expect(page.locator('#timeline-container .tl-rows')).toHaveAttribute('transform', 'translate(0 26)');
         const first = clusters(page).first();
         const ids = (await first.getAttribute('data-hist-ids'))!.split(' ');
