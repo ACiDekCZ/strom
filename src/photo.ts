@@ -8,6 +8,7 @@
 
 import { StromData, PortraitCrop, PortraitSource, Person } from './types.js';
 import { deleteMedia, personMediaById } from './media.js';
+import { pendingImageOf } from './research-image-refs.js';
 
 /** Target avatar size in device-independent pixels. */
 export const PHOTO_SIZE = 256;
@@ -97,11 +98,13 @@ export function dataUrlByteSize(dataUrl: string): number {
 /** Total bytes of all photos in a tree: the persons' portraits and the couples' photos (spec 107). */
 export function totalPhotoBytes(data: StromData): number {
     let total = 0;
+    // One on its way (the app's view, spec 116 §5) weighs as the image it stands for.
+    const size = (url: string): number => pendingImageOf(url)?.bytes ?? dataUrlByteSize(url);
     for (const person of Object.values(data.persons)) {
-        if (person.photo) total += dataUrlByteSize(person.photo);
+        if (person.photo) total += size(person.photo);
     }
     for (const union of Object.values(data.partnerships)) {
-        if (union.photo) total += dataUrlByteSize(union.photo);
+        if (union.photo) total += size(union.photo);
     }
     return total;
 }

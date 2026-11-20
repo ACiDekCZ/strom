@@ -13,6 +13,7 @@
  */
 
 import { imageLoads, type FieldKey } from '../image-loads.js';
+import { isPendingImageUrl, pendingImageOf } from '../research-image-refs.js';
 import { sharedPhaseDelay } from '../card-signals.js';
 import { iconSvg } from '../icons.js';
 import { strings } from '../strings.js';
@@ -96,6 +97,43 @@ export function setImgState(host: HTMLElement, state: ImgState, src?: string): v
 export function imgGlyphHtml(kind: 'image' | 'image-off', note?: string, size = 24): string {
     return `<span class="img-slot-glyph">${iconSvg(kind, { size, strokeWidth: 1.6 })}`
         + `${note ? `<span class="img-slot-note">${esc(note)}</span>` : ''}</span>`;
+}
+
+/**
+ * A small portrait of a list or a dialog in a state (spec 116 §5): the
+ * photo (an older one coming anew under the veil), or the person's
+ * initials in the photo's place — under the veil while it comes, calm when
+ * it did not come (`failedTitle` then says so). '' without a photo and
+ * without one on its way. `photo` is the field's value: a stand-in is none.
+ * The host carries `cls` and `attrs` (` data-x="…"`, escaped by the caller)
+ * and is `aria-hidden` (a picture of the row).
+ */
+export function smallPortraitHtml(cls: string, photo: string | undefined, initials: string, state: ImgState, failedTitle?: string, attrs = ''): string {
+    const real = photo && /^data:image\//.test(photo) && !isPendingImageUrl(photo) ? photo : '';
+    if (real && state === 'refresh') {
+        return `<span class="${cls} img-slot-pic"${attrs}${imgStateAttr('refresh')} aria-hidden="true"><img src="${esc(real)}" alt=""></span>`;
+    }
+    if (real) return `<img class="${cls}"${attrs} src="${esc(real)}" alt="" aria-hidden="true">`;
+    if (state !== 'loading' && state !== 'refresh' && state !== 'failed') return '';
+    const title = state === 'failed' && failedTitle ? ` title="${esc(failedTitle)}"` : '';
+    return `<span class="${cls} img-slot-pic is-initials"${attrs}${state === 'failed' ? '' : imgStateAttr('loading')}${title} aria-hidden="true">`
+        + `<span class="avatar-initials">${esc(initials)}</span></span>`;
+}
+
+/**
+ * An image of a page drawn in the app's window (the person page, the family
+ * pages) while the tree's images come: a stand-in of the shown data
+ * (imageLoads.view) is on its way or did not come, with its reference's
+ * size; a stored image by its field's key may be refreshing (spec 116 §5).
+ */
+export function pageImageWait(src: string, key?: string): { state: ImgState; w?: number; h?: number } {
+    const pend = pendingImageOf(src);
+    if (pend) {
+        const s = imageLoads.stateOfSha(pend.sha);
+        const ref = s?.entry.ref;
+        return { state: s?.state === 'pending' ? 'loading' : 'failed', ...(ref?.width && ref.height ? { w: ref.width, h: ref.height } : {}) };
+    }
+    return { state: key ? imgStateOf(key as FieldKey, true) : 'none' };
 }
 
 // ==================== THE CARD ====================

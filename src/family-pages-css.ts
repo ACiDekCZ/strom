@@ -591,6 +591,10 @@ export function ensureFamilyPagesAppCss(doc: Document = document): void {
 
 export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS, '') + `
 .sp-app { max-width: 960px; margin: 0 auto; padding: 24px 32px 40px; }
+/* An image still on its way, or that did not come (spec 116 §5): the window only, a file never has one. */
+.sp-img-wait { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.sp-portrait.sp-img-wait { border-radius: var(--r-md, 6px); }
+.sp-clip-img.sp-img-wait { box-sizing: border-box; background-color: var(--surface-2); }
 /* The app's window shows full data; a living person's tag tells what the saved file protects (§3.3, §9.3). */
 .sp-living { font-size: 12px; font-weight: 400; color: var(--text-faint); white-space: nowrap; }
 .sp-app button.pp-link, .sp-app button.sp-crumb, .sp-app button.sp-crumb-back, .sp-app button.sp-toc-a {

@@ -28,6 +28,7 @@ import { runBusy, activatedElement, BUSY_TIMEOUTS } from './busy.js';
 import { emptyStateHtml } from './empty-state.js';
 
 import { iconSvg } from '../icons.js';
+import { imageLoads } from '../image-loads.js';
 
 /** Kinds the app cannot preview: only the original, for a research that takes it. */
 const ORIGINAL_ONLY_TYPES = ['image/tiff', 'image/heic', 'image/heif'];
@@ -210,7 +211,9 @@ export const attachmentsMethods = uiModule({
         // What this person brings into the file, each part named (the whole
         // tree's size belongs to the tree statistics, not to one person).
         if (totalEl) {
-            const m = personMedia(person, DataManager.getData());
+            // The images still on their way count as the person's (spec 116 §5).
+            const view = imageLoads.view(DataManager.getData());
+            const m = personMedia(view.persons[person.id] ?? person, view);
             const A = strings.attachments;
             const parts = [
                 m.photoBytes > 0 ? A.partPhoto(formatBytes(m.photoBytes)) : '',

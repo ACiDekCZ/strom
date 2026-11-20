@@ -50,6 +50,11 @@ import {
 } from './persistence.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { iconSvg } from '../icons.js';
+import { imageLoads } from '../image-loads.js';
+import { pendingImageOf } from '../research-image-refs.js';
+import { imgStateOf, smallPortraitHtml, type ImgState } from '../ui/image-slot.js';
+import { personPhotoKey } from '../ui/person-photo-model.js';
+import { personInitials } from '../initials.js';
 
 // Auto-save debounce delay (ms)
 const AUTO_SAVE_DELAY = 2000;
@@ -1232,7 +1237,7 @@ class MergerUIClass {
                     <label class="conflict-option sel-opt" data-sel-form="tile">
                         <input type="radio" name="conflict-${conflict.field}" value="keep_existing"
                             ${conflict.resolution === 'keep_existing' ? 'checked' : ''}>
-                        <span class="conflict-value existing">${this.conflictValueHtml(conflict.field, conflict.existingValue)}</span>
+                        <span class="conflict-value existing">${this.conflictValueHtml(conflict.field, conflict.existingValue, match.existingId)}</span>
                         <span class="conflict-badge existing">${strings.merge.keepExisting}</span>
                         ${conflict.resolution === 'keep_existing' ? suggestedLabel(conflict) : ''}
                     </label>
@@ -1608,12 +1613,12 @@ class MergerUIClass {
      * data: URL is inert as an <img src>) so the dialog never dumps a data URL
      * as text; gender is localized; everything else is escaped plain text.
      */
-    private conflictValueHtml(field: string, v?: string): string {
+    private conflictValueHtml(field: string, v?: string, existingId?: PersonId): string {
         if (field === 'photo') {
-            if (v && v.startsWith('data:')) {
-                return `<img class="conflict-photo" src="${this.escapeHtml(v)}" alt="${this.escapeHtml(strings.labels.photo)}">`;
-            }
-            return '—';
+            // The open tree's portrait may still be on its way (spec 116 §5): its state from the evidence.
+            const person = existingId ? this.mergeState?.existingData.persons[existingId] : undefined;
+            const state = existingId ? imgStateOf(personPhotoKey(existingId), !!v) : 'none';
+            return conflictPhotoHtml(v, person ? personInitials(person.firstName, person.lastName) : '', state);
         }
         if (field === 'gender' && isGender(v)) return this.escapeHtml(strings.gender[v]);
         return this.escapeHtml(v || '—');
@@ -1625,6 +1630,28 @@ class MergerUIClass {
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
+}
+
+/**
+ * A photo of a merge conflict (a thumbnail; never a data URL as text): one
+ * of the open tree still on its way shows the initials under the veil, one
+ * that did not come the initials with a title saying so (spec 116 §5).
+ */
+export function conflictPhotoHtml(v: string | undefined, initials: string, state: ImgState): string {
+    const pending = state === 'loading' || state === 'refresh' || state === 'failed';
+    const standIn = v ? pendingImageOf(v) : null;
+    if (pending || standIn) {
+        const shown = pending ? state : imageLoads.stateOfSha(standIn!.sha)?.state === 'pending' ? 'loading' : 'failed';
+        return smallPortraitHtml('conflict-photo', v, initials, shown, strings.photos.failed) || '—';
+    }
+    if (v && v.startsWith('data:')) {
+        return `<img class="conflict-photo" src="${escapeAttr(v)}" alt="${escapeAttr(strings.labels.photo)}">`;
+    }
+    return '—';
+}
+
+function escapeAttr(text: string): string {
+    return (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 export const MergerUI = new MergerUIClass();

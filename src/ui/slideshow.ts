@@ -18,6 +18,23 @@ import { PersonId, Person, STANDALONE_VIEWS } from '../types.js';
 import { formatFlexDate } from '../dates.js';
 import { uiModule } from './module.js';
 import { nameHtml } from '../person-name.js';
+import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT } from '../image-loads.js';
+import { imgStateOf, smallPortraitHtml, type ImgState } from './image-slot.js';
+import { personPhotoKey } from './person-photo-model.js';
+import { personInitials } from '../initials.js';
+
+let slideshowImagesWired = false;
+
+/**
+ * The caption's photo block: the portrait, or while it comes the initials
+ * in its round place under the veil; one that did not come leaves no block
+ * (as without a photo, spec 116 §5).
+ */
+export function slideshowPhotoHtml(person: Pick<Person, 'firstName' | 'lastName' | 'photo'>, state: ImgState): string {
+    const photo = person.photo && /^data:image\//.test(person.photo) ? person.photo : '';
+    if (!photo && state !== 'loading') return '';
+    return `<div class="slideshow-photo">${smallPortraitHtml('slideshow-pic', photo, personInitials(person.firstName, person.lastName), state)}</div>`;
+}
 
 /** How long a stop lasts (ms). Stops with a story stay longer to be readable. */
 const STOP_PLAIN = 4500;
@@ -49,7 +66,8 @@ export const slideshowMethods = uiModule({
 
     /** Does this person have something worth lingering on? */
     slideshowHasStory(person: Person): boolean {
-        return !!(person.notes?.trim() || person.photo);
+        // A portrait on its way is the person's photo too (spec 116 §5).
+        return !!(person.notes?.trim() || person.photo || imageLoads.onItsWay(personPhotoKey(person.id)));
     },
 
     async startSlideshow(): Promise<void> {
@@ -153,14 +171,35 @@ export const slideshowMethods = uiModule({
             .map(d => (d ? formatFlexDate(d) : ''))
             .filter(Boolean).join(' – ');
         const story = person.notes?.trim() ?? '';
+        this.wireSlideshowImages();
         box.innerHTML = `
-            ${person.photo ? `<div class="slideshow-photo"><img src="${this.escapeHtml(person.photo)}" alt=""></div>` : ''}
+            ${slideshowPhotoHtml(person, imgStateOf(personPhotoKey(person.id), !!person.photo))}
             <div class="slideshow-text">
                 <div class="slideshow-name">${nameHtml(person)}</div>
                 ${years ? `<div class="slideshow-years">${this.escapeHtml(years)}</div>` : ''}
                 ${story ? `<div class="slideshow-story">${this.escapeHtml(story)}</div>` : ''}
             </div>
             <div class="slideshow-progress">${this.slideshowIndex + 1} / ${this.slideshowStops.length}</div>`;
+    },
+
+    /** The caption follows the portrait of its stop: it came, or did not (spec 116 §5). */
+    wireSlideshowImages(): void {
+        if (slideshowImagesWired || typeof window === 'undefined') return;
+        slideshowImagesWired = true;
+        const again = (): void => {
+            if (!this.slideshowActive) return;
+            const id = this.slideshowStops[this.slideshowIndex];
+            const person = id ? DataManager.getPerson(id) : null;
+            const box = document.getElementById('slideshow-caption');
+            if (!person || !box) return;
+            const html = slideshowPhotoHtml(person, imgStateOf(personPhotoKey(person.id), !!person.photo));
+            const shown = box.querySelector('.slideshow-photo');
+            if (shown?.outerHTML === html) return;
+            if (shown) shown.remove();
+            if (html) box.insertAdjacentHTML('afterbegin', html);
+        };
+        window.addEventListener(IMAGES_ARRIVED_EVENT, again);
+        window.addEventListener(IMAGES_STATE_EVENT, again);
     },
 
     /** Move `delta` stops and restart the timer; wraps around at the ends. */

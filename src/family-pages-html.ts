@@ -49,6 +49,8 @@ import { ZipEntry, dataUrlBytes } from './zip.js';
 
 export { indexLetter };
 import { safeHttpUrl } from './validation.js';
+import { isPendingImageUrl } from './research-image-refs.js';
+import { imgGlyphHtml, imgStateAttr } from './ui/image-slot.js';
 import {
     ROD_TIMELINE_CHIPS, ROD_TIMELINE_SYMBOLS, RodTimelineEvent, RodTimelineKind, buildRodTimeline, rodTimelineAxis, rodTimelineChip, rodTimelineMainCentury, rodTimelineTicks,
 } from './rod-timeline.js';
@@ -876,7 +878,24 @@ function portraitHtml(r: Render, p: Person): string {
         const cls = r.set.images.add(src, 'photo');
         return cls ? `<span class="pp-img sp-portrait ${cls}" aria-hidden="true"></span>` : '';
     }
+    const tile = waitTile(r, src, 'sp-portrait', 18);
+    if (tile) return tile;
     return `<img class="sp-portrait" src="${esc(src)}" alt="" loading="lazy">`;
+}
+
+/**
+ * The window's tile in the place of an image still on its way, or that did
+ * not come (spec 116 §5): the glyph (crossed out when it did not come), the
+ * image's ratio when known; '' for an image that is there and in a file.
+ */
+function waitTile(r: Render, src: string, cls: string, size: number, note = false): string {
+    if (r.mode !== 'app' || !isPendingImageUrl(src)) return '';
+    const w = r.set.options.imageWait?.(src);
+    const state = w?.state === 'loading' ? 'loading' : 'failed';
+    const ph = r.S.photos;
+    const ar = w?.w && w.h ? ` style="--pp-ar:${Math.round(w.w)} / ${Math.round(w.h)}"` : '';
+    const glyph = state === 'loading' ? imgGlyphHtml('image', undefined, size) : imgGlyphHtml('image-off', note ? ph.tileFailed : undefined, size);
+    return `<span class="${cls} sp-img-wait"${imgStateAttr(state)}${ar} role="img" aria-label="${esc(state === 'loading' ? ph.ariaLoading : ph.ariaFailed)}">${glyph}</span>`;
 }
 
 function partnerCardHtml(r: Render, ctx: BookCtx, u: Partnership, p: Person, famRod: RodId | null): string {
@@ -1000,8 +1019,11 @@ function marriageHtml(r: Render, ctx: BookCtx, u: Partnership, slug: string): st
             }
         } else {
             // The window: the app's image viewer, as the person page's excerpts (src/ui/person-page-ui.ts).
-            clipHtml = `<button type="button" class="sp-clip" data-pp-zoom aria-label="${esc(`${r.S.personPage.zoom}: ${clip.caption || P.clip}`)}">`
-                + `<img class="sp-clip-img" src="${esc(clip.src)}" alt="${esc(clip.caption || P.clip)}" loading="lazy">${cap}</button>`;
+            const tile = waitTile(r, clip.src, 'sp-clip-img', 24, true);
+            clipHtml = tile
+                ? `<div class="sp-clip">${tile}${cap}</div>`
+                : `<button type="button" class="sp-clip" data-pp-zoom aria-label="${esc(`${r.S.personPage.zoom}: ${clip.caption || P.clip}`)}">`
+                    + `<img class="sp-clip-img" src="${esc(clip.src)}" alt="${esc(clip.caption || P.clip)}" loading="lazy">${cap}</button>`;
         }
         if (clipHtml) clipHtml = `<div class="sp-clipbox">${clipHtml}${clip.scan ? `<p class="sp-clip-scan">${clip.scan}</p>` : ''}</div>`;
     }
@@ -1715,6 +1737,7 @@ function personPageOpts(r: Render, page: SetPage): PersonPageOptions {
         },
         idPrefix: page.slug,
         ...(r.mode === 'file' ? { images: set.images } : {}),
+        ...(r.mode === 'app' && set.options.imageWait ? { imageWait: set.options.imageWait } : {}),
     };
 }
 

@@ -632,3 +632,27 @@ var shut=[];
 window.addEventListener('beforeprint',function(){shut=q('details.pp-ch-fold:not([open])');shut.forEach(function(f){f.open=true})});
 window.addEventListener('afterprint',function(){shut.forEach(function(f){f.open=false});shut=[]});
 })();`;
+
+/**
+ * The app's window only (spec 116 §5): an image of the page still on its
+ * way, or that did not come. A saved page and print never carry a state
+ * (they wait for the images), so this is never part of a file's CSS; the
+ * veil itself is the app's ([data-img-state], index.html).
+ */
+export const PERSON_PAGE_WAIT_CSS = `
+.pp-portrait--wait { display: flex; align-items: center; justify-content: center; cursor: default; }
+.pp-portrait--wait .pp-initials-text { font-family: var(--font-serif); font-size: 30px; line-height: 1; color: var(--text-light); }
+.pp-portrait-col { flex: 0 0 auto; display: flex; flex-direction: column; gap: 2px; width: 128px; }
+.pp-portrait-col .pp-img-msg { margin-top: 4px; }
+.pp-img-wait { display: flex; align-items: center; justify-content: center; cursor: default; }
+.pp-fig > .pp-fig-img.pp-img-wait { grid-area: 1 / 1; box-sizing: border-box; }
+@container (max-width: 640px) {
+  .pp-portrait-col { width: auto; max-width: 100%; }
+  .pp-portrait--wait .pp-initials-text { font-size: 23px; }
+}
+/* Printed after "Continue without": what did not come is left out, as in a file (§8). */
+@media print {
+  .pp-fig:has(> .pp-img-wait), .pp-gal-item:has(.pp-img-wait), .sp-clipbox:has(.sp-img-wait),
+  .sp-portrait.sp-img-wait, .pp-img-msg { display: none !important; }
+}
+`;

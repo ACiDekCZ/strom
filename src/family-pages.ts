@@ -29,7 +29,7 @@ import {
 } from './lineage.js';
 import { BookSelectionSpec, lineageSpec } from './book-model.js';
 import { sortRods } from './rods-overview.js';
-import { PERSON_PAGE_DEFAULT_PRIVACY, ProtectedPersonPageTree, dataUrlImageSize, personPageFileName, protectPersonPageTree } from './person-page.js';
+import { PERSON_PAGE_DEFAULT_PRIVACY, ProtectedPersonPageTree, dataUrlImageSize, personPageFileName, protectPersonPageTree, type PersonPageOptions } from './person-page.js';
 import { ImageChoice, ImageRegistry, RegistryImageKind, SHRINK_CLIP_PX, SHRINK_PHOTO_PX } from './image-registry.js';
 import type { HistoryPayload, PersonHistoryEnv } from './history.js';
 
@@ -115,6 +115,8 @@ export interface PageSetOptions {
     /** The research's history (the timelines' history layer); none: no layer. */
     history?: { payload: HistoryPayload; env?: PersonHistoryEnv } | null;
     now?: Date;
+    /** The app's window while the tree's images come (spec 116 §5, PersonPageOptions.imageWait); never a file. */
+    imageWait?: PersonPageOptions['imageWait'];
 }
 
 /** The groups of the person pages a set carries (1102 §4.4); stories and sources also on the family pages. */
@@ -140,7 +142,8 @@ export interface PageSetContext {
 
 export interface PageSet {
     spec: BookSelectionSpec;
-    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map' | 'sources' | 'stories' | 'timelines' | 'minimal'>> & { now: Date; groups: PageSetGroups };
+    options: Required<Pick<PageSetOptions, 'lang' | 'privacy' | 'families' | 'clips' | 'photos' | 'map' | 'sources' | 'stories' | 'timelines' | 'minimal'>> & { now: Date; groups: PageSetGroups }
+        & Pick<PageSetOptions, 'imageWait'>;
     /** The research's history for the timelines (null: none). */
     history: { payload: HistoryPayload; env?: PersonHistoryEnv } | null;
     selection: Selection;
@@ -474,6 +477,7 @@ export function buildPageSet(data: StromData, spec: BookSelectionSpec, opts: Pag
         lang, privacy: opts.privacy ?? PERSON_PAGE_DEFAULT_PRIVACY, families: opts.families ?? 'pages',
         clips: opts.clips ?? 'full', photos: opts.photos ?? 'full', map: opts.map ?? true,
         sources, stories, groups, timelines: opts.timelines ?? false, minimal: opts.minimal ?? false, now: opts.now ?? new Date(),
+        ...(opts.imageWait ? { imageWait: opts.imageWait } : {}),
     };
     // Ancestors without a depth: the dialog's default (§4.1).
     if (spec.kind === 'ancestors' && spec.generations == null) spec = { ...spec, generations: PAGE_SET_ANCESTOR_GENERATIONS };

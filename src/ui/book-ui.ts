@@ -56,6 +56,7 @@ import { activatedElement, BUSY_MIN_MS, BUSY_SHOW_MS, busySpinHtml, nextPaint } 
 import { imagesBeforeOutput } from './output-images.js';
 import { showProgressToast, type ProgressToastHandle } from './toast.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
+import { imageLoads } from '../image-loads.js';
 
 type Kind = 'tree' | 'rods' | 'ancestors' | 'descendants' | 'persons';
 type PersonKind = 'ancestors' | 'descendants';
@@ -501,7 +502,8 @@ function syncBook(s: DialogState, modal: HTMLElement): string {
     if (hint) customBtn?.setAttribute('aria-describedby', 'book-preset-hint'); else customBtn?.removeAttribute('aria-describedby');
 
     // Parts: an unavailable one stays in sight, grey, unticked, with its reason (in the app's language)
-    const avail = bookPartAvailability(s.data, { ...opts, lang: s.appLang }, env);
+    // A part made of images still on their way is there (spec 116 §5: the book waits for them).
+    const avail = bookPartAvailability(imageLoads.view(s.data), { ...opts, lang: s.appLang }, env);
     let ticked = 0;
     for (const k of BOOK_PART_KEYS) {
         const row = modal.querySelector<HTMLElement>(`.book-part[data-part="${k}"]`);

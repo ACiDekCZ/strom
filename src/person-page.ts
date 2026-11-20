@@ -31,6 +31,8 @@ import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
 import { asciiSlug, safeFileName } from './filenames.js';
 import { isSafeExcerptDataUrl, safeHttpUrl, isOriginalOnlyAttachment } from './validation.js';
 import { dataUrlImageSize } from './photo.js';
+import { isPendingImageUrl } from './research-image-refs.js';
+import { imgGlyphHtml, imgStateAttr, type ImgState } from './ui/image-slot.js';
 import { nameSourceCodes, storyBasisBodyHtml, storyBasisEmpty, storyBasisHead, storyBasisShown, storyBasisWords, storyFactText } from './story-sources.js';
 import { storyProseHtml, coupleStories, coupleStoryYears, splitProseLead, partnershipsInOrder, partnershipSortKey } from './story-text.js';
 import { excerptImageUrl } from './excerpts.js';
@@ -168,6 +170,20 @@ export interface PersonPageOptions {
      * there by default), with four sections or more as in the window.
      */
     toc?: boolean;
+    /**
+     * The app's window while the tree's images come (spec 116 §5): the state
+     * of an image by its source (a stand-in: on its way, or did not come) or
+     * its field's key (an older portrait while a new one comes). A file and
+     * print never have one (they wait for the images, §8).
+     */
+    imageWait?: (src: string, key?: string) => PageImageWait;
+}
+
+/** An image of the page while the tree's images come: its state, the size it will have (a tile's ratio, §1.4). */
+export interface PageImageWait {
+    state: ImgState;
+    w?: number;
+    h?: number;
 }
 
 /** What the app knows besides the tree (all optional). */
@@ -1152,10 +1168,23 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
 
     // The portrait (§3.1): a rounded square; a click shows it large (the window's viewer, the file's light box).
     let avatar: string;
-    if (photo) {
+    const wait = photo ? imageWaitOf(c, photo, `person:${person.id}:photo`) : null;
+    if (wait && (wait.state === 'loading' || (wait.state === 'failed' && isPendingImageUrl(photo!)))) {
+        // On its way: the initials in the photo's square under the veil; did not come: the same square, calm,
+        // without the zoom, Try again under it (spec 116 §5, the app's window only).
+        const ph = c.S.photos;
+        const loading = wait.state === 'loading';
+        avatar = `<span class="pp-portrait pp-portrait--wait"${imgStateAttr(loading ? 'loading' : 'none')} role="img" aria-label="${esc(loading ? ph.ariaLoading : ph.ariaFailed)}">`
+            + `<span class="pp-initials-text" aria-hidden="true">${esc(personInitials(person.firstName, person.lastName))}</span></span>`;
+        if (!loading) {
+            avatar = `<div class="pp-portrait-col">${avatar}<div class="busy-msg pp-img-msg" role="status"><span>${esc(ph.failed)}</span>`
+                + `<button type="button" class="link" data-pp-img-retry="person:${esc(person.id)}:photo">${esc(c.S.busy.retry)}</button></div></div>`;
+        }
+    } else if (photo) {
         const corner = `<span class="pp-portrait-zoom" aria-hidden="true">⤢</span>`;
+        const refresh = wait?.state === 'refresh' ? imgStateAttr('refresh') : '';
         if (c.imgs) avatar = `<a class="pp-portrait" href="#obr-p" aria-label="${esc(P.zoom)}">${imgHtml(c, photo, '', 'pp-photo')}${corner}</a>`;
-        else if (c.app) avatar = `<button type="button" class="pp-portrait" data-pp-zoom aria-label="${esc(P.zoom)}"><img class="pp-photo" src="${esc(photo)}" alt="">${corner}</button>`;
+        else if (c.app) avatar = `<button type="button" class="pp-portrait"${refresh} data-pp-zoom aria-label="${esc(P.zoom)}"><img class="pp-photo" src="${esc(photo)}" alt="">${corner}</button>`;
         else avatar = `<span class="pp-portrait"><img class="pp-photo" src="${esc(photo)}" alt=""></span>`;
     } else {
         // A poor person (a name and a year at most) gets the smaller initials.
@@ -2248,6 +2277,8 @@ function figureHtml(c: Ctx, src: string, caption: string, id?: string, link = ''
             : img;
         return `<figure class="pp-fig"${idAttr}>${pic}<figcaption>${esc(caption)}</figcaption>${scan}</figure>`;
     }
+    const tile = waitTileHtml(c, src, 'pp-fig-img', 'div');
+    if (tile) return `<figure class="pp-fig"${idAttr}>${tile}<figcaption>${esc(caption)}</figcaption>${scan}</figure>`;
     const zoom = c.app ? `<button type="button" class="pp-zoom" data-pp-zoom aria-label="${esc(c.P.zoom)}">⤢</button>` : '';
     return `<figure class="pp-fig"${idAttr}><img src="${esc(src)}" alt="${esc(caption)}" loading="lazy">${zoom}`
         + `<figcaption>${esc(caption)}</figcaption>${scan}</figure>`;
@@ -2581,6 +2612,37 @@ function imgHtml(c: Ctx, src: string, alt: string, cls: string): string {
     return `<span class="pp-img ${cls} img-${e.n}"${alt ? ` role="img" aria-label="${esc(alt)}"` : ' aria-hidden="true"'}></span>`;
 }
 
+/** An image's state in the app's window while the tree's images come (null: none, a file, print). */
+function imageWaitOf(c: Ctx, src: string, key?: string): PageImageWait | null {
+    if (!c.app || c.imgs) return null;
+    // A stand-in the window cannot ask about is shown as not come, never as a broken image.
+    if (!c.opts.imageWait) return isPendingImageUrl(src) ? { state: 'failed' } : null;
+    const w = c.opts.imageWait(src, key);
+    return w.state === 'none' || w.state === 'loaded' ? null : w;
+}
+
+/** The size of an image still on its way (its reference's), null when not known or not waiting. */
+function waitSize(c: Ctx, src: string): { w: number; h: number } | null {
+    if (!isPendingImageUrl(src)) return null;
+    const w = imageWaitOf(c, src);
+    return w?.w && w.h ? { w: w.w, h: w.h } : null;
+}
+
+/**
+ * A tile in the place of an image still on its way, or that did not come
+ * (spec 116 §1.4): the image's own ratio when known, the glyph (did not
+ * come: crossed out, "Not loaded"); '' for an image that is there.
+ */
+function waitTileHtml(c: Ctx, src: string, cls: string, tag: 'div' | 'span'): string {
+    if (!isPendingImageUrl(src)) return '';
+    const w = imageWaitOf(c, src);
+    const state = w?.state === 'loading' ? 'loading' : 'failed';
+    const ph = c.S.photos;
+    const ar = w?.w && w.h ? ` style="--pp-ar:${Math.round(w.w)} / ${Math.round(w.h)}"` : '';
+    const glyph = state === 'loading' ? imgGlyphHtml('image') : imgGlyphHtml('image-off', ph.tileFailed);
+    return `<${tag} class="${cls} pp-img-wait"${imgStateAttr(state)}${ar} role="img" aria-label="${esc(state === 'loading' ? ph.ariaLoading : ph.ariaFailed)}">${glyph}</${tag}>`;
+}
+
 /** The file's one <style> of images (each data URL once). */
 function imgStyles(c: Ctx): string {
     // A set's images are in its one <style> (the registry's css()).
@@ -2706,7 +2768,7 @@ function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
         const sub = [s ? peekTitle(s.title) : '', year !== null && !caption.includes(String(year)) ? String(year) : ''].filter(Boolean).join(', ');
         const kind: GalleryItem['kind'] = a.kind === 'photo' || a.kind === 'document' || a.kind === 'record' ? a.kind
             : sourceId || DOCUMENT_WORDS.test(`${a.name} ${a.note ?? ''}`) ? 'document' : 'photo';
-        const size = dataUrlImageSize(src);
+        const size = waitSize(c, src) ?? dataUrlImageSize(src);
         out.push({ src, kind, caption, sub, year, wide: !!size && isWide(kind, size.w, size.h) });
     }
     const sorted = out
@@ -2755,6 +2817,8 @@ function galleryHtml(c: Ctx): string {
         let pic: string;
         if (c.imgs) {
             pic = `<a class="pp-gal-thumb" href="#obr-${i + 1}" aria-label="${esc(`${P.zoom}: ${it.caption}`)}">${imgHtml(c, it.src, it.caption, 'pp-gal-img')}</a>`;
+        } else if (waitTileHtml(c, it.src, 'pp-gal-thumb', 'span')) {
+            pic = waitTileHtml(c, it.src, 'pp-gal-thumb', 'span');
         } else if (c.app) {
             pic = `<button type="button" class="pp-gal-thumb" data-pp-zoom aria-label="${esc(`${P.zoom}: ${it.caption}`)}">`
                 + `<img class="pp-gal-img" src="${esc(it.src)}" alt="${esc(it.caption)}" loading="lazy"></button>`;

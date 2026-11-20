@@ -33,7 +33,9 @@ import {
 import { selectMapPlace, placeOrderKey, PlacePoint, KEY_SEP } from '../person-page-map.js';
 import { lifeChartHtml } from '../person-page-chart.js';
 import { FanZoom, fanZoomModifier } from '../fan-zoom.js';
-import { PERSON_PAGE_CSS } from '../person-page-css.js';
+import { PERSON_PAGE_CSS, PERSON_PAGE_WAIT_CSS } from '../person-page-css.js';
+import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, type FieldKey } from '../image-loads.js';
+import { pageImageWait } from './image-slot.js';
 import { uiModule } from './module.js';
 import { portraitWholePhoto } from './portrait-actions-ui.js';
 import type { SetRef } from './family-pages-ui.js';
@@ -146,6 +148,16 @@ let tocPick: ((id: string) => void) | null = null;
 let editObserver: MutationObserver | null = null;
 let rerenderQueued = false;
 let userChangeHandler: (() => void) | null = null;
+/** Images of the tree that came, or whose state changed, while the window is open (spec 116 §5). */
+let imagesHandler: (() => void) | null = null;
+/** The count of images that did not come, as last drawn: a change redraws the waiting places. */
+let imagesFailedShown = -1;
+let imagesArrivedSince = false;
+/** Some came: the state event that follows each batch redraws (imagesHandler). */
+function imagesArrived(): void {
+    imagesArrivedSince = true;
+    imagesHandler?.();
+}
 /** Keeps the header's Share/Save button right when the window changes size (a resized browser, a turned device). */
 let resizeHandler: (() => void) | null = null;
 /** Redraws the life chart for the column's width (the current page's). */
@@ -196,7 +208,7 @@ function ensurePageCss(): void {
     if (document.getElementById(CSS_ID)) return;
     const style = document.createElement('style');
     style.id = CSS_ID;
-    style.textContent = PERSON_PAGE_CSS;
+    style.textContent = PERSON_PAGE_CSS + PERSON_PAGE_WAIT_CSS;
     document.head.appendChild(style);
 }
 
@@ -289,6 +301,17 @@ export const personPageMethods = uiModule({
             });
         };
         window.addEventListener('strom:user-change', userChangeHandler);
+        // An image the page waits for came, or did not: the page is drawn again (spec 116 §5).
+        const redraw = userChangeHandler;
+        imagesHandler = () => {
+            if (!bodyEl()?.querySelector('[data-img-state], .pp-img-wait, .sp-img-wait')) return;
+            const failed = imageLoads.snapshot().failed;
+            if (failed === imagesFailedShown && !imagesArrivedSince) return;
+            imagesArrivedSince = false;
+            redraw();
+        };
+        window.addEventListener(IMAGES_ARRIVED_EVENT, imagesArrived);
+        window.addEventListener(IMAGES_STATE_EVENT, imagesHandler);
         // The history layer read (or changed) after the window opened: its rows come in place.
         window.addEventListener(HISTORY_CHANGED_EVENT, userChangeHandler);
         resizeHandler = () => syncShareButton();
@@ -325,6 +348,10 @@ export const personPageMethods = uiModule({
             window.removeEventListener(HISTORY_CHANGED_EVENT, userChangeHandler);
         }
         userChangeHandler = null;
+        window.removeEventListener(IMAGES_ARRIVED_EVENT, imagesArrived);
+        if (imagesHandler) window.removeEventListener(IMAGES_STATE_EVENT, imagesHandler);
+        imagesHandler = null;
+        imagesFailedShown = -1;
         if (resizeHandler) window.removeEventListener('resize', resizeHandler);
         resizeHandler = null;
         this.dialogStack = this.dialogStack.filter(d => d !== PERSON_PAGE_ID);
@@ -384,8 +411,11 @@ export const personPageMethods = uiModule({
             mode: 'app', links: 'app', toggles: entry.toggles, open: entry.open, selectedPlace: entry.place,
             ...(chartWidth ? { chartWidth } : {}),
             ...(familyPages.size ? { familyPages } : {}),
+            imageWait: pageImageWait,
         });
-        const page = preparePersonPageData(DataManager.getData(), opts, this.personPageContext(entry.personId));
+        // The images still on their way are the page's too: their places wait for them (spec 116 §5).
+        imagesFailedShown = imageLoads.snapshot().failed;
+        const page = preparePersonPageData(imageLoads.view(data), opts, this.personPageContext(entry.personId));
         const body = buildPersonPageBody(page, opts);
         pagePlaces = page.places;
         // The contents start with the header's details (the top of the page), counted apart from the four sections.
@@ -676,6 +706,9 @@ export const personPageMethods = uiModule({
         const menu = overlay.querySelector<HTMLElement>('.pp-menu');
         if (menu && !menu.hidden && !target.closest('.pp-menu') && !target.closest('.pp-more')) this.closePersonPageMenu(false);
 
+        // An image that did not come: asked for again, no terminal (spec 116 §5).
+        const retry = target.closest<HTMLElement>('[data-pp-img-retry]');
+        if (retry) { imageLoads.retry([retry.dataset.ppImgRetry as FieldKey]); return; }
         // The header.
         if (target.closest('.pp-close')) { this.closePersonPage(); return; }
         if (target.closest('.pp-back')) { this.personPageBack(); return; }

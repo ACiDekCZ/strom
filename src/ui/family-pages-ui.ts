@@ -38,6 +38,8 @@ import { isPicking, whilePicking } from './file-pick.js';
 import { wireRodPicker, wireTreePages } from './rod-picker-ui.js';
 import { wireRodTimelines } from '../rod-timeline-wire.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
+import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT } from '../image-loads.js';
+import { pageImageWait } from './image-slot.js';
 
 /**
  * A page of a set in the window: the set by its selection, the page by its
@@ -103,6 +105,9 @@ function cacheKey(spec: BookSelectionSpec, history: SetHistory = historyOf()): s
     return `${DataManager.getCurrentTreeId() ?? ''}|${getCurrentLanguage()}|${JSON.stringify(spec)}|${historyKey(history)}`;
 }
 
+/** Sets built while images were on their way (dropped from the cache when some come). */
+const waitingSets = new WeakSet<PageSet>();
+
 /** The window's set when it is built already (null: building it is still ahead). */
 export function cachedPageSet(spec: BookSelectionSpec): PageSet | null {
     return cache.get(cacheKey(spec)) ?? null;
@@ -120,10 +125,25 @@ export function windowPageSet(spec: BookSelectionSpec): PageSet {
     if (!cacheWatched) {
         cacheWatched = true;
         window.addEventListener('strom:user-change', () => { cache.clear(); });
+        // A set drawn while images were on their way is built again once some came or did not (spec 116 §5).
+        let failed = -1;
+        const dropWaiting = (): void => {
+            for (const [k, s] of cache) if (waitingSets.has(s)) cache.delete(k);
+        };
+        window.addEventListener(IMAGES_ARRIVED_EVENT, dropWaiting);
+        window.addEventListener(IMAGES_STATE_EVENT, () => {
+            const now = imageLoads.snapshot().failed;
+            if (now !== failed) { failed = now; dropWaiting(); }
+        });
     }
-    const set = buildPageSet(DataManager.getData(), spec, {
+    // The images still on their way are the window's too: their places wait for them (never a file: buildPagesFromDialog).
+    const data = DataManager.getData();
+    const shown = imageLoads.view(data);
+    const set = buildPageSet(shown, spec, {
         lang: getCurrentLanguage(), privacy: 'full', families: 'pages', timelines: true, history,
+        ...(shown !== data ? { imageWait: pageImageWait } : {}),
     }, { treeName: treeName() });
+    if (shown !== data) waitingSets.add(set);
     cache.set(key, set);
     while (cache.size > CACHE_SETS) cache.delete(cache.keys().next().value!);
     return set;

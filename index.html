@@ -2171,6 +2171,11 @@
             color: var(--text-faint);
         }
         .img-slot-note { font-size: 11px; line-height: 1.2; color: var(--text-light); text-align: center; }
+        /* A small portrait of a list or a dialog (smallPortraitHtml): the photo's own box, the initials or the
+           older photo inside it. Its size and frame are the place's. */
+        .img-slot-pic { display: inline-flex; align-items: center; justify-content: center; overflow: hidden; }
+        .img-slot-pic.is-initials { background-color: var(--surface-2); }
+        .img-slot-pic > img { width: 100%; height: 100%; object-fit: cover; display: block; }
         [data-img-state] img { transition: opacity .15s ease-out; }
         [data-img-state] img.is-arriving { opacity: 0; }
         @media (prefers-reduced-motion: reduce) {
@@ -17194,10 +17199,13 @@
             animation: slideshow-in 0.5s ease;
         }
         @keyframes slideshow-in { from { opacity: 0; transform: translateX(-50%) translateY(12px); } }
-        .slideshow-photo img {
+        .slideshow-photo img, .slideshow-photo .img-slot-pic {
             width: 88px; height: 88px; border-radius: 50%; object-fit: cover;
             display: block; border: 2px solid rgba(255,255,255,0.25);
         }
+        .slideshow-photo .img-slot-pic { display: flex; }
+        .slideshow-photo .img-slot-pic > img { border: 0; border-radius: 0; }
+        .slideshow-photo .avatar-initials { font-size: 26px; }
         .slideshow-text { min-width: 0; }
         .slideshow-name { font-size: 26px; font-weight: 700; line-height: 1.2; }
         .slideshow-years { font-size: 15px; opacity: 0.75; margin-top: 2px; }
@@ -18005,6 +18013,9 @@
             object-fit: cover;
             vertical-align: middle;
         }
+        /* The open tree's portrait on its way or not come (spec 116 §5): the initials in a 72 px square. */
+        .conflict-photo.img-slot-pic { width: 72px; height: 72px; }
+        .conflict-photo .avatar-initials { font-size: 20px; }
         .merge-progress {
             display: flex;
             gap: 8px;
@@ -21601,6 +21612,7 @@
         /* A changed portrait's preview at the row's end. */
         .research-changes-row:has(.research-changes-pic) { grid-template-columns: 16px minmax(0, 1fr) 30px; }
         .research-changes-pic { width: 30px; height: 30px; object-fit: cover; border-radius: var(--r-sm); border: 1px solid var(--border); box-sizing: border-box; }
+        .research-changes-pic .avatar-initials { font-size: 11px; }
         .research-changes-inexact { margin: 6px 14px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: 12px; line-height: 1.4; color: var(--text-light); }
         /* The note under the mark: a new conflict, the first start of sending by itself. */
         .research-sync-note {

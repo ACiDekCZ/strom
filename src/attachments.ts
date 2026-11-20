@@ -125,7 +125,8 @@ export interface PersonMedia {
 
 export function personMedia(person: Person, data: StromData): PersonMedia {
     const out: PersonMedia = {
-        photoBytes: person.photo ? dataUrlByteSize(person.photo) : 0,
+        // One on its way (the app's view, spec 116 §5) weighs as the image it stands for.
+        photoBytes: person.photo ? pendingImageOf(person.photo)?.bytes ?? dataUrlByteSize(person.photo) : 0,
         attachments: 0, attachmentBytes: 0, excerpts: 0, excerptBytes: 0,
     };
     for (const att of personMediaOf(data, person.id)) {

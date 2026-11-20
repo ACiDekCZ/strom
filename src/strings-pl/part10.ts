@@ -136,6 +136,7 @@ export const plPart10: Pick<StringsType, 'busy' | 'photos'> = {
         failedNew: 'Nowe zdjęcie nie zostało wczytane.',
         ariaLoading: 'zdjęcie się wczytuje',
         ariaFailed: 'zdjęcie nie wczytane',
+        tileFailed: 'Nie wczytano',
         recropWait: 'Kadr można edytować po wczytaniu zdjęcia.',
         chipLabel: 'Zdjęcia',
         chipAria: (k: number, n: number) => `Wczytywanie zdjęć: ${k} z ${n}`,

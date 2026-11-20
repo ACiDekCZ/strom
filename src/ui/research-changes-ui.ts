@@ -35,6 +35,10 @@ import { uiModule } from './module.js';
 import { surnamesReadByResearch, lineageReadByResearch } from './surname-suggest-ui.js';
 import { returnFocusAfterViewer } from './sources.js';
 import { shownNameOrEmpty } from '../person-name.js';
+import { imgStateOf, smallPortraitHtml, type ImgState } from './image-slot.js';
+import { personPhotoKey } from './person-photo-model.js';
+import { personInitials } from '../initials.js';
+import { IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT } from '../image-loads.js';
 
 const PANEL_ID = 'research-changes-panel';
 /** The fingerprint the kept copy stands for (the tie's base, or the written send's). */
@@ -391,11 +395,35 @@ function personRowOf(ch: PersonChange, mode: 'send' | 'written', appOnly = false
         + photoPic(ch) + '</li>';
 }
 
-/** A changed portrait's 30 px preview at the row's end (spec 102 §10; a removed one has none). */
+/**
+ * A changed portrait's 30 px preview at the row's end (spec 102 §10; a
+ * removed one has none). One still on its way: the initials under the veil;
+ * one that did not come: the initials (spec 116 §5).
+ */
 function photoPic(ch: PersonChange): string {
     if (!ch.kinds.includes('photo') || ch.deleted) return '';
-    const photo = DataManager.getPerson(ch.personId)?.photo;
-    return photo && /^data:image\//.test(photo) ? `<img class="research-changes-pic" src="${esc(photo)}" alt="" aria-hidden="true">` : '';
+    const person = DataManager.getPerson(ch.personId);
+    return changePicHtml(person, person ? imgStateOf(personPhotoKey(person.id), !!person.photo) : 'none');
+}
+
+/** photoPic's preview of `person` with its portrait's state (none: the photo, or nothing). */
+export function changePicHtml(person: Pick<Person, 'firstName' | 'lastName' | 'photo'> & { id?: string } | null | undefined, state: ImgState): string {
+    if (!person) return '';
+    return smallPortraitHtml('research-changes-pic', person.photo, personInitials(person.firstName, person.lastName), state, undefined,
+        person.id ? ` data-pic-person="${esc(person.id)}"` : '');
+}
+
+/** The previews of the open list again as their portraits now are (an image came, or did not). */
+function refreshChangePics(): void {
+    document.querySelectorAll<HTMLElement>('.research-changes-pic[data-pic-person]').forEach(el => {
+        const person = DataManager.getPerson(el.dataset.picPerson as PersonId);
+        const html = person ? changePicHtml(person, imgStateOf(personPhotoKey(person.id), !!person.photo)) : '';
+        if (el.outerHTML !== html) el.outerHTML = html;
+    });
+}
+if (typeof window !== 'undefined') {
+    window.addEventListener(IMAGES_ARRIVED_EVENT, refreshChangePics);
+    window.addEventListener(IMAGES_STATE_EVENT, refreshChangePics);
 }
 
 /**

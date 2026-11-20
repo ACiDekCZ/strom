@@ -10632,6 +10632,8 @@ const stringsEN = {
         /** The end of a card's aria-label. */
         ariaLoading: 'photo loading',
         ariaFailed: 'photo not loaded',
+        /** A tile of an image that did not come (64 px and more, spec 116 §1.4). */
+        tileFailed: 'Not loaded',
         /** The portrait editor waits for the photo it would open on (the crop, Make portraits…). */
         recropWait: 'The crop can be edited once the photo has loaded.',
         /** The indicator of the tree's photos on their way (spec 116 §6, src/ui/image-load-chip.ts). */
@@ -20883,6 +20885,7 @@ const stringsCZ: StringsType = {
         failedNew: 'Nová fotka se nenačetla.',
         ariaLoading: 'fotka se načítá',
         ariaFailed: 'fotka se nenačetla',
+        tileFailed: 'Nenačteno',
         recropWait: 'Výřez půjde upravit po načtení fotky.',
         chipLabel: 'Fotky',
         chipAria: (k: number, n: number) => `Načítají se fotky: ${k} z ${n}`,
@@ -31046,6 +31049,7 @@ const stringsDE: StringsType = {
         failedNew: 'Das neue Foto wurde nicht geladen.',
         ariaLoading: 'Foto wird geladen',
         ariaFailed: 'Foto nicht geladen',
+        tileFailed: 'Nicht geladen',
         recropWait: 'Der Ausschnitt lässt sich bearbeiten, sobald das Foto geladen ist.',
         chipLabel: 'Fotos',
         chipAria: (k: number, n: number) => `Fotos werden geladen: ${k} von ${n}`,

@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
     applyImageFills, awaitTreeImages, imageLoads, imagesToAwait, personsByNearness, resetImageLoads, startImageLoad,
-    takePendingImages, withArrivedImages, type AwaitImagesChoice, type AwaitImagesView,
+    takePendingImages, withArrivedImages, withWaitingImages, type AwaitImagesChoice, type AwaitImagesView,
     IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, IMAGE_FIRST_BATCH,
     type ImageFill, type ImageLoadDeps, type ImageLoadSnapshot, type ImagesArrivedDetail, type PendingImage,
 } from '../image-loads.js';
@@ -274,6 +274,59 @@ function chain(n: number): { data: StromData; pending: PendingImage[]; store: Ma
     }
     return { data: { persons, partnerships: {} } as unknown as StromData, pending, store };
 }
+
+describe('the view of the tree while images come (U4d1)', () => {
+    it('withWaitingImages: each image on its way where it goes, as its stand-in with its own size; the data untouched', () => {
+        const { data, pending } = takePendingImages(readPending(), null, refsOf(SLIM));
+        const before = JSON.stringify(data);
+        const view = withWaitingImages(data, pending);
+        expect(JSON.stringify(data)).toBe(before);
+        const person = Object.values(view.persons).find(p => p.firstName === 'Velimír')!;
+        expect(isPendingImageUrl(person.photo)).toBe(true);
+        const files = allMedia(view);
+        expect(files.length).toBe(1);
+        expect(isPendingImageUrl(files[0].dataUrl)).toBe(true);
+        expect(files[0].sizeBytes).toBe(FILE_IMG.length);
+        const crops = Object.values(view.sources!).flatMap(s => s.excerpts ?? []);
+        expect(crops.map(e => e.clip)).toEqual(['C0001', 'C0002']);
+        expect(crops.map(e => e.sizeBytes)).toEqual([CROP_A.length, CROP_B.length]);
+        // The counts see them as the tree's images.
+        expect(countImages(view).bytes).toBe(PORTRAIT.length + FILE_IMG.length + CROP_A.length + CROP_B.length);
+        // Nothing waits: the data themselves.
+        expect(withWaitingImages(data, [])).toBe(data);
+    });
+
+    it('a portrait that keeps its older image meanwhile shows the older one', () => {
+        const data = readPending();
+        const id = Object.values(data.persons).find(p => p.firstName === 'Velimír')!.id;
+        const previous = { ...data, persons: { ...data.persons, [id]: { ...data.persons[id], photo: dataUrlOf(OLD_PORTRAIT) } } } as StromData;
+        const { data: out, pending } = takePendingImages(data, previous);
+        expect(withWaitingImages(out, pending).persons[id].photo).toBe(dataUrlOf(OLD_PORTRAIT));
+    });
+
+    it('imageLoads.view: the open tree with what waits and did not come; after it came, the data as they are', async () => {
+        const { data, pending, store } = chain(3);
+        const missing = pending[2].ref.sha;
+        store.delete(missing);
+        const b = bridge(store);
+        const l = load({ pending, data, fetch: b.deps });
+        const during = imageLoads.view(data);
+        expect(isPendingImageUrl(during.persons[toPersonId('p0')].photo)).toBe(true);
+        expect(data.persons[toPersonId('p0')].photo).toBeFalsy();
+        expect(imageLoads.onItsWay('person:p0:photo')).toBe(true);
+        await l.q.whenIdle();
+        const after = imageLoads.view(data);
+        expect(after.persons[toPersonId('p0')].photo).toBe(store.get(pending[0].ref.sha));
+        // Did not come: still the tree's image, shown as not loaded.
+        expect(imageLoads.stateOf('person:p2:photo')).toBe('failed');
+        expect(isPendingImageUrl(after.persons[toPersonId('p2')].photo)).toBe(true);
+        expect(imageLoads.onItsWay('person:p2:photo')).toBe(true);
+        expect(imageLoads.stateOfSha(missing)?.state).toBe('failed');
+        // Another tree open: the data as they are.
+        resetImageLoads();
+        expect(imageLoads.view(data)).toBe(data);
+    });
+});
 
 describe('the queue', () => {
     it('the evidence and its snapshot: all to come, then all came; written once, stored once', async () => {

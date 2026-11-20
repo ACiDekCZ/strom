@@ -22,7 +22,7 @@
 import type { Attachment, MediaPlace, PartnershipId, PersonId, PortraitSource, SourceExcerpt, StromData } from './types.js';
 import { personSourceIds } from './types.js';
 import {
-    IMAGE_BATCH, IMAGE_CONCURRENCY, ImageBatchFailed, fetchImageBatch, isPendingImageUrl, pendingImageOf,
+    IMAGE_BATCH, IMAGE_CONCURRENCY, ImageBatchFailed, fetchImageBatch, isPendingImageUrl, pendingImageOf, pendingImageUrl,
     type ImageFailReason, type ImageFetchDeps, type ImageRef,
 } from './research-image-refs.js';
 import { imageSizeFromDataUrl } from './excerpts.js';
@@ -284,6 +284,67 @@ export function withArrivedImages(data: StromData, arrived: ReadonlyMap<string, 
         if (url) fills.push({ entry, url });
     }
     applyImageFills(out, fills);
+    return out;
+}
+
+/**
+ * What the app shows of `data` while images are on their way (spec 116 §5):
+ * each image of `waiting` the data hold nothing for (a portrait or a
+ * couple's photo without an older one, a file or a crop waiting aside) put
+ * in place as its stand-in (pendingImageUrl), so a page lists it where it
+ * goes and counts it as an image; one that keeps an older image meanwhile
+ * keeps it. Only for showing and counting — never stored, never an output.
+ * `data` is left as it is (the records written are fresh copies).
+ */
+export function withWaitingImages(data: StromData, waiting: readonly PendingImage[]): StromData {
+    const fills: ImageFill[] = [];
+    for (const p of waiting) {
+        if (p.expect !== undefined) continue;
+        // Without the portraits' sources: their place is the data's, not the view's.
+        const { portraits: _aside, ...entry } = p;
+        fills.push({ entry, url: pendingImageUrl(p.ref) });
+    }
+    if (!fills.length) return data;
+    const out: StromData = { ...data };
+    const persons = new Set<string>(), unions = new Set<string>(), sources = new Set<string>();
+    for (const { entry } of fills) {
+        const [kind, id] = entry.key.split(':');
+        if (kind === 'person') persons.add(id);
+        else if (kind === 'union') unions.add(id);
+        else if (kind === 'excerpt') sources.add(id);
+    }
+    if (persons.size) {
+        out.persons = { ...data.persons };
+        for (const id of persons) {
+            const p = data.persons?.[id as PersonId];
+            if (p) out.persons[id as PersonId] = { ...p };
+        }
+    }
+    if (unions.size) {
+        out.partnerships = { ...data.partnerships };
+        for (const id of unions) {
+            const u = data.partnerships?.[id as PartnershipId];
+            if (u) out.partnerships[id as PartnershipId] = { ...u };
+        }
+    }
+    if (sources.size) {
+        out.sources = { ...data.sources };
+        for (const id of sources) {
+            const s = data.sources?.[id];
+            if (s) out.sources[id] = { ...s };
+        }
+    }
+    applyImageFills(out, fills);
+    // A file's size is the image's, not its stand-in's (the counts of sizes).
+    for (const { entry } of fills) {
+        const id = entry.key.startsWith('media:') ? entry.key.slice(6) : '';
+        const rec = id ? out.media?.[id] : undefined;
+        if (rec && isPendingImageUrl(rec.dataUrl)) rec.sizeBytes = entry.ref.bytes || entry.media?.sizeBytes || 0;
+        const [kind, sid, eid] = entry.key.split(':');
+        if (kind !== 'excerpt') continue;
+        const exc = out.sources?.[sid]?.excerpts?.find(e => e?.id === eid);
+        if (exc && isPendingImageUrl(exc.dataUrl)) exc.sizeBytes = entry.ref.bytes || entry.excerpt?.record.sizeBytes || 0;
+    }
     return out;
 }
 
@@ -647,6 +708,21 @@ export class ImageLoadQueue {
         return [...this.items.values()].filter(it => it.state === 'failed').map(it => it.key);
     }
 
+    /** The images not in yet (still to come, or did not come), with what each waits with (withWaitingImages). */
+    notIn(): PendingImage[] {
+        if (this.aborted) return [];
+        return [...this.items.values()].filter(it => it.state !== 'loaded');
+    }
+
+    /** The state of the image of hash `sha` (any of its places): on its way while one waits for it, else failed / loaded; null when not in the evidence. */
+    stateOfSha(sha: string): { state: ImageLoadState; entry: ImageLoadEntry } | null {
+        const keys = this.bySha.get(sha.toLowerCase()) ?? this.bySha.get(sha);
+        if (!keys?.length) return null;
+        const items = keys.map(k => this.items.get(k)).filter((it): it is Item => !!it);
+        const it = items.find(i => i.state === 'pending') ?? items.find(i => i.state === 'failed') ?? items[0];
+        return it ? { state: it.state, entry: this.publicEntry(it) } : null;
+    }
+
     /**
      * What has not come (still to come or failed), as noted with the stored
      * tree (I1); empty once all came. `records`: with the records of files
@@ -957,6 +1033,26 @@ export const imageLoads = {
     },
     failedKeys(): FieldKey[] {
         return currentLoad?.failedKeys() ?? [];
+    },
+    /** The image of `key` is not in yet: on its way, or did not come (it still counts as the tree's image). */
+    onItsWay(key: FieldKey): boolean {
+        const s = currentLoad?.stateOf(key);
+        return s === 'pending' || s === 'failed';
+    },
+    /** The state of a stand-in's image (pendingImageOf(url).sha) in the current load; null when not waited for. */
+    stateOfSha(sha: string): { state: ImageLoadState; entry: ImageLoadEntry } | null {
+        return currentLoad?.stateOfSha(sha) ?? null;
+    },
+    /**
+     * The open tree's data as the app shows and counts them while images
+     * are on their way (withWaitingImages): `data` itself when nothing waits.
+     * Never stored, never an output.
+     */
+    view(data: StromData): StromData {
+        const q = currentLoad;
+        if (!q || q.isAborted() || !q.holdsOpenTree()) return data;
+        const waiting = q.notIn();
+        return waiting.length ? withWaitingImages(data, waiting) : data;
     },
     setPriority(personIds: readonly string[]): void {
         currentLoad?.setPriority(personIds);

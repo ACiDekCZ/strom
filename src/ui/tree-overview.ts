@@ -53,6 +53,7 @@ import { findComponents, componentName } from '../components.js';
 import { orphanedPlaceKeys } from '../places.js';
 import { totalPhotoBytes } from '../photo.js';
 import { totalAttachmentBytes, ATTACHMENT_WARN_BYTES } from '../attachments.js';
+import { imageLoads } from '../image-loads.js';
 import { upcomingAnniversaries, Anniversary } from '../anniversaries.js';
 import { SettingsManager } from '../settings.js';
 import { shownName } from '../person-name.js';
@@ -1890,7 +1891,8 @@ export const treeOverviewMethods = uiModule({
     treeOverviewQualityData(): QualityData {
         return cached('quality', false, () => {
             const st = state!;
-            const data = st.data;
+            // The images still on their way are the tree's: counted as photos, files and sizes (spec 116 §5).
+            const data = imageLoads.view(st.data);
             const persons = Object.values(data.persons).filter(p => !p.isPlaceholder);
             const year = new Date().getFullYear();
             const bounds = inferBirthUpperBounds(data);
