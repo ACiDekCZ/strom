@@ -41,14 +41,14 @@ function person(id: string, first: string, last: string, gender: Gender, extra: 
     return { id: id as PersonId, firstName: first, lastName: last, gender, parentIds: [], childIds: [], partnerships: [], ...extra } as Person;
 }
 
-/** Bohumil (portrait on its way) and Ludmila (a photo), married, with a couple's photo and a crop on their way. */
+/** Vratimil (portrait on its way) and Ludoslava (a photo), married, with a couple's photo and a crop on their way. */
 function tree(o: { portrait?: string; couple?: string; crop?: string } = {}): StromData {
     const u = 'u1' as PartnershipId;
     return {
         persons: {
-            bo: person('bo', 'Bohumil', 'Křepelka', 'male', { birthDate: '1871', deathDate: '1931', partnerships: [u], photo: o.portrait ?? WAIT_A, sourceIds: ['s1'], childIds: ['ji' as PersonId] }),
-            lu: person('lu', 'Ludmila', 'Pěnkavová', 'female', { birthDate: '1875', deathDate: '1940', partnerships: [u], photo: IMG, childIds: ['ji' as PersonId] }),
-            ji: person('ji', 'Jiřina', 'Křepelková', 'female', { birthDate: '1899', deathDate: '1970', parentIds: ['bo', 'lu'] as PersonId[] }),
+            bo: person('bo', 'Vratimil', 'Ostružník', 'male', { birthDate: '1871', deathDate: '1931', partnerships: [u], photo: o.portrait ?? WAIT_A, sourceIds: ['s1'], childIds: ['ji' as PersonId] }),
+            lu: person('lu', 'Ludoslava', 'Kvítkovská', 'female', { birthDate: '1875', deathDate: '1940', partnerships: [u], photo: IMG, childIds: ['ji' as PersonId] }),
+            ji: person('ji', 'Dobromila', 'Ostružníková', 'female', { birthDate: '1899', deathDate: '1970', parentIds: ['bo', 'lu'] as PersonId[] }),
         },
         partnerships: {
             u1: { id: u, person1Id: 'bo' as PersonId, person2Id: 'lu' as PersonId, status: 'married', childIds: ['ji' as PersonId], startDate: '1897', photo: o.couple ?? WAIT_B, sourceIds: ['s2'] } as Partnership,
@@ -82,32 +82,32 @@ const page = (data: StromData, o: Partial<PersonPageOptions> = {}): string => {
 
 describe('a small portrait of a list or a dialog (smallPortraitHtml)', () => {
     it('the photo; while it comes the initials under the veil; one that did not come the initials, calm, with its title', () => {
-        expect(smallPortraitHtml('x', IMG, 'BK', 'none')).toBe(`<img class="x" src="${IMG}" alt="" aria-hidden="true">`);
-        const loading = smallPortraitHtml('x', undefined, 'BK', 'loading');
+        expect(smallPortraitHtml('x', IMG, 'VO', 'none')).toBe(`<img class="x" src="${IMG}" alt="" aria-hidden="true">`);
+        const loading = smallPortraitHtml('x', undefined, 'VO', 'loading');
         expect(loading).toContain('data-img-state="loading"');
-        expect(loading).toContain('<span class="avatar-initials">BK</span>');
+        expect(loading).toContain('<span class="avatar-initials">VO</span>');
         expect(loading).not.toContain('<img');
-        const failed = smallPortraitHtml('x', undefined, 'BK', 'failed', 'Fotka se nenačetla.');
+        const failed = smallPortraitHtml('x', undefined, 'VO', 'failed', 'Fotka se nenačetla.');
         expect(failed).not.toContain('data-img-state');
         expect(failed).toContain('title="Fotka se nenačetla."');
-        expect(failed).toContain('BK');
+        expect(failed).toContain('VO');
         // An older photo while a newer one comes: the photo under the veil.
-        const refresh = smallPortraitHtml('x', IMG, 'BK', 'refresh');
+        const refresh = smallPortraitHtml('x', IMG, 'VO', 'refresh');
         expect(refresh).toContain('data-img-state="refresh"');
         expect(refresh).toContain(`<img src="${IMG}"`);
         // A stand-in is never an <img>; without a photo and without one coming: nothing.
-        expect(smallPortraitHtml('x', WAIT_A, 'BK', 'loading')).not.toContain('<img');
-        expect(smallPortraitHtml('x', undefined, 'BK', 'none')).toBe('');
+        expect(smallPortraitHtml('x', WAIT_A, 'VO', 'loading')).not.toContain('<img');
+        expect(smallPortraitHtml('x', undefined, 'VO', 'none')).toBe('');
     });
 });
 
 describe('the slideshow, the research changes, a merge conflict (spec 116 §5)', () => {
-    const bo = { firstName: 'Bohumil', lastName: 'Křepelka' };
+    const bo = { firstName: 'Vratimil', lastName: 'Ostružník' };
 
     it('slideshow: the block as an avatar with initials while it comes; none when it did not come', () => {
         const loading = slideshowPhotoHtml({ ...bo, photo: undefined }, 'loading');
         expect(loading).toMatch(/^<div class="slideshow-photo"><span class="slideshow-pic img-slot-pic is-initials" data-img-state="loading"/);
-        expect(loading).toContain('>BK<');
+        expect(loading).toContain('>VO<');
         expect(slideshowPhotoHtml({ ...bo, photo: undefined }, 'failed')).toBe('');
         expect(slideshowPhotoHtml({ ...bo, photo: undefined }, 'none')).toBe('');
         expect(slideshowPhotoHtml({ ...bo, photo: IMG }, 'none')).toContain(`src="${IMG}"`);
@@ -118,23 +118,23 @@ describe('the slideshow, the research changes, a merge conflict (spec 116 §5)',
         expect(loading).toContain('class="research-changes-pic img-slot-pic is-initials"');
         expect(loading).toContain('data-img-state="loading"');
         const failed = changePicHtml({ ...bo, photo: undefined }, 'failed');
-        expect(failed).toContain('>BK<');
+        expect(failed).toContain('>VO<');
         expect(failed).not.toContain('data-img-state');
         expect(changePicHtml({ ...bo, photo: IMG }, 'none')).toContain('<img class="research-changes-pic"');
         expect(changePicHtml({ ...bo, photo: undefined }, 'none')).toBe('');
     });
 
     it('merge conflict: the avatar while it comes, the initials with the title when it did not; a stand-in never an <img>', () => {
-        const loading = conflictPhotoHtml(undefined, 'BK', 'loading');
+        const loading = conflictPhotoHtml(undefined, 'VO', 'loading');
         expect(loading).toContain('class="conflict-photo img-slot-pic is-initials"');
         expect(loading).toContain('data-img-state="loading"');
-        const failed = conflictPhotoHtml(undefined, 'BK', 'failed');
+        const failed = conflictPhotoHtml(undefined, 'VO', 'failed');
         expect(failed).toContain(`title="${strings.photos.failed}"`);
         expect(failed).not.toContain('data-img-state');
-        expect(failed).toContain('>BK<');
-        expect(conflictPhotoHtml(WAIT_A, 'BK', 'none')).not.toContain('<img');
-        expect(conflictPhotoHtml(IMG, 'BK', 'none')).toContain('<img class="conflict-photo"');
-        expect(conflictPhotoHtml(undefined, 'BK', 'none')).toBe('—');
+        expect(failed).toContain('>VO<');
+        expect(conflictPhotoHtml(WAIT_A, 'VO', 'none')).not.toContain('<img');
+        expect(conflictPhotoHtml(IMG, 'VO', 'none')).toContain('<img class="conflict-photo"');
+        expect(conflictPhotoHtml(undefined, 'VO', 'none')).toBe('—');
     });
 });
 
@@ -142,7 +142,7 @@ describe('the person page in the app\'s window (spec 116 §5)', () => {
     it('the portrait on its way: the initials in the photo\'s 128 px square under the veil, no zoom', () => {
         const html = page(tree(), { imageWait: wait });
         expect(html).toContain('<span class="pp-portrait pp-portrait--wait" data-img-state="loading"');
-        expect(html).toContain('<span class="pp-initials-text" aria-hidden="true">BK</span>');
+        expect(html).toContain('<span class="pp-initials-text" aria-hidden="true">VO</span>');
         expect(html).not.toContain(`src="${WAIT_A}"`);
         expect(html).not.toContain('data-pp-img-retry');
     });

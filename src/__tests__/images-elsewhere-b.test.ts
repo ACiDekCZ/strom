@@ -116,7 +116,7 @@ describe('the table\'s couple\'s photo (spec 116 §5)', () => {
 });
 
 describe('a source\'s crops on their way (spec 116 §5)', () => {
-    const src = { id: 's1', title: 'Matrika zemřelých Vranov 1890–1910' } as Source;
+    const src = { id: 's1', title: 'Matrika zemřelých Zvonovice 1890–1910' } as Source;
 
     it('waitingExcerpts lists them in order with their state; another tree open: none', async () => {
         const q = load([
