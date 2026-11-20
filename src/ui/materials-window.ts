@@ -601,6 +601,8 @@ export const materialsWindowMethods = uiModule({
             cols,
             tileRow,
             restoreExtra: 26,
+            // Two more lines under a family tree file: "File of a source · Family tree file · 184 kB" whole (spec 117 §5, 5a).
+            treeExtra: compact ? 0 : 30,
             listRow: coarse ? 56 : 48,
             group: coarse ? 60 : 56,
             folder: coarse ? 44 : 36,
@@ -1174,7 +1176,8 @@ export const materialsWindowMethods = uiModule({
     mwTreeTilePersonsHtml(item: MaterialItem): string {
         const line = this.mwTreeFileLine(item);
         const title = [line, this.mwTreeFileOf(item)].filter(Boolean).join(' · ');
-        return `<span class="mw-tile-persons is-tree" title="${esc(title)}">${this.mwSourceOfTagHtml(item)}${esc(line)}</span>`;
+        // The size whole on the line it wraps to ("184 kB", not "184" and "kB").
+        return `<span class="mw-tile-persons is-tree" title="${esc(title)}">${this.mwSourceOfTagHtml(item)}${esc(line.replace(/(\d) (?=\S+$)/, '$1\u00a0'))}</span>`;
     },
 
     /**

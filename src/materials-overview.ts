@@ -207,9 +207,11 @@ export function itemWithoutPerson(item: MaterialItem): boolean {
 
 /**
  * The file is in the tree (the tree keeps it or uses it, or a source it is the file of comes to the tree,
- * spec 102 §7); beside an archive the rest is only in the archive.
+ * spec 102 §7); beside an archive the rest is only in the archive. A family tree file never is: the source
+ * made of it is, the file itself has no place in the tree (spec 117 §5, design 5a).
  */
 export function itemInTree(item: MaterialItem): boolean {
+    if (item.tree) return false;
     return !!item.attachment || (item.uses ?? 0) > 0 || !!item.sourceOf?.some(s => s.inTree);
 }
 
@@ -644,6 +646,8 @@ export interface RowMetrics {
     tileRow: number;
     /** Extra height of a grid row with a hidden tile ("Restore" under it). */
     restoreExtra: number;
+    /** Extra height of a grid row with a family tree file (its tag, kind and size on up to three lines). */
+    treeExtra?: number;
     listRow: number;
     group: number;
     folder: number;
@@ -689,7 +693,7 @@ export function overviewRows(groups: readonly OverviewGroup[], isOpen: (key: str
         const cols = Math.max(1, m.cols);
         for (let i = 0; i < items.length; i += cols) {
             const chunk = items.slice(i, i + cols);
-            const height = m.tileRow + (chunk.some(x => x.hidden) ? m.restoreExtra : 0);
+            const height = m.tileRow + (chunk.some(x => x.hidden) ? m.restoreExtra : 0) + (chunk.some(x => x.tree) ? m.treeExtra ?? 0 : 0);
             for (const item of chunk) rowOf.set(item.key, rows.length);
             push({ type: 'tiles', key: `t:${folder?.key ?? group.key}:${i}`, top, height, group, ...(folder ? { folder } : {}), items: chunk, first: order.length });
             order.push(...chunk);

@@ -111,6 +111,12 @@ test.describe('Family tree files in Materials (material.trees)', () => {
         await expect(sourced.locator('.mw-tile-persons.is-tree')).toHaveText('File of a sourceFamily tree file · 180 kB');
         await expect(sourced.locator('.mw-places')).toHaveCount(0);
         await expect(sourced).toHaveAttribute('aria-label', /Family tree file · 180 kB, the file of the source Quellmayer family tree 1990/);
+        // The file itself has no place in the tree, though the source made of it has (design 5a): no "In the tree".
+        await expect(sourced.locator('.mw-intree')).toHaveCount(0);
+        // The tag, the kind and the size whole, not cut to "Family…" (the row is taller for them).
+        const whole = (loc: import('@playwright/test').Locator) => loc.evaluate(el => el.scrollHeight <= el.clientHeight + 1);
+        expect(await whole(sourced.locator('.mw-tile-persons.is-tree'))).toBe(true);
+        expect(await whole(plain.locator('.mw-tile-persons.is-tree'))).toBe(true);
 
         // The Kind filter: the row only because there is a family tree file.
         await win(page).locator('[data-mw="kind"]').click();
@@ -318,6 +324,8 @@ test.describe('Family tree files on a narrow screen', () => {
 
     test('a tap opens the sheet from below; Delete permanently… of a file no source was made of opens the dialog with its letters', async ({ page }) => {
         await research(page, GATED);
+        // A phone shows no texts under a tile, a family tree file's neither (its row has no room for them).
+        await expect(tile(page, 'talvanen.ged').locator('.mw-tile-persons')).toBeHidden();
         // The file a source was made of: the sheet names the source (its Delete permanently… is the two-part dialog's, below).
         await tile(page, 'quellmayer.ged').click();
         const sheet = page.locator('.bottom-sheet-menu');

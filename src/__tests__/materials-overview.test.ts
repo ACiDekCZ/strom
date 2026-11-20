@@ -343,6 +343,12 @@ describe('rows of the virtual list', () => {
         expect(layout.order.map(i => i.key)).toEqual(['m:I0004', 'm:I0001', 'm:I0002']);
         expect(layout.rowOf.get('m:I0002')).toBe(5);
         expect(layout.rows[5].top).toBe(60 + 120 + 30 + 30 + 30);
+        // A row with a family tree file has room for its tag, kind and size (spec 117 §5).
+        const treeItems = items.map(x => (x.key === 'm:I0004' ? { ...x, tree: true } : x));
+        const treeGroups = overviewGroups({ items: treeItems, list: l, filters: filters({ showHidden: true }), mode: 'batch', batchLoaded: () => true });
+        const tree = overviewRows(treeGroups, k => open.has(k), { ...METRICS, treeExtra: 30 });
+        expect(tree.rows[1].height).toBe(150);
+        expect(overviewRows(groups, k => open.has(k), { ...METRICS, treeExtra: 30 }).rows[1].height).toBe(120);
     });
 
     it('a list: one row per item', () => {
@@ -598,6 +604,10 @@ describe('review filters, counts and the list sort (spec 102 §8)', () => {
         const items = both();
         const pick = (f: Partial<OverviewFilters>) => items.filter(i => passesFilters(i, filters(f))).map(i => i.key).sort();
         expect(items.filter(itemInTree).map(i => i.key).sort()).toEqual(['a:t', 'm:I0001']);
+        // A family tree file a live source in the tree was made of has no place in the tree itself (spec 117 §5, 5a).
+        const treeFile = { ...items.find(i => i.key === 'm:I0002')!, tree: true, sourceOf: [{ inTree: true }] } as unknown as typeof items[number];
+        expect(itemInTree(treeFile)).toBe(false);
+        expect(itemInTree({ ...treeFile, tree: false })).toBe(true);
         expect(pick({ where: 'tree' })).toEqual(['a:t', 'm:I0001']);
         expect(pick({ where: 'archive' })).toEqual(['m:I0002', 'm:I0003']);
         expect(pick({ noSource: true })).toEqual(['a:t', 'm:I0002', 'm:I0003']);

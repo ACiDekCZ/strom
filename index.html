@@ -30328,6 +30328,9 @@
         .mw-tile-persons.is-none, .mw-li-persons.is-none { color: var(--text-faint); font-style: italic; }
         /* A family tree file (spec 117 §5): its kind and size instead of people, quiet; in a list row only on a phone. */
         .mw-tile-persons.is-tree { color: var(--text-faint); }
+        /* A family tree file (design 5a): its tag, kind and size whole, on up to three lines (its row is taller, treeExtra). */
+        .mw-tile-persons.is-tree { white-space: normal; max-height: 45px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+        .mw-tile-persons.is-tree .mw-intree-tag { line-height: 13px; vertical-align: top; }
         .mw-li-persons .mw-li-treeline { display: none; }
         .materials-window .mw-restore { align-self: flex-start; max-width: 100%; font-size: 12px; padding: 2px 0; white-space: normal; text-align: left; overflow-wrap: anywhere; }
         .materials-window .mw-restore[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
@@ -30514,7 +30517,7 @@
             .mw-folder { padding-left: calc(12px + min(var(--mw-depth, 0), 4) * 14px); }
             .mw-status, .mw-skipped, .mw-thumbs { padding-left: 16px; padding-right: 16px; }
             .mw-r-tiles, .mw-r-skeleton { column-gap: 6px; }
-            .mw-tile-title, .mw-tile-persons { display: none; }
+            .mw-tile-title, .mw-tile-persons, .mw-tile-persons.is-tree { display: none; }
             .mw-hidden-label { font-size: 10px; left: 4px; bottom: 4px; padding: 1px 6px; }
             .mw-li { grid-template-columns: auto 40px minmax(0, 1fr) auto; grid-template-rows: auto auto; row-gap: 2px; padding: 0 4px; }
             .mw-li-check, .mw-li .mw-thumb { grid-row: 1 / span 2; }
@@ -30555,7 +30558,7 @@
             .mw-tools { flex-wrap: nowrap; }
             .mw-scroll { padding: 0 16px; }
             .mw-r-tiles, .mw-r-skeleton { column-gap: 8px; }
-            .mw-tile-title, .mw-tile-persons { display: none; }
+            .mw-tile-title, .mw-tile-persons, .mw-tile-persons.is-tree { display: none; }
             .mw-empty.is-none { padding: 16px 0; gap: 6px; }
             .mw-empty-file { width: 48px; height: 58px; }
             .mw-selbar { height: 48px; flex-wrap: nowrap; padding: 0 16px; padding-bottom: env(safe-area-inset-bottom); }
