@@ -22,7 +22,7 @@ import { yearOf, yearFraction } from './dates.js';
 import { placeKey, townOfPlace } from './places.js';
 import { Rod, RodId, RodPlaceSpan, placeSpans, rodGenerations } from './lineage.js';
 import { NOT_RESIDENCE_EVENT_TYPES } from './events.js';
-import { HistoryKind, HistoryPayload, PersonHistoryEnv, effectiveHidden, matchHistoryPlace, pickHistoryText } from './history.js';
+import { HISTORY_KINDS, HistoryKind, HistoryPayload, HistoryScope, PersonHistoryEnv, effectiveHidden, matchHistoryPlace, pickHistoryText } from './history.js';
 import { ProtectedPersonPageTree } from './person-page.js';
 import { countryIdAt } from './map-context.js';
 import { Language } from './strings.js';
@@ -34,8 +34,8 @@ export const ROD_TIMELINE_CHIPS: readonly RodTimelineChip[] = ['birth', 'marriag
 
 /**
  * The symbol of a chip's kind, the same the rows draw before a marriage's partner and a move's place (and the person
- * page's chart uses for its marks). History has none of its own (each kind of history event has its symbol), so its
- * chip keeps a dot.
+ * page's chart uses for its marks). History has no character of its own: its chip draws the symbol of the kind
+ * "other" (each kind of history event has its symbol, `historyKindSvg`).
  */
 export const ROD_TIMELINE_SYMBOLS: Readonly<Record<RodTimelineChip, string>> = {
     birth: '*', marriage: '⚭', death: '†', move: '→', hist: '',
@@ -52,8 +52,12 @@ export interface RodTimelineHistory {
     kind: HistoryKind;
     text: string;
     textLang: string;
+    /** Where it comes from: the whole region, the place's history or a finding of the research's records. */
+    scope: HistoryScope;
     /** The line's spelling of the place the event belongs to; none for an event of the whole region. */
     place?: string;
+    /** An event of the whole region: the region's name, only when the line's history has two regions or more. */
+    region?: string;
 }
 
 export interface RodTimelineEvent {
@@ -378,6 +382,9 @@ export function buildRodTimeline(input: RodTimelineInput): RodTimeline | null {
             if (key && !keys.has(key)) keys.set(key, s.name);
         }
         const done = new Set<string>();
+        // The regions of the region events kept: named on their rows only when there are two or more.
+        const regionNames = new Map<string, string>();
+        const regionOf = new Map<RodTimelineHistory, string>();
         for (const [key, name] of keys) {
             for (const evId of p.places[key]?.events ?? []) {
                 if (done.has(evId)) continue;
@@ -395,15 +402,18 @@ export function buildRodTimeline(input: RodTimelineInput): RodTimeline | null {
                 const t = pickHistoryText(ev.text, lang, p.lang);
                 if (!t) continue;
                 done.add(evId);
-                events.push({
-                    kind: 'history', year: ev.from, sort: ev.from,
-                    history: {
-                        id: ev.id, from: ev.from, ...(ev.to !== undefined && ev.to > ev.from ? { to: ev.to } : {}), kind: ev.kind,
-                        text: t.text, textLang: t.lang, ...(ev.scope !== 'region' ? { place: name } : {}),
-                    },
-                });
+                const history: RodTimelineHistory = {
+                    id: ev.id, from: ev.from, ...(ev.to !== undefined && ev.to > ev.from ? { to: ev.to } : {}), kind: ev.kind,
+                    text: t.text, textLang: t.lang, scope: ev.scope, ...(ev.scope !== 'region' ? { place: name } : {}),
+                };
+                if (ev.scope === 'region' && ev.region) {
+                    regionOf.set(history, ev.region.id);
+                    if (!regionNames.has(ev.region.id)) regionNames.set(ev.region.id, pickHistoryText(ev.region.name, lang, p.lang)?.text ?? ev.region.id);
+                }
+                events.push({ kind: 'history', year: ev.from, sort: ev.from, history });
             }
         }
+        if (regionNames.size >= 2) for (const [h, id] of regionOf) h.region = regionNames.get(id);
     }
 
     events.sort((a, b) => a.sort - b.sort || (a.kind === 'history' ? -1 : 0) - (b.kind === 'history' ? -1 : 0));
@@ -418,6 +428,13 @@ export function buildRodTimeline(input: RodTimelineInput): RodTimeline | null {
         places: allPlaces.slice(0, ROD_TIMELINE_PLACES), morePlaces: Math.max(0, allPlaces.length - ROD_TIMELINE_PLACES),
         events, centuries, history: !!hist,
     };
+}
+
+/** The kinds of history on the timeline, in the order of the kinds (the page's second row of chips, 121 §9). */
+export function rodTimelineHistKinds(tl: RodTimeline): HistoryKind[] {
+    const on = new Set<HistoryKind>();
+    for (const e of tl.events) if (e.history) on.add(e.history.kind);
+    return HISTORY_KINDS.filter(k => on.has(k));
 }
 
 /** The century opened at first (§5.2): the one with the most events, the earlier on a tie; null without events. */

@@ -9,9 +9,11 @@
 import { describe, it, expect } from 'vitest';
 import { PageSet, PageSetOptions, buildPageSet } from '../family-pages.js';
 import { buildPageSetHtml, renderPage } from '../family-pages-html.js';
-import { buildRodTimeline, rodTimelineAxis, rodTimelineMainCentury, rodTimelineTicks, RodTimeline } from '../rod-timeline.js';
+import { buildRodTimeline, rodTimelineAxis, rodTimelineHistKinds, rodTimelineMainCentury, rodTimelineTicks, RodTimeline } from '../rod-timeline.js';
 import { rodTimelineScript } from '../rod-timeline-wire.js';
 import { FAMILY_PAGES_BODY_CSS } from '../family-pages-css.js';
+import { HISTORY_KINDS, HistoryPayload } from '../history.js';
+import { historyKindSvg } from '../history-symbols.js';
 import { PersonId, StromData } from '../types.js';
 import { timelineFixture, TP_NOW } from './helpers/tree-pages-fixture.js';
 
@@ -157,6 +159,123 @@ describe('the history layer (§5.2, §5.5)', () => {
     });
 });
 
+describe('history on the page: symbols and the kinds\' filter (121 §9)', () => {
+    const html = renderPage(full, slugOf(full, F.ids.vaclav));
+    const overview = html.slice(html.indexOf('<div class="sp-tl-plot">'), html.indexOf('</section>', html.indexOf('<div class="sp-tl-plot">')));
+    const rowOf = (place: string): string => {
+        const i = overview.indexOf(`title="${place} · `);
+        const start = overview.lastIndexOf('<span class="sp-tl-r', i);
+        const next = overview.indexOf('<span class="sp-tl-r', i);
+        return overview.slice(start, next < 0 ? undefined : next);
+    };
+
+    it('a band of the region\'s history carries its kind\'s symbol of 11 px on top', () => {
+        const bands = [...overview.matchAll(/<span class="sp-tl-band" data-hk="(\w+)" data-f="(\d+)"/g)].map(m => `${m[2]}:${m[1]}`);
+        expect(bands).toEqual(['1866:war', '1914:war']);
+        for (const y of ['1866', '1914']) {
+            expect(overview).toMatch(new RegExp(`<span class="sp-tl-bandsym" data-hk="war" data-f="${y}" data-t="${+y + 1}" data-pt="" style="left:[\\d.]+%" title="[^"]+" aria-hidden="true">${historyKindSvg('war', 11).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</span>`));
+        }
+        expect(FAMILY_PAGES_BODY_CSS).toMatch(/\.sp-tl-bandsym \{[^}]*color: var\(--hist-text\)/);
+    });
+
+    it('a place\'s own history is a symbol on the place\'s row, not a band across the chart', () => {
+        expect(overview).not.toMatch(/class="sp-tl-band"[^>]* data-f="1831"/);
+        expect(overview).not.toMatch(/class="sp-tl-band"[^>]* data-f="1890"/);
+        const lop = rowOf('Lopuchov');
+        expect(lop).toContain(`<span class="sp-tl-locsym is-place" data-hk="epidemic" data-f="1831" data-t="1832" data-pt="" style="left:`);
+        expect(lop).toContain('title="1831 · Cholera v Lopuchově"');
+        expect(lop).toContain(`data-hk="other" data-f="1890"`);
+        expect(count(overview, /class="sp-tl-locsym/g)).toBe(2);
+        expect(rowOf('Kvasín')).not.toContain('sp-tl-locsym');
+        // 18 × 18 on the surface in the origin's colour, 16 px on a phone.
+        expect(FAMILY_PAGES_BODY_CSS).toMatch(/\.sp-tl-locsym \{[^}]*width: 18px; height: 18px;[^}]*border: 1px solid currentColor; border-radius: var\(--r-tag\); background: var\(--surface\); color: var\(--hist-place-text\)/);
+        expect(FAMILY_PAGES_BODY_CSS).toMatch(/@media \(max-width: 640px\) \{[^@]*\.sp-tl-locsym \{ top: 8px; width: 16px; height: 16px; \}/);
+        expect(html).toContain('Symboly na řádku obce = místní dějiny.');
+    });
+
+    it('a finding of the records on its place\'s row in the colour of findings; a place without a row keeps its band', () => {
+        const lop = Object.keys(F.history.places)[0];
+        const payload: HistoryPayload = {
+            ...F.history,
+            events: [...F.history.events, { ...F.history.events.find(e => e.id === 'lop-1890')!, id: 'lop-1902', from: 1902, kind: 'disaster', scope: 'local', text: { cs: 'Kroupy' } }],
+            places: { ...F.history.places, [lop]: { ...F.history.places[lop], events: [...F.history.places[lop].events, 'lop-1902'] } },
+        };
+        const set = tlSet({ privacy: 'full', history: { payload } });
+        const page = renderPage(set, slugOf(set, F.ids.vaclav));
+        expect(page).toContain('<span class="sp-tl-locsym is-local" data-hk="disaster" data-f="1902"');
+        expect(page).toContain('<li class="sp-tl-row sp-tl-row--hist is-local" data-k="hist" data-hk="disaster">');
+        expect(FAMILY_PAGES_BODY_CSS).toContain('.sp-tl-locsym.is-local { color: var(--hist-local-text); }');
+    });
+
+    it('the list: the kind\'s symbol of 12 px before "history · kind", the colour of the origin, the place after the text', () => {
+        const row = (y: number) => new RegExp(`<li class="sp-tl-row sp-tl-row--hist ([\\w-]+)" data-k="hist" data-hk="(\\w+)"><span class="sp-tl-y">${y}</span><div class="sp-tl-b"><span class="sp-tl-k">(<svg[^]*?</svg>)dějiny · [^<]+</span>`).exec(html);
+        expect(row(1866)?.slice(1)).toEqual(['is-region', 'war', historyKindSvg('war', 12)]);
+        expect(row(1831)?.slice(1)).toEqual(['is-place', 'epidemic', historyKindSvg('epidemic', 12)]);
+        expect(html).toMatch(/Cholera v Lopuchově<\/span> <span class="sp-tl-pl">· Lopuchov<\/span>/);
+        // One region: no region after the text.
+        expect(html).toMatch(/Prusko-rakouská válka<\/span><\/span>/);
+        expect(FAMILY_PAGES_BODY_CSS).toContain('.sp-tl-row--hist.is-place .sp-tl-k { color: var(--hist-place-text); }');
+        expect(FAMILY_PAGES_BODY_CSS).toContain('.sp-tl-row--hist .sp-tl-k { color: var(--hist-text); }');
+    });
+
+    it('two regions: each region event names its region after the text', () => {
+        const payload: HistoryPayload = {
+            ...F.history,
+            events: F.history.events.map(e => e.id === 'cz-1914' ? { ...e, region: { id: 'cz-moravia', name: { cs: 'Morava', en: 'Moravia' } } } : e),
+        };
+        const set = tlSet({ privacy: 'full', history: { payload } });
+        const tl = buildRodTimeline({ prot: set.protectedTree, rodId: set.protectedTree.lineages.rodByPerson.get(F.ids.vaclav)!, lang: 'cs', now: TP_NOW, history: { payload } })!;
+        const h = tl.events.filter(e => e.history).map(e => [e.year, e.history!.region ?? e.history!.place]);
+        expect(h).toEqual([[1831, 'Lopuchov'], [1866, 'Čechy'], [1890, 'Lopuchov'], [1914, 'Morava']]);
+        const page = renderPage(set, slugOf(set, F.ids.vaclav));
+        expect(page).toMatch(/Prusko-rakouská válka<\/span> <span class="sp-tl-pl">· Čechy<\/span>/);
+        expect(lhotak.events.some(e => e.history?.region)).toBe(false);
+    });
+
+    it('the second row of chips: "Kinds of history", All and the kinds on the page, each with its symbol; the script\'s only', () => {
+        expect(rodTimelineHistKinds(lhotak)).toEqual(['war', 'epidemic', 'other']);
+        const at = html.indexOf('<div class="sp-tl-ctl js-only">');
+        const ctl = html.slice(at, html.indexOf('<section', at));
+        const row = ctl.slice(ctl.indexOf('<div class="sp-tl-chips sp-tl-hkrow"'));
+        expect(row).toMatch(/^<div class="sp-tl-chips sp-tl-hkrow" role="group" aria-label="Druhy dějin"><span class="sp-tl-chips-lab" aria-hidden="true">Druhy dějin:<\/span>/);
+        expect([...row.matchAll(/data-tl-hk="(\w*)" aria-pressed="(\w+)"/g)].map(m => `${m[1]}:${m[2]}`)).toEqual([':true', 'war:false', 'epidemic:false', 'other:false']);
+        expect(row).toContain(`data-tl-hk="war" aria-pressed="false">${historyKindSvg('war', 14)}Válka</button>`);
+        expect(row).toContain('data-tl-hk="" aria-pressed="true">Vše</button>');
+        // Under the first row, inside the controls only the script shows.
+        expect(ctl.indexOf('sp-tl-hkrow')).toBeGreaterThan(ctl.indexOf('data-tl-k="hist"'));
+    });
+
+    it('no row of kinds with one kind of history or without the history group', () => {
+        const payload: HistoryPayload = { ...F.history, events: F.history.events.filter(e => e.kind === 'war') };
+        const one = tlSet({ privacy: 'full', history: { payload } });
+        expect(renderPage(one, slugOf(one, F.ids.vaclav))).not.toContain('data-tl-hk');
+        const off = tlSet({ privacy: 'full', groups: { history: false } });
+        expect(renderPage(off, slugOf(off, F.ids.vaclav))).not.toContain('data-tl-hk');
+    });
+
+    it('English: Kinds of history, All, the kinds\' names', () => {
+        const set = tlSet({ privacy: 'full', lang: 'en' });
+        const page = renderPage(set, slugOf(set, F.ids.vaclav));
+        expect(page).toContain('aria-label="Kinds of history"');
+        expect(page).toContain('data-tl-hk="" aria-pressed="true">All</button>');
+        expect(page).toContain('Epidemic</button>');
+        expect(page).toContain('Symbols on a place’s row = local history.');
+    });
+
+    it('the stylesheet hides each kind left out (rows, bands and symbols) and the row with History off, on screen only', () => {
+        for (const k of HISTORY_KINDS) expect(FAMILY_PAGES_BODY_CSS).toContain(`.sp-tl[data-hk-off~="${k}"] [data-hk="${k}"]`);
+        const screen = FAMILY_PAGES_BODY_CSS.slice(FAMILY_PAGES_BODY_CSS.indexOf('@media screen {'));
+        const block = screen.slice(0, screen.indexOf('\n}'));
+        expect(block).toContain('.sp-tl[data-hk-off~="war"] [data-hk="war"]');
+        expect(block).toContain('.sp-tl[data-off~="hist"] .sp-tl-hkrow');
+        expect(block).toContain('.sp-tl[data-off~="hist"] .sp-tl-locsym');
+        expect(block).toContain('.sp-tl[data-off~="hist"] .sp-tl-bandsym');
+        // Every history element carries its kind.
+        expect(count(html, /class="sp-tl-row sp-tl-row--hist[^"]*" data-k="hist" data-hk="\w+"/g)).toBe(4);
+        expect(count(html, /class="sp-tl-(?:band|bandsym|locsym[^"]*)" data-hk="\w+"/g)).toBe(2 * 2 + 2);
+    });
+});
+
 describe('the protection of the living (§5.4)', () => {
     const set = tlSet();
     const tl = timelineOf(set, F.ids.vaclav);
@@ -238,17 +357,28 @@ describe('the page in the set (§5.1)', () => {
         expect(html).toContain('19th century');
     });
 
-    it('the chips carry their kind\'s symbol, hidden from screen readers; History keeps the dot', () => {
+    it('the chips carry their kind\'s symbol, hidden from screen readers; History the symbol of "other" (121 §9)', () => {
         const html = renderPage(full, slugOf(full, F.ids.vaclav));
-        const chip = (k: string) => new RegExp(`<button type="button" class="sp-tl-chip" data-tl-k="${k}" aria-pressed="true">(<span[^>]*>[^<]*</span>)`).exec(html)?.[1];
+        const chip = (k: string) => new RegExp(`<button type="button" class="sp-tl-chip sel-opt" data-tl-k="${k}" aria-pressed="true">(<span[^>]*>[^<]*</span>)`).exec(html)?.[1];
         expect(chip('birth')).toBe('<span class="sp-tl-sym" aria-hidden="true">*</span>');
         expect(chip('marriage')).toBe('<span class="sp-tl-sym" aria-hidden="true">⚭</span>');
         expect(chip('death')).toBe('<span class="sp-tl-sym" aria-hidden="true">†</span>');
         expect(chip('move')).toBe('<span class="sp-tl-sym" aria-hidden="true">→</span>');
-        expect(chip('hist')).toBe('<span class="sp-tl-dot" aria-hidden="true"></span>');
-        expect(html).not.toMatch(/data-tl-k="(?!hist)\w+" aria-pressed="true"><span class="sp-tl-dot"/);
-        // A chip turned off greys its symbol as it greys the dot.
-        expect(FAMILY_PAGES_BODY_CSS).toMatch(/\.sp-tl-chip\[aria-pressed="false"\] \.sp-tl-sym \{ color: var\(--text-faint\)/);
+        expect(html).toContain(`data-tl-k="hist" aria-pressed="true">${historyKindSvg('other', 14)}Dějiny</button>`);
+        expect(html).not.toContain('sp-tl-dot');
+        // A chip turned off greys its symbol.
+        expect(FAMILY_PAGES_BODY_CSS).toMatch(/\.sp-tl-chip\[aria-pressed="false"\] \.sp-tl-sym, \.sp-tl-chip\[data-tl-k\]\[aria-pressed="false"\] \.hist-kind-svg \{ color: var\(--text-faint\)/);
+    });
+
+    it('the chips mark the choice as the app\'s options ("Linka", .sel-opt), not with a frame of their own (121 §9)', () => {
+        const html = renderPage(full, slugOf(full, F.ids.vaclav));
+        expect(count(html, /class="sp-tl-chip"/g)).toBe(0);
+        expect(count(html, /class="sp-tl-chip sel-opt"/g)).toBe(5 + 4);
+        const rule = /\.sp-tl-chip \{([^}]*)\}/.exec(FAMILY_PAGES_BODY_CSS)![1];
+        expect(rule).not.toMatch(/border|background|color/);
+        expect(FAMILY_PAGES_BODY_CSS).not.toMatch(/\.sp-tl-chip\[aria-pressed="false"\] \{/);
+        // The saved file carries the indicator's rules.
+        expect(buildPageSetHtml(full)).toContain('.sel-opt {');
     });
 
     it('the controls\' script is valid source text', () => {

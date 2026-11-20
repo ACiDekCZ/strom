@@ -8,7 +8,10 @@
  * only that century's events ("All": the whole period, the century with the
  * most events open). The chips filter the rows by kind (`data-off` on the
  * timeline; the stylesheet hides them on screen only); History also hides the
- * bands. Printing shows the whole period with every century open.
+ * bands, the symbols and the row of the kinds of history. That row (121 §9)
+ * filters history by its kind: "All" or the kinds chosen (`data-hk-off` lists
+ * the kinds left out; rows, bands and symbols carry `data-hk`). Printing shows
+ * the whole period with every century open.
  */
 export function wireRodTimelines(root: Document | Element): void {
     const doc = root.ownerDocument || (root as Document);
@@ -27,6 +30,8 @@ export function wireRodTimelines(root: Document | Element): void {
                 const x = Math.max(f, a), y = Math.min(t, b);
                 if (y < a || x > b) { el.style.display = 'none'; return; }
                 el.style.display = '';
+                // A symbol is a point: the middle of its year, no width.
+                if (el.hasAttribute('data-pt')) { el.style.left = ((Math.min(x, b - 1) + 0.5 - a) / span * 100).toFixed(2) + '%'; return; }
                 el.style.left = ((x - a) / span * 100).toFixed(2) + '%';
                 el.style.width = (Math.max(y - x, 0.5) / span * 100).toFixed(2) + '%';
             });
@@ -53,9 +58,16 @@ export function wireRodTimelines(root: Document | Element): void {
                 if (b.getAttribute('aria-pressed') === 'false') off.push(b.getAttribute('data-tl-k') || '');
             });
             if (off.length) tl.setAttribute('data-off', off.join(' ')); else tl.removeAttribute('data-off');
+            // The kinds of history: none chosen is "All"; else the kinds not chosen are left out.
+            const kinds = Array.prototype.slice.call(tl.querySelectorAll('[data-tl-hk]:not([data-tl-hk=""])')) as HTMLElement[];
+            const chosen = kinds.filter(b => b.getAttribute('aria-pressed') === 'true');
+            const hkOff = chosen.length ? kinds.filter(b => chosen.indexOf(b) < 0).map(b => b.getAttribute('data-tl-hk') || '') : [];
+            if (hkOff.length) tl.setAttribute('data-hk-off', hkOff.join(' ')); else tl.removeAttribute('data-hk-off');
+            const all = tl.querySelector('[data-tl-hk=""]');
+            if (all) all.setAttribute('aria-pressed', String(!chosen.length));
             groups.forEach(g => {
                 const rows = Array.prototype.slice.call(g.querySelectorAll('.sp-tl-row')) as HTMLElement[];
-                const shown = rows.some(x => off.indexOf(x.getAttribute('data-k') || '') < 0);
+                const shown = rows.some(x => off.indexOf(x.getAttribute('data-k') || '') < 0 && hkOff.indexOf(x.getAttribute('data-hk') || '') < 0);
                 g.classList.toggle('sp-tl-none', !shown);
             });
         };
@@ -64,7 +76,14 @@ export function wireRodTimelines(root: Document | Element): void {
             const c = t.closest ? t.closest('[data-tl-c]') : null;
             if (c) { century(c.getAttribute('data-tl-c') || ''); return; }
             const k = t.closest ? t.closest('[data-tl-k]') : null;
-            if (k) { k.setAttribute('aria-pressed', String(k.getAttribute('aria-pressed') === 'false')); filter(); }
+            if (k) { k.setAttribute('aria-pressed', String(k.getAttribute('aria-pressed') === 'false')); filter(); return; }
+            const hk = t.closest ? t.closest('[data-tl-hk]') : null;
+            if (hk) {
+                // "All" drops the chosen kinds; a kind joins or leaves them.
+                if (hk.getAttribute('data-tl-hk')) hk.setAttribute('aria-pressed', String(hk.getAttribute('aria-pressed') !== 'true'));
+                else Array.prototype.slice.call(tl.querySelectorAll('[data-tl-hk]')).forEach((b: HTMLElement) => { b.setAttribute('aria-pressed', 'false'); });
+                filter();
+            }
         });
         // Printing: the whole period, every century open; then back as it was.
         let was: boolean[] | null = null;

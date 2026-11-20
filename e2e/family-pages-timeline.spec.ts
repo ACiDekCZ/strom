@@ -2,8 +2,10 @@
  * A line's timeline (1102 §5): the saved file (the century segment zooms the
  * overview and opens its century, the chips filter the rows, without scripts
  * every century open and no controls, a phone without sideways scrolling,
- * the dark scheme's tokens, print without the controls) and the app's window
- * (the line page's link opens the timeline, the controls work, the dark theme).
+ * the dark scheme's tokens, print without the controls; 121 §9: the kinds of
+ * history filter rows, bands and symbols, History off hides their row, German
+ * at 390 and 1440 px without sideways scrolling) and the app's window (the
+ * line page's link opens the timeline, the controls work, the dark theme).
  */
 
 import { test, expect, Page, Locator } from '@playwright/test';
@@ -27,6 +29,19 @@ writeFileSync(file, buildPageSetHtml(set), 'utf-8');
 const url = pathToFileURL(file).href;
 const TL = 'casova-osa-lhotak-lopuchov';
 const ROD = set.bySlug.get(TL)!.crumbs[1].slug!;
+// The same file in German (the longest chips' texts).
+const setDe = buildPageSet(fx.data, { kind: 'tree' }, {
+    lang: 'de', privacy: 'full', now: TP_NOW, timelines: true, history: { payload: fx.history },
+}, { treeName: 'Rodokmen z Lopuchova' });
+const fileDe = join(dir, 'Stammbaum.html');
+writeFileSync(fileDe, buildPageSetHtml(setDe), 'utf-8');
+const urlDe = pathToFileURL(fileDe).href;
+const TL_DE = setDe.rodTimelineSlug.get(setDe.protectedTree.lineages.rodByPerson.get(fx.ids.vaclav)!)!;
+
+/** How many of the elements are on the screen. */
+async function visible(l: Locator): Promise<number> {
+    return l.evaluateAll(els => els.filter(e => getComputedStyle(e).display !== 'none' && (e as HTMLElement).offsetParent !== null).length);
+}
 
 /** Slugs of the sections on the screen. */
 async function shown(page: Page): Promise<string[]> {
@@ -66,6 +81,76 @@ test.describe('a line\'s timeline: the saved file', () => {
         // All: back to the whole period.
         await tl.locator('[data-tl-c=""]').click();
         expect(await openCenturies(tl)).toEqual(['19']);
+    });
+
+    test('the kinds of history (121 §9): a kind hides the others\' rows, bands and symbols; All brings them back; History off hides the row', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.goto(`${url}#${TL}`);
+        await expect.poll(() => shown(page)).toEqual([TL]);
+        const tl = page.locator(`#${TL} .sp-tl`);
+        // The whole period, every century open: each history row can be seen.
+        await tl.locator('[data-tl-c=""]').click();
+        await tl.locator('details.sp-tl-c').evaluateAll(els => els.forEach(e => { (e as HTMLDetailsElement).open = true; }));
+        const row = tl.locator('.sp-tl-hkrow');
+        await expect(row).toBeVisible();
+        await expect(row.locator('[data-tl-hk]')).toHaveText(['Vše', 'Válka', 'Epidemie', 'Jiné']);
+        await expect(row.locator('[data-tl-hk=""]')).toHaveAttribute('aria-pressed', 'true');
+        expect(await visible(tl.locator('.sp-tl-row--hist'))).toBe(4);
+        expect(await visible(tl.locator('.sp-tl-band'))).toBe(2);
+        expect(await visible(tl.locator('.sp-tl-bandsym'))).toBe(2);
+        expect(await visible(tl.locator('.sp-tl-locsym'))).toBe(2);
+        // War only: the epidemic and the other kind leave the list and the place's row; the war's bands stay.
+        await row.locator('[data-tl-hk="war"]').click();
+        await expect(row.locator('[data-tl-hk="war"]')).toHaveAttribute('aria-pressed', 'true');
+        await expect(row.locator('[data-tl-hk=""]')).toHaveAttribute('aria-pressed', 'false');
+        await expect(tl).toHaveAttribute('data-hk-off', 'epidemic other');
+        expect(await visible(tl.locator('.sp-tl-row--hist'))).toBe(2);
+        expect(await visible(tl.locator('.sp-tl-row--hist[data-hk="war"]'))).toBe(2);
+        expect(await visible(tl.locator('.sp-tl-band'))).toBe(2);
+        expect(await visible(tl.locator('.sp-tl-bandsym'))).toBe(2);
+        expect(await visible(tl.locator('.sp-tl-locsym'))).toBe(0);
+        // An epidemic joins: its symbol is back on the place's row.
+        await row.locator('[data-tl-hk="epidemic"]').click();
+        expect(await visible(tl.locator('.sp-tl-locsym[data-hk="epidemic"]'))).toBe(1);
+        expect(await visible(tl.locator('.sp-tl-locsym[data-hk="other"]'))).toBe(0);
+        // All: everything back, no kind chosen.
+        await row.locator('[data-tl-hk=""]').click();
+        await expect(row.locator('[data-tl-hk=""]')).toHaveAttribute('aria-pressed', 'true');
+        await expect(row.locator('[aria-pressed="true"]')).toHaveCount(1);
+        await expect(tl).not.toHaveAttribute('data-hk-off', /.*/);
+        expect(await visible(tl.locator('.sp-tl-row--hist'))).toBe(4);
+        expect(await visible(tl.locator('.sp-tl-locsym'))).toBe(2);
+        // History off: no row of kinds, no bands or symbols; on again: the row is back.
+        await tl.locator('[data-tl-k="hist"]').click();
+        await expect(row).toBeHidden();
+        expect(await visible(tl.locator('.sp-tl-bandsym, .sp-tl-locsym, .sp-tl-band'))).toBe(0);
+        await tl.locator('[data-tl-k="hist"]').click();
+        await expect(row).toBeVisible();
+        // The chosen chip: the dark frame of the app's options ("Linka"), no fill of its own.
+        const look = await tl.locator('[data-tl-k="birth"]').evaluate(e => {
+            const cs = getComputedStyle(e);
+            return { bg: cs.backgroundColor, shadow: cs.boxShadow, border: cs.borderTopColor, text: getComputedStyle(document.body).color };
+        });
+        expect(look.shadow).toContain('inset');
+        expect(look.border).toBe(look.text);
+    });
+
+    test('German at 390 and 1440 px (121 §9): the rows of chips wrap, no sideways scrolling', async ({ page }) => {
+        for (const [w, h] of [[390, 844], [1440, 900]] as const) {
+            await page.setViewportSize({ width: w, height: h });
+            await page.goto(`${urlDe}#${TL_DE}`);
+            await expect.poll(() => shown(page)).toEqual([TL_DE]);
+            const tl = page.locator(`#${TL_DE} .sp-tl`);
+            await expect(tl.locator('.sp-tl-hkrow')).toBeVisible();
+            await expect(tl.locator('.sp-tl-hkrow [data-tl-hk=""]')).toHaveText('Alle');
+            expect(await page.evaluate(() => document.documentElement.scrollWidth), `${w}×${h}`).toBeLessThanOrEqual(w);
+            // Each chip and each place symbol inside the page's width.
+            const right = await tl.locator('.sp-tl-chip, .sp-tl-locsym, .sp-tl-bandsym').evaluateAll(els => Math.max(...els.map(e => e.getBoundingClientRect().right)));
+            expect(right, `${w}`).toBeLessThanOrEqual(w);
+            // On a phone the place's symbol is 16 px.
+            if (w === 390) expect(await tl.locator('.sp-tl-locsym').first().evaluate(e => e.getBoundingClientRect().width)).toBe(16);
+            else expect(await tl.locator('.sp-tl-locsym').first().evaluate(e => e.getBoundingClientRect().width)).toBe(18);
+        }
     });
 
     test('without the script: every century open, no controls', async ({ browser }) => {
@@ -133,6 +218,8 @@ test.describe('a line\'s timeline: the window', () => {
         // Each chip: its kind's symbol, then its name.
         await expect(tl.locator('[data-tl-k]')).toHaveText([/^\*\s*Births$/, /^⚭\s*Marriages$/, /^†\s*Deaths$/, /^→\s*Moves$/]);
         await expect(tl.locator('[data-tl-k] .sp-tl-sym[aria-hidden="true"]')).toHaveCount(4);
+        // The chosen chip has the app's "Linka" frame (121 §9): the window's rules do not paint over it.
+        expect(await tl.locator('[data-tl-k="birth"]').evaluate(e => getComputedStyle(e).boxShadow)).toContain('inset');
         const centuries = await tl.locator('[data-tl-c]').count();
         expect(centuries).toBeGreaterThan(2);
         expect((await openCenturies(tl)).length).toBe(1);

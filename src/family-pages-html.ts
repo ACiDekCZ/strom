@@ -52,8 +52,10 @@ import { safeHttpUrl } from './validation.js';
 import { isPendingImageUrl } from './research-image-refs.js';
 import { imgGlyphHtml, imgStateAttr } from './ui/image-slot.js';
 import {
-    ROD_TIMELINE_CHIPS, ROD_TIMELINE_SYMBOLS, RodTimelineEvent, RodTimelineKind, buildRodTimeline, rodTimelineAxis, rodTimelineChip, rodTimelineMainCentury, rodTimelineTicks,
+    ROD_TIMELINE_CHIPS, ROD_TIMELINE_SYMBOLS, RodTimelineEvent, RodTimelineHistory, RodTimelineKind, buildRodTimeline, rodTimelineAxis, rodTimelineChip,
+    rodTimelineHistKinds, rodTimelineMainCentury, rodTimelineTicks,
 } from './rod-timeline.js';
+import { historyKindSvg } from './history-symbols.js';
 
 export interface PageSetHtmlOptions {
     /** The embedded @font-face rules (the app supplies personPageFontCss()); none = fallback fonts. */
@@ -1588,6 +1590,21 @@ function tlBarHtml(cls: string, from: number, to: number, a: number, b: number, 
     return `<span class="${cls}" data-f="${from}" data-t="${to}" style="left:${left}%;width:${width}%" title="${esc(title)}"></span>`;
 }
 
+/**
+ * A history symbol of the overview (121 §9): at the middle of its first year, moved by the script on a zoom as the
+ * bars are (`data-pt`: a point, no width); its kind in `data-hk` for the filter of kinds.
+ */
+function tlSymHtml(cls: string, h: RodTimelineHistory, a: number, b: number, title: string, size: number): string {
+    const x = Math.min(Math.max(h.from, a), b - 1) + 0.5;
+    const left = ((x - a) / (b - a) * 100).toFixed(2);
+    return `<span class="${cls}" data-hk="${h.kind}" data-f="${h.from}" data-t="${h.from + 1}" data-pt="" style="left:${left}%" title="${esc(title)}" aria-hidden="true">${historyKindSvg(h.kind, size)}</span>`;
+}
+
+/** Where a history row comes from, for its colour (121 §9): the region, the place's history, a research finding. */
+function tlScopeClass(h: RodTimelineHistory): string {
+    return h.scope === 'region' ? 'is-region' : h.scope === 'local' ? 'is-local' : 'is-place';
+}
+
 function tlTicksHtml(a: number, b: number): string {
     return rodTimelineTicks(a, b).map(y => `<span style="left:${((y - a) / (b - a) * 100).toFixed(2)}%">${y}</span>`).join('');
 }
@@ -1601,9 +1618,11 @@ function tlRowHtml(r: Render, ctx: BookCtx, e: RodTimelineEvent): string {
         const kind = r.S.history.kinds[h.kind] ?? h.kind;
         const years = h.to ? ` (${h.from}–${h.to})` : '';
         const lang = h.textLang && h.textLang !== r.set.options.lang ? ` lang="${esc(h.textLang)}"` : '';
-        const where = h.place ? ` <span class="sp-tl-pl">· ${esc(h.place)}</span>` : '';
-        return `<li class="sp-tl-row sp-tl-row--hist" data-k="hist"><span class="sp-tl-y">${e.year}</span>`
-            + `<div class="sp-tl-b"><span class="sp-tl-k">${esc(F.tlHist(kind))}</span><span class="sp-tl-t"><span${lang}>${esc(h.text)}</span>${esc(years)}${where}</span></div></li>`;
+        // After the text: the place, or the region when the line's history has two regions or more.
+        const at = h.place ?? h.region;
+        const where = at ? ` <span class="sp-tl-pl">· ${esc(at)}</span>` : '';
+        return `<li class="sp-tl-row sp-tl-row--hist ${tlScopeClass(h)}" data-k="hist" data-hk="${h.kind}"><span class="sp-tl-y">${e.year}</span>`
+            + `<div class="sp-tl-b"><span class="sp-tl-k">${historyKindSvg(h.kind, 12)}${esc(F.tlHist(kind))}</span><span class="sp-tl-t"><span${lang}>${esc(h.text)}</span>${esc(years)}${where}</span></div></li>`;
     }
     const who = e.personId ? personLinkHtml(r, ctx, e.personId) : '';
     const parts: string[] = [];
@@ -1658,13 +1677,22 @@ function rodTimelinePageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
     const kinds = ROD_TIMELINE_CHIPS.filter(k => k !== 'hist' || tl.history);
     const chips = `<div class="sp-tl-chips" role="group" aria-label="${esc(F.tlKindsLabel)}">`
         + kinds.map(k => {
-            // The kind's symbol (a dot for history); decorative, the chip's name is its text.
+            // The kind's symbol (history: the symbol of "other"); decorative, the chip's name is its text.
             const sym = ROD_TIMELINE_SYMBOLS[k];
-            const mark = sym ? `<span class="sp-tl-sym" aria-hidden="true">${sym}</span>` : '<span class="sp-tl-dot" aria-hidden="true"></span>';
-            return `<button type="button" class="sp-tl-chip" data-tl-k="${k}" aria-pressed="true">${mark}${esc(F.tlKinds[k])}</button>`;
+            const mark = sym ? `<span class="sp-tl-sym" aria-hidden="true">${sym}</span>` : historyKindSvg('other', 14);
+            return `<button type="button" class="sp-tl-chip sel-opt" data-tl-k="${k}" aria-pressed="true">${mark}${esc(F.tlKinds[k])}</button>`;
         }).join('')
         + `</div>`;
-    const controls = `<div class="sp-tl-ctl js-only">${seg}${chips}</div>`;
+    // The kinds of history on the page (121 §9), two or more: "All" and each kind with its symbol; the script's.
+    const histKinds = rodTimelineHistKinds(tl);
+    const capital = (t: string): string => t.charAt(0).toLocaleUpperCase(set.options.lang) + t.slice(1);
+    const histChips = histKinds.length > 1
+        ? `<div class="sp-tl-chips sp-tl-hkrow" role="group" aria-label="${esc(F.tlHistKindsLabel)}">`
+            + `<span class="sp-tl-chips-lab" aria-hidden="true">${esc(F.tlHistKindsLabel)}:</span>`
+            + `<button type="button" class="sp-tl-chip sel-opt" data-tl-hk="" aria-pressed="true">${esc(S.history.filterAll)}</button>`
+            + histKinds.map(k => `<button type="button" class="sp-tl-chip sel-opt" data-tl-hk="${k}" aria-pressed="false">${historyKindSvg(k, 14)}${esc(capital(S.history.kinds[k] ?? k))}</button>`).join('')
+            + `</div>` : '';
+    const controls = `<div class="sp-tl-ctl js-only">${seg}${chips}${histChips}</div>`;
 
     // The overview (§5.2): generations, places, history as vertical bands; no bars of single people.
     const ends: number[] = [];
@@ -1678,17 +1706,26 @@ function rodTimelinePageHtml(r: Render, page: SetPage, ctx: BookCtx): string {
         labels.push(`<span class="sp-tl-lab sp-tl-lab--gen">${roman(g.gen)}<span class="sp-tl-lab-n"> · ${g.count}</span></span>`);
         rows.push(`<span class="sp-tl-r">${tlBarHtml('sp-tl-bar sp-tl-bar--gen', g.from, g.to, a, b, `${roman(g.gen)} · ${yearSpan(g.from, g.to)}`)}</span>`);
     }
+    // History (121 §9): a place's own history on the place's row as a symbol in a frame of its origin's colour; the
+    // rest (the region's events, a place without a row) as vertical bands with the kind's symbol on top.
+    const rowOf = new Set(tl.places.map(p => p.name));
+    const onRow = (h: RodTimelineHistory): boolean => h.scope !== 'region' && !!h.place && rowOf.has(h.place);
+    const yearsOf = (h: RodTimelineHistory): string => h.to ? `${h.from}–${h.to}` : String(h.from);
     tl.places.forEach((p, i) => {
         const first = i === 0 ? ' sp-tl-first' : '';
         labels.push(`<span class="sp-tl-lab sp-tl-lab--pl${first}" title="${esc(p.name)}"><span class="sp-tl-pln">${esc(p.name)}</span></span>`);
-        rows.push(`<span class="sp-tl-r sp-tl-r--pl${first}">${tlBarHtml('sp-tl-bar sp-tl-bar--pl', p.from, p.to, a, b, `${p.name} · ${yearSpan(p.from, p.to)}`)}</span>`);
+        const syms = hist.filter(e => onRow(e.history!) && e.history!.place === p.name)
+            .map(e => tlSymHtml(`sp-tl-locsym ${tlScopeClass(e.history!)}`, e.history!, a, b, `${yearsOf(e.history!)} · ${e.history!.text}`, 11)).join('');
+        rows.push(`<span class="sp-tl-r sp-tl-r--pl${first}">${tlBarHtml('sp-tl-bar sp-tl-bar--pl', p.from, p.to, a, b, `${p.name} · ${yearSpan(p.from, p.to)}`)}${syms}</span>`);
     });
-    const bands = hist.map(e => {
+    const bands = hist.filter(e => !onRow(e.history!)).map(e => {
         const h = e.history!;
-        return tlBarHtml('sp-tl-band', h.from, (h.to ?? h.from) + 1, a, b, `${h.text} (${h.to ? `${h.from}–${h.to}` : h.from})`);
+        const title = `${h.text} (${yearsOf(h)})`;
+        return tlBarHtml('sp-tl-band', h.from, (h.to ?? h.from) + 1, a, b, title).replace('<span class="sp-tl-band"', `<span class="sp-tl-band" data-hk="${h.kind}"`)
+            + tlSymHtml('sp-tl-bandsym', h, a, b, title, 11);
     }).join('');
     const more = tl.morePlaces ? `<p class="sp-faint sp-more">${esc(F.morePlaces(tl.morePlaces))}</p>` : '';
-    const note = bands ? `<p class="sp-tl-note">${esc(F.tlHistNote)}</p>` : '';
+    const note = hist.length ? `<p class="sp-tl-note">${esc(F.tlHistNote)}</p>` : '';
     const overview = `<section class="sp-block sp-tl-over"><h2 class="sp-h2">${esc(F.tlOverview)}</h2>`
         + `<div class="sp-tl-chart"><div class="sp-tl-labs">${labels.join('')}</div>`
         + `<div class="sp-tl-plot">${bands}<span class="sp-tl-ticks" aria-hidden="true">${tlTicksHtml(a, b)}</span>${rows.join('')}</div></div>${more}${note}</section>`;
