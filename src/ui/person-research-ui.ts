@@ -168,6 +168,9 @@ export function researchFactLabel(fact: string): string {
     if (tag === 'NPFX') return strings.labels.titleBefore;
     if (tag === 'NSFX') return strings.labels.titleAfter;
     if (tag === 'SEX') return strings.labels.gender;
+    // A couple's facts (a family's citation, a wedding's conflict): the event's name, never its tag.
+    if (tag === 'MARR') return strings.table.evKind.marriage;
+    if (tag === 'DIV') return strings.table.evKind.divorce;
     const type = gedcomTagEventType(tag);
     return type ? strings.events.types[type] : tag;
 }

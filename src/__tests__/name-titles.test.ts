@@ -172,6 +172,17 @@ describe('a research conflict about a title', () => {
         expect(researchFactLabel('NSFX')).toBe('Titel nach dem Namen');
     });
 
+    it('names a couple\'s marriage and divorce by the event, never by its tag', () => {
+        setLanguage('en');
+        expect(researchFactLabel('MARR')).toBe('Marriage');
+        expect(researchFactLabel('div')).toBe('Divorce');
+        setLanguage('de');
+        expect(researchFactLabel('MARR')).toBe('Heirat');
+        expect(researchFactLabel('DIV')).toBe('Scheidung');
+        setLanguage('cs');
+        expect(researchFactLabel('MARR')).toBe('Sňatek');
+    });
+
     it('reads in words in the research\'s change lines and the overview\'s fact words', () => {
         expect(humanizeChange('+P0006 Jan Novák · E0006 NPFX Ing.', undefined, strings.research.changeWords))
             .toBe('New person: Jan Novák · title before the name Ing.');
