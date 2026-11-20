@@ -15,7 +15,7 @@ import {
     sourceRetractTaken, materialTreesTaken, retractStart, retractListed, retractChanged, retractExpired, retractSending,
     retractNotSent, retractFailed, retractCanGo, deletedSourcesOf, withDeletedSource, withoutDeletedSources,
     rememberDeletedSource, forgetDeletedSources, SOURCE_RETRACT_FEATURE, MATERIAL_TREES_FEATURE,
-    conflictKeepOfferedIn, conflictKeepOffered, conflictKeepOutcome,
+    conflictKeepOfferedIn, conflictKeepOffered, conflictKeepOutcome, retractTaskTitles,
     type SourceImpact, type SourceRetractEnv,
 } from '../source-retract.js';
 import { DataManager } from '../data.js';
@@ -229,6 +229,18 @@ describe('what the dialog shows (retractSummary)', () => {
         expect(s.cites).toEqual([]);
         expect(s.bare).toBe(0);
         expect(s.lowered).toBe(0);
+    });
+});
+
+describe('the names of tasks (retractTaskTitles)', () => {
+    it('from the queue and the waiting list, the first that names a task wins; blank names left out', () => {
+        const titles = retractTaskTitles([
+            null,
+            { queue: [{ id: 'T0012', text: 'Narození Jana 1865' }, { id: 'T0014', text: '  ' }], waiting: [{ id: 'T0013', what: 'Sčítání 1880' }] },
+            { queue: [{ id: 'T0012', text: 'older name' }, { id: 'T0014', text: 'Pohřeb Josefa' }] },
+        ]);
+        expect([...titles]).toEqual([['T0012', 'Narození Jana 1865'], ['T0013', 'Sčítání 1880'], ['T0014', 'Pohřeb Josefa']]);
+        expect(retractTaskTitles([]).size).toBe(0);
     });
 });
 

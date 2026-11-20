@@ -31338,6 +31338,8 @@
         .mv-use-files { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12.5px; overflow-wrap: anywhere; }
         .mdlg-changed { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--warning-text); text-wrap: pretty; }
         .mdlg-changed[hidden] { display: none; }
+        /* Its Undo is reached over the Sources window it was deleted from (an overlay of 200). */
+        .toast[data-kind="source-retract"] { z-index: 270; }
         @media (min-width: 641px) and (max-width: 1024px) {
             .mdlg--remove.mdlg--source { width: 560px; }
         }

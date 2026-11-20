@@ -19,7 +19,7 @@ import type { FactStatus } from '../types.js';
 import { researchSourceRef } from '../research-link.js';
 import {
     restoreSource, retractCanGo, retractChanged, retractExpired, retractFailed, retractListed, retractNotSent,
-    retractSending, retractSource, retractSourceDry, retractStart, retractSummary, sourceRetractOffered,
+    retractSending, retractSource, retractSourceDry, retractStart, retractSummary, retractTaskTitles, sourceRetractOffered,
     type RestoreDone, type RetractError, type RetractResult, type RetractState, type RetractSummary,
 } from '../source-retract.js';
 import type { BridgeOptions } from '../materials.js';
@@ -27,6 +27,8 @@ import type { ToastWorkEnd } from './toast.js';
 import { factStatusHtml } from './fact-status.js';
 import { researchConflictTitle, researchFactLabel } from './person-research-ui.js';
 import { button, materialDialog } from './material-actions-ui.js';
+import { liveSession } from './research-ui.js';
+import { lastBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 
 const TOAST_MS = 8000;
@@ -358,10 +360,14 @@ export const sourceRetractMethods = uiModule({
             row('conflicts', R.rows.conflicts, items(list, 0));
         }
         if (sum.tasks.length) {
+            // The task's name where the research said it (its queue, its waiting list); else its id.
+            const titles = this.sourceRetractTaskTitles();
             const list = sum.tasks.map(t => {
                 const said = [t.becomes === 'dropped' ? R.taskDropped : R.taskNarrowed];
                 if (t.state === 'doing') said.push(R.taskDoing);
-                return item(line(h('span', '', t.id), h('span', 'is-faint', `· ${R.taskState[t.state] ?? t.state}`)),
+                const name = h('span', '', titles.get(t.id) ?? t.id);
+                name.dataset.task = t.id;
+                return item(line(name, h('span', 'is-faint', `· ${R.taskState[t.state] ?? t.state}`)),
                     h('span', 'mv-use-sub', said.join(' · ')));
             });
             list.push(h('span', 'mv-use-sub', R.tasksBack));
@@ -383,6 +389,16 @@ export const sourceRetractMethods = uiModule({
             out.push(sec);
         }
         return out;
+    },
+
+    /** The names of the research's tasks this page knows (the followed research's queue and waiting list), by id. */
+    sourceRetractTaskTitles(): Map<string, string> {
+        const rid = this.researchSyncLink()?.link.id ?? '';
+        const s = liveSession();
+        return retractTaskTitles([
+            s && rid && s.researchId.toLowerCase() === rid.toLowerCase() ? s : null,
+            rid ? this.researchStatusOf(rid) ?? lastBridgeStatus(rid) : null,
+        ]);
     },
 
     /**

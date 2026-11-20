@@ -188,6 +188,11 @@ export interface FakeBridge {
     /** Splitting older locations (spec 075 §5): `GET/POST /sources/split`, `/sources/split/undo` with `sources.split` in `features`. */
     sourcesSplit?: FakeSourcesSplit;
     /**
+     * Deleting a source in the research (spec 117): `POST /source/retract` (dry run and confirmed deletion) and
+     * `POST /source/restore` with `source.retract` in `features` (without it: 404 without a body, a bridge without the route).
+     */
+    sourceRetract?: FakeSourceRetract;
+    /**
      * "Research on" (spec 064): `/status.live` and `POST /live {"idleMinutes"}` with `live.idle` in `features`,
      * `POST /live {"do": "stop"}` with `live.stop` (202, then the bridge is down).
      */
@@ -472,6 +477,107 @@ function serveSourcesConfirm(b: FakeBridge, method: string, url: URL, posted: st
     const tags = [`1 _STROM_READ ${s.read}`, ...(s.conf ? [`2 _CONF ${s.conf}`] : []), `2 _TXT ${s.txt}`].join('\n');
     b.treeGed = b.treeGed.replace(new RegExp(`(0 @${id}@ SOUR[\\s\\S]*?)1 _STROM_READ \\S+(?:\\n2 _(?:CONF|TXT) \\S+)*`), `$1${tags}`);
     return { status: 200, body: { ...said(), head, parent } };
+}
+
+/** A queued answer of `/source/*` (instead of the research's own): for the next dry run, deletion or restore. */
+export interface FakeSourceRetractReply {
+    on: 'dry' | 'retract' | 'restore';
+    status: number;
+    body?: unknown;
+    /** No answer at all (the connection refused). */
+    abort?: boolean;
+}
+
+/**
+ * The research's side of deleting a source (ZADANI_VYZKUM smazani-pramene, contract U3): its list of impacts
+ * per source (`impacts`, the bridge's raw JSON), what was asked (`asks`), answers queued instead (`replies`),
+ * an answer held until released (`hold`). A confirmed deletion takes the source's record and its citations
+ * out of the tree's file and moves the head; Undo puts the file as it was back (a new head).
+ */
+export interface FakeSourceRetract {
+    impacts: Record<string, Record<string, unknown>>;
+    asks: { on: 'dry' | 'retract' | 'restore'; body: Record<string, unknown> }[];
+    replies: FakeSourceRetractReply[];
+    hold?: Promise<void> | null;
+    /** The confirmations given (the last one of each preview holds). */
+    confirms?: string[];
+    /** The tree's file before each deletion, by the source. */
+    before?: Record<string, string>;
+    /** Undo's `skipped` (default: none). */
+    skipped?: unknown[];
+}
+
+export function fakeSourceRetract(init: Partial<FakeSourceRetract> = {}): FakeSourceRetract {
+    return { impacts: {}, asks: [], replies: [], ...init };
+}
+
+/** The tree's file without a source: its record and every citation of it (with the citation's own lines). */
+export function gedWithoutSource(ged: string, xref: string): string {
+    const out: string[] = [];
+    let skip = -1;
+    for (const line of ged.split('\n')) {
+        const level = Number(line.split(' ', 1)[0]);
+        if (skip >= 0 && level > skip) continue;
+        skip = -1;
+        if (line === `0 @${xref}@ SOUR` || new RegExp(`^\\d+ SOUR @${xref}@$`).test(line)) {
+            skip = level;
+            continue;
+        }
+        out.push(line);
+    }
+    return out.join('\n');
+}
+
+/** `POST /source/retract` and `/source/restore` as the research answers them (null: not one of them). */
+async function serveSourceRetract(b: FakeBridge, method: string, url: URL, posted: string | null): Promise<{ status: number; body: unknown; abort?: boolean } | null> {
+    const sr = b.sourceRetract;
+    const rest = url.pathname.replace(/^\/[^/]+/, '');
+    if (rest !== '/source/retract' && rest !== '/source/restore') return null;
+    if (!sr || method !== 'POST' || !(b.features ?? []).includes('source.retract')) return { status: 404, body: '' };
+    let body: Record<string, unknown> = {};
+    try { body = JSON.parse(posted ?? '{}'); } catch { /* keep empty */ }
+    const on = rest === '/source/restore' ? 'restore' : body.dryRun === true ? 'dry' : 'retract';
+    sr.asks.push({ on, body });
+    if (sr.hold) await sr.hold;
+    const at = sr.replies.findIndex(r => r.on === on);
+    if (at >= 0) {
+        const reply = sr.replies.splice(at, 1)[0];
+        return { status: reply.status, body: reply.body ?? {}, ...(reply.abort ? { abort: true } : {}) };
+    }
+    const ids = Array.isArray(body.sources) ? body.sources.map(String) : [];
+    if (!ids.length || ids.some(id => !/^S\d+$/.test(id))) return { status: 400, body: { error: 'Bad request.', code: 'source.body' } };
+    const xrefOf = (id: string) => new RegExp(`0 @([^@]+)@ SOUR\\n(?:[1-9].*\\n)*?1 REFN ${id}\\b`).exec(b.treeGed)?.[1] ?? null;
+    if (on === 'restore') {
+        const before = ids.map(id => sr.before?.[id]).find(Boolean);
+        if (!before) return { status: 409, body: { error: 'Not retracted.', code: 'source.notRetracted', params: { id: ids[0] } } };
+        for (const id of ids) delete sr.before![id];
+        const parent = b.head;
+        b.treeGed = before;
+        const head = moveHead(b);
+        return { status: 200, body: { restored: ids, citations: 3, skipped: sr.skipped ?? [], head, parent } };
+    }
+    const missing = ids.find(id => !xrefOf(id));
+    if (missing) {
+        return sr.before?.[missing]
+            ? { status: 409, body: { error: 'Already retracted.', code: 'source.retracted', params: { id: missing } } }
+            : { status: 404, body: { error: 'No such source.', code: 'source.unknown', params: { id: missing } } };
+    }
+    const impacts = ids.map(id => sr.impacts[id] ?? { id, title: id, counts: {} });
+    if (on === 'dry') {
+        const confirm = `c${(sr.confirms ??= []).length + 1}-${ids.join('.')}`;
+        sr.confirms.push(confirm);
+        return { status: 200, body: { dryRun: true, sources: ids, impacts, confirm } };
+    }
+    if (typeof body.confirm !== 'string' || body.confirm !== sr.confirms?.[sr.confirms.length - 1]) {
+        return { status: 400, body: { error: 'The confirmation does not hold.', code: 'source.body' } };
+    }
+    const parent = b.head;
+    for (const id of ids) {
+        (sr.before ??= {})[id] = b.treeGed;
+        b.treeGed = gedWithoutSource(b.treeGed, xrefOf(id)!);
+    }
+    const head = moveHead(b);
+    return { status: 200, body: { sources: ids, retracted: ids, impacts, head, parent } };
 }
 
 /** The research's split of older locations (spec 075 §5, ZADANI_VYZKUM citace-pole, Odpověď výzkumu D). */
@@ -2026,6 +2132,11 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         if (hyp) return json(hyp.status, hyp.body);
         const conf = serveSourcesConfirm(b, method, url, route.request().postData());
         if (conf) return json(conf.status, conf.body);
+        const retract = await serveSourceRetract(b, method, url, route.request().postData());
+        if (retract) {
+            if (retract.abort) return route.abort('connectionrefused');
+            return retract.body === '' ? route.fulfill({ status: retract.status, headers: cors, body: '' }) : json(retract.status, retract.body);
+        }
         const split = await serveSourcesSplit(b, method, url, route.request().postData());
         if (split) return json(split.status, split.body);
         const qual = serveQuality(b, method, url, route.request().postData());

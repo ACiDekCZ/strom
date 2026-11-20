@@ -487,6 +487,31 @@ export function retractSummary(impact: SourceImpact, data: Pick<StromData, 'pers
     };
 }
 
+/** What the research says of its tasks somewhere the app reads (its queue, its waiting list): their names by id. */
+export interface RetractTaskSource {
+    queue?: readonly { id: string; text: string }[];
+    waiting?: readonly { id: string; what: string }[];
+}
+
+/**
+ * The names of tasks the app knows (the research's queue and waiting list,
+ * the first source that names a task wins); a task none of them has keeps
+ * its id in the list (§2 "Tasks").
+ */
+export function retractTaskTitles(sources: readonly (RetractTaskSource | null | undefined)[]): Map<string, string> {
+    const out = new Map<string, string>();
+    const put = (id: string, name: string) => {
+        const t = name.trim();
+        if (id && t && !out.has(id)) out.set(id, t);
+    };
+    for (const s of sources) {
+        if (!s) continue;
+        for (const q of s.queue ?? []) put(q.id, q.text);
+        for (const w of s.waiting ?? []) put(w.id, w.what);
+    }
+    return out;
+}
+
 // ==================== THE DIALOG'S STATE ====================
 
 /**
