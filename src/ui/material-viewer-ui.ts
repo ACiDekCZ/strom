@@ -598,6 +598,11 @@ export const materialViewerMethods = uiModule({
             return;
         }
 
+        // A family tree file (spec 117 §5): no preview, its letters and its kind.
+        if (item.tree) {
+            slots.card(viewerCard(letters, m.treeFile, []));
+            return;
+        }
         // Only in the tree: its own copy.
         if (!inArchive) {
             if (attImage) slots.image(attImage, null, fallback);
@@ -845,11 +850,12 @@ export const materialViewerMethods = uiModule({
         };
         // Link to… (spec 102 §4): the tree's file in the tree; material outside it needs the bridge (Q2).
         const inTree = !!item.attachment?.places?.length;
-        const canAttach = inTree ? DataManager.canEditMedia(item.attachment!.id) : inArchive && !!ctx?.caps.assign && !item.removedId && !DataManager.isReadOnly();
+        // A family tree file (spec 117 §5): Delete permanently… is its only action.
+        const canAttach = item.tree ? false : inTree ? DataManager.canEditMedia(item.attachment!.id) : inArchive && !!ctx?.caps.assign && !item.removedId && !DataManager.isReadOnly();
         if (canAttach) action(m.attach, () => this.openAttachDialog([item], { personId: this.materialContextPerson() }), { primary: true, write: !inTree, id: 'attach' });
         // Create a source from this file… (spec 102 §5): the second action, the same conditions as Link to….
         if (canAttach && this.canEditSources()) action(m.makeSource, () => void this.makeSourceFromMaterial(item, { personId: this.materialContextPerson() }), { write: !inTree, id: 'makeSource' });
-        if (inArchive) {
+        if (inArchive && !item.tree) {
             if (item.removedId && item.hidden) {
                 // Taken out of the tree: back with its places (the tree's own write).
                 if (!DataManager.isReadOnly()) action(m.restore, () => this.restoreRemovedMaterials([item]), { id: 'restore' });
@@ -880,7 +886,8 @@ export const materialViewerMethods = uiModule({
         }
         // Delete permanently… (spec 102 §9): the last action, behind `material.delete`, never in a tree that is read only.
         if (inArchive && ctx?.caps.delete && !DataManager.isReadOnly()) {
-            action(m.del.forever, () => void this.openDeleteDialog([item], { leave: () => closeImageViewer(), ctx: { where: 'viewer' } }), { danger: true, write: true, id: 'delete' });
+            const leave = { leave: () => closeImageViewer(), ctx: { where: 'viewer' as const } };
+            action(m.del.forever, () => void (item.tree ? this.openTreeFileDelete(item, leave) : this.openDeleteDialog([item], leave)), { danger: true, write: true, id: 'delete' });
         }
         if ((writes || edit === 'off') && !up) foot.appendChild(h('p', 'mv-off', m.actionsWhenRunning));
         if (actions.childElementCount) foot.appendChild(actions);

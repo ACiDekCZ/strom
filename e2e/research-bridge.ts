@@ -1465,7 +1465,8 @@ export interface FakeMaterialFile {
     source?: string;
     here?: boolean;
     title?: string;
-    kind?: 'photo' | 'document' | 'record' | 'other';
+    /** `tree`: a family tree file (spec 117 §5), listed only to `trees=1` behind `material.trees`. */
+    kind?: 'photo' | 'document' | 'record' | 'other' | 'tree';
     date?: string;
     hidden?: { at?: string; by?: string; reason?: 'unrelated' | 'duplicate' };
     /** Where the research uses it (`material.uses`); `of`: the sources it is the file of (`material.sourceOf`). */
@@ -1844,11 +1845,15 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         const person = q.get('person');
         const batch = q.get('batch');
         const filesParam = q.get('files');
+        const treesParam = q.get('trees');
         if ((person !== null && !PERSON_REF.test(person)) || (batch !== null && !batch.trim())
-            || (filesParam !== null && filesParam !== '0' && filesParam !== '1')) {
+            || (filesParam !== null && filesParam !== '0' && filesParam !== '1')
+            || (treesParam !== null && treesParam !== '0' && treesParam !== '1')) {
             return refusal(400, 'material.query');
         }
-        let files = m.files;
+        // Family tree files (spec 117 §5) only to `trees=1` of a research with `material.trees`.
+        const trees = treesParam === '1' && features.includes('material.trees');
+        let files = trees ? m.files : m.files.filter(f => f.kind !== 'tree');
         if (person) files = files.filter(f => concerns(f, person));
         if (batch) files = files.filter(f => f.batch === batch);
         const batches = m.batches
@@ -1881,8 +1886,12 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         const files = (ids as string[]).map(id => m.files.find(f => f.id === id));
         const missing = (ids as string[]).find((_, i) => !files[i]);
         if (missing) return refusal(404, 'material.file', { id: missing });
+        // A family tree file a live source was made of (spec 117 §7): that source in `blockedBy`, deleted only with it.
+        const liveOf = (f: FakeMaterialFile) => f.kind === 'tree'
+            ? (f.uses?.of ?? []).filter(o => o.via === 'input' && typeof o.source === 'string').map(o => o.source as string) : [];
         const impacts = () => (files as FakeMaterialFile[]).map(f => ({
             id: f.id, name: f.name, sha: f.sha, sources: [], excerpts: 0, people: f.persons, links: 0, tasks: [], bytes: 'deleted', sameAs: [],
+            ...(liveOf(f).length ? { blockedBy: liveOf(f) } : {}),
             ...(m.deleteImpacts?.[f.id] ?? {}),
         }));
         const signed = (deleteConfirms.get(b) ?? new Map<string, string>());
@@ -1902,6 +1911,11 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         const list = impacts();
         if (JSON.stringify((JSON.parse(was) as { list: unknown }).list) !== JSON.stringify(list)) {
             return { status: 409, body: { error: 'changed', code: 'material.delete-changed', text: 'changed', impacts: list } };
+        }
+        const retract = Array.isArray(body.retractSources) ? body.retractSources as string[] : [];
+        const live = [...new Set((files as FakeMaterialFile[]).flatMap(liveOf))].filter(x => !retract.includes(x));
+        if (live.length) {
+            return { status: 409, body: { error: 'source-live', code: 'material.source-live', text: 'source-live', params: { sources: live.join(',') }, sources: live } };
         }
         signed.delete(body.confirm as string);
         m.files = m.files.filter(f => !(ids as string[]).includes(f.id));

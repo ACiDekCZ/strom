@@ -87,7 +87,7 @@ describe('texts (§11)', () => {
         expect(S.strings.sources.retract.lowered(3)).toBe('3 údaje budou méně jisté');
         expect(S.strings.sources.retract.more(5)).toBe('a 5 dalších');
         setLanguage('de');
-        expect(S.strings.sources.retract.counts(34, 16)).toBe('Sie wird 34-mal bei Angaben und in 16 Erzählungen zitiert.');
+        expect(S.strings.sources.retract.counts(34, 16)).toBe('Die Quelle wird 34-mal bei Angaben und in 16 Erzählungen zitiert.');
         setLanguage('pl');
         expect(S.strings.sources.retract.bare(9)).toBe('9 danych zostanie bez źródła. Dane pozostaną, tylko bez cytowania.');
         expect(S.strings.sources.retract.lowered(3)).toBe('3 dane staną się mniej pewne');

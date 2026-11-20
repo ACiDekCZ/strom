@@ -20,11 +20,11 @@ import {
 } from '../materials.js';
 import {
     deletableFiles, deleteCanGo, deleteChanged, deleteListed, deleteStart, deleteSummary, deleteTicked, deleteWarns,
-    type DeleteState,
+    treeFileSource, type DeleteState,
 } from '../material-delete.js';
 import { button, materialDialog } from './material-actions-ui.js';
 import { previewEl } from './material-sort-ui.js';
-import type { MaterialActionCtx } from './materials-ui.js';
+import { materialTileLetters, type MaterialActionCtx } from './materials-ui.js';
 import { uiModule } from './module.js';
 
 const TOAST_MS = 8000;
@@ -42,6 +42,12 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
     return el;
 }
 
+/** How Delete permanently… was asked: `leave` once the files are gone, `ctx` where (and whether the selection) it came from. */
+export interface DeleteDialogOpts {
+    leave?: () => void;
+    ctx?: MaterialActionCtx;
+}
+
 /** Does deleting touch the tree (its places, its sources): the research's next version is then loaded, not taken as its own. */
 function touchesTree(impacts: readonly DeleteImpact[]): boolean {
     return impacts.some(i => i.links > 0 || i.sources.length > 0);
@@ -55,10 +61,34 @@ export const materialDeleteMethods = uiModule({
     },
 
     /**
+     * Delete permanently… of one family tree file (spec 117 §6, §7): a file a live source was
+     * made of goes to the two-part dialog (the source first, then the file), any other to the
+     * dialog of every file (without "Only hide", its sentence of the research's archive alone).
+     */
+    openTreeFileDelete(item: MaterialItem, opts: DeleteDialogOpts = {}): Promise<boolean> {
+        const source = treeFileSource(item);
+        if (source) return this.openTreeFileDeleteDialog(item, source.source, opts);
+        return this.openDeleteDialog([item], opts);
+    },
+
+    /**
+     * The two-part dialog "first the source, then the file" (spec 117 §7): the file `item`
+     * and the live source `sourceRef` (S…) made of it, deleted in one write
+     * (`retractSources`). Until it is drawn, today's dialog: its dry run names the source in
+     * `blockedBy`, and a confirmation without it is refused (409 `material.source-live`).
+     */
+    openTreeFileDeleteDialog(item: MaterialItem, _sourceRef: string, opts: DeleteDialogOpts = {}): Promise<boolean> {
+        return this.openDeleteDialog([item], opts);
+    },
+
+    /**
      * The dialog of "Delete permanently…" (spec 102 §9). `leave`: called once
      * the files are deleted (the viewer has nothing left to show). True: deleted.
+     * Only family tree files (spec 117 §6): the extension's letters in the head
+     * instead of a preview, the sentences of a file only the research keeps, and
+     * no "Only hide" (a family tree file cannot be hidden).
      */
-    async openDeleteDialog(items: MaterialItem[], opts: { leave?: () => void; ctx?: MaterialActionCtx } = {}): Promise<boolean> {
+    async openDeleteDialog(items: MaterialItem[], opts: DeleteDialogOpts = {}): Promise<boolean> {
         const m = strings.materials;
         const d = m.del;
         const mc = this.materialsContext();
@@ -72,6 +102,7 @@ export const materialDeleteMethods = uiModule({
         const ids = files.map(i => i.file!.id);
         const n = files.length;
         const one = n === 1 ? files[0] : null;
+        const trees = files.every(i => i.tree);
         const batches = new Set(files.map(i => i.batch?.name ?? ''));
         const batchName = batches.size === 1 ? files[0].batch?.name ?? '' : '';
         const sub = one ? [one.name, batchName].filter(Boolean).join(' · ') : batchName || undefined;
@@ -79,8 +110,21 @@ export const materialDeleteMethods = uiModule({
         dialog.box.classList.add('mdlg--delete');
         dialog.box.dataset.delete = '';
 
+        // One family tree file: the extension's letters in the head (no preview), its name in the file's type.
+        if (one && trees) {
+            const headEl = dialog.box.querySelector<HTMLElement>('.mdlg-head')!;
+            const type = h('span', 'mdlg-attach-type', materialTileLetters(one));
+            type.setAttribute('aria-hidden', 'true');
+            headEl.prepend(type);
+            headEl.classList.add('has-thumb');
+            const subEl = headEl.querySelector<HTMLElement>('.mdlg-sub');
+            if (subEl) {
+                subEl.replaceChildren(h('span', 'mdlg-sub-file', one.name));
+                if (batchName) subEl.append(` · ${batchName}`);
+            }
+        }
         // One file: its thumbnail in the head; several: the first few and "and N more".
-        if (one?.file?.sha) {
+        else if (one?.file?.sha) {
             const headEl = dialog.box.querySelector<HTMLElement>('.mdlg-head')!;
             void getCachedThumb(mc.treeId, one.file.sha, 256).then(blob => {
                 if (!blob || !headEl.isConnected) return;
@@ -108,13 +152,14 @@ export const materialDeleteMethods = uiModule({
         note.setAttribute('role', 'status');
         const list = h('div', 'mdlg-delete-list');
         list.setAttribute('aria-live', 'polite');
-        const text = h('p', 'mdlg-text', mc.agent ? d.text(n) : d.textArchive(n));
+        // A family tree file has no places in the tree: only the research's archive loses it.
+        const text = h('p', 'mdlg-text', trees ? (n === 1 ? d.textTree : d.textTreeN) : mc.agent ? d.text(n) : d.textArchive(n));
         const check = h('label', 'mdlg-check');
         const box = h('input');
         box.type = 'checkbox';
         box.name = 'mdlg-delete-understand';
         const checkText = h('span', 'mdlg-check-text');
-        checkText.append(h('span', '', d.understand), h('span', 'mdlg-check-hint', mc.agent ? d.understandHint(n) : d.understandHintArchive(n)));
+        checkText.append(h('span', '', d.understand), h('span', 'mdlg-check-hint', mc.agent || trees ? d.understandHint(n) : d.understandHintArchive(n)));
         check.append(box, checkText);
         dialog.body.append(note, list, text, check);
 
@@ -129,7 +174,7 @@ export const materialDeleteMethods = uiModule({
             list.replaceChildren();
             if (state.phase === 'loading' && !state.impacts.length) list.appendChild(h('p', 'mdlg-note', d.loading(n)));
             else if (state.phase === 'failed' && !state.impacts.length) list.appendChild(h('p', 'mdlg-note', d.failed));
-            else list.append(...this.materialDeleteList(state.impacts, n));
+            else list.append(...this.materialDeleteList(state.impacts, n, { trees }));
             box.checked = state.understood;
             box.disabled = state.phase !== 'ready' || !state.impacts.length;
             go.disabled = !deleteCanGo(state);
@@ -195,7 +240,8 @@ export const materialDeleteMethods = uiModule({
             this.materialActionDone(opts.ctx ?? {});
         };
 
-        const hideable = files.filter(i => !i.hidden && !i.attachment?.places?.length);
+        // A family tree file cannot be hidden (spec 117 §6): no "Only hide" for it.
+        const hideable = files.filter(i => !i.tree && !i.hidden && !i.attachment?.places?.length);
         const cancel = button(strings.buttons.cancel, '', () => dialog.close());
         const go = button(d.go(n), 'is-danger', () => void send());
         go.disabled = true;
@@ -224,8 +270,11 @@ export const materialDeleteMethods = uiModule({
         });
     },
 
-    /** The list of what refers to the files: the warning, "What refers to the file" and its rows, or none. */
-    materialDeleteList(impacts: readonly DeleteImpact[], n: number): HTMLElement[] {
+    /**
+     * The list of what refers to the files: the warning, "What refers to the file" and its rows, or none
+     * (`trees`: only family tree files, whose "none" says no source was made of them, spec 117 §6).
+     */
+    materialDeleteList(impacts: readonly DeleteImpact[], n: number, opts: { trees?: boolean } = {}): HTMLElement[] {
         const d = strings.materials.del;
         const s = deleteSummary(impacts);
         const out: HTMLElement[] = [];
@@ -287,7 +336,7 @@ export const materialDeleteMethods = uiModule({
             sec.append(head, grid);
             out.push(sec);
         } else if (impacts.length) {
-            out.push(h('p', 'mdlg-note', d.noRefs(n)));
+            out.push(h('p', 'mdlg-note', opts.trees && n === 1 ? d.noRefsTree : d.noRefs(n)));
         }
         if (s.kept) {
             const kept = h('p', 'mdlg-note', d.kept(s.kept, s.keptOther));

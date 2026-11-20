@@ -30326,6 +30326,9 @@
         }
         .mw-tile-persons, .mw-li-persons { font-size: 11.5px; line-height: 15px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mw-tile-persons.is-none, .mw-li-persons.is-none { color: var(--text-faint); font-style: italic; }
+        /* A family tree file (spec 117 §5): its kind and size instead of people, quiet; in a list row only on a phone. */
+        .mw-tile-persons.is-tree { color: var(--text-faint); }
+        .mw-li-persons .mw-li-treeline { display: none; }
         .materials-window .mw-restore { align-self: flex-start; max-width: 100%; font-size: 12px; padding: 2px 0; white-space: normal; text-align: left; overflow-wrap: anywhere; }
         .materials-window .mw-restore[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
         .mw-li, .mw-lh {
@@ -30521,6 +30524,7 @@
             .mw-li, #materials-modal[data-model="archive"] .mw-li { grid-template-columns: auto 40px minmax(0, 1fr) auto; }
             .mw-li-source { display: none; }
             .mw-li-persons .mw-li-srctag { display: inline-block; font-size: 10.5px; padding: 0 5px; }
+            .mw-li-persons .mw-li-treeline { display: inline; font-family: var(--font-sans); color: var(--text-faint); }
             .mw-li-date { grid-column: 4; grid-row: 1 / span 2; }
             .mw-lhead { display: none; }
             .mw-bulk { padding-left: 16px; padding-right: 16px; }
@@ -30925,6 +30929,7 @@
         @media (hover: hover) { .mv-use-x:hover { background: var(--hover-bg); color: var(--text); } }
         .mv-uses-more { align-self: flex-start; font-size: 12.5px; padding: 0; }
         .mv-uses-none { margin: 0; font-size: 13px; color: var(--text-light); }
+        .mv-uses-treeof { margin: 0; font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
         .mv-uses-archive { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
         .mv-uses-persons { display: flex; flex-direction: column; gap: 6px; }
         .mv-uses-arch { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); text-wrap: pretty; }
@@ -31034,8 +31039,15 @@
         .mdlg--attach { width: 500px; }
         .mdlg--remove { width: 500px; }
         .mdlg-head.has-thumb { display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 12px; align-items: center; }
-        .mdlg-head.has-thumb > :not(.mdlg-attach-thumb) { grid-column: 2; }
+        .mdlg-head.has-thumb > :not(.mdlg-attach-thumb):not(.mdlg-attach-type) { grid-column: 2; }
         .mdlg-attach-thumb { grid-row: 1 / span 2; width: 36px; height: 36px; object-fit: cover; border-radius: var(--r-sm); background: var(--surface-2); }
+        /* A file without a preview (a family tree file, spec 117 §6): its extension's letters like a Materials tile. */
+        .mdlg-attach-type {
+            grid-row: 1 / span 2; width: 36px; height: 36px; box-sizing: border-box; border-radius: var(--r-sm); background: var(--surface-2);
+            border: 1px solid var(--border); display: flex; align-items: center; justify-content: center;
+            font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--text-light);
+        }
+        .mdlg-sub-file { font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; overflow-wrap: anywhere; }
         .mdlg-seg { align-self: flex-start; max-width: 100%; }
         .mdlg-seg .sel-opt { padding: 0 14px; }
         .mdlg-attach-pane { display: flex; flex-direction: column; gap: 8px; min-height: 120px; }

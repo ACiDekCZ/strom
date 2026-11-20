@@ -14,7 +14,7 @@ import {
 } from '../materials.js';
 import { selectionDeletable, treeFileSource, withoutTreeFiles, deleteBlockedBy, deleteStart, deleteListed, deleteTicked, deleteBothCanGo, deleteChanged } from '../material-delete.js';
 import { sortable, sortNeedy } from '../material-sort.js';
-import { itemKindFilter } from '../materials-overview.js';
+import { itemKindFilter, overviewItems } from '../materials-overview.js';
 
 const BASE = 'http://127.0.0.1:5998/0123456789abcdef0123456789abcdef';
 const sha = (n: number) => n.toString(16).padStart(64, '0');
@@ -78,6 +78,21 @@ describe('a family tree file', () => {
         expect(treeFileSource(bare)).toBeNull();
         expect(selectionDeletable([withSource])).toEqual([withSource]);
         expect(selectionDeletable([withSource, bare])).toEqual([bare]);
+    });
+});
+
+describe('a family tree file in the Materials window (§5)', () => {
+    it('is never a place in the tree, though its source is: "Used: nowhere", its source on the item', () => {
+        const live = { source: 'S0042', via: 'input', title: 'Rodokmen Ostrovid', cited: [], citedCount: 0, inTree: true };
+        const tree = parseMaterialFile({ id: 'I0007', sha: sha(7), name: 'strom-ostrovid.ged', kind: 'tree', bytes: 48_000, uses: { excerpts: 0, sources: ['S0042'], tasks: 0, of: [live] } })!;
+        const scan = parseMaterialFile({ id: 'I0001', sha: sha(1), name: 'scan.jpg', uses: { excerpts: 0, sources: ['S0042'], tasks: 0, of: [{ ...live, via: 'media' }] } })!;
+        const items = overviewItems({ files: [tree, scan], batches: [], people: {}, fetchedAt: 0 }, [], { sourceOf: true });
+        const [treeItem, scanItem] = items;
+        expect(treeItem.tree).toBe(true);
+        expect(treeItem.sourceOf?.map(o => o.source)).toEqual(['S0042']);
+        expect(treeItem.uses ?? 0).toBe(0);
+        // The file of a source counts the source's place in the tree.
+        expect(scanItem.uses).toBe(1);
     });
 });
 

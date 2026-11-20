@@ -115,6 +115,8 @@ function withSourceOf(item: MaterialItem, rec: TreeRecord | undefined): void {
     if (!of?.length) return;
     item.sourceOf = of;
     if (!item.source) item.source = of[0].title ?? of[0].source;
+    // A family tree file is never a place in the tree (spec 117 §5: "Used: nowhere"), its source notwithstanding.
+    if (item.tree) return;
     const more = of.filter(s => s.inTree && !rec?.sourceRefs?.includes(s.source)).length;
     if (more) item.uses = (item.uses ?? 0) + more;
 }

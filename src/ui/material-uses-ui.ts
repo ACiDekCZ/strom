@@ -18,6 +18,7 @@ import { MediaUse, materialPersonLabel, mediaUseLabel, mediaUses } from '../medi
 import { placePersonId } from '../media.js';
 import { nameWithoutYears } from '../materials-overview.js';
 import { researchPersonRef, researchSourceRef } from '../research-link.js';
+import { treeFileSource } from '../material-delete.js';
 import { closeImageViewer } from './image-viewer.js';
 import type { MaterialsContext } from './materials-ui.js';
 import { uiModule } from './module.js';
@@ -66,13 +67,20 @@ export const materialUsesMethods = uiModule({
         block.dataset.uses = String(uses.length);
 
         // The file of a source (spec 102 §7, set only with `material.sourceOf`): its sources first.
-        const of = archive ? item.sourceOf ?? [] : [];
+        // A family tree file (spec 117 §5): what refers to it, the live source made of it or none.
+        const treeSource = item.tree ? treeFileSource(item) : null;
+        const of = archive ? item.sourceOf ?? (treeSource ? [treeSource] : []) : [];
         const head = h('div', 'mv-uses-head');
-        const title = h('h3', 'mv-uses-title', m.used);
+        const title = h('h3', 'mv-uses-title', item.tree ? m.del.refs(1) : m.used);
         head.appendChild(title);
-        const count = [of.length ? m.agentSort.sourcesN(of.length) : '', uses.length ? m.places(uses.length) : ''].filter(Boolean).join(' · ');
+        const count = item.tree ? '' : [of.length ? m.agentSort.sourcesN(of.length) : '', uses.length ? m.places(uses.length) : ''].filter(Boolean).join(' · ');
         if (count) head.appendChild(h('span', 'mv-uses-count', count));
         block.appendChild(head);
+        if (item.tree) {
+            // "the file of the source {title}", else that none was made of it; never in the tree itself: no places, no Link to….
+            block.appendChild(treeSource ? h('p', 'mv-uses-treeof', m.treeFileOf(treeSource.title ?? treeSource.source)) : h('p', 'mv-uses-none', m.del.noRefsTree));
+            return block;
+        }
         if (of.length) block.appendChild(this.materialSourceOfRows(of, ctx!, opts));
         // In the tree only through a source and nowhere of its own: no "Not in the tree yet." (Link to… stays an action).
         const viaSourceOnly = !uses.length && of.some(s => s.inTree);
