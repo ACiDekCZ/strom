@@ -14,12 +14,12 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId } from '../types.js';
 import { sha256OfBlob } from '../sha256.js';
 import { originalTargets, mediaReplyId } from '../originals.js';
-import { parseLiveBridge, withAppVersion, researchSchemeUrl, sanitizeLiveStatus, BATCH_KEPT_FEATURE, researchLinkMark } from '../research-link.js';
+import { parseLiveBridge, withAppVersion, researchSchemeUrl, sanitizeLiveStatus, BATCH_KEPT_FEATURE, INTAKE_AUTO_FEATURE, researchLinkMark } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
     BatchSkip, BatchFolder, batchSkip, batchLimitsOf, batchOverLimit, batchEstimate, batchDefaultName, batchTree,
     batchFolderFiles, newBatchId, batchPathHeader, isZip, UnfinishedBatch, sanitizeUnfinishedBatch,
-    MEDIA_QUEUED_FEATURE, MEDIA_KNOWN_FEATURE, MediaKnownState, batchKnownChunk, parseMediaKnown, parseBatchDoneFiles,
+    MEDIA_QUEUED_FEATURE, MEDIA_KNOWN_FEATURE, MediaKnownState, batchKnownChunk, parseMediaKnown, parseBatchDoneFiles, batchSorting,
 } from '../batch.js';
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { isWriteHeldCode, joinSaid, writeHeldOfRefusal } from '../research-write-held.js';
@@ -57,7 +57,8 @@ interface Item {
 
 type Step = 'pick' | 'check' | 'send' | 'progress' | 'done';
 
-interface DoneReply { inputs: number; known: number; refused: number; tasks: number }
+/** `batch/<id>/done`: counts, and with `intake.auto` (spec 130) whether this batch is sorted by tasks (`sort`) and the setting (`auto`). */
+interface DoneReply { inputs: number; known: number; refused: number; tasks: number; sort?: boolean; auto?: boolean }
 
 interface Run {
     id: string;
@@ -560,6 +561,12 @@ export const batchMethods = uiModule({
         const open = link && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.researchId }, announcedResearchScheme()) : null;
         // Materials shown in the app: the batch opens there; the research's own overview stays a link on the left.
         const materials = this.materialsListOn();
+        // Sorted by the research itself, or waiting in Materials for Sort with the agent… (spec 130 K1.2, K2.2, K5.1).
+        const status = link ? this.researchStatusOf(link.researchId) : null;
+        const sorting = batchSorting(!!status?.features?.includes(INTAKE_AUTO_FEATURE), status?.intake?.auto, r.result);
+        const sortBlock = materials && sorting !== 'auto' ? this.batchSortHtml(received) : '';
+        const text = materials && stored ? b.doneTextMaterials : archive ? b.doneTextArchive : stored ? b.doneTextStored
+            : sorting === 'auto' ? b.doneTextAuto : sorting === 'manual' ? (sortBlock ? b.doneTextUnsorted : b.doneTextUnsortedLater) : b.doneText;
         return `
                 <div class="modal-content batch-content batch-done">
                     <h3 class="batch-confirm-title">✓ ${esc(archive ? b.doneTitleArchive(r.name) : b.doneTitle(r.name))}</h3>
@@ -567,8 +574,8 @@ export const batchMethods = uiModule({
                     ${known ? `<div class="batch-done-row"><span>${esc(archive ? b.alreadyHadArchive : b.alreadyHad)}</span><strong>${known}</strong></div>` : ''}
                     ${refusedRow}
                     ${!stored && r.result?.tasks ? `<div class="batch-done-row"><span>${esc(b.tasks)}</span><strong>${r.result.tasks}</strong></div>` : ''}
-                    <p class="batch-done-text">${esc(materials && stored ? b.doneTextMaterials : archive ? b.doneTextArchive : stored ? b.doneTextStored : b.doneText)}</p>
-                    ${materials ? this.batchSortHtml(received) : ''}
+                    <p class="batch-done-text">${esc(text)}</p>
+                    ${sortBlock}
                     ${open && !materials ? `<button type="button" class="research-sync-link" data-act="open-research">${researchActionLabel(b.openInResearch, researchLinkMark('open'))}</button>` : ''}
                 </div>
                 <div class="buttons batch-footer">${materials ? `
@@ -1075,7 +1082,8 @@ export const batchMethods = uiModule({
                 this.researchTakeOwnWriteHead(r.researchId, headBefore, j?.head, j?.parent);
                 this.batchTakeDoneFiles(r, j?.files);
                 const n = (v: unknown): number => (typeof v === 'number' && v >= 0 ? Math.floor(v) : 0);
-                return j ? { inputs: n(j.inputs), known: n(j.known), refused: n(j.refused), tasks: Array.isArray(j.tasks) ? j.tasks.length : 0 } : null;
+                return j ? { inputs: n(j.inputs), known: n(j.known), refused: n(j.refused), tasks: Array.isArray(j.tasks) ? j.tasks.length : 0,
+                    ...(typeof j.sort === 'boolean' ? { sort: j.sort } : {}), ...(typeof j.auto === 'boolean' ? { auto: j.auto } : {}) } : null;
             } catch {
                 return null;
             }

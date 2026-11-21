@@ -14,7 +14,7 @@
 
 import {
     cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, type ResearchExperiment, type ResearchHypothesesDecide,
-    sanitizeBooksSettings, sanitizeCensus, type LiveBooksSettings, type LiveCensus,
+    sanitizeBooksSettings, sanitizeCensus, sanitizeIntakeSetting, type LiveBooksSettings, type LiveCensus, type LiveIntakeSetting,
 } from './research-link.js';
 import { writeHeldOfRefusal, type ResearchWriteHeld } from './research-write-held.js';
 import { READ_TASK_NAMES, READ_TASK_SETTING_PATH, readTaskSettingBody, sanitizeTaskSetting, type ReadTaskSetting } from './research-read-task.js';
@@ -739,6 +739,44 @@ export function censusReply(status: number, body: unknown, features: readonly st
 export async function postBridgeCensus(base: string, on: boolean, features: readonly string[] | null | undefined): Promise<CensusWriteResult> {
     const res = await postWrite(base, '/census', { on });
     return res ? censusReply(res.status, res.body, features) : { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
+}
+
+// ==================== SORTING OF BATCHES (spec 130) ====================
+
+/**
+ * Why `POST /intake {auto}` did not go: `invalid` 400 intake.body; `archive` 409 intake.archive (an archive, or a
+ * research waiting for its agent); `held` sealed elsewhere / not downloaded / disk full (each with its feature);
+ * `full` 507 without the feature of a held write; `locked` 423; `busy` 503 research.busy; `network` no answer;
+ * `unknown` anything else (500 intake.failed: the bridge's sentence, if any, in `reason`).
+ */
+export type IntakeWriteError = CensusWriteError;
+
+export type IntakeWriteResult =
+    | { ok: true; intake: LiveIntakeSetting | null; head: string; parent: string }
+    | { ok: false; code: IntakeWriteError; status: number; reason: string; bridgeCode: string; held?: ResearchWriteHeld };
+
+/** The reply to `POST /intake`, typed: the setting the research keeps now (null: not said validly) and its commit. */
+export function intakeReply(status: number, body: unknown, features: readonly string[] | null | undefined): IntakeWriteResult {
+    const r = asRecord(body) ?? {};
+    if (status >= 200 && status < 300) return { ok: true, intake: sanitizeIntakeSetting(r.intake), ...headsOf(body) };
+    const reason = bridgeSentence(body);
+    const code = bridgeCode(body);
+    const out = (c: IntakeWriteError, extra: { held?: ResearchWriteHeld } = {}): IntakeWriteResult =>
+        ({ ok: false, code: c, status, reason, bridgeCode: code, ...extra });
+    const held = writeHeldOfRefusal(code, r.error, features, r.params);
+    if (held) return out('held', { held });
+    if (status === 400) return out('invalid');
+    if (status === 409 && code === 'intake.archive') return out('archive');
+    if (status === 503 || code === 'research.busy' || code === 'busy') return out('busy');
+    if (status === 423 || code === 'locked') return out('locked');
+    if (status === 507 || code === 'disk.full') return out('full');
+    return out('unknown');
+}
+
+/** Batches sorted by the agent by themselves, or not (`POST <token>/intake {"auto": bool}`), written at once, no terminal. */
+export async function postBridgeIntake(base: string, auto: boolean, features: readonly string[] | null | undefined): Promise<IntakeWriteResult> {
+    const res = await postWrite(base, '/intake', { auto });
+    return res ? intakeReply(res.status, res.body, features) : { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
 }
 
 // ==================== KINDS OF EVENTS (spec 035) ====================

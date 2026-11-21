@@ -2687,6 +2687,12 @@ export interface LiveStatus {
      */
     census?: LiveCensus | null;
     /**
+     * `intake` (with `intake.auto` in `features`, spec 130): whether the research sorts a closed batch by itself
+     * (tasks of sorting for the agent). Absent: not said (an archive, a research waiting for its agent, an older
+     * research) — then no switch is offered.
+     */
+    intake?: LiveIntakeSetting;
+    /**
      * `hypotheses.decide` (with `hypotheses.decide` in `features`, spec 060): who decides the research's
      * hypotheses; a value the app does not know reads as `person`. Absent: not said (an archive, a research
      * waiting for its agent, an older research).
@@ -2853,6 +2859,22 @@ export function sanitizeCensus(value: unknown): LiveCensus | null {
     if (!r || typeof r.on !== 'boolean') return null;
     const held = typeof r.held === 'number' && Number.isInteger(r.held) && r.held >= 0 && r.held <= 10_000_000 ? r.held : null;
     return { on: r.on, held };
+}
+/**
+ * `/status.features` (spec 130, Strom Research 1.36): a closed batch is sorted by the agent only when the research's
+ * setting says so — `/status.intake {auto}`, `POST /intake {auto}`, and `auto` / `sort` / `tasks` in `batch/<id>/done`.
+ */
+export const INTAKE_AUTO_FEATURE = 'intake.auto';
+
+/** `/status.intake`: the research sorts a closed batch by itself (`auto`). */
+export interface LiveIntakeSetting {
+    auto: boolean;
+}
+
+/** `/status.intake` (or the `intake` of a `POST /intake` reply), checked: `auto` a boolean, else null (not said). */
+export function sanitizeIntakeSetting(value: unknown): LiveIntakeSetting | null {
+    const r = asRecord(value);
+    return r && typeof r.auto === 'boolean' ? { auto: r.auto } : null;
 }
 /**
  * `/status.features` (spec 060): `/status.hypotheses.decide`, `POST /hypotheses {decide}` and who decided a
@@ -4490,6 +4512,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(OFF_LINE_BRANCHES_FEATURE) && sanitizeOffLine(r.offLine) ? { offLine: sanitizeOffLine(r.offLine)! } : {}),
         ...(statusBooks(r.books, features) ? { books: statusBooks(r.books, features)! } : {}),
         ...(features?.includes(CENSUS_FEATURE) ? { census: sanitizeCensus(r.census) } : {}),
+        ...(features?.includes(INTAKE_AUTO_FEATURE) && sanitizeIntakeSetting(r.intake) ? { intake: sanitizeIntakeSetting(r.intake)! } : {}),
         ...(features?.includes(QUEUE_PAGE_FEATURE) && sanitizeQueueCounts(r.queueCounts) ? { queueCounts: sanitizeQueueCounts(r.queueCounts)! } : {}),
         ...agentSaid(r.agent),
         ...(sanitizeBrowser(r) ? { browser: sanitizeBrowser(r)! } : {}),

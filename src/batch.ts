@@ -176,6 +176,22 @@ export const KNOWN_CHUNK_FILES = 200;
 /** …or this many bytes to hash first (so a pause or a cancel is never far away). */
 export const KNOWN_CHUNK_BYTES = 64 * 1024 * 1024;
 
+/**
+ * How a closed batch is sorted (spec 130), said at the end of sending it:
+ * - `older`: a research without `intake.auto` sorts every batch by itself, as it always did;
+ * - `auto`: the research's setting is on — it makes the batch's tasks of sorting itself;
+ * - `manual`: off (the default) — the files wait in Materials unsorted, Sort with the agent… is offered.
+ * The batch's own reply decides first (`sort`, then `auto` of `batch/<id>/done`), then `/status.intake.auto`;
+ * a research with the feature that says neither is off (its default).
+ */
+export type BatchSorting = 'older' | 'auto' | 'manual';
+
+export function batchSorting(feature: boolean, statusAuto: boolean | undefined, done: { sort?: boolean; auto?: boolean } | null | undefined): BatchSorting {
+    if (!feature) return 'older';
+    const on = typeof done?.sort === 'boolean' ? done.sort : typeof done?.auto === 'boolean' ? done.auto : statusAuto === true;
+    return on ? 'auto' : 'manual';
+}
+
 /** What the research has of one file: the file (`has`), it waits in the bridge's queue (`queued`), or nothing (`none`). */
 export type MediaKnownState = 'has' | 'queued' | 'none';
 

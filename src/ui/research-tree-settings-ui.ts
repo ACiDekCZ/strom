@@ -16,10 +16,10 @@ import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
 import {
-    researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, HYPOTHESES_DECIDE_FEATURE, CENSUS_FEATURE, researchLinkMark, researchUrlMark,
+    researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, HYPOTHESES_DECIDE_FEATURE, CENSUS_FEATURE, INTAKE_AUTO_FEATURE, researchLinkMark, researchUrlMark,
     booksOn, BOOKS_MIN_TASKS_DEFAULT, BOOKS_SAME_BOOK_DEFAULT, type ResearchHypothesesDecide, type LiveBooksSettings,
 } from '../research-link.js';
-import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask, postBridgeBooks, postBridgeCensus, type BooksSettingBody } from '../history-bridge.js';
+import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask, postBridgeBooks, postBridgeCensus, postBridgeIntake, type BooksSettingBody } from '../history-bridge.js';
 import { booksSettingHtml, booksMinTasksInput, type BooksSettingNote } from './books-setting-view.js';
 import { READ_SOURCE_TASK_FEATURE, type ReadTaskSetting } from '../research-read-task.js';
 import { readTaskSettingHtml, type ReadTaskSettingNote } from './read-task-setting-view.js';
@@ -56,6 +56,13 @@ let storiesListening = false;
 const census: { rid: string; note?: string; want?: boolean; wantHeld?: number | null; busy?: boolean; sending?: boolean; gone?: boolean } = { rid: '' };
 
 /**
+ * "The agent goes through files sent to the research by itself" (spec 130 K2.1, K1.3: batches, single files, scans): the same parts as `census` — the
+ * sentence under the row (a refusal), the value asked until the research's status says it (`want`), a write on
+ * its way (`busy`, `sending`), the row gone after the research said the tree is an archive (`gone`).
+ */
+const intake: { rid: string; note?: string; want?: boolean; busy?: boolean; sending?: boolean; gone?: boolean } = { rid: '' };
+
+/**
  * "Who decides hypotheses" (spec 060): the same parts as `stories` — the
  * research's answer under the row (`link`: its terminal confirms the agent),
  * the value asked until the status says it (`want`), a write on its way (`busy`).
@@ -76,6 +83,7 @@ const HYPOS_PEND = 'tree:hypos';
 const READ_TASK_PEND = 'tree:readtask';
 const STORIES_PEND = 'tree:stories';
 const CENSUS_PEND = 'tree:census';
+const INTAKE_PEND = 'tree:intake';
 /** How long the group stays highlighted when a link opens the dialog at it. */
 const READ_TASK_FLASH_MS = 1500;
 
@@ -355,6 +363,7 @@ export const researchTreeSettingsMethods = uiModule({
                 <button type="button" class="link-button research-older-sources" id="research-older-sources" hidden></button>`}
                 ${sendingHtml}
                 ${originalsHtml}
+                ${archive || agentAway ? '' : `<div class="research-intake-host" id="research-intake-host"></div>`}
                 <div class="research-images-host" id="research-images-host"></div>
                 <div class="research-stories-host" id="research-stories-host"></div>
                 ${archive || agentAway ? '' : `<div class="research-census-host" id="research-census-host"></div>`}
@@ -495,6 +504,9 @@ export const researchTreeSettingsMethods = uiModule({
         census.rid = link.id;
         delete census.note; delete census.want; delete census.wantHeld; delete census.busy; delete census.sending; delete census.gone;
         this.renderResearchCensusRow();
+        intake.rid = link.id;
+        delete intake.note; delete intake.want; delete intake.busy; delete intake.sending; delete intake.gone;
+        this.renderResearchIntakeRow();
         hypos.rid = link.id;
         delete hypos.note; delete hypos.want; delete hypos.busy;
         this.renderResearchHypothesesRow();
@@ -513,6 +525,7 @@ export const researchTreeSettingsMethods = uiModule({
                 if (rid !== stories.rid) return;
                 this.renderResearchStoriesRow();
                 this.renderResearchCensusRow();
+                this.renderResearchIntakeRow();
                 this.renderResearchHypothesesRow();
                 this.renderResearchReadTaskRow();
                 this.renderResearchBooksRow();
@@ -696,6 +709,88 @@ export const researchTreeSettingsMethods = uiModule({
             }
         }
         this.renderResearchCensusRow();
+    },
+
+    /**
+     * Spec 130 K2.1: "The agent goes through files sent to the research by itself" — only with `intake.auto` and the
+     * research's `/status.intake` (neither in an archive nor a research waiting for its agent: no host there, and
+     * gone once the research says so); the switch follows `/status.intake.auto`; without the bridge inactive with
+     * its sentence. No mark: the write goes through the bridge, no terminal.
+     */
+    renderResearchIntakeRow(): void {
+        const host = document.querySelector<HTMLElement>(`#${SETTINGS_ID} #research-intake-host`);
+        if (!host) return;
+        const rid = intake.rid;
+        const ctx = this.historyManageContext();
+        const last = (ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid)) ?? lastBridgeStatus(rid);
+        const features = ctx?.researchId === rid ? ctx.features : last?.features ?? [];
+        const said = last?.intake;
+        if (intake.gone || !features.includes(INTAKE_AUTO_FEATURE) || (!said && intake.want === undefined) || (rid && this.researchAgentlessFor(rid))) {
+            host.innerHTML = '';
+            return;
+        }
+        const h = strings.history;
+        const up = this.researchBridgeUp(rid);
+        if (intake.want !== undefined && said?.auto === intake.want) delete intake.want;
+        const on = intake.sending ?? intake.want ?? said?.auto === true;
+        const note = !up ? h.storiesBridgeDown : intake.note ?? '';
+        const focused = document.activeElement?.id === 'research-intake-auto';
+        // On its way (6.1): the new state at once, dashed and locked (keeping its focus), its words after 120 ms.
+        const pend = !!intake.busy;
+        host.innerHTML = `
+            <fieldset class="research-transcripts research-intake">
+                <legend>${esc(h.intakeSection)}</legend>
+                <label class="settings-checkbox research-intake-row"${pend ? pendAttrs(INTAKE_PEND).replace(' aria-disabled="true"', '') : ''}>
+                    <input type="checkbox" id="research-intake-auto"${on ? ' checked' : ''}${!up ? ' disabled' : pend ? ' aria-disabled="true"' : ''}>
+                    <span class="settings-text">
+                        <span class="settings-name">${esc(h.intakeTitle)}</span>
+                        <span class="settings-desc">${esc(h.intakeDesc)}</span>${pend ? pendStatusHtml(INTAKE_PEND) : ''}
+                    </span>
+                </label>
+                ${note ? `<p class="research-stories-note research-intake-note" id="research-intake-note"><span>${esc(note)}</span></p>` : ''}
+            </fieldset>`;
+        const input = host.querySelector<HTMLInputElement>('#research-intake-auto');
+        // Locked while on its way: a click changes nothing (the row drawn again as it stands).
+        input?.addEventListener('change', () => {
+            if (intake.busy) { this.renderResearchIntakeRow(); return; }
+            void this.setResearchIntake(input.checked);
+        });
+        if (focused) input?.focus({ preventScroll: true });
+    },
+
+    /**
+     * Spec 130 K2.1: `POST /intake {"auto": bool}` at once, both ways; a refusal says why under the row and the
+     * switch stays as the research says (an archive: the row goes).
+     */
+    async setResearchIntake(auto: boolean): Promise<void> {
+        const rid = intake.rid;
+        const ctx = this.historyManageContext();
+        const base = ctx?.researchId === rid ? ctx.base : null;
+        if (!base || intake.busy) { this.renderResearchIntakeRow(); return; }
+        intake.busy = true;
+        intake.sending = auto;
+        delete intake.note;
+        startPend(INTAKE_PEND, { redraw: () => this.renderResearchIntakeRow() });
+        this.renderResearchIntakeRow();
+        const r = await postBridgeIntake(base, auto, ctx!.features);
+        if (intake.rid !== rid) { dropPend(INTAKE_PEND); return; }
+        await endPend(INTAKE_PEND);
+        delete intake.busy;
+        delete intake.sending;
+        if (r.ok) {
+            intake.want = r.intake?.auto ?? auto;
+        } else {
+            const W = strings.live.waitingWrite;
+            switch (r.code) {
+                case 'archive': intake.gone = true; break;
+                case 'busy': intake.note = strings.history.errBusy; break;
+                case 'held': intake.note = this.researchWriteHeldText(r.held!, false).toast; break;
+                case 'locked': intake.note = W.locked; break;
+                case 'full': intake.note = r.reason || W.fileFull; break;
+                default: intake.note = r.reason || W.writeFailed;
+            }
+        }
+        this.renderResearchIntakeRow();
     },
 
     /**

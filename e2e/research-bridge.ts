@@ -129,6 +129,12 @@ export interface FakeBridge {
      * back with `held` = `heldOff` while off (0 on); `replies` answer instead, first first (a refusal, a 200 of its own).
      */
     census?: FakeCensus;
+    /**
+     * Batches sorted by the agent by themselves (spec 130, `intake.auto` in `features`): `/status.intake` (`intake`,
+     * sent as it is; unset: not said, as an archive), every `POST /intake` body (`posts`); a valid `{auto}` is written
+     * and said back, `replies` answer instead. A batch's close says `auto` / `sort` and its tasks only when on.
+     */
+    intake?: FakeIntake;
     /** Stuck (SIGSTOP): `/status` never answers. */
     statusHang?: boolean;
     /**
@@ -221,6 +227,18 @@ export interface FakeCensus {
     heldOff: number;
     posts: unknown[];
     replies: { status: number; body: unknown }[];
+}
+
+/** The research's setting of sorting closed batches (spec 130). */
+export interface FakeIntake {
+    intake?: unknown;
+    posts: unknown[];
+    replies: { status: number; body: unknown }[];
+}
+
+/** A research that sorts closed batches by itself (`auto`) or not (off, the default). */
+export function fakeIntake(auto: boolean): FakeIntake {
+    return { intake: { auto }, posts: [], replies: [] };
 }
 
 /** A research's census records: off with `held` tasks set aside (on: `held` 0). */
@@ -2403,6 +2421,21 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             b.census.census = { on: r.on, held: r.on ? 0 : b.census.heldOff };
             return json(200, { census: b.census.census, ...(was === r.on ? { head: b.head, parent: b.head } : commitWrite(b)) });
         }
+        // Sorting of closed batches (spec 130): `{"auto": bool}` exactly; the same value again writes nothing.
+        if (b.intake && method === 'POST' && /\/intake$/.test(url.pathname) && b.features?.includes('intake.auto')) {
+            let body: unknown = null;
+            try { body = JSON.parse(route.request().postData() ?? ''); } catch { /* not JSON */ }
+            b.intake.posts.push(body);
+            const said = b.intake.replies.shift();
+            if (said) return json(said.status, said.body);
+            const r = body && typeof body === 'object' ? body as Record<string, unknown> : null;
+            if (!r || Object.keys(r).length !== 1 || typeof r.auto !== 'boolean') {
+                return json(400, { error: 'Not a body /intake takes.', code: 'intake.body' });
+            }
+            const was = (b.intake.intake as { auto?: unknown } | undefined)?.auto;
+            b.intake.intake = { auto: r.auto };
+            return json(200, { intake: b.intake.intake, ...(was === r.auto ? { head: b.head, parent: b.head } : commitWrite(b)) });
+        }
         // A heavy part apart (research 1.26.0, `status.parts`): its rev and its fields as the full status has them.
         const partPath = /\/status\/([A-Za-z]+)$/.exec(url.pathname);
         if (partPath && method === 'GET' && b.features?.includes('status.parts')) {
@@ -2449,6 +2482,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.quality ? { quality: { rev: b.quality.rev } } : {}),
                 ...(b.hypotheses?.decide !== undefined ? { hypotheses: { decide: b.hypotheses.decide } } : {}),
                 ...(b.census ? { census: b.census.census } : {}),
+                ...(b.intake?.intake !== undefined ? { intake: b.intake.intake } : {}),
                 ...(b.live ? { live: { idleMinutes: b.live.idleMinutes, idleChoices: b.live.idleChoices ?? [0, 120] } } : {}),
                 ...(b.handoffs ? { handoffs: b.handoffs } : {}),
                 ...(b.statusExtra ?? {}),
@@ -2528,7 +2562,12 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 return { sha, path: q.path, batch: q.batch, input: id };
             });
             const refusedQueued = taken.filter(t => 'refused' in t).length;
-            return json(200, { batch: done[1], name: body.name, inputs: files - refusedQueued, known: 0, refused: refusedQueued, nested: [], tasks: files ? ['T0101'] : [], head: b.head,
+            // Sorting by tasks only when the research's setting is on (spec 130); `sort` of the body decides for this batch.
+            const intakeOn = (b.features ?? []).includes('intake.auto');
+            const auto = (b.intake?.intake as { auto?: unknown } | undefined)?.auto === true;
+            const sort = typeof body.sort === 'boolean' ? body.sort : auto;
+            return json(200, { batch: done[1], name: body.name, inputs: files - refusedQueued, known: 0, refused: refusedQueued, nested: [],
+                tasks: files && (!intakeOn || sort) ? ['T0101'] : [], head: b.head, ...(intakeOn ? { auto, sort } : {}),
                 ...(queued.length || (b.features ?? []).includes('media.queued') ? { files: taken } : {}),
                 ...(b.material?.writeParent ? { parent: b.head } : {}) });
         }
