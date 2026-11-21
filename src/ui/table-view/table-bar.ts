@@ -201,8 +201,10 @@ export function updateScope(bar: HTMLElement, shown: ScopeShown): void {
 
 /**
  * The steps row 1 takes on a computer and at a tablet's width before it would wrap (⧉ and ⋯ alone on
- * a second row): 0 the labels Scope and View hidden (the scope's switch
- * stays whole: de at 1440); 1 the switch folded into one button with the
+ * a second row): 0 the labels Scope and View hidden, the search's share
+ * of the row 120 px (it still grows into the room left; the scope's switch
+ * stays whole: de at 1440); 0n the selection's name in the switch shorter
+ * (a long list name in de at 1440); 1 the switch folded into one button with the
  * scope's name (spec 098 §11c, 11c·2); 2 This view and the whole tree as a
  * glyph, the search, the list's name and the view's name narrower (…);
  * 3 the Columns count hidden, both names narrower still; 4 the names at
@@ -212,7 +214,7 @@ export function updateScope(bar: HTMLElement, shown: ScopeShown): void {
  * including the ones before). Measured, not by width thresholds: a changed
  * view's buttons, a list's name, the language and the font decide what fits.
  */
-const FIT_STEPS = ['tv-fit-0', 'tv-fit-1', 'tv-fit-2', 'tv-fit-3', 'tv-fit-4', 'tv-fit-5'] as const;
+const FIT_STEPS = ['tv-fit-0', 'tv-fit-0n', 'tv-fit-1', 'tv-fit-2', 'tv-fit-3', 'tv-fit-4', 'tv-fit-5'] as const;
 
 /** Row 1 on more than one line, or past its edge. */
 function rowWraps(row: HTMLElement): boolean {

@@ -11572,8 +11572,12 @@
             .tv-bar-row1:has(.tv-view-discard:not([hidden])) .tv-scope-btn:not(.is-list) .tv-scope-glyph { display: block; }
         }
         @media (min-width: 641px) {
-            .tv-bar-row1:is(.tv-fit-0, .tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-scope-label,
-            .tv-bar-row1:is(.tv-fit-0, .tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-slot-view .tv-view-label { display: none; }
+            .tv-bar-row1:is(.tv-fit-0, .tv-fit-0n, .tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-scope-label,
+            .tv-bar-row1:is(.tv-fit-0, .tv-fit-0n, .tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-slot-view .tv-view-label { display: none; }
+            /* Steps 0 and 0n keep the switch whole: the search asks 120 px of the row (and grows into what is left),
+               then the selection's name in the switch is cut shorter (spec 098 §11c: whole at 1440 in de). */
+            .tv-bar-row1:is(.tv-fit-0, .tv-fit-0n) .tv-slot-search { flex-basis: 120px; }
+            .tv-bar-row1.tv-fit-0n .table-scope .scope-name { max-width: 140px; }
             .tv-bar-row1:is(.tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-scope-btn:not(.is-list) .tv-scope-name { display: none; }
             .tv-bar-row1:is(.tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-scope-btn:not(.is-list) .tv-scope-glyph { display: block; }
             .tv-bar-row1:is(.tv-fit-2, .tv-fit-3, .tv-fit-4) .tv-slot-search { flex-basis: 120px; }

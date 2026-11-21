@@ -122,6 +122,27 @@ test.describe('the Table\'s scope in German, a computer', () => {
         await expect(tv(page, '.tv-scope-btn')).toBeHidden();
         expect((await tv(page, '.tv-bar-row1').boundingBox())!.height).toBeLessThan(60);
     });
+
+    test('a list name of 30 characters keeps the switch unfolded: the name cut shorter inside it, one row', async ({ page }) => {
+        await seedSetting(page, 'language', 'de');
+        await family(page);
+        const id = await page.evaluate(() => window.Strom.DataManager.createPersonList({
+            name: 'Briefe an die Pfarrei Varnholm', dynamic: false, personIds: ['w', 'q'] as never[], sort: 'manual',
+        })!.id);
+        await page.locator('#view-mode-table').click();
+        await page.evaluate((l) => window.Strom.UI.setTableScopeTo(l), id);
+        await expect(page.locator('#table-scope-sel')).toHaveClass(/active/);
+        await expect(page.locator('#table-scope-sel')).toContainText('Briefe an die');
+        await expect(tv(page, '.table-scope.scope-seg')).toBeVisible();
+        await expect(tv(page, '.tv-scope-btn')).toBeHidden();
+        const row = tv(page, '.tv-bar-row1');
+        expect((await row.boundingBox())!.height).toBeLessThan(60);
+        // The name inside the switch ends with "…", nothing past the row's edge.
+        const name = page.locator('#table-scope-sel .scope-name');
+        expect(await name.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
+        expect(await row.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
+    });
 });
 
 test.describe('the Table\'s scope where the bar is tight', () => {
