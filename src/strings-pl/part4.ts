@@ -486,7 +486,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         scopeView: 'Ten widok',
         scopeTree: 'Całe drzewo',
         scopeSel: 'Wybór',
-        scopeSelNamed: (label: string, n: number) => `${label} · ${n}`,
+        scopeSelNamed: (label: string, n: number) => `${label} · ${numPl(n)}`,
         scopeAria: (label: string, n: number) => `Zakres: wybór ${label}, ${nPl(n, 'osoba', 'osoby', 'osób')}`,
         scopeGroup: 'Zakres mapy',
         scopeBtn: (s: string) => `Zakres: ${s}`,

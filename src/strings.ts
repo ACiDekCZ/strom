@@ -4568,7 +4568,7 @@ const stringsEN = {
         scopeView: 'This view',
         scopeTree: 'Whole tree',
         scopeSel: 'Selection',
-        scopeSelNamed: (label: string, n: number) => `${label} · ${n}`,
+        scopeSelNamed: (label: string, n: number) => `${label} · ${numEn(n)}`,
         scopeAria: (label: string, n: number) => `Scope: selection ${label}, ${nEn(n, 'person', 'people')}`,
         scopeGroup: 'Map scope',
         scopeBtn: (s: string) => `Scope: ${s}`,
@@ -15217,7 +15217,7 @@ const stringsCZ: StringsType = {
         scopeView: 'Tento pohled',
         scopeTree: 'Celý strom',
         scopeSel: 'Výběr',
-        scopeSelNamed: (label: string, n: number) => `${label} · ${n}`,
+        scopeSelNamed: (label: string, n: number) => `${label} · ${numCs(n)}`,
         scopeAria: (label: string, n: number) => `Rozsah: výběr ${label}, ${nCs(n, 'osoba', 'osoby', 'osob')}`,
         scopeGroup: 'Rozsah mapy',
         scopeBtn: (s: string) => `Rozsah: ${s}`,
@@ -25689,7 +25689,7 @@ const stringsDE: StringsType = {
         scopeView: 'Diese Ansicht',
         scopeTree: 'Ganzer Stammbaum',
         scopeSel: 'Auswahl',
-        scopeSelNamed: (label: string, n: number) => `${label} · ${n}`,
+        scopeSelNamed: (label: string, n: number) => `${label} · ${numDe(n)}`,
         scopeAria: (label: string, n: number) => `Bereich: Auswahl ${label}, ${nDe(n, 'Person', 'Personen')}`,
         scopeGroup: 'Kartenbereich',
         scopeBtn: (s: string) => `Bereich: ${s}`,
@@ -31905,6 +31905,11 @@ let currentLanguage: Language = 'en';
  */
 export function getCurrentLanguage(): Language {
     return currentLanguage;
+}
+
+/** A count as the current language writes it ("2 400", "2,400", "2.400"). */
+export function countText(n: number): string {
+    return ({ cs: numCs, en: numEn, de: numDe } as Partial<Record<Language, (x: number) => string>>)[currentLanguage]?.(n) ?? n.toLocaleString(currentLanguage);
 }
 
 /**

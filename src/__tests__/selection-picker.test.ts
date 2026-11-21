@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
     SelectionPickRow, SelectionPickerMarkup, SelectionPickRowInfo, selectionFoundRowsHtml, selectionIcon, selectionPickFilter, selectionPickerHtml,
 } from '../rod-picker.js';
-import { strings } from '../strings.js';
+import { strings, setLanguage } from '../strings.js';
 import { stepGenerations } from '../ui/selection-picker-ui.js';
 
 const s = strings.selection;
@@ -111,6 +111,21 @@ describe('selectionPickerHtml (§2, 2a)', () => {
         const focus = selectionFoundRowsHtml(rows, 'focus');
         expect(focus).toContain('data-sec="focus" data-sel="des:p9"');
         expect(focus).not.toContain('data-found');
+    });
+
+    it('a count as the language writes it (thousands, spec 098 §12)', () => {
+        const big = [{ ...row('anc:p9', 'Ancestors: Vojmír'), count: 12400 }];
+        try {
+            setLanguage('en');
+            expect(selectionFoundRowsHtml(big)).toContain('<span class="sp-rodpick-c">12,400</span>');
+            setLanguage('de');
+            expect(selectionFoundRowsHtml(big)).toContain('<span class="sp-rodpick-c">12.400</span>');
+            setLanguage('cs');
+            expect(selectionFoundRowsHtml(big)).toContain(`<span class="sp-rodpick-c">${(12400).toLocaleString('cs-CZ')}</span>`);
+            expect(strings.map.scopeSelNamed('Letters', 12400)).toBe(`Letters · ${(12400).toLocaleString('cs-CZ')}`);
+        } finally {
+            setLanguage('en');
+        }
     });
 });
 

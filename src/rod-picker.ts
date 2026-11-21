@@ -12,6 +12,7 @@
 import { LineageIndex, RodId, otherFamilyRods, rodLabels, rods } from './lineage.js';
 import type { PageSet } from './family-pages.js';
 import { sortRods } from './rods-overview.js';
+import { countText } from './strings.js';
 
 export interface RodPickerItem {
     /** A line, the whole tree or the other families. */
@@ -144,19 +145,19 @@ export function rodPickerHtml(m: RodPickerMarkup): string {
             return `<li class="sp-rodpick-tree sel-opt" data-sel-form="row" data-rod="tree"${whole}>${m.link(item, inner, 'sp-rodpick-a')}</li>`;
         }
         if (item.id === 'other') {
-            const inner = `<span class="sp-rodpick-n">${esc(t.other)}</span><span class="sp-rodpick-c">${item.members}</span>`;
+            const inner = `<span class="sp-rodpick-n">${esc(t.other)}</span><span class="sp-rodpick-c">${countText(item.members)}</span>`;
             if (m.otherMode === 'expand') {
                 // §1.4: a button unfolding the small lines, each a row of its own (the current one marked).
                 const smalls = (m.small ?? []).map(s => {
                     const sOn = s.id === m.current;
                     const years = s.from !== null && s.to !== null ? (s.from === s.to ? `${s.from}` : `${s.from}–${s.to}`) : '';
                     const sInner = `<span class="sp-rodpick-n">${esc(s.label)}${years ? ` <span class="sp-rodpick-sub">${esc(years)}</span>` : ''}</span>`
-                        + `<span class="sp-rodpick-c">${s.members}</span>`;
+                        + `<span class="sp-rodpick-c">${countText(s.members)}</span>`;
                     return `<li class="sp-rodpick-small sel-opt${sOn ? ' is-cur' : ''}" data-sel-form="row" data-rod="${esc(s.id)}" data-q="${esc(rodPickKey([s.label, ...s.forms].join(' ')))}"`
                         + `${sOn ? ' aria-current="true"' : ''} hidden>${m.link(s, sInner, 'sp-rodpick-a')}</li>`;
                 }).join('');
                 const xInner = `<span class="sp-rodpick-n">${esc(t.other)} <span class="sp-rodpick-xchev" aria-hidden="true">▸</span></span>`
-                    + `<span class="sp-rodpick-c">${item.members}</span>`;
+                    + `<span class="sp-rodpick-c">${countText(item.members)}</span>`;
                 return `<li class="sp-rodpick-other sel-opt" data-sel-form="row" data-rod="other"><button type="button" class="sp-rodpick-x" aria-expanded="false">${xInner}</button></li>${smalls}`;
             }
             return `<li class="sp-rodpick-other sel-opt${on ? ' is-cur' : ''}" data-sel-form="row" data-rod="other"${cur}>${m.link(item, inner, 'sp-rodpick-a')}</li>`;
@@ -165,7 +166,7 @@ export function rodPickerHtml(m: RodPickerMarkup): string {
             ? `<span class="sp-rodpick-bar" aria-hidden="true"><span style="left:${((item.from - m.lo) / span * 100).toFixed(1)}%;width:${Math.max(2, (item.to - item.from) / span * 100).toFixed(1)}%"></span></span>`
             : '<span class="sp-rodpick-bar" aria-hidden="true"></span>';
         const key = rodPickKey([item.label, ...item.forms].join(' '));
-        const inner = `<span class="sp-rodpick-n">${esc(item.label)}</span>${bar}<span class="sp-rodpick-c">${item.members}</span>`;
+        const inner = `<span class="sp-rodpick-n">${esc(item.label)}</span>${bar}<span class="sp-rodpick-c">${countText(item.members)}</span>`;
         return `<li class="sp-rodpick-rod sel-opt${on ? ' is-cur' : ''}" data-sel-form="row" data-rod="${esc(item.id)}" data-q="${esc(key)}"${cur}>${m.link(item, inner, 'sp-rodpick-a')}</li>`;
     }).join('');
     const mode = m.otherMode === 'expand' ? ' data-other-mode="expand"' : '';
@@ -271,7 +272,7 @@ export function selectionPickSummaryHtml(label: SelectionPickerMarkup['label'], 
 function selRowHtml(r: SelectionPickRow, sec: string, extraCls = '', extraAttr = ''): string {
     const sub = r.sub ? `<small class="sp-selpick-sub">${esc(r.sub)}</small>` : '';
     const inner = `<span class="sp-selpick-ic" aria-hidden="true">${r.icon}</span><span class="sp-rodpick-n">${esc(r.label)}${sub}</span>`
-        + `<span class="sp-rodpick-c">${r.count}</span>`;
+        + `<span class="sp-rodpick-c">${countText(r.count)}</span>`;
     const q = r.q !== undefined ? ` data-q="${esc(r.q)}"` : '';
     const cur = r.current ? ' aria-current="true"' : '';
     return `<li class="sp-selpick-row sel-opt${r.current ? ' is-cur' : ''}${extraCls}" data-sel-form="row" data-sec="${sec}"${extraAttr} data-sel="${esc(r.sel)}"${q}${cur}>`
@@ -314,7 +315,7 @@ export function selectionPickerHtml(m: SelectionPickerMarkup): string {
     rows.push(`<li class="sp-rodpick-tree sel-opt" data-sel-form="row" data-sel="none"${noneOn ? ' aria-current="true"' : ''}>`
         + `<button type="button" class="sp-rodpick-a"><span class="sp-selpick-ic" aria-hidden="true">${selectionIcon('none')}</span>`
         + `<span class="sp-rodpick-n">${esc(t.none)}<small class="sp-selpick-sub">${esc(t.noneSub)}</small></span>`
-        + `<span class="sp-rodpick-c">${m.treeCount}</span></button></li>`);
+        + `<span class="sp-rodpick-c">${countText(m.treeCount)}</span></button></li>`);
     if (m.rods) {
         const { lo, hi } = m.rods;
         const span = Math.max(1, hi - lo);
@@ -329,7 +330,7 @@ export function selectionPickerHtml(m: SelectionPickerMarkup): string {
                 : '<span class="sp-rodpick-bar" aria-hidden="true"></span>';
             const key = rodPickKey([item.label, ...item.forms].join(' '));
             rows.push(`<li class="sp-rodpick-rod sel-opt${on ? ' is-cur' : ''}" data-sel-form="row" data-sec="rods" data-rod="${esc(item.id)}" data-sel="${esc(sel)}" data-q="${esc(key)}"${on ? ' aria-current="true"' : ''}>`
-                + `<button type="button" class="sp-rodpick-a">${rodIc}<span class="sp-rodpick-n">${esc(item.label)}</span>${bar}<span class="sp-rodpick-c">${item.members}</span></button></li>`);
+                + `<button type="button" class="sp-rodpick-a">${rodIc}<span class="sp-rodpick-n">${esc(item.label)}</span>${bar}<span class="sp-rodpick-c">${countText(item.members)}</span></button></li>`);
         }
         const other = m.rods.items.find(i => i.id === 'other');
         if (other && m.rods.small.length) {
@@ -343,7 +344,7 @@ export function selectionPickerHtml(m: SelectionPickerMarkup): string {
                 rows.push(`<li class="sp-rodpick-small sel-opt${on ? ' is-cur' : ''}" data-sel-form="row" data-sec="rods" data-rod="${esc(s.id)}" data-sel="${esc(sel)}"`
                     + ` data-q="${esc(rodPickKey([s.label, ...s.forms].join(' ')))}"${on ? ' aria-current="true"' : ''} hidden>`
                     + `<button type="button" class="sp-rodpick-a"><span class="sp-rodpick-n">${esc(s.label)}${years ? ` <span class="sp-rodpick-sub">${esc(years)}</span>` : ''}</span>`
-                    + `<span class="sp-rodpick-c">${s.members}</span></button></li>`);
+                    + `<span class="sp-rodpick-c">${countText(s.members)}</span></button></li>`);
             }
         }
         rows.push(secNone('rods', t.noMatch.rods));

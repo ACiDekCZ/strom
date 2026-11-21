@@ -14,7 +14,7 @@
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
-import { strings } from '../strings.js';
+import { strings, countText } from '../strings.js';
 import type { Person, PersonId } from '../types.js';
 import { MAP_KINDS, mapPointPersonIds, personHasMapPlace } from '../places.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
@@ -274,13 +274,13 @@ export const mapScopeMethods = uiModule({
             return `<button type="button" class="map-scope-row sel-opt" data-sel-form="row" role="radio" aria-checked="${on}" data-scope="${value}">`
                 + `<span class="map-scope-row-ic" aria-hidden="true">${on ? '●' : '○'}</span>`
                 + `<span class="map-scope-row-n">${esc(name)}${hint ? `<small>${esc(hint)}</small>` : ''}</span>`
-                + `<span class="map-scope-row-c">${count === null ? '' : count}</span></button>`;
+                + `<span class="map-scope-row-c">${count === null ? '' : countText(count)}</span></button>`;
         };
         const selName = ref ? `${m.scopeSel}: ${selectionText(ref)}` : `${m.scopeSel}…`;
         const quick = selectionQuickRows(5).map(r =>
             `<button type="button" class="map-scope-row sel-opt" data-sel-form="row" data-sel="${esc(r.sel)}">`
             + `<span class="map-scope-row-ic" aria-hidden="true">${r.icon}</span><span class="map-scope-row-n">${esc(r.label)}</span>`
-            + `<span class="map-scope-row-c">${r.count}</span></button>`).join('');
+            + `<span class="map-scope-row-c">${countText(r.count)}</span></button>`).join('');
         const overlay = document.createElement('div');
         overlay.className = 'bottom-sheet-overlay map-scope-overlay';
         overlay.innerHTML = `<div class="bottom-sheet map-scope-sheet" role="dialog" aria-modal="true" aria-labelledby="map-scope-sheet-title">`
