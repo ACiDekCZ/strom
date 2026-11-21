@@ -219,6 +219,27 @@ test.describe('Use as portrait… on a picture of the research (1121)', () => {
     });
 });
 
+test.describe('Use as portrait… among the first actions of the viewer opened for the person (1121)', () => {
+    const order = (page: Page) => panel(page).locator('.mv-actions > *').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.action));
+
+    test('a desktop: right after the first action', async ({ page }) => {
+        await page.setViewportSize(DESKTOP);
+        await setup(page);
+        await viewFor(page, 'P0001', 'Svatba');
+        expect((await order(page)).slice(0, 2)).toEqual(['attach', 'useAsPortrait']);
+    });
+
+    test('a phone (390): the collapsed sheet shows it', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await setup(page);
+        await viewFor(page, 'P0001', 'Svatba');
+        await expect(panel(page)).not.toHaveClass(/is-expanded/);
+        expect((await order(page)).slice(0, 2)).toEqual(['attach', 'useAsPortrait']);
+        await expect(act(page, 'useAsPortrait')).toBeVisible();
+        await expect(act(page, 'makeSource')).toBeHidden();
+    });
+});
+
 test.describe('Link to… opened for a person (1121)', () => {
     test.use({ viewport: DESKTOP });
 

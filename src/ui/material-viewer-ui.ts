@@ -883,6 +883,10 @@ export const materialViewerMethods = uiModule({
                 closeImageViewer();
                 void this.useMaterialAsPortrait(forId, item);
             }, { id: 'useAsPortrait', write: portrait.bridge });
+            // Opened for that person: right after the first action, among those a phone's collapsed sheet shows (1121).
+            if (forId === (st.ctx.personId ?? this.materialContextPerson()) && actions.childElementCount > 2) {
+                actions.insertBefore(actions.lastElementChild!, actions.children[1]);
+            }
         }
         if (inTree && DataManager.canEditMedia(item.attachment!.id)) {
             action(m.removeFromTree, () => void this.openRemoveFromTreeDialog(item, { leave: () => closeImageViewer() }), { danger: true, id: 'removeFromTree' });
