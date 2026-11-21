@@ -341,7 +341,7 @@ export const materialMethods = uiModule({
                 this.showToast(m.sentWaitToast(sent, name, !('personId' in target)) + knownPart, 8000, { closable: true, ...sort });
                 return;
             }
-            this.showToast((archive ? m.savedArchiveToast(sent, name) : m.sentToast(sent, name)) + knownPart, 6000, { closable: true, ...show });
+            this.showToast((archive ? m.savedArchiveToast(sent, name, !('personId' in target)) : m.sentToast(sent, name, !('personId' in target))) + knownPart, 6000, { closable: true, ...show });
         }
     },
 

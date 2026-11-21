@@ -22,3 +22,23 @@ describe('pl: sent to the research, waits in Materials', () => {
         expect(text).not.toContain('dla osoby');
     });
 });
+
+describe('sent to the research or saved in the archive, for a source', () => {
+    it('pl: a source is "dla źródła „<title>”", a person "dla osoby <name>"', () => {
+        const m = getStringsForLang('pl').material;
+        expect(m.sentToast(1, 'Matrika Lhota 1850', true)).toContain('1 plik dla źródła „Matrika Lhota 1850”.');
+        expect(m.savedArchiveToast(2, 'Matrika Lhota 1850', true)).toContain('2 pliki dla źródła „Matrika Lhota 1850”.');
+        expect(m.sentToast(1, 'Karel Testovec')).toContain('1 plik dla osoby Karel Testovec.');
+        expect(m.savedArchiveToast(1, 'Karel Testovec')).toContain('1 plik dla osoby Karel Testovec.');
+    });
+
+    it('cs: a source is "k prameni „<title>“", never "k osobě"', () => {
+        const m = getStringsForLang('cs').material;
+        const sent = m.sentToast(1, 'Matrika Lhota 1850', true);
+        const saved = m.savedArchiveToast(3, 'Matrika Lhota 1850', true);
+        expect(sent).toContain('1 soubor k prameni „Matrika Lhota 1850“.');
+        expect(saved).toContain('3 soubory k prameni „Matrika Lhota 1850“.');
+        expect(sent + saved).not.toContain('k osobě');
+        expect(m.sentToast(1, 'Karel Testovec')).toContain('k osobě Karel Testovec.');
+    });
+});
