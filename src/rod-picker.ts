@@ -335,7 +335,7 @@ export function selectionPickerHtml(m: SelectionPickerMarkup): string {
         const other = m.rods.items.find(i => i.id === 'other');
         if (other && m.rods.small.length) {
             const xInner = `<span class="sp-selpick-ic" aria-hidden="true"></span><span class="sp-rodpick-n">${esc(t.other)} <span class="sp-rodpick-xchev" aria-hidden="true">▸</span></span>`
-                + `<span class="sp-rodpick-c">${other.members}</span>`;
+                + `<span class="sp-rodpick-c">${countText(other.members)}</span>`;
             rows.push(`<li class="sp-rodpick-other sel-opt" data-sel-form="row" data-sec="rods" data-rod="other"><button type="button" class="sp-rodpick-x" aria-expanded="false">${xInner}</button></li>`);
             for (const s of m.rods.small) {
                 const sel = `rod:${encodeURIComponent(s.id)}`;

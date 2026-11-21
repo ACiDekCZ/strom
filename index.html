@@ -25596,6 +25596,12 @@
                 position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
             }
         }
+        /* Wider than a phone the selection's pill is as wide as its content up to its max-width: placed at 50 % it
+           would shrink to half the screen and cut a long name with its count while room is left (§12). */
+        @media (min-width: 641px) {
+            .evidence-pill.evidence-pill--sel { width: max-content; }
+            body.overview-docked .evidence-pill.evidence-pill--sel { max-width: calc(100vw - var(--overview-w) - 32px); }
+        }
         /* Touch (§10): the selection pill's Next person and × are 44 px targets like its label and Hide others. */
         @media (pointer: coarse) {
             .evidence-pill--sel .evidence-pill-next, .evidence-pill--sel .evidence-pill-close { height: 44px; min-width: 44px; }
@@ -25693,6 +25699,11 @@
             body[data-view-mode="fan"] .evidence-pill { top: max(112px, calc(var(--fan-toolbar-bottom, 0px) + 8px)); }
             body.descendants-view .evidence-pill ~ .live-follow-pill { top: 172px; }
             body[data-view-mode="fan"] .evidence-pill ~ .live-follow-pill { top: max(172px, calc(var(--fan-toolbar-bottom, 0px) + 68px)); }
+        }
+        /* A standalone file's banner stands where the pill would at these widths: the pills go under it. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            body:has(#embedded-mode-banner.visible) .evidence-pill { top: calc(var(--toolbar-h, 56px) + 72px); }
+            body:has(#embedded-mode-banner.visible) .evidence-pill ~ .live-follow-pill { top: calc(var(--toolbar-h, 56px) + 132px); }
         }
         @media (min-width: 641px) and (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             body.descendants-view .evidence-pill { top: 96px; }
