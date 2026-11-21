@@ -101,6 +101,45 @@ test.describe('the map scope Selection on a computer', () => {
         await expect(page.locator('.map-marker')).toHaveCount(2);
     });
 
+    test('the Places dialog from the map shows its scope, the selection chosen; a part changes the dialog\'s list and the map', async ({ page }) => {
+        await setup(page);
+        await sel(page).click();
+        await pickList(page, 'Quillfen line');
+        await page.evaluate(() => window.Strom.UI.showPlacesManager());
+        const dialog = page.locator('#places-modal');
+        const scope = dialog.locator('.places-scope');
+        await expect(scope).toHaveAttribute('role', 'group');
+        await expect(scope).toHaveAttribute('aria-label', 'Map scope');
+        await expect(scope.locator('.sel-opt')).toHaveText(['This view', /Quillfen line\s*· 4/, 'Whole tree']);
+        const part = (s: string): Locator => scope.locator(`[data-places-scope="${s}"]`);
+        await expect(part('sel')).toHaveAttribute('aria-pressed', 'true');
+        await expect(part('sel')).toHaveClass(/active/);
+        await expect(part('sel')).toHaveAttribute('aria-label', /Quillfen line, 4 people/);
+        await expect(part('tree')).toHaveAttribute('aria-pressed', 'false');
+        await expect(dialog.locator('.places-total')).toHaveText('4 places');
+
+        // Whole tree: the dialog lists every place, the map behind it has the same scope.
+        await part('tree').click();
+        await expect(part('tree')).toHaveAttribute('aria-pressed', 'true');
+        await expect(part('tree')).toBeFocused();
+        await expect(part('sel')).toHaveAttribute('aria-pressed', 'false');
+        await expect(dialog.locator('.places-total')).toHaveText('7 places');
+        await expect(page.locator('#map-scope-tree')).toHaveClass(/active/);
+
+        // Back to the selection.
+        await part('sel').click();
+        await expect(part('sel')).toHaveAttribute('aria-pressed', 'true');
+        await expect(dialog.locator('.places-total')).toHaveText('4 places');
+        await expect(sel(page)).toHaveClass(/active/);
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+
+        // Opened for the whole tree from elsewhere (a person's page, the tree's menu): no scope to show.
+        await page.evaluate(() => window.Strom.UI.showPlacesManager(undefined, undefined, 'tree'));
+        await expect(dialog).toBeVisible();
+        await expect(dialog.locator('.places-scope')).toHaveCount(0);
+    });
+
     test('the place\'s bubble: the selection\'s people, the others as one line with Whole tree', async ({ page }) => {
         await setup(page);
         await sel(page).click();
@@ -236,6 +275,23 @@ test.describe('the map scope on a phone', () => {
         await expect(page.locator('.map-scope-sheet [data-scope="sel"]')).toHaveAttribute('aria-checked', 'true');
         await page.locator('.map-scope-sheet .map-scope-all').click();
         await expect(page.locator('.rod-pick-sheet')).toBeVisible();
+    });
+
+    test('the Places dialog\'s scope fits the phone, 44 px parts, the selection chosen', async ({ page }) => {
+        await setup(page);
+        const btn = page.locator('#map-container .map-scope-btn');
+        await btn.click();
+        await page.locator('.map-scope-sheet .map-scope-row[data-sel]', { hasText: 'Quillfen line' }).click();
+        await expect(btn).toHaveText(/Scope:.*Quillfen line/);
+        await page.evaluate(() => window.Strom.UI.showPlacesManager());
+        const scope = page.locator('#places-modal .places-scope');
+        await expect(scope.locator('[data-places-scope="sel"]')).toHaveAttribute('aria-pressed', 'true');
+        const box = (await scope.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(390.5);
+        for (const s of ['view', 'sel', 'tree']) {
+            expect((await scope.locator(`[data-places-scope="${s}"]`).boundingBox())!.height).toBeGreaterThanOrEqual(43.5);
+        }
     });
 });
 

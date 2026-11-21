@@ -6478,6 +6478,24 @@
         /* The summary: the count, the state chips, Select and ⋯; the context line and a step's preview under it. */
         .places-top { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 8px 24px 10px; border-bottom: 1px solid var(--divider); }
         .places-summary { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; }
+        /* Opened from the map: the map's scope as a .sel-seg (src/ui/sel-css.ts), the selection's name cut with "…". */
+        .places-scope.sel-seg { display: inline-flex; align-self: flex-start; max-width: 100%; overflow: hidden; }
+        .places-scope button { display: inline-flex; align-items: baseline; gap: 4px; min-width: 0; padding: 5px 12px; font-size: 13px; white-space: nowrap; }
+        .places-scope .map-scope-name { max-width: 200px; }
+        .places-scope button.active .map-scope-n { color: var(--text-light); }
+        @media (max-width: 640px) {
+            .places-scope.sel-seg { display: flex; align-self: stretch; }
+            .places-scope button { flex: 1 1 auto; justify-content: center; padding: 5px 8px; }
+            .places-scope button[data-places-scope="sel"] { flex: 0 1 auto; }
+            .places-scope .map-scope-name { max-width: 120px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .places-top > .places-scope.sel-seg { flex: none; }
+            .places-scope .map-scope-name { max-width: 140px; }
+        }
+        @media (pointer: coarse) {
+            .places-scope button { min-height: 44px; align-items: center; }
+        }
         .places-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
         .places-total { font-size: 13px; font-weight: 600; margin-right: 4px; white-space: nowrap; }
         /* The state chips and Select are .sel-opt chips (src/ui/sel-css.ts); border and corner over the dialog's button rule. */

@@ -148,6 +148,9 @@ function otherUnplacedOfTown(town: string, exceptKey: string): string[] {
 /** What opens at a place the dialog is opened on (the map's bubble, the person card). */
 export type PlaceFocus = 'search' | 'why' | 'row';
 
+/** The open dialog came from the map: its scope is shown and can be changed there (spec 098 §3). */
+let managerFromMap = false;
+
 export const placesManagerMethods = uiModule({
     placesForManager(scope: MapScope): ManagerPlace[] {
         const data = DataManager.getData();
@@ -166,11 +169,15 @@ export const placesManagerMethods = uiModule({
      * @param opts.unplaced open with the "No location" chip on
      * @param opts.focus what opens at `focusKey`: its search (default), its "Why here", or just the row
      *
-     * Opened from the map it follows the map's scope; opened from anywhere else
-     * "this view" would mean nothing, so it covers the whole tree.
+     * Opened from the map it follows the map's scope, shown over its list and
+     * changed there (the map's too); opened from anywhere else "this view"
+     * would mean nothing, so it covers the whole tree.
      */
     showPlacesManager(focusKey?: string, parentDialogId?: string, scope?: MapScope,
         opts: { keepFilter?: boolean; unplaced?: boolean; focus?: PlaceFocus } = {}): void {
+        // Opened from the map (it follows the map's scope), the dialog shows that scope and changes it;
+        // a redraw keeps what the open decided.
+        if (!opts.keepFilter) managerFromMap = scope === undefined && !parentDialogId;
         this.placesManagerScope = scope ?? (parentDialogId ? 'tree' : this.mapScope);
         this.placesManagerParent = parentDialogId ?? null;
         const places = this.placesForManager(this.placesManagerScope);
@@ -256,8 +263,9 @@ export const placesManagerMethods = uiModule({
         // The summary with its state chips, the context line and the preview of a step for all.
         const top = document.createElement('div');
         top.className = 'places-top';
-        top.innerHTML = `${this.placesSummaryHtml(summary)}<div class="places-context-host"></div><div class="places-bulk-host"></div>`;
+        top.innerHTML = `${managerFromMap ? this.placesScopeHtml() : ''}${this.placesSummaryHtml(summary)}<div class="places-context-host"></div><div class="places-bulk-host"></div>`;
         modal.insertBefore(top, modal.querySelector(':scope > .modal-content'));
+        if (managerFromMap) this.bindPlacesScope(top);
         if (managerCanResearch) modal.insertAdjacentHTML('beforeend', this.placesSelbarHtml());
         const input = bar.querySelector('#places-filter') as HTMLInputElement;
         const setQuery = (q: string): void => {

@@ -129,6 +129,52 @@ export const mapScopeMethods = uiModule({
         if (btn) btn.hidden = path && scope !== 'sel';
     },
 
+    /**
+     * The map's scope in the Places dialog opened from the map: the same
+     * parts as over the map, the one it lists chosen (aria-pressed); the
+     * Selection part only while the window has a selection (the dialog has
+     * no choice of one). A part sets the map's scope and lists its places.
+     */
+    placesScopeHtml(): string {
+        const m = strings.map;
+        const scope = this.placesManagerScope;
+        const ref = getSelection().ref;
+        const part = (s: MapScope, inner: string, label?: string): string =>
+            `<button type="button" class="sel-opt${scope === s ? ' active' : ''}" data-sel-form="seg" data-places-scope="${s}" aria-pressed="${scope === s}"`
+            + `${label ? ` aria-label="${esc(label)}" title="${esc(label)}"` : ''}>${inner}</button>`;
+        let sel = '';
+        if (ref) {
+            const label = selectionText(ref);
+            const n = realSelectionIds().length;
+            sel = part('sel', `<b class="map-scope-name">${esc(label)}</b><span class="map-scope-n">· ${n}</span>`, m.scopeAria(label, n));
+        }
+        return `<div class="places-scope sel-seg" role="group" aria-label="${esc(m.scopeGroup)}">`
+            + part('view', esc(m.scopeView)) + sel + part('tree', esc(m.scopeTree)) + '</div>';
+    },
+
+    /** The Places dialog's scope parts (placesScopeHtml). */
+    bindPlacesScope(root: HTMLElement): void {
+        root.querySelector('.places-scope')?.addEventListener('click', (e) => {
+            const part = (e.target as HTMLElement).closest<HTMLElement>('[data-places-scope]');
+            const scope = part?.dataset.placesScope;
+            if (scope === 'view' || scope === 'sel' || scope === 'tree') void this.setPlacesScope(scope);
+        });
+    },
+
+    /**
+     * A scope chosen in the Places dialog: the map's scope (the map behind it
+     * drawn anew where it stands) and the dialog's list (its search and chip
+     * kept). A scope without a place keeps both as they are, with a toast.
+     */
+    async setPlacesScope(scope: MapScope): Promise<void> {
+        if (scope === this.placesManagerScope) return;
+        if (scope === 'sel' && !getSelection().ref) return;
+        if (this.placesForManager(scope).length === 0) { this.showToast(strings.map.noPlacesAtAll); return; }
+        await this.setMapScope(scope, { keepView: true });
+        this.showPlacesManager(undefined, this.placesManagerParent ?? undefined, scope, { keepFilter: true });
+        document.querySelector<HTMLElement>(`#places-modal [data-places-scope="${scope}"]`)?.focus();
+    },
+
     /** The Selection part: a click, and ↓ / Alt+↓ for the choice. */
     bindMapScope(container: HTMLElement): void {
         const sel = container.querySelector<HTMLButtonElement>('#map-scope-sel');
