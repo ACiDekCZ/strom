@@ -229,12 +229,16 @@ test.describe('follow live with the images by their hash (ged.imagesByHash)', ()
         expect(bridge.trees[files]).toMatchObject({ ref: true, tag: `"${H1}-ref"`, status: 304 });
 
         // A new head: the file by reference, its images found in the stored tree.
-        bridge.head = H2;
+        // The new head only while the page is away: a page still following (its stream reconnects every 250 ms)
+        // would load it itself before the restart.
         await stored(page);
+        const app = page.url();
+        await page.goto('about:blank');
+        bridge.head = H2;
         const asks = bridge.trees.length;
-        await page.reload();
+        await page.goto(app);
         await expect(card(page, 'Dobromila')).toBeVisible();
-        // The reload's own ask (a poll after the load asks again with the new tag: 304).
+        // The restart's own ask (a poll after the load asks again with the new tag: 304).
         expect(bridge.trees[asks]).toMatchObject({ ref: true, status: 200 });
         expect(bridge.images.length).toBe(posts);
         expect(await excerpts(page)).toEqual([imgs[0].url, imgs[1].url]);
