@@ -17,7 +17,7 @@ import { DataManager } from '../data.js';
 import { Attachment, MediaPlace, PartnershipId, Person, PersonId, Source } from '../types.js';
 import { strings } from '../strings.js';
 import { MaterialItem, directPersons, fileUrl } from '../materials.js';
-import { mediaPersonIds, placePersonId } from '../media.js';
+import { mediaAt, mediaPersonIds, placePersonId } from '../media.js';
 import { mediaPlaceLabel, mediaUseLabel, mediaUses } from '../media-uses.js';
 import { MultiPersonPicker, PersonPicker } from '../person-picker.js';
 import { researchPersonRef } from '../research-link.js';
@@ -139,6 +139,16 @@ export const materialAttachMethods = uiModule({
         // Context: the person it came from, else the file's only person.
         const own = records.length === 1 && files.length === 1 ? mediaPersonIds(records[0]) : [];
         let anchorPerson: PersonId | null = ctx.personId && DataManager.getPerson(ctx.personId) ? ctx.personId : own.length === 1 ? own[0] : null;
+        // The person it was opened from is chosen at the start (1121), unless every file is theirs already
+        // (a place in the tree or the research's assignment): then nothing is chosen and one sentence says so.
+        const fromPerson = ctx.personId ? DataManager.getPerson(ctx.personId) : undefined;
+        const fromRefn = researchPersonRef(fromPerson?.refn);
+        const hasFromPerson = (i: MaterialItem): boolean => {
+            const rec = treeRecord(i);
+            return (!!rec && !rec.removed && !!fromPerson && mediaAt(rec, { personId: fromPerson.id })) || (!!fromRefn && i.persons.includes(fromRefn));
+        };
+        const fromAlready = !!fromPerson && files.every(hasFromPerson);
+        const preselect: PersonId[] = fromPerson && !fromPerson.isPlaceholder && !fromAlready ? [fromPerson.id] : [];
 
         const seg = h('div', 'mdlg-seg sel-seg');
         seg.setAttribute('role', 'radiogroup');
@@ -244,6 +254,7 @@ export const materialAttachMethods = uiModule({
                 b.tabIndex = on ? 0 : -1;
             });
             if (next === 'person') {
+                if (fromAlready && fromPerson) pane.appendChild(h('p', 'mdlg-text mdlg-attach-has', m.attachPersonAlready(fullName(fromPerson), files.length)));
                 const host = h('div');
                 host.id = PICKER_ID;
                 pane.appendChild(host);
@@ -260,7 +271,9 @@ export const materialAttachMethods = uiModule({
                     removeLabel: m.removePerson,
                     maxLabel: m.assignMax,
                     fixedLabel: m.attachAlready,
+                    initial: preselect,
                 });
+                chosenPeople = [...preselect];
                 multi.focusInput();
             } else if (next === 'event') {
                 withPerson(person => {

@@ -416,6 +416,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         attachPersonPh: 'Szukaj osoby – imię lub rok',
         attachSourcePh: 'Szukaj w źródłach',
         attachAlready: 'już połączono',
+        attachPersonAlready: (name: string, n: number) => `${n === 1 ? 'Plik jest już połączony' : 'Pliki są już połączone'} z osobą ${name}.`,
         attachChange: 'zmień',
         attachEventsOf: (name: string) => `Wydarzenia osoby ${name}`,
         attachCouplesOf: (name: string) => `Związki osoby ${name}`,
