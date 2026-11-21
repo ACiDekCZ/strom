@@ -15310,9 +15310,13 @@
             :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) .sp-rodpick-small button.sp-rodpick-a { min-height: 44px; }
         }
         /* Narrow desktop: no "Line" before the name, the name to 150px, tighter tabs
-           (8.4 px, not 9: the labels take the 500 cut, the earlier tabs 400). */
+           (8.4 px, not 9: the labels take the 500 cut, the earlier tabs 400) and a
+           tighter selection button: offered in every tree (spec 098 §2), its full
+           padding left the search field 2 px short at 1200 px with a long tree name,
+           and the "/" hint went with the next fit step. */
         @media (min-width: 1025px) and (max-width: 1279px) {
             .rod-picker-host .sp-rodpick-pfx { display: none; }
+            .rod-picker-host .sp-rodpick-btn { padding: 0 8px; gap: 4px; }
             .rod-picker-host .sp-rodpick-v b { max-width: 150px; }
             .toolbar:has(.rod-picker-host:not([hidden])) .view-mode-segment button { padding: 0 8.4px; }
         }

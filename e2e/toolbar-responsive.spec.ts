@@ -820,8 +820,9 @@ test.describe('the tree switcher and the search field are equally high (T54 H4)'
 test.describe('Esc folds the search opened from the magnifier back to it', () => {
     test.use({ locale: 'de-DE' });
 
-    // Widths where the de bar folds the search on its own: a computer at 1100, a tablet at 700.
-    for (const [width, height, touch] of [[1100, 800, false], [700, 1000, true]] as const) {
+    // Widths where the de bar folds the search on its own: a computer at 1060, a tablet at 700
+    // (at 1100 the field just holds its 80 px: the selection's button is tighter at 1025-1279 px).
+    for (const [width, height, touch] of [[1060, 800, false], [700, 1000, true]] as const) {
         test.describe(`${width} px${touch ? ', touch' : ''}`, () => {
             test.use({ viewport: { width, height }, hasTouch: touch });
 
