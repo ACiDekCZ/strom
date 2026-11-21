@@ -17,6 +17,8 @@ import { ROW_KEY, ROW_TYPES, type RowType } from './table-model.js';
 import { listKindIcon } from '../list-kind-icon.js';
 import type { ListKind } from '../../person-lists.js';
 import { isPhoneBar } from '../../breakpoints.js';
+import { selectionIcon } from '../../rod-picker.js';
+import type { SelectionKind } from '../../view-selection-ref.js';
 
 export interface BarHandlers {
     /** A row type was chosen (segment or sheet). */
@@ -142,6 +144,8 @@ export function updateBar(bar: HTMLElement, type: RowType, counts: Record<RowTyp
 /** What Scope ▾ shows (spec 084 §9): the list's name and kind; null: the whole tree. */
 export interface ScopeShown {
     list: { name: string; kind: ListKind } | null;
+    /** The window's selection that is not a list (spec 098 §5): "Selection: Rod Quellmayer" and its kind's icon. */
+    sel?: { name: string; kind: Exclude<SelectionKind, 'list'> } | null;
     /** Sources: no scope by list (dimmed, says why). */
     disabled: boolean;
 }
@@ -154,13 +158,14 @@ const SCOPE_GLYPH = '<svg class="tv-scope-glyph" width="14" height="14" viewBox=
 export function updateScope(bar: HTMLElement, shown: ScopeShown): void {
     const btn = bar.querySelector<HTMLElement>('.tv-scope-btn')!;
     const t = strings.table;
-    const name = shown.list?.name ?? t.scopeWhole;
+    const name = shown.list?.name ?? shown.sel?.name ?? t.scopeWhole;
     const key = JSON.stringify(shown);
     if (btn.dataset.key === key) return;
     btn.dataset.key = key;
-    btn.classList.toggle('is-list', !!shown.list);
+    btn.classList.toggle('is-list', !!shown.list || !!shown.sel);
+    btn.classList.toggle('is-sel', !!shown.sel);
     // The whole tree: its name, or where the bar is tight (a tablet, a changed view) only a list glyph.
-    btn.innerHTML = (shown.list ? listKindIcon(shown.list.kind, 14) : SCOPE_GLYPH)
+    btn.innerHTML = (shown.list ? listKindIcon(shown.list.kind, 14) : shown.sel ? `<span class="tv-scope-selic" aria-hidden="true">${selectionIcon(shown.sel.kind)}</span>` : SCOPE_GLYPH)
         + `<span class="tv-scope-name">${esc(name)}</span><span class="tv-scope-caret" aria-hidden="true">▾</span>`;
     btn.setAttribute('aria-label', t.scopeAria(name));
     if (shown.disabled) {

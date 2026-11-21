@@ -16,7 +16,7 @@ import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
 import { strings } from '../strings.js';
 import type { Person, PersonId } from '../types.js';
-import { MAP_KINDS, collectPlaces, mapPointPersonIds } from '../places.js';
+import { MAP_KINDS, mapPointPersonIds, personHasMapPlace } from '../places.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import { mapScopeAfterSelection, mapScopeOnOpen, type MapScope } from '../map-scope.js';
 import { getWindowRole } from '../windows/window-role.js';
@@ -384,13 +384,10 @@ export const mapScopeMethods = uiModule({
         };
     },
 
-    /** The selection's people without any place (every kind of the map). */
+    /** The selection's people without any place (every kind of the map, spec 098 §5; the Table's "No place" chip agrees). */
     mapSelUnplacedIds(): PersonId[] {
-        const ids = selectionIds();
-        if (!ids) return [];
-        const placed = new Set<PersonId>();
-        for (const usage of collectPlaces(DataManager.getData(), ids).values()) usage.personIds.forEach(id => placed.add(id));
-        return realSelectionIds().filter(id => !placed.has(id));
+        const data = DataManager.getData();
+        return realSelectionIds().filter(id => !personHasMapPlace(data.persons[id], data));
     },
 
     /**
@@ -425,13 +422,10 @@ export const mapScopeMethods = uiModule({
     },
 
     /**
-     * The selection's people without a place (§5, 4g's link): the Table.
-     * Spec 098 §5 narrows it to those people (the Table's scope Selection
-     * and its "No place" filter).
+     * The selection's people without a place (§5, 4g's link and the status
+     * bar's line): the Table in the selection's scope with "No place".
      */
     openMapSelUnplaced(): void {
-        TreeRenderer.presetViewMode('table');
-        void TreeRenderer.renderAsync();
+        this.openTableForSelection({ filter: 'noPlace' });
     },
 });
-

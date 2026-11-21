@@ -50,14 +50,14 @@ export function createNotice(handlers: NoticeHandlers): HTMLElement {
     return el;
 }
 
-/** The strip for `name` (for `gone` the name is not said), or hidden (null). */
-export function showNotice(el: HTMLElement, name: string | null, kind: NoticeKind = 'filter'): void {
+/** The strip for `name` (for `gone` the name is not said), or hidden (null); `inSelection`: the scope is the window's selection (spec 098 §5). */
+export function showNotice(el: HTMLElement, name: string | null, kind: NoticeKind = 'filter', inSelection = false): void {
     if (name === null) {
         if (!el.hidden) { el.hidden = true; el.innerHTML = ''; }
         return;
     }
     const t = strings.table;
-    const text = kind === 'gone' ? t.scopeGone : kind === 'list' ? t.notInList(name) : t.link.hidden(name);
+    const text = kind === 'gone' ? t.scopeGone : kind === 'list' ? (inSelection ? t.notInSelection(name) : t.notInList(name)) : t.link.hidden(name);
     const html = '<span class="tv-notice-dot" aria-hidden="true"></span>'
         + `<span class="tv-notice-text">${esc(text)}</span>`
         + '<span class="tv-notice-acts">'

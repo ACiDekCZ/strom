@@ -11487,6 +11487,9 @@
         .tv-scope-menu { min-width: 320px; max-width: 380px; }
         .tv-scope-label { margin-right: 6px; font-size: 12px; color: var(--text-faint); white-space: nowrap; }
         .tv-scope-glyph { display: none; flex: none; color: var(--text-light); }
+        /* The window's selection as the scope (spec 098 §5): its kind's icon, as in the Selection ▾ choice. */
+        .tv-scope-selic { display: inline-flex; flex: none; color: var(--text-light); }
+        .tv-scope-selic svg { width: 14px; height: 14px; }
         @media (max-width: 1199px) { .tv-slot-scope .tv-scope-label { display: none; } }
         /* A tight bar: the whole tree as a list glyph (its name in the title and the label), the labels hidden;
            a list keeps its name. A tablet's width with a changed view's buttons always; row 1 of a computer and
@@ -13191,6 +13194,12 @@
         .map-status button.map-status-research { background: var(--research); border-color: var(--research); color: var(--research-soft); }
         @media (hover: hover) { .map-status button.map-status-research:hover { filter: brightness(1.1); } }
         .map-status button.map-status-confirm { color: var(--warn-text); border-color: var(--warn-line); background: var(--warn-soft); }
+        /* The selection's people without a place (spec 098 §5): a second line under the counts, the whole line one quiet button. */
+        .map-status button.map-status-unplaced { flex-basis: 100%; padding: 0; border: 0; border-radius: var(--r-sm); background: none; box-shadow: none; color: var(--primary); font-size: 13px; font-weight: 500; text-align: center; cursor: pointer; }
+        .map-status button.map-status-unplaced:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) { .map-status button.map-status-unplaced:hover { background: none; color: var(--primary-dark); text-decoration: underline; text-underline-offset: 2px; } }
+        @media (max-width: 640px) { .map-status button.map-status-unplaced { font-size: 12px; } }
+        @media (pointer: coarse) { .map-status button.map-status-unplaced { min-height: 44px; } }
         /* A phone's sheet covers the bottom: the bar steps aside while it is open. */
         .map-sheet-open .map-status { visibility: hidden; }
         .map-attribution {
@@ -25559,6 +25568,8 @@
         @media (hover: hover) { .evidence-pill-next:hover, .evidence-pill-cite:hover, .evidence-pill-sources:hover, .evidence-pill-close:hover { background: var(--hover-bg); } }
         .evidence-pill-next:focus-visible, .evidence-pill-cite:focus-visible, .evidence-pill-sources:focus-visible, .evidence-pill-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         body[data-view-mode="timeline"] .evidence-pill, body[data-view-mode="map"] .evidence-pill { display: none; }
+        /* The Table shows the window's selection as its scope (spec 098 §5): the selection's pill would cover its bar. */
+        body[data-view-mode="table"] #evidence-pill.evidence-pill--sel { display: none; }
         /* Following on the map: its own pause pill stays (spec 043 §1.4). */
         body[data-view-mode="map"] .evidence-pill.live-follow-pill--map { display: flex; }
         /* Tablet: same place, wider margins. */

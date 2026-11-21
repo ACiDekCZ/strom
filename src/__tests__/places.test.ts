@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { placeKey, collectPlaces, placeList, placesWithVariants, renamePlace, orphanedPlaceKeys,
     sortPlacesByName, sortPlacesForManager, isPlacesSort, readPlacesSort, DEFAULT_PLACES_SORT, placeFilterText, placeMatchesFilter,
     MapKind, countPlaceUses, compareHouses, houseKey, groupTownPoints, MappedPlaceInput, TownPoint, mapPointHasPerson,
-    splitPlaceHouses, placeTownGroups, townHousePlaces, townOfPlace } from '../places.js';
+    splitPlaceHouses, placeTownGroups, townHousePlaces, townOfPlace, personHasMapPlace } from '../places.js';
 import { StromData, Person, PersonId, PartnershipId, Partnership, PlaceGeo } from '../types.js';
 
 function person(id: string, o: Partial<Person> = {}): Person {
@@ -455,5 +455,50 @@ describe('splitPlaceHouses', () => {
         expect([e.birthPlace, e.birthAddress, e.events![0].place, e.events![0].address]).toEqual(['Bělokamen', '16', 'Bělokamen', '16']);
         expect(r.changed).toBe(5);
         expect(r.data.persons[P('f')].birthPlace).toBe('Praha 5');
+    });
+});
+
+describe('personHasMapPlace (spec 098 §5: no place of any map kind)', () => {
+    const data = treeWith([
+        person('born', { birthPlace: 'Bělokamen' }),
+        person('died', { deathPlace: 'Lhotín' }),
+        person('event', { events: [{ id: 'e1', type: 'residence', place: 'Tichá Lhota' }] }),
+        person('wed', { partnerships: ['u1' as PartnershipId] }),
+        person('wife', { partnerships: ['u1' as PartnershipId] }),
+        person('div', { partnerships: ['u2' as PartnershipId] }),
+        person('div2', { partnerships: ['u2' as PartnershipId] }),
+        person('cev', { partnerships: ['u3' as PartnershipId] }),
+        person('cev2', { partnerships: ['u3' as PartnershipId] }),
+        person('none', { birthDate: '1900', events: [{ id: 'e2', type: 'residence', date: '1910' }], partnerships: ['u4' as PartnershipId] }),
+        person('none2', { partnerships: ['u4' as PartnershipId] }),
+        person('blank', { birthPlace: '  ', deathPlace: ' , ' }),
+    ], [
+        union('u1', 'wed', 'wife', { startPlace: 'Horní Ves' }),
+        union('u2', 'div', 'div2', { endPlace: 'Zálesí' }),
+        union('u3', 'cev', 'cev2', { events: [{ id: 'c1', type: 'banns', place: 'Lhotín' }] }),
+        union('u4', 'none', 'none2', { startDate: '1920' }),
+    ]);
+    const has = (id: string) => personHasMapPlace(data.persons[P(id)], data);
+
+    it('a birth, death or own event place counts', () => {
+        expect(has('born')).toBe(true);
+        expect(has('died')).toBe(true);
+        expect(has('event')).toBe(true);
+    });
+
+    it("a couple's wedding, divorce or couple event place counts for both partners", () => {
+        for (const id of ['wed', 'wife', 'div', 'div2', 'cev', 'cev2']) expect(has(id)).toBe(true);
+    });
+
+    it('dates without places, and empty or punctuation-only places, are no place', () => {
+        expect(has('none')).toBe(false);
+        expect(has('none2')).toBe(false);
+        expect(has('blank')).toBe(false);
+    });
+
+    it('agrees with collectPlaces person by person', () => {
+        const placed = new Set<PersonId>();
+        for (const u of collectPlaces(data).values()) u.personIds.forEach(id => placed.add(id));
+        for (const p of Object.values(data.persons)) expect(personHasMapPlace(p, data)).toBe(placed.has(p.id));
     });
 });

@@ -14,7 +14,9 @@ import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
 import { buildTableModel, rowsOf, type TableModel } from '../ui/table-view/table-model.js';
 import { cellOf, LEAD_COLUMNS } from '../ui/table-view/table-columns.js';
 import { availableChips, emptyFilter, filterRows, setChip, sortRows } from '../ui/table-view/table-filter.js';
-import { applyScopeCells, outsideScope, scopeCounts, scopeRows, tableScopeOf } from '../ui/table-view/table-scope.js';
+import { applyScopeCells, isSelectionScopeKey, outsideScope, scopeCounts, scopeKeySelection, scopeRows, selectionScopeKey, tableScopeOf } from '../ui/table-view/table-scope.js';
+import { selectionIndex } from '../ui/view-selection-ui.js';
+import { selectionPersonIds, type SelectionRef } from '../view-selection.js';
 import { defaultTableState } from '../ui/table-view/table-state.js';
 import { applyView, viewFromState } from '../ui/table-view/table-views.js';
 import { applyTableWindowState, readTableWindowState, tableWindowStateOf } from '../ui/table-view/table-window-state.js';
@@ -135,6 +137,71 @@ describe('table scope by a list of people', () => {
         const src = defaultTableState().types.sources;
         src.scope = 'pl_fixed';
         expect(viewFromState('sources', src, 'v2', 'S', '').scope).toBeUndefined();
+    });
+});
+
+describe("table scope by the window's selection (spec 098 §5)", () => {
+    const { data } = syntheticTree({ persons: 200, founders: 20 });
+
+    beforeEach(() => load(structuredClone(data), []));
+
+    /** A person with descendants (the selection must not be empty). */
+    function descendantsRef(): SelectionRef {
+        const { index } = selectionIndex();
+        for (const id of Object.keys(dm.data.persons) as PersonId[]) {
+            const ref: SelectionRef = { kind: 'descendants', personId: id };
+            if ((selectionPersonIds(index.data, index, ref)?.size ?? 0) > 3) return ref;
+        }
+        throw new Error('no person with descendants');
+    }
+
+    it('a list keeps its id as the key; another selection is a key of its own, read back', () => {
+        expect(selectionScopeKey({ kind: 'list', listId: 'pl_x' })).toBe('pl_x');
+        const ref = descendantsRef();
+        const key = selectionScopeKey(ref);
+        expect(isSelectionScopeKey(key)).toBe(true);
+        expect(isSelectionScopeKey('pl_x')).toBe(false);
+        expect(scopeKeySelection(key)).toEqual(ref);
+        expect(scopeKeySelection('pl_x')).toBeNull();
+    });
+
+    it("the rows are the selection's people (the sort stays the Table's), no Done, nobody to take out", () => {
+        const ref = descendantsRef();
+        const m = model();
+        const scope = tableScopeOf(selectionScopeKey(ref))!;
+        expect(scope.kind).toBe('selection');
+        expect(scope.fixed).toBe(false);
+        expect(scope.cells.done).toBeNull();
+        const { index } = selectionIndex();
+        const want = [...selectionPersonIds(index.data, index, ref)!].filter(id => !dm.data.persons[id].isPlaceholder).sort();
+        expect(scopeRows(m, 'persons', scope).map(r => r.id).sort()).toEqual(want);
+        const outside = rowsOf(m, 'persons').find(r => !want.includes(r.id as PersonId))!;
+        expect(outsideScope(outside, scope)).toBe(true);
+        expect(scopeCounts(m, scope).persons).toBe(want.length);
+    });
+
+    it('a selection that is gone has no scope; a view never keeps the selection', () => {
+        expect(tableScopeOf(selectionScopeKey({ kind: 'descendants', personId: 'nobody' as PersonId }))).toBeNull();
+        const st = defaultTableState().types.persons;
+        st.scope = selectionScopeKey(descendantsRef());
+        expect(viewFromState('persons', st, 'v1', 'Mine', '').scope).toBeUndefined();
+    });
+
+    it('"No place" keeps the scope\'s people with no place of any map kind', () => {
+        const ref = descendantsRef();
+        const scope = tableScopeOf(selectionScopeKey(ref))!;
+        const [a, b] = scope.ids;
+        const pa = dm.data.persons[a];
+        pa.birthPlace = undefined; pa.deathPlace = undefined; pa.events = [];
+        for (const u of pa.partnerships) { const un = dm.data.partnerships[u]; un.startPlace = undefined; un.endPlace = undefined; un.events = []; }
+        dm.data.persons[b].birthPlace = 'Bělokamen';
+        const m = model();
+        const f = emptyFilter();
+        setChip(f, 'noPlace', true);
+        const shown = filterRows(m, 'persons', scopeRows(m, 'persons', scope), f).rows.map(r => r.id);
+        expect(shown).toContain(a);
+        expect(shown).not.toContain(b);
+        expect(availableChips(m, 'persons')).toContain('noPlace');
     });
 });
 

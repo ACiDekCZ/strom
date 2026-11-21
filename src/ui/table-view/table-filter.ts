@@ -23,6 +23,7 @@ import { personPassesUnions, type UnionPredicate } from './table-subrows.js';
 import { rodOf, type RodId } from '../../lineage.js';
 import { RELIABILITY_ORDER } from '../../reliability.js';
 import { strings } from '../../strings.js';
+import { personHasMapPlace } from '../../places.js';
 import type { EventParticipant, ParticipantRole, PersonId } from '../../types.js';
 import { shownNameOrEmpty } from '../../person-name.js';
 import { yearOf as dateYearOf } from '../../dates.js';
@@ -31,7 +32,7 @@ import { yearOf as dateYearOf } from '../../dates.js';
 // The filter's shape (§8.2, §9.1). Part D stores it in `TableView.filter`.
 
 /** The quick chips (§8.1), in their fixed order. */
-export const CHIP_ORDER = ['living', 'deceased', 'blood', 'rod', 'gen', 'multiU', 'noBirth', 'uncertain', 'noSource', 'finding', 'unusual', 'unconfirmed'] as const;
+export const CHIP_ORDER = ['living', 'deceased', 'blood', 'rod', 'gen', 'multiU', 'noBirth', 'noPlace', 'uncertain', 'noSource', 'finding', 'unusual', 'unconfirmed'] as const;
 
 /** The Events table's quick chips (§14.1), in their fixed order. */
 export const EVENT_CHIP_ORDER = ['evBirth', 'evMarriage', 'evDeath', 'evOther', 'noSource'] as const;
@@ -467,6 +468,8 @@ export function personPassesChip(model: TableModel, row: PersonRow, item: ChipFi
         case 'left': return !ctx.scope?.done || !ctx.scope.done.has(row.id);
         case 'done': return !ctx.scope?.done || ctx.scope.done.has(row.id);
         case 'noBirth': return !p.birthDate?.trim();
+        // No place of any kind the map shows (spec 098 §5; the map's "N people … no place" agrees).
+        case 'noPlace': return !personHasMapPlace(p, ctx.data);
         case 'uncertain': return cellOf(model, row, col('persons', 'bDate')).uncertain || cellOf(model, row, col('persons', 'dDate')).uncertain;
         case 'noSource': return cellOf(model, row, col('persons', 'srcCount')).sortKey === 0;
         case 'finding': {

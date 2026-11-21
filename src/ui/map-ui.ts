@@ -353,7 +353,9 @@ export const mapMethods = uiModule({
     },
 
     /** The bar's actions after the map's own lookup. */
-    mapBarAction(action: MapBarAction): void {
+    mapBarAction(action: MapBarAction | 'unplaced'): void {
+        // The selection's people without a place (spec 098 §5): the Table with them.
+        if (action === 'unplaced') { this.openTableForSelection({ filter: 'noPlace' }); return; }
         if (action === 'geocode') { void this.startGeocoding(); return; }
         if (action === 'confirm') { this.openWaitingPlaces(); return; }
         if (action === 'research') {
@@ -666,6 +668,11 @@ export const mapMethods = uiModule({
             return;
         }
 
+        // The selection's people without any place (spec 098 §5): a second line, the whole line one button to the Table.
+        const unplacedN = this.mapEffectiveScope() === 'sel' ? this.mapSelUnplacedIds().length : 0;
+        const unplaced = unplacedN > 0
+            ? `<button type="button" class="map-status-unplaced" onclick="window.Strom.UI.mapBarAction('unplaced')">${this.escapeHtml(strings.map.selUnplaced(unplacedN))}</button>` : '';
+
         // In time mode the family path is drawn from the births: without them
         // the bar says why the lines are gone, so it does not look broken.
         const pathOn = this.mapPathOn();
@@ -685,7 +692,7 @@ export const mapMethods = uiModule({
             if (undated > 0) {
                 box.innerHTML = `
                     <span class="map-status-text">${strings.map.timeUndated(undated)}${pathNote}</span>
-                    <button type="button" class="secondary" onclick="window.Strom.UI.showPlacesManager()">${strings.map.managePlaces}</button>`;
+                    <button type="button" class="secondary" onclick="window.Strom.UI.showPlacesManager()">${strings.map.managePlaces}</button>${unplaced}`;
                 box.style.display = 'flex';
                 return;
             }
@@ -695,7 +702,7 @@ export const mapMethods = uiModule({
         if (places.length === 0 && missing.length === 0) {
             // With kinds off, the places may all be of those kinds: say that, not "no places".
             const text = this.mapKinds().size < MAP_KINDS.length ? strings.map.noPlacesOfKinds : strings.map.noPlaces;
-            box.innerHTML = `<span class="map-status-text">${text}</span>`;
+            box.innerHTML = `<span class="map-status-text">${text}</span>${unplaced}`;
             box.style.display = 'flex';
             return;
         }
@@ -736,7 +743,7 @@ export const mapMethods = uiModule({
         };
         box.innerHTML = `
             <span class="map-status-text">${this.escapeHtml(text)}${pathNote}</span>
-            ${actions.map(button).join('')}`;
+            ${actions.map(button).join('')}${unplaced}`;
         box.classList.toggle('is-after', bar.after);
         box.style.display = 'flex';
     },

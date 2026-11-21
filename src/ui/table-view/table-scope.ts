@@ -7,11 +7,21 @@
 
 import type { PersonId, PersonList } from '../../types.js';
 import { DataManager } from '../../data.js';
+import { decodeSelectionRef, encodeSelectionRef, type SelectionRef } from '../../view-selection-ref.js';
+import { selectionPersonIds } from '../../view-selection.js';
 import type { RowType, ScopeCells, TableModel, TableRow } from './table-model.js';
 import { rowsOf } from './table-model.js';
+import { selectionIndex } from '../view-selection-ui.js';
 
-/** The Table's scope: the list and what its people give the rows. */
-export interface TableScope {
+/**
+ * The Table's scope: a list and what its people give the rows, or the
+ * window's selection that is not a list (spec 098 §5: a family line,
+ * ancestors, descendants, a research line; `kind: 'selection'`).
+ */
+export type TableScope = {
+    kind: 'list';
+    /** The state's scope key (`TableTypeState.scope`): the list's id. */
+    key: string;
     listId: string;
     list: PersonList;
     /** The list's people in its order. */
@@ -19,11 +29,40 @@ export interface TableScope {
     cells: ScopeCells;
     /** A fixed list: its people can be taken out from the Table (§9d). */
     fixed: boolean;
+} | {
+    kind: 'selection';
+    /** The state's scope key: `sel:` and the encoded ref. */
+    key: string;
+    ref: SelectionRef;
+    /** The selection's people (no order of their own: the sort stays). */
+    ids: readonly PersonId[];
+    /** Only `pos` (who is in), no # or Done column. */
+    cells: ScopeCells;
+    fixed: false;
+};
+
+/** The prefix of a selection's scope key (a list's id never has it). */
+const SEL_PREFIX = 'sel:';
+
+/** The state's scope key of a selection (a list: its id). */
+export function selectionScopeKey(ref: SelectionRef): string {
+    return ref.kind === 'list' ? ref.listId : SEL_PREFIX + encodeSelectionRef(ref);
+}
+
+/** The selection of a scope key (null: a list's id or nothing). */
+export function scopeKeySelection(key: string | null): SelectionRef | null {
+    return key && key.startsWith(SEL_PREFIX) ? decodeSelectionRef(key.slice(SEL_PREFIX.length)) : null;
+}
+
+/** Whether a scope key names a selection (not a list). */
+export function isSelectionScopeKey(key: string | null): boolean {
+    return !!key && key.startsWith(SEL_PREFIX);
 }
 
 interface ScopeMemo {
     ids: readonly PersonId[];
-    list: PersonList;
+    list: PersonList | null;
+    ref: SelectionRef | null;
     scope: TableScope;
     rows: Map<RowType, TableRow[]>;
     model: TableModel | null;
@@ -32,25 +71,48 @@ interface ScopeMemo {
 let memo: ScopeMemo | null = null;
 
 /**
- * The scope of a list (null: no such list any more). The people come from
- * DataManager (cached per revision there); the rest is built again only when
- * the people or the list change.
+ * The scope of a key (null: no such list or selection any more): a list's
+ * id, or a selection's key (selectionScopeKey). The people come from
+ * DataManager or the selection (cached per revision there); the rest is
+ * built again only when the people, the list or the selection change.
  */
-export function tableScopeOf(listId: string | null): TableScope | null {
-    if (!listId) return null;
+export function tableScopeOf(key: string | null): TableScope | null {
+    if (!key) return null;
+    if (isSelectionScopeKey(key)) return selectionScopeOf(key);
+    const listId = key;
     const list = DataManager.getPersonList(listId);
     if (!list) return null;
     const ids = DataManager.getPersonListIds(listId);
     // A stored list is a new object after each change; the ready-made one is made anew on each read (same `updated`).
-    if (memo && memo.ids === ids && (memo.list === list || (!!list.builtin && memo.list.id === list.id && memo.list.updated === list.updated))) return memo.scope;
+    if (memo && memo.list && memo.ids === ids && (memo.list === list || (!!list.builtin && memo.list.id === list.id && memo.list.updated === list.updated))) return memo.scope;
     const pos = new Map<string, number>();
     ids.forEach((id, i) => pos.set(id, i + 1));
     const fixed = !list.dynamic;
     const done = fixed && list.checklist ? new Set<string>(list.done ?? []) : null;
-    const scope: TableScope = { listId, list, ids, cells: { pos, done }, fixed };
-    memo = { ids, list, scope, rows: new Map(), model: null };
+    const scope: TableScope = { kind: 'list', key, listId, list, ids, cells: { pos, done }, fixed };
+    memo = { ids, list, ref: null, scope, rows: new Map(), model: null };
     return scope;
 }
+
+/** A selection's scope (spec 098 §5): its people as the window counts them; null when it is gone. */
+function selectionScopeOf(key: string): TableScope | null {
+    const ref = scopeKeySelection(key);
+    if (!ref || ref.kind === 'list') return null;
+    const { index } = selectionIndex();
+    const set = selectionPersonIds(index.data, index, ref);
+    if (!set) return null;
+    if (memo && memo.ref && memo.scope.key === key && memoSet === set) return memo.scope;
+    const ids = [...set].filter(id => !!index.data.persons[id] && !index.data.persons[id].isPlaceholder);
+    const pos = new Map<string, number>();
+    ids.forEach((id, i) => pos.set(id, i + 1));
+    const scope: TableScope = { kind: 'selection', key, ref, ids, cells: { pos, done: null }, fixed: false };
+    memo = { ids, list: null, ref, scope, rows: new Map(), model: null };
+    memoSet = set;
+    return scope;
+}
+
+/** The selection's set the memo was built from (selectionPersonIds caches it per change of the data). */
+let memoSet: ReadonlySet<PersonId> | null = null;
 
 /**
  * The rows of a row type within the scope: People in the list's order, a

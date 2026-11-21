@@ -269,7 +269,8 @@ export function viewFromState(type: RowType, st: RowTypeState, id: string, name:
         filter: { op: 'and', items: structuredClone(st.filter.items) as unknown as Record<string, unknown>[] },
         sort: st.sort.map(fromSpec),
         ...(type === 'persons' ? { unions: { collapsed: st.unions.collapsed, except: [...st.unions.except].sort() } } : {}),
-        ...(type !== 'sources' && st.scope ? { scope: { listId: st.scope } } : {}),
+        // The window's selection as the scope (`sel:…`, spec 098 §5) belongs to the window, not to a view.
+        ...(type !== 'sources' && st.scope && !st.scope.startsWith('sel:') ? { scope: { listId: st.scope } } : {}),
         ...(type !== 'sources' && st.group ? { group: { by: st.group.by, collapsed: [...st.group.collapsed].sort() } } : {}),
         updated: now,
     };

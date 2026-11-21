@@ -498,6 +498,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         selEmpty: 'Wybór jest pusty.',
         selNoPlaces: 'Nikt z wyboru nie ma jeszcze miejsca.',
         selUnplacedLink: (n: number) => `${nPl(n, 'osoba', 'osoby', 'osób')} bez miejsca ›`,
+        selUnplaced: (n: number) => `${nPl(n, 'osoba', 'osoby', 'osób')} z wyboru ${plPl(n, 'nie ma', 'nie mają', 'nie ma')} miejsca ›`,
         outside: 'poza wyborem',
         showInTree: 'Pokaż w całym drzewie',
         popupOutside: (n: number) => `i ${nPl(n, 'osoba', 'osoby', 'osób')} poza wyborem ·`,

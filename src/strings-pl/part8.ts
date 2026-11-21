@@ -1471,7 +1471,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         chip: {
             left: 'Zostało', done: 'Gotowe',
             living: 'Żyjący', deceased: 'Zmarli', blood: 'Krewni', rod: 'Ród', gen: 'Pokolenie',
-            multiU: 'Kilka związków', noBirth: 'Bez daty urodzenia', uncertain: 'Niepewna data', noSource: 'Bez źródła',
+            multiU: 'Kilka związków', noBirth: 'Bez daty urodzenia', noPlace: 'Bez miejsca', uncertain: 'Niepewna data', noSource: 'Bez źródła',
             finding: 'Z ustaleniami', unusual: 'Nietypowe', unconfirmed: 'Niepotwierdzone z badania',
             evBirth: 'Urodzenia i chrzty', evMarriage: 'Śluby', evDeath: 'Zgony i pochówki', evOther: 'Inne wydarzenia', participant: 'Uczestnik',
             srcNoPerson: 'Bez osoby', srcUnread: 'Nieprzeczytane', srcTranscript: 'Z transkrypcją', srcOnline: 'Online',
@@ -1503,6 +1503,12 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         scopeSources: 'Źródła nie mają zakresu według listy.',
         scopeGone: 'Listy widoku już nie ma, pokazano całe drzewo.',
         notInList: (name: string) => `Nie ma na liście: ${name}.`,
+        notInSelection: (name: string) => `Nie ma w wyborze: ${name}.`,
+        scopeSelGroup: 'Wybór okna',
+        scopeSel: (label: string) => `Wybór: ${label}`,
+        chipNoPlaceTitle: 'Osoby bez miejsca urodzenia, ślubu, śmierci ani innego zdarzenia',
+        onMap: 'Na mapie',
+        onMapNoMain: 'Okno główne nie jest otwarte.',
         outsideList: 'poza listą',
         sortList: 'Sortowanie: # (kolejność listy)',
         /** Rows under group headers by one value (spec 084 §10, §11). */

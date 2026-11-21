@@ -215,7 +215,7 @@ export class FilterBar {
             const waits = state.checking && CHECK_CHIPS.includes(chip);
             const choice = CHOICE_CHIPS.includes(chip);
             html += `<button type="button" class="tv-chip sel-opt${item ? ' is-active' : ''}" data-chip="${chip}" aria-pressed="${!!item}"`
-                + (waits ? ` aria-disabled="true" title="${esc(strings.table.checksWait)}"` : '')
+                + (waits ? ` aria-disabled="true" title="${esc(strings.table.checksWait)}"` : chip === 'noPlace' ? ` title="${esc(strings.table.chipNoPlaceTitle)}"` : '')
                 + (choice ? ' aria-haspopup="dialog"' : '')
                 + `>${item ? '✓ ' : ''}${esc(chipLabel(model, item, chip))}${choice ? ' ▾' : ''}</button>`;
         }

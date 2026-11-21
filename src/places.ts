@@ -19,7 +19,7 @@
  * the house field (splitPlaceHouses).
  */
 
-import { StromData, PersonId, PlaceGeo, LifeEvent, LifeEventType, CoupleEventType } from './types.js';
+import { StromData, Person, PersonId, PlaceGeo, LifeEvent, LifeEventType, CoupleEventType } from './types.js';
 import type { SharedEventIndex } from './shared-events.js';
 import {
     bareNumber, foldText, houseWith, isNumberTok, KnownStreets, nameOf, numberedTown, splitStreet, streetOfHouse, tokens,
@@ -270,6 +270,24 @@ export function collectPlaces(
             .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
     }
     return out;
+}
+
+/**
+ * Whether a person has a place the map can show (any of its kinds: birth,
+ * death, a wedding or divorce, a person's or a couple's other event) — the
+ * same facts collectPlaces gathers. "No place" of the map's selection and
+ * of the Table's chip (spec 098 §5); a place without coordinates counts.
+ */
+export function personHasMapPlace(person: Person, data: StromData): boolean {
+    const has = (raw: string | undefined): boolean => { const v = raw?.trim(); return !!v && !!placeKey(v); };
+    if (has(person.birthPlace) || has(person.deathPlace)) return true;
+    if ((person.events ?? []).some(ev => has(ev.place))) return true;
+    for (const uid of person.partnerships ?? []) {
+        const union = data.partnerships[uid];
+        if (!union || (union.person1Id !== person.id && union.person2Id !== person.id)) continue;
+        if (has(union.startPlace) || has(union.endPlace) || (union.events ?? []).some(ev => has(ev.place))) return true;
+    }
+    return false;
 }
 
 /** Sorted list for pickers and the places manager: most used first, then alphabetical. */
