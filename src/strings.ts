@@ -3735,6 +3735,13 @@ const stringsEN = {
         sentAt: (t: string) => `sent ${t}`,
         settings: 'Research settings',
         settingsInResearch: 'Settings in the research',
+        // The most agents at once in Research for this tree (spec 126 U10 §5).
+        runsMax: 'Agents at once, at most',
+        runsMaxHint: 'Default 3. Work on the whole queue counts too.',
+        runsMaxAria: 'Number of agents',
+        runsMaxLess: 'Fewer',
+        runsMaxMore: 'More',
+        runsMaxRaise: 'Raising it is possible only in the research terminal.',
         findDescendants: 'Find descendants',
         dirRunning: 'already active',
         dirResumeNote: (s: string) => `${s} · restart`,
@@ -7457,6 +7464,13 @@ const stringsEN = {
         runStopFailed: 'The agent was not stopped.',
         runStopFailedSaid: (t: string) => `The agent was not stopped: “${t}”`,
         runAfterStop: 'The whole queue takes the direction again.',
+        // The whole queue beside the directions' own runs (spec 126 U10 §6).
+        queueLineRunNote: (a: string) => `done by the direction's own agent (${a})`,
+        queueLineRunShow: 'Show ›',
+        queueLineRunFiltered: (a: string, t: string) => `This direction has its own agent at work (${a}, since ${t}). The whole queue skips it.`,
+        queueWorkSkips: (names: string, n: number) => (n === 1
+            ? `Skips the direction ${names} (its own agent works on it).`
+            : `Skips the directions ${names} (their own agents work on them).`),
         branchQueueBeyond: (n: number) => `The branch's tasks stand further on in the queue (${n}).`,
         branchNeverGroup: (n: number) => `Not researched · ${nEn(n, 'branch', 'branches')}`,
         branchAdd: (n: string) => `Add to the direction ${n}`,
@@ -14496,6 +14510,13 @@ const stringsCZ: StringsType = {
         sentAt: (t: string) => `poslané ${t}`,
         settings: 'Nastavení výzkumu',
         settingsInResearch: 'Nastavení ve výzkumu',
+        // Nejvýš agentů najednou ve Výzkumu tohoto stromu (spec 126 U10 §5).
+        runsMax: 'Nejvýš agentů najednou',
+        runsMaxHint: 'Výchozí 3. Do počtu se počítá i práce na celé frontě.',
+        runsMaxAria: 'Počet agentů',
+        runsMaxLess: 'Méně',
+        runsMaxMore: 'Více',
+        runsMaxRaise: 'Zvýšit jde jen v terminálu výzkumu.',
         findDescendants: 'Hledat potomky',
         dirRunning: 'už je aktivní',
         dirResumeNote: (s: string) => `${s} · znovu spustit`,
@@ -18139,10 +18160,17 @@ const stringsCZ: StringsType = {
         runFinishesThen: (task: string, line: string) => `Dokončí ${task} linie ${line}, pak ji přeskočí.`,
         runStop: 'Zastavit',
         runStopHint: 'Dokončí rozdělaný úkol a další nezačne',
-        runStopping: 'Zastavuji…',
+        runStopping: 'Zastavuje se…',
         runStopFailed: 'Agenta se nepodařilo zastavit.',
         runStopFailedSaid: (t: string) => `Agenta se nepodařilo zastavit: „${t}“`,
         runAfterStop: 'Linii zase bere celá fronta.',
+        // Celá fronta vedle vlastních běhů linií (spec 126 U10 §6).
+        queueLineRunNote: (a: string) => `dělá je vlastní agent linie (${a})`,
+        queueLineRunShow: 'Ukázat ›',
+        queueLineRunFiltered: (a: string, t: string) => `Na této linii pracuje vlastní agent (${a}, od ${t}). Celá fronta ji přeskakuje.`,
+        queueWorkSkips: (names: string, n: number) => (n === 1
+            ? `Přeskočí linii ${names} (pracuje na ní vlastní agent).`
+            : `Přeskočí linie ${names} (pracují na nich vlastní agenti).`),
         branchQueueBeyond: (n: number) => `Úkoly větve stojí ve frontě dál (${n}).`,
         branchNeverGroup: (n: number) => `Nezkoumá se · ${nCs(n, 'větev', 'větve', 'větví')}`,
         branchAdd: (n: string) => `Přidat k linii ${n}`,
@@ -25081,6 +25109,13 @@ const stringsDE: StringsType = {
         sentAt: (t: string) => `gesendet ${t}`,
         settings: 'Forschungseinstellungen',
         settingsInResearch: 'Einstellungen in der Forschung',
+        // Höchstens gleichzeitige Agenten in Forschung dieses Stammbaums (spec 126 U10 §5).
+        runsMax: 'Agenten gleichzeitig höchstens',
+        runsMaxHint: 'Standard 3. Die Arbeit an der ganzen Warteschlange zählt mit.',
+        runsMaxAria: 'Anzahl der Agenten',
+        runsMaxLess: 'Weniger',
+        runsMaxMore: 'Mehr',
+        runsMaxRaise: 'Erhöhen lässt es sich nur im Terminal der Forschung.',
         findDescendants: 'Nachkommen suchen',
         dirRunning: 'bereits aktiv',
         dirResumeNote: (s: string) => `${s} · neu starten`,
@@ -28677,6 +28712,13 @@ const stringsDE: StringsType = {
         runStopFailed: 'Der Agent wurde nicht gestoppt.',
         runStopFailedSaid: (t: string) => `Der Agent wurde nicht gestoppt: „${t}“`,
         runAfterStop: 'Die Richtung übernimmt wieder die ganze Warteschlange.',
+        // Die ganze Warteschlange neben den eigenen Läufen der Richtungen (spec 126 U10 §6).
+        queueLineRunNote: (a: string) => `erledigt der eigene Agent der Richtung (${a})`,
+        queueLineRunShow: 'Zeigen ›',
+        queueLineRunFiltered: (a: string, t: string) => `An dieser Richtung arbeitet ein eigener Agent (${a}, seit ${t}). Die ganze Warteschlange überspringt sie.`,
+        queueWorkSkips: (names: string, n: number) => (n === 1
+            ? `Überspringt die Richtung ${names} (ein eigener Agent arbeitet daran).`
+            : `Überspringt die Richtungen ${names} (eigene Agenten arbeiten daran).`),
         branchQueueBeyond: (n: number) => `Die Aufgaben des Zweigs stehen weiter hinten in der Warteschlange (${n}).`,
         branchNeverGroup: (n: number) => `Nicht erforscht · ${nDe(n, 'Zweig', 'Zweige')}`,
         branchAdd: (n: string) => `Zur Richtung ${n} hinzufügen`,

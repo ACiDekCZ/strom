@@ -350,3 +350,158 @@ test.describe('the runs in Now', () => {
         expect(over).toBe(0);
     });
 });
+
+/** Only the directions' runs at work (no general run): G0001's run, and G0002's and G0003's when asked. */
+function lineRunsAt(n: 1 | 3): { runs: Record<string, unknown>[]; working: Record<string, unknown>[]; researches: Record<string, unknown>[] } {
+    const runs: Record<string, unknown>[] = [{ ...RUNS[1], since: at(-10) }];
+    const working: Record<string, unknown>[] = [{ ...RUN_WORKING[1], since: at(-2) }];
+    let researches = RUN_DIRECTIONS;
+    if (n === 3) {
+        for (const [id, g] of [['run-2c44', 'G0002'], ['run-3d55', 'G0003']]) {
+            runs.push({ id, research: g, agent: 'codex', agentName: 'Codex', since: at(-30), state: 'working', session: `S-${g}`, task: 'T0400', sessions: 1 });
+            working.push({ who: 'codex', since: at(-3), task: 'matrika', research: g, session: `S-${g}`, run: id });
+        }
+        researches = RUN_DIRECTIONS.map(d => d.id === 'G0001' ? d
+            : { ...d, state: 'active', run: d.id === 'G0002' ? 'run-2c44' : 'run-3d55', canStart: false, why: 'running', working: true });
+    }
+    return { runs, working, researches };
+}
+
+async function openTreeSettings(page: Page): Promise<void> {
+    await page.evaluate(() => window.Strom.UI.showResearchTreeSettings(window.Strom.TreeManager.getActiveTreeId()!));
+    await expect(page.locator('#research-tree-settings-modal')).toBeVisible();
+}
+
+const settings = (page: Page) => page.locator('#research-tree-settings-modal');
+const runsField = (page: Page) => page.locator('#research-runs-max');
+const queueRows = (page: Page) => overview(page).locator('#ov-sec-queue .live-queue > .live-queue-row[data-task]');
+const queueHead = (page: Page) => overview(page).locator('.live-section__head[aria-controls="ov-sec-queue"]');
+
+/** The overview with its Queue section unfolded (its heading's action is drawn only then). */
+async function openQueue(page: Page): Promise<void> {
+    await openOverview(page);
+    if (await queueHead(page).getAttribute('aria-expanded') === 'false') await queueHead(page).click();
+    await expect(queueHead(page)).toHaveAttribute('aria-expanded', 'true');
+}
+
+test.describe('the most agents at once (spec 126 U10 §5)', () => {
+    test('Research for this tree: the stepper under the agent writes a lower value; a raise gives the terminal command and the value back', async ({ page }) => {
+        const b = await followRuns(page);
+        await openTreeSettings(page);
+        const dt = settings(page).locator('dl.research-tree-agent > dt[data-row="runs"]');
+        await expect(dt).toHaveText('Agents at once, at most');
+        await expect(runsField(page)).toHaveValue('3');
+        await expect(runsField(page)).toHaveAttribute('max', '10');
+        await expect(runsField(page)).toHaveAttribute('aria-label', 'Number of agents');
+        await expect(settings(page).locator('.research-tree-runs__hint')).toHaveText('Default 3. Work on the whole queue counts too.');
+        // No mark: the write goes through the bridge.
+        await expect(settings(page).locator('dd[data-row="runs"] .research-open-mark, dd[data-row="runs"] .research-ai-badge')).toHaveCount(0);
+
+        await settings(page).getByRole('button', { name: 'Fewer' }).click();
+        await expect(runsField(page)).toHaveValue('2');
+        await expect.poll(() => b.writes.filter(w => w.path === 'settings/runs').map(w => w.body)).toEqual([{ max: 2 }]);
+        await expect(settings(page).locator('#research-runs-note')).toHaveCount(0);
+
+        await settings(page).getByRole('button', { name: 'More' }).click();
+        const note = settings(page).locator('#research-runs-note');
+        await expect(note).toContainText('Raising it is possible only in the research terminal.');
+        await expect(note.locator('code')).toHaveText('strom config set run.parallel 3');
+        await expect(note.locator('.research-live-copy')).toHaveText('Copy');
+        await expect(runsField(page)).toHaveValue('2');
+        expect(b.limits!.maxRuns).toBe(2);
+    });
+
+    test('Settings › of a direction held at the limit opens the dialog at the field', async ({ page }) => {
+        await followRuns(page, { researches: directions('G0002', { canStart: false, why: 'limit' }) });
+        await openOverview(page);
+        await unfold(page, 'G0002');
+        await runBox(page, 'G0002').locator('.research-direction__run-settings').click();
+        await expect(settings(page)).toBeVisible();
+        await expect(runsField(page)).toBeFocused();
+    });
+
+    test('at 3 of 3: Work on the queue… held with its reason in the Queue heading, Now and the Research menu', async ({ page }) => {
+        await page.clock.install({ time: T });
+        await followRuns(page, lineRunsAt(3));
+        await openQueue(page);
+        const head = overview(page).locator('.queue-work-btn');
+        await expect(head).toHaveAttribute('aria-disabled', 'true');
+        await expect(head).toHaveAttribute('data-offer', 'limit');
+        await expect(overview(page).locator('#queue-work-limit-queue')).toHaveText('3 agents are working; the settings allow no more. Settings ›');
+        await head.click({ force: true });
+        await expect(page.locator('#queue-work-modal')).toHaveCount(0);
+        const nowWork = now(page).locator('.research-overview__work');
+        await expect(nowWork).toHaveAttribute('aria-disabled', 'true');
+        await expect(now(page).locator('#queue-work-limit-now')).toContainText('3 agents are working');
+
+        await overview(page).locator('#queue-work-limit-queue .queue-work-limit__settings').click();
+        await expect(runsField(page)).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(settings(page)).toHaveCount(0);
+    });
+
+    test('the Research menu: the item grey with why at the limit', async ({ page }) => {
+        await page.clock.install({ time: T });
+        await followRuns(page, lineRunsAt(3));
+        await page.locator('#research-menu-btn').click();
+        const item = page.locator('#research-menu #research-item-queue-work');
+        await expect(item).toHaveAttribute('aria-disabled', 'true');
+        await expect(item).toContainText('3 agents are working; the settings allow no more.');
+    });
+
+    test('an older research (no run.limit): no row in Research for this tree', async ({ page }) => {
+        await followRuns(page, { features: RUN_FEATURES.filter(f => f !== 'run.limit') });
+        await openTreeSettings(page);
+        await expect(settings(page).locator('dl.research-tree-agent > dt[data-row="agent"], dl.research-tree-agent > dt').first()).toBeVisible();
+        await expect(settings(page).locator('[data-row="runs"], #research-runs-max')).toHaveCount(0);
+    });
+});
+
+test.describe('the whole queue beside the directions\' runs (spec 126 U10 §6)', () => {
+    test('a direction with its run folded into a row above the queue, the count and numbers without it; Show › filters it with its sentence', async ({ page }) => {
+        await page.clock.install({ time: T });
+        await followRuns(page, lineRunsAt(1));
+        await openQueue(page);
+        const line = overview(page).locator('#ov-sec-queue .research-queue__line-run[data-direction="G0001"]');
+        await expect(line).toHaveCount(1);
+        await expect(line.locator('.research-queue__line-run-head')).toHaveText('Kubíčkovi z Dolní Lhoty · 2 tasks');
+        await expect(line.locator('.research-queue__line-run-note')).toHaveText('done by the direction\'s own agent (Claude) G0001');
+        // Its tasks not in the numbered list, the list numbered from 1 without them, the title counting without them.
+        await expect(queueRows(page).first()).toBeVisible();
+        const ids = await queueRows(page).evaluateAll(els => els.map(e => (e as HTMLElement).dataset.task));
+        expect(ids).not.toContain('T0390');
+        expect(ids).not.toContain('T0393');
+        const nums = await queueRows(page).locator('.live-queue-num').allTextContents();
+        expect(nums.slice(0, 3)).toEqual(['1', '2', '3']);
+        await expect(overview(page).locator('.live-section__head[aria-controls="ov-sec-queue"] .live-section__title')).toHaveText('Queue · 12');
+
+        await line.locator('.research-queue__line-run-show').click();
+        const since = await clockOf(page, at(-10));
+        await expect(overview(page).locator('#ov-sec-queue .research-queue__line-run-filtered'))
+            .toHaveText(`This direction has its own agent at work (Claude, since ${since}). The whole queue skips it.`);
+        await expect.poll(() => queueRows(page).evaluateAll(els => els.map(e => (e as HTMLElement).dataset.task))).toEqual(['T0390', 'T0393']);
+        expect(await queueRows(page).locator('.live-queue-num').allTextContents()).toEqual(['1', '2']);
+        await expect(overview(page).locator('#ov-sec-queue .research-queue__line-run')).toHaveCount(0);
+    });
+
+    test('the dialog of Work on the queue… says which direction it skips and that usage adds up', async ({ page }) => {
+        await page.clock.install({ time: T });
+        await followRuns(page, lineRunsAt(1));
+        await openQueue(page);
+        await overview(page).locator('.queue-work-btn').click();
+        await expect(dialog(page)).toBeVisible();
+        await expect(dialog(page).locator('.queue-work__skips')).toHaveText('Skips the direction Kubíčkovi z Dolní Lhoty (its own agent works on it).');
+        await expect(dialog(page)).toContainText('1 agent is already working. Subscription usage adds up.');
+        await expect(dialog(page)).not.toContainText('Oddací záznam Vojtěcha Kubíčka');
+    });
+
+    test('an older research (no run.lines): the queue as before, its tasks numbered in the whole queue', async ({ page }) => {
+        await page.clock.install({ time: T });
+        await followRuns(page, { ...lineRunsAt(1), features: RUN_FEATURES.filter(f => !f.startsWith('run.')) });
+        await openQueue(page);
+        await expect(queueRows(page).first()).toBeVisible();
+        await expect(overview(page).locator('.research-queue__line-run, .research-queue__line-run-filtered, .queue-work-limit')).toHaveCount(0);
+        const ids = await queueRows(page).evaluateAll(els => els.map(e => (e as HTMLElement).dataset.task));
+        expect(ids).toContain('T0390');
+    });
+});

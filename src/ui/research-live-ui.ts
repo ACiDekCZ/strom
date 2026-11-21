@@ -131,7 +131,7 @@ function refusalText(r: LiveWriteRefusal): string {
 }
 
 /** A command for the terminal with a small "Copy" beside it. */
-function commandLine(command: string, onCopy: (cmd: string) => void, label?: string): HTMLElement {
+export function commandLine(command: string, onCopy: (cmd: string) => void, label?: string): HTMLElement {
     const line = el('span', 'research-live-command');
     if (label) line.appendChild(el('span', 'research-live-command-label', label));
     line.appendChild(el('code', undefined, command));

@@ -28,11 +28,14 @@ import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, 
 import { sourceReadingHash, unverifiedOlderSources, newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
-import { onComputer, readTree } from './research-ui.js';
+import { el, onComputer, readTree } from './research-ui.js';
 import { researchDisplayName, researchSendMode, onBridgeStatus, lastBridgeStatus } from './research-sync-ui.js';
 import { SettingsManager } from '../settings.js';
 import { formatBytesShort } from './originals-ui.js';
 import { isBetaBuildHere } from '../pwa.js';
+import { runLimit, runLimitCap, runLimitOn } from '../research-runs.js';
+import { postRunLimit, runLimitRaise, RUN_LIMIT_MIN } from '../research-runs-write.js';
+import { commandLine } from './research-live-ui.js';
 
 const SETTINGS_ID = 'research-tree-settings-modal';
 const ASK_ID = 'research-mode-ask-modal';
@@ -83,6 +86,14 @@ const HYPOS_PEND = 'tree:hypos';
 const READ_TASK_PEND = 'tree:readtask';
 const STORIES_PEND = 'tree:stories';
 const CENSUS_PEND = 'tree:census';
+const RUNS_PEND = 'tree:runs';
+
+/**
+ * "Agents at once, at most" (spec 126 U10 §5): the value asked until the research's status says it (`want`), the
+ * value on its way (`sending`), the sentence under it (a refusal; `command`: the terminal command that raises it),
+ * a research waiting for its agent (`away`: no row), a redraw held while the field is typed in (`stale`).
+ */
+const runsMax: { rid: string; want?: number; sending?: number; note?: { text: string; command?: string | null }; away?: boolean; stale?: boolean } = { rid: '' };
 const INTAKE_PEND = 'tree:intake';
 /** How long the group stays highlighted when a link opens the dialog at it. */
 const READ_TASK_FLASH_MS = 1500;
@@ -389,6 +400,11 @@ export const researchTreeSettingsMethods = uiModule({
             this.renderBrowserRows(agentDl, { name: st?.agentName ?? '', away: agentAway }, st?.browser);
             this.watchBrowserRows();
         }
+        // The most agents at once (spec 126 U10 §5): the last row of the agent's box.
+        runsMax.rid = link.id;
+        runsMax.away = agentAway;
+        delete runsMax.want; delete runsMax.sending; delete runsMax.note; delete runsMax.stale;
+        this.renderResearchRunsRow();
         // Source images the research left out of its file (filled once the tree's stored images are read).
         const imagesHost = overlay.querySelector<HTMLElement>('#research-images-host');
         if (imagesHost) void this.renderResearchImagesSettings(treeId, imagesHost);
@@ -530,6 +546,7 @@ export const researchTreeSettingsMethods = uiModule({
                 this.renderResearchHypothesesRow();
                 this.renderResearchReadTaskRow();
                 this.renderResearchBooksRow();
+                this.renderResearchRunsRow();
                 this.renderOffLineSettings();
             });
         }
@@ -547,6 +564,123 @@ export const researchTreeSettingsMethods = uiModule({
                 field.focus();
             }
         }
+    },
+
+    /**
+     * Spec 126 U10 §5: "Agents at once, at most" — the last row of the agent's box, only with `run.limit` (not in
+     * an archive nor a research waiting for its agent). A stepper from 1 to the research's cap; lowering is written
+     * through the bridge at once (the runs at work go on), raising only in the research's terminal: its refusal puts
+     * the value back and gives the command to copy. Without the bridge inactive with its sentence. No mark: the
+     * write goes through the bridge.
+     */
+    renderResearchRunsRow(force = false): void {
+        const dl = document.querySelector<HTMLElement>(`#${SETTINGS_ID} dl.research-tree-agent`);
+        if (!dl) return;
+        const rid = runsMax.rid;
+        const ctx = this.historyManageContext();
+        const last = (ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid)) ?? lastBridgeStatus(rid);
+        const features = ctx?.researchId === rid ? ctx.features : last?.features ?? [];
+        let dt = dl.querySelector<HTMLElement>('dt[data-row="runs"]');
+        let dd = dl.querySelector<HTMLElement>('dd[data-row="runs"]');
+        if (runsMax.away || !runLimitOn(features) || (rid && this.researchAgentlessFor(rid))) {
+            dt?.remove();
+            dd?.remove();
+            return;
+        }
+        const active = document.activeElement as HTMLElement | null;
+        if (!force && dd && active?.id === 'research-runs-max' && dd.contains(active)) {
+            runsMax.stale = true;
+            return;
+        }
+        delete runsMax.stale;
+        const r = strings.research;
+        if (!dt || !dd) {
+            dt = el('dt', 'research-tree-runs-label');
+            dt.dataset.row = 'runs';
+            dt.innerHTML = `<label for="research-runs-max">${esc(r.runsMax)}</label>`;
+            dd = el('dd', 'research-tree-runs');
+            dd.dataset.row = 'runs';
+            dl.append(dt, dd);
+        }
+        const up = this.researchBridgeUp(rid);
+        const said = runLimit(last);
+        if (runsMax.want !== undefined && runsMax.want === said) delete runsMax.want;
+        const value = runsMax.sending ?? runsMax.want ?? said;
+        const cap = runLimitCap(last);
+        const pend = runsMax.sending !== undefined;
+        const note = !up ? { text: strings.history.storiesBridgeDown } : runsMax.note;
+        const focusId = active && dd.contains(active) ? active.id : '';
+        const off = !up ? ' disabled' : pend ? ' aria-disabled="true"' : '';
+        dd.innerHTML = `
+            <span class="research-tree-runs__stepper"${pend ? pendAttrs(RUNS_PEND).replace(' aria-disabled="true"', '') : ''}>
+                <button type="button" class="research-tree-runs__step" id="research-runs-less" aria-label="${esc(r.runsMaxLess)}"${value <= RUN_LIMIT_MIN ? ' disabled' : off}>−</button>
+                <input type="number" class="research-tree-runs__field" id="research-runs-max" inputmode="numeric" min="${RUN_LIMIT_MIN}" max="${cap}" step="1"
+                    value="${value}" aria-label="${esc(r.runsMaxAria)}"${off}>
+                <button type="button" class="research-tree-runs__step" id="research-runs-more" aria-label="${esc(r.runsMaxMore)}"${value >= cap ? ' disabled' : off}>+</button>
+            </span>${pend ? pendStatusHtml(RUNS_PEND) : ''}
+            <span class="research-tree-runs__hint">${esc(r.runsMaxHint)}</span>`;
+        if (note) {
+            const p = el('p', 'research-tree-runs__note');
+            p.id = 'research-runs-note';
+            p.appendChild(el('span', undefined, note.text));
+            if (note.command) p.append(' ', commandLine(note.command, c => this.copyResearchLiveCommand(c)));
+            dd.appendChild(p);
+        }
+        const field = dd.querySelector<HTMLInputElement>('#research-runs-max');
+        const take = (n: number): void => {
+            if (runsMax.sending !== undefined) { this.renderResearchRunsRow(true); return; }
+            if (!Number.isInteger(n) || n < RUN_LIMIT_MIN || n > cap || n === value) { this.renderResearchRunsRow(true); return; }
+            void this.setResearchRunsMax(n);
+        };
+        if (field) {
+            field.addEventListener('change', () => take(Number(field.value.trim())));
+            field.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); take(Number(field.value.trim())); } });
+            // A redraw held while typing comes when the field is left.
+            field.addEventListener('blur', () => {
+                window.setTimeout(() => { if (runsMax.stale && document.activeElement?.id !== 'research-runs-max') this.renderResearchRunsRow(); }, 0);
+            });
+        }
+        dd.querySelector<HTMLButtonElement>('#research-runs-less')?.addEventListener('click', () => take(value - 1));
+        dd.querySelector<HTMLButtonElement>('#research-runs-more')?.addEventListener('click', () => take(value + 1));
+        if (focusId) {
+            const again = dd.querySelector<HTMLElement>(`#${focusId}`);
+            // A stepper button at its end is disabled: the field keeps the focus.
+            (again && !(again as HTMLButtonElement).disabled ? again : field)?.focus({ preventScroll: true });
+        }
+    },
+
+    /**
+     * Spec 126 U10 §5: `POST /settings/runs {max}`. Lowering is the research's at once (its answer's `limits`);
+     * raising is refused (403 `runs.raise`): the value goes back and the sentence gives the terminal's command.
+     */
+    async setResearchRunsMax(n: number): Promise<void> {
+        const rid = runsMax.rid;
+        const ctx = this.historyManageContext();
+        const base = ctx?.researchId === rid ? ctx.base : null;
+        if (!base || runsMax.sending !== undefined) { this.renderResearchRunsRow(true); return; }
+        runsMax.sending = n;
+        delete runsMax.note;
+        startPend(RUNS_PEND, { redraw: () => this.renderResearchRunsRow(true) });
+        this.renderResearchRunsRow(true);
+        const r = await postRunLimit(base, n);
+        if (runsMax.rid !== rid) { dropPend(RUNS_PEND); return; }
+        await endPend(RUNS_PEND);
+        delete runsMax.sending;
+        const raise = runLimitRaise(r);
+        if (r.ok) {
+            runsMax.want = r.limits?.maxRuns ?? n;
+        } else if (raise) {
+            runsMax.note = { text: strings.research.runsMaxRaise, command: raise.command };
+        } else if (r.code === 'archive') {
+            runsMax.away = true;
+        } else if (r.code === 'busy') {
+            runsMax.note = { text: strings.history.errBusy };
+        } else if (r.code === 'network') {
+            runsMax.note = { text: strings.history.storiesBridgeDown };
+        } else {
+            runsMax.note = { text: r.reason || (r.held ? this.researchWriteHeldText(r.held, false).toast : strings.live.waitingWrite.writeFailed) };
+        }
+        this.renderResearchRunsRow(true);
     },
 
     /**

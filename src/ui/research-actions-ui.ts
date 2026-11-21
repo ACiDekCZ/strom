@@ -427,7 +427,10 @@ export const researchActionsMethods = uiModule({
             if (waiting > 0) first.push({ id: 'research-item-waiting', label: r.waiting, method: 'researchActionWaiting', count: waiting });
             if (!noAgent && this.researchLinkAvailable('chat')) first.push({ id: 'research-item-chat', label: r.continueAgent, method: 'researchActionChat', ...opens(researchLinkMark('chat')) });
             // Work on the queue (spec 052 §5): right under the agent's chat; not while the research works.
-            if (!noAgent && this.queueWorkMenuOffered()) first.push({ id: 'research-item-queue-work', label: strings.live.queueWork, method: 'researchActionWork', ...opens(researchLinkMark('work')) });
+            // At the most runs at once (spec 126 U10 §5) grey, its second line says why.
+            const workOffer = noAgent ? 'none' : this.queueWorkMenuOffer();
+            if (workOffer === 'offer') first.push({ id: 'research-item-queue-work', label: strings.live.queueWork, method: 'researchActionWork', ...opens(researchLinkMark('work')) });
+            else if (workOffer === 'limit') first.push({ id: 'research-item-queue-work', label: strings.live.queueWork, method: 'researchActionWork', ...opens(researchLinkMark('work')), disabled: true, sub: this.queueWorkMenuLimitText() });
             const read = noAgent ? null : this.readMenuEntry();
             if (read) readRow = [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: read.link && this.researchLinkAvailable('open') ? read.link : undefined }];
             if (this.researchLinkAvailable('open')) first.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ...opens(researchLinkMark('open')) });

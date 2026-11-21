@@ -9296,6 +9296,44 @@
         .install-ready-rows > dt ~ dt, .install-ready-rows > dt ~ dt + dd,
         .research-tree-agent > dt ~ dt, .research-tree-agent > dt ~ dt + dd { border-top: 1px solid var(--divider); }
         .research-tree-agent { margin: 0 0 16px; padding: 4px 14px; border: 1px solid var(--divider); border-radius: var(--r-lg); background: var(--surface-2); }
+        /* "Agents at once, at most" (spec 126 U10 §5, 5a): the agent box's last row, a stepper − [n] + and its hint; a
+           refusal (raising only in the research terminal) under it with the command to copy. */
+        .research-tree-agent > dt.research-tree-runs-label { align-self: start; padding-top: 13px; }
+        .research-tree-agent > dt.research-tree-runs-label label { font: inherit; color: inherit; cursor: default; }
+        .research-tree-agent > dd.research-tree-runs { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+        .research-tree-runs__stepper { display: inline-flex; align-items: center; gap: 4px; }
+        .modal .research-tree-runs__step {
+            width: 32px; height: 30px; min-width: 0; padding: 0; margin: 0; border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--card-bg); color: var(--text); font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
+        }
+        .modal .research-tree-runs__step:disabled, .modal .research-tree-runs__step[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+        .modal .research-tree-runs__step:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .modal input.research-tree-runs__field {
+            width: 44px; height: 30px; padding: 0 4px; margin: 0; border-radius: var(--r-md); text-align: center;
+            font-variant-numeric: tabular-nums; -moz-appearance: textfield; appearance: textfield;
+        }
+        .modal input.research-tree-runs__field::-webkit-inner-spin-button,
+        .modal input.research-tree-runs__field::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .research-tree-runs__hint { font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        .research-tree-runs__note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        @media (hover: hover) {
+            .modal .research-tree-runs__step:not(:disabled):not([aria-disabled="true"]):hover { border-color: var(--primary); color: var(--primary); }
+        }
+        @media (pointer: coarse) {
+            .modal .research-tree-runs__step { width: 44px; height: 44px; }
+            .modal input.research-tree-runs__field { height: 44px; width: 52px; }
+            .research-tree-agent > dt.research-tree-runs-label { padding-top: 19px; }
+        }
+        @media (max-width: 640px) {
+            /* The label over its stepper: the box keeps one column of rows for a long label. */
+            .research-tree-agent > dt.research-tree-runs-label { grid-column: 1 / -1; padding: 9px 0 0; border-top: 1px solid var(--divider); }
+            .research-tree-agent > dd.research-tree-runs { grid-column: 1 / -1; padding-top: 4px; border-top: 0; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .modal .research-tree-runs__step { width: 40px; height: 40px; }
+            .modal input.research-tree-runs__field { height: 40px; }
+            .research-tree-agent > dt.research-tree-runs-label { padding-top: 17px; }
+        }
         /* The Browser row: the dot and the sentence, then its link, the archives without permission or the phone's hint;
            lit for a while when its sentence changes. */
         .install-ready-rows > dd.install-ready-browser, .research-tree-agent > dd.install-ready-browser {
@@ -32575,6 +32613,39 @@
         }
         @media (pointer: coarse) {
             .live-section__tail > .queue-work-btn, .live-section__tail > .queue-work-busy { min-height: 44px; height: auto; }
+        }
+        /* "Work on the queue…" held at the most agents at once (spec 126 U10 §5, 5d): faded, not clickable, and the
+           reason under the Queue heading (or Now's offer) with "Settings ›". */
+        .live-section__tail > .queue-work-btn.is-held, .research-overview__work.is-held { opacity: .45; cursor: not-allowed; }
+        @media (hover: hover) {
+            .live-section__tail > .queue-work-btn.is-held:hover { border-color: var(--border); color: var(--text); }
+        }
+        .queue-work-limit { margin: 2px 0 8px; font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; text-wrap: pretty; }
+        .queue-work-limit .link-button.queue-work-limit__settings { padding: 0; margin: 0; min-height: 0; font-size: 12.5px; }
+        @media (pointer: coarse) { .queue-work-limit .link-button.queue-work-limit__settings { min-height: 44px; } }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .queue-work-limit .link-button.queue-work-limit__settings { min-height: 40px; }
+        }
+        /* The whole queue beside the directions' own runs (spec 126 U10 §6, 6a–6c): a folded row per such direction
+           above the numbered tasks, "Show ›" on the right; under its filter a quiet sentence over its own tasks. */
+        .research-queue__line-run {
+            display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--divider); min-width: 0;
+        }
+        .research-queue__line-run-glyph { flex: none; width: 16px; text-align: center; color: var(--text-light); }
+        .research-queue__line-run-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .research-queue__line-run-head { font-size: 13.5px; color: var(--text); overflow-wrap: anywhere; }
+        .research-queue__line-run-head > strong { font-weight: 600; }
+        .research-queue__line-run-note { font-size: 12px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .research-queue__line-run-note > .research-queue__line-run-code { margin-left: 2px; }
+        .link-button.research-queue__line-run-show { flex: none; padding: 0; margin: 0; min-height: 0; font-size: 12.5px; white-space: nowrap; }
+        .research-queue__line-run-filtered { margin: 2px 0 6px; font-size: 12.5px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        @media (pointer: coarse) { .link-button.research-queue__line-run-show { min-height: 44px; } }
+        @media (max-width: 640px) {
+            .research-queue__line-run { flex-wrap: wrap; }
+            .link-button.research-queue__line-run-show { margin-left: 24px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .link-button.research-queue__line-run-show { min-height: 40px; }
         }
         #queue-work-modal { z-index: 190; align-items: flex-start; padding: clamp(12px, 10vh, 96px) 12px 12px; }
         #queue-work-modal .modal.queue-work {

@@ -14,6 +14,7 @@
  */
 
 import { noteQueueStartStatus, QUEUE_SCOPE, QUEUE_START_MS, type QueueStartView } from './queue-start.js';
+import { NOW_LIMIT_NOTE, runsSideBySide } from './queue-work-dialog.js';
 import { RUN_ENDED_MS, linesWithRun, liveRuns, orderRuns, runCount, runLinesOn, runStopOn, runsShown, type LiveRun } from '../research-runs.js';
 import { postRunStop } from '../research-runs-write.js';
 import { busySpinHtml, busyStatusEl } from './busy.js';
@@ -2701,8 +2702,17 @@ export const researchOverviewMethods = uiModule({
      * as it finishes it. While an agent works Now keeps "Finish and stop" only.
      */
     appendOverviewNowWork(host: HTMLElement, s: LiveSession): void {
-        if (s.working.length > 0 || this.queueWorkOfferFor(s) !== 'offer') return;
+        // Runs side by side (spec 126 U10 §5): the directions' own runs leave it offered, the most at once hold it.
+        if (!runsSideBySide(s) && s.working.length > 0) return;
+        const offer = this.queueWorkOfferFor(s);
+        if (offer !== 'offer' && offer !== 'limit') return;
         const row = el('div', 'research-overview__now-actions research-overview__now-work');
+        if (offer === 'limit') {
+            row.appendChild(this.queueWorkHeldButton('link-button research-overview__work', NOW_LIMIT_NOTE));
+            host.appendChild(row);
+            host.appendChild(this.queueWorkLimitNote(s, NOW_LIMIT_NOTE));
+            return;
+        }
         const btn = setResearchActionLabel(el('button', 'link-button research-overview__work'), strings.live.queueWork, researchLinkMark('work'));
         btn.type = 'button';
         btn.setAttribute('aria-haspopup', 'dialog');
@@ -2858,6 +2868,8 @@ export const researchOverviewMethods = uiModule({
                 : { kind: 'line', research: x.scope, draw: () => this.overviewQueueStartRow(x.view, s.researches.find(d => d.id === x.scope) ?? null, x.scope) }),
         ];
         for (const it of orderRuns(items, s.researches)) list.appendChild(it.draw());
+        // "Work on the queue…" while the general run does not work (held at the most runs at once).
+        if (!shownStarts.some(x => x.scope === QUEUE_SCOPE)) this.appendOverviewNowWork(host, s);
         scheduleRunsEndedRedraw(runs, () => this.renderResearchOverview());
     },
 

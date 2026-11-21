@@ -1284,6 +1284,13 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         runStopFailed: 'Nie udało się zatrzymać agenta.',
         runStopFailedSaid: (t: string) => `Nie udało się zatrzymać agenta: „${t}”`,
         runAfterStop: 'Linię znowu bierze cała kolejka.',
+        // Cała kolejka obok własnych przebiegów linii (spec 126 U10 §6).
+        queueLineRunNote: (a: string) => `robi je własny agent linii (${a})`,
+        queueLineRunShow: 'Pokaż ›',
+        queueLineRunFiltered: (a: string, t: string) => `Nad tą linią pracuje własny agent (${a}, od ${t}). Cała kolejka ją pomija.`,
+        queueWorkSkips: (names: string, n: number) => (n === 1
+            ? `Pominie linię ${names} (pracuje nad nią własny agent).`
+            : `Pominie linie ${names} (pracują nad nimi własne agenty).`),
         branchQueueBeyond: (n: number) => `Zadania gałęzi stoją dalej w kolejce (${n}).`,
         branchNeverGroup: (n: number) => `Nie jest badana · ${nPl(n, 'gałąź', 'gałęzie', 'gałęzi')}`,
         branchAdd: (n: string) => `Dodaj do linii ${n}`,

@@ -1114,6 +1114,13 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         sentAt: (t: string) => `wysłane ${t}`,
         settings: 'Ustawienia badania',
         settingsInResearch: 'Ustawienia w badaniu',
+        // Najwyżej agentów naraz w Badaniu tego drzewa (spec 126 U10 §5).
+        runsMax: 'Najwyżej agentów naraz',
+        runsMaxHint: 'Domyślnie 3. Liczy się też praca nad całą kolejką.',
+        runsMaxAria: 'Liczba agentów',
+        runsMaxLess: 'Mniej',
+        runsMaxMore: 'Więcej',
+        runsMaxRaise: 'Zwiększyć można tylko w terminalu badania.',
         findDescendants: 'Szukaj potomków',
         dirRunning: 'już aktywny',
         dirResumeNote: (s: string) => `${s} · do ponownego uruchomienia`,

@@ -44,6 +44,7 @@ import { StromData, TreeId, PersonId, SourceExcerpt, TreeImagesVariant } from '.
 import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate } from '../ged-parser.js';
 import { formatFlexDate, instantLocalDay } from '../dates.js';
 import { formatLiveTime, formatLiveClock } from '../live-time.js';
+import { generalQueueCount, lineRunGroups, lineRunOf, linesWithRun, liveRuns, queueTaskTakenByLine, runLinesOn } from '../research-runs.js';
 import { isDesktop, isMobile } from '../breakpoints.js';
 import { livePanelDrawnSections, livePanelNothingAtWork, livePanelWorkingOnly } from './live-panel-working-only.js';
 import {
@@ -5554,8 +5555,16 @@ export const researchUiMethods = uiModule({
         const allNext = s.queue.filter(q => q.state === 'next');
         const counts = s.queueCounts;
         if (s.queue.length === 0 && s.queueMore === 0 && !(counts && counts.next + counts.parked > 0)) return;
-        // The counts of the whole queue (`queueCounts`), else of the status's window.
-        const nextCount = counts ? counts.next : allNext.length + s.queueMore;
+        // Runs side by side (spec 126 U10 §6): the tasks of the directions with their own run are not the whole
+        // queue's – folded into a row per direction above it, its count and its numbers without them.
+        const runsAll = directions && runLinesOn(s.features) && Array.isArray(s.runs) ? liveRuns(s) : [];
+        const runLines = linesWithRun(runsAll);
+        const apart = runLines.size > 0 && dirFilter === 'all' && !branch;
+        const filterRun = runLines.size > 0 && dirFilter !== 'all' && !branch ? lineRunOf(runsAll, dirFilter) : null;
+        const forGeneral = (q: LiveQueueItem): boolean => !queueTaskTakenByLine(q, runLines, runsAll);
+        // The counts of the whole queue (`queueCounts`), else of the status's window (the general run's, with runs side by side).
+        const nextCount = runLines.size === 0 ? (counts ? counts.next : allNext.length + s.queueMore)
+            : counts ? generalQueueCount(s.queue, counts, runsAll) : allNext.filter(forGeneral).length + s.queueMore;
         const lineCount = (id: string): number => counts ? counts.research[id] ?? 0 : allNext.filter(q => q.research === id).length;
         // The overview reads the whole queue by pages through the bridge (`queue.page`): a filter's
         // tasks from all of it, the rest of the queue by "Load more"; never while the section is folded.
@@ -5578,7 +5587,7 @@ export const researchUiMethods = uiModule({
         const list = loadingFirst ? null : read;
         const loadShown = loadingFirst && queueLoadShown(read.key, () => this.renderResearchOverview());
         if (read && !loadingFirst) queueLoadSince.delete(read.key);
-        const next = list ? list.items.filter(q => q.state === 'next') : allNext.filter(inFilter);
+        const next = (list ? list.items.filter(q => q.state === 'next') : allNext.filter(inFilter)).filter(q => !apart || forGeneral(q));
         const windowParked = s.queue.filter(q => q.state === 'parked' && inFilter(q));
         const parked = list ? [...list.items.filter(q => q.state === 'parked'),
             ...windowParked.filter(q => !list.items.some(x => x.id === q.id))] : windowParked;
@@ -5604,6 +5613,8 @@ export const researchUiMethods = uiModule({
                     : L.queueCount(nextCount),
             }),
         });
+        // "Work on the queue…" held at the most runs at once (spec 126 U10 §5, 5d): the reason under the heading.
+        if (action?.dataset.offer === 'limit') host.appendChild(this.queueWorkLimitNote(s, 'queue-work-limit-queue'));
         if (search) search.field.mount(host);
         if (multi) {
             const pills = el('div', 'research-overview__filters research-overview__queue-filters');
@@ -5614,7 +5625,7 @@ export const researchUiMethods = uiModule({
             const picked = s.researches.find(d => d.id === dirFilter);
             if (picked && !active.includes(picked)) active.push(picked);
             const options: [string, string, number][] = [
-                ['all', L.filterAll, counts ? counts.next : allNext.length],
+                ['all', L.filterAll, runLines.size > 0 ? nextCount : counts ? counts.next : allNext.length],
                 ...active.map(d => [d.id, d.name, lineCount(d.id)] as [string, string, number]),
             ];
             for (const [id, label, n] of options) {
@@ -5651,6 +5662,17 @@ export const researchUiMethods = uiModule({
         const kinds = paged ? queueKindRow(s, (k) => this.pickQueueKind(s, k)) : null;
         if (kinds) host.appendChild(kinds);
         if (search && this.appendQueueSearchResult(host, s, search, { base, branch, dirFilter, multi, kind })) return;
+        // A row per direction with its own run above the whole queue's tasks; its own tasks under its filter, said so.
+        if (apart) {
+            for (const g of lineRunGroups(s.queue, counts, runsAll, s.researches)) {
+                if (g.tasks > 0) host.appendChild(this.queueLineRunRow(s, g.research, g.direction, g.run.agentName, g.tasks));
+            }
+        }
+        if (filterRun) {
+            const at = Date.parse(filterRun.since);
+            const time = Number.isFinite(at) ? formatLiveClock(at, Date.now(), getCurrentLanguage()) : '';
+            host.appendChild(el('p', 'research-queue__line-run-filtered', L.queueLineRunFiltered(filterRun.agentName, time)));
+        }
         const ul = el('ul', 'live-panel-list live-queue');
         host.appendChild(ul);
         if (loadingFirst) {
@@ -5673,8 +5695,10 @@ export const researchUiMethods = uiModule({
         // the same number as under the branch (a line's filter counts anew,
         // unless the bridge says each task's place).
         const placeOf = branch ? new Map(allNext.map((q, i) => [q.id, i + 1])) : null;
-        const placeAt = (q: LiveQueueItem, i: number): number =>
-            (list || branch || dirFilter === 'all' ? q.pos : undefined) ?? placeOf?.get(q.id) ?? i + 1;
+        // The general run's tasks and a direction's own run's are numbered anew, in the order each takes them.
+        const renumbered = apart || !!filterRun;
+        const placeAt = (q: LiveQueueItem, i: number): number => renumbered ? i + 1
+            : (list || branch || dirFilter === 'all' ? q.pos : undefined) ?? placeOf?.get(q.id) ?? i + 1;
         // One width for every number of the list (the widest place's digits): the texts start in one column.
         const widest = shownNext.reduce((m, q, i) => Math.max(m, placeAt(q, i)), 0);
         if (widest >= 10) ul.style.setProperty('--live-queue-num', `${String(widest).length}ch`);
@@ -5685,7 +5709,7 @@ export const researchUiMethods = uiModule({
             if (search) li.tabIndex = -1;
             const place = placeAt(q, i);
             const num = el('span', 'live-queue-num', String(place));
-            if (placeOf || list) num.setAttribute('aria-label', L.branchQueuePos(place));
+            if ((placeOf || list) && !renumbered) num.setAttribute('aria-label', L.branchQueuePos(place));
             li.appendChild(num);
             const text = el('span', 'live-queue-text', q.text);
             // The panel, two or more lines at work: the task's line first.
@@ -5744,8 +5768,8 @@ export const researchUiMethods = uiModule({
             const filterNext = !filter ? counts.next
                 : filter.kind ? (filter.branch || filter.research ? undefined : counts.kind?.[filter.kind] ?? 0)
                 : filter.branch ? counts.branch[filter.branch] : filter.research ? counts.research[filter.research] : undefined;
-            const total = list ? filterNext ?? list.total ?? 0 : counts.next;
-            const has = list ? next.length : allNext.length;
+            const total = apart && !filter?.kind ? nextCount : list ? filterNext ?? list.total ?? 0 : counts.next;
+            const has = list || apart ? next.length : allNext.length;
             const more = list ? list.next !== null && has < total : allNext.length < counts.next;
             if (list?.error) {
                 this.appendQueueListState(ul, list.error, () => {
@@ -5801,6 +5825,36 @@ export const researchUiMethods = uiModule({
             link.onclick = () => this.openQueueSearch();
             host.appendChild(link);
         }
+    },
+
+    /**
+     * A direction with its own run in the whole queue (spec 126 U10 §6, 6a): its glyph, name and tasks, under
+     * it who does them with its code, and "Show ›" = the queue's filter of that direction.
+     */
+    queueLineRunRow(s: LiveSession, id: string, d: LiveDirection | undefined, agent: string, tasks: number): HTMLElement {
+        const L = strings.live;
+        const row = el('div', 'research-queue__line-run');
+        row.dataset.direction = id;
+        const glyph = el('span', 'research-queue__line-run-glyph', directionGlyph(d));
+        glyph.setAttribute('aria-hidden', 'true');
+        row.appendChild(glyph);
+        const text = el('div', 'research-queue__line-run-text');
+        const head = el('div', 'research-queue__line-run-head');
+        head.append(el('strong', undefined, d?.name ?? id), ` · ${L.dirTasks(tasks)}`);
+        text.appendChild(head);
+        const note = el('div', 'research-queue__line-run-note', `${L.queueLineRunNote(agent)} `);
+        note.appendChild(el('span', 'research-overview__run-code research-queue__line-run-code', id));
+        text.appendChild(note);
+        row.appendChild(text);
+        const show = el('button', 'link-button research-queue__line-run-show', L.queueLineRunShow);
+        show.type = 'button';
+        show.setAttribute('aria-label', `${L.queueLineRunShow.replace(/\s*›\s*$/, '')}: ${d?.name ?? id}`);
+        show.onclick = () => {
+            setQueueBranchFilter(s, null);
+            this.setWorkingLine(id);
+        };
+        row.appendChild(show);
+        return row;
     },
 
     /**

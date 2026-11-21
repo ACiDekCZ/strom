@@ -24,7 +24,8 @@ import {
     type LiveRunWire, type LiveWork, type LiveWorker, type ResearchLinkParams,
 } from '../research-link.js';
 import {
-    type LiveRun, lineRunAgent, lineRunBlock, liveRuns, queueTaskTakenByLine, rememberLineAgent, runAgentsOn, runCount, runLimit, runLinesOn,
+    type LiveRun, atRunLimit, generalQueueCount, lineRunAgent, lineRunBlock, linesWithRun, liveRuns, queueForGeneralRun, queueRunOf,
+    queueTaskTakenByLine, rememberLineAgent, runAgentsOn, runCount, runLimit, runLinesOn,
 } from '../research-runs.js';
 import { fetchQueuePage } from '../research-queue-pages.js';
 import { uiModule } from './module.js';
@@ -33,9 +34,13 @@ import { el, liveSession, queueKindText, type LiveSession } from './research-ui.
 import { overviewMode } from './research-overview-ui.js';
 import { directionGlyph } from './research-directions-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
+import { QUEUE_SCOPE } from './queue-start.js';
 import { researchActionLabel, setResearchActionLabel } from './research-open-mark.js';
 
 const DIALOG_ID = 'queue-work-modal';
+/** The reason under the Queue heading's held "Work on the queue…" (and Now's). */
+export const QUEUE_LIMIT_NOTE = 'queue-work-limit-queue';
+export const NOW_LIMIT_NOTE = 'queue-work-limit-now';
 /** "Only [n] tasks" before anything is typed. */
 export const WORK_TASKS_DEFAULT = 5;
 
@@ -56,8 +61,11 @@ export interface QueueWorkState {
     researches?: readonly LiveDirection[];
 }
 
-/** Where the offer stands: none, the action, or "At work ›" in its place. */
-export type QueueWorkOffer = 'none' | 'offer' | 'busy';
+/**
+ * Where the offer stands: none, the action, "At work ›" in its place, or (runs side by side, spec 126 U10 §5)
+ * the action held because the most runs at once work.
+ */
+export type QueueWorkOffer = 'none' | 'offer' | 'busy' | 'limit';
 
 export interface QueueWorkContext {
     /** The bridge answers now. */
@@ -68,6 +76,8 @@ export interface QueueWorkContext {
     noAgent: boolean;
     /** The phone's sheet (≤ 640 px or a phone held sideways). */
     phone: boolean;
+    /** Directions' runs on their way that the research does not name yet (they count toward the most at once). */
+    starting?: number;
 }
 
 /** An agent session or a run works in the research now. */
@@ -83,7 +93,56 @@ export function researchWorking(state: Pick<QueueWorkState, 'busy'>): boolean {
 export function queueWorkOffer(state: QueueWorkState | null, ctx: QueueWorkContext): QueueWorkOffer {
     if (!state || !ctx.live || ctx.phone || ctx.noAgent || !ctx.linkAvailable) return 'none';
     if (!state.features?.includes(WORK_LINK_FEATURE)) return 'none';
+    // Runs side by side (spec 126 U10 §5): only the general run or a session of no run stands in its way,
+    // else the most runs at once (the general run, the directions' runs and the starts on their way).
+    if (runsSideBySide(state)) {
+        const runs = workDialogRuns(state);
+        if (generalWorkBusy(state, runs)) return 'busy';
+        return atRunLimit(runs, runLimit(state), ctx.starting ?? 0) ? 'limit' : 'offer';
+    }
     return researchWorking(state) ? 'busy' : 'offer';
+}
+
+/** The research names its runs (`run.lines` with `/status.runs`): the directions' own runs do not hold the general one. */
+export function runsSideBySide(state: Pick<QueueWorkState, 'features' | 'runs'>): boolean {
+    return runLinesOn(state.features) && Array.isArray(state.runs);
+}
+
+/**
+ * The research refuses the general run (as the research's `work` does): the general run works already, or a
+ * session that belongs to no run (a conversation) – a row of `working[]` none of the runs holds.
+ */
+export function generalWorkBusy(state: Pick<QueueWorkState, 'working'>, runs: readonly LiveRun[]): boolean {
+    if (queueRunOf(runs)) return true;
+    const owned = new Set(runs.flatMap(r => r.workers));
+    return (state.working ?? []).some(w => !owned.has(w));
+}
+
+/** Why "Work on the queue…" is held at the most runs at once ("3 agents are working; the settings allow no more."). */
+export function queueWorkLimitText(state: QueueWorkState): string {
+    return strings.live.runsLimitReached(runCount(workDialogRuns(state)));
+}
+
+/** The queue the general run takes (without the directions with their own run), its count up next and the directions it skips. */
+export function generalWorkQueue(state: QueueWorkState): { queue: LiveQueueItem[]; total: number | undefined; skips: LiveDirection[] } {
+    const runs = runsSideBySide(state) ? workDialogRuns(state) : [];
+    const lines = linesWithRun(runs);
+    if (lines.size === 0) return { queue: [...state.queue], total: state.queueCounts?.next, skips: [] };
+    const researches = state.researches ?? [];
+    const skips = [...lines].map(id => researches.find(d => d.id === id) ?? ({ id, name: id } as LiveDirection));
+    // In the order of the directions (Now's order of their runs).
+    const order = new Map(researches.map((d, i) => [d.id, d.order ?? i]));
+    skips.sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
+    return {
+        queue: queueForGeneralRun(state.queue, lines, runs),
+        total: state.queueCounts ? generalQueueCount(state.queue, state.queueCounts, runs) : undefined,
+        skips,
+    };
+}
+
+/** "Skips the direction X (its own agent works on it)." (null: none skipped). */
+export function queueWorkSkipsText(skips: readonly Pick<LiveDirection, 'name'>[]): string | null {
+    return skips.length === 0 ? null : strings.live.queueWorkSkips(skips.map(d => d.name).join(', '), skips.length);
 }
 
 /** "Only [n] tasks" is a choice (`run.tasks`); without it only "Automatically". */
@@ -91,10 +150,15 @@ export function queueWorkCounted(state: QueueWorkState): boolean {
     return !!state.features?.includes(RUN_TASKS_FEATURE);
 }
 
-/** The task that comes first: one set next by hand, else the first of the whole queue, else the first up next. */
+/**
+ * The task that comes first: one set next by hand, else the one first in the queue (its lowest place: the
+ * general run's first may stand after the directions' own, spec 126 U10 §6), else the first up next.
+ */
 export function queueWorkFirst(queue: readonly LiveQueueItem[]): LiveQueueItem | null {
     const next = queue.filter(q => q.state === 'next');
-    return next.find(q => q.own === 'next') ?? next.find(q => q.pos === 1) ?? next[0] ?? null;
+    const placed = next.filter(q => q.pos !== undefined);
+    const lowest = placed.length > 0 ? placed.reduce((a, q) => (q.pos! < a.pos! ? q : a)) : null;
+    return next.find(q => q.own === 'next') ?? lowest ?? next[0] ?? null;
 }
 
 /** The status carries at most this many tasks (`sanitizeQueue`): a full one may leave some out. */
@@ -156,7 +220,7 @@ export function workConfirmText(work: LiveWork | undefined): string {
 }
 
 /** The unfolded list under First up: its heading, the rows and what lies beyond them (hidden until More). */
-function queueWorkMoreHtml(state: QueueWorkState, more: readonly LiveQueueItem[], line?: { total?: number }): string {
+function queueWorkMoreHtml(state: QueueWorkState, more: readonly LiveQueueItem[], line?: { total?: number }, total: number | undefined = state.queueCounts?.next): string {
     const L = strings.live;
     const placed = more.some(q => q.pos !== undefined);
     // With places: the rows numbered 1., 2., 3. as they come after the first (a task set first from 2nd
@@ -172,7 +236,7 @@ function queueWorkMoreHtml(state: QueueWorkState, more: readonly LiveQueueItem[]
                                 ? `<span class="queue-work__sr">, ${esc(L.branchQueuePos(q.pos))}</span>` : ''}</span>
                         </li>`;
     }).join('');
-    const rest = line ? queueWorkRest(state, more, line.total) : queueWorkRest(state, more);
+    const rest = line ? queueWorkRest(state, more, line.total) : queueWorkRest(state, more, total);
     const restText = rest !== null && rest > 0 ? (line ? L.lineRunRest(rest) : L.queueWorkRest(rest))
         : rest === null && state.queue.length >= STATUS_QUEUE_FULL ? L.queueWorkRestUnknown : '';
     return `
@@ -223,7 +287,39 @@ export const queueWorkMethods = uiModule({
             linkAvailable: this.researchLinkAvailable('work'),
             noAgent: this.activeResearchNoAgent(),
             phone: overviewMode() === 'sheet',
+            starting: this.lineRunsStarting(),
         });
+    },
+
+    /** The directions' runs on their way from here (they count toward the most runs at once until their runs come). */
+    lineRunsStarting(): number {
+        return this.runStartsNow().filter(x => x.scope !== QUEUE_SCOPE && x.view.phase === 'starting').length;
+    },
+
+    /**
+     * "Work on the queue…" held at the most runs at once (spec 126 U10 §5, 5d): the button grey and inert,
+     * described by the reason drawn under it (queueWorkLimitNote with the same `noteId`).
+     */
+    queueWorkHeldButton(cls: string, noteId: string): HTMLElement {
+        const btn = setResearchActionLabel(el('button', `${cls} is-held`), strings.live.queueWork, researchLinkMark('work'));
+        btn.type = 'button';
+        btn.dataset.offer = 'limit';
+        btn.setAttribute('aria-disabled', 'true');
+        btn.setAttribute('aria-describedby', noteId);
+        btn.onclick = (e) => e.preventDefault();
+        return btn;
+    },
+
+    /** The reason under a held "Work on the queue…": "3 agents are working; the settings allow no more. Settings ›". */
+    queueWorkLimitNote(state: QueueWorkState, noteId: string): HTMLElement {
+        const p = el('p', 'queue-work-limit');
+        p.id = noteId;
+        p.appendChild(el('span', undefined, queueWorkLimitText(state)));
+        const settings = el('button', 'link-button queue-work-limit__settings', strings.live.runsSettingsLink);
+        settings.type = 'button';
+        settings.onclick = () => this.openRunsSettings();
+        p.append(' ', settings);
+        return p;
     },
 
     /**
@@ -243,6 +339,7 @@ export const queueWorkMethods = uiModule({
             link.onclick = () => this.showOverviewNowFinish();
             return link;
         }
+        if (offer === 'limit') return this.queueWorkHeldButton('queue-work-btn', QUEUE_LIMIT_NOTE);
         if (offer !== 'offer') return null;
         const btn = setResearchActionLabel(el('button', 'queue-work-btn'), L.queueWork, researchLinkMark('work'));
         btn.type = 'button';
@@ -277,13 +374,25 @@ export const queueWorkMethods = uiModule({
 
     /** "Work on the queue…" in the Research menu (not while the research works). */
     queueWorkMenuOffered(): boolean {
+        return this.queueWorkMenuOffer() === 'offer';
+    },
+
+    /** The Research menu's offer: the item, the item grey with the reason (`limit`), or none. */
+    queueWorkMenuOffer(): QueueWorkOffer {
         const at = this.queueWorkMenuState();
-        return !!at && queueWorkOffer(at.state, {
+        return !at ? 'none' : queueWorkOffer(at.state, {
             live: at.live,
             linkAvailable: this.researchLinkAvailable('work'),
             noAgent: this.activeResearchNoAgent(),
             phone: overviewMode() === 'sheet',
-        }) === 'offer';
+            starting: this.lineRunsStarting(),
+        });
+    },
+
+    /** Why the Research menu's "Work on the queue…" is grey (the most runs at once reached). */
+    queueWorkMenuLimitText(): string {
+        const at = this.queueWorkMenuState();
+        return at ? queueWorkLimitText(at.state) : '';
     },
 
     /** The Research menu's "Work on the queue…". */
@@ -320,7 +429,10 @@ export const queueWorkMethods = uiModule({
         const noGate = !!state.work && state.work.gate === null;
         // A direction's run: its queue and its count up next (`queueCounts.research`); else the whole queue.
         const lineTotal = line ? state.queueCounts?.research[line.id] : undefined;
-        let queue: readonly LiveQueueItem[] = line ? lineWorkQueue(state, line.id) : state.queue;
+        // The whole queue: without the tasks of the directions with their own run (spec 126 U10 §6), said under the box.
+        const general = line ? null : generalWorkQueue(state);
+        let queue: readonly LiveQueueItem[] = line ? lineWorkQueue(state, line.id) : general!.queue;
+        const skipsText = general ? queueWorkSkipsText(general.skips) : null;
         const session = queueWorkSessionLine(state.work);
         const addsUp = runLinesOn(state.features) ? workDialogAddsUp(state) : 0;
         const agents = line ? workDialogAgents(state) : null;
@@ -332,13 +444,13 @@ export const queueWorkMethods = uiModule({
             const first = queueWorkFirst(q);
             // The tasks after it (not the count in "Only [n] tasks"): folded at every opening.
             const more = queueWorkMore(q, first);
-            const moreCount = line ? queueWorkMoreCount({ ...state, queue: q }, more, lineTotal) : queueWorkMoreCount(state, more);
+            const moreCount = line ? queueWorkMoreCount({ ...state, queue: q }, more, lineTotal) : queueWorkMoreCount(state, more, general!.total);
             if (!first && !session) return '';
             return `
                 <div class="queue-work__first">
                     ${first ? `<div class="queue-work__first-label">${esc(L.queueWorkFirst)}</div>
                     <div class="queue-work__first-task"><strong>${esc(first.id)}</strong> ${esc(first.text)}</div>` : ''}
-                    ${moreCount !== null ? `<button type="button" class="link-button queue-work__more-btn" id="queue-work-more-btn" aria-expanded="false" aria-controls="queue-work-more" aria-label="${esc(L.queueWorkMoreAria(moreCount))}" data-count="${esc(moreCount)}"><span class="queue-work__more-label">${esc(L.queueWorkMore(moreCount))}</span><span class="queue-work__chev" aria-hidden="true"></span></button>${queueWorkMoreHtml(line ? { ...state, queue: q } : state, more, line ? { total: lineTotal } : undefined)}` : ''}
+                    ${moreCount !== null ? `<button type="button" class="link-button queue-work__more-btn" id="queue-work-more-btn" aria-expanded="false" aria-controls="queue-work-more" aria-label="${esc(L.queueWorkMoreAria(moreCount))}" data-count="${esc(moreCount)}"><span class="queue-work__more-label">${esc(L.queueWorkMore(moreCount))}</span><span class="queue-work__chev" aria-hidden="true"></span></button>${queueWorkMoreHtml(line ? { ...state, queue: q } : state, more, line ? { total: lineTotal } : undefined, general?.total)}` : ''}
                     ${session ? `<div class="queue-work__session">${esc(session)}</div>` : ''}
                 </div>`;
         };
@@ -381,6 +493,7 @@ export const queueWorkMethods = uiModule({
                         </span>
                     </label>` : ''}
                 </div>${firstHtml(queue)}
+                ${skipsText ? `<p class="queue-work__adds queue-work__skips">${esc(skipsText)}</p>` : ''}
                 ${addsUp > 0 ? `<p class="queue-work__adds">${esc(L.runsAddUp(addsUp))}</p>` : ''}
                 ${line ? '<p class="queue-work__held" id="queue-work-held" role="status" hidden></p>' : ''}
                 <div class="buttons queue-work__foot">
