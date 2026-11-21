@@ -2440,6 +2440,9 @@
         /* The bottom-right pills reach the middle: "+ child" just left of them (its right set by
            the renderer, placeChildAddTabs), its label growing away from them. */
         .edge-bottom-center.is-beside { left: auto; transform: none; }
+        /* Just right of the "◎ Focus on …" button when it reaches the middle (spec 098 §13; its left set by the
+           renderer, placeChildAddTab), its label growing away from the button. */
+        .edge-bottom-center.is-after { transform: none; }
         @media (hover: hover) { .person-card:has(.edge-bottom-center.is-beside .add-btn:hover) .edge-bottom-left {
             opacity: 0;
             pointer-events: none;

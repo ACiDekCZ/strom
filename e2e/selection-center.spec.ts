@@ -134,6 +134,33 @@ test.describe('the centre of the selection on a computer', () => {
         await expect(page.locator('#tree-canvas .card-tag--outside')).toHaveCount(0);
     });
 
+    test('a wide font: the "+ child" tab shown under the pointer stands beside the button, never over it', async ({ page }) => {
+        await setup(page, 'o1');
+        // A wider face than the default (CI's Linux fonts are wider than a Mac's).
+        await page.addStyleTag({ content: '* { font-family: Verdana, "DejaVu Sans", sans-serif !important; }' });
+        await chooseRod(page, 'Brandvold');
+        const card = cardOf(page, 'o1');
+        const btn = card.locator('.card-tag--center');
+        await expect(btn).toBeVisible();
+        await card.hover({ position: { x: 20, y: 20 } });
+        const add = card.locator('.edge-bottom-center .add-btn');
+        await expect(add).toBeVisible();
+        const b = (await btn.boundingBox())!;
+        const a = (await add.boundingBox())!;
+        expect(a.x).toBeGreaterThanOrEqual(b.x + b.width);
+        expect(a.x + a.width).toBeLessThanOrEqual((await card.boundingBox())!.x + (await card.boundingBox())!.width);
+        // Every point of the button is the button's (its start, middle and end), with the pointer on it too.
+        await btn.hover();
+        const hits = await btn.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            const y = r.top + r.height / 2;
+            return [r.left + 3, r.left + r.width / 2, r.right - 3].map(x => el.contains(document.elementFromPoint(x, y)));
+        });
+        expect(hits).toEqual([true, true, true]);
+        await btn.click({ timeout: 5000 });
+        await expect.poll(() => focusId(page)).toBe('b1');
+    });
+
     test('none in the fan', async ({ page }) => {
         await setup(page, 'o1');
         await chooseRod(page, 'Brandvold');

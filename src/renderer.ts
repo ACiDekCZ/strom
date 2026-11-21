@@ -4925,7 +4925,10 @@ class TreeRendererClass {
         const offer = outside ? UI.selectionCenterOffer?.() ?? null : null;
         let btn = card.querySelector<HTMLButtonElement>(':scope > .card-tag--center');
         if (!offer) {
-            btn?.remove();
+            if (btn) {
+                btn.remove();
+                this.placeChildAddTab(card);
+            }
             return;
         }
         const text = strings.selection.focusCenter(offer.name);
@@ -4960,9 +4963,16 @@ class TreeRendererClass {
         btn.setAttribute('aria-label', aria);
         btn.title = aria;
         this.fitCenterButton(card, btn);
+        this.placeChildAddTab(card);
     }
 
-    /** The centre's button ends before a tab on the card's bottom edge (measured as drawn; none: its own max-width). */
+    /**
+     * The centre's button ends before a tab on the card's bottom edge
+     * (measured as drawn; none: its own max-width). Under a mouse, when it
+     * reaches the "+ child" tab's place, it also leaves room for that tab
+     * just right of it (placeChildAddTab): the tab, shown while the pointer
+     * is on the card, never covers the button, whatever the font.
+     */
     private fitCenterButton(card: HTMLElement, btn: HTMLElement): void {
         btn.style.removeProperty('max-width');
         const cr = card.getBoundingClientRect();
@@ -4975,7 +4985,30 @@ class TreeRendererClass {
             if (r.width === 0 || r.bottom <= br.top || r.top >= br.bottom || r.left <= br.left) continue;
             limit = Math.min(limit, (r.left - br.left) / scale - 4);
         }
+        const slot = this.childAddSlot(card);
+        if (slot && btn.offsetLeft + btn.offsetWidth + CHILD_ADD_GAP > slot.left) {
+            limit = Math.min(limit, slot.end - CHILD_ADD_TAB - CHILD_ADD_GAP - btn.offsetLeft);
+        }
         if (limit < Infinity) btn.style.maxWidth = `${Math.max(0, Math.floor(limit))}px`;
+    }
+
+    /**
+     * Where the "+ child" tab stands at rest (card px from the padding edge):
+     * `left` in the middle of the bottom edge, or just left of the
+     * bottom-right pills when they reach the middle; `end` = the right end
+     * of its row (the pills, else the status corner or the edges' inset).
+     * null: no tab here (none on the card, or no mouse to show it).
+     */
+    private childAddSlot(card: HTMLElement): { left: number; end: number } | null {
+        if (!card.querySelector(':scope > .edge-bottom-center')) return null;
+        if (typeof window.matchMedia === 'function' && !window.matchMedia('(hover: hover)').matches) return null;
+        const width = card.clientWidth;
+        const pills = card.querySelector<HTMLElement>(':scope > .edge-bottom-right');
+        if (pills && pills.offsetWidth) {
+            const end = pills.offsetLeft - CHILD_ADD_GAP;
+            return { left: Math.min(width / 2, end - CHILD_ADD_TAB / 2) - CHILD_ADD_TAB / 2, end };
+        }
+        return { left: width / 2 - CHILD_ADD_TAB / 2, end: width - (card.classList.contains('has-status') ? 40 : 12) };
     }
 
     /** The centre's button again (the following of the agent switched on or off, §13). */
@@ -6032,8 +6065,8 @@ class TreeRendererClass {
             });
 
             // Attach event listeners to add buttons
-            // "+ child" placed clear of the bottom-right pills when the pointer comes (it shows only then).
-            if (childAddHtml && card.classList.contains('has-edge-br')) card.addEventListener('pointerenter', () => this.placeChildAddTab(card));
+            // "+ child" placed clear of the bottom-right pills and the "◎ Focus on …" button when the pointer comes (it shows only then).
+            if (childAddHtml) card.addEventListener('pointerenter', () => this.placeChildAddTab(card));
             card.querySelectorAll('.add-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -6095,15 +6128,29 @@ class TreeRendererClass {
      * mouse: when the bottom-right pills (the sibling order "2 of 6", ⇄ N)
      * reach the middle, it stands just left of them, anchored by its right
      * side so its label grows away from them (the ∞ pills on the left give
-     * way while it is pointed at). Read when the pointer comes onto the card,
-     * so a render never waits for the layout.
+     * way while it is pointed at). When the "◎ Focus on …" button (spec 098
+     * §13) reaches its place, it stands just right of the button, anchored
+     * by its left side (the button keeps that room, fitCenterButton). Read
+     * when the pointer comes onto the card, so a render never waits for the
+     * layout, and when the button is drawn or taken away.
      */
     private placeChildAddTab(card: HTMLElement): void {
         const add = card.querySelector<HTMLElement>(':scope > .edge-bottom-center');
         const pills = card.querySelector<HTMLElement>(':scope > .edge-bottom-right');
         if (!add) return;
-        add.classList.remove('is-beside');
+        add.classList.remove('is-beside', 'is-after');
         add.style.removeProperty('right');
+        add.style.removeProperty('left');
+        const center = card.querySelector<HTMLElement>(':scope > .card-tag--center');
+        const slot = center?.offsetWidth ? this.childAddSlot(card) : null;
+        if (center && slot) {
+            const after = center.offsetLeft + center.offsetWidth + CHILD_ADD_GAP;
+            if (after > slot.left) {
+                add.classList.add('is-after');
+                add.style.left = `${Math.round(after)}px`;
+                return;
+            }
+        }
         if (!pills || !pills.offsetWidth) return;
         const width = card.clientWidth;
         const end = pills.offsetLeft - CHILD_ADD_GAP;
