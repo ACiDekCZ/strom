@@ -148,6 +148,9 @@ test.describe('the window\'s selection on a computer', () => {
         const pop = await openPicker(page);
         expect(await heads(pop)).toEqual(['Ancestors and descendants', 'Lists of people']);
         await expect(pop.locator('li[data-sec="focus"][data-sel^="anc:"]')).toContainText('Ancestors: Albin');
+        // No list of its own: the ready-made one alone (spec 098 §12).
+        await expect(pop.locator('li.sp-selpick-row[data-sec="lists"]')).toHaveCount(1);
+        await expect(pop.locator('li.sp-selpick-row[data-sec="lists"]')).toContainText('Added in the last 30 days');
     });
 });
 
