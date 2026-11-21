@@ -63,6 +63,18 @@ function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/**
+ * The window's selection is offered (spec 098 §2, §10): in every tree that has
+ * someone to choose; an empty tree has nobody to select, and its bar keeps the
+ * room for the search field.
+ */
+export function selectionOffered(): boolean {
+    const persons = DataManager.getData()?.persons;
+    if (!persons) return false;
+    for (const id in persons) if (!persons[id as PersonId].isPlaceholder) return true;
+    return false;
+}
+
 /** The tree has a line worth choosing (not only small families): the section Family lines is offered (§2). */
 export function rodPickerOffered(): boolean {
     return rods(selectionIndex().index).some(r => !r.small);
@@ -328,7 +340,7 @@ export const selectionPickerMethods = uiModule({
         const el = document.getElementById('view-rod-picker');
         if (!el) return;
         const view = TreeRenderer.getViewMode();
-        const off = view === 'timeline' || view === 'map' || view === 'table';
+        const off = view === 'timeline' || view === 'map' || view === 'table' || !selectionOffered();
         if (off) { el.hidden = true; return; }
         const key = currentHostKey();
         const built = !!el.querySelector('details.sp-rodpick');

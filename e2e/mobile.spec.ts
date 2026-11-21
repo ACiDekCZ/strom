@@ -198,7 +198,8 @@ test('the "More" sheet (menu 1020 §7): Undo|Redo tiles, content, For the family
     await expect(sheet.locator('.bottom-sheet-section')).toHaveCount(0);
     const rows = (await sheet.locator('.bottom-sheet-items > .bottom-sheet-item:not(.bottom-sheet-storage-row)').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
     // "Ancestor research · New" only while it is new (menu 1020 §1.1); seen here: in the tree's sheet.
-    expect(rows).toEqual(['Anniversaries', 'Lists of people', 'Export…', 'For the family ›', 'Full screen', 'Tree: My Family Tree ›', 'Add family…']);
+    // The window's selection under the View tiles in every tree (spec 098 §10).
+    expect(rows).toEqual(['Anniversaries', 'Lists of people', 'Export…', 'For the family ›', 'Selection No selection ›', 'Full screen', 'Tree: My Family Tree ›', 'Add family…']);
     await expect(pairs.nth(1)).toHaveAttribute('aria-label', 'View');
     await expect(pairs.nth(1).locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map', 'Timeline']);
     await expect(pairs.nth(2).locator('.bottom-sheet-item')).toHaveText(['Settings', 'How Strom works', 'About Strom']);
@@ -311,9 +312,11 @@ test.describe('More on a small phone and held sideways', () => {
         expect(undo.height).toBeGreaterThanOrEqual(44);
         const tree = (await sheet.locator('.bottom-sheet-tree-row').boundingBox())!;
         expect(tree.height).toBeLessThan(46);
-        // Full screen joins the View line as a fourth tile (spec 082 K1.3): no extra row to scroll to.
+        // Full screen joins the View line as a fourth tile (spec 082 K1.3), the window's selection closes it
+        // (spec 098 §10): no extra row to scroll to.
         await expect(sheet.locator('.bottom-sheet-pair[aria-label="View"] .bottom-sheet-item'))
-            .toHaveText(['Fan', 'Map', 'Timeline', 'Full screen']);
+            .toHaveText(['Fan', 'Map', 'Timeline', 'Full screen', /^Selection\s*No selection\s*›$/]);
+        await expect(sheet.locator(':scope > .bottom-sheet-items > .more-rod-row')).toHaveCount(0);
         await expect.poll(() => sheet.evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
     });
 });

@@ -439,8 +439,10 @@ test.describe('the bulk load and the search field (de-DE)', () => {
             await expect.poll(fits).toBe(true);
             expect((await searchRoom(page)).width).toBe(idle);
             if (width === 1440) {
-                // Six view tabs: the tabs may tighten (step 2), the Actions label stays (step 3 not taken).
-                await expect(page.locator('.toolbar')).not.toHaveClass(/toolbar-squeeze-2/);
+                // Six view tabs and the window's selection of every tree (spec 098 §2) beside the kept Send place:
+                // the tabs may tighten (step 2), the Actions label fold (step 3) and the name be capped (step 4),
+                // the search field never folds (step 5 not taken).
+                await expect(page.locator('.toolbar')).not.toHaveClass(/toolbar-squeeze-3/);
                 await page.locator('#research-menu-btn').click();
                 await expect(page.locator('#research-item-images')).toHaveText(/^Bilder nur in der Forschung · [01] \/ 2$/);
             }

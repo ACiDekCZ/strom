@@ -4172,6 +4172,15 @@
             .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-storage-row { min-height: 44px; margin: 2px 0; }
             .bottom-sheet-more .bottom-sheet-handle { margin-top: 2px; margin-bottom: 4px; }
         }
+        /* A short phone upright (360×640, 375×667): 44 px rows and tiles as held sideways, so the
+           first level with the window's selection (spec 098 §10) and the storage row needs no scrolling. */
+        @media (max-width: 640px) and (max-height: 700px) and (orientation: portrait) {
+            .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-item { min-height: 44px; }
+            .bottom-sheet-more .bottom-sheet-pair { padding: 0 8px; }
+            .bottom-sheet-menu.bottom-sheet-more .bottom-sheet-tree-row { min-height: 44px; }
+            .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-storage-row { min-height: 44px; margin: 2px 0 4px; }
+            .bottom-sheet-menu.bottom-sheet-more .bottom-sheet-item.more-rod-row { min-height: 44px; margin: 4px 8px 2px; }
+        }
         /* The prominent "Strom: {name}" row — mirrors the desktop .actions-tree-row:
            tinted background, text-light prefix, serif 600 name, trailing chevron.
            It reads as a distinct submenu opener, not just another action. */
@@ -15136,7 +15145,9 @@
         .toolbar.toolbar-squeeze .view-mode-segment button { padding: 0 8px; }
         .toolbar.toolbar-squeeze .search-shortcut { display: none; }
         /* Fit step 4: the tree's name capped shorter ("…"; the whole name in its tooltip). */
-        .toolbar.toolbar-squeeze-name .tree-switcher-btn { max-width: min(96px, 100%); }
+        /* The pill as wide as the capped name makes it (a fixed 96 px cut the name 2 px under its cap, which
+           the fit read as a squeezed switcher and folded the search field instead). */
+        .toolbar.toolbar-squeeze-name .tree-switcher-btn { max-width: 100%; }
         .toolbar.toolbar-squeeze-name .tree-switcher-btn .tree-name { max-width: 56px; }
         /* Fit step 5 (desktop; the tablet's step 3, never a phone either way up):
            the search field folds to the magnifier; open, it lies over the
@@ -15438,6 +15449,13 @@
         .more-rod-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-item.more-rod-row { grid-column: 1 / -1; width: 100%; min-height: 44px; margin: 2px 0; }
+            /* The window's selection closes the View line (spec 098 §10): a row of its own made the
+               first level scroll. The tiles as wide as their names, the selection takes the rest. */
+            .bottom-sheet-more .bottom-sheet-pair:has(> .more-rod-row) > .bottom-sheet-item:not(.more-rod-row) { flex: 0 1 auto; width: auto; padding: 10px 12px; }
+            .bottom-sheet-more .bottom-sheet-pair > .bottom-sheet-item.more-rod-row {
+                flex: 1 1 0; width: auto; min-width: 0; min-height: 44px; margin: 0; padding: 0 12px; gap: 8px;
+                justify-content: flex-start; text-align: left; background: var(--surface-2); border-radius: var(--r-md);
+            }
         }
         /* Descendants badge bar */
         .collab-bar {
@@ -25710,6 +25728,8 @@
             body[data-view-mode="fan"] .evidence-pill { top: max(96px, calc(var(--fan-toolbar-bottom, 0px) + 8px)); }
             body.descendants-view .evidence-pill ~ .live-follow-pill { top: 156px; }
             body[data-view-mode="fan"] .evidence-pill ~ .live-follow-pill { top: max(156px, calc(var(--fan-toolbar-bottom, 0px) + 68px)); }
+            /* The selection's pill as wide as its content stays centred like the other pills, clear of the side bar on both sides. */
+            .evidence-pill.evidence-pill--sel { max-width: calc(100vw - 2 * (var(--side-bar-w, 76px) + 12px)); }
         }
         /* A phone held sideways at most 640 wide keeps the phone's bottom pill, right of the side bar. */
         @media (max-width: 640px) and (max-height: 500px) and (orientation: landscape) {

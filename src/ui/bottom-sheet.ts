@@ -22,6 +22,7 @@ import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
 import { getSelection, selectionText } from './view-selection-ui.js';
+import { selectionOffered } from './selection-picker-ui.js';
 import { satelliteResearchMenu } from '../windows/window-research-menu.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
@@ -77,6 +78,8 @@ interface MenuBlock {
     pairLabel?: string;
     /** A framed row across the sheet under the pair ("Family line · Whole tree ›"). */
     valueRow?: ValueRow;
+    /** The value row at the end of the pair's line instead of under it (a phone held sideways has no height for a row more). */
+    valueInPair?: boolean;
     /** The research group (a narrow window with a mouse): title, state, frequent actions, "All research actions ›". */
     research?: ResearchSheetGroup;
     /** A quiet line with its link before the block (the research programs out of the browser's reach); hidden until it applies. */
@@ -454,14 +457,15 @@ export const bottomSheetMethods = uiModule({
         }
 
         // 5) View: Fan | Map | Timeline tiles (no bottom-bar tab of their own); on a phone under them the
-        //    window's selection (spec 098 §10: in every tree in Family, Descendants and the fan, not
+        //    window's selection (spec 098 §10: in every tree with people in Family, Descendants and the fan, not
         //    on the timeline, the map, the table; a tablet has it in its top bar).
         const sel = getSelection().ref;
-        const selectionRow: ValueRow | undefined = isPhoneBar() && mode !== 'timeline' && mode !== 'map' && mode !== 'table'
+        const selectionRow: ValueRow | undefined = isPhoneBar() && mode !== 'timeline' && mode !== 'map' && mode !== 'table' && selectionOffered()
             ? { label: s.selection.row, value: sel ? selectionText(sel) : s.selection.none, id: 'sheet-rod', run: () => this.showSelectionSheet() }
             : undefined;
         // Full screen (spec 082 K1.3): only in the bottom-bar regime; on an iPhone the way to the Home Screen.
-        // Held sideways the sheet has no height to spare: there it joins the View line as a fourth tile.
+        // Held sideways the sheet has no height to spare: there it joins the View line as a fourth tile,
+        // and the selection closes that line (a row of its own would make the first level scroll).
         const fullscreen = isTabletOrMobile() ? currentFullscreenOffer() : null;
         const fullscreenRow: MenuRow | null = fullscreen ? {
             id: 'sheet-fullscreen',
@@ -477,7 +481,7 @@ export const bottomSheetMethods = uiModule({
             { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
             { label: s.viewModeSwitch.timeline, run: () => this.setDisplayViewMode('timeline'), active: mode === 'timeline' },
             ...(fullscreenRow && sideways ? [fullscreenRow] : []),
-        ], valueRow: selectionRow });
+        ], valueRow: selectionRow, valueInPair: sideways });
         if (fullscreenRow && !sideways) blocks.push({ rows: [fullscreenRow] });
 
         // 6) [Ancestor research · New] · "Tree: {name} ›" (every whole-tree action) · Add family.
@@ -961,9 +965,10 @@ export const bottomSheetMethods = uiModule({
                     const btn = pairRow.appendChild(makeButton(row));
                     if (btn.classList.contains('sel-opt')) btn.dataset.selForm = 'tile';
                 }
+                if (block.valueRow && block.valueInPair) pairRow.appendChild(makeValueButton(block.valueRow));
                 list.appendChild(pairRow);
             }
-            if (block.valueRow) list.appendChild(makeValueButton(block.valueRow));
+            if (block.valueRow && !(block.valueInPair && block.pair)) list.appendChild(makeValueButton(block.valueRow));
         }
 
         overlay.appendChild(sheet);
