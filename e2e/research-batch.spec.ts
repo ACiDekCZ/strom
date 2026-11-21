@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import {
-    fakeBridge, fakeIntake, fakeMaterial, openResearch, openResearchMenu, poll, block, BRIDGE, BRIDGE2, MATERIAL_FEATURES, UUID, FakeBridge, FakeIntake,
+    fakeBridge, fakeIntake, fakeMaterial, materialFile, openResearch, openResearchMenu, poll, block, BRIDGE, BRIDGE2, MATERIAL_FEATURES, UUID, FakeBridge, FakeIntake,
+    FakeMaterialFile,
 } from './research-bridge.js';
 
 /**
@@ -475,9 +476,10 @@ test.describe('Sorting a closed batch', () => {
     const SORT_ACCEPTS = { ...BATCH_ACCEPTS, media: { ...BATCH_ACCEPTS.media, tasks: 'open' } };
     const SORT_FEATURES = [...MATERIAL_FEATURES, 'material.edit', 'material.sort'];
 
-    async function setup(page: Page, opts: { features: string[]; intake?: FakeIntake }): Promise<FakeBridge> {
+    async function setup(page: Page, opts: { features: string[]; intake?: FakeIntake; files?: FakeMaterialFile[] }): Promise<FakeBridge> {
         await page.clock.setFixedTime(new Date('2026-11-21T10:30:00Z'));
-        const b = await fakeBridge(page, { accepts: SORT_ACCEPTS, features: opts.features, material: fakeMaterial(), ...(opts.intake ? { intake: opts.intake } : {}) });
+        const b = await fakeBridge(page, { accepts: SORT_ACCEPTS, features: opts.features, material: fakeMaterial({ files: opts.files ?? [] }),
+            ...(opts.intake ? { intake: opts.intake } : {}) });
         await openResearch(page, { media: true });
         await page.evaluate(({ uuid, base, accepts }) => {
             localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts }));
@@ -599,5 +601,104 @@ test.describe('Sorting a closed batch', () => {
         await setup(page, { features: SORT_FEATURES, intake: fakeIntake(true) });
         await openTreeSettings(page);
         await expect(page.locator('#research-intake-host')).toBeEmpty();
+    });
+
+    // ==================== Before sending a batch (spec 130 K1.3) ====================
+
+    async function confirmTwo(page: Page) {
+        await page.evaluate(() => (window.Strom.UI as any).showBatchDialog());
+        await addFiles(page, ['Krabice/a.jpg', 'Krabice/b.jpg']);
+        const dialog = page.locator('#batch-modal');
+        await dialog.locator('[data-act="next"]').click();
+        await expect(dialog.getByRole('button', { name: 'Send 2 files' })).toBeVisible();
+        return dialog;
+    }
+
+    test('before sending a batch, off: no cost and no agent, the files wait in Materials', async ({ page }) => {
+        await setup(page, { features: [...SORT_FEATURES, 'intake.auto'], intake: fakeIntake(false) });
+        const dialog = await confirmTwo(page);
+        await expect(dialog.locator('.material-box')).toHaveText(/The files are stored in the research, outside git, and wait in Materials unsorted\. The agent sorts them only on request/);
+        await expect(dialog).not.toContainText(/Estimated cost|Privacy|goes to the model provider/);
+    });
+
+    test('before sending a batch, on and older: privacy and cost as before', async ({ page }) => {
+        await setup(page, { features: [...SORT_FEATURES, 'intake.auto'], intake: fakeIntake(true) });
+        const dialog = await confirmTwo(page);
+        await expect(dialog).toContainText('Privacy');
+        await expect(dialog).toContainText('Whatever the agent opens goes to the model provider.');
+    });
+
+    // ==================== A single file (Send material…, spec 130 K1.3) ====================
+
+    async function sendOne(page: Page) {
+        await page.evaluate(() => (window.Strom.UI as any).showMaterialDialog({ personId: Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan')!.id }));
+        const dialog = page.locator('#material-modal');
+        await dialog.locator('#material-input').setInputFiles({ name: 'dopis.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('obsah dopisu') });
+        return dialog;
+    }
+
+    test('a single file, off: the dialog and the toast say it waits in Materials; Sort with the agent… (AI, no terminal) opens the sorting of it', { tag: '@smoke' }, async ({ page }) => {
+        const b = await setup(page, { features: [...SORT_FEATURES, 'intake.auto'], intake: fakeIntake(false),
+            files: [materialFile(101, { name: 'dopis.jpg', persons: ['P0003'] })] });
+        const dialog = await sendOne(page);
+        await expect(dialog.locator('.material-box')).toContainText('Nothing is added to the tree. The research stores the files with the person. They wait in Materials; the agent goes through them only on request.');
+        await dialog.getByRole('button', { name: 'Send 1 file' }).click();
+        const toast = page.locator('.toast', { hasText: 'Sent to the research' });
+        await expect(toast).toContainText('Sent to the research: 1 file for Jan Fíšek. It waits in Materials, not sorted yet.');
+        await expect(toast).not.toContainText('task');
+        const sort = toast.locator('.toast-action', { hasText: 'Sort with the agent…' });
+        await expect(sort.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(sort.locator('.research-open-mark')).toHaveCount(0);
+        await expect(toast.locator('.toast-action', { hasText: 'Show' })).toHaveCount(1);
+        expect(b.mediaPuts).toHaveLength(1);
+        await sort.click();
+        await expect(page.locator('.mdlg--sort')).toBeVisible();
+        await expect(page.locator('.mdlg--sort')).toContainText('1 file');
+        // Only the dialog opened: nothing is sorted before its own button.
+        expect(b.material?.sorts ?? []).toHaveLength(0);
+    });
+
+    test('a single file, on: the research makes a task of it, as before; no Sort with the agent…', async ({ page }) => {
+        await setup(page, { features: [...SORT_FEATURES, 'intake.auto'], intake: fakeIntake(true) });
+        const dialog = await sendOne(page);
+        await expect(dialog.locator('.material-box')).toContainText('Nothing is added to the tree. The research stores the files with the person and creates a task for the agent.');
+        await dialog.getByRole('button', { name: 'Send 1 file' }).click();
+        const toast = page.locator('.toast', { hasText: 'Sent to the research' });
+        await expect(toast).toContainText('Sent to the research: 1 file for Jan Fíšek. The research will create a task.');
+        await expect(toast.locator('.toast-action', { hasText: 'Sort with the agent' })).toHaveCount(0);
+    });
+
+    test('a single file, an older research (no intake.auto): the texts of before', async ({ page }) => {
+        await setup(page, { features: SORT_FEATURES });
+        const dialog = await sendOne(page);
+        await expect(dialog.locator('.material-box')).toContainText('creates a task for the agent');
+        await dialog.getByRole('button', { name: 'Send 1 file' }).click();
+        const toast = page.locator('.toast', { hasText: 'Sent to the research' });
+        await expect(toast).toContainText('The research will create a task.');
+        await expect(toast.locator('.toast-action', { hasText: 'Sort with the agent' })).toHaveCount(0);
+    });
+
+    test('the reply decides: the status says on, the research made no task of the file — it waits in Materials', async ({ page }) => {
+        const intake = fakeIntake(true);
+        await setup(page, { features: [...SORT_FEATURES, 'intake.auto'], intake });
+        const dialog = await sendOne(page);
+        // Switched off in the research meanwhile (the app's status not read again yet).
+        intake.intake = { auto: false };
+        await dialog.getByRole('button', { name: 'Send 1 file' }).click();
+        await expect(page.locator('.toast', { hasText: 'Sent to the research' })).toContainText('It waits in Materials, not sorted yet.');
+    });
+
+    test('Materials: a file not gone through says "not sorted" when off', async ({ page }) => {
+        const intake = fakeIntake(false);
+        await setup(page, { features: [...SORT_FEATURES, 'intake.auto'], intake, files: [materialFile(1, { persons: ['P0003'] })] });
+        const id = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!.id);
+        await page.evaluate((id) => {
+            const ui = window.Strom.UI as unknown as { pushDialog(id: string): void; showEditPersonModal(id: string): void };
+            ui.pushDialog('person-modal');
+            ui.showEditPersonModal(id);
+        }, id);
+        const meta = page.locator('#materials-section .material-row:not(.is-skeleton) .material-meta').first();
+        await expect(meta).toContainText('not sorted');
+        await expect(meta).not.toContainText('waiting to be processed');
     });
 });

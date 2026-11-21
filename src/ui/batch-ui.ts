@@ -488,8 +488,10 @@ export const batchMethods = uiModule({
             try { return new Intl.NumberFormat(getCurrentLanguage(), { style: 'currency', currency: cur, maximumFractionDigits: n < 10 ? 2 : 0 }).format(n); }
             catch { return `${n} ${cur}`; }
         };
-        const info = stored
-            ? `<p class="material-box"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(archive ? b.archiveInfo : b.storedInfo)}</span></p>`
+        // Not sorted by itself (spec 130 K1.3): no agent opens the files, nothing is spent by the sending.
+        const waits = !stored && this.researchIntakeSorting(link.researchId) === 'manual';
+        const info = stored || waits
+            ? `<p class="material-box"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(archive ? b.archiveInfo : stored ? b.storedInfo : b.waitInfo)}</span></p>`
             : `<div class="batch-confirm-block"><div class="batch-confirm-label">${esc(b.privacyTitle)}</div><p>${esc(b.privacy)}</p></div>
                <div class="batch-confirm-block"><div class="batch-confirm-label">${esc(b.costTitle)}</div>${est
                     ? `<div class="batch-cost-row"><span>${esc(b.costSort)}</span><strong>${esc(smallBatch ? b.atMost(money(est.amount, est.currency)) : b.about(money(est.amount, est.currency)))}</strong></div><p class="batch-cost-note">${esc(b.costNote)}</p>`

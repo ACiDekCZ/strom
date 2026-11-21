@@ -732,6 +732,23 @@ export const materialSortMethods = uiModule({
         this.openSortDialog({ items, batch: batchName });
     },
 
+    /**
+     * Files just sent one by one (Send material…, spec 130 K1.3) that wait in Materials: Materials open and
+     * the dialog of Sort with the agent over those files. `personRef`: the person they went to (only their
+     * files asked from the research), else the whole list.
+     */
+    async openSortForFiles(ids: readonly string[], personRef?: string): Promise<void> {
+        const mc = this.materialsContext();
+        if (!mc?.base || this.materialSortGate() !== 'on' || !ids.length) return;
+        this.openMaterials();
+        const res = await fetchMaterial(mc.base, personRef ? { person: personRef } : {});
+        if (!res.ok) { this.materialErrorToast(mc, res.error, () => void this.openSortForFiles(ids, personRef)); return; }
+        await mergeIntoCache(mc.treeId, res.value.files, res.value.people ?? {});
+        const byId = this.materialSortItemMap(mc.treeId);
+        const items = ids.map(id => byId.get(id)).filter((i): i is MaterialItem => !!i);
+        if (items.length) this.openSortDialog({ items, batch: null, selection: true });
+    },
+
     // ==================== PROGRESS (13e) ====================
 
     /** Ask about the remembered sorting (GET only), until it ends. */

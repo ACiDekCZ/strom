@@ -23,7 +23,8 @@ import { StorageManager } from '../storage.js';
 import { MediaOriginal, PartnershipId, PersonId, ResearchWriteHeld, StromData, TreeId } from '../types.js';
 import { writeHeldOfCode } from '../research-write-held.js';
 import { storedResearchBridge, researchLinksEnabled, announcedResearchScheme } from '../research-device.js';
-import { parseLiveBridge, withAppVersion, researchSchemeUrl } from '../research-link.js';
+import { parseLiveBridge, withAppVersion, researchSchemeUrl, INTAKE_AUTO_FEATURE } from '../research-link.js';
+import { batchSorting, type BatchSorting } from '../batch.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { runBusy } from './busy.js';
 import { sha256OfBlob, normalizeSha256 } from '../sha256.js';
@@ -155,6 +156,16 @@ const replyIds = new Map<string, string>();
 
 export function researchReplyId(sha: string): string | null {
     return replyIds.get(sha) ?? null;
+}
+
+/**
+ * Whether the research made a task for the agent of a file it took (spec 130 K1.3: `task` in its reply to
+ * a single file), by its SHA-256, as its bridge answered in this page. Not said for a file it had already.
+ */
+const replyTasks = new Map<string, boolean>();
+
+export function researchReplyTask(sha: string): boolean | undefined {
+    return replyTasks.get(sha);
 }
 
 /** What the research says it added to a file it had: a person, the note (none: nothing new). */
@@ -490,6 +501,18 @@ export const originalsMethods = uiModule({
         } catch { /* no storage: said every time */ }
         const { text, action } = say();
         this.showToast(text, 8000, { closable: true, ...(action ? { action } : {}) });
+    },
+
+    /**
+     * How files sent to this research are sorted (spec 130 K1.3), as at the end of a batch: `older` a research
+     * without `intake.auto` (each file sent makes a task for the agent, as always), `auto` its setting on,
+     * `manual` off — the files wait in Materials until Sort with the agent…. `tasked`: what the replies to the
+     * files just sent said (a task made or not); they decide before `/status.intake`.
+     */
+    researchIntakeSorting(researchId: string, tasked: readonly boolean[] = []): BatchSorting {
+        const status = this.researchStatusOf(researchId);
+        return batchSorting(!!status?.features?.includes(INTAKE_AUTO_FEATURE), status?.intake?.auto,
+            tasked.length ? { sort: tasked.some(Boolean) } : null);
     },
 
     /** The open tree's research takes originals, or says it does not (the line by the Attachments heading). */
@@ -959,6 +982,8 @@ export const originalsMethods = uiModule({
                     const note = added?.note === true;
                     if (person || note) knownAdded.set(rec.sha256, { person, note });
                 }
+                if (body && typeof body.known !== 'string') replyTasks.set(rec.sha256, body.task !== undefined && body.task !== null && body.task !== false);
+                else replyTasks.delete(rec.sha256);
                 const replyId = mediaReplyId(body);
                 if (replyId) replyIds.set(rec.sha256, replyId);
                 return replyId ?? 'ok';

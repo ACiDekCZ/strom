@@ -236,15 +236,15 @@ export function materialItemSha(item: MaterialItem): string | null {
     return item.file?.sha ?? item.attachment?.original?.sha256 ?? null;
 }
 
-/** The second line: kind · date · size (with an agent: its state). */
-function metaLine(item: MaterialItem, agent: boolean): string {
+/** The second line: kind · date · size (with an agent: its state; `waiting`: the words of a file not gone through yet). */
+function metaLine(item: MaterialItem, agent: boolean, waiting: string): string {
     const m = strings.materials;
     const parts = [materialKindLabel(item)];
     if (item.date) parts.push(materialDate(item.date));
     if (item.bytes) parts.push(formatBytesShort(item.bytes));
     if (agent && item.origin !== 'tree') {
         if (item.state === 'processed') parts.push(m.agentDone);
-        else if (item.state === 'new') parts.push(m.agentWaiting);
+        else if (item.state === 'new') parts.push(waiting);
     }
     return parts.join(' · ');
 }
@@ -343,6 +343,14 @@ export const materialsMethods = uiModule({
             caps: materialCaps({ ...env, ...(links ? {} : { openLinks: false }) }),
             agent: !this.researchAgentlessFor(researchId, ctx.link),
         };
+    },
+
+    /**
+     * A file of the research not gone through yet: "waiting to be processed", or "not sorted" when the research
+     * sorts only on request (spec 130 K1.3, its setting off).
+     */
+    materialWaitingLabel(researchId: string): string {
+        return this.researchIntakeSorting(researchId) === 'manual' ? strings.materials.agentUnsorted : strings.materials.agentWaiting;
     },
 
     /** Materials from the research are shown in this tree (on a computer, a research that lists them). */
@@ -643,7 +651,7 @@ export const materialsMethods = uiModule({
                 ${thumb}
                 <span class="material-main">
                     <span class="material-title" title="${esc(item.title)}">${esc(item.title)}</span>
-                    <span class="material-meta">${esc(metaLine(item, ctx.agent))}</span>
+                    <span class="material-meta">${esc(metaLine(item, ctx.agent, this.materialWaitingLabel(ctx.researchId)))}</span>
                     ${where}
                     ${note}
                 </span>

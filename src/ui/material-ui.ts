@@ -20,7 +20,7 @@ import { exifOrientation, originalTargets } from '../originals.js';
 import { dataUrlByteSize } from '../photo.js';
 import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES } from '../attachments.js';
 import { personSubtitle } from './person-sources-ui.js';
-import { formatBytesShort, QueueOutcome, researchKnownAdded, researchRefusalOf, researchReplyId } from './originals-ui.js';
+import { formatBytesShort, QueueOutcome, researchKnownAdded, researchRefusalOf, researchReplyId, researchReplyTask } from './originals-ui.js';
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
@@ -135,7 +135,9 @@ export const materialMethods = uiModule({
             box = m.infoQueue;
             primary = { label: m.sendLater, act: 'send' };
         } else {
-            box = archive ? m.infoArchive : isPerson ? m.infoAgent : m.infoAgentSource;
+            // Sorted by the agent only when the research's setting says so (spec 130 K1.3).
+            const waits = !archive && this.researchIntakeSorting(link.researchId) === 'manual';
+            box = archive ? m.infoArchive : waits ? (isPerson ? m.infoWait : m.infoWaitSource) : isPerson ? m.infoAgent : m.infoAgentSource;
             primary = { label: archive ? saveLabel : picked.length ? m.sendN(picked.length) : m.sendFiles, act: 'send' };
         }
         const note = (overlay.querySelector('#material-note') as HTMLTextAreaElement | null)?.value ?? '';
@@ -265,6 +267,8 @@ export const materialMethods = uiModule({
         const kept = archive && this.materialsListOn();
         /** What the research took (its id known): into the remembered list at once. */
         const saved: { id: string; name: string; sha: string; mime: string; bytes: number; note: string }[] = [];
+        /** Whether the research made a task of each file it took now (spec 130 K1.3; an older bridge says nothing). */
+        const taskedReplies: boolean[] = [];
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             if (go) { go.disabled = true; go.textContent = m.sendingK(i + 1, files.length); }
@@ -283,6 +287,10 @@ export const materialMethods = uiModule({
             const outcome = await this.queueOriginal(original, file, { ...target, note, material: true });
             const replyId = outcome === 'sent' || outcome === 'known' || outcome === 'knownFilled' ? researchReplyId(original.sha256) : null;
             if (replyId) saved.push({ id: replyId, name: file.name, sha: original.sha256, mime: original.mimeType, bytes: file.size, note });
+            if (outcome === 'sent') {
+                const tasked = researchReplyTask(original.sha256);
+                if (tasked !== undefined) taskedReplies.push(tasked);
+            }
             if (outcome === 'queued') queuedShas.push(original.sha256);
             else if (outcome === 'known') known++;
             else if (outcome === 'knownFilled') {
@@ -322,6 +330,17 @@ export const materialMethods = uiModule({
             // "Show": the person's materials (a source: the materials window).
             const show = this.materialsListOn() ? { action: { label: strings.materials.show,
                 run: () => ('personId' in target ? this.showPersonMaterials(target.personId) : this.openMaterials()) } } : {};
+            // Not sorted by itself (spec 130 K1.3): they wait in Materials, Sort with the agent… offered for them.
+            const waits = !archive && this.researchIntakeSorting(link.researchId, taskedReplies) === 'manual';
+            if (waits) {
+                const ids = saved.map(f => f.id);
+                const sort = this.materialsListOn() && this.materialSortGate() === 'on' && ids.length
+                    ? { action: { label: strings.materials.agentSort.sort, ai: true, run: () => void this.openSortForFiles(ids, 'personId' in target ? DataManager.getPerson(target.personId)?.refn : undefined) },
+                        ...('action' in show ? { more: show.action } : {}) }
+                    : show;
+                this.showToast(m.sentWaitToast(sent, name) + knownPart, 8000, { closable: true, ...sort });
+                return;
+            }
             this.showToast((archive ? m.savedArchiveToast(sent, name) : m.sentToast(sent, name)) + knownPart, 6000, { closable: true, ...show });
         }
     },

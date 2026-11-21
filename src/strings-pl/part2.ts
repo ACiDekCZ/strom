@@ -935,6 +935,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         costUnknown: 'Koszt będzie widoczny w badaniu.',
         archiveInfo: 'Pliki zostaną zapisane w Archiwum Strom, poza gitem.',
         storedInfo: 'Pliki zostaną zapisane w badaniu w niezmienionej postaci, poza gitem.',
+        waitInfo: 'Pliki zostaną zapisane w badaniu, poza gitem, i czekają w Materiałach nieposortowane. Agent posortuje je tylko na żądanie; koszt jest podawany wcześniej.',
         keepTab: 'Karta musi pozostać otwarta, dopóki pliki nie zostaną wysłane.',
         sendN: (n: number) => `Wyślij ${nPl(n, 'plik', 'pliki', 'plików')}`,
         saveN: (n: number) => `Zapisz ${nPl(n, 'plik', 'pliki', 'plików')}`,

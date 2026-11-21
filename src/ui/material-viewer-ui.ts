@@ -789,7 +789,7 @@ export const materialViewerMethods = uiModule({
         }
         if (agent && inArchive) {
             if (item.state === 'processed') field(m.f.state, m.agentDone);
-            else if (item.state === 'new') field(m.f.state, m.agentWaiting);
+            else if (item.state === 'new') field(m.f.state, ctx ? this.materialWaitingLabel(ctx.researchId) : m.agentWaiting);
         }
         if (fields.childElementCount) body.appendChild(fields);
 

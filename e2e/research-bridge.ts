@@ -2225,8 +2225,11 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 }
                 const id = `I${String(100 + b.mediaPuts.length).padStart(4, '0')}`;
                 b.mediaKnown.set(sha, id);
+                // A task for the agent comes of it, unless the research sorts only on request (spec 130 K1.3:
+                // `intake.auto` off, or not said, which is off).
+                const sorts = !(b.features ?? []).includes('intake.auto') || (b.intake?.intake as { auto?: unknown } | undefined)?.auto === true;
                 // With the family's material on (spec 017), a new file is a commit, as in the research.
-                return json(200, { input: id, ...(b.material ? commitWrite(b) : {}) });
+                return json(200, { input: id, ...(sorts ? { task: `T${id.slice(1)}` } : {}), ...(b.material ? commitWrite(b) : {}) });
             }
             if (url.searchParams.get('file') === '1') {
                 const file = b.mediaFiles.get(sha);

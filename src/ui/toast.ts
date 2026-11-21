@@ -18,7 +18,7 @@
  */
 
 import { strings } from '../strings.js';
-import { setResearchOpenLabel } from './research-open-mark.js';
+import { setResearchOpenLabel, researchBridgeAgentLabel } from './research-open-mark.js';
 import { watchToasts, whenFree } from '../toast-slot.js';
 
 /** How a message shows (UI.showToast). */
@@ -28,7 +28,8 @@ export interface ToastOptions {
     closable?: boolean;
     kind?: string;
     /**
-     * `research`: the action opens the research's terminal (its mark); `ai`: an agent works there too.
+     * `research`: the action opens the research's terminal (its mark); `ai`: an agent works there too (without
+     * `research`: an agent works through the bridge, no terminal — the AI badge alone).
      * `work` (§4, "Undo" and its kin): the toast stays, says the work (the one spinner and `work.label`) and its
      * end (✓ for 4 s, or the error with "Try again" and ✕, not closing by itself); `run` gives that end.
      */
@@ -136,6 +137,8 @@ function fillToast(toast: HTMLElement, message: string, opts: ToastOptions, onAc
             act.type = 'button';
             act.className = 'toast-action';
             if (research) setResearchOpenLabel(act, label, { ai });
+            // An agent working through the bridge, no terminal: the AI badge alone.
+            else if (ai) act.innerHTML = researchBridgeAgentLabel(label);
             else act.textContent = label;
             const work = 'work' in a ? (a as ToastAction).work : undefined;
             act.onclick = work ? () => { void workInToast(toast, a as ToastAction, work, opts); } : () => {
