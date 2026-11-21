@@ -11050,13 +11050,13 @@
         .tv-rowtype .segment-btn { padding: 0 12px; height: 34px; font-size: 13px; white-space: nowrap; }
         /* The corners of the bar's fields and buttons (T54 H11); each cell draws its own frame, so the chosen
            one's dark frame lies where the light one was, one hairline thick (H3), as high as Columns and Export. */
-        .table-view .tv-rowtype.sel-seg { --sel-r: var(--r-md); border: 0; }
-        .table-view .tv-rowtype.sel-seg > .sel-opt { position: relative; border: var(--sel-line-w) solid var(--border); }
-        .table-view .tv-rowtype.sel-seg > .sel-opt + .sel-opt { margin-left: calc(-1 * var(--sel-line-w)); border-left: var(--sel-line-w) solid var(--border); }
-        .table-view .tv-rowtype.sel-seg > .sel-opt:first-child { border-radius: var(--sel-r) 0 0 var(--sel-r); }
-        .table-view .tv-rowtype.sel-seg > .sel-opt:last-child { border-radius: 0 var(--sel-r) var(--sel-r) 0; }
-        .table-view .tv-rowtype.sel-seg > .sel-opt:is(.active, [aria-checked="true"]) { z-index: 1; border-color: var(--sel-border); box-shadow: none; }
-        @media (hover: hover) { .table-view .tv-rowtype.sel-seg > .sel-opt:hover { z-index: 1; } }
+        .table-view :is(.tv-rowtype, .table-scope).sel-seg { --sel-r: var(--r-md); border: 0; }
+        .table-view :is(.tv-rowtype, .table-scope).sel-seg > .sel-opt { position: relative; border: var(--sel-line-w) solid var(--border); }
+        .table-view :is(.tv-rowtype, .table-scope).sel-seg > .sel-opt + .sel-opt { margin-left: calc(-1 * var(--sel-line-w)); border-left: var(--sel-line-w) solid var(--border); }
+        .table-view :is(.tv-rowtype, .table-scope).sel-seg > .sel-opt:first-child { border-radius: var(--sel-r) 0 0 var(--sel-r); }
+        .table-view :is(.tv-rowtype, .table-scope).sel-seg > .sel-opt:last-child { border-radius: 0 var(--sel-r) var(--sel-r) 0; }
+        .table-view :is(.tv-rowtype, .table-scope).sel-seg > .sel-opt:is(.active, [aria-checked="true"]) { z-index: 1; border-color: var(--sel-border); box-shadow: none; }
+        @media (hover: hover) { .table-view :is(.tv-rowtype, .table-scope).sel-seg > .sel-opt:not([aria-disabled="true"]):hover { z-index: 1; } }
         .tv-rowtype-count { margin-left: 6px; font-variant-numeric: tabular-nums; opacity: 0.85; }
         .tv-rowtype-btn {
             display: none; align-items: center; gap: 6px; height: 40px; padding: 0 12px;
@@ -11523,8 +11523,21 @@
             color: var(--text-light); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap;
         }
         .tv-view-changed[hidden], .tv-view-act[hidden], .tv-view-discard[hidden], .tv-view-dot[hidden] { display: none; }
-        /* Spec 084 §9 Scope ▾ between the row type and the view: the whole tree plain, a list dark-framed and bold with its kind. */
+        /* Spec 098 §11c the scope between the row type and the view: "Scope" and the shared switch This view /
+           Selection ▾ / Whole tree (as tall as the row type's cells); folded into one button "This view ▾" where
+           the bar is tight (11c·2, fitBarRow's step 0), the whole tree plain, a selection dark-framed and bold with its icon. */
         .tv-slot-scope { display: flex; align-items: center; min-width: 0; flex: 0 1 auto; }
+        .tv-bar .table-scope.scope-seg { display: inline-flex; flex: 0 1 auto; min-width: 0; }
+        .tv-bar .table-scope.scope-seg[hidden] { display: none; }
+        .tv-bar .table-scope > button {
+            height: 34px; padding: 0 12px; margin: 0; font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tv-bar .table-scope .scope-sel-part { min-width: 0; align-items: center; }
+        .tv-bar .table-scope[aria-disabled="true"] { opacity: 0.5; }
+        .tv-bar .table-scope[aria-disabled="true"] > button { cursor: default; }
+        .tv-bar-row1:not(:is(.tv-fit-0, .tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5)) .tv-scope-btn { display: none; }
+        .tv-bar-row1:is(.tv-fit-0, .tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .table-scope.scope-seg { display: none; }
         .tv-scope-btn {
             display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 270px; height: 34px; padding: 0 10px;
             border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
@@ -11543,7 +11556,6 @@
         /* The window's selection as the scope (spec 098 §5): its kind's icon, as in the Selection ▾ choice. */
         .tv-scope-selic { display: inline-flex; flex: none; color: var(--text-light); }
         .tv-scope-selic svg { width: 14px; height: 14px; }
-        @media (max-width: 1199px) { .tv-slot-scope .tv-scope-label { display: none; } }
         /* A tight bar: the whole tree as a list glyph (its name in the title and the label), the labels hidden;
            a list keeps its name. A tablet's width with a changed view's buttons always; row 1 of a computer and
            a tablet's width by measure (fitBarRow in table-bar.ts) before ⧉ and ⋯ would wrap: step 1 this, step 2 the search,
@@ -12051,7 +12063,7 @@
             .tv-rowtype .segment-btn { height: 44px; }
             .tv-legend-btn { height: 44px; }
             .tv-cols-btn, .tv-export-btn, .tv-view-btn, .tv-view-act { height: 44px; }
-            .tv-scope-btn { height: 44px; }
+            .tv-scope-btn, .tv-bar .table-scope > button { height: 44px; }
             .tv-check { width: 24px; height: 24px; font-size: 15px; }
             .tv-view-discard, .tv-view-changed.is-note { min-height: 44px; }
             .export-table-link { min-height: 44px; }
@@ -12110,11 +12122,12 @@
             .tv-groupcell { cursor: default; }
             .tv-status-checks { font-size: 11.5px; }
             /* 8h the search and the Filters button on a line of their own; no chips' row. */
-            .tv-slot-search { order: 10; flex: 1 1 0; min-width: 0; max-width: none; }
+            .tv-slot-search { order: 11; flex: 1 1 0; min-width: 0; max-width: none; }
+            .tv-slot-scope { order: 10; flex: 1 1 100%; }
             .tv-search { width: 100%; }
             .tv-search-q { width: 100%; flex: 1 1 auto; height: 40px; font-size: 16px; }
             .tv-filters-btn {
-                order: 11; display: inline-flex; align-items: center; flex: none; height: 40px; padding: 0 12px;
+                order: 12; display: inline-flex; align-items: center; flex: none; height: 40px; padding: 0 12px;
                 font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
             }
             .tv-bar-row1::after { content: ''; order: 9; flex-basis: 100%; height: 0; }
@@ -12125,8 +12138,17 @@
             .tv-nomatch { padding: 28px 12px; }
             /* 12a row 1: the row type · the view (grows, "…") · ⋯ with Columns and Export; row 2: search · Filters. */
             .tv-slot-cols, .tv-slot-export, .tv-slot-window, .tv-bar-spacer { display: none; }
-            /* Spec 084 §9: the scope is Scope › in the phone's ⋯. */
-            .tv-slot-scope { display: none; }
+            /* Spec 098 §11c (11c·3): the scope as one button "Scope: … ▾" (its sheet the choice), 44 px;
+               (.tv-bar … to outweigh the shared .scope-btn that hides it wider than a phone). */
+            .tv-slot-scope .tv-scope-label, .tv-bar .table-scope.scope-seg, .tv-bar .tv-scope-btn { display: none; }
+            .tv-bar .table-scope-btn {
+                display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 0 12px;
+                border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+                font: inherit; font-size: 14px; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+            }
+            .tv-bar .table-scope-btn[hidden] { display: none; }
+            .tv-bar .table-scope-btn[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+            .tv-bar .table-scope-btn .scope-btn-caret { margin-left: auto; }
             .tv-scope-menu { min-width: 0; max-width: calc(100vw - 32px); }
             .tv-slot-more, .tv-slot-more.is-empty { display: flex; flex: none; margin-left: 0; }
             .tv-more-menu-btn { width: 44px; height: 40px; font-size: 20px; }
@@ -12156,6 +12178,9 @@
             .tv-bar-row1 { flex-wrap: nowrap; min-height: 50px; padding: 5px 12px; }
             .tv-bar-row1::after { display: none; }
             .tv-slot-view { flex: 0 1 auto; max-width: 220px; }
+            /* The scope's button in the one row, after the view (11c on a phone held sideways). */
+            .tv-slot-scope { order: 1; flex: 0 1 auto; max-width: 200px; }
+            .tv-bar .table-scope-btn { min-height: 40px; }
             .tv-slot-search { order: 2; flex: 1 1 0; }
             .tv-filters-btn { order: 3; }
             .tv-slot-more { order: 4; }

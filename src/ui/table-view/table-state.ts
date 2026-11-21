@@ -43,11 +43,6 @@ export interface RowTypeState {
     /** The search text (§8.3; not part of a view). */
     search: string;
     /**
-     * The list of people the rows are narrowed to (spec 084 §9; `TableView.scope`),
-     * null for the whole tree. Never set for sources.
-     */
-    scope: string | null;
-    /**
      * The rows under group headers by one value (spec 084 §10; `TableView.group`),
      * the closed groups' keys with it; null: no grouping.
      */
@@ -65,12 +60,18 @@ export interface TableState {
     drafts: Record<string, TableView>;
     /** The tree's stored working state was read (localStorage, §9.1). */
     restored?: boolean;
+    /**
+     * The list the Table was narrowed to in the stored state before the
+     * shared scope switch (spec 084 §9 → spec 098 §11c): the first draw takes
+     * it over as the window's selection (or drops it) and clears it.
+     */
+    legacyScope?: string | null;
 }
 
 /** A row type's state as its default view gives it. */
 export function defaultTypeState(type: RowType): RowTypeState {
     const v = DEFAULT_VIEWS[type];
-    return { columns: [...v.columns], widths: { ...v.widths }, pinned: v.pinned, sort: v.sort.map(s => ({ ...s })), top: 0, left: 0, selected: null, collapsedGroups: [], coverageRow: true, unions: defaultUnionCollapse(), revealedUnions: [], filter: emptyFilter(), search: '', scope: null, group: null };
+    return { columns: [...v.columns], widths: { ...v.widths }, pinned: v.pinned, sort: v.sort.map(s => ({ ...s })), top: 0, left: 0, selected: null, collapsedGroups: [], coverageRow: true, unions: defaultUnionCollapse(), revealedUnions: [], filter: emptyFilter(), search: '', group: null };
 }
 
 export function defaultTableState(): TableState {

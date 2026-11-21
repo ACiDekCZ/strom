@@ -29,7 +29,7 @@ export interface BarHandlers {
     onMoreMenu(): void;
     /** ‹ / › (spec 103 §1): a jump by a name back or forward. */
     onHistory(dir: -1 | 1): void;
-    /** Scope ▾ (spec 084 §9): the menu of the lists. */
+    /** The scope folded into one button where the bar is tight (spec 098 §11c, 11c·2): its menu. */
     onScopeMenu(anchor: HTMLElement): void;
 }
 
@@ -73,8 +73,13 @@ export function updateNav(bar: HTMLElement, any: boolean, back: string | null, f
     set('1', forward, nav.forwardTo, nav.forward);
 }
 
-/** The bar's skeleton; `updateBar` fills the row type. */
-export function createBar(handlers: BarHandlers): HTMLElement {
+/**
+ * The bar's skeleton; `updateBar` fills the row type. `scopeSeg`: the shared
+ * scope switch's markup (This view / Selection ▾ / Whole tree and the
+ * phone's "Scope: … ▾", src/ui/scope-seg-ui.ts), after the label "Scope"
+ * and before the button it folds into where the bar is tight.
+ */
+export function createBar(handlers: BarHandlers, scopeSeg = ''): HTMLElement {
     const bar = document.createElement('div');
     bar.className = 'tv-bar';
     bar.innerHTML = '<div class="tv-bar-row1">'
@@ -85,7 +90,8 @@ export function createBar(handlers: BarHandlers): HTMLElement {
         + '</div>'
         + `<div class="tv-rowtype sel-seg" role="radiogroup" aria-label="${esc(strings.table.rowType)}"></div>`
         + '<button type="button" class="tv-rowtype-btn" aria-haspopup="dialog"></button>'
-        + `<div class="tv-slot tv-slot-scope"><span class="tv-scope-label" aria-hidden="true">${esc(strings.table.scope)}</span>`
+        + `<div class="tv-slot tv-slot-scope"><span class="tv-scope-label" aria-hidden="true">${esc(strings.scope.label)}</span>`
+        + scopeSeg
         + '<button type="button" class="tv-scope-btn" aria-haspopup="menu"></button></div>'
         + '<div class="tv-slot tv-slot-view"></div>'
         + '<div class="tv-bar-spacer"></div>'
@@ -141,12 +147,20 @@ export function updateBar(bar: HTMLElement, type: RowType, counts: Record<RowTyp
     btn.setAttribute('aria-label', `${strings.table.rowType}: ${strings.table.rowTypeAria(label, counts[type])}`);
 }
 
-/** What Scope ▾ shows (spec 084 §9): the list's name and kind; null: the whole tree. */
+/**
+ * The scope as the folded button shows it (spec 098 §11c, 11c·2): This view,
+ * the window's selection (a list with its kind, another selection with its
+ * icon; its name "List: …") or the Whole tree.
+ */
 export interface ScopeShown {
-    list: { name: string; kind: ListKind } | null;
-    /** The window's selection that is not a list (spec 098 §5): "Selection: Rod Quellmayer" and its kind's icon. */
-    sel?: { name: string; kind: Exclude<SelectionKind, 'list'> } | null;
-    /** Sources: no scope by list (dimmed, says why). */
+    scope: 'view' | 'sel' | 'tree';
+    /** The selection's name ("List: Letters to write") when the scope is Selection. */
+    name?: string;
+    /** A list's kind (its icon). */
+    list?: ListKind;
+    /** Another selection's kind (its icon). */
+    sel?: Exclude<SelectionKind, 'list'>;
+    /** Sources: the scope does not apply (dimmed, says why). */
     disabled: boolean;
 }
 
@@ -154,33 +168,42 @@ export interface ScopeShown {
 const SCOPE_GLYPH = '<svg class="tv-scope-glyph" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"'
     + ' stroke-width="1.6" stroke-linecap="round"><path d="M6 4h8M6 8h8M6 12h8"/><circle cx="2.5" cy="4" r=".6"/><circle cx="2.5" cy="8" r=".6"/><circle cx="2.5" cy="12" r=".6"/></svg>';
 
-/** Scope ▾ for the current row type (spec 084 §9; the phone has it in ⋯). */
+/** This view's glyph in a tight bar: a couple over a child (the Family view's people). */
+const VIEW_GLYPH = '<svg class="tv-scope-glyph" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.5" stroke-linecap="round"><rect x="1.5" y="2" width="5" height="4" rx="1"/><rect x="9.5" y="2" width="5" height="4" rx="1"/>'
+    + '<rect x="5.5" y="10" width="5" height="4" rx="1"/><path d="M6.5 4h3M8 4v6"/></svg>';
+
+/** The folded scope button (spec 098 §11c; shown where the bar is tight, the segment otherwise). */
 export function updateScope(bar: HTMLElement, shown: ScopeShown): void {
     const btn = bar.querySelector<HTMLElement>('.tv-scope-btn')!;
-    const t = strings.table;
-    const name = shown.list?.name ?? shown.sel?.name ?? t.scopeWhole;
-    const key = JSON.stringify(shown);
+    const s = strings.scope;
+    const sel = shown.scope === 'sel' && !!shown.name;
+    const name = sel ? shown.name! : shown.scope === 'tree' ? s.tree : s.view;
+    const key = JSON.stringify([shown, strings.scope.btn('')]);
     if (btn.dataset.key === key) return;
     btn.dataset.key = key;
-    btn.classList.toggle('is-list', !!shown.list || !!shown.sel);
-    btn.classList.toggle('is-sel', !!shown.sel);
-    // The whole tree: its name, or where the bar is tight (a tablet, a changed view) only a list glyph.
-    btn.innerHTML = (shown.list ? listKindIcon(shown.list.kind, 14) : shown.sel ? `<span class="tv-scope-selic" aria-hidden="true">${selectionIcon(shown.sel.kind)}</span>` : SCOPE_GLYPH)
-        + `<span class="tv-scope-name">${esc(name)}</span><span class="tv-scope-caret" aria-hidden="true">▾</span>`;
-    btn.setAttribute('aria-label', t.scopeAria(name));
+    btn.dataset.scope = shown.scope;
+    btn.classList.toggle('is-list', sel);
+    btn.classList.toggle('is-sel', sel && !!shown.sel);
+    const icon = sel && shown.list ? listKindIcon(shown.list, 14)
+        : sel && shown.sel ? `<span class="tv-scope-selic" aria-hidden="true">${selectionIcon(shown.sel)}</span>`
+            : shown.scope === 'view' ? VIEW_GLYPH : SCOPE_GLYPH;
+    btn.innerHTML = icon + `<span class="tv-scope-name">${esc(name)}</span><span class="tv-scope-caret" aria-hidden="true">▾</span>`;
+    btn.setAttribute('aria-label', s.btn(name));
     if (shown.disabled) {
         btn.setAttribute('aria-disabled', 'true');
-        btn.title = t.scopeSources;
+        btn.title = strings.table.scopeSources;
     } else {
         btn.removeAttribute('aria-disabled');
-        btn.title = t.scopeAria(name);
+        btn.title = s.btn(name);
     }
 }
 
 /**
  * The steps row 1 takes on a computer and at a tablet's width before it would wrap (⧉ and ⋯ alone on
- * a second row): 1 the labels Scope and View hidden, the whole tree as a list
- * glyph; 2 the search, the list's name and the view's name narrower (…);
+ * a second row): 0 the scope's switch folded into one button with the scope's
+ * name (spec 098 §11c, 11c·2); 1 the labels Scope and View hidden, This view
+ * and the whole tree as a glyph; 2 the search, the list's name and the view's name narrower (…);
  * 3 the Columns count hidden, both names narrower still; 4 the names at
  * their narrowest, a changed view's mark as its ● alone; 5 the search at
  * 80 px (its placeholder kept whole until then). A list keeps its name (cut
@@ -188,7 +211,7 @@ export function updateScope(bar: HTMLElement, shown: ScopeShown): void {
  * including the ones before). Measured, not by width thresholds: a changed
  * view's buttons, a list's name, the language and the font decide what fits.
  */
-const FIT_STEPS = ['tv-fit-1', 'tv-fit-2', 'tv-fit-3', 'tv-fit-4', 'tv-fit-5'] as const;
+const FIT_STEPS = ['tv-fit-0', 'tv-fit-1', 'tv-fit-2', 'tv-fit-3', 'tv-fit-4', 'tv-fit-5'] as const;
 
 /** Row 1 on more than one line, or past its edge. */
 function rowWraps(row: HTMLElement): boolean {

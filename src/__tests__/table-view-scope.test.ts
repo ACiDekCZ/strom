@@ -14,13 +14,13 @@ import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
 import { buildTableModel, rowsOf, type TableModel } from '../ui/table-view/table-model.js';
 import { cellOf, LEAD_COLUMNS } from '../ui/table-view/table-columns.js';
 import { availableChips, emptyFilter, filterRows, setChip, sortRows } from '../ui/table-view/table-filter.js';
-import { applyScopeCells, isSelectionScopeKey, outsideScope, scopeCounts, scopeKeySelection, scopeRows, selectionScopeKey, tableScopeOf } from '../ui/table-view/table-scope.js';
+import {
+    applyScopeCells, isSelectionScopeKey, legacyScopeSelection, outsideScope, scopeCounts, scopeKeySelection, scopeRows, selectionScopeKey, tableScopeNow, tableScopeOf,
+} from '../ui/table-view/table-scope.js';
 import { selectionIndex } from '../ui/view-selection-ui.js';
 import { selectionPersonIds, type SelectionRef } from '../view-selection.js';
 import { defaultTableState } from '../ui/table-view/table-state.js';
-import { applyView, viewFromState } from '../ui/table-view/table-views.js';
-import { applyTableWindowState, readTableWindowState, tableWindowStateOf } from '../ui/table-view/table-window-state.js';
-import { sortText } from '../ui/table-view/table-bar.js';
+import { restoreTableState, tableWorkOf, viewFromState } from '../ui/table-view/table-views.js';
 import { setLanguage } from '../strings.js';
 import type { PersonId, PersonList, StromData, TreeId } from '../types.js';
 
@@ -119,24 +119,65 @@ describe('table scope by a list of people', () => {
         expect(sortRows(m, 'persons', rows, [{ col: 'num', dir: 'desc' }]).map(r => r.id)).toEqual([...picked].reverse());
     });
 
-    it('a view keeps its scope and a new window gets it; Sources never take one', () => {
+    it("the scope now from the window's switch (spec 098 §11c): Whole tree none, Selection the list with # and Done, This view its people", () => {
+        const view = new Set<PersonId>([ids[5], ids[6], ids[7]]);
+        let asked = 0;
+        const viewIds = () => { asked++; return view; };
+        expect(tableScopeNow('tree', { kind: 'list', listId: 'pl_work' }, viewIds)).toBeNull();
+        expect(tableScopeNow('sel', null, viewIds)).toBeNull();
+        expect(asked).toBe(0);
+        const list = tableScopeNow('sel', { kind: 'list', listId: 'pl_work' }, viewIds)!;
+        expect(list.kind).toBe('list');
+        expect(list.ids).toEqual(picked);
+        expect(list.fixed).toBe(true);
+        expect([...list.cells.done!]).toEqual([picked[1]]);
+        expect(tableScopeNow('sel', { kind: 'list', listId: 'pl_gone' }, viewIds)).toBeNull();
+        const here = tableScopeNow('view', null, viewIds)!;
+        expect(here.kind).toBe('view');
+        expect(here.key).toBe('view');
+        expect(here.fixed).toBe(false);
+        expect(here.cells.done).toBeNull();
+        expect([...here.ids].sort()).toEqual([...view].sort());
+        // The same people: the same scope (its rows kept); others: a new one.
+        expect(tableScopeNow('view', { kind: 'list', listId: 'pl_work' }, viewIds)).toBe(here);
+        expect(tableScopeNow('view', null, () => new Set([ids[5]]))).not.toBe(here);
+        const m = model();
+        expect(scopeRows(m, 'persons', here).map(r => r.id).sort()).toEqual([...view].sort());
+        expect(outsideScope(m.personRows.get(ids[8])!, here)).toBe(true);
+    });
+
+    it('a view no longer keeps a scope; the list a stored state had is taken over once (spec 098 §11c)', () => {
         const state = defaultTableState();
         const st = state.types.persons;
-        st.scope = 'pl_fixed';
         st.sort = [{ col: 'num', dir: 'asc' }];
         const v = viewFromState('persons', st, 'v1', 'Mine', '');
-        expect(v.scope).toEqual({ listId: 'pl_fixed' });
-        const back = defaultTableState().types.persons;
-        applyView(v, back);
-        expect(back.scope).toBe('pl_fixed');
-        const carried = readTableWindowState(structuredClone(tableWindowStateOf(state, [])))!;
-        const other = defaultTableState();
-        applyTableWindowState(other, carried, []);
-        expect(other.types.persons.scope).toBe('pl_fixed');
-        expect(sortText('persons', other.types.persons.sort)).toBe('Sort: # (list order)');
-        const src = defaultTableState().types.sources;
-        src.scope = 'pl_fixed';
-        expect(viewFromState('sources', src, 'v2', 'S', '').scope).toBeUndefined();
+        expect(v.scope).toBeUndefined();
+        // Stored before the shared switch: the open view's draft with its list.
+        const old = { rowType: 'persons' as const, open: { persons: 'b:overview' }, work: { persons: { ...viewFromState('persons', st, 'b:overview', '', ''), scope: { listId: 'pl_fixed' } } } };
+        const before = defaultTableState();
+        restoreTableState(before, old, []);
+        expect(before.legacyScope).toBe('pl_fixed');
+        const written = tableWorkOf(before, []);
+        expect(written.sharedScope).toBe(true);
+        expect(JSON.stringify(written)).not.toContain('pl_fixed');
+        const after = defaultTableState();
+        restoreTableState(after, { ...old, sharedScope: true }, []);
+        expect(after.legacyScope).toBeUndefined();
+        const none = defaultTableState();
+        restoreTableState(none, null, []);
+        expect(none.legacyScope).toBeUndefined();
+    });
+
+    it('the old list becomes the selection only in a window without one and while it is there', () => {
+        const exists = (r: SelectionRef) => !!tableScopeOf(selectionScopeKey(r));
+        expect(legacyScopeSelection('pl_fixed', false, exists)).toEqual({ kind: 'list', listId: 'pl_fixed' });
+        expect(legacyScopeSelection('pl_fixed', true, exists)).toBeNull();
+        expect(legacyScopeSelection('pl_gone', false, exists)).toBeNull();
+        expect(legacyScopeSelection(null, false, exists)).toBeNull();
+        expect(legacyScopeSelection(undefined, false, exists)).toBeNull();
+        const rod: SelectionRef = { kind: 'descendants', personId: ids[0] };
+        expect(legacyScopeSelection(selectionScopeKey(rod), false, () => true)).toEqual(rod);
+        expect(legacyScopeSelection('sel:garbage', false, () => true)).toBeNull();
     });
 });
 
@@ -180,11 +221,12 @@ describe("table scope by the window's selection (spec 098 §5)", () => {
         expect(scopeCounts(m, scope).persons).toBe(want.length);
     });
 
-    it('a selection that is gone has no scope; a view never keeps the selection', () => {
+    it("a selection that is gone has no scope; the scope Selection is the window's selection", () => {
         expect(tableScopeOf(selectionScopeKey({ kind: 'descendants', personId: 'nobody' as PersonId }))).toBeNull();
-        const st = defaultTableState().types.persons;
-        st.scope = selectionScopeKey(descendantsRef());
-        expect(viewFromState('persons', st, 'v1', 'Mine', '').scope).toBeUndefined();
+        const ref = descendantsRef();
+        const now = tableScopeNow('sel', ref, () => new Set())!;
+        expect(now.kind).toBe('selection');
+        expect(now).toBe(tableScopeOf(selectionScopeKey(ref)));
     });
 
     it('"No place" keeps the scope\'s people with no place of any map kind', () => {

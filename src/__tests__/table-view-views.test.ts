@@ -315,7 +315,7 @@ describe('the working state in localStorage (§9.1)', () => {
         switchView(b, 'tv-a', stored);
         const savedNow = viewFromState('persons', b.types.persons, 'tv-a', stored[0].name, '2026-11-11T10:00:00Z');
         writeTableWork('t1', tableWorkOf(b, [savedNow]));
-        expect(readTableWork('t1')).toEqual({ rowType: 'persons', open: { persons: 'tv-a', unions: 'b:marriages', events: 'b:events', sources: 'b:allSources' }, work: {} });
+        expect(readTableWork('t1')).toEqual({ rowType: 'persons', open: { persons: 'tv-a', unions: 'b:marriages', events: 'b:events', sources: 'b:allSources' }, work: {}, sharedScope: true });
     });
 
     it('a stored unsaved state is read as a stored view is: malformed parts left out, unknown ones dropped', () => {
@@ -358,7 +358,7 @@ describe('opening, switching and keeping views in the table state (§9.2, §9.3)
         expect(state.restored).toBe(true);
         expect(state.open).toEqual({ persons: 'b:overview', unions: 'b:marriages', events: 'b:events', sources: 'b:allSources' });
         expect(viewChanged(openViewOf(state, 'persons', undefined), state.types.persons)).toBe(false);
-        expect(tableWorkOf(state, undefined)).toEqual({ rowType: 'persons', open: { persons: 'b:overview', unions: 'b:marriages', events: 'b:events', sources: 'b:allSources' }, work: {} });
+        expect(tableWorkOf(state, undefined)).toEqual({ rowType: 'persons', open: { persons: 'b:overview', unions: 'b:marriages', events: 'b:events', sources: 'b:allSources' }, work: {}, sharedScope: true });
     });
 
     it('switching keeps the changes of the view left until it is chosen again, and switches the row type', () => {

@@ -1,14 +1,19 @@
 /**
- * The Table narrowed to one list of people (spec 084 §9): the rows of the
- * list's people (People in the list's order; Unions and Events with at least
- * one of them), the # and Done columns' cells (§13d) and the counts of the
- * row types within the scope. Worked out once per list and model revision.
+ * The Table narrowed to a scope (spec 084 §9, spec 098 §11c): the rows of
+ * its people (People in a list's order; Unions and Events with at least one
+ * of them), the # and Done columns' cells of a list (§13d) and the counts of
+ * the row types within the scope. The scope is the shared switch's (This
+ * view / Selection / Whole tree, src/ui/scope-seg-ui.ts): the window's
+ * selection a list gives a list's scope, another selection its people, This
+ * view the people the Family view lays out. Worked out once per change of
+ * its people.
  */
 
 import type { PersonId, PersonList } from '../../types.js';
 import { DataManager } from '../../data.js';
 import { decodeSelectionRef, encodeSelectionRef, type SelectionRef } from '../../view-selection-ref.js';
 import { selectionPersonIds } from '../../view-selection.js';
+import type { ViewScope } from '../../view-scope.js';
 import type { RowType, ScopeCells, TableModel, TableRow } from './table-model.js';
 import { rowsOf } from './table-model.js';
 import { selectionIndex } from '../view-selection-ui.js';
@@ -35,6 +40,15 @@ export type TableScope = {
     key: string;
     ref: SelectionRef;
     /** The selection's people (no order of their own: the sort stays). */
+    ids: readonly PersonId[];
+    /** Only `pos` (who is in), no # or Done column. */
+    cells: ScopeCells;
+    fixed: false;
+} | {
+    /** This view (spec 098 §11c): the people the Family view lays out around the focus now. */
+    kind: 'view';
+    key: 'view';
+    /** Its people (no order of their own: the sort stays). */
     ids: readonly PersonId[];
     /** Only `pos` (who is in), no # or Done column. */
     cells: ScopeCells;
@@ -113,6 +127,43 @@ function selectionScopeOf(key: string): TableScope | null {
 
 /** The selection's set the memo was built from (selectionPersonIds caches it per change of the data). */
 let memoSet: ReadonlySet<PersonId> | null = null;
+
+/** This view's scope: its people as the Family view lays them out (the same set while nothing changed). */
+function viewScopeOf(set: ReadonlySet<PersonId>): TableScope {
+    if (memo && memo.scope.kind === 'view' && memoSet === set) return memo.scope;
+    const persons = DataManager.getData().persons;
+    const ids = [...set].filter(id => !!persons[id] && !persons[id].isPlaceholder);
+    const pos = new Map<string, number>();
+    ids.forEach((id, i) => pos.set(id, i + 1));
+    const scope: TableScope = { kind: 'view', key: 'view', ids, cells: { pos, done: null }, fixed: false };
+    memo = { ids, list: null, ref: null, scope, rows: new Map(), model: null };
+    memoSet = set;
+    return scope;
+}
+
+/**
+ * The Table's scope now (spec 098 §11c) from the shared switch: the Whole
+ * tree none (null); Selection the window's selection (a list: its order, #
+ * and Done; null without one or when it is gone); This view the people the
+ * Family view lays out (`viewIds`, read only then).
+ */
+export function tableScopeNow(scope: ViewScope, ref: SelectionRef | null, viewIds: () => ReadonlySet<PersonId>): TableScope | null {
+    if (scope === 'tree') return null;
+    if (scope === 'sel') return ref ? tableScopeOf(selectionScopeKey(ref)) : null;
+    return viewScopeOf(viewIds());
+}
+
+/**
+ * A scope the Table kept before it took the shared switch (spec 098 §11c,
+ * the stored state's list or `sel:` key): it becomes the window's selection
+ * with the scope Selection when the window has no selection and it is still
+ * there; else it is dropped. Returns the selection to take, or null.
+ */
+export function legacyScopeSelection(stored: string | null | undefined, hasSelection: boolean, exists: (ref: SelectionRef) => boolean): SelectionRef | null {
+    if (!stored || hasSelection) return null;
+    const ref: SelectionRef | null = isSelectionScopeKey(stored) ? scopeKeySelection(stored) : { kind: 'list', listId: stored };
+    return ref && exists(ref) ? ref : null;
+}
 
 /**
  * The rows of a row type within the scope: People in the list's order, a
