@@ -10676,7 +10676,16 @@
             font-size: 13px; color: var(--text);
         }
         .tl-toolbar-label { flex: none; color: var(--text-light); }
-        .tl-toolbar .timeline-scope.scope-seg { flex: 0 1 auto; min-width: 0; }
+        /* A .sel-seg (src/ui/sel-css.ts) of the map's size. */
+        .tl-toolbar .timeline-scope.scope-seg { display: inline-flex; flex: 0 1 auto; min-width: 0; overflow: hidden; }
+        .tl-toolbar .timeline-scope button {
+            padding: 5px 12px; margin: 0; font-family: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tl-toolbar .timeline-scope .scope-sel-part { min-width: 0; }
+        @media (pointer: coarse) {
+            .tl-toolbar .timeline-scope button { min-height: 44px; }
+        }
         .tl-toolbar-note {
             flex: 0 1 auto; min-width: 0; margin-left: auto;
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
