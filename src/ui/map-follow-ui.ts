@@ -6,7 +6,7 @@
  * with its name to the right and the session's number when two or more run.
  * A run that moves to another place signals once (two pulses), and so do
  * the rings once on arriving on the map (not on a zoom or a pan); the map pans
- * only when the place of session 1 is outside the view and the map is not
+ * only when the place of session 1 (with runs: of the run followed) is outside the view and the map is not
  * paused (moved by hand: live-follow-ui.ts). A place without a position, or
  * a person without a place, gets a line at the top instead. The trail of
  * the places worked on before: empty rings, older fainter, a dotted line
@@ -25,14 +25,14 @@ import { shownName } from '../person-name.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { fitBounds, pointInViewport, project, unproject } from '../map.js';
 import type { MapPoint } from '../places.js';
-import { FollowTarget, sessionTone } from '../live-follow-targets.js';
+import { FollowTarget, leadFirst } from '../live-follow-targets.js';
 import { GeoPoint, WorkPlace, mapTrailDots, mapTrailLines, workPlaceId } from '../live-follow-map.js';
 import { getFollowTrail } from '../live-follow-prefs.js';
 import { uiModule } from './module.js';
 import { researchBridgeAgentLabel } from './research-open-mark.js';
 import { liveSession, timeEl } from './research-ui.js';
 import {
-    currentFollowTargets, currentWorkPlaces, followBusy, followMapPaused, followNumbered, followTiming, followTrail,
+    currentFollowTargets, currentWorkPlaces, followBusy, followMapPaused, followNumbered, followTiming, followTone, followTrail,
     takeMapArrival,
 } from './live-follow-ui.js';
 
@@ -54,7 +54,7 @@ interface WorkMark {
 /** The work marks drawn now (repositioned on every frame of a pan). */
 let marks: WorkMark[] = [];
 /** The trail's dotted lines drawn now. */
-let lines: Array<{ session: number; from: GeoPoint; to: GeoPoint }> = [];
+let lines: Array<{ session: number; runId?: string; from: GeoPoint; to: GeoPoint }> = [];
 let panFrame = 0;
 let panTimer: ReturnType<typeof setTimeout> | null = null;
 let lastPanAt = 0;
@@ -161,7 +161,7 @@ export const mapFollowMethods = uiModule({
         const points = this.mapPoints();
         const byId = new Map<string, WorkMark>();
         const missing: Array<{ target: FollowTarget; place: WorkPlace }> = [];
-        for (const t of [...targets].sort((a, b) => a.session - b.session)) {
+        for (const t of [...targets].sort(leadFirst)) {
             const place = places.get(t.row);
             if (!place) continue;
             if (!place.geo) { missing.push({ target: t, place }); continue; }
@@ -185,8 +185,10 @@ export const mapFollowMethods = uiModule({
         const showTrail = getFollowTrail() && !isPhoneBar();
         const current = new Set(marks.map(m => m.id));
         const dots = showTrail ? mapTrailDots(trail, current) : [];
-        const now = new Map<number, { key: string; geo: GeoPoint }>();
-        for (const m of marks) for (const t of m.targets) if (!now.has(t.session)) now.set(t.session, { key: m.id, geo: m.geo });
+        const now = new Map<number, { key: string; geo: GeoPoint; runId?: string }>();
+        for (const m of marks) {
+            for (const t of m.targets) if (!now.has(t.session)) now.set(t.session, { key: m.id, geo: m.geo, ...(t.runId ? { runId: t.runId } : {}) });
+        }
         lines = showTrail ? mapTrailLines(trail, now) : [];
 
         const keep = new Set<Element>();
@@ -197,7 +199,7 @@ export const mapFollowMethods = uiModule({
                 dot.dataset.key = d.key;
                 layer.prepend(dot);
             }
-            dot.className = `map-trail-dot follow-${sessionTone(d.session)}`;
+            dot.className = `map-trail-dot follow-${followTone(d)}`;
             dot.dataset.lat = String(d.geo.lat);
             dot.dataset.lon = String(d.geo.lon);
             dot.dataset.followSession = String(d.session);
@@ -216,7 +218,7 @@ export const mapFollowMethods = uiModule({
             }
             const out = !w.pointKey;
             const pulsing = el.classList.contains('is-pulse');
-            el.className = `map-marker-work follow-${sessionTone(lead.session)} ${w.place.kind === 'record' ? 'is-record' : 'is-person'}${out ? ' is-outscope' : ''}${pulsing ? ' is-pulse' : ''}`;
+            el.className = `map-marker-work follow-${lead.tone} ${w.place.kind === 'record' ? 'is-record' : 'is-person'}${out ? ' is-outscope' : ''}${pulsing ? ' is-pulse' : ''}`;
             el.dataset.followSession = String(lead.session);
             el.dataset.lat = String(w.geo.lat);
             el.dataset.lon = String(w.geo.lon);
@@ -225,7 +227,7 @@ export const mapFollowMethods = uiModule({
             const sub = [src, out ? m.outScope : ''].filter(Boolean).join(' · ');
             const label = `${m.workHead}: ${w.place.name}${numbered ? ` · ${strings.live.sessionN(lead.session)}` : ''}`;
             const html = `<button type="button" class="map-work-ring" aria-label="${esc(label)}" title="${esc(w.targets.map(t => t.task).filter(Boolean).join('\n') || label)}">${out ? '<span class="map-work-hollow" aria-hidden="true"></span>' : ''}</button>`
-                + (numbered ? w.targets.map((t, i) => `<span class="map-work-num follow-${sessionTone(t.session)}" style="--i:${i}" aria-hidden="true">${t.session}</span>`).join('') : '')
+                + (numbered ? w.targets.map((t, i) => `<span class="map-work-num follow-${t.tone}${t.label.length > 2 ? ' is-wide' : ''}" style="--i:${i}" aria-hidden="true">${esc(t.label)}</span>`).join('') : '')
                 + `<span class="map-work-label" aria-hidden="true"><b>${esc(w.place.name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span>`;
             if (el.dataset.html !== html) {
                 el.innerHTML = html;
@@ -265,7 +267,7 @@ export const mapFollowMethods = uiModule({
         this.renderMapFollowNotices(container, missing, numbered);
         this.positionMapFollow(container);
         this.positionMapLinesLegend();
-        if (targets.some(t => t.session === 1 && pulse?.has(t.row))) this.mapFollowPan(false);
+        if (targets.some(t => t.tone === 'primary' && pulse?.has(t.row))) this.mapFollowPan(false);
     },
 
     /** Lines for a place without a position or a person without a place, one per session. */
@@ -297,8 +299,8 @@ export const mapFollowMethods = uiModule({
             const full = place.kind === 'noPlace' ? m.noPlace(name) : m.noCoords(name);
             const rest = full.startsWith(name) ? full.slice(name.length) : ` ${full}`;
             const known = place.kind === 'noCoords' && place.key && !readOnly ? place.key : null;
-            return `<div class="map-follow-notice follow-${sessionTone(target.session)}" data-follow-session="${target.session}">`
-                + `<span class="map-follow-notice-mark" aria-hidden="true">${numbered ? target.session : ''}</span>`
+            return `<div class="map-follow-notice follow-${target.tone}" data-follow-session="${target.session}">`
+                + `<span class="map-follow-notice-mark${numbered && target.label.length > 2 ? ' is-wide' : ''}" aria-hidden="true">${numbered ? esc(target.label) : ''}</span>`
                 + `<span class="map-follow-notice-text"><b>${esc(name)}</b>${esc(rest)}</span>`
                 + (known ? `<button type="button" class="map-follow-locate" data-key="${esc(known)}">${esc(m.locate)}</button>` : '')
                 + (known && lookable(known)
@@ -352,7 +354,7 @@ export const mapFollowMethods = uiModule({
         if (svg) {
             svg.innerHTML = lines.map(l => {
                 const a = at(l.from), b = at(l.to);
-                return `<line class="follow-${sessionTone(l.session)}" x1="${Math.round(a.x)}" y1="${Math.round(a.y)}" x2="${Math.round(b.x)}" y2="${Math.round(b.y)}"/>`;
+                return `<line class="follow-${followTone(l)}" x1="${Math.round(a.x)}" y1="${Math.round(a.y)}" x2="${Math.round(b.x)}" y2="${Math.round(b.y)}"/>`;
             }).join('');
         }
     },
@@ -395,7 +397,7 @@ export const mapFollowMethods = uiModule({
         return targets.map(t => {
             const src = withSource && place ? sourceText(place, true) : '';
             const since = s?.working[t.row]?.since ?? '';
-            return `<div class="map-popup-work follow-${sessionTone(t.session)}" data-follow-session="${t.session}">
+            return `<div class="map-popup-work follow-${t.tone}" data-follow-session="${t.session}">
                 <div class="map-popup-work-head"><span class="map-popup-work-dot" aria-hidden="true"></span>${esc(strings.map.workHead)}${numbered ? ` · ${esc(strings.live.sessionN(t.session))}` : ''}</div>
                 ${src ? `<div class="map-popup-work-src">${esc(src)}</div>` : ''}
                 ${t.task ? `<div class="map-popup-work-task">${esc(t.task)}</div>` : ''}
@@ -423,7 +425,7 @@ export const mapFollowMethods = uiModule({
     },
 
     /**
-     * Pan to the place session 1 works on, when it is outside the view (64 px
+     * Pan to the place session 1 (the run followed) works on, when it is outside the view (64 px
      * margin) and the map is not paused; `now`: without the 8 s brake;
      * `centre`: also when it is in view (Back to the agent). A dialog, a menu
      * or typing puts it off. The zoom stays; a place more than two views away
@@ -440,7 +442,7 @@ export const mapFollowMethods = uiModule({
             panTimer = setTimeout(() => this.mapFollowPan(now, centre), t.retry);
             return;
         }
-        const lead = currentFollowTargets().find(x => x.session === 1);
+        const lead = currentFollowTargets().find(x => x.tone === 'primary');
         const geo = lead ? currentWorkPlaces([lead]).get(lead.row)?.geo : null;
         if (!lead || !geo) return;
         if (followBusy(this.isEvidenceHighlightOn() && this.evidenceHighlightKind() !== 'selection')) {

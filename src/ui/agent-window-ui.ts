@@ -52,7 +52,8 @@ export const agentWindowMethods = uiModule({
     /** The agent's state for the other windows now, safe to cross, with the stamps of its large sections. */
     agentWindowState(): { sections: AgentSections; stamps: AgentStamps } {
         const treeId = DataManager.getCurrentTreeId();
-        const follow = { on: this.isLiveFollowOn(), view: this.liveFollowView() };
+        const followedRun = this.followedRun();
+        const follow = { on: this.isLiveFollowOn(), view: this.liveFollowView(), ...(followedRun ? { run: followedRun } : {}) };
         // A locked tree (§3.6) or a page without a tree of its own: nothing of its research leaves this window.
         if (!treeId || DataManager.isLocked() || DataManager.isViewMode()) {
             const sections: AgentSections = { link: { treeId: treeId ?? null, meta: null }, live: null, work: EMPTY_WORK, cards: [], status: null, places: null, follow };

@@ -1,0 +1,32 @@
+/**
+ * The words of a run (spec 126 U10) shared by Now and the choice of the run followed (§7): its name and
+ * what a waiting run waits for, in the app's words.
+ */
+
+import { strings, getCurrentLanguage } from './strings.js';
+import { formatLiveClock } from './live-time.js';
+import type { LiveDirection } from './research-link.js';
+import type { LiveRun } from './research-runs.js';
+
+/** A run's name: the direction's ("Kubíčkovi z Dolní Lhoty"), the general run's "Whole queue". */
+export function runName(r: Pick<LiveRun, 'kind' | 'research' | 'id'>, researches: readonly LiveDirection[]): string {
+    return r.kind === 'queue' ? strings.live.runWhole : researches.find(d => d.id === r.research)?.name ?? r.research ?? r.id;
+}
+
+/** A clock time of an ISO moment ("14:00"; '' when not said or not readable). */
+function clock(iso: string | undefined): string {
+    const ts = iso ? Date.parse(iso) : NaN;
+    return Number.isFinite(ts) ? formatLiveClock(ts, Date.now(), getCurrentLanguage()) : '';
+}
+
+/** What a waiting run waits for, until when ("waiting for the subscription limit until 14:00"). */
+export function runWaitText(run: Pick<LiveRun, 'wait'>): string {
+    const L = strings.live;
+    const t = clock(run.wait?.until);
+    const why = run.wait?.for ?? 'other';
+    return why === 'limit' ? (t ? L.runStateLimit(t) : L.runStateLimitNoTime)
+        : why === 'archive' ? (t ? L.runStateArchive(t) : L.runStateArchiveNoTime)
+        : why === 'browser' ? L.runStateBrowser
+        : why === 'download' ? L.runStateDownload
+        : t ? L.runStateWaitingUntil(t) : L.runStateWaiting;
+}

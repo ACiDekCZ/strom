@@ -7,6 +7,12 @@
  * of the "Now" list; its number is that position (1, 2, …). Numbers are shown
  * only when two or more runs work at once. Session 1 takes the app's primary
  * colour, the others the accent.
+ *
+ * Runs (spec 126 U10 §7, a research with `/status.runs`): a row belongs to
+ * its run; the run's number is its block's place in Now (the general run
+ * "1", a direction's run its glyph and number, "↑ 2"). The run followed
+ * takes the primary colour, every other one the accent. Without runs:
+ * sessions as above.
  */
 
 import { PersonId } from './types.js';
@@ -20,17 +26,61 @@ export interface WorkingRow {
     paused?: unknown;
     /** A place of the record ("L0001"), when the research gives one (part of the map work). */
     place?: string;
+    /** The run the row belongs to (`working[].run`, spec 126 U10). */
+    run?: string;
+    /** The row's direction ("G0001"). */
+    research?: string;
+    /** The agent's session ("N0141"): a row without `run` belongs to the run of that session. */
+    session?: string;
+}
+
+/** The colour group of a mark: the run followed (or session 1) primary, the others accent. */
+export type FollowTone = 'primary' | 'accent';
+
+/** A run as following marks it (a subset of LiveRun, in Now's order). */
+export interface FollowRun {
+    id: string;
+    kind: 'queue' | 'line';
+    research?: string;
+    state: string;
+    session?: string;
+    /** Its rows of `working[]` (the same objects). */
+    workers: readonly WorkingRow[];
+    /** The glyph of its direction (↑ ↓ ⌕ ?), for its label. */
+    glyph?: string;
+}
+
+/** The runs and the run followed, when the research sends runs (absent or empty: sessions, as before). */
+export interface FollowRunsOpts {
+    runs?: readonly FollowRun[];
+    /** The run followed (null: none). */
+    followedRunId?: string | null;
+    /** Only this run's people (the phone marks the run followed alone). */
+    onlyRun?: string | null;
+}
+
+/** The mark of a row: its number, its label ("1", "↑ 2") and colour group; its run, when it has one. */
+export interface FollowMark {
+    session: number;
+    label: string;
+    tone: FollowTone;
+    runId?: string;
 }
 
 /** One person worked on by one session. */
 export interface FollowTarget {
     /** Index of the row in `working[]`. */
     row: number;
-    /** 1-based session number (its place among the runs that are not paused). */
+    /** 1-based session number (its place among the runs that are not paused; with runs: its run's block in Now). */
     session: number;
     personId: PersonId;
     task: string;
     who: string;
+    /** What the mark shows (two or more runs): the session's number, or the run's label ("↑ 2"). */
+    label: string;
+    tone: FollowTone;
+    /** The run (with runs only). */
+    runId?: string;
 }
 
 /** The session number of each row (null: paused); `numbered`: two or more run at once. */
@@ -40,17 +90,98 @@ export function sessionNumbers(working: readonly WorkingRow[]): { numbers: Array
     return { numbers, numbered: n >= 2 };
 }
 
-/** The people worked on: one target per running row whose person is in the tree. */
-export function followTargets(working: readonly WorkingRow[], personOf: (refn: string) => PersonId | null): FollowTarget[] {
-    const { numbers } = sessionNumbers(working);
+const runLive = (r: Pick<FollowRun, 'state'>): boolean => r.state !== 'ended';
+
+/** Each run's number (its block's place in Now among the runs not ended); `numbered`: two or more. */
+export function runNumbers(runs: readonly Pick<FollowRun, 'id' | 'state'>[]): { numbers: Map<string, number>; numbered: boolean } {
+    const numbers = new Map<string, number>();
+    for (const r of runs) if (runLive(r) && !numbers.has(r.id)) numbers.set(r.id, numbers.size + 1);
+    return { numbers, numbered: numbers.size >= 2 };
+}
+
+/** A run's label: the general run its number ("1"), a direction's run its glyph and number ("↑ 2"). */
+export function runLabel(run: Pick<FollowRun, 'kind' | 'glyph'>, n: number): string {
+    return run.kind === 'line' && run.glyph ? `${run.glyph} ${n}` : String(n);
+}
+
+/** A run's colour: the run followed primary, every other one accent. */
+export function runTone(runId: string | undefined, followedRunId: string | null | undefined): FollowTone {
+    return !!runId && runId === followedRunId ? 'primary' : 'accent';
+}
+
+/** The run a row belongs to: the one it names, else the one holding it, else the one of its session. */
+export function runOfRow(row: WorkingRow, runs: readonly FollowRun[]): FollowRun | null {
+    return (row.run ? runs.find(r => r.id === row.run) : undefined)
+        ?? runs.find(r => r.workers.includes(row))
+        ?? (row.session ? runs.find(r => r.session === row.session) : undefined)
+        ?? null;
+}
+
+/**
+ * The run followed when none was chosen (Milan's question 4): the first one in Now's order that is not
+ * waiting (nor ended) and works on a person of the tree (`hasPerson`), else the first one not waiting, else null.
+ */
+export function defaultFollowedRun(runs: readonly FollowRun[], hasPerson: (run: FollowRun) => boolean = () => true): string | null {
+    const going = runs.filter(r => runLive(r) && r.state !== 'waiting');
+    return (going.find(hasPerson) ?? going[0])?.id ?? null;
+}
+
+/** The run followed: the one chosen while it runs (not ended), else the default. */
+export function followedRunOf(runs: readonly FollowRun[], chosen: string | null | undefined, hasPerson?: (run: FollowRun) => boolean): string | null {
+    if (chosen && runs.some(r => r.id === chosen && runLive(r))) return chosen;
+    return defaultFollowedRun(runs, hasPerson);
+}
+
+/**
+ * The mark of each row of `working[]` (null: paused); `numbered`: two or more marks. Without runs: the
+ * session numbers. With runs: a row's run's number, label and colour; a row of no run (a conversation)
+ * numbers after the runs, in the accent.
+ */
+export function rowMarks(working: readonly WorkingRow[], opts: FollowRunsOpts = {}): { marks: Array<FollowMark | null>; numbered: boolean } {
+    const runs = opts.runs ?? [];
+    if (runs.length === 0) {
+        const { numbers, numbered } = sessionNumbers(working);
+        return {
+            marks: numbers.map(n => (n === null ? null : { session: n, label: String(n), tone: sessionTone(n) })),
+            numbered,
+        };
+    }
+    const { numbers } = runNumbers(runs);
+    let next = numbers.size;
+    const marks = working.map((w): FollowMark | null => {
+        if (w.paused) return null;
+        const run = runOfRow(w, runs);
+        const n = run ? numbers.get(run.id) : undefined;
+        if (run && n !== undefined) return { session: n, label: runLabel(run, n), tone: runTone(run.id, opts.followedRunId), runId: run.id };
+        const own = ++next;
+        return { session: own, label: String(own), tone: 'accent' };
+    });
+    return { marks, numbered: next >= 2 };
+}
+
+/**
+ * The people worked on: one target per running row whose person is in the tree. With runs, `onlyRun`
+ * keeps the rows of that run alone (the phone).
+ */
+export function followTargets(working: readonly WorkingRow[], personOf: (refn: string) => PersonId | null, opts: FollowRunsOpts = {}): FollowTarget[] {
+    const { marks } = rowMarks(working, opts);
+    const only = opts.runs?.length && opts.onlyRun !== undefined ? opts.onlyRun : undefined;
     const out: FollowTarget[] = [];
     working.forEach((w, row) => {
-        const session = numbers[row];
-        if (session === null || !w.person) return;
+        const m = marks[row];
+        if (!m || !w.person) return;
+        if (only !== undefined && m.runId !== only) return;
         const personId = personOf(w.person);
-        if (personId) out.push({ row, session, personId, task: w.task, who: w.who });
+        if (personId) {
+            out.push({ row, session: m.session, personId, task: w.task, who: w.who, label: m.label, tone: m.tone, ...(m.runId ? { runId: m.runId } : {}) });
+        }
     });
     return out;
+}
+
+/** The order of marks on one person or place: the primary one first, then by number. */
+export function leadFirst(a: Pick<FollowTarget, 'tone' | 'session'>, b: Pick<FollowTarget, 'tone' | 'session'>): number {
+    return (a.tone === 'primary' ? 0 : 1) - (b.tone === 'primary' ? 0 : 1) || a.session - b.session;
 }
 
 /**
@@ -119,6 +250,8 @@ export interface TrailEntry {
     /** The place worked on (its key on the map), null when none. */
     placeKey: string | null;
     session: number;
+    /** The run (with runs): its colour follows the run followed. */
+    runId?: string;
     at: number;
     /** The place's position, when it has one (the map's trail draws only those). */
     geo?: { lat: number; lon: number } | null;
@@ -147,6 +280,8 @@ export interface CardTrailEntry {
     personId: PersonId;
     kind: 'added' | 'changed';
     session: number;
+    /** The run (with runs): its colour follows the run followed. */
+    runId?: string;
     at: number;
 }
 

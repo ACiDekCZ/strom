@@ -114,7 +114,9 @@ export const overviewWindowMethods = uiModule({
         }
         // What the evidence pill lights up in the tree here (the window's rows say it).
         extras.highlight = this.evidenceHighlightNow();
-        extras.follow = { on: this.isLiveFollowOn(), view: this.liveFollowView() };
+        // The run followed only with runs (spec 126 U10 §7): the state of before otherwise.
+        const followedRun = this.followedRun();
+        extras.follow = { on: this.isLiveFollowOn(), view: this.liveFollowView(), ...(followedRun ? { run: followedRun } : {}) };
         extras.lines = directionsWindowState(researchSession());
         extras.taskOrder = taskOrderWindowState();
         extras.waitingWrite = this.waitingRowsWindowState(w?.s ?? null);
@@ -248,6 +250,9 @@ export const overviewWindowMethods = uiModule({
                 return true;
             case 'follow-view':
                 this.setLiveFollowView(a.args.view);
+                return true;
+            case 'follow-run':
+                this.setFollowedRun(a.args.run);
                 return true;
             case 'turn-on': {
                 // "Turn on" only: the same switch would stop a research that runs.

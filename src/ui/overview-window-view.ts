@@ -181,6 +181,7 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         isFollowingActiveResearch(): boolean { return read()?.source === 'live'; },
         isLiveFollowOn(): boolean { return extras().follow.on; },
         liveFollowView(): FollowView | null { return extras().follow.view; },
+        followedRun(): string | null { return extras().follow.run ?? null; },
         researchLiveState(this: UIClass, _treeId: string) {
             return extras().liveSwitch as ReturnType<UIClass['researchLiveState']>;
         },
@@ -265,6 +266,7 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         },
         setLiveFollow(on: boolean): void { run('follow-tree', { on }); },
         setLiveFollowView(view: FollowView): void { run('follow-view', { view }); },
+        setFollowedRun(id: string | null): void { if (id) run('follow-run', { run: id }); },
         async toggleResearchLive(): Promise<void> { run('turn-on'); },
         overviewShowPerson(id: PersonId): void { run('show-person', { personId: id }); },
         startPersonHighlight(_kind: string, label: string, ids: PersonId[], _recount?: unknown, opts?: { quiet?: boolean }): void {

@@ -7464,6 +7464,12 @@ const stringsEN = {
         runStopFailed: 'The agent was not stopped.',
         runStopFailedSaid: (t: string) => `The agent was not stopped: “${t}”`,
         runAfterStop: 'The whole queue takes the direction again.',
+        // Following one of the runs (spec 126 U10 §7).
+        runFollow: 'Follow this run',
+        runFollowed: 'Followed',
+        followRunPill: 'Following:',
+        followRunMenu: 'Follow run',
+        followRunAria: (name: string) => `Followed run: ${name}, change`,
         // The whole queue beside the directions' own runs (spec 126 U10 §6).
         queueLineRunNote: (a: string) => `done by the direction's own agent (${a})`,
         queueLineRunShow: 'Show ›',
@@ -18164,6 +18170,12 @@ const stringsCZ: StringsType = {
         runStopFailed: 'Agenta se nepodařilo zastavit.',
         runStopFailedSaid: (t: string) => `Agenta se nepodařilo zastavit: „${t}“`,
         runAfterStop: 'Linii zase bere celá fronta.',
+        // Sledování jednoho z běhů (spec 126 U10 §7).
+        runFollow: 'Sledovat tento běh',
+        runFollowed: 'Sleduje se',
+        followRunPill: 'Sleduje se:',
+        followRunMenu: 'Sledovat běh',
+        followRunAria: (name: string) => `Sledovaný běh: ${name}, změnit`,
         // Celá fronta vedle vlastních běhů linií (spec 126 U10 §6).
         queueLineRunNote: (a: string) => `dělá je vlastní agent linie (${a})`,
         queueLineRunShow: 'Ukázat ›',
@@ -28712,6 +28724,12 @@ const stringsDE: StringsType = {
         runStopFailed: 'Der Agent wurde nicht gestoppt.',
         runStopFailedSaid: (t: string) => `Der Agent wurde nicht gestoppt: „${t}“`,
         runAfterStop: 'Die Richtung übernimmt wieder die ganze Warteschlange.',
+        // Einem der Läufe folgen (spec 126 U10 §7).
+        runFollow: 'Diesem Lauf folgen',
+        runFollowed: 'Wird verfolgt',
+        followRunPill: 'Verfolgt:',
+        followRunMenu: 'Lauf verfolgen',
+        followRunAria: (name: string) => `Verfolgter Lauf: ${name}, ändern`,
         // Die ganze Warteschlange neben den eigenen Läufen der Richtungen (spec 126 U10 §6).
         queueLineRunNote: (a: string) => `erledigt der eigene Agent der Richtung (${a})`,
         queueLineRunShow: 'Zeigen ›',

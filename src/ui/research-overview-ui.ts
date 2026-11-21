@@ -17,6 +17,7 @@ import { noteQueueStartStatus, QUEUE_SCOPE, QUEUE_START_MS, type QueueStartView 
 import { NOW_LIMIT_NOTE, runsSideBySide } from './queue-work-dialog.js';
 import { RUN_ENDED_MS, linesWithRun, liveRuns, orderRuns, runCount, runLinesOn, runStopOn, runsShown, type LiveRun } from '../research-runs.js';
 import { postRunStop } from '../research-runs-write.js';
+import { runName, runWaitText } from '../research-runs-text.js';
 import { busySpinHtml, busyStatusEl } from './busy.js';
 import { canvasBusy } from './canvas-busy.js';
 import type { RowRefusal } from './waiting-row-notes.js';
@@ -381,10 +382,6 @@ function drawnSession(): LiveSession | null {
     return v && v.treeId === DataManager.getCurrentTreeId() ? v.session : null;
 }
 
-/** A run's name in Now: the direction's ("Kubíčkovi z Dolní Lhoty"), the general run's "Whole queue". */
-function runName(r: LiveRun, s: LiveSession): string {
-    return r.kind === 'queue' ? strings.live.runWhole : s.researches.find(d => d.id === r.research)?.name ?? r.research ?? r.id;
-}
 
 /** Stop of a run asked here: while the bridge writes it, done (the run finishing until the bridge says so), refused (its sentence). */
 type RunStopNote = { state: 'stopping' } | { state: 'stopped' } | { state: 'failed'; text: string };
@@ -2847,7 +2844,7 @@ export const researchOverviewMethods = uiModule({
         starts: ReadonlyArray<{ scope: string; view: QueueStartView }>): void {
         const L = strings.live;
         const n = runCount(runs);
-        const names = runs.filter(r => r.state !== 'ended').map(r => runName(r, s));
+        const names = runs.filter(r => r.state !== 'ended').map(r => runName(r, s.researches));
         const host = liveSection(body, {
             ...fold, title: n > 0 ? L.nowAgents(n) : L.now,
             summary: names.length > 0 ? names.join(', ') : L.nobody,
@@ -2963,17 +2960,10 @@ export const researchOverviewMethods = uiModule({
                 span.insertAdjacentHTML('afterbegin', busySpinHtml(12));
                 span.appendChild(document.createTextNode(run.state === 'starting' ? L.runStateStarting : L.runStateFinishing));
                 break;
-            case 'waiting': {
+            case 'waiting':
                 span.classList.add('is-wait');
-                const t = clock(run.wait?.until);
-                const why = run.wait?.for ?? 'other';
-                span.textContent = why === 'limit' ? (t ? L.runStateLimit(t) : L.runStateLimitNoTime)
-                    : why === 'archive' ? (t ? L.runStateArchive(t) : L.runStateArchiveNoTime)
-                    : why === 'browser' ? L.runStateBrowser
-                    : why === 'download' ? L.runStateDownload
-                    : t ? L.runStateWaitingUntil(t) : L.runStateWaiting;
+                span.textContent = runWaitText(run);
                 break;
-            }
             case 'ended':
                 span.classList.add('is-ended');
                 span.textContent = L.runStateEnded(clock(run.endedAt !== undefined ? new Date(run.endedAt).toISOString() : undefined));
@@ -2999,6 +2989,20 @@ export const researchOverviewMethods = uiModule({
             btn.type = 'button';
             btn.onclick = show;
             if (d) lightsGroup(btn, 'direction', d.name);
+            row.appendChild(btn);
+        }
+        // Which run following goes to (spec 126 U10 §7): two or more runs and following on; the phone has no choice.
+        const followable = mode !== 'sheet' && run.state !== 'ended' && this.isLiveFollowOn()
+            && liveRuns(s).filter(r => r.state !== 'ended').length >= 2;
+        if (followable && this.followedRun() === run.id) {
+            const on = el('span', 'research-overview__followed');
+            on.appendChild(el('span', 'research-overview__followed-dot', '●')).setAttribute('aria-hidden', 'true');
+            on.append(L.runFollowed);
+            row.appendChild(on);
+        } else if (followable) {
+            const btn = el('button', 'link-button research-overview__run-follow', L.runFollow);
+            btn.type = 'button';
+            btn.onclick = () => this.setFollowedRun(run.id);
             row.appendChild(btn);
         }
         const live = run.state === 'working' || run.state === 'waiting';
@@ -3452,6 +3456,22 @@ export const researchOverviewMethods = uiModule({
         if (source === 'live') {
             const follow = this.liveFollowButton('overview');
             if (follow) head.appendChild(follow);
+            // The run followed and the choice of another (spec 126 U10 §7, 7d): this window has no pill of the tree.
+            const runs = liveRuns(s).filter(x => x.state !== 'ended');
+            const followed = this.isLiveFollowOn() && runs.length >= 2 ? runs.find(x => x.id === this.followedRun()) : undefined;
+            if (followed) {
+                const name = runName(followed, s.researches);
+                const pick = el('button', 'research-overview__follow-run');
+                pick.type = 'button';
+                pick.setAttribute('aria-haspopup', 'menu');
+                pick.setAttribute('aria-expanded', 'false');
+                pick.setAttribute('aria-label', L.followRunAria(name));
+                pick.title = `${L.followRunPill} ${name}`;
+                pick.appendChild(el('span', 'research-overview__follow-run-name', name));
+                pick.appendChild(el('span', 'research-overview__follow-run-chev', '▾')).setAttribute('aria-hidden', 'true');
+                pick.onclick = () => this.openFollowRunMenu(pick, s, followed.id);
+                head.appendChild(pick);
+            }
             const stop = el('button', 'live-panel-action research-overview__stop', r.stop);
             stop.type = 'button';
             stop.onclick = () => this.stopLiveFollow();

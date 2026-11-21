@@ -1826,10 +1826,11 @@ export function waitsOnUser(on: string | undefined): boolean {
  * the bottom bar (its height and the 8px gap above it; 0 without a strip, or
  * when the panel is a card at the top). The tree's pills stand on top of it.
  */
-/** A session's number in "At work": a 20px circle in the session's colour. */
-export function workingNumberBadge(n: number): HTMLElement {
-    const badge = el('span', `live-working-num follow-${sessionTone(n)}`, String(n));
-    badge.title = strings.live.sessionN(n);
+/** A session's number in "At work": a 20px circle in the session's colour (a run's label, "↑ 2", in the run's). */
+export function workingNumberBadge(m: { session: number; label?: string; tone?: 'primary' | 'accent' }): HTMLElement {
+    const label = m.label ?? String(m.session);
+    const badge = el('span', `live-working-num follow-${m.tone ?? sessionTone(m.session)}${label.length > 2 ? ' is-wide' : ''}`, label);
+    badge.title = strings.live.sessionN(m.session);
     return badge;
 }
 

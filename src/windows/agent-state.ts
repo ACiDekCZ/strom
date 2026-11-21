@@ -62,6 +62,8 @@ export interface AgentPlacesData {
 export interface AgentFollowData {
     on: boolean;
     view: string | null;
+    /** The run followed (spec 126 U10 §7; absent or null: none, or a research without runs). */
+    run?: string | null;
 }
 
 export interface AgentSections {

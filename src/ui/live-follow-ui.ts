@@ -29,11 +29,18 @@ import { segmentArrowTarget } from './live-section-edit.js';
 import { topPrefs } from './live-section-prefs.js';
 import { FollowView, FOLLOW_VIEWS, getFollowView, getFanCenterSetting, getFanPerson, getFollowTrail, getFocusBefore, setFocusBefore } from '../live-follow-prefs.js';
 import {
-    FollowTarget, TrailEntry, followTargets, changedTargets, sessionNumbers, fanCenter, pushTrail,
+    FollowTarget, TrailEntry, followTargets, changedTargets, fanCenter, pushTrail,
     CardTrailEntry, pushCardTrail, sessionTone, startFocusBefore,
+    FollowMark, FollowRun, FollowRunsOpts, FollowTone, followedRunOf, leadFirst, rowMarks, runNumbers, runLabel, runTone,
 } from '../live-follow-targets.js';
+import { liveRuns, runLinesOn, type LiveRun } from '../research-runs.js';
+import { runName, runWaitText } from '../research-runs-text.js';
+import { directionGlyph } from './research-directions-ui.js';
+import { agentMirror } from '../windows/agent-mirror.js';
+import type { LiveSession } from './research-ui.js';
 import type { LiveDiff } from '../live-diff.js';
 import { isPhoneBar } from '../breakpoints.js';
+import { shownName } from '../person-name.js';
 import { WorkPlace, resolveWorkPlace, samePlace, workPlaceId } from '../live-follow-map.js';
 import { WORKING_PLACE_FEATURE } from '../research-link.js';
 import { windowAgentFollow } from '../windows/agent-follow-state.js';
@@ -118,6 +125,24 @@ let session: FollowSession | null = null;
 /** The view mode last seen, to tell a switch of view from a move inside one. */
 let seenMode: ViewMode | null = null;
 
+/**
+ * The run chosen to follow (spec 126 U10 §7; this window's memory, never stored): null, or once it ends,
+ * the default (followedRunOf). Another window of the app takes the main window's (its mirror's `follow.run`).
+ */
+let chosenRunId: string | null = null;
+/** The run followed when following last looked (a change jumps at once). */
+let lastFollowedRun: string | null = null;
+/** The open choice of the run followed (the pill's menu). */
+let runMenu: { el: HTMLElement; anchor: HTMLElement; ac: AbortController } | null = null;
+
+function closeRunMenu(): void {
+    if (!runMenu) return;
+    runMenu.ac.abort();
+    runMenu.el.remove();
+    runMenu.anchor.setAttribute('aria-expanded', 'false');
+    runMenu = null;
+}
+
 const isFollowView = (m: ViewMode): m is FollowView => (FOLLOW_VIEWS as readonly string[]).includes(m);
 
 /** Another window follows in the view it shows (O5); a view without jumps counts as the family view. */
@@ -139,12 +164,46 @@ function defaultPerson(): PersonId | null {
     return (Object.keys(d.persons)[0] as PersonId | undefined) ?? null;
 }
 
-/** The run the tree follows: the first one at work on a person of this tree. */
+/** The runs following marks (spec 126 U10 §7): the research's runs in Now's order, none ended (empty: sessions as before). */
+function followRunsOf(s: LiveSession | null): Array<LiveRun & FollowRun> {
+    if (!s || !runLinesOn(s.features)) return [];
+    return liveRuns(s).filter(r => r.state !== 'ended').map(r => ({
+        ...r, ...(r.kind === 'line' ? { glyph: directionGlyph(s.researches.find(d => d.id === r.research)) } : {}),
+    }));
+}
+
+/**
+ * The run followed now (null: no runs, or none to follow): the one chosen here while it runs (another
+ * window: the main window's), else the first in Now not waiting that works on a person of this tree.
+ */
+function followedRunNow(s: LiveSession | null = liveSession()): string | null {
+    const runs = followRunsOf(s);
+    if (runs.length === 0) return null;
+    const mirror = agentMirror();
+    const chosen = mirror ? mirror.follow().run ?? null : chosenRunId;
+    const personOf = personOfRefn();
+    const id = followedRunOf(runs, chosen, r => r.workers.some(w => !w.paused && !!w.person && !!personOf(w.person)));
+    // The run chosen ended (or is gone): the default from now on.
+    if (!mirror && chosenRunId && id !== chosenRunId) chosenRunId = null;
+    return id;
+}
+
+/** The runs and the run followed, for the marks; `phone`: only the run followed (spec 126 U10 §7, 7e). */
+function runsOpts(s: LiveSession | null, phone = false): FollowRunsOpts {
+    const runs = followRunsOf(s);
+    if (runs.length === 0) return {};
+    const followedRunId = followedRunNow(s);
+    return { runs, followedRunId, ...(phone ? { onlyRun: followedRunId } : {}) };
+}
+
+/** The run the tree follows: the run followed's person (with runs), else the first one at work on a person of this tree. */
 function followTarget(): PersonId | null {
     const s = liveSession();
     if (!s) return null;
     const persons = Object.values(DataManager.getData().persons);
-    for (const w of s.working) {
+    const followed = followedRunNow(s);
+    const run = followed ? followRunsOf(s).find(r => r.id === followed) : undefined;
+    for (const w of run ? run.workers : s.working) {
         if (w.paused || !w.person) continue;
         const p = persons.find(x => x.refn === w.person);
         if (p) return p.id;
@@ -155,7 +214,7 @@ function followTarget(): PersonId | null {
 /** The people following puts the focus on: those worked on now and the last jump's target. */
 function workedNow(): Set<PersonId> {
     const s = liveSession();
-    const out = new Set<PersonId>(s ? followTargets(s.working, personOfRefn()).map(t => t.personId) : []);
+    const out = new Set<PersonId>(s ? followTargets(s.working, personOfRefn(), runsOpts(s)).map(t => t.personId) : []);
     if (lastTarget) out.add(lastTarget);
     return out;
 }
@@ -258,11 +317,16 @@ function followSession(): FollowSession | null {
     return session;
 }
 
-/** Every person worked on now, by session (none while following does not apply). */
+/** Every person worked on now, by session (none while following does not apply); on a phone the run followed's alone. */
 export function currentFollowTargets(): FollowTarget[] {
     const s = liveSession();
     if (!followActive() || !s) return [];
-    return followTargets(s.working, personOfRefn());
+    return followTargets(s.working, personOfRefn(), runsOpts(s, isPhoneBar())).sort(leadFirst);
+}
+
+/** A mark's colour group now: a run's by the run followed (spec 126 U10 §7), else its session's (043). */
+export function followTone(x: { session: number; runId?: string }): FollowTone {
+    return x.runId ? runTone(x.runId, followedRunNow()) : sessionTone(x.session);
 }
 
 /** The bridge names the place record a run works on (`working.place`); without it the field is not read. */
@@ -281,9 +345,9 @@ export function currentWorkPlaces(targets: readonly FollowTarget[] = currentFoll
     return out;
 }
 
-/** A session's colour on the cards (043: the first one primary, the others accent). */
-function toneColor(session: number): string {
-    return sessionTone(session) === 'primary' ? 'var(--follow-c1)' : 'var(--follow-c2)';
+/** A session's colour on the cards (043: the first one primary, the others accent; a run: the one followed primary). */
+function toneColor(x: { session: number; runId?: string }): string {
+    return followTone(x) === 'primary' ? 'var(--follow-c1)' : 'var(--follow-c2)';
 }
 
 /**
@@ -292,11 +356,12 @@ function toneColor(session: number): string {
  * child or a partner of theirs; else the run whose task the last change
  * came with; else the first one. Not following: the first one.
  */
-export function liveSessionOf(id: PersonId): number {
+export function liveSessionOf(id: PersonId): { session: number; runId?: string } {
     const s = liveSession();
-    if (!s || !followActive()) return 1;
-    const targets = followTargets(s.working, personOfRefn());
-    if (targets.length === 0) return 1;
+    const first = { session: 1 };
+    if (!s || !followActive()) return first;
+    const targets = followTargets(s.working, personOfRefn(), runsOpts(s)).sort(leadFirst);
+    if (targets.length === 0) return first;
     const data = DataManager.getData();
     const p = data.persons[id];
     const near = new Set<PersonId>([id, ...(p?.parentIds ?? []), ...(p?.childIds ?? [])]);
@@ -304,11 +369,12 @@ export function liveSessionOf(id: PersonId): number {
         const u = data.partnerships[uid];
         if (u) { near.add(u.person1Id); near.add(u.person2Id); }
     }
+    const mark = (t: FollowTarget) => ({ session: t.session, ...(t.runId ? { runId: t.runId } : {}) });
     const byPerson = targets.find(t => t.personId === id) ?? targets.find(t => near.has(t.personId));
-    if (byPerson) return byPerson.session;
+    if (byPerson) return mark(byPerson);
     const task = s.changes[0]?.task;
     const byTask = task ? targets.find(t => t.task === task) : undefined;
-    return byTask?.session ?? 1;
+    return byTask ? mark(byTask) : mark(targets[0]);
 }
 
 /** The trail on the cards (newest first): following on, the trail on, not on a phone. */
@@ -316,7 +382,7 @@ function cardTrailShown(): ReadonlyArray<{ personId: PersonId; kind: 'added' | '
     if (!followActive() || !session || !getFollowTrail() || isPhoneBar()) return [];
     const now = Date.now();
     session.cardTrail = pushCardTrail(session.cardTrail, [], now);
-    return session.cardTrail.map(e => ({ personId: e.personId, kind: e.kind, color: toneColor(e.session) }));
+    return session.cardTrail.map(e => ({ personId: e.personId, kind: e.kind, color: toneColor(e) }));
 }
 
 /** A live load's scene ended: the people it added or changed go to the front of the card trail. */
@@ -325,10 +391,10 @@ function noteLiveLoad(diff: LiveDiff): void {
     if (!fs) return;
     const now = Date.now();
     const entries: CardTrailEntry[] = [
-        ...diff.added.map(personId => ({ personId, kind: 'added' as const, session: liveSessionOf(personId), at: now })),
+        ...diff.added.map(personId => ({ personId, kind: 'added' as const, ...liveSessionOf(personId), at: now })),
         ...[...new Set([...diff.changed.keys(), ...diff.merged.values()])]
             .filter(personId => !diff.added.includes(personId))
-            .map(personId => ({ personId, kind: 'changed' as const, session: liveSessionOf(personId), at: now })),
+            .map(personId => ({ personId, kind: 'changed' as const, ...liveSessionOf(personId), at: now })),
     ];
     if (entries.length === 0) return;
     fs.cardTrail = pushCardTrail(fs.cardTrail, entries, now);
@@ -375,7 +441,11 @@ export function followTiming(): { gap: number; idle: number; retry: number } {
 /** Session numbers are shown (two or more runs at work). */
 export function followNumbered(): boolean {
     const s = liveSession();
-    return !!s && followActive() && sessionNumbers(s.working).numbered;
+    if (!s || !followActive()) return false;
+    const opts = runsOpts(s);
+    // A phone marks the run followed alone (spec 126 U10 §7): no labels for one run.
+    if (opts.runs && isPhoneBar()) return false;
+    return rowMarks(s.working, opts).numbered;
 }
 
 /** The fan is drawn while following: true once after it is opened (the arrival's signal is due). */
@@ -579,14 +649,14 @@ export const liveFollowMethods = uiModule({
 
     /**
      * The session number of a row of "At work" (1, 2, … in the colours of
-     * the marks in the fan): only while following and two or more rows run;
-     * a paused row has none.
+     * the marks in the fan; a run's label, "↑ 2"): only while following and
+     * two or more rows run; a paused row has none.
      */
-    liveWorkingNumber(index: number): number | null {
+    liveWorkingNumber(index: number): FollowMark | null {
         const s = liveSession();
         if (!s || !followActive()) return null;
-        const { numbers, numbered } = sessionNumbers(s.working);
-        return numbered ? numbers[index] ?? null : null;
+        const { marks, numbered } = rowMarks(s.working, runsOpts(s));
+        return numbered ? marks[index] ?? null : null;
     },
 
     /** Where the fan centres when following opens it (null: not following, the fan's own rule). */
@@ -649,8 +719,8 @@ export const liveFollowMethods = uiModule({
                 if (!prev) continue;
                 const was = fs.lastPlaces.get(t.row);
                 fs.trail = pushTrail(fs.trail, {
-                    personId: prev, placeKey: was && was.kind !== 'noPlace' ? workPlaceId(was) : null, session: t.session, at: now,
-                    geo: was?.geo ?? null,
+                    personId: prev, placeKey: was && was.kind !== 'noPlace' ? workPlaceId(was) : null, session: t.session,
+                    ...(t.runId ? { runId: t.runId } : {}), at: now, geo: was?.geo ?? null,
                 }, now);
             }
             fs.lastTargets = diff.next;
@@ -685,9 +755,14 @@ export const liveFollowMethods = uiModule({
         }
         if (this.followViewChanged()) return;
         this.refreshFollowMarks();
+        // Another run followed (chosen in the main window, or the one followed ended): there at once (spec 126 U10 §7).
+        const run = followedRunNow();
+        const switched = run !== lastFollowedRun && lastFollowedRun !== null && run !== null;
+        lastFollowedRun = run;
+        this.renderLiveFollowPill();
         // The user focused someone else in the family view since the last jump.
-        if (this.followMovedAway()) return;
-        if (!pausedByUser) this.followJump(false);
+        if (!switched && this.followMovedAway()) return;
+        if (!pausedByUser) this.followJump(switched);
     },
 
     /**
@@ -906,32 +981,173 @@ export const liveFollowMethods = uiModule({
             TreeRenderer.refreshSelectionCenter();
         }
         // Another window says its pause in its strip (§3, dotaz 1): no pill there, not even the map's.
+        // Two or more runs (spec 126 U10 §7): following says which run it follows, and offers the others.
+        const live = liveSession();
+        const runs = followRunsOf(live);
+        const runId = runs.length >= 2 ? followedRunNow(live) : null;
+        const run = runId ? runs.find(r => r.id === runId) : undefined;
         const kind = scope || !followActive() ? null
             : pausedByUser ? 'follow'
-                : followMapPaused() && TreeRenderer.getViewMode() === 'map' ? 'map' : null;
+                : followMapPaused() && TreeRenderer.getViewMode() === 'map' ? 'map'
+                    : run ? 'pick' : null;
+        const phone = isPhoneBar();
+        const name = run && live ? runName(run, live.researches) : '';
+        const stamp = `${kind}|${name}|${phone}`;
         let pill = document.getElementById('live-follow-pill');
-        if (pill && pill.dataset.kind !== kind) {
+        if (pill && pill.dataset.stamp !== stamp) {
             pill.remove();
             pill = null;
+            closeRunMenu();
         }
         if (!kind || pill) return;
         const L = strings.live;
-        pill = el('div', `evidence-pill live-follow-pill${kind === 'map' ? ' live-follow-pill--map' : ''}`);
+        pill = el('div', `evidence-pill live-follow-pill${kind === 'map' ? ' live-follow-pill--map' : kind === 'pick' ? ' live-follow-pill--pick' : ''}`);
         pill.id = 'live-follow-pill';
         pill.dataset.kind = kind;
+        pill.dataset.stamp = stamp;
+        if (run) pill.dataset.run = run.id;
         pill.setAttribute('role', 'status');
-        if (kind === 'map') pill.appendChild(el('span', 'live-follow-pill__mark', '◎')).setAttribute('aria-hidden', 'true');
-        pill.appendChild(el('span', 'evidence-pill-label', kind === 'map' ? L.mapPaused : L.followPaused));
-        const back = el('button', 'evidence-pill-next live-follow-back', L.followBack);
-        back.type = 'button';
-        back.onclick = () => (kind === 'map' ? this.resumeMapFollow() : this.resumeLiveFollow());
+        if (kind === 'pick') {
+            const what = el('span', 'evidence-pill-pick-text');
+            what.append(`${L.followRunPill} `, el('b', undefined, name));
+            if (phone) {
+                // The phone says which run it follows; the choice is on a larger screen (§7, 7e).
+                const label = el('span', 'evidence-pill-label');
+                label.appendChild(what);
+                label.title = `${L.followRunPill} ${name}`;
+                pill.appendChild(label);
+            } else {
+                const pick = el('button', 'evidence-pill-label evidence-pill-label--pick');
+                pick.type = 'button';
+                pick.setAttribute('aria-haspopup', 'menu');
+                pick.setAttribute('aria-expanded', 'false');
+                pick.setAttribute('aria-label', L.followRunAria(name));
+                pick.title = `${L.followRunPill} ${name}`;
+                const chev = el('span', 'evidence-pill-pick-chev', '▾');
+                chev.setAttribute('aria-hidden', 'true');
+                pick.append(what, chev);
+                pick.onclick = () => this.openFollowRunMenu(pick);
+                pill.appendChild(pick);
+            }
+        } else {
+            if (kind === 'map') pill.appendChild(el('span', 'live-follow-pill__mark', '◎')).setAttribute('aria-hidden', 'true');
+            pill.appendChild(el('span', 'evidence-pill-label', kind === 'map' ? L.mapPaused : L.followPaused));
+            const back = el('button', 'evidence-pill-next live-follow-back', L.followBack);
+            back.type = 'button';
+            back.onclick = () => (kind === 'map' ? this.resumeMapFollow() : this.resumeLiveFollow());
+            pill.appendChild(back);
+            // Two or more runs: the run followed, muted, after Back to the agent.
+            if (name) pill.appendChild(el('span', 'live-follow-pill__run', name));
+        }
         const close = el('button', 'evidence-pill-close', '×');
         close.type = 'button';
         close.setAttribute('aria-label', L.followOff);
         close.title = L.followOff;
         close.onclick = () => this.setLiveFollow(false);
-        pill.append(back, close);
+        pill.append(close);
         document.body.appendChild(pill);
+    },
+
+    /**
+     * The runs to follow (spec 126 U10 §7, 7b): a row per run that is not ended, in Now's order ("1 · Whole
+     * queue", "↑ 2 · Kubíčkovi z Dolní Lhoty", under it the agent and the person), the run followed drawn by
+     * the selection line, a waiting run grey with what it waits for; at the end "Stop following here".
+     */
+    openFollowRunMenu(anchor: HTMLElement, from?: LiveSession, followedId?: string | null): void {
+        const again = runMenu?.anchor === anchor;
+        closeRunMenu();
+        if (again) return;
+        const s = from ?? liveSession();
+        const runs = followRunsOf(s);
+        if (!s || runs.length < 2) return;
+        const L = strings.live;
+        const followed = followedId !== undefined ? followedId : followedRunNow(s);
+        const { numbers } = runNumbers(runs);
+        const persons = Object.values(DataManager.getData().persons);
+        const menu = el('div', 'live-follow-run-menu');
+        menu.setAttribute('role', 'menu');
+        menu.setAttribute('aria-label', L.followRunMenu);
+        menu.appendChild(el('div', 'live-follow-run-menu__head', L.followRunMenu)).setAttribute('aria-hidden', 'true');
+        for (const r of runs) {
+            const n = numbers.get(r.id) ?? 0;
+            const item = el('button', `live-follow-run-menu__item sel-opt${r.state === 'waiting' ? ' is-wait' : ''}`);
+            item.type = 'button';
+            item.dataset.selForm = 'row';
+            item.dataset.run = r.id;
+            item.setAttribute('role', 'menuitemradio');
+            item.setAttribute('aria-checked', String(r.id === followed));
+            const head = el('span', 'live-follow-run-menu__name');
+            head.append(el('span', 'live-follow-run-menu__num', runLabel(r, n)), ` · ${runName(r, s.researches)}`);
+            const w = r.workers.find(x => !x.paused && x.person) ?? r.workers[0];
+            const who = w?.person ? persons.find(p => p.refn === w.person) : undefined;
+            const sub = r.state === 'waiting' ? runWaitText(r)
+                : [r.agentName || w?.who || '', who ? shownName(who) : ''].filter(Boolean).join(' · ');
+            item.appendChild(head);
+            if (sub) item.appendChild(el('span', 'live-follow-run-menu__sub', sub));
+            item.onclick = () => {
+                closeRunMenu();
+                this.setFollowedRun(r.id);
+            };
+            menu.appendChild(item);
+        }
+        menu.appendChild(el('div', 'live-follow-run-menu__sep')).setAttribute('role', 'separator');
+        const off = el('button', 'live-follow-run-menu__off', L.followOff);
+        off.type = 'button';
+        off.setAttribute('role', 'menuitem');
+        off.onclick = () => {
+            closeRunMenu();
+            this.setLiveFollow(false);
+        };
+        menu.appendChild(off);
+        document.body.appendChild(menu);
+        const r = anchor.getBoundingClientRect();
+        const w = menu.offsetWidth;
+        menu.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - w - 8)))}px`;
+        menu.style.top = `${Math.round(r.bottom + 6)}px`;
+        anchor.setAttribute('aria-expanded', 'true');
+        const items = (): HTMLElement[] => [...menu.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
+        (items().find(i => i.getAttribute('aria-checked') === 'true') ?? items()[0])?.focus({ preventScroll: true });
+        const ac = new AbortController();
+        runMenu = { el: menu, anchor, ac };
+        menu.addEventListener('keydown', (e) => {
+            const list = items();
+            const at = list.indexOf(document.activeElement as HTMLElement);
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeRunMenu();
+                anchor.focus({ preventScroll: true });
+            } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                list[(at + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length]?.focus();
+            }
+        }, { signal: ac.signal });
+        // A click outside (after this one is over) closes it.
+        setTimeout(() => document.addEventListener('pointerdown', (e) => {
+            const t = e.target as Node;
+            if (!menu.contains(t) && !anchor.contains(t)) closeRunMenu();
+        }, { signal: ac.signal }), 0);
+    },
+
+    /** The run followed now (spec 126 U10 §7; null: no runs to choose from). */
+    followedRun(): string | null {
+        return followedRunNow();
+    },
+
+    /**
+     * Follow this run (Now, the pill, the overview's window): it takes the primary colour and following
+     * goes to its person at once. In this window's memory only; another window asks the main one.
+     */
+    setFollowedRun(id: string | null): void {
+        if (agentMirror()) return;
+        chosenRunId = id;
+        lastFollowedRun = followedRunNow();
+        // The marks take the colours of the run followed, Now and the other windows say it (a redraw of the panel).
+        this.refreshFollowMarks(new Set());
+        this.renderLivePanel();
+        this.renderLiveFollowPill();
+        if (!followActive() || pausedByUser) return;
+        if (followSession()?.view === 'map' && TreeRenderer.getViewMode() === 'map') this.mapFollowPan(true);
+        this.followJump(true);
     },
 
     /** Following paused here (by hand, or the map's panning while the map is shown). */

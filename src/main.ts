@@ -445,7 +445,8 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     mirror.onChange((changed) => {
         UI.agentMirrorApplied(changed);
         // Whom the agent works on, the bridge lost or back: following here and the strip look again.
-        if (changed.includes('live')) {
+        // The run followed chosen in the main window (spec 126 U10 §7): the marks and the jump follow it.
+        if (changed.includes('live') || changed.includes('follow')) {
             UI.syncLiveFollow();
             states.update();
         }

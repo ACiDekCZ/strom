@@ -132,31 +132,31 @@ export function workPlaceId(w: WorkPlace): string {
  */
 export function trailStrength(
     trail: readonly TrailEntry[], spotOf: (e: TrailEntry) => string | null, skip: ReadonlySet<string> = new Set(),
-): Map<string, { opacity: number; session: number }> {
-    const out = new Map<string, { opacity: number; session: number; n: number }>();
+): Map<string, { opacity: number; session: number; runId?: string }> {
+    const out = new Map<string, { opacity: number; session: number; runId?: string; n: number }>();
     trail.forEach((e, i) => {
         const spot = spotOf(e);
         if (!spot || skip.has(spot)) return;
         const o = trailOpacity(i);
         const had = out.get(spot);
-        if (!had) out.set(spot, { opacity: o, session: e.session, n: 1 });
+        if (!had) out.set(spot, { opacity: o, session: e.session, ...(e.runId ? { runId: e.runId } : {}), n: 1 });
         else {
             had.n++;
             had.opacity = Math.min(trailOpacity(0), Math.max(had.opacity, o) + 0.1);
         }
     });
-    return new Map([...out].map(([k, v]) => [k, { opacity: Math.round(v.opacity * 100) / 100, session: v.session }]));
+    return new Map([...out].map(([k, v]) => [k, { opacity: Math.round(v.opacity * 100) / 100, session: v.session, ...(v.runId ? { runId: v.runId } : {}) }]));
 }
 
 /** A dot of the map's trail. */
-export interface MapTrailDot { key: string; geo: GeoPoint; opacity: number; session: number }
+export interface MapTrailDot { key: string; geo: GeoPoint; opacity: number; session: number; runId?: string }
 
 /** The map's trail: places with a position, the ones worked on now left out. */
 export function mapTrailDots(trail: readonly TrailEntry[], current: ReadonlySet<string>): MapTrailDot[] {
     const geoOf = new Map<string, GeoPoint>();
     for (const e of trail) if (e.placeKey && e.geo && !geoOf.has(e.placeKey)) geoOf.set(e.placeKey, e.geo);
     const strength = trailStrength(trail, e => (e.placeKey && e.geo ? e.placeKey : null), current);
-    return [...strength].map(([key, v]) => ({ key, geo: geoOf.get(key)!, opacity: v.opacity, session: v.session }));
+    return [...strength].map(([key, v]) => ({ key, geo: geoOf.get(key)!, opacity: v.opacity, session: v.session, ...(v.runId ? { runId: v.runId } : {}) }));
 }
 
 /**
@@ -165,10 +165,10 @@ export function mapTrailDots(trail: readonly TrailEntry[], current: ReadonlySet<
  * position are skipped, the same place twice in a row is one.
  */
 export function mapTrailLines(
-    trail: readonly TrailEntry[], now: ReadonlyMap<number, { key: string; geo: GeoPoint }>,
-): Array<{ session: number; from: GeoPoint; to: GeoPoint }> {
+    trail: readonly TrailEntry[], now: ReadonlyMap<number, { key: string; geo: GeoPoint; runId?: string }>,
+): Array<{ session: number; runId?: string; from: GeoPoint; to: GeoPoint }> {
     const sessions = new Set<number>([...trail.map(e => e.session), ...now.keys()]);
-    const out: Array<{ session: number; from: GeoPoint; to: GeoPoint }> = [];
+    const out: Array<{ session: number; runId?: string; from: GeoPoint; to: GeoPoint }> = [];
     for (const s of [...sessions].sort((a, b) => a - b)) {
         const steps: Array<{ key: string; geo: GeoPoint }> = [];
         for (const e of [...trail].reverse()) {
@@ -176,9 +176,10 @@ export function mapTrailLines(
         }
         const cur = now.get(s);
         if (cur) steps.push(cur);
+        const runId = cur?.runId ?? trail.find(e => e.session === s)?.runId;
         for (let i = 1; i < steps.length; i++) {
             if (steps[i].key === steps[i - 1].key) continue;
-            out.push({ session: s, from: steps[i - 1].geo, to: steps[i].geo });
+            out.push({ session: s, ...(runId ? { runId } : {}), from: steps[i - 1].geo, to: steps[i].geo });
         }
     }
     return out;

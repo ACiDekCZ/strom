@@ -77,8 +77,8 @@ export interface OverviewExtras {
     agentless: boolean;
     /** No agent known to work now (agentless, or its mode not known yet). */
     noAgent: boolean;
-    /** ◎ following in the tree and the view it runs in. */
-    follow: { on: boolean; view: 'family' | 'fan' | 'map' | null };
+    /** ◎ following in the tree and the view it runs in; the run followed (spec 126 U10 §7; absent or null: none). */
+    follow: { on: boolean; view: 'family' | 'fan' | 'map' | null; run?: string | null };
     lines: OverviewLinesState;
     /** Hypotheses asked of the research and waiting for its answer, and the list of proposals accepted at once. */
     hypotheses: { pending: Record<string, unknown>; batch: unknown | null };
@@ -339,6 +339,8 @@ export type OverviewAction =
     | { action: 'follow-tree'; args: { on: boolean } }
     /** "Follow in: Family / Fan / Map". */
     | { action: 'follow-view'; args: { view: 'family' | 'fan' | 'map' } }
+    /** Follow this run (spec 126 U10 §7): its people take the primary colour, following goes to it. */
+    | { action: 'follow-run'; args: { run: string } }
     /** Turn on (the research not running): the switch as today. */
     | { action: 'turn-on'; args?: Record<string, never> }
     /** A line selected for the queue and the tree's light ('all': none). */
@@ -397,7 +399,7 @@ export type OverviewActionArgs<T extends OverviewActionId> = Extract<OverviewAct
 export const OVERVIEW_ACTION_IDS = [
     'show-person', 'show-people', 'show-direction', 'direction-found', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
     'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings', 'books-settings', 'runs-settings',
-    'hover-person', 'verify-stop', 'run-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'turn-on',
+    'hover-person', 'verify-stop', 'run-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'follow-run', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
     'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-retry', 'waiting-file', 'waiting-audit', 'waiting-aside',
     'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
@@ -492,7 +494,8 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
             return { action, args: { itemId: a.itemId, ...(a.files ? { files: a.files as File[] } : {}) } };
         }
         case 'run-stop':
-            return str(a.run) ? { action, args: { run: a.run } } : null;
+        case 'follow-run':
+            return str(a.run) ? { action, args: { run: a.run } } as OverviewAction : null;
         case 'highlight-end':
             return str(a.kind) ? { action, args: { kind: a.kind } } : null;
         case 'hover-person':

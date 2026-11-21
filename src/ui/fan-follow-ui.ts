@@ -17,11 +17,11 @@ import { shownNameFull } from '../person-name.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { FOCUS_R, FanModel } from '../fan-chart.js';
 import { findFanAnchor, fanPeople, FanAnchor } from '../fan-follow-anchor.js';
-import { FollowTarget, sessionTone } from '../live-follow-targets.js';
+import { FollowTarget, leadFirst } from '../live-follow-targets.js';
 import { trailStrength } from '../live-follow-map.js';
 import { getFollowTrail } from '../live-follow-prefs.js';
 import { uiModule } from './module.js';
-import { currentFollowTargets, followNumbered, followPinned, followTrail, takeFanArrival } from './live-follow-ui.js';
+import { currentFollowTargets, followNumbered, followPinned, followTone, followTrail, takeFanArrival } from './live-follow-ui.js';
 import type { FanMenuItemId } from './fan-view.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -116,6 +116,11 @@ interface ChipGroup {
 }
 
 /** One signal: two rounds of 750 ms (index.html `fan-work-pulse`). */
+/** Half the width (screen px) of a number's mark: a circle for "1"/"12", a pill for a run's "↑ 2". */
+function numHalf(label: string): number {
+    return label.length <= 2 ? 8.5 : Math.max(8.5, label.length * 3.4 + 5);
+}
+
 const PULSE_MS = 1500;
 /** Row of working[] → when its signal started (a redraw meanwhile carries it on, not anew). */
 const pulsing = new Map<number, number>();
@@ -191,7 +196,7 @@ export const fanFollowMethods = uiModule({
             };
             for (const [key, v] of trailStrength(trail, e => spotOf(e.personId), now)) {
                 const el = svg.querySelector<SVGElement>(`[data-fan-key="${key}"]`);
-                const attrs = { class: `fan-trail follow-${sessionTone(v.session)}`, style: `--trail-o: ${v.opacity}` };
+                const attrs = { class: `fan-trail follow-${followTone(v)}`, style: `--trail-o: ${v.opacity}` };
                 let shape: SVGElement | null = null;
                 if (key === 'f') shape = svgEl('circle', { ...attrs, cx: 0, cy: 0, r: FOCUS_R });
                 else {
@@ -219,9 +224,9 @@ export const fanFollowMethods = uiModule({
         const { W, H } = zoom.size();
 
         for (const [pid, list] of byPerson) {
-            list.sort((a, b) => a.session - b.session);
+            list.sort(leadFirst);
             const lead = list[0];
-            const tone = sessionTone(lead.session);
+            const tone = lead.tone;
             const { first, repeats } = keysOf(model, pid);
             if (!first) {
                 const anchor = anchorOf(model, pid, visible);
@@ -278,7 +283,7 @@ export const fanFollowMethods = uiModule({
             const g = first === 'f' ? null : sectorGeom(model, first);
             const a = g ? ((g.lo + g.hi) / 2) * Math.PI / 180 : Math.PI / 2;
             const narrow = !!g && g.r2 * (g.hi - g.lo) * Math.PI / 180 * ppu < NARROW_PX;
-            const nums = numbered ? list.map(t => t.session) : [];
+            const nums = numbered ? list : [];
             if (g && narrow) {
                 const rt = g.desc ? model.Rd : model.R;
                 const r0 = rt + px(4), r1 = rt + px(26);
@@ -289,16 +294,23 @@ export const fanFollowMethods = uiModule({
                 }));
                 if (!nums.length) pin.appendChild(svgEl('circle', { cx: r1 * Math.cos(a), cy: -r1 * Math.sin(a), r: px(4.5) }));
                 layer.appendChild(pin);
-                nums.forEach((n, i) => {
-                    const rr = r1 + px(4 + i * 18);
+                let along = 4;
+                nums.forEach(n => {
+                    const half = numHalf(n.label);
+                    const rr = r1 + px(along + half - 8.5);
+                    along += half * 2 + 1;
                     layer.appendChild(this.fanFollowNumber(n, rr * Math.cos(a), -rr * Math.sin(a), ppu));
                 });
             } else if (nums.length) {
                 const rr = g ? g.r2 - px(12) : FOCUS_R - px(14);
                 const cx = g ? rr * Math.cos(a) : 0, cy = g ? -rr * Math.sin(a) : -rr;
+                const widths = nums.map(n => numHalf(n.label) * 2 + 2);
+                const total = widths.reduce((a, b) => a + b, 0);
+                let start = -total / 2;
                 nums.forEach((n, i) => {
                     // Two sessions on one person: the numbers side by side.
-                    const off = (i - (nums.length - 1) / 2) * px(19);
+                    const off = px(start + widths[i] / 2);
+                    start += widths[i];
                     const tx = g ? -Math.sin(a) * off : off, ty = g ? -Math.cos(a) * off : 0;
                     layer.appendChild(this.fanFollowNumber(n, cx + tx, cy + ty, ppu));
                 });
@@ -323,14 +335,24 @@ export const fanFollowMethods = uiModule({
         this.fanFollowChips(overlay, model, outside, numbered, W, H);
     },
 
-    /** A session number in the fan (a circle in its colour, the number in the surface's colour). */
-    fanFollowNumber(n: number, x: number, y: number, ppu: number): SVGElement {
-        const g = svgEl('g', { class: `fan-work-num follow-${sessionTone(n)}` });
-        g.appendChild(svgEl('circle', { cx: x, cy: y, r: 8.5 / ppu, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }));
+    /**
+     * A session number in the fan (a circle in its colour, the number in the surface's colour); a run's
+     * label ("↑ 2", spec 126 U10 §7) in a pill as wide as it needs.
+     */
+    fanFollowNumber(n: Pick<FollowTarget, 'label' | 'tone'>, x: number, y: number, ppu: number): SVGElement {
+        const g = svgEl('g', { class: `fan-work-num follow-${n.tone}` });
+        const half = numHalf(n.label);
+        if (half <= 8.5) g.appendChild(svgEl('circle', { cx: x, cy: y, r: 8.5 / ppu, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }));
+        else {
+            g.appendChild(svgEl('rect', {
+                x: x - half / ppu, y: y - 8.5 / ppu, width: (half * 2) / ppu, height: 17 / ppu, rx: 8.5 / ppu,
+                'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke',
+            }));
+        }
         const t = svgEl('text', {
             x, y, 'font-size': 11 / ppu, 'font-weight': 700, 'text-anchor': 'middle', 'dominant-baseline': 'central',
         });
-        t.textContent = String(n);
+        t.textContent = n.label;
         g.appendChild(t);
         return g;
     },
@@ -349,7 +371,7 @@ export const fanFollowMethods = uiModule({
             const btn = htmlEl('button', 'fan-follow-edge');
             btn.type = 'button';
             btn.setAttribute('data-follow-session', String(lead.session));
-            btn.classList.add(`follow-${sessionTone(lead.session)}`);
+            btn.classList.add(`follow-${lead.tone}`);
             btn.setAttribute('aria-label', strings.fan.edgeGo(name));
             btn.title = strings.fan.edgeGo(name);
             btn.append(htmlEl('span', 'fan-follow-edge-dot', arrowFor(pt.x - W / 2, pt.y - H / 2)), htmlEl('span', 'fan-follow-edge-name', name));
@@ -422,13 +444,13 @@ export const fanFollowMethods = uiModule({
         };
 
         for (const g of groups.values()) {
-            const lead = g.entries.map(e => e.targets[0]).sort((a, b) => a.session - b.session)[0];
-            const tone = sessionTone(lead.session);
+            const lead = g.entries.map(e => e.targets[0]).sort(leadFirst)[0];
+            const tone = lead.tone;
             const chip = htmlEl('button', `fan-follow-chip follow-${tone}`);
             chip.type = 'button';
             chip.setAttribute('data-follow-session', String(lead.session));
             if (g.anchorId) chip.setAttribute('data-anchor', g.anchorId);
-            const mark = numbered ? htmlEl('span', 'fan-follow-chip-num', String(lead.session)) : htmlEl('span', 'fan-follow-chip-dot');
+            const mark = numbered ? htmlEl('span', `fan-follow-chip-num${lead.label.length > 2 ? ' is-wide' : ''}`, lead.label) : htmlEl('span', 'fan-follow-chip-dot');
             mark.setAttribute('aria-hidden', 'true');
             const text = htmlEl('span', 'fan-follow-chip-text');
             const head = htmlEl('span', 'fan-follow-chip-head');

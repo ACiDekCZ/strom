@@ -1284,6 +1284,12 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         runStopFailed: 'Nie udało się zatrzymać agenta.',
         runStopFailedSaid: (t: string) => `Nie udało się zatrzymać agenta: „${t}”`,
         runAfterStop: 'Linię znowu bierze cała kolejka.',
+        // Śledzenie jednego z przebiegów (spec 126 U10 §7).
+        runFollow: 'Śledź ten przebieg',
+        runFollowed: 'Śledzony',
+        followRunPill: 'Śledzony:',
+        followRunMenu: 'Śledź przebieg',
+        followRunAria: (name: string) => `Śledzony przebieg: ${name}, zmień`,
         // Cała kolejka obok własnych przebiegów linii (spec 126 U10 §6).
         queueLineRunNote: (a: string) => `robi je własny agent linii (${a})`,
         queueLineRunShow: 'Pokaż ›',
