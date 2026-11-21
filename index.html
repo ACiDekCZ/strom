@@ -25444,6 +25444,28 @@
         @media (hover: hover) { .evidence-pill-label--pick:hover { background: var(--hover-bg); } }
         .evidence-pill-label--pick:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         @media (pointer: coarse) { .evidence-pill-label--pick { min-height: 44px; } }
+        /* "Hide others" of the window's selection (spec 098 §8): a .sel-opt with a check box after a thin rule. */
+        .evidence-pill-sep { flex: none; width: 1px; height: 20px; margin: 0 2px; background: var(--divider); }
+        .evidence-pill-hide {
+            flex: none; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; box-sizing: border-box;
+            font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
+        }
+        .evidence-pill-hide .bx {
+            flex: none; display: grid; place-items: center; width: 14px; height: 14px; box-sizing: border-box;
+            border: 1.5px solid var(--text-faint); border-radius: var(--r-sm); color: transparent; font-size: 10px; line-height: 1;
+        }
+        .evidence-pill-hide[aria-pressed="true"] .bx { border-color: var(--text); background: var(--text); color: var(--surface); }
+        @media (hover: hover) { .evidence-pill-hide:hover { border-color: var(--text-faint); } }
+        @media (pointer: coarse) { .evidence-pill-hide.sel-opt { min-height: 44px; } }
+        /* The fan lays out no tree: no "Hide others" there (§11). */
+        body[data-view-mode="fan"] :is(.evidence-pill-sep, .evidence-pill-hide) { display: none; }
+        /* The focused person outside the selection (§9): undimmed, a tag on the card's top edge. */
+        .person-card > .card-tag--outside {
+            position: absolute; top: -11px; left: 10px; z-index: 3; height: 17px; box-sizing: border-box;
+            display: inline-flex; align-items: center; padding: 0 6px; pointer-events: none;
+            font-family: var(--font-sans); font-size: 10.5px; font-weight: 600; line-height: 1; white-space: nowrap;
+            color: var(--text); background: var(--surface); border: 1px solid var(--text-faint); border-radius: var(--r-tag);
+        }
         .evidence-pill-next, .evidence-pill-cite, .evidence-pill-sources, .evidence-pill-close {
             flex: none; height: 30px; padding: 0 10px; cursor: pointer; border: 0; border-radius: var(--r-sm);
             background: none; color: var(--primary); font: inherit; font-size: 13px; font-weight: 500;
@@ -25466,6 +25488,17 @@
             }
             .evidence-pill-label { flex: 1; }
             .evidence-pill-next, .evidence-pill-cite, .evidence-pill-sources, .evidence-pill-close { height: 40px; min-width: 40px; }
+        }
+        /* Phones (§10): one row as before; "Hide others" only its box (the words stay its accessible name), a
+           44 px target — a second row would stand taller than the gap between two rows of cards, so the pill
+           could no longer keep clear of them (spec 039). */
+        @media (max-width: 640px) {
+            .evidence-pill--sel .evidence-pill-sep { display: none; }
+            .evidence-pill--sel .evidence-pill-hide { width: 44px; height: 44px; padding: 0; justify-content: center; }
+            .evidence-pill--sel .evidence-pill-hide .bx { width: 18px; height: 18px; font-size: 12px; }
+            .evidence-pill--sel .evidence-pill-hide-t {
+                position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+            }
         }
 
         /* The tree's photos on their way, "Photos k / n" (spec 116 §6, src/ui/image-load-chip.ts): quieter than the

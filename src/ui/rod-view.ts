@@ -10,8 +10,8 @@
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { LineageIndex, RodId, rods } from '../lineage.js';
-import { rodFocusTarget } from '../rod-focus.js';
+import { LineageIndex, RodId, realRodMembers, rods } from '../lineage.js';
+import { selectionFocusTarget } from '../rod-focus.js';
 import { RodPickerItem, rodPickerHtml, rodPickerItems, rodPickerSmallItems } from '../rod-picker.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { showFocusToast } from '../focus-toast.js';
@@ -19,7 +19,7 @@ import { shownNameFull } from '../person-name.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { TreeManager } from '../tree-manager.js';
 import type { PersonId, TreeId } from '../types.js';
-import { encodeSelectionRef, type SelectionRef } from '../view-selection.js';
+import { encodeSelectionRef, selectionPersonIds, type SelectionRef } from '../view-selection.js';
 import { wireRodPicker } from './rod-picker-ui.js';
 import type { HighlightGroup } from './evidence-ui.js';
 import { uiModule } from './module.js';
@@ -132,6 +132,9 @@ export const rodViewMethods = uiModule({
     /** The choice or the data changed: the toolbar's choice and the fan's legend follow. */
     rodViewChanged(): void {
         this.syncSelectionPickerHost();
+        // "Hide others" (§8): the layout and the pill's switch follow
+        this.syncPersonFilter();
+        if (this.evidenceHighlightKind() === 'selection') this.renderEvidencePill();
         const sel = getSelectedRod();
         if (sel !== legendRod) {
             legendRod = sel;
@@ -139,29 +142,44 @@ export const rodViewMethods = uiModule({
         }
     },
 
-    /** After a choice: the focus to one of the selection's people when none is drawn (a family line, spec 039 §4.4). */
-    moveFocusToSelection(ref: SelectionRef): void {
-        if (ref.kind === 'rod') this.moveFocusToRod(ref.rodId);
-    },
-
     /**
-     * §4.4: none of the line's members drawn — the focus to the nearest one
-     * (the founder in Descendants), a step of the history, "↩ Back".
+     * After a choice (spec 039 §4.4, spec 098 §9): none of the selection's
+     * people drawn — the focus to the nearest one (in Descendants to the
+     * family line's founder, the person whose ancestors or descendants they
+     * are, else the one born first), a step of the history, "↩ Back".
      */
-    moveFocusToRod(id: RodId): void {
+    moveFocusToSelection(ref: SelectionRef): void {
         const view = TreeRenderer.getViewMode();
         if (view === 'timeline' || view === 'map' || view === 'table') return;
+        const { index } = rodIndex();
+        const data = DataManager.getData();
+        let members: PersonId[];
+        let root: PersonId | null = null;
+        if (ref.kind === 'rod') {
+            const rod = index.rods.get(ref.rodId);
+            if (!rod) return;
+            members = realRodMembers(index, ref.rodId);
+            root = data.persons[rod.founderId] ? rod.founderId : null;
+        } else {
+            members = [...(selectionPersonIds(data, index, ref) ?? [])];
+            if (ref.kind === 'ancestors' || ref.kind === 'descendants') root = ref.personId;
+        }
         const drawn: ReadonlySet<PersonId> = view === 'fan'
             ? new Set([...document.querySelectorAll<HTMLElement>('[data-fan-person]')].map(el => (el.dataset.fanPerson ?? '') as PersonId))
             : TreeRenderer.getVisiblePersonIds({ includeView: true });
-        const target = rodFocusTarget(rodIndex().index, id, TreeRenderer.getFocusPersonId(), drawn, view);
+        const target = selectionFocusTarget(data, members, root, TreeRenderer.getFocusPersonId(), drawn, view);
         if (!target) return;
         const person = DataManager.getPerson(target);
         if (!person) return;
-        const label = selectionText({ kind: 'rod', rodId: id });
+        const label = selectionText(ref);
         void TreeRenderer.setFocus(target).then(() => {
             if (TreeRenderer.getFocusPersonId() !== target || !TreeRenderer.canGoBack()) return;
             showFocusToast(shownNameFull(person, '?'), () => { void TreeRenderer.goBack(); }, (n) => strings.selection.moved(n, label));
         });
+    },
+
+    /** A family line chosen (§4.4): moveFocusToSelection of it. */
+    moveFocusToRod(id: RodId): void {
+        this.moveFocusToSelection({ kind: 'rod', rodId: id });
     },
 });

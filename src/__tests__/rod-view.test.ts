@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildLineages, rodOf, RodId, LineageIndex, rodLabels, rods } from '../lineage.js';
-import { rodFocusTarget } from '../rod-focus.js';
+import { rodFocusTarget, selectionFocusTarget } from '../rod-focus.js';
 import { rodPickerHtml, rodPickerItems, rodPickerSmallItems } from '../rod-picker.js';
 import { sortRods } from '../rods-overview.js';
 import { StromData, PersonId, Person, Partnership, PartnershipId } from '../types.js';
@@ -82,6 +82,31 @@ describe('the focus move of a chosen line (§4.4)', () => {
     it('Descendants: the founder; a line not connected to the focus: the founder', () => {
         expect(rodFocusTarget(idx, rod, P('bolemir'), new Set([P('bolemir')]), 'descendants')).toBe(P('hostivit'));
         expect(rodFocusTarget(idx, rod, P('vratislav'), new Set([P('vratislav')]), 'family')).toBe(P('hostivit'));
+    });
+});
+
+describe('the focus move of any selection (spec 098 §9)', () => {
+    const data = brumlak();
+
+    it('a list: stays while one of it is drawn; else its nearest person, a tie to the one born first', () => {
+        const list = [P('bozetech'), P('bolemir')];
+        expect(selectionFocusTarget(data, list, null, P('borivoj'), new Set([P('borivoj'), P('bozetech')]), 'family')).toBeNull();
+        expect(selectionFocusTarget(data, list, null, P('borivoj'), new Set([P('borivoj')]), 'family')).toBe(P('bozetech'));
+        expect(selectionFocusTarget(data, list, null, P('hostivit'), new Set([P('hostivit')]), 'fan')).toBe(P('bolemir'));
+    });
+
+    it('nobody connected to the focus, or Descendants: the root, else the one born first', () => {
+        const list = [P('bozetech'), P('bolemir')];
+        expect(selectionFocusTarget(data, list, null, P('vratislav'), new Set([P('vratislav')]), 'family')).toBe(P('bolemir'));
+        expect(selectionFocusTarget(data, list, P('borivoj'), P('vratislav'), new Set([P('vratislav')]), 'descendants')).toBe(P('borivoj'));
+        // Ancestors of Bolemír chosen in Descendants: to Bolemír himself
+        expect(selectionFocusTarget(data, [P('spytihnev'), P('radoslava')], P('bolemir'), P('vratislav'), new Set([P('vratislav')]), 'descendants'))
+            .toBe(P('bolemir'));
+    });
+
+    it('an empty selection or the focus itself the target: no move', () => {
+        expect(selectionFocusTarget(data, [], null, P('borivoj'), new Set(), 'family')).toBeNull();
+        expect(selectionFocusTarget(data, [P('borivoj')], null, P('borivoj'), new Set(), 'family')).toBeNull();
     });
 });
 

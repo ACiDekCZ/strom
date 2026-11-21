@@ -590,6 +590,8 @@ class TreeRendererClass {
      * localStorage.
      */
     private viewMode: ViewMode = 'family';
+    /** "Hide others" of the window's selection (spec 098 §8, setPersonFilter): the people laid out, null: everyone. */
+    private personFilter: ReadonlySet<PersonId> | null = null;
     /** A satellite window's one view (setWindowView), else null. */
     private windowView: ViewMode | null = null;
 
@@ -1342,6 +1344,8 @@ class TreeRendererClass {
                 ? { showPartnersOf: this.partnersShownIds.filter(id => !this.partnersShownUnions.has(id)) } : {}),
             ...(!descendantsOnly && this.partnersShownUnions.size > 0
                 ? { showPartnerUnions: this.partnersShownIds.flatMap(id => this.partnersShownUnions.get(id) ?? []) } : {}),
+            // "Hide others" (spec 098 §8): the screen's own layout only (the outputs draw the whole view)
+            ...(debug && this.personFilterOn() ? { personFilter: this.personFilter! } : {}),
         };
 
         // The screen's own layout: a step of children and siblings at once counts with it
@@ -2159,9 +2163,62 @@ class TreeRendererClass {
         };
     }
 
+    /**
+     * "Hide others" of the window's selection (spec 098 §8): the tree laid
+     * out anew from these people alone (the focus always with them,
+     * PipelineInput.personFilter), in Family and Descendants; null: everyone.
+     * The tabs of hidden relatives and children and siblings at once count
+     * only these people (tabInView).
+     */
+    setPersonFilter(ids: ReadonlySet<PersonId> | null): void {
+        const before = this.personFilter;
+        if (before === ids || (before && ids && before.size === ids.size && [...ids].every(id => before.has(id)))) return;
+        this.personFilter = ids ? new Set(ids) : null;
+        if (this.viewMode === 'family' || this.viewMode === 'descendants') void this.renderForFilter();
+    }
+
+    /**
+     * Laid out anew for "Hide others": the card nearest the screen's middle
+     * stays in its place when it is still drawn, else the focus (always
+     * drawn); the zoom does not change.
+     */
+    private async renderForFilter(): Promise<void> {
+        const kept = (id: PersonId): boolean => !this.personFilter || this.personFilter.has(id) || id === this.focusPersonId;
+        const near = this.viewAnchorCard();
+        const focus = this.focusPersonId && this.positions.has(this.focusPersonId) ? this.focusPersonId : null;
+        const anchorId = near && kept(near) ? near : focus;
+        const box = anchorId ? this.cardBox(anchorId) : null;
+        const beforeAll = new Map(this.positions);
+        await this.renderInternal();
+        if (anchorId && box && this.positions.has(anchorId)) {
+            this.keepCardInPlace(anchorId, beforeAll, false, { w: box.right - box.left, h: box.bottom - box.top });
+        } else if (beforeAll.size > 0) this.centerForViewMode();
+    }
+
+    getPersonFilter(): ReadonlySet<PersonId> | null {
+        return this.personFilter;
+    }
+
+    /** The filter of "Hide others" applies to this view. */
+    private personFilterOn(): boolean {
+        return !!this.personFilter && (this.viewMode === 'family' || this.viewMode === 'descendants');
+    }
+
+    /** Left out by "Hide others": not of the selection (the focus never). */
+    private filteredOut(id: PersonId): boolean {
+        return this.personFilterOn() && !this.personFilter!.has(id) && id !== this.focusPersonId;
+    }
+
+    /**
+     * Drawn, or left out by "Hide others" (spec 098 §8): a relative not of the
+     * selection is no hidden relative, so the tabs on the cards and children
+     * and siblings at once count only the selection's people.
+     */
+    private readonly tabInView = (id: PersonId): boolean => this.positions.has(id) || this.filteredOut(id);
+
     /** The hidden-relatives tabs of a drawn card in this view (hiddenRelativesTabs). */
     private relativesTabs(id: PersonId, unionChildIds: ReadonlySet<PersonId>): HiddenRelativesTab[] {
-        return hiddenRelativesTabs(DataManager.getData(), id, pid => this.positions.has(pid), unionChildIds,
+        return hiddenRelativesTabs(DataManager.getData(), id, this.tabInView, unionChildIds,
             this.childrenShownSet(), this.childrenUnshowable, this.shownChildrenContext());
     }
 
@@ -2169,7 +2226,7 @@ class TreeRendererClass {
     private siblingsTab(personId: PersonId): SiblingsTabState | null {
         if (this.viewMode !== 'family' || !this.positions.has(personId)) return null;
         const data = DataManager.getData();
-        return siblingsTabState(data, personId, id => this.positions.has(id), unionChildIdSet(data),
+        return siblingsTabState(data, personId, this.tabInView, unionChildIdSet(data),
             this.childrenShownSet(), this.childrenUnshowable, this.shownChildrenContext());
     }
 
@@ -2265,7 +2322,7 @@ class TreeRendererClass {
         const data = DataManager.getData();
         const beforeAll = new Map(this.positions);
         const screenBefore = this.cardScreenCenter(personId);
-        const inView = (id: PersonId) => this.positions.has(id);
+        const inView = this.tabInView;
         const parents = (data.persons[personId]?.parentIds ?? []).filter(q => !!data.persons[q] && !data.persons[q].isPlaceholder);
         const promised = new Map(parents.map(q => [q, hiddenChildIds(data, q, inView).filter(id => id !== personId)] as const));
         const visible = new Map(parents.map(q => [q, new Set((data.persons[q]?.childIds ?? []).filter(inView))] as const));
@@ -2346,7 +2403,7 @@ class TreeRendererClass {
      */
     private partnersToShow(personId: PersonId): OfferedPartner[] {
         if (this.viewMode !== 'family') return [];
-        const inView = (id: PersonId) => this.positions.has(id);
+        const inView = this.tabInView;
         if (this.partnersShownIds.includes(personId)) return this.partnersRemaining(personId, inView);
         if (this.partnersUnshowable.has(personId)) return [];
         return this.partnerOffers(personId, inView);
@@ -2502,7 +2559,7 @@ class TreeRendererClass {
         if (this.viewMode !== 'family' || !this.positions.has(personId)) return false;
         if (this.isChildrenShown(personId)) return true;
         return !this.childrenUnshowable.has(personId)
-            && hiddenChildIds(DataManager.getData(), personId, id => this.positions.has(id)).length > 0;
+            && hiddenChildIds(DataManager.getData(), personId, this.tabInView).length > 0;
     }
 
     /**
@@ -2542,7 +2599,7 @@ class TreeRendererClass {
         const data = DataManager.getData();
         const beforeAll = new Map(this.positions);
         const screenBefore = new Map(parents.map(q => [q, this.cardScreenCenter(q)] as const));
-        const inView = (id: PersonId) => this.positions.has(id);
+        const inView = this.tabInView;
         const promised = new Map(parents.map(q => [q, hiddenChildIds(data, q, inView)] as const));
         const visible = new Map(parents.map(q => [q, new Set((data.persons[q]?.childIds ?? []).filter(inView))] as const));
         this.childrenShownIds = [...this.childrenShownIds, ...parents];
@@ -2624,7 +2681,7 @@ class TreeRendererClass {
         const cached = this.bulkPlanCache!.plans.get(key);
         if (cached) return cached;
         const data = DataManager.getData();
-        const inView = (id: PersonId) => this.positions.has(id);
+        const inView = this.tabInView;
         const family = collectBulkFamily(data, personId, inView, maxGeneration);
         const parents = bulkParents(data, family, inView, q => !this.childrenShownIds.includes(q) && !this.childrenUnshowable.has(q));
         const input = this.bulkLayoutInput(parents);
@@ -2724,7 +2781,7 @@ class TreeRendererClass {
     async showBulkFamily(personId: PersonId, source: 'a' | 'b', maxGeneration = Infinity): Promise<void> {
         const { family, parents } = this.bulkFamilyPlan(personId, maxGeneration);
         if (parents.length === 0) return;
-        const inView = (id: PersonId) => this.positions.has(id);
+        const inView = this.tabInView;
         const step: BulkStep = {
             seq: ++this.bulkSeq, source, personId, depth: this.bulkDepthKey(),
             added: bulkAddedKeys(DataManager.getData(), family, parents, inView),
@@ -3626,7 +3683,7 @@ class TreeRendererClass {
      */
     private siblingsTabHtml(personId: PersonId, shown: boolean, fullTitle: string, unionChildIds: ReadonlySet<PersonId>, nested = false): string {
         const data = DataManager.getData();
-        const inView = (id: PersonId) => this.positions.has(id);
+        const inView = this.tabInView;
         const elsewhere = this.siblingsElsewhereOf(personId);
         const aria = (shown ? strings.focus.siblingsTabHideAria : strings.focus.siblingsTabShowAria)(fullTitle);
         const tabHtml = `<button type="button" class="branch-tab sel-tab siblings-tab kind-place${shown ? ' active' : ''}" data-sel-dir="down" data-action="toggle-siblings" aria-pressed="${shown}" aria-label="${this.escapeHtml(aria)}">`
@@ -3658,7 +3715,7 @@ class TreeRendererClass {
      */
     private parentsTabHtml(personId: PersonId, shown: boolean, fullTitle: string, nested = false): string {
         const parentIds = DataManager.getPerson(personId)?.parentIds ?? [];
-        const items = this.nameGroupsHtml([{ pre: '', items: (shown ? this.shownParentsOf(personId) : parentIds.filter(q => !this.positions.has(q)))
+        const items = this.nameGroupsHtml([{ pre: '', items: (shown ? this.shownParentsOf(personId) : parentIds.filter(q => !this.tabInView(q)))
             .map(q => DataManager.getPerson(q))
             .filter((p): p is Person => p !== null && !p.isPlaceholder)
             .map(p => this.bubbleItemHtml(p)) }]);
@@ -4736,11 +4793,14 @@ class TreeRendererClass {
      * "Where evidence is missing → Show in tree": the people in `ids` get a
      * dashed frame, everyone else dims (cards and fan sectors). Null ends it.
      * Class toggling only; re-applied on every render. `faint`: people shown
-     * beside them with a lighter frame instead of dimmed.
+     * beside them with a lighter frame instead of dimmed. `selection`: the
+     * window's selection (spec 098 §9): the focus is never dimmed, outside it
+     * the card carries the tag "outside the selection".
      */
-    setEvidenceHighlight(ids: Set<PersonId> | null, faint: Set<PersonId> | null = null): void {
+    setEvidenceHighlight(ids: Set<PersonId> | null, faint: Set<PersonId> | null = null, selection = false): void {
         this.evidenceIds = ids;
         this.evidenceFaintIds = ids ? faint : null;
+        this.evidenceIsSelection = !!ids && selection;
         this.applyEvidenceHighlight();
         // The fan's legend chip names a highlighted family line (spec 114 §6).
         this.fanView?.refreshLegend();
@@ -4768,21 +4828,59 @@ class TreeRendererClass {
     }
 
     private fanRodPreview: { hit: ReadonlySet<PersonId>; faint: ReadonlySet<PersonId> } | null = null;
+    /** The highlight is the window's selection's (setEvidenceHighlight). */
+    private evidenceIsSelection = false;
 
-    /** A card's class while a group is highlighted: in it, shown faintly beside it, or dimmed. */
+    /** A card's class while a group is highlighted: in it, shown faintly beside it, or dimmed (the selection's focus never). */
     private evidenceClass(id: PersonId): string {
         if (this.evidenceIds?.has(id)) return 'evidence-hit';
-        return this.evidenceFaintIds?.has(id) ? 'evidence-faint' : 'evidence-dim';
+        if (this.evidenceFaintIds?.has(id)) return 'evidence-faint';
+        return this.evidenceIsSelection && id === this.focusPersonId ? '' : 'evidence-dim';
+    }
+
+    /**
+     * The focused person outside the window's selection (spec 098 §9): fully
+     * shown with the tag "outside the selection" on the card's top edge, said
+     * in its accessible name too. Not in the fan (its centre only undimmed).
+     */
+    private markOutsideSelection(card: HTMLElement): void {
+        const id = card.dataset.id as PersonId | undefined;
+        const outside = !!id && this.evidenceIsSelection && id === this.focusPersonId
+            && !this.evidenceIds?.has(id) && !this.evidenceFaintIds?.has(id);
+        const had = !!card.querySelector(':scope > .card-tag--outside');
+        card.classList.toggle('sel-outside', outside);
+        if (!outside && !had) delete card.dataset.ariaBase;
+        if (outside === had) return;
+        if (outside) {
+            const tag = document.createElement('span');
+            tag.className = 'card-tag card-tag--outside';
+            tag.setAttribute('aria-hidden', 'true');
+            tag.textContent = strings.selection.outside;
+            card.append(tag);
+            const name = card.getAttribute('aria-label');
+            if (name !== null) {
+                card.dataset.ariaBase = name;
+                card.setAttribute('aria-label', strings.selection.outsideAria(name));
+            }
+        } else {
+            card.querySelectorAll(':scope > .card-tag--outside').forEach(t => t.remove());
+            if (card.dataset.ariaBase !== undefined) {
+                card.setAttribute('aria-label', card.dataset.ariaBase);
+                delete card.dataset.ariaBase;
+            }
+        }
     }
 
     private applyEvidenceHighlight(): void {
         const mark = (el: Element, id: string | null | undefined): void => {
             el.classList.remove('evidence-hit', 'evidence-faint', 'evidence-dim');
             if (!this.evidenceIds || !id) return;
-            el.classList.add(this.evidenceClass(id as PersonId));
+            const cls = this.evidenceClass(id as PersonId);
+            if (cls) el.classList.add(cls);
         };
         document.querySelectorAll<HTMLElement>('.person-card').forEach(card => {
             mark(card, card.dataset.id);
+            this.markOutsideSelection(card);
             card.classList.remove('evl-full', 'evl-partial', 'evl-none');
             const level = card.dataset.id ? this.evidenceLevelMap?.get(card.dataset.id as PersonId) : undefined;
             if (level) card.classList.add(`evl-${level}`);
@@ -5337,7 +5435,7 @@ class TreeRendererClass {
                     // Shown: only the children the click brought into view
                     const ids = childrenShown
                         ? newlyShownChildIds(DataManager.getData(), id, cid => this.positions.has(cid), this.childrenVisibleBefore.get(id) ?? new Set())
-                        : hiddenChildIds(DataManager.getData(), id, cid => this.positions.has(cid));
+                        : hiddenChildIds(DataManager.getData(), id, this.tabInView);
                     const childItems = this.childrenByUnionHtml(id, ids);
                     const header = childrenShown ? strings.focus.childrenShownTooltip : strings.focus.hiddenChildrenTooltip;
                     // Children of a union whose partner is out of view bring the partner along (§5)
@@ -5380,7 +5478,7 @@ class TreeRendererClass {
 
             // Other partners (bottom-left edge slot, §5): "▸ ∞ N" shows the
             // partners of unions without children in place, "▾ ∞ N" hides them.
-            const partnersPill = this.partnersPillOf(id, pid => this.positions.has(pid));
+            const partnersPill = this.partnersPillOf(id, this.tabInView);
             const hiddenIndicatorsHtml = partnersPill
                 ? this.partnersPillHtml(id, partnersPill, fullTitle, partnersPill.shown && this.isNestedShown(id, shownHere, 'other')) : '';
 
@@ -5851,6 +5949,8 @@ class TreeRendererClass {
 
             this.placeCard(canvas, card, id, live);
         }
+        // The focus outside the window's selection: its tag (spec 098 §9), on the cards as placed
+        for (const card of canvas.querySelectorAll<HTMLElement>(':scope > .person-card')) this.markOutsideSelection(card);
         this.yieldSiblingOrderPills(canvas);
         // Measure again with the pills as drawn (once: the second render knows them).
         if (edgeRoomStale && !this.edgeRoomRetried) {
@@ -7865,11 +7965,11 @@ class TreeRendererClass {
         if (!person) return '';
         const name = shownNameFull(person, '?');
         const parents = person.parentIds
-            .filter(pid => !this.positions.has(pid))
+            .filter(pid => !this.tabInView(pid))
             .map(pid => DataManager.getPerson(pid))
             .filter((p): p is Person => p !== null);
         const siblingIds = DataManager.getSiblings(personId)
-            .filter(s => unionChildIds.has(s.id) && !this.positions.has(s.id))
+            .filter(s => unionChildIds.has(s.id) && !this.tabInView(s.id))
             .map(s => s.id);
         const parentItems = parents.map(p => this.bubbleItemHtml(p));
         let body: string;

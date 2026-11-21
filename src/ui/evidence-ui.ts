@@ -32,7 +32,7 @@ import { EvidenceLevel, evidenceLevels } from '../evidence-level.js';
 import { assignGenerations } from '../generations.js';
 import { birthResearchStatus } from '../tree-overview.js';
 import { uiModule } from './module.js';
-import { clearSelection, selectionDataChanged, selectionUncovered } from './view-selection-ui.js';
+import { clearSelection, getSelection, selectionDataChanged, selectionUncovered, setHideOthers } from './view-selection-ui.js';
 import { overviewChanged } from '../windows/overview-window.js';
 
 /** A highlighted group of people: what it is, who, and where Next › stands. */
@@ -135,6 +135,7 @@ export const evidenceUiMethods = uiModule({
         TreeRenderer.setEvidenceHighlight(new Set(ids));
         this.renderEvidencePill();
         cardsClearOfPill();
+        this.syncPersonFilter();
     },
 
     /**
@@ -155,9 +156,11 @@ export const evidenceUiMethods = uiModule({
             keepEmpty: group.keepEmpty,
         };
         TreeRenderer.setEvidenceLevels(null);
-        TreeRenderer.setEvidenceHighlight(new Set(evidence.ids), group.faint ? new Set(group.faint()) : null);
+        TreeRenderer.setEvidenceHighlight(new Set(evidence.ids), group.faint ? new Set(group.faint()) : null, group.kind === 'selection');
         this.renderEvidencePill();
         cardsClearOfPill();
+        // "Hide others" of the window's selection holds only while it is highlighted (§12: another group covers it)
+        this.syncPersonFilter();
     },
 
     /** The Evidence mode: every card framed by its level, the pill counting them. */
@@ -169,6 +172,7 @@ export const evidenceUiMethods = uiModule({
         TreeRenderer.setEvidenceLevels(evidenceLevels(DataManager.getData()));
         this.renderEvidencePill();
         cardsClearOfPill();
+        this.syncPersonFilter();
     },
 
     /** A count in the Evidence pill: that group highlighted (again: back to all three). */
@@ -184,6 +188,23 @@ export const evidenceUiMethods = uiModule({
         TreeRenderer.setEvidenceLevels(null);
         TreeRenderer.setEvidenceHighlight(new Set(ids));
         this.renderEvidencePill();
+        this.syncPersonFilter();
+    },
+
+    /**
+     * "Hide others" (spec 098 §8) to the tree: the window's selection's people
+     * (a family line's spouses who married in with them) while its highlight
+     * holds the pill and "Hide others" is on; otherwise everyone.
+     */
+    syncPersonFilter(): void {
+        const sel = getSelection();
+        if (!sel.ref || !sel.hideOthers || evidence?.kind !== 'selection') {
+            TreeRenderer.setPersonFilter(null);
+            return;
+        }
+        const ids = new Set(evidence.ids);
+        if (evidence.faint) for (const id of evidence.faint()) ids.add(id);
+        TreeRenderer.setPersonFilter(ids);
     },
 
     /** Which group the pill highlights now (null: none). */
@@ -222,8 +243,9 @@ export const evidenceUiMethods = uiModule({
         }
         const current = evidence.ids[evidence.index];
         evidence = { ...evidence, ids, index: current ? ids.indexOf(current) : -1 };
-        TreeRenderer.setEvidenceHighlight(new Set(ids), evidence.faint ? new Set(evidence.faint()) : null);
+        TreeRenderer.setEvidenceHighlight(new Set(ids), evidence.faint ? new Set(evidence.faint()) : null, evidence.kind === 'selection');
         this.renderEvidencePill();
+        this.syncPersonFilter();
     },
 
     /** Next ›: centre the next person (the chart re-centres on them when they are not drawn). */
@@ -248,6 +270,7 @@ export const evidenceUiMethods = uiModule({
         document.getElementById('evidence-pill')?.remove();
         // Another group ended: the window's selection comes back from under it.
         selectionUncovered();
+        this.syncPersonFilter();
         // The overview's own window says what is lit here.
         overviewChanged();
     },
@@ -283,6 +306,7 @@ export const evidenceUiMethods = uiModule({
         }
         pill.setAttribute('aria-label', levelsMode ? s.evidenceMode : s.evidenceTitle);
         pill.replaceChildren();
+        pill.classList.remove('evidence-pill--sel');
         const label = document.createElement('span');
         label.className = 'evidence-pill-label';
         const what = document.createElement('strong');
@@ -345,6 +369,27 @@ export const evidenceUiMethods = uiModule({
                 pick.append(text, chev);
                 pick.onclick = () => this.openSelectionPicker();
                 pill.append(pick);
+                // "Hide others" (§8): the tree laid out from the selection alone (not in the fan: CSS)
+                const sep = document.createElement('span');
+                sep.className = 'evidence-pill-sep';
+                sep.setAttribute('aria-hidden', 'true');
+                const hide = document.createElement('button');
+                hide.type = 'button';
+                hide.className = 'evidence-pill-hide sel-opt';
+                const on = getSelection().hideOthers;
+                hide.setAttribute('aria-pressed', String(on));
+                hide.title = strings.selection.hideOthersTitle;
+                const box = document.createElement('span');
+                box.className = 'bx';
+                box.setAttribute('aria-hidden', 'true');
+                box.textContent = '✓';
+                const words = document.createElement('span');
+                words.className = 'evidence-pill-hide-t';
+                words.textContent = strings.selection.hideOthers;
+                hide.append(box, words);
+                hide.onclick = () => setHideOthers(!getSelection().hideOthers);
+                pill.append(sep, hide);
+                pill.classList.add('evidence-pill--sel');
             } else {
                 pill.append(label);
             }
