@@ -272,7 +272,9 @@ describe('content of the sectors (spec 118 §5)', () => {
     });
 });
 
-describe('no text overflows its sector (spec 118 §5, large fans)', () => {
+// A safety net for a loaded machine (the full suite with other runs beside it): the 10 rings take
+// under a second alone, past the default 5 s when the machine is busy; the tests check no time.
+describe('no text overflows its sector (spec 118 §5, large fans)', { timeout: 60_000 }, () => {
     /** A complete pedigree of `gens` rings, everybody with dates and places. */
     function pedigree(gens: number): StromData {
         const persons: Record<string, Person> = {};

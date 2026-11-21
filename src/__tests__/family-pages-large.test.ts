@@ -206,7 +206,9 @@ describe('the set of files of a large tree (1102 §7.5, §8)', LOADED_TIMEOUT, (
 
 describe('the choice of a line in a set of many lines (1102 §7.5)', () => {
     it('the full choice on the introduction and the line pages, a short one on the people\'s pages', async () => {
-        const data = syntheticTree({ persons: 2500 }).data;
+        // 900 people make 58 lines, well over ZIP_PICK_LINES (the same choice as 2500 people and 115 lines,
+        // at a quarter of the time: a loaded machine no longer runs it past the limit).
+        const data = syntheticTree({ persons: 900 }).data;
         const set = treeSet(data);
         expect(set.rodIds.length).toBeGreaterThan(ZIP_PICK_LINES);
         const entries = await buildPageSetFilesAsync(set);
