@@ -700,8 +700,8 @@ test.describe('the 1280 fold boundary', () => {
 test.describe('the sample tree\'s toolbar with the line picker and ⧉', () => {
     const WIDE_FONT = '* { font-family: Verdana, "DejaVu Sans", sans-serif !important; }';
     const FIT_WIDTHS = [1440, 1100, 1024, 960, 900, 800, 700, 641];
-    /** The line picker's "all lines" label: the language is the one asked for. */
-    const ALL_LINES: Record<string, string> = { 'de-DE': 'Stammlinien', 'cs-CZ': 'Rody', 'en-US': 'Lines', 'pl-PL': 'Rody' };
+    /** The line picker's label with nothing chosen (spec 098 §1.1): the language is the one asked for. */
+    const ALL_LINES: Record<string, string> = { 'de-DE': 'Auswahl', 'cs-CZ': 'Výběr', 'en-US': 'Selection', 'pl-PL': 'Wybór' };
 
     async function toolbarAudit(page: Page) {
         return page.evaluate(() => {

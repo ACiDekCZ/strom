@@ -1,24 +1,16 @@
 /**
- * The family line chosen in the tree view (spec 039 §0): one state, set from
- * the toolbar's choice, the person's menu, the pill, the tree overview's
- * "Show in tree" and the person's "Family line" row. The line's members are
- * highlighted with the pill (src/ui/evidence-ui.ts, kind 'rod'), the spouses
- * who married in faintly, the rest dimmed.
- *
- * - Remembered per tree (SettingsManager.rodByTree, a view setting, not the
- *   tree's data) and put back when the tree opens, without moving the focus.
- * - Another highlighted group covers the line; when that group ends the line
- *   comes back. Choosing a line ends any other group.
- * - A line that no longer exists after a change is let go without a word.
- * - Chosen anywhere but from memory: when none of its members is drawn the
- *   focus moves to the nearest one (src/rod-focus.ts), with "↩ Back".
+ * The family line of the window's selection (spec 039 §0, spec 098 §0.2): a
+ * thin layer over src/ui/view-selection-ui.ts for the callers of the family
+ * line (the toolbar's choice of lines, the person's menu, the tree overview's
+ * "Show in tree", the person's "Family line" row, the fan's legend, spec 114).
+ * The state, its memory per tree, covering by another group and the end of
+ * a gone selection live there.
  */
 
 import { DataManager } from '../data.js';
-import { SettingsManager } from '../settings.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { LineageIndex, RodId, buildLineages, rodLabels, rods, realRodMembers, realRodSpouses } from '../lineage.js';
+import { LineageIndex, RodId, rods } from '../lineage.js';
 import { rodFocusTarget } from '../rod-focus.js';
 import { RodPickerItem, rodPickerHtml, rodPickerItems, rodPickerSmallItems } from '../rod-picker.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
@@ -27,70 +19,26 @@ import { shownNameFull } from '../person-name.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { TreeManager } from '../tree-manager.js';
 import type { PersonId, TreeId } from '../types.js';
+import { encodeSelectionRef, type SelectionRef } from '../view-selection.js';
 import { wireRodPicker } from './rod-picker-ui.js';
 import type { HighlightGroup } from './evidence-ui.js';
 import { uiModule } from './module.js';
+import {
+    SelectionOrigin, clearSelection, getSelection, onSelectionChange, selectionBack, selectionGroup, selectionIndex,
+    selectionIndexGeneration, selectionText, setSelection, setSelectionHost,
+} from './view-selection-ui.js';
 
 /** Where a line was chosen: from memory ('restore') the focus stays. */
-export type RodOrigin = 'picker' | 'menu' | 'pill' | 'overview' | 'person' | 'legend' | 'restore';
-
-/** What the state needs of the app (the UI; a fake in tests). */
-export interface RodViewHost {
-    highlightGroup(group: HighlightGroup): void;
-    evidenceHighlightKind(): string | null;
-    isEvidenceHighlightOn(): boolean;
-    endEvidenceHighlight(): void;
-    /** After a choice (not from memory): the focus to a member when none is drawn. */
-    moveFocusToRod(id: RodId): void;
-    /** The toolbar's choice, the fan's legend: the chosen line changed or the data did. */
-    rodViewChanged(): void;
-}
-
-let host: RodViewHost | null = null;
-/** The tree the state belongs to (undefined: not looked at yet). */
-let treeKey: string | null | undefined;
-/** The data when the tree was last switched: a remembered line is forgotten only from data loaded since. */
-let treeKeyData: unknown = null;
-let selected: RodId | null = null;
-/** A remembered line not found yet (the tree still locked or loading): tried again after each change. */
-let pending: RodId | null = null;
-/** "Back to overview" of a line shown from the tree overview (this page only, never remembered). */
-let back: (() => void) | null = null;
-const listeners = new Set<(id: RodId | null) => void>();
-/** Bumped by every change of the data: the lines are computed again when next needed. */
-let generation = 0;
-let cache: { data: unknown; generation: number; index: LineageIndex; labels: Map<RodId, string> } | null = null;
-
-export function setRodViewHost(h: RodViewHost | null): void {
-    host = h;
-}
-
-/** Tests: a clean state. */
-export function resetRodView(): void {
-    host = null;
-    treeKey = undefined;
-    treeKeyData = null;
-    selected = null;
-    pending = null;
-    back = null;
-    listeners.clear();
-    generation++;
-    cache = null;
-}
+export type RodOrigin = SelectionOrigin;
 
 /** The open tree's lines (computed once per change of the data). */
 export function rodIndex(): { index: LineageIndex; labels: Map<RodId, string> } {
-    const data = DataManager.getData();
-    if (!cache || cache.data !== data || cache.generation !== generation) {
-        const index = buildLineages(data);
-        cache = { data, generation, index, labels: rodLabels(index) };
-    }
-    return cache;
+    return selectionIndex();
 }
 
 /** Changes with every change of the data or the tree (the toolbar's choice is built again). */
 export function rodIndexGeneration(): number {
-    return generation;
+    return selectionIndexGeneration();
 }
 
 /** The line's name as the tree overview writes it. */
@@ -99,166 +47,39 @@ export function rodLabel(id: RodId): string {
     return labels.get(id) ?? index.rods.get(id)?.surname ?? '';
 }
 
-function alive(index: LineageIndex, id: RodId): boolean {
-    return index.rods.has(id) && realRodMembers(index, id).length > 0;
-}
-
-/** The tree's real data is in (not an empty stand-in of a locked tree). */
-function dataIsReal(): boolean {
-    return !DataManager.isLocked() && Object.keys(DataManager.getData().persons).length > 0;
-}
-
-function notify(): void {
-    for (const cb of [...listeners]) cb(selected);
-    host?.rodViewChanged();
-}
-
-/** Another group (not the line) holds the pill: the line waits under it. */
-function covered(): boolean {
-    return !!host && host.isEvidenceHighlightOn() && host.evidenceHighlightKind() !== 'rod';
-}
-
-function endRodHighlight(): void {
-    if (host?.evidenceHighlightKind() === 'rod') host.endEvidenceHighlight();
-}
-
-/** The highlight of a line: members framed, spouses faint, recounted from the shared index. */
-export function rodGroup(id: RodId, returnTo?: () => void): HighlightGroup | null {
-    const { index } = rodIndex();
-    if (!alive(index, id)) return null;
-    return {
-        kind: 'rod', cite: false,
-        personIds: realRodMembers(index, id),
-        title: (n) => strings.treeOverview.rods.highlight(rodLabel(id), n),
-        recount: () => realRodMembers(rodIndex().index, id),
-        faint: () => realRodSpouses(rodIndex().index, id),
-        ...(returnTo ? { returnTo } : {}),
-    };
-}
-
-function show(id: RodId): void {
-    const group = rodGroup(id, back ?? undefined);
-    if (group) host?.highlightGroup(group);
-}
-
-/** A remembered line of the open tree, shown (unless another group covers it). */
-function resolvePending(): boolean {
-    if (!pending) return false;
-    const { index } = rodIndex();
-    if (!alive(index, pending)) {
-        // Gone from a tree that is really there: forgotten. A locked or loading tree keeps it.
-        // (The data seen at the switch may still be the previous tree's.)
-        if (dataIsReal() && DataManager.getData() !== treeKeyData) {
-            if (treeKey) SettingsManager.setRodForTree(treeKey, null);
-            pending = null;
-        }
-        return false;
-    }
-    selected = pending;
-    pending = null;
-    if (!covered()) show(selected);
-    return true;
-}
-
-/** Follow the open tree: another tree brings its own remembered line (shown, no focus move). */
-function syncTree(): boolean {
-    const key = DataManager.getCurrentTreeId();
-    if (key === treeKey) return false;
-    const had = selected;
-    treeKey = key;
-    treeKeyData = DataManager.getData();
-    selected = null;
-    back = null;
-    pending = key ? (SettingsManager.getRodForTree(key) as RodId | null) : null;
-    if (had) endRodHighlight();
-    resolvePending();
-    if (had !== selected) notify();
-    return true;
-}
-
-/** The chosen line of the open tree (null: the whole tree). */
+/** The chosen line of the open tree (null: no selection, or a selection that is not a line). */
 export function getSelectedRod(): RodId | null {
-    syncTree();
-    // A remembered line waiting for the tree's data (the first render after loading).
-    if (pending && resolvePending()) notify();
-    return selected;
+    const ref = getSelection().ref;
+    return ref?.kind === 'rod' ? ref.rodId : null;
 }
 
 /** "Back to overview" of the chosen line (only right after "Show in tree" in the tree overview). */
 export function rodBack(): (() => void) | null {
-    return selected ? back : null;
+    return getSelectedRod() ? selectionBack() : null;
 }
 
-/**
- * Choose a line (null: the whole tree). A line not in the tree clears the
- * choice. Ends any other highlighted group; moves the focus to a member when
- * none is drawn (not from memory).
- */
+/** Choose a line (null: no selection); a line not in the tree clears the choice. */
 export function setRodSelection(id: RodId | string | null, origin: RodOrigin, opts: { back?: () => void } = {}): void {
-    syncTree();
-    if (!id) { clearRodSelection(); return; }
-    const rodId = id as RodId;
-    const { index } = rodIndex();
-    if (!alive(index, rodId)) { clearRodSelection(); return; }
-    selected = rodId;
-    pending = null;
-    back = origin === 'overview' ? opts.back ?? null : null;
-    if (treeKey) SettingsManager.setRodForTree(treeKey, rodId);
-    if (origin !== 'restore' || !covered()) show(rodId);
-    notify();
-    if (origin !== 'restore') host?.moveFocusToRod(rodId);
+    if (!id) { clearSelection(); return; }
+    setSelection({ kind: 'rod', rodId: id as RodId }, origin, opts);
 }
 
-/** The whole tree: the choice cleared and forgotten, the line's highlight ended. */
+/** No selection: cleared and forgotten, the highlight ended. */
 export function clearRodSelection(): void {
-    syncTree();
-    const had = selected !== null || pending !== null;
-    selected = null;
-    pending = null;
-    back = null;
-    if (treeKey) SettingsManager.setRodForTree(treeKey, null);
-    endRodHighlight();
-    if (had) notify();
+    clearSelection();
 }
 
-/** Called with the chosen line (or null) after every change of the choice. */
+/** Called with the chosen line (or null) after every change of the selection. */
 export function onRodSelectionChange(cb: (id: RodId | null) => void): () => void {
-    listeners.add(cb);
-    return () => { listeners.delete(cb); };
+    return onSelectionChange((sel, change) => {
+        if (change.reason === 'hideOthers') return;
+        cb(sel.ref?.kind === 'rod' ? sel.ref.rodId : null);
+    });
 }
 
-/**
- * After a change of the data or a switch of the tree (before the highlight
- * recounts): the lines computed again, the tree's remembered line put back,
- * a line that no longer exists let go without a word.
- */
-export function rodViewDataChanged(): void {
-    generation++;
-    if (syncTree()) { host?.rodViewChanged(); return; }
-    const was = selected;
-    if (pending) {
-        if (resolvePending()) notify();
-    } else if (selected && !alive(rodIndex().index, selected)) {
-        if (dataIsReal()) {
-            if (treeKey) SettingsManager.setRodForTree(treeKey, null);
-        } else {
-            pending = selected;
-        }
-        selected = null;
-        back = null;
-        endRodHighlight();
-    }
-    if (was !== selected) notify();
-    else host?.rodViewChanged();
-}
-
-/**
- * Another group ended (its ×, Escape, nobody left): the chosen line comes
- * back from under it, without moving the focus.
- */
-export function rodViewUncovered(): void {
-    if (!selected || covered() || host?.evidenceHighlightKind() === 'rod') return;
-    show(selected);
+/** The highlight of a line: members framed, spouses faint, recounted from the shared index. */
+export function rodGroup(id: RodId, returnTo?: () => void): HighlightGroup | null {
+    return selectionGroup({ kind: 'rod', rodId: id }, returnTo);
 }
 
 // ---------------------------------------------------------------------------
@@ -315,7 +136,7 @@ function appendSaveListRow(pick: HTMLDetailsElement, current: RodId | null, onSa
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'sp-rodpick-savebtn';
-    btn.textContent = strings.rodView.saveList(rodLabel(current));
+    btn.textContent = strings.selection.saveList;
     btn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -331,6 +152,12 @@ function pickRod(rod: string): void {
     else if (rod && rod !== 'other') setRodSelection(rod, 'picker');
 }
 
+/** The selection as a key of the built choice (built again when it changes). */
+function selectionKey(): string {
+    const ref = getSelection().ref;
+    return ref ? encodeSelectionRef(ref) : '';
+}
+
 /** Swipe down from the sheet's head closes it (the list itself scrolls). */
 const SHEET_SWIPE_CLOSE_PX = 80;
 
@@ -341,26 +168,40 @@ function esc(text: string): string {
 function pickerTexts() {
     const F = strings.familyPages;
     return {
-        prefix: F.rodPickPrefix, all: F.rodPickAll, wholeTree: F.wholeTree, other: F.otherFams, placeholder: F.rodPickPh,
-        none: F.rodPickNone, label: F.rodPickLabel, members: F.nPersons,
+        prefix: F.rodPickPrefix, all: strings.selection.button, wholeTree: F.wholeTree, other: F.otherFams, placeholder: F.rodPickPh,
+        none: F.rodPickNone, label: strings.selection.pickLabel, members: F.nPersons,
     };
 }
 
 export const rodViewMethods = uiModule({
     /** At start: the state follows the data and the tree; the highlight recounts through it. */
     initRodView(): void {
-        setRodViewHost({
+        setSelectionHost({
             highlightGroup: (g) => this.highlightGroup(g),
             evidenceHighlightKind: () => this.evidenceHighlightKind(),
             isEvidenceHighlightOn: () => this.isEvidenceHighlightOn(),
             endEvidenceHighlight: () => this.endEvidenceHighlight(),
-            moveFocusToRod: (id) => this.moveFocusToRod(id),
-            rodViewChanged: () => this.rodViewChanged(),
+            moveFocusToSelection: (ref) => this.moveFocusToSelection(ref),
+            selectionChanged: () => this.rodViewChanged(),
+            selectionShown: () => this.selectionShown(),
+            showToast: (text) => this.showToast(text, 5000),
         });
         this.listenForEvidenceChanges();
         setRodPickerSheetOpener(() => this.showRodPickerSheet());
         getSelectedRod();
         this.syncRodPickerHost();
+    },
+
+    /**
+     * The window's selection is in sight (spec 098 §7): its highlight in
+     * Family, Descendants or the fan (another group covering it hides it),
+     * or the map showing the selection's scope.
+     */
+    selectionShown(): boolean {
+        const view = TreeRenderer.getViewMode();
+        // The map's scope 'sel' comes with spec 098 §3.
+        if (view === 'map') return String(this.mapScope) === 'sel';
+        return (view === 'family' || view === 'descendants' || view === 'fan') && this.evidenceHighlightKind() === 'selection';
     },
 
     /** The chosen line (the fan's legend marks its row). */
@@ -384,6 +225,11 @@ export const rodViewMethods = uiModule({
         }
     },
 
+    /** After a choice: the focus to one of the selection's people when none is drawn (a family line, spec 039 §4.4). */
+    moveFocusToSelection(ref: SelectionRef): void {
+        if (ref.kind === 'rod') this.moveFocusToRod(ref.rodId);
+    },
+
     /**
      * §4.4: none of the line's members drawn — the focus to the nearest one
      * (the founder in Descendants), a step of the history, "↩ Back".
@@ -398,10 +244,10 @@ export const rodViewMethods = uiModule({
         if (!target) return;
         const person = DataManager.getPerson(target);
         if (!person) return;
-        const label = rodLabel(id);
+        const label = selectionText({ kind: 'rod', rodId: id });
         void TreeRenderer.setFocus(target).then(() => {
             if (TreeRenderer.getFocusPersonId() !== target || !TreeRenderer.canGoBack()) return;
-            showFocusToast(shownNameFull(person, '?'), () => { void TreeRenderer.goBack(); }, (n) => strings.rodView.moved(n, label));
+            showFocusToast(shownNameFull(person, '?'), () => { void TreeRenderer.goBack(); }, (n) => strings.selection.moved(n, label));
         });
     },
 
@@ -416,11 +262,11 @@ export const rodViewMethods = uiModule({
         const view = TreeRenderer.getViewMode();
         const off = view === 'timeline' || view === 'map' || view === 'table';
         if (off) { el.hidden = true; return; }
-        const key = `${DataManager.getCurrentTreeId() ?? ''}|${getSelectedRod() ?? ''}|${getCurrentLanguage()}`;
+        const key = `${DataManager.getCurrentTreeId() ?? ''}|${selectionKey()}|${getCurrentLanguage()}`;
         const built = !!el.querySelector('details.sp-rodpick');
         // The same tree and choice after a change of the data: the list is built again when it
         // opens (§1.5), not after every edit; a chosen line's name may have changed, so it is now.
-        if (key === hostKey && (generation === hostGeneration || (built && !getSelectedRod()))) {
+        if (key === hostKey && (rodIndexGeneration() === hostGeneration || (built && !getSelection().ref))) {
             el.hidden = !built;
             return;
         }
@@ -438,8 +284,8 @@ export const rodViewMethods = uiModule({
         if (!el) return;
         if (!reopen && el.querySelector('details[open]')) return;
         const current = getSelectedRod();
-        hostKey = `${DataManager.getCurrentTreeId() ?? ''}|${current ?? ''}|${getCurrentLanguage()}`;
-        hostGeneration = generation;
+        hostKey = `${DataManager.getCurrentTreeId() ?? ''}|${selectionKey()}|${getCurrentLanguage()}`;
+        hostGeneration = rodIndexGeneration();
         hostAbort?.abort();
         hostAbort = null;
         const items = rodPickerItems(rodIndex().index, undefined, undefined, getCurrentLanguage());
@@ -454,7 +300,7 @@ export const rodViewMethods = uiModule({
         if (!pick) return;
         const summary = pick.querySelector<HTMLElement>('summary');
         if (summary) {
-            summary.title = current ? rodLabel(current) : strings.familyPages.rodPickLabel;
+            summary.title = current ? rodLabel(current) : strings.selection.pickLabel;
             summary.setAttribute('aria-expanded', 'false');
             summary.setAttribute('aria-haspopup', 'listbox');
         }
@@ -462,7 +308,7 @@ export const rodViewMethods = uiModule({
             summary?.setAttribute('aria-expanded', String(pick.open));
             const chev = pick.querySelector('.sp-rodpick-chev');
             if (chev) chev.textContent = pick.open ? '▴' : '▾';
-            if (pick.open && hostGeneration !== generation && pick.isConnected) {
+            if (pick.open && hostGeneration !== rodIndexGeneration() && pick.isConnected) {
                 // The data changed since it was built: the list again, open.
                 this.renderRodPickerHost(true);
                 return;
@@ -514,7 +360,7 @@ export const rodViewMethods = uiModule({
         const items = rodPickerItems(rodIndex().index, undefined, undefined, getCurrentLanguage());
         if (!items.some(i => i.id !== 'tree' && i.id !== 'other')) return;
         ensureFamilyPagesAppCss();
-        const title = strings.familyPages.rodPickLabel;
+        const title = strings.selection.pickLabel;
         const overlay = document.createElement('div');
         overlay.className = 'bottom-sheet-overlay rod-pick-overlay';
         overlay.innerHTML = `<div class="bottom-sheet rod-pick-sheet" role="dialog" aria-modal="true" aria-labelledby="rod-pick-sheet-title">`

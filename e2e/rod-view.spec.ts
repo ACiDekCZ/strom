@@ -3,7 +3,7 @@
  * (desktop before the view tabs, tablet at the bar's right end), its search
  * with Enter on the first result and the small lines unfolding under Other
  * families; the person menu's "Only the X line" (birth line first, the chosen
- * one offering the whole tree); on a phone More → Family line → the list as a
+ * one offering to clear the selection); on a phone More → Selection → the list as a
  * sheet, the pill's label opening it again; sideways beside the side bar;
  * German and the dark theme without overflow; a reload keeps the line.
  * Invented names only (e2e/rods-fixture.ts).
@@ -60,7 +60,7 @@ test.describe('the toolbar\'s choice on a computer', () => {
         await setup(page);
         await expect(host(page)).toBeVisible();
         const btn = host(page).locator('.sp-rodpick-btn');
-        await expect(btn).toHaveText(/^Lines/);
+        await expect(btn).toHaveText(/^Selection/);
         // Before the view tabs, 6px or so between them.
         const gap = await page.evaluate(() => {
             const a = document.querySelector('#view-rod-picker .sp-rodpick-btn')!.getBoundingClientRect();
@@ -79,7 +79,7 @@ test.describe('the toolbar\'s choice on a computer', () => {
         await expect(pill(page)).toBeVisible();
         await expect(pill(page).locator('.evidence-pill-label--pick')).toContainText('Hollberg');
         await expect(host(page).locator('.sp-rodpick-btn')).toContainText('Hollberg');
-        await expect(pill(page).locator('.evidence-pill-close')).toHaveAttribute('aria-label', 'Show the whole tree');
+        await expect(pill(page).locator('.evidence-pill-close')).toHaveAttribute('aria-label', 'Clear the selection');
 
         await page.reload();
         await expect(page.locator('html')).not.toHaveClass(/app-loading/);
@@ -90,7 +90,7 @@ test.describe('the toolbar\'s choice on a computer', () => {
         await host(page).locator('.sp-rodpick-btn').click();
         await host(page).locator('.sp-rodpick-tree button').click();
         await expect(pill(page)).toBeHidden();
-        await expect(host(page).locator('.sp-rodpick-btn')).toHaveText(/^Lines/);
+        await expect(host(page).locator('.sp-rodpick-btn')).toHaveText(/^Selection/);
     });
 
     test('Descendants: another line already chosen, a line with nobody drawn moves the focus; ↩ Back brings it back', async ({ page }) => {
@@ -168,7 +168,7 @@ test.describe('the toolbar\'s choice on a computer', () => {
         await expect(pill(page).locator('.evidence-pill-label--pick')).toContainText('Brandvold');
 
         await card(page, 'Karin').click();
-        await expect(menu.locator('[data-action="rod-clear"]')).toHaveText(/Show the whole tree/);
+        await expect(menu.locator('[data-action="rod-clear"]')).toHaveText(/Clear the selection/);
         await expect(menu.locator('[data-action^="rod-only:"]')).toHaveCount(1);
         await menu.locator('[data-action="rod-clear"]').click();
         await expect(pill(page)).toBeHidden();
@@ -287,14 +287,14 @@ test.describe('the toolbar\'s choice on a tablet', () => {
 test.describe('the phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-    test('More → Family line → the list → a pick → the pill → its label → another line', async ({ page }) => {
+    test('More → Selection → the list → a pick → the pill → its label → another line', async ({ page }) => {
         await setup(page);
         await expect(host(page)).toBeHidden();
         await page.locator('#bb-view-more').click();
         const row = page.locator('#sheet-rod');
         await expect(row).toBeVisible();
-        await expect(row.locator('.more-rod-row-label')).toHaveText('Family line');
-        await expect(row.locator('.more-rod-row-value')).toHaveText('Whole tree');
+        await expect(row.locator('.more-rod-row-label')).toHaveText('Selection');
+        await expect(row.locator('.more-rod-row-value')).toHaveText('No selection');
         expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(51.5);
         await row.click();
         const sheet = pickSheet(page);
@@ -330,7 +330,7 @@ test.describe('the phone', () => {
         await expect(label).toContainText('Tallqvist');
     });
 
-    test('the person\'s sheet offers the line; More has no Family line row on the timeline', async ({ page }) => {
+    test('the person\'s sheet offers the line; More has no Selection row on the timeline', async ({ page }) => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.showPersonBottomSheet('b16' as never));
         const sheet = page.locator('.bottom-sheet-person');
@@ -357,11 +357,11 @@ test.describe('the phone', () => {
         });
         await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
         await page.locator('#bb-view-more').click();
-        await expect(page.locator('#sheet-rod .more-rod-row-label')).toHaveText('Stammlinie');
-        await expect(page.locator('#sheet-rod .more-rod-row-value')).toHaveText('Ganzer Stammbaum');
+        await expect(page.locator('#sheet-rod .more-rod-row-label')).toHaveText('Auswahl');
+        await expect(page.locator('#sheet-rod .more-rod-row-value')).toHaveText('Keine Auswahl');
         await page.locator('#sheet-rod').click();
         const sheet = pickSheet(page);
-        await expect(sheet.locator('.rod-pick-sheet-title')).toHaveText('Stammlinie wählen');
+        await expect(sheet.locator('.rod-pick-sheet-title')).toHaveText('Personenauswahl');
         expect(await overflowing(page, '.rod-pick-sheet')).toEqual([]);
         await sheet.locator('.sp-rodpick-rod', { hasText: 'Brandvold' }).locator('button').click();
         await expect(pill(page).locator('.evidence-pill-label--pick')).toContainText('Brandvold');

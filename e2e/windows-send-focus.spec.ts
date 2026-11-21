@@ -7,7 +7,7 @@ import { card, openApp, setFollowMode, followModeOf } from './helpers.js';
  * also one the main window's chart did not draw; running down the rows with
  * the arrow keys changes the centre once, to the last row; one Back returns
  * to the centre before the run. "Mark" keeps the centre, "off" sends
- * nothing. The window's header chooses it in "Selection" (spec 110 §1):
+ * nothing. The window's header chooses it in "Chosen person" (spec 110 §1):
  * This window / Main window, the main window's group greyed while off or
  * without the main window, none in a chart's view.
  */
@@ -197,16 +197,16 @@ test('focus of a person the main window\'s Table leaves out: the centre stays, t
 const control = (p: Page) => p.locator('.sat-follow');
 const menu = (p: Page) => p.locator('.sat-follow-menu');
 
-test('"Selection" in a Table window: Focus by default (the chosen row makes the main window\'s centre), Mark chosen in the menu is kept as chosen; off greys the main window\'s group and sends nothing; the choice is kept; a Family view has no such group; without the main window it is greyed', async ({ page, context }) => {
+test('"Chosen person" in a Table window: Focus by default (the chosen row makes the main window\'s centre), Mark chosen in the menu is kept as chosen; off greys the main window\'s group and sends nothing; the choice is kept; a Family view has no such group; without the main window it is greyed', async ({ page, context }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
     const treeId = await openMain(page, context);
     const sat = await openTable(context, treeId, 'sf04aa', 'default', errors);
 
-    // Focus by default (none chosen yet); at 1200 px both directions in words, no "Selection:".
+    // Focus by default (none chosen yet); at 1200 px both directions in words, no "Chosen person:".
     expect(await sat.evaluate(() => sessionStorage.getItem('strom.win.send.sf04aa'))).toBeNull();
     await expect(control(sat)).toHaveAttribute('data-send', 'focus');
-    await expect(control(sat)).toHaveAttribute('aria-label', 'Person selection between windows. From other windows: mark only. To the main window: focus.');
+    await expect(control(sat)).toHaveAttribute('aria-label', 'Chosen person between windows. From other windows: mark only. To the main window: focus.');
     await expect(control(sat)).toHaveAttribute('aria-haspopup', 'menu');
     await expect(sat.locator('.sat-follow-label')).toBeHidden();
     await expect(sat.locator('.sat-follow-state')).toHaveText('mark only');
@@ -241,14 +241,14 @@ test('"Selection" in a Table window: Focus by default (the chosen row makes the 
 
     // Off: the main window's group stays, greyed, Focus still checked, with its note; a click there does nothing; nothing sent.
     await setFollowMode(sat, 'off');
-    await expect(control(sat)).toHaveAttribute('aria-label', 'Person selection between windows: off.');
+    await expect(control(sat)).toHaveAttribute('aria-label', 'Chosen person between windows: off.');
     await expect(sat.locator('.sat-follow-send')).toBeHidden();
     await control(sat).click();
     const main = menu(sat).locator('[role="group"]').nth(1);
     await expect(main).toHaveAttribute('aria-disabled', 'true');
     await expect(main.locator('[data-send="focus"]')).toHaveAttribute('aria-checked', 'true');
     await expect(main.locator('[data-send="focus"]')).toHaveAttribute('aria-disabled', 'true');
-    await expect(main.locator('.sat-follow-note')).toHaveText('Unavailable – selection sharing is off in this window.');
+    await expect(main.locator('.sat-follow-note')).toHaveText('Unavailable – sharing the chosen person is off in this window.');
     await main.locator('[data-send="mark"]').click({ force: true });
     await expect(menu(sat)).toBeVisible();
     await sat.keyboard.press('Escape');

@@ -14,7 +14,8 @@ import { surnameKey } from '../surnames.js';
 import { placeKey } from '../places.js';
 import { StromData, PersonId } from '../types.js';
 import { DataManager } from '../data.js';
-import { resetRodView, rodIndex, rodIndexGeneration, rodViewDataChanged } from '../ui/rod-view.js';
+import { rodIndex, rodIndexGeneration } from '../ui/rod-view.js';
+import { resetViewSelection as resetRodView, selectionDataChanged as rodViewDataChanged } from '../ui/view-selection-ui.js';
 import { syntheticTree } from './helpers/synthetic-tree.js';
 
 // ---- The rule as it was written before (every lineage against the whole list) ----

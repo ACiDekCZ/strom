@@ -116,7 +116,7 @@ test.describe('person family line row', () => {
         await more.click();
         await menu.getByRole('menuitem', { name: 'Show family line in tree' }).click();
         await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
-        await expect(page.locator('#evidence-pill')).toContainText('Brandvold family line: 16 people');
+        await expect(page.locator('#evidence-pill')).toContainText('Line Brandvold · 16 people');
         await expect(page.locator('.person-card[data-id="b16"]')).toHaveClass(/evidence-hit/);
         await expect(page.locator('.person-card[data-id="b14w"]')).toHaveClass(/evidence-faint/);
     });

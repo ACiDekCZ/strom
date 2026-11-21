@@ -248,20 +248,20 @@ test.describe('the header fits (de)', () => {
             await page.setViewportSize({ width: 1440, height: 900 });
             const treeId = await openMain(page, context, LONG_NAME);
             const sat = await openSatellite(context, treeId, 'descendants', `sv1${width}`, { width, height: 700 });
-            await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-label', 'Personenauswahl zwischen Fenstern. Aus anderen Fenstern: wechseln.');
+            await expect(sat.locator('.sat-follow')).toHaveAttribute('aria-label', 'Gewählte Person zwischen Fenstern. Aus anderen Fenstern: wechseln.');
             await expect(another(sat)).toHaveAccessibleName('Weiteres Fenster öffnen');
             if (width >= 960) await expect(segment(sat)).toBeVisible();
             else await expect(viewBtn(sat)).toBeVisible();
-            // "Auswahl:" from 1280 px (spec 110 §1), the mode in words beside its icon; a phone width keeps the icon alone.
+            // "Gewählte Person:" from 1280 px (spec 110 §1), the mode in words beside its icon; a phone width keeps the icon alone.
             await expect(sat.locator('.sat-follow-label')).toBeVisible({ visible: width >= 1280 });
             await expect(sat.locator('.sat-follow-state')).toBeVisible({ visible: width > 640 });
             await headerFits(sat);
-            // "Selection" (K2.1): its longest mode fits too; its menu stays inside the window, nothing in it cut.
+            // "Chosen person" (K2.1): its longest mode fits too; its menu stays inside the window, nothing in it cut.
             await setFollowMode(sat, 'mark');
             await headerFits(sat);
             if (width >= 960) {
                 const titleWidth = await sat.locator('.sat-header-title').evaluate(el => el.getBoundingClientRect().width);
-                expect(titleWidth, 'beside the tabs and "Selection" the name still reads').toBeGreaterThan(60);
+                expect(titleWidth, 'beside the tabs and "Chosen person" the name still reads').toBeGreaterThan(60);
             }
             await sat.locator('.sat-follow').click();
             const m = await sat.locator('.sat-follow-menu').evaluate((menu) => {

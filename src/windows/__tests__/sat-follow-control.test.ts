@@ -1,5 +1,5 @@
 /**
- * The satellite header's "Selection" control (spec 110 §1, §4, §6, §7): its
+ * The satellite header's "Chosen person" control (spec 110 §1, §4, §6, §7): its
  * closed parts by the header's width, the main window's group of its menu
  * (greyed while off here or without the main window, a note while the main
  * window follows the agent) and its aria-label in whole words. The value of
@@ -16,7 +16,7 @@ import {
 const table = (over: Partial<FollowControlState> = {}): FollowControlState => ({ recv: 'mark', send: 'focus', agent: false, mainClosed: false, ...over });
 
 describe('the closed control by the header width', () => {
-    it('"Selection:" and both directions from 1280 px, both from 1100 px, the sent direction alone beside the tabs below it', () => {
+    it('"Chosen person:" and both directions from 1280 px, both from 1100 px, the sent direction alone beside the tabs below it', () => {
         expect(followControlParts(1440, table())).toEqual({ label: true, recv: true, send: true, text: true });
         expect(followControlParts(1280, table())).toEqual({ label: true, recv: true, send: true, text: true });
         expect(followControlParts(1279, table())).toEqual({ label: false, recv: true, send: true, text: true });
@@ -33,7 +33,7 @@ describe('the closed control by the header width', () => {
         expect(followControlParts(390, table({ send: 'mark' }))).toEqual({ label: false, recv: false, send: true, text: false });
     });
 
-    it('off is "⊘ off" at every width (with "Selection:" from 1280 px); a view without the main window\'s choice says its own direction alone', () => {
+    it('off is "⊘ off" at every width (with "Chosen person:" from 1280 px); a view without the main window\'s choice says its own direction alone', () => {
         for (const w of [1440, 1024, 960, 800]) {
             expect(followControlParts(w, table({ recv: 'off' }))).toEqual({ label: w >= 1280, recv: true, send: false, text: true });
         }
@@ -71,12 +71,12 @@ describe('the words', () => {
 
     it('the aria-label says both directions in whole words, the agent, off, and a view\'s own direction alone', () => {
         setLanguage('en');
-        expect(followControlAria(table())).toBe('Person selection between windows. From other windows: mark only. To the main window: focus.');
-        expect(followControlAria(table({ agent: true }))).toBe('Person selection between windows. From other windows: mark only. To the main window: focus (agent).');
-        expect(followControlAria(table({ recv: 'off' }))).toBe('Person selection between windows: off.');
-        expect(followControlAria(table({ recv: 'switch', send: null }))).toBe('Person selection between windows. From other windows: switch.');
+        expect(followControlAria(table())).toBe('Chosen person between windows. From other windows: mark only. To the main window: focus.');
+        expect(followControlAria(table({ agent: true }))).toBe('Chosen person between windows. From other windows: mark only. To the main window: focus (agent).');
+        expect(followControlAria(table({ recv: 'off' }))).toBe('Chosen person between windows: off.');
+        expect(followControlAria(table({ recv: 'switch', send: null }))).toBe('Chosen person between windows. From other windows: switch.');
         setLanguage('de');
-        expect(followControlAria(table({ agent: true }))).toBe('Personenauswahl zwischen Fenstern. Aus anderen Fenstern: nur markieren. Ins Hauptfenster: fokussieren (Agent).');
+        expect(followControlAria(table({ agent: true }))).toBe('Gewählte Person zwischen Fenstern. Aus anderen Fenstern: nur markieren. Ins Hauptfenster: fokussieren (Agent).');
         expect(followModeName('off')).toBe('aus');
     });
 

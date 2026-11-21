@@ -2655,8 +2655,15 @@ export interface AppSettings {
         /** The Timeline's history options (spec 121 §0): the kinds and the region shown, local history on the life lines. */
         timeline?: { kinds?: string[]; region?: string; local?: boolean };
     }>;
-    /** Per tree (spec 039): the family line chosen in the tree view (its id), kept until ended by ×. A view setting of this device, not tree data. */
+    /** Before spec 098 (read once, moved to selectionByTree): the family line chosen in the tree view, per tree. */
     rodByTree?: Record<string, string>;
+    /**
+     * Per tree (spec 098 §7): the main window's selection of people and its "Hide others", kept until cleared.
+     * A view setting of this device, never tree data. The ref is checked when read (src/view-selection.ts).
+     */
+    selectionByTree?: Record<string, { ref: unknown; hideOthers?: boolean }>;
+    /** Per tree (spec 098 §7): the map's scope, 'view' | 'sel' | 'tree'. */
+    mapScopeByTree?: Record<string, string>;
     historyKindRegion?: boolean;  // default: true - the card's timeline shows regional history (spec 1028 §6)
     historyKindPlace?: boolean;   // default: true - the card's timeline shows the history of a place (with history.place)
     historyKindLocal?: boolean;   // default: true - the card's timeline shows findings from the research's sources

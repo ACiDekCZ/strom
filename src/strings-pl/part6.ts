@@ -225,7 +225,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         followFanCenterPerson: 'Wybrana osoba',
         followFanCenterFocusHelp: 'Osoba w centrum uwagi przed włączeniem śledzenia.',
         followFanPersonThisTree: (tree: string) => `dla drzewa „${tree}”`,
-        followFanPersonNone: 'Brak wyboru dla tego drzewa',
+        followFanPersonNone: 'Nie wybrano dla tego drzewa',
         followFanPersonOther: (tree: string) => `Wybrana osoba jest ustawiona dla drzewa „${tree}”. Tutaj używana jest osoba w centrum uwagi.`,
         followFanPersonPick: 'Wybrać osobę',
         followFanPersonChange: 'Zmienić',

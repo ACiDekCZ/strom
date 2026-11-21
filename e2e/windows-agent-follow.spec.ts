@@ -263,7 +263,7 @@ test.describe('desktop', () => {
         await expect(ctl).toHaveAttribute('aria-label', /To the main window: focus \(agent\)\.$/);
         await ctl.click();
         await expect(sat.locator('.sat-follow-menu [data-send="focus"]')).toHaveAttribute('aria-checked', 'true');
-        await expect(sat.locator('.sat-follow-menu .sat-follow-note[data-note="agent"]')).toHaveText('The main window is following the agent – the selection is only marked there.');
+        await expect(sat.locator('.sat-follow-menu .sat-follow-note[data-note="agent"]')).toHaveText('The main window follows the agent – the chosen person is only marked there.');
         await sat.keyboard.press('Escape');
         // Paused in the main window: "(agent)" goes, the choice stays Focus.
         await page.evaluate(() => window.Strom.UI.pauseLiveFollow());

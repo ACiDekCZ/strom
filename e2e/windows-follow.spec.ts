@@ -57,7 +57,7 @@ test('a Descendants window set to switch takes the person chosen in the main win
     const [johan, erik, thomas] = [await personId(page, 'Johan', 'Berg'), await personId(page, 'Erik', 'Berg'), await personId(page, 'Thomas', 'Berg')];
     const desc = await openSatellite(context, treeId, 'descendants', 'fw01aa', errors);
     const map = await openSatellite(context, treeId, 'map', 'fw02aa', errors);
-    await expect(desc.locator('.sat-follow')).toHaveAttribute('aria-label', 'Person selection between windows. From other windows: switch.');
+    await expect(desc.locator('.sat-follow')).toHaveAttribute('aria-label', 'Chosen person between windows. From other windows: switch.');
     expect(await followModeOf(map)).toBe('mark');
     // The Map offers no switch: its centre is not a person.
     await map.locator('.sat-follow').click();

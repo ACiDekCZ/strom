@@ -10,7 +10,7 @@ import { StromData, PersonId, Person, Partnership, PartnershipId } from '../type
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { contextMenuMethods, rodMenuRows, PersonMenuAction } from '../ui/context-menu.js';
-import { resetRodView } from '../ui/rod-view.js';
+import { resetViewSelection as resetRodView } from '../ui/view-selection-ui.js';
 
 type Sex = 'male' | 'female';
 interface Spec { first: string; last: string; sex: Sex; born?: string; parents?: string[] }
@@ -99,10 +99,10 @@ describe('the person menu\'s lines (§2.1)', () => {
         expect(rows[0].submenu?.map(a => a.meta)).toEqual(['birth', 'wife', 'wife']);
     });
 
-    it('the chosen line: its row shows the whole tree', () => {
+    it('the chosen line: its row clears the selection', () => {
         expect(actions(rodMenuRows(idx, labels, P('borivoj'), brumlak))).toEqual(['rod-clear']);
         const rows = rodMenuRows(idx, labels, P('radoslava'), trnkavec);
-        expect(rows[0]).toMatchObject({ action: 'rod-clear', label: 'Show the whole tree' });
+        expect(rows[0]).toMatchObject({ action: 'rod-clear', label: 'Clear the selection' });
         expect(rows[1].submenu?.map(a => a.action)).toEqual([`rod-only:${brumlak}`, `rod-only:${orechovsky}`]);
         // Another line chosen: the person's rows unchanged.
         expect(actions(rodMenuRows(idx, labels, P('borivoj'), trnkavec))).toEqual([`rod-only:${brumlak}`]);

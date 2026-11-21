@@ -107,7 +107,7 @@ test.describe('tree overview: family lines', () => {
         await expect(items).toHaveText(['Kvarnby 2 people · 1810–1838', 'Ostrander 3 people · 1835–1866']);
         await items.first().getByRole('button', { name: 'Kvarnby' }).click();
         await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
-        await expect(page.locator('#evidence-pill')).toContainText('Kvarnby family line: 2 people');
+        await expect(page.locator('#evidence-pill')).toContainText('Line Kvarnby · 2 people');
     });
 
     test('show in tree: members highlighted, wives faint, back to the overview', async ({ page }) => {
@@ -117,7 +117,7 @@ test.describe('tree overview: family lines', () => {
         await sec.locator('.tov-rod.is-open').getByRole('button', { name: 'Show in tree' }).click();
         await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
         const pill = page.locator('#evidence-pill');
-        await expect(pill).toContainText('Brandvold family line: 16 people');
+        await expect(pill).toContainText('Line Brandvold · 16 people');
         // Mikael's tree: his parents and grandparents are members, his mother married in.
         await expect(page.locator('.person-card.evidence-hit').first()).toBeVisible();
         await expect(page.locator('.person-card.evidence-faint').first()).toBeVisible();
@@ -135,7 +135,7 @@ test.describe('tree overview: family lines', () => {
         await sec.locator('.tov-rod-row').first().click();
         await sec.locator('.tov-rod.is-open').getByRole('button', { name: 'Show in tree' }).click();
         const pill = page.locator('#evidence-pill');
-        await expect(pill).toContainText('Brandvold-Ekhammarsson Lindenau family line');
+        await expect(pill).toContainText('Line Brandvold-Ekhammarsson Lindenau');
         const apart = async (others: string[]): Promise<string[]> => pill.evaluate((el, sels) => {
             const a = el.getBoundingClientRect();
             return sels.filter(sel => [...document.querySelectorAll(sel)].some(o => {

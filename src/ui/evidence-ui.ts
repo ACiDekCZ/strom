@@ -15,9 +15,10 @@
  * also shows other groups of people (the live research's "changed while
  * watching").
  *
- * A family line chosen in the tree view (src/ui/rod-view.ts) is a group of
- * kind 'rod': another group covers it and it comes back when that one ends;
- * its × (and Escape) shows the whole tree again, its label opens the choice.
+ * The window's selection of people (src/ui/view-selection-ui.ts, spec 098)
+ * is a group of kind 'selection': another group covers it and it comes back
+ * when that one ends; its × (and Escape) clears the selection, its label
+ * opens the choice. It stays up with nobody in it (an empty list, §12).
  */
 
 import { canvasBusy } from './canvas-busy.js';
@@ -31,12 +32,12 @@ import { EvidenceLevel, evidenceLevels } from '../evidence-level.js';
 import { assignGenerations } from '../generations.js';
 import { birthResearchStatus } from '../tree-overview.js';
 import { uiModule } from './module.js';
-import { clearRodSelection, rodViewDataChanged, rodViewUncovered } from './rod-view.js';
+import { clearSelection, selectionDataChanged, selectionUncovered } from './view-selection-ui.js';
 import { overviewChanged } from '../windows/overview-window.js';
 
 /** A highlighted group of people: what it is, who, and where Next › stands. */
 interface Highlight {
-    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction' | 'direction-found' | 'ancestorGap' | 'rod';
+    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction' | 'direction-found' | 'ancestorGap' | 'selection';
     label: string;
     ids: PersonId[];
     index: number;
@@ -50,6 +51,8 @@ interface Highlight {
     returnTo?: () => void;
     /** People shown faintly beside the group, recounted with it (a lineage's spouses). */
     faint?: () => PersonId[];
+    /** Stays up with nobody in it (the window's selection, spec 098 §12). */
+    keepEmpty?: boolean;
 }
 
 /** One group of people to highlight with the pill (the tree overview's cards and line ends). */
@@ -63,6 +66,8 @@ export interface HighlightGroup {
     returnTo?: () => void;
     /** People shown faintly beside the group (neither framed nor dimmed), recounted with it. */
     faint?: () => PersonId[];
+    /** Shown with nobody in it, the pill counting 0 and Next unavailable (the window's selection, spec 098 §12). */
+    keepEmpty?: boolean;
 }
 
 /** The highlight being shown (null: none). */
@@ -139,7 +144,7 @@ export const evidenceUiMethods = uiModule({
      */
     highlightGroup(group: HighlightGroup): void {
         this.listenForEvidenceChanges();
-        if (group.personIds.length === 0) {
+        if (group.personIds.length === 0 && !group.keepEmpty) {
             this.showToast(strings.treeHealth.highlightDone, 4000);
             return;
         }
@@ -147,6 +152,7 @@ export const evidenceUiMethods = uiModule({
         evidence = {
             kind: group.kind, label: group.title(group.personIds.length), ids: [...group.personIds], index: -1,
             recount: group.recount, title: group.title, cite: group.cite, returnTo: group.returnTo, faint: group.faint,
+            keepEmpty: group.keepEmpty,
         };
         TreeRenderer.setEvidenceLevels(null);
         TreeRenderer.setEvidenceHighlight(new Set(evidence.ids), group.faint ? new Set(group.faint()) : null);
@@ -196,8 +202,8 @@ export const evidenceUiMethods = uiModule({
 
     /** Recount after a change or a tree switch; nobody left ends the mode. */
     refreshEvidenceHighlight(): void {
-        // The chosen line first: the tree's remembered one put back, a line gone let go.
-        rodViewDataChanged();
+        // The window's selection first: the tree's remembered one put back, one gone cleared.
+        selectionDataChanged();
         if (levelsMode && !evidence) {
             TreeRenderer.setEvidenceLevels(evidenceLevels(DataManager.getData()));
             this.renderEvidencePill();
@@ -205,7 +211,7 @@ export const evidenceUiMethods = uiModule({
         }
         if (!evidence || !evidence.recount) return;
         const ids = evidence.recount();
-        if (ids.length === 0) {
+        if (ids.length === 0 && !evidence.keepEmpty) {
             if (levelsMode) {
                 this.showEvidenceLevels();
                 return;
@@ -240,18 +246,18 @@ export const evidenceUiMethods = uiModule({
         TreeRenderer.setEvidenceHighlight(null);
         TreeRenderer.setEvidenceLevels(null);
         document.getElementById('evidence-pill')?.remove();
-        // Another group ended: the chosen family line comes back from under it.
-        rodViewUncovered();
+        // Another group ended: the window's selection comes back from under it.
+        selectionUncovered();
         // The overview's own window says what is lit here.
         overviewChanged();
     },
 
     /**
-     * ×, Escape, "Back to overview": the group ends; on a family line that is
-     * the whole tree again (the choice cleared and forgotten).
+     * ×, Escape, "Back to overview": the group ends; on the window's
+     * selection that clears it (and forgets it).
      */
     dismissEvidenceHighlight(): void {
-        if (evidence?.kind === 'rod') clearRodSelection();
+        if (evidence?.kind === 'selection') clearSelection();
         if (evidence || levelsMode) this.endEvidenceHighlight();
     },
 
@@ -320,13 +326,13 @@ export const evidenceUiMethods = uiModule({
                 what.textContent = evidence.label;
                 label.append(what, document.createTextNode(stepping ? ` · ${evidence.index + 1} / ${n}` : ` · ${n}`));
             }
-            if (evidence.kind === 'rod') {
-                // A family line (spec 039 §3.1): the label opens the choice of lines.
+            if (evidence.kind === 'selection') {
+                // The window's selection (spec 039 §3.1, 098 §8): the label opens the choice.
                 const pick = document.createElement('button');
                 pick.type = 'button';
                 pick.className = 'evidence-pill-label evidence-pill-label--pick';
                 pick.setAttribute('aria-haspopup', 'listbox');
-                pick.setAttribute('aria-label', strings.rodView.change);
+                pick.setAttribute('aria-label', strings.selection.change);
                 pick.title = label.textContent ?? '';
                 const chev = document.createElement('span');
                 chev.className = 'evidence-pill-pick-chev';
@@ -349,6 +355,8 @@ export const evidenceUiMethods = uiModule({
             next.type = 'button';
             next.className = 'evidence-pill-next';
             next.textContent = s.next;
+            // An empty selection (§12): nobody to go to.
+            next.disabled = evidence.ids.length === 0;
             next.onclick = () => this.evidenceNext();
             pill.append(next);
             // Going through the people without a (birth) source: cite right here.
@@ -396,8 +404,8 @@ export const evidenceUiMethods = uiModule({
         close.type = 'button';
         close.className = 'evidence-pill-close';
         close.innerHTML = '&times;';
-        // A family line: × shows the whole tree (spec 039 §3.1).
-        const closeText = evidence?.kind === 'rod' ? strings.rodView.whole : s.highlightEnd;
+        // The window's selection: × clears it (spec 098 §1.1).
+        const closeText = evidence?.kind === 'selection' ? strings.selection.clear : s.highlightEnd;
         close.setAttribute('aria-label', closeText);
         close.title = closeText;
         close.onclick = () => this.dismissEvidenceHighlight();

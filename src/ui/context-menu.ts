@@ -185,7 +185,7 @@ export function rodMenuRows(index: LineageIndex, labels: ReadonlyMap<RodId, stri
     const spouseMeta = person.gender === 'female' ? r.wife : person.gender === 'male' ? r.husband : undefined;
     const label = (id: RodId): string => labels.get(id) ?? index.rods.get(id)?.surname ?? '';
     const whole: PersonMenuAction[] = selected && ids.includes(selected)
-        ? [{ action: ROD_CLEAR_ACTION, label: r.whole, kind: 'focus' }] : [];
+        ? [{ action: ROD_CLEAR_ACTION, label: strings.selection.clear, kind: 'focus' }] : [];
     const rows: PersonMenuAction[] = ids.filter(id => id !== selected).map(id => ({
         action: ROD_ONLY_ACTION + id, label: r.only(label(id)), kind: 'focus' as const,
         ...(ids.length >= 2 ? { meta: id === birth ? r.birth : spouseMeta } : {}),

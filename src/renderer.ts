@@ -7489,7 +7489,7 @@ class TreeRendererClass {
                 homeChanged: () => updateDefaultFocusButtons(),
                 menuClosed: () => UI.fanFollowMenuClosed?.(),
                 selectedRod: () => UI.selectedRod(),
-                highlightedRod: () => (UI.evidenceHighlightKind() === 'rod' ? UI.selectedRod() : null),
+                highlightedRod: () => (UI.evidenceHighlightKind() === 'selection' ? UI.selectedRod() : null),
                 selectRod: id => UI.selectRodFromFan(id),
                 previewRod: group => this.setFanRodPreview(group),
                 personDetail: id => UI.runPersonMenuAction(id, 'edit'),
