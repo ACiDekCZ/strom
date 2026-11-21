@@ -115,6 +115,8 @@ test.describe('On the map on a phone', () => {
         const row = page.locator('#pl-sheet-map');
         await expect(row).toHaveText('On the map');
         expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        // As tall as the sheet's other rows (48 px).
+        expect(Math.round((await row.boundingBox())!.height)).toBe(Math.round((await sheet.locator('.bottom-sheet-item').nth(0).boundingBox())!.height));
         await row.tap();
         await onMap(page, { kind: 'list', listId: id }, 4);
     });

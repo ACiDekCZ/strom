@@ -25596,6 +25596,10 @@
                 position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
             }
         }
+        /* Touch (§10): the selection pill's Next person and × are 44 px targets like its label and Hide others. */
+        @media (pointer: coarse) {
+            .evidence-pill--sel .evidence-pill-next, .evidence-pill--sel .evidence-pill-close { height: 44px; min-width: 44px; }
+        }
 
         /* The tree's photos on their way, "Photos k / n" (spec 116 §6, src/ui/image-load-chip.ts): quieter than the
            highlight pill whose place it takes, under the top bar in the middle (below the pills when they are up:
