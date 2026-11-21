@@ -24,7 +24,8 @@
  *   5. `.toolbar-squeeze-3`: the search field → the magnifier, the field
  *      opens over the toolbar.
  *
- * The view tabs never fold. A renamed tree is measured again (the name's text
+ * Step 4 is left again once step 5 is taken when the name then fits whole
+ * (the magnifier frees more room than the cap took). The view tabs never fold. A renamed tree is measured again (the name's text
  * is watched: a name squeezed before and after need not change any size).
  *
  * Each step is measured with the steps before it taken and itself not, so the
@@ -192,13 +193,25 @@ function tabletSearchTooNarrow(toolbar: HTMLElement, reserve: number): boolean {
     return input.getBoundingClientRect().width - reserve < TABLET_SEARCH_MIN_PX;
 }
 
-/** Take the steps of `steps` the toolbar needs, measured one by one. */
-function fitSteps(toolbar: HTMLElement, steps: readonly string[], tight: (reserve: number, step: string) => boolean): void {
+/**
+ * Take the steps of `steps` the toolbar needs, measured one by one. With
+ * `giveBack` [earlier, later]: when the later step is taken, the earlier one
+ * is left again if the toolbar holds its content without it (the search field
+ * folded into the magnifier frees more than the capped tree name took: the
+ * window's selection beside the tabs, spec 098 §2, left de at 1440 px with a
+ * research the name "Familie …" and 185 px unused).
+ */
+function fitSteps(toolbar: HTMLElement, steps: readonly string[], tight: (reserve: number, step: string) => boolean, giveBack?: readonly [string, string]): void {
     const had = steps.map(step => toolbar.classList.contains(step));
     toolbar.classList.remove(...steps);
     for (let i = 0; i < steps.length; i++) {
         if (!tight(had[i] ? HYSTERESIS_PX : 0, steps[i])) break;
         toolbar.classList.add(steps[i]);
+    }
+    if (giveBack && toolbar.classList.contains(giveBack[0]) && toolbar.classList.contains(giveBack[1])) {
+        const i = steps.indexOf(giveBack[0]);
+        toolbar.classList.remove(giveBack[0]);
+        if (tight(had[i] ? HYSTERESIS_PX : 0, giveBack[0])) toolbar.classList.add(giveBack[0]);
     }
 }
 
@@ -210,7 +223,7 @@ export function updateToolbarFit(): void {
     const tabletOnly = TOOLBAR_TABLET_FIT_STEPS.filter(step => !(TOOLBAR_FIT_STEPS as readonly string[]).includes(step));
     if (isDesktop()) {
         toolbar.classList.remove(...tabletOnly);
-        fitSteps(toolbar, TOOLBAR_FIT_STEPS, (reserve, step) => tooTight(toolbar, reserve, step));
+        fitSteps(toolbar, TOOLBAR_FIT_STEPS, (reserve, step) => tooTight(toolbar, reserve, step), ['toolbar-squeeze-name', 'toolbar-squeeze-3']);
     } else if (isTablet() && !isPhoneBar()) {
         toolbar.classList.remove(...desktopOnly);
         fitSteps(toolbar, TOOLBAR_TABLET_FIT_STEPS, reserve => tabletTooTight(toolbar, reserve)
