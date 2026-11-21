@@ -558,7 +558,7 @@ test.describe('follow the agent in the tree', () => {
             await expect(sec).toHaveAttribute('data-ready', 'true');
             // The only line of the tree: its detail right away.
             await sec.getByRole('button', { name: 'Show in tree' }).click();
-            await expect(line).toContainText('Brandvold-Ekhammarsson Lindenau family line');
+            await expect(line).toContainText('Line Brandvold-Ekhammarsson Lindenau');
         };
         /** The two pills, and each of them with the tree's chrome: what overlaps. */
         const clash = (): Promise<string[]> => page.evaluate(() => {

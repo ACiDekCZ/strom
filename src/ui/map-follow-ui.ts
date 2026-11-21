@@ -443,7 +443,7 @@ export const mapFollowMethods = uiModule({
         const lead = currentFollowTargets().find(x => x.session === 1);
         const geo = lead ? currentWorkPlaces([lead]).get(lead.row)?.geo : null;
         if (!lead || !geo) return;
-        if (followBusy(this.isEvidenceHighlightOn())) {
+        if (followBusy(this.isEvidenceHighlightOn() && this.evidenceHighlightKind() !== 'selection')) {
             panTimer = setTimeout(() => this.mapFollowPan(now, centre), t.retry);
             return;
         }

@@ -15,6 +15,9 @@
  * - Map: what it shows (this view / the whole tree), its centre and zoom, the
  *   kinds of places on and the time layer (on, its year).
  *
+ * Every view, the Table too, also carries the window's selection of people
+ * with "Hide others" and the map's scope (spec 098 §7, `CarriedSelection`).
+ *
  * Sent as `init` after the satellite's hello, never in the address. Applied
  * once, at the first tree of the window; after that the window has its own
  * state. Pure: the app's getters and setters come in (window-start.ts).
@@ -22,6 +25,7 @@
 
 import type { PersonId } from '../types.js';
 import type { MapScope } from '../map-scope.js';
+import { sanitizeSelectionRef, type WindowSelection } from '../view-selection-ref.js';
 import type { SatelliteKind } from './window-role.js';
 
 /** The views whose state is carried here (the Table's is table-ui's). */
@@ -256,6 +260,41 @@ export function applyViewStateAfterDraw(state: ViewWindowState | null, view: str
     if (view !== 'family' && view !== 'descendants') return;
     if (state && (state.view === 'family' || state.view === 'descendants') && state.zoom) target.restoreZoom(state.zoom);
     else target.centerView();
+}
+
+// ---- the window's selection and the map's scope (spec 098 §7) ----
+
+/**
+ * The window's selection with "Hide others" and the map's scope, as a new
+ * window takes them over (any view, the Table too) and a satellite keeps
+ * them over its reload. The window then has its own: a change in one window
+ * changes no other, and only the main window remembers them for the tree.
+ */
+export interface CarriedSelection {
+    selection: WindowSelection;
+    mapScope: MapScope;
+}
+
+/** The field of a window's starting state that carries them. */
+const CARRIED_KEY = 'windowSelection';
+
+/** The starting state with the selection and the map's scope beside the view's own fields (an object state only). */
+export function withCarriedSelection(state: unknown, carried: CarriedSelection): unknown {
+    if (!isObj(state)) return state;
+    const selection: WindowSelection = carried.selection.ref
+        ? { ref: { ...carried.selection.ref }, hideOthers: carried.selection.hideOthers }
+        : { ref: null, hideOthers: false };
+    return { ...state, [CARRIED_KEY]: { selection, mapScope: carried.mapScope } };
+}
+
+/** The selection and map scope a state carries, checked (null: none, an older window's state). */
+export function carriedSelectionOf(raw: unknown): CarriedSelection | null {
+    if (!isObj(raw)) return null;
+    const c = raw[CARRIED_KEY];
+    if (!isObj(c) || !isObj(c.selection)) return null;
+    const ref = sanitizeSelectionRef(c.selection.ref);
+    const mapScope: MapScope = c.mapScope === 'sel' || c.mapScope === 'tree' ? c.mapScope : 'view';
+    return { selection: { ref, hideOthers: !!ref && c.selection.hideOthers === true }, mapScope };
 }
 
 // ---- a satellite's own state over its reload, and its start without one ----

@@ -257,6 +257,28 @@ export function setSelection(ref: SelectionRef | null, origin: SelectionOrigin, 
     if (origin !== 'restore') host?.moveFocusToSelection(selected);
 }
 
+/**
+ * A new window takes the selection of the window it was opened from (§7,
+ * its start or its own reload): shown without a focus move, its tree's
+ * memory not read after it. Remembering stays the main window's (the
+ * settings of another window are read only). A locked or loading tree keeps
+ * it waiting, as a remembered one.
+ */
+export function adoptWindowSelection(sel: WindowSelection): void {
+    syncTree();
+    if (!sel.ref) { clearSelection(); return; }
+    if (!dataIsReal()) {
+        if (selected) endSelectionHighlight();
+        selected = null;
+        hideOthers = false;
+        back = null;
+        pending = { ref: { ...sel.ref }, hideOthers: sel.hideOthers };
+        notify({ reason: 'restore' });
+        return;
+    }
+    setSelection(sel.ref, 'restore', { hideOthers: sel.hideOthers });
+}
+
 /** No selection: cleared and forgotten, "Hide others" off, the highlight ended. */
 export function clearSelection(): void {
     syncTree();

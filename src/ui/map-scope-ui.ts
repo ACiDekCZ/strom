@@ -57,6 +57,12 @@ export const mapScopeMethods = uiModule({
         this.mapScope = mapScopeOnOpen(SettingsManager.getMapScopeForTree(tree), !!getSelection().ref);
     },
 
+    /** The open tree's scope as the map would take it now (nothing changed here): what a new window takes over (§7). */
+    mapScopeNow(): MapScope {
+        const tree = DataManager.getCurrentTreeId();
+        return tree === scopeTree ? this.mapScope : mapScopeOnOpen(SettingsManager.getMapScopeForTree(tree), !!getSelection().ref);
+    },
+
     /** A satellite takes the main window's scope over (nothing stored): the tree's memory is not read after it. */
     applyMapScopeFromWindow(scope: MapScope): void {
         scopeTree = DataManager.getCurrentTreeId();

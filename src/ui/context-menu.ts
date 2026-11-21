@@ -116,13 +116,12 @@ function isChartRow(a: PersonMenuAction): boolean {
 }
 
 /**
- * Rows a satellite never offers (spec 079 §2): the view links and "Only the
- * X line" (views of the main window's research), and stop following (its
- * research, its bridge).
+ * Rows a satellite never offers (spec 079 §2): the view links (views of the
+ * main window's research) and stop following (its research, its bridge).
+ * "Select ›" stays: a satellite has a selection of its own (spec 098 §7).
  */
 function isMainWindowRow(a: PersonMenuAction): boolean {
-    return a.action.startsWith('view-link-') || a.action.startsWith(SELECT_ACTION) || a.action === SELECT_CLEAR_ACTION
-        || a.action === SELECT_MENU_ACTION || a.action === 'live-stop';
+    return a.action.startsWith('view-link-') || a.action === 'live-stop';
 }
 
 /**

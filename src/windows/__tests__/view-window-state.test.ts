@@ -8,8 +8,8 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    applyViewStateAfterDraw, applyViewStateBeforeDraw, captureViewState, chooseWindowStart, parseMainFocus, parseViewState,
-    readStoredWindowState, storedWindowStateJson, windowStateKey,
+    applyViewStateAfterDraw, applyViewStateBeforeDraw, captureViewState, carriedSelectionOf, chooseWindowStart, parseMainFocus, parseViewState,
+    readStoredWindowState, storedWindowStateJson, windowStateKey, withCarriedSelection,
     type ViewStateSource, type ViewStateTarget, type ViewWindowState,
 } from '../view-window-state.js';
 import type { PersonId } from '../../types.js';
@@ -215,5 +215,40 @@ describe('the start of a tree in a satellite', () => {
         expect(parseMainFocus(null)).toBeNull();
         expect(parseMainFocus({ personId: '', depthUp: 1, depthDown: 1 })).toBeNull();
         expect(parseMainFocus({ personId: 'p7', depthUp: 'x', depthDown: 1 })).toBeNull();
+    });
+});
+
+describe('the window\'s selection and the map\'s scope (spec 098 §7)', () => {
+    const anc = { kind: 'ancestors' as const, personId: P('p1'), generations: 3 };
+
+    it('go beside any view\'s state (the Table\'s too) and come back through the channel, the view\'s state unchanged', () => {
+        const fam = captureViewState('family', source())!;
+        const carried = withCarriedSelection(fam, { selection: { ref: anc, hideOthers: true }, mapScope: 'sel' });
+        const back = JSON.parse(JSON.stringify(carried));
+        expect(carriedSelectionOf(back)).toEqual({ selection: { ref: anc, hideOthers: true }, mapScope: 'sel' });
+        expect(parseViewState('family', back)).toEqual(fam);
+        const table = { rowType: 'persons', viewId: 'b:all', search: '', selected: null };
+        const t = JSON.parse(JSON.stringify(withCarriedSelection(table, { selection: { ref: { kind: 'list', listId: 'L1' }, hideOthers: false }, mapScope: 'tree' })));
+        expect(carriedSelectionOf(t)).toEqual({ selection: { ref: { kind: 'list', listId: 'L1' }, hideOthers: false }, mapScope: 'tree' });
+        expect(t).toMatchObject(table);
+    });
+
+    it('no selection travels as none (Hide others off); a copy, not the window\'s own object', () => {
+        const ref = { kind: 'rod' as const, rodId: 'r1' as never };
+        const sel = { ref, hideOthers: true };
+        const out = withCarriedSelection({ view: 'map' }, { selection: sel, mapScope: 'view' }) as { windowSelection: { selection: { ref: unknown } } };
+        expect(out.windowSelection.selection.ref).not.toBe(ref);
+        expect(carriedSelectionOf(withCarriedSelection({}, { selection: { ref: null, hideOthers: true }, mapScope: 'sel' })))
+            .toEqual({ selection: { ref: null, hideOthers: false }, mapScope: 'sel' });
+    });
+
+    it('an older window\'s state, a broken one or none: nothing carried; a broken ref is no selection, an unknown scope This view', () => {
+        expect(carriedSelectionOf(captureViewState('family', source()))).toBeNull();
+        expect(carriedSelectionOf(null)).toBeNull();
+        expect(carriedSelectionOf({ windowSelection: 'x' })).toBeNull();
+        expect(carriedSelectionOf({ windowSelection: { selection: { ref: { kind: 'nope' }, hideOthers: true }, mapScope: 'all' } }))
+            .toEqual({ selection: { ref: null, hideOthers: false }, mapScope: 'view' });
+        // Not an object: left as it is.
+        expect(withCarriedSelection(undefined, { selection: { ref: null, hideOthers: false }, mapScope: 'view' })).toBeUndefined();
     });
 });

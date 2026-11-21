@@ -22,7 +22,7 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import type { WindowRegistry, WindowEntry } from './window-registry.js';
-import { windowStartState } from './window-start.js';
+import { windowStartState, withWindowSelection } from './window-start.js';
 import { focusOverviewWindow, overviewInWindow } from './overview-window.js';
 import type { SatelliteKind } from './window-role.js';
 import {
@@ -77,7 +77,8 @@ function isMac(): boolean {
  */
 function openWindow(kind: SatelliteKind, initial?: unknown): void {
     if (!registry) return;
-    const start = initial !== undefined ? initial : windowStartState(kind);
+    // The Table's own state comes in; the window's selection and map scope go beside it (spec 098 §7).
+    const start = initial !== undefined ? withWindowSelection(kind, initial) : windowStartState(kind);
     const before = registry.size;
     const id = registry.openSatellite(kind, start);
     if (!id) {

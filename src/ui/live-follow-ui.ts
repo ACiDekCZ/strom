@@ -412,7 +412,11 @@ export function followFanCenter(): PersonId | null {
     });
 }
 
-/** Something the user is in the middle of: a jump would pull the tree from under it. */
+/**
+ * Something the user is in the middle of: a jump would pull the tree from
+ * under it. `highlight`: a passing highlight of a group; the window's
+ * selection is a lasting state and does not hold the jumps back (spec 098 §7).
+ */
 export function followBusy(highlight: boolean): boolean {
     return somethingOpen(highlight);
 }
@@ -739,7 +743,7 @@ export const liveFollowMethods = uiModule({
         const there = target === lastTarget && TreeRenderer.getFocusPersonId() === target && TreeRenderer.getViewMode() === 'family';
         if (there || (jumpPending === target && target === lastTarget)) return;
         const t = timing();
-        if (somethingOpen(this.isEvidenceHighlightOn())) {
+        if (somethingOpen(this.isEvidenceHighlightOn() && this.evidenceHighlightKind() !== 'selection')) {
             jumpTimer = setTimeout(() => this.followJump(now), t.retry);
             return;
         }

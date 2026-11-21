@@ -142,6 +142,16 @@ test.describe('desktop', () => {
         await expect(stripText(a)).toHaveText('This window is not following the agent · read-only', { timeout: 10000 });
         expect(await stripLog(a)).not.toContainEqual(expect.stringContaining('sat-strip--takeover'));
         await expect.poll(() => b.evaluate((id) => window.Strom.Windows?.list().some(w => w.id === id) ?? false, SAT_A)).toBe(true);
+
+        // On the map (spec 098 §6) after the takeover: B shows it itself; A hands it to B, its new main window.
+        expect(await b.evaluate(() => window.Strom.UI.showOnMapState().disabled)).toBe(false);
+        await expect.poll(() => a.evaluate(() => window.Strom.UI.showOnMapState().disabled)).toBe(false);
+        const root = await a.evaluate(() => Object.values(window.Strom.DataManager.getData().persons).find(x => x.refn === 'P0001')!.id);
+        await a.evaluate((r) => window.Strom.UI.showSelectionOnMap({ kind: 'descendants', personId: r } as never), root);
+        await expect.poll(() => b.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('map');
+        await expect.poll(() => b.evaluate(() => window.Strom.UI.mapEffectiveScope())).toBe('sel');
+        expect(await b.evaluate(() => window.Strom.SettingsManager.getSelectionForTree(window.Strom.DataManager.getCurrentTreeId())?.ref ?? null)).toEqual({ kind: 'descendants', personId: root });
+        expect(await a.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('family');
     });
 
     test('without the bridge address stored here no window takes over: following can\'t be restored, Make this the main window and Open Strom', async ({ page, context }) => {

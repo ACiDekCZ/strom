@@ -467,6 +467,8 @@ function startSatelliteWindow(params: SatelliteParams, debugOptions: DebugOption
     UI.initKeyboard();
     UI.initSearch();
     UI.initHistoryManage();
+    // The window's own selection of people (spec 098 §7): highlighted, Hide others, the map's scope Selection.
+    UI.initRodView();
     if (debugOptions.enabled) TreeRenderer.setDebugOptions(debugOptions);
 
     // The view switched in this window (K2): its address, the main window's list, the header and the title follow.

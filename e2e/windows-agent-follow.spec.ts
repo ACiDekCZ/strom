@@ -104,6 +104,7 @@ async function nextStatus(bridge: Bridge): Promise<void> {
     await expect.poll(() => bridge.chain, { timeout: 10000 }).toBeGreaterThanOrEqual(n + 2);
 }
 
+const focusIdOf = (page: Page) => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId());
 const focusRefn = (page: Page) => page.evaluate(() => window.Strom.DataManager.getPerson(window.Strom.TreeRenderer.getFocusPersonId()!)?.refn ?? null);
 const strip = (page: Page) => page.locator('.sat-strip');
 const stripText = (page: Page) => page.locator('.sat-strip .sat-strip-text');
@@ -175,6 +176,39 @@ test.describe('desktop', () => {
         // Nothing of following written to the storage the main window keeps.
         const writes = await sat.evaluate(() => (window as unknown as { __storage: string[] }).__storage);
         expect(writes.filter(w => /live-follow|focus|view|fan/i.test(w))).toEqual([]);
+    });
+
+    test('the agent\'s jumps move only the focus, outside the selection too: the selection of the main window and of a Family window stay (spec 098 §7)', async ({ page, context }) => {
+        const bridge = await routeBridge(context);
+        const treeId = await follow(page);
+        const ids = await page.evaluate(() => Object.values(window.Strom.DataManager.getData().persons).filter(x => x.refn === 'P0001' || x.refn === 'P0002').map(x => x.id));
+        await page.evaluate((p) => window.Strom.DataManager.createPersonList({ name: 'Elders', dynamic: false, personIds: p as never[], sort: 'manual' }), ids);
+        const host = page.locator('#view-rod-picker');
+        await host.locator('.sp-rodpick-btn').click();
+        await host.locator('.sp-rodpick-pop li.sp-selpick-row[data-sec="lists"]', { hasText: 'Elders' }).locator('button').click();
+        const name = (p: Page) => p.locator('#evidence-pill .evidence-pill-label--pick');
+        await expect(name(page)).toContainText('Elders');
+        // The pointer off the cards (a card's tooltip under it holds the jumps back).
+        await page.mouse.move(700, 880);
+        const stored = () => page.evaluate(() => window.Strom.SettingsManager.getSelectionForTree(window.Strom.DataManager.getCurrentTreeId()));
+        const before = await stored();
+
+        const sat = await openFamilyWindow(context, treeId);
+        await expect.poll(() => focusRefn(sat)).toBe('P0012');
+        await expect(name(sat)).toContainText('Elders');
+        bridge.person = 'P0003';
+        await nextStatus(bridge);
+        await expect.poll(() => focusRefn(sat)).toBe('P0003');
+        // The main window: the choice paused its following a while (the user took over), then it jumps too.
+        await expect.poll(() => focusRefn(page), { timeout: 12000 }).toBe('P0003');
+        await expect(name(page)).toContainText('Elders');
+        await expect(name(sat)).toContainText('Elders');
+        // The focus outside the selection: undimmed, tagged.
+        const card = sat.locator(`#tree-canvas .person-card[data-id="${await focusIdOf(sat)}"]`);
+        await expect(card.locator('.card-tag--outside')).toHaveText('outside the selection');
+        expect(await stored()).toEqual(before);
+        const writes = await sat.evaluate(() => (window as unknown as { __storage: string[] }).__storage);
+        expect(writes.filter(w => /selection|mapScope/i.test(w))).toEqual([]);
     });
 
     test('detached: no jumps, over the window\'s reload; Follow the agent; the end of the session forgets it with a toast', async ({ page, context }) => {
