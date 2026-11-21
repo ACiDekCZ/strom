@@ -123,14 +123,14 @@ export const timelineScopeMethods = uiModule({
     },
 
     /** A scope chosen for the Timeline (setViewScope): remembered, the rows drawn anew from the top. */
-    applyTimelineScope(scope: ViewScope, _opts: { keepView?: boolean }): void {
+    applyTimelineScope(scope: ViewScope, _opts: { keepView?: boolean }): Promise<void> {
         this.rememberViewScope('timeline', scope);
         this.closeScopePicker(false);
         this.renderScopeSeg('timeline');
-        if (TreeRenderer.getViewMode() !== 'timeline') return;
+        if (TreeRenderer.getViewMode() !== 'timeline') return Promise.resolve();
         const box = document.getElementById('timeline-container');
         if (box) box.scrollTop = 0;
-        TreeRenderer.render();
+        return TreeRenderer.renderAsync();
     },
 
     /**

@@ -10687,12 +10687,12 @@
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .tl-toolbar { min-height: 0; padding: 8px 12px 0; background: var(--bg-color, #fff); border-bottom: 0; }
             .tl-toolbar-label, .tl-toolbar .timeline-scope.scope-seg, .tl-toolbar-note { display: none; }
-            .timeline-scope-btn {
-                display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; min-height: 32px; padding: 0 10px;
+            .tl-toolbar .timeline-scope-btn {
+                display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; min-height: 44px; padding: 0 12px;
                 border: 1.5px solid transparent; border-radius: var(--r-md); background: var(--surface); color: var(--text);
                 font: inherit; font-size: 12.5px; white-space: nowrap; box-shadow: var(--shadow-sm); cursor: pointer;
             }
-            .timeline-scope-btn[hidden] { display: none; }
+            .tl-toolbar .timeline-scope-btn[hidden] { display: none; }
         }
         .timeline-svg { display: block; width: 100%; }
         .tl-grid { stroke: var(--border-color, #e2e2e2); stroke-width: 1; }
