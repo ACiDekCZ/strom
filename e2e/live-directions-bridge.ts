@@ -4,7 +4,8 @@ import { expect, Page } from '@playwright/test';
  * A research bridge that manages its directions (Strom Research 1.26,
  * spec 038): `/status` with `caps` and the directions in their order of
  * work, and the writes (`POST /directions`, `/directions/<G>`,
- * `/directions/<G>/state`, `/directions/order`, `GET /directions/people`)
+ * `/directions/<G>/state`, `/directions/order`, `GET /directions/people`;
+ * the runs' `runs/stop`, `settings/runs`, `directions/preview`, `gather/undo`)
  * kept in `writes` and answered by default as the research would, or by
  * the answers queued in `replies`. Followed live through `?live=`.
  * Invented data only (the Fíškovi of Smrkov).
@@ -92,7 +93,7 @@ export interface ManagedBridge {
     /** `/status.busy` (absent: none sent). */
     busy?: { sessions: number; runs: number };
     /** `/status.work` (absent: none sent). */
-    work?: { gate: string | null; minutes: number };
+    work?: { gate: string | null; minutes: number; confirm?: 'ask' | 'no' };
     /** Each task carries its place in the whole queue (`queue.page` with a queue read by pages): the write's answer too, as the research sends it. */
     placed?: boolean;
     /** How long a write of a task's place takes before its answer (the research writes its tree first; 0: at once). */
@@ -103,6 +104,20 @@ export interface ManagedBridge {
     verify?: { waiting: number };
     /** Each `POST verify/…` asked (its path after the token). */
     verifyAsks: string[];
+    /**
+     * The runs (spec 126 U10, `run.lines` in `features`): `/status.runs` (absent: none sent), `runsEnded`,
+     * `limits` (`running` counted from `runs`) and `agents`. `POST runs/stop` sets a run `finishing`
+     * (404 `runs.unknown`), `POST settings/runs` lowers `maxRuns` (raising: 403 `runs.raise` with the
+     * command; outside 1–cap: 400 `runs.max`).
+     */
+    runs?: Record<string, unknown>[];
+    runsEnded?: Record<string, unknown>[];
+    limits?: { maxRuns: number; cap: number };
+    agents?: Record<string, unknown>[];
+    /** `POST directions/preview`'s answer (absent: `{ inside: [], move: 0 }`); `moveTasks: true` moves its `move`. */
+    preview?: { inside: string[]; move: number };
+    /** Tasks moved into a direction when it was made, by direction (`POST directions/<G>/gather/undo` takes them back). */
+    gathered: Record<string, number>;
 }
 
 /** The status's window of a queue read by pages: 14 tasks up next, then up to 6 set aside. */
@@ -134,7 +149,9 @@ function queueCounts(b: ManagedBridge): Record<string, unknown> {
         if (typeof q.branch === 'string') branch[q.branch] = (branch[q.branch] ?? 0) + 1;
         if (typeof q.taskKind === 'string') kind[q.taskKind] = (kind[q.taskKind] ?? 0) + 1;
     }
-    return { research, branch, ...(Object.keys(kind).length > 0 ? { kind } : {}), next, parked, rev: queueRev(b) };
+    // `run.lines`: the tasks up next left to the general run (no direction's run takes them).
+    const general = b.runs ? b.queue.filter(q => q.state === 'next' && !q.run).length : null;
+    return { research, branch, ...(Object.keys(kind).length > 0 ? { kind } : {}), next, parked, rev: queueRev(b), ...(general !== null ? { general } : {}) };
 }
 
 /** Lower case without diacritics, as the research compares a searched text. */
@@ -291,6 +308,28 @@ function answer(b: ManagedBridge, method: string, path: string, body: Record<str
         return { status: 200, body: { branch: br, tasks: b.queue.filter(q => q.branch === br.id).map(q => ({ id: q.id, text: q.text })) } };
     }
     if (method !== 'POST') return { status: 404, body: { error: 'not.found' } };
+    // The runs (spec 126 U10).
+    if (path === 'runs/stop') {
+        const run = b.runs?.find(r => r.id === body.run);
+        if (!run) return { status: 404, body: { error: 'runs.unknown' } };
+        run.state = 'finishing';
+        return { status: 200, body: { ok: true, run } };
+    }
+    if (path === 'settings/runs' && b.limits) {
+        const max = body.max;
+        if (typeof max !== 'number' || !Number.isInteger(max) || max < 1 || max > b.limits.cap) return { status: 400, body: { error: 'runs.max' } };
+        if (max > b.limits.maxRuns) return { status: 403, body: { error: 'runs.raise', command: `strom config set run.parallel ${max}` } };
+        b.limits.maxRuns = max;
+        return { status: 200, body: { ok: true, limits: { ...b.limits, running: b.runs?.length ?? 0 } } };
+    }
+    if (path === 'directions/preview') return { status: 200, body: b.preview ?? { inside: [], move: 0 } };
+    const undo = /^directions\/(G\d+)\/gather\/undo$/.exec(path);
+    if (undo) {
+        const back = b.gathered[undo[1]];
+        if (!back) return { status: 409, body: { error: 'gather.none' } };
+        delete b.gathered[undo[1]];
+        return { status: 200, body: { ok: true, back } };
+    }
     // Work outside the directions (spec 038 K7): a branch's choice, the tree's, a task's own place, a growing branch's answer.
     const setBranch = (br: Record<string, unknown>, mode: string, line?: string): void => {
         if (mode === 'default') {
@@ -388,7 +427,10 @@ function answer(b: ManagedBridge, method: string, path: string, body: Record<str
             order: b.researches.filter(x => x.state !== 'done').length + 1, tasks: 0, waiting: 0, working: false, since: new Date().toISOString(),
             ...(body.limits ? { limits: body.limits } : {}), ...(typeof body.question === 'string' ? { question: body.question } : {}) };
         b.researches.push(d);
-        return { status: 200, body: { direction: d } };
+        if (typeof body.moveTasks !== 'boolean') return { status: 200, body: { direction: d } };
+        const moved = body.moveTasks ? b.preview?.move ?? 0 : 0;
+        if (moved > 0) b.gathered[id] = moved;
+        return { status: 200, body: { direction: d, moved } };
     }
     return { status: 404, body: { error: 'not.found' } };
 }
@@ -425,10 +467,22 @@ export async function followManaged(page: Page, opts: {
     links?: string[];
     /** `/status.busy` (absent: none sent). */
     busy?: { sessions: number; runs: number };
-    /** `/status.work` (absent: none sent). */
-    work?: { gate: string | null; minutes: number };
+    /** `/status.work` (absent: none sent; `confirm`: whether the terminal asks before a run). */
+    work?: { gate: string | null; minutes: number; confirm?: 'ask' | 'no' };
+    /** The research's name (`/status.tree.name`; absent: Fíškovi). */
+    treeName?: string;
     /** `/status.verify`: facts waiting to be verified again (`verify` should be in `features`). */
     verify?: { waiting: number };
+    /** `/status.runs` (spec 126 U10; `run.lines` should be in `features`; absent: none sent). */
+    runs?: Record<string, unknown>[];
+    /** `/status.runsEnded` (absent: none sent). */
+    runsEnded?: Record<string, unknown>[];
+    /** `/status.limits` without `running` (counted from `runs`; absent: none sent). */
+    limits?: { maxRuns: number; cap: number };
+    /** `/status.agents` (`run.agents` should be in `features`; absent: none sent). */
+    agents?: Record<string, unknown>[];
+    /** `POST directions/preview`'s answer (absent: nothing inside). */
+    preview?: { inside: string[]; move: number };
 } = {}): Promise<ManagedBridge> {
     const links = [...ALL_LINKS, ...(opts.links ?? [])];
     await page.setViewportSize(opts.size ?? { width: 1440, height: 900 });
@@ -458,6 +512,12 @@ export async function followManaged(page: Page, opts: {
         ...(opts.work ? { work: { ...opts.work } } : {}),
         ...(opts.verify ? { verify: { ...opts.verify } } : {}),
         verifyAsks: [],
+        ...(opts.runs ? { runs: structuredClone(opts.runs) } : {}),
+        ...(opts.runsEnded ? { runsEnded: structuredClone(opts.runsEnded) } : {}),
+        ...(opts.limits ? { limits: { ...opts.limits } } : {}),
+        ...(opts.agents ? { agents: structuredClone(opts.agents) } : {}),
+        ...(opts.preview ? { preview: structuredClone(opts.preview) } : {}),
+        gathered: {},
     };
     if (opts.features?.includes('queue.next')) {
         b.queueNext = { base: b.queue.map(q => String(q.id)), at: new Map(), clock: 0 };
@@ -473,7 +533,7 @@ export async function followManaged(page: Page, opts: {
         return [...all.filter(q => q.state === 'next').slice(0, QUEUE_WINDOW), ...all.filter(q => q.state === 'parked').slice(0, 6)];
     };
     const status = () => ({
-        tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', persons: 4,
+        tree: { id: UUID, name: opts.treeName ?? 'Fíškovi' }, head: 'h1', persons: 4,
         working: b.working,
         waiting: b.waiting,
         // An older research cuts the queue to the same window, without places and counts.
@@ -487,6 +547,10 @@ export async function followManaged(page: Page, opts: {
         ...(b.busy ? { busy: b.busy } : {}),
         ...(b.work ? { work: b.work } : {}),
         ...(b.verify ? { verify: { waiting: b.verify.waiting, asked: 0, images: 0, permission: 0, kept: 0, confirmed: 0 } } : {}),
+        ...(b.runs ? { runs: b.runs } : {}),
+        ...(b.runsEnded ? { runsEnded: b.runsEnded } : {}),
+        ...(b.limits ? { limits: { ...b.limits, running: b.runs?.length ?? 0 } } : {}),
+        ...(b.agents ? { agents: b.agents } : {}),
         ...(b.caps ? { caps: b.caps } : {}),
         ...(b.offLine ? { offLine: b.offLine } : {}),
         ...(opts.features ? { features: opts.features } : {}),
@@ -522,7 +586,7 @@ export async function followManaged(page: Page, opts: {
             }
             return route.fulfill(json({ ok: false, code: 'verify.unknown' }, 400));
         }
-        if (/^(directions|offline|queue\/|waiting\/)/.test(path)) {
+        if (/^(directions|offline|queue\/|waiting\/|runs\/|settings\/)/.test(path)) {
             const raw = req.postData();
             const body = raw ? JSON.parse(raw) as Record<string, unknown> : {};
             b.writes.push({ method: req.method(), path, body });
