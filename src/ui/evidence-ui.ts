@@ -204,7 +204,20 @@ export const evidenceUiMethods = uiModule({
         }
         const ids = new Set(evidence.ids);
         if (evidence.faint) for (const id of evidence.faint()) ids.add(id);
-        TreeRenderer.setPersonFilter(ids);
+        // The Fan leaves the others' sectors empty only for a selection of ancestors (§11b).
+        TreeRenderer.setPersonFilter(ids, { fan: sel.ref.kind === 'ancestors' });
+    },
+
+    /**
+     * The pill's "Hide others" (spec 098 §11b): in the Fan only for a
+     * selection of ancestors; for any other selection it is not offered
+     * there (the state stays, Family keeps it).
+     */
+    syncEvidencePillHide(): void {
+        const pill = document.getElementById('evidence-pill');
+        if (!pill) return;
+        const noHide = TreeRenderer.getViewMode() === 'fan' && getSelection().ref?.kind !== 'ancestors';
+        pill.classList.toggle('evidence-pill--no-hide', noHide);
     },
 
     /** Which group the pill highlights now (null: none). */
@@ -369,7 +382,7 @@ export const evidenceUiMethods = uiModule({
                 pick.append(text, chev);
                 pick.onclick = () => this.openSelectionPicker();
                 pill.append(pick);
-                // "Hide others" (§8): the tree laid out from the selection alone (not in the fan: CSS)
+                // "Hide others" (§8): the tree laid out from the selection alone (in the Fan only for ancestors, §11b)
                 const sep = document.createElement('span');
                 sep.className = 'evidence-pill-sep';
                 sep.setAttribute('aria-hidden', 'true');
@@ -455,5 +468,6 @@ export const evidenceUiMethods = uiModule({
         close.title = closeText;
         close.onclick = () => this.dismissEvidenceHighlight();
         pill.append(close);
+        this.syncEvidencePillHide();
     },
 });

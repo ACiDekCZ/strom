@@ -489,6 +489,13 @@ export interface FanSvgOptions {
     focusBack?: { row: string; title: string };
     /** False: shapes and titles only (during a gesture). */
     labels?: boolean;
+    /**
+     * "Hide others" of a selection of ancestors (spec 098 §11b): the sectors
+     * of people not in this set drawn as empty dashed outlines in their
+     * places (no name, years, fill or "+", not clickable, hidden from
+     * assistive technology); the geometry and the focus disc as always.
+     */
+    keepOnly?: ReadonlySet<PersonId>;
 }
 
 /** A family line highlighted in a printed fan: its id and its people (the faint spouses print as the others). */
@@ -683,6 +690,15 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
     };
     const labelOpts = { uid, defs, esc };
     const STROKE = 'stroke-width="1" vector-effect="non-scaling-stroke"';
+    // "Hide others" (spec 098 §11b): a sector outside the kept people is an empty outline in its place.
+    const keepOnly = opts.keepOnly ?? null;
+    let offCount = 0;
+    const off = (personId: PersonId | null): boolean => !!keepOnly && !(personId && (keepOnly.has(personId) || personId === model.focus.id));
+    const offSector = (key: string, d: string): string => {
+        offCount++;
+        return `<g class="fan-sector fan-sector--off" data-fan-off="${key}" aria-hidden="true" pointer-events="none">`
+            + `<path class="fan-empty-edge" d="${d}" fill="none" stroke-dasharray="4 3" ${STROKE}/></g>`;
+    };
 
     const wrap = (personId: PersonId | null, g: string) => {
         const href = personId && opts.linkFor ? opts.linkFor(personId) : null;
@@ -762,6 +778,8 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         const d = fanWedgePath(s.r1, s.r2, s.lo, s.hi);
         if (!s.person) {
             if (!opts.editable) continue;
+            // A missing parent of someone hidden: no "+" either.
+            if (off(s.childId)) { body.push(offSector(s.key, d)); continue; }
             let plus = '';
             if (withLabels && inView(s)) {
                 const b = fanLabelBox(s, ppu);
@@ -779,6 +797,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
             continue;
         }
         const p = s.person;
+        if (off(p.id)) { body.push(offSector(s.key, d)); continue; }
         const prot = protect(p);
         const dim = dimmed(p);
         const fc = fillOf({ kind: 'anc', person: p, generation: s.generation, ahnentafel: s.ahnentafel }, dim);
@@ -819,6 +838,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         const d = fanWedgePath(s.r1, s.r2, s.lo, s.hi);
         const p = s.person;
         const rep = s.repeatOfKey != null;
+        if (off(p?.id ?? null)) { body.push(offSector(s.key, d)); continue; }
         if (marks.has(s.key)) over.push(`<path class="fan-mark" d="${d}" fill="none" stroke-width="3" vector-effect="non-scaling-stroke" pointer-events="none"/>`);
         if (s.kind === 'partner' && !p) {
             let label = '';
@@ -935,19 +955,21 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
     const pats = patsUsed.size > 0;
     // The photo rules only where a portrait (or its wait) is drawn: a drawing without one stays as it was.
     const photos = photoCount > 0;
+    // The empty outlines' colour: editable (the "+" slots) or sectors hidden by "Hide others".
+    const edges = opts.editable || offCount > 0;
     let css: string;
     if (embedded) {
         const T = fanPalette(embedTheme, style);
-        css = themeRules(scope, T, fillsA, opts.editable, halo, pats, photos);
+        css = themeRules(scope, T, fillsA, edges, halo, pats, photos);
         if (hl) {
             css += `${scope} .fan-hl-dim :is(.fan-name,.fan-years,.fan-kekule){fill:${T.textLight}}`
                 + `${scope} .fan-hl-edge{fill:none;stroke:${style === 'mono' ? T.text : FAN_PRINT_EDGE};stroke-width:${fmt(2.5 / ppu)};`
                 + `stroke-dasharray:${fmt(5 / ppu)} ${fmt(3 / ppu)};stroke-linejoin:round}`;
         }
     } else {
-        css = themeRules(scope, fanPalette('light', style), fillsA, opts.editable, halo, pats, photos)
-            + themeRules(`[data-theme="dark"] ${scope}`, fanPalette('dark', style), fillsB, opts.editable, halo, pats, photos)
-            + `@media print{${themeRules(`[data-theme="dark"] ${scope}`, fanPalette('print', style), fillsA, opts.editable, halo, pats, photos)}`
+        css = themeRules(scope, fanPalette('light', style), fillsA, edges, halo, pats, photos)
+            + themeRules(`[data-theme="dark"] ${scope}`, fanPalette('dark', style), fillsB, edges, halo, pats, photos)
+            + `@media print{${themeRules(`[data-theme="dark"] ${scope}`, fanPalette('print', style), fillsA, edges, halo, pats, photos)}`
             + (opts.printHighlight ? printHighlightRules(scope, fillsA, style) : '') + '}';
     }
     css += `${scope} text{pointer-events:none}`;

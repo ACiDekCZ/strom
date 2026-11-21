@@ -563,6 +563,8 @@ export const miscMethods = uiModule({
         if (mode !== 'table') this.forgetTableOrder();
         // The window's selection choice (spec 098 §2): hidden on the timeline, the map and the table.
         this.syncSelectionPickerHost();
+        // The pill's "Hide others" in the Fan only for a selection of ancestors (§11b).
+        this.syncEvidencePillHide();
         // Mobile CSS hides the focus bar under the descendants badge.
         document.body.classList.toggle('descendants-view', mode === 'descendants');
         // Standalone views (map/timeline/fan) have their own top-left controls;

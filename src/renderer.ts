@@ -602,6 +602,8 @@ class TreeRendererClass {
     private viewMode: ViewMode = 'family';
     /** "Hide others" of the window's selection (spec 098 §8, setPersonFilter): the people laid out, null: everyone. */
     private personFilter: ReadonlySet<PersonId> | null = null;
+    /** The filter applies to the Fan too (a selection of ancestors, spec 098 §11b): the others' sectors empty outlines. */
+    private personFilterFan = false;
     /** A satellite window's one view (setWindowView), else null. */
     private windowView: ViewMode | null = null;
 
@@ -2179,13 +2181,28 @@ class TreeRendererClass {
      * out anew from these people alone (the focus always with them,
      * PipelineInput.personFilter), in Family and Descendants; null: everyone.
      * The tabs of hidden relatives and children and siblings at once count
-     * only these people (tabInView).
+     * only these people (tabInView). `fan`: in the Fan too, the sectors of
+     * the others left as empty outlines in their places (a selection of
+     * ancestors, §11b).
      */
-    setPersonFilter(ids: ReadonlySet<PersonId> | null): void {
+    setPersonFilter(ids: ReadonlySet<PersonId> | null, opts: { fan?: boolean } = {}): void {
         const before = this.personFilter;
-        if (before === ids || (before && ids && before.size === ids.size && [...ids].every(id => before.has(id)))) return;
+        const fan = !!ids && !!opts.fan;
+        const fanBefore = this.personFilterFan;
+        this.personFilterFan = fan;
+        const same = before === ids || (!!before && !!ids && before.size === ids.size && [...ids].every(id => before.has(id)));
+        if (same) {
+            if (fan !== fanBefore && this.viewMode === 'fan') this.fanView?.redraw();
+            return;
+        }
         this.personFilter = ids ? new Set(ids) : null;
         if (this.viewMode === 'family' || this.viewMode === 'descendants') void this.renderForFilter();
+        else if (this.viewMode === 'fan' && (fan || fanBefore)) this.fanView?.redraw();
+    }
+
+    /** The people whose sectors the Fan keeps under "Hide others" (§11b); null: all. */
+    private fanKeepOnly(): ReadonlySet<PersonId> | null {
+        return this.personFilterFan && this.personFilter ? this.personFilter : null;
     }
 
     /**
@@ -7614,6 +7631,7 @@ class TreeRendererClass {
                 menuClosed: () => UI.fanFollowMenuClosed?.(),
                 selectedRod: () => UI.selectedRod(),
                 highlightedRod: () => (UI.evidenceHighlightKind() === 'selection' ? UI.selectedRod() : null),
+                keepOnly: () => this.fanKeepOnly(),
                 selectRod: id => UI.selectRodFromFan(id),
                 previewRod: group => this.setFanRodPreview(group),
                 personDetail: id => UI.runPersonMenuAction(id, 'edit'),

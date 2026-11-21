@@ -156,6 +156,37 @@ describe('buildFanSvg', () => {
         expect(svg).toContain('Maximilián Bartoloměj Kratochvílovský');
     });
 
+    it('"Hide others" (098 §11b): the sectors of the others empty dashed outlines in their places, the focus as always', () => {
+        const d = data([
+            person('me', 'male', ['f', 'm']),
+            person('f', 'male', ['ff', 'fm'], { birthDate: '1900', deathDate: '1970' }),
+            person('m', 'female', ['mf'], { birthDate: '1905', deathDate: '1980' }),
+            person('ff', 'male'), person('fm', 'female'), person('mf', 'male'),
+        ]);
+        const model = buildFanModel(d, 'me' as PersonId, 3)!;
+        const all = buildFanSvg(model, { ...svgOpts, ppu: 3, measure: estimate });
+        const kept = buildFanSvg(model, { ...svgOpts, ppu: 3, measure: estimate, keepOnly: new Set(['m', 'mf'] as PersonId[]) });
+        // The mother's side as before (same shape), the father's side empty outlines without people.
+        const pathOf = (svg: string, key: string) => new RegExp(`data-fan-key="${key}"[^>]*>(?:<[^>]+>)*?<path class="fan-fill[^"]*" d="([^"]+)"`).exec(svg)?.[1];
+        expect(pathOf(kept, 'a3')).toBe(pathOf(all, 'a3'));
+        expect(pathOf(kept, 'a6')).toBe(pathOf(all, 'a6'));
+        expect(kept).toContain('data-fan-person="me"');
+        expect(kept).toContain('data-fan-person="m"');
+        expect(kept).not.toContain('data-fan-person="f"');
+        expect(kept).not.toContain('data-fan-person="ff"');
+        expect(kept).not.toContain('1900–1970');
+        const off = [...kept.matchAll(/<g class="fan-sector fan-sector--off" data-fan-off="(a\d+)" aria-hidden="true" pointer-events="none"><path class="fan-empty-edge" d="([^"]+)"/g)];
+        expect(off.map(m => m[1]).sort()).toEqual(['a2', 'a4', 'a5', 'a8', 'a9', 'a10', 'a11'].sort());
+        // The outline stands where the father's sector stood.
+        expect(off.find(m => m[1] === 'a2')![2]).toBe(pathOf(all, 'a2'));
+        // No "+" over a hidden person; the kept mother's missing parent keeps it.
+        expect(kept).not.toContain('data-fan-add="f"');
+        expect(kept).not.toContain('data-fan-add="ff"');
+        expect(kept).toContain('data-fan-add="m"');
+        // Not editable: the outlines still get their colour.
+        expect(buildFanSvg(model, { ...svgOpts, editable: false, keepOnly: new Set(['m'] as PersonId[]) })).toContain('.fan-empty-edge{stroke:');
+    });
+
     it('escapes person names', () => {
         const d = data([person('me', 'male', [], { firstName: '<Evil & "Q"' })]);
         const model = buildFanModel(d, 'me' as PersonId, 4)!;

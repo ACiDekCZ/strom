@@ -117,6 +117,8 @@ export interface FanViewHost {
     selectedRod?(): string | null;
     /** The chosen family line while its highlight holds the pill (no other group covers it); else null. */
     highlightedRod?(): string | null;
+    /** "Hide others" of a selection of ancestors (spec 098 §11b): the people whose sectors stay; null: all of them. */
+    keepOnly?(): ReadonlySet<PersonId> | null;
     /**
      * A legend row or a sector's menu (spec 114 §5): the family line becomes
      * the tree's chosen line (spec 039, one state with the Family view); null:
@@ -512,6 +514,8 @@ export class FanViewController {
     /** Extra options of the drawing: the outlined first occurrence, the way back in the focus disc. */
     protected svgExtras(): Partial<FanSvgOptions> {
         const extras: Partial<FanSvgOptions> = {};
+        const keep = this.host.keepOnly?.() ?? null;
+        if (keep) extras.keepOnly = keep;
         const marks = [...(this.flashKey ? [this.flashKey] : []), ...this.windowSelectedKeys()];
         if (marks.length) extras.marks = marks;
         const back = this.backTarget();
@@ -1358,7 +1362,8 @@ export class FanViewController {
             e.preventDefault();
             e.stopPropagation();
             const next = fanNavMove(fanNavNodes(this.model, this.host.editable()), key, dir, this.model.shape === 'full');
-            if (next) this.focusKey(next);
+            // A sector left empty by "Hide others" (§11b) takes no keyboard focus: the focus stays.
+            if (next && chart.querySelector(`[data-fan-key="${next}"][tabindex]`)) this.focusKey(next);
             return;
         }
         if (e.key === 'Enter' || e.key === ' ') {

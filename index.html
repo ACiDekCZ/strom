@@ -25648,8 +25648,10 @@
         .evidence-pill-hide[aria-pressed="true"] .bx { border-color: var(--text); background: var(--text); color: var(--surface); }
         @media (hover: hover) { .evidence-pill-hide:hover { border-color: var(--text-faint); } }
         @media (pointer: coarse) { .evidence-pill-hide.sel-opt { min-height: 44px; } }
-        /* The fan lays out no tree: no "Hide others" there (§11). */
-        body[data-view-mode="fan"] :is(.evidence-pill-sep, .evidence-pill-hide) { display: none; }
+        /* The Fan offers "Hide others" only for a selection of ancestors (spec 098 §11b, evidence-ui syncEvidencePillHide). */
+        .evidence-pill--no-hide :is(.evidence-pill-sep, .evidence-pill-hide) { display: none; }
+        /* A sector hidden by "Hide others" in the Fan: an empty outline in its place, not clickable. */
+        .fan-sector.fan-sector--off { cursor: default; }
         /* The focused person outside the selection (§9): undimmed, a tag on the card's top edge. */
         .person-card > .card-tag--outside {
             position: absolute; top: -11px; left: 10px; z-index: 3; height: 17px; box-sizing: border-box;
