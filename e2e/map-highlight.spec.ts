@@ -105,3 +105,32 @@ test.describe('the selection highlighted on the map, a phone', () => {
         expect(box.y + box.height).toBeLessThanOrEqual(bar.y + bar.height + 1);
     });
 });
+
+test.describe('the selection highlighted on the map, a phone, a long name', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+    test('a long selection name wraps the second line: "highlighted" stays readable, the line inside the bar', async ({ page }) => {
+        await stubTiles(page);
+        await seedPathTree(page, {}, { timeOn: false });
+        await page.evaluate(() => window.Strom.DataManager.createPersonList({
+            name: 'Letters to the Quillfen and Ostrowbek parishes', dynamic: false, personIds: ['tamsin', 'orrin'] as never[], sort: 'manual',
+        }));
+        const btn = page.locator('#map-container .map-scope-btn');
+        await btn.click();
+        await page.locator('.map-scope-sheet .map-scope-row[data-sel]', { hasText: 'Letters to the Quillfen and Ostrowbek parishes' }).click();
+        await btn.click();
+        await page.locator('.map-scope-sheet [data-scope="tree"]').click();
+
+        const line = page.locator('.map-status-hl');
+        await expect(line).toHaveText('Selection: List: Letters to the Quillfen and Ostrowbek parishes highlighted');
+        // Nothing cut: the whole text in the line's box, on more than one line.
+        const fit = await line.evaluate(el => ({ sh: el.scrollHeight, ch: el.clientHeight, sw: el.scrollWidth, cw: el.clientWidth, lh: parseFloat(getComputedStyle(el).lineHeight) }));
+        expect(fit.sh).toBeLessThanOrEqual(fit.ch + 1);
+        expect(fit.sw).toBeLessThanOrEqual(fit.cw + 1);
+        expect(fit.ch).toBeGreaterThan(fit.lh * 1.5);
+        const bar = (await page.locator('.map-status').boundingBox())!;
+        const box = (await line.boundingBox())!;
+        expect(box.y + box.height).toBeLessThanOrEqual(bar.y + bar.height + 1);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    });
+});

@@ -13279,10 +13279,14 @@
         @media (hover: hover) { .map-status button.map-status-unplaced:hover { background: none; color: var(--primary-dark); text-decoration: underline; text-underline-offset: 2px; } }
         @media (max-width: 640px) { .map-status button.map-status-unplaced { font-size: 12px; } }
         @media (pointer: coarse) { .map-status button.map-status-unplaced { min-height: 44px; } }
-        /* The window's selection highlighted (spec 098 §11d): the phone's quiet second line says which (its scope button has no name). */
+        /* The window's selection highlighted (spec 098 §11d): the phone's quiet second line says which (its scope button has no name).
+           A long name wraps (two lines at most), so the closing word ("highlighted") is not cut away. */
         .map-status-hl { display: none; }
         @media (max-width: 640px) {
-            .map-status-hl { display: block; flex-basis: 100%; text-align: center; font-size: 12px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .map-status-hl {
+                display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; flex-basis: 100%;
+                text-align: center; font-size: 12px; line-height: 1.35; color: var(--text-light); overflow: hidden; overflow-wrap: anywhere;
+            }
         }
         /* A phone's sheet covers the bottom: the bar steps aside while it is open. */
         .map-sheet-open .map-status { visibility: hidden; }
