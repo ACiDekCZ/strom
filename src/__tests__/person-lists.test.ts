@@ -143,13 +143,20 @@ describe('stored lists (data version 22)', () => {
     });
 
     it('a GEDCOM export carries neither the lists nor the dates added', () => {
-        const d = family();
-        d.persons[id('ada')].addedAt = '2026-11-01T08:00:00.000Z';
-        d.personLists = [fixed({ name: 'Archive request', personIds: [id('ada')] })];
-        const { content } = exportToGedcom(d, 'T');
-        expect(content).not.toContain('Archive request');
-        expect(content).not.toContain('2026-11-01');
-        expect(content).not.toMatch(/1 NOV 2026/);
+        // A fixed clock: the export's own date (HEAD DATE) must not be read as the date added.
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-06-15T10:30:00Z'));
+        try {
+            const d = family();
+            d.persons[id('ada')].addedAt = '2026-11-01T08:00:00.000Z';
+            d.personLists = [fixed({ name: 'Archive request', personIds: [id('ada')] })];
+            const { content } = exportToGedcom(d, 'T');
+            expect(content).not.toContain('Archive request');
+            expect(content).not.toContain('2026-11-01');
+            expect(content).not.toMatch(/(^|\D)1 NOV 2026/m);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
 

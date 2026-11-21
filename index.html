@@ -32917,6 +32917,9 @@
         .pl-note .secondary { padding: 4px 10px; font-size: 12.5px; }
         .pl-acts { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex: none; }
         .modal .pl-more { min-width: 36px; padding-left: 8px; padding-right: 8px; }
+        /* "On the map" (spec 098 §6): the secondary button after Open in Table; disabled in a satellite without its main window. */
+        .modal .pl-acts .pl-onmap { white-space: nowrap; }
+        .modal .pl-acts .pl-onmap[aria-disabled="true"] { color: var(--text-secondary); cursor: default; }
         .pl-tiles { display: flex; gap: 8px; margin-top: 14px; flex: none; }
         .pl-tile { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--divider); border-radius: var(--r-md); background: var(--surface); }
         .pl-tile--wide { flex-grow: 1.4; }

@@ -3493,11 +3493,13 @@ export const tableMethods = uiModule({
         // Editing a Table filter rule (spec 084 §7, §9): its list takes the filter as it is now.
         const ruleList = this.tableRuleList();
         const saveRule = ruleList ? { label: strings.lists.saveRule(listDisplayName(ruleList)), run: () => this.saveTableRule() } : null;
+        // On the map (spec 098 §6): only in a list's or the window selection's scope, the last row.
+        const onMap = this.tableOnMap();
         if (!isPhoneBar()) {
             const anchor = mounted?.bar.querySelector<HTMLElement>('.tv-more-menu-btn');
             const hasRows = !!rowCounts(model)[state.rowType];
             const canGroup = hasRows && groupChoices.length > 1;
-            if (!anchor || (!saveRule && (!hasRows || (!saveList && !canGroup)))) return;
+            if (!anchor || (!saveRule && !onMap && (!hasRows || (!saveList && !canGroup)))) return;
             const entries: MenuEntry[] = [];
             // Group by › and Collapse / Expand all groups (spec 084 §10), then the saves.
             if (canGroup) {
@@ -3515,6 +3517,10 @@ export const tableMethods = uiModule({
             if ((saveRule || (saveList && hasRows)) && entries.length) entries.push(SEP);
             if (saveRule) entries.push({ id: 'saveRule', label: saveRule.label, icon: '', run: saveRule.run });
             if (saveList && hasRows) entries.push({ id: 'saveList', label: strings.lists.saveAs, icon: '', run: () => this.saveTableAsList() });
+            if (onMap) {
+                if (entries.length) entries.push(SEP);
+                entries.push({ id: 'onMap', label: t.onMap, icon: '', disabled: onMap.disabled, title: onMap.why, run: onMap.run });
+            }
             openHeadMenu(anchor, '', '', entries);
             return;
         }
@@ -3559,7 +3565,20 @@ export const tableMethods = uiModule({
         }
         if (saveRule) first.push({ label: saveRule.label, run: saveRule.run });
         if (saveList) first.push({ label: strings.lists.saveAs, run: () => this.saveTableAsList() });
-        this.presentMenuSheet(t.moreActions, first.length ? [{ rows: first }, { rows, divider: true }] : [{ rows }]);
+        const blocks: { rows: { label: string; run: () => void; disabled?: boolean; why?: string; id?: string }[]; divider?: boolean }[] = first.length ? [{ rows: first }, { rows, divider: true }] : [{ rows }];
+        if (onMap) blocks.push({ rows: [{ id: 'tv-onmap-row', label: t.onMap, run: onMap.run, ...(onMap.disabled ? { disabled: true, why: onMap.why } : {}) }], divider: true });
+        this.presentMenuSheet(t.moreActions, blocks);
+    },
+
+    /** ⋯'s On the map (spec 098 §6): the Table's list or window selection as the selection on the Map; null in another scope. */
+    tableOnMap(): { disabled: boolean; why?: string; run: () => void } | null {
+        const state = stateOf(treeKey());
+        if (state.rowType === 'sources') return null;
+        const scope = scopeOfType(state, state.rowType);
+        if (!scope) return null;
+        const ref: SelectionRef = scope.kind === 'list' ? { kind: 'list', listId: scope.listId } : scope.ref;
+        const avail = this.showOnMapState();
+        return { ...avail, run: () => { if (!this.showOnMapState().disabled) this.showSelectionOnMap(ref); } };
     },
 
     /** A completeness cell's bubble by touch (§6.2): the share, what is missing, what it counts. */

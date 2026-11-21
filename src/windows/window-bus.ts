@@ -158,6 +158,12 @@ export type WindowMessageBody =
     | { type: 'taking-over'; windowId: string }
     /** second tab / sat → main: an address or a launch to open there (?person= ?live= ?send= ?import-url=, files). */
     | { type: 'link'; search?: string; files?: unknown[] }
+    /**
+     * sat → main: "On the map" of a satellite's Table (spec 098 §6): the main
+     * window takes the selection (an encoded SelectionRef), shows the Map in
+     * the scope Selection and comes forward.
+     */
+    | { type: 'show-on-map'; ref: string; treeId: TreeId | null }
     /** main → sat: close yourself (a window the main window holds no reference to). */
     | { type: 'close'; to: string };
 
@@ -177,7 +183,7 @@ export interface ChannelLike {
 }
 
 const TYPES = new Set<string>(['hello', 'init', 'tree', 'patch', 'edit', 'edit-result', 'select', 'send-mode', 'undo', 'redo', 'status',
-    'focus-req', 'focused', 'research-action', 'research-action-result', 'research-menu-req', 'research-menu', 'research-state', 'agent-state', 'agent-state-req', 'fan-rod-colors', 'view', 'spawn', 'bye', 'main-bye', 'taking-over', 'link', 'close']);
+    'focus-req', 'focused', 'research-action', 'research-action-result', 'research-menu-req', 'research-menu', 'research-state', 'agent-state', 'agent-state-req', 'fan-rod-colors', 'view', 'spawn', 'bye', 'main-bye', 'taking-over', 'link', 'show-on-map', 'close']);
 
 function isWindowMessage(data: unknown): data is WindowMessage {
     if (!data || typeof data !== 'object') return false;

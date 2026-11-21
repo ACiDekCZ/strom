@@ -10084,6 +10084,8 @@ const stringsEN = {
         fill: 'Add from the rule',
         editRule: 'Edit rule…',
         openTable: 'Open in Table',
+        onMap: 'On the map',
+        onMapTitle: "Show the list's people on the map",
         actions: 'More list actions',
         sum: {
             persons: 'people', birth: 'born', photo: 'with photo', cite: 'with citation', story: 'with story', left: 'left',
@@ -20619,6 +20621,8 @@ const stringsCZ: StringsType = {
         fill: 'Doplnit podle pravidla',
         editRule: 'Upravit pravidlo…',
         openTable: 'Otevřít v Tabulce',
+        onMap: 'Na mapě',
+        onMapTitle: 'Ukázat osoby seznamu na mapě',
         actions: 'Další akce seznamu',
         sum: {
             persons: 'osob', birth: 'narození', photo: 's fotkou', cite: 's dokladem', story: 's vyprávěním', left: 'zbývá',
@@ -31033,6 +31037,8 @@ const stringsDE: StringsType = {
         fill: 'Nach Regel ergänzen',
         editRule: 'Regel bearbeiten…',
         openTable: 'In Tabelle öffnen',
+        onMap: 'Auf der Karte',
+        onMapTitle: 'Personen der Liste auf der Karte zeigen',
         actions: 'Weitere Aktionen der Liste',
         sum: {
             persons: 'Personen', birth: 'Geburt', photo: 'mit Foto', cite: 'mit Beleg', story: 'mit Erzählung', left: 'offen',

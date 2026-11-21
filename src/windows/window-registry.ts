@@ -215,6 +215,8 @@ export class WindowRegistry {
     private readonly sendEndHandlers = new Set<(windowId: string) => void>();
     private linkHandler: LinkHandler | null = null;
     private researchHandler: ResearchActionHandler | null = null;
+    /** "On the map" of a satellite's Table (spec 098 §6): the selection's encoded ref and its tree. */
+    private showOnMapHandler: ((ref: string, treeId: TreeId | null) => void) | null = null;
     private researchMenuProvider: ((personId: string) => unknown[]) | null = null;
     private readonly heldLinks: { link: { search?: string; files?: unknown[] }; from: string }[] = [];
     private readonly heldActions: HeldAction[] = [];
@@ -273,6 +275,7 @@ export class WindowRegistry {
             b.on('link', m => this.onLink({ search: m.search, files: m.files }, m.from)),
             b.on('research-action', m => this.onResearchAction({ action: m.action, args: m.args, from: m.from, reqId: m.reqId })),
             b.on('research-menu-req', m => this.onResearchMenuRequest(m)),
+            b.on('show-on-map', m => this.showOnMapHandler?.(m.ref, m.treeId)),
             b.on('agent-state-req', m => this.agentStateAsked(m.windowId || m.from)),
             this.host.onSaved(() => this.sync()),
         );
@@ -434,6 +437,11 @@ export class WindowRegistry {
     }
 
     /** Who runs a research action asked for by a satellite (§2, §6). */
+    /** Who shows a satellite's selection on the map here (spec 098 §6). */
+    setShowOnMapHandler(cb: ((ref: string, treeId: TreeId | null) => void) | null): void {
+        this.showOnMapHandler = cb;
+    }
+
     setResearchActionHandler(cb: ResearchActionHandler | null): void {
         this.researchHandler = cb;
         if (cb) for (const a of this.heldActions.splice(0)) this.runResearchAction(a);

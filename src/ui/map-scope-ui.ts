@@ -20,7 +20,8 @@ import { MAP_KINDS, mapPointPersonIds, personHasMapPlace } from '../places.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import { mapScopeAfterSelection, mapScopeOnOpen, type MapScope } from '../map-scope.js';
 import { getWindowRole } from '../windows/window-role.js';
-import { decodeSelectionRef } from '../view-selection-ref.js';
+import { decodeSelectionRef, encodeSelectionRef, type SelectionRef } from '../view-selection-ref.js';
+import { showOnMapForward } from '../windows/window-show-on-map.js';
 import { canvasBusy } from './canvas-busy.js';
 import { uiModule } from './module.js';
 import { selectionQuickRows } from './selection-picker-ui.js';
@@ -427,5 +428,35 @@ export const mapScopeMethods = uiModule({
      */
     openMapSelUnplaced(): void {
         this.openTableForSelection({ filter: 'noPlace' });
+    },
+
+    /**
+     * "On the map" (§6: a list in the Lists of people, the Table's list or
+     * selection scope): the window's selection, the Map in the scope
+     * Selection, framed anew. A satellite hands it to the main window.
+     */
+    showSelectionOnMap(ref: SelectionRef): void {
+        const forward = showOnMapForward();
+        if (forward) {
+            if (forward.mainOpen()) forward.send(encodeSelectionRef(ref));
+            return;
+        }
+        setSelection(ref, 'list');
+        if (!getSelection().ref) return;
+        this.syncMapScopeTree();
+        if (this.mapScope !== 'sel') this.rememberMapScope('sel');
+        this.closeMapPopup();
+        this.closeMapScopePicker(false);
+        this.mapCenter = null;  // framed anew for the selection's places
+        if (TreeRenderer.getViewMode() !== 'map') { this.setDisplayViewMode('map'); return; }
+        this.renderMapScope();
+        void canvasBusy(() => TreeRenderer.renderAsync(), { label: strings.busy.mapCalc });
+    },
+
+    /** Whether "On the map" works now: a satellite needs its main window (`why`: the tooltip). */
+    showOnMapState(): { disabled: boolean; why?: string } {
+        const forward = showOnMapForward();
+        if (forward && !forward.mainOpen()) return { disabled: true, why: strings.table.onMapNoMain };
+        return { disabled: false };
     },
 });

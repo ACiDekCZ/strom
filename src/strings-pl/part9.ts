@@ -31,6 +31,8 @@ export const plPart9: Pick<StringsType, 'lists'> = {
         fill: 'Uzupełnij według reguły',
         editRule: 'Edytuj regułę…',
         openTable: 'Otwórz w tabeli',
+        onMap: 'Na mapie',
+        onMapTitle: 'Pokaż osoby z listy na mapie',
         actions: 'Więcej działań listy',
         sum: {
             persons: 'osób', birth: 'urodzenia', photo: 'ze zdjęciem', cite: 'z dowodem', story: 'z opowieścią', left: 'zostało',

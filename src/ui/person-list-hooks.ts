@@ -35,6 +35,9 @@ export interface ListMenuRow {
     danger?: boolean;
     /** A second level ("Export ›"): its rows open beside the row (a page of the phone's sheet); `run` is not used. */
     children?: ListMenuRow[];
+    /** Offered but not working now (a satellite without its main window): `why` as its tooltip. */
+    disabled?: boolean;
+    why?: string;
     run: () => void;
 }
 
@@ -43,6 +46,8 @@ export interface PersonListHooks {
     editRule: ((ui: UIClass, listId: string) => void) | null;
     addPerson: ((ui: UIClass, listId: string) => void) | null;
     openInTable(ui: UIClass, listId: string, opts?: { noSource?: boolean }): void;
+    /** "On the map" (spec 098 §6): the list as the window's selection on the Map in the scope Selection. */
+    showOnMap(ui: UIClass, listId: string): void;
     listMenu: Array<(ui: UIClass, list: PersonList) => ListMenuRow[]>;
 }
 
@@ -64,6 +69,11 @@ export const personListHooks: PersonListHooks = {
     openInTable(ui, listId, opts) {
         ui.closePersonLists();
         ui.openTableInScope(listId, opts ?? {});
+    },
+    showOnMap(ui, listId) {
+        if (ui.showOnMapState().disabled) return;
+        ui.closePersonLists();
+        ui.showSelectionOnMap({ kind: 'list', listId });
     },
     listMenu: [freezeAndChecklistRows, exportRows],
 };

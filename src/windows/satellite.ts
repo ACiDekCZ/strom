@@ -483,6 +483,11 @@ export class SatelliteClient {
         });
     }
 
+    /** "On the map" of this window's Table (spec 098 §6): the main window shows the selection on its map. */
+    showOnMap(ref: string): void {
+        this.bus.post({ type: 'show-on-map', ref, treeId: this._treeId });
+    }
+
     /** A research action: the main window runs it (§2 person menu). */
     researchAction(action: string, args?: unknown): void {
         this.bus.post({ type: 'research-action', action, args });

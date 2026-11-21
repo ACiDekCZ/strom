@@ -451,7 +451,9 @@ export const personListsMethods = uiModule({
 
         const menuOpen = st.menu?.kind === 'list' && st.menu.from === 'detail';
         const more = ro ? '' : `<button type="button" class="secondary pl-more${menuOpen ? ' is-open' : ''}" data-act="menu-detail" data-key="menu-detail" aria-label="${esc(t.actions)}" title="${esc(t.actions)}" aria-haspopup="menu" aria-expanded="${menuOpen}">${DOTS}</button>`;
-        const acts = `<div class="pl-acts"><button type="button" class="primary" data-act="open-table" data-key="open-table">${esc(t.openTable)}</button>${more}</div>`;
+        const onMap = this.showOnMapState();
+        const mapBtn = `<button type="button" class="secondary pl-onmap" data-act="on-map" data-key="on-map" title="${esc(onMap.why ?? t.onMapTitle)}"${onMap.disabled ? ' aria-disabled="true"' : ''}>${esc(t.onMap)}</button>`;
+        const acts = `<div class="pl-acts"><button type="button" class="primary" data-act="open-table" data-key="open-table">${esc(t.openTable)}</button>${mapBtn}${more}</div>`;
 
         // The tiles (K8.2): only "without citation" leads on (the Table's chip).
         const s = listSummary(index, list);
@@ -558,11 +560,12 @@ export const personListsMethods = uiModule({
         }).join('');
     },
 
-    /** The rows of a list's ⋯: Open in Table · Rename · Duplicate · (Freeze or Tick off done, more from the hooks) · Delete. */
+    /** The rows of a list's ⋯: Open in Table · On the map · Rename · Duplicate · (Freeze or Tick off done, more from the hooks) · Delete. */
     personListMenuRows(list: PersonList): ListMenuRow[] {
         const t = strings.lists;
         const rows: ListMenuRow[] = [
             { id: 'open', label: t.openTable, run: () => personListHooks.openInTable(this, list.id) },
+            { id: 'map', label: t.onMap, ...this.showOnMapState(), run: () => personListHooks.showOnMap(this, list.id) },
             { id: 'rename', label: t.menu.rename, run: () => this.startPersonListRename(list.id) },
             { id: 'dup', label: t.menu.dup, run: () => this.duplicatePersonListUi(list.id) },
         ];
@@ -615,7 +618,7 @@ export const personListsMethods = uiModule({
                     + `<span class="pl-menu-label">${esc(r.label)}</span><span class="pl-menu-check pl-menu-chev" aria-hidden="true">›</span></button>`;
             }
             const role = r.checked === undefined ? 'menuitem' : `menuitemcheckbox" aria-checked="${r.checked}`;
-            return `<button type="button" class="pl-menu-item${r.danger ? ' is-danger' : ''}" role="${role}" data-act="menu-run" data-run="${esc(r.id)}" data-key="menu-${esc(r.id)}">`
+            return `<button type="button" class="pl-menu-item${r.danger ? ' is-danger' : ''}" role="${role}" data-act="menu-run" data-run="${esc(r.id)}" data-key="menu-${esc(r.id)}"${r.disabled ? ' aria-disabled="true"' : ''}${r.why ? ` title="${esc(r.why)}"` : ''}>`
                 + `<span class="pl-menu-label">${esc(r.label)}${r.sub ? `<span class="pl-menu-sub">${esc(r.sub)}</span>` : ''}</span><span class="pl-menu-check" aria-hidden="true">${r.checked ? '✓' : ''}</span></button>`;
         };
         const items = rows.map((r, i) => {
@@ -677,8 +680,8 @@ export const personListsMethods = uiModule({
             st.menu = null;
             const rows = this.personListMenuRows(list);
             const blocks = [
-                { rows: rows.filter(r => r.id === 'open'), divider: false },
-                { rows: rows.filter(r => r.id !== 'open' && r.id !== 'delete'), divider: true },
+                { rows: rows.filter(r => r.id === 'open' || r.id === 'map'), divider: false },
+                { rows: rows.filter(r => r.id !== 'open' && r.id !== 'map' && r.id !== 'delete'), divider: true },
                 { rows: rows.filter(r => r.id === 'delete'), divider: true },
             ].map(b => ({ ...b, rows: b.rows.map(r => sheetRow(r)) }));
             this.presentMenuSheet(listDisplayName(list), blocks, { subtitle: rowMeta(list) });
@@ -876,6 +879,7 @@ export const personListsMethods = uiModule({
                 if (menu?.kind !== 'list') return;
                 const list = DataManager.getPersonList(menu.listId);
                 const item = list ? this.personListMenuRows(list).flatMap(r => [r, ...(r.children ?? [])]).find(r => r.id === el!.dataset.run && !r.children) : undefined;
+                if (item?.disabled) return;
                 st.menu = null;
                 this.renderPersonLists();
                 item?.run();
@@ -893,6 +897,7 @@ export const personListsMethods = uiModule({
                 return;
             case 'rename': if (listId) this.startPersonListRename(listId); return;
             case 'open-table': if (listId) personListHooks.openInTable(this, listId); return;
+            case 'on-map': if (listId) personListHooks.showOnMap(this, listId); return;
             case 'no-cite': if (listId) personListHooks.openInTable(this, listId, { noSource: true }); return;
             case 'edit-rule': if (listId) personListHooks.editRule?.(this, listId); return;
             case 'add-person': if (listId) personListHooks.addPerson?.(this, listId); return;
@@ -1217,9 +1222,10 @@ export const personListsMethods = uiModule({
 });
 
 /** A row of a list's ⋯ in the phone's sheet; a second level ("Export ›") is a page of the sheet. */
-function sheetRow(r: ListMenuRow): { label: string; sub?: string; danger?: boolean; value?: string; id: string; run: () => void; page?: { title: string; rows: ReturnType<typeof sheetRow>[] } } {
+function sheetRow(r: ListMenuRow): { label: string; sub?: string; danger?: boolean; value?: string; id: string; run: () => void; disabled?: boolean; why?: string; page?: { title: string; rows: ReturnType<typeof sheetRow>[] } } {
     return {
         label: r.label, sub: r.sub, danger: r.danger, value: r.checked ? '✓' : undefined, id: `pl-sheet-${r.id}`, run: r.run,
+        ...(r.disabled ? { disabled: true, why: r.why } : {}),
         ...(r.children ? { page: { title: r.label, rows: r.children.map(sheetRow) } } : {}),
     };
 }

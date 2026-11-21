@@ -21,6 +21,7 @@ import { recordReloadPoint } from '../resume-view.js';
 import { openForwardedLink, type ForwardedLink, type LinkOpenerDeps } from './window-link.js';
 import { SecondTab, renderSecondTab, removeSecondTabScreen } from './second-tab.js';
 import { DataManager } from '../data.js';
+import { decodeSelectionRef } from '../view-selection-ref.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -36,6 +37,7 @@ import { cardInView, wireMainSelection, wireSatelliteSelection, type MainFocusDe
 import { hideWindowNotice, showWindowNotice } from '../ui/window-notice.js';
 import { windowAgentFollow } from './agent-follow-state.js';
 import { setTableResearchForward, TABLE_BUBBLE_ACTION } from './window-table-research.js';
+import { setShowOnMapForward } from './window-show-on-map.js';
 import { SettingsManager } from '../settings.js';
 import type { MapKind } from '../places.js';
 import type { SatelliteKind } from './window-role.js';
@@ -122,6 +124,12 @@ export function startMainWindow(): WindowRegistry {
         openChanged: (open) => UI.overviewWindowOpenChanged(open),
     });
     wireAgentMain(registry);
+    // "On the map" of a satellite (spec 098 §6): its selection on this window's map, in the same tree only.
+    registry.setShowOnMapHandler((ref, treeId) => {
+        if (treeId && treeId !== DataManager.getCurrentTreeId()) return;
+        const sel = decodeSelectionRef(ref);
+        if (sel) UI.showSelectionOnMap(sel);
+    });
     registry.setResearchActionHandler((action, args) => {
         if (action === PERSON_MENU_ACTION) {
             runSatelliteResearchRow(args, { items: researchItems, run: (personId, a) => UI.runPersonMenuAction(personId as PersonId, a) });
@@ -246,6 +254,11 @@ export function startSatelliteSelection(client: SatelliteClient): void {
             client.researchAction(TABLE_BUBBLE_ACTION, args);
             if (focusMain) void client.requestMainFocus();
         },
+    });
+    // "On the map" (spec 098 §6): the main window shows the selection on its map and comes forward.
+    setShowOnMapForward({
+        mainOpen: () => client.connection === 'connected',
+        send: (ref) => { client.showOnMap(ref); void client.requestMainFocus(); },
     });
 }
 
