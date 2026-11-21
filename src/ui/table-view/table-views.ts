@@ -14,13 +14,14 @@
  */
 
 import { strings } from '../../strings.js';
-import type { TableView, TableViewRowType } from '../../types.js';
+import type { ResearchLine, TableView, TableViewRowType } from '../../types.js';
 import { sanitizeTableView } from '../../table-views-data.js';
 import { columnById, DEFAULT_VIEWS, type SortSpec } from './table-columns.js';
 import { ROW_TYPES, type RowType } from './table-model.js';
 import type { FilterItem } from './table-filter.js';
 import { defaultUnionCollapse } from './table-subrows.js';
 import { groupKeysOf } from './table-group.js';
+import { lineOffered } from './table-research.js';
 import {
     applyColumnSetup, columnSetupOf, defaultTypeState, type ColumnSetup, type RowTypeState, type TableState,
 } from './table-state.js';
@@ -100,8 +101,8 @@ const RESEARCH_PREFIX = 'r:';
 export interface ResearchViewOffer {
     /** A research tree: the view Research (its overview). */
     overview: boolean;
-    /** The research's lines in its order: a view each, and Off the lines. */
-    lines: readonly { id: string; name: string }[];
+    /** The research's lines in its order: a view each (not an ended one), and Off the lines. */
+    lines: readonly { id: string; name: string; state?: ResearchLine['state'] }[];
     /** Exchange with research (a research tree that can change). */
     exchange: boolean;
 }
@@ -127,7 +128,7 @@ export function researchViewIds(): string[] {
     const o = researchViewOffer;
     if (!o.overview) return [];
     const out = [`${RESEARCH_PREFIX}research`];
-    for (const l of o.lines) out.push(`${RESEARCH_PREFIX}line:${l.id}`);
+    for (const l of o.lines) if (lineOffered(l)) out.push(`${RESEARCH_PREFIX}line:${l.id}`);
     if (o.lines.length) out.push(`${RESEARCH_PREFIX}offLine`);
     if (o.exchange) out.push(`${RESEARCH_PREFIX}exchange`);
     return out;

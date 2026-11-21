@@ -22,11 +22,12 @@ import {
     activeFilterCount, availableChips, chipLabel, filterRows, filterSummary, setChip, type TableFilter,
 } from '../ui/table-view/table-filter.js';
 import {
-    builtinViews, dropMissingViews, findView, isBuiltinId, isResearchViewId, researchViewId, researchViews, setResearchViews,
+    builtinViews, dropMissingViews, findView, isBuiltinId, isResearchViewId, researchViewId, researchViewIds, researchViews, setResearchViews,
     switchView, takenViewNames, viewChanged, viewList,
 } from '../ui/table-view/table-views.js';
 import { defaultTableState, shownColumns } from '../ui/table-view/table-state.js';
 import { tableEmptyState, type TableEmptyInput } from '../ui/table-view/table-empty.js';
+import { groupRows } from '../ui/table-view/table-group.js';
 
 const GED = readFileSync(join(__dirname, '../../e2e/fixtures/research-table.ged'), 'utf8');
 const NOW = Date.parse('2026-11-10T12:00:00Z');
@@ -53,7 +54,7 @@ const refns = (m: TableModel, f: TableFilter) =>
     filterRows(m, 'persons', m.persons, f).rows.map(r => (r as { person: { refn?: string } }).person.refn).sort();
 
 const offerOf = (env: ReturnType<typeof envOf>) => {
-    setResearchViews({ overview: true, lines: env.lines.lines.map(l => ({ id: l.id, name: l.name })), exchange: env.input.kind === 'research' && !env.input.readOnly });
+    setResearchViews({ overview: true, lines: env.lines.lines.map(l => ({ id: l.id, name: l.name, state: l.state })), exchange: env.input.kind === 'research' && !env.input.readOnly });
 };
 
 beforeAll(() => {
@@ -237,5 +238,48 @@ describe('the research views\' empty states (16q)', () => {
 
     it('Exchange with nothing: in sync', () => {
         expect(tableEmptyState({ ...input, viewId: 'r:exchange' })).toMatchObject({ kind: 'exchangeEmpty', title: 'Strom a výzkum jsou srovnané' });
+    });
+});
+
+describe('a done line is not offered (paused stays)', () => {
+    // G0002 ended in the research; G0001 goes on.
+    const doneData = load(GED.replace('2 STAT paused', '2 STAT done'));
+    const doneEnv = (more: Partial<ResearchTableInput> = {}) => researchTableEnv(doneData, { ...base, ...more });
+
+    it('no chip for a done line; a paused one keeps its chip', () => {
+        const ids = researchChipOffer(doneEnv()).map(o => o.id);
+        expect(ids).toContain('line:G0001');
+        expect(ids).not.toContain('line:G0002');
+        expect(ids).toContain('offLine');
+        expect(researchChipOffer(envOf()).map(o => o.id)).toContain('line:G0002');
+    });
+
+    it('a done line\'s chip on in a stored filter stays offered and filtering until it is turned off', () => {
+        const env = doneEnv();
+        const on = researchChipOffer(env, id => id === 'line:G0002');
+        expect(on.map(o => o.id)).toContain('line:G0002');
+        expect(researchChipActive(env, 'line:G0002')).toBe(true);
+    });
+
+    it('no view for a done line; an open one falls back to the default view', () => {
+        const env = doneEnv();
+        offerOf(env);
+        expect(researchViewIds()).toEqual(['r:research', 'r:line:G0001', 'r:offLine', 'r:exchange']);
+        const state = defaultTableState();
+        offerOf(envOf());
+        expect(switchView(state, 'r:line:G0002', [])).toBe(true);
+        offerOf(env);
+        expect(dropMissingViews(state, [])).toBe(true);
+        expect(state.open.persons).toBe('b:overview');
+    });
+
+    it('grouped by lines: no group of a done line', () => {
+        const m = buildTableModel(doneData, { rev: 1, homeId: null, lang: 'cs', year: 2026 });
+        applyResearch(m, doneEnv());
+        const keys = groupRows(m, 'persons', 'lines', m.persons).map(g => g.key);
+        expect(keys).toContain('G0001');
+        expect(keys).not.toContain('G0002');
+        const paused = modelWith({});
+        expect(groupRows(paused, 'persons', 'lines', paused.persons).map(g => g.key)).toContain('G0002');
     });
 });

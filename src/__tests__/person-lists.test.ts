@@ -32,7 +32,7 @@ import { buildLineages } from '../lineage.js';
 import { setLanguage, strings } from '../strings.js';
 import { syntheticTree } from './helpers/synthetic-tree.js';
 import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
-import { STROM_DATA_VERSION, type Partnership, type PartnershipId, type Person, type PersonId, type PersonList, type StromData, type TreeId } from '../types.js';
+import { STROM_DATA_VERSION, type Partnership, type PartnershipId, type Person, type PersonId, type PersonList, type ResearchPlace, type StromData, type TreeId } from '../types.js';
 
 const id = (s: string) => s as PersonId;
 const uid = (s: string) => s as PartnershipId;
@@ -211,6 +211,44 @@ describe('who is in a list', () => {
         expect(listPersonIds(ix, l)).toEqual(['konst', 'ada']);
         expect(ruleLabel(l.rule, ix)).toBe('Research line: G1 Ostrovid line');
         expect(ruleBroken(ix, { kind: 'line', directionId: 'G9' })).toEqual({ kind: 'line' });
+    });
+
+    it('a research line: a person also in a done line belongs to the line not done', () => {
+        const d = family();
+        d.researchDirections = { complete: true, lines: [{ id: 'G1', name: 'Ostrovid line', state: 'active' }, { id: 'G2', name: 'Other', state: 'done' }], branches: [] };
+        const at: [string, string, ResearchPlace[]][] = [
+            ['konst', 'P1', [{ role: 'line', line: 'G2' }, { role: 'line', line: 'G1' }]],
+            ['ada', 'P2', [{ role: 'line', line: 'G1' }]],
+            ['emil', 'P3', [{ role: 'line', line: 'G2' }]],
+        ];
+        for (const [pid, refn, places] of at) {
+            d.persons[id(pid)].refn = refn;
+            d.persons[id(pid)].research = { places } as Person['research'];
+        }
+        const ix = buildLineages(d);
+        const rule = (directionId: string) => ({ ...fixed(), dynamic: true, sort: 'old' as const, rule: { kind: 'line' as const, directionId } });
+        expect(listPersonIds(ix, rule('G1'))).toEqual(['konst', 'ada']);
+        // Konstantin stands in the ended G2 as well: a list of G2 keeps him (membership is any place in the line).
+        expect(listPersonIds(ix, rule('G2'))).toEqual(['konst', 'emil']);
+    });
+
+    it('a research line: a person of a narrower line nested in it is in it too', () => {
+        const d = family();
+        d.researchDirections = { complete: true, lines: [{ id: 'G1', name: 'Ostrovid line', state: 'active' }, { id: 'G2', name: 'Konstantin\'s ancestors', state: 'active' }], branches: [] };
+        const at: [string, string, ResearchPlace[]][] = [
+            // The narrower G2 first, as the research lists the places.
+            ['konst', 'P1', [{ role: 'line', line: 'G2' }, { role: 'line', line: 'G1' }]],
+            ['ada', 'P2', [{ role: 'line', line: 'G1' }]],
+            ['emil', 'P3', [{ role: 'line', line: 'G2' }]],
+        ];
+        for (const [pid, refn, places] of at) {
+            d.persons[id(pid)].refn = refn;
+            d.persons[id(pid)].research = { places } as Person['research'];
+        }
+        const ix = buildLineages(d);
+        const rule = (directionId: string) => ({ ...fixed(), dynamic: true, sort: 'old' as const, rule: { kind: 'line' as const, directionId } });
+        expect(listPersonIds(ix, rule('G1'))).toEqual(['konst', 'ada']);
+        expect(listPersonIds(ix, rule('G2'))).toEqual(['konst', 'emil']);
     });
 
     it('a Table filter: the rows it passes in its order; for unions both partners', () => {

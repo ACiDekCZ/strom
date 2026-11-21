@@ -31,7 +31,7 @@ import { uiModule } from '../module.js';
 import { liveSession, onComputer } from '../research-ui.js';
 import { closeTableBubble, openBubblePanel, researchBubbleHtml, researchBubbleTitle, sheetElement } from './table-bubble.js';
 import { researchBubble, researchBubbleActions, type ResearchBubble, type ResearchBubbleAction } from './table-research-bubble.js';
-import { personLineRole, researchBranchName, type ResearchTableEnv } from './table-research.js';
+import { inLine, researchBranchName, type ResearchTableEnv } from './table-research.js';
 import {
     bubbleFocusesMain, bubbleOfferedHere, bubbleRunsHere, findBubbleAction, readTableBubbleArgs, tableBubbleArgs, tableResearchForward,
 } from '../../windows/window-table-research.js';
@@ -198,9 +198,7 @@ export const tableResearchMethods = uiModule({
             const line = env.lines.lines.find(x => x.id === a.lineId);
             label = line ? `${line.id} ${line.name}` : a.lineId;
             for (const q of Object.values(env.data.persons)) {
-                if (q.isPlaceholder) continue;
-                const role = personLineRole(env.lines, q);
-                if (role?.kind === 'line' && role.line.id === a.lineId) ids.push(q.id);
+                if (!q.isPlaceholder && inLine(env.lines, q, a.lineId)) ids.push(q.id);
             }
         }
         if (!DataManager.getPerson(a.personId)) return undefined;

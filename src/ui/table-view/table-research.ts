@@ -123,6 +123,36 @@ export function researchLinesOf(data: StromData, livePlaces?: DirectionPlaces | 
     };
 }
 
+/**
+ * A line offered to choose from (the Table's chips, views and groups, the
+ * window's selection, a new list): an ended (done) line is not, it shows
+ * only in the overview of the lines where it can be taken up again; a
+ * paused one stays.
+ */
+export function lineOffered(line: Pick<ResearchLine, 'state'>): boolean {
+    return line.state !== 'done';
+}
+
+/** The lines offered to choose from, in the research's order; `keep` holds an ended one still chosen (a chip on, the selection). */
+export function offeredLines(model: Pick<ResearchLinesModel, 'lines'>, keep?: (id: string) => boolean): ResearchLine[] {
+    return model.lines.filter(l => lineOffered(l) || !!keep?.(l.id));
+}
+
+/**
+ * The lines the window's selection and a new list offer (`keep`: the one
+ * chosen now, ended or not): the file's lines, whose places they read, each
+ * in the state the bridge says when it says one (an end or a restart shows
+ * at once), else the file's.
+ */
+export function selectionLines(data: StromData, livePlaces?: DirectionPlaces | null, keep?: string | null): ResearchLine[] {
+    const file = researchLinesOf(data);
+    const live = livePlaces ? researchLinesOf(data, livePlaces) : null;
+    const lines = live?.source === 'live' && file.source !== 'none'
+        ? file.lines.map(l => live.lines.find(x => x.id === l.id) ?? l)
+        : file.lines;
+    return offeredLines({ lines }, id => id === keep);
+}
+
 /** How a person stands in the lines (§16.9); null when nothing is known. */
 export type PersonLineRole =
     | { kind: 'line'; line: ResearchLine; index: number; partner: boolean; branch?: ResearchBranch }
@@ -131,23 +161,28 @@ export type PersonLineRole =
     | { kind: 'off' };
 
 /**
- * The person's first place that names a known line (a side branch added to
- * a line counts in it), else a side branch, an island, or — with every place
- * said — off the lines.
+ * The person's first place that names a known line not ended (a side
+ * branch added to a line counts in it; an ended line only when no other is
+ * named), else a side branch, an island, or — with every place said — off
+ * the lines. The column Line shows it; who stands in a line is personLineIds.
  */
 export function personLineRole(model: ResearchLinesModel, p: Pick<Person, 'refn'>): PersonLineRole | null {
     if (model.source === 'none') return null;
     const places = model.placesOf(p.refn);
-    const lineIndex = (id: string | undefined): number => id ? model.lines.findIndex(l => l.id === id) : -1;
     const branchOf = (id: string | undefined): ResearchBranch | undefined => id ? model.branches.find(b => b.id === id) : undefined;
-    for (const place of places) {
-        if (place.role === 'line' || place.role === 'partner') {
-            const i = lineIndex(place.line);
-            if (i >= 0) return { kind: 'line', line: model.lines[i], index: i, partner: place.role === 'partner' };
-        } else if (place.role === 'branch') {
-            const branch = branchOf(place.branch);
-            const i = lineIndex(branch?.line ?? place.line);
-            if (i >= 0) return { kind: 'line', line: model.lines[i], index: i, partner: false, ...(branch ? { branch } : {}) };
+    // A place in an ended line gives way to one in a line that is not (the person stays in the line still offered).
+    for (const ended of [false, true]) {
+        const lineIndex = (id: string | undefined): number =>
+            id ? model.lines.findIndex(l => l.id === id && (ended || lineOffered(l))) : -1;
+        for (const place of places) {
+            if (place.role === 'line' || place.role === 'partner') {
+                const i = lineIndex(place.line);
+                if (i >= 0) return { kind: 'line', line: model.lines[i], index: i, partner: place.role === 'partner' };
+            } else if (place.role === 'branch') {
+                const branch = branchOf(place.branch);
+                const i = lineIndex(branch?.line ?? place.line);
+                if (i >= 0) return { kind: 'line', line: model.lines[i], index: i, partner: false, ...(branch ? { branch } : {}) };
+            }
         }
     }
     const branchPlace = places.find(x => x.role === 'branch');
@@ -158,6 +193,29 @@ export function personLineRole(model: ResearchLinesModel, p: Pick<Person, 'refn'
     if (places.some(x => x.role === 'island')) return { kind: 'island' };
     if (model.complete) return { kind: 'off' };
     return null;
+}
+
+/**
+ * The known lines a person stands in: any of their places, not only the
+ * narrowest (a person of a narrower line nested in a wider one is in both;
+ * a side branch added to a line counts in it). Ended lines too: membership
+ * is the research's; what is offered to choose from is offeredLines'.
+ */
+export function personLineIds(model: ResearchLinesModel, p: Pick<Person, 'refn'>): Set<string> {
+    const out = new Set<string>();
+    if (model.source === 'none') return out;
+    for (const place of model.placesOf(p.refn)) {
+        const id = place.role === 'line' || place.role === 'partner' ? place.line
+            : place.role === 'branch' ? (model.branches.find(b => b.id === place.branch)?.line ?? place.line)
+            : undefined;
+        if (id && model.lines.some(l => l.id === id)) out.add(id);
+    }
+    return out;
+}
+
+/** The person stands in the line (personLineIds): the lists, the window's selection, the Table's line chips and their counts. */
+export function inLine(model: ResearchLinesModel, p: Pick<Person, 'refn'>, lineId: string): boolean {
+    return personLineIds(model, p).has(lineId);
 }
 
 /** Off the lines (§16.9): a side branch not added to a line, an island, and anyone without a place when all are said. */
@@ -756,7 +814,7 @@ export function researchChips(env: ResearchTableEnv, p: Person, newWindow: Resea
     if (p.question?.trim() || (p.research?.hypotheses ?? []).some(isOpenHypothesis)) out.add('rQ');
     if (agentHere && env.input.live && ref && (env.working.has(ref) || env.queued.has(ref))) out.add('rAgent');
     const role = personLineRole(env.lines, p);
-    if (role?.kind === 'line') out.add(`line:${role.line.id}`);
+    for (const id of personLineIds(env.lines, p)) out.add(`line:${id}`);
     if (isOffLine(role)) out.add('offLine');
     if ((env.input.unsent?.get(p.id)?.length ?? 0) > 0) out.add('xUnsent');
     if (Object.values(p.researchOrigins ?? {}).some(o => !!o.was?.value?.trim())) out.add('xChanged');
@@ -789,9 +847,9 @@ export function researchLineCounts(env: ResearchTableEnv, persons: readonly Pers
     let offLine = 0;
     for (const p of persons) {
         if (p.isPlaceholder) continue;
-        const role = personLineRole(env.lines, p);
-        if (role?.kind === 'line') counts.set(role.line.id, (counts.get(role.line.id) ?? 0) + 1);
-        else if (isOffLine(role)) offLine++;
+        const ids = personLineIds(env.lines, p);
+        for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+        if (!ids.size && isOffLine(personLineRole(env.lines, p))) offLine++;
     }
     return { lines: env.lines.lines.map(line => ({ line, count: counts.get(line.id) ?? 0 })), offLine };
 }
@@ -824,11 +882,11 @@ export interface ResearchChipOffer {
 /**
  * The research chips the tree offers, in the block's order (§16.5): the
  * signals (waiting and the agent not in an archive or a read-only copy), a
- * chip per line and Off the lines (only with lines), then the chips of
- * "More" (§16.10, §16.8; not sent and deciding here only where the tree can
- * change). None without research.
+ * chip per line not ended (or whose chip is `on`) and Off the lines (only
+ * with lines), then the chips of "More" (§16.10, §16.8; not sent and
+ * deciding here only where the tree can change). None without research.
  */
-export function researchChipOffer(env: ResearchTableEnv): ResearchChipOffer[] {
+export function researchChipOffer(env: ResearchTableEnv, on?: (id: ResearchChipId) => boolean): ResearchChipOffer[] {
     const { kind, readOnly } = env.input;
     if (kind === 'none') return [];
     const agentHere = kind === 'research' && !readOnly;
@@ -838,7 +896,8 @@ export function researchChipOffer(env: ResearchTableEnv): ResearchChipOffer[] {
         out.push({ id, place: 'block', ...(id === 'rAgent' ? { live: true } : {}) });
     }
     if (env.lines.lines.length > 0) {
-        for (const line of env.lines.lines) out.push({ id: `line:${line.id}`, place: 'block', line });
+        // An ended line has no chip; one on in a stored filter stays until it is turned off.
+        for (const line of offeredLines(env.lines, id => !!on?.(`line:${id}`))) out.push({ id: `line:${line.id}`, place: 'block', line });
         out.push({ id: 'offLine', place: 'block' });
     }
     for (const id of RESEARCH_MORE_CHIPS) {
@@ -850,7 +909,8 @@ export function researchChipOffer(env: ResearchTableEnv): ResearchChipOffer[] {
 
 /** The chip can filter now: offered, and a live-only one only while following (§16.5: inactive otherwise). */
 export function researchChipActive(env: ResearchTableEnv, id: string): boolean {
-    const offer = researchChipOffer(env).find(c => c.id === id);
+    // A chip on stays filtering, an ended line's too (§16.5: kept until it is turned off).
+    const offer = researchChipOffer(env, () => true).find(c => c.id === id);
     return !!offer && (!offer.live || env.input.live);
 }
 

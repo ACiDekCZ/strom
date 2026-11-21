@@ -12,6 +12,9 @@ import {
 } from '../rod-picker.js';
 import { strings, setLanguage } from '../strings.js';
 import { stepGenerations } from '../ui/selection-picker-ui.js';
+import { selectionLines } from '../ui/table-view/table-research.js';
+import type { DirectionPlaces } from '../research-directions-write.js';
+import type { StromData } from '../types.js';
 
 const s = strings.selection;
 const texts: SelectionPickerMarkup['texts'] = {
@@ -183,5 +186,37 @@ describe('the generations\' stepper', () => {
         expect(stepGenerations(9, 1)).toBe(10);
         expect(stepGenerations(10, 1)).toBeUndefined();
         expect(stepGenerations(undefined, 1)).toBeUndefined();
+    });
+});
+
+describe('the research lines offered (a done line left out)', () => {
+    const tree = (): StromData => ({
+        persons: {}, partnerships: {},
+        researchDirections: {
+            complete: true, branches: [],
+            lines: [
+                { id: 'G0001', name: 'Předci Bořivoje Trnkavce', state: 'active' },
+                { id: 'G0002', name: 'Brumlákovi z Lísku', state: 'done' },
+                { id: 'G0003', name: 'Revize Ludmily', state: 'paused' },
+            ],
+        },
+    } as unknown as StromData);
+    const ids = (lines: readonly { id: string }[]) => lines.map(l => l.id);
+
+    it('a done line is not among the rows, a paused one is; the line chosen now stays', () => {
+        expect(ids(selectionLines(tree(), null))).toEqual(['G0001', 'G0003']);
+        expect(ids(selectionLines(tree(), null, 'G0002'))).toEqual(['G0001', 'G0002', 'G0003']);
+    });
+
+    it('the bridge\'s states win over the file\'s: a line ended or taken up again shows at once', () => {
+        const live: DirectionPlaces = {
+            places: new Map(), branches: [], rev: '1',
+            lines: [
+                { id: 'G0001', name: 'Předci Bořivoje Trnkavce', state: 'done' },
+                { id: 'G0002', name: 'Brumlákovi z Lísku', state: 'active' },
+                { id: 'G0003', name: 'Revize Ludmily', state: 'paused' },
+            ],
+        };
+        expect(ids(selectionLines(tree(), live))).toEqual(['G0002', 'G0003']);
     });
 });

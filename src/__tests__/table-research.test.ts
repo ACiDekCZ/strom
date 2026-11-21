@@ -18,11 +18,11 @@ import { sanitizeLiveStatus } from '../research-link.js';
 import { directionPlacesOf, directionPlacesKept, fetchDirectionPeople, forgetDirectionPeople, onDirectionPlaces } from '../research-directions-write.js';
 import { setLanguage, strings } from '../strings.js';
 import type { LiveWaiting } from '../research-link.js';
-import type { Person, PersonId, StromData } from '../types.js';
+import type { Person, PersonId, ResearchPlace, StromData } from '../types.js';
 import {
     researchTableEnv, researchCell, researchColumns, researchChips, researchLinesOf, personLineRole, researchLineCounts,
     researchColumnLiveOff, unionLineRole, unionResearchIdCell, sourceResearchIdCell, type ResearchTableInput,
-    researchOffer, unionResearchCell, sourceImageCell, applyResearch, RESEARCH_DEFAULT_COLUMNS,
+    researchOffer, unionResearchCell, sourceImageCell, applyResearch, RESEARCH_DEFAULT_COLUMNS, type ResearchLinesModel,
 } from '../ui/table-view/table-research.js';
 import { cellOf, columnById, columnOffered, setResearchOffer } from '../ui/table-view/table-columns.js';
 import { catalogColumns, defaultTypeState, groupAllColumns, setGroupShown, shownColumns, showColumn } from '../ui/table-view/table-state.js';
@@ -203,6 +203,24 @@ describe('lines and line roles (§16.9)', () => {
         expect(personLineRole(researchLinesOf(partial), byRefn(partial, 'P0011'))).toBeNull();
     });
 
+    it('a place in a done line gives way to one in a line not done; with no other the done line stays', () => {
+        const lines = [
+            { id: 'G0001', name: 'Předci Karla Pivoňkovského', state: 'active' as const },
+            { id: 'G0002', name: 'Klikvové z Rebarborova', state: 'done' as const },
+        ];
+        const places: Record<string, ResearchPlace[]> = {
+            // The done line is the narrower place, listed first.
+            P0801: [{ role: 'line', line: 'G0002' }, { role: 'line', line: 'G0001' }],
+            P0802: [{ role: 'line', line: 'G0002' }],
+        };
+        const model: ResearchLinesModel = { source: 'file', lines, branches: [], complete: true, placesOf: refn => (refn ? places[refn] : undefined) ?? [] };
+        expect(personLineRole(model, { refn: 'P0801' })).toMatchObject({ kind: 'line', line: { id: 'G0001' }, index: 0 });
+        expect(personLineRole(model, { refn: 'P0802' })).toMatchObject({ kind: 'line', line: { id: 'G0002' }, index: 1 });
+        // A paused line keeps its place first.
+        const paused = { ...model, lines: [lines[0], { ...lines[1], state: 'paused' as const }] };
+        expect(personLineRole(paused, { refn: 'P0801' })).toMatchObject({ kind: 'line', line: { id: 'G0002' } });
+    });
+
     it('a tree without lines has none', () => {
         expect(researchLinesOf(load(GED.replace(/1 _STROM_DIRECTIONS Y\n/, '').replace(/1 _STROM_DIRECTION G000[12]\n(2 .*\n)+/g, ''))).source).toBe('none');
     });
@@ -353,6 +371,35 @@ describe('research chips', () => {
         expect(researchChips(env, P('P0011'))).toEqual(new Set(['offLine', 'xAgentDecided', 'xNew']));
         expect(researchChips(env, P('P0009'))).toEqual(new Set(['line:G0001', 'xPaused']));
         expect(researchChips(env, P('P0013'))).toEqual(new Set(['rQ', 'line:G0002', 'xPaused']));
+    });
+
+    it('nested lines: a person in a narrower line is in the wider one too (chips and counts)', () => {
+        const nested = load();
+        // Josef (P0003) of G0001 stands in the narrower G0002 too (listed first, as the research lists the narrowest first).
+        expect(personLineRole(researchLinesOf(data), byRefn(data, 'P0003'))).toMatchObject({ kind: 'line', line: { id: 'G0001' } });
+        byRefn(nested, 'P0003').research = { ...byRefn(nested, 'P0003').research, places: [{ role: 'line', line: 'G0002' }, { role: 'line', line: 'G0001' }] };
+        const e = researchTableEnv(nested, { kind: 'research', live: false, now: NOW, lastOpened: Date.parse('2026-11-09T00:00:00Z') });
+        const chips = researchChips(e, byRefn(nested, 'P0003'));
+        expect(chips.has('line:G0002')).toBe(true);
+        expect(chips.has('line:G0001')).toBe(true);
+        expect(chips.has('offLine')).toBe(false);
+        // The column Line keeps the narrowest.
+        expect(personLineRole(e.lines, byRefn(nested, 'P0003'))).toMatchObject({ kind: 'line', line: { id: 'G0002' } });
+        const before = new Map(researchLineCounts(env, Object.values(data.persons)).lines.map(l => [l.line.id, l.count]));
+        const after = new Map(researchLineCounts(e, Object.values(nested.persons)).lines.map(l => [l.line.id, l.count]));
+        // Counted in both: G0001 keeps him, G0002 gains him.
+        expect(after.get('G0001')).toBe(before.get('G0001'));
+        expect(after.get('G0002')).toBe(before.get('G0002')! + 1);
+    });
+
+    it('a side branch added to a line puts its people in that line besides their own', () => {
+        const nested = load();
+        const p = byRefn(nested, 'P0013');
+        p.research = { ...p.research, places: [...(p.research?.places ?? []), { role: 'branch', branch: 'B-P0009' }] };
+        const e = researchTableEnv(nested, { kind: 'research', live: false, now: NOW, lastOpened: Date.parse('2026-11-09T00:00:00Z') });
+        const chips = researchChips(e, p);
+        expect(chips.has('line:G0002')).toBe(true);
+        expect(chips.has('line:G0001')).toBe(true);
     });
 
     it('new from research by window', () => {

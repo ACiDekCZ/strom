@@ -31,7 +31,8 @@ import type { PersonId, PersonList, PersonListRule } from '../types.js';
 import { rulePersonIds } from '../person-lists.js';
 import { rodLabels, type RodId } from '../lineage.js';
 import { rodPickerItems, rodPickerSmallItems } from '../rod-picker.js';
-import { researchLinesOf } from './table-view/table-research.js';
+import { researchLinesOf, selectionLines } from './table-view/table-research.js';
+import { researchTableLive } from './research-ui.js';
 import { shownName } from '../person-name.js';
 import { cardYears } from '../card-fields.js';
 import { TreeRenderer } from '../renderer.js';
@@ -131,6 +132,11 @@ function researchLines(): ReadonlyArray<{ id: string; name: string }> {
     return researchLinesOf(DataManager.getData()).lines;
 }
 
+/** The lines offered to choose from: an ended one only while it is the one chosen (`keep`), as in the window's selection. */
+function offeredResearchLines(keep: string | null): ReadonlyArray<{ id: string; name: string }> {
+    return selectionLines(DataManager.getData(), researchTableLive().places, keep);
+}
+
 function personOf(id: PersonId | null) {
     if (!id) return null;
     const p = DataManager.getData().persons[id];
@@ -220,7 +226,7 @@ export const personListNewMethods = uiModule({
         const one = opts.personIds?.length === 1 ? opts.personIds[0] : null;
         const focus = one && personOf(one) ? one : TreeRenderer.getFocusPersonId();
         const firstRod = rodChoices().big[0]?.id ?? rodChoices().small[0]?.id ?? null;
-        const lines = researchLines();
+        const lines = offeredResearchLines(null);
         const active = document.activeElement;
         const st: NewListState = {
             mode, source, overlayId: mode === 'save' ? SAVE_ID : NEW_ID,
@@ -347,7 +353,7 @@ export const personListNewMethods = uiModule({
         if (st.mode !== 'edit') opts.push(['empty', n.empty, n.emptySub]);
         const rods = rodChoices();
         opts.push(['rods', n.rod, ''], ['ancestors', n.anc, ''], ['descendants', n.des, '']);
-        if (researchLines().length) opts.push(['line', n.line, '']);
+        if (offeredResearchLines(st.lineId).length) opts.push(['line', n.line, '']);
         opts.push(['added', n.added, '']);
         let html = `<div class="pln-legend" id="pln-based">${esc(n.basedOn)}</div><div class="pln-opts" role="radiogroup" aria-labelledby="pln-based">`;
         for (const [opt, label, sub] of opts) {
@@ -392,7 +398,7 @@ export const personListNewMethods = uiModule({
                 return `<div class="pln-ctls">${person}${select('gens', n.generations, gens)}</div>`;
             }
             case 'line':
-                return `<div class="pln-ctls">${select('line', n.line, researchLines().map(l => option(l.id, `${l.id} ${l.name}`, l.id === st.lineId)).join(''))}</div>`;
+                return `<div class="pln-ctls">${select('line', n.line, offeredResearchLines(st.lineId).map(l => option(l.id, `${l.id} ${l.name}`, l.id === st.lineId)).join(''))}</div>`;
             case 'added': {
                 const periods = PERIODS.map(d => option(d, n.period(d), !st.customDays && st.days === d)).join('') + option('custom', n.custom, st.customDays);
                 const days = st.customDays

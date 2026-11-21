@@ -179,7 +179,7 @@ let researchCounts: { env: ResearchTableEnv; window: ResearchNewWindow; counts: 
 function researchBarState(
     env: ResearchTableEnv, m: TableModel, filter: TableFilter, columns: readonly ColumnDef[], researchView: boolean,
 ): ResearchBarState | undefined {
-    const offer = researchChipOffer(env);
+    const offer = researchChipOffer(env, id => !!chipItem(filter, id));
     if (!offer.length) return undefined;
     const chipOn = filter.items.some(i => isChipItem(i) && isResearchChipId(i.chip));
     const window = newWindowOf(chipItem(filter, 'xNew'));
@@ -903,7 +903,7 @@ export const tableMethods = uiModule({
         // §16.5: the research's views the tree offers, before its state is read (a view no longer offered falls back).
         setResearchViews(research && research.input.kind !== 'none' ? {
             overview: true,
-            lines: research.lines.lines.map(l => ({ id: l.id, name: l.name })),
+            lines: research.lines.lines.map(l => ({ id: l.id, name: l.name, state: l.state })),
             exchange: research.input.kind === 'research' && !research.input.readOnly,
         } : null);
         const state = stateOf(tree);

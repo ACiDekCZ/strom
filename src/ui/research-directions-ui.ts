@@ -1654,8 +1654,8 @@ export const researchDirectionsMethods = uiModule({
         if (d.last) detail.appendChild(el('div', 'research-direction__last', L.dirLast(shortDate(d.last.at), d.last.text)));
         if (opts.actions === false) return detail;
         const actions = el('div', 'research-direction__actions');
-        // Nothing that leads to an agent in an archive or while the research waits for one.
-        const work = this.activeResearchNoAgent() ? null : this.activeResearchLink('chat', { research: d.id });
+        // Nothing that leads to an agent in an archive or while the research waits for one; only an active line is worked on.
+        const work = d.state !== 'active' || this.activeResearchNoAgent() ? null : this.activeResearchLink('chat', { research: d.id });
         if (work) {
             const btn = setResearchActionLabel(el('button', 'link-button'), L.dirWork, researchLinkMark('chat'));
             btn.type = 'button';

@@ -21,7 +21,8 @@ import {
 } from '../rod-picker.js';
 import { ensureFamilyPagesAppCss } from '../family-pages-css.js';
 import { listDisplayName, listKind, listSummary, ruleLabel } from '../person-lists.js';
-import { researchLinesOf } from './table-view/table-research.js';
+import { researchLinesOf, selectionLines } from './table-view/table-research.js';
+import { researchTableLive } from './research-ui.js';
 import { filterAndSort } from '../person-picker.js';
 import { shownName } from '../person-name.js';
 import { displayYear } from '../dates.js';
@@ -157,7 +158,8 @@ function pickerMarkup(): SelectionPickerMarkup {
     const items = rodPickerItems(index, undefined, undefined, lang);
     const offered = rodPickerOffered();
     const focus = realPerson(TreeRenderer.getFocusPersonId());
-    const lines: SelectionPickRow[] = researchLinesOf(data).lines.map(l => {
+    // An ended line is not offered, unless it is the selection now; the bridge's states as the Table reads them.
+    const lines: SelectionPickRow[] = selectionLines(data, researchTableLive().places, ref?.kind === 'line' ? ref.directionId : null).map(l => {
         const r: SelectionRef = { kind: 'line', directionId: l.id };
         const name = l.name || l.id;
         return { sel: encodeSelectionRef(r), label: name, sub: strings.selection.lineSub, count: countOf(r), icon: selectionIcon('line'), q: rodPickKey(name), current: encodeSelectionRef(r) === current };

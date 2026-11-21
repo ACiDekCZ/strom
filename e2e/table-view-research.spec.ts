@@ -574,6 +574,30 @@ test.describe('research chips and views (§16.5)', () => {
         expect(await label.evaluate(el => el.clientWidth > 0 && el.scrollWidth <= el.clientWidth)).toBe(true);
     });
 
+    test('an ended line is offered nowhere: no chip, no view, no row in the selection\'s choice; a paused one stays', async ({ page }) => {
+        // G0001 ended in the research, G0002 stays paused.
+        const ended = GED.replace(/(1 _STROM_DIRECTION G0001\n(?:2 .*\n)*?)2 STAT active\n/, '$12 STAT done\n');
+        expect(ended).not.toBe(GED);
+        await page.clock.setFixedTime(new Date('2026-11-10T12:00:00Z'));
+        await openApp(page);
+        await dropGed(page, ended);
+        await expect(card(page, 'Karel')).toBeVisible();
+        await page.locator('#view-rod-picker .sp-rodpick-btn').click();
+        const pop = page.locator('#view-rod-picker .sp-rodpick-pop');
+        await expect(pop).toBeVisible();
+        await expect(pop.locator('li[data-sec="lines"][data-sel="line:G0002"]')).toHaveCount(1);
+        await expect(pop.locator('li[data-sec="lines"][data-sel="line:G0001"]')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await openTable(page);
+        await rToggle(page).click();
+        await expect(menuItem(page, 'G0002 Klikvové z Rebarborova')).toBeVisible();
+        await expect(menuItem(page, 'G0001 Předci Karla Pivoňkovského')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await page.locator('#table-container .tv-view-btn').click();
+        await expect(menuItem(page, 'Line: G0002 Klikvové z Rebarborova')).toBeVisible();
+        await expect(menuItem(page, 'Line: G0001 Předci Karla Pivoňkovského')).toHaveCount(0);
+    });
+
     test('a tree without research: no research chip and no research views', async ({ page }) => {
         await openApp(page);
         await seedTree(page, PLAIN, 'Kvelden', 'a');

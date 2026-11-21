@@ -12,7 +12,7 @@ import { eventValueIsOnTag } from '../../events.js';
 import { addedTime } from '../../person-lists-data.js';
 import { strings } from '../../strings.js';
 import { cellOf, columnById } from './table-columns.js';
-import { researchLinesOf, type ResearchLinesModel } from './table-research.js';
+import { lineOffered, offeredLines, researchLinesOf, type ResearchLinesModel } from './table-research.js';
 import { rowKey, type RowType, type TableModel, type TableRow } from './table-model.js';
 import type { DrawLine, GridLine } from './table-subrows.js';
 
@@ -95,7 +95,7 @@ function linesOf(model: TableModel): ResearchLinesModel {
 /** Whether the tree has research lines to group by. */
 export function treeHasLines(model: TableModel): boolean {
     const m = linesOf(model);
-    return m.source !== 'none' && m.lines.length > 0;
+    return m.source !== 'none' && offeredLines(m).length > 0;
 }
 
 function yearOf(sortKey: number | string | null): number | null {
@@ -171,7 +171,8 @@ function valuesOf(env: GroupEnv, type: RowType, by: TableGroupKey, row: TableRow
                 for (const place of m.placesOf(p.refn)) {
                     let id = place.role === 'line' || place.role === 'partner' ? place.line : undefined;
                     if (place.role === 'branch') id = m.branches.find(b => b.id === place.branch)?.line ?? place.line;
-                    const i = id ? m.lines.findIndex(l => l.id === id) : -1;
+                    // An ended line has no group (as no chip or view).
+                    const i = id ? m.lines.findIndex(l => l.id === id && lineOffered(l)) : -1;
                     if (i < 0 || seen.has(id!)) continue;
                     seen.add(id!);
                     const line = m.lines[i];
