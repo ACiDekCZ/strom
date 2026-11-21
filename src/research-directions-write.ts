@@ -57,6 +57,8 @@ export interface DirectionWriteRefused {
     existing?: { id: string; name: string; state: LiveDirection['state'] };
     /** `held`: what holds it and the research's sentence. */
     held?: ResearchWriteHeld;
+    /** 403 `runs.raise` (spec 126 U10): the terminal command that raises the most runs at once, when said. */
+    command?: string;
 }
 
 /** A write done: the research's version after it and the one it was made on (absent: not said). */
@@ -104,7 +106,11 @@ export function directionRefusal(status: number, body: unknown, retryAfter?: str
     if (status === 507) return out('full');
     if (status === 400) return out('bad-body');
     if (status === 404) return out(errorCode === 'directions.person' ? 'person' : 'none');
-    if (status === 403) return out('app-only');
+    if (status === 403) {
+        // Raising the most runs at once is the person's in the terminal: the command that does it, when it looks like one.
+        const command = errorCode === 'runs.raise' ? cleanText(r.command, 120) : '';
+        return { ...out('app-only'), ...(/^strom [A-Za-z0-9 ._=-]{1,100}$/.test(command) ? { command } : {}) };
+    }
     if (status >= 500 && status < 600) return out('failed');
     if (status === 0) return out('network');
     return out('unknown');
@@ -183,7 +189,8 @@ export function researchBridgeWrite<T extends object>(base: string, method: 'GET
 
 /** The direction in an answer (`direction`), checked as the status's are; null when absent or not valid. */
 function directionOf(r: Record<string, unknown>): LiveDirection | null {
-    return sanitizeDirections([r.direction])[0] ?? null;
+    // A direction's own run (spec 126 U10) as the bridge says it: an older research sends none.
+    return sanitizeDirections([r.direction], true)[0] ?? null;
 }
 
 /** What a new direction says (`POST /directions`). */
@@ -197,6 +204,11 @@ export interface DirectionCreateBody {
     note?: string;
     /** A branch outside the directions it grows from ("B-P0031"). */
     branch?: string;
+    /**
+     * Move the open tasks of the wider direction whose people are all in the new one (spec 126 U10, K2.15;
+     * `directions.move` in `features`): sent only when said, so an older research gets the body as before.
+     */
+    moveTasks?: boolean;
 }
 
 /** A branch's key ("B-P0031"), or null. */
@@ -204,16 +216,16 @@ export function offLineBranchRef(id: unknown): string | null {
     return researchBranchRef(id);
 }
 
-/** Create a direction; it comes last in the order. 409 `directions.exists`: `existing` says which is there. */
-export function createDirection(base: string, body: DirectionCreateBody): Promise<BridgeWriteResult<{ direction: LiveDirection | null }>> {
+/** The body a new direction is sent with (`moveTasks` left out), or null when it is not one the research takes. */
+function directionCreateSent(body: DirectionCreateBody): Record<string, unknown> | null {
     const person = researchPersonRef(body.person);
     const kinds = ['ancestors', 'descendants', 'question'];
-    if (!person || !kinds.includes(body.direction)) return Promise.resolve(notSent());
-    if (body.direction === 'question' && !body.question?.trim()) return Promise.resolve(notSent());
+    if (!person || !kinds.includes(body.direction)) return null;
+    if (body.direction === 'question' && !body.question?.trim()) return null;
     const branch = body.branch === undefined ? undefined : offLineBranchRef(body.branch);
-    if (body.branch !== undefined && !branch) return Promise.resolve(notSent());
+    if (body.branch !== undefined && !branch) return null;
     const limits = body.limits && (body.limits.generations !== undefined || body.limits.before !== undefined) ? body.limits : undefined;
-    const sent = {
+    return {
         person, direction: body.direction,
         ...(body.name?.trim() ? { name: body.name.trim() } : {}),
         ...(body.question?.trim() ? { question: body.question.trim() } : {}),
@@ -221,7 +233,60 @@ export function createDirection(base: string, body: DirectionCreateBody): Promis
         ...(body.note?.trim() ? { note: body.note.trim() } : {}),
         ...(branch ? { branch } : {}),
     };
-    return researchBridgeWrite(base, 'POST', 'directions', sent, r => ({ direction: directionOf(r) }));
+}
+
+/** A whole count of an answer (0 when absent or not a count). */
+const countOf = (v: unknown): number => typeof v === 'number' && Number.isInteger(v) && v >= 0 ? Math.min(v, 10_000_000) : 0;
+
+/**
+ * Create a direction; it comes last in the order. 409 `directions.exists`: `existing` says which is there.
+ * With `moveTasks` (spec 126 U10, `directions.move`): `moved` = the tasks moved into it (absent: not said).
+ */
+export function createDirection(base: string, body: DirectionCreateBody):
+    Promise<BridgeWriteResult<{ direction: LiveDirection | null; moved?: number }>> {
+    const sent = directionCreateSent(body);
+    if (!sent) return Promise.resolve(notSent());
+    const move = typeof body.moveTasks === 'boolean' ? { moveTasks: body.moveTasks } : {};
+    return researchBridgeWrite(base, 'POST', 'directions', { ...sent, ...move }, r => ({
+        direction: directionOf(r),
+        ...(typeof r.moved === 'number' ? { moved: countOf(r.moved) } : {}),
+    }));
+}
+
+/**
+ * What a new direction would take over (spec 126 U10, K2.15; `directions.move` in `features`):
+ * `POST <token>/directions/preview` with the body of the new direction answers the wider directions
+ * it lies in (`inside`, G…, each once; empty: none — a nested direction may lie in more) and how many
+ * of their open tasks are about its people only (`move`; 0: nothing to ask). Nothing is written.
+ */
+export function previewDirection(base: string, body: DirectionCreateBody):
+    Promise<BridgeWriteResult<{ inside: string[]; move: number }>> {
+    const sent = directionCreateSent(body);
+    if (!sent) return Promise.resolve(notSent());
+    return researchBridgeWrite(base, 'POST', 'directions/preview', sent, r => {
+        const raw = Array.isArray(r.inside) ? r.inside.slice(0, MAX_INSIDE) : [];
+        const inside = [...new Set(raw.map(researchDirectionRef).filter((x): x is string => !!x))];
+        return { inside, move: inside.length > 0 ? countOf(r.move) : 0 };
+    });
+}
+
+/** Most wider directions taken from a preview's `inside`. */
+const MAX_INSIDE = 20;
+
+/**
+ * Take back the tasks moved into a direction when it was made (`POST <token>/directions/<G…>/gather/undo`,
+ * `directions.move`): `back` is how many went back to the wider direction. 409 `gather.none` (code
+ * `conflict`): nothing to take back.
+ */
+export function undoGather(base: string, researchId: string): Promise<BridgeWriteResult<{ back: number }>> {
+    const id = researchDirectionRef(researchId);
+    if (!id || id !== researchId) return Promise.resolve(notSent());
+    return researchBridgeWrite(base, 'POST', `directions/${id}/gather/undo`, {}, r => ({ back: countOf(r.back) }));
+}
+
+/** A request not sent at all (its values are not what the research takes). */
+export function bridgeWriteNotSent(): DirectionWriteRefused {
+    return notSent();
 }
 
 /** What an edit changes (`null` limits: no limit of that kind; `reason`: why a paused one is paused). */
