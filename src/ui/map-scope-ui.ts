@@ -1,80 +1,67 @@
 /**
- * The map's scope (spec 098 §3, §4, §7, §10): "This view / Selection ▾ /
- * Whole tree" over the map, the phone's "Scope: … ▾" button with its sheet,
- * the scope remembered for the tree (the main window only), the selection's
- * changes followed (a selection cleared or gone takes the scope back to This
- * view), the empty states of a selection and what the map says of people
- * outside the selection (a place's bubble, the toolbar's search).
+ * The map's scope (spec 098 §3, §4, §7, §10, §11d): the map's part of the
+ * scope's switch "This view / Selection ▾ / Whole tree" (src/ui/scope-seg-ui.ts:
+ * the segment, the phone's button with its sheet, the memory per tree, the
+ * selection's changes followed), the empty states of a selection, what the
+ * map says of people outside the selection (a place's bubble, the toolbar's
+ * search) and the selection highlighted with This view or the Whole tree.
  *
- * The people of a scope come from src/map-scope.ts (mapScopePersonIds); the
- * map draws them in src/ui/map-ui.ts (mapScopePersons). The choice of a
- * selection is the one of src/ui/selection-picker-ui.ts, as a popover here.
+ * The people of a scope come from src/view-scope.ts (scopePersonIds); the
+ * map draws them in src/ui/map-ui.ts (mapScopePersons).
  */
 
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
-import { SettingsManager } from '../settings.js';
-import { strings, countText } from '../strings.js';
+import { strings } from '../strings.js';
 import type { Person, PersonId } from '../types.js';
 import { MAP_KINDS, mapPointPersonIds, personHasMapPlace } from '../places.js';
-import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
-import { mapScopeAfterSelection, mapScopeOnOpen, type MapScope } from '../map-scope.js';
-import { getWindowRole } from '../windows/window-role.js';
-import { decodeSelectionRef, encodeSelectionRef, type SelectionRef } from '../view-selection-ref.js';
+import type { ViewScope as MapScope } from '../view-scope.js';
+import { encodeSelectionRef, type SelectionRef } from '../view-selection-ref.js';
 import { showOnMapForward } from '../windows/window-show-on-map.js';
 import { canvasBusy } from './canvas-busy.js';
 import { uiModule } from './module.js';
-import { selectionQuickRows } from './selection-picker-ui.js';
+import { realSelectionIds, type ScopeSegHost } from './scope-seg-ui.js';
 import { getSelection, selectionIds, selectionText, setSelection, type SelectionChange } from './view-selection-ui.js';
-
-/** The tree whose remembered scope is in place (undefined: none read yet). */
-let scopeTree: string | null | undefined;
-/** The open popover of the choice (under the scope's Selection part). */
-let picker: { host: HTMLElement; abort: AbortController } | null = null;
 
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-/** The selection's people that are real persons (a placeholder is nobody). */
-function realSelectionIds(): PersonId[] {
-    const data = DataManager.getData();
-    return [...(selectionIds() ?? [])].filter(id => { const p = data.persons[id]; return !!p && !p.isPlaceholder; });
 }
 
 /** What an empty map of the selection says (§4, 4f, 4g). */
 export type MapSelEmpty = { kind: 'empty' } | { kind: 'noPlaces'; unplaced: number };
 
 export const mapScopeMethods = uiModule({
-    /**
-     * The tree's remembered scope (§7), read once per tree: 'sel' only while
-     * the window has a selection (else This view, the memory kept).
-     */
+    /** The map's part of the scope's switch (src/ui/scope-seg-ui.ts). */
+    mapScopeHost(): ScopeSegHost {
+        return {
+            root: () => document.querySelector<HTMLElement>('#map-container .map-topleft'),
+            popoverParent: () => document.getElementById('map-container'),
+            apply: (scope, opts) => this.applyMapScope(scope, opts),
+            beforePicker: () => this.closeMapPopup(),
+            // The switch steps aside for the ancestors' path except with the scope Selection (the path then keeps to it).
+            hidden: () => this.mapPathOn() && this.mapScope !== 'sel',
+            selectionChanged: (change, before) => this.mapSelectionChanged(change, before),
+        };
+    },
+
+    /** The tree's remembered map scope (§7), read once per tree. */
     syncMapScopeTree(): void {
-        const tree = DataManager.getCurrentTreeId();
-        if (tree === scopeTree) return;
-        scopeTree = tree;
-        this.mapScope = mapScopeOnOpen(SettingsManager.getMapScopeForTree(tree), !!getSelection().ref);
+        this.syncViewScopeTree('map');
     },
 
     /** The open tree's scope as the map would take it now (nothing changed here): what a new window takes over (§7). */
     mapScopeNow(): MapScope {
-        const tree = DataManager.getCurrentTreeId();
-        return tree === scopeTree ? this.mapScope : mapScopeOnOpen(SettingsManager.getMapScopeForTree(tree), !!getSelection().ref);
+        return this.viewScopeNow('map');
     },
 
     /** A satellite takes the main window's scope over (nothing stored): the tree's memory is not read after it. */
     applyMapScopeFromWindow(scope: MapScope): void {
-        scopeTree = DataManager.getCurrentTreeId();
-        this.mapScope = mapScopeOnOpen(scope, !!getSelection().ref);
+        this.applyViewScopeFromWindow('map', scope);
     },
 
     /** The scope now, remembered for the tree by the main window ('view' is the default: nothing stored). */
     rememberMapScope(scope: MapScope): void {
-        this.mapScope = scope;
-        const tree = DataManager.getCurrentTreeId();
-        scopeTree = tree;
-        if (tree && getWindowRole() !== 'satellite') SettingsManager.setMapScopeForTree(tree, scope === 'view' ? null : scope);
+        this.rememberViewScope('map', scope);
     },
 
     /**
@@ -83,57 +70,32 @@ export const mapScopeMethods = uiModule({
      * without a selection opens the choice of one instead.
      */
     setMapScope(scope: MapScope, opts: { keepView?: boolean } = {}): Promise<void> {
-        this.syncMapScopeTree();
-        if (scope === 'sel' && !getSelection().ref) { this.openMapScopePicker(); return Promise.resolve(); }
-        if (this.mapScope === scope) return Promise.resolve();
+        return this.setViewScope('map', scope, opts);
+    },
+
+    /** A scope chosen for the map (setViewScope): remembered, the places computed anew. */
+    applyMapScope(scope: MapScope, opts: { keepView?: boolean }): Promise<void> {
         this.rememberMapScope(scope);
         this.closeMapPopup();
-        this.closeMapScopePicker(false);
+        this.closeScopePicker(false);
         if (!opts.keepView) this.mapCenter = null;  // reframe for the new set of places
         // B166, §8: the choice at once, the places computed anew under the canvas overlay ("Calculating the map…").
         this.renderMapScope();
         return canvasBusy(() => TreeRenderer.renderAsync(), { label: strings.busy.mapCalc }).then(() => undefined);
     },
 
-    /**
-     * The scope's controls as they are: the segment's chosen part, the
-     * Selection part's name and count (or "Selection ▾"), the phone's button;
-     * the segment steps aside for the ancestors' path except with the scope
-     * Selection (the path then keeps to it).
-     */
+    /** The map's switch as it is (renderScopeSeg). */
     renderMapScope(): void {
-        const root = document.querySelector('#map-container .map-topleft');
-        if (!root) return;
-        const m = strings.map;
-        const scope = this.mapScope;
-        const ref = getSelection().ref;
-        root.querySelector('#map-scope-view')?.classList.toggle('active', scope === 'view');
-        root.querySelector('#map-scope-tree')?.classList.toggle('active', scope === 'tree');
-        const sel = root.querySelector<HTMLButtonElement>('#map-scope-sel');
-        const label = ref ? selectionText(ref) : '';
-        const n = ref ? realSelectionIds().length : 0;
-        if (sel) {
-            sel.classList.toggle('active', scope === 'sel');
-            sel.innerHTML = ref
-                ? `<b class="map-scope-name">${esc(label)}</b><span class="map-scope-n">· ${n}</span><span class="map-scope-cv" aria-hidden="true">▾</span>`
-                : `${esc(m.scopeSel)}<span class="map-scope-cv" aria-hidden="true">▾</span>`;
-            const name = ref ? m.scopeAria(label, n) : m.scopeSel;
-            sel.title = name;
-            sel.setAttribute('aria-label', name);
-            sel.setAttribute('aria-expanded', String(!!picker));
-        }
-        const btn = root.querySelector<HTMLElement>('.map-scope-btn');
-        if (btn) {
-            const what = scope === 'tree' ? m.scopeTree : scope === 'sel' && ref ? label : m.scopeView;
-            const text = btn.querySelector('.map-scope-btn-label');
-            if (text) text.innerHTML = `${esc(m.scopeBtn('')).trimEnd()} <b>${esc(what)}</b>`;
-            btn.title = m.scopeBtn(what);
-            btn.setAttribute('aria-label', m.scopeBtn(what));
-        }
-        const path = this.mapPathOn();
-        const segment = root.querySelector<HTMLElement>('.map-scope');
-        if (segment) segment.hidden = path && scope !== 'sel';
-        if (btn) btn.hidden = path && scope !== 'sel';
+        this.renderScopeSeg('map');
+    },
+
+    /**
+     * The people the map highlights (§11d): the window's selection while the
+     * map shows This view or the Whole tree (also under the ancestors' path);
+     * null with the scope Selection or no selection.
+     */
+    mapHighlightIds(): ReadonlySet<PersonId> | null {
+        return this.scopeHighlight('map', this.mapEffectiveScope());
     },
 
     /**
@@ -143,7 +105,7 @@ export const mapScopeMethods = uiModule({
      * no choice of one). A part sets the map's scope and lists its places.
      */
     placesScopeHtml(): string {
-        const m = strings.map;
+        const s = strings.scope;
         const scope = this.placesManagerScope;
         const ref = getSelection().ref;
         const part = (s: MapScope, inner: string, label?: string): string =>
@@ -153,10 +115,10 @@ export const mapScopeMethods = uiModule({
         if (ref) {
             const label = selectionText(ref);
             const n = realSelectionIds().length;
-            sel = part('sel', `<b class="map-scope-name">${esc(label)}</b><span class="map-scope-n">· ${n}</span>`, m.scopeAria(label, n));
+            sel = part('sel', `<b class="scope-name map-scope-name">${esc(label)}</b><span class="scope-n map-scope-n">· ${n}</span>`, s.aria(label, n));
         }
-        return `<div class="places-scope sel-seg" role="group" aria-label="${esc(m.scopeGroup)}">`
-            + part('view', esc(m.scopeView)) + sel + part('tree', esc(m.scopeTree)) + '</div>';
+        return `<div class="places-scope sel-seg" role="group" aria-label="${esc(s.sheetSec.map)}">`
+            + part('view', esc(s.view)) + sel + part('tree', esc(s.tree)) + '</div>';
     },
 
     /** The Places dialog's scope parts (placesScopeHtml). */
@@ -182,181 +144,43 @@ export const mapScopeMethods = uiModule({
         document.querySelector<HTMLElement>(`#places-modal [data-places-scope="${scope}"]`)?.focus();
     },
 
-    /** The Selection part: a click, and ↓ / Alt+↓ for the choice. */
+    /** The map's Selection part: a click, and ↓ for the choice. */
     bindMapScope(container: HTMLElement): void {
-        const sel = container.querySelector<HTMLButtonElement>('#map-scope-sel');
-        sel?.addEventListener('click', () => this.mapScopeSelClick());
-        sel?.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key !== 'ArrowDown') return;
-            e.preventDefault();
-            this.openMapScopePicker();
-        });
-    },
-
-    /**
-     * The Selection part (§3): not chosen with a selection → the scope
-     * Selection at once; chosen, or no selection → the choice opens.
-     */
-    mapScopeSelClick(): void {
-        if (picker) { this.closeMapScopePicker(true); return; }
-        if (getSelection().ref && this.mapScope !== 'sel') { void this.setMapScope('sel'); return; }
-        // After this click has gone by: the choice closes on a click outside it.
-        setTimeout(() => this.openMapScopePicker(), 0);
+        const root = container.querySelector<HTMLElement>('.map-topleft');
+        if (root) this.bindScopeSeg('map', root);
     },
 
     mapScopePickerOpen(): boolean {
-        return !!picker;
+        return this.scopePickerOpen('map');
     },
 
-    /**
-     * The choice of the window's selection (§2) under the Selection part; a
-     * phone (the sheet's "All selections…", or held sideways) gets the sheet.
-     * A pick sets the window's selection and the scope Selection.
-     */
+    /** The choice of the window's selection under the map's Selection part (a phone: the sheet). */
     openMapScopePicker(): void {
-        const container = document.getElementById('map-container');
-        const anchor = container?.querySelector<HTMLElement>('#map-scope-sel');
-        const onPicked = (s: string): void => { if (s !== 'none') void this.setMapScope('sel'); };
-        if (!container || !anchor || anchor.getClientRects().length === 0
-            || window.matchMedia(`${MQ_MOBILE}, ${MQ_PHONE_LANDSCAPE}`).matches) {
-            this.showSelectionSheet(onPicked);
-            return;
-        }
-        this.closeMapScopePicker(false);
-        this.closeMapPopup();
-        const host = document.createElement('div');
-        host.className = 'map-scope-pick';
-        container.appendChild(host);
-        const abort = new AbortController();
-        picker = { host, abort };
-        const box = container.getBoundingClientRect();
-        const r = anchor.getBoundingClientRect();
-        host.style.left = `${Math.max(8, Math.min(r.left - box.left, box.width - 396))}px`;
-        host.style.top = `${r.bottom - box.top}px`;
-        host.style.setProperty('--map-scope-pick-room', `${Math.max(200, box.bottom - r.bottom - 24)}px`);
-        this.mountSelectionPicker(host, {
-            onPicked,
-            onClose: () => {
-                const at = document.activeElement;
-                this.closeMapScopePicker(!at || at === document.body || host.contains(at));
-            },
-            signal: abort.signal,
-        });
-        anchor.setAttribute('aria-expanded', 'true');
+        this.openScopePicker('map');
     },
 
     /** Close the choice; `refocus`: back to the Selection part. */
     closeMapScopePicker(refocus: boolean): void {
-        if (!picker) return;
-        const { host, abort } = picker;
-        picker = null;
-        abort.abort();
-        host.remove();
-        const anchor = document.querySelector<HTMLElement>('#map-container #map-scope-sel');
-        anchor?.setAttribute('aria-expanded', 'false');
-        if (refocus) anchor?.focus();
+        this.closeScopePicker(refocus);
     },
 
-    /**
-     * The phone's sheet "Scope" (§10, 10e): the three scopes with their
-     * people, a few selections to change to and "All selections…".
-     */
+    /** The phone's sheet "Scope" of the map (§10, 10e). */
     showMapScopeSheet(): void {
-        this.noteBottomSheetTrigger();
-        this.hideBottomSheet();
-        const m = strings.map;
-        const ref = getSelection().ref;
-        const data = DataManager.getData();
-        const all = Object.values(data.persons).filter(p => p && !p.isPlaceholder).length;
-        const scope = this.mapScope;
-        const radio = (value: MapScope, name: string, hint: string, count: number | null): string => {
-            const on = scope === value;
-            return `<button type="button" class="map-scope-row sel-opt" data-sel-form="row" role="radio" aria-checked="${on}" data-scope="${value}">`
-                + `<span class="map-scope-row-ic" aria-hidden="true">${on ? '●' : '○'}</span>`
-                + `<span class="map-scope-row-n">${esc(name)}${hint ? `<small>${esc(hint)}</small>` : ''}</span>`
-                + `<span class="map-scope-row-c">${count === null ? '' : countText(count)}</span></button>`;
-        };
-        const selName = ref ? `${m.scopeSel}: ${selectionText(ref)}` : `${m.scopeSel}…`;
-        const quick = selectionQuickRows(5).map(r =>
-            `<button type="button" class="map-scope-row sel-opt" data-sel-form="row" data-sel="${esc(r.sel)}">`
-            + `<span class="map-scope-row-ic" aria-hidden="true">${r.icon}</span><span class="map-scope-row-n">${esc(r.label)}</span>`
-            + `<span class="map-scope-row-c">${countText(r.count)}</span></button>`).join('');
-        const overlay = document.createElement('div');
-        overlay.className = 'bottom-sheet-overlay map-scope-overlay';
-        overlay.innerHTML = `<div class="bottom-sheet map-scope-sheet" role="dialog" aria-modal="true" aria-labelledby="map-scope-sheet-title">`
-            + `<div class="bottom-sheet-handle"></div>`
-            + `<div class="rod-pick-sheet-bar"><h2 class="rod-pick-sheet-title" id="map-scope-sheet-title">${esc(m.scopeSheet)}</h2>`
-            + `<button type="button" class="rod-pick-sheet-x" aria-label="${esc(strings.buttons.close)}">×</button></div>`
-            + `<div class="map-scope-sheet-sec" id="map-scope-sheet-sec">${esc(m.scopeSheetSec)}</div>`
-            + `<div role="radiogroup" aria-labelledby="map-scope-sheet-sec">`
-            + radio('view', m.scopeView, m.scopeViewHint, TreeRenderer.getVisiblePersonIds().size)
-            + radio('sel', selName, '', ref ? realSelectionIds().length : null)
-            + radio('tree', m.scopeTree, '', all)
-            + `</div>`
-            + `<div class="map-scope-sheet-sec" id="map-scope-sheet-change">${esc(m.scopeChange)}</div>`
-            + `<div role="group" aria-labelledby="map-scope-sheet-change">${quick}`
-            + `<button type="button" class="map-scope-row map-scope-all sel-opt" data-sel-form="row"><span class="map-scope-row-ic" aria-hidden="true"></span>`
-            + `<span class="map-scope-row-n">${esc(m.scopeAll)}</span><span class="map-scope-row-c"></span></button></div>`
-            + `</div>`;
-        const close = (): void => { if (this.bottomSheet === overlay) this.hideBottomSheet(); };
-        overlay.addEventListener('click', (e) => {
-            const t = e.target as HTMLElement;
-            if (t === overlay || t.closest('.rod-pick-sheet-x')) { close(); return; }
-            const row = t.closest<HTMLElement>('.map-scope-row');
-            if (!row) return;
-            if (row.classList.contains('map-scope-all')) {
-                close();
-                this.openMapScopePicker();
-                return;
-            }
-            const s = row.dataset.scope as MapScope | undefined;
-            if (s) {
-                close();
-                if (s === 'sel' && !ref) { this.openMapScopePicker(); return; }
-                void this.setMapScope(s);
-                return;
-            }
-            const next = row.dataset.sel ? decodeSelectionRef(row.dataset.sel) : null;
-            if (next) {
-                close();
-                setSelection(next, 'map');
-                void this.setMapScope('sel');
-            }
-        });
-        document.body.appendChild(overlay);
-        this.bottomSheet = overlay;
-        requestAnimationFrame(() => {
-            overlay.classList.add('active');
-            overlay.querySelector<HTMLElement>('.rod-pick-sheet-x')?.focus({ preventScroll: true });
-        });
+        this.showScopeSheet('map');
     },
 
     /**
-     * The window's selection changed (§3, §7): cleared or gone takes the
-     * scope Selection back to This view; another tree reads its memory; a
-     * selection put back from memory brings the remembered Selection back.
-     * The open map follows (framed anew when its people changed).
+     * The window's selection changed and the map's scope followed it
+     * (scopeSelectionChanged; `before`: the scope before). The open map
+     * follows: framed anew when its people changed; with This view or the
+     * Whole tree the highlight of the selection drawn anew where it stands (§11d).
      */
-    mapSelectionChanged(change: SelectionChange): void {
-        if (change.reason === 'tree') scopeTree = undefined;
-        const before = this.mapScope;
-        this.syncMapScopeTree();
-        const has = !!getSelection().ref;
-        if (change.reason === 'restore' && this.mapScope === 'view' && has
-            && SettingsManager.getMapScopeForTree(DataManager.getCurrentTreeId()) === 'sel') {
-            this.mapScope = 'sel';
-        }
-        const next = mapScopeAfterSelection(this.mapScope, change.reason, has);
-        if (next !== this.mapScope) this.rememberMapScope(next);
+    mapSelectionChanged(change: SelectionChange, before: MapScope): void {
         if (TreeRenderer.getViewMode() !== 'map' || !document.querySelector('#map-container .map-canvas')) return;
         if (change.reason === 'hideOthers') { this.renderMapScope(); return; }
-        if (this.mapScope !== before || this.mapScope === 'sel') {
-            this.closeMapPopup();
-            this.mapCenter = null;
-            void TreeRenderer.renderAsync();
-            return;
-        }
-        this.renderMapScope();
+        this.closeMapPopup();
+        if (this.mapScope !== before || this.mapScope === 'sel') this.mapCenter = null;
+        void TreeRenderer.renderAsync();
     },
 
     /** The selection's people (the path's choice with the scope Selection). */
@@ -452,7 +276,7 @@ export const mapScopeMethods = uiModule({
         this.syncMapScopeTree();
         if (this.mapScope !== 'sel') this.rememberMapScope('sel');
         this.closeMapPopup();
-        this.closeMapScopePicker(false);
+        this.closeScopePicker(false);
         this.mapCenter = null;  // framed anew for the selection's places
         if (TreeRenderer.getViewMode() !== 'map') { this.setDisplayViewMode('map'); return; }
         this.renderMapScope();

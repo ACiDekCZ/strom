@@ -102,8 +102,8 @@ export const rodViewMethods = uiModule({
             showToast: (text) => this.showToast(text, 5000),
         });
         this.listenForEvidenceChanges();
-        // The map's scope follows the selection (spec 098 §3, §7).
-        onSelectionChange((_sel, change) => this.mapSelectionChanged(change));
+        // The scopes of the Map, the Timeline and the Table follow the selection (spec 098 §3, §7, §11.0).
+        onSelectionChange((_sel, change) => this.scopeSelectionChanged(change));
         getSelectedRod();
         this.syncSelectionPickerHost();
     },
@@ -111,11 +111,11 @@ export const rodViewMethods = uiModule({
     /**
      * The window's selection is in sight (spec 098 §7): its highlight in
      * Family, Descendants or the fan (another group covering it hides it),
-     * or the map showing the selection's scope.
+     * or the map (its scope Selection, or the selection highlighted, §11d).
      */
     selectionShown(): boolean {
         const view = TreeRenderer.getViewMode();
-        if (view === 'map') return this.mapScope === 'sel';
+        if (view === 'map') return true;
         return (view === 'family' || view === 'descendants' || view === 'fan') && this.evidenceHighlightKind() === 'selection';
     },
 

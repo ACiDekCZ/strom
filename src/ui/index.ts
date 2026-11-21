@@ -119,6 +119,7 @@ import { evidenceUiMethods } from './evidence-ui.js';
 import { rodViewMethods } from './rod-view.js';
 import { selectionPickerMethods } from './selection-picker-ui.js';
 import { mapScopeMethods } from './map-scope-ui.js';
+import { scopeSegMethods } from './scope-seg-ui.js';
 import { treeOverviewMethods } from './tree-overview.js';
 import { personListsMethods } from './person-lists-ui.js';
 import { personListNewMethods } from './person-list-new-ui.js';
@@ -155,6 +156,7 @@ import { genLabelsMethods } from './gen-labels.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
+import type { ViewScope } from '../view-scope.js';
 import { mapPathMethods } from './map-path-ui.js';
 import { mapLinesLegendMethods } from './map-lines-legend-ui.js';
 import type { LineMode } from '../map-lines.js';
@@ -453,6 +455,9 @@ export class UIClass {
 
     // Map view. mapCenter null = not framed yet (the next draw fits the places).
     mapScope: MapScope = 'view';
+    /** The Timeline's and the Table's scope (spec 098 §11.0, src/ui/scope-seg-ui.ts). */
+    timelineScope: ViewScope = 'view';
+    tableScope: ViewScope = 'tree';
     mapCenter: PlaceGeo | null = null;
     mapZoom = 5;
     /**
@@ -949,6 +954,9 @@ Object.assign(UIClass.prototype, selectionPickerMethods);
 type MapScopeMethods = typeof mapScopeMethods;
 export interface UIClass extends MapScopeMethods {}
 Object.assign(UIClass.prototype, mapScopeMethods);
+type ScopeSegMethods = typeof scopeSegMethods;
+export interface UIClass extends ScopeSegMethods {}
+Object.assign(UIClass.prototype, scopeSegMethods);
 type TreeOverviewMethods = typeof treeOverviewMethods;
 export interface UIClass extends TreeOverviewMethods {}
 Object.assign(UIClass.prototype, treeOverviewMethods);

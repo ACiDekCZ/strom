@@ -5,7 +5,7 @@
  * reads the settings writes nothing.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SettingsManager, migrateRodByTree } from '../settings.js';
+import { SettingsManager, migrateMapScopeByTree, migrateRodByTree } from '../settings.js';
 import { SETTINGS_KEY, type AppSettings } from '../types.js';
 import type { RodId } from '../lineage.js';
 
@@ -103,5 +103,52 @@ describe('the selection remembered per tree', () => {
         expect(SettingsManager.getSelectionForTree('t1')).toBeNull();
         expect(SettingsManager.getMapScopeForTree('t1')).toBe('sel');
         expect(SettingsManager.getMapScopeForTree('t2')).toBeNull();
+    });
+});
+
+describe('scopes per tree and view (spec 098 §11)', () => {
+    it('the map\'s scope per tree moves to scopeByTree[tree].map; one stored there wins, a broken one is dropped', () => {
+        const s = {
+            mapScopeByTree: { t1: 'sel', t2: 'tree', t3: 'everything' },
+            scopeByTree: { t2: { map: 'view', table: 'sel' } },
+        } as unknown as AppSettings;
+        expect(migrateMapScopeByTree(s)).toBe(true);
+        expect(s.mapScopeByTree).toBeUndefined();
+        expect(s.scopeByTree).toEqual({ t1: { map: 'sel' }, t2: { map: 'view', table: 'sel' } });
+        expect(migrateMapScopeByTree(s)).toBe(false);
+    });
+
+    it('the main window migrates once on load and stores it', () => {
+        store.set(SETTINGS_KEY, JSON.stringify({ mapScopeByTree: { m9: 'tree' } }));
+        SettingsManager.init();
+        expect(SettingsManager.getScopeForTree('m9', 'map')).toBe('tree');
+        const saved = JSON.parse(store.get(SETTINGS_KEY)!);
+        expect(saved.mapScopeByTree).toBeUndefined();
+        expect(saved.scopeByTree.m9).toEqual({ map: 'tree' });
+    });
+
+    it('each view its own scope; a view\'s default is not stored (Map, Timeline This view, Table Whole tree)', () => {
+        SettingsManager.init();
+        SettingsManager.setScopeForTree('t1', 'timeline', 'sel');
+        SettingsManager.setScopeForTree('t1', 'table', 'view');
+        SettingsManager.setScopeForTree('t1', 'map', 'view');
+        expect(SettingsManager.getScopeForTree('t1', 'timeline')).toBe('sel');
+        expect(SettingsManager.getScopeForTree('t1', 'table')).toBe('view');
+        expect(SettingsManager.getScopeForTree('t1', 'map')).toBeNull();
+        SettingsManager.setScopeForTree('t1', 'table', 'tree');
+        SettingsManager.setScopeForTree('t1', 'timeline', null);
+        expect(SettingsManager.getScopeForTree('t1', 'table')).toBeNull();
+        expect(JSON.parse(store.get(SETTINGS_KEY)!).scopeByTree?.t1).toBeUndefined();
+    });
+
+    it('a read-only window reads the old map scope but writes nothing', () => {
+        const before = JSON.stringify({ mapScopeByTree: { r7: 'sel' } });
+        store.set(SETTINGS_KEY, before);
+        SettingsManager.setReadOnly(true);
+        SettingsManager.init();
+        expect(SettingsManager.getScopeForTree('r7', 'map')).toBe('sel');
+        SettingsManager.setScopeForTree('r7', 'timeline', 'tree');
+        expect(writes).toEqual([]);
+        expect(store.get(SETTINGS_KEY)).toBe(before);
     });
 });

@@ -510,9 +510,14 @@ export function windowStartState(kind: SatelliteKind): unknown {
     return withWindowSelection(kind, state);
 }
 
-/** This window's selection with "Hide others" and the map's scope of the open tree (spec 098 §7). */
+/** This window's selection with "Hide others" and the views' scopes of the open tree (spec 098 §7, §11.0). */
 function windowSelectionNow(): CarriedSelection {
-    return { selection: getSelection(), mapScope: UI.mapScopeNow() };
+    return {
+        selection: getSelection(),
+        mapScope: UI.mapScopeNow(),
+        timelineScope: UI.viewScopeNow('timeline'),
+        tableScope: UI.viewScopeNow('table'),
+    };
 }
 
 /**
@@ -587,6 +592,8 @@ export function wireSatelliteViewStart(client: SatelliteClient, kept: StoredWind
         if (carried) {
             adoptWindowSelection(carried.selection);
             UI.applyMapScopeFromWindow(carried.mapScope);
+            if (carried.timelineScope) UI.applyViewScopeFromWindow('timeline', carried.timelineScope);
+            if (carried.tableScope) UI.applyViewScopeFromWindow('table', carried.tableScope);
         }
         const start = chooseWindowStart(state, parseMainFocus(client.mainFocus), appViewStateTarget.hasPerson);
         if (start.focus) appViewStateTarget.setFocus(start.focus.personId, start.focus.depthUp, start.focus.depthDown);

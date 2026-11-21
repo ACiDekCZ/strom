@@ -2662,8 +2662,13 @@ export interface AppSettings {
      * A view setting of this device, never tree data. The ref is checked when read (src/view-selection.ts).
      */
     selectionByTree?: Record<string, { ref: unknown; hideOthers?: boolean }>;
-    /** Per tree (spec 098 §7): the map's scope, 'view' | 'sel' | 'tree'. */
+    /** Before spec 098 §11 (read once, moved to scopeByTree[tree].map): the map's scope per tree. */
     mapScopeByTree?: Record<string, string>;
+    /**
+     * Per tree and view (spec 098 §7, §11): the scope of the Map, the Timeline and the Table,
+     * 'view' | 'sel' | 'tree'; a view's default (Map, Timeline 'view', Table 'tree') is not stored.
+     */
+    scopeByTree?: Record<string, { map?: string; timeline?: string; table?: string }>;
     historyKindRegion?: boolean;  // default: true - the card's timeline shows regional history (spec 1028 §6)
     historyKindPlace?: boolean;   // default: true - the card's timeline shows the history of a place (with history.place)
     historyKindLocal?: boolean;   // default: true - the card's timeline shows findings from the research's sources

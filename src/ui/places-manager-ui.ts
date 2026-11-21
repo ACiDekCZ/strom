@@ -36,7 +36,7 @@ import { onComputer } from './research-ui.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { SettingsManager } from '../settings.js';
-import { mapScopePersonIds } from '../map-scope.js';
+import { scopePersonIds as mapScopePersonIds } from '../view-scope.js';
 import { selectionIds } from './view-selection-ui.js';
 import {
     placeStateBadge, placeStateMatches, placeStateRank, placeStateSummary, type PlaceIdentity,

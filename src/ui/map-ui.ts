@@ -52,7 +52,7 @@ import { loadMapTile, mapTilesBlocked, mapTilesFailedIn, onMapTilesChange, relea
 import { iconSvg } from '../icons.js';
 import { shownName } from '../person-name.js';
 import { barHtml } from './prog-bar.js';
-import { mapScopePersonIds, type MapScope } from '../map-scope.js';
+import { scopePersonIds as mapScopePersonIds, type ViewScope as MapScope } from '../view-scope.js';
 import { selectionIds } from './view-selection-ui.js';
 /** A place that has coordinates and therefore something to draw. */
 export interface MappedPlace {
@@ -61,7 +61,7 @@ export interface MappedPlace {
     geo: PlaceGeo;
 }
 
-export type { MapScope } from '../map-scope.js';
+export type { ViewScope as MapScope } from '../view-scope.js';
 
 /** Recomputes --map-floor for the current map canvas (see watchMapFloor). */
 let mapFloorUpdate: (() => void) | null = null;
@@ -231,12 +231,7 @@ export const mapMethods = uiModule({
                             aria-pressed="false" aria-label="${strings.map.timeMode}" title="${strings.map.timeMode}"><span class="map-time-toggle-icon" aria-hidden="true">${iconSvg('timer')}</span><span class="map-time-toggle-text" aria-hidden="true">${strings.map.timeModeShort}</span></button>
                 </div>
                 <div class="map-topleft">
-                    <div class="map-scope sel-seg" role="group" aria-label="${this.escapeHtml(strings.map.scopeGroup)}">
-                        <button type="button" id="map-scope-view" class="sel-opt" data-sel-form="seg" onclick="window.Strom.UI.setMapScope('view')">${strings.map.scopeView}</button>
-                        <button type="button" id="map-scope-sel" class="sel-opt" data-sel-form="seg" aria-haspopup="listbox" aria-expanded="false"></button>
-                        <button type="button" id="map-scope-tree" class="sel-opt" data-sel-form="seg" onclick="window.Strom.UI.setMapScope('tree')">${strings.map.scopeTree}</button>
-                    </div>
-                    <button type="button" class="map-scope-btn" aria-haspopup="dialog" onclick="window.Strom.UI.showMapScopeSheet()"><span class="map-scope-btn-label"></span><span class="map-scope-btn-caret" aria-hidden="true">▾</span></button>
+                    ${this.scopeSegHtml('map')}
                     <div class="map-path-chip" hidden>
                         <button type="button" class="map-path-chip-open" title="${strings.map.pathChange}" aria-haspopup="dialog" aria-expanded="false"
                                 onclick="window.Strom.UI.openMapPathPicker('chip')"><span class="map-path-chip-mark" aria-hidden="true">◎</span><span class="map-path-chip-pre">${strings.map.pathChip}</span><strong class="map-path-chip-name"></strong><span class="map-path-chip-caret" aria-hidden="true">▾</span></button>
@@ -325,9 +320,7 @@ export const mapMethods = uiModule({
         label('.map-fit', m.fit);
         label('.map-time-toggle', m.timeMode, false);
         text('.map-time-toggle-text', m.timeModeShort);
-        text('#map-scope-view', m.scopeView);
-        text('#map-scope-tree', m.scopeTree);
-        label('.map-scope', m.scopeGroup, false);
+        this.retranslateScopeSeg('map');
         this.renderMapScope();
         container.querySelectorAll<HTMLElement>('.map-path-chip-open').forEach(el => { el.title = m.pathChange; });
         text('.map-path-chip-pre', m.pathChip);

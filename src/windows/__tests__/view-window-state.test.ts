@@ -225,11 +225,11 @@ describe('the window\'s selection and the map\'s scope (spec 098 §7)', () => {
         const fam = captureViewState('family', source())!;
         const carried = withCarriedSelection(fam, { selection: { ref: anc, hideOthers: true }, mapScope: 'sel' });
         const back = JSON.parse(JSON.stringify(carried));
-        expect(carriedSelectionOf(back)).toEqual({ selection: { ref: anc, hideOthers: true }, mapScope: 'sel' });
+        expect(carriedSelectionOf(back)).toEqual({ selection: { ref: anc, hideOthers: true }, mapScope: 'sel', timelineScope: 'view', tableScope: 'tree' });
         expect(parseViewState('family', back)).toEqual(fam);
         const table = { rowType: 'persons', viewId: 'b:all', search: '', selected: null };
         const t = JSON.parse(JSON.stringify(withCarriedSelection(table, { selection: { ref: { kind: 'list', listId: 'L1' }, hideOthers: false }, mapScope: 'tree' })));
-        expect(carriedSelectionOf(t)).toEqual({ selection: { ref: { kind: 'list', listId: 'L1' }, hideOthers: false }, mapScope: 'tree' });
+        expect(carriedSelectionOf(t)).toEqual({ selection: { ref: { kind: 'list', listId: 'L1' }, hideOthers: false }, mapScope: 'tree', timelineScope: 'view', tableScope: 'tree' });
         expect(t).toMatchObject(table);
     });
 
@@ -239,7 +239,7 @@ describe('the window\'s selection and the map\'s scope (spec 098 §7)', () => {
         const out = withCarriedSelection({ view: 'map' }, { selection: sel, mapScope: 'view' }) as { windowSelection: { selection: { ref: unknown } } };
         expect(out.windowSelection.selection.ref).not.toBe(ref);
         expect(carriedSelectionOf(withCarriedSelection({}, { selection: { ref: null, hideOthers: true }, mapScope: 'sel' })))
-            .toEqual({ selection: { ref: null, hideOthers: false }, mapScope: 'sel' });
+            .toEqual({ selection: { ref: null, hideOthers: false }, mapScope: 'sel', timelineScope: 'view', tableScope: 'tree' });
     });
 
     it('an older window\'s state, a broken one or none: nothing carried; a broken ref is no selection, an unknown scope This view', () => {
@@ -247,8 +247,16 @@ describe('the window\'s selection and the map\'s scope (spec 098 §7)', () => {
         expect(carriedSelectionOf(null)).toBeNull();
         expect(carriedSelectionOf({ windowSelection: 'x' })).toBeNull();
         expect(carriedSelectionOf({ windowSelection: { selection: { ref: { kind: 'nope' }, hideOthers: true }, mapScope: 'all' } }))
-            .toEqual({ selection: { ref: null, hideOthers: false }, mapScope: 'view' });
+            .toEqual({ selection: { ref: null, hideOthers: false }, mapScope: 'view', timelineScope: 'view', tableScope: 'tree' });
         // Not an object: left as it is.
         expect(withCarriedSelection(undefined, { selection: { ref: null, hideOthers: false }, mapScope: 'view' })).toBeUndefined();
+    });
+
+    it('the Timeline\'s and the Table\'s scopes travel too (spec 098 §11.0); unknown ones read as the views\' defaults', () => {
+        const out = JSON.parse(JSON.stringify(withCarriedSelection({ view: 'timeline' },
+            { selection: { ref: anc, hideOthers: false }, mapScope: 'view', timelineScope: 'sel', tableScope: 'view' })));
+        expect(carriedSelectionOf(out)).toEqual({ selection: { ref: anc, hideOthers: false }, mapScope: 'view', timelineScope: 'sel', tableScope: 'view' });
+        expect(carriedSelectionOf({ windowSelection: { selection: { ref: null }, mapScope: 'tree', timelineScope: 'x', tableScope: 3 } }))
+            .toEqual({ selection: { ref: null, hideOthers: false }, mapScope: 'tree', timelineScope: 'view', tableScope: 'tree' });
     });
 });

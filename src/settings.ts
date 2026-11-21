@@ -10,6 +10,7 @@ import { initLanguage, Language } from './strings.js';
 import { MapKind, MAP_KINDS, isMapKind, readPlacesSort, type PlacesSort } from './places.js';
 import { HISTORY_KINDS, isHistoryKind, type HistoryKind } from './history.js';
 import { sameSelectionRef, sanitizeSelectionRef, type SelectionRef } from './view-selection-ref.js';
+import { isViewScope, scopeDefault, type ScopedView, type ViewScope } from './view-scope.js';
 
 /** How many recently cited sources the picker remembers per tree. */
 export const RECENT_SOURCES_MAX = 5;
@@ -84,9 +85,26 @@ export interface StoredSelection {
 }
 
 /** The map's scope remembered per tree (spec 098 §3, §7). */
-export type StoredMapScope = 'view' | 'sel' | 'tree';
+export type StoredMapScope = ViewScope;
 
-const MAP_SCOPES: readonly StoredMapScope[] = ['view', 'sel', 'tree'];
+/**
+ * The map's scope remembered per tree before spec 098 §11 (`mapScopeByTree`)
+ * becomes the map's part of the scopes per tree and view (`scopeByTree`),
+ * pure: a scope already stored there wins; `mapScopeByTree` goes. Returns
+ * whether anything changed (the caller stores it).
+ */
+export function migrateMapScopeByTree(settings: AppSettings): boolean {
+    const old = settings.mapScopeByTree;
+    if (!old) return false;
+    const all: NonNullable<AppSettings['scopeByTree']> = { ...(settings.scopeByTree ?? {}) };
+    for (const [treeId, scope] of Object.entries(old)) {
+        if (!isViewScope(scope) || all[treeId]?.map) continue;
+        all[treeId] = { ...(all[treeId] ?? {}), map: scope };
+    }
+    delete settings.mapScopeByTree;
+    if (Object.keys(all).length) settings.scopeByTree = all;
+    return true;
+}
 
 /**
  * The family line remembered per tree before spec 098 (`rodByTree`) becomes
@@ -187,7 +205,9 @@ class SettingsManagerClass {
                 // Merge with defaults (for forward compatibility)
                 this.settings = { ...this.settings, ...parsed };
                 // Spec 098 §7: the family line remembered per tree becomes the tree's selection.
-                if (migrateRodByTree(this.settings)) this.saveQuietly();
+                // Spec 098 §11: the map's scope per tree becomes the map's part of the scopes per tree and view.
+                const scopes = migrateMapScopeByTree(this.settings);
+                if (migrateRodByTree(this.settings) || scopes) this.saveQuietly();
             }
         } catch {
             // Use defaults on error
@@ -363,7 +383,7 @@ class SettingsManagerClass {
     forgetLifelineDefaults(treeId: string): void {
         // The tree's selection and map scope go with it (spec 039 §3.5, 098 §7).
         let changed = false;
-        for (const all of [this.settings.selectionByTree, this.settings.mapScopeByTree]) {
+        for (const all of [this.settings.selectionByTree, this.settings.scopeByTree]) {
             if (all?.[treeId]) { delete all[treeId]; changed = true; }
         }
         if (!this.settings.lifelineByTree?.[treeId]) { if (changed) this.save(); return; }
@@ -393,19 +413,38 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** A view's scope remembered for a tree (spec 098 §7, §11); null: never chosen. */
+    getScopeForTree(treeId: string | null, view: ScopedView): ViewScope | null {
+        const v = treeId ? this.settings.scopeByTree?.[treeId]?.[view] : undefined;
+        return isViewScope(v) ? v : null;
+    }
+
+    /**
+     * Remember a view's scope for a tree (null or the view's default:
+     * forgotten). The main window only (a read-only window writes nothing),
+     * stored only when it changed.
+     */
+    setScopeForTree(treeId: string, view: ScopedView, scope: ViewScope | null): void {
+        if (this.readOnly) return;
+        const next = scope === scopeDefault(view) ? null : scope;
+        if (this.getScopeForTree(treeId, view) === next) return;
+        const all = (this.settings.scopeByTree ??= {});
+        const entry = { ...(all[treeId] ?? {}) };
+        if (next) entry[view] = next;
+        else delete entry[view];
+        if (Object.keys(entry).length) all[treeId] = entry;
+        else delete all[treeId];
+        this.save();
+    }
+
     /** The map's scope remembered for a tree (spec 098 §7); null: never chosen. */
     getMapScopeForTree(treeId: string | null): StoredMapScope | null {
-        const v = treeId ? this.settings.mapScopeByTree?.[treeId] : undefined;
-        return MAP_SCOPES.includes(v as StoredMapScope) ? v as StoredMapScope : null;
+        return this.getScopeForTree(treeId, 'map');
     }
 
     /** Remember (or, with null, forget) a tree's map scope; the main window only, stored only when it changed. */
     setMapScopeForTree(treeId: string, scope: StoredMapScope | null): void {
-        if (this.readOnly) return;
-        if (this.getMapScopeForTree(treeId) === scope) return;
-        if (scope) (this.settings.mapScopeByTree ??= {})[treeId] = scope;
-        else delete this.settings.mapScopeByTree![treeId];
-        this.save();
+        this.setScopeForTree(treeId, 'map', scope);
     }
 
     /**

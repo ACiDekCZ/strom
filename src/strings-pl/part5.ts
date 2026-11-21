@@ -2,7 +2,7 @@ import type { StringsType } from '../strings.js';
 import { nPl, numPl, plPl, joinAndPl, relationPl } from './helpers.js';
 
 export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationships' | 'card' | 'buttons' | 'dialog'
-    | 'gender' | 'partnershipStatus' | 'parentRelType' | 'export' | 'depth' | 'rodView' | 'selection' | 'focus'
+    | 'gender' | 'partnershipStatus' | 'parentRelType' | 'export' | 'depth' | 'rodView' | 'scope' | 'selection' | 'focus'
     | 'generationLabels' | 'treeOverview' | 'branchTabs' | 'search' | 'deepLink' | 'searchFilters' | 'personPicker'
     | 'errors' | 'storageSafety' | 'addChild' | 'uiTips' | 'about' | 'gedcom' | 'gedcomNotes' | 'saveCurrent'
     | 'validation'> = {
@@ -252,6 +252,19 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         birth: 'z urodzenia',
         wife: 'żona',
         husband: 'mąż',
+    },
+    scope: {
+        label: 'Zakres',
+        view: 'Ten widok',
+        sel: 'Wybór',
+        tree: 'Całe drzewo',
+        btn: (s: string) => `Zakres: ${s}`,
+        viewHint: 'osoby rozłożone w widoku Rodzina',
+        change: 'Zmień wybór',
+        all: 'Wszystkie wybory…',
+        aria: (label: string, n: number) => `Zakres: wybór ${label}, ${nPl(n, 'osoba', 'osoby', 'osób')}`,
+        sheetSec: { map: 'Zakres mapy', timeline: 'Zakres osi czasu', table: 'Zakres tabeli' },
+        highlighted: (label: string) => `Wybór: ${label} wyróżniony`,
     },
     selection: {
         button: 'Wybór',
