@@ -4890,6 +4890,7 @@ class TreeRendererClass {
             && !this.evidenceIds?.has(id) && !this.evidenceFaintIds?.has(id);
         const had = !!card.querySelector(':scope > .card-tag--outside');
         card.classList.toggle('sel-outside', outside);
+        this.markSelectionCenter(card, outside);
         if (!outside && !had) delete card.dataset.ariaBase;
         if (outside === had) return;
         if (outside) {
@@ -4910,6 +4911,79 @@ class TreeRendererClass {
                 delete card.dataset.ariaBase;
             }
         }
+    }
+
+    /**
+     * "◎ Focus on {name}" on the bottom edge of the focused card outside the
+     * window's selection (spec 098 §13): the focus to the selection's centre
+     * (UI.selectionCenterOffer says whether and whom: Family or Descendants,
+     * part of the selection drawn, no agent followed, a centre that is not
+     * the focus). A tab on the card's bottom edge (hidden children) keeps its
+     * place: the button ends before it.
+     */
+    private markSelectionCenter(card: HTMLElement, outside: boolean): void {
+        const offer = outside ? UI.selectionCenterOffer?.() ?? null : null;
+        let btn = card.querySelector<HTMLButtonElement>(':scope > .card-tag--center');
+        if (!offer) {
+            btn?.remove();
+            return;
+        }
+        const text = strings.selection.focusCenter(offer.name);
+        const aria = strings.selection.focusCenterAria(offer.name, offer.label);
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'card-tag card-tag--center';
+            btn.dataset.action = 'focus-selection-center';
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                UI.focusSelectionCenter?.();
+            });
+            // The card's own keys (Enter opens its menu) stay out of the button's.
+            btn.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+            });
+            card.append(btn);
+        }
+        if (btn.dataset.center !== offer.id || btn.dataset.text !== text) {
+            btn.dataset.center = offer.id;
+            btn.dataset.text = text;
+            const mark = document.createElement('span');
+            mark.className = 'card-tag-mark';
+            mark.setAttribute('aria-hidden', 'true');
+            mark.textContent = '◎';
+            const words = document.createElement('span');
+            words.className = 'card-tag-text';
+            words.textContent = text;
+            btn.replaceChildren(mark, words);
+        }
+        btn.setAttribute('aria-label', aria);
+        btn.title = aria;
+        this.fitCenterButton(card, btn);
+    }
+
+    /** The centre's button ends before a tab on the card's bottom edge (measured as drawn; none: its own max-width). */
+    private fitCenterButton(card: HTMLElement, btn: HTMLElement): void {
+        btn.style.removeProperty('max-width');
+        const cr = card.getBoundingClientRect();
+        if (cr.width === 0 || card.offsetWidth === 0) return;
+        const scale = cr.width / card.offsetWidth;
+        const br = btn.getBoundingClientRect();
+        let limit = Infinity;
+        for (const el of card.querySelectorAll<HTMLElement>(':scope > .branch-tab, :scope > .line-link')) {
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.bottom <= br.top || r.top >= br.bottom || r.left <= br.left) continue;
+            limit = Math.min(limit, (r.left - br.left) / scale - 4);
+        }
+        if (limit < Infinity) btn.style.maxWidth = `${Math.max(0, Math.floor(limit))}px`;
+    }
+
+    /** The centre's button again (the following of the agent switched on or off, §13). */
+    refreshSelectionCenter(): void {
+        const id = this.focusPersonId;
+        if (!id) return;
+        const card = document.querySelector<HTMLElement>(`#tree-canvas > .person-card[data-id="${CSS.escape(id)}"]`);
+        if (card) this.markOutsideSelection(card);
     }
 
     private applyEvidenceHighlight(): void {

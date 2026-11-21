@@ -19,7 +19,7 @@ import { shownNameFull } from '../person-name.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { TreeManager } from '../tree-manager.js';
 import type { PersonId, TreeId } from '../types.js';
-import { encodeSelectionRef, selectionPersonIds, type SelectionRef } from '../view-selection.js';
+import { encodeSelectionRef, selectionCenter, selectionPersonIds, type SelectionRef } from '../view-selection.js';
 import { wireRodPicker } from './rod-picker-ui.js';
 import type { HighlightGroup } from './evidence-ui.js';
 import { uiModule } from './module.js';
@@ -179,6 +179,50 @@ export const rodViewMethods = uiModule({
         void TreeRenderer.setFocus(target).then(() => {
             if (TreeRenderer.getFocusPersonId() !== target || !TreeRenderer.canGoBack()) return;
             showFocusToast(shownNameFull(person, '?'), () => { void TreeRenderer.goBack(); }, (n) => strings.selection.moved(n, label));
+        });
+    },
+
+    /**
+     * "◎ Focus on {name}" on the focused card outside the selection (spec 098
+     * §13): whom it focuses, or null while it is not offered — only in Family
+     * and Descendants, the selection's highlight not covered, part of the
+     * selection drawn (else the focus moves by itself, §9), no agent followed
+     * here, a centre that is not the focus. The renderer asks only for a
+     * focused card outside the selection and its line's spouses.
+     */
+    selectionCenterOffer(): { id: PersonId; name: string; label: string } | null {
+        const view = TreeRenderer.getViewMode();
+        if (view !== 'family' && view !== 'descendants') return null;
+        if (this.evidenceHighlightKind() !== 'selection') return null;
+        if (this.agentFollowedHere()) return null;
+        const ref = getSelection().ref;
+        if (!ref) return null;
+        const data = DataManager.getData();
+        const { index } = rodIndex();
+        const members = selectionPersonIds(data, index, ref);
+        if (!members || members.size === 0) return null;
+        const drawn = TreeRenderer.getVisiblePersonIds({ includeView: true });
+        let any = false;
+        for (const id of members) if (drawn.has(id)) { any = true; break; }
+        if (!any) return null;
+        const id = selectionCenter(data, index, ref, TreeRenderer.getFocusPersonId());
+        const person = id ? DataManager.getPerson(id) : null;
+        if (!id || !person) return null;
+        return { id, name: shownNameFull(person, '?'), label: selectionText(ref) };
+    },
+
+    /**
+     * The button pressed (§13): the focus to the selection's centre, a step
+     * of the history with "↩ Back"; the selection, Hide others and the
+     * scopes stay as they are.
+     */
+    focusSelectionCenter(): void {
+        const offer = this.selectionCenterOffer();
+        if (!offer) return;
+        const target = offer.id;
+        void TreeRenderer.setFocus(target).then(() => {
+            if (TreeRenderer.getFocusPersonId() !== target || !TreeRenderer.canGoBack()) return;
+            showFocusToast(offer.name, () => { void TreeRenderer.goBack(); });
         });
     },
 

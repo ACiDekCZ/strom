@@ -304,6 +304,8 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         hideOthersTitle: 'Drzewo jest rozkładane tylko z osób z wyboru',
         outside: 'poza wyborem',
         outsideAria: (n: string) => `${n} – poza wyborem`,
+        focusCenter: (n: string) => `Ustaw fokus na ${n}`,
+        focusCenterAria: (n: string, label: string) => `Ustaw fokus na ${n} – środek wyboru ${label}`,
         goneList: (n: string) => `Wybór wyczyszczony: lista „${n}” została usunięta.`,
         goneRod: (r: string) => `Wybór wyczyszczony: ród ${r} przestał istnieć.`,
         goneLine: 'Wybór wyczyszczony: linia badań została usunięta.',

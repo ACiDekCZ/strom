@@ -349,6 +349,8 @@ function wireAgentFollow(client: SatelliteClient, state: ReturnType<typeof start
         update();
         // The Table's agent row: tinted, scrolled to again once attached, its hidden note (§5).
         UI.tableAgentFollowChanged();
+        // "Focus on the centre of the selection" only while not following (spec 098 §13).
+        TreeRenderer.refreshSelectionCenter();
     });
 }
 

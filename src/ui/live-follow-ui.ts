@@ -36,6 +36,7 @@ import type { LiveDiff } from '../live-diff.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { WorkPlace, resolveWorkPlace, samePlace, workPlaceId } from '../live-follow-map.js';
 import { WORKING_PLACE_FEATURE } from '../research-link.js';
+import { windowAgentFollow } from '../windows/agent-follow-state.js';
 
 const FOLLOW_KEY = 'strom-live-follow';
 /** The far-out zoom where cards lose their text, and the zoom a jump then takes. */
@@ -177,6 +178,8 @@ export interface LiveFollowScope {
 }
 
 let scope: LiveFollowScope | null = null;
+/** Following as the centre's button last saw it (renderLiveFollowPill). */
+let lastFollowedHere = false;
 
 export function setLiveFollowScope(s: LiveFollowScope | null): void {
     scope = s;
@@ -452,6 +455,17 @@ export const liveFollowMethods = uiModule({
 
     isLiveFollowOn(): boolean {
         return isOn();
+    },
+
+    /**
+     * The agent is followed in this window (spec 097): the main window's ◎
+     * with a live session on this tree, or this satellite attached to it or
+     * paused (its own state; detached does not follow). "Focus on the
+     * centre of the selection" is then not offered (spec 098 §13).
+     */
+    agentFollowedHere(): boolean {
+        const w = windowAgentFollow();
+        return followActive() || w === 'attached' || w === 'paused';
     },
 
     setLiveFollow(on: boolean): void {
@@ -885,6 +899,12 @@ export const liveFollowMethods = uiModule({
      * has it; on the map moved by hand "Map panning paused · Back to the agent · ×".
      */
     renderLiveFollowPill(): void {
+        // Following came or went: the centre's button on the focused card follows (spec 098 §13).
+        const followed = this.agentFollowedHere();
+        if (followed !== lastFollowedHere) {
+            lastFollowedHere = followed;
+            TreeRenderer.refreshSelectionCenter();
+        }
         // Another window says its pause in its strip (§3, dotaz 1): no pill there, not even the map's.
         const kind = scope || !followActive() ? null
             : pausedByUser ? 'follow'

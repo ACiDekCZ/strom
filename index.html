@@ -25659,6 +25659,22 @@
             font-family: var(--font-sans); font-size: 10.5px; font-weight: 600; line-height: 1; white-space: nowrap;
             color: var(--text); background: var(--surface); border: 1px solid var(--text-faint); border-radius: var(--r-tag);
         }
+        /* "◎ Focus on {name}" (§13) on the bottom edge of that card: clear of a partner's card beside it and of the
+           top tabs (◎ family, ▸ siblings); a bottom tab (hidden children) keeps its place, the button ends before it
+           (renderer fitCenterButton). The same place at every width. */
+        .person-card > .card-tag--center {
+            position: absolute; bottom: -11px; left: 6px; z-index: 3; height: 17px; box-sizing: border-box;
+            display: inline-flex; align-items: center; gap: 3px; max-width: calc(100% - 8px); padding: 0 5px; margin: 0; white-space: nowrap;
+            font: 600 10px/15px var(--font-sans); color: var(--primary); background: var(--surface);
+            border: 1px solid var(--border); border-radius: var(--r-tag); pointer-events: auto; cursor: pointer;
+        }
+        /* The text cut with an ellipsis inside (the button itself unclipped: its touch target reaches beyond it). */
+        .card-tag--center > .card-tag-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .card-tag--center > .card-tag-mark { flex: none; }
+        @media (hover: hover) { .person-card > .card-tag--center:hover { background: var(--hover-bg); } }
+        .person-card > .card-tag--center:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        /* Touch: a 44 px target around the 17 px tag, unseen (as the .sel-opt chips). */
+        @media (pointer: coarse) { .person-card > .card-tag--center::before { content: ""; position: absolute; inset: -14px -4px; } }
         .evidence-pill-next, .evidence-pill-cite, .evidence-pill-sources, .evidence-pill-close {
             flex: none; height: 30px; padding: 0 10px; cursor: pointer; border: 0; border-radius: var(--r-sm);
             background: none; color: var(--primary); font: inherit; font-size: 13px; font-weight: 500;
