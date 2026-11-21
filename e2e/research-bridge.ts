@@ -2690,6 +2690,20 @@ function partRev(value: unknown): string {
 
 export const poll = (page: Page) => page.evaluate(() => window.Strom.UI.pollResearchBridge());
 
+/** Freeze the page's clock (installed before the app loaded): from here on time moves only by runFor. */
+export async function pauseClock(page: Page): Promise<void> {
+    // A jump into the page's past is refused (its time ran on meanwhile); the clock stands still after the first try.
+    for (let tries = 1; ; tries++) {
+        const now = await page.evaluate(() => Date.now());
+        try {
+            await page.clock.pauseAt(now + 1);
+            return;
+        } catch (e) {
+            if (tries >= 3) throw e;
+        }
+    }
+}
+
 /**
  * A stuck bridge (`statusHang`) is said as one only after three asks in a row without an answer
  * in time (15 s each, 1104): run them on the page clock (installed). `after(i)`: after the i-th.

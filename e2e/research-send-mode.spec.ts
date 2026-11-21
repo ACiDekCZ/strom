@@ -730,7 +730,9 @@ test('"Send, then load" where the research takes nothing new: said so (never "th
     bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 0, applied: 0, input: 'I0091' } };
     await page.evaluate(() => { void window.Strom.UI.researchSendNow({ thenLoad: true }); });
     await expect.poll(() => bridge.posts.length).toBe(1);
-    await expect(page.locator('.toast', { hasText: 'The research took nothing new from this send.' })).toBeVisible();
+    // Said: the load that follows puts its progress toast over it 120 ms later (a mere message gives way to a
+    // progress toast, src/toast-slot.ts), so it may already wait under it, held, when looked at.
+    await expect(page.locator('body > .toast', { hasText: 'The research took nothing new from this send.' })).toHaveCount(1);
     await expect(page.locator('.toast', { hasText: 'The research has the same tree' })).toHaveCount(0);
     // Asked before it replaces the edit the research did not take.
     const ok = page.locator('#research-load-modal #research-load-ok, #confirmation-modal.active button:has-text("Update")').first();

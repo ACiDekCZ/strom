@@ -157,6 +157,11 @@ const excerpts = (page: Page) => page.evaluate(() => {
     const src = Object.values(window.Strom.DataManager.getData().sources ?? {}).find(s => s.refn === 'S0001');
     return (src?.excerpts ?? []).map(e => e.dataUrl);
 });
+/**
+ * The tree stored (its save to IndexedDB runs after the images show): a reload before it would read the
+ * tree as it was, whose fingerprint no longer matches the kept tag — the file asked anew, 200 for 304.
+ */
+const stored = (page: Page) => page.evaluate(() => window.Strom.TreeManager.flush());
 const asked = (b: Bridge) => b.images.flatMap(a => a.shas);
 const viewer = (page: Page) => page.locator('#source-viewer-modal');
 
@@ -217,6 +222,7 @@ test.describe('follow live with the images by their hash (ged.imagesByHash)', ()
 
         // The same head: the file of that variant asked with its tag, 304, nothing downloaded.
         const files = bridge.trees.length;
+        await stored(page);
         await page.reload();
         await expect(card(page, 'Hostivít')).toBeVisible();
         await expect.poll(() => bridge.trees.length).toBeGreaterThan(files);
@@ -224,14 +230,18 @@ test.describe('follow live with the images by their hash (ged.imagesByHash)', ()
 
         // A new head: the file by reference, its images found in the stored tree.
         bridge.head = H2;
+        await stored(page);
+        const asks = bridge.trees.length;
         await page.reload();
         await expect(card(page, 'Dobromila')).toBeVisible();
-        expect(bridge.trees[bridge.trees.length - 1]).toMatchObject({ ref: true, status: 200 });
+        // The reload's own ask (a poll after the load asks again with the new tag: 304).
+        expect(bridge.trees[asks]).toMatchObject({ ref: true, status: 200 });
         expect(bridge.images.length).toBe(posts);
         expect(await excerpts(page)).toEqual([imgs[0].url, imgs[1].url]);
 
         // The bridge gone: the tree as stored, its images with it.
         bridge.gone = true;
+        await stored(page);
         await page.reload();
         await expect(card(page, 'Dobromila')).toBeVisible();
         await expect.poll(() => excerpts(page)).toEqual([imgs[0].url, imgs[1].url]);

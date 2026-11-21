@@ -276,7 +276,8 @@ test.describe('loading the research\'s version', () => {
 test.describe('a progress toast and a message to be read', () => {
     test('a progress toast coming after "Research version loaded" with Restore waits under it; an informative one or one that stays gives way', async ({ page }) => {
         await openResearch(page);
-        const shown = page.locator('body > .toast:not(.toast-held)');
+        // On the screen: neither waiting under another one nor on its way out (fading, its .show gone, 300 ms).
+        const shown = page.locator('body > .toast.show:not(.toast-held)');
         // A message with its action and its own time: a progress toast started after it waits under it.
         await page.evaluate(() => {
             const UI = window.Strom.UI as any;

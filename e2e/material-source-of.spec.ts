@@ -153,7 +153,11 @@ test.describe('The file of a source on a narrow screen', () => {
             return el ? el.scrollWidth - el.clientWidth : 0;
         });
         expect(wide).toBeLessThanOrEqual(0);
-        const box = await register.locator('.mw-li-persons').boundingBox();
-        expect(box!.x + box!.width).toBeLessThanOrEqual(PHONE.width);
+        // A redraw of the window (names or the research's status arriving) replaces the rows: a box read
+        // between finding the cell and measuring it is null, so the right edge is read again until it is there.
+        await expect.poll(async () => {
+            const box = await register.locator('.mw-li-persons').boundingBox();
+            return box ? box.x + box.width : Infinity;
+        }).toBeLessThanOrEqual(PHONE.width);
     });
 });

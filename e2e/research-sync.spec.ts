@@ -77,7 +77,8 @@ test.describe('the state of the tree and sending straight', () => {
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page, { syncReply: { status: 500, body: { error: 'výzkum úpravy nezapsal', reason: 'P0002 already has birth parents in F0001' } } });
         await poll(page);
-        void page.evaluate(() => window.Strom.UI.researchSendNow());
+        // Started, not awaited in the page: the send waits for the dialog's answer, which may come after the test's end.
+        await page.evaluate(() => { void window.Strom.UI.researchSendNow(); });
         const dialog = page.locator('#confirmation-modal');
         await expect(dialog).toContainText("The research didn't accept the changes");
         await expect(dialog).toContainText('Details (to pass on): P0002 already has birth parents in F0001');
@@ -94,7 +95,8 @@ test.describe('the state of the tree and sending straight', () => {
         await fakeBridge(page, { syncReply: { status: 400, body: { error: 'tohle nevypadá jako rodokmen tohoto výzkumu', code: 'tree.foreign',
             text: "this does not look like the research's family tree" } } });
         await poll(page);
-        void page.evaluate(() => window.Strom.UI.researchSendNow());
+        // Started, not awaited in the page: the send waits for the dialog's answer, which may come after the test's end.
+        await page.evaluate(() => { void window.Strom.UI.researchSendNow(); });
         const dialog = page.locator('#confirmation-modal');
         await expect(dialog).toContainText("The research didn't accept the changes");
         await expect(dialog).toContainText("Reason from the research: this doesn't look like the research's family tree; it can be exported and loaded in the research as another family tree.");

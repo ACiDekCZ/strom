@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { card } from './helpers.js';
 import {
-    BRIDGE, BRIDGE2, UUID, HEAD, NEW_HEAD, block, dot, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, pollUntilStuck, researchGed, FakeBridge, acceptLoad,
+    BRIDGE, BRIDGE2, UUID, HEAD, NEW_HEAD, block, dot, editJan, fakeBridge, links, openResearch, openResearchMenu, pauseClock, poll, pollUntilStuck, researchGed, FakeBridge, acceptLoad,
 } from './research-bridge.js';
 
 /**
@@ -1703,6 +1703,10 @@ test.describe('the research as an archive', () => {
         const where = page.locator('#research-tree-settings-modal #research-mode-where');
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         await expect(where).toHaveText('The research is switched to a Strom archive in the research: Settings → “Research, or only a Strom archive”. Open the research, opens in the research');
+        // From the click on, the page's time moves only by the steps below: the open's working look comes 120 ms
+        // after the click, on the button drawn again if it is there by then (else in a toast); a busy machine
+        // reopening the dialog later would find the state gone to the toast.
+        await pauseClock(page);
         await where.locator('#research-mode-where-open').click();
         await expect(page.locator('#research-tree-settings-modal')).toHaveCount(0);
         expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
@@ -1713,6 +1717,7 @@ test.describe('the research as an archive', () => {
         // A person's next step, not the second click of a double click (the same link within 400 ms hands nothing over).
         // The button drawn again shows the first open's "Opening the research…" until its 10 s limit (no proof
         // comes from this bridge): the limit passes on the page's clock.
+        await page.clock.runFor(150);
         await expect(where.locator('#research-mode-where-open')).toHaveAttribute('aria-busy', 'true');
         await page.clock.fastForward(10_500);
         await expect(where.locator('#research-mode-where-open')).not.toHaveAttribute('aria-busy', 'true');

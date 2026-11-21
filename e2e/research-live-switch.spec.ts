@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { fakeBridge, openResearch, poll, links, UUID, type FakeBridge } from './research-bridge.js';
+import { fakeBridge, openResearch, poll, links, pauseClock, UUID, type FakeBridge } from './research-bridge.js';
 
 /**
  * "Research on" (spec 064): the research tree's switch in the research panel
@@ -212,6 +212,9 @@ test.describe('Research on: the switch', () => {
         const row = page.locator('#tree-manager-list .tree-manager-item').first();
         const sw = row.getByRole('switch', { name: 'Research on' });
         await expect(sw).toHaveAttribute('aria-checked', 'false');
+        // From the click on, the page's time moves only by the steps below: on a busy machine the 120 ms of the
+        // words would pass on their own before "at once" is looked at.
+        await pauseClock(page);
         await sw.click();
         expect(await links(page)).toEqual([`strom-research://live?tree=${UUID}&do=start`]);
         // At once: on, dashed, locked; the words only after 120 ms.
