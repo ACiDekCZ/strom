@@ -28,7 +28,7 @@ import { placeGeoHash } from '../place-records.js';
 import { PersonId, PlaceGeo } from '../types.js';
 import {
     collectPlaces, placeKey, PlaceUsage, MapKind, MAP_KINDS, isMapKind, groupTownPoints, knownStreets, MapPoint, TownPoint,
-    mapPointHasPerson, mapPointRowCount, soloPersons, type PlaceShare,
+    mapPointHasPerson, mapPointPersonIds, mapPointRowCount, soloPersons, type PlaceShare,
 } from '../places.js';
 import { sharedNames } from '../shared-with-line.js';
 import { lifeEventLabel } from '../person-sources.js';
@@ -53,7 +53,7 @@ import { iconSvg } from '../icons.js';
 import { shownName } from '../person-name.js';
 import { barHtml } from './prog-bar.js';
 import { scopePersonIds as mapScopePersonIds, type ViewScope as MapScope } from '../view-scope.js';
-import { selectionIds } from './view-selection-ui.js';
+import { getSelection, selectionIds, selectionText } from './view-selection-ui.js';
 /** A place that has coordinates and therefore something to draw. */
 export interface MappedPlace {
     key: string;
@@ -75,8 +75,18 @@ let townExpanded = new Set<string>();
 const WORK_BUBBLE = '\u0001work:';
 /** The "no house number" group in townExpanded. */
 const NO_HOUSE = '\u0000';
+/** The people outside the selection in a place's bubble (spec 098 §11d), their group in townExpanded. */
+const OUTSIDE = '\u0002outside';
 /** Above this many houses a town bubble gets its search and shortens each house's people. */
 const TOWN_BIG = 30;
+/** The opacity of what lies outside the window's selection highlighted (spec 098 §11d, as `.evidence-dim`). */
+export const MAP_DIM = 0.45;
+
+/** Some of `ids` in `set`. */
+function someIn(ids: Iterable<PersonId>, set: ReadonlySet<PersonId>): boolean {
+    for (const id of ids) if (set.has(id)) return true;
+    return false;
+}
 /** The phone's menu of kinds is open. */
 let kindsMenuOpen = false;
 let kindTipTimer: number | null = null;
@@ -663,8 +673,12 @@ export const mapMethods = uiModule({
 
         // The selection's people without any place (spec 098 §5): a second line, the whole line one button to the Table.
         const unplacedN = this.mapEffectiveScope() === 'sel' ? this.mapSelUnplacedIds().length : 0;
-        const unplaced = unplacedN > 0
+        const unplacedLine = unplacedN > 0
             ? `<button type="button" class="map-status-unplaced" onclick="window.Strom.UI.mapBarAction('unplaced')">${this.escapeHtml(strings.map.selUnplaced(unplacedN))}</button>` : '';
+        // The window's selection highlighted (spec 098 §11d): a phone has no selection's pill nor its name in the scope, so a quiet line says it.
+        const ref = this.mapHighlightIds() ? getSelection().ref : null;
+        const lines = unplacedLine + (ref
+            ? `<span class="map-status-hl">${this.escapeHtml(strings.scope.highlighted(selectionText(ref)))}</span>` : '');
 
         // In time mode the family path is drawn from the births: without them
         // the bar says why the lines are gone, so it does not look broken.
@@ -685,7 +699,7 @@ export const mapMethods = uiModule({
             if (undated > 0) {
                 box.innerHTML = `
                     <span class="map-status-text">${strings.map.timeUndated(undated)}${pathNote}</span>
-                    <button type="button" class="secondary" onclick="window.Strom.UI.showPlacesManager()">${strings.map.managePlaces}</button>${unplaced}`;
+                    <button type="button" class="secondary" onclick="window.Strom.UI.showPlacesManager()">${strings.map.managePlaces}</button>${lines}`;
                 box.style.display = 'flex';
                 return;
             }
@@ -695,7 +709,7 @@ export const mapMethods = uiModule({
         if (places.length === 0 && missing.length === 0) {
             // With kinds off, the places may all be of those kinds: say that, not "no places".
             const text = this.mapKinds().size < MAP_KINDS.length ? strings.map.noPlacesOfKinds : strings.map.noPlaces;
-            box.innerHTML = `<span class="map-status-text">${text}</span>${unplaced}`;
+            box.innerHTML = `<span class="map-status-text">${text}</span>${lines}`;
             box.style.display = 'flex';
             return;
         }
@@ -736,7 +750,7 @@ export const mapMethods = uiModule({
         };
         box.innerHTML = `
             <span class="map-status-text">${this.escapeHtml(text)}${pathNote}</span>
-            ${actions.map(button).join('')}${unplaced}`;
+            ${actions.map(button).join('')}${lines}`;
         box.classList.toggle('is-after', bar.after);
         box.style.display = 'flex';
     },
@@ -839,13 +853,16 @@ export const mapMethods = uiModule({
         const points = this.mapPoints(places);
         const ids = this.placeIdentitiesNow(points.map(p => this.mapMarkerInfo(p).key));
         const lang = getCurrentLanguage();
+        // The window's selection with This view or the Whole tree (spec 098 §11d): points without its people dimmed.
+        const hl = this.mapHighlightIds();
         layer.innerHTML = points.map(p => {
             const info = this.mapMarkerInfo(p);
             // The bubble's rows: a person per own facts, a shared event once (spec 085 §2f).
             const persons = mapPointRowCount(p);
             const id = ids.get(info.key);
             const check = id?.state === 'check' ? this.mapCheckReason(id, lang) : undefined;
-            return this.mapMarkerHtml(info, persons, false, width, height, check);
+            const dim = !!hl && !someIn(mapPointPersonIds(p), hl);
+            return this.mapMarkerHtml(info, persons, false, width, height, check, dim);
         }).join('');
         this.markMapWindowSelected(layer, points);
         declutterMapLabels(layer);
@@ -907,14 +924,15 @@ export const mapMethods = uiModule({
 
     /**
      * One marker: the dot with its people, a town's "⌂ N" tag, the name under
-     * it; `check`: the Check mark ("!" on the dot's top right) with its reason.
+     * it; `check`: the Check mark ("!" on the dot's top right) with its reason;
+     * `dim`: none of the window's selection here (spec 098 §11d).
      */
-    mapMarkerHtml(info: MapMarkerInfo, persons: number, fresh: boolean, width: number, height: number, check?: string): string {
+    mapMarkerHtml(info: MapMarkerInfo, persons: number, fresh: boolean, width: number, height: number, check?: string, dim = false): string {
         const at = pointInViewport(info.geo, this.mapCenter!, this.mapZoom, width, height);
         // Skip what is far off-screen; keeps big trees light while panning.
         if (at.x < -200 || at.y < -200 || at.x > width + 200 || at.y > height + 200) return '';
         return `
-            <button type="button" class="map-marker${fresh ? ' map-marker-fresh' : ''}${info.houses > 0 ? ' map-marker-town' : ''}" data-key="${this.escapeHtml(info.key)}"
+            <button type="button" class="map-marker${fresh ? ' map-marker-fresh' : ''}${info.houses > 0 ? ' map-marker-town' : ''}${dim ? ' evidence-dim' : ''}" data-key="${this.escapeHtml(info.key)}"
                     style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;">
                 <span class="map-marker-dot">${persons}</span>
                 ${check !== undefined ? `<span class="map-marker-check" role="img" aria-label="${this.escapeHtml(strings.places.onMap.checkMark(check))}" title="${this.escapeHtml(strings.places.onMap.checkMark(check))}">!</span>` : ''}
@@ -965,15 +983,17 @@ export const mapMethods = uiModule({
      * (keyed placeA→placeB) at the strongest opacity. Opacity fades with the
      * child's age at year Y: 1.0 fresh, down to 0.15 at 60+ years.
      */
-    mapMigrationSegments(year: number): { from: PlaceGeo; to: PlaceGeo; opacity: number }[] {
+    mapMigrationSegments(year: number): { from: PlaceGeo; to: PlaceGeo; opacity: number; dim: boolean }[] {
         // The path runs between birthplaces: no births on the map, no path.
         if (!this.mapKinds().has('birth')) return [];
         const data = DataManager.getData();
         const places = data.places ?? {};
         const filter = this.mapScopePersons();
         const kept = (id: PersonId): boolean => !filter || filter.has(id);
+        // The window's selection highlighted (spec 098 §11d): a child's line outside it dimmed.
+        const hl = this.mapHighlightIds();
 
-        const byKey = new Map<string, { from: PlaceGeo; to: PlaceGeo; opacity: number }>();
+        const byKey = new Map<string, { from: PlaceGeo; to: PlaceGeo; opacity: number; dim: boolean }>();
         for (const child of Object.values(data.persons)) {
             if (!kept(child.id)) continue;
             const cYear = yearOf(child.birthDate);
@@ -996,9 +1016,13 @@ export const mapMethods = uiModule({
                 const age = year - cYear;
                 const opacity = Math.max(0.15, 1 - (Math.max(0, age) / 60) * 0.85);
                 const segKey = `${pKey}->${cKey}`;
+                const dim = !!hl && !hl.has(child.id);
                 const existing = byKey.get(segKey);
-                if (!existing) byKey.set(segKey, { from: pGeo, to: cGeo, opacity });
-                else existing.opacity = Math.max(existing.opacity, opacity);
+                if (!existing) byKey.set(segKey, { from: pGeo, to: cGeo, opacity, dim });
+                else {
+                    existing.opacity = Math.max(existing.opacity, opacity);
+                    existing.dim &&= dim;
+                }
             }
         }
         return [...byKey.values()];
@@ -1014,6 +1038,7 @@ export const mapMethods = uiModule({
         const { width, height } = this.mapViewportSize(container);
         const year = this.mapTimeYear;
 
+        const hl = this.mapHighlightIds();
         markers.innerHTML = this.mapTimePlacesData().map(tp => {
             const upto = tp.points.filter(p => p.year <= year);
             if (upto.length === 0) return '';
@@ -1021,7 +1046,8 @@ export const mapMethods = uiModule({
             const persons = datedRowCount(upto);
             // "Fresh" = something happened here within the last ten years (Y−10, Y].
             const fresh = upto.some(p => p.year > year - 10);
-            return this.mapMarkerHtml(tp, persons, fresh, width, height);
+            const dim = !!hl && !upto.some(p => hl.has(p.personId));
+            return this.mapMarkerHtml(tp, persons, fresh, width, height, undefined, dim);
         }).join('');
         declutterMapLabels(markers);
 
@@ -1034,6 +1060,7 @@ export const mapMethods = uiModule({
                 a: pointInViewport(s.from, this.mapCenter!, this.mapZoom, width, height),
                 b: pointInViewport(s.to, this.mapCenter!, this.mapZoom, width, height),
                 opacity: s.opacity,
+                dim: s.dim,
             }))
             // Density guard: keep only lines with an endpoint near the viewport,
             // then a hard cap so a huge tree can never flood the SVG.
@@ -1042,7 +1069,7 @@ export const mapMethods = uiModule({
             .slice(0, 400);
         lines.innerHTML = drawable.map(s =>
             `<line x1="${Math.round(s.a.x)}" y1="${Math.round(s.a.y)}" x2="${Math.round(s.b.x)}" y2="${Math.round(s.b.y)}"`
-            + ` stroke="var(--primary)" stroke-width="2" stroke-opacity="${s.opacity.toFixed(3)}" />`).join('');
+            + ` stroke="var(--primary)" stroke-width="2" stroke-opacity="${s.opacity.toFixed(3)}"${s.dim ? ` opacity="${MAP_DIM}" class="evidence-dim"` : ''} />`).join('');
     },
 
     /** Sync the toggle button, the timebar visibility and the slider bounds. */
@@ -1416,9 +1443,12 @@ export const mapMethods = uiModule({
         const town = point.type === 'town' && !path;
         const big = town && point.type === 'town' && point.houseCount > TOWN_BIG;
         const sel = this.mapEffectiveScope() === 'sel';
+        // The window's selection highlighted (spec 098 §11d): its people first, the others under "Outside the selection".
+        const hl = path ? null : this.mapHighlightIds();
         const summary = point.type === 'town'
             ? m.townSummary(point.houseCount, point.personCount) + only
             : sel ? m.popupSelCount(point.usage.personIds.length) + only
+            : hl ? m.popupSelCountOf(point.usage.personIds.filter(id => hl.has(id)).length, point.usage.personIds.length) + only
             : (only ? m.usedBy(point.usage.personIds.length) + only : '');
         // The people here outside the selection, as one quiet line with the way to the whole tree.
         const outside = sel && !path ? this.mapPointOutsideCount(point.key) : 0;
@@ -1448,8 +1478,7 @@ export const mapMethods = uiModule({
             </div>
             ${this.mapPopupResearchHtml(point, located)}
             <div class="map-popup-body${town ? ' map-popup-houses' : ''}">
-                ${path ? path.rows : point.type === 'town' ? '' : `<div class="map-popup-people${this.mapTimeOn ? ' is-rows' : ''}">${this.mapPopupPeople(
-                    [...soloPersons(point.usage)], Infinity, '')}${this.mapPopupShares(point.usage.shares ?? [])}</div>`}
+                ${path ? path.rows : point.type === 'town' ? '' : this.mapPopupPlacePeople(point.usage, hl)}
                 ${outsideLine}
             </div>
             <div class="map-popup-foot">
@@ -1604,18 +1633,19 @@ export const mapMethods = uiModule({
         const big = point.houseCount > TOWN_BIG;
         const q = big ? townQuery.trim() : '';
         const houses = q ? point.houses.filter(h => houseMatches(h.house, q)) : point.houses;
+        const hl = this.mapHighlightIds();
         const count = popup.querySelector('.map-popup-search-count') as HTMLElement | null;
         if (count) count.textContent = q ? m.houseHits(houses.length) : '';
         const rows = houses.map(h => `
             <div class="map-popup-house">
                 <div class="map-popup-house-head"><span class="map-popup-house-no">${this.escapeHtml(h.house)}</span><span class="map-popup-house-bytown">${this.escapeHtml(strings.places.onMap.byTown)}</span></div>
-                <div class="map-popup-people">${this.mapPopupPeople([...h.solo], big ? 3 : Infinity, h.key)}${this.mapPopupShares(h.shares)}</div>
+                <div class="map-popup-people">${this.mapPopupPeople([...h.solo], big ? 3 : Infinity, h.key, hl)}${this.mapPopupShares(h.shares)}</div>
             </div>`).join('');
         const none = q && houses.length === 0 ? `<p class="map-popup-none">${this.escapeHtml(m.houseSearchNone)}</p>` : '';
         const noHouse = !q && point.noHouse.size > 0 ? `
             <div class="map-popup-nohouse">
                 <div class="map-popup-nohouse-title">${this.escapeHtml(`${m.noHouseNumber} · ${m.usedBy(point.noHouse.size)}`)}</div>
-                <div class="map-popup-people">${this.mapPopupPeople([...point.noHouseSolo], big ? 6 : Infinity, NO_HOUSE)}${this.mapPopupShares(point.noHouseShares)}</div>
+                <div class="map-popup-people">${this.mapPopupPeople([...point.noHouseSolo], big ? 6 : Infinity, NO_HOUSE, hl)}${this.mapPopupShares(point.noHouseShares)}</div>
             </div>` : '';
         const outside = this.mapEffectiveScope() === 'sel' ? this.mapPointOutsideCount(point.key) : 0;
         const outsideLine = outside > 0
@@ -1624,13 +1654,38 @@ export const mapMethods = uiModule({
     },
 
     /**
+     * A place's people in its bubble (not a town's): its persons and shared
+     * events; with the window's selection highlighted (`hl`, spec 098 §11d)
+     * the selection's first, then "Outside the selection" and the others dimmed.
+     */
+    mapPopupPlacePeople(usage: PlaceUsage, hl: ReadonlySet<PersonId> | null): string {
+        const rows = this.mapTimeOn ? ' is-rows' : '';
+        const solo = [...soloPersons(usage)];
+        const shares = usage.shares ?? [];
+        if (!hl) return `<div class="map-popup-people${rows}">${this.mapPopupPeople(solo, Infinity, '')}${this.mapPopupShares(shares)}</div>`;
+        const inSolo = solo.filter(([id]) => hl.has(id));
+        const inShares = shares.filter(r => r.personIds.some(id => hl.has(id)));
+        const outSolo = solo.filter(([id]) => !hl.has(id));
+        const outShares = shares.filter(r => !r.personIds.some(id => hl.has(id)));
+        const top = inSolo.length + inShares.length > 0
+            ? `<div class="map-popup-people${rows}">${this.mapPopupPeople(inSolo, Infinity, '')}${this.mapPopupShares(inShares)}</div>` : '';
+        const rest = outSolo.length + outShares.length > 0
+            ? `<div class="map-popup-outside-head">${this.escapeHtml(strings.map.popupOutsideHead)}</div>`
+                + `<div class="map-popup-people map-popup-people--outside is-dim${rows}">${this.mapPopupPeople(outSolo, Infinity, OUTSIDE)}${this.mapPopupShares(outShares)}</div>` : '';
+        return top + rest;
+    },
+
+    /**
      * People of a bubble as buttons, the marks of their kinds before the name
      * (only the kinds on); past `limit` a "+ N more" that shows the rest of
-     * this group (`group` = its key in townExpanded).
+     * this group (`group` = its key in townExpanded); `hl`: the window's
+     * selection highlighted (its people first, the others `.is-dim`).
      */
-    mapPopupPeople(entries: readonly (readonly [PersonId, ReadonlySet<MapKind>])[], limit: number, group: string): string {
+    mapPopupPeople(entries: readonly (readonly [PersonId, ReadonlySet<MapKind>])[], limit: number, group: string, hl: ReadonlySet<PersonId> | null = null): string {
         const m = strings.map;
         const on = this.mapKinds();
+        // A town's house with the window's selection highlighted (spec 098 §11d): its people first, the others dimmed.
+        if (hl) entries = [...entries.filter(([id]) => hl.has(id)), ...entries.filter(([id]) => !hl.has(id))];
         const people = entries
             .map(([id, kinds]) => ({ person: DataManager.getPerson(id), kinds }))
             .filter((e): e is { person: NonNullable<typeof e.person>; kinds: ReadonlySet<MapKind> } => !!e.person);
@@ -1642,7 +1697,7 @@ export const mapMethods = uiModule({
             if (this.mapTimeOn) return this.mapPopupPathRow(person.id, name, this.mapPopupBirthYear(person.id), '', false, marks);
             const what = MAP_KINDS.filter(k => kinds.has(k) && on.has(k)).map(k => m.kinds[k]).join(', ');
             return `
-                <button type="button" class="map-popup-person" data-person-id="${this.escapeHtml(person.id)}"
+                <button type="button" class="map-popup-person${hl && !hl.has(person.id) ? ' is-dim' : ''}" data-person-id="${this.escapeHtml(person.id)}"
                         title="${this.escapeHtml(what ? `${name} · ${what}` : name)}">${marks
                     ? `<span class="map-popup-marks" aria-hidden="true">${marks}</span>` : ''}${this.escapeHtml(name)}</button>`;
         }).join('');

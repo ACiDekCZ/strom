@@ -39,7 +39,7 @@ import {
 } from '../map-lines.js';
 import { LINE_FOCUS_DIM, lineStyle, lineSwatch, pointFill, pointSize, lineColorVar } from '../map-line-colors.js';
 import { uiModule } from './module.js';
-import { declutterMapLabels, type MapScope } from './map-ui.js';
+import { declutterMapLabels, MAP_DIM, type MapScope } from './map-ui.js';
 
 /** The legend's width (drawn by the legend part): 300, from 1280 px 320 — the framing keeps clear of it. */
 export const LEGEND_WIDTH = { base: 300, wide: 320, wideFrom: 1280 } as const;
@@ -455,6 +455,8 @@ export const mapPathMethods = uiModule({
         const focus = colors ? this.mapPathFocusClass() : null;
         const esc = (t: string): string => this.escapeHtml(t);
         const { display } = this.mapPathLocate();
+        // The window's selection highlighted (spec 098 §11d): lines and points of people outside it dimmed.
+        const hl = this.mapHighlightIds();
 
         // Lines.
         const { segs, total } = pathSegments(model, year, mode, geo => visible(at(geo)));
@@ -467,7 +469,8 @@ export const mapPathMethods = uiModule({
             const a = at(s.from), b = at(s.to);
             const bw = bow(a, b, bowSide(`${s.fromKey}->${s.toKey}`));
             const st = lineStyle(s.cls, { age: s.age, colors, focus });
-            const op = st.opacity.toFixed(3);
+            const out = !!hl && !s.childIds.some(id => hl.has(id));
+            const op = (st.opacity * (out ? MAP_DIM : 1)).toFixed(3);
             casing.push(`<path d="${bw.d}" fill="none" stroke="${st.casing}" stroke-width="${st.casingWidth}" stroke-linecap="round" opacity="${op}"/>`);
             strokes.push(`<path class="map-path-line" data-cls="${s.cls}" d="${bw.d}" fill="none" stroke="${st.stroke}" stroke-width="${st.width}"`
                 + `${st.dash ? ` stroke-dasharray="${st.dash}"` : ''} stroke-linecap="${st.cap}" opacity="${op}"/>`);
@@ -495,9 +498,10 @@ export const mapPathMethods = uiModule({
             const size = pointSize(colors ? p.classes.length : 1, p.fresh);
             const fill = pointFill(p.classes, colors);
             const dim = focus && !p.classes.includes(focus) ? LINE_FOCUS_DIM.point : 1;
+            const out = !!hl && !p.personIds.some(id => hl.has(id));
             const name = display.get(p.key) ?? '';
-            html.push(`<button type="button" class="map-marker map-path-point${p.fresh ? ' is-fresh' : ''}" data-key="${esc(p.key)}" data-classes="${p.classes.join(' ')}"`
-                + ` aria-label="${esc(name)}" style="left:${Math.round(xy.x)}px; top:${Math.round(xy.y)}px;${dim < 1 ? ` opacity:${dim};` : ''}">`
+            html.push(`<button type="button" class="map-marker map-path-point${p.fresh ? ' is-fresh' : ''}${out ? ' evidence-dim' : ''}" data-key="${esc(p.key)}" data-classes="${p.classes.join(' ')}"`
+                + ` aria-label="${esc(name)}" style="left:${Math.round(xy.x)}px; top:${Math.round(xy.y)}px;${dim < 1 ? ` opacity:${out ? +(dim * MAP_DIM).toFixed(3) : dim};` : ''}">`
                 + `<span class="map-marker-dot map-path-dot" style="width:${size}px; height:${size}px; background:${fill};"></span>`
                 + `<span class="map-marker-label">${esc(name)}</span></button>`);
         }

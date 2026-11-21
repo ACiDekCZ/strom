@@ -13209,6 +13209,11 @@
         @media (hover: hover) { .map-status button.map-status-unplaced:hover { background: none; color: var(--primary-dark); text-decoration: underline; text-underline-offset: 2px; } }
         @media (max-width: 640px) { .map-status button.map-status-unplaced { font-size: 12px; } }
         @media (pointer: coarse) { .map-status button.map-status-unplaced { min-height: 44px; } }
+        /* The window's selection highlighted (spec 098 §11d): the phone's quiet second line says which (its scope button has no name). */
+        .map-status-hl { display: none; }
+        @media (max-width: 640px) {
+            .map-status-hl { display: block; flex-basis: 100%; text-align: center; font-size: 12px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        }
         /* A phone's sheet covers the bottom: the bar steps aside while it is open. */
         .map-sheet-open .map-status { visibility: hidden; }
         .map-attribution {
@@ -13409,6 +13414,9 @@
         .map-popup-none { margin: 0; padding: 14px 0; font-size: 13px; color: var(--text-light); }
         .map-popup-nohouse { display: flex; flex-direction: column; gap: 6px; padding: 10px 0 4px; }
         .map-popup-nohouse-title { font-size: 12px; font-weight: 600; color: var(--text-light); }
+        /* The window's selection highlighted (spec 098 §11d): the others under a quiet head, dimmed. */
+        .map-popup-outside-head { padding: 6px 0 2px; border-top: 1px solid var(--divider); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); }
+        .map-popup-people.is-dim, .map-popup-person.is-dim { opacity: .6; }
         .map-popup-nohouse .map-popup-people { gap: 5px; padding: 0; }
         .map-popup-foot { flex: none; padding: 8px 14px 12px; border-top: 1px solid var(--divider); }
         .map-popup-foot .map-popup-fix {
@@ -25510,6 +25518,7 @@
         .person-card.evidence-dim { opacity: 0.45; }
         .person-card.evidence-hit { outline: 1.5px dashed var(--accent); outline-offset: 2px; }
         .fan-sector.evidence-dim, .fan-focus.evidence-dim { opacity: 0.45; }
+        .map-marker.evidence-dim { opacity: 0.45; }
         /* The Evidence mode: every card framed by its level, nothing dimmed. */
         .person-card.evl-full { outline: 1.5px solid var(--primary); outline-offset: 1px; background: var(--primary-soft); }
         .person-card.evl-partial { outline: 1.5px dashed var(--primary); outline-offset: 1px; }
