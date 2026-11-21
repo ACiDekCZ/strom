@@ -41,8 +41,10 @@ import { startPend, endPend, dropPend, pendOf, applyPend, pendStatusEl } from '.
 import { busySpinHtml } from './busy.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
-import { noteQueueStartStatus, queueStartOf, retryQueueStart, startQueueWork, QUEUE_START_MS, type QueueStartView } from './queue-start.js';
-import { researchWorking } from './queue-work-dialog.js';
+import {
+    noteQueueStartStatus, queueStartOf, queueStartsOf, retryQueueStart, runStartProven, startQueueWork, QUEUE_SCOPE, QUEUE_START_MS, type QueueStartView,
+} from './queue-start.js';
+import { runLinesOn } from '../research-runs.js';
 import { overviewChanged, overviewInWindow } from '../windows/overview-window.js';
 import type { TreeId } from '../types.js';
 
@@ -160,29 +162,32 @@ export const researchLiveMethods = uiModule({
     // ==================== STARTING THE QUEUE'S WORK (waiting buttons §3.2) ====================
 
     /**
-     * "Open terminal" of "Work on the queue": the link handed over quietly (Now says the state, queue-start.ts),
-     * its proof the link's handoff or a session or a run at work, at most 30 s.
+     * "Open terminal" of "Work on the queue" (`scope` absent) or "Start" of a direction's own run (`scope`: its
+     * id, spec 126 U10): the link handed over quietly (Now says the state, queue-start.ts), its proof the link's
+     * handoff or the run of the scope at work (an older research: a session or a run), at most 30 s.
      */
-    beginQueueWork(url: string): void {
+    beginRunWork(url: string, scope?: string): void {
         const rid = this.activeResearchId();
         if (!rid) return;
-        // Someone works there already: no session can prove this start, the link's own state says it (a toast).
-        const at = this.queueWorkMenuState()?.state as { working?: readonly unknown[] } | undefined;
-        if ((at?.working?.length ?? 0) > 0) {
+        const at = this.queueWorkMenuState()?.state as { working?: readonly unknown[]; features?: readonly string[] | null } | undefined;
+        // An older research where someone works already: no session can prove this start, the link's own state says it
+        // (a toast). With runs side by side (`run.lines`) the start always shows in Now.
+        if (!runLinesOn(at?.features) && (at?.working?.length ?? 0) > 0) {
             void this.launchResearchLink(url, 'agent', document.createElement('span'), { timeoutMs: QUEUE_START_MS });
             return;
         }
+        const sc = scope ?? QUEUE_SCOPE;
         // Now says the state where the overview is seen (here or in its own window); without it a toast does.
         const shown = overviewInWindow() || (document.getElementById('research-overview')?.getClientRects().length ?? 0) > 0;
         startQueueWork(rid, {
             launch: ({ limitMs, onLateProof }) => this.launchResearchLink(url, 'agent', document.createElement('span'), {
-                timeoutMs: limitMs, quiet: shown, onLateProof, proof: (st) => researchWorking(st),
+                timeoutMs: limitMs, quiet: shown, onLateProof, proof: (st) => runStartProven(st, sc),
             }),
             changed: () => {
                 this.renderLivePanel();
                 overviewChanged();
             },
-        });
+        }, Date.now(), sc);
     },
 
     /** The start of the open tree's queue work as Now draws it (null: none). */
@@ -190,10 +195,15 @@ export const researchLiveMethods = uiModule({
         return queueStartOf(this.activeResearchId());
     },
 
-    /** Try again after "Did the queue work not start?". */
-    retryQueueWork(): void {
+    /** Every start of the open tree's work, the general run's (scope 'queue') and the directions' runs (their ids). */
+    runStartsNow(): Array<{ scope: string; view: QueueStartView }> {
+        return queueStartsOf(this.activeResearchId());
+    },
+
+    /** Try again after "Did the queue work not start?" (`scope`: a direction's run). */
+    retryQueueWork(scope?: string): void {
         const rid = this.activeResearchId();
-        if (rid) retryQueueStart(rid);
+        if (rid) retryQueueStart(rid, scope ?? QUEUE_SCOPE);
     },
 
     /** The bridge's `end` event (followed): how it ended, kept for the switch's text. */

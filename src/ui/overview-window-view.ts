@@ -223,6 +223,7 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
         openOffLineSettings(): void { run('offline-settings'); },
         // Research for this tree at Books (Faster by downloading › Settings…): a dialog of the main window.
         openBooksSettings(): void { run('books-settings'); },
+        openRunsSettings(): void { run('runs-settings'); },
         offLineSettingsOffered(): boolean { return extras().offLineSettings === true; },
         // Its own overview (no small panel here); none opened or closed here.
         renderLivePanel(this: UIClass): void { this.renderResearchOverview(); },
@@ -450,18 +451,23 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             // "Work on the queue…" starts the agent there: the main window says so as for its own link.
             port.send('research-link', { link: l.link, params: l.params, ...(l.link === 'work' ? { kind: 'agent' } : {}) });
         },
-        /** "Work on the queue…" started from here: the main window hands it over and keeps its state (3a). */
-        beginQueueWork(this: UIClass, url: string): void {
-            lastWorkUrl = url;
+        /** "Work on the queue…" or a direction's own run started from here: the main window hands it over and keeps its state (3a). */
+        beginRunWork(this: UIClass, url: string, scope?: string): void {
+            lastWorkUrls.set(scope ?? 'queue', url);
             this.handOverResearchLink(url);
         },
         /** The start of the queue's work as the main window has it. */
         queueStartNow(): { phase: 'starting' | 'silent'; startedAt: number } | null {
             return extras().queueStart ?? null;
         },
+        /** Every start of the research's work as the main window has it. */
+        runStartsNow(): Array<{ scope: string; view: { phase: 'starting' | 'silent'; startedAt: number } }> {
+            return extras().runStarts ?? [];
+        },
         /** Try again: the same link once more through the main window. */
-        retryQueueWork(this: UIClass): void {
-            if (lastWorkUrl) this.handOverResearchLink(lastWorkUrl);
+        retryQueueWork(this: UIClass, scope?: string): void {
+            const url = lastWorkUrls.get(scope ?? 'queue');
+            if (url) this.handOverResearchLink(url);
         },
         /** A link from here: the element's state a moment; the main window hands it over and waits for its proof. */
         launchResearchLink(this: UIClass, url: string, kind: ResearchLinkKind = 'terminal', el?: HTMLElement | null): Promise<OpenBusyResult> {
@@ -476,8 +482,8 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
     };
 }
 
-/** The last "Work on the queue…" link started from this window (its Try again). */
-let lastWorkUrl: string | null = null;
+/** The last "Work on the queue…" link and each direction's run link started from this window, by scope (their Try again). */
+const lastWorkUrls = new Map<string, string>();
 /** A refused row's sentence drawn here already (its text): `role=alert` only on its first drawing. */
 const refusalsSaid = new Map<string, string>();
 

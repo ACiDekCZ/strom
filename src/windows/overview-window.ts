@@ -95,6 +95,8 @@ export interface OverviewExtras {
     offLineSettings?: boolean;
     /** "Work on the queue…" starting (waiting buttons 3a, 3b) as the main window has it; absent or null: none. */
     queueStart?: { phase: 'starting' | 'silent'; startedAt: number } | null;
+    /** Every start of the research's work (spec 126 U10): the general run's (scope 'queue') and the directions' runs (their ids). */
+    runStarts?: Array<{ scope: string; view: { phase: 'starting' | 'silent'; startedAt: number } }>;
     /** "Follow live" starting in the main window (waiting buttons §11.2): its step; absent or null: none. */
     followStart?: 'connect' | 'tree' | null;
     /** Rows of "Awaiting action" whose file the main window writes for this window now (§11.2); absent: none. */
@@ -318,6 +320,8 @@ export type OverviewAction =
     | { action: 'offline-settings'; args?: Record<string, never> }
     /** Settings… of "Faster by downloading" (spec 105 §3): Research for this tree at Books. */
     | { action: 'books-settings'; args?: Record<string, never> }
+    /** "Settings ›" beside the most runs at once reached (spec 126 U10): Research for this tree at that setting. */
+    | { action: 'runs-settings'; args?: Record<string, never> }
     // ---- in the main window, it stays where it is ----
     /** A row hovered: its card lit up in the main window's tree (null: none). */
     | { action: 'hover-person'; args: { personId: string | null } }
@@ -390,7 +394,7 @@ export type OverviewActionArgs<T extends OverviewActionId> = Extract<OverviewAct
 
 export const OVERVIEW_ACTION_IDS = [
     'show-person', 'show-people', 'show-direction', 'direction-found', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
-    'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings', 'books-settings',
+    'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings', 'books-settings', 'runs-settings',
     'hover-person', 'verify-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
     'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-retry', 'waiting-file', 'waiting-audit', 'waiting-aside',
@@ -401,7 +405,7 @@ export const OVERVIEW_ACTION_IDS = [
 /** Actions whose result shows in the main window: the overview window asks it to the front after them. */
 export const OVERVIEW_ACTIONS_TO_MAIN: ReadonlySet<OverviewActionId> = new Set<OverviewActionId>([
     'show-person', 'show-people', 'show-direction', 'direction-found', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
-    'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings', 'books-settings',
+    'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings', 'books-settings', 'runs-settings',
 ]);
 
 const str = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
@@ -470,6 +474,7 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
         case 'verify-bulk':
         case 'offline-settings':
         case 'books-settings':
+        case 'runs-settings':
         case 'verify-stop':
         case 'follow-live':
         case 'stop-follow':

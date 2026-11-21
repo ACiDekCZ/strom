@@ -78,6 +78,6 @@ export function followRuns(page: Page, opts: Parameters<typeof followManaged>[1]
     return followManaged(page, {
         ged: RUNS_GED, researches: RUN_DIRECTIONS, working: RUN_WORKING, queue: RUN_QUEUE, paged: true,
         features: RUN_FEATURES, runs: RUNS, runsEnded: [], limits: RUN_LIMITS, agents: RUN_AGENTS,
-        work: { gate: null, minutes: 0, confirm: 'ask' }, treeName: 'Kubíčkovi a Malí', ...opts,
+        work: { gate: null, minutes: 0, confirm: 'ask' }, treeName: 'Kubíčkovi a Malí', links: ['work'], ...opts,
     });
 }

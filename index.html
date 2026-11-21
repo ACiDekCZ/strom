@@ -24658,6 +24658,27 @@
             .research-direction__move { width: 44px; height: 44px; }
         }
         .research-direction__now { color: var(--text); overflow-wrap: anywhere; }
+        /* A direction's own run in its detail (spec 126 U10 §1, 1b–1g): the framed button (AI + terminal) and its
+           sentence, held with the reason (never hidden); with its run the state and "In Now ›". */
+        .research-direction__run { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 8px; min-width: 0; }
+        .research-direction__run-btn { max-width: 100%; text-align: left; }
+        .research-direction__run-why { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .research-direction__run-why .link-button, .research-direction__in-now { padding: 0; min-height: 0; font-size: 12px; }
+        .research-direction__run .is-held { opacity: .45; cursor: not-allowed; }
+        .research-direction__run-state { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; font-size: 13px; color: var(--text); }
+        .research-direction__run-state > strong { font-weight: 600; color: var(--primary); }
+        .research-direction__run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); align-self: center; flex: none; }
+        .research-direction__run-meta { color: var(--text); }
+        .research-direction__meta .research-direction__in-now { font-size: inherit; }
+        @media (pointer: coarse) {
+            .research-direction__run-why .link-button, .research-direction__in-now { min-height: 44px; }
+        }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .research-direction__run-btn { width: 100%; }
+        }
+        /* "In Now ›": the run's block lit a moment (as a task moved by "Do next"). */
+        .research-overview__now :is(.research-overview__now-row, .live-now-starting).is-flash { background: var(--primary-soft); border-radius: var(--r-md); }
+        .research-overview__now :is(.research-overview__now-row, .live-now-starting).is-flash:focus { outline: none; }
         .research-direction__limit { color: var(--text-faint); }
         .research-direction__found { font-size: 13px; color: var(--text); display: flex; flex-wrap: wrap; column-gap: 6px; }
         .research-direction__found-parts { display: inline-flex; flex-wrap: wrap; column-gap: 6px; }
@@ -32600,6 +32621,29 @@
             #queue-work-modal { padding: 12px; }
             #queue-work-modal .modal.queue-work { max-height: calc(100vh - 24px); }
             .queue-work__confirm { order: 1; flex-basis: auto; margin: 0; }
+        }
+        /* The dialog narrowed to a direction (spec 126 U10 §2, 2a–2f): the kicker over the direction's name and code,
+           the agent as a .sel-seg (Linka), the line that usage adds up, the reason when its run cannot start. */
+        .queue-work__head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .queue-work__head-kicker { font-size: 12px; color: var(--text-light); }
+        #queue-work-modal .queue-work--line h2 { overflow-wrap: anywhere; }
+        .queue-work__glyph { color: var(--text-light); margin-right: 2px; }
+        #queue-work-modal .queue-work--line h2 .code { font-size: .8em; font-weight: 500; color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .queue-work__agent { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 12px; }
+        .queue-work__agent-label { font-size: 12px; color: var(--text-light); }
+        .queue-work__agent .sel-seg { display: inline-flex; align-self: flex-start; max-width: 100%; }
+        #queue-work-modal .queue-work__agent .sel-opt { height: 32px; min-height: 0; padding: 0 12px; font-size: 13px; white-space: nowrap; }
+        .queue-work__agent .sel-opt small { font-size: 11.5px; color: var(--text-light); font-weight: 400; }
+        .queue-work__agent-kept { margin: 0; font-size: 12px; color: var(--text-faint); }
+        .queue-work__adds { margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        .queue-work__held { margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--warning-text); }
+        .queue-work__held[hidden] { display: none; }
+        @media (pointer: coarse) {
+            #queue-work-modal .queue-work__agent .sel-opt { height: 44px; }
+        }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .queue-work__agent .sel-seg { display: flex; align-self: stretch; }
+            #queue-work-modal .queue-work__agent .sel-opt { flex: 1 1 0; min-width: 0; padding: 0 6px; }
         }
         /* ==== How Strom works: the help window (src/ui/help-ui.ts, 1105 §2–§8, §11) ====
            Above every other window (the Research overview, Places, the conflicts panel).

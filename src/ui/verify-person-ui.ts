@@ -1071,7 +1071,7 @@ export const verifyPersonMethods = uiModule({
         // Its mark from the one map (RESEARCH_LINK_MARKS, `work`: the AI badge and the terminal mark).
         this.showToast(v.bulkStartedIdle(r.facts), BULK_PROCESS_MS, {
             closable: true, kind: 'verify-process',
-            action: { label: v.processNow, run: () => this.beginQueueWork(url), ...researchLinkFlags(url) },
+            action: { label: v.processNow, run: () => this.beginRunWork(url), ...researchLinkFlags(url) },
         });
     },
 

@@ -263,8 +263,9 @@ export const researchTreeSettingsMethods = uiModule({
     /**
      * The dialog for a tree tied to a research that knows how a transcript weighs.
      * `group: 'books'` opens it at "Books", open and highlighted for a moment (Faster by downloading › Settings…).
+     * `focus: 'runs-max'`: at "Most agents at once" (spec 126 U10), its field focused once the dialog has it.
      */
-    async showResearchTreeSettings(treeId: TreeId, opts: { group?: 'books' } = {}): Promise<void> {
+    async showResearchTreeSettings(treeId: TreeId, opts: { group?: 'books'; focus?: 'runs-max' } = {}): Promise<void> {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!meta || !link) return;
@@ -538,6 +539,13 @@ export const researchTreeSettingsMethods = uiModule({
         overlay.querySelector<HTMLInputElement>('input[name="research-transcripts"]:checked')?.focus();
         if (opts.group === 'books') {
             this.flashResearchSettingsGroup('research-books-group', '#research-books-min', () => { books.open = true; });
+        }
+        if (opts.focus === 'runs-max') {
+            const field = overlay.querySelector<HTMLElement>('#research-runs-max, [data-focus="runs-max"]');
+            if (field) {
+                field.scrollIntoView?.({ block: 'nearest' });
+                field.focus();
+            }
         }
     },
 

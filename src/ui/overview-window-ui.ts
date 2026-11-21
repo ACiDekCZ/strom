@@ -106,6 +106,7 @@ export const overviewWindowMethods = uiModule({
             extras.verify = this.treeVerifyNow();
             extras.offLineSettings = this.offLineSettingsOffered(treeId);
             extras.queueStart = this.queueStartNow();
+            extras.runStarts = this.runStartsNow();
             extras.followStart = followStartOf(researchId);
             if (filesSending.size) extras.fileSending = [...filesSending];
             if (notesReading.size) extras.noteReading = [...notesReading];
@@ -211,6 +212,9 @@ export const overviewWindowMethods = uiModule({
                 return true;
             case 'offline-settings':
                 this.openOffLineSettings();
+                return true;
+            case 'runs-settings':
+                this.openRunsSettings();
                 return true;
             case 'books-settings':
                 this.openBooksSettings();
@@ -344,8 +348,11 @@ export const overviewWindowMethods = uiModule({
                 // Built here for the open tree from the action and its parameters (never an address the window sends).
                 const url = this.activeResearchLink(a.args.link, (a.args.params ?? {}) as Omit<ResearchLinkParams, 'tree'>);
                 if (!url) return false;
-                // "Work on the queue…" starts here, its state in Now of both windows (3a).
-                if (a.args.link === 'work') this.beginQueueWork(url);
+                // "Work on the queue…" and a direction's own run start here, their state in Now of both windows (3a).
+                if (a.args.link === 'work') {
+                    const line = (a.args.params as { research?: unknown } | undefined)?.research;
+                    this.beginRunWork(url, typeof line === 'string' ? line : undefined);
+                }
                 else this.launchResearchLink(url, a.args.kind ?? 'terminal');
                 return true;
             }

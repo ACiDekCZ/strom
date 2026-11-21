@@ -29,6 +29,7 @@ import { DirectionStateDo, DirectionWriteRefused, directionRetryHelps, setDirect
 import { undoInToast } from './toast.js';
 import { announceBusy, busyStatusEl, prepareBusy } from './busy.js';
 import { RowBusy, drawRowLinkBusy, drawRowMoreBusy, rowBusyStatusEl } from './row-busy.js';
+import { type LiveRun, type LineRunBlock, lineRunBlock, lineRunOf, liveRuns, runCount, runLimit, runLinesOn } from '../research-runs.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
@@ -524,7 +525,37 @@ interface DirectionMenuItem {
     hint?: string;
     /** The research link's mark (an action through the bridge has none). */
     mark?: ReturnType<typeof researchLinkMark>;
+    /** Shown but not available (`aria-disabled`; its hint says why). */
+    disabled?: boolean;
     run: () => void;
+}
+
+/**
+ * A direction's own run as its detail, its ⋯ and its row show it (spec 126 U10 §1):
+ * - `running`: its run (the research's word: also only its id, `d.run`);
+ * - `starting`: its start on its way (local, queue-start.ts);
+ * - `offer`: it can start, `n` tasks up next;
+ * - `held`: shown but not available, `why` (with `limit` "Settings ›" beside it).
+ * Null: not offered at all (an older research, an ended direction, an archive, a research waiting for its agent).
+ */
+export type LineRunOffer =
+    | { kind: 'running'; run: LiveRun | null; id: string }
+    | { kind: 'starting' }
+    | { kind: 'offer'; n: number }
+    | { kind: 'held'; why: string; limit: boolean; n: number };
+
+/** The sentence of a held direction's run (null: the action is not drawn). */
+function lineRunWhy(block: LineRunBlock, runs: readonly LiveRun[]): string | null {
+    const L = strings.live;
+    switch (block) {
+        case 'paused': return L.lineRunPaused;
+        case 'empty': return L.lineRunEmpty;
+        case 'limit': return L.runsLimitReached(runCount(runs));
+        case 'noAgent': return L.lineRunNoAgent;
+        case 'oldRun': return L.lineRunOldRun;
+        case 'unknown': return L.lineRunCannot;
+        default: return null;
+    }
 }
 
 /** The people of a direction, as the app knows them (null: it has no person). */
@@ -939,6 +970,25 @@ export const researchDirectionsMethods = uiModule({
         const L = strings.live;
         const meta = el('div', 'research-direction__meta');
         const run = s.working.find(w => w.research === d.id && !w.paused && w.task);
+        // Its own run (spec 126 U10 §1): "Agent at work: Claude" · "In Now ›" in place of the task (the sheet: the state only).
+        const own = this.lineRunOffer(s, d);
+        if (own?.kind === 'running' || own?.kind === 'starting') {
+            const focus = personByRefn(d.focus);
+            if (focus) {
+                const link = el('button', 'live-person-link');
+                link.innerHTML = fitNameHtml(focus, fullName(focus));
+                link.type = 'button';
+                link.onclick = () => this.overviewShowPerson(focus.id, mode);
+                meta.appendChild(link);
+            }
+            if (own.kind === 'starting') meta.appendChild(el('span', 'research-direction__run-meta', strings.live.runStateStarting));
+            else {
+                meta.appendChild(el('span', 'research-direction__run-meta', L.lineRunWorkingMeta(own.run?.agentName || d.agent || '')));
+                if (mode !== 'sheet') meta.appendChild(this.lineRunInNowLink(own.id, d.id));
+            }
+            if (d.state !== 'paused') for (const t of limitTexts(d)) meta.appendChild(el('span', 'research-direction__limit', t));
+            return meta;
+        }
         if (d.state === 'paused') {
             if (run) meta.appendChild(el('span', 'research-direction__now', L.dirFinishing(run.task)));
             else if (d.reason) meta.appendChild(el('span', undefined, L.dirReason(d.reason)));
@@ -1008,6 +1058,10 @@ export const researchDirectionsMethods = uiModule({
         // The branches added to it (work outside the directions that now helps it).
         this.appendDirectionBranches(detail, s, d, view.canWrite);
 
+        // Its own run (spec 126 U10 §1): above the actions, the button or its state.
+        const runBox = this.lineRunControl(s, d, mode, view);
+        if (runBox) detail.appendChild(runBox);
+
         const actions = el('div', 'research-direction__actions');
         if (!view.readOnly && d.state !== 'done') {
             const what: DirectionStateDo = d.state === 'paused' ? 'resume' : 'pause';
@@ -1067,6 +1121,104 @@ export const researchDirectionsMethods = uiModule({
         }
         if (actions.childElementCount > 0) detail.appendChild(actions);
         return detail;
+    },
+
+    /** Its own run as the direction shows it (spec 126 U10 §1; null: not offered, see LineRunOffer). */
+    lineRunOffer(s: LiveSession, d: LiveDirection): LineRunOffer | null {
+        if (!runLinesOn(s.features) || d.state === 'done' || this.activeResearchNoAgent()) return null;
+        const runs = liveRuns(s);
+        const mine = lineRunOf(runs, d.id);
+        if (mine || d.run) return { kind: 'running', run: mine, id: mine?.id ?? d.run! };
+        // Nothing to start with: the research does not take the work link here.
+        if (!this.researchLinkAvailable('work')) return null;
+        const starts = this.runStartsNow();
+        if (starts.some(x => x.scope === d.id && x.view.phase === 'starting')) return { kind: 'starting' };
+        // Starts of other runs on their way count against the most runs at once.
+        const others = starts.filter(x => x.scope !== d.id && x.view.phase === 'starting').length;
+        const block = lineRunBlock(d, runs, s.queueCounts, runLimit(s), others);
+        const n = s.queueCounts?.research[d.id] ?? d.tasks ?? 0;
+        if (!block) return { kind: 'offer', n };
+        if (block === 'running') return { kind: 'running', run: null, id: d.run ?? '' };
+        const why = lineRunWhy(block, runs);
+        return why ? { kind: 'held', why, limit: block === 'limit', n } : null;
+    },
+
+    /** "In Now ›" of a direction's own run: Now shown with the run's block flashed. */
+    lineRunInNowLink(runId: string, direction: string): HTMLElement {
+        const link = el('button', 'link-button research-direction__in-now', strings.live.lineRunInNow);
+        link.type = 'button';
+        link.dataset.run = runId;
+        link.onclick = (e) => {
+            e.stopPropagation();
+            this.showOverviewNowRun(runId, direction);
+        };
+        return link;
+    },
+
+    /**
+     * The block of a direction's own run in its detail (spec 126 U10 §1): the
+     * framed "Put an agent on this direction" (AI + terminal) with its
+     * sentence, held with the reason when it cannot start (never hidden);
+     * with its run the state "Agent at work · Claude · since 10:42" and
+     * "In Now ›". Not on the phone's sheet, read only, or where not offered.
+     */
+    lineRunControl(s: LiveSession, d: LiveDirection, mode: Mode, view: DirectionsView): HTMLElement | null {
+        if (mode === 'sheet' || view.readOnly) return null;
+        const offer = this.lineRunOffer(s, d);
+        if (!offer) return null;
+        const L = strings.live;
+        const box = el('div', 'research-direction__run');
+        box.dataset.lineRun = offer.kind;
+        if (offer.kind === 'running') {
+            const state = el('div', 'research-direction__run-state');
+            const dot = el('span', 'research-direction__run-dot');
+            dot.setAttribute('aria-hidden', 'true');
+            state.appendChild(dot);
+            state.appendChild(el('strong', undefined, L.lineRunWorking));
+            const at = offer.run?.since ? Date.parse(offer.run.since) : NaN;
+            const since = Number.isFinite(at) ? formatLiveClock(at, Date.now(), getCurrentLanguage()) : '';
+            const agent = offer.run?.agentName || d.agent || '';
+            const rest = agent && since ? L.lineRunWorkingSince(agent, since) : agent;
+            if (rest) state.appendChild(el('span', undefined, ` · ${rest}`));
+            box.appendChild(state);
+            if (offer.id) box.appendChild(this.lineRunInNowLink(offer.id, d.id));
+            return box;
+        }
+        const btn = el('button', 'secondary research-direction__state research-direction__run-btn');
+        btn.type = 'button';
+        btn.dataset.do = 'run';
+        setResearchActionLabel(btn, L.lineRun, researchLinkMark('work'));
+        box.appendChild(btn);
+        if (offer.kind === 'starting') {
+            btn.setAttribute('aria-disabled', 'true');
+            btn.setAttribute('aria-busy', 'true');
+            prepareBusy(btn, strings.busy.starting);
+            btn.dataset.busy = 'busy';
+            btn.onclick = (e) => e.preventDefault();
+            return box;
+        }
+        const why = el('p', 'research-direction__run-why');
+        if (offer.kind === 'held') {
+            btn.setAttribute('aria-disabled', 'true');
+            btn.classList.add('is-held');
+            btn.onclick = (e) => e.preventDefault();
+            why.id = `research-direction-run-why-${d.id}`;
+            btn.setAttribute('aria-describedby', why.id);
+            why.appendChild(el('span', undefined, offer.why));
+            if (offer.limit) {
+                const settings = el('button', 'link-button research-direction__run-settings', L.runsSettingsLink);
+                settings.type = 'button';
+                settings.onclick = () => this.openRunsSettings();
+                why.append(' ', settings);
+            }
+        } else {
+            why.textContent = L.lineRunSub(offer.n);
+            btn.setAttribute('aria-haspopup', 'dialog');
+            if (view.down) holdForBridge(btn);
+            else btn.onclick = () => this.showLineRunDialog(s, d, btn);
+        }
+        box.appendChild(why);
+        return box;
     },
 
     /** An ended direction (folded below the order): no number; Restart beside it. */
@@ -1146,9 +1298,21 @@ export const researchDirectionsMethods = uiModule({
         }
         // Save as list (spec 084 §6, 6e): stays in the app, so no mark.
         if (!DataManager.listsReadOnly()) items.push(null, this.directionSaveListItem(d));
+        // Its own run (spec 126 U10 §1), before the conversation: held with the reason as its hint; absent while it runs.
+        const offer = this.lineRunOffer(s, d);
+        const runItem: DirectionMenuItem | null = offer?.kind === 'offer'
+            ? { do: 'run', label: L.lineRun, mark: researchLinkMark('work'), hint: L.lineRunHint, run: () => this.showLineRunDialog(s, d, anchor) }
+            : offer?.kind === 'held' || offer?.kind === 'starting'
+                ? { do: 'run', label: L.lineRun, mark: researchLinkMark('work'), hint: offer.kind === 'held' ? offer.why : strings.busy.starting, disabled: true, run: () => {} }
+                : null;
         const work = d.state === 'active' && !this.activeResearchNoAgent() ? this.activeResearchLink('chat', { research: d.id }) : null;
+        if (runItem || work) items.push(null);
+        if (runItem) items.push(runItem);
         if (work) {
-            items.push(null, { do: 'work', label: L.dirWork, mark: researchLinkMark('chat'), run: () => this.launchResearchLink(work, 'agent') });
+            items.push({
+                do: 'work', label: L.dirWork, mark: researchLinkMark('chat'), ...(runLinesOn(s.features) ? { hint: L.dirWorkHint } : {}),
+                run: () => this.launchResearchLink(work, 'agent'),
+            });
         }
         this.showDirectionMenu(anchor, d, items);
     },
@@ -1744,6 +1908,14 @@ export const researchDirectionsMethods = uiModule({
             else label.textContent = it.label;
             item.appendChild(label);
             if (it.hint) item.appendChild(el('span', 'research-direction-menu__hint', it.hint));
+            if (it.disabled) {
+                // Shown, focusable, does nothing: its hint says why.
+                item.setAttribute('aria-disabled', 'true');
+                item.classList.add('is-disabled');
+                item.onclick = (e) => e.stopPropagation();
+                menu.appendChild(item);
+                continue;
+            }
             const run = it.run;
             item.onclick = () => {
                 this.closeDirectionMenu();

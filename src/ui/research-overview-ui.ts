@@ -13,7 +13,8 @@
  * missing. Bridge text is set as text, never HTML. Only while following.
  */
 
-import { noteQueueStartStatus, QUEUE_START_MS, type QueueStartView } from './queue-start.js';
+import { noteQueueStartStatus, QUEUE_SCOPE, QUEUE_START_MS, type QueueStartView } from './queue-start.js';
+import { runLinesOn } from '../research-runs.js';
 import { busySpinHtml, busyStatusEl } from './busy.js';
 import { canvasBusy } from './canvas-busy.js';
 import type { RowRefusal } from './waiting-row-notes.js';
@@ -25,7 +26,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId, ResearchHypothesis } from '../types.js';
 import { acceptBatch, acceptBatchRowResult } from '../research-hypothesis-waiting.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveBook, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, type QueueTaskKind, booksOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
+import { LiveBook, type LiveDirection, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, type QueueTaskKind, booksOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
 import { bookById, bookHeadTitle, bookImagesText, bookMetaParts, bookOfferText, bookTitle, bookWebUrl, urgentBooks, urgentBooksShown } from '../research-books.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
@@ -547,6 +548,48 @@ export const researchOverviewMethods = uiModule({
             finish.scrollIntoView?.({ block: 'nearest' });
             finish.focus({ preventScroll: true });
         } else heading.focus({ preventScroll: true });
+    },
+
+    /**
+     * "In Now ›" of a direction's run (spec 126 U10 §1): Now shown, the run's
+     * block (its `data-run`, else its direction's row) flashed and focused;
+     * no block: Now's heading at the top as "At work ›" does.
+     */
+    showOverviewNowRun(runId: string, direction?: string): void {
+        if (!drawnSession()) return;
+        this.unfoldOverviewSection('now');
+        this.renderLivePanel();
+        const body = document.querySelector<HTMLElement>('#research-overview .research-overview__body');
+        const heading = body?.querySelector<HTMLElement>('[aria-controls="ov-sec-now"]');
+        if (!body || !heading) return;
+        scrollHeadingToTop(body, heading);
+        const sec = body.querySelector<HTMLElement>('#ov-sec-now');
+        const block = sec?.querySelector<HTMLElement>(`[data-run="${CSS.escape(runId)}"]`)
+            ?? (direction ? sec?.querySelector<HTMLElement>(`[data-direction="${CSS.escape(direction)}"]`) : null)
+            ?? null;
+        if (!block) {
+            heading.focus({ preventScroll: true });
+            return;
+        }
+        block.scrollIntoView?.({ block: 'nearest' });
+        block.classList.remove('is-flash');
+        void block.offsetWidth;
+        block.classList.add('is-flash');
+        window.setTimeout(() => block.classList.remove('is-flash'), 1600);
+        if (!block.hasAttribute('tabindex')) block.tabIndex = -1;
+        block.focus({ preventScroll: true });
+    },
+
+    /**
+     * "Settings ›" beside the most runs at once reached (spec 126 U10 §1):
+     * Research for this tree at that field (the phone's sheet goes first, as
+     * for Books).
+     */
+    openRunsSettings(): void {
+        const treeId = drawnSession()?.treeId ?? liveSession()?.treeId ?? overviewViewing()?.treeId;
+        if (!treeId) return;
+        if (document.querySelector('#research-overview.research-overview--sheet')) this.closeResearchOverview();
+        void this.showResearchTreeSettings(treeId, { focus: 'runs-max' });
     },
 
     /** ⤡ (and Escape): back to the small panel; following goes on. Without following: the overview closes. */
@@ -2545,9 +2588,17 @@ export const researchOverviewMethods = uiModule({
         const groups = multi ? all : [];
         const lines = workingLineCount(groups);
         // "Work on the queue…" started from here (3a, 3b): its row stands until the session's own row comes.
-        const start = this.queueStartNow();
-        if (start && s.working.length > 0) queueMicrotask(() => noteQueueStartStatus(s.researchId, { working: s.working }));
-        const starting = s.working.length === 0 ? start : null;
+        // With runs side by side (spec 126 U10) every start has its row, until its own run comes, whoever else works.
+        const runsOn = runLinesOn(s.features);
+        const starts = this.runStartsNow();
+        const start = starts.find(x => x.scope === QUEUE_SCOPE)?.view ?? null;
+        if (starts.length > 0 && (s.working.length > 0 || (s.runs?.length ?? 0) > 0)) {
+            queueMicrotask(() => noteQueueStartStatus(s.researchId, { working: s.working, busy: s.busy, runs: s.runs }));
+        }
+        const starting = s.working.length === 0 || runsOn ? start : null;
+        // A direction's dialog open meanwhile: "Start" held once its run cannot start any more (spec 126 U10 §2).
+        if (runsOn && document.querySelector('#queue-work-modal[data-direction]')) queueMicrotask(() => this.syncLineRunDialog(s));
+        const lineStarts = runsOn ? starts.filter(x => x.scope !== QUEUE_SCOPE) : [];
         const host = liveSection(body, {
             ...fold, title: lines >= 2 ? strings.otherResearch.nowLines(lines) : L.now,
             summary: multi ? undefined
@@ -2560,16 +2611,21 @@ export const researchOverviewMethods = uiModule({
         this.appendResearchElsewhere(host, 'overview');
         const list = el('ul', 'live-panel-list live-working research-overview__now');
         host.appendChild(list);
+        // A direction's run on its way (spec 126 U10 §1): its row first, "Starting… · Name (G0002)".
+        for (const ls of lineStarts) list.appendChild(this.overviewQueueStartRow(ls.view, s.researches.find(d => d.id === ls.scope) ?? null, ls.scope));
         if (multi) {
             // Two or more lines at work: a row per line (spec 011).
+            if (starting) list.appendChild(this.overviewQueueStartRow(starting));
             for (const g of groups) list.appendChild(this.overviewNowLine(g, mode));
             this.appendOverviewNowWork(host, s);
             return;
         }
         if (starting) list.appendChild(this.overviewQueueStartRow(starting));
-        else if (s.working.length === 0) list.appendChild(el('li', 'live-empty', L.nobody));
+        else if (s.working.length === 0 && lineStarts.length === 0) list.appendChild(el('li', 'live-empty', L.nobody));
         for (const w of s.working) {
             const li = el('li', 'research-overview__now-row');
+            if (w.run) li.dataset.run = w.run;
+            if (w.research) li.dataset.direction = w.research;
             const text = el('div', 'research-overview__now-text');
             text.appendChild(el('strong', undefined, w.who));
             if (w.task) text.appendChild(el('span', 'live-task', ` — ${w.task}`));
@@ -2613,20 +2669,24 @@ export const researchOverviewMethods = uiModule({
      * agent starts in the research's terminal; after 30 s without a proof (3b) the question, the sentence with
      * Try again and the hint.
      */
-    overviewQueueStartRow(start: QueueStartView): HTMLElement {
+    overviewQueueStartRow(start: QueueStartView, line: LiveDirection | null = null, scope?: string): HTMLElement {
         const b = strings.busy;
+        const L = strings.live;
         const li = el('li', `live-now-starting${start.phase === 'silent' ? ' is-silent' : ''}`);
+        // A direction's run (spec 126 U10 §1): "Starting… · Name (G0002)", its own question and Try again.
+        if (scope) li.dataset.startScope = scope;
+        const name = scope ? `${line?.name ?? scope} (${scope})` : '';
         const title = el('span', 'live-now-starting__title');
         if (start.phase === 'starting') {
             li.setAttribute('aria-busy', 'true');
             title.setAttribute('role', 'status');
             title.insertAdjacentHTML('afterbegin', busySpinHtml(14));
-            title.appendChild(el('span', undefined, b.queueStarting));
+            title.appendChild(el('span', undefined, scope ? L.lineRunStarting(name) : b.queueStarting));
             li.appendChild(title);
-            li.appendChild(el('span', 'live-now-starting__sub', b.queueStartingSub));
+            li.appendChild(el('span', 'live-now-starting__sub', scope ? L.lineRunStartingSub : b.queueStartingSub));
             return li;
         }
-        title.textContent = b.queueNotStarted;
+        title.textContent = scope ? `${L.lineRunNotStarted} · ${name}` : b.queueNotStarted;
         li.appendChild(title);
         // Neutral, as the terminal's own limit (§3.1): a terminal that did not answer may only be asking.
         const msg = el('div', 'busy-msg');
@@ -2634,7 +2694,7 @@ export const researchOverviewMethods = uiModule({
         msg.appendChild(el('span', 'busy-msg__text', b.terminalSilent(Math.round(QUEUE_START_MS / 1000))));
         const retry = el('button', 'link busy-msg__retry', b.retry);
         retry.type = 'button';
-        retry.onclick = () => this.retryQueueWork();
+        retry.onclick = () => this.retryQueueWork(scope);
         msg.appendChild(retry);
         msg.appendChild(el('span', 'hint', b.notOpenedHint));
         li.appendChild(msg);
@@ -2677,6 +2737,8 @@ export const researchOverviewMethods = uiModule({
         const s = drawnSession();
         const li = el('li', 'research-overview__now-row research-overview__now-row--line');
         if (g.id) li.dataset.direction = g.id;
+        const run = g.workers.find(w => w.run)?.run;
+        if (run) li.dataset.run = run;
         const glyph = el('span', 'live-line__glyph', g.id ? directionGlyph(g.direction) : '·');
         glyph.setAttribute('aria-hidden', 'true');
         li.appendChild(glyph);
