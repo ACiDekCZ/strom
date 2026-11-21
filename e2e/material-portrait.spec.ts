@@ -261,13 +261,26 @@ test.describe('Link to… opened for a person (1121)', () => {
         await expect(dialog(page).locator('.mdlg-foot .mdlg-btn.is-primary')).toBeDisabled();
     });
 
-    test('a file the research already gives to the person: nothing chosen, the sentence says so', async ({ page }) => {
+    test('a file the research already gives to the person: nothing chosen, the sentence says so, its people shown linked', async ({ page }) => {
         await setup(page);
         await editModal(page, 'Josef');
         await row(page, 'Svatba').locator('.material-more').click();
         await menuItem(page, 'attach').click();
         await expect(dialog(page).locator('.mdlg-attach-has')).toHaveText('The file is already linked to Josef Fíšek.');
         await expect(dialog(page).locator('.mdlg-foot .mdlg-btn.is-primary')).toBeDisabled();
+        // Whose the file is already: named above the list with the mark, never "Nobody yet"; ticked and fixed in the list.
+        await expect(dialog(page).locator('.ppm-none')).toHaveCount(0);
+        const fixedChips = dialog(page).locator('.ppm-chip--fixed');
+        await expect(fixedChips).toHaveCount(2);
+        await expect(fixedChips.first()).toContainText('Josef Fíšek');
+        await expect(fixedChips.first().locator('.ppm-chip-mark')).toHaveText('already linked');
+        await expect(fixedChips.nth(1)).toContainText('Anna Svobodová');
+        await expect(fixedChips.locator('.ppm-chip-x')).toHaveCount(0);
+        const josef = dialog(page).locator('.ppm-row', { hasText: 'Josef Fíšek' });
+        await expect(josef).toHaveClass(/is-fixed/);
+        await expect(josef.locator('input')).toBeChecked();
+        await expect(josef.locator('input')).toBeDisabled();
+        await expect(dialog(page).locator('.ppm-row', { hasText: 'Jan Fíšek' })).not.toHaveClass(/is-fixed/);
     });
 });
 

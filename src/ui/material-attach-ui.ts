@@ -70,6 +70,40 @@ function allHave(records: Attachment[], place: MediaPlace, key: (p: MediaPlace) 
     return records.every(r => r.places.some(p => key(p) === k));
 }
 
+/**
+ * The people every one of the files is already theirs: a place of theirs in
+ * the tree (not taken out), or the research's assignment (REFN). Shown in
+ * "Link to…" as linked already (ticked, not changeable), never "Nobody yet".
+ */
+export function attachFixedPeople(files: MaterialItem[], persons: Person[], recordOf: (item: MaterialItem) => Attachment | undefined = treeRecord): PersonId[] {
+    if (!files.length) return [];
+    const byRefn = new Map<string, Person>();
+    for (const p of persons) {
+        const refn = researchPersonRef(p.refn);
+        if (refn && !byRefn.has(refn)) byRefn.set(refn, p);
+    }
+    const has = (item: MaterialItem, p: Person): boolean => {
+        const rec = recordOf(item);
+        if (rec && !rec.removed && mediaAt(rec, { personId: p.id })) return true;
+        const refn = researchPersonRef(p.refn);
+        return !!refn && item.persons.includes(refn);
+    };
+    // The first file's people, in its order; then those every other file has too.
+    const first = files[0];
+    const rec = recordOf(first);
+    const ids: PersonId[] = [];
+    for (const pl of rec && !rec.removed ? rec.places : []) if ('personId' in pl && !pl.fact && !pl.eventId && !ids.includes(pl.personId)) ids.push(pl.personId);
+    for (const refn of first.persons) {
+        const p = byRefn.get(refn);
+        if (p && !ids.includes(p.id)) ids.push(p.id);
+    }
+    const known = new Map(persons.map(p => [p.id, p]));
+    return ids.filter(id => {
+        const p = known.get(id);
+        return !!p && !p.isPlaceholder && files.every(i => has(i, p));
+    });
+}
+
 function placeKeyOf(p: MediaPlace): string {
     if ('personId' in p) return `p:${p.personId}:${p.fact ?? ''}:${p.eventId ?? ''}`;
     if ('partnershipId' in p) return `u:${p.partnershipId}:${p.eventId ?? ''}`;
@@ -149,6 +183,11 @@ export const materialAttachMethods = uiModule({
         };
         const fromAlready = !!fromPerson && files.every(hasFromPerson);
         const preselect: PersonId[] = fromPerson && !fromPerson.isPlaceholder && !fromAlready ? [fromPerson.id] : [];
+        // Whose all the files are already (a place in the tree or the research's assignment): ticked and not
+        // changeable in the list, and named above it — the same people the sentence "already linked" speaks of.
+        const pickable = DataManager.getAllPersons().filter(p => !p.isPlaceholder);
+        const fixedPeople = attachFixedPeople(files, pickable);
+        const fixedSet = new Set(fixedPeople);
 
         const seg = h('div', 'mdlg-seg sel-seg');
         seg.setAttribute('role', 'radiogroup');
@@ -258,14 +297,14 @@ export const materialAttachMethods = uiModule({
                 const host = h('div');
                 host.id = PICKER_ID;
                 pane.appendChild(host);
-                const fixed = (p: Person) => allHave(records, { personId: p.id }, placeKeyOf) && !outside.length;
                 multi = new MultiPersonPicker({
                     containerId: PICKER_ID,
                     multi: true,
-                    persons: DataManager.getAllPersons().filter(p => !p.isPlaceholder),
+                    persons: pickable,
                     placeholder: m.attachPersonPh,
                     max: MAX_PEOPLE,
-                    fixed,
+                    fixed: p => fixedSet.has(p.id),
+                    fixedChips: fixedPeople,
                     onChange: ids => { chosenPeople = ids; refresh(); },
                     noneLabel: m.noneChosen,
                     removeLabel: m.removePerson,

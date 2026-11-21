@@ -652,6 +652,11 @@ export interface MultiPersonPickerOptions {
     removeLabel: (name: string) => string;
     maxLabel?: (max: number) => string;
     fixedLabel?: string;
+    /**
+     * The fixed people named above the list (each with `fixedLabel`, without
+     * ×), in this order: the chips line never says "Nobody yet" beside them.
+     */
+    fixedChips?: PersonId[];
     /** Chosen at the start (in this order). */
     initial?: PersonId[];
     /** At most this many chips, then "+ N more" (moreLabel); default all. */
@@ -768,14 +773,21 @@ export class MultiPersonPicker {
     }
 
     private renderChips(): void {
+        const fixedChips = (this.options.fixedChips ?? []).flatMap(id => {
+            const p = this.allPersons.find(x => x.id === id);
+            if (!p) return [];
+            const name = `${p.firstName} ${p.lastName}`.trim();
+            const mark = this.options.fixedLabel ? `<span class="ppm-chip-mark">${this.esc(this.options.fixedLabel)}</span>` : '';
+            return [`<span class="ppm-chip ppm-chip--fixed">${this.esc(name)}${mark}</span>`];
+        }).join('');
         if (this.chosen.length === 0) {
-            this.chips.innerHTML = `<span class="ppm-none">${this.esc(this.options.noneLabel)}</span>`;
+            this.chips.innerHTML = fixedChips || `<span class="ppm-none">${this.esc(this.options.noneLabel)}</span>`;
             return;
         }
         const limit = this.options.chipsShown ?? Infinity;
         const shown = this.chosen.length > limit ? this.chosen.slice(0, limit) : this.chosen;
         const rest = this.chosen.length - shown.length;
-        this.chips.innerHTML = shown.map(id => {
+        this.chips.innerHTML = fixedChips + shown.map(id => {
             const p = this.allPersons.find(x => x.id === id);
             const name = p ? `${p.firstName} ${p.lastName}`.trim() : id;
             return `<span class="ppm-chip">${this.esc(name)}<button type="button" class="ppm-chip-x" data-remove="${this.esc(id)}" aria-label="${this.esc(this.options.removeLabel(name))}">&times;</button></span>`;
