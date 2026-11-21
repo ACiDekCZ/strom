@@ -69,6 +69,10 @@ function toolbarOverlaps(page: Page) {
     return page.evaluate(() => {
         const tb = document.querySelector('.toolbar') as HTMLElement;
         const shown = (el: Element): boolean => {
+            // A closed <details> draws only its summary (Chromium still reports boxes for the rest):
+            // the Selection ▾ choice of every tree (spec 098 §2) keeps its list in one.
+            const details = el.closest('details');
+            if (details && !details.open && el.closest('summary')?.parentElement !== details) return false;
             for (let e: Element | null = el; e && e !== tb.parentElement; e = e.parentElement) {
                 const cs = getComputedStyle(e);
                 if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false;

@@ -161,11 +161,13 @@ test.describe('desktop (1440)', () => {
 
         // The map: its centre, zoom, what it shows and the kinds of places.
         await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
+        // The scope chosen as a person would (spec 098 §7: the tree's remembered scope, read when the map is
+        // first drawn, would otherwise replace a value only written into the field).
+        await page.evaluate(() => window.Strom.UI.setMapScope('tree', { keepView: true }));
         await page.evaluate(() => {
-            const ui = window.Strom.UI as unknown as { mapCenter: unknown; mapZoom: number; mapScope: string };
+            const ui = window.Strom.UI as unknown as { mapCenter: unknown; mapZoom: number };
             ui.mapCenter = { lat: 49.2, lon: 16.6 };
             ui.mapZoom = 8;
-            ui.mapScope = 'tree';
             window.Strom.SettingsManager.setMapKinds(['birth', 'wedding']);
         });
         const satMap = await popupOf(page, () => page.locator('#view-mode-map').click({ modifiers: ['ControlOrMeta'] }), 'map');
