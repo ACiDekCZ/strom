@@ -8172,6 +8172,32 @@ class TreeRendererClass {
         return new Set((opts.includeView ? this.positions : this.outputPeople()).keys());
     }
 
+    /** The Family view's people laid out for a view drawn its own way (familyViewPersonIds), with what they were laid out for. */
+    private familyPeople: { key: string; ids: ReadonlySet<PersonId> } | null = null;
+
+    /**
+     * The people the Family view lays out around the focus now, without
+     * anyone seen only through a view link (the Table's "This view", spec 098
+     * §11c): the screen's own where a tree view is drawn; the Table draws no
+     * tree, so there they are laid out once, without drawing, and kept until
+     * the data, the focus or what the view shows change. The same set is
+     * returned while nothing changed.
+     */
+    familyViewPersonIds(): ReadonlySet<PersonId> {
+        const drawn = this.viewMode !== 'table' && this.positions.size > 0;
+        const key = drawn ? `drawn:${this.renderSeq}:${this.viewMode}` : JSON.stringify([
+            DataManager.getCurrentTreeId(), DataManager.getRevision(), this.focusPersonId, this.focusDepthUp, this.focusDepthDown,
+            this.showAllPartnerships, this.childrenShownIds, this.parentsShownIds, this.partnersShownIds, [...this.partnersShownUnions],
+        ]);
+        if (this.familyPeople?.key === key) return this.familyPeople.ids;
+        let ids: ReadonlySet<PersonId>;
+        if (drawn) ids = new Set(this.outputPeople().keys());
+        else if (!this.focusPersonId || !DataManager.getPerson(this.focusPersonId)) ids = new Set();
+        else ids = new Set(this.computeTreeLayout(false, [], false).positions.keys());
+        this.familyPeople = { key, ids };
+        return ids;
+    }
+
     /** Generation bands for the sticky label overlay (empty outside family/descendants). */
     getGenerationBands(): GenerationBand[] {
         return this.generationBands;

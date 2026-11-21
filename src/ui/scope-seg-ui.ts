@@ -36,12 +36,20 @@ export interface ScopeSegHost {
     popoverParent(): HTMLElement | null;
     /** A scope chosen (never 'sel' without a selection): the view's people computed anew. */
     apply(scope: ViewScope, opts: { keepView?: boolean }): Promise<void> | void;
+    /** Where the choice opens when the Selection part is not shown (the Table's folded scope button, §11c). */
+    pickerAnchor?(): HTMLElement | null;
     /** Before the choice opens (the map closes its bubble). */
     beforePicker?(): void;
     /** The switch steps aside now (the map's ancestors' path outside the scope Selection). */
     hidden?(): boolean;
     /** The people of "This view" in the phone's sheet (default: the people laid out in the tree view). */
     viewCount?(): number;
+    /**
+     * Why the scope does not apply now (the Table's Sources, §11c): the
+     * switch stays, dimmed (`aria-disabled`, the reason as its tooltip), and
+     * nothing in it can be chosen; null or absent: it applies.
+     */
+    disabled?(): string | null;
     /**
      * The window's selection changed, the view's scope already followed
      * (`before`: the scope before it): the open view draws itself anew.
@@ -57,7 +65,7 @@ const scopeTrees: Partial<Record<ScopedView, string | null>> = {};
 /** The views' hosts (the map's comes from map-scope-ui on first use). */
 const hosts: Partial<Record<ScopedView, ScopeSegHost>> = {};
 /** The open popover of the choice (under a scope's Selection part). */
-let picker: { view: ScopedView; host: HTMLElement; abort: AbortController } | null = null;
+let picker: { view: ScopedView; host: HTMLElement; abort: AbortController; anchor: HTMLElement } | null = null;
 
 /** The popover's width (the toolbar's choice of a selection): it stays inside the view. */
 const PICK_WIDTH = 396;
@@ -134,6 +142,7 @@ export const scopeSegMethods = uiModule({
      */
     setViewScope(view: ScopedView, scope: ViewScope, opts: { keepView?: boolean } = {}): Promise<void> {
         this.syncViewScopeTree(view);
+        if (this.scopeHostOf(view)?.disabled?.()) return Promise.resolve();
         if (scope === 'sel' && !getSelection().ref) { this.openScopePicker(view); return Promise.resolve(); }
         if (this.viewScope(view) === scope) return Promise.resolve();
         const host = this.scopeHostOf(view);
@@ -216,7 +225,7 @@ export const scopeSegMethods = uiModule({
             const name = ref ? s.aria(label, n) : s.sel;
             sel.title = name;
             sel.setAttribute('aria-label', name);
-            sel.setAttribute('aria-expanded', String(picker?.view === view));
+            sel.setAttribute('aria-expanded', String(picker?.anchor === sel));
         }
         const btn = root.querySelector<HTMLElement>(`.${view}-scope-btn`);
         if (btn) {
@@ -230,6 +239,17 @@ export const scopeSegMethods = uiModule({
         const segment = root.querySelector<HTMLElement>(`.${view}-scope.scope-seg`);
         if (segment) segment.hidden = hidden;
         if (btn) btn.hidden = hidden;
+        const off = host?.disabled?.() ?? null;
+        for (const el of [segment, ...(segment?.querySelectorAll<HTMLElement>('.sel-opt') ?? []), btn]) {
+            if (!el) continue;
+            if (off) el.setAttribute('aria-disabled', 'true');
+            else el.removeAttribute('aria-disabled');
+        }
+        if (segment) {
+            if (off) segment.title = off;
+            else segment.removeAttribute('title');
+        }
+        if (off && btn) btn.title = off;
     },
 
     /**
@@ -238,6 +258,7 @@ export const scopeSegMethods = uiModule({
      */
     scopeSelClick(view: ScopedView): void {
         if (picker?.view === view) { this.closeScopePicker(true); return; }
+        if (this.scopeHostOf(view)?.disabled?.()) return;
         if (getSelection().ref && this.viewScope(view) !== 'sel') { void this.setViewScope(view, 'sel'); return; }
         // After this click has gone by: the choice closes on a click outside it.
         setTimeout(() => this.openScopePicker(view), 0);
@@ -255,8 +276,10 @@ export const scopeSegMethods = uiModule({
      */
     openScopePicker(view: ScopedView): void {
         const host = this.scopeHostOf(view);
+        if (host?.disabled?.()) return;
         const container = host?.popoverParent();
-        const anchor = host?.root()?.querySelector<HTMLElement>(`#${view}-scope-sel`);
+        const part = host?.root()?.querySelector<HTMLElement>(`#${view}-scope-sel`);
+        const anchor = part && part.getClientRects().length > 0 ? part : host?.pickerAnchor?.() ?? part;
         const onPicked = (s: string): void => { if (s !== 'none') void this.setViewScope(view, 'sel'); };
         if (!container || !anchor || anchor.getClientRects().length === 0
             || window.matchMedia(`${MQ_MOBILE}, ${MQ_PHONE_LANDSCAPE}`).matches) {
@@ -269,7 +292,7 @@ export const scopeSegMethods = uiModule({
         pop.className = cls(view, 'pick');
         container.appendChild(pop);
         const abort = new AbortController();
-        picker = { view, host: pop, abort };
+        picker = { view, host: pop, abort, anchor };
         const box = container.getBoundingClientRect();
         const r = anchor.getBoundingClientRect();
         // A container that scrolls (the Timeline's, under its sticky bar): its content moved by the scroll.
@@ -290,13 +313,12 @@ export const scopeSegMethods = uiModule({
     /** Close the choice; `refocus`: back to the Selection part. */
     closeScopePicker(refocus: boolean): void {
         if (!picker) return;
-        const { view, host, abort } = picker;
+        const { host, abort, anchor } = picker;
         picker = null;
         abort.abort();
         host.remove();
-        const anchor = this.scopeHostOf(view)?.root()?.querySelector<HTMLElement>(`#${view}-scope-sel`);
-        anchor?.setAttribute('aria-expanded', 'false');
-        if (refocus) anchor?.focus();
+        anchor.setAttribute('aria-expanded', 'false');
+        if (refocus && anchor.isConnected) anchor.focus();
     },
 
     /**
@@ -304,6 +326,7 @@ export const scopeSegMethods = uiModule({
      * their people, a few selections to change to and "All selections…".
      */
     showScopeSheet(view: ScopedView): void {
+        if (this.scopeHostOf(view)?.disabled?.()) return;
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
         const s = strings.scope;
