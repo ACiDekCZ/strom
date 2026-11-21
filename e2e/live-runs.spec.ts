@@ -64,7 +64,7 @@ test.describe('a direction\'s own run', () => {
         await expect(meta.locator('.research-direction__in-now')).toHaveText('In Now ›');
         await unfold(page, 'G0001');
         await expect(runBox(page, 'G0001').locator('[data-do="run"]')).toHaveCount(0);
-        await expect(runBox(page, 'G0001').locator('.research-direction__run-state')).toHaveText(/^Agent at work · Claude · since \d{1,2}:\d{2}/);
+        await expect(runBox(page, 'G0001').locator('.research-direction__run-state')).toHaveText(/^Agent at work · Claude · since (?:\S+ )?\d{1,2}:\d{2}/);   // a date before the time across midnight
         await openMenu(page, 'G0001');
         await expect(page.locator('#live-direction-menu [data-do="run"]')).toHaveCount(0);
         await page.keyboard.press('Escape');
@@ -261,7 +261,7 @@ test.describe('the runs in Now', () => {
         await expect(g1.locator('.research-overview__run-name')).toHaveText('Kubíčkovi z Dolní Lhoty');
         await expect(g1.locator('.research-overview__run-code')).toHaveText('G0001');
         await expect(g1.locator('.research-overview__run-state')).toHaveText('working');
-        await expect(g1.locator('.research-overview__run-meta')).toHaveText(/^Claude · since \d{1,2}:\d{2}/);
+        await expect(g1.locator('.research-overview__run-meta')).toHaveText(/^Claude · since (?:\S+ )?\d{1,2}:\d{2}/);
         await expect(g1.locator('.research-overview__run-person')).toHaveText('Vojtěch Kubíček');
         await expect(g1.locator('.research-overview__finish')).toHaveCount(1);
         await expect(g1).not.toContainText('Skips');
@@ -324,7 +324,7 @@ test.describe('the runs in Now', () => {
         b.runsEnded = [{ id: 'run-1a07', research: 'G0001', agent: 'claude', since: at(-10), ended, why: 'stopped' }];
         b.working = b.working.filter(w => w.run !== 'run-1a07');
         const g1 = block(page, 'run-1a07');
-        await expect(g1.locator('.research-overview__run-state')).toHaveText(/^ended at \d{1,2}:\d{2}/, { timeout: 10000 });
+        await expect(g1.locator('.research-overview__run-state')).toHaveText(/^ended at (?:\S+ )?\d{1,2}:\d{2}/, { timeout: 10000 });
         await expect(g1).toHaveClass(/is-ended/);
         await expect(g1.locator('.research-overview__run-note')).toHaveText(['The whole queue takes the direction again.']);
         await expect(g1.locator('.research-overview__run-actions')).toHaveCount(0);
