@@ -644,6 +644,12 @@ export const PERSON_PAGE_WAIT_CSS = `
 .pp-portrait--wait .pp-initials-text { font-family: var(--font-serif); font-size: 30px; line-height: 1; color: var(--text-light); }
 .pp-portrait-col { flex: 0 0 auto; display: flex; flex-direction: column; gap: 2px; width: 128px; }
 .pp-portrait-col .pp-img-msg { margin-top: 4px; }
+/* A person without a portrait who has photos to cut one from (spec 107 §2): the initials and the link open the picker. */
+.pp-portrait-col--pick { align-items: center; gap: 6px; width: auto; max-width: 128px; }
+button.pp-initials--pick { border: 0; padding: 0; margin: 0; cursor: pointer; }
+button.pp-initials--pick:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.pp-portrait-col .pp-portrait-link { font-size: 13px; line-height: 1.35; padding: 0; text-align: center; overflow-wrap: anywhere; }
+@media (pointer: coarse) { .pp-portrait-col .pp-portrait-link { min-height: 44px; } }
 .pp-img-wait { display: flex; align-items: center; justify-content: center; cursor: default; }
 .pp-fig > .pp-fig-img.pp-img-wait { grid-area: 1 / 1; box-sizing: border-box; }
 @container (max-width: 640px) {
@@ -653,6 +659,7 @@ export const PERSON_PAGE_WAIT_CSS = `
 /* Printed after "Continue without": what did not come is left out, as in a file (§8). */
 @media print {
   .pp-fig:has(> .pp-img-wait), .pp-gal-item:has(.pp-img-wait), .sp-clipbox:has(.sp-img-wait),
-  .sp-portrait.sp-img-wait, .pp-img-msg { display: none !important; }
+  .sp-portrait.sp-img-wait, .pp-img-msg, .pp-portrait-link { display: none !important; }
+  button.pp-initials--pick { cursor: default; }
 }
 `;

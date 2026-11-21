@@ -366,6 +366,7 @@ export const personModalMethods = uiModule({
             ctxEl.textContent = [modeTitle, summary].filter(Boolean).join(' · ');
             ctxEl.style.display = ctxEl.textContent ? '' : 'none';
         }
+        this.updatePortraitOffer();
         this.bindLivePersonModalName();
         this.updatePersonModalName();
         this.updatePersonModalRod(person);
@@ -1389,6 +1390,70 @@ export const personModalMethods = uiModule({
         this.renderPhotoState(state, !!dataUrl);
         // Mirror the photo into the header avatar (falls back to initials).
         this.updateHeaderAvatar();
+        this.updatePortraitOffer();
+    },
+
+    /**
+     * "Portrait from a photo…" (spec 107 §2): a person without a portrait
+     * who has a photo to offer now gets the link beside the header's context,
+     * the header's circle and the empty preview as buttons into the picker.
+     * A person without such photos (or with a portrait) keeps them quiet.
+     */
+    updatePortraitOffer(): void {
+        const id = this.currentId;
+        const offer = !!id && !this.photoModel.value && canEditPortrait(id)
+            && this.portraitPickerModel(id).shown.length > 0;
+        const label = strings.portrait.fromPhoto;
+        const link = document.getElementById('pm-portrait-link');
+        const sep = document.getElementById('pm-portrait-sep');
+        const ctx = document.getElementById('modal-title');
+        if (link) link.hidden = !offer;
+        const ctxShown = !!ctx?.textContent && ctx.style.display !== 'none';
+        if (sep) sep.hidden = !offer || !ctxShown;
+        const row = link?.parentElement;
+        if (row) row.hidden = !offer && !ctxShown;
+        const avatar = document.getElementById('pm-avatar') as HTMLButtonElement | null;
+        if (avatar) {
+            avatar.disabled = !offer;
+            if (offer) {
+                avatar.setAttribute('aria-label', label);
+                avatar.title = label;
+            } else {
+                avatar.removeAttribute('aria-label');
+                avatar.removeAttribute('title');
+            }
+            // Without the offer only a picture (as the circle was before).
+            if (offer) avatar.removeAttribute('aria-hidden');
+            else avatar.setAttribute('aria-hidden', 'true');
+        }
+        // The empty preview of the photo section: a button into the picker too.
+        const preview = document.getElementById('photo-preview');
+        if (preview) {
+            const pick = offer && !preview.querySelector('img, .pm-avatar-initials');
+            preview.classList.toggle('is-pick', pick);
+            if (pick) {
+                preview.setAttribute('role', 'button');
+                preview.tabIndex = 0;
+                preview.setAttribute('aria-label', strings.labels.photoChoose);
+                preview.setAttribute('aria-haspopup', 'dialog');
+            } else {
+                preview.removeAttribute('role');
+                preview.removeAttribute('tabindex');
+                preview.removeAttribute('aria-label');
+                preview.removeAttribute('aria-haspopup');
+            }
+        }
+    },
+
+    /** The empty preview chosen (a click, Enter, Space): the picker under it. */
+    photoPreviewPick(e: Event): void {
+        const preview = e.currentTarget as HTMLElement | null;
+        if (!preview?.classList.contains('is-pick')) return;
+        if (e instanceof KeyboardEvent) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+        }
+        this.choosePersonPhoto(preview);
     },
 
     /** The sentence under the photo's buttons: on its way (spinner), or did not come with Try again (neutral, §2). */

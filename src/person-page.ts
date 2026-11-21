@@ -177,6 +177,13 @@ export interface PersonPageOptions {
      * print never have one (they wait for the images, §8).
      */
     imageWait?: (src: string, key?: string) => PageImageWait;
+    /**
+     * The app's window only (spec 107 §2): a person without a portrait who has
+     * a photo to cut one from — the initials and "Portrait from a photo…" under
+     * them open the picker (`data-pp-action="portrait-pick"`). A file and print
+     * never have it.
+     */
+    portraitPick?: boolean;
 }
 
 /** An image of the page while the tree's images come: its state, the size it will have (a tile's ratio, §1.4). */
@@ -1189,7 +1196,16 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
     } else {
         // A poor person (a name and a year at most) gets the smaller initials.
         const small = facts.length <= 1 && !(person.nameVariants ?? []).length;
-        avatar = `<div class="pp-initials${small ? ' pp-initials--small' : ''}" aria-hidden="true">${esc(personInitials(person.firstName, person.lastName))}</div>`;
+        const initials = esc(personInitials(person.firstName, person.lastName));
+        if (c.app && c.opts.mode === 'app' && c.opts.links === 'app' && c.opts.portraitPick && !c.page.readOnly) {
+            // Photos at the person to cut a portrait from (spec 107 §2): the initials and a link under them open the picker.
+            const label = esc(c.S.portrait.fromPhoto);
+            avatar = `<div class="pp-portrait-col pp-portrait-col--pick">`
+                + `<button type="button" class="pp-initials pp-initials--pick${small ? ' pp-initials--small' : ''}" data-pp-action="portrait-pick" aria-haspopup="dialog" aria-label="${label}" title="${label}">${initials}</button>`
+                + `<button type="button" class="link-button pp-portrait-link" data-pp-action="portrait-pick" aria-haspopup="dialog">${label}</button></div>`;
+        } else {
+            avatar = `<div class="pp-initials${small ? ' pp-initials--small' : ''}" aria-hidden="true">${initials}</div>`;
+        }
     }
     const aka = shield ? [] : (person.nameVariants ?? []).map(v => v.trim()).filter(Boolean);
     return `<header class="pp-hero${photo ? ' pp-hero--photo' : ''}" id="pp-sec-facts">${avatar}<div class="pp-hero-main">`

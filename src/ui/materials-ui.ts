@@ -557,6 +557,8 @@ export const materialsMethods = uiModule({
     renderMaterialsSection(): void {
         const section = document.getElementById(SECTION_ID);
         if (!section || section.hidden || !this.currentId) return;
+        // The materials came or changed: "Portrait from a photo…" offers what is there now.
+        this.updatePortraitOffer();
         const person = DataManager.getPerson(this.currentId);
         const ctx = this.materialsContext();
         if (!person || !ctx?.caps.list) return;
@@ -733,7 +735,10 @@ export const materialsMethods = uiModule({
         const answer = await fetchMaterial(ctx.base, { trees: ctx.caps.trees });
         if (answer.ok) await saveMaterialList(ctx.treeId, answer.value, { kind: 'all' });
         else fullAsked.delete(ctx.treeId);
-        if (answer.ok) this.renderPortraitPicker();
+        if (answer.ok) {
+            this.renderPortraitPicker();
+            this.personPagePortraitOfferChanged();
+        }
     },
 
     /** Scroll the open editor to the materials (or the attachments on touch). */
@@ -1029,8 +1034,11 @@ export const materialsMethods = uiModule({
             if (person && document.getElementById('person-modal')?.classList.contains('active')) this.applyAdvancedFieldVisibility(person);
         }
         this.refreshMaterialsCounts();
-        // The research's pictures in or out of an open portrait picker, its sentence.
+        // The research's pictures in or out of an open portrait picker, its sentence;
+        // "Portrait from a photo…" of the open person dialog.
         this.renderPortraitPicker();
+        if (this.currentId && document.getElementById('person-modal')?.classList.contains('active')) this.updatePortraitOffer();
+        this.personPagePortraitOfferChanged();
     },
 
     /** The cards' "Materials N": recomputed; the tree redrawn only when what it shows changed. */

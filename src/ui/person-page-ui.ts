@@ -37,7 +37,7 @@ import { PERSON_PAGE_CSS, PERSON_PAGE_WAIT_CSS } from '../person-page-css.js';
 import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, type FieldKey } from '../image-loads.js';
 import { pageImageWait } from './image-slot.js';
 import { uiModule } from './module.js';
-import { portraitWholePhoto } from './portrait-actions-ui.js';
+import { canEditPortrait, portraitWholePhoto } from './portrait-actions-ui.js';
 import type { SetRef } from './family-pages-ui.js';
 import { openImageViewer } from './image-viewer.js';
 import { personSubtitle } from './person-sources-ui.js';
@@ -414,6 +414,8 @@ export const personPageMethods = uiModule({
             ...(chartWidth ? { chartWidth } : {}),
             ...(familyPages.size ? { familyPages } : {}),
             imageWait: pageImageWait,
+            // Photos at a person without a portrait: the initials and "Portrait from a photo…" open the picker (spec 107 §2).
+            portraitPick: this.personPagePortraitPick(entry.personId),
         });
         // The images still on their way are the page's too: their places wait for them (spec 116 §5).
         imagesFailedShown = imageLoads.snapshot().failed;
@@ -839,10 +841,32 @@ export const personPageMethods = uiModule({
         }
     },
 
+    /** A person without a portrait who has a photo to offer now (spec 107 §2.1). */
+    personPagePortraitPick(personId: PersonId): boolean {
+        const person = DataManager.getPerson(personId);
+        return !!person && !person.photo && canEditPortrait(personId) && this.portraitPickerModel(personId).shown.length > 0;
+    },
+
+    /**
+     * The research's list came or the bridge went: an open person page whose
+     * "Portrait from a photo…" offer changed is drawn again (spec 107 §2.1).
+     */
+    personPagePortraitOfferChanged(): void {
+        const overlay = overlayEl();
+        if (!overlay || !state || state.current.set) return;
+        const shown = !!overlay.querySelector('[data-pp-action="portrait-pick"]');
+        if (shown !== this.personPagePortraitPick(state.current.personId)) this.renderPersonPage();
+    },
+
     /** The page's actions into the app: a source, Materials, the research. */
     runPersonPageAction(action: string, el: HTMLElement): void {
         if (!state) return;
         if (action === 'map:open') { this.openPersonPageMap(); return; }
+        if (action === 'portrait-pick') {
+            // "Portrait from a photo…" (spec 107 §2): the picker at what was clicked; the portrait is written at once.
+            this.openPortraitPicker(state.current.personId, el, { where: 'page' });
+            return;
+        }
         if (action === 'map:path') {
             if (el.getAttribute('aria-disabled') !== 'true') this.openPersonPageMapPath();
             return;
@@ -1031,12 +1055,21 @@ export const personPageMethods = uiModule({
         // Phones (and a phone held sideways) have Save and Print here; wider windows have them in the header.
         menu.innerHTML = item('save', P.save, true) + item('print', P.print, true)
             + (canEdit ? item('edit', P.edit) : '')
+            // Change portrait… (spec 107 §1.3): a person with a portrait and photos to cut another from.
+            + (canEdit && this.personPageCanChangePortrait(personId) ? item('portrait', P.changePortrait) : '')
             // Edit portrait crop (spec 107 §2): only an editable person with a portrait.
             + (canEdit && DataManager.getPerson(personId)?.photo ? item('crop', P.editCrop) : '')
             + item('focus', P.focus);
         menu.hidden = false;
         overlayEl()?.querySelector('.pp-more')?.setAttribute('aria-expanded', 'true');
         [...menu.querySelectorAll<HTMLElement>('.pp-menu-item')].find(el => el.getClientRects().length > 0)?.focus();
+    },
+
+    /** "Change portrait…": a person with a portrait and photos to offer (or the research's, counted while it does not run). */
+    personPageCanChangePortrait(personId: PersonId): boolean {
+        if (!DataManager.getPerson(personId)?.photo || !canEditPortrait(personId)) return false;
+        const model = this.portraitPickerModel(personId);
+        return model.shown.length + model.researchOnly > 0;
     },
 
     closePersonPageMenu(focusButton: boolean): void {
@@ -1069,6 +1102,10 @@ export const personPageMethods = uiModule({
             this.snapshotPersonPage();
             this.pushDialog('person-modal');
             this.showEditPersonModal(personId);
+        } else if (key === 'portrait') {
+            // The picker under the ⋯ (a click on the portrait still shows it large).
+            const more = overlayEl()?.querySelector<HTMLElement>('.pp-more');
+            if (more) this.openPortraitPicker(personId, more, { where: 'page' });
         } else if (key === 'crop') {
             // The editor opens over the page; Done writes at once and the page redraws (strom:user-change).
             this.editPersonPortrait(personId);

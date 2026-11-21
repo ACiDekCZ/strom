@@ -118,6 +118,8 @@ export const attachmentsMethods = uiModule({
         if (!container || !this.currentId) return;
         const person = DataManager.getPerson(this.currentId);
         if (!person) return;
+        // The person's files changed: "Portrait from a photo…" offers what is there now.
+        this.updatePortraitOffer();
 
         // The files still on their way after the tree are the person's too: their rows wait (spec 116 §5).
         const attachments = shownPersonMedia(imageLoads.view(DataManager.getData()), person.id);

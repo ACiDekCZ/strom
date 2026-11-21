@@ -1394,6 +1394,22 @@ describe('person page 2 (§0, §3, §4)', () => {
         expect(html).not.toContain('pp-initials--small');
     });
 
+    it('a person without a portrait who has photos (spec 107 §2): the initials and "Portrait from a photo…" open the picker, in the window only', () => {
+        const d = fiskTree();
+        expect(d.persons['jan' as PersonId].photo).toBeUndefined();
+        const html = body(d, { portraitPick: true });
+        expect(html.match(/data-pp-action="portrait-pick"/g)).toHaveLength(2);
+        expect(html).toContain('<div class="pp-portrait-col pp-portrait-col--pick"><button type="button" class="pp-initials pp-initials--pick" data-pp-action="portrait-pick" aria-haspopup="dialog" aria-label="Portrét z fotky…" title="Portrét z fotky…">JF</button>');
+        expect(html).toContain('<button type="button" class="link-button pp-portrait-link" data-pp-action="portrait-pick" aria-haspopup="dialog">Portrét z fotky…</button>');
+        // Without the option, read-only, a file and print: the initials as before.
+        expect(body(d)).not.toContain('portrait-pick');
+        expect(buildPersonPageBody(preparePersonPageData(d, opts({ portraitPick: true })), opts({ portraitPick: true }))).toContain('portrait-pick');
+        expect(doc(d, { portraitPick: true })).not.toContain('portrait-pick');
+        expect(doc(d, { portraitPick: true, links: 'app' })).not.toContain('portrait-pick');
+        const ro = opts({ portraitPick: true });
+        expect(buildPersonPageBody(preparePersonPageData(d, ro, { readOnly: true }), ro)).not.toContain('portrait-pick');
+    });
+
     it('the open question: in the window, in the file only for the deceased', () => {
         const d = fiskTree();
         d.persons['jan' as PersonId].question = 'Odkud přišel jeho otec? [S0042]';

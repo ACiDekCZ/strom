@@ -70,6 +70,7 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         pickTitle: 'Portret ze zdjęcia',
         fromComputer: 'Z komputera…',
         fromDevice: 'Z tego urządzenia…',
+        fromPhoto: 'Portret ze zdjęcia…',
         others: (n: number) => `i jeszcze ${n}`,
         alsoIn: (names: string) => `Na zdjęciu także: ${names}`,
         researchDown: (n: number) => `Zdjęcia z badania (${n}) są dostępne, gdy badanie działa.`,

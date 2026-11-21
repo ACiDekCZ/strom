@@ -32,6 +32,9 @@ import { openPortraitEditor } from '../ui/portrait-editor.js';
 import { portraitActionsMethods } from '../ui/portrait-actions-ui.js';
 import { portraitPickerMethods, portraitPickerHtml } from '../ui/portrait-picker-ui.js';
 import { bottomSheetMethods } from '../ui/bottom-sheet.js';
+import { personModalMethods } from '../ui/person-modal.js';
+import { personPageMethods } from '../ui/person-page-ui.js';
+import { openPhotoModel } from '../ui/person-photo-model.js';
 
 const TREE = 'portrait-picker-tree' as TreeId;
 const sha = (n: number) => n.toString(16).padStart(64, '0');
@@ -478,5 +481,131 @@ describe('portraitPickerHtml', () => {
         expect(html).toContain('Photos from the research (2) are available while the research runs.');
         expect(html).not.toContain('data-pick-act="start"');
         expect(strings.portrait.others(3)).toBe('and 3 more');
+    });
+});
+
+// ---- "Portrait from a photo…" at a person without a portrait (§2) ----
+
+/** The person dialog's header and photo section, as index.html has them. */
+function dialogHeader(context = 'Upravit osobu'): { avatar: HTMLButtonElement; link: HTMLElement; sep: HTMLElement; row: HTMLElement; preview: HTMLElement } {
+    const modal = document.createElement('div');
+    modal.id = 'person-modal';
+    modal.className = 'active';
+    const avatar = document.createElement('button') as HTMLButtonElement;
+    avatar.id = 'pm-avatar';
+    (avatar as unknown as { disabled: boolean }).disabled = true;
+    const row = document.createElement('div');
+    const ctxEl = document.createElement('span');
+    ctxEl.id = 'modal-title';
+    ctxEl.textContent = context;
+    const sep = document.createElement('span');
+    sep.id = 'pm-portrait-sep';
+    sep.hidden = true;
+    const link = document.createElement('button');
+    link.id = 'pm-portrait-link';
+    link.hidden = true;
+    row.append(ctxEl, sep, link);
+    const preview = document.createElement('div');
+    preview.id = 'photo-preview';
+    modal.append(avatar, row, preview);
+    document.body.appendChild(modal);
+    return { avatar, link, sep, row, preview };
+}
+
+describe('Portrait from a photo… (§2)', () => {
+    const offer = () => personModalMethods.updatePortraitOffer.call(ui as never);
+    const offerUi = () => Object.assign(ui, {
+        choosePersonPhoto: (a: HTMLElement) => personModalMethods.choosePersonPhoto.call(ui as never, a),
+    });
+
+    it('a person without a portrait with a JPEG at them: the link, the header circle and the empty preview open the picker', () => {
+        const karel = DataManager.createPerson({ firstName: 'Karel', lastName: 'Novák', gender: 'male' }).id;
+        DataManager.addAttachment(karel, att('pole', { title: 'Na poli, 1931' }) as Omit<Attachment, 'id' | 'places'>);
+        const el = dialogHeader();
+        offerUi();
+        ui.currentId = karel;
+        ui.photoModel = openPhotoModel(karel, undefined) as never;
+        offer();
+        expect(el.link.hidden).toBe(false);
+        expect(el.sep.hidden).toBe(false);
+        expect(el.avatar.disabled).toBe(false);
+        expect(el.avatar.getAttribute('aria-label')).toBe('Portrét z fotky…');
+        expect(el.avatar.getAttribute('aria-hidden')).toBeNull();
+        expect(el.preview.classList.contains('is-pick')).toBe(true);
+        expect(el.preview.getAttribute('role')).toBe('button');
+        expect(el.preview.getAttribute('aria-label')).toBe('Vybrat fotku');
+        // Enter on the preview: the picker under it.
+        personModalMethods.photoPreviewPick.call(ui as never, { currentTarget: el.preview, key: 'Enter', preventDefault: () => {} } as unknown as Event);
+        expect(ui.portraitPickerOpen(karel)).toBe(true);
+        expect(el.preview.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('a person with a portrait: nothing; Remove brings the link (photos at them)', () => {
+        const el = dialogHeader();
+        offerUi();
+        Object.assign(ui, {
+            showPhotoModel: () => personModalMethods.updatePortraitOffer.call(ui as never),
+            renderAttachmentsList: () => {},
+        });
+        ui.currentId = jan;
+        ui.photoModel = openPhotoModel(jan, DataManager.getPerson(jan)!.photo) as never;
+        offer();
+        expect(el.link.hidden).toBe(true);
+        expect(el.sep.hidden).toBe(true);
+        expect(el.avatar.disabled).toBe(true);
+        expect(el.avatar.getAttribute('aria-hidden')).toBe('true');
+        personModalMethods.removePersonPhoto.call(ui as never);
+        expect(el.link.hidden).toBe(false);
+        expect(el.avatar.disabled).toBe(false);
+    });
+
+    it('without a context line the link stands alone (no separator)', () => {
+        DataManager.updatePerson(jan, { photo: undefined, photoSource: undefined });
+        const el = dialogHeader('');
+        ui.currentId = jan;
+        ui.photoModel = openPhotoModel(jan, undefined) as never;
+        offer();
+        expect(el.link.hidden).toBe(false);
+        expect(el.sep.hidden).toBe(true);
+        expect(el.row.hidden).toBe(false);
+    });
+
+    it('only a PDF: nothing; only research photos with the bridge down: nothing', () => {
+        const karel = DataManager.createPerson({ firstName: 'Karel', lastName: 'Novák', gender: 'male' }).id;
+        DataManager.addAttachment(karel, att('dopis', { name: 'dopis.pdf', mimeType: 'application/pdf', dataUrl: 'data:application/pdf;base64,AA' }) as Omit<Attachment, 'id' | 'places'>);
+        const el = dialogHeader();
+        ui.currentId = karel;
+        ui.photoModel = openPhotoModel(karel, undefined) as never;
+        offer();
+        expect(el.link.hidden).toBe(true);
+        expect(el.avatar.disabled).toBe(true);
+        expect(el.preview.classList.contains('is-pick')).toBe(false);
+
+        // Karel named in the research's three pictures, the bridge down: the picker would show only the sentence.
+        DataManager.updatePerson(jan, { refn: 'P0009' });
+        DataManager.updatePerson(karel, { refn: 'P0001' });
+        expect(ui.portraitPickerModel(karel)).toMatchObject({ shown: [], researchOnly: 3 });
+        offer();
+        expect(el.link.hidden).toBe(true);
+        // The bridge up: they can be offered.
+        setBridge(true);
+        offer();
+        expect(el.link.hidden).toBe(false);
+    });
+
+    it("the person page: the initials and the link only for a person without a portrait who has photos; Change portrait… only with a portrait", () => {
+        const page = (id: PersonId) => personPageMethods.personPagePortraitPick.call(ui as never, id);
+        const change = (id: PersonId) => personPageMethods.personPageCanChangePortrait.call(ui as never, id);
+        expect(page(jan)).toBe(false);
+        expect(change(jan)).toBe(true);
+        const karel = DataManager.createPerson({ firstName: 'Karel', lastName: 'Novák', gender: 'male' }).id;
+        expect(page(karel)).toBe(false);
+        expect(change(karel)).toBe(false);
+        DataManager.addAttachment(karel, att('pole') as Omit<Attachment, 'id' | 'places'>);
+        expect(page(karel)).toBe(true);
+        expect(change(karel)).toBe(false);
+        vi.spyOn(DataManager, 'isPersonLocked').mockReturnValue(true);
+        expect(page(karel)).toBe(false);
+        expect(change(jan)).toBe(false);
     });
 });

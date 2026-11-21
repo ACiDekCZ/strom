@@ -2232,6 +2232,9 @@
         }
         [data-theme="dark"] .photo-preview:has(> .pm-avatar-initials) { background: var(--surface-2); }
         .photo-preview .pm-avatar-initials { font-size: 22px; }
+        /* The empty preview of a person with photos to cut a portrait from: a button into the picker (spec 107 §1.3). */
+        .photo-preview.is-pick { cursor: pointer; border: 1px dashed var(--line-color); box-sizing: border-box; }
+        .photo-preview.is-pick:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         /* Its sentence on a line of its own under the buttons. */
         .photo-actions .photo-state { flex-basis: 100%; margin-top: 0; }
         .photo-actions .busy-st.photo-state { font-size: 12.5px; color: var(--text-light); }
@@ -7400,6 +7403,18 @@
             margin-top: 3px;
             font-variant-numeric: tabular-nums;
         }
+        /* The context line with "Portrait from a photo…" beside it (spec 107 §2: a person without a portrait who has photos). */
+        .pm-context-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; margin-top: 3px; min-width: 0; }
+        .pm-context-row .pm-context { margin-top: 0; }
+        .pm-context-row[hidden] { display: none; }
+        .pm-context-sep { font-size: 12px; color: var(--text-light); }
+        .pm-context-sep[hidden], .pm-portrait-link[hidden] { display: none; }
+        .pm-portrait-link { font-size: 12.5px; padding: 0; text-align: left; }
+        @media (pointer: coarse) { .pm-portrait-link { min-height: 32px; } }
+        /* The header's circle is a button only beside "Portrait from a photo…". */
+        button.pm-avatar { padding: 0; border: 0; font: inherit; color: inherit; cursor: pointer; }
+        button.pm-avatar:disabled { cursor: default; opacity: 1; }
+        button.pm-avatar:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
         .pm-header .close-btn { flex: none; align-self: flex-start; }
         /* "Family line" row (spec 1031 §3.1): label, value with lineage links, ⋯ menu. */
         .pm-rod {
@@ -33999,10 +34014,12 @@
     <div class="modal-overlay" id="person-modal">
         <div class="modal pm-modal" role="dialog" data-dialog-kind="form" aria-modal="true" aria-labelledby="pm-name">
             <div class="pm-header">
-                <div class="pm-avatar male" id="pm-avatar"></div>
+                <button type="button" class="pm-avatar male" id="pm-avatar" disabled aria-hidden="true" aria-haspopup="dialog" onclick="window.Strom.UI.choosePersonPhoto(this)"></button>
                 <div class="pm-header-text">
                     <div class="pm-name" id="pm-name"></div>
-                    <div class="pm-context" id="modal-title"></div>
+                    <div class="pm-context-row">
+                        <span class="pm-context" id="modal-title"></span><span class="pm-context-sep" id="pm-portrait-sep" hidden aria-hidden="true"> · </span><button type="button" class="link-button pm-portrait-link" id="pm-portrait-link" hidden aria-haspopup="dialog" data-i18n="portrait.fromPhoto" onclick="window.Strom.UI.choosePersonPhoto(this)"></button>
+                    </div>
                     <div class="pm-rod" id="pm-rod" hidden></div>
                     <div class="pm-rod pm-in-line" id="pm-in-line" hidden></div>
                 </div>
@@ -34290,7 +34307,7 @@
                     <div class="form-group">
                         <label data-i18n="labels.photo"></label>
                         <div class="photo-editor">
-                            <div class="photo-preview" id="photo-preview"></div>
+                            <div class="photo-preview" id="photo-preview" onclick="window.Strom.UI.photoPreviewPick(event)" onkeydown="window.Strom.UI.photoPreviewPick(event)"></div>
                             <div class="photo-actions">
                                 <input type="file" id="input-photo" accept="image/*" style="display:none" onchange="window.Strom.UI.handlePhotoInput(event)">
                                 <button type="button" class="secondary" id="photo-choose-btn" aria-haspopup="dialog" onclick="window.Strom.UI.choosePersonPhoto(this)" data-i18n="labels.photoChoose"></button>

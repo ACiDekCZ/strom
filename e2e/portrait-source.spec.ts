@@ -163,7 +163,8 @@ test.describe('Edit crop later (desktop)', () => {
         const w = ppWin(page);
         await expect(w).toBeVisible();
         await w.locator('.pp-more').click();
-        await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Edit person', 'Edit portrait crop', 'Focus in tree']);
+        // Its photo is at the person: Change portrait… too (spec 107 §1.3).
+        await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Edit person', 'Change portrait…', 'Edit portrait crop', 'Focus in tree']);
         await w.locator('[data-pp-menu="crop"]').click();
         await expect(editor(page)).toBeVisible();
         await expect(editor(page).locator('.pe-note-original')).toHaveCount(0);

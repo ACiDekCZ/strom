@@ -404,7 +404,8 @@ export const portraitPickerMethods = uiModule({
                 again.focus({ preventScroll: true });
             }
         }
-        if (st.kind === 'popover') placePopover(st);
+        // A button drawn anew meanwhile (the person page redrawn): the popover stays where it is.
+        if (st.kind === 'popover' && st.anchor.isConnected) placePopover(st);
     },
 
     portraitPickerClick(e: MouseEvent): void {
