@@ -90,7 +90,7 @@ import { QUALITY_CHANGED_EVENT } from '../quality-ui.js';
 import type { Partnership, PartnershipId, Person, PersonId, PersonList, StromData, TableGroupKey, TableView, TreeId } from '../../types.js';
 import {
     discardViewChanges, dropMissingViews, findView, isBuiltinId, isResearchViewId, newViewId, openViewOf, readTableWork, restoreTableState, setResearchViews, switchView,
-    tableWorkOf, takenViewNames, uniqueViewName, viewChanged, viewFromState, viewList, writeTableWork,
+    sortForView, stateForView, tableWorkOf, takenViewNames, uniqueViewName, viewChanged, viewFromState, viewList, viewSortOf, writeTableWork,
 } from './table-views.js';
 import { exportDownloadLabel, exportForm, ViewBar, viewNameForm, type ExportFormat, type ExportSummary } from './table-viewbar.js';
 import { buildTableCsv, exportColumnCount, exportsNotLive, tableCsvFileName, type TableCsvInput } from './table-export.js';
@@ -302,14 +302,17 @@ const LIST_SORT: readonly SortSpec[] = [{ col: 'num', dir: 'asc' }];
  * scope starts the rows at the top. The first draw of a tree only takes out
  * a # the scope has not.
  */
-function followScope(tree: string, state: TableState, scope: TableScope | null): void {
+function followScope(tree: string, state: TableState, scope: TableScope | null, viewSort: readonly SortSpec[]): void {
     const key = scope?.key ?? null;
     const list = scope?.kind === 'list';
     const pst = state.types.persons;
-    const dropNum = (): void => { if (pst.sort.some(x => x.col === 'num')) pst.sort = pst.sort.filter(x => x.col !== 'num'); };
+    // A list's order left: the open view's own sort again (sortForView).
+    const dropNum = (): void => { if (pst.sort.some(x => x.col === 'num')) pst.sort = sortForView(pst.sort, viewSort); };
     if (!scopeSeen.has(tree)) {
         scopeSeen.set(tree, key);
         if (!list) dropNum();
+        // A list's order is not kept with a view (it is the scope's): a list's scope opens in it while the view's sort stands.
+        else if (JSON.stringify(pst.sort) === JSON.stringify(viewSort)) pst.sort = LIST_SORT.map(x => ({ ...x }));
         return;
     }
     if (scopeSeen.get(tree) === key) return;
@@ -913,7 +916,7 @@ export const tableMethods = uiModule({
         // The window's scope (spec 098 §11c): the same for People, Unions and Events; Sources have none.
         const windowScope = this.tableWindowScope();
         const scope = type === 'sources' ? null : windowScope;
-        followScope(tree, state, windowScope);
+        followScope(tree, state, windowScope, viewSortOf(openViewOf(state, 'persons', data.tableViews)));
         // # and Done read the People table's scope; the work list's chips too.
         applyScopeCells(m, windowScope);
         // Jumps by a name (spec 103 U3): another tree drops the history, the row shown for now and the strip.
@@ -3150,7 +3153,7 @@ export const tableMethods = uiModule({
         const st = state.types[type];
         const open = openViewOf(state, type, storedViews());
         if (isBuiltinId(open.id)) return;
-        if (!DataManager.saveTableView(viewFromState(type, st, open.id, open.name, new Date().toISOString()))) return;
+        if (!DataManager.saveTableView(viewFromState(type, stateForView(st, open), open.id, open.name, new Date().toISOString()))) return;
         st.base = columnSetupOf(st);
         this.redrawTableNow();
     },
@@ -3169,7 +3172,7 @@ export const tableMethods = uiModule({
             const st = state.types[type];
             const name = uniqueViewName(form.read(), takenViewNames(storedViews()));
             const id = newViewId();
-            if (!DataManager.saveTableView(viewFromState(type, st, id, name, new Date().toISOString()))) return;
+            if (!DataManager.saveTableView(viewFromState(type, stateForView(st, open), id, name, new Date().toISOString()))) return;
             // The changes went into the new view: the view left has none.
             delete state.drafts[open.id];
             state.open[type] = id;

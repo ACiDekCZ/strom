@@ -11525,7 +11525,7 @@
         .tv-view-changed[hidden], .tv-view-act[hidden], .tv-view-discard[hidden], .tv-view-dot[hidden] { display: none; }
         /* Spec 098 §11c the scope between the row type and the view: "Scope" and the shared switch This view /
            Selection ▾ / Whole tree (as tall as the row type's cells); folded into one button "This view ▾" where
-           the bar is tight (11c·2, fitBarRow's step 0), the whole tree plain, a selection dark-framed and bold with its icon. */
+           the bar is tight (11c·2, fitBarRow's step 1; step 0 only hides the labels Scope and View), the whole tree plain, a selection dark-framed and bold with its icon. */
         .tv-slot-scope { display: flex; align-items: center; min-width: 0; flex: 0 1 auto; }
         .tv-bar .table-scope.scope-seg { display: inline-flex; flex: 0 1 auto; min-width: 0; }
         .tv-bar .table-scope.scope-seg[hidden] { display: none; }
@@ -11536,8 +11536,8 @@
         .tv-bar .table-scope .scope-sel-part { min-width: 0; align-items: center; }
         .tv-bar .table-scope[aria-disabled="true"] { opacity: 0.5; }
         .tv-bar .table-scope[aria-disabled="true"] > button { cursor: default; }
-        .tv-bar-row1:not(:is(.tv-fit-0, .tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5)) .tv-scope-btn { display: none; }
-        .tv-bar-row1:is(.tv-fit-0, .tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .table-scope.scope-seg { display: none; }
+        .tv-bar-row1:not(:is(.tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5)) .tv-scope-btn { display: none; }
+        .tv-bar-row1:is(.tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .table-scope.scope-seg { display: none; }
         .tv-scope-btn {
             display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 270px; height: 34px; padding: 0 10px;
             border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
@@ -11558,7 +11558,8 @@
         .tv-scope-selic svg { width: 14px; height: 14px; }
         /* A tight bar: the whole tree as a list glyph (its name in the title and the label), the labels hidden;
            a list keeps its name. A tablet's width with a changed view's buttons always; row 1 of a computer and
-           a tablet's width by measure (fitBarRow in table-bar.ts) before ⧉ and ⋯ would wrap: step 1 this, step 2 the search,
+           a tablet's width by measure (fitBarRow in table-bar.ts) before ⧉ and ⋯ would wrap: step 0 the labels hidden
+           (the switch stays whole: de at 1440), step 1 the switch folded (the scope's name kept), step 2 the whole tree and This view as a glyph, the search,
            the list's name and the view's name narrower, step 3 the Columns count hidden and both names narrower
            still, step 4 the names at their narrowest and a changed view's mark as its ● alone (its word in its
            title), step 5 the search at 80 px. A list's name stays readable (cut with "…", never only its kind's
@@ -11571,10 +11572,10 @@
             .tv-bar-row1:has(.tv-view-discard:not([hidden])) .tv-scope-btn:not(.is-list) .tv-scope-glyph { display: block; }
         }
         @media (min-width: 641px) {
-            .tv-bar-row1:is(.tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-scope-label,
-            .tv-bar-row1:is(.tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-slot-view .tv-view-label { display: none; }
-            .tv-bar-row1:is(.tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-scope-btn:not(.is-list) .tv-scope-name { display: none; }
-            .tv-bar-row1:is(.tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-scope-btn:not(.is-list) .tv-scope-glyph { display: block; }
+            .tv-bar-row1:is(.tv-fit-0, .tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-scope-label,
+            .tv-bar-row1:is(.tv-fit-0, .tv-fit-1, .tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-slot-view .tv-view-label { display: none; }
+            .tv-bar-row1:is(.tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-scope-btn:not(.is-list) .tv-scope-name { display: none; }
+            .tv-bar-row1:is(.tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-scope-btn:not(.is-list) .tv-scope-glyph { display: block; }
             .tv-bar-row1:is(.tv-fit-2, .tv-fit-3, .tv-fit-4) .tv-slot-search { flex-basis: 120px; }
             .tv-bar-row1:is(.tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-scope-btn { max-width: 180px; }
             .tv-bar-row1:is(.tv-fit-2, .tv-fit-3, .tv-fit-4, .tv-fit-5) .tv-view-btn { max-width: 180px; }

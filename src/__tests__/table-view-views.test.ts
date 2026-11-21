@@ -17,7 +17,7 @@ import { keepTableViews, sanitizeTableView, sanitizeTableViews } from '../table-
 import { STROM_DATA_VERSION, type PersonId, type StromData, type TableView, type TreeId } from '../types.js';
 import {
     applyView, builtinView, builtinViews, customViews, defaultViewId, findView, isBuiltinId, readTableWork, takenViewNames, uniqueViewName,
-    viewChanged, viewFromState, workStorageKey, writeTableWork, BUILTIN_VIEWS,
+    viewChanged, viewFromState, workStorageKey, writeTableWork, BUILTIN_VIEWS, sortForView, stateForView,
     discardViewChanges, dropMissingViews, openViewOf, restoreTableState, switchView, tableWorkOf, viewList,
 } from '../ui/table-view/table-views.js';
 import { defaultTableState, defaultTypeState, hideColumn, resetColumns, setColumnWidth, sortClick } from '../ui/table-view/table-state.js';
@@ -221,6 +221,25 @@ describe('views and a row type\'s state (§9.2–§9.4)', () => {
         applyView(v, again);
         expect(viewChanged(v, again)).toBe(false);
         expect(again.filter).toEqual(st.filter);
+    });
+
+    it('a list\'s order (# first, the scope\'s, spec 098 §11c) does not make "changed" and is not kept with the view', () => {
+        const v = saved();
+        const st = defaultTypeState('persons');
+        applyView(v, st);
+        st.sort = [{ col: 'num', dir: 'asc' }];
+        expect(viewChanged(v, st)).toBe(false);
+        expect(stateForView(st, v).sort).toEqual([{ col: 'bapDate', dir: 'desc' }]);
+        // Another change still counts; its draft keeps the view's own sort.
+        hideColumn('persons', st, 'bapPlace');
+        expect(viewChanged(v, st)).toBe(true);
+        expect(viewFromState('persons', stateForView(st, v), v.id, v.name, '').sort).toEqual([{ col: 'bapDate', dir: -1 }]);
+        // A sort of its own: changed; a # further down is dropped.
+        expect(sortForView([{ col: 'name', dir: 'asc' }, { col: 'num', dir: 'asc' }], [])).toEqual([{ col: 'name', dir: 'asc' }]);
+        const own = defaultTypeState('persons');
+        applyView(v, own);
+        own.sort = [{ col: 'name', dir: 'asc' }, { col: 'num', dir: 'asc' }];
+        expect(viewChanged(v, own)).toBe(true);
     });
 
     it('a view with an unknown column is not "changed" once opened', () => {

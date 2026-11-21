@@ -201,9 +201,10 @@ export function updateScope(bar: HTMLElement, shown: ScopeShown): void {
 
 /**
  * The steps row 1 takes on a computer and at a tablet's width before it would wrap (⧉ and ⋯ alone on
- * a second row): 0 the scope's switch folded into one button with the scope's
- * name (spec 098 §11c, 11c·2); 1 the labels Scope and View hidden, This view
- * and the whole tree as a glyph; 2 the search, the list's name and the view's name narrower (…);
+ * a second row): 0 the labels Scope and View hidden (the scope's switch
+ * stays whole: de at 1440); 1 the switch folded into one button with the
+ * scope's name (spec 098 §11c, 11c·2); 2 This view and the whole tree as a
+ * glyph, the search, the list's name and the view's name narrower (…);
  * 3 the Columns count hidden, both names narrower still; 4 the names at
  * their narrowest, a changed view's mark as its ● alone; 5 the search at
  * 80 px (its placeholder kept whole until then). A list keeps its name (cut

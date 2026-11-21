@@ -19,13 +19,14 @@ import { rowsOf } from './table-model.js';
 import { selectionIndex } from '../view-selection-ui.js';
 
 /**
- * The Table's scope: a list and what its people give the rows, or the
+ * The Table's scope: a list and what its people give the rows, the
  * window's selection that is not a list (spec 098 §5: a family line,
- * ancestors, descendants, a research line; `kind: 'selection'`).
+ * ancestors, descendants, a research line; `kind: 'selection'`), or This
+ * view (`kind: 'view'`). The Whole tree has none (null).
  */
 export type TableScope = {
     kind: 'list';
-    /** The state's scope key (`TableTypeState.scope`): the list's id. */
+    /** The scope's key (the rows' memo, what a row shown for now depends on): the list's id. */
     key: string;
     listId: string;
     list: PersonList;

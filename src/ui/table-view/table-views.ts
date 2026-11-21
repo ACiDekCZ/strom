@@ -274,6 +274,26 @@ export function viewFromState(type: RowType, st: RowTypeState, id: string, name:
     };
 }
 
+/**
+ * The sort a view keeps from a state: a list's order (# first, spec 098
+ * §11c) comes from the scope, not from the view, so it stands for the view's
+ * own sort (`viewSort`); a # further down is dropped.
+ */
+export function sortForView(sort: readonly SortSpec[], viewSort: readonly SortSpec[]): SortSpec[] {
+    if (sort[0]?.col === 'num') return viewSort.map(x => ({ ...x }));
+    return sort.filter(x => x.col !== 'num').map(x => ({ ...x }));
+}
+
+/** The sort a view opens with. */
+export function viewSortOf(view: TableView): SortSpec[] {
+    return view.sort.map(toSpec);
+}
+
+/** The state as a view keeps it (`view`: the open one): a list's order stands for the view's own sort (sortForView). */
+export function stateForView(st: RowTypeState, view: TableView): RowTypeState {
+    return st.sort.some(x => x.col === 'num') ? { ...st, sort: sortForView(st.sort, viewSortOf(view)) } : st;
+}
+
 /** What makes two states the same view: everything a view keeps, nothing else. */
 function stateKey(type: RowType, st: RowTypeState): string {
     const v = viewFromState(type, st, '', '', '');
@@ -291,7 +311,8 @@ function viewKey(view: TableView): string {
 /** The row type's state differs from its open view (§9.3 "● changed"). */
 export function viewChanged(view: TableView, st: RowTypeState): boolean {
     if (!isShownRowType(view.rowType)) return false;
-    return stateKey(view.rowType, st) !== viewKey(view);
+    // The list's order the scope gives (# ↑, spec 098 §11c) does not change the view.
+    return stateKey(view.rowType, stateForView(st, view)) !== viewKey(view);
 }
 
 // ---------------------------------------------------------------------------
@@ -474,7 +495,7 @@ export function switchView(state: TableState, id: string, stored: readonly Table
     const curId = state.open[t];
     if (curId !== id) {
         const cur = findView(curId, stored);
-        if (cur && viewChanged(cur, st)) state.drafts[curId] = viewFromState(t, st, curId, cur.name, '');
+        if (cur && viewChanged(cur, st)) state.drafts[curId] = viewFromState(t, stateForView(st, cur), curId, cur.name, '');
         else delete state.drafts[curId];
         applyView(view, st);
         const draft = state.drafts[id];
@@ -506,7 +527,7 @@ export function tableWorkOf(state: TableState, stored: readonly TableView[] | un
         const view = openViewOf(state, t, stored);
         work.open[t] = view.id;
         const st = state.types[t];
-        if (viewChanged(view, st)) work.work[t] = viewFromState(t, st, view.id, view.name, '');
+        if (viewChanged(view, st)) work.work[t] = viewFromState(t, stateForView(st, view), view.id, view.name, '');
     }
     const drafts: Record<string, TableView> = {};
     for (const [id, d] of Object.entries(state.drafts)) {
