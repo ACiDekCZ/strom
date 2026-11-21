@@ -824,6 +824,8 @@ export interface MaterialActionContext {
     person?: string | null;
     /** Where the actions are shown: the item's ⋯ menu (default) or the viewer. */
     where?: 'menu' | 'viewer';
+    /** The tree already has the item's file as a picture it shows (at another person): Use as portrait… needs no bridge. */
+    treeCopy?: (item: MaterialItem) => boolean;
 }
 
 interface ActionRow {
@@ -831,7 +833,7 @@ interface ActionRow {
     /** Offered for the item at all. */
     when: (item: MaterialItem, caps: MaterialCaps, ctx: MaterialActionContext) => boolean;
     /** Writes to the research: offered but disabled while the bridge does not answer. */
-    writes?: boolean | ((item: MaterialItem) => boolean);
+    writes?: boolean | ((item: MaterialItem, ctx: MaterialActionContext) => boolean);
     extra?: (item: MaterialItem, ctx: MaterialActionContext) => Partial<MaterialAction>;
 }
 
@@ -864,14 +866,32 @@ const ACTION_ROWS: ActionRow[] = [
     { id: 'openSystem', when: (i, c) => inArchive(i) && c.openLinks !== false },
     { id: 'showInBatch', when: (i) => inArchive(i) && !!i.batch },
     { id: 'download', when: (i) => i.origin === 'tree' },
-    // A picture of the tree's attachment as the person's portrait (spec 107 §4; the menu leaves it out where the person cannot change).
-    { id: 'useAsPortrait', when: (i) => isPortraitCandidate(i.attachment) },
+    // A picture as the person's portrait (spec 107 §4; the menu leaves it out where the person cannot change): the tree's
+    // attachment, or a picture of the research the person is named in — its working copy comes over the bridge, so it
+    // waits for the bridge (as Link to…) unless the tree already has the file at another person.
+    {
+        id: 'useAsPortrait',
+        writes: (i, x) => !isPortraitCandidate(i.attachment) && !x.treeCopy?.(i),
+        when: (i, c, x) => isPortraitCandidate(i.attachment) || (isMaterialPortraitCandidate(i, x.person) && (c.assign || !!x.treeCopy?.(i))),
+    },
     { id: 'removeFromTree', when: (i) => inTree(i) },
 ];
 
 /** An attachment that can become a portrait: a picture the tree shows (not only its original kept by the research). */
 export function isPortraitCandidate(att: Attachment | undefined): boolean {
     return !!att && att.mimeType.startsWith('image/') && !att.originalOnly && !!att.dataUrl;
+}
+
+/** Pictures a portrait can be cut from (the working copy the tree makes of them shows them). */
+const PORTRAIT_MIMES = ['image/jpeg', 'image/png'];
+
+/**
+ * A picture of the research that names the person (REFN) and is not the
+ * tree's file at them: Use as portrait… makes it the tree's file at the person.
+ */
+export function isMaterialPortraitCandidate(item: MaterialItem, person: string | null | undefined): boolean {
+    if (item.attachment || item.tree || item.removedId || item.hidden || !inArchive(item) || !person || !item.persons.includes(person)) return false;
+    return PORTRAIT_MIMES.includes((item.mime ?? item.file?.mime ?? '').toLowerCase());
 }
 
 /** The actions of one item (P1). */
@@ -882,7 +902,7 @@ export function materialActions(item: MaterialItem, caps: MaterialCaps, ctx: Mat
     for (const row of ACTION_ROWS) {
         if (!row.when(item, caps, ctx)) continue;
         const action: MaterialAction = { id: row.id, ...(row.extra?.(item, ctx) ?? {}) };
-        const writes = typeof row.writes === 'function' ? row.writes(item) : row.writes;
+        const writes = typeof row.writes === 'function' ? row.writes(item, ctx) : row.writes;
         if (writes && !caps.bridgeUp) action.disabled = 'bridgeDown';
         out.push(action);
     }

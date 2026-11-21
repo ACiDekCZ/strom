@@ -42,7 +42,7 @@ import { onComputer } from './research-ui.js';
 import { openImageViewer } from './image-viewer.js';
 import { materialDetailsEdit } from './material-details-ui.js';
 import { uiModule } from './module.js';
-import { canEditPortrait } from './portrait-actions-ui.js';
+import { canEditPortrait, treePortraitCopy } from './portrait-actions-ui.js';
 import { windowAddOffered } from '../materials-overview.js';
 
 const MODAL_ID = 'materials-modal';
@@ -113,6 +113,8 @@ export interface MaterialOpenCtx {
     noSource?: boolean;
     /** Review ended (the viewer closed): how many files were saved. */
     done?: (saved: number) => void;
+    /** The person the items were opened for (their section, the window filtered to them): Use as portrait… is for them. */
+    personId?: PersonId | null;
 }
 
 /** What the materials need to know about the active tree (null: not linked to a research). */
@@ -762,7 +764,7 @@ export const materialsMethods = uiModule({
         const index = all.findIndex(i => i.key === key);
         const person = DataManager.getPerson(this.currentId);
         const label = person ? strings.materials.ctxPerson(`${person.firstName} ${person.lastName}`.trim()) : '';
-        if (index >= 0) this.openMaterialItems(all, index, { where: 'section', label });
+        if (index >= 0) this.openMaterialItems(all, index, { where: 'section', label, personId: this.currentId });
         else this.openMaterial(item);
     },
 
@@ -837,7 +839,7 @@ export const materialsMethods = uiModule({
         const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
         const refn = researchPersonRef(person?.refn);
         const locked = !!this.currentId && DataManager.isPersonLocked(this.currentId);
-        const actions = materialActions(item, caps, { person: refn, where: 'menu' })
+        const actions = materialActions(item, caps, { person: refn, where: 'menu', treeCopy: (i) => !!treePortraitCopy(i) })
             // Nothing to download from an attachment that is only its original; a locked person keeps its files.
             .filter(a => !(a.id === 'download' && (!item.attachment?.dataUrl || item.attachment.originalOnly)))
             .filter(a => !((a.id === 'removeFromTree' || a.id === 'attach' || a.id === 'makeSource') && (locked || DataManager.isReadOnly())))
@@ -845,7 +847,7 @@ export const materialsMethods = uiModule({
             .filter(a => !(a.id === 'edit' && !['on', 'off'].includes(materialDetailsEdit(item, ctx) ?? '')))
             // Use as portrait: a person who can change, and not the portrait's source already (spec 107 §4).
             .filter(a => !(a.id === 'useAsPortrait' && (!this.currentId || !canEditPortrait(this.currentId)
-                || (!!person && this.portraitSourceAttachmentShown(person) === item.attachment?.id))));
+                || this.materialPortraitShown(item, this.currentId))));
         const menu = document.createElement('div');
         menu.id = MENU_ID;
         menu.className = 'materials-item-menu';
@@ -931,7 +933,7 @@ export const materialsMethods = uiModule({
                 a.remove();
                 break;
             }
-            case 'useAsPortrait': if (item.attachment && this.currentId) void this.useAttachmentAsPortrait(this.currentId, item.attachment.id); break;
+            case 'useAsPortrait': if (this.currentId) void this.useMaterialAsPortrait(this.currentId, item); break;
             case 'removeFromTree': void this.openRemoveFromTreeDialog(item); break;
             case 'attach': this.openAttachDialog([item], { personId: this.currentId }); break;
             case 'makeSource': void this.makeSourceFromMaterial(item, { personId: this.currentId }); break;

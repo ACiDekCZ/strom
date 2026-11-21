@@ -270,7 +270,35 @@ describe('materialActions', () => {
 
     it('archive item: open, link to, create a source, remove, hide, system, batch', () => {
         expect(ids(materialActions(by['m:I0001'], caps(), { person: 'P0001' })))
-            .toEqual(['open', 'attach', 'makeSource', 'removeFromPerson', 'hide', 'openSystem', 'showInBatch']);
+            .toEqual(['open', 'attach', 'makeSource', 'removeFromPerson', 'hide', 'openSystem', 'showInBatch', 'useAsPortrait']);
+    });
+
+    it("use as portrait for a research's picture that names the person (1121): only for them, a picture, a research that assigns", () => {
+        const pic = by['m:I0001'];
+        expect(ids(materialActions(pic, caps(), { person: 'P0001' }))).toContain('useAsPortrait');
+        // Another person's Materials, no person, a hidden file: not offered.
+        expect(ids(materialActions(pic, caps(), { person: 'P0009' }))).not.toContain('useAsPortrait');
+        expect(ids(materialActions(pic, caps()))).not.toContain('useAsPortrait');
+        expect(ids(materialActions(by['m:I0003'], caps(), { person: 'P0001' }))).not.toContain('useAsPortrait');
+        // Not a picture the tree can show.
+        const pdfList = list([file(7, { persons: ['P0001'], mime: 'application/pdf', name: 'a.pdf' }), file(8, { persons: ['P0001'], mime: 'image/tiff', name: 'b.tif' })]);
+        for (const item of personMaterials({ refn: 'P0001', attachments: [] }, pdfList)) {
+            expect(ids(materialActions(item, caps(), { person: 'P0001' }))).not.toContain('useAsPortrait');
+        }
+        // An older research without assign: not offered (as Link to…), unless the tree has the file already.
+        expect(ids(materialActions(pic, caps({ assign: false }), { person: 'P0001' }))).not.toContain('useAsPortrait');
+        expect(ids(materialActions(pic, caps({ assign: false }), { person: 'P0001', treeCopy: () => true }))).toContain('useAsPortrait');
+    });
+
+    it('use as portrait of a research picture waits for the bridge unless the tree has the file (1121)', () => {
+        const pic = by['m:I0001'];
+        const down = materialActions(pic, caps({ bridgeUp: false }), { person: 'P0001' });
+        expect(down.find(a => a.id === 'useAsPortrait')?.disabled).toBe('bridgeDown');
+        const inTree = materialActions(pic, caps({ bridgeUp: false }), { person: 'P0001', treeCopy: () => true });
+        expect(inTree.find(a => a.id === 'useAsPortrait')?.disabled).toBeUndefined();
+        // The tree's own attachment never waits.
+        const tree = materialActions(by['a:t'], caps({ bridgeUp: false }), { person: 'P0001' });
+        expect(tree.find(a => a.id === 'useAsPortrait')?.disabled).toBeUndefined();
     });
 
     it('a hidden item restores instead of hiding', () => {
@@ -299,7 +327,7 @@ describe('materialActions', () => {
         expect(ids(materialActions(by['m:I0001'], caps({ assign: false }), { person: 'P0001' })))
             .toEqual(['open', 'openSystem', 'showInBatch']);
         const down = materialActions(by['m:I0001'], caps({ bridgeUp: false }), { person: 'P0001' });
-        expect(down.filter(a => a.disabled === 'bridgeDown').map(a => a.id)).toEqual(['attach', 'makeSource', 'removeFromPerson', 'hide']);
+        expect(down.filter(a => a.disabled === 'bridgeDown').map(a => a.id)).toEqual(['attach', 'makeSource', 'removeFromPerson', 'hide', 'useAsPortrait']);
         expect(down.find(a => a.id === 'open')?.disabled).toBeUndefined();
     });
 

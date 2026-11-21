@@ -1795,7 +1795,11 @@ export const materialsWindowMethods = uiModule({
         const index = items.findIndex(i => i.key === key);
         if (index < 0) return;
         const personName = w.filters.person ? nameWithoutYears(w.names.get(w.filters.person) ?? w.filters.person) : '';
-        this.openMaterialItems(items, index, { where: 'window', label: personName ? strings.materials.ctxPerson(personName) : group ? this.mwGroupName(group) : '' });
+        // The window filtered to a person: Use as portrait… is for them (1121).
+        const who = w.filters.person;
+        const personId = !who ? null : DataManager.getPerson(who as PersonId)?.id
+            ?? DataManager.getAllPersons().find(p => researchPersonRef(p.refn) === who)?.id ?? null;
+        this.openMaterialItems(items, index, { where: 'window', label: personName ? strings.materials.ctxPerson(personName) : group ? this.mwGroupName(group) : '', personId });
     },
 
     mwRun(id: MaterialActionId, items: MaterialItem[], ctx: MaterialActionCtx): void {

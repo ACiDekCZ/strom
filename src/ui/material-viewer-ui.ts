@@ -26,11 +26,10 @@ import { announcedResearchScheme } from '../research-device.js';
 import {
     MaterialItem, cachedMaterialList, materialFileItem, materialType, materialKindLabel, materialFolder,
     materialFromKey, fileExt, fileUrl, thumbUrl, materialSystemLink, getCachedThumb, researchMakesThumb,
-    batchFolderLabel, materialDate, isPortraitCandidate, attachmentItem,
+    batchFolderLabel, materialDate, attachmentItem,
 } from '../materials.js';
 import { iconSvg } from '../icons.js';
 import { detailsKeys, materialDetailsEdit, materialDetailsFields, materialDetailsOf } from './material-details-ui.js';
-import { canEditPortrait } from './portrait-actions-ui.js';
 import { attachmentResizeState, pdfBlobFromDataUrl } from '../attachments.js';
 import { formatBytesShort } from './originals-ui.js';
 import { openViewerList, closeImageViewer, viewerListOpen, viewerListIndex, redrawViewerList, relayoutViewer, goViewerList, ViewerSlots } from './image-viewer.js';
@@ -852,7 +851,8 @@ export const materialViewerMethods = uiModule({
         const inTree = !!item.attachment?.places?.length;
         // A family tree file (spec 117 §5): Delete permanently… is its only action.
         const canAttach = item.tree ? false : inTree ? DataManager.canEditMedia(item.attachment!.id) : inArchive && !!ctx?.caps.assign && !item.removedId && !DataManager.isReadOnly();
-        if (canAttach) action(m.attach, () => this.openAttachDialog([item], { personId: this.materialContextPerson() }), { primary: true, write: !inTree, id: 'attach' });
+        // The person the materials were opened for (their card, the window filtered to them) is chosen at the start (1121).
+        if (canAttach) action(m.attach, () => this.openAttachDialog([item], { personId: st.ctx.personId ?? this.materialContextPerson() }), { primary: true, write: !inTree, id: 'attach' });
         // Create a source from this file… (spec 102 §5): the second action, the same conditions as Link to….
         if (canAttach && this.canEditSources()) action(m.makeSource, () => void this.makeSourceFromMaterial(item, { personId: this.materialContextPerson() }), { write: !inTree, id: 'makeSource' });
         if (inArchive && !item.tree) {
@@ -871,15 +871,18 @@ export const materialViewerMethods = uiModule({
         } else if (item.attachment) {
             const att = item.attachment;
             if (att.dataUrl && !att.originalOnly) download(att.dataUrl, att.name);
-            const owner = attachmentOwner(att.id);
-            // Use as portrait (spec 107 §4): the tree's own write, so it does not wait for the research's bridge.
-            if (owner && isPortraitCandidate(att) && !isPortraitSource && canEditPortrait(owner.id)) {
-                const ownerId = owner.id;
-                action(m.useAsPortrait, () => {
-                    closeImageViewer();
-                    void this.useAttachmentAsPortrait(ownerId, att.id);
-                }, { id: 'useAsPortrait' });
-            }
+        }
+        // Use as portrait (spec 107 §4): the tree's file for its owner (the tree's own write); a research's picture
+        // for the person the materials were opened for (1121), over the bridge unless the tree has the file.
+        const portrait = item.origin === 'tree'
+            ? (item.attachment ? this.materialPortraitOffer(item, attachmentOwner(item.attachment.id)?.id ?? null, ctx?.caps ?? null) : null)
+            : this.materialPortraitOffer(item, st.ctx.personId ?? this.materialContextPerson(), ctx?.caps ?? null);
+        if (portrait && !isPortraitSource && !this.materialPortraitShown(item, portrait.personId)) {
+            const forId = portrait.personId;
+            action(m.useAsPortrait, () => {
+                closeImageViewer();
+                void this.useMaterialAsPortrait(forId, item);
+            }, { id: 'useAsPortrait', write: portrait.bridge });
         }
         if (inTree && DataManager.canEditMedia(item.attachment!.id)) {
             action(m.removeFromTree, () => void this.openRemoveFromTreeDialog(item, { leave: () => closeImageViewer() }), { danger: true, id: 'removeFromTree' });

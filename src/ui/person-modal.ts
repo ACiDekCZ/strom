@@ -35,7 +35,7 @@ import { storyFactText } from '../story-sources.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { dataUrlByteSize } from '../photo.js';
 import { openPortraitEditor } from './portrait-editor.js';
-import { PendingPortrait, PortraitOrigin, portraitCropOf, portraitOriginOf, portraitOriginImage, canEditPortrait } from './portrait-actions-ui.js';
+import { PendingPortrait, PortraitFileLink, PortraitOrigin, portraitCropOf, portraitOriginOf, portraitOriginImage, canEditPortrait, linkPortraitFile, portraitLinkImage } from './portrait-actions-ui.js';
 import { personInitials } from '../initials.js';
 import { shownName, nameHtml } from '../person-name.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
@@ -1488,6 +1488,11 @@ export const personModalMethods = uiModule({
     /** Save the pending portrait's original as the person's attachment (a new file); the source for updatePerson. */
     attachPendingPortrait(personId: PersonId, pending: PendingPortrait | null): { photoSource?: PortraitSource } {
         if (!pending) return {};
+        // A research's picture: the tree's file at the person now, in Save's step (1121).
+        if (pending.link) {
+            const origin = linkPortraitFile(personId, pending.link);
+            return origin ? { photoSource: { ...origin, ...pending.crop } } : {};
+        }
         if (pending.origin) {
             // Cut from what the tree has: only while it is still there.
             const person = DataManager.getPerson(personId);
@@ -1524,6 +1529,11 @@ export const personModalMethods = uiModule({
         }
         if (this.currentId && !canEditPortrait(this.currentId)) return;
         const pending = this.pendingPortraitFor(photo);
+        const linked = pending?.link ? portraitLinkImage(pending.link) : null;
+        if (pending?.link && linked) {
+            await this.portraitIntoPersonModal({ source: linked, initial: pending.crop, link: pending.link });
+            return;
+        }
         if (pending?.original) {
             await this.portraitIntoPersonModal({ source: pending.original, initial: pending.crop, original: pending.original, fileName: pending.fileName,
                 ...(pending.file ? { file: pending.file } : {}), ...(pending.originalMeta ? { originalMeta: pending.originalMeta } : {}) });
@@ -1564,6 +1574,8 @@ export const personModalMethods = uiModule({
         /** A recrop of a new file still waiting for Save: the file and its original's identity (spec 108 K2.4). */
         file?: Blob;
         originalMeta?: MediaOriginal;
+        /** A research's picture: it becomes the tree's file at the person on Save (1121). */
+        link?: PortraitFileLink;
     }): Promise<void> {
         const current = this.photoModel.value;
         let result: Awaited<ReturnType<typeof openPortraitEditor>>;
@@ -1586,6 +1598,7 @@ export const personModalMethods = uiModule({
         this.showPhotoModel();
         const original = result.original ?? opts.original;
         const pending: PendingPortrait | null = opts.squareOnly ? null
+            : opts.link ? { photo: step.photo, crop: step.crop, link: opts.link }
             : opts.origin ? { photo: step.photo, crop: step.crop, origin: opts.origin }
             : original ? { photo: step.photo, crop: step.crop, original, fileName: opts.fileName ?? '' }
             : null;
