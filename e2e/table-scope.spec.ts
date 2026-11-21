@@ -136,12 +136,31 @@ test.describe('the Table\'s scope in German, a computer', () => {
         await expect(tv(page, '.table-scope.scope-seg')).toBeVisible();
         await expect(tv(page, '.tv-scope-btn')).toBeHidden();
         const row = tv(page, '.tv-bar-row1');
-        expect((await row.boundingBox())!.height).toBeLessThan(60);
+        // The bar settles after a measurement (fitBarRow): poll, not one look.
+        await expect.poll(async () => (await row.boundingBox())!.height).toBeLessThan(60);
         // The name inside the switch ends with "…", nothing past the row's edge.
         const name = page.locator('#table-scope-sel .scope-name');
-        expect(await name.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
-        expect(await row.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+        await expect.poll(() => name.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
+        await expect.poll(() => row.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
+        // The narrower search keeps its placeholder whole: no room kept for the clear cross while empty.
+        const fits = await tv(page, '.tv-search-q').evaluate(el => {
+            const inp = el as HTMLInputElement;
+            const cs = getComputedStyle(inp);
+            const probe = document.createElement('span');
+            probe.textContent = inp.placeholder;
+            probe.style.cssText = `position:absolute;white-space:nowrap;font:${cs.font}`;
+            document.body.appendChild(probe);
+            const textW = probe.offsetWidth;
+            probe.remove();
+            const room = inp.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+            const noCross = [...document.styleSheets].some(sh => [...sh.cssRules].some(r =>
+                r instanceof CSSStyleRule && r.selectorText.includes('.tv-search-q:placeholder-shown::-webkit-search-cancel-button')
+                && r.style.display === 'none'));
+            return { textW, room, noCross };
+        });
+        expect(fits.noCross).toBe(true);
+        expect(fits.room).toBeGreaterThanOrEqual(fits.textW);
     });
 });
 
