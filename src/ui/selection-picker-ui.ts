@@ -54,6 +54,11 @@ let hostGeneration = -1;
 let hostFocus: string | null = null;
 let hostTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** The selection, the data or the person in focus changed since the toolbar's list was built. */
+function hostStale(): boolean {
+    return hostKey !== currentHostKey() || hostGeneration !== selectionIndexGeneration() || hostFocus !== TreeRenderer.getFocusPersonId();
+}
+
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -367,14 +372,21 @@ export const selectionPickerMethods = uiModule({
         }
         hostAbort = new AbortController();
         const signal = hostAbort.signal;
+        // A click (or Enter, Space) opening a list built before the selection, the data or the person
+        // in focus changed (the deferred rebuild not yet done): the list again, open, in this click,
+        // so the open list is the one that stays (built again at the toggle, it was replaced a task
+        // after it showed).
+        summary?.addEventListener('click', (e) => {
+            if (pick.open || !hostStale()) return;
+            e.preventDefault();
+            this.renderSelectionPickerHost(true);
+        }, { signal });
         pick.addEventListener('toggle', () => {
             summary?.setAttribute('aria-expanded', String(pick.open));
             const chev = pick.querySelector('.sp-rodpick-chev');
             if (chev) chev.textContent = pick.open ? '▴' : '▾';
-            if (pick.open && pick.isConnected
-                && (hostKey !== currentHostKey() || hostGeneration !== selectionIndexGeneration() || hostFocus !== TreeRenderer.getFocusPersonId())) {
-                // The selection, the data or the person in focus changed since it was built (opened
-                // before the deferred rebuild): the list again, open.
+            if (pick.open && pick.isConnected && hostStale()) {
+                // Opened another way before the deferred rebuild: the list again, open.
                 this.renderSelectionPickerHost(true);
                 return;
             }

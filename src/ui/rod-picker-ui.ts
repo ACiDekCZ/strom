@@ -182,8 +182,10 @@ export function wireRodPicker(root: HTMLElement, onPick?: (rod: string) => void,
     }, on);
     (opts.outside ?? root).addEventListener('click', (e) => {
         // The person popover of "Another person…" stands beside the choice: clicks in it keep it open.
+        // A click on a node no longer in the page is not outside: the choice built again in that
+        // click (the window's selection opened stale) replaced the button it was on.
         const t = e.target as Element | null;
-        if (pick.open && !pick.contains(t as Node) && !t?.closest?.('.tov-pop')) shut();
+        if (pick.open && t?.isConnected && !pick.contains(t as Node) && !t.closest?.('.tov-pop')) shut();
     }, on);
     // A current small line shows unfolded at once (the row that says where the view is).
     if (expand && pick.querySelector('.sp-rodpick-small[aria-current]')) { unfolded = true; filter(); }
