@@ -111,11 +111,14 @@ export const rodViewMethods = uiModule({
     /**
      * The window's selection is in sight (spec 098 §7): its highlight in
      * Family, Descendants or the fan (another group covering it hides it),
-     * or the map (its scope Selection, or the selection highlighted, §11d).
+     * or the map (its scope Selection, or the selection highlighted, §11d),
+     * the Timeline (its rows or its highlight, §11a) or the Table in the
+     * scope Selection (§11c).
      */
     selectionShown(): boolean {
         const view = TreeRenderer.getViewMode();
-        if (view === 'map') return true;
+        if (view === 'map' || view === 'timeline') return true;
+        if (view === 'table') return this.viewScope('table') === 'sel';
         return (view === 'family' || view === 'descendants' || view === 'fan') && this.evidenceHighlightKind() === 'selection';
     },
 
