@@ -12,7 +12,7 @@
  */
 
 import { materialImageWait } from './materials-ui.js';
-import { mediaPersonId } from '../media.js';
+import { mediaPersonId, placePersonId } from '../media.js';
 import { researchMarkFlags, setResearchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { Person, PersonId } from '../types.js';
@@ -514,12 +514,52 @@ export const materialActionsMethods = uiModule({
         } else {
             const undo = assignUndoRequests(before, res.value.files);
             const what = files.length === 1 ? files[0].title : m.assignWhat.filesOnly(files.length);
+            // The tree's places of the person on those files go with it (1121), as the selection's Remove a person…:
+            // one step without its own toast; this toast's Undo takes it back first.
+            const tree = this.removeMaterialTreePlaces(files, refn);
+            const action = undo.length ? this.materialAssignUndo(mc, undo) : null;
+            const both: ToastAction | null = tree ? {
+                label: strings.undo.undo, work: { label: strings.busy.reverting },
+                run: async () => {
+                    tree.undo();
+                    if (action) return action.run();
+                    this.refreshMaterialsWindow();
+                    return { ok: true, text: strings.busy.undone };
+                },
+            } : action;
             this.showToast(m.removedToast(name, what), TOAST_MS, {
                 closable: true, kind: 'materials',
-                ...(undo.length ? { action: this.materialAssignUndo(mc, undo) } : {}),
+                ...(both ? { action: both } : {}),
             });
         }
         this.materialActionDone(ctx);
+    },
+
+    /**
+     * The person's (REFN) places on the tree's files among `files` (themselves, their facts and events), off in one
+     * undo step without a toast of its own. Null: nothing was there. `undo` takes that step back while it is still
+     * the last one (once).
+     */
+    removeMaterialTreePlaces(files: MaterialItem[], refn: string): { undo: () => void } | null {
+        const person = DataManager.getAllPersons().find(p => researchPersonRef(p.refn) === refn);
+        if (!person) return null;
+        const ids = files.map(i => i.attachment).filter((a): a is NonNullable<typeof a> => !!a && !a.removed)
+            .filter(a => a.places.some(p => placePersonId(p) === person.id)).map(a => a.id);
+        if (!ids.length) return null;
+        if (!DataManager.removeMediaPerson(ids, person.id, { silent: true }).length) return null;
+        const step = DataManager.lastUndoDescription();
+        this.afterMediaChange();
+        let done = false;
+        return {
+            undo: () => {
+                if (done) return;
+                done = true;
+                if (step && DataManager.lastUndoDescription() === step) {
+                    DataManager.undo();
+                    this.afterMediaChange();
+                }
+            },
+        };
     },
 
     async removeFromWholeBatch(mc: MaterialsContext, batchId: string, batchName: string, refn: string, ctx: MaterialActionCtx): Promise<void> {

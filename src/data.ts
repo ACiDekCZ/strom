@@ -4579,10 +4579,11 @@ class DataManagerClass {
      * Take a person off several files in one undo step (spec 102 §8, the
      * selection's Remove a person…): every place of the files at that person.
      * A file left without a place goes from the tree as §3's × does (kept by
-     * an archive it stays there; otherwise it is deleted, O1). Returns the ids
-     * changed.
+     * an archive it stays there; otherwise it is deleted, O1). `silent`: no
+     * Undo toast of its own (the caller's toast undoes it with its other
+     * part). Returns the ids changed.
      */
-    removeMediaPerson(ids: readonly string[], personId: PersonId, opts: { toast?: string } = {}): string[] {
+    removeMediaPerson(ids: readonly string[], personId: PersonId, opts: { toast?: string; silent?: boolean } = {}): string[] {
         const atts = [...new Set(ids)].map(id => findMedia(this.data, id))
             .filter((a): a is Attachment => !!a && this.mediaEditable(a) && a.places.some(p => placePersonId(p) === personId));
         if (!atts.length) return [];
@@ -4594,7 +4595,7 @@ class DataManagerClass {
         for (const id of gone) this.forgetMediaLinks(id);
         const name = person ? (`${person.firstName} ${person.lastName}`.trim() || personId) : personId;
         const label = strings.undo.mediaPersonRemove(name, atts.length);
-        this.commitMutation(label, false, undefined, opts.toast ? { text: opts.toast } : undefined);
+        this.commitMutation(label, !!opts.silent, undefined, opts.toast ? { text: opts.toast } : undefined);
         AuditLogManager.log(this.currentTreeId, 'attachment.remove', label);
         return atts.map(a => a.id);
     }

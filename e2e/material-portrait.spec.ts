@@ -293,4 +293,46 @@ test.describe('Removing a person from a file keeps the portrait (1121)', () => {
         await expect.poll(async () => (await stored(page, 'Josef')).media.some(m => m.persons.length > 0)).toBe(false);
         expect((await stored(page, 'Josef')).photo).toBe(before.photo);
     });
+
+    test('a photo that is also the tree\'s file at the person: Remove from this person takes the research\'s assignment and the tree\'s places in one step, Undo brings both back; the other person\'s place and the portraits stay', async ({ page }) => {
+        const { material } = await setup(page);
+        // Both portraits from the wedding photo: one file of the tree, at Josef and at Anna.
+        for (const refn of ['P0001', 'P0002']) {
+            await viewFor(page, refn, 'Svatba');
+            await act(page, 'useAsPortrait').click();
+            await editor(page).getByRole('button', { name: 'Done' }).click();
+            await expect(editor(page)).toHaveCount(0);
+            await closeWindow(page);
+        }
+        const josefId = await personId(page, 'Josef');
+        const annaId = await personId(page, 'Anna');
+        const josef = await stored(page, 'Josef');
+        const anna = await stored(page, 'Anna');
+        expect(josef.media).toEqual([{ id: expect.any(String), persons: [josefId, annaId], sha: WEDDING_SHA }]);
+        expect(josef.source?.attachmentId).toBe(josef.media[0].id);
+
+        await editModal(page, 'Josef');
+        await row(page, 'Svatba').locator('.material-more').click();
+        await menuItem(page, 'removeFromPerson').click();
+        await expect(toast(page)).toHaveText(/Removed: Josef Fíšek from Svatba\./);
+        expect(material.assigns).toEqual([{ files: ['I0001'], remove: ['P0001'] }]);
+        // The tree's places at Josef go too (one toast, no second Undo pill); Anna keeps hers, both portraits stay.
+        let s = await stored(page, 'Josef');
+        expect(s.media).toEqual([{ id: josef.media[0].id, persons: [annaId], sha: WEDDING_SHA }]);
+        expect(s.photo).toBe(josef.photo);
+        expect((await stored(page, 'Anna')).source).toEqual(anna.source);
+        expect((await stored(page, 'Anna')).photo).toBe(anna.photo);
+        await expect(row(page, 'Svatba')).toHaveCount(0);
+        await expect(page.locator('.undo-toast')).toHaveCount(0);
+
+        // Undo: the research's assignment and the tree's places back.
+        await toast(page).locator('.toast-action').click();
+        await expect.poll(() => material.assigns.length).toBe(2);
+        expect(material.assigns[1]).toEqual({ files: ['I0001'], add: ['P0001'] });
+        s = await stored(page, 'Josef');
+        expect(s.media).toEqual(josef.media);
+        expect(s.source).toEqual(josef.source);
+        expect(s.photo).toBe(josef.photo);
+        await expect(row(page, 'Svatba')).toBeVisible();
+    });
 });
