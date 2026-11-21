@@ -16,7 +16,8 @@
  */
 
 import type { PersonId, PersonListRule, StromData } from './types.js';
-import { realRodMembers, type LineageIndex, type RodId } from './lineage.js';
+import { realRodMembers, sortByBirth, type LineageIndex, type RodId } from './lineage.js';
+import { nearestMember } from './rod-focus.js';
 import { listDisplayName, listPersonIds, personListsOf, rulePersonIds } from './person-lists.js';
 import { researchLinesOf } from './ui/table-view/table-research.js';
 import { shownName } from './person-name.js';
@@ -125,4 +126,44 @@ export function selectionAsRule(ref: SelectionRef): PersonListRule | null {
         case 'line': return ruleOf(ref);
         case 'list': return null;
     }
+}
+
+// ---------------------------------------------------------------------------
+// The centre of the selection (§13)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whom "Focus on the centre of the selection" (spec 098 §13) focuses: the
+ * person whose ancestors or descendants they are; a family line's founder
+ * (missing: its member born first); the person a research line starts from
+ * (its REFN); a list (or a line whose person is not in the tree) the member
+ * nearest to the focus over parents, children and partners (a tie to the one
+ * born first; none connected: the one born first). Null: nothing to offer
+ * (a selection gone or empty, the centre is the focus).
+ */
+export function selectionCenter(data: StromData, index: LineageIndex, ref: SelectionRef, focusId: PersonId | null): PersonId | null {
+    const real = (id: PersonId | undefined): id is PersonId => !!id && !!data.persons[id] && !data.persons[id].isPlaceholder;
+    const pick = (id: PersonId | null): PersonId | null => (id && id !== focusId ? id : null);
+    if (selectionGone(data, index, ref)) return null;
+    switch (ref.kind) {
+        case 'ancestors':
+        case 'descendants':
+            return real(ref.personId) ? pick(ref.personId) : null;
+        case 'rod': {
+            const founder = index.rods.get(ref.rodId)?.founderId;
+            if (real(founder)) return pick(founder);
+            return pick(sortByBirth(data, realRodMembers(index, ref.rodId))[0] ?? null);
+        }
+        case 'line': {
+            const refn = researchLinesOf(data).lines.find(l => l.id === ref.directionId)?.focus;
+            const start = refn ? Object.values(data.persons).find(p => p.refn === refn && !p.isPlaceholder) : undefined;
+            if (start) return pick(start.id);
+            break;
+        }
+        case 'list':
+            break;
+    }
+    const members = [...(selectionPersonIds(data, index, ref) ?? [])].filter(real);
+    if (members.length === 0) return null;
+    return pick(nearestMember(data, members, focusId) ?? sortByBirth(data, members)[0]);
 }

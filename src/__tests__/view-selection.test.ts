@@ -11,8 +11,9 @@ import { setLanguage } from '../strings.js';
 import type { Person, Partnership, PartnershipId, PersonId, PersonList, StromData } from '../types.js';
 import {
     SelectionRef, decodeSelectionRef, encodeSelectionRef, sameSelectionRef, sanitizeSelectionRef, selectionAsRule, selectionGone,
-    selectionLabel, selectionLabelText, selectionPersonIds,
+    selectionCenter, selectionLabel, selectionLabelText, selectionPersonIds,
 } from '../view-selection.js';
+import { nearestMember, selectionFocusTarget } from '../rod-focus.js';
 
 type Sex = 'male' | 'female';
 interface Spec { first: string; last: string; sex: Sex; born?: string; parents?: string[]; placeholder?: boolean }
@@ -232,5 +233,72 @@ describe('the cache (§0.1, K3.2)', () => {
         const second = selectionPersonIds(data, index2, ref);
         expect(second).not.toBe(first);
         expect(ids(second)).toEqual(['sudimir', 'vlkodav', 'zbyhnev']);
+    });
+});
+
+describe('the centre of a selection (§13)', () => {
+    it('ancestors and descendants: their person; the focus itself: nothing to offer', () => {
+        const data = mesicek();
+        const index = buildLineages(data);
+        expect(selectionCenter(data, index, { kind: 'ancestors', personId: P('drahoslav') }, P('vlkodav'))).toBe('drahoslav');
+        expect(selectionCenter(data, index, { kind: 'descendants', personId: P('sudimir'), generations: 1 }, P('kopretinka'))).toBe('sudimir');
+        expect(selectionCenter(data, index, { kind: 'ancestors', personId: P('drahoslav') }, P('drahoslav'))).toBeNull();
+        expect(selectionCenter(data, index, { kind: 'ancestors', personId: P('nobody') }, P('vlkodav'))).toBeNull();
+    });
+
+    it('a family line: its founder; without one in the tree its member born first', () => {
+        const data = mesicek();
+        // Sudimír's birth unknown later than his son's: born first is then Zbyhněv.
+        data.persons[P('sudimir')].birthDate = '1900';
+        const index = buildLineages(data);
+        const rod = rodOf(index, P('zbyhnev'))!;
+        expect(index.rods.get(rod)!.founderId).toBe('sudimir');
+        expect(selectionCenter(data, index, { kind: 'rod', rodId: rod }, P('bohuchval'))).toBe('sudimir');
+        expect(selectionCenter(data, index, { kind: 'rod', rodId: rod }, P('sudimir'))).toBeNull();
+        (index.rods.get(rod) as { founderId: PersonId }).founderId = P('nobody');
+        expect(selectionCenter(data, index, { kind: 'rod', rodId: rod }, P('bohuchval'))).toBe('zbyhnev');
+    });
+
+    it('a research line: the person it starts from (REFN); without one the member nearest to the focus', () => {
+        const data = mesicek();
+        data.researchDirections!.lines[0].focus = 'P1';
+        const index = buildLineages(data);
+        expect(selectionCenter(data, index, { kind: 'line', directionId: 'G1' }, P('zbyhnev'))).toBe('drahoslav');
+        data.researchDirections!.lines[0].focus = 'P99';
+        // Zbyhněv: his sister Rozmarýna two steps away, her son Drahoslav three.
+        expect(selectionCenter(data, index, { kind: 'line', directionId: 'G1' }, P('zbyhnev'))).toBe('rozmaryna');
+        delete data.researchDirections!.lines[0].focus;
+        expect(selectionCenter(data, index, { kind: 'line', directionId: 'G1' }, P('zbyhnev'))).toBe('rozmaryna');
+    });
+
+    it('a list: the member nearest to the focus, a tie to the one born first; none connected: the one born first', () => {
+        const data = mesicek();
+        const index = buildLineages(data);
+        const list: SelectionRef = { kind: 'list', listId: 'l1' };
+        // Kopretinka: her son Vlkodav one step, her father-in-law Sudimír two.
+        expect(selectionCenter(data, index, list, P('kopretinka'))).toBe('vlkodav');
+        // Zbyhněv: his father and his son one step each; Sudimír born first.
+        expect(selectionCenter(data, index, list, P('zbyhnev'))).toBe('sudimir');
+        // The focus in the list is its own nearest member: nothing to offer.
+        expect(selectionCenter(data, index, list, P('vlkodav'))).toBeNull();
+        data.persons[P('samotar')] = {
+            id: P('samotar'), firstName: 'Samotář', lastName: 'Bezkořen', gender: 'male', isPlaceholder: false,
+            partnerships: [], parentIds: [], childIds: [],
+        } as Person;
+        const index2 = buildLineages(data);
+        expect(selectionCenter(data, index2, list, P('samotar'))).toBe('sudimir');
+        expect(selectionCenter(data, index2, { kind: 'list', listId: 'gone' }, P('samotar'))).toBeNull();
+    });
+
+    it('nearestMember: the BFS of the focus move and the centre alike', () => {
+        const data = mesicek();
+        expect(nearestMember(data, [P('vlkodav'), P('sudimir')], P('kopretinka'))).toBe('vlkodav');
+        expect(nearestMember(data, [P('vlkodav'), P('sudimir')], P('zbyhnev'))).toBe('sudimir');
+        expect(nearestMember(data, [P('ghost')], P('drahoslav'))).toBeNull();
+        expect(nearestMember(data, [P('vlkodav')], null)).toBeNull();
+        expect(nearestMember(data, [P('vlkodav')], P('vlkodav'))).toBe('vlkodav');
+        // The focus move (§9) unchanged: nothing drawn → the nearest; something drawn → stays.
+        expect(selectionFocusTarget(data, [P('vlkodav'), P('sudimir')], null, P('kopretinka'), new Set(), 'family')).toBe('vlkodav');
+        expect(selectionFocusTarget(data, [P('vlkodav'), P('sudimir')], null, P('kopretinka'), new Set([P('sudimir')]), 'family')).toBeNull();
     });
 });

@@ -10,6 +10,8 @@
  * (the view draws from the focus down).
  *
  * selectionFocusTarget: the same for every selection of people (spec 098 §9).
+ * nearestMember: the member the fewest steps from the focus (also the
+ * centre of a list, spec 098 §13).
  */
 
 import { LineageIndex, RodId, partnersOf, realRodMembers, sortByBirth } from './lineage.js';
@@ -54,13 +56,25 @@ export function selectionFocusTarget(
     const start = root && data.persons[root] ? root : sortByBirth(data, [...real])[0];
     const pick = (id: PersonId): PersonId | null => (id === focusId ? null : id);
     if (view === 'descendants' || !focusId || !data.persons[focusId]) return pick(start);
+    return pick(nearestMember(data, real, focusId) ?? start);
+}
 
-    const memberSet = new Set(real);
+/**
+ * The member of `members` the fewest steps away from `focusId` over parents,
+ * children and partners (the focus itself when it is one; a tie to the one
+ * born first). Null without a focus in the tree or when none of them is
+ * connected to it. Placeholders and people not in the tree never count.
+ */
+export function nearestMember(data: StromData, members: Iterable<PersonId>, focusId: PersonId | null): PersonId | null {
+    if (!focusId || !data.persons[focusId]) return null;
+    const memberSet = new Set<PersonId>();
+    for (const id of members) if (data.persons[id] && !data.persons[id].isPlaceholder) memberSet.add(id);
+    if (memberSet.size === 0) return null;
     const seen = new Set<PersonId>([focusId]);
     let level: PersonId[] = [focusId];
     while (level.length > 0) {
         const hits = level.filter(id => memberSet.has(id));
-        if (hits.length > 0) return pick(sortByBirth(data, hits)[0]);
+        if (hits.length > 0) return sortByBirth(data, hits)[0];
         const next: PersonId[] = [];
         for (const id of level) {
             const p = data.persons[id];
@@ -73,5 +87,5 @@ export function selectionFocusTarget(
         }
         level = next;
     }
-    return pick(start);
+    return null;
 }
