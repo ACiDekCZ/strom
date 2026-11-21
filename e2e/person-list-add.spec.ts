@@ -255,14 +255,15 @@ async function changeView(page: Page): Promise<void> {
     await expect(page.locator('#table-container .tv-view-discard')).toBeVisible();
 }
 
-/** The Table in a list's scope (Scope ▾ with the list's name). */
+/** The Table in a list's scope (the window's selection with the scope Selection, spec 098 §11c; the switch or its folded button names the list). */
 async function scopeToList(page: Page, name: string): Promise<void> {
     await page.evaluate((n) => {
         const dm = window.Strom.DataManager;
         const l = dm.createPersonList({ name: n, dynamic: false, personIds: dm.getAllPersons().slice(0, 6).map(p => p.id), sort: 'manual' });
         (window.Strom.UI as unknown as { setTableScopeTo(id: string): void }).setTableScopeTo(l.id);
     }, name);
-    await expect(page.locator('#table-container .tv-scope-btn.is-list')).toBeVisible();
+    await expect(page.locator('#table-container .tv-scope-btn.is-list')).toHaveCount(1);
+    await expect(page.locator('#table-scope-sel')).toHaveClass(/active/);
 }
 
 /** The sample tree (counts in three digits, as people see it first) in the Table, in `lang`. */
@@ -325,8 +326,8 @@ test.describe('Add to list: a phone', () => {
         await openTable(page, true);
         await page.locator('#table-container .tv-more-menu-btn').tap();
         const more = page.locator('.bottom-sheet');
-        // After Scope › (spec 084 §9) and Group by › (§10).
-        await expect(more.locator('.bottom-sheet-item').nth(2)).toContainText('Save as list of people…');
+        // After Group by › (§10; the scope has a row of its own on a phone, spec 098 §11c).
+        await expect(more.locator('.bottom-sheet-item').nth(1)).toContainText('Save as list of people…');
         await more.locator('.bottom-sheet-item', { hasText: 'Save as list of people…' }).tap();
         await expect(page.locator('#person-list-save')).toBeVisible();
     });

@@ -32,7 +32,8 @@ for (const [width, height] of SIZES) {
 
         await page.evaluate(() => window.Strom.UI.setDisplayViewMode('table'));
         await expect(page.locator('#table-container .tv-head')).toBeVisible();
-        const scope = page.locator('#table-container .tv-scope-btn');
+        // The scope as it shows at this width: the switch, its folded button or a phone's row (spec 098 §11c).
+        const scope = page.locator('#table-container :is(.table-scope.scope-seg, .tv-scope-btn, .table-scope-btn)').filter({ visible: true }).first();
         await expect.poll(() => page.evaluate(() => {
             const n = document.getElementById('file-copy-notice')!.getBoundingClientRect();
             const covered = [...document.querySelectorAll<HTMLElement>('#table-container > .tv-bar, #table-container .tv-head')]
@@ -40,13 +41,13 @@ for (const [width, height] of SIZES) {
                 .filter(b => b.height > 0 && b.left < n.right && n.left < b.right && b.top < n.bottom && n.top < b.bottom);
             return covered.length;
         }), 'the notice covers neither the bar nor the column heads').toBe(0);
-        // Scope ▾ takes the click while the notice shows.
+        // The scope takes the click while the notice shows.
         if (await scope.isVisible()) {
             const hit = await scope.evaluate((btn) => {
                 const r = btn.getBoundingClientRect();
                 return btn.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
             });
-            expect(hit, 'Scope ▾ is not under the notice').toBe(true);
+            expect(hit, 'the scope is not under the notice').toBe(true);
         }
         await expect(notice).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);

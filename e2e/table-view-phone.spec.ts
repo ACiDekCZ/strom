@@ -257,7 +257,8 @@ test.describe('phone (390)', () => {
             await expect(sheet).toBeVisible();
         };
         await openMore();
-        await expect(sheet.locator('.bottom-sheet-item')).toHaveText([/^ScopeWhole tree/, /^Group byNo grouping/, 'Save as list of people…', /^Columns/, 'Export', /^Coverage row/, 'Collapse unions']);
+        // The scope is not in ⋯: a row of its own over the search (spec 098 §11c).
+        await expect(sheet.locator('.bottom-sheet-item')).toHaveText([/^Group byNo grouping/, 'Save as list of people…', /^Columns/, 'Export', /^Coverage row/, 'Collapse unions']);
         await sheet.locator('.bottom-sheet-item', { hasText: 'Columns' }).tap();
         await expect(page.locator('.tv-colpanel--sheet')).toBeVisible();
         await page.locator('.tv-colpanel--sheet .tv-cp-done').tap();

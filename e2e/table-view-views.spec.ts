@@ -273,7 +273,8 @@ test.describe('phone (390)', () => {
 });
 
 /**
- * A list as the Table's scope keeps its name on a tight bar: German at a
+ * A list as the Table's scope (the window's selection, spec 098 §11c: the
+ * switch's Selection part or its folded button) keeps its name on a tight bar: German at a
  * computer's and a tablet's width made the steps hide it, leaving the list's
  * kind icon alone (verification of 3.30.0). The name is cut with "…", the
  * Columns count goes first; a computer's row stays one line.
@@ -283,7 +284,7 @@ test.describe('a long list name in German', () => {
     const LIST = 'Briefe an die Verwandtschaft in Schwaben';
 
     for (const [width, height] of [[1440, 900], [1024, 768]] as const) {
-        test(`Scope ▾ shows the list's name, cut, on one row (@${width})`, async ({ page }) => {
+        test(`the scope shows the list's name, cut, on one row (@${width})`, async ({ page }) => {
             await page.setViewportSize({ width, height });
             await openApp(page);
             await page.evaluate(() => window.Strom.UI.loadDemoTree());
@@ -294,13 +295,21 @@ test.describe('a long list name in German', () => {
                 dm.createPersonList({ name, dynamic: false, personIds: ids as never[], sort: 'manual' });
                 window.Strom.UI.setDisplayViewMode('table');
             }, LIST);
-            await page.locator('#table-container .tv-scope-btn').click();
-            await page.locator('.tv-menu .tv-menu-item', { hasText: 'Briefe' }).click();
-            const name = page.locator('#table-container .tv-scope-btn .tv-scope-name');
-            await expect(name).toHaveText(LIST);
+            // The list as the window's selection (spec 098 §11c): from the switch's Selection ▾, or the folded button's menu.
+            const part = page.locator('#table-scope-sel');
+            await expect(page.locator('#table-scope-tree').or(page.locator('#table-container .tv-scope-btn')).filter({ visible: true }).first()).toBeVisible();
+            if (await part.isVisible()) {
+                await part.click();
+                await page.locator('#table-container .table-scope-pick li.sp-selpick-row[data-sec="lists"]', { hasText: 'Briefe' }).locator('button').click();
+            } else {
+                await page.locator('#table-container .tv-scope-btn').click();
+                await page.locator('.tv-menu .tv-menu-item', { hasText: 'Briefe' }).click();
+            }
+            const name = page.locator('#table-container :is(#table-scope-sel .scope-name, .tv-scope-btn .tv-scope-name)').filter({ visible: true });
+            await expect(name).toContainText(LIST);
             const fit = await page.evaluate(() => {
                 const row = document.querySelector<HTMLElement>('#table-container .tv-bar-row1')!;
-                const n = row.querySelector<HTMLElement>('.tv-scope-name')!;
+                const n = [...row.querySelectorAll<HTMLElement>('#table-scope-sel .scope-name, .tv-scope-btn .tv-scope-name')].find(e => e.getClientRects().length > 0)!;
                 const tops = [...row.children].filter(c => (c as HTMLElement).offsetParent !== null)
                     .map(c => Math.round(c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2));
                 // The table's search keeps its placeholder whole while a name step still helps (step 5 last).

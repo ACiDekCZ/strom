@@ -1,6 +1,7 @@
 /**
- * The Table narrowed to a list of people (spec 084 §9, §13d): Scope ▾ in the
- * bar (the phone's Scope › in ⋯), the People rows in the list's order with
+ * The Table narrowed to a list of people (spec 084 §9, §13d): the list as the
+ * window's selection with the scope Selection of the shared switch (spec 098
+ * §11c; a phone's "Scope: … ▾" over the search), the People rows in the list's order with
  * #, the row types counting the scope, a jump to a person outside the list
  * (Not in the list, Show for now, Whole tree), a list deleted under the
  * scope, a work list's Done column and chips, Remove from the list in a
@@ -60,30 +61,42 @@ async function openTable(page: Page, phone = false): Promise<void> {
     await expect(status(page)).toHaveText('6 of 6 people');
 }
 
+/**
+ * The shared switch (spec 098 §11c): Whole tree, or a list as the window's
+ * selection from the choice under Selection ▾ (the part alone takes the
+ * window's selection when it is that list already).
+ */
 async function chooseScope(page: Page, name: string): Promise<void> {
-    await tv(page, '.tv-scope-btn').click();
-    await tvItem(page, name).click();
+    if (name === 'Whole tree') {
+        await page.locator('#table-scope-tree').click();
+        await expect(page.locator('#table-scope-tree')).toHaveClass(/active/);
+        return;
+    }
+    const sel = page.locator('#table-scope-sel');
+    const pop = tv(page, '.table-scope-pick .sp-rodpick-pop');
+    const taken = page.locator('#table-scope-sel.active', { hasText: name });
+    await sel.click();
+    await expect(pop.or(taken)).toBeVisible();
+    if (await pop.isVisible()) await pop.locator('li.sp-selpick-row[data-sec="lists"]', { hasText: name }).locator('button').click();
+    await expect(taken).toBeVisible();
 }
 
 test.describe('Table scope: a computer', () => {
     test.use({ viewport: { width: 1440, height: 900 } });
 
-    test('Scope ▾: the list\'s people in its order with #, the counts in the scope, back to the whole tree', async ({ page }) => {
+    test('Selection ▾: the list\'s people in its order with #, the counts in the scope, back to the whole tree', async ({ page }) => {
         await family(page);
         await openTable(page);
-        const btn = tv(page, '.tv-scope-btn');
-        await expect(btn).toHaveText(/Whole tree/);
-        await expect(btn).not.toHaveClass(/is-list/);
+        const sel = page.locator('#table-scope-sel');
+        await expect(page.locator('#table-scope-tree')).toHaveClass(/active/);
         await expect(tv(page, '.tv-slot-scope .tv-scope-label')).toHaveText('Scope');
-        await btn.click();
-        await expect(page.locator('.tv-menu .tv-menu-heading')).toHaveText('Lists of people');
-        await expect(tvItem(page, 'Whole tree')).toHaveAttribute('aria-checked', 'true');
-        await expect(tvItem(page, 'Letters to write')).toContainText('3');
-        await expect(tvItem(page, 'Manage lists…')).toBeVisible();
-        await tvItem(page, 'Letters to write').click();
+        await sel.click();
+        const pick = tv(page, '.table-scope-pick .sp-rodpick-pop li.sp-selpick-row[data-sec="lists"]');
+        await expect(pick.filter({ hasText: 'Letters to write' })).toContainText('3');
+        await pick.filter({ hasText: 'Letters to write' }).locator('button').click();
 
-        await expect(btn).toHaveClass(/is-list/);
-        await expect(btn).toHaveAttribute('aria-label', 'Scope: Letters to write');
+        await expect(sel).toHaveClass(/active/);
+        await expect(sel).toContainText('List: Letters to write');
         await expect(status(page)).toHaveText('3 of 3 people');
         await expect(tv(page, '.tv-status')).toContainText('Sort: # (list order)');
         expect(await shownKeys(page)).toEqual(['p:w', 'p:q', 'p:t']);
@@ -95,7 +108,7 @@ test.describe('Table scope: a computer', () => {
         await tv(page, '.tv-rowtype [data-rowtype="unions"]').click();
         await expect(status(page)).toHaveText(/^1 of 1 union/);
         await tv(page, '.tv-rowtype [data-rowtype="sources"]').click();
-        await expect(btn).toHaveAttribute('aria-disabled', 'true');
+        await expect(tv(page, '.table-scope.scope-seg')).toHaveAttribute('aria-disabled', 'true');
         await tv(page, '.tv-rowtype [data-rowtype="persons"]').click();
         await expect(status(page)).toHaveText('3 of 3 people');
 
@@ -165,18 +178,19 @@ test.describe('Table scope: a computer', () => {
         await (await mother()).click();
         await notice.getByRole('button', { name: 'Whole tree' }).click();
         await expect(notice).toBeHidden();
-        await expect(tv(page, '.tv-scope-btn')).toHaveText(/Whole tree/);
+        await expect(page.locator('#table-scope-tree')).toHaveClass(/active/);
         await expect(row(page, 'p:i')).toHaveAttribute('aria-selected', 'true');
 
-        // The list deleted under the scope: the whole tree, said under the bar.
+        // The list deleted under the scope: the window's selection cleared and said in a toast (held while the
+        // delete's toast with Undo shows), the whole tree; no notice under the bar.
         await chooseScope(page, 'Letters to write');
         await expect(status(page)).toHaveText('3 of 3 people');
         const id = await listId(page, 'Letters to write');
         await page.evaluate((x) => window.Strom.DataManager.deletePersonList(x), id);
-        await expect(notice.locator('.tv-notice-text')).toHaveText('The view’s list is gone; the whole tree is shown.');
-        await expect(status(page)).toHaveText('6 of 6 people');
-        await notice.locator('.tv-notice-close').click();
+        await expect(page.locator('body > .toast', { hasText: 'Selection cleared: the list “Letters to write” was deleted.' })).toBeAttached();
         await expect(notice).toBeHidden();
+        await expect(status(page)).toHaveText('6 of 6 people');
+        await expect(page.locator('#table-scope-tree')).toHaveClass(/active/);
     });
 
     test('a work list: Done boxes ticked by a click and Space, the chips Left and Done; Remove from the list', async ({ page }) => {
@@ -227,13 +241,14 @@ test.describe('Table scope: a computer', () => {
         await d.locator('.pl-row', { hasText: 'Letters to write' }).click();
         await d.locator('[data-key="open-table"]').click();
         await expect(d).toHaveCount(0);
-        await expect(tv(page, '.tv-scope-btn')).toHaveAttribute('aria-label', 'Scope: Letters to write');
+        await expect(tv(page, '.tv-scope-btn')).toHaveAttribute('aria-label', 'Scope: List: Letters to write');
+        await expect(page.locator('#table-scope-sel')).toHaveClass(/active/);
         await expect(status(page)).toHaveText('3 of 3 people');
 
         await page.evaluate(() => window.Strom.UI.showPersonLists());
         await d.locator('.pl-row', { hasText: 'Graves to visit' }).click();
         await d.locator('[data-key="no-cite"]').click();
-        await expect(tv(page, '.tv-scope-btn')).toHaveAttribute('aria-label', 'Scope: Graves to visit');
+        await expect(tv(page, '.tv-scope-btn')).toHaveAttribute('aria-label', 'Scope: List: Graves to visit');
         await expect(tv(page, '.tv-chips [data-chip="noSource"]')).toHaveAttribute('aria-pressed', 'true');
         await expect(status(page)).toHaveText('2 of 2 people');
 
@@ -244,7 +259,7 @@ test.describe('Table scope: a computer', () => {
         })!.id);
         expect(await listIds(page, 'Born before 1900')).toEqual(['c', 'y']);
         await page.evaluate((x) => window.Strom.UI.openTableForRule(x), ruleId);
-        await expect(tv(page, '.tv-scope-btn')).toHaveText(/Whole tree/);
+        await expect(page.locator('#table-scope-tree')).toHaveClass(/active/);
         await expect(status(page)).toHaveText('2 of 6 people');
         // The filter goes to the rule (the search is not part of it).
         await tv(page, '.tv-chips [data-chip="living"]').click();
@@ -260,31 +275,27 @@ test.describe('Table scope: a computer', () => {
 test.describe('Table scope: a phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-    test('Scope › in ⋯: the lists on a second page, the rows in the list\'s order, no Scope ▾ in the bar', async ({ page }) => {
+    test('"Scope: … ▾" over the search: the lists in its sheet, the rows in the list\'s order', async ({ page }) => {
         await family(page);
         await openTable(page, true);
-        await expect(tv(page, '.tv-slot-scope')).toBeHidden();
-        await tv(page, '.tv-more-menu-btn').tap();
-        const sheet = page.locator('.bottom-sheet');
-        const first = sheet.locator('.bottom-sheet-item').first();
-        await expect(first).toContainText('Scope');
-        await expect(first).toContainText('Whole tree');
-        await first.tap();
-        const sub = sheet.locator('.bottom-sheet-subpage');
-        await expect(sub).toBeVisible();
-        const item = sub.locator('.bottom-sheet-item', { hasText: 'Letters to write' });
+        // The scope is not in ⋯ any more (spec 098 §11c): a row of its own.
+        const btn = tv(page, '.table-scope-btn');
+        await expect(btn).toContainText('Scope: Whole tree');
+        await btn.tap();
+        const sheet = page.locator('.table-scope-sheet');
+        await expect(sheet).toBeVisible();
+        const item = sheet.locator('.scope-row[data-sel]', { hasText: 'Letters to write' });
         expect((await item.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await item.tap();
         await expect(status(page)).toHaveText('3 of 3 people');
         expect(await shownKeys(page)).toEqual(['p:w', 'p:q', 'p:t']);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
-        // Again: the row says the list; ✓ on it.
-        await tv(page, '.tv-more-menu-btn').tap();
-        await expect(sheet.locator('.bottom-sheet-item').first()).toContainText('Letters to write');
-        await sheet.locator('.bottom-sheet-item').first().tap();
-        await expect(sub.locator('.bottom-sheet-item', { hasText: 'Letters to write' })).toContainText('✓');
-        await sub.locator('.bottom-sheet-item', { hasText: 'Whole tree' }).tap();
+        // Again: the button says the list; the Whole tree back from its sheet.
+        await expect(btn).toContainText('List: Letters to write');
+        await btn.tap();
+        await expect(sheet).toBeVisible();
+        await sheet.locator('[data-scope="tree"]').tap();
         await expect(status(page)).toHaveText('6 of 6 people');
     });
 });

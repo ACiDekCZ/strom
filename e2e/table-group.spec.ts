@@ -102,8 +102,10 @@ test.describe('Table groups: a computer', () => {
     test('Unions in a list\'s scope: the partner outside the list in grey, grouped by the number of children', async ({ page }) => {
         await family(page);
         await page.locator('#view-mode-table').click();
-        await tv(page, '.tv-scope-btn').click();
-        await tvItem(page, 'Letters to write').click();
+        // The list as the window's selection from the shared switch's Selection ▾ (spec 098 §11c).
+        await page.locator('#table-scope-sel').click();
+        await tv(page, '.table-scope-pick .sp-rodpick-pop li.sp-selpick-row[data-sec="lists"]').filter({ hasText: 'Letters to write' }).locator('button').click();
+        await expect(page.locator('#table-scope-sel')).toHaveClass(/active/);
         await tv(page, '.tv-rowtype [data-rowtype="unions"]').click();
         await expect(status(page)).toHaveText(/^1 of 1 union/);
         const off = tv(page, '.tv-body .tv-cell.is-off-list');

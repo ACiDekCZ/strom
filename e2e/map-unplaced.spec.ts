@@ -1,9 +1,9 @@
 /**
  * The selection's people without a place (spec 098 §5): the map's status
  * bar says how many have no place of any kind (only in the scope
- * Selection), and its line opens the Table with them — a list in the
- * list's scope, another selection in the scope "Selection: …" (Scope ▾'s
- * part Window selection) — with the chip "No place" on. Invented names only.
+ * Selection), and its line opens the Table with them in the scope
+ * Selection of the shared switch (spec 098 §11c; a list with its order) —
+ * with the chip "No place" on. Invented names only.
  */
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { seedPathTree, stubTiles } from './map-path-fixture.js';
@@ -59,9 +59,10 @@ test.describe('the selection\'s people without a place', () => {
 
         await line(page).click();
         await expect(page.locator('#table-container')).toBeVisible();
-        const scope = tv(page, '.tv-scope-btn');
-        await expect(scope).toContainText('Selection: Descendants: Fennick Yarrowby');
-        await expect(scope).toHaveClass(/is-sel/);
+        // The shared switch (spec 098 §11c): its Selection part with the window's selection.
+        const scope = page.locator('#table-scope-sel');
+        await expect(scope).toContainText('Descendants: Fennick Yarrowby');
+        await expect(scope).toHaveClass(/active/);
         const chip = tv(page, '.tv-chip[data-chip="noPlace"]');
         await expect(chip).toHaveAttribute('aria-pressed', 'true');
         await expect(chip).toHaveText('✓ No place');
@@ -75,15 +76,9 @@ test.describe('the selection\'s people without a place', () => {
         await expect(chip).toHaveAttribute('aria-pressed', 'false');
         expect(await shownKeys(page)).toEqual(['p:elowen', 'p:fennick', 'p:wren']);
 
-        // Scope ▾: the part Window selection with the selection ticked, the whole tree back.
-        await scope.click();
-        const menu = page.locator('.tv-scope-menu');
-        await expect(menu).toBeVisible();
-        await expect(menu).toContainText('Window selection');
-        const selRow = menu.locator('.tv-menu-item', { hasText: 'Selection: Descendants: Fennick Yarrowby' });
-        await expect(selRow).toHaveAttribute('aria-checked', 'true');
-        await menu.locator('.tv-menu-item', { hasText: 'Whole tree' }).click();
-        await expect(scope).not.toHaveClass(/is-sel/);
+        // The Whole tree back.
+        await page.locator('#table-scope-tree').click();
+        await expect(scope).not.toHaveClass(/active/);
         await expect(tv(page, '.tv-status-count')).toHaveText('11 of 11 people');
     });
 
@@ -96,14 +91,13 @@ test.describe('the selection\'s people without a place', () => {
         await pickList(page, 'Mixed');
         await expect(line(page)).toHaveText('1 person in the selection has no place ›');
         await line(page).click();
-        const scope = tv(page, '.tv-scope-btn');
+        const scope = page.locator('#table-scope-sel');
         await expect(scope).toContainText('Mixed');
-        await expect(scope).not.toHaveClass(/is-sel/);
+        await expect(scope).toHaveClass(/active/);
         await expect(tv(page, '.tv-chip[data-chip="noPlace"]')).toHaveAttribute('aria-pressed', 'true');
         expect(await shownKeys(page)).toEqual(['p:elowen']);
-        // The list's part is among the lists, not under Window selection.
-        await scope.click();
-        await expect(page.locator('.tv-scope-menu')).not.toContainText('Window selection');
+        // A list keeps its order: the # column.
+        await expect(tv(page, '.tv-headrow [data-col="num"]')).toHaveCount(1);
     });
 
     test('the empty map\'s link opens the same Table', async ({ page }) => {
@@ -114,7 +108,7 @@ test.describe('the selection\'s people without a place', () => {
         await pickList(page, 'Unplaced');
         await expect(page.locator('.map-empty .map-empty-link')).toHaveText('2 people without a place ›');
         await page.locator('.map-empty .map-empty-link').click();
-        await expect(tv(page, '.tv-scope-btn')).toContainText('Unplaced');
+        await expect(page.locator('#table-scope-sel')).toContainText('Unplaced');
         await expect(tv(page, '.tv-chip[data-chip="noPlace"]')).toHaveAttribute('aria-pressed', 'true');
         expect(await shownKeys(page)).toEqual(['p:elowen', 'p:wren']);
     });

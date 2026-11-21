@@ -242,6 +242,7 @@ test('lists of people in the exported HTML: shown, opened in the Table and as it
     await expect(d.locator('.pl-new, .pl-dots, .pl-more, .pl-pencil, .pl-x, .pl-check, .pl-handle, [data-act="add-person"]')).toHaveCount(0);
     await d.locator('[data-act="open-table"]').first().click();
     await expect(d).toHaveCount(0);
-    await expect(page.locator('#table-container .tv-scope-btn')).toHaveAttribute('aria-label', 'Scope: Letters to write');
+    // The list as the window's selection with the scope Selection (spec 098 §11c).
+    await expect(page.locator('#table-container .tv-scope-btn')).toHaveAttribute('aria-label', 'Scope: List: Letters to write');
     await expect(page.locator('#table-container .tv-status-count')).toHaveText('2 of 2 people');
 });
