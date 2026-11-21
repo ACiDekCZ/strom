@@ -65,6 +65,7 @@ import { computeDebugValidation } from './debug-validation.js';
 import { computeDebugGeometry } from './debug-geometry.js';
 import { foldPlaceholderFamilies, hidePlaceholders } from './placeholders.js';
 import { buildViewLayer, flagViewLayer } from './view-layer.js';
+import { FilterGroup, FilterOrder, keptPersons, mergeGroups, nextRepresentative, restrictSelection } from './person-filter.js';
 
 /**
  * Find persons with multiple partnerships for auto-expansion.
@@ -553,12 +554,92 @@ function drawnWithoutPartnerUnions(input: PipelineInput): () => ReadonlySet<Pers
  * etalon-half-sisters).
  */
 export function runLayoutPipeline(input: PipelineInput): LayoutResult {
-    const result = runLayoutPipelineOnce(input);
+    if (input.personFilter) return layoutWithPersonFilter(input);
+    return runWithPartnerOrder(input);
+}
+
+/** One layout, again with the compact partner order when that leaves fewer lines out. `keep`: see selectStage. */
+function runWithPartnerOrder(input: PipelineInput, keep?: ReadonlySet<PersonId>): LayoutResult {
+    const result = runLayoutPipelineOnce(input, keep);
     const omitted = result.omittedEdges?.length ?? 0;
     if (omitted === 0 || ![...result.partnerChains?.values() ?? []].some(c => c.chronologicalOrderUsed)) return result;
     const policy = input.displayPolicy ?? DEFAULT_DISPLAY_POLICY;
-    const compact = runLayoutPipelineOnce({ ...input, displayPolicy: { ...policy, partnerOrder: 'compact' } });
+    const compact = runLayoutPipelineOnce({ ...input, displayPolicy: { ...policy, partnerOrder: 'compact' } }, keep);
     return (compact.omittedEdges?.length ?? 0) < omitted ? compact : result;
+}
+
+/** The input without its person filter (the whole view). */
+function withoutPersonFilter(input: PipelineInput): PipelineInput {
+    const { personFilter: _filter, ...rest } = input;
+    return rest;
+}
+
+/**
+ * The persons the whole view draws with their generation and their X after
+ * step 5 (the order of a row: later steps shift blocks, never reorder them).
+ */
+function drawnOrder(input: PipelineInput): Map<PersonId, FilterOrder> {
+    const out = new Map<PersonId, FilterOrder>();
+    const stage = selectStage(input);
+    if (!stage) return out;
+    const { data, selection, effectivePolicy, hiddenPersonIds } = stage;
+    const model = buildLayoutModel({ data, selection, focusPersonId: input.focusPersonId, displayPolicy: effectivePolicy });
+    if (hiddenPersonIds.size > 0) model.hiddenPersonIds = hiddenPersonIds;
+    const genModel = assignGenerations({ model, focusPersonId: input.focusPersonId });
+    const measured = measureSubtrees({ genModel, config: input.config, focusPersonId: input.focusPersonId, expandChildrenOf: input.expandChildrenOf });
+    const { personX } = placeX({ measured, config: input.config });
+    for (const id of model.persons.keys()) {
+        const x = personX.get(id), gen = genModel.personGen.get(id);
+        if (hiddenPersonIds.has(id) || x === undefined || gen === undefined) continue;
+        out.set(id, { gen, x });
+    }
+    return out;
+}
+
+/**
+ * The layout of PipelineInput.personFilter (src/layout/pipeline/person-filter.ts):
+ * the whole view's persons of the filter (the focus always) laid out anew,
+ * the focus's group first, then a group around each kept person no group
+ * reached yet, side by side in the rows of their generations.
+ */
+function layoutWithPersonFilter(input: PipelineInput): LayoutResult {
+    const base = withoutPersonFilter(input);
+    const order = drawnOrder(base);
+    if (order.size === 0) return emptyResult();
+    const keep = keptPersons(order, input.personFilter!, input.focusPersonId);
+    if (keep.size === order.size) return runWithPartnerOrder(base);
+    const main = runWithPartnerOrder(base, keep);
+    const groups: FilterGroup[] = [{ result: main, rep: input.focusPersonId }];
+    let rest = [...keep].filter(id => !main.positions.has(id));
+    while (rest.length > 0) {
+        const rep = nextRepresentative(rest, order);
+        const gens = rest.map(id => order.get(id)?.gen ?? 0);
+        const span = Math.max(...gens) - Math.min(...gens);
+        const result = runWithPartnerOrder({
+            data: base.data,
+            focusPersonId: rep,
+            config: base.config,
+            ancestorDepth: span,
+            descendantDepth: span,
+            includeSpouseAncestors: false,
+            includeParentSiblings: true,
+            includeParentSiblingDescendants: true,
+            ...(base.maxIterations !== undefined ? { maxIterations: base.maxIterations } : {}),
+            ...(base.tolerance !== undefined ? { tolerance: base.tolerance } : {}),
+            ...(base.displayPolicy ? { displayPolicy: base.displayPolicy } : {}),
+            ...(base.viewLinks ? { viewLinks: base.viewLinks } : {}),
+            ...(base.includeView !== undefined ? { includeView: base.includeView } : {}),
+        }, new Set(rest));
+        if (result.positions.size > 0) groups.push({ result, rep });
+        // The person laid out around is never tried again (nothing left behind for ever)
+        rest = rest.filter(id => id !== rep && !result.positions.has(id));
+    }
+    if (groups.length === 1) return main;
+    const merged = mergeGroups(groups, order, base.config);
+    const validation = validateLayout(merged, base.config);
+    merged.diagnostics.validationPassed = validation.passed;
+    merged.diagnostics.errors = validation.errors;
+    return merged;
 }
 
 /** What step 1 and the in-place expansions leave for the layout (selectStage). */
@@ -577,7 +658,7 @@ interface SelectedStage {
  * the children and partners shown in place, the folded ancestors and the
  * empty "?" stand-ins. Null when nobody is selected.
  */
-function selectStage(input: PipelineInput): SelectedStage | null {
+function selectStage(input: PipelineInput, keep?: ReadonlySet<PersonId>): SelectedStage | null {
     const {
         data: inputData,
         focusPersonId,
@@ -659,6 +740,15 @@ function selectStage(input: PipelineInput): SelectedStage | null {
     // Empty "?" stand-ins are not drawn (T11)
     const hiddenPersonIds = hidePlaceholders(data, selection, focusPersonId);
 
+    // "Hide others" (PipelineInput.personFilter): only the kept persons are laid out
+    if (keep) {
+        restrictSelection(selection, keep, data);
+        for (const id of [...hiddenPersonIds]) if (!selection.persons.has(id)) hiddenPersonIds.delete(id);
+        const drawnExtra = extraDepthDrawn.filter(id => selection.persons.has(id));
+        if (selection.persons.size === 0) return null;
+        return { data, viewLayer, selection, effectivePolicy, hiddenPersonIds, extraDepthDrawn: drawnExtra };
+    }
+
     return { data, viewLayer, selection, effectivePolicy, hiddenPersonIds, extraDepthDrawn };
 }
 
@@ -671,6 +761,12 @@ function selectStage(input: PipelineInput): SelectedStage | null {
  * people a step adds with it (bulk-family.ts).
  */
 export function drawnPersonIds(input: PipelineInput): Set<PersonId> {
+    // "Hide others": the whole view's persons of the filter, the focus always (every one of them is drawn)
+    if (input.personFilter) {
+        const all = drawnPersonIds(withoutPersonFilter(input));
+        const filter = input.personFilter;
+        return new Set([...all].filter(id => id === input.focusPersonId || filter.has(id)));
+    }
     const stage = selectStage(input);
     if (!stage) return new Set();
     const { data, selection, effectivePolicy, hiddenPersonIds } = stage;
@@ -682,7 +778,7 @@ export function drawnPersonIds(input: PipelineInput): Set<PersonId> {
     return new Set([...model.persons.keys()].filter(id => !hiddenPersonIds.has(id) && personX.has(id) && genModel.personGen.has(id)));
 }
 
-function runLayoutPipelineOnce(input: PipelineInput): LayoutResult {
+function runLayoutPipelineOnce(input: PipelineInput, keep?: ReadonlySet<PersonId>): LayoutResult {
     const {
         focusPersonId,
         config,
@@ -690,7 +786,7 @@ function runLayoutPipelineOnce(input: PipelineInput): LayoutResult {
         tolerance = 0.5,
     } = input;
 
-    const stage = selectStage(input);
+    const stage = selectStage(input, keep);
     // Early return if no persons selected
     if (!stage) return emptyResult();
     const { data, viewLayer, selection, effectivePolicy, hiddenPersonIds, extraDepthDrawn } = stage;
@@ -1054,7 +1150,8 @@ export function pipelineInputFromRequest(request: LayoutRequest): PipelineInput 
         foldAncestorsOf: request.foldAncestorsOf,
         extraDepthFor: request.extraDepthFor,
         showPartnersOf: request.showPartnersOf,
-        showPartnerUnions: request.showPartnerUnions
+        showPartnerUnions: request.showPartnerUnions,
+        ...(request.personFilter ? { personFilter: request.personFilter } : {})
     };
 }
 

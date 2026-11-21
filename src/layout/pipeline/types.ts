@@ -707,6 +707,17 @@ export interface PipelineInput {
      * who then stands in more than one union is a partner chain.
      */
     showPartnerUnions?: readonly PartnershipId[];
+    /**
+     * "Hide others" of the window's selection (spec 098 §8): only these
+     * persons are laid out, the focus always with them. The filter applies
+     * to the persons the view would draw without it (its focus, depths and
+     * in-place expansions), never more: those of the set are collected for
+     * the layout and laid out anew (lines only between persons both drawn).
+     * Persons the focus's own layout does not reach stand in the rows of
+     * their generations beside it, in the order the whole view gives them
+     * (src/layout/pipeline/person-filter.ts).
+     */
+    personFilter?: ReadonlySet<PersonId>;
 }
 
 // ==================== ANCESTOR CLUSTER ====================
@@ -782,4 +793,6 @@ export interface LayoutRequest {
     showPartnersOf?: readonly PersonId[];
     /** See PipelineInput.showPartnerUnions. */
     showPartnerUnions?: readonly PartnershipId[];
+    /** See PipelineInput.personFilter. */
+    personFilter?: ReadonlySet<PersonId>;
 }
