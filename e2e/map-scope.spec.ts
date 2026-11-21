@@ -75,6 +75,8 @@ test.describe('the map scope Selection on a computer', () => {
         // The part chosen: the choice; Escape closes it back to the part.
         await sel(page).click();
         await expect(pop(page)).toBeVisible();
+        // Escape belongs to the choice once the keyboard is in it (its search field, focused a frame after it opens).
+        await expect(page.locator('#map-container .map-scope-pick .sp-rodpick-q')).toBeFocused();
         await page.keyboard.press('Escape');
         await expect(pop(page)).toHaveCount(0);
         await expect(sel(page)).toBeFocused();

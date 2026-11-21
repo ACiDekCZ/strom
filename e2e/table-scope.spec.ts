@@ -196,6 +196,8 @@ test.describe('the Table\'s scope where the bar is tight', () => {
         await expect(item('Selection: List: Letters to write')).toHaveAttribute('aria-checked', 'true');
         await item('All selections…').click();
         await expect(tv(page, '.table-scope-pick .sp-rodpick-pop')).toBeVisible();
+        // Escape belongs to the choice once the keyboard is in it (its search field, focused a frame after it opens).
+        await expect(tv(page, '.table-scope-pick .sp-rodpick-q')).toBeFocused();
         await page.keyboard.press('Escape');
         await expect(tv(page, '.table-scope-pick')).toHaveCount(0);
 
