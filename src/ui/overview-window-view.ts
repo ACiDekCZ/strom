@@ -219,6 +219,12 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             return { ok: false, text: strings.verify.failed };
         },
         showVerifyBulkDialog(): void { run('verify-bulk'); },
+        // Stop of one run (spec 126 U10 §4): written by the main window (its bridge), its outcome said here.
+        async writeRunStop(runId: string): Promise<{ ok: true } | { ok: false; text: string }> {
+            const a = await port.ask('run-stop', { run: runId }, OVERVIEW_ANSWER_WAIT_MS);
+            if (a && typeof a === 'object' && 'ok' in a) return a as { ok: true } | { ok: false; text: string };
+            return { ok: false, text: a === null ? strings.busy.mainWindowSilent : strings.live.runStopFailed };
+        },
         // Research for this tree at the work outside the directions: a dialog of the main window.
         openOffLineSettings(): void { run('offline-settings'); },
         // Research for this tree at Books (Faster by downloading › Settings…): a dialog of the main window.

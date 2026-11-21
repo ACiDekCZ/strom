@@ -1749,6 +1749,15 @@ export function liveState(s: LiveSession): { label: string; cls: 'is-working' | 
     return { label: L.stateIdle, cls: 'is-idle' };
 }
 
+/**
+ * Why a run is paused (`paused.reason`): the research's codes `limit` and `archive` in the app's words,
+ * any other reason (free text in the research's language) as it is (spec 126 U10).
+ */
+export function pausedReasonText(reason: string): string {
+    const L = strings.live;
+    return reason === 'limit' ? L.runStateLimitNoTime : reason === 'archive' ? L.runStateArchiveNoTime : reason;
+}
+
 /** A paused run: "Paused · <why> · resumes at 21:30" (what the research says of it). */
 export function pausedText(w: LiveWorker): string {
     if (!w.paused) return '';
@@ -1756,7 +1765,7 @@ export function pausedText(w: LiveWorker): string {
     // Waiting for an archive (spec 127): which one, and when the run gives up (not "resumes").
     if (w.waits) return [L.statePaused, waitsText(w)].join(' · ');
     const ts = Date.parse(w.paused.until);
-    return [L.statePaused, w.paused.reason, Number.isFinite(ts) ? L.pausedUntil(formatLiveClock(ts, Date.now(), getCurrentLanguage())) : '']
+    return [L.statePaused, pausedReasonText(w.paused.reason), Number.isFinite(ts) ? L.pausedUntil(formatLiveClock(ts, Date.now(), getCurrentLanguage())) : '']
         .filter(Boolean).join(' · ');
 }
 

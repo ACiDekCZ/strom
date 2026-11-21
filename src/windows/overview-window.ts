@@ -327,6 +327,8 @@ export type OverviewAction =
     | { action: 'hover-person'; args: { personId: string | null } }
     /** Stop of the tree's "Verifying": the research drops what it has not begun to verify. */
     | { action: 'verify-stop'; args?: Record<string, never> }
+    /** Stop of one run (spec 126 U10 §4): it finishes its task and takes no next one. Answers `{ ok }` or `{ ok: false, text }`. */
+    | { action: 'run-stop'; args: { run: string } }
     /** The main window's highlight of `kind` ends (the changes' filter left none of its people to show). */
     | { action: 'highlight-end'; args: { kind: string } }
     /** Follow live from the overview (it stays open, followed). */
@@ -395,7 +397,7 @@ export type OverviewActionArgs<T extends OverviewActionId> = Extract<OverviewAct
 export const OVERVIEW_ACTION_IDS = [
     'show-person', 'show-people', 'show-direction', 'direction-found', 'person-research', 'tree-overview', 'waiting-places', 'waiting-group-note',
     'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings', 'books-settings', 'runs-settings',
-    'hover-person', 'verify-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'turn-on',
+    'hover-person', 'verify-stop', 'run-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
     'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-retry', 'waiting-file', 'waiting-audit', 'waiting-aside',
     'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
@@ -489,6 +491,8 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
             if (a.files !== undefined && !(Array.isArray(a.files) && a.files.every(isFile))) return null;
             return { action, args: { itemId: a.itemId, ...(a.files ? { files: a.files as File[] } : {}) } };
         }
+        case 'run-stop':
+            return str(a.run) ? { action, args: { run: a.run } } : null;
         case 'highlight-end':
             return str(a.kind) ? { action, args: { kind: a.kind } } : null;
         case 'hover-person':

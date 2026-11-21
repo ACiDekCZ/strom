@@ -228,6 +228,9 @@ export const overviewWindowMethods = uiModule({
                     verifyStopping = false;
                     overviewChanged();
                 });
+            case 'run-stop':
+                // Written here (its bridge); the outcome goes back to the window's Stop.
+                return this.writeRunStop(a.args.run);
             case 'highlight-end':
                 // Only the highlight the window saw: another one begun here since stays.
                 if (this.evidenceHighlightKind() !== a.args.kind) return false;

@@ -14,11 +14,12 @@
  */
 
 import { noteQueueStartStatus, QUEUE_SCOPE, QUEUE_START_MS, type QueueStartView } from './queue-start.js';
-import { runLinesOn } from '../research-runs.js';
+import { RUN_ENDED_MS, linesWithRun, liveRuns, orderRuns, runCount, runLinesOn, runStopOn, runsShown, type LiveRun } from '../research-runs.js';
+import { postRunStop } from '../research-runs-write.js';
 import { busySpinHtml, busyStatusEl } from './busy.js';
 import { canvasBusy } from './canvas-busy.js';
 import type { RowRefusal } from './waiting-row-notes.js';
-import { researchOpenSrText, setResearchActionLabel } from './research-open-mark.js';
+import { researchBridgeActionLabel, researchOpenSrText, setResearchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -52,7 +53,7 @@ import {
     LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
     liveSession, nowHelpTopic, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip,
     liveState, pausedText, appendWorkingHold, workingHoldEl, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
-    markWaitingFocus, waitingWhyEl, overviewViewing, OverviewViewing, onComputer, lightsGroup, markOverviewLit,
+    markWaitingFocus, waitingWhyEl, overviewViewing, OverviewViewing, onComputer, lightsGroup, markOverviewLit, researchSession,
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
 import {
@@ -377,6 +378,39 @@ function drawnSession(): LiveSession | null {
     if (followed) return followed;
     const v = overviewViewing();
     return v && v.treeId === DataManager.getCurrentTreeId() ? v.session : null;
+}
+
+/** A run's name in Now: the direction's ("Kubíčkovi z Dolní Lhoty"), the general run's "Whole queue". */
+function runName(r: LiveRun, s: LiveSession): string {
+    return r.kind === 'queue' ? strings.live.runWhole : s.researches.find(d => d.id === r.research)?.name ?? r.research ?? r.id;
+}
+
+/** Stop of a run asked here: while the bridge writes it, done (the run finishing until the bridge says so), refused (its sentence). */
+type RunStopNote = { state: 'stopping' } | { state: 'stopped' } | { state: 'failed'; text: string };
+const runStopNotes = new Map<string, RunStopNote>();
+
+/** What Now knows of a stop asked for the run (forgotten once the bridge says it finishes or it ended). */
+function runStopNote(run: Pick<LiveRun, 'id'> & Partial<Pick<LiveRun, 'state'>>): RunStopNote | null {
+    const note = runStopNotes.get(run.id) ?? null;
+    if (note && note.state !== 'stopping' && (run.state === 'finishing' || run.state === 'ended')) {
+        runStopNotes.delete(run.id);
+        return null;
+    }
+    return note;
+}
+
+/** Now drawn again when the first run ended a moment ago is to go (RUN_ENDED_MS after its end). */
+let runsEndedTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleRunsEndedRedraw(runs: readonly LiveRun[], redraw: () => void): void {
+    if (runsEndedTimer) clearTimeout(runsEndedTimer);
+    runsEndedTimer = null;
+    const ends = runs.filter(r => r.state === 'ended' && r.endedAt !== undefined).map(r => r.endedAt! + RUN_ENDED_MS);
+    if (ends.length === 0) return;
+    const wait = Math.max(0, Math.min(...ends) - Date.now()) + 50;
+    runsEndedTimer = setTimeout(() => {
+        runsEndedTimer = null;
+        redraw();
+    }, wait);
 }
 
 export const researchOverviewMethods = uiModule({
@@ -959,7 +993,15 @@ export const researchOverviewMethods = uiModule({
         // Paused: when it goes on (and why, on hover) says more than the last change.
         const paused = stateCls === 'is-paused' ? s.working.find(w => w.paused) : undefined;
         const resumes = paused ? Date.parse(paused.paused!.until) : NaN;
-        if (paused && Number.isFinite(resumes)) {
+        // Two or more runs side by side (spec 126 U10 §3): "3 agents working", under it those waiting for the limit.
+        const runs = runLinesOn(s.features) && stateCls !== 'is-lost' ? liveRuns(s).filter(r => r.state !== 'ended') : [];
+        if (runs.length >= 2) {
+            const waits = runs.filter(r => r.state === 'waiting' && r.wait?.for === 'limit');
+            const ends = waits.map(r => Date.parse(r.wait?.until ?? '')).filter(Number.isFinite);
+            const until = ends.length > 0 ? formatLiveClock(Math.min(...ends), Date.now(), getCurrentLanguage()) : '';
+            const sub = waits.length === 0 ? lastEl ?? '' : until ? L.stateAgentsWaiting(waits.length, until) : L.stateAgentsWaitingNoTime(waits.length);
+            cell(L.state, L.stateAgents(runs.length), sub, 'is-working', [lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
+        } else if (paused && Number.isFinite(resumes)) {
             // A run waiting for an archive gives up then rather than resumes (spec 127): its own sentence.
             cell(L.state, state, paused.waits ? waitsText(paused) : L.pausedUntil(formatLiveClock(resumes, Date.now(), getCurrentLanguage())), stateCls,
                 [pausedText(paused), lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
@@ -2599,6 +2641,12 @@ export const researchOverviewMethods = uiModule({
         // A direction's dialog open meanwhile: "Start" held once its run cannot start any more (spec 126 U10 §2).
         if (runsOn && document.querySelector('#queue-work-modal[data-direction]')) queueMicrotask(() => this.syncLineRunDialog(s));
         const lineStarts = runsOn ? starts.filter(x => x.scope !== QUEUE_SCOPE) : [];
+        // A block per run (spec 126 U10 §3) once a direction has its own run, or two run; a general run alone: Now as before.
+        const runs = runsOn ? runsShown(s.bridge.base, liveRuns(s), Date.now()) : [];
+        if (runs.some(r => r.kind === 'line') || runs.length >= 2) {
+            this.appendOverviewNowRuns(body, s, fold, mode, runs, starts);
+            return;
+        }
         const host = liveSection(body, {
             ...fold, title: lines >= 2 ? strings.otherResearch.nowLines(lines) : L.now,
             summary: multi ? undefined
@@ -2779,6 +2827,228 @@ export const researchOverviewMethods = uiModule({
         if (d) for (const b of text.querySelectorAll<HTMLElement>('.research-overview__show-in-tree')) lightsGroup(b, 'direction', d.name);
         li.appendChild(text);
         return li;
+    },
+
+    /**
+     * Now with the runs side by side (spec 126 U10 §3): "Now · 3 agents", a block per run (the general run
+     * first, then the directions' runs in their order), each start of §1 in the place its run comes to.
+     */
+    appendOverviewNowRuns(body: HTMLElement, s: LiveSession, fold: LiveFold, mode: Mode, runs: readonly LiveRun[],
+        starts: ReadonlyArray<{ scope: string; view: QueueStartView }>): void {
+        const L = strings.live;
+        const n = runCount(runs);
+        const names = runs.filter(r => r.state !== 'ended').map(r => runName(r, s));
+        const host = liveSection(body, {
+            ...fold, title: n > 0 ? L.nowAgents(n) : L.now,
+            summary: names.length > 0 ? names.join(', ') : L.nobody,
+            help: nowHelpTopic(s),
+        });
+        this.appendResearchElsewhere(host, 'overview');
+        const list = el('ul', 'live-panel-list live-working research-overview__now research-overview__runs');
+        host.appendChild(list);
+        // The starts not yet named by a run of the bridge, where their runs come.
+        const shownStarts = starts.filter(x => x.scope === QUEUE_SCOPE
+            ? !runs.some(r => r.kind === 'queue' && r.state !== 'ended')
+            : !runs.some(r => r.kind === 'line' && r.research === x.scope && r.state !== 'ended'));
+        type Item = { kind: 'queue' | 'line'; research?: string; draw: () => HTMLElement };
+        const items: Item[] = [
+            ...runs.map((r): Item => ({ kind: r.kind, ...(r.research ? { research: r.research } : {}), draw: () => this.overviewNowRun(r, s, runs, mode) })),
+            ...shownStarts.map((x): Item => x.scope === QUEUE_SCOPE
+                ? { kind: 'queue', draw: () => this.overviewQueueStartRow(x.view) }
+                : { kind: 'line', research: x.scope, draw: () => this.overviewQueueStartRow(x.view, s.researches.find(d => d.id === x.scope) ?? null, x.scope) }),
+        ];
+        for (const it of orderRuns(items, s.researches)) list.appendChild(it.draw());
+        scheduleRunsEndedRedraw(runs, () => this.renderResearchOverview());
+    },
+
+    /**
+     * A run's block in Now: its glyph, the direction's name and code (the general run: "Whole queue") and its
+     * state; the agent and since when; the person and task of its last step; what it skips or finishes; its
+     * actions (Show in tree · Stop · Finish and stop; on the phone Show in tree only; none once it ended).
+     */
+    overviewNowRun(run: LiveRun, s: LiveSession, runs: readonly LiveRun[], mode: Mode): HTMLElement {
+        const L = strings.live;
+        const local = runStopNote(run);
+        const shown: LiveRun = local?.state === 'stopped' && (run.state === 'working' || run.state === 'waiting')
+            ? { ...run, state: 'finishing' } : run;
+        const d = run.research ? s.researches.find(x => x.id === run.research) : undefined;
+        const li = el('li', `research-overview__run${shown.state === 'ended' ? ' is-ended' : ''}`);
+        li.dataset.run = run.id;
+        if (run.research) li.dataset.direction = run.research;
+        const glyph = el('span', run.kind === 'queue' ? 'live-line__glyph live-line__glyph--queue' : 'live-line__glyph', run.kind === 'queue' ? '' : directionGlyph(d));
+        glyph.setAttribute('aria-hidden', 'true');
+        li.appendChild(glyph);
+        const text = el('div', 'research-overview__run-text');
+        const head = el('div', 'research-overview__run-head');
+        head.appendChild(el('strong', 'research-overview__run-name', run.kind === 'queue' ? L.runWhole : d?.name ?? run.research ?? ''));
+        if (run.kind === 'line' && run.research) head.appendChild(el('span', 'research-overview__run-code', run.research));
+        head.appendChild(this.overviewRunState(shown));
+        text.appendChild(head);
+        const meta = el('div', 'research-overview__run-meta');
+        meta.appendChild(document.createTextNode(run.agentName || run.agent));
+        const since = shown.state === 'ended' ? null : timeEl(run.since, 'sincefor');
+        if (since) meta.append(' · ', since);
+        text.appendChild(meta);
+        // Its last step: the person (serif) and the task, how it helps its direction.
+        const w = run.workers[0];
+        if (w && shown.state !== 'ended') {
+            const task = el('div', 'research-overview__run-task');
+            const person = personByRefn(w.person);
+            if (person || w.person) task.appendChild(el('span', 'research-overview__run-person', person ? fullName(person) : w.person!));
+            if (w.task) task.appendChild(document.createTextNode(task.childNodes.length > 0 ? ` — ${w.task}` : w.task));
+            const why = workingWhyText(w, s, true);
+            if (why) task.appendChild(el('span', 'research-overview__why', ` · ${why}`));
+            if (task.childNodes.length > 0) text.appendChild(task);
+        } else if (!w && run.lastStep && shown.state !== 'ended') {
+            text.appendChild(el('div', 'research-overview__run-task', run.lastStep));
+        }
+        const note = (t: string) => text.appendChild(el('div', 'research-overview__run-note', t));
+        if (run.kind === 'queue' && shown.state !== 'ended') {
+            // The general run and the directions with a run of their own (§6): what it skips, what it finishes first.
+            const lines = linesWithRun(runs);
+            const skipped = s.researches.filter(x => lines.has(x.id));
+            const doing = run.workers.find(x => x.research && lines.has(x.research));
+            if (doing) {
+                const line = s.researches.find(x => x.id === doing.research);
+                note(L.runFinishesThen(run.task ?? doing.task, line?.name ?? doing.research!));
+            }
+            if (skipped.length > 0) note(L.runSkips(skipped.map(x => x.name).join(', ')));
+        }
+        if (shown.state === 'waiting' && shown.wait?.for === 'browser') note(L.runBrowserNote);
+        if (shown.state === 'waiting' && shown.wait?.reason) note(shown.wait.reason);
+        if (shown.state === 'ended' && run.kind === 'line') note(L.runAfterStop);
+        if (local?.state === 'failed' && shown.state !== 'ended') {
+            const failed = el('div', 'research-overview__run-note research-overview__run-failed', local.text);
+            failed.setAttribute('role', 'alert');
+            text.appendChild(failed);
+        }
+        if (shown.state !== 'ended') {
+            const actions = this.overviewRunActions(shown, s, mode, d);
+            if (actions) text.appendChild(actions);
+        }
+        li.appendChild(text);
+        return li;
+    },
+
+    /** A run's state at the right of its head: working (a dot), waiting (what for, until when), finishing, ended. */
+    overviewRunState(run: LiveRun): HTMLElement {
+        const L = strings.live;
+        const clock = (iso: string | undefined): string => {
+            const ts = iso ? Date.parse(iso) : NaN;
+            return Number.isFinite(ts) ? formatLiveClock(ts, Date.now(), getCurrentLanguage()) : '';
+        };
+        const span = el('span', 'research-overview__run-state');
+        switch (run.state) {
+            case 'working':
+                span.classList.add('is-working');
+                span.appendChild(el('i', 'research-overview__run-dot')).setAttribute('aria-hidden', 'true');
+                span.appendChild(document.createTextNode(L.runStateWorking));
+                break;
+            case 'starting':
+            case 'finishing':
+                span.classList.add('is-busy');
+                span.setAttribute('role', 'status');
+                span.insertAdjacentHTML('afterbegin', busySpinHtml(12));
+                span.appendChild(document.createTextNode(run.state === 'starting' ? L.runStateStarting : L.runStateFinishing));
+                break;
+            case 'waiting': {
+                span.classList.add('is-wait');
+                const t = clock(run.wait?.until);
+                const why = run.wait?.for ?? 'other';
+                span.textContent = why === 'limit' ? (t ? L.runStateLimit(t) : L.runStateLimitNoTime)
+                    : why === 'archive' ? (t ? L.runStateArchive(t) : L.runStateArchiveNoTime)
+                    : why === 'browser' ? L.runStateBrowser
+                    : why === 'download' ? L.runStateDownload
+                    : t ? L.runStateWaitingUntil(t) : L.runStateWaiting;
+                break;
+            }
+            case 'ended':
+                span.classList.add('is-ended');
+                span.textContent = L.runStateEnded(clock(run.endedAt !== undefined ? new Date(run.endedAt).toISOString() : undefined));
+                break;
+        }
+        return span;
+    },
+
+    /**
+     * A run's actions (spec 126 U10 §4): Show in tree (the direction's people lit; the general run: its person) ·
+     * Stop (through the bridge, no mark; with `run.stop`) · Finish and stop (the research's terminal, by the run's
+     * id). Waiting for the limit, an archive or a reason of its own: no Finish and stop, as a paused session today.
+     * Finishing: Show in tree only. On the phone's sheet: Show in tree only. Nothing to offer: no row.
+     */
+    overviewRunActions(run: LiveRun, s: LiveSession, mode: Mode, d: LiveDirection | undefined): HTMLElement | null {
+        const L = strings.live;
+        const row = el('div', 'research-overview__now-actions research-overview__run-actions');
+        const workerPerson = run.workers.map(w => personByRefn(w.person)).find((p): p is Person => !!p);
+        const show = d && directionPersonIds(d) ? () => this.showDirectionInTree(d, mode)
+            : workerPerson ? () => this.overviewShowPerson(workerPerson.id, mode) : null;
+        if (show) {
+            const btn = el('button', 'link-button research-overview__show-in-tree', L.showInTree);
+            btn.type = 'button';
+            btn.onclick = show;
+            if (d) lightsGroup(btn, 'direction', d.name);
+            row.appendChild(btn);
+        }
+        const live = run.state === 'working' || run.state === 'waiting';
+        if (mode !== 'sheet' && live && runStopOn(s.features)) {
+            const btn = el('button', 'link-button research-overview__run-stop');
+            btn.type = 'button';
+            btn.title = L.runStopHint;
+            if (runStopNote(run)?.state === 'stopping') {
+                btn.setAttribute('aria-disabled', 'true');
+                btn.setAttribute('aria-busy', 'true');
+                btn.classList.add('is-busy');
+                btn.innerHTML = `${busySpinHtml(12)}${researchBridgeActionLabel(L.runStopping, 'run-stop')}`;
+            } else {
+                btn.innerHTML = researchBridgeActionLabel(L.runStop, 'run-stop');
+                btn.onclick = () => void this.stopRun(run.id);
+            }
+            row.appendChild(btn);
+        }
+        const finishable = run.state === 'working' || (run.state === 'waiting' && (run.wait?.for === 'browser' || run.wait?.for === 'download'));
+        const finish = mode !== 'sheet' && finishable ? this.activeResearchLink('finish', { run: run.id }) : null;
+        if (finish) {
+            const btn = setResearchActionLabel(el('button', 'link-button research-overview__finish'), L.finishSession, researchLinkMark('finish'));
+            btn.type = 'button';
+            btn.title = L.finishHint;
+            btn.onclick = () => this.launchResearchLink(finish);
+            row.appendChild(btn);
+        }
+        return row.childElementCount > 0 ? row : null;
+    },
+
+    /**
+     * Stop of one run (spec 126 U10 §4): "Stopping…" while the bridge writes it, then the run finishing at once
+     * (the bridge's status says so next); a refusal said under the run. A run the bridge no longer knows is done.
+     */
+    async stopRun(runId: string): Promise<void> {
+        if (runStopNote({ id: runId })?.state === 'stopping') return;
+        runStopNotes.set(runId, { state: 'stopping' });
+        this.renderResearchOverview();
+        const r = await this.writeRunStop(runId);
+        runStopNotes.set(runId, r.ok ? { state: 'stopped' } : { state: 'failed', text: r.text });
+        this.renderResearchOverview();
+    },
+
+    /**
+     * Stop of one run written through the bridge, the status read again after it; the refusal's sentence.
+     * The overview's own window asks its main window.
+     */
+    async writeRunStop(runId: string): Promise<{ ok: true } | { ok: false; text: string }> {
+        const L = strings.live;
+        const s = researchSession();
+        if (!s || s.ended) return { ok: false, text: L.dirBridgeDown };
+        const r = await postRunStop(s.bridge.base, runId);
+        // 404 runs.unknown: the run is gone, nothing more to stop.
+        if (r.ok || r.status === 404) {
+            this.researchStatusAfterWrite(s);
+            return { ok: true };
+        }
+        const said = r.code === 'held' ? r.held?.said || r.reason : r.reason;
+        return {
+            ok: false,
+            text: r.code === 'busy' ? L.dirBusy : r.code === 'network' ? L.dirBridgeDown : said ? L.runStopFailedSaid(said) : L.runStopFailed,
+        };
     },
 
     /** Progress: the changes while watching, by task, filtered; hover and click reach the tree. */

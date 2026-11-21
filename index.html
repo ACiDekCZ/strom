@@ -24677,8 +24677,41 @@
             .research-direction__run-btn { width: 100%; }
         }
         /* "In Now ›": the run's block lit a moment (as a task moved by "Do next"). */
-        .research-overview__now :is(.research-overview__now-row, .live-now-starting).is-flash { background: var(--primary-soft); border-radius: var(--r-md); }
-        .research-overview__now :is(.research-overview__now-row, .live-now-starting).is-flash:focus { outline: none; }
+        .research-overview__now :is(.research-overview__now-row, .live-now-starting, .research-overview__run).is-flash { background: var(--primary-soft); border-radius: var(--r-md); }
+        .research-overview__now :is(.research-overview__now-row, .live-now-starting, .research-overview__run).is-flash:focus { outline: none; }
+        /* Now with the runs side by side (spec 126 U10 §3, §4): a block per run, its state at the right of its head. */
+        .research-overview__runs > li.research-overview__run {
+            display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start;
+            padding: 9px 0; border-bottom: 0; border-top: 1px solid var(--divider);
+        }
+        .research-overview__runs > li:first-child { border-top: 0; }
+        .research-overview__runs > li.live-now-starting + li.research-overview__run,
+        .research-overview__runs > li.research-overview__run + li.live-now-starting { border-top: 1px solid var(--divider); }
+        .live-line__glyph--queue { background: transparent; border: 1px dashed var(--line-color); box-sizing: border-box; }
+        .research-overview__run-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+        .research-overview__run-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+        .research-overview__run-name { font-size: 14px; font-weight: 600; color: var(--text); }
+        .research-overview__run.is-ended .research-overview__run-name { color: var(--text-light); }
+        .research-overview__run-code { font-size: 12px; font-weight: 400; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .research-overview__run-state {
+            margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+            font-size: 12px; color: var(--text-light); white-space: nowrap;
+        }
+        .research-overview__run-state.is-working { color: var(--primary); font-weight: 600; }
+        .research-overview__run-state.is-wait { color: var(--warning-text); }
+        .research-overview__run-state.is-ended { color: var(--text-faint); }
+        .research-overview__run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); flex: none; }
+        .research-overview__run-meta { font-size: 12px; color: var(--text-light); }
+        .research-overview__now .research-overview__run-meta .live-time { display: inline; font-size: inherit; color: inherit; }
+        .research-overview__run-task { font-size: 13px; line-height: 1.4; color: var(--text); }
+        .research-overview__run-person { font-family: var(--font-serif); }
+        .research-overview__run-note { font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .research-overview__run-failed { color: var(--warning-text); }
+        .research-overview__run-actions > .research-overview__run-stop.is-busy { color: var(--text-light); text-decoration: none; cursor: default; }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            /* Narrow: the state goes under the name when both do not fit, never cut. */
+            .research-overview__run-state { white-space: normal; }
+        }
         .research-direction__limit { color: var(--text-faint); }
         .research-direction__found { font-size: 13px; color: var(--text); display: flex; flex-wrap: wrap; column-gap: 6px; }
         .research-direction__found-parts { display: inline-flex; flex-wrap: wrap; column-gap: 6px; }

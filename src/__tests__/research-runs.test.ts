@@ -16,6 +16,8 @@ import {
 import { LiveDirection, LiveQueueCounts, LiveQueueItem, sanitizeLiveStatus } from '../research-link.js';
 import { postRunLimit, postRunStop, runLimitRaise } from '../research-runs-write.js';
 import { createDirection, previewDirection, undoGather } from '../research-directions-write.js';
+import { setLanguage, strings } from '../strings.js';
+import { pausedReasonText } from '../ui/research-ui.js';
 
 const TREE = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
 const FEATURES = ['run.lines', 'run.agents', 'run.stop', 'run.limit', 'directions.move', 'queue.page', 'offLine.branches'];
@@ -404,5 +406,38 @@ describe('writes of the runs through the bridge', () => {
         const old = await createDirection(BASE, { person: 'P0004', direction: 'ancestors', name: 'Šustrovi' });
         expect(sent(2)).toEqual({ person: 'P0004', direction: 'ancestors', name: 'Šustrovi' });
         expect(old.ok && 'moved' in old).toBe(false);
+    });
+});
+
+describe('the texts of the runs in Now (§3, §4)', () => {
+    afterEach(() => setLanguage('en'));
+
+    it('counts the agents in the heading and the state tile in each language (1, 2, 5)', () => {
+        setLanguage('cs');
+        expect([1, 2, 5].map(n => strings.live.nowAgents(n))).toEqual(['Teď · 1 agent', 'Teď · 2 agenti', 'Teď · 5 agentů']);
+        expect([1, 2, 5].map(n => strings.live.stateAgents(n))).toEqual(['Pracuje 1 agent', 'Pracují 2 agenti', 'Pracuje 5 agentů']);
+        expect([1, 2, 5].map(k => strings.live.stateAgentsWaiting(k, '14:00')))
+            .toEqual(['1 čeká na limit do 14:00', '2 čekají na limit do 14:00', '5 čeká na limit do 14:00']);
+        setLanguage('de');
+        expect([1, 2, 5].map(n => strings.live.nowAgents(n))).toEqual(['Jetzt · 1 Agent', 'Jetzt · 2 Agenten', 'Jetzt · 5 Agenten']);
+        expect([1, 2, 5].map(n => strings.live.stateAgents(n))).toEqual(['1 Agent arbeitet', '2 Agenten arbeiten', '5 Agenten arbeiten']);
+        expect(strings.live.stateAgentsWaiting(2, '14:00')).toBe('2 warten auf das Limit bis 14:00');
+        setLanguage('pl');
+        expect([1, 2, 5].map(n => strings.live.nowAgents(n))).toEqual(['Teraz · agenci: 1', 'Teraz · agenci: 2', 'Teraz · agenci: 5']);
+        expect([1, 2, 5].map(n => strings.live.stateAgents(n))).toEqual(['Pracuje agentów: 1', 'Pracuje agentów: 2', 'Pracuje agentów: 5']);
+        expect([1, 2, 5].map(k => strings.live.stateAgentsWaiting(k, '14:00')))
+            .toEqual(['1 czeka na limit do 14:00', '2 czekają na limit do 14:00', '5 czeka na limit do 14:00']);
+        setLanguage('en');
+        expect([1, 3].map(n => strings.live.nowAgents(n))).toEqual(['Now · 1 agent', 'Now · 3 agents']);
+        expect([1, 3].map(n => strings.live.stateAgents(n))).toEqual(['1 agent working', '3 agents working']);
+    });
+
+    it('says the codes of a paused run in the app\'s words and a reason of the research as it is', () => {
+        setLanguage('cs');
+        expect(pausedReasonText('limit')).toBe('čeká na limit předplatného');
+        expect(pausedReasonText('archive')).toBe('čeká na archiv');
+        expect(pausedReasonText('Archiv má dnes údržbu')).toBe('Archiv má dnes údržbu');
+        setLanguage('en');
+        expect(pausedReasonText('limit')).toBe('waiting for the subscription limit');
     });
 });

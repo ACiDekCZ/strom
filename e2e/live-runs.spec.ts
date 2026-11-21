@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
-import { directionRow, launchedLinks, openOverview, overview } from './live-directions-bridge';
-import { RUN_DIRECTIONS, RUN_FEATURES, followRuns } from './live-runs-bridge';
+import { UUID, directionRow, launchedLinks, openOverview, overview } from './live-directions-bridge';
+import { RUNS, RUN_DIRECTIONS, RUN_FEATURES, RUN_WORKING, followRuns } from './live-runs-bridge';
 
 /**
  * A direction's own run (spec 126 U10 §1, §2): "Put an agent on this
@@ -209,5 +209,144 @@ test.describe('the dialog before a direction\'s run', () => {
         const over = await d.evaluate((m) => [m, ...m.querySelectorAll<HTMLElement>('.modal-header, .queue-work__head, h2, .queue-work__agent, .queue-work__foot')]
             .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.className || e.tagName));
         expect(over).toEqual([]);
+    });
+});
+
+/**
+ * The runs in Now (spec 126 U10 §3, §4): a block per run, the general run
+ * first, then the directions' runs in their order, each with its state, what
+ * the general run skips, its own Finish and stop (by the run's id) and Stop
+ * through the bridge (no mark); a run ended a moment ago stays a minute.
+ */
+const T = new Date('2026-11-21T10:30:00Z');
+const at = (min: number): string => new Date(T.getTime() + min * 60_000).toISOString();
+/** The page's clock text of an ISO time (the browser's own zone). */
+const clockOf = (page: Page, iso: string) => page.evaluate(i => new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' }).format(new Date(i)), iso);
+
+/** The two runs of the sample with times of the test's clock, and G0002 waiting for the limit until `until` when asked. */
+function runsAt(opts: { limitUntil?: string } = {}): Record<string, unknown>[] {
+    const runs: Record<string, unknown>[] = RUNS.map((r, i) => ({ ...r, since: at(i === 0 ? -50 : -10) }));
+    if (opts.limitUntil) {
+        runs.push({ id: 'run-2c44', research: 'G0002', agent: 'codex', agentName: 'Codex', since: at(-30), state: 'paused',
+            paused: { until: opts.limitUntil, reason: 'limit' }, session: 'N0143', sessions: 2 });
+    }
+    return runs;
+}
+const workingAt = (): Record<string, unknown>[] => RUN_WORKING.map((w, i) => ({ ...w, since: at(i === 0 ? -4 : -2) }));
+const threeRunDirections = (): Record<string, unknown>[] => directions('G0002', { run: 'run-2c44', canStart: false, why: 'running', working: true });
+
+const now = (page: Page) => overview(page).locator('#ov-sec-now');
+const nowTitle = (page: Page) => overview(page).locator('.live-section__head[aria-controls="ov-sec-now"] .live-section__title');
+const block = (page: Page, run: string) => now(page).locator(`.research-overview__run[data-run="${run}"]`);
+
+test.describe('the runs in Now', () => {
+    test('three runs: a block each in order, the wait with its time and no Finish, Skips on the general run only, the state tile', async ({ page }) => {
+        await page.clock.install({ time: T });
+        const until = at(180);
+        await followRuns(page, { runs: runsAt({ limitUntil: until }), working: workingAt(), researches: threeRunDirections() });
+        await openOverview(page);
+        const t = await clockOf(page, until);
+        await expect(now(page).locator('.research-overview__run')).toHaveCount(3);
+        expect(await now(page).locator('.research-overview__run').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.run)))
+            .toEqual(['run-8f2c', 'run-1a07', 'run-2c44']);
+        await expect(nowTitle(page)).toHaveText('Now · 3 agents');
+
+        const general = block(page, 'run-8f2c');
+        await expect(general.locator('.research-overview__run-name')).toHaveText('Whole queue');
+        await expect(general.locator('.live-line__glyph--queue')).toHaveCount(1);
+        await expect(general.locator('.research-overview__run-state')).toHaveText('working');
+        await expect(general.locator('.research-overview__run-note')).toContainText(['Skips: Kubíčkovi z Dolní Lhoty, Malí z Horní Vsi']);
+
+        const g1 = block(page, 'run-1a07');
+        await expect(g1.locator('.research-overview__run-name')).toHaveText('Kubíčkovi z Dolní Lhoty');
+        await expect(g1.locator('.research-overview__run-code')).toHaveText('G0001');
+        await expect(g1.locator('.research-overview__run-state')).toHaveText('working');
+        await expect(g1.locator('.research-overview__run-meta')).toHaveText(/^Claude · since \d{1,2}:\d{2}/);
+        await expect(g1.locator('.research-overview__run-person')).toHaveText('Vojtěch Kubíček');
+        await expect(g1.locator('.research-overview__finish')).toHaveCount(1);
+        await expect(g1).not.toContainText('Skips');
+
+        const g2 = block(page, 'run-2c44');
+        await expect(g2.locator('.research-overview__run-state')).toHaveText(`waiting for the subscription limit until ${t}`);
+        await expect(g2.locator('.research-overview__run-state')).toHaveClass(/is-wait/);
+        await expect(g2.locator('.research-overview__finish')).toHaveCount(0);
+        await expect(g2).not.toContainText('Skips');
+
+        const tile = overview(page).locator('.research-overview__summary .research-overview__cell').first();
+        await expect(tile.locator('.research-overview__cell-value')).toHaveText('3 agents working');
+        await expect(tile.locator('.research-overview__cell-sub')).toHaveText(`1 waiting for the limit until ${t}`);
+    });
+
+    test('Finish and stop of G0001 names its run, not the first session; Stop goes through the bridge without a mark', async ({ page }) => {
+        await page.clock.install({ time: T });
+        const b = await followRuns(page, { runs: runsAt(), working: workingAt() });
+        await openOverview(page);
+        const g1 = block(page, 'run-1a07');
+        const finish = g1.locator('.research-overview__finish');
+        await expect(finish).toHaveAttribute('title', 'The agent writes up findings and closes the session');
+        await expect(finish.locator('.research-open-mark')).toHaveCount(1);
+        await finish.click();
+        await expect.poll(() => launchedLinks(page)).toEqual([`strom-research://finish?tree=${UUID}&run=run-1a07`]);
+
+        const stop = g1.locator('.research-overview__run-stop');
+        await expect(stop).toHaveText('Stop');
+        await expect(stop).toHaveAttribute('title', 'Finishes the task in progress and starts no other');
+        await expect(stop.locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
+        // Stop before Finish and stop, after Show in tree.
+        expect(await g1.locator('.research-overview__run-actions > .link-button').evaluateAll(els => els.map(e => e.className.split(' ')[1])))
+            .toEqual(['research-overview__show-in-tree', 'research-overview__run-stop', 'research-overview__finish']);
+        await stop.click();
+        await expect(g1.locator('.research-overview__run-state')).toHaveText('finishing – the agent writes up findings');
+        await expect(g1.locator('.research-overview__run-stop, .research-overview__finish')).toHaveCount(0);
+        await expect(g1.locator('.research-overview__show-in-tree')).toHaveCount(1);
+        expect(b.writes.filter(w => w.method === 'POST').map(w => [w.path, w.body])).toEqual([['runs/stop', { run: 'run-1a07' }]]);
+        // The other run goes on as it was.
+        await expect(block(page, 'run-8f2c').locator('.research-overview__run-state')).toHaveText('working');
+        await expect(block(page, 'run-8f2c').locator('.research-overview__run-stop')).toHaveCount(1);
+    });
+
+    test('without run.stop no Stop, Finish and stop stays', async ({ page }) => {
+        await page.clock.install({ time: T });
+        await followRuns(page, { runs: runsAt(), working: workingAt(), features: RUN_FEATURES.filter(f => f !== 'run.stop') });
+        await openOverview(page);
+        await expect(block(page, 'run-1a07').locator('.research-overview__finish')).toHaveCount(1);
+        await expect(now(page).locator('.research-overview__run-stop')).toHaveCount(0);
+    });
+
+    test('a run gone: "ended at …" and the whole queue takes its direction again, no Skips; after a minute Now is as before', async ({ page }) => {
+        await page.clock.install({ time: T });
+        const b = await followRuns(page, { runs: runsAt(), working: workingAt(), fastReconnect: true });
+        await openOverview(page);
+        await expect(block(page, 'run-8f2c').locator('.research-overview__run-note')).toHaveText(['Skips: Kubíčkovi z Dolní Lhoty']);
+        // Its end on the page's clock (the test's T and the moments since).
+        const ended = new Date(await page.evaluate(() => Date.now())).toISOString();
+        b.runs = b.runs!.filter(r => r.id !== 'run-1a07');
+        b.runsEnded = [{ id: 'run-1a07', research: 'G0001', agent: 'claude', since: at(-10), ended, why: 'stopped' }];
+        b.working = b.working.filter(w => w.run !== 'run-1a07');
+        const g1 = block(page, 'run-1a07');
+        await expect(g1.locator('.research-overview__run-state')).toHaveText(/^ended at \d{1,2}:\d{2}/, { timeout: 10000 });
+        await expect(g1).toHaveClass(/is-ended/);
+        await expect(g1.locator('.research-overview__run-note')).toHaveText(['The whole queue takes the direction again.']);
+        await expect(g1.locator('.research-overview__run-actions')).toHaveCount(0);
+        await expect(block(page, 'run-8f2c')).not.toContainText('Skips');
+        await expect(nowTitle(page)).toHaveText('Now · 1 agent');
+        // A minute later the block goes: the general run alone is Now as before.
+        await page.clock.runFor(61_000);
+        await expect(g1).toHaveCount(0);
+        await expect(now(page).locator('.research-overview__run')).toHaveCount(0);
+        await expect(now(page).locator('.research-overview__now-row')).toHaveCount(1);
+    });
+
+    test('a phone: every block and its state, Show in tree only', async ({ page }) => {
+        await page.clock.install({ time: T });
+        await followRuns(page, { runs: runsAt({ limitUntil: at(180) }), working: workingAt(), researches: threeRunDirections(), size: { width: 390, height: 844 } });
+        await page.locator('#live-panel .live-panel-toggle').click();
+        await expect(overview(page)).toHaveClass(/research-overview--sheet/);
+        await expect(now(page).locator('.research-overview__run')).toHaveCount(3);
+        await expect(now(page).locator('.research-overview__run-note')).toContainText(['Skips: Kubíčkovi z Dolní Lhoty, Malí z Horní Vsi']);
+        await expect(now(page).locator('.research-overview__finish, .research-overview__run-stop')).toHaveCount(0);
+        await expect(block(page, 'run-1a07').locator('.research-overview__show-in-tree')).toHaveCount(1);
+        const over = await now(page).evaluate(n => [...n.querySelectorAll<HTMLElement>('.research-overview__run')].filter(e => e.scrollWidth > e.clientWidth + 1).length);
+        expect(over).toBe(0);
     });
 });
