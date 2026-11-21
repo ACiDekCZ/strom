@@ -105,6 +105,17 @@ export interface TimelineSvgOptions {
     measureLabel?: (text: string) => number;
     /** Lineage signs before the names (spec 112); absent or the marker off: none. */
     branches?: TimelineBranchSigns | null;
+    /**
+     * The window's selection highlighted (spec 098 §11a, screen only): its
+     * rows framed (`evidence-hit`), the others dimmed (`evidence-dim`).
+     */
+    selection?: ReadonlySet<string> | null;
+    /**
+     * Only the rows `from` ≤ i < `to` drawn (a long timeline draws the rows
+     * in view and a margin); the height, the axis and the grid stay the
+     * whole timeline's. Absent: every row.
+     */
+    rowWindow?: { from: number; to: number } | null;
 }
 
 /** Whether the rows carry a lineage sign slot (the markers on). */
@@ -405,6 +416,8 @@ function rowSvg(
     const focused = r.personId === opts.focusId ? ' focused' : '';
     const highlight = opts.highlightIds
         ? (opts.highlightIds.has(r.personId) ? ' search-hit' : ' search-dim') : '';
+    const selected = opts.selection && mode === 'screen'
+        ? (opts.selection.has(r.personId) ? ' evidence-hit' : ' evidence-dim') : '';
 
     const nameEsc = esc(r.name);
     const yearsStr = rowYears(r);
@@ -456,7 +469,7 @@ function rowSvg(
             + `${slot}<span class="tl-nm">${nameEsc}</span> <span class="tl-yr">${yearsEsc}</span></div></foreignObject>`;
     }
 
-    return `<g class="timeline-bar${focused}${highlight}" data-person-id="${esc(r.personId)}">`
+    return `<g class="timeline-bar${focused}${highlight}${selected}" data-person-id="${esc(r.personId)}">`
         + `<rect x="0" y="${y}" width="${rowWidth}" height="${rowH}" class="tl-rowhit" fill="transparent"/>`
         + label
         + `<rect x="${x1.toFixed(1)}" y="${barY}" width="${w.toFixed(1)}" height="14" rx="3" fill="${color}" class="tl-bar-rect"/>`
@@ -529,6 +542,14 @@ function localSvg(
 }
 
 /**
+ * Where the first row starts in the timeline's SVG (px): under the axis band
+ * and, on screen, the history row. Row i starts `i * rowH` below it.
+ */
+export function timelineRowsTop(model: TimelineModel, opts: Pick<TimelineSvgOptions, 'mode' | 'narrow'>): number {
+    return TOP + (opts.mode === 'screen' && model.history ? historyRowHeight(!!opts.narrow) : 0);
+}
+
+/**
  * Build the timeline SVG string. In 'screen' mode this is byte-identical to the
  * former inline renderer markup; in 'poster' mode it embeds its own light-theme
  * styles and self-contained name labels.
@@ -557,8 +578,12 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
     }).join('');
 
     // A shared event of two rows or more: one mark instead of the rows' dots, drawn over them (spec 085 §2e).
-    const shared = model.shared ?? [];
-    const marked = new Set(shared.map(m => m.shareId));
+    // A window of rows (a long timeline): the rows in it, the marks over them.
+    const win = opts.rowWindow ?? null;
+    const inWindow = (i: number): boolean => !win || (i >= win.from && i < win.to);
+    const allShared = model.shared ?? [];
+    const marked = new Set(allShared.map(m => m.shareId));
+    const shared = win ? allShared.filter(m => m.rows[0] < win.to && m.rows[m.rows.length - 1] >= win.from) : allShared;
     const geoms = shared.map(m => sharedMarkGeom(m, ROW_H, xOf));
     const spots = placeSharedLabels(geoms.map(g => ({ ...g, rows: g.mark.rows })), {
         rowH: ROW_H, rowCount: model.rows.length, plotX0, plotX1: plotX0 + plotW, measure: opts.measureLabel ?? estimateLabelWidth,
@@ -567,7 +592,9 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
     const marks = geoms.map((g, i) => sharedMarkSvg(g, spots[i], model.rows, opts)).join('');
     // Local history on the lines (spec 121 §8): below 1.5 px per year one symbol per line.
     const plot = { x0: plotX0, pxPerYear: plotW / Math.max(1, model.axis.maxYear - model.axis.minYear) };
-    const rowsSvg = model.rows.map((r, i) => rowSvg(r, i, opts, xOf, marked, plot)).join('') + marks;
+    let rowsSvg = '';
+    model.rows.forEach((r, i) => { if (inWindow(i)) rowsSvg += rowSvg(r, i, opts, xOf, marked, plot); });
+    rowsSvg += marks;
     // Shifted by the history row; print drops the row and the shift (index.html @media print).
     const rows = hist ? `<g class="tl-rows" transform="translate(0 ${histH})">${rowsSvg}</g>` : rowsSvg;
     // Drawn after the rows: a cluster's touch target may reach into the first row.

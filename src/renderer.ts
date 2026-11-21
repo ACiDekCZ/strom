@@ -62,7 +62,8 @@ import { renderDebugOverlay, clearDebugOverlay } from './debug-overlay.js';
 import { debugPanel } from './debug-panel.js';
 import { yearOf, displayYear, formatFlexDate, shortYearRanges } from './dates.js';
 import { computeTimelineModel } from './timeline.js';
-import { buildTimelineSvg, TimelineBranchSigns } from './timeline-chart.js';
+import { buildTimelineSvg, timelineRowsTop, TimelineBranchSigns, TimelineSvgOptions } from './timeline-chart.js';
+import type { TimelineModel } from './timeline.js';
 import { HISTORY_CHANGED_EVENT } from './ui/history-ui.js';
 import { TIMELINE_HISTORY_OPTIONS_EVENT } from './ui/timeline-history-ui.js';
 import { sortLifeEvents } from './events.js';
@@ -319,6 +320,15 @@ export function imageBySha(shell: string, inner: string): string {
 
 /** How often a view drawn its own way is drawn again while images come (ms). */
 const IMAGE_VIEW_REDRAW_MS = 600;
+/**
+ * A Timeline of more rows draws only those in view and TIMELINE_WINDOW_MARGIN
+ * rows on each side (spec 098 §11a: the Whole tree of a 5 000-person tree);
+ * a scroll that brings rows within TIMELINE_WINDOW_SLACK of the drawn ones'
+ * edge into view draws them anew.
+ */
+const TIMELINE_WINDOW_MIN_ROWS = 150;
+const TIMELINE_WINDOW_MARGIN = 20;
+const TIMELINE_WINDOW_SLACK = 5;
 /** How often a pan or a zoom orders the queue of images anew (ms). */
 const IMAGE_PRIORITY_MS = 250;
 
@@ -1054,8 +1064,9 @@ class TreeRendererClass {
         // The Timeline's history popover (spec 121 §2) belongs to that view only.
         if (this.viewMode !== 'timeline') UI.closeTimelinePopover?.();
         // Chrome that belongs to some views only (the evidence pill) reads it here.
-        // A followed research's card stood below the Fan or the Table view's bar: back at the top it is placed again.
-        const leftFan = (document.body.dataset.viewMode === 'fan' && this.viewMode !== 'fan') || document.body.dataset.viewMode === 'table';
+        // A followed research's card stood below the Fan's, the Timeline's or the Table view's bar: back at the top it is placed again.
+        const was = document.body.dataset.viewMode;
+        const leftFan = ((was === 'fan' || was === 'timeline') && this.viewMode !== was) || was === 'table';
         document.body.dataset.viewMode = this.viewMode;
         for (const [mode, view] of Object.entries(standalone)) {
             const el = document.getElementById(view.id);
@@ -4740,7 +4751,8 @@ class TreeRendererClass {
         if (this.viewMode === 'fan') {
             this.fanView?.revealPerson(id);
         } else if (this.viewMode === 'timeline') {
-            this.scrollTimelineRow(this.markTimelineWindowSelected());
+            this.markTimelineWindowSelected();
+            this.scrollTimelineToPerson(id);
         } else if (this.viewMode === 'map') {
             UI.revealMapPerson(id);
         }
@@ -4749,16 +4761,26 @@ class TreeRendererClass {
     /** The Timeline scrolled to the person's row when it is out of view (a centre chosen in another window, spec 110 §3). */
     revealTimelinePerson(id: PersonId): void {
         if (this.viewMode !== 'timeline') return;
-        const sel = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id;
-        this.scrollTimelineRow(document.querySelector<SVGGElement>(`#timeline-container .timeline-bar[data-person-id="${sel}"]`));
+        this.scrollTimelineToPerson(id);
     }
 
-    private scrollTimelineRow(row: SVGGElement | null): void {
-        const box = document.getElementById('timeline-container');
-        if (!row || !box) return;
-        const r = row.getBoundingClientRect(), c = box.getBoundingClientRect();
-        if (r.top < c.top) box.scrollBy({ top: r.top - c.top - 8, behavior: 'smooth' });
-        else if (r.bottom > c.bottom) box.scrollBy({ top: r.bottom - c.bottom + 8, behavior: 'smooth' });
+    /**
+     * The Timeline scrolled to a person's row when it is out of view (below
+     * the sticky bar); a long timeline's row not drawn yet is found by its
+     * place among the rows and drawn by the scroll.
+     */
+    private scrollTimelineToPerson(id: PersonId): void {
+        const d = this.timelineDraw;
+        const g = this.timelineGeometry();
+        if (!d || !g || !d.container.isConnected) return;
+        const i = d.model.rows.findIndex(r => r.personId === id);
+        if (i < 0) return;
+        const box = d.container;
+        const rowTop = g.rowsTop + i * g.rowH;
+        const viewTop = box.scrollTop + g.bar;
+        const viewBottom = box.scrollTop + box.clientHeight;
+        if (rowTop < viewTop) box.scrollBy({ top: rowTop - viewTop - 8, behavior: 'smooth' });
+        else if (rowTop + g.rowH > viewBottom) box.scrollBy({ top: rowTop + g.rowH - viewBottom + 8, behavior: 'smooth' });
     }
 
     getWindowSelected(): PersonId | null {
@@ -7641,6 +7663,8 @@ class TreeRendererClass {
     }
 
     private renderTimeline(container: HTMLElement): void {
+        // The view's bar (scope, spec 098 §11a) stays; the chart is drawn into the body under it.
+        const body = UI.timelineChrome(container);
         // Delegate bar clicks once (safe against odd person ids in JSON imports).
         if (!container.dataset.wired) {
             container.dataset.wired = '1';
@@ -7653,6 +7677,8 @@ class TreeRendererClass {
                 return true;
             };
             container.addEventListener('click', (e) => {
+                // The view's bar and the choice of a selection under it handle their own clicks.
+                if ((e.target as Element).closest('#timeline-toolbar, .scope-pick')) return;
                 if (histCluster(e)) return;
                 // The row's label opens its options (spec 121 §5); "Clear filter" of an empty filter (§10).
                 const histBtn = (e.target as Element).closest<HTMLElement>('.tl-hist-btn');
@@ -7683,37 +7709,52 @@ class TreeRendererClass {
             window.addEventListener(HISTORY_CHANGED_EVENT, redraw);
             // The row's options changed (spec 121 §5): drawn from what was computed, nothing read anew.
             window.addEventListener(TIMELINE_HISTORY_OPTIONS_EVENT, redraw);
+            // A long timeline draws the rows in view: scrolled, the rows coming into view are drawn.
+            let scrollFrame = 0;
+            container.addEventListener('scroll', () => {
+                if (scrollFrame || !this.timelineDraw?.windowed) return;
+                scrollFrame = requestAnimationFrame(() => {
+                    scrollFrame = 0;
+                    if (this.viewMode === 'timeline' && this.timelineWindowStale()) this.drawTimelineRows();
+                });
+            }, { passive: true });
+            // Paper gets every row (index.html prints the whole timeline), the screen its window again after.
+            window.addEventListener('beforeprint', () => {
+                this.timelinePrinting = true;
+                if (this.viewMode === 'timeline' && this.timelineDraw?.windowed) this.drawTimelineRows();
+            });
+            window.addEventListener('afterprint', () => {
+                this.timelinePrinting = false;
+                if (this.viewMode === 'timeline' && this.timelineDraw?.windowed) this.drawTimelineRows();
+            });
         }
 
-        const ids = [...this.positions.keys()] as unknown as string[];
+        // The rows of the Timeline's scope (spec 098 §11a): This view, the selection or the whole tree.
+        const ids = UI.timelineScopePersons() as unknown as string[];
         const todayYear = new Date().getFullYear();
         // The history row of the whole timeline (spec 121 §1): kept while the rows and the data stay, the focus only its line.
         const history = UI.timelineHistoryAll(ids, this.focusPersonId);
         const model = computeTimelineModel(DataManager.getData(), ids, todayYear, history ? { history } : {});
         UI.setTimelineHistoryDrawn(model.history?.events ?? [], model.rows.map(r => r.personId), model.history);
-        const S = strings.timeline;
+        // The window's selection highlighted with This view or the Whole tree (11a·2).
+        const selection = UI.timelineHighlightIds();
+        UI.renderTimelineNote(model.rows.length, model.omittedCount, !!selection);
 
         const isMobile = isMobileViewport();
         const ROW_H = isMobile ? 28 : 30;
         const LABEL_W = isMobile ? 96 : 160;
         const W = Math.max(320, container.clientWidth || 800);
 
-        const omitted = model.omittedCount > 0
-            ? `<div class="tl-omitted">${this.escapeHtml(S.omitted(model.omittedCount))}</div>` : '';
-        const empty = model.rows.length === 0
-            ? `<div class="tl-omitted">${this.escapeHtml(S.empty)}</div>` : '';
-
         // The on-screen SVG is built by the shared pure builder (screen mode:
         // CSS classes + foreignObject labels). The poster reuses the same
         // builder in 'poster' mode; see src/timeline-chart.ts.
-        const svg = buildTimelineSvg(model, {
+        const opts: TimelineSvgOptions = {
             esc: (t) => this.escapeHtml(t),
             width: W,
             rowH: ROW_H,
             labelW: LABEL_W,
             mode: 'screen',
             focusId: this.focusPersonId,
-            highlightIds: this.highlightIds ?? null,
             // Screen SVG is inline in the DOM, so the gender tokens resolve
             // themselves and follow the active theme.
             maleColor: 'var(--male)',
@@ -7722,21 +7763,107 @@ class TreeRendererClass {
             narrow: isMobile,
             measureLabel: this.timelineLabelMeasure(container),
             branches: this.timelineBranchSigns(),
-        });
+            selection,
+        };
+        this.timelineDraw = {
+            model, opts, container, body,
+            windowed: model.rows.length > TIMELINE_WINDOW_MIN_ROWS,
+            drawn: null,
+        };
+        this.drawTimelineRows();
+    }
+
+    /** The Timeline as last computed (its rows, the chart's options): a scroll draws the rows in view from it. */
+    private timelineDraw: {
+        model: TimelineModel;
+        opts: TimelineSvgOptions;
+        container: HTMLElement;
+        body: HTMLElement;
+        /** Only the rows in view (and a margin) are drawn: a long timeline (spec 098 §11a). */
+        windowed: boolean;
+        /** The rows drawn [from, to) (null: all). */
+        drawn: { from: number; to: number } | null;
+    } | null = null;
+    /** The browser prints: every row drawn. */
+    private timelinePrinting = false;
+
+    /** Where the Timeline's rows start in its scrolled content, the bar's height and the rows' height (px). */
+    private timelineGeometry(): { rowsTop: number; bar: number; rowH: number } | null {
+        const d = this.timelineDraw;
+        if (!d) return null;
+        const box = d.container.getBoundingClientRect();
+        const bodyTop = d.body.getBoundingClientRect().top - box.top + d.container.scrollTop
+            + (parseFloat(getComputedStyle(d.body).paddingTop) || 0);
+        const bar = d.container.querySelector<HTMLElement>(':scope > #timeline-toolbar')?.offsetHeight ?? 0;
+        return { rowsTop: bodyTop + timelineRowsTop(d.model, d.opts), bar, rowH: d.opts.rowH };
+    }
+
+    /** The rows in view now [first, last] (behind the sticky bar is not in view). */
+    private timelineRowsInView(): { first: number; last: number } | null {
+        const d = this.timelineDraw;
+        const g = this.timelineGeometry();
+        if (!d || !g) return null;
+        const top = d.container.scrollTop + g.bar - g.rowsTop;
+        const bottom = d.container.scrollTop + d.container.clientHeight - g.rowsTop;
+        const n = d.model.rows.length;
+        return {
+            first: Math.max(0, Math.min(n - 1, Math.floor(top / g.rowH))),
+            last: Math.max(0, Math.min(n - 1, Math.ceil(bottom / g.rowH))),
+        };
+    }
+
+    /** A scroll brought rows near the edge of the drawn ones into view: they are drawn anew. */
+    private timelineWindowStale(): boolean {
+        const d = this.timelineDraw;
+        const view = this.timelineRowsInView();
+        if (!d?.drawn || !view) return false;
+        const n = d.model.rows.length;
+        const need = { from: Math.max(0, view.first - TIMELINE_WINDOW_SLACK), to: Math.min(n, view.last + 1 + TIMELINE_WINDOW_SLACK) };
+        return need.from < d.drawn.from || need.to > d.drawn.to;
+    }
+
+    /**
+     * Draw the Timeline's rows from the last computation: all of them, or
+     * of a long timeline the rows in view and TIMELINE_WINDOW_MARGIN on each
+     * side (the height, the axis and the grid are the whole timeline's).
+     */
+    private drawTimelineRows(): void {
+        const d = this.timelineDraw;
+        if (!d) return;
+        const { model, body, container } = d;
+        let win: { from: number; to: number } | null = null;
+        if (d.windowed && !this.timelinePrinting) {
+            const view = this.timelineRowsInView() ?? { first: 0, last: 0 };
+            const n = model.rows.length;
+            win = { from: Math.max(0, view.first - TIMELINE_WINDOW_MARGIN), to: Math.min(n, view.last + 1 + TIMELINE_WINDOW_MARGIN) };
+        }
+        const empty = model.rows.length === 0
+            ? `<div class="tl-empty">${this.escapeHtml(strings.timeline.empty)}</div>` : '';
+        const svg = buildTimelineSvg(model, { ...d.opts, highlightIds: this.highlightIds ?? null, rowWindow: win });
+        d.drawn = win;
 
         // Nothing changed (a status that brought nothing new for the row): the DOM stays.
-        const html = `${omitted}${empty}${svg}`;
-        if (html === this.timelineHtml && container.firstElementChild) return;
+        const html = `${empty}${svg}`;
+        if (html === this.timelineHtml && body.firstElementChild) return;
         this.timelineHtml = html;
         // A redraw keeps the keyboard on the history cluster it was on.
         const focusedCluster = (document.activeElement as Element | null)?.closest?.('#timeline-container .tl-hist')?.getAttribute('data-hist-ids');
-        container.innerHTML = html;
+        body.innerHTML = html;
+        container.dataset.rowsDrawn = win ? `${win.from}-${win.to}` : 'all';
         this.markTimelineWindowSelected();
         // The row's label drawn anew: open while its options are.
         UI.syncTimelineHistoryButton();
         if (focusedCluster) {
             container.querySelector<SVGGElement>(`.tl-hist[data-hist-ids="${CSS.escape(focusedCluster)}"]`)?.focus({ preventScroll: true });
         }
+    }
+
+    /**
+     * The people of the Timeline's rows as it would draw them now (its scope,
+     * spec 098 §11a): the poster prints the same rows.
+     */
+    getTimelinePersonIds(opts: { output?: boolean } = {}): string[] {
+        return UI.timelineScopePersons(opts.output ? () => this.getVisiblePersonIds() : undefined) as unknown as string[];
     }
 
     /**

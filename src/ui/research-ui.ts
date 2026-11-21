@@ -1798,8 +1798,8 @@ function placeLivePanel(panel: HTMLElement): void {
     const base = panel.getBoundingClientRect();
     const overlaps = (r: DOMRect) => r.width > 0 && r.height > 0 && r.left < base.right && r.right > base.left;
     let top = base.top;
-    // The Table view's bar spans the width under the top bar (and may wrap): the card stands below it.
-    for (const sel of ['#embedded-mode-banner.visible', '#collab-bar', '#collab-badge', 'body[data-view-mode="table"] #table-container > .tv-bar']) {
+    // The Table's and the Timeline's bars span the width under the top bar (and may wrap): the card stands below it.
+    for (const sel of ['#embedded-mode-banner.visible', '#collab-bar', '#collab-badge', 'body[data-view-mode="table"] #table-container > .tv-bar', 'body[data-view-mode="timeline"] #timeline-toolbar']) {
         const node = document.querySelector<HTMLElement>(sel);
         if (!node || getComputedStyle(node).display === 'none') continue;
         const r = node.getBoundingClientRect();

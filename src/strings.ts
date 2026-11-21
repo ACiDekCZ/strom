@@ -4909,6 +4909,9 @@ const stringsEN = {
         wedding: 'Marriage',
         empty: 'No people with a known birth year',
         omitted: (n: number) => `${n} ${n === 1 ? 'person' : 'people'} without a birth year not shown`,
+        /** The view's bar (spec 098 §11a): the rows drawn; with the selection highlighted. */
+        rows: (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`,
+        rowsHighlighted: (n: number) => `${n} ${n === 1 ? 'person' : 'people'} · selection highlighted`,
     },
 
     // Evidence highlight on the tree (the pill of "Show in tree")
@@ -15558,6 +15561,8 @@ const stringsCZ: StringsType = {
         wedding: 'Sňatek',
         empty: 'Žádné osoby se známým rokem narození',
         omitted: (n: number) => `${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')} bez roku narození ${plural('cs', n, 'není zobrazena', 'nejsou zobrazeny', 'není zobrazeno')}`,
+        rows: (n: number) => `${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')}`,
+        rowsHighlighted: (n: number) => `${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')} · výběr zvýrazněn`,
     },
 
     // Evidence highlight on the tree (the pill of "Show in tree")
@@ -26035,6 +26040,8 @@ const stringsDE: StringsType = {
         wedding: 'Heirat',
         empty: 'Keine Personen mit bekanntem Geburtsjahr',
         omitted: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'} ohne Geburtsjahr nicht angezeigt`,
+        rows: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'}`,
+        rowsHighlighted: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'} · Auswahl hervorgehoben`,
     },
 
     // Evidence highlight on the tree (the pill of "Show in tree")

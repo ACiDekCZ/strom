@@ -338,10 +338,12 @@ function buildCurrentPoster(look?: FanLook): PosterBuild | null {
     const meta = posterFooterMeta(mode, data);
 
     if (mode === 'timeline') {
-        // Persons = the SAME pipeline selection the on-screen timeline draws
-        // (positions.keys()), fed through the privacy-filtered data so living
-        // people are not named in full (audit K2).
-        const ids = [...TreeRenderer.getPosterLayout().positions.keys()] as unknown as string[];
+        // Persons = the SAME rows the on-screen timeline draws (its scope,
+        // spec 098 §11a: this view, the selection or the whole tree), fed
+        // through the privacy-filtered data so living people are not named
+        // in full (audit K2). This view: the layout's output people (no one
+        // seen only through a link "linked in the view only").
+        const ids = TreeRenderer.getTimelinePersonIds({ output: true });
         const model = computeTimelineModel(data, ids, new Date().getFullYear());
         if (model.rows.length === 0) return null;
         // Poster rasterises to PNG without a CSS context, so var(--male/--female)

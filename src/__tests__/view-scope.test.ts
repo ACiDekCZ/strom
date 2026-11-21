@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    isViewScope, scopeAfterSelection, scopeDefault, scopeHighlightIds, scopeOnOpen, scopePersonIds,
+    isViewScope, scopeAfterSelection, scopeDefault, scopeHighlightIds, scopeIdList, scopeOnOpen, scopePersonIds,
     SCOPED_VIEWS, type ScopedView,
 } from '../view-scope';
 import type { PersonId } from '../types';
@@ -102,5 +102,29 @@ describe('isViewScope', () => {
         expect(isViewScope('tree')).toBe(true);
         expect(isViewScope('list')).toBe(false);
         expect(isViewScope(undefined)).toBe(false);
+    });
+});
+
+describe('scopeIdList (the Timeline\'s rows, spec 098 §11a)', () => {
+    const persons: Record<string, { firstName?: string; isPlaceholder?: boolean }> = {
+        a: { firstName: 'Ada' },
+        b: { firstName: 'Bo' },
+        c: { firstName: 'Cid' },
+        x: { isPlaceholder: true },
+    };
+    const view = ids('a', 'b');
+    const sel = ids('c');
+
+    it('This view: the people laid out now', () => {
+        expect(scopeIdList('view', () => view, () => sel, persons)).toEqual(['a', 'b']);
+    });
+
+    it('Selection: the selection\'s people; the selection gone: nobody', () => {
+        expect(scopeIdList('sel', () => view, () => sel, persons)).toEqual(['c']);
+        expect(scopeIdList('sel', () => view, () => null, persons)).toEqual([]);
+    });
+
+    it('Whole tree: every real person, no placeholder', () => {
+        expect(scopeIdList('tree', () => view, () => sel, persons).sort()).toEqual(['a', 'b', 'c']);
     });
 });

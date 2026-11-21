@@ -120,6 +120,7 @@ import { rodViewMethods } from './rod-view.js';
 import { selectionPickerMethods } from './selection-picker-ui.js';
 import { mapScopeMethods } from './map-scope-ui.js';
 import { scopeSegMethods } from './scope-seg-ui.js';
+import { timelineScopeMethods } from './timeline-scope-ui.js';
 import { treeOverviewMethods } from './tree-overview.js';
 import { personListsMethods } from './person-lists-ui.js';
 import { personListNewMethods } from './person-list-new-ui.js';
@@ -957,6 +958,9 @@ Object.assign(UIClass.prototype, mapScopeMethods);
 type ScopeSegMethods = typeof scopeSegMethods;
 export interface UIClass extends ScopeSegMethods {}
 Object.assign(UIClass.prototype, scopeSegMethods);
+type TimelineScopeMethods = typeof timelineScopeMethods;
+export interface UIClass extends TimelineScopeMethods {}
+Object.assign(UIClass.prototype, timelineScopeMethods);
 type TreeOverviewMethods = typeof treeOverviewMethods;
 export interface UIClass extends TreeOverviewMethods {}
 Object.assign(UIClass.prototype, treeOverviewMethods);

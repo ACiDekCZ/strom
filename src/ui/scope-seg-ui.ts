@@ -272,8 +272,9 @@ export const scopeSegMethods = uiModule({
         picker = { view, host: pop, abort };
         const box = container.getBoundingClientRect();
         const r = anchor.getBoundingClientRect();
-        pop.style.left = `${Math.max(8, Math.min(r.left - box.left, box.width - PICK_WIDTH))}px`;
-        pop.style.top = `${r.bottom - box.top}px`;
+        // A container that scrolls (the Timeline's, under its sticky bar): its content moved by the scroll.
+        pop.style.left = `${Math.max(8, Math.min(r.left - box.left, box.width - PICK_WIDTH)) + container.scrollLeft}px`;
+        pop.style.top = `${r.bottom - box.top + container.scrollTop}px`;
         pop.style.setProperty('--scope-pick-room', `${Math.max(200, box.bottom - r.bottom - 24)}px`);
         this.mountSelectionPicker(pop, {
             onPicked,

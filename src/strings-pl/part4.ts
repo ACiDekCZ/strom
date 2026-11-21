@@ -821,6 +821,8 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         wedding: 'Ślub',
         empty: 'Brak osób o znanym roku urodzenia',
         omitted: (n: number) => `${n} ${plPl(n, 'osoba', 'osoby', 'osób')} bez roku urodzenia ${plPl(n, 'nie jest wyświetlana', 'nie są wyświetlane', 'nie jest wyświetlanych')}`,
+        rows: (n: number) => `${n} ${plPl(n, 'osoba', 'osoby', 'osób')}`,
+        rowsHighlighted: (n: number) => `${n} ${plPl(n, 'osoba', 'osoby', 'osób')} · wybór wyróżniony`,
     },
 
     // Evidence highlight on the tree (the pill of "Show in tree")

@@ -10664,7 +10664,35 @@
             overflow-y: auto;
             overflow-x: hidden;
             background: var(--bg-color, #fff);
-            padding: 8px 0 24px;
+            padding: 0 0 24px;
+        }
+        /* The view's bar (spec 098 §11a): "Scope", the switch, how many people quietly on the right;
+           it stays over the axis while the rows scroll under it. */
+        .tl-toolbar {
+            position: sticky; top: 0; z-index: 3;
+            display: flex; align-items: center; gap: 8px 12px;
+            min-height: 52px; padding: 8px 16px; box-sizing: border-box;
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            font-size: 13px; color: var(--text);
+        }
+        .tl-toolbar-label { flex: none; color: var(--text-light); }
+        .tl-toolbar .timeline-scope.scope-seg { flex: 0 1 auto; min-width: 0; }
+        .tl-toolbar-note {
+            flex: 0 1 auto; min-width: 0; margin-left: auto;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            color: var(--text-light); font-size: 12.5px; font-variant-numeric: tabular-nums;
+        }
+        .tl-body { padding-top: 8px; }
+        /* Phone and a phone held sideways: only "Scope: … ▾" over the axis (11a·5), its sheet the choice. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .tl-toolbar { min-height: 0; padding: 8px 12px 0; background: var(--bg-color, #fff); border-bottom: 0; }
+            .tl-toolbar-label, .tl-toolbar .timeline-scope.scope-seg, .tl-toolbar-note { display: none; }
+            .timeline-scope-btn {
+                display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; min-height: 32px; padding: 0 10px;
+                border: 1.5px solid transparent; border-radius: var(--r-md); background: var(--surface); color: var(--text);
+                font: inherit; font-size: 12.5px; white-space: nowrap; box-shadow: var(--shadow-sm); cursor: pointer;
+            }
+            .timeline-scope-btn[hidden] { display: none; }
         }
         .timeline-svg { display: block; width: 100%; }
         .tl-grid { stroke: var(--border-color, #e2e2e2); stroke-width: 1; }
@@ -10704,6 +10732,12 @@
             .tl-name .tl-yr { display: none; }
         }
         .timeline-bar.search-dim { opacity: 0.28; }
+        /* The window's selection with This view or the Whole tree (spec 098 §11a, 11a·2): its rows outlined
+           with a dashed line, the others dimmed; the focus and the person of another window keep their ring. */
+        .timeline-bar.evidence-dim { opacity: 0.45; }
+        .timeline-bar.evidence-hit:not(.focused):not(.window-selected):not(.search-hit) .tl-bar-rect {
+            stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3;
+        }
         .timeline-bar.search-hit .tl-bar-rect { stroke: #f5a623; stroke-width: 2.5; }
         .tl-dot { fill: var(--text-color, #444); }
         .tl-dot-wedding { fill: var(--surface); stroke: var(--warning); stroke-width: 2; }
@@ -10715,7 +10749,8 @@
             fill: var(--primary); font-size: 11.5px; font-weight: 600;
             paint-order: stroke; stroke: var(--bg-color, #fff); stroke-width: 3px; stroke-linejoin: round;
         }
-        .tl-omitted { font-size: 12px; color: var(--text-light, #888); padding: 4px 12px; font-style: italic; }
+        /* No row to draw (no birth year among the scope's people): one quiet sentence. */
+        .tl-empty { font-size: 13px; color: var(--text-light, #888); padding: 4px 16px; }
         /* The history row of the whole timeline (spec 121 §1): under the axis band; the label is the
            options' button ("History ▾", the filter in it); the kind most of a cluster's events have,
            coloured by the origin, a count badge, the periods' stripes in two tracks; the focused
@@ -25663,6 +25698,8 @@
             body.has-focus-panel:not(.standalone-view) .img-load-chip,
             body.descendants-view .img-load-chip,
             body[data-view-mode="fan"] .img-load-chip { top: max(112px, calc(var(--fan-toolbar-bottom, 0px) + 8px), var(--img-chip-below, 0px)); }
+            /* The Timeline's bar (spec 098 §11a): below it. */
+            body[data-view-mode="timeline"] .img-load-chip { top: max(calc(var(--tl-toolbar-bottom, 0px) + 8px), var(--img-chip-below, 0px)); }
             body.overview-docked .img-load-chip { left: calc((100vw - var(--overview-w)) / 2); }
         }
         @media (max-width: 1024px) {
@@ -32158,6 +32195,8 @@
                 overflow: visible !important;
                 background: white !important;
             }
+            /* The scope's bar is the screen's: paper gets the chart. */
+            #timeline-toolbar { display: none !important; }
             .fan-container { background: white !important; }
 
             /* The map is a live online view (tiles): nothing to print. */

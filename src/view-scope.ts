@@ -52,6 +52,22 @@ export function scopePersonIds(
     }
 }
 
+/**
+ * The people a view lists for its scope (the Timeline's rows, spec 098
+ * §11a): the people laid out now, the selection's, or for the Whole tree
+ * every real person of the tree (a placeholder is nobody).
+ */
+export function scopeIdList(
+    scope: ViewScope,
+    viewIds: () => ReadonlySet<PersonId>,
+    selectionIds: () => ReadonlySet<PersonId> | null,
+    persons: Readonly<Record<string, { isPlaceholder?: boolean } | undefined>>,
+): PersonId[] {
+    const ids = scopePersonIds(scope, viewIds, selectionIds);
+    if (ids) return [...ids];
+    return Object.keys(persons).filter(id => { const p = persons[id]; return !!p && !p.isPlaceholder; }) as PersonId[];
+}
+
 /** The scope a tree opens with: the remembered one, 'sel' only while the window has a selection (§7). */
 export function scopeOnOpen(stored: ViewScope | null, hasSelection: boolean, view: ScopedView = 'map'): ViewScope {
     if (stored === 'sel' && !hasSelection) return scopeDefault(view);
