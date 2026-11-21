@@ -82,6 +82,30 @@ test.describe('Hide others on a computer', () => {
         await expect.poll(() => drawn(page)).toEqual(before);
     });
 
+    test('laid out anew, no card stays under the pill: the view pans the least it takes (098)', async ({ page }) => {
+        await setup(page);
+        await chooseList(page, 'Letters', ['b14', 'b15']);
+        // Karl's card 10 px under the pill's lower edge, as a pan may leave it.
+        await page.evaluate(() => {
+            const pill = document.getElementById('evidence-pill')!.getBoundingClientRect();
+            const card = document.querySelector('#tree-canvas .person-card[data-id="b14"]')!.getBoundingClientRect();
+            const zoom = window.Strom.ZoomPan;
+            zoom.shiftWorld(0, -((pill.bottom - 10) - card.top) / zoom.getScale());
+        });
+        const underPill = (): Promise<string[]> => page.evaluate(() => {
+            const p = document.getElementById('evidence-pill')!.getBoundingClientRect();
+            return [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card[data-id]')].filter(c => {
+                const r = c.getBoundingClientRect();
+                return r.right > p.left && r.left < p.right && r.bottom > p.top && r.top < p.bottom;
+            }).map(c => c.dataset.id!);
+        });
+        expect(await underPill()).toContain('b14');
+        await hide(page).click();
+        await expect.poll(() => drawn(page)).toEqual(['b14', 'b15', 'b16']);
+        await expect.poll(underPill).toEqual([]);
+        await expect(cardOf(page, 'b16')).toBeInViewport();
+    });
+
     test('a focus moved outside the selection keeps its tag, with and without Hide others; none in the fan', async ({ page }) => {
         await setup(page);
         await chooseList(page, 'Letters', ['b14', 'b15', 'b16']);

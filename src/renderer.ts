@@ -2180,7 +2180,8 @@ class TreeRendererClass {
     /**
      * Laid out anew for "Hide others": the card nearest the screen's middle
      * stays in its place when it is still drawn, else the focus (always
-     * drawn); the zoom does not change.
+     * drawn); the zoom does not change. Then no card under the selection's
+     * pill (the rows laid out anew may reach under it; the least pan).
      */
     private async renderForFilter(): Promise<void> {
         const kept = (id: PersonId): boolean => !this.personFilter || this.personFilter.has(id) || id === this.focusPersonId;
@@ -2192,6 +2193,7 @@ class TreeRendererClass {
         await this.renderInternal();
         if (anchorId && box && this.positions.has(anchorId)) {
             this.keepCardInPlace(anchorId, beforeAll, false, { w: box.right - box.left, h: box.bottom - box.top });
+            ZoomPan.keepCardsClearOfPills(anchorId);
         } else if (beforeAll.size > 0) this.centerForViewMode();
     }
 
