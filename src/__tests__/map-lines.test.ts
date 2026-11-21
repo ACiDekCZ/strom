@@ -106,6 +106,13 @@ describe('ancestor records', () => {
         expect(m.target).toMatchObject({ year: 1958, placeKey: 'misto t', kind: 'birth' });
     });
 
+    it('persons keeps the walk to a set (the map\'s scope Selection): a parent outside ends that branch', () => {
+        const only = new Set(['t', 'f', 'ff', 'fff', 'm', 'mmm'].map(id));
+        const m2 = buildPathModel(family(), id('t'), { persons: only });
+        // mm is outside: her mother mmm is not reached through her.
+        expect(m2.ancestors.map(a => a.personId).sort()).toEqual(['f', 'ff', 'fff', 'm'].sort());
+    });
+
     it('maxGen stops the walk', () => {
         const m2 = buildPathModel(family(), id('t'), { maxGen: 2 });
         expect(m2.ancestors.map(a => a.rel)).toEqual([2, 3, 4, 5, 6, 7]);

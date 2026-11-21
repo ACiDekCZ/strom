@@ -78,7 +78,10 @@ export const searchMethods = uiModule({
             onSelect: (personId) => {
                 // The Table view selects the person's row and scrolls to it (the focus stays).
                 if (TreeRenderer.getViewMode() === 'table') this.revealTablePerson(personId);
-                else {
+                else if (TreeRenderer.getViewMode() === 'map') {
+                    // The map moves to the person's places when none is in view (spec 098 §4).
+                    void TreeRenderer.setFocus(personId).then(() => this.revealMapPerson(personId));
+                } else {
                     TreeRenderer.setFocus(personId);
                     ZoomPan.centerOnPerson(personId);
                     ZoomPan.highlightPerson(personId);
@@ -94,6 +97,8 @@ export const searchMethods = uiModule({
             placeholder: strings.search.placeholder,
             filter: (p) => !p.isPlaceholder,
             searchDetails: true,
+            // The map with the scope Selection: a person outside it says so, with a way to the whole tree.
+            rowNote: (p) => this.mapSearchNote(p.id),
         });
 
         // Live-highlight matches in the tree as the name query changes.

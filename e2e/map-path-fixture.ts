@@ -1,5 +1,6 @@
 import { expect, Page } from '@playwright/test';
 import { openApp, seedTree, type SeedPerson } from './helpers.js';
+import { chooseMapWholeTree } from './map-scope-helpers.js';
 
 /**
  * The tree and helpers of the ancestors' path on the map (map-path*.spec.ts).
@@ -65,7 +66,7 @@ export async function seedPathTree(
     });
 
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
-    await page.getByRole('button', { name: 'Whole tree' }).click();
+    await chooseMapWholeTree(page);
     await expect(page.locator('.map-marker').first()).toBeVisible();
     if (opts.timeOn === false) return;
     await page.getByRole('button', { name: 'Migration over time' }).click();

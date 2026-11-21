@@ -26,6 +26,7 @@
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
+import { selectionIds } from './view-selection-ui.js';
 import { PersonId, PlaceGeo } from '../types.js';
 import { collectPlaces, groupTownPoints, knownStreets } from '../places.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
@@ -47,6 +48,8 @@ export const LEGEND_WIDTH = { base: 300, wide: 320, wideFrom: 1280 } as const;
 let locateCache: { rev: number; data: object; places: object | undefined; locate: PathLocate; display: Map<string, string> } | null = null;
 /** Path models by person, for the same tree state as locateCache. */
 let modelCache = new Map<PersonId, PathModel>();
+/** The models within the selection's people (the map's scope Selection), for that set of people. */
+let selModelCache: { ids: ReadonlySet<PersonId>; models: Map<PersonId, PathModel> } | null = null;
 /** The open picker, its host and what opened it. */
 let picker: { ui: PathPersonPicker; host: HTMLElement; anchor: 'bar' | 'chip' } | null = null;
 let pickerOutsideBound = false;
@@ -83,11 +86,26 @@ export const mapPathMethods = uiModule({
     mapPathOn(): boolean {
         if (!this.mapTimeOn || !this.mapPathTarget) return false;
         const p = DataManager.getPerson(this.mapPathTarget);
-        return !!p && !p.isPlaceholder;
+        return !!p && !p.isPlaceholder && !this.mapPathOutside();
     },
 
-    /** The scope the map applies: with the path the whole tree (the chosen scope is kept for later). */
+    /**
+     * The path's person is outside the selection with the scope Selection
+     * (spec 098 §4): the chip stays, dimmed, the path is not drawn.
+     */
+    mapPathOutside(): boolean {
+        if (!this.mapTimeOn || !this.mapPathTarget || this.mapScope !== 'sel') return false;
+        const ids = selectionIds();
+        return !!ids && !ids.has(this.mapPathTarget);
+    },
+
+    /**
+     * The scope the map applies: with the path the whole tree (the chosen
+     * scope is kept for later), except the scope Selection, which the path
+     * keeps to.
+     */
     mapEffectiveScope(): MapScope {
+        if (this.mapScope === 'sel') return 'sel';
         return this.mapPathOn() ? 'tree' : this.mapScope;
     },
 
@@ -110,16 +128,24 @@ export const mapPathMethods = uiModule({
         const locate: PathLocate = key => pointOf.get(spellings.keyOf.get(key) ?? key) ?? null;
         locateCache = { rev, data, places: data.places, locate, display };
         modelCache = new Map();
+        selModelCache = null;
         return locateCache;
     },
 
     /** The path model of a person (cached for the tree's state). */
     mapPathModelOf(id: PersonId): PathModel {
         const { locate } = this.mapPathLocate();
-        let model = modelCache.get(id);
+        // The scope Selection keeps the path to the selection's people (spec 098 §4).
+        const persons = this.mapScope === 'sel' ? selectionIds() : null;
+        let cache = modelCache;
+        if (persons) {
+            if (selModelCache?.ids !== persons) selModelCache = { ids: persons, models: new Map() };
+            cache = selModelCache.models;
+        }
+        let model = cache.get(id);
         if (!model) {
-            model = buildPathModel(DataManager.getData(), id, { locate });
-            modelCache.set(id, model);
+            model = buildPathModel(DataManager.getData(), id, persons ? { locate, persons } : { locate });
+            cache.set(id, model);
         }
         return model;
     },
@@ -200,6 +226,7 @@ export const mapPathMethods = uiModule({
             mode: 'path',
             container: inner,
             recentId: TreeRenderer.getFocusPersonId(),
+            ...(this.mapScope === 'sel' ? { persons: this.mapScopeSelectionPersons() } : {}),
             selectedId: this.mapPathOn() ? this.mapPathTarget : null,
             onMapCount: id => this.mapPathCount(id),
             onSelect: id => this.setMapPathTarget(id),
@@ -341,15 +368,24 @@ export const mapPathMethods = uiModule({
     renderMapPathChip(): void {
         const container = document.getElementById('map-container');
         const chip = container?.querySelector('.map-path-chip') as HTMLElement | null;
-        const scope = container?.querySelector('.map-scope') as HTMLElement | null;
-        const on = this.mapPathOn();
-        if (scope) scope.hidden = on;
+        const outside = this.mapPathOutside();
+        const on = this.mapPathOn() || outside;
+        // The scope steps aside for the path, except Selection: the path keeps to it (spec 098 §4).
+        this.renderMapScope();
         if (!chip) return;
         chip.hidden = !on;
+        chip.classList.toggle('is-outside', outside);
         if (!on) return;
         const name = this.mapPathName();
         const strong = chip.querySelector('.map-path-chip-name') as HTMLElement | null;
-        if (strong) { strong.textContent = name; strong.title = name; }
+        if (strong) { strong.textContent = name; strong.title = outside ? `${name} · ${strings.map.outside}` : name; }
+        let tag = chip.querySelector<HTMLElement>('.map-path-chip-out');
+        if (outside && !tag) {
+            tag = document.createElement('span');
+            tag.className = 'map-path-chip-out';
+            strong?.after(tag);
+        }
+        if (tag) { tag.textContent = outside ? ` · ${strings.map.outside}` : ''; tag.hidden = !outside; }
     },
 
     /**

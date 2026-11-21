@@ -136,6 +136,8 @@ export interface PathModelOptions {
     maxGen?: number;
     /** Place key → map point; default: `data.places[key]` at its own key (as mapMigrationSegments). */
     locate?: PathLocate;
+    /** Only these people (the map's scope Selection, spec 098 §4): a parent outside ends that branch. */
+    persons?: ReadonlySet<PersonId>;
 }
 
 /** The hard cap of drawn path lines (as without a chosen person). */
@@ -239,6 +241,7 @@ export function buildPathModel(data: StromData, targetId: PersonId, opts: PathMo
             const [father, mother] = fatherMother(data, person);
             for (const [parent, r] of [[father, rel * 2], [mother, rel * 2 + 1]] as const) {
                 if (!parent || parent.id === targetId) continue;
+                if (opts.persons && !opts.persons.has(parent.id)) continue;
                 const pl = placeFor(parent);
                 const a: PathAncestor = {
                     personId: parent.id, rel: r, gen, quarter: quarterOfRel(r), eighth: eighthOfRel(r),

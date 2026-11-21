@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, seedSetting } from './helpers.js';
+import { chooseMapWholeTree } from './map-scope-helpers.js';
 
 /**
  * A shared event on the map (spec 085 §2f, 2g): one row of a place's bubble
@@ -68,7 +69,7 @@ async function household(page: Page, opts: { width?: number; height?: number; lo
 
 async function openMap(page: Page): Promise<void> {
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
-    await page.locator('.map-scope button', { hasText: /^(Whole tree|Ganzer Stammbaum)$/ }).click();
+    await chooseMapWholeTree(page);
     await expect(page.locator('.map-marker').first()).toBeVisible();
     await page.evaluate(() => {
         window.Strom.UI.dismissUndoToast();

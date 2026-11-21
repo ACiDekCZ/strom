@@ -1,6 +1,7 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { openApp, seedTree, seedSetting } from './helpers.js';
 import { fakeBridge, fakeFixes, openResearch, poll, links } from './research-bridge.js';
+import { chooseMapWholeTree } from './map-scope-helpers.js';
 
 /**
  * The Places dialog with towns and houses ("map kinds and houses" §4–§7): a
@@ -348,7 +349,7 @@ test.describe('the Places dialog with towns and houses', () => {
             window.Strom.DataManager.getData().places = {};
             window.Strom.UI.setDisplayViewMode('map');
         });
-        await page.locator('.map-scope button', { hasText: /^Whole tree$/ }).click();
+        await chooseMapWholeTree(page);
         await page.evaluate(() => {
             window.Strom.UI.dismissUndoToast();
             document.querySelectorAll('.toast, .family-offer').forEach(t => t.remove());

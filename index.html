@@ -12651,6 +12651,56 @@
             font-size: 13px;
         }
         .map-path-chip[hidden], .map-scope[hidden] { display: none; }
+        /* The scope's Selection part (spec 098 §3): the selection's name cut with "…", its count quiet. */
+        #map-scope-sel { display: inline-flex; align-items: baseline; gap: 4px; min-width: 0; }
+        .map-scope-name { display: inline-block; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: inherit; }
+        .map-scope-n { flex: none; color: var(--text-faint); font-weight: 400; }
+        #map-scope-sel.active .map-scope-n { color: var(--text-light); }
+        .map-scope-cv { flex: none; font-size: 10px; color: var(--text-faint); }
+        /* The phone's "Scope: … ▾" beside "Kinds" (§10): the kinds button's look. */
+        .map-scope-btn { display: none; }
+        .map-scope-btn-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .map-scope-btn-label b { font-weight: 600; }
+        .map-scope-btn-caret { flex: none; font-size: 10px; color: var(--text-faint); }
+        /* The choice of a selection under the part: the toolbar's popover of Selection ▾. */
+        .map-scope-pick { position: absolute; z-index: 6; width: 0; height: 0; }
+        .map-scope-pick > details > summary { display: none; }
+        .map-scope-pick .sp-rodpick-pop { top: 6px; display: flex; flex-direction: column; max-height: min(420px, var(--map-scope-pick-room, 420px)); box-shadow: var(--shadow-lg); }
+        .map-scope-pick .sp-rodpick-list { flex: 1 1 auto; min-height: 0; max-height: none; }
+        /* The path's person outside the selection (§4): the chip stays, dimmed, the path is not drawn. */
+        .map-path-chip.is-outside { color: var(--text-faint); }
+        .map-path-chip-out { flex: none; white-space: nowrap; }
+        .map-path-chip-out[hidden] { display: none; }
+        .map-status-quiet { color: var(--text-light); }
+        /* A selection with nothing to show: a quiet sentence in the middle of the map, no frame. */
+        .map-empty {
+            position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%); z-index: 2;
+            max-width: min(360px, calc(100% - 32px)); text-align: center; color: var(--text-light); font-size: 14px; line-height: 1.5;
+            pointer-events: none;
+        }
+        .map-empty .map-link { pointer-events: auto; }
+        .map-link { padding: 0; border: 0; background: none; color: var(--primary-dark); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+        .map-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .map-popup-outside { margin: 8px 0 0; color: var(--text-light); font-size: 12.5px; }
+        /* A tag after a name ("outside the selection"): a word on a soft ground. */
+        .tagx { display: inline-block; padding: 0 6px; border-radius: var(--r-tag); background: var(--surface-2); color: var(--text-light); font-size: 11px; font-weight: 600; line-height: 1.6; white-space: nowrap; vertical-align: 1px; }
+        .person-picker-tagx { margin-left: 6px; }
+        .person-picker-rowact { align-self: flex-start; margin-top: 2px; font-size: 12.5px; }
+        /* The phone's sheet "Scope": the scopes as radio rows, then a few selections. */
+        .map-scope-sheet-sec { margin: 10px 4px 4px; color: var(--text-light); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+        .map-scope-row { box-sizing: border-box; display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; min-height: 44px; padding: 6px 8px; color: var(--text); font: inherit; font-size: 14.5px; text-align: left; cursor: pointer; }
+        .map-scope-row-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .map-scope-row-n small { display: block; color: var(--text-light); font-size: 12px; white-space: normal; }
+        .map-scope-row-c { color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .map-scope-row-ic { color: var(--text-light); text-align: center; }
+        @media (hover: hover) {
+            .map-link:hover { color: var(--primary); }
+            .map-scope-row:hover { background: var(--hover-bg); }
+        }
+        @media (pointer: coarse) {
+            .map-scope-btn { min-height: 44px; }
+            .person-picker-rowact, .map-popup-outside .map-link, .map-empty .map-link { min-height: 44px; }
+        }
         .map-path-chip-open {
             display: flex;
             align-items: center;
@@ -13501,6 +13551,18 @@
            The map's own controls step below it rather than hiding under it. */
         @media (max-width: 640px) {
             .map-controls, .map-topleft { top: 52px; }
+            /* The scope as one button "Scope: … ▾" beside "Kinds" (spec 098 §10), the path's chip a row above them. */
+            .map-topleft { flex-direction: row; flex-wrap: wrap; }
+            .map-topleft > .map-path-chip { order: -1; flex: 1 1 100%; }
+            .map-scope.sel-seg { display: none; }
+            /* The kinds' menu opens from the corner's left edge: beside the scope it would run off the screen. */
+            .map-topleft > .map-kinds-wrap { position: static; }
+            .map-scope-btn {
+                display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; height: 32px; padding: 0 10px;
+                border: 1.5px solid transparent; border-radius: 8px; background: var(--surface); color: var(--text);
+                font: inherit; font-size: 12.5px; white-space: nowrap; box-shadow: var(--shadow-sm); cursor: pointer;
+            }
+            .map-scope-btn[hidden] { display: none; }
         }
         /* Phone and a phone held sideways: the kinds as one button with a menu. */
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
@@ -13512,6 +13574,7 @@
             .map-topleft { top: 8px; left: 8px; right: calc(var(--map-controls-w, 30px) + 18px); flex-direction: row; }
             .map-topleft > .map-path-chip { flex: 0 1 auto; }
             .map-topleft > .map-kinds-wrap { flex: none; }
+            .map-scope-name { max-width: 140px; }
             .map-controls { top: 8px; right: 8px; }
             .map-controls button { width: 30px; height: 30px; }
             .map-kinds-menu { width: 320px; }
@@ -15166,43 +15229,43 @@
         .rod-picker-host details[open] > .sp-rodpick-btn { border-color: var(--primary); background: var(--read-scan-bg); }
         .rod-picker-host .sp-rodpick-pop { display: flex; flex-direction: column; max-height: min(420px, calc(100vh - 200px)); box-shadow: var(--shadow-lg); }
         .rod-picker-host .sp-rodpick-list { flex: 1 1 auto; min-height: 0; max-height: none; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-x {
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) button.sp-rodpick-x {
             box-sizing: border-box; display: grid; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 8px;
             border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 14.5px;
             text-align: left; cursor: pointer; transition: none;
         }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 72px 36px; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-rodpick-tree button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-x { grid-template-columns: minmax(0, 1fr) auto; min-height: 48px; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; min-height: 40px; padding-left: 36px; }
-        :is(.rod-picker-host, .rod-pick-sheet) .sp-rodpick-xchev { color: var(--text-faint); }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 72px 36px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) .sp-rodpick-tree button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) button.sp-rodpick-x { grid-template-columns: minmax(0, 1fr) auto; min-height: 48px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; min-height: 40px; padding-left: 36px; }
+        :is(.rod-picker-host, .rod-pick-sheet, .map-scope-pick) .sp-rodpick-xchev { color: var(--text-faint); }
         /* A line's row is a .sel-opt row on its <li> (src/ui/sel-css.ts). */
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-first { box-shadow: inset 0 0 0 2px var(--primary); }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-a:focus-visible, :is(.toolbar .rod-picker-host, .rod-pick-sheet) button.sp-rodpick-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) button.sp-rodpick-first { box-shadow: inset 0 0 0 2px var(--primary); }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) button.sp-rodpick-a:focus-visible, :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) button.sp-rodpick-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         /* The choice's last row (spec 084 §6): the chosen line saved as a list of people, behind a line of its own. */
         .sp-rodpick-save { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--divider); list-style: none; }
         .sp-rodpick-save[hidden] { display: none; }
-        :is(.rod-picker-host, .rod-pick-sheet) button.sp-rodpick-savebtn {
+        :is(.rod-picker-host, .rod-pick-sheet, .map-scope-pick) button.sp-rodpick-savebtn {
             box-sizing: border-box; display: block; width: 100%; min-height: 40px; padding: 6px 8px; border: 0; border-radius: var(--r-sm);
             background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
         }
-        :is(.rod-picker-host, .rod-pick-sheet) button.sp-rodpick-savebtn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        :is(.rod-picker-host, .rod-pick-sheet, .map-scope-pick) button.sp-rodpick-savebtn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         @media (hover: hover) {
-            :is(.rod-picker-host, .rod-pick-sheet) button.sp-rodpick-savebtn:hover { background: var(--hover-bg); }
+            :is(.rod-picker-host, .rod-pick-sheet, .map-scope-pick) button.sp-rodpick-savebtn:hover { background: var(--hover-bg); }
         }
         @media (pointer: coarse) {
-            :is(.rod-picker-host, .rod-pick-sheet) button.sp-rodpick-savebtn { min-height: 48px; }
+            :is(.rod-picker-host, .rod-pick-sheet, .map-scope-pick) button.sp-rodpick-savebtn { min-height: 48px; }
         }
         /* The window's selection (spec 098 §2, 2a): the same list in sections —
            No selection, Family lines, People (a query's), Ancestors and
            descendants, Research lines, Lists of people — every row with its
            icon; the chosen ancestors' or descendants' person and generations
            on top, the footer (Save as list…, Lists of people…) under it. */
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick button.sp-rodpick-a,
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick button.sp-rodpick-x { gap: 8px; grid-template-columns: 20px minmax(0, 1fr) auto; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick .sp-rodpick-rod button.sp-rodpick-a { grid-template-columns: 20px minmax(0, 1fr) 72px 36px; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick .sp-rodpick-tree button.sp-rodpick-a { grid-template-columns: 20px minmax(0, 1fr) auto; min-height: 44px; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; padding-left: 36px; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick button.sp-rodpick-x { min-height: 44px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) .sp-selpick button.sp-rodpick-a,
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) .sp-selpick button.sp-rodpick-x { gap: 8px; grid-template-columns: 20px minmax(0, 1fr) auto; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) .sp-selpick .sp-rodpick-rod button.sp-rodpick-a { grid-template-columns: 20px minmax(0, 1fr) 72px 36px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) .sp-selpick .sp-rodpick-tree button.sp-rodpick-a { grid-template-columns: 20px minmax(0, 1fr) auto; min-height: 44px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) .sp-selpick .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; padding-left: 36px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) .sp-selpick button.sp-rodpick-x { min-height: 44px; }
         .sp-selpick .sp-rodpick-other { margin-top: 0; padding-top: 0; border-top: 0; }
         .sp-selpick .sp-selpick-ic { display: inline-flex; align-items: center; justify-content: center; color: var(--text-faint); }
         .sp-selpick .sp-selpick-ic svg { display: block; }
@@ -15244,7 +15307,7 @@
         }
         @media (pointer: coarse) {
             .rod-picker-host .sp-rodpick-btn { min-height: 44px; }
-            :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-rodpick-small button.sp-rodpick-a { min-height: 44px; }
+            :is(.toolbar .rod-picker-host, .rod-pick-sheet, .map-scope-pick) .sp-rodpick-small button.sp-rodpick-a { min-height: 44px; }
         }
         /* Narrow desktop: no "Line" before the name, the name to 150px, tighter tabs
            (8.4 px, not 9: the labels take the 500 cut, the earlier tabs 400). */

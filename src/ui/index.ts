@@ -118,6 +118,7 @@ import { readHistoryMethods } from './read-history-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
 import { rodViewMethods } from './rod-view.js';
 import { selectionPickerMethods } from './selection-picker-ui.js';
+import { mapScopeMethods } from './map-scope-ui.js';
 import { treeOverviewMethods } from './tree-overview.js';
 import { personListsMethods } from './person-lists-ui.js';
 import { personListNewMethods } from './person-list-new-ui.js';
@@ -945,6 +946,9 @@ Object.assign(UIClass.prototype, rodViewMethods);
 type SelectionPickerMethods = typeof selectionPickerMethods;
 export interface UIClass extends SelectionPickerMethods {}
 Object.assign(UIClass.prototype, selectionPickerMethods);
+type MapScopeMethods = typeof mapScopeMethods;
+export interface UIClass extends MapScopeMethods {}
+Object.assign(UIClass.prototype, mapScopeMethods);
 type TreeOverviewMethods = typeof treeOverviewMethods;
 export interface UIClass extends TreeOverviewMethods {}
 Object.assign(UIClass.prototype, treeOverviewMethods);

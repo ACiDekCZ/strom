@@ -465,7 +465,7 @@ const appViewStateTarget: ViewStateTarget = {
     setFullFamilies: (on) => TreeRenderer.setDescendantsFullFamilies(on),
     setFan: (fan) => TreeRenderer.setWindowFan(fan),
     setMap: (m) => {
-        UI.mapScope = m.scope;
+        UI.applyMapScopeFromWindow(m.scope);
         UI.mapCenter = m.center ? { lat: m.center.lat, lon: m.center.lon } : null;
         UI.mapZoom = m.zoom;
         // The kinds are this device's: the same here unless changed meanwhile (a satellite keeps them in its memory).

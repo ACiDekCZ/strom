@@ -142,6 +142,12 @@ export interface PersonPickerOptions {
     searchDetails?: boolean;
     /** Open the list as soon as the field gets focus (the toolbar search); otherwise on a click, typing or ArrowDown. */
     openOnFocus?: boolean;
+    /**
+     * A row's tag after the name and a link under it (the map's search: a
+     * person outside the selection, "Show in the whole tree"); null: none.
+     * The link closes the list and clears the field.
+     */
+    rowNote?: (person: Person) => { tag: string; action?: { label: string; run: (id: PersonId) => void } } | null;
 }
 
 const BATCH_SIZE = 50;
@@ -473,6 +479,17 @@ export class PersonPicker {
             .join('') + (hasMore ? '<div class="person-picker-loading">…</div>' : '');
 
         // Attach click listeners
+        this.dropdown.querySelectorAll<HTMLElement>('.person-picker-rowact').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = btn.closest<HTMLElement>('.person-picker-item')?.dataset.id as PersonId | undefined;
+                const person = id ? this.allPersons.find(p => p.id === id) : undefined;
+                const run = person ? this.options.rowNote?.(person)?.action?.run : undefined;
+                this.hide();
+                this.clear();
+                if (id && run) run(id);
+            });
+        });
         this.dropdown.querySelectorAll('.person-picker-item').forEach(item => {
             item.addEventListener('click', () => {
                 const personId = item.getAttribute('data-id') as PersonId;
@@ -532,14 +549,19 @@ export class PersonPicker {
             label = `${name}, ${dist}${matchText ? ` · ${matchText}` : ''}`;
         }
         const selected = index === this.selectedIndex;
+        const note = this.options.rowNote?.(person) ?? null;
+        if (note && label) label = `${label} · ${note.tag}`;
         const labelAttrs = label
             ? ` aria-label="${this.escapeHtml(label)}" title="${this.escapeHtml(label)}"`
             : '';
+        const tag = note ? ` <span class="tagx person-picker-tagx">${this.escapeHtml(note.tag)}</span>` : '';
+        const act = note?.action
+            ? `<button type="button" class="map-link person-picker-rowact">${this.escapeHtml(note.action.label)}</button>` : '';
 
         return `
-            <div class="person-picker-item sel-opt${selected ? ' selected' : ''}${dist ? ' has-dist' : ''}" data-sel-form="row" role="option" aria-selected="${selected}"${labelAttrs}
+            <div class="person-picker-item sel-opt${selected ? ' selected' : ''}${dist ? ' has-dist' : ''}${note ? ' has-note' : ''}" data-sel-form="row" role="option" aria-selected="${selected}"${labelAttrs}
                  data-id="${this.escapeHtml(person.id)}">
-                <span class="person-picker-name">${nameHtml(person)} ${birthYear}</span>${below}
+                <span class="person-picker-name">${nameHtml(person)} ${birthYear}${tag}</span>${below}${act}
             </div>
         `;
     }

@@ -168,11 +168,30 @@ function pickerMarkup(): SelectionPickerMarkup {
     };
 }
 
+/**
+ * A few selections to change to at once (the phone's map scope sheet, §10
+ * 10e): the family lines, the ancestors of the person in focus and the
+ * lists, the current one left out, at most `limit` (two lines first, then
+ * the ancestors, the lists, more lines).
+ */
+export function selectionQuickRows(limit = 5): SelectionPickRow[] {
+    const m = pickerMarkup();
+    const rodIc = selectionIcon('rod');
+    const rods: SelectionPickRow[] = (m.rods?.items ?? [])
+        .filter(i => i.id !== 'tree' && i.id !== 'other')
+        .map(i => ({ sel: `rod:${encodeURIComponent(i.id)}`, label: i.label, count: i.members, icon: rodIc }))
+        .filter(r => r.sel !== m.current);
+    const anc = m.focus.filter(r => r.sel.startsWith('anc:') && !r.current);
+    const lists = m.lists.filter(r => !r.current);
+    const out: SelectionPickRow[] = [...rods.slice(0, 2), ...anc, ...lists, ...rods.slice(2)];
+    return out.slice(0, limit);
+}
+
 /** A pick of the list: 'none' clears the selection, a ref chooses it. */
-function pickSelection(sel: string): void {
+function pickSelection(sel: string, origin: 'picker' | 'map' = 'picker'): void {
     if (sel === 'none') { clearSelection(); return; }
     const ref = decodeSelectionRef(sel);
-    if (ref) setSelection(ref, 'picker');
+    if (ref) setSelection(ref, origin);
 }
 
 /** The selection as the dialog "Save as list of people" takes it. */
@@ -397,13 +416,43 @@ export const selectionPickerMethods = uiModule({
     },
 
     /**
+     * The choice as a popover of its own in `host` (the map's scope, §3):
+     * built now, open at once (its button hidden by CSS). A pick sets the
+     * window's selection (origin 'map') and then calls `onPicked`; a close
+     * by any way (a pick, Escape, a click outside) calls `onClose` once.
+     */
+    mountSelectionPicker(host: HTMLElement, opts: { onPicked: (sel: string) => void; onClose: () => void; signal: AbortSignal }): void {
+        ensureFamilyPagesAppCss();
+        host.innerHTML = selectionPickerHtml(pickerMarkup());
+        const pick = host.querySelector<HTMLDetailsElement>('details.sp-rodpick');
+        if (!pick) return;
+        const { signal } = opts;
+        const close = (): void => { pick.open = false; };
+        const pop = pick.querySelector<HTMLElement>('.sp-rodpick-pop') ?? host;
+        this.wireSelectionPickerExtras(pick, pop, close, signal);
+        wireRodPicker(host, (sel) => {
+            close();
+            pickSelection(sel, 'map');
+            opts.onPicked(sel);
+        }, { pick, signal, outside: document, markFirst: true, findPersons: foundRowsHtml });
+        pick.open = true;
+        pick.addEventListener('toggle', () => { if (!pick.open) opts.onClose(); }, { signal });
+        pick.querySelector('summary')?.addEventListener('click', (e) => e.preventDefault(), { signal });
+        requestAnimationFrame(() => {
+            if (!pick.isConnected) return;
+            pick.querySelector<HTMLElement>('.sp-rodpick-list li[aria-current]')?.scrollIntoView({ block: 'nearest' });
+            pick.querySelector<HTMLInputElement>('.sp-rodpick-q')?.focus({ preventScroll: true });
+        });
+    },
+
+    /**
      * The phone's list (§10, 10c): a bottom sheet of the window's height less
      * 40px (beside the side bar when the phone is held sideways) with the
      * title, ×, the search field on top (focused only when tapped: no keyboard
      * over the list), the sections under it, rows of 52px, the footer.
      * Opened from More → Selection and from the pill's label.
      */
-    showSelectionSheet(): void {
+    showSelectionSheet(onPicked?: (sel: string) => void): void {
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
         ensureFamilyPagesAppCss();
@@ -422,7 +471,7 @@ export const selectionPickerMethods = uiModule({
         overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
         sheet.querySelector('.rod-pick-sheet-x')?.addEventListener('click', close);
         // The list stays open in the sheet: a pick, Escape (its own) and nothing else closes it — and the sheet with it.
-        wireRodPicker(sheet, (sel) => { close(); pickSelection(sel); }, { pick, outside: new EventTarget(), markFirst: true, findPersons: foundRowsHtml });
+        wireRodPicker(sheet, (sel) => { close(); pickSelection(sel, onPicked ? 'map' : 'picker'); onPicked?.(sel); }, { pick, outside: new EventTarget(), markFirst: true, findPersons: foundRowsHtml });
         this.wireSelectionPickerExtras(pick, overlay, close);
         pick.addEventListener('toggle', () => { if (!pick.open) close(); });
         pick.querySelector('summary')?.addEventListener('click', (e) => e.preventDefault());

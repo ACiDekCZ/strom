@@ -102,6 +102,8 @@ export const rodViewMethods = uiModule({
             showToast: (text) => this.showToast(text, 5000),
         });
         this.listenForEvidenceChanges();
+        // The map's scope follows the selection (spec 098 §3, §7).
+        onSelectionChange((_sel, change) => this.mapSelectionChanged(change));
         getSelectedRod();
         this.syncSelectionPickerHost();
     },
@@ -113,8 +115,7 @@ export const rodViewMethods = uiModule({
      */
     selectionShown(): boolean {
         const view = TreeRenderer.getViewMode();
-        // The map's scope 'sel' comes with spec 098 §3.
-        if (view === 'map') return String(this.mapScope) === 'sel';
+        if (view === 'map') return this.mapScope === 'sel';
         return (view === 'family' || view === 'descendants' || view === 'fan') && this.evidenceHighlightKind() === 'selection';
     },
 

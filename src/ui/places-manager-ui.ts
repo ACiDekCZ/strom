@@ -36,6 +36,8 @@ import { onComputer } from './research-ui.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { SettingsManager } from '../settings.js';
+import { mapScopePersonIds } from '../map-scope.js';
+import { selectionIds } from './view-selection-ui.js';
 import {
     placeStateBadge, placeStateMatches, placeStateRank, placeStateSummary, type PlaceIdentity,
 } from '../place-identity.js';
@@ -149,8 +151,7 @@ export type PlaceFocus = 'search' | 'why' | 'row';
 export const placesManagerMethods = uiModule({
     placesForManager(scope: MapScope): ManagerPlace[] {
         const data = DataManager.getData();
-        const filter: ReadonlySet<PersonId> | undefined =
-            scope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+        const filter = mapScopePersonIds(scope, () => TreeRenderer.getVisiblePersonIds(), () => selectionIds());
         // By name, as the UI language sorts; the dialog's sort orders its items (sortedManagerItems).
         return sortPlacesForManager([...collectPlaces(data, filter)]
             .map(([key, usage]) => ({ key, usage, geo: data.places?.[key] })), 'name', getCurrentLanguage());

@@ -589,6 +589,14 @@ export function mapPointHasPerson(point: MapPoint, personId: string): boolean {
     return point.noHouse.has(personId as PersonId) || point.houses.some(h => h.persons.has(personId as PersonId));
 }
 
+/** Everybody with a fact at a map point (a town's: at its houses and at the town itself). */
+export function mapPointPersonIds(point: MapPoint): Set<PersonId> {
+    if (point.type === 'place') return new Set(point.usage.personIds);
+    const out = new Set<PersonId>(point.noHouse.keys());
+    for (const h of point.houses) for (const id of h.persons.keys()) out.add(id);
+    return out;
+}
+
 /** A place's person rows of the bubble: each person with the kinds of their own facts (spec 085 §2f). */
 export function soloPersons(usage: PlaceUsage): Map<PersonId, Set<MapKind>> {
     if (!usage.solo) return usage.kinds;

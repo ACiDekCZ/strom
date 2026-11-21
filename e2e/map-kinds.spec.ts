@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, seedTree, seedSetting } from './helpers.js';
+import { chooseMapWholeTree } from './map-scope-helpers.js';
 
 /**
  * Kinds of places on the map and town points (spec 031 §1–§3). Like the rest
@@ -22,7 +23,7 @@ async function stubTiles(page: Page): Promise<void> {
 /** Open the map on the whole tree once a tree is in place. */
 async function openMap(page: Page): Promise<void> {
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
-    await page.locator('.map-scope button', { hasText: /^(Whole tree|Ganzer Stammbaum)$/ }).click();
+    await chooseMapWholeTree(page);
     await expect(page.locator('.map-marker').first()).toBeVisible();
     await page.evaluate(() => {
         window.Strom.UI.dismissUndoToast();

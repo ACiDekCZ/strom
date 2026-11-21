@@ -52,6 +52,8 @@ import { loadMapTile, mapTilesBlocked, mapTilesFailedIn, onMapTilesChange, relea
 import { iconSvg } from '../icons.js';
 import { shownName } from '../person-name.js';
 import { barHtml } from './prog-bar.js';
+import { mapScopePersonIds, type MapScope } from '../map-scope.js';
+import { selectionIds } from './view-selection-ui.js';
 /** A place that has coordinates and therefore something to draw. */
 export interface MappedPlace {
     key: string;
@@ -59,8 +61,7 @@ export interface MappedPlace {
     geo: PlaceGeo;
 }
 
-/** Which people the map covers. */
-export type MapScope = 'view' | 'tree';
+export type { MapScope } from '../map-scope.js';
 
 /** Recomputes --map-floor for the current map canvas (see watchMapFloor). */
 let mapFloorUpdate: (() => void) | null = null;
@@ -148,10 +149,22 @@ export const mapMethods = uiModule({
      * at), 'tree' = everybody.
      */
     mapPlaces(): MappedPlace[] {
-        const data = DataManager.getData();
-        const filter: ReadonlySet<PersonId> | undefined =
-            this.mapEffectiveScope() === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+        return this.mapPlacesFor(this.mapScopePersons());
+    },
 
+    /**
+     * The people the map covers (spec 098 §4): undefined = the whole tree,
+     * the window's selection for 'sel', the people laid out now for 'view'.
+     * The points, the kinds' counts, the bar and its lookup, Migration over
+     * time and the ancestors' path all go by it.
+     */
+    mapScopePersons(): ReadonlySet<PersonId> | undefined {
+        return mapScopePersonIds(this.mapEffectiveScope(), () => TreeRenderer.getVisiblePersonIds(), () => selectionIds());
+    },
+
+    /** The places with coordinates of these people (undefined: everybody), most used first. */
+    mapPlacesFor(filter: ReadonlySet<PersonId> | undefined): MappedPlace[] {
+        const data = DataManager.getData();
         const mapped: MappedPlace[] = [];
         // A shared event is one row of a bubble, counted once (spec 085 §2f).
         const places = collectPlaces(data, filter, this.mapKinds(), DataManager.getSharedEventIndex());
@@ -164,8 +177,7 @@ export const mapMethods = uiModule({
     /** Places in scope that have no coordinates yet — the geocoding to-do list. */
     mapMissingPlaces(): { key: string; usage: PlaceUsage }[] {
         const data = DataManager.getData();
-        const filter: ReadonlySet<PersonId> | undefined =
-            this.mapEffectiveScope() === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+        const filter = this.mapScopePersons();
         return this.mapSpellings(collectPlaces(data, filter, this.mapKinds())).places
             .filter(p => !p.geo)
             .map(({ key, usage }) => ({ key, usage }))
@@ -219,10 +231,12 @@ export const mapMethods = uiModule({
                             aria-pressed="false" aria-label="${strings.map.timeMode}" title="${strings.map.timeMode}"><span class="map-time-toggle-icon" aria-hidden="true">${iconSvg('timer')}</span><span class="map-time-toggle-text" aria-hidden="true">${strings.map.timeModeShort}</span></button>
                 </div>
                 <div class="map-topleft">
-                    <div class="map-scope sel-seg">
+                    <div class="map-scope sel-seg" role="group" aria-label="${this.escapeHtml(strings.map.scopeGroup)}">
                         <button type="button" id="map-scope-view" class="sel-opt" data-sel-form="seg" onclick="window.Strom.UI.setMapScope('view')">${strings.map.scopeView}</button>
+                        <button type="button" id="map-scope-sel" class="sel-opt" data-sel-form="seg" aria-haspopup="listbox" aria-expanded="false"></button>
                         <button type="button" id="map-scope-tree" class="sel-opt" data-sel-form="seg" onclick="window.Strom.UI.setMapScope('tree')">${strings.map.scopeTree}</button>
                     </div>
+                    <button type="button" class="map-scope-btn" aria-haspopup="dialog" onclick="window.Strom.UI.showMapScopeSheet()"><span class="map-scope-btn-label"></span><span class="map-scope-btn-caret" aria-hidden="true">▾</span></button>
                     <div class="map-path-chip" hidden>
                         <button type="button" class="map-path-chip-open" title="${strings.map.pathChange}" aria-haspopup="dialog" aria-expanded="false"
                                 onclick="window.Strom.UI.openMapPathPicker('chip')"><span class="map-path-chip-mark" aria-hidden="true">◎</span><span class="map-path-chip-pre">${strings.map.pathChip}</span><strong class="map-path-chip-name"></strong><span class="map-path-chip-caret" aria-hidden="true">▾</span></button>
@@ -251,6 +265,7 @@ export const mapMethods = uiModule({
             this.bindMapClicks(container);
             this.bindMapTime(container);
             this.bindMapKinds(container);
+            this.bindMapScope(container);
             this.watchMapFloor(container);
             container.dataset.mapLang = getCurrentLanguage();
         } else if (container.dataset.mapLang !== getCurrentLanguage()) {
@@ -258,9 +273,8 @@ export const mapMethods = uiModule({
             this.retranslateMapChrome(container);
         }
         this.renderMapKinds();
-
-        document.getElementById('map-scope-view')?.classList.toggle('active', this.mapScope !== 'tree');
-        document.getElementById('map-scope-tree')?.classList.toggle('active', this.mapScope === 'tree');
+        this.syncMapScopeTree();
+        this.renderMapScope();
 
         // First open: the background tiles come from openstreetmap.org, and the
         // tile requests themselves reveal which area the family lived in. In an
@@ -313,6 +327,8 @@ export const mapMethods = uiModule({
         text('.map-time-toggle-text', m.timeModeShort);
         text('#map-scope-view', m.scopeView);
         text('#map-scope-tree', m.scopeTree);
+        label('.map-scope', m.scopeGroup, false);
+        this.renderMapScope();
         container.querySelectorAll<HTMLElement>('.map-path-chip-open').forEach(el => { el.title = m.pathChange; });
         text('.map-path-chip-pre', m.pathChip);
         label('.map-path-chip-clear', m.pathClear);
@@ -602,6 +618,15 @@ export const mapMethods = uiModule({
         const box = document.getElementById('map-status');
         if (!box) return;
 
+        // A selection with nobody, or nobody placed (spec 098 §4): a quiet sentence in the map, no bar.
+        const empty = this.mapGeocoding ? null : this.mapSelEmptyState(places.length);
+        this.renderMapEmpty(empty);
+        if (empty) {
+            box.innerHTML = '';
+            box.style.display = 'none';
+            return;
+        }
+
         if (this.mapGeocoding) {
             const { done, total, place } = this.mapGeocoding;
             // 2h: what runs with "k of n" at the right, the bar, the place asked now with Cancel at the right.
@@ -649,6 +674,12 @@ export const mapMethods = uiModule({
         // In time mode, own up to places that carry no date and so cannot appear
         // on the timeline — honesty instead of a silently emptier map.
         // With the ancestors' path the ones off the timeline are the legend's (its foot).
+        // The path's person outside the selection: why no path is drawn (spec 098 §4).
+        if (this.mapPathOutside()) {
+            box.innerHTML = `<span class="map-status-text map-status-quiet">${this.escapeHtml(strings.map.pathOutside)}</span>`;
+            box.style.display = 'flex';
+            return;
+        }
         if (this.mapTimeOn && !pathOn) {
             const undated = this.mapTimeHarvest().undatedPlaceCount;
             if (undated > 0) {
@@ -897,8 +928,7 @@ export const mapMethods = uiModule({
     /** The dated harvest for the map's current scope (view / whole tree). */
     mapTimeHarvest(): DatedPlaceHarvest {
         const data = DataManager.getData();
-        const filter: ReadonlySet<PersonId> | undefined =
-            this.mapEffectiveScope() === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+        const filter = this.mapScopePersons();
         return collectDatedPlacePoints(data, filter, this.mapKinds(), DataManager.getSharedEventIndex());
     },
 
@@ -940,8 +970,7 @@ export const mapMethods = uiModule({
         if (!this.mapKinds().has('birth')) return [];
         const data = DataManager.getData();
         const places = data.places ?? {};
-        const filter: ReadonlySet<PersonId> | undefined =
-            this.mapEffectiveScope() === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+        const filter = this.mapScopePersons();
         const kept = (id: PersonId): boolean => !filter || filter.has(id);
 
         const byKey = new Map<string, { from: PlaceGeo; to: PlaceGeo; opacity: number }>();
@@ -1386,9 +1415,15 @@ export const mapMethods = uiModule({
             ? placeOriginBadge(located.origin, lang, located.origin === 'research' ? located.at : undefined, { small: true }) : '';
         const town = point.type === 'town' && !path;
         const big = town && point.type === 'town' && point.houseCount > TOWN_BIG;
+        const sel = this.mapEffectiveScope() === 'sel';
         const summary = point.type === 'town'
             ? m.townSummary(point.houseCount, point.personCount) + only
+            : sel ? m.popupSelCount(point.usage.personIds.length) + only
             : (only ? m.usedBy(point.usage.personIds.length) + only : '');
+        // The people here outside the selection, as one quiet line with the way to the whole tree.
+        const outside = sel && !path ? this.mapPointOutsideCount(point.key) : 0;
+        const outsideLine = outside > 0
+            ? `<p class="map-popup-outside">${this.escapeHtml(m.popupOutside(outside))} <button type="button" class="map-link map-popup-whole">${this.escapeHtml(m.popupWhole)}</button></p>` : '';
 
         popup.innerHTML = `
             <div class="map-popup-grip" aria-hidden="true"></div>
@@ -1415,6 +1450,7 @@ export const mapMethods = uiModule({
             <div class="map-popup-body${town ? ' map-popup-houses' : ''}">
                 ${path ? path.rows : point.type === 'town' ? '' : `<div class="map-popup-people${this.mapTimeOn ? ' is-rows' : ''}">${this.mapPopupPeople(
                     [...soloPersons(point.usage)], Infinity, '')}${this.mapPopupShares(point.usage.shares ?? [])}</div>`}
+                ${outsideLine}
             </div>
             <div class="map-popup-foot">
                 <button type="button" class="map-popup-fix" data-key="${this.escapeHtml(point.type === 'town' ? point.ownKey ?? point.key : point.key)}">${m.wrongSpot}</button>
@@ -1581,7 +1617,10 @@ export const mapMethods = uiModule({
                 <div class="map-popup-nohouse-title">${this.escapeHtml(`${m.noHouseNumber} · ${m.usedBy(point.noHouse.size)}`)}</div>
                 <div class="map-popup-people">${this.mapPopupPeople([...point.noHouseSolo], big ? 6 : Infinity, NO_HOUSE)}${this.mapPopupShares(point.noHouseShares)}</div>
             </div>` : '';
-        body.innerHTML = rows + none + noHouse;
+        const outside = this.mapEffectiveScope() === 'sel' ? this.mapPointOutsideCount(point.key) : 0;
+        const outsideLine = outside > 0
+            ? `<p class="map-popup-outside">${this.escapeHtml(m.popupOutside(outside))} <button type="button" class="map-link map-popup-whole">${this.escapeHtml(m.popupWhole)}</button></p>` : '';
+        body.innerHTML = rows + none + noHouse + outsideLine;
     },
 
     /**
@@ -1660,7 +1699,7 @@ export const mapMethods = uiModule({
         key = this.mapPointKeyOf(key);
         const geo = DataManager.getData().places?.[key];
         if (!geo) return;
-        if (!this.mapPlaces().some(p => p.key === key)) this.mapScope = 'tree';
+        if (!this.mapPlaces().some(p => p.key === key)) this.rememberMapScope('tree');
         // Hidden by the kinds switched off: the place's own kinds come on too.
         if (!this.mapPlaces().some(p => p.key === key)) {
             const usage = collectPlaces(DataManager.getData()).get(key);
@@ -1687,6 +1726,12 @@ export const mapMethods = uiModule({
         popup?.addEventListener('click', (e: Event) => {
             const target = e.target as HTMLElement;
             if (target.closest('.map-popup-close')) { this.closeMapPopup(); return; }
+            // "Whole tree" under the selection's people (spec 098 §4): the same place, everybody.
+            if (target.closest('.map-popup-whole') && openPoint) {
+                const key = openPoint;
+                void this.setMapScope('tree', { keepView: true }).then(() => this.showMapPlace(key, { pan: false }));
+                return;
+            }
             // A name of a shared event's row goes to that person (spec 085 §2f).
             const shareName = target.closest<HTMLElement>('.map-popup-share-name');
             if (shareName?.dataset.personId) { this.focusFromMap(shareName.dataset.personId); return; }
@@ -1739,7 +1784,7 @@ export const mapMethods = uiModule({
             // A button the bubble re-rendered under the click ("+ N more") is
             // no longer in the page: that click was inside the bubble.
             if (!(e.target as Node).isConnected) return;
-            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-time-tip, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice, .map-attribution')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-scope-pick, .map-empty, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-time-tip, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice, .map-attribution')) return;
             if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) return;
             this.closeMapPopup();
         });
@@ -1769,17 +1814,6 @@ export const mapMethods = uiModule({
         }
         TreeRenderer.presetViewMode('family');
         TreeRenderer.setFocus(personId as PersonId);
-    },
-
-    setMapScope(scope: MapScope): void {
-        if (this.mapScope === scope) return;
-        this.mapScope = scope;
-        this.closeMapPopup();
-        this.mapCenter = null;  // reframe for the new set of places
-        // B166, §8: the choice at once, the places computed anew under the canvas overlay ("Calculating the map…").
-        document.getElementById('map-scope-view')?.classList.toggle('active', scope !== 'tree');
-        document.getElementById('map-scope-tree')?.classList.toggle('active', scope === 'tree');
-        void canvasBusy(() => TreeRenderer.renderAsync(), { label: strings.busy.mapCalc });
     },
 
     /** B165, §8: the Fit button: every place framed under the canvas overlay ("Calculating the map…", past 120 ms). */
@@ -1854,7 +1888,7 @@ export const mapMethods = uiModule({
         };
 
         container.addEventListener('pointerdown', (e: PointerEvent) => {
-            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-time-tip, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-marker-work, .map-follow-notices, .follow-legend-host, .map-popup, .map-path-picker, .map-scope-pick, .map-empty, .map-lines-legend, .map-lines-chip, .map-lines-und, .map-time-tip, .map-controls, .map-topleft, .map-status, .map-timebar, .map-tiles-notice')) return;
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
             if (pointers.size === 1) dragFrom = { x: e.clientX, y: e.clientY };
             try { container.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
@@ -1931,7 +1965,7 @@ export const mapMethods = uiModule({
         container.addEventListener('wheel', (e: WheelEvent) => {
             if (!this.mapCenter) return;
             // The choice of a person scrolls its own list.
-            if ((e.target as HTMLElement).closest('.map-path-picker, .map-lines-legend, .map-lines-und, .map-time-tip')) return;
+            if ((e.target as HTMLElement).closest('.map-path-picker, .map-scope-pick, .map-lines-legend, .map-lines-und, .map-time-tip')) return;
             e.preventDefault();
             this.noteMapMovedByUser();
             const rect = container.getBoundingClientRect();

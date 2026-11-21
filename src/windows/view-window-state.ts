@@ -21,6 +21,7 @@
  */
 
 import type { PersonId } from '../types.js';
+import type { MapScope } from '../map-scope.js';
 import type { SatelliteKind } from './window-role.js';
 
 /** The views whose state is carried here (the Table's is table-ui's). */
@@ -82,7 +83,7 @@ export interface TimelineWindowState extends ViewStateBase {
 
 export interface MapWindowState extends ViewStateBase {
     view: 'map';
-    scope: 'view' | 'tree';
+    scope: MapScope;
     /** null: not framed yet (the window frames the places itself). */
     center: { lat: number; lon: number } | null;
     zoom: number;
@@ -110,7 +111,7 @@ export interface ViewStateSource {
     chartZoom(): ChartZoom | null;
     fullFamilies(): boolean;
     fan(): FanWindowSettings;
-    map(): { scope: 'view' | 'tree'; center: { lat: number; lon: number } | null; zoom: number; kinds: string[]; time: MapTimeState };
+    map(): { scope: MapScope; center: { lat: number; lon: number } | null; zoom: number; kinds: string[]; time: MapTimeState };
 }
 
 /** What a satellite applies the state to. */
@@ -210,7 +211,7 @@ export function parseViewState(kind: SatelliteKind, raw: unknown): ViewWindowSta
             }
             const kinds = Array.isArray(raw.kinds) ? raw.kinds.filter((k): k is string => typeof k === 'string') : [];
             if (!num(raw.zoom)) return null;
-            return { ...base, view: 'map', scope: raw.scope === 'tree' ? 'tree' : 'view', center, zoom: raw.zoom, kinds, time };
+            return { ...base, view: 'map', scope: raw.scope === 'tree' || raw.scope === 'sel' ? raw.scope : 'view', center, zoom: raw.zoom, kinds, time };
         }
     }
 }
