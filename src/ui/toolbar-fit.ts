@@ -99,13 +99,14 @@ function placeholderWidth(input: HTMLInputElement, cs: CSSStyleDeclaration): num
 /**
  * The room the search input lacks (0 when it has enough), with `reserve` px
  * held back: every tree's input asks for SEARCH_MIN_PX, a research tree's
- * also for its placeholder (up to SEARCH_ROOM_CAP_PX).
+ * also for its placeholder (up to SEARCH_ROOM_CAP_PX). With `placeholder`
+ * any tree's input asks for its placeholder too (the first step, below).
  */
-export function searchShortfall(toolbar: HTMLElement, reserve = 0): number {
+export function searchShortfall(toolbar: HTMLElement, reserve = 0, placeholder = false): number {
     const input = toolbar.querySelector<HTMLInputElement>('#toolbar-search-picker .person-picker-input');
     if (!input || input.getClientRects().length === 0) return 0;
     const belowMin = Math.max(0, Math.ceil(SEARCH_MIN_PX - (input.getBoundingClientRect().width - reserve)));
-    if (!document.body.classList.contains('research-actions') || !input.placeholder) return belowMin;
+    if ((!placeholder && !document.body.classList.contains('research-actions')) || !input.placeholder) return belowMin;
     const cs = getComputedStyle(input);
     const room = input.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) - reserve;
     const need = Math.min(placeholderWidth(input, cs), SEARCH_ROOM_CAP_PX);
@@ -130,8 +131,15 @@ function switcherSqueezed(toolbar: HTMLElement, nameCap: boolean): boolean {
     return name.getBoundingClientRect().width + 1 < wanted;
 }
 
-/** True when the toolbar, as laid out now, does not hold its content. */
-function tooTight(toolbar: HTMLElement, reserve: number): boolean {
+/**
+ * True when the toolbar, as laid out now, does not hold its content. The
+ * first step ("＋ Add person" → ＋) is taken also when the search field of a
+ * tree without a research cannot hold its full placeholder: a computer's
+ * width then keeps "Person suchen…" whole, whatever the line picker's label
+ * ("Wybór ▾" is wider than "Rody ▾" was, spec 098 §1.1). The later steps
+ * still ask such a field for SEARCH_MIN_PX alone (it has its short form).
+ */
+function tooTight(toolbar: HTMLElement, reserve: number, step: string): boolean {
     const previous = toolbar.style.paddingRight;
     if (reserve > 0) {
         const pad = parseFloat(getComputedStyle(toolbar).paddingRight) || 0;
@@ -139,7 +147,7 @@ function tooTight(toolbar: HTMLElement, reserve: number): boolean {
     }
     const tight = toolbar.scrollWidth > toolbar.clientWidth + 0.5 || switcherSqueezed(toolbar, true);
     toolbar.style.paddingRight = previous;
-    return tight || searchShortfall(toolbar, reserve) > 0;
+    return tight || searchShortfall(toolbar, reserve, step === TOOLBAR_FIT_STEPS[0]) > 0;
 }
 
 /**
@@ -202,7 +210,7 @@ export function updateToolbarFit(): void {
     const tabletOnly = TOOLBAR_TABLET_FIT_STEPS.filter(step => !(TOOLBAR_FIT_STEPS as readonly string[]).includes(step));
     if (isDesktop()) {
         toolbar.classList.remove(...tabletOnly);
-        fitSteps(toolbar, TOOLBAR_FIT_STEPS, reserve => tooTight(toolbar, reserve));
+        fitSteps(toolbar, TOOLBAR_FIT_STEPS, (reserve, step) => tooTight(toolbar, reserve, step));
     } else if (isTablet() && !isPhoneBar()) {
         toolbar.classList.remove(...desktopOnly);
         fitSteps(toolbar, TOOLBAR_TABLET_FIT_STEPS, reserve => tabletTooTight(toolbar, reserve)
