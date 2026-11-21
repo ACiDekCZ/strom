@@ -9303,13 +9303,14 @@
         .research-tree-agent > dd.research-tree-runs { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
         .research-tree-runs__stepper { display: inline-flex; align-items: center; gap: 4px; }
         .modal .research-tree-runs__step {
-            width: 32px; height: 30px; min-width: 0; padding: 0; margin: 0; border: 1px solid var(--border); border-radius: var(--r-md);
+            flex: none; width: 32px; height: 30px; min-width: 32px; padding: 0; margin: 0; border: 1px solid var(--border); border-radius: var(--r-md);
             background: var(--card-bg); color: var(--text); font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
         }
         .modal .research-tree-runs__step:disabled, .modal .research-tree-runs__step[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
         .modal .research-tree-runs__step:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-        .modal input.research-tree-runs__field {
-            width: 44px; height: 30px; padding: 0 4px; margin: 0; border-radius: var(--r-md); text-align: center;
+        /* The field under .research-tree-runs__stepper: (0,3,1) like the modal's full-width text fields, later. */
+        .modal .research-tree-runs__stepper input.research-tree-runs__field {
+            flex: none; width: 44px; height: 30px; padding: 0 4px; margin: 0; border-radius: var(--r-md); text-align: center;
             font-variant-numeric: tabular-nums; -moz-appearance: textfield; appearance: textfield;
         }
         .modal input.research-tree-runs__field::-webkit-inner-spin-button,
@@ -9320,8 +9321,8 @@
             .modal .research-tree-runs__step:not(:disabled):not([aria-disabled="true"]):hover { border-color: var(--primary); color: var(--primary); }
         }
         @media (pointer: coarse) {
-            .modal .research-tree-runs__step { width: 44px; height: 44px; }
-            .modal input.research-tree-runs__field { height: 44px; width: 52px; }
+            .modal .research-tree-runs__step { width: 44px; min-width: 44px; height: 44px; }
+            .modal .research-tree-runs__stepper input.research-tree-runs__field { height: 44px; width: 52px; }
             .research-tree-agent > dt.research-tree-runs-label { padding-top: 19px; }
         }
         @media (max-width: 640px) {
@@ -9330,8 +9331,8 @@
             .research-tree-agent > dd.research-tree-runs { grid-column: 1 / -1; padding-top: 4px; border-top: 0; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .modal .research-tree-runs__step { width: 40px; height: 40px; }
-            .modal input.research-tree-runs__field { height: 40px; }
+            .modal .research-tree-runs__step { width: 40px; min-width: 40px; height: 40px; }
+            .modal .research-tree-runs__stepper input.research-tree-runs__field { height: 40px; }
             .research-tree-agent > dt.research-tree-runs-label { padding-top: 17px; }
         }
         /* The Browser row: the dot and the sentence, then its link, the archives without permission or the phone's hint;
@@ -22682,6 +22683,10 @@
             .live-follow-pill .evidence-pill-label { flex: 1 10 auto; min-width: min-content; white-space: normal; text-overflow: clip; line-height: 1.2; }
             .live-follow-pill .live-follow-back { flex: 0 1 auto; min-width: min-content; white-space: normal; line-height: 1.2; }
         }
+        /* The run followed (spec 126 U10 §7): a long name ends with … on every width, × stays inside the pill
+           (after the phone's two-line label above, which would hold the whole name). */
+        .live-follow-pill.live-follow-pill--pick .evidence-pill-label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .live-follow-pill.live-follow-pill--pick .evidence-pill-close { flex: none; }
         .live-panel-chip--warn { color: var(--warning-text); background: var(--warning-soft); border-color: transparent; }
         /* Section choices (spec 044): "Awaiting action" kept in sight while collapsed or hidden. */
         .live-panel-chip.is-important { color: var(--on-warning); background: var(--warning); border-color: var(--warning); }
@@ -24664,8 +24669,11 @@
             display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px;
             font-size: 12px; color: var(--text-light);
         }
-        /* The dot keeps the same room on both sides (a space at the start of a flex item is lost). */
-        .research-direction__meta > * + *::before { content: '·'; margin-right: 6px; color: var(--text-light); }
+        /* The dot ends the part before it, so a wrapped row never starts with it; the gap gives the room after it.
+           An inline block: a link's underline stops before the dot. */
+        .research-direction__meta > :not(:last-child)::after {
+            content: '·'; display: inline-block; margin-left: 6px; color: var(--text-light); text-decoration: none;
+        }
         .research-direction__meta .live-person-link { font-size: 12px; }
         .research-direction__waiting { color: var(--warning-text); }
         .research-direction__do { font-size: 13px; }
@@ -25156,8 +25164,8 @@
                 display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             }
             .research-overview--sheet .research-direction__meta > * { display: inline; }
-            /* One line, no flex gap: the dot keeps its room on the left too. */
-            .research-overview--sheet .research-direction:not(.is-open) .research-direction__meta > * + *::before { margin-left: 6px; }
+            /* One line, no flex gap: the dot keeps its room on the right too. */
+            .research-overview--sheet .research-direction:not(.is-open) .research-direction__meta > :not(:last-child)::after { margin-right: 6px; }
             .research-overview--sheet .research-direction__moves { flex-direction: row; }
         }
 
@@ -32808,11 +32816,14 @@
         #queue-work-modal .queue-work__agent .sel-opt { height: 32px; min-height: 0; padding: 0 12px; font-size: 13px; white-space: nowrap; }
         .queue-work__agent .sel-opt small { font-size: 11.5px; color: var(--text-light); font-weight: 400; }
         .queue-work__agent-kept { margin: 0; font-size: 12px; color: var(--text-faint); }
+        /* More agents than a segment holds: the dialogs' select across the row. */
+        #queue-work-modal select.queue-work__agent-select { align-self: stretch; width: 100%; max-width: 100%; }
         .queue-work__adds { margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
         .queue-work__held { margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--warning-text); }
         .queue-work__held[hidden] { display: none; }
         @media (pointer: coarse) {
             #queue-work-modal .queue-work__agent .sel-opt { height: 44px; }
+            #queue-work-modal select.queue-work__agent-select { min-height: 44px; }
         }
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .queue-work__agent .sel-seg { display: flex; align-self: stretch; }

@@ -209,6 +209,16 @@ export function workDialogAgents(state: QueueWorkState): LiveAgent[] | null {
     return runAgentsOn(state.features) && (state.agents?.length ?? 0) >= 2 ? state.agents! : null;
 }
 
+/** The most agents drawn as a segment; more (or a segment wider than its room) are a select. */
+export const AGENT_SEGMENT_MAX = 3;
+
+/** Whether the agents' segment, as laid out, is wider than its room or cuts one of its names. */
+function agentSegmentOverflows(seg: HTMLElement): boolean {
+    const room = seg.parentElement?.clientWidth ?? 0;
+    if (room > 0 && seg.scrollWidth > Math.min(seg.clientWidth || room, room) + 1) return true;
+    return Array.from(seg.querySelectorAll<HTMLElement>('[data-agent]')).some(b => b.scrollWidth > b.clientWidth + 1);
+}
+
 /** How many runs work already (the line "Subscription usage adds up" only from one on; 0 for an older research). */
 export function workDialogAddsUp(state: QueueWorkState): number {
     return runCount(workDialogRuns(state));
@@ -460,10 +470,15 @@ export const queueWorkMethods = uiModule({
                         <h2 id="queue-work-title"><span class="queue-work__glyph" aria-hidden="true">${esc(directionGlyph(line))}</span> ${esc(line.name)} <span class="code">${esc(line.id)}</span></h2>
                     </div>` : `
                     <h2 id="queue-work-title">${esc(L.queueWorkTitle)}</h2>`;
+        // The agent: a segment while it fits (a few short names), else the dialogs' select (five agents of a real research).
+        const agentSegHtml = (list: readonly LiveAgent[]): string =>
+            `<div class="sel-seg queue-work__agent-seg" role="radiogroup" aria-labelledby="queue-work-agent-h">${list.map(a => `<button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-agent="${esc(a.id)}" aria-checked="${a.id === agent}" tabindex="${a.id === agent ? 0 : -1}">${esc(a.name)}${a.id === defaultAgent ? ` <small>(${esc(L.lineRunAgentDefault)})</small>` : ''}</button>`).join('')}</div>`;
+        const agentSelectHtml = (list: readonly LiveAgent[]): string =>
+            `<select class="queue-work__agent-select" id="queue-work-agent" aria-labelledby="queue-work-agent-h">${list.map(a => `<option value="${esc(a.id)}"${a.id === agent ? ' selected' : ''}>${esc(a.name)}${a.id === defaultAgent ? ` (${esc(L.lineRunAgentDefault)})` : ''}</option>`).join('')}</select>`;
         const agentHtml = agents ? `
                 <div class="queue-work__agent">
                     <div class="queue-work__agent-label" id="queue-work-agent-h">${esc(L.lineRunAgent)}</div>
-                    <div class="sel-seg queue-work__agent-seg" role="radiogroup" aria-labelledby="queue-work-agent-h">${agents.map(a => `<button type="button" class="segment-btn sel-opt" data-sel-form="seg" role="radio" data-agent="${esc(a.id)}" aria-checked="${a.id === agent}" tabindex="${a.id === agent ? 0 : -1}">${esc(a.name)}${a.id === defaultAgent ? ` <small>(${esc(L.lineRunAgentDefault)})</small>` : ''}</button>`).join('')}</div>
+                    ${agents.length <= AGENT_SEGMENT_MAX ? agentSegHtml(agents) : agentSelectHtml(agents)}
                     <p class="queue-work__agent-kept">${esc(L.lineRunAgentKept)}</p>
                 </div>` : '';
         const overlay = document.createElement('div');
@@ -537,6 +552,11 @@ export const queueWorkMethods = uiModule({
         // Typing into the count (or clicking it) chooses "Only [n] tasks".
         count?.addEventListener('input', chooseCount);
         count?.addEventListener('click', chooseCount);
+        // A segment wider than its room (long names, a narrow screen): the select in its place.
+        const seg = overlay.querySelector<HTMLElement>('.queue-work__agent-seg');
+        if (seg && agents && agentSegmentOverflows(seg)) seg.outerHTML = agentSelectHtml(agents);
+        const agentSelect = overlay.querySelector<HTMLSelectElement>('#queue-work-agent');
+        if (agentSelect) agentSelect.onchange = () => { agent = agentSelect.value || null; };
         // The agent: one of the segment (arrows move the choice, as radios do).
         const agentBtns = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.queue-work__agent-seg [data-agent]'));
         const pick = (b: HTMLButtonElement, focus: boolean): void => {

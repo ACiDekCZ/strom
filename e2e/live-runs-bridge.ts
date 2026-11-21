@@ -50,6 +50,15 @@ export const RUN_AGENTS: Record<string, unknown>[] = [
     { id: 'codex', name: 'Codex' },
 ];
 
+/** Five agents with long names, as a real research sends them (pass as `agents`; the sample keeps two). */
+export const RUN_AGENTS_MANY: Record<string, unknown>[] = [
+    { id: 'claude', name: 'Claude Code', default: true },
+    { id: 'codex', name: 'OpenAI Codex CLI' },
+    { id: 'antigravity', name: 'Antigravity CLI' },
+    { id: 'opencode', name: 'OpenCode' },
+    { id: 'grok', name: 'Grok Build' },
+];
+
 /** At most 3 runs at once, the research takes up to 10 (`running` is counted by the bridge). */
 export const RUN_LIMITS = { maxRuns: 3, cap: 10 };
 

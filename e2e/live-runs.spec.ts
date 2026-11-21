@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { UUID, directionRow, launchedLinks, openOverview, overview } from './live-directions-bridge';
-import { RUNS, RUN_DIRECTIONS, RUN_FEATURES, RUN_WORKING, followRuns } from './live-runs-bridge';
+import { RUNS, RUN_AGENTS_MANY, RUN_DIRECTIONS, RUN_FEATURES, RUN_WORKING, followRuns } from './live-runs-bridge';
 
 /**
  * A direction's own run (spec 126 U10 §1, §2): "Put an agent on this
@@ -503,5 +503,114 @@ test.describe('the whole queue beside the directions\' runs (spec 126 U10 §6)',
         await expect(overview(page).locator('.research-queue__line-run, .research-queue__line-run-filtered, .queue-work-limit')).toHaveCount(0);
         const ids = await queueRows(page).evaluateAll(els => els.map(e => (e as HTMLElement).dataset.task));
         expect(ids).toContain('T0390');
+    });
+});
+
+/**
+ * Fit at every width (spec 126 U10, the walkthrough): the stepper of the most
+ * agents keeps its buttons beside its field, the pill of the run followed
+ * cuts a long name and keeps its ×, five agents of a real research are a
+ * select, and the dot of a direction's row never starts a wrapped line.
+ */
+test.describe('fit at every width', () => {
+    /** The stepper's parts and its row: [left, right, width] each. */
+    const stepper = (page: Page) => settings(page).locator('dd[data-row="runs"]').evaluate(dd => {
+        const box = (e: Element | null) => { const r = e!.getBoundingClientRect(); return { left: r.left, right: r.right, width: r.width, height: r.height }; };
+        return { row: box(dd), less: box(dd.querySelector('#research-runs-less')), field: box(dd.querySelector('#research-runs-max')), more: box(dd.querySelector('#research-runs-more')) };
+    });
+
+    test('the stepper: − and + 32 px wide beside a 44 px field, inside its row', async ({ page }) => {
+        await followRuns(page);
+        await openTreeSettings(page);
+        const s = await stepper(page);
+        expect(s.less.width).toBeGreaterThanOrEqual(32);
+        expect(s.more.width).toBeGreaterThanOrEqual(32);
+        expect(Math.round(s.field.width)).toBe(44);
+        expect(s.more.right).toBeLessThanOrEqual(s.row.right + 0.5);
+        expect(s.less.right).toBeLessThanOrEqual(s.field.left);
+    });
+
+    test.describe('touch', () => {
+        test.use({ hasTouch: true, isMobile: true });
+        test('390 px: − and + 44 × 44 beside the field, inside the row', async ({ page }) => {
+            await followRuns(page, { size: { width: 390, height: 844 } });
+            await openTreeSettings(page);
+            const s = await stepper(page);
+            for (const b of [s.less, s.more]) {
+                expect(Math.round(b.width)).toBe(44);
+                expect(Math.round(b.height)).toBe(44);
+            }
+            expect(Math.round(s.field.width)).toBe(52);
+            expect(s.more.right).toBeLessThanOrEqual(s.row.right + 0.5);
+        });
+    });
+
+    for (const width of [390, 1024]) {
+        test(`the pill at ${width}: a long run's name ends with …, × inside the pill`, async ({ page }) => {
+            const long = 'Kubíčkovi z Dolní Lhoty u Kutné Hory';
+            await page.clock.install({ time: T });
+            await page.addInitScript(() => {
+                (globalThis as { __LIVE_FOLLOW_MS?: unknown }).__LIVE_FOLLOW_MS = { gap: 300, idle: 60_000, retry: 150 };
+                if (sessionStorage.getItem('follow-seeded')) return;
+                sessionStorage.setItem('follow-seeded', '1');
+                localStorage.setItem('strom-live-follow', '1');
+            });
+            await followRuns(page, {
+                runs: runsAt(), working: workingAt(), fastReconnect: true, size: { width, height: width < 641 ? 844 : 768 },
+                researches: directions('G0001', { name: long }),
+            });
+            await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+            await page.evaluate(() => window.Strom.UI.setFollowedRun('run-1a07'));
+            const pill = page.locator('#live-follow-pill');
+            await expect(pill).toContainText(long);
+            const fit = await pill.evaluate(p => {
+                const r = p.getBoundingClientRect();
+                const x = p.querySelector('.evidence-pill-close')!.getBoundingClientRect();
+                return { sw: p.scrollWidth, cw: p.clientWidth, inside: x.left >= r.left - 0.5 && x.right <= r.right + 0.5 };
+            });
+            expect(fit.sw).toBeLessThanOrEqual(fit.cw);
+            expect(fit.inside).toBe(true);
+        });
+    }
+
+    for (const width of [1440, 1024]) {
+        test(`five agents at ${width}: a select inside the dialog, the last one chosen goes into the link`, async ({ page }) => {
+            await page.clock.install({ time: T });
+            await followRuns(page, { agents: RUN_AGENTS_MANY, size: { width, height: width > 1024 ? 900 : 768 } });
+            await openOverview(page);
+            await unfold(page, 'G0002');
+            await runBox(page, 'G0002').locator('[data-do="run"]').click();
+            const d = dialog(page);
+            const select = d.locator('select.queue-work__agent-select');
+            await expect(select).toHaveAttribute('aria-labelledby', 'queue-work-agent-h');
+            await expect(select.locator('option')).toHaveText(['Claude Code (default)', 'OpenAI Codex CLI', 'Antigravity CLI', 'OpenCode', 'Grok Build']);
+            await expect(select).toHaveValue('claude');
+            const out = await d.evaluate(m => {
+                const r = m.getBoundingClientRect();
+                return [m, ...m.querySelectorAll<HTMLElement>('*')].filter(e => {
+                    const b = e.getBoundingClientRect();
+                    return b.width > 0 && (b.right > r.right + 0.5 || b.left < r.left - 0.5 || (e !== m && e.tagName !== 'SELECT' && e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).textOverflow !== 'ellipsis'));
+                }).map(e => e.className || e.tagName);
+            });
+            expect(out).toEqual([]);
+            await select.selectOption('grok');
+            await d.locator('#queue-work-open').click();
+            await page.clock.runFor(1000);
+            await expect.poll(() => launchedLinks(page)).toEqual([
+                expect.stringMatching(/^strom-research:\/\/work\?tree=[^&]+&do=loop&research=G0002&agent=grok$/),
+            ]);
+        });
+    }
+
+    test('a direction\'s row: the dot ends the part before it, a wrapped line starts with no dot', async ({ page }) => {
+        await followRuns(page, { size: { width: 1024, height: 768 } });
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await openOverview(page);
+        const meta = directionRow(page, 'G0001').locator('.research-direction__meta').first();
+        await expect(meta).toContainText('Agent arbeitet: Claude');
+        const dots = await meta.evaluate(m => [...m.children].map(c => [getComputedStyle(c, '::before').content, getComputedStyle(c, '::after').content]));
+        expect(dots.length).toBeGreaterThanOrEqual(3);
+        expect(dots.map(d => d[0]).filter(c => c !== 'none' && c !== 'normal')).toEqual([]);
+        expect(dots.map(d => d[1])).toEqual([...dots.slice(1).map(() => '"·"'), 'none']);
     });
 });
