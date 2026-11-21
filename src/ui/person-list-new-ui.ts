@@ -48,7 +48,7 @@ const MAX_GENERATIONS = 10;
 const MAX_DAYS = 3650;
 
 /** Where the dialog comes from: the rule choice (new), or a view saved as a list. */
-export type NewListSource = 'new' | 'table' | 'unions' | 'search' | 'rod' | 'line';
+export type NewListSource = 'new' | 'table' | 'unions' | 'search' | 'rod' | 'line' | 'selection';
 
 /**
  * What the dialog opens with (D3b and D4 call it with a rule or people):
@@ -176,6 +176,11 @@ function defaultName(st: NewListState): string {
         const r = st.saveRule;
         if (r?.kind === 'rods') return t.rule.rod(rodLabel(r.rodIds[0]) || '?');
         if (r?.kind === 'line') return researchLines().find(l => l.id === r.directionId)?.name ?? r.lineName ?? '';
+        // The window's selection of ancestors or descendants (spec 098 §2).
+        if (r?.kind === 'ancestors' || r?.kind === 'descendants') {
+            const p = personOf(r.personId);
+            return p ? (r.kind === 'ancestors' ? t.new.nameAnc(shownName(p)) : t.new.nameDes(shownName(p))) : '';
+        }
         return '';
     }
     switch (st.opt) {
@@ -222,7 +227,7 @@ export const personListNewMethods = uiModule({
             listId: editList?.id ?? null,
             opt: 'empty', rodId: firstRod, personId: personOf(focus) ? focus : null, gens: 0,
             lineId: lines[0]?.id ?? null, days: 30, customDays: false,
-            dynamic: editList ? editList.dynamic : opts.dynamic ?? (mode === 'save' && (source === 'rod' || source === 'line')),
+            dynamic: editList ? editList.dynamic : opts.dynamic ?? (mode === 'save' && (source === 'rod' || source === 'line' || source === 'selection')),
             name: opts.name ?? '', nameTouched: opts.name !== undefined,
             given: opts.personIds ? [...opts.personIds] : null,
             saveRule: mode === 'save' ? opts.rule ?? null : null,

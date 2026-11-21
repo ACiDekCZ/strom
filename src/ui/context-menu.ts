@@ -20,7 +20,9 @@ import { inBirthOrder } from '../marriage-order.js';
 import { menuOffersLineJumps } from '../card-tap.js';
 import { personStoryChapterCount } from '../story-text.js';
 import { LineageIndex, RodId, realRodMembers, rodOf, spouseRodsOf } from '../lineage.js';
-import { clearRodSelection, getSelectedRod, rodIndex, setRodSelection } from './rod-view.js';
+import { rodIndex } from './rod-view.js';
+import { clearSelection, getSelection, setSelection } from './view-selection-ui.js';
+import { decodeSelectionRef, encodeSelectionRef, selectionPersonIds, type SelectionRef } from '../view-selection.js';
 import { getWindowRole } from '../windows/window-role.js';
 import { satelliteResearchMenu, WIN_RESEARCH_PREFIX } from '../windows/window-research-menu.js';
 import { isBulkBubbleOpen, runBulkFamily } from './bulk-family-ui.js';
@@ -33,10 +35,12 @@ const LINE_JUMP_PARENTS_ACTION = 'line-jump-parents';
 const LINE_JUMP_CHILDREN_ACTION = 'line-jump-children';
 /** The menu action of a name under "∞ Other partners" (+ the marriage's id, round 7 §50). */
 const PARTNER_HERE_ACTION = 'partner-here:';
-/** The menu action "Only the X line" (+ the line's id, spec 039 §2.1). */
-const ROD_ONLY_ACTION = 'rod-only:';
-/** The menu action "Show the whole tree" on the person's chosen line. */
-const ROD_CLEAR_ACTION = 'rod-clear';
+/** The rows of "Select ›" (+ the encoded selection, spec 098 §2): a family line, the ancestors, the descendants. */
+const SELECT_ACTION = 'select:';
+/** The row "Select ›" itself (its submenu). */
+const SELECT_MENU_ACTION = 'select';
+/** "Clear the selection" under it, the person being in the window's selection. */
+const SELECT_CLEAR_ACTION = 'select-clear';
 /** The menu actions of children and siblings at once (src/bulk-family.ts): expand, collapse the standing step. */
 export const BULK_FAMILY_ACTION = 'bulk-family';
 export const BULK_FAMILY_OFF_ACTION = 'bulk-family-off';
@@ -117,8 +121,8 @@ function isChartRow(a: PersonMenuAction): boolean {
  * research, its bridge).
  */
 function isMainWindowRow(a: PersonMenuAction): boolean {
-    return a.action.startsWith('view-link-') || a.action.startsWith(ROD_ONLY_ACTION) || a.action === ROD_CLEAR_ACTION
-        || a.action === 'rod-only' || a.action === 'live-stop';
+    return a.action.startsWith('view-link-') || a.action.startsWith(SELECT_ACTION) || a.action === SELECT_CLEAR_ACTION
+        || a.action === SELECT_MENU_ACTION || a.action === 'live-stop';
 }
 
 /**
@@ -166,35 +170,47 @@ function group(items: PersonMenuAction[]): PersonMenuAction[] {
 }
 
 /**
- * "Only the X line" (spec 039 §2.1): the person's birth line first, then the
- * lines they married into, each with at least two real members. One line:
- * one row; two: two rows with "birth" / "wife" or "husband" as the meta;
- * three and more: "Only one line ›". The chosen line's row shows the whole
- * tree again instead. Views only: offered in every variant of the menu.
+ * "◎ Select ›" (spec 098 §2, 1g): one row whose submenu offers the person's
+ * family lines (the birth line first, then the lines they married into, each
+ * with at least two real members; "birth" / "wife" or "husband" beside them
+ * when there are two or more), a divider, then the person's ancestors and
+ * descendants with their counts (left out when there are none beyond the
+ * person). When the person is in the window's selection, "Clear the
+ * selection" follows the row. Views only: offered in every variant of the menu.
  */
-export function rodMenuRows(index: LineageIndex, labels: ReadonlyMap<RodId, string>, personId: PersonId, selected: RodId | null): PersonMenuAction[] {
+export function selectionMenuRows(index: LineageIndex, labels: ReadonlyMap<RodId, string>, personId: PersonId, selected: SelectionRef | null): PersonMenuAction[] {
     const person = index.data.persons[personId];
     if (!person || person.isPlaceholder) return [];
+    const s = strings.selection;
     const shown = (id: RodId): boolean => realRodMembers(index, id).length >= 2;
     const own = rodOf(index, personId);
     const birth = own && shown(own) ? own : null;
     const married = spouseRodsOf(index, personId).filter(id => id !== own && shown(id));
     const ids = [...(birth ? [birth] : []), ...married];
-    if (ids.length === 0) return [];
     const r = strings.rodView;
     const spouseMeta = person.gender === 'female' ? r.wife : person.gender === 'male' ? r.husband : undefined;
     const label = (id: RodId): string => labels.get(id) ?? index.rods.get(id)?.surname ?? '';
-    const whole: PersonMenuAction[] = selected && ids.includes(selected)
-        ? [{ action: ROD_CLEAR_ACTION, label: strings.selection.clear, kind: 'focus' }] : [];
-    const rows: PersonMenuAction[] = ids.filter(id => id !== selected).map(id => ({
-        action: ROD_ONLY_ACTION + id, label: r.only(label(id)), kind: 'focus' as const,
+    const rows: PersonMenuAction[] = ids.map(id => ({
+        action: SELECT_ACTION + encodeSelectionRef({ kind: 'rod', rodId: id }), label: s.menuRod(label(id)), kind: 'focus' as const,
         ...(ids.length >= 2 ? { meta: id === birth ? r.birth : spouseMeta } : {}),
     }));
-    if (ids.length < 3) {
-        // In the person's order: the chosen line's row (the whole tree) where that line stands.
-        return ids.map(id => (id === selected ? whole[0] : rows.find(a => a.action === ROD_ONLY_ACTION + id)!));
+    const kin: PersonMenuAction[] = [];
+    for (const kind of ['ancestors', 'descendants'] as const) {
+        const ref: SelectionRef = { kind, personId };
+        const found = selectionPersonIds(index.data, index, ref);
+        const n = found ? found.size - (found.has(personId) ? 1 : 0) : 0;
+        if (n <= 0) continue;
+        kin.push({
+            action: SELECT_ACTION + encodeSelectionRef(ref), label: kind === 'ancestors' ? s.menuAnc : s.menuDes, kind: 'focus',
+            meta: String(found!.size),
+        });
     }
-    return [...whole, ...submenuRow('rod-only', r.onlySub, rows).map(a => ({ ...a, kind: 'focus' as const }))];
+    const sub = [...rows, ...kin.map((a, i) => (i === 0 && rows.length > 0 ? { ...a, divider: true } : a))];
+    const out: PersonMenuAction[] = sub.length ? [{ action: SELECT_MENU_ACTION, label: s.menuSub, submenu: sub, kind: 'focus' }] : [];
+    if (selected && selectionPersonIds(index.data, index, selected)?.has(personId)) {
+        out.push({ action: SELECT_CLEAR_ACTION, label: s.clear, kind: 'focus' });
+    }
+    return out;
 }
 
 /** Label (+ the quiet right-aligned meta, AI label, the research's mark) of a person menu item, escaped. */
@@ -305,9 +321,9 @@ export const contextMenuMethods = uiModule({
             ...this.bulkFamilyRows(personId),
         ];
         const children: PersonMenuAction[] = [...inPlace, ...this.elsewhereRows(personId)];
-        // "Only the X line" (spec 039 §2.1): a view, so in every variant, after the person's own rows.
+        // "Select ›" (spec 098 §2): a view, so in every variant, after the person's own rows.
         const { index, labels } = rodIndex();
-        const rodRows = rodMenuRows(index, labels, personId, getSelectedRod());
+        const rodRows = selectionMenuRows(index, labels, personId, getSelection().ref);
         if (isViewMode) {
             return forWindow(withViewLinkRows([
                 { action: 'focus', label: c.focus, kind: 'focus' },
@@ -575,12 +591,13 @@ export const contextMenuMethods = uiModule({
             TreeRenderer.showChildElsewhereStep(action.slice(CHILD_ELSEWHERE_ACTION.length) as PersonId);
             return;
         }
-        if (action.startsWith(ROD_ONLY_ACTION)) {
-            setRodSelection(action.slice(ROD_ONLY_ACTION.length), 'menu');
+        if (action.startsWith(SELECT_ACTION)) {
+            const ref = decodeSelectionRef(action.slice(SELECT_ACTION.length));
+            if (ref) setSelection(ref, 'menu');
             return;
         }
-        if (action === ROD_CLEAR_ACTION) {
-            clearRodSelection();
+        if (action === SELECT_CLEAR_ACTION) {
+            clearSelection();
             return;
         }
         switch (action) {

@@ -10,7 +10,7 @@
  * lines", the pairs' folds and the jumps of "Other families" letters.
  */
 
-import { rodPickKey } from '../rod-picker.js';
+import { SelectionPickRowInfo, rodPickKey, selectionPickFilter } from '../rod-picker.js';
 
 function finePointer(): boolean {
     return !!window.matchMedia?.('(pointer: fine)').matches;
@@ -25,6 +25,26 @@ export interface WireRodPickerOptions {
     outside?: EventTarget;
     /** The first result of a query framed, the one Enter picks (the tree view, spec 039 §1.3). */
     markFirst?: boolean;
+    /**
+     * The window's selection (spec 098 §2): the rows of the people a query
+     * finds (selectionFoundRowsHtml), put under the section People.
+     */
+    findPersons?: (query: string) => string;
+}
+
+/** A query this long looks for people too (one letter would match half the tree). */
+const PERSON_QUERY_MIN = 2;
+
+/** What the sectioned filter needs of a row of the window's selection. */
+function rowInfo(li: HTMLElement): SelectionPickRowInfo {
+    const c = li.classList;
+    const role: SelectionPickRowInfo['role'] = c.contains('sp-selpick-sh') ? 'head'
+        : c.contains('sp-selpick-none') ? 'none'
+        : c.contains('sp-rodpick-tree') ? 'tree'
+        : c.contains('sp-rodpick-small') ? 'small'
+        : c.contains('sp-rodpick-other') ? 'other'
+        : li.dataset.found !== undefined ? 'found' : 'row';
+    return { role, sec: li.dataset.sec ?? '', q: li.dataset.q, empty: li.dataset.empty !== undefined };
 }
 
 /**
@@ -44,8 +64,40 @@ export function wireRodPicker(root: HTMLElement, onPick?: (rod: string) => void,
         .map(li => li.querySelector<HTMLElement>('.sp-rodpick-a, .sp-rodpick-x')).filter((a): a is HTMLElement => !!a);
     const toggleBtn = (): HTMLButtonElement | null => pick.querySelector<HTMLButtonElement>('.sp-rodpick-x');
     let unfolded = false;
+    const sectioned = pick.classList.contains('sp-selpick');
+    /** The window's selection (§2): the sections filtered together, the people found put in. */
+    const filterSections = (k: string): void => {
+        const list = pick.querySelector<HTMLElement>('.sp-rodpick-list');
+        if (!list) return;
+        list.querySelectorAll('li[data-found]').forEach(li => li.remove());
+        const searched = !!opts.findPersons && k.length >= PERSON_QUERY_MIN;
+        if (searched) {
+            const head = list.querySelector<HTMLElement>('.sp-selpick-sh[data-sec="persons"]');
+            head?.insertAdjacentHTML('afterend', opts.findPersons!(input?.value ?? ''));
+        }
+        const all = items();
+        const shows = selectionPickFilter(all.map(rowInfo), k, unfolded, searched);
+        all.forEach((li, i) => {
+            const show = shows[i];
+            li.hidden = show.hidden;
+            if (show.text) li.textContent = (show.text === 'empty' ? li.dataset.empty : li.dataset.none) ?? '';
+        });
+        const x = toggleBtn();
+        const open = k ? all.some((li, i) => !shows[i].hidden && li.classList.contains('sp-rodpick-small')) : unfolded;
+        x?.setAttribute('aria-expanded', String(open));
+        const chev = x?.querySelector('.sp-rodpick-xchev');
+        if (chev) chev.textContent = open ? '▾' : '▸';
+    };
     const filter = (): void => {
         const k = rodPickKey(input?.value ?? '');
+        if (sectioned) {
+            filterSections(k);
+            if (opts.markFirst) {
+                pick.querySelectorAll('.sp-rodpick-first').forEach(el => el.classList.remove('sp-rodpick-first'));
+                if (k) visible().find(a => a.classList.contains('sp-rodpick-a'))?.classList.add('sp-rodpick-first');
+            }
+            return;
+        }
         let n = 0;
         let smallHits = 0;
         for (const li of items()) {
@@ -122,12 +174,16 @@ export function wireRodPicker(root: HTMLElement, onPick?: (rod: string) => void,
         }
         const a = (e.target as HTMLElement).closest<HTMLElement>('.sp-rodpick-a');
         if (!a) return;
-        const rod = a.closest<HTMLElement>('li')?.dataset.rod ?? '';
+        const li = a.closest<HTMLElement>('li');
+        // The window's selection carries its ref (data-sel), a line's choice its line.
+        const rod = li?.dataset.sel ?? li?.dataset.rod ?? '';
         shut();
         onPick?.(rod);
     }, on);
     (opts.outside ?? root).addEventListener('click', (e) => {
-        if (pick.open && !pick.contains(e.target as Node)) shut();
+        // The person popover of "Another person…" stands beside the choice: clicks in it keep it open.
+        const t = e.target as Element | null;
+        if (pick.open && !pick.contains(t as Node) && !t?.closest?.('.tov-pop')) shut();
     }, on);
     // A current small line shows unfolded at once (the row that says where the view is).
     if (expand && pick.querySelector('.sp-rodpick-small[aria-current]')) { unfolded = true; filter(); }

@@ -122,7 +122,7 @@ describe('the chosen line: one state, per tree, covered and back (§0, §3)', ()
         vi.spyOn(TreeRenderer, 'setEvidenceLevels').mockImplementation(() => {});
         resetRodView();
         moves.length = 0;
-        ui = { ...evidenceUiMethods, renderEvidencePill() {}, showToast() {}, openRodPicker() {} } as never;
+        ui = { ...evidenceUiMethods, renderEvidencePill() {}, showToast() {}, openSelectionPicker() {} } as never;
         toasts.length = 0;
         setSelectionHost({
             highlightGroup: (g) => ui.highlightGroup.call(ui as never, g),

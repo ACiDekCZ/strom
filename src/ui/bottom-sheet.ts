@@ -21,7 +21,6 @@ import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js'
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
-import { rodPickerOffered } from './rod-view.js';
 import { getSelection, selectionText } from './view-selection-ui.js';
 import { satelliteResearchMenu } from '../windows/window-research-menu.js';
 
@@ -455,11 +454,11 @@ export const bottomSheetMethods = uiModule({
         }
 
         // 5) View: Fan | Map | Timeline tiles (no bottom-bar tab of their own); on a phone under them the
-        //    family line's choice (spec 039 §5.1: not on the timeline and the map, nor in a tree
-        //    without a line; a tablet has it in its top bar).
+        //    window's selection (spec 098 §10: in every tree in Family, Descendants and the fan, not
+        //    on the timeline, the map, the table; a tablet has it in its top bar).
         const sel = getSelection().ref;
-        const rodRow: ValueRow | undefined = isPhoneBar() && mode !== 'timeline' && mode !== 'map' && mode !== 'table' && rodPickerOffered()
-            ? { label: s.selection.row, value: sel ? selectionText(sel) : s.selection.none, id: 'sheet-rod', run: () => this.showRodPickerSheet() }
+        const selectionRow: ValueRow | undefined = isPhoneBar() && mode !== 'timeline' && mode !== 'map' && mode !== 'table'
+            ? { label: s.selection.row, value: sel ? selectionText(sel) : s.selection.none, id: 'sheet-rod', run: () => this.showSelectionSheet() }
             : undefined;
         // Full screen (spec 082 K1.3): only in the bottom-bar regime; on an iPhone the way to the Home Screen.
         // Held sideways the sheet has no height to spare: there it joins the View line as a fourth tile.
@@ -478,7 +477,7 @@ export const bottomSheetMethods = uiModule({
             { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
             { label: s.viewModeSwitch.timeline, run: () => this.setDisplayViewMode('timeline'), active: mode === 'timeline' },
             ...(fullscreenRow && sideways ? [fullscreenRow] : []),
-        ], valueRow: rodRow });
+        ], valueRow: selectionRow });
         if (fullscreenRow && !sideways) blocks.push({ rows: [fullscreenRow] });
 
         // 6) [Ancestor research · New] · "Tree: {name} ›" (every whole-tree action) · Add family.

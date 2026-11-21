@@ -15152,8 +15152,9 @@
         /* The family line's choice (spec 039 §1): the tree pages' "Line X ▾"
            (src/family-pages-css.ts) before the view tabs, which then follow 6px
            after it; the list's rows are buttons here (not the toolbar's green
-           ones). Hidden on the timeline and the map, in a tree without a line,
-           on the phone (src/ui/rod-view.ts). */
+           ones). Since spec 098 the window's selection, in every tree; hidden
+           on the timeline, the map, the table and the phone
+           (src/ui/selection-picker-ui.ts). */
         .rod-picker-host { display: flex; align-items: center; flex-shrink: 0; min-width: 0; margin-left: auto; }
         .rod-picker-host[hidden] { display: none !important; }
         .rod-picker-host:not([hidden]) + .view-mode-segment { margin-left: -2px; }
@@ -15190,6 +15191,53 @@
         }
         @media (pointer: coarse) {
             :is(.rod-picker-host, .rod-pick-sheet) button.sp-rodpick-savebtn { min-height: 48px; }
+        }
+        /* The window's selection (spec 098 §2, 2a): the same list in sections —
+           No selection, Family lines, People (a query's), Ancestors and
+           descendants, Research lines, Lists of people — every row with its
+           icon; the chosen ancestors' or descendants' person and generations
+           on top, the footer (Save as list…, Lists of people…) under it. */
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick button.sp-rodpick-a,
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick button.sp-rodpick-x { gap: 8px; grid-template-columns: 20px minmax(0, 1fr) auto; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick .sp-rodpick-rod button.sp-rodpick-a { grid-template-columns: 20px minmax(0, 1fr) 72px 36px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick .sp-rodpick-tree button.sp-rodpick-a { grid-template-columns: 20px minmax(0, 1fr) auto; min-height: 44px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; padding-left: 36px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet) .sp-selpick button.sp-rodpick-x { min-height: 44px; }
+        .sp-selpick .sp-rodpick-other { margin-top: 0; padding-top: 0; border-top: 0; }
+        .sp-selpick .sp-selpick-ic { display: inline-flex; align-items: center; justify-content: center; color: var(--text-faint); }
+        .sp-selpick .sp-selpick-ic svg { display: block; }
+        .sp-selpick .sp-rodpick-n { min-width: 0; }
+        .sp-selpick .sp-selpick-sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-faint); }
+        .sp-selpick .sp-rodpick-c { color: var(--text-light); font-variant-numeric: tabular-nums; text-align: right; }
+        .sp-selpick .sp-selpick-sh {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 8px 4px;
+            font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); list-style: none;
+        }
+        .sp-selpick .sp-selpick-sh[hidden] { display: none; }
+        .sp-selpick button.sp-selpick-other, .sp-selpick button.sp-selpick-change {
+            min-height: 24px; margin: 0; padding: 0 2px; border: 0; border-radius: var(--r-sm); background: none;
+            color: var(--primary); font: inherit; font-size: 12.5px; font-weight: 500; letter-spacing: 0; text-transform: none; cursor: pointer;
+        }
+        .sp-selpick button.sp-selpick-change { font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
+        .sp-selpick button.sp-selpick-other:focus-visible, .sp-selpick button.sp-selpick-change:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .sp-selpick .sp-selpick-none { padding: 6px 8px 10px; font-size: 13px; color: var(--text-faint); list-style: none; }
+        .sp-selpick .sp-selpick-none[hidden] { display: none; }
+        .sp-selpick .sp-selpick-cur {
+            display: flex; flex-direction: column; gap: 8px; margin: 0 0 6px; padding: 10px 10px 12px; border-bottom: 1px solid var(--divider);
+        }
+        .sp-selpick .sp-selpick-cur-t { font-size: 12px; color: var(--text-faint); }
+        .sp-selpick .sp-selpick-cur-v { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+        .sp-selpick .sp-selpick-cur-c { font-weight: 400; color: var(--text-light); }
+        .sp-selpick .sp-selpick-cur-o { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 13px; color: var(--text-light); }
+        .sp-selpick .sp-selpick-cur-o b { font-weight: 600; color: var(--text); }
+        .sp-selpick .sp-selpick-gen { display: inline-flex; align-items: center; gap: 8px; }
+        .sp-selpick .sp-selpick-foot { display: flex; flex-direction: column; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--divider); }
+        @media (hover: hover) {
+            .sp-selpick button.sp-selpick-other:hover, .sp-selpick button.sp-selpick-change:hover { text-decoration: underline; }
+        }
+        @media (pointer: coarse) {
+            .sp-selpick button.sp-selpick-other, .sp-selpick button.sp-selpick-change { min-height: 44px; padding: 0 6px; }
+            .sp-selpick .sp-selpick-sh { padding-top: 6px; padding-bottom: 0; }
         }
         @media (hover: hover) {
         }
@@ -15268,6 +15316,17 @@
         .rod-pick-sheet .sp-rodpick-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
         .rod-pick-sheet .sp-rodpick-other { margin-top: 0; padding-top: 0; }
         .rod-pick-sheet .sp-rodpick-none { margin: 14px 18px; font-size: 15px; }
+        /* The sheet's sections (098 §10, 10c): rows of 52px with a 22px icon, the headings 14px 16px 6px, the footer's rows 48px. */
+        .bottom-sheet.rod-pick-sheet .sp-selpick .sp-rodpick-list button.sp-rodpick-a,
+        .bottom-sheet.rod-pick-sheet .sp-selpick .sp-rodpick-list button.sp-rodpick-x { grid-template-columns: 22px minmax(0, 1fr) auto; min-height: 52px; padding: 6px 16px; font-size: 16px; }
+        .bottom-sheet.rod-pick-sheet .sp-selpick .sp-rodpick-list .sp-rodpick-rod button.sp-rodpick-a { grid-template-columns: 22px minmax(0, 1fr) 64px 32px; }
+        .bottom-sheet.rod-pick-sheet .sp-selpick .sp-rodpick-list .sp-rodpick-tree button.sp-rodpick-a { grid-template-columns: 22px minmax(0, 1fr) auto; min-height: 56px; }
+        .bottom-sheet.rod-pick-sheet .sp-selpick .sp-rodpick-list .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 32px; min-height: 44px; padding-left: 46px; }
+        .rod-pick-sheet .sp-selpick .sp-selpick-sh { padding: 14px 16px 6px; }
+        .rod-pick-sheet .sp-selpick .sp-selpick-none { padding: 6px 16px 10px; font-size: 15px; }
+        .rod-pick-sheet .sp-selpick .sp-selpick-cur { margin: 0; padding: 12px 16px 14px; }
+        .rod-pick-sheet .sp-selpick .sp-selpick-foot { margin: 0; padding: 4px 0 12px; }
+        .bottom-sheet.rod-pick-sheet .sp-selpick button.sp-rodpick-savebtn { min-height: 48px; padding: 6px 16px; border-radius: 0; font-size: 16px; }
         /* A phone sideways (§5.3): beside the side bar, the whole width of the tree's area. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .bottom-sheet-overlay.rod-pick-overlay { padding-left: var(--side-bar-w); }

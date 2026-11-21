@@ -249,8 +249,6 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         toggle: 'Liczba pokoleń',
     },
     rodView: {
-        only: (l: string) => `Tylko ród ${l}`,
-        onlySub: 'Tylko ród',
         birth: 'z urodzenia',
         wife: 'żona',
         husband: 'mąż',

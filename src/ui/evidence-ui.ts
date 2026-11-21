@@ -343,7 +343,7 @@ export const evidenceUiMethods = uiModule({
                 text.className = 'evidence-pill-pick-text';
                 text.append(...label.childNodes);
                 pick.append(text, chev);
-                pick.onclick = () => this.openRodPicker();
+                pick.onclick = () => this.openSelectionPicker();
                 pill.append(pick);
             } else {
                 pill.append(label);

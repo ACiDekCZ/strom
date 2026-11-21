@@ -5271,8 +5271,6 @@ const stringsEN = {
         toggle: 'Number of generations',
     },
     rodView: {
-        only: (l: string) => `Only the ${l} line`,
-        onlySub: 'Only one line',
         birth: 'birth',
         wife: 'wife',
         husband: 'husband',
@@ -15879,8 +15877,6 @@ const stringsCZ: StringsType = {
         toggle: 'Počet generací',
     },
     rodView: {
-        only: (l: string) => `Jen rod ${l}`,
-        onlySub: 'Jen rod',
         birth: 'rodný',
         wife: 'manželka',
         husband: 'manžel',
@@ -26319,8 +26315,6 @@ const stringsDE: StringsType = {
         toggle: 'Anzahl der Generationen',
     },
     rodView: {
-        only: (l: string) => `Nur Stammlinie ${l}`,
-        onlySub: 'Nur eine Stammlinie',
         birth: 'Geburt',
         wife: 'Ehefrau',
         husband: 'Ehemann',

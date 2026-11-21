@@ -1,15 +1,18 @@
 /**
- * The person menu's family lines (spec 039 §2.1, §2.2): no row without a
- * line of two people, "Only the X line" for one, the birth line first with
- * "birth" / "wife" for two, a submenu from three; the chosen line's row shows
- * the whole tree; offered in the view mode too. Every name is invented.
+ * The person menu's "Select ›" (spec 098 §2, 1g; spec 039 §2.1 for the
+ * lines): no row without a line of two people, ancestors or descendants; the
+ * submenu has the birth line first with "birth" / "wife" for two lines, a
+ * divider, then Ancestors and Descendants with their counts; "Clear the
+ * selection" when the person is in the window's selection; offered in the
+ * view mode too. Every name is invented.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildLineages, rodLabels, rodOf, RodId, LineageIndex } from '../lineage.js';
 import { StromData, PersonId, Person, Partnership, PartnershipId } from '../types.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
-import { contextMenuMethods, rodMenuRows, PersonMenuAction } from '../ui/context-menu.js';
+import { contextMenuMethods, selectionMenuRows, PersonMenuAction } from '../ui/context-menu.js';
+import { encodeSelectionRef } from '../view-selection.js';
 import { resetViewSelection as resetRodView } from '../ui/view-selection-ui.js';
 
 type Sex = 'male' | 'female';
@@ -53,59 +56,50 @@ const P = (id: string): PersonId => id as PersonId;
 const rodIdOf = (idx: LineageIndex, id: string): RodId => rodOf(idx, P(id))!;
 const actions = (rows: PersonMenuAction[]): string[] => rows.map(a => a.action);
 
-describe('the person menu\'s lines (§2.1)', () => {
+describe('the person menu\'s "Select ›" (§2)', () => {
     const data = sample();
     const idx = buildLineages(data);
     const labels = rodLabels(idx);
     const brumlak = rodIdOf(idx, 'hostivit');
     const trnkavec = rodIdOf(idx, 'kvido');
     const orechovsky = rodIdOf(idx, 'lumir');
+    const sel = (ref: Parameters<typeof encodeSelectionRef>[0]): string => `select:${encodeSelectionRef(ref)}`;
 
-    it('no line of two people: no row', () => {
-        expect(rodMenuRows(idx, labels, P('vratislav'), null)).toEqual([]);
+    it('no line of two people, no ancestors, no descendants: no row', () => {
+        expect(selectionMenuRows(idx, labels, P('vratislav'), null)).toEqual([]);
     });
 
-    it('one line: "Only the X line" without a meta', () => {
-        const rows = rodMenuRows(idx, labels, P('borivoj'), null);
-        expect(actions(rows)).toEqual([`rod-only:${brumlak}`]);
-        expect(rows[0].label).toBe('Only the Brumlák line');
-        expect(rows[0].meta).toBeUndefined();
-        expect(rows[0].kind).toBe('focus');
+    it('one row "Select" with a submenu: the line without a meta, a divider, the ancestors with their count', () => {
+        const rows = selectionMenuRows(idx, labels, P('borivoj'), null);
+        expect(actions(rows)).toEqual(['select']);
+        expect(rows[0]).toMatchObject({ label: 'Select', kind: 'focus' });
+        const sub = rows[0].submenu!;
+        expect(actions(sub)).toEqual([sel({ kind: 'rod', rodId: brumlak }), sel({ kind: 'ancestors', personId: P('borivoj') })]);
+        expect(sub[0]).toMatchObject({ label: 'Brumlák line', kind: 'focus' });
+        expect(sub[0].meta).toBeUndefined();
+        expect(sub[1]).toMatchObject({ label: 'Ancestors', meta: '2', divider: true });
     });
 
-    it('two lines: the birth line first ("birth"), the husband\'s line ("husband")', () => {
-        const rows = rodMenuRows(idx, labels, P('spytihnev'), null);
-        // Spytihněv: born Trnkavec, his wife's line is not his.
-        expect(actions(rows)).toEqual([`rod-only:${trnkavec}`]);
-        const two = buildLineages(tree({
-            hostivit: { first: 'Hostivít', last: 'Brumlák', sex: 'male', born: '1800' },
-            borivoj: { first: 'Bořivoj', last: 'Brumlák', sex: 'male', born: '1830', parents: ['hostivit'] },
-            radoslava: { first: 'Radoslava', last: 'Brumláková', sex: 'female', born: '1832', parents: ['hostivit'] },
-            kvido: { first: 'Kvido', last: 'Trnkavec', sex: 'male', born: '1795' },
-            spytihnev: { first: 'Spytihněv', last: 'Trnkavec', sex: 'male', born: '1828', parents: ['kvido'] },
-        }, [['u1', 'spytihnev', 'radoslava', []]]));
-        const r2 = rodMenuRows(two, rodLabels(two), P('radoslava'), null);
-        expect(r2.map(a => [a.label, a.meta])).toEqual([
-            ['Only the Brumlák line', 'birth'],
-            ['Only the Trnkavec line', 'wife'],
-        ]);
+    it('the founder: Descendants with their count, no Ancestors', () => {
+        const sub = selectionMenuRows(idx, labels, P('hostivit'), null)[0].submenu!;
+        expect(actions(sub)).toEqual([sel({ kind: 'rod', rodId: brumlak }), sel({ kind: 'descendants', personId: P('hostivit') })]);
+        expect(sub[1]).toMatchObject({ label: 'Descendants', meta: '3' });
     });
 
-    it('three lines: a submenu "Only one line", birth first', () => {
-        const rows = rodMenuRows(idx, labels, P('radoslava'), null);
-        expect(rows).toHaveLength(1);
-        expect(rows[0].label).toBe('Only one line');
-        expect(rows[0].submenu?.map(a => a.action)).toEqual([`rod-only:${brumlak}`, `rod-only:${trnkavec}`, `rod-only:${orechovsky}`]);
-        expect(rows[0].submenu?.map(a => a.meta)).toEqual(['birth', 'wife', 'wife']);
+    it('several lines: the birth line first ("birth"), the husbands\' lines ("wife")', () => {
+        const sub = selectionMenuRows(idx, labels, P('radoslava'), null)[0].submenu!;
+        expect(actions(sub).slice(0, 3)).toEqual([brumlak, trnkavec, orechovsky].map(id => sel({ kind: 'rod', rodId: id })));
+        expect(sub.slice(0, 3).map(a => a.meta)).toEqual(['birth', 'wife', 'wife']);
+        expect(sub[3]).toMatchObject({ label: 'Ancestors', divider: true });
     });
 
-    it('the chosen line: its row clears the selection', () => {
-        expect(actions(rodMenuRows(idx, labels, P('borivoj'), brumlak))).toEqual(['rod-clear']);
-        const rows = rodMenuRows(idx, labels, P('radoslava'), trnkavec);
-        expect(rows[0]).toMatchObject({ action: 'rod-clear', label: 'Clear the selection' });
-        expect(rows[1].submenu?.map(a => a.action)).toEqual([`rod-only:${brumlak}`, `rod-only:${orechovsky}`]);
-        // Another line chosen: the person's rows unchanged.
-        expect(actions(rodMenuRows(idx, labels, P('borivoj'), trnkavec))).toEqual([`rod-only:${brumlak}`]);
+    it('a person in the window\'s selection: "Clear the selection" under the row', () => {
+        const rows = selectionMenuRows(idx, labels, P('borivoj'), { kind: 'rod', rodId: brumlak });
+        expect(actions(rows)).toEqual(['select', 'select-clear']);
+        expect(rows[1]).toMatchObject({ label: 'Clear the selection', kind: 'focus' });
+        // Ancestors of Bořivoj: Hostivít is in, Vojmír is not.
+        expect(actions(selectionMenuRows(idx, labels, P('hostivit'), { kind: 'ancestors', personId: P('borivoj') }))).toContain('select-clear');
+        expect(actions(selectionMenuRows(idx, labels, P('vojmir'), { kind: 'ancestors', personId: P('borivoj') }))).toEqual(['select']);
     });
 });
 
@@ -148,13 +142,14 @@ describe('getPersonMenuActions offers the lines (§2.2)', () => {
         const rows = menu('borivoj');
         const i = rows.indexOf('descendants');
         expect(i).toBeGreaterThanOrEqual(0);
-        expect(rows[i + 1]).toMatch(/^rod-only:/);
+        expect(rows[i + 1]).toBe('select');
+        expect(rows[i + 2]).toMatch(/^select:rod:/);
     });
 
     it('in the view mode too', () => {
         readOnly = true;
-        expect(menu('borivoj').filter(a => a.startsWith('rod-only:'))).toHaveLength(1);
-        expect(menu('radoslava').filter(a => a.startsWith('rod-only:'))).toHaveLength(3);
-        expect(menu('vratislav').some(a => a.startsWith('rod'))).toBe(false);
+        expect(menu('borivoj').filter(a => a.startsWith('select:rod:'))).toHaveLength(1);
+        expect(menu('radoslava').filter(a => a.startsWith('select:rod:'))).toHaveLength(3);
+        expect(menu('vratislav').some(a => a.startsWith('select'))).toBe(false);
     });
 });

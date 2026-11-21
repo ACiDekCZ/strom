@@ -561,8 +561,8 @@ export const miscMethods = uiModule({
         const mode = TreeRenderer.getViewMode();
         // Away from the Table view its rows kept in place after an edit are sorted again next time (§10.3).
         if (mode !== 'table') this.forgetTableOrder();
-        // The family line's choice (spec 039 §1.5): hidden on the timeline and the map.
-        this.syncRodPickerHost();
+        // The window's selection choice (spec 098 §2): hidden on the timeline, the map and the table.
+        this.syncSelectionPickerHost();
         // Mobile CSS hides the focus bar under the descendants badge.
         document.body.classList.toggle('descendants-view', mode === 'descendants');
         // Standalone views (map/timeline/fan) have their own top-left controls;
