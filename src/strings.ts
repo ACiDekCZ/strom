@@ -7295,6 +7295,12 @@ const stringsEN = {
         dirAnyway: 'Create anyway',
         dirNoLink: 'The research does not know this person yet. A sync helps.',
         dirToastCreated: 'Direction created · at the end of the order',
+        // A narrower direction takes over the wider ones' tasks (spec 126 U10, K2.15)
+        dirMoveAsk: (n: number, from: string | null) => `Move ${nEn(n, 'open task', 'open tasks')} here from ${from ? `the direction ${from}` : 'the wider directions'} (about the people of this direction)`,
+        dirMoveInside: (names: string[]) => names.length > 1
+            ? `The new direction lies inside the directions ${joinAnd('en', names)}. The people in it stay in the wider directions too.`
+            : `The new direction lies inside the direction ${names[0] ?? ''}. The people in it stay in the wider direction too.`,
+        dirToastMoved: (n: number) => `Direction created. ${nEn(n, 'task', 'tasks')} moved.`,
         dirLocked: 'Kind and person cannot change. Another person means a new direction.',
         dirKindFromBranch: 'Pre-filled from the relation, can be switched.',
         dirPauseReason: 'Reason for the pause (optional)',
@@ -18004,6 +18010,12 @@ const stringsCZ: StringsType = {
         dirAnyway: 'Založit přesto',
         dirNoLink: 'Výzkum tuto osobu ještě nezná. Pomůže synchronizace.',
         dirToastCreated: 'Linie založena · na konci pořadí',
+        // A narrower direction takes over the wider ones' tasks (spec 126 U10, K2.15)
+        dirMoveAsk: (n: number, from: string | null) => `Převést sem ${nCs(n, 'otevřený úkol', 'otevřené úkoly', 'otevřených úkolů')} ${from ? `z linie ${from}` : 'ze širších linií'} (o lidech této linie)`,
+        dirMoveInside: (names: string[]) => names.length > 1
+            ? `Nová linie je uvnitř linií ${joinAnd('cs', names)}. Lidé v ní zůstávají i v širších liniích.`
+            : `Nová linie je uvnitř linie ${names[0] ?? ''}. Lidé v ní zůstávají i v širší linii.`,
+        dirToastMoved: (n: number) => `Linie založena. ${plural('cs', n, 'Převeden', 'Převedeny', 'Převedeno')} ${nCs(n, 'úkol', 'úkoly', 'úkolů')}.`,
         dirLocked: 'Druh a osobu nejde změnit. Jiná osoba = nová linie.',
         dirKindFromBranch: 'Předvyplněno podle vazby, jde přepnout.',
         dirPauseReason: 'Důvod pozastavení (nepovinný)',
@@ -28558,6 +28570,12 @@ const stringsDE: StringsType = {
         dirAnyway: 'Trotzdem anlegen',
         dirNoLink: 'Die Forschung kennt diese Person noch nicht. Ein Abgleich hilft.',
         dirToastCreated: 'Richtung angelegt · am Ende der Reihenfolge',
+        // A narrower direction takes over the wider ones' tasks (spec 126 U10, K2.15)
+        dirMoveAsk: (n: number, from: string | null) => `${nDe(n, 'offene Aufgabe', 'offene Aufgaben')} ${from ? `aus der Richtung ${from}` : 'aus den weiteren Richtungen'} hierher übernehmen (zu den Personen dieser Richtung)`,
+        dirMoveInside: (names: string[]) => names.length > 1
+            ? `Die neue Richtung liegt innerhalb der Richtungen ${joinAnd('de', names)}. Die Personen darin bleiben auch in den weiteren Richtungen.`
+            : `Die neue Richtung liegt innerhalb der Richtung ${names[0] ?? ''}. Die Personen darin bleiben auch in der weiteren Richtung.`,
+        dirToastMoved: (n: number) => `Richtung angelegt. ${nDe(n, 'Aufgabe', 'Aufgaben')} übernommen.`,
         dirLocked: 'Art und Person lassen sich nicht ändern. Eine andere Person ergibt eine neue Richtung.',
         dirKindFromBranch: 'Nach der Beziehung vorausgefüllt, umschaltbar.',
         dirPauseReason: 'Grund der Pause (optional)',

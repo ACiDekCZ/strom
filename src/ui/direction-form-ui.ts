@@ -19,11 +19,15 @@ import { shownName } from '../person-name.js';
 import { yearOf } from '../dates.js';
 import { filterAndSort } from '../person-picker.js';
 import { withBusyRetry } from '../research-directions.js';
-import { createDirection, directionPeopleKept, editDirection, fetchDirectionPeople, DirectionEditBody } from '../research-directions-write.js';
+import {
+    createDirection, directionPeopleKept, editDirection, fetchDirectionPeople, previewDirection, DirectionCreateBody, DirectionEditBody,
+} from '../research-directions-write.js';
+import { directionsMoveOn } from '../research-runs.js';
 import type { PersonMenuAction } from './context-menu.js';
 import {
     BEFORE_MAX, BEFORE_MIN, FORM_KINDS, FormKind, FormProblem, GENERATIONS_MAX, autoDirectionName, changedLimits,
-    findDuplicateDirection, formProblem, newPrimary, parseBeforeYear,
+    createdToastText, directionMoveAsk, directionMoveAsked, directionMoveOffer, DirectionMoveOffer, findDuplicateDirection,
+    formProblem, moveTasksSent, newPrimary, NewPrimary, parseBeforeYear,
 } from '../direction-form.js';
 import { LiveSession, el, researchSession } from './research-ui.js';
 import { directionGlyph, directionRefusedText, markFreshDirection } from './research-directions-ui.js';
@@ -38,6 +42,8 @@ const DIALOG_ID = 'direction-form-modal';
 const MAX_RESULTS = 30;
 /** Most recent people listed. */
 const MAX_RECENT = 7;
+/** How long the form waits after a change before it asks the bridge what a new direction takes over. */
+const MOVE_PREVIEW_MS = 300;
 
 /** What the dialog opens on. */
 export interface DirectionFormOptions {
@@ -84,6 +90,14 @@ interface FormState {
     yearTried: boolean;
     /** A direction the research answered 409 `directions.exists` with. */
     existing: LiveDirection | null;
+    /**
+     * A new direction inside wider ones (spec 126 U10, K2.15; `directions.move`): the bridge's preview
+     * shown (null: none), the body last asked about ('' none) and its timer, the box to move the tasks.
+     */
+    moveOffer: DirectionMoveOffer | null;
+    moveAsked: string;
+    moveTimer: ReturnType<typeof setTimeout> | null;
+    moveChecked: boolean;
     root: HTMLElement;
 }
 
@@ -270,6 +284,10 @@ export const directionFormMethods = uiModule({
             questionTried: false,
             yearTried: false,
             existing: null,
+            moveOffer: null,
+            moveAsked: '',
+            moveTimer: null,
+            moveChecked: true,
             root,
         };
         this.buildDirectionForm(form, kinds);
@@ -288,6 +306,7 @@ export const directionFormMethods = uiModule({
     closeDirectionForm(back = true): void {
         const f = form;
         form = null;
+        if (f?.moveTimer) clearTimeout(f.moveTimer);
         document.getElementById(DIALOG_ID)?.remove();
         this.dialogStack = this.dialogStack.filter(d => d !== DIALOG_ID);
         let to = f?.opts.returnFocus;
@@ -465,7 +484,22 @@ export const directionFormMethods = uiModule({
         i.setAttribute('aria-hidden', 'true');
         free.append(i, el('span', undefined, edit ? L.dirEditFree : L.dirFree));
 
-        fields.append(personField, kindField, dup, qField, nField, rField, limits, free);
+        // A new direction inside wider ones (spec 126 U10, K2.15): move their tasks here (ticked), the sentence under it.
+        const move = el('div', 'direction-form__move');
+        move.hidden = true;
+        const moveCheck = el('label', 'direction-form__move-check');
+        const moveBox = el('input');
+        moveBox.type = 'checkbox';
+        moveBox.id = 'direction-form-move-tasks';
+        moveBox.checked = f.moveChecked;
+        moveBox.setAttribute('aria-describedby', 'direction-form-move-inside');
+        moveBox.onchange = () => { f.moveChecked = moveBox.checked; };
+        moveCheck.append(moveBox, el('span', 'direction-form__move-text'));
+        const moveInside = el('p', 'direction-form__hint direction-form__move-inside');
+        moveInside.id = 'direction-form-move-inside';
+        move.append(moveCheck, moveInside);
+
+        fields.append(personField, kindField, dup, qField, nField, rField, limits, free, move);
 
         // The research's answer when it did not take the write (above the footer).
         const problem = el('div', 'direction-form__problem');
@@ -596,6 +630,15 @@ export const directionFormMethods = uiModule({
         yInput.setAttribute('aria-invalid', String(yBad));
         if (yBad) yInput.setAttribute('aria-describedby', 'direction-form-before-error');
         else yInput.removeAttribute('aria-describedby');
+
+        // A new direction inside wider ones: what the bridge's preview said (asked again after a change).
+        this.directionFormMovePreview(f, primaryWill);
+        const offer = f.moveOffer;
+        const moveAsk = directionMoveAsk(offer);
+        q(root, '.direction-form__move').hidden = !offer;
+        q(root, '.direction-form__move-check').hidden = !moveAsk;
+        q(root, '.direction-form__move-text').textContent = moveAsk;
+        q(root, '.direction-form__move-inside').textContent = offer ? L.dirMoveInside(offer.inside) : '';
 
         // The research's answer.
         const problem = q(root, '.direction-form__problem');
@@ -851,15 +894,10 @@ export const directionFormMethods = uiModule({
         else await this.createDirectionFromForm(f, year);
     },
 
-    /** Create the direction: last in the order, lit for 2 s, a toast with "Work on this direction". */
-    async createDirectionFromForm(f: FormState, year: number | null): Promise<void> {
-        const s = researchSession();
-        if (!s) return;
-        const L = strings.live;
-        const base = s.bridge.base;
+    /** What a new direction is sent with (the create and its preview). */
+    directionFormBody(f: FormState, year: number | null): DirectionCreateBody {
         const branch = f.opts.branch;
-        const head = await this.waitingHeadBeforeWrite(s);
-        const r = await withBusyRetry(() => createDirection(base, {
+        return {
             person: f.refn,
             direction: f.kind,
             name: f.name.trim() || undefined,
@@ -869,7 +907,50 @@ export const directionFormMethods = uiModule({
             } : {}),
             ...(f.known.trim() ? { note: f.known.trim() } : {}),
             ...(branch ? { branch } : {}),
-        }));
+        };
+    },
+
+    /**
+     * Ask the bridge what a new direction would take over from the wider ones it lies in (spec 126 U10, K2.15;
+     * `directions.move` only, a new direction the primary creates): 300 ms after the last change, an answer for
+     * an older body dropped, a refusal or no answer shows nothing. Until the answer the last preview stays.
+     */
+    directionFormMovePreview(f: FormState, will: NewPrimary | 'save'): void {
+        const s = researchSession();
+        const asked = !!s && !s.ended && directionMoveAsked({ edit: !!f.edit, moveOn: directionsMoveOn(s.features), primary: will })
+            && this.directionsView(s).canWrite;
+        const year = f.kind === 'descendants' ? null : parseBeforeYear(f.before);
+        const body = asked && f.refn && year !== 'bad' ? this.directionFormBody(f, year) : null;
+        const key = body ? JSON.stringify(body) : '';
+        if (key === f.moveAsked) return;
+        f.moveAsked = key;
+        if (f.moveTimer) clearTimeout(f.moveTimer);
+        f.moveTimer = null;
+        if (!body || !s) {
+            f.moveOffer = null;
+            return;
+        }
+        f.moveTimer = setTimeout(() => {
+            f.moveTimer = null;
+            void previewDirection(s.bridge.base, body).then(r => {
+                if (form !== f || f.moveAsked !== key || researchSession() !== s) return;
+                const known = new Map(s.researches.map(d => [d.id, d.name]));
+                f.moveOffer = r.ok ? directionMoveOffer(r, id => known.get(id)) : null;
+                this.renderDirectionForm();
+            });
+        }, MOVE_PREVIEW_MS);
+    },
+
+    /** Create the direction: last in the order, lit for 2 s, a toast with "Work on this direction". */
+    async createDirectionFromForm(f: FormState, year: number | null): Promise<void> {
+        const s = researchSession();
+        if (!s) return;
+        const L = strings.live;
+        const base = s.bridge.base;
+        const head = await this.waitingHeadBeforeWrite(s);
+        // The tasks of the wider directions: said only when the form asked (an older research gets the body as before).
+        const body = { ...this.directionFormBody(f, year), ...moveTasksSent(f.moveOffer, f.moveChecked) };
+        const r = await withBusyRetry(() => createDirection(base, body));
         f.sending = false;
         if (researchSession() !== s || s.ended) {
             if (form === f) this.closeDirectionForm(false);
@@ -903,7 +984,7 @@ export const directionFormMethods = uiModule({
         }
         // "Work on this direction": an agent in the research's terminal (a computer only).
         const work = made && !this.activeResearchNoAgent() ? this.activeResearchLink('chat', { research: made.id }) : null;
-        this.showToast(L.dirToastCreated, 8000, {
+        this.showToast(createdToastText(r.moved), 8000, {
             kind: 'direction',
             ...(work ? { action: { label: L.dirWork, run: () => this.launchResearchLink(work, 'agent'), ...researchLinkFlags(work) } } : {}),
         });

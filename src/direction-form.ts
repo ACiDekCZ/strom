@@ -122,3 +122,43 @@ export function changedLimits(before: { generations?: number; before?: number } 
     if ((before?.before ?? null) !== after.before) out.before = after.before;
     return Object.keys(out).length > 0 ? out : null;
 }
+
+/**
+ * What a new direction lying inside wider ones says before it is created (spec 126 U10, K2.15;
+ * `directions.move`): the wider directions' names and how many of their open tasks it would take over.
+ */
+export interface DirectionMoveOffer {
+    /** The wider directions' names (each once, never empty). */
+    inside: string[];
+    /** The tasks it would take over (0: nothing is asked, the sentence alone). */
+    move: number;
+}
+
+/** The form asks the bridge for a preview only when creating, with `directions.move`, and the primary creates. */
+export function directionMoveAsked(o: { edit: boolean; moveOn: boolean; primary: NewPrimary | 'save' }): boolean {
+    return !o.edit && o.moveOn && (o.primary === 'create' || o.primary === 'anyway');
+}
+
+/** The offer from a preview's answer; null when the new direction lies in no wider one (nothing shown). */
+export function directionMoveOffer(preview: { inside: readonly string[]; move: number },
+    nameOf: (id: string) => string | undefined): DirectionMoveOffer | null {
+    const inside = [...new Set(preview.inside.map(id => nameOf(id)?.trim() || id))];
+    if (inside.length === 0) return null;
+    return { inside, move: Number.isInteger(preview.move) && preview.move > 0 ? preview.move : 0 };
+}
+
+/** The question about moving the tasks ('' when there is nothing to move): from the one wider direction by name. */
+export function directionMoveAsk(offer: DirectionMoveOffer | null): string {
+    if (!offer || offer.move <= 0) return '';
+    return strings.live.dirMoveAsk(offer.move, offer.inside.length === 1 ? offer.inside[0] : null);
+}
+
+/** What a create sends about the tasks: `moveTasks` only when the question was shown (an older research gets nothing new). */
+export function moveTasksSent(offer: DirectionMoveOffer | null, checked: boolean): { moveTasks?: boolean } {
+    return offer && offer.move > 0 ? { moveTasks: checked } : {};
+}
+
+/** The toast after a create: the tasks moved into it, else the usual one. */
+export function createdToastText(moved: number | undefined): string {
+    return moved !== undefined && moved > 0 ? strings.live.dirToastMoved(moved) : strings.live.dirToastCreated;
+}

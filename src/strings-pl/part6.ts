@@ -1,5 +1,5 @@
 import type { StringsType } from '../strings.js';
-import { nPl, numPl, plPl } from './helpers.js';
+import { joinAndPl, nPl, numPl, plPl } from './helpers.js';
 
 export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' | 'settings' | 'treeActions'
     | 'treeManager' | 'share' | 'shareDiff' | 'viewMode' | 'encryption' | 'treePreview' | 'slideshow' | 'live'
@@ -1118,6 +1118,12 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         dirAnyway: 'Załóż mimo to',
         dirNoLink: 'Badanie jeszcze nie zna tej osoby. Pomoże synchronizacja.',
         dirToastCreated: 'Założono linię · na końcu kolejności',
+        // A narrower direction takes over the wider ones' tasks (spec 126 U10, K2.15)
+        dirMoveAsk: (n: number, from: string | null) => `Przenieść tu ${nPl(n, 'otwarte zadanie', 'otwarte zadania', 'otwartych zadań')} ${from ? `z linii ${from}` : 'z szerszych linii'} (o osobach tej linii)`,
+        dirMoveInside: (names: string[]) => names.length > 1
+            ? `Nowa linia leży wewnątrz linii ${joinAndPl(names)}. Osoby z niej pozostają też w szerszych liniach.`
+            : `Nowa linia leży wewnątrz linii ${names[0] ?? ''}. Osoby z niej pozostają też w szerszej linii.`,
+        dirToastMoved: (n: number) => `Założono linię. Przeniesiono ${nPl(n, 'zadanie', 'zadania', 'zadań')}.`,
         dirLocked: 'Rodzaju i osoby nie można zmienić. Inna osoba to nowa linia.',
         dirKindFromBranch: 'Wstępnie wypełnione według pokrewieństwa, można przełączyć.',
         dirPauseReason: 'Powód wstrzymania (opcjonalnie)',

@@ -261,6 +261,73 @@ test.describe('the direction form', () => {
     });
 });
 
+test.describe('a new direction inside a wider one (spec 126 U10, K2.15)', () => {
+    const MOVE = ['directions.move'];
+    const sent = { person: 'P0050', direction: 'ancestors', name: 'Ancestors: Marie Fíšková' };
+    const previews = (b: Awaited<ReturnType<typeof followManaged>>) => directionWrites(b).filter(w => w.path === 'directions/preview');
+    const creates = (b: Awaited<ReturnType<typeof followManaged>>) => directionWrites(b).filter(w => w.path === 'directions');
+
+    test('the preview offers moving its tasks here, ticked; the create moves them and the toast counts them', async ({ page }) => {
+        const b = await followManaged(page, { features: MOVE, preview: { inside: ['G0001'], move: 7 } });
+        await openOverview(page);
+        await openNew(page);
+        const f = form(page);
+        await expect(f.locator('.direction-form__move')).toBeHidden();
+        await pick(page, 'fiskova', 'Marie Fíšková');
+        const box = f.locator('#direction-form-move-tasks');
+        await expect(f.locator('.direction-form__move-text'))
+            .toHaveText('Move 7 open tasks here from the direction Předci: Jan Fíšek (about the people of this direction)');
+        await expect(box).toBeChecked();
+        await expect(f.locator('.direction-form__move-inside'))
+            .toHaveText('The new direction lies inside the direction Předci: Jan Fíšek. The people in it stay in the wider direction too.');
+        await expect(box).toHaveAttribute('aria-describedby', 'direction-form-move-inside');
+        expect(previews(b).map(w => w.body)).toEqual([sent]);
+        await f.locator('#direction-form-submit').click();
+        await expect.poll(() => creates(b).map(w => w.body)).toEqual([{ ...sent, moveTasks: true }]);
+        await expect(f).toHaveCount(0);
+        await expect(page.locator('.toast[data-kind="direction"]')).toContainText('Direction created. 7 tasks moved.');
+    });
+
+    test('unticked, the create says moveTasks false and the toast is the usual one', async ({ page }) => {
+        const b = await followManaged(page, { features: MOVE, preview: { inside: ['G0001'], move: 7 } });
+        await openOverview(page);
+        await openNew(page);
+        const f = form(page);
+        await pick(page, 'fiskova', 'Marie Fíšková');
+        await f.locator('.direction-form__move-check').click();
+        await expect(f.locator('#direction-form-move-tasks')).not.toBeChecked();
+        await f.locator('#direction-form-submit').click();
+        await expect.poll(() => creates(b).map(w => w.body)).toEqual([{ ...sent, moveTasks: false }]);
+        await expect(page.locator('.toast[data-kind="direction"]')).toContainText('Direction created · at the end of the order');
+    });
+
+    test('nothing to move: the sentence alone, no question, the body as before', async ({ page }) => {
+        const b = await followManaged(page, { features: MOVE, preview: { inside: ['G0001', 'G0002'], move: 0 } });
+        await openOverview(page);
+        await openNew(page);
+        const f = form(page);
+        await pick(page, 'fiskova', 'Marie Fíšková');
+        await expect(f.locator('.direction-form__move-inside')).toHaveText(
+            'The new direction lies inside the directions Předci: Jan Fíšek and Potomci: Josef Fíšek. The people in it stay in the wider directions too.');
+        await expect(f.locator('.direction-form__move-check')).toBeHidden();
+        await f.locator('#direction-form-submit').click();
+        await expect.poll(() => creates(b).map(w => w.body)).toEqual([sent]);
+    });
+
+    test('an older research without directions.move: no preview asked, the form as before', async ({ page }) => {
+        const b = await followManaged(page, { preview: { inside: ['G0001'], move: 7 } });
+        await openOverview(page);
+        await openNew(page);
+        const f = form(page);
+        await pick(page, 'fiskova', 'Marie Fíšková');
+        await page.waitForTimeout(600);
+        await expect(f.locator('.direction-form__move')).toBeHidden();
+        await f.locator('#direction-form-submit').click();
+        await expect.poll(() => creates(b).map(w => w.body)).toEqual([sent]);
+        expect(previews(b)).toEqual([]);
+    });
+});
+
 test.describe('the person\'s research items with a research that manages its directions', () => {
     test('Find ancestors / descendants open the form without a mark; a paused one restarts through the bridge', async ({ page }) => {
         const b = await followManaged(page);

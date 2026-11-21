@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { autoDirectionName, changedLimits, findDuplicateDirection, firstWords, formProblem, newPrimary, parseBeforeYear } from '../direction-form.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+    autoDirectionName, changedLimits, createdToastText, directionMoveAsk, directionMoveAsked, directionMoveOffer, findDuplicateDirection,
+    firstWords, formProblem, moveTasksSent, newPrimary, parseBeforeYear,
+} from '../direction-form.js';
 import type { LiveDirection } from '../research-link.js';
 import { DirectionWriteRefused, directionRefusal, directionRetryHelps } from '../research-directions-write.js';
-import { strings } from '../strings.js';
+import { setLanguage, strings } from '../strings.js';
 
 const d = (x: Partial<LiveDirection>): LiveDirection => ({ id: 'G0001', name: 'x', state: 'active', ...x } as LiveDirection);
 
@@ -65,5 +68,59 @@ describe('direction form', () => {
         expect(formProblem(said, 'edit', panel)).toEqual({
             text: 'The change to the direction was not saved: “Strom se právě zapisuje.”', tone: 'danger', retry: false, said: 'Strom se právě zapisuje.',
         });
+    });
+});
+
+describe('a new direction inside wider ones (spec 126 U10, K2.15)', () => {
+    afterEach(() => setLanguage('en'));
+    const names: Record<string, string> = { G0001: 'Kubíčkovi z Dolní Lhoty', G0002: 'Malí z Horní Vsi' };
+    const nameOf = (id: string) => names[id];
+
+    it('asks the bridge only when creating with directions.move and a primary that creates', () => {
+        expect(directionMoveAsked({ edit: false, moveOn: true, primary: 'create' })).toBe(true);
+        expect(directionMoveAsked({ edit: false, moveOn: true, primary: 'anyway' })).toBe(true);
+        expect(directionMoveAsked({ edit: false, moveOn: false, primary: 'create' })).toBe(false);
+        expect(directionMoveAsked({ edit: true, moveOn: true, primary: 'save' })).toBe(false);
+        for (const p of ['off', 'show', 'resume'] as const) expect(directionMoveAsked({ edit: false, moveOn: true, primary: p })).toBe(false);
+    });
+
+    it('shows nothing outside a wider direction, the sentence alone with nothing to move, the question with tasks', () => {
+        expect(directionMoveOffer({ inside: [], move: 0 }, nameOf)).toBeNull();
+        const alone = directionMoveOffer({ inside: ['G0001'], move: 0 }, nameOf);
+        expect(alone).toEqual({ inside: ['Kubíčkovi z Dolní Lhoty'], move: 0 });
+        expect(directionMoveAsk(alone)).toBe('');
+        const ask = directionMoveOffer({ inside: ['G0001'], move: 7 }, nameOf);
+        expect(directionMoveAsk(ask)).toBe('Move 7 open tasks here from the direction Kubíčkovi z Dolní Lhoty (about the people of this direction)');
+        // A direction the panel does not know is named by its key; more wider ones: the count without a name.
+        const two = directionMoveOffer({ inside: ['G0001', 'G0009'], move: 1 }, nameOf);
+        expect(two?.inside).toEqual(['Kubíčkovi z Dolní Lhoty', 'G0009']);
+        expect(directionMoveAsk(two)).toBe('Move 1 open task here from the wider directions (about the people of this direction)');
+        expect(strings.live.dirMoveInside(two!.inside)).toBe(
+            'The new direction lies inside the directions Kubíčkovi z Dolní Lhoty and G0009. The people in it stay in the wider directions too.');
+    });
+
+    it('sends moveTasks only when the question showed, as the box says', () => {
+        expect(moveTasksSent(null, true)).toEqual({});
+        expect(moveTasksSent({ inside: ['x'], move: 0 }, true)).toEqual({});
+        expect(moveTasksSent({ inside: ['x'], move: 3 }, true)).toEqual({ moveTasks: true });
+        expect(moveTasksSent({ inside: ['x'], move: 3 }, false)).toEqual({ moveTasks: false });
+    });
+
+    it('the toast counts the tasks moved, else stays as before', () => {
+        expect(createdToastText(undefined)).toBe(strings.live.dirToastCreated);
+        expect(createdToastText(0)).toBe(strings.live.dirToastCreated);
+        expect(createdToastText(7)).toBe('Direction created. 7 tasks moved.');
+        setLanguage('cs');
+        expect(createdToastText(1)).toBe('Linie založena. Převeden 1 úkol.');
+        expect(createdToastText(3)).toBe('Linie založena. Převedeny 3 úkoly.');
+        expect(createdToastText(7)).toBe('Linie založena. Převedeno 7 úkolů.');
+        expect(directionMoveAsk({ inside: ['Kubíčkovi z Dolní Lhoty'], move: 7 }))
+            .toBe('Převést sem 7 otevřených úkolů z linie Kubíčkovi z Dolní Lhoty (o lidech této linie)');
+        expect(strings.live.dirMoveInside(['Kubíčkovi z Dolní Lhoty']))
+            .toBe('Nová linie je uvnitř linie Kubíčkovi z Dolní Lhoty. Lidé v ní zůstávají i v širší linii.');
+        setLanguage('pl');
+        expect(createdToastText(5)).toBe('Założono linię. Przeniesiono 5 zadań.');
+        setLanguage('de');
+        expect(createdToastText(1)).toBe('Richtung angelegt. 1 Aufgabe übernommen.');
     });
 });

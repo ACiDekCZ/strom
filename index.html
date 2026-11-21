@@ -24900,6 +24900,19 @@
             flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--text-light);
             font-size: 11px; line-height: 14px; text-align: center; font-style: italic; margin-top: 1px;
         }
+        /* A new direction inside wider ones (spec 126 U10, K2.15): a checkbox as in the material dialogs, the sentence under it. */
+        .direction-form__move { display: flex; flex-direction: column; gap: 2px; }
+        .direction-form .direction-form__move-check {
+            display: flex; gap: 10px; align-items: flex-start; margin: 0; font-size: 14px; font-weight: 400; line-height: 1.4;
+            color: var(--text); cursor: pointer;
+        }
+        .direction-form__move-check input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--primary); flex: none; }
+        .direction-form__move-text { min-width: 0; overflow-wrap: anywhere; }
+        .direction-form__move-check:not([hidden]) + .direction-form__move-inside { padding-left: 28px; }
+        .direction-form__move-inside { overflow-wrap: anywhere; }
+        @media (pointer: coarse) {
+            .direction-form .direction-form__move-check { min-height: 44px; align-items: center; }
+        }
         .direction-form__problem {
             margin-top: 12px; padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere;
         }
