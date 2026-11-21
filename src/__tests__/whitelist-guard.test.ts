@@ -372,6 +372,8 @@ type OwnedElsewhere =
     | 'birthStatus'         // the research's status of the birth (GEDCOM import), never edited
     | 'birthAge'            // a Strom file's BIRT > AGE (GEDCOM import), kept for the way back, never edited
     | 'deathStatus'         // …and of the death
+    | 'nameStatus'          // …and of the name (GEDCOM import, 066 K6.3), never edited
+    | 'marriedNameStatus'   // …and of the name after marriage
     | 'gedcomDates'         // GEDCOM import only; a changed date simply has no entry
     | 'importId'            // GEDCOM import only (spec 066): the import the person came from
     | 'importedValues'      // GEDCOM import only: an edit ends the mark by changing the value

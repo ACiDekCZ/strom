@@ -1642,6 +1642,16 @@ interface GedcomIndividual {
     primaryNameParts: GedcomNameParts;
     variantNameParts: GedcomNameParts[];
     /**
+     * NAME > _STROM_STATUS of the primary name (the fact `name`) and of each
+     * variant (sparse, same index as nameVariants), the research's or the
+     * app's own file only. A variant's counts only as the name after marriage
+     * taken into marriedSurname (marriedNameStatus).
+     */
+    nameStatus?: FactStatus;
+    variantNameStatus?: (FactStatus | undefined)[];
+    /** The status of the name after marriage taken (Person.marriedNameStatus). */
+    marriedNameStatus?: FactStatus;
+    /**
      * _MARNM values in file order (level 1, or level 2 under a NAME), the
      * married surname some programs (Legacy, PAF) write instead of a second
      * NAME with TYPE married.
@@ -2489,6 +2499,8 @@ interface MarriedNameRead {
     text?: string;
     /** It carries Strom's mark of the name the person goes by. */
     marked?: boolean;
+    /** Its NAME > _STROM_STATUS (Person.marriedNameStatus when it is the one taken). */
+    status?: FactStatus;
 }
 
 /**
@@ -2510,6 +2522,9 @@ function chooseLastMarriageName(data: StromData, person: Person, names: readonly
     person.marriedSurname = now.surname;
     if (now.given) person.marriedFirstName = now.given;
     else delete person.marriedFirstName;
+    // The status is the chosen name's (none: none).
+    if (now.status) person.marriedNameStatus = now.status;
+    else delete person.marriedNameStatus;
     const gone = new Set([key(`${now.given || person.firstName} ${now.surname}`), ...(now.text ? [key(now.text)] : [])]);
     const variants = (person.nameVariants ?? []).filter(v => !gone.has(key(v)));
     const back = spelled(was.text ?? `${was.given || person.firstName} ${was.surname}`);
@@ -2534,6 +2549,7 @@ function readMarriedSurname(
         indi.nameVariants.splice(k, 1);
         indi.variantNameTypes.splice(k, 1);
         indi.variantNameParts.splice(k, 1);
+        indi.variantNameStatus?.splice(k, 1);
         if (indi.primaryMark === undefined || indi.primaryMark < k) return;
         if (indi.primaryMark === k) { markedMarried = true; indi.primaryMark = undefined; }
         else indi.primaryMark--;
@@ -2547,12 +2563,16 @@ function readMarriedSurname(
         if (!read.lastName) continue;
         // Given names of its own ("Jana Kateřina /Nováková/" beside "Jana /…/") stay with it.
         const given = read.firstName && read.firstName !== '?' && read.firstName.trim() !== (indi.firstName ?? '').trim() ? read.firstName.trim() : '';
-        names.push({ surname: read.lastName, ...(given ? { given } : {}), text: indi.nameVariants[k], ...(indi.primaryMark === k ? { marked: true } : {}) });
+        const status = indi.variantNameStatus?.[k];
+        names.push({ surname: read.lastName, ...(given ? { given } : {}), text: indi.nameVariants[k], ...(indi.primaryMark === k ? { marked: true } : {}),
+            ...(status ? { status } : {}) });
         takenAt = k;
     }
     if (takenAt >= 0) {
         married = names[names.length - 1].surname;
         marriedGiven = names[names.length - 1].given ?? '';
+        const status = names[names.length - 1].status;
+        if (status) indi.marriedNameStatus = status;
         dropVariant(takenAt);
     } else {
         for (const v of indi.marnm) {
@@ -4940,6 +4960,13 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
                             else indi.variantNameTypes[currentNameSlot] = type;
                         } else if (tag === 'SOUR' && value) {
                             cite(indi.sourceRefs, value);
+                        } else if (tag === '_STROM_STATUS' && currentNameSlot !== null && (stromResearch || stromApp)) {
+                            // The research's status of the name (066 K6.3), as of a birth: the
+                            // primary name's is the fact `name`'s; a variant's is kept by its
+                            // index for the name after marriage. Another program's file: not read.
+                            const status = parseFactStatus(value);
+                            if (currentNameSlot === -1) indi.nameStatus = status;
+                            else if (status) (indi.variantNameStatus ??= [])[currentNameSlot] = status;
                         } else if (tag === '_MARNM' && value.trim()) {
                             // 2 _MARNM under a NAME: the married surname.
                             indi.marnm.push(value.trim());
@@ -5273,9 +5300,13 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
         if (k < 0) continue;
         const birthName = indi.nameVariants[k];
         const birthParts = indi.variantNameParts[k];
+        const birthStatus = indi.variantNameStatus?.[k];
         indi.nameVariants[k] = indi.name;
         indi.variantNameTypes[k] = indi.primaryNameType;
         indi.variantNameParts[k] = indi.primaryNameParts;
+        // The status goes with its name too.
+        if (indi.nameStatus || birthStatus) (indi.variantNameStatus ??= [])[k] = indi.nameStatus;
+        indi.nameStatus = birthStatus;
         indi.name = birthName;
         indi.primaryNameType = 'birth';
         indi.primaryNameParts = birthParts;
@@ -5929,6 +5960,8 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
         if (indi.deathAddress) person.deathAddress = indi.deathAddress;
         if (indi.birthStatus) person.birthStatus = indi.birthStatus;
         if (indi.deathStatus) person.deathStatus = indi.deathStatus;
+        if (indi.nameStatus) person.nameStatus = indi.nameStatus;
+        if (indi.marriedSurname && indi.marriedNameStatus) person.marriedNameStatus = indi.marriedNameStatus;
         const dateForms = keptDateForms(indi.dateForms);
         if (dateForms) person.gedcomDates = dateForms;
         // Facts with no field of their own join the note, labelled, ahead of

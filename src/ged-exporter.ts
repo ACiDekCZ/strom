@@ -1699,6 +1699,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // one; none without a choice or a married surname.
         const married = person.marriedSurname?.trim();
         if (married && person.primaryName === 'birth') lines.push(`2 ${PRIMARY_NAME_TAG} Y`);
+        // The research's status of the name, back as it came (066 K6.3).
+        pushStatus(lines, person.nameStatus);
         pushFactImport(person, 'name');
         pushFactOrigin(person, 'name');
         // The surname after marriage as the name she had after it, right
@@ -1715,6 +1717,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 if (!married.includes(',')) pushWrapped(lines, 2, 'SURN', married);
             }
             if (person.primaryName === 'married') lines.push(`2 ${PRIMARY_NAME_TAG} Y`);
+            pushStatus(lines, person.marriedNameStatus);
         }
         // Other spellings as further NAME lines — the first one above stays the
         // primary, which is what every reader expects.

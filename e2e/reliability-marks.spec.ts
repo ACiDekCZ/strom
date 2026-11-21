@@ -189,6 +189,39 @@ test.describe('reliability marks', () => {
         await expect(birth.locator('.fs-dots i.on')).toHaveCount(1);
     });
 
+    test('a research tree: the name\'s status at the given name and the surname, the married name\'s a quiet pill (066 K6.3)', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Zdeslava', 'Hrbolcová', { gender: 'female' });
+        await page.evaluate(() => {
+            const S = window.Strom;
+            const p = S.DataManager.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Zdeslava')!;
+            p.birthDate = '1828-11-09';
+            p.birthStatus = 'proven';
+            p.nameStatus = 'probable';
+            p.marriedSurname = 'Šmudláková';
+            p.marriedNameStatus = 'possible';
+            p.researchOrigins = { name: { kind: 'research' }, birth: { kind: 'research' } };
+            S.UI.researchShowsOriginNow = () => true;
+            S.UI.activeResearchId = () => 'r-smudlak';
+            S.TreeRenderer.render();
+        });
+        await cardAction(page, 'Zdeslava', 'edit');
+        const modal = personModal(page);
+        await expect(modal).toBeVisible();
+        for (const label of ['label[for="input-firstname"]', '#lastname-label']) {
+            const pill = modal.locator(`${label} button.fact-status-probable`);
+            await expect(pill).toHaveText('Probable');
+        }
+        // The married name's: a pill with a title only, no tip on a click.
+        const married = modal.locator('label[for="input-married-surname"] > .fact-status');
+        await expect(married).toHaveCount(1);
+        expect(await married.evaluate(el => el.tagName)).toBe('SPAN');
+        await expect(married).toHaveClass(/fact-status-possible/);
+        await expect(married).toHaveAttribute('title', /.+/);
+        await married.click();
+        await expect(page.locator('#status-tip')).toBeHidden();
+    });
+
     test('a research tree with origin stored: the card\'s mark is the same before its bridge answers and with it (1109)', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Bonifác', 'Kvapilík');

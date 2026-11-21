@@ -722,6 +722,14 @@ export interface Person {
     birthStatus?: FactStatus;
     deathStatus?: FactStatus;
     /**
+     * The research's status of the name (fact `name`, `_STROM_STATUS` under the
+     * primary NAME of the research's or the app's own file); read, shown and
+     * sent back as it came, never worked out here.
+     */
+    nameStatus?: FactStatus;
+    /** …and of the name after marriage (the NAME with TYPE married that gave marriedSurname): shown quietly, no mark of the card. */
+    marriedNameStatus?: FactStatus;
+    /**
      * Dates as the GEDCOM file wrote them, by their flex value, where the
      * app's own form would write them differently ('CAL 1885' is '~1885',
      * which goes out as ABT 1885; '1699/00' is '1699'). A date whose value is

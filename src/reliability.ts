@@ -143,7 +143,8 @@ export function factStatusOf(holder: FactHolder, fact: string): FactStatus | und
         return (holder.events ?? []).find(e => e?.id === id)?.status;
     }
     if (isPartnership(holder)) return fact === 'marriage' ? holder.startStatus : fact === 'divorce' ? holder.endStatus : undefined;
-    return fact === 'birth' ? holder.birthStatus : fact === 'death' ? holder.deathStatus : undefined;
+    return fact === 'name' ? holder.nameStatus
+        : fact === 'birth' ? holder.birthStatus : fact === 'death' ? holder.deathStatus : undefined;
 }
 
 /** The parts of a fact that have a value now. */

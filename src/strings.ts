@@ -1090,6 +1090,7 @@ const stringsEN = {
         fromImport: (prog: string, date: string) => `· taken from the family tree ${prog}, ${date}`,
         originMixed: (prog: string, date: string, loaded: string) => `Facts marked “from family tree” come from ${prog} (file ${date}, loaded ${loaded}).`,
         originAll: (prog: string, date: string, loaded: string) => `All of this person's facts come from ${prog} (file ${date}, loaded ${loaded}).`,
+        originHistory: (prog: string, date: string, loaded: string) => `This person's facts came from ${prog} (file ${date}, loaded ${loaded}); none is from the family tree alone any more.`,
         /** `date`: the day of the change, when known (left out otherwise). */
         partial: (from: string, changed: string, date?: string) => `The ${from} is from the family tree; the ${changed} was changed by a person${date ? ` on ${date}` : ''}.`,
         part: { DATE: 'date', PLAC: 'place', VAL: 'value', GIVN: 'given name', SURN: 'surname', SEX: 'sex' },
@@ -11820,6 +11821,7 @@ const stringsCZ: StringsType = {
         fromImport: (prog: string, date: string) => `· převzato z rodokmenu ${prog}, ${date}`,
         originMixed: (prog: string, date: string, loaded: string) => `Údaje se značkou z rodokmenu jsou z ${prog} (soubor ${date}, načteno ${loaded}).`,
         originAll: (prog: string, date: string, loaded: string) => `Všechny údaje osoby jsou z ${prog} (soubor ${date}, načteno ${loaded}).`,
+        originHistory: (prog: string, date: string, loaded: string) => `Údaje osoby přišly z ${prog} (soubor ${date}, načteno ${loaded}); žádný už není jen z rodokmenu.`,
         partial: (from: string, changed: string, date?: string) => `${capFirst(from)} je z rodokmenu, ${changed} změnil člověk${date ? ` ${date}` : ''}.`,
         part: { DATE: 'datum', PLAC: 'místo', VAL: 'hodnota', GIVN: 'křestní jméno', SURN: 'příjmení', SEX: 'pohlaví' },
         joinParts: (parts: string[]) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} a ${parts[parts.length - 1]}`),
@@ -22303,6 +22305,7 @@ const stringsDE: StringsType = {
         fromImport: (prog: string, date: string) => `· übernommen aus ${prog}, ${date}`,
         originMixed: (prog: string, date: string, loaded: string) => `Angaben mit der Marke „aus dem Stammbaum“ stammen aus ${prog} (Datei vom ${date}, geladen am ${loaded}).`,
         originAll: (prog: string, date: string, loaded: string) => `Alle Angaben der Person stammen aus ${prog} (Datei vom ${date}, geladen am ${loaded}).`,
+        originHistory: (prog: string, date: string, loaded: string) => `Die Angaben der Person stammen aus ${prog} (Datei vom ${date}, geladen am ${loaded}); keine ist mehr nur aus dem Stammbaum.`,
         partial: (from: string, changed: string, date?: string) => `${capFirst(from)} stammt aus dem Stammbaum, ${changed} hat ein Mensch${date ? ` am ${date}` : ''} geändert.`,
         part: { DATE: 'Datum', PLAC: 'Ort', VAL: 'Wert', GIVN: 'Vorname', SURN: 'Nachname', SEX: 'Geschlecht' },
         joinParts: (parts: string[]) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} und ${parts[parts.length - 1]}`),

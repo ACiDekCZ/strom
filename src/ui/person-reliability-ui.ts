@@ -119,7 +119,7 @@ export const personReliabilityMethods = uiModule({
         this.renderPersonFactOrigins(personId);
         // "Verify facts (N)" above the events, as the card mark's tip offers it (whatever the marks setting says).
         this.renderPersonVerifyRow(person ? personId : null);
-        if (!person || !view?.atFacts) return;
+        if (!person || !view) return;
         const put = (label: Element | null | undefined, html: string): void => {
             if (!label || !html) return;
             const tmp = document.createElement('template');
@@ -127,6 +127,14 @@ export const personReliabilityMethods = uiModule({
             const pill = tmp.content.firstElementChild;
             if (pill) label.insertBefore(pill, label.querySelector('.pm-conflict-tag'));
         };
+        // The name after marriage: the research's status of it, quiet (no tip, no action) and in no mark
+        // of the card, whether or not the facts have pills (066 K6.3).
+        if (person.marriedNameStatus && person.marriedSurname?.trim()) {
+            const step = reliabilityStep({ status: person.marriedNameStatus });
+            put(document.querySelector('#person-modal label[for="input-married-surname"]'),
+                reliabilityHtml(step, step ? reliabilityTitle(step) : '', { inert: true, fact: 'name:married' }));
+        }
+        if (!view.atFacts) return;
         // The name: at the given name and the surname, each while it is the part from the family tree.
         const name = view.summary.facts.find(f => f.fact === 'name');
         if (name) {

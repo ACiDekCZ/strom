@@ -847,6 +847,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         fromImport: (prog: string, date: string) => `· przejęte z drzewa ${prog}, ${date}`,
         originMixed: (prog: string, date: string, loaded: string) => `Dane oznaczone „z drzewa” pochodzą z ${prog} (plik ${date}, wczytano ${loaded}).`,
         originAll: (prog: string, date: string, loaded: string) => `Wszystkie dane osoby pochodzą z ${prog} (plik ${date}, wczytano ${loaded}).`,
+        originHistory: (prog: string, date: string, loaded: string) => `Dane osoby pochodzą z ${prog} (plik ${date}, wczytano ${loaded}); żadna nie jest już tylko z drzewa.`,
         partial: (from: string, changed: string, date?: string) => `${from.charAt(0).toLocaleUpperCase() + from.slice(1)} pochodzi z drzewa, ${changed} zmienił człowiek${date ? ` ${date}` : ''}.`,
         part: { DATE: 'data', PLAC: 'miejsce', VAL: 'wartość', GIVN: 'imię', SURN: 'nazwisko', SEX: 'płeć' },
         joinParts: (parts: string[]) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} i ${parts[parts.length - 1]}`),

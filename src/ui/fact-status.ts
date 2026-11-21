@@ -196,6 +196,11 @@ export function personMarksLayout(summary: PersonOriginSummary): {
     if (summary.allSameStep && !partial) {
         return { row: { text: strings.reliability.originAll(o.prog, o.date, o.loaded), step: summary.allSameStep }, atFacts: false };
     }
+    // The facts came from the family tree, but none is from it alone any more
+    // (each documented or confirmed since): the row says so as history (066 K6.3).
+    if (!partial && !summary.facts.some(f => f.step === 'import')) {
+        return { row: { text: strings.reliability.originHistory(o.prog, o.date, o.loaded) }, atFacts: true };
+    }
     return { row: { text: strings.reliability.originMixed(o.prog, o.date, o.loaded) }, atFacts: true };
 }
 

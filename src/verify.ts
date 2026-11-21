@@ -40,6 +40,11 @@ export const FACT_MARK = /^[0-9a-fA-F]{16}$/;
 /** POST /verify/stop: drop the re-verification tasks not yet begun. */
 export const VERIFY_STOP_FEATURE = 'verify.stop';
 /**
+ * The research reads and writes the name's status, id and confirmation (`_STROM_STATUS`, `_STROM_EID P0012.N`,
+ * `_STROM_CONFIRMED` under the primary NAME): the name is verified and confirmed as the other facts are (066 K6.3).
+ */
+export const NAME_STATUS_FEATURE = 'name-status';
+/**
  * POST /verify/bulk with `try` puts its tasks at the head of the queue, and its answer (not dry) says
  * `first` and whether the research works now (`working`) — spec 065 K7.1/K7.2.
  */
