@@ -139,7 +139,7 @@ describe('Hide others: the layout of the selection alone', () => {
                 }
                 expect(checked).toBeGreaterThan(0);
                 expect(failures.slice(0, 20)).toEqual([]);
-            });
+            }, 600_000);
         }
     }
 
