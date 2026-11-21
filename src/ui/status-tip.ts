@@ -27,7 +27,7 @@ import { sourceEntryText } from '../source-location.js';
 import { FactCitation, FactHolder, factCitations, isPartnership } from '../import-origin.js';
 import { citationMainShown } from '../citation-gates.js';
 import {
-    CARD_STATUS_FACTS, CardStatus, FactReliability, ReliabilityOptions, ReliabilityStep, ReliabilityStepName, factReliability,
+    CARD_STATUS_FACTS, CardStatus, CardStatusFact, FactReliability, ReliabilityOptions, ReliabilityStep, ReliabilityStepName, factReliability,
 } from '../reliability.js';
 import type { LifeEvent, Partnership, PartnershipId, Person, PersonId, Source, StromData } from '../types.js';
 import type { PersonStoryState } from '../card-signals.js';
@@ -141,6 +141,9 @@ export interface SourceRowModel {
 export interface SourcesModel {
     head: string;
     rows: SourceRowModel[];
+    /** The card's bubble: the rows of other facts under their own head, after `rows` (K048: a register's
+     *  citation at a proven birth is not "cited in the family tree" because the name came from it). */
+    rest?: { head: string; rows: SourceRowModel[] };
     /** No row: what stands in its place. */
     empty?: string;
     /** The way to all of them ("and 2 more ›", "Person's sources (6) ›"). */
@@ -241,27 +244,42 @@ export function factSourcesModel(data: StromData, holder: FactHolder, fact: stri
 export function cardSourcesModel(data: StromData, person: Person, status: CardStatus): SourcesModel {
     const s = strings.reliability;
     // By first appearance at the name, the birth, the death, each fact's citations in the order shown (spec 095 K1.1).
-    const bySource = new Map<string, { source: Source; ctx: CitationContextLike; facts: { label: string; main: boolean }[] }>();
+    type CardRow = { source: Source; ctx: CitationContextLike; facts: { label: string; main: boolean }[]; keys: Set<CardStatusFact> };
+    const bySource = new Map<string, CardRow>();
     const mainShown = citationMainShown();
     for (const fact of CARD_STATUS_FACTS) {
         for (const c of factCitations(data, person, fact)) {
-            const row = bySource.get(c.source.id) ?? { source: c.source, ctx: c.ctx, facts: [] };
+            const row = bySource.get(c.source.id) ?? { source: c.source, ctx: c.ctx, facts: [], keys: new Set<CardStatusFact>() };
             const label = s.cardFact[fact];
             const at = row.facts.find(f => f.label === label);
             if (at) at.main ||= !!c.main && mainShown;
             else row.facts.push({ label, main: !!c.main && mainShown });
+            row.keys.add(fact);
             bySource.set(c.source.id, row);
         }
     }
-    const rows: SourceRowModel[] = [...bySource.values()].map(r => ({
-        source: r.source, ctx: r.ctx, sub: sourceEntryText(r.source), facts: r.facts,
-    }));
-    const total = host?.personSourceCount(person.id) ?? rows.length;
-    const more = total > 0 ? { label: s.srcPerson(total), personId: person.id, sourceIds: rows.map(x => x.source.id) } : undefined;
+    const all = [...bySource.values()];
+    const toModel = (r: CardRow): SourceRowModel => ({ source: r.source, ctx: r.ctx, sub: sourceEntryText(r.source), facts: r.facts });
+    const total = host?.personSourceCount(person.id) ?? all.length;
+    const more = total > 0 ? { label: s.srcPerson(total), personId: person.id, sourceIds: all.map(x => x.source.id) } : undefined;
     const step = status.step?.step ?? (status.cls === 'cs-import' ? 'import' : undefined);
-    if (rows.length === 0) return { head: s.srcHead, rows: [], empty: step === 'import' ? s.importNoCite : s.noSourceRow, more };
-    const head = step === 'import' ? s.citedInImportHead : rows.length === 1 ? s.srcOne : s.srcN(rows.length);
-    return { head, rows: rows.slice(0, MAX_ROWS), more };
+    if (all.length === 0) return { head: s.srcHead, rows: [], empty: step === 'import' ? s.importNoCite : s.noSourceRow, more };
+    const counted = (n: number): string => (n === 1 ? s.srcOne : s.srcN(n));
+    if (step !== 'import') return { head: counted(all.length), rows: all.slice(0, MAX_ROWS).map(toModel), more };
+    // "Cited in the family tree" heads only the citations at the facts taken from it (the mark's facts);
+    // a citation at a fact the tree does not take from the family tree (a register at a proven birth) keeps its own head.
+    const fromTree = new Set<CardStatusFact>(status.facts);
+    const isTree = (r: CardRow): boolean => fromTree.size === 0 || [...r.keys].every(k => fromTree.has(k));
+    const shown = [...all.filter(isTree), ...all.filter(r => !isTree(r))].slice(0, MAX_ROWS);
+    const treeRows = shown.filter(isTree).map(toModel);
+    const otherRows = shown.filter(r => !isTree(r)).map(toModel);
+    const otherCount = all.filter(r => !isTree(r)).length;
+    if (treeRows.length === 0) return { head: counted(otherCount), rows: otherRows, more };
+    return {
+        head: s.citedInImportHead, rows: treeRows,
+        ...(otherRows.length ? { rest: { head: counted(otherCount), rows: otherRows } } : {}),
+        more,
+    };
 }
 
 /** What a trigger is about, read from its attributes (null: nothing to say). */
@@ -365,11 +383,14 @@ export function sourceSubHtml(r: SourceRowModel): string {
 function tipHtml(m: TipModel): string {
     const s = strings.reliability;
     const src = m.sources;
-    const rows = src ? src.rows.map((r, i) => `
-        <button type="button" class="st-src" data-row="${i}" data-source-id="${esc(r.source.id)}" data-ctx="${esc(JSON.stringify(r.ctx))}">
+    const rowsHtml = (list: SourceRowModel[], from: number): string => list.map((r, i) => `
+        <button type="button" class="st-src" data-row="${from + i}" data-source-id="${esc(r.source.id)}" data-ctx="${esc(JSON.stringify(r.ctx))}">
             <span class="st-src-icon" aria-hidden="true">${iconSvg('file', { size: 14 })}</span>
             <span class="st-src-text"><span class="st-src-title">${esc(r.source.title)}</span>${sourceSubHtml(r)}</span>
-        </button>`).join('') : '';
+        </button>`).join('');
+    const rows = src ? rowsHtml(src.rows, 0) : '';
+    const rest = src?.rest
+        ? `<div class="st-src-head st-src-head--rest">${esc(src.rest.head)}</div>${rowsHtml(src.rest.rows, src.rows.length)}` : '';
     const story = m.story
         ? `<button type="button" class="st-story st-link">${esc(strings.card.tipStoryRow(m.story.title))}</button>` : '';
     return `
@@ -380,6 +401,7 @@ function tipHtml(m: TipModel): string {
         ${src ? `<div class="st-sources">
             <div class="st-src-head">${esc(src.head)}</div>
             ${rows}
+            ${rest}
             ${src.empty ? `<div class="st-src-none">${esc(src.empty)}</div>` : ''}
             ${src.more ? `<button type="button" class="st-more st-link">${esc(src.more.label)}</button>` : ''}
         </div>` : ''}

@@ -153,6 +153,40 @@ describe('bubbles (M4, M5)', () => {
         expect(sourceSubHtml(m.rows[0])).not.toContain('st-src-main');
     });
 
+    it('the card\'s mark from the family tree: its head only over the name\'s citations, the registers at the birth and death under their own (K048)', () => {
+        shown();
+        const data = tree();
+        data.sources!['src-ged'] = { id: 'src-ged', title: 'Rodokmen Ostružníků' } as never;
+        (data.persons[RADIM] as Person).sourceIds = ['src-ged'];
+        const s = strings.reliability;
+        const status = { cls: 'cs-import', source: 'step', step: { step: 'import' }, facts: ['name'] } as unknown as CardStatus;
+        const m = cardSourcesModel(data, data.persons[RADIM], status);
+        expect(m.head).toBe(s.citedInImportHead);
+        expect(m.rows.map(r => r.source.id)).toEqual(['src-ged']);
+        expect(m.rest?.head).toBe(s.srcN(3));
+        expect(m.rest?.rows.map(r => r.source.id)).toEqual(['src-birth', 'src-death']);
+        expect(m.more?.sourceIds).toEqual(['src-ged', 'src-birth', 'src-death', 'src-census']);
+        // A register cited at the name and at the birth is not only the family tree's.
+        (data.persons[RADIM] as Person).sourceIds = ['src-ged', 'src-birth'];
+        const both = cardSourcesModel(data, data.persons[RADIM], status);
+        expect(both.rows.map(r => r.source.id)).toEqual(['src-ged']);
+        expect(both.rest?.rows.map(r => r.source.id)).toEqual(['src-birth', 'src-death']);
+        // Only the name's citations: one head, no second block.
+        const nameOnly = tree();
+        nameOnly.sources!['src-ged'] = { id: 'src-ged', title: 'Rodokmen Ostružníků' } as never;
+        const p = nameOnly.persons[RADIM] as Person;
+        p.sourceIds = ['src-ged'];
+        p.birthSourceIds = [];
+        p.deathSourceIds = [];
+        const one = cardSourcesModel(nameOnly, p, status);
+        expect(one.head).toBe(s.citedInImportHead);
+        expect(one.rest).toBeUndefined();
+        // No citation at the name: the registers under their count, never "cited in the family tree".
+        const none = cardSourcesModel(tree(), tree().persons[RADIM], status);
+        expect(none.head).toBe(s.srcN(3));
+        expect(none.rows.map(r => r.source.id)).toEqual(['src-birth', 'src-death', 'src-census']);
+    });
+
     it('a fact\'s citations (factCitations) in the order shown, the main one flagged', () => {
         shown();
         const data = withMain(tree(), 'birthSourceIds', 'src-census');
