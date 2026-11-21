@@ -52,6 +52,7 @@ import { bottomSheetMethods } from './bottom-sheet.js';
 
 import { personModalMethods } from './person-modal.js';
 import { portraitActionsMethods, PendingPortrait } from './portrait-actions-ui.js';
+import { portraitPickerMethods } from './portrait-picker-ui.js';
 import { openPhotoModel, type PhotoModel } from './person-photo-model.js';
 import { unionPhotoMethods } from './union-photo-ui.js';
 import { personEventsMethods } from './person-events.js';
@@ -656,6 +657,10 @@ Object.assign(UIClass.prototype, personModalMethods);
 type PortraitActionsMethods = typeof portraitActionsMethods;
 export interface UIClass extends PortraitActionsMethods {}
 Object.assign(UIClass.prototype, portraitActionsMethods);
+
+type PortraitPickerMethods = typeof portraitPickerMethods;
+export interface UIClass extends PortraitPickerMethods {}
+Object.assign(UIClass.prototype, portraitPickerMethods);
 
 type UnionPhotoMethods = typeof unionPhotoMethods;
 export interface UIClass extends UnionPhotoMethods {}

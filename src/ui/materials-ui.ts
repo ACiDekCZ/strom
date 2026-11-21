@@ -720,6 +720,8 @@ export const materialsMethods = uiModule({
         } finally {
             personLoading.delete(refn);
             if (this.currentId === personId) this.renderMaterialsSection();
+            // An open "Portrait from a photo" picker: the research's pictures as they came.
+            this.renderPortraitPicker();
         }
     },
 
@@ -731,6 +733,7 @@ export const materialsMethods = uiModule({
         const answer = await fetchMaterial(ctx.base, { trees: ctx.caps.trees });
         if (answer.ok) await saveMaterialList(ctx.treeId, answer.value, { kind: 'all' });
         else fullAsked.delete(ctx.treeId);
+        if (answer.ok) this.renderPortraitPicker();
     },
 
     /** Scroll the open editor to the materials (or the attachments on touch). */
@@ -1026,6 +1029,8 @@ export const materialsMethods = uiModule({
             if (person && document.getElementById('person-modal')?.classList.contains('active')) this.applyAdvancedFieldVisibility(person);
         }
         this.refreshMaterialsCounts();
+        // The research's pictures in or out of an open portrait picker, its sentence.
+        this.renderPortraitPicker();
     },
 
     /** The cards' "Materials N": recomputed; the tree redrawn only when what it shows changed. */

@@ -1445,6 +1445,19 @@ export const personModalMethods = uiModule({
     },
 
     /**
+     * "Choose photo": the photos of the person a portrait can be cut from
+     * (spec 107 "Portrait from a photo"), or straight the file picker when
+     * there are none (and for a person not saved yet).
+     */
+    choosePersonPhoto(anchor: HTMLElement): void {
+        if (this.currentId) {
+            this.openPortraitPicker(this.currentId, anchor, { where: 'dialog' });
+            return;
+        }
+        (document.getElementById('input-photo') as HTMLInputElement | null)?.click();
+    },
+
+    /**
      * A chosen file opens the portrait editor (spec 107 §1): Done shows the
      * portrait in the preview and keeps the whole photo and the crop until the
      * dialog is saved (then an attachment and the portrait's source); Cancel
@@ -2177,6 +2190,7 @@ export const personModalMethods = uiModule({
     forceCloseModal(): void {
         document.querySelectorAll('#person-modal .pm-window-conflict').forEach(n => n.remove());
         this.closePersonModalRodMenu();
+        this.closePortraitPicker(false, 'dialog');
         this.closeResearchConflictPanel({ focus: false });
         this.closeLifelineHistoryPopups();
         this.dropLifelineHistoryToastLift();

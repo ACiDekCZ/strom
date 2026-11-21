@@ -21,6 +21,7 @@ import { openPortraitEditor, PortraitEditorInput } from './portrait-editor.js';
 import { uiModule } from './module.js';
 import { imageLoads } from '../image-loads.js';
 import { personPhotoKey } from './person-photo-model.js';
+import { portraitCropOf } from '../portrait-candidates.js';
 
 /** Where a portrait comes from that is already in the tree: an attachment of the person or the couple's photo. */
 export type PortraitOrigin = { attachmentId: string } | { partnershipId: NonNullable<PortraitSource['partnershipId']> };
@@ -82,14 +83,7 @@ export interface PendingPortrait {
     link?: PortraitFileLink;
 }
 
-/** A portrait's crop without its origin. */
-export function portraitCropOf(source: PortraitSource): PortraitCrop {
-    const crop: PortraitCrop = { region: { ...source.region } };
-    if (source.quarterTurns) crop.quarterTurns = source.quarterTurns;
-    if (source.angle) crop.angle = source.angle;
-    if (source.mirror) crop.mirror = true;
-    return crop;
-}
+export { portraitCropOf };
 
 /** The origin of a portrait's source (the attachment or the couple's photo it names). */
 export function portraitOriginOf(source: PortraitSource): PortraitOrigin | null {
@@ -275,18 +269,19 @@ export const portraitActionsMethods = uiModule({
      * person dialog of its owner the portrait waits for Save; elsewhere Done
      * writes at once, a person with a portrait seeing Current → New.
      */
-    async useAttachmentAsPortrait(personId: PersonId, attachmentId: string): Promise<void> {
+    async useAttachmentAsPortrait(personId: PersonId, attachmentId: string, opts: { initial?: PortraitCrop } = {}): Promise<void> {
         const person = DataManager.getPerson(personId);
         if (!person || !canEditPortrait(personId)) return;
         const origin: PortraitOrigin = { attachmentId };
         const image = portraitOriginImage(person, origin);
         if (!image) return;
+        const initial = opts.initial ? { initial: opts.initial } : {};
         const dialogOpen = this.currentId === personId && !!document.getElementById('person-modal')?.classList.contains('active');
         if (dialogOpen) {
-            await this.portraitIntoPersonModal({ source: image, origin, replace: true });
+            await this.portraitIntoPersonModal({ source: image, origin, replace: true, ...initial });
             return;
         }
-        await this.editPortraitNow(personId, { source: image, origin, replace: true });
+        await this.editPortraitNow(personId, { source: image, origin, replace: true, ...initial });
     },
 
     /**
@@ -321,12 +316,12 @@ export const portraitActionsMethods = uiModule({
      * the bridge, and only Done (or the dialog's Save) makes it the tree's
      * file at the person, in the portrait's undo step.
      */
-    async useMaterialAsPortrait(personId: PersonId, item: MaterialItem): Promise<void> {
+    async useMaterialAsPortrait(personId: PersonId, item: MaterialItem, opts: { initial?: PortraitCrop } = {}): Promise<void> {
         const person = DataManager.getPerson(personId);
         if (!person || !canEditPortrait(personId)) return;
         const own = item.attachment && DataManager.personMedia(personId).some(a => a.id === item.attachment!.id) ? item.attachment : null;
         if (own) {
-            await this.useAttachmentAsPortrait(personId, own.id);
+            await this.useAttachmentAsPortrait(personId, own.id, opts);
             return;
         }
         const copy = treePortraitCopy(item);
@@ -345,10 +340,22 @@ export const portraitActionsMethods = uiModule({
             }
             link = { record };
         }
+        await this.useMaterialLink(personId, link, opts);
+    },
+
+    /**
+     * The editor over a research's picture (the tree's copy or its working
+     * copy): from the person's open dialog the portrait waits for Save, else
+     * Done writes at once; the picture becomes the tree's file at the person
+     * only then (1121).
+     */
+    async useMaterialLink(personId: PersonId, link: PortraitFileLink, opts: { initial?: PortraitCrop } = {}): Promise<void> {
+        if (!DataManager.getPerson(personId) || !canEditPortrait(personId)) return;
         const image = portraitLinkImage(link);
         if (!image) return;
+        const initial = opts.initial ? { initial: opts.initial } : {};
         const dialogOpen = this.currentId === personId && !!document.getElementById('person-modal')?.classList.contains('active');
-        if (dialogOpen) await this.portraitIntoPersonModal({ source: image, link, replace: true });
-        else await this.editPortraitNow(personId, { source: image, link, replace: true });
+        if (dialogOpen) await this.portraitIntoPersonModal({ source: image, link, replace: true, ...initial });
+        else await this.editPortraitNow(personId, { source: image, link, replace: true, ...initial });
     },
 });

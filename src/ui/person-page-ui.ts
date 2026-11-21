@@ -335,6 +335,7 @@ export const personPageMethods = uiModule({
     closePersonPage(opts: { focus?: boolean } = {}): void {
         const overlay = overlayEl();
         this.closePersonPageExport();
+        this.closePortraitPicker(false, 'page');
         tocCleanup?.();
         tocCleanup = null;
         editObserver?.disconnect();

@@ -30548,6 +30548,87 @@
             background: var(--surface-2); border: 1px solid var(--border); color: var(--text-light);
             font-size: 10px; font-weight: 700; letter-spacing: 0.02em;
         }
+        /* "Portrait from a photo" (portrait-picker-ui.ts, spec 107): the person's photos to cut a
+           portrait from. A popover at "Choose photo" with a mouse over 1024px; a bottom sheet on
+           touch and in narrower windows (3 tiles on a phone, 4 on a tablet), a panel at the right
+           on a phone held sideways. */
+        .portrait-pick {
+            position: fixed; z-index: 10050; width: 372px; max-width: calc(100vw - 16px); box-sizing: border-box;
+            background: var(--surface); color: var(--text); border: 1px solid var(--border);
+            border-radius: var(--r-lg); box-shadow: var(--shadow-lg); padding: 4px 0 6px; font-size: 13.5px;
+        }
+        .portrait-pick-head { display: flex; align-items: baseline; gap: 8px; padding: 8px 14px; }
+        .portrait-pick-title { font-weight: 600; font-size: 14px; }
+        .portrait-pick-count { font-size: 13px; color: var(--text-light); }
+        .portrait-pick-grid {
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px;
+            padding: 2px 14px 10px; max-height: 388px; overflow-y: auto;
+        }
+        .portrait-pick-tile {
+            display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 0; margin: 0;
+            border: none; background: none; color: inherit; font: inherit; text-align: left;
+            border-radius: var(--r-md); cursor: pointer;
+        }
+        .portrait-pick-tile.is-waiting { cursor: default; }
+        .portrait-pick-tile.is-busy { cursor: progress; }
+        .portrait-pick-tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .portrait-pick-img {
+            position: relative; display: block; aspect-ratio: 1; overflow: hidden;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2);
+        }
+        .portrait-pick-img > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        @media (hover: hover) {
+            .portrait-pick-tile:not(.is-waiting):hover .portrait-pick-img { border-color: var(--sel-mute); }
+        }
+        .portrait-pick-letters {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            font: 600 10px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.02em; color: var(--text-light);
+        }
+        .portrait-pick-img .portrait-pick-tag { position: absolute; left: 4px; bottom: 4px; background: var(--surface); }
+        .portrait-pick-busy {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            background: color-mix(in srgb, var(--surface) 55%, transparent);
+        }
+        .portrait-pick-cap, .portrait-pick-others { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .portrait-pick-cap { font-size: 12.5px; }
+        .portrait-pick-others { font-size: 11.5px; color: var(--text-light); }
+        .portrait-pick-note { font-size: 12.5px; color: var(--text-light); margin: 0; padding: 0 14px 10px; line-height: 1.4; }
+        .portrait-pick-status { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin: 0; padding: 0 14px 10px; white-space: normal; }
+        .portrait-pick-status.is-err { color: var(--error-text); }
+        .portrait-pick-sep { height: 1px; background: var(--divider); margin: 2px 0 4px; }
+        .portrait-pick-item {
+            display: flex; align-items: center; width: 100%; min-height: 36px; padding: 0 14px;
+            border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+        }
+        @media (hover: hover) { .portrait-pick-item:hover { background: var(--hover-bg); } }
+        .portrait-pick-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        /* The sheet: the person's name as its title, tiles and rows for a finger. */
+        .bottom-sheet.portrait-pick-sheet { max-height: calc(100dvh - 16px); }
+        .portrait-pick-sheet .portrait-pick-grid { padding: 4px 16px 12px; gap: 14px 10px; max-height: none; overflow: visible; }
+        .portrait-pick-sheet .portrait-pick-tile { min-height: 44px; }
+        .portrait-pick-sheet .portrait-pick-cap { font-size: 13px; }
+        .portrait-pick-sheet .portrait-pick-note, .portrait-pick-sheet .portrait-pick-status { padding: 0 16px 12px; }
+        .portrait-pick-sheet .bottom-sheet-menu-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .portrait-pick-sheet .bottom-sheet-item { min-height: 48px; }
+        .portrait-pick-sheet .bottom-sheet-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (hover: hover) { .portrait-pick-sheet .bottom-sheet-item:hover { background: var(--hover-bg); } }
+        /* A tablet: the sheet is up to 560px wide, 4 tiles in a row. */
+        @media (min-width: 641px) { .portrait-pick-sheet .portrait-pick-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+        @media (pointer: coarse) { .portrait-pick-item { min-height: 44px; } }
+        /* A phone held sideways: a 360px panel at the right over the whole height, 3 tiles. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .bottom-sheet-overlay:has(> .portrait-pick-sheet) { align-items: stretch; justify-content: flex-end; }
+            .bottom-sheet.portrait-pick-sheet {
+                width: 360px; max-width: 100%; margin: 0; height: 100%; max-height: none;
+                border-radius: var(--r-lg) 0 0 var(--r-lg); transform: translateX(100%);
+                padding: calc(8px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) 8px;
+                overscroll-behavior: contain;
+            }
+            .bottom-sheet-overlay.active .bottom-sheet.portrait-pick-sheet { transform: translateX(0); }
+            .portrait-pick-sheet .bottom-sheet-handle { display: none; }
+            .portrait-pick-sheet .portrait-pick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .portrait-pick-sheet .bottom-sheet-item { min-height: 44px; }
+        }
         /* Materials at the person (materials-ui.ts, spec 017): attachments and the research's files in one list. */
         .materials-section[hidden] { display: none; }
         .materials-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -34212,7 +34293,7 @@
                             <div class="photo-preview" id="photo-preview"></div>
                             <div class="photo-actions">
                                 <input type="file" id="input-photo" accept="image/*" style="display:none" onchange="window.Strom.UI.handlePhotoInput(event)">
-                                <button type="button" class="secondary" onclick="document.getElementById('input-photo').click()" data-i18n="labels.photoChoose"></button>
+                                <button type="button" class="secondary" id="photo-choose-btn" aria-haspopup="dialog" onclick="window.Strom.UI.choosePersonPhoto(this)" data-i18n="labels.photoChoose"></button>
                                 <button type="button" class="secondary" id="photo-recrop-btn" onclick="window.Strom.UI.recropPersonPhoto()" data-i18n="labels.photoRecrop"></button>
                                 <button type="button" class="secondary" id="photo-remove-btn" onclick="window.Strom.UI.removePersonPhoto()" data-i18n="labels.photoRemove"></button>
                                 <span class="photo-size" id="photo-size"></span>

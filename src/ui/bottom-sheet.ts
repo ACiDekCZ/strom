@@ -1022,6 +1022,67 @@ export const bottomSheetMethods = uiModule({
     },
 
     /**
+     * The sheet of the portrait picker (touch, a window up to 1024 px; spec
+     * 107): the same overlay, handle and swipe-down as the menu sheets, the
+     * person's name as its title (`titleHtml`: trusted markup), and an empty
+     * body the picker draws itself (returned). A phone held sideways shows it
+     * as a panel at the right.
+     */
+    presentPortraitSheet(titleHtml: string, opts: { label?: string; onClose?: () => void } = {}): HTMLElement {
+        const overlay = document.createElement('div');
+        overlay.className = 'bottom-sheet-overlay';
+        const sheet = document.createElement('div');
+        sheet.className = 'bottom-sheet bottom-sheet-menu portrait-pick-sheet';
+        sheet.setAttribute('role', 'dialog');
+        if (opts.label) sheet.setAttribute('aria-label', opts.label);
+        const handle = document.createElement('div');
+        handle.className = 'bottom-sheet-handle';
+        const title = document.createElement('div');
+        title.className = 'bottom-sheet-menu-title';
+        title.innerHTML = titleHtml;
+        const body = document.createElement('div');
+        body.className = 'portrait-pick-body';
+        sheet.append(handle, title, body);
+        overlay.appendChild(sheet);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this.hideBottomSheet();
+        });
+        // Swipe-down to dismiss (a swipe right on a phone held sideways), as the person sheet.
+        let startX = 0;
+        let startY = 0;
+        let dragging = false;
+        const side = (): boolean => typeof window.matchMedia === 'function' && window.matchMedia(MQ_PHONE_LANDSCAPE).matches;
+        sheet.addEventListener('touchstart', (e) => {
+            // The grid scrolls: a drag inside it moves it, not the sheet.
+            if ((e.target as Element | null)?.closest?.('.portrait-pick-grid') && sheet.scrollTop > 0) return;
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+            dragging = true;
+            sheet.style.transition = 'none';
+        }, { passive: true });
+        sheet.addEventListener('touchmove', (e) => {
+            if (!dragging) return;
+            const d = side() ? e.touches[0].clientX - startX : e.touches[0].clientY - startY;
+            if (d > 0) sheet.style.transform = side() ? `translateX(${d}px)` : `translateY(${d}px)`;
+        }, { passive: true });
+        sheet.addEventListener('touchend', (e) => {
+            if (!dragging) return;
+            dragging = false;
+            sheet.style.transition = '';
+            const d = side() ? e.changedTouches[0].clientX - startX : e.changedTouches[0].clientY - startY;
+            if (d > SWIPE_CLOSE_PX) this.hideBottomSheet();
+            else sheet.style.transform = '';
+        });
+        this.noteBottomSheetTrigger();
+        this.hideBottomSheet();
+        document.body.appendChild(overlay);
+        this.bottomSheet = overlay;
+        this.bottomSheetOnClose = opts.onClose ?? null;
+        requestAnimationFrame(() => overlay.classList.add('active'));
+        return body;
+    },
+
+    /**
      * Attach a long-press gesture to a card: on a coarse pointer, holding for
      * LONG_PRESS_MS without moving > MOVE_CANCEL_PX opens the bottom sheet and
      * suppresses the following click (so the desktop context menu never fires).

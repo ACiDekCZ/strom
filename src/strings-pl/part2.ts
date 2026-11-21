@@ -67,6 +67,14 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         replaced: (n: string) => `Portret osoby ${n} zastąpiony.`,
         personGone: 'Osoby nie ma już w drzewie, nic nie zapisano.',
         fromUnion: (saved: number, skipped: number) => `Zapisano ${nPl(saved, 'portret', 'portrety', 'portretów')} ze zdjęcia pary${skipped > 0 ? `, ${skipped} pominięto` : ''}.`,
+        pickTitle: 'Portret ze zdjęcia',
+        fromComputer: 'Z komputera…',
+        fromDevice: 'Z tego urządzenia…',
+        others: (n: number) => `i jeszcze ${n}`,
+        alsoIn: (names: string) => `Na zdjęciu także: ${names}`,
+        researchDown: (n: number) => `Zdjęcia z badania (${n}) są dostępne, gdy badanie działa.`,
+        pickLoading: 'Wczytywanie zdjęcia z badania…',
+        pickFailed: 'Nie udało się wczytać zdjęcia.',
     },
 
     // Import filter: leave images out

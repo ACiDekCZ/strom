@@ -1670,6 +1670,16 @@ const stringsEN = {
         personGone: 'The person is no longer in the tree; nothing was saved.',
         /** Done over a couple's photo (spec 107 §7f): the portraits saved, the steps skipped or kept. */
         fromUnion: (saved: number, skipped: number) => `${nEn(saved, 'portrait', 'portraits')} saved from the couple’s photo${skipped > 0 ? `, ${skipped} skipped` : ''}.`,
+        /** The picker of the person's photos (spec 107, portrait from a photo). */
+        pickTitle: 'Portrait from a photo',
+        fromComputer: 'From the computer…',
+        fromDevice: 'From this device…',
+        /** Under a photo's name: the other people in it. */
+        others: (n: number) => `and ${n} more`,
+        alsoIn: (names: string) => `Also in the photo: ${names}`,
+        researchDown: (n: number) => `Photos from the research (${n}) are available while the research runs.`,
+        pickLoading: 'Loading the photo from the research…',
+        pickFailed: 'The photo could not be loaded.',
     },
 
     // Import filter: leave images out
@@ -12401,6 +12411,15 @@ const stringsCZ: StringsType = {
         personGone: 'Osoba už ve stromu není, nic se neuložilo.',
         /** Hotovo nad fotkou svazku (spec 107 §7f). */
         fromUnion: (saved: number, skipped: number) => `${plural('cs', saved, 'Uložen', 'Uloženy', 'Uloženo')} ${nCs(saved, 'portrét', 'portréty', 'portrétů')} z fotky svazku${skipped > 0 ? `, ${skipped} ${plural('cs', skipped, 'přeskočen', 'přeskočeny', 'přeskočeno')}` : ''}.`,
+        /** The picker of the person's photos (spec 107, portrait from a photo). */
+        pickTitle: 'Portrét z fotky',
+        fromComputer: 'Z počítače…',
+        fromDevice: 'Ze zařízení…',
+        others: (n: number) => `a ${n} ${plural('cs', n, 'další', 'další', 'dalších')}`,
+        alsoIn: (names: string) => `Na fotce také: ${names}`,
+        researchDown: (n: number) => `Fotky z výzkumu (${n}) jsou dostupné, když výzkum běží.`,
+        pickLoading: 'Načítá se fotka z výzkumu…',
+        pickFailed: 'Fotku se nepodařilo načíst.',
     },
 
     // Filtr importu: bez obrázků
@@ -22922,6 +22941,14 @@ const stringsDE: StringsType = {
         replaced: (n: string) => `Porträt von ${n} ersetzt.`,
         personGone: 'Die Person ist nicht mehr im Stammbaum, nichts wurde gespeichert.',
         fromUnion: (saved: number, skipped: number) => `${nDe(saved, 'Porträt', 'Porträts')} aus dem Paarfoto gespeichert${skipped > 0 ? `, ${skipped} übersprungen` : ''}.`,
+        pickTitle: 'Porträt aus einem Foto',
+        fromComputer: 'Vom Computer…',
+        fromDevice: 'Von diesem Gerät…',
+        others: (n: number) => `und ${n} weitere`,
+        alsoIn: (names: string) => `Auch auf dem Foto: ${names}`,
+        researchDown: (n: number) => `Fotos aus der Forschung (${n}) sind verfügbar, wenn die Forschung läuft.`,
+        pickLoading: 'Das Foto wird aus der Forschung geladen…',
+        pickFailed: 'Das Foto ließ sich nicht laden.',
     },
 
     // Importfilter: ohne Bilder
