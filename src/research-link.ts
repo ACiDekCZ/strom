@@ -119,9 +119,11 @@ export function researchLinkMark(action: ResearchLinkAction, p: ResearchLinkMark
  * Actions asked through the research's bridge, no link and no terminal (spec 065): verify a fact,
  * a person or the tree (an AI agent works on them in the research's background), confirm a fact
  * from the scan or take it back, stop the verification not yet begun, split the older sources'
- * locations into fields and undo that split (spec 075 §5, no agent: the research's code).
+ * locations into fields and undo that split (spec 075 §5, no agent: the research's code), stop one
+ * run and set the most runs at once (spec 126 U10, `run.stop`, `run.limit`).
  */
-export const RESEARCH_BRIDGE_ACTIONS = ['verify', 'verify-bulk', 'fact-confirm', 'verify-stop', 'sources-split', 'material-sort'] as const;
+export const RESEARCH_BRIDGE_ACTIONS = ['verify', 'verify-bulk', 'fact-confirm', 'verify-stop', 'sources-split', 'material-sort',
+    'run-stop', 'run-limit'] as const;
 export type ResearchBridgeAction = typeof RESEARCH_BRIDGE_ACTIONS[number];
 
 /**
@@ -136,6 +138,8 @@ export const RESEARCH_BRIDGE_MARKS: Readonly<Record<ResearchBridgeAction, Resear
     'fact-confirm': 'none', 'verify-stop': 'none', 'sources-split': 'none',
     // The agent proposes titles, dates and links for files in the research's background (spec 102 §13).
     'material-sort': 'bridgeAgent',
+    // spec 126 U10: stop one run (it finishes its task, its window closes) and the most runs at once — no terminal, no new agent.
+    'run-stop': 'none', 'run-limit': 'none',
 };
 
 /**
@@ -327,6 +331,10 @@ export interface ResearchLinkParams {
     directionDo?: ResearchDirectionDo;
     /** The agent's session to finish ("N0132"). */
     session?: string;
+    /** `finish` (spec 126 U10, `run.lines`): the run to finish ("run-1a07", `/status.runs[].id`) — never with `session`. */
+    run?: string;
+    /** `work` with `research` (spec 126 U10, `run.agents`): the agent of the direction's run ("codex", `/status.agents[].id`). */
+    agent?: string;
     /** An original by its SHA-256 (`media`: open it in the system's image viewer). */
     sha?: string;
     /** A story: approve it (or its waiting new version), or keep the approved one. */
@@ -473,6 +481,16 @@ export function researchSessionRef(id: unknown): string | null {
     return typeof id === 'string' && /^N\d{1,7}$/.test(id.trim()) ? id.trim() : null;
 }
 
+/** A run's id in the research ("run-1a07", `/status.runs[].id`, spec 126 U10), or null. */
+export function researchRunRef(id: unknown): string | null {
+    return typeof id === 'string' && /^run-[A-Za-z0-9._-]{1,36}$/.test(id) ? id : null;
+}
+
+/** An agent's id in the research ("claude", "codex"; `/status.agents[].id`, spec 126 U10), or null. */
+export function researchAgentRef(id: unknown): string | null {
+    return typeof id === 'string' && /^[a-z0-9-]{1,32}$/.test(id) ? id : null;
+}
+
 /**
  * What to do with a task in the research (nothing: answer it): park / drop /
  * wake, and the actions a waiting item offers (Strom Research 1.13.2-beta.13,
@@ -541,6 +559,11 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             return id && p.directionDo && DIRECTION_DOS.includes(p.directionDo) ? `${base}&id=${id}&do=${p.directionDo}` : null;
         }
         case 'finish': {
+            // spec 126 U10: a run by its id, or a session — never both.
+            if (p.run !== undefined) {
+                const run = researchRunRef(p.run);
+                return run && p.session === undefined ? `${base}&run=${run}` : null;
+            }
             const session = researchSessionRef(p.session);
             return session ? `${base}&session=${session}` : null;
         }
@@ -589,14 +612,22 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             return p.prune ? `${base}&prune=1` : base;
         case 'work': {
             // spec 052 §5: the fixed `do`, and a count 1–100 only with `tasks` — nothing else.
-            if (p.workDo === 'loop') return p.n === undefined && p.workTasks === undefined ? `${base}&do=loop` : null;
+            // spec 126 U10: a direction's own run (`research`, with `loop` or a count) and its agent (only with `research`).
+            let line = '';
+            if (p.research !== undefined || p.agent !== undefined) {
+                const research = researchDirectionRef(p.research);
+                const agent = p.agent === undefined ? '' : researchAgentRef(p.agent);
+                if (!research || agent === null || p.workTasks !== undefined) return null;
+                line = `&research=${research}${agent ? `&agent=${agent}` : ''}`;
+            }
+            if (p.workDo === 'loop') return p.n === undefined && p.workTasks === undefined ? `${base}&do=loop${line}` : null;
             if (p.workDo !== 'tasks') return null;
             if (p.workTasks !== undefined) {
                 const ids = p.n === undefined ? workTaskIds(p.workTasks) : null;
                 return ids ? `${base}&do=tasks&task=${ids.join(',')}` : null;
             }
             const n = workTasksCount(p.n);
-            return n !== null ? `${base}&do=tasks&n=${n}` : null;
+            return n !== null ? `${base}&do=tasks&n=${n}${line}` : null;
         }
         case 'book': {
             // spec 105: the book by its id and the fixed `do=folder` (the research's default) — nothing else.
@@ -2293,6 +2324,8 @@ export interface LiveWorker {
     helps?: QueueHelpsBy;
     /** The branch of the task ("B-P0208"): outside the lines, or added to the line (with the feature `working.helps`). */
     branch?: string;
+    /** The run the row belongs to (`/status.runs[].id`, spec 126 U10); absent: not said (matched by `session`). */
+    run?: string;
     /** The session holds its task, kept alive by its signs (`task.holds`, spec 127). */
     hold?: WorkHold;
     /** The run waits for an archive another session uses (`archive.holds`, spec 127); `paused` says it too. */
@@ -2345,6 +2378,77 @@ export interface QueueArchiveHeld {
 export const WORKING_PLACE_FEATURE = 'working.place';
 /** The bridge says how a row of `working` helps its line, and its branch (`working[].helps`, `branch`; spec 036 K1.8). */
 export const WORKING_HELPS_FEATURE = 'working.helps';
+
+// ==================== RUNS (spec 126 U10) ====================
+// The words of `features` for the runs of the directions, in ONE place: named as the app asked the research
+// (docs: the bridge's shape); a different answer of the research changes only these.
+
+/** `/status.runs`, `/status.limits`, `researches[].run/canStart/why/agent`, `queue[].run`, the `work` link with `research=`. */
+export const RUN_LINES_FEATURE = 'run.lines';
+/** `/status.agents` and `agent=` in the `work` link (the agent of a direction's run). */
+export const RUN_AGENTS_FEATURE = 'run.agents';
+/** `POST <token>/runs/stop {run}`: stop one run without its terminal. */
+export const RUN_STOP_FEATURE = 'run.stop';
+/** `POST <token>/settings/runs {max}`: the most runs at once, written from the app. */
+export const RUN_LIMIT_FEATURE = 'run.limit';
+/** `POST <token>/directions/preview` and `moveTasks` of `POST <token>/directions`: tasks moved into a narrower direction. */
+export const DIRECTIONS_MOVE_FEATURE = 'directions.move';
+
+/** A run's state as the bridge says it: starting, at work, between two sessions, waiting (`paused`), finishing. */
+export type LiveRunWireState = 'working' | 'between' | 'paused' | 'finishing';
+
+/** Why a run ended (`runsEnded[].why`): its work done, stopped, the usage limit, a gate, its time, an archive, an error. */
+export type RunEndedWhy = 'done' | 'stopped' | 'limit' | 'gate' | 'time' | 'archive' | 'error';
+
+/** One run of `/status.runsEnded` (ended in the research's last 10 minutes), checked. */
+export interface LiveRunEnded {
+    id: string;
+    /** The direction of its own run ("G0001"); null: the general run. */
+    research: string | null;
+    agent: string;
+    /** Since when it ran ('' = not said) and when it ended (ISO, always valid). */
+    since: string;
+    ended: string;
+    /** Why it ended; null: a word not known here (shown without a reason). */
+    why: RunEndedWhy | null;
+}
+
+/** One run of `/status.runs` (a `strom run` worker: the general one or a direction's own), checked. */
+export interface LiveRunWire {
+    /** The worker's id, the same through its sessions and pauses ("run-1a07"). */
+    id: string;
+    /** The direction of its own run ("G0001"); null: the general run (the whole queue). */
+    research: string | null;
+    /** The agent's id (`agents[].id`) and the name shown. */
+    agent: string;
+    agentName: string;
+    model?: string;
+    /** Since when it runs (ISO; '' = not said). */
+    since: string;
+    state: LiveRunWireState;
+    /** `paused`: until when (ISO; '' = not said), why (`limit`, `browser`, `download`, `archive`, or another text) and since when. */
+    paused?: { until: string; reason: string; since?: string };
+    /** The session working now ("N0141"), the task ("T0388") and its last step (at most 200 characters). */
+    session?: string;
+    task?: string;
+    lastStep?: string;
+    /** How many sessions it has had. */
+    sessions?: number;
+}
+
+/** `/status.limits`: the most runs at once (`run.parallel`), how many run now, the highest value the research takes. */
+export interface LiveRunLimits {
+    maxRuns: number;
+    running: number;
+    cap?: number;
+}
+
+/** One agent of `/status.agents`: its id, its name, and whether it is the research's own. */
+export interface LiveAgent {
+    id: string;
+    name: string;
+    default?: true;
+}
 
 /** Something the research waits for from the user. */
 /**
@@ -2566,7 +2670,23 @@ export interface LiveDirection {
     parent?: string;
     /** What it found in its last days (`directions.found`; absent: nothing in them). */
     found?: DirectionFound;
+    /** The fields below only with `run.lines` in `features` (spec 126 U10). The run that holds the direction (`/status.runs[].id`); absent: none. */
+    run?: string;
+    /** A run of the direction can start now (absent: not said; the app reckons it itself). */
+    canStart?: boolean;
+    /** Why it cannot (with `canStart: false`): one of the fixed words; a word not known here is `unknown`. */
+    why?: DirectionRunWhy;
+    /** The agent the research keeps for the direction's run (`/status.agents[].id`); absent: none kept. */
+    agent?: string;
 }
+
+/**
+ * Why a direction's run cannot start (`researches[].why`, spec 126 U10): it has a run, it is paused or
+ * ended, nothing in its queue, the most runs work, no agent's command line, an archive, a research
+ * waiting for its agent, an older run of the tree (before 1.25); `unknown`: a word not known here.
+ */
+export type DirectionRunWhy = 'running' | 'paused' | 'done' | 'empty' | 'limit' | 'noAgent' | 'archive' | 'waitingAgent' | 'oldRun' | 'unknown';
+const DIRECTION_RUN_WHYS: readonly string[] = ['running', 'paused', 'done', 'empty', 'limit', 'noAgent', 'archive', 'waitingAgent', 'oldRun'];
 
 /** A direction's limits (each absent: no limit of that kind). */
 export interface DirectionLimits {
@@ -2725,6 +2845,14 @@ export interface LiveStatus {
     books?: LiveBooks;
     /** `queueCounts` (with `queue.page` in `features`): the queue's counts for the filters; absent: not said. */
     queueCounts?: LiveQueueCounts;
+    /** `runs` (with `run.lines` in `features`, spec 126 U10): the runs working now, at most 20; absent: not said. */
+    runs?: LiveRunWire[];
+    /** `runsEnded` (with `run.lines` in `features`): the runs ended in the last 10 minutes and why; absent: not said. */
+    runsEnded?: LiveRunEnded[];
+    /** `limits` (with `run.lines` in `features`): the most runs at once, how many run, the highest value taken; absent: not said. */
+    limits?: LiveRunLimits;
+    /** `agents` (with `run.agents` in `features`): the agents the research can start here; absent: not said. */
+    agents?: LiveAgent[];
     /** The agent's name (`agent.name`, or a bare name); absent: none said (an archive has none). */
     agentName?: string;
     /** `browser` (with `browser.state` in `features`, not for an archive): the agent's browser and its archives; absent: not said. */
@@ -3281,6 +3409,8 @@ export interface LiveQueueItem {
     book?: string;
     /** Put forward by "Downloaded book first" (`queue.sameBook`): the book of the last session (spec 105). */
     sameBook?: string;
+    /** The run that takes it (`/status.runs[].id`, spec 126 U10): a direction's own run; absent: the general run. */
+    run?: string;
     /** Another live session holds the task (`task.holds`, spec 127); never with `archiveHeld`. */
     heldBy?: QueueHeldBy;
     /** The task's archive with limited access is used by another session now (`archive.holds`, spec 127). */
@@ -3629,6 +3759,8 @@ export const RUN_TASKS_FEATURE = 'run.tasks';
 export interface LiveWork {
     gate: string | null;
     minutes: number;
+    /** Whether the terminal asks before a run starts (`ask`) or starts at once (`no`; spec 126 U10); absent: not said. */
+    confirm?: 'ask' | 'no';
 }
 
 /** `/status.work`, checked; null when it is not one (no gate key, or minutes not a count). */
@@ -3638,7 +3770,8 @@ export function sanitizeLiveWork(value: unknown): LiveWork | null {
     const gate = r.gate === null ? null : cleanText(r.gate, 120);
     if (r.gate !== null && !gate) return null;
     const minutes = asCount(r.minutes);
-    return { gate, minutes: minutes ?? 0 };
+    const confirm = r.confirm === 'ask' || r.confirm === 'no' ? r.confirm : null;
+    return { gate, minutes: minutes ?? 0, ...(confirm ? { confirm } : {}) };
 }
 
 /** `/status.queueCounts`: tasks up next by direction and branch (absent = 0), all of them, set aside, and the order's print. */
@@ -3651,6 +3784,8 @@ export interface LiveQueueCounts {
     parked: number;
     /** A print of the queue's order (16 hex): pages read with the same one are still valid. */
     rev: string;
+    /** Tasks up next the general run takes (without those of directions with their own run; spec 126 U10); absent: not said. */
+    general?: number;
 }
 
 /** Most directions and branches read from `queueCounts`. */
@@ -3682,9 +3817,11 @@ export function sanitizeQueueCounts(value: unknown): LiveQueueCounts | null {
         const n = asCount(v);
         if (key && n !== null && n > 0) kind[key] = Math.min(10_000_000, (kind[key] ?? 0) + n);
     }
+    const general = asCount(r.general);
     return {
         research: map(r.research, researchDirectionRef), branch: map(r.branch, researchBranchRef),
         ...(Object.keys(kind).length > 0 ? { kind } : {}), next, parked, rev: r.rev,
+        ...(general !== null ? { general: Math.min(general, next) } : {}),
     };
 }
 
@@ -3751,11 +3888,113 @@ export function sanitizeWorking(value: unknown, helpsSaid = false, holds: HoldsS
         // The hold and the wait for an archive: only from a research that says them (spec 127).
         const hold = holds.task ? sanitizeHold(r.hold) : null;
         const waits = holds.archive ? sanitizeWaits(r.waits) : null;
+        // The row's run (spec 126 U10): read whenever sent — an older research sends none, and the app reads it only with `/status.runs`.
+        const run = researchRunRef(r.run);
         out.push({
             who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}), ...(family ? { family } : {}), ...(paused ? { paused } : {}),
             ...(research ? { research } : {}), ...(session ? { session } : {}), ...(place ? { place } : {}),
-            ...(helps ? { helps } : {}), ...(branch ? { branch } : {}), ...(hold ? { hold } : {}), ...(waits ? { waits } : {}),
+            ...(helps ? { helps } : {}), ...(branch ? { branch } : {}), ...(hold ? { hold } : {}), ...(waits ? { waits } : {}), ...(run ? { run } : {}),
         });
+    }
+    return out;
+}
+
+/** Most runs taken from `/status.runs`. */
+export const MAX_RUNS = 20;
+/** The highest "most runs at once" taken from the bridge. */
+const MAX_RUN_LIMIT = 99;
+const RUN_WIRE_STATES: readonly string[] = ['working', 'between', 'paused', 'finishing'];
+const RUN_ENDED_WHYS: readonly string[] = ['done', 'stopped', 'limit', 'gate', 'time', 'archive', 'error'];
+
+/**
+ * `/status.runs` (spec 126 U10). Untrusted input: a run needs a valid id (each once), an agent's id and,
+ * when it names one, a valid direction; at most 20. A state not known here reads as `working` (a run the
+ * bridge names still runs: it holds its direction and counts toward the most at once); `ended` drops the
+ * run (the app keeps "ended" itself for a while, noteEndedRuns). Null: not a list.
+ */
+export function sanitizeRuns(value: unknown): LiveRunWire[] | null {
+    if (!Array.isArray(value)) return null;
+    const out: LiveRunWire[] = [];
+    for (const item of value.slice(0, MAX_ITEMS)) {
+        if (out.length >= MAX_RUNS) break;
+        const r = asRecord(item);
+        const id = researchRunRef(r?.id);
+        const agent = researchAgentRef(r?.agent);
+        if (!r || !id || !agent || out.some(x => x.id === id) || r.state === 'ended') continue;
+        const research = r.research === null || r.research === undefined ? null : researchDirectionRef(r.research);
+        if (research === null && r.research !== null && r.research !== undefined) continue;
+        const state = typeof r.state === 'string' && RUN_WIRE_STATES.includes(r.state) ? r.state as LiveRunWireState : 'working';
+        const since = cleanText(r.since, 40);
+        const p = state === 'paused' ? asRecord(r.paused) : null;
+        const until = p ? cleanText(p.until, 40) : '';
+        const pausedSince = p ? cleanText(p.since, 40) : '';
+        const model = cleanText(r.model, 40);
+        const session = researchSessionRef(r.session);
+        const task = researchTaskRef(r.task);
+        const lastStep = cleanText(r.lastStep, 200);
+        const sessions = asCount(r.sessions);
+        out.push({
+            id, research, agent, agentName: cleanText(r.agentName, 80) || agent, ...(model ? { model } : {}),
+            since: Number.isFinite(Date.parse(since)) ? since : '', state,
+            ...(state === 'paused' ? { paused: {
+                until: Number.isFinite(Date.parse(until)) ? until : '', reason: p ? cleanText(p.reason, 200) : '',
+                ...(Number.isFinite(Date.parse(pausedSince)) ? { since: pausedSince } : {}),
+            } } : {}),
+            ...(session ? { session } : {}), ...(task ? { task } : {}), ...(lastStep ? { lastStep } : {}),
+            ...(sessions !== null ? { sessions } : {}),
+        });
+    }
+    return out;
+}
+
+/**
+ * `/status.runsEnded` (spec 126 U10): a run needs a valid id (each once), an agent's id, a valid end time and,
+ * when it names one, a valid direction; at most 20. An unknown `why` is null (shown without a reason).
+ */
+export function sanitizeRunsEnded(value: unknown): LiveRunEnded[] | null {
+    if (!Array.isArray(value)) return null;
+    const out: LiveRunEnded[] = [];
+    for (const item of value.slice(0, MAX_ITEMS)) {
+        if (out.length >= MAX_RUNS) break;
+        const r = asRecord(item);
+        const id = researchRunRef(r?.id);
+        const agent = researchAgentRef(r?.agent);
+        const ended = cleanText(r?.ended, 40);
+        if (!r || !id || !agent || !Number.isFinite(Date.parse(ended)) || out.some(x => x.id === id)) continue;
+        const research = r.research === null || r.research === undefined ? null : researchDirectionRef(r.research);
+        if (research === null && r.research !== null && r.research !== undefined) continue;
+        const since = cleanText(r.since, 40);
+        out.push({
+            id, research, agent, since: Number.isFinite(Date.parse(since)) ? since : '', ended,
+            why: typeof r.why === 'string' && RUN_ENDED_WHYS.includes(r.why) ? r.why as RunEndedWhy : null,
+        });
+    }
+    return out;
+}
+
+/** `/status.limits`: `maxRuns` 1–99 (else null), `running` a count (0 when not said), `cap` ≥ `maxRuns` when said. */
+export function sanitizeRunLimits(value: unknown): LiveRunLimits | null {
+    const r = asRecord(value);
+    const max = asCount(r?.maxRuns);
+    if (!r || max === null || max < 1 || max > MAX_RUN_LIMIT || r.maxRuns !== max) return null;
+    const cap = asCount(r.cap);
+    return {
+        maxRuns: max, running: asCount(r.running) ?? 0,
+        ...(cap !== null && cap === r.cap && cap >= max && cap <= MAX_RUN_LIMIT ? { cap } : {}),
+    };
+}
+
+/** `/status.agents`: agents with a valid id (each once), a name (else the id), the first `default` only; null: not a list. */
+export function sanitizeAgents(value: unknown): LiveAgent[] | null {
+    if (!Array.isArray(value)) return null;
+    const out: LiveAgent[] = [];
+    for (const item of value.slice(0, MAX_ITEMS)) {
+        if (out.length >= 20) break;
+        const r = asRecord(item);
+        const id = researchAgentRef(r?.id);
+        if (!r || !id || out.some(a => a.id === id)) continue;
+        const first = r.default === true && !out.some(a => a.default);
+        out.push({ id, name: cleanText(r.name, 80) || id, ...(first ? { default: true as const } : {}) });
     }
     return out;
 }
@@ -4092,6 +4331,8 @@ export function sanitizeQueue(value: unknown, offLine = false, branches = false,
         // The book of the task (spec 105): only a valid id.
         const book = researchBookRef(r.book);
         const sameBook = researchBookRef(r.sameBook);
+        // The run that takes it (spec 126 U10): only a task up next; an older research sends none.
+        const run = state === 'next' ? researchRunRef(r.run) : null;
         // Who holds it, or the archive it waits for (spec 127): only from a research that says them, never both.
         const heldBy = holds.task ? sanitizeHeldBy(r.heldBy) : null;
         const archiveHeld = !heldBy && holds.archive ? sanitizeArchiveHeld(r.archiveHeld) : null;
@@ -4100,6 +4341,7 @@ export function sanitizeQueue(value: unknown, offLine = false, branches = false,
             ...(off ? { offLine: off } : {}), ...(helps ? { helps } : {}),
             ...(branch ? { branch } : {}), ...(own ? { own } : {}), ...(why ? { why } : {}), ...(pos ? { pos } : {}),
             ...(kind ? { kind } : {}), ...(taskKind ? { taskKind } : {}), ...(book ? { book } : {}), ...(sameBook ? { sameBook } : {}),
+            ...(run ? { run } : {}),
             ...(heldBy ? { heldBy } : {}), ...(archiveHeld ? { archiveHeld } : {}),
         });
     }
@@ -4203,7 +4445,7 @@ const MAX_DIRECTION_NOTE = 140;
  * valid id, a name and a state; any other field that is wrong is dropped and
  * the direction kept.
  */
-export function sanitizeDirections(value: unknown): LiveDirection[] {
+export function sanitizeDirections(value: unknown, runsSaid = false): LiveDirection[] {
     if (!Array.isArray(value)) return [];
     const out: LiveDirection[] = [];
     for (const item of value.slice(0, MAX_ITEMS)) {
@@ -4247,9 +4489,23 @@ export function sanitizeDirections(value: unknown): LiveDirection[] {
         if (parent && parent !== id) d.parent = parent;
         const found = sanitizeDirectionFound(r.found);
         if (found) d.found = found;
+        if (runsSaid) Object.assign(d, directionRunSaid(r));
         out.push(d);
     }
     return out;
+}
+
+/** A direction's own run (`run`, `canStart`, `why`, `agent`; spec 126 U10): each field kept only when valid. */
+function directionRunSaid(r: Record<string, unknown>): Pick<LiveDirection, 'run' | 'canStart' | 'why' | 'agent'> {
+    const run = researchRunRef(r.run);
+    const canStart = typeof r.canStart === 'boolean' ? r.canStart : null;
+    // `why` only beside `canStart: false`; a word not known here is `unknown` (the app says "cannot start" without a sentence).
+    const why: DirectionRunWhy | null = canStart !== false || typeof r.why !== 'string' ? null
+        : DIRECTION_RUN_WHYS.includes(r.why) ? r.why as DirectionRunWhy : 'unknown';
+    const agent = researchAgentRef(r.agent);
+    return {
+        ...(run ? { run } : {}), ...(canStart !== null ? { canStart } : {}), ...(why ? { why } : {}), ...(agent ? { agent } : {}),
+    };
 }
 
 /** A direction's `limits`: generations 1–99, a year 1000–2100; null when neither is valid. */
@@ -4482,7 +4738,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         update: sanitizeUpdate(r.update),
         spend: sanitizeSpend(r.spend, !!features?.includes(SPEND_READERS_FEATURE)),
         lastIntake: sanitizeIntake(r.lastIntake),
-        researches: sanitizeDirections(r.researches),
+        researches: sanitizeDirections(r.researches, !!features?.includes(RUN_LINES_FEATURE)),
         accepts: readAcceptsGated(sanitizeAccepts(r.accepts), !!features?.includes(READ_FEATURE), !!features?.includes(READ_CHOOSE_FEATURE), !!features?.includes(READ_CHOICES_NOW_FEATURE)),
         inbox: sanitizeInbox(r.inbox),
         sends: sanitizeSends(r.sends, !!features?.includes(SYNC_NW_CODES_FEATURE)),
@@ -4514,10 +4770,21 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(CENSUS_FEATURE) ? { census: sanitizeCensus(r.census) } : {}),
         ...(features?.includes(INTAKE_AUTO_FEATURE) && sanitizeIntakeSetting(r.intake) ? { intake: sanitizeIntakeSetting(r.intake)! } : {}),
         ...(features?.includes(QUEUE_PAGE_FEATURE) && sanitizeQueueCounts(r.queueCounts) ? { queueCounts: sanitizeQueueCounts(r.queueCounts)! } : {}),
+        ...runsSaid(r, features),
         ...agentSaid(r.agent),
         ...(sanitizeBrowser(r) ? { browser: sanitizeBrowser(r)! } : {}),
         ...(features?.includes(LIVE_IDLE_FEATURE) && sanitizeLiveIdle(r.live) ? { live: sanitizeLiveIdle(r.live)! } : {}),
     };
+}
+
+/** `runs` and `limits` (with `run.lines`) and `agents` (with `run.agents`; spec 126 U10): each only when valid. */
+function runsSaid(r: Record<string, unknown>, features: readonly string[] | null): Pick<LiveStatus, 'runs' | 'runsEnded' | 'limits' | 'agents'> {
+    const lines = !!features?.includes(RUN_LINES_FEATURE);
+    const runs = lines ? sanitizeRuns(r.runs) : null;
+    const runsEnded = lines ? sanitizeRunsEnded(r.runsEnded) : null;
+    const limits = lines ? sanitizeRunLimits(r.limits) : null;
+    const agents = features?.includes(RUN_AGENTS_FEATURE) ? sanitizeAgents(r.agents) : null;
+    return { ...(runs ? { runs } : {}), ...(runsEnded ? { runsEnded } : {}), ...(limits ? { limits } : {}), ...(agents ? { agents } : {}) };
 }
 
 /** `agent: { name }` (or a bare name, an older shape): the agent's name, when said. */
@@ -4684,6 +4951,8 @@ export interface LiveLogEntry {
     kinds?: LiveChangeKind[];
     /** The research direction the commit was for ("G0002"; a newer research). */
     research?: string;
+    /** The run whose session made it ("run-1a07"; spec 126 U10, a research with `run.lines`). */
+    run?: string;
     /**
      * The sources each `text` line names ("S0012"), same order; absent when no line names one
      * (and from an older research).
@@ -4726,11 +4995,13 @@ export function sanitizeLiveLog(value: unknown): LiveLogEntry[] | null {
             ? [...new Set(v.filter((x): x is string => typeof x === 'string' && /^S\d{1,9}$/.test(x)))].slice(0, MAX_LINE_SOURCES) : [];
         const lines = rawText ? rawText.map((t, i) => ({ t: cleanText(t), k: rawKinds?.[i], s: lineSources(rawSources?.[i]) })).filter(l => l.t) : null;
         const research = researchDirectionRef(e.research);
+        const run = researchRunRef(e.run);
         out.push({
             head: cleanText(e.head, 80), at, what, task: cleanText(e.task),
             ...(lines ? { text: lines.map(l => l.t) } : {}),
             ...(lines && rawKinds ? { kinds: lines.map(l => l.k as LiveChangeKind) } : {}),
             ...(research ? { research } : {}),
+            ...(run ? { run } : {}),
             ...(lines && lines.some(l => l.s.length > 0) ? { sources: lines.map(l => l.s) } : {}),
         });
     }

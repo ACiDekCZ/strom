@@ -117,6 +117,10 @@ describe('the map of research actions to their marks', () => {
         expect(RESEARCH_BRIDGE_MARKS['sources-split']).toBe('none');
         // Sort with the agent (spec 102 §13): an agent through the bridge, the AI badge alone.
         expect(RESEARCH_BRIDGE_MARKS['material-sort']).toBe('bridgeAgent');
+        // Stop one run and the most runs at once (spec 126 U10): through the bridge, no terminal, no new agent: nothing.
+        expect(RESEARCH_BRIDGE_MARKS['run-stop']).toBe('none');
+        expect(RESEARCH_BRIDGE_MARKS['run-limit']).toBe('none');
+        expect(researchBridgeActionLabel(strings.materials.agentSort.sort, 'run-stop')).not.toContain('research-ai-badge');
         const sort = researchBridgeActionLabel(strings.materials.agentSort.sort, 'material-sort');
         expect(sort).toContain('research-ai-badge');
         expect(sort).not.toContain('research-open-mark');

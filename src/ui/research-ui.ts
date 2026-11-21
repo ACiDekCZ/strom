@@ -53,7 +53,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, LiveWork, ResearchCaps, BrowserInfo, LiveOffLine, LiveBooks, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, LiveRunWire, LiveRunEnded, LiveRunLimits, LiveAgent, LiveWork, ResearchCaps, BrowserInfo, LiveOffLine, LiveBooks, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
     LiveQueueCounts, QUEUE_PAGE_FEATURE, QUEUE_SEARCH_FEATURE, type QueueTaskKind,
     researchLinkMark, researchUrlMark, researchMediaKeys, MEDIA_BASE_MAX, researchMediaSentAfterReturn,
 } from '../research-link.js';
@@ -308,6 +308,14 @@ export interface LiveSession {
     update: { version: string } | null;
     /** Sessions and runs working now (its last status's `busy`; absent: not said). */
     busy?: LiveBusy;
+    /** The runs working now (its last status's `runs`, with `run.lines`, spec 126 U10; absent: not said). */
+    runs?: LiveRunWire[];
+    /** The runs ended in the research's last 10 minutes (its last status's `runsEnded`, with `run.lines`; absent: not said). */
+    runsEnded?: LiveRunEnded[];
+    /** The most runs at once and how many run (its last status's `limits`, with `run.lines`; absent: not said). */
+    limits?: LiveRunLimits;
+    /** The agents the research can start (its last status's `agents`, with `run.agents`; absent: not said). */
+    agents?: LiveAgent[];
     /** The gate and a session's length for "Work on the queue…" (its last status's `work`, `work.link`; absent: not said). */
     work?: LiveWork;
     spend: LiveSpend | null;
@@ -3490,6 +3498,10 @@ export const researchUiMethods = uiModule({
         s.books = status.books;
         s.update = status.update;
         s.busy = status.busy;
+        s.runs = status.runs;
+        s.runsEnded = status.runsEnded;
+        s.limits = status.limits;
+        s.agents = status.agents;
         s.work = status.work;
         s.browser = status.browser;
         s.spend = status.spend;
@@ -4074,6 +4086,10 @@ export const researchUiMethods = uiModule({
                 ...(status.queueCounts ? { queueCounts: status.queueCounts } : {}),
                 update: status.update,
                 ...(status.busy ? { busy: status.busy } : {}),
+                ...(status.runs ? { runs: status.runs } : {}),
+                ...(status.runsEnded ? { runsEnded: status.runsEnded } : {}),
+                ...(status.limits ? { limits: status.limits } : {}),
+                ...(status.agents ? { agents: status.agents } : {}),
                 ...(status.work ? { work: status.work } : {}),
                 spend: status.spend,
                 lastIntake: status.lastIntake,
@@ -4405,6 +4421,10 @@ export const researchUiMethods = uiModule({
         s.books = status.books;
         s.update = status.update;
         s.busy = status.busy;
+        s.runs = status.runs;
+        s.runsEnded = status.runsEnded;
+        s.limits = status.limits;
+        s.agents = status.agents;
         s.work = status.work;
         s.browser = status.browser;
         s.spend = status.spend;

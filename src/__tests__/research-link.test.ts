@@ -1339,6 +1339,128 @@ describe('research directions (researches[])', () => {
         expect(researchSchemeUrl('finish', { tree: U, session: 'T0132' })).toBeNull();
         expect(sanitizeResearchLinks(['direction', 'finish', 'nope'])).toEqual(['direction', 'finish']);
     });
+
+    it('links of the directions\' runs (spec 126 U10): work with the direction and its agent, finish a run', () => {
+        const work = (p: Record<string, unknown>) => researchSchemeUrl('work', { tree: U, ...p });
+        expect(work({ workDo: 'loop', research: 'G0002' })).toBe(`strom-research://work?tree=${U}&do=loop&research=G0002`);
+        expect(work({ workDo: 'loop', research: 'G0002', agent: 'codex' })).toBe(`strom-research://work?tree=${U}&do=loop&research=G0002&agent=codex`);
+        expect(work({ workDo: 'tasks', n: 5, research: 'G0002', agent: 'codex' }))
+            .toBe(`strom-research://work?tree=${U}&do=tasks&n=5&research=G0002&agent=codex`);
+        // Only a direction's id, only an agent's id, the agent only with the direction, never with the tasks named.
+        expect(work({ workDo: 'loop', research: 'P0002' })).toBeNull();
+        expect(work({ workDo: 'loop', research: 'G00021234' })).toBeNull();
+        expect(work({ workDo: 'loop', research: 'G0002', agent: 'Codex' })).toBeNull();
+        expect(work({ workDo: 'loop', research: 'G0002', agent: 'codex&x=1' })).toBeNull();
+        expect(work({ workDo: 'loop', research: 'G0002', agent: 'a'.repeat(33) })).toBeNull();
+        expect(work({ workDo: 'loop', agent: 'codex' })).toBeNull();
+        expect(work({ workDo: 'tasks', workTasks: ['T0412'], research: 'G0002' })).toBeNull();
+        expect(work({ workDo: 'tasks', research: 'G0002' })).toBeNull();
+        // Finish a run by its id; a session as before; never both.
+        expect(researchSchemeUrl('finish', { tree: U, run: 'run-1a07' })).toBe(`strom-research://finish?tree=${U}&run=run-1a07`);
+        expect(researchSchemeUrl('finish', { tree: U, run: 'run-1a07', session: 'N0132' })).toBeNull();
+        expect(researchSchemeUrl('finish', { tree: U, run: 'run 1a07' })).toBeNull();
+        expect(researchSchemeUrl('finish', { tree: U, run: 'r'.repeat(41) })).toBeNull();
+        expect(researchSchemeUrl('finish', { tree: U, run: '' })).toBeNull();
+        // The research's shape: run-…, at most 36 characters after it.
+        expect(researchSchemeUrl('finish', { tree: U, run: '1a07' })).toBeNull();
+        expect(researchSchemeUrl('finish', { tree: U, run: 'run-' + 'a'.repeat(37) })).toBeNull();
+        expect(researchSchemeUrl('finish', { tree: U, run: 'run-48213-lq3x.9' })).toBe(`strom-research://finish?tree=${U}&run=run-48213-lq3x.9`);
+    });
+
+    it('/status.runs, limits and agents (spec 126 U10): only with run.lines / run.agents, bad data dropped', () => {
+        const base = { tree: { id: U, name: 'Kubíčkovi a Malí' }, head: 'abc1234' };
+        const raw = {
+            ...base,
+            features: ['run.lines', 'run.agents'],
+            runs: [
+                { id: 'run-8f2c', research: null, agent: 'claude', agentName: 'Claude', model: 'opus', since: '2026-11-21T10:02:00Z', state: 'working',
+                    session: 'N0141', task: 'T0388', lastStep: 'x'.repeat(260), sessions: 3 },
+                { id: 'run-1a07', research: 'G0001', agent: 'claude', since: 'yesterday', state: 'paused',
+                    paused: { until: '2026-11-21T14:00:00Z', reason: 'limit', since: '2026-11-21T11:00:00Z' } },
+                { id: '1a07', agent: 'claude', state: 'working' },
+                { id: 'run-1a07', research: 'G0002', agent: 'codex', state: 'working' },
+                { id: 'run bad', agent: 'claude', state: 'working' },
+                { id: 'run-x', research: 'P0001', agent: 'claude', state: 'working' },
+                { id: 'run-y', agent: 'Claude Code', state: 'working' },
+                { id: 'run-z', agent: 'codex', state: 'ended' },
+                { id: 'run-new', agent: 'codex', state: 'resting', session: 'T1' },
+                'run-q',
+            ],
+            limits: { maxRuns: 3, running: 2, cap: 10 },
+            runsEnded: [
+                { id: 'run-5b20', research: 'G0003', agent: 'codex', since: '2026-11-21T09:10:00Z', ended: '2026-11-21T11:51:30Z', why: 'stopped' },
+                { id: 'run-4a11', research: null, agent: 'claude', ended: '2026-11-21T11:40:00Z', why: 'tired' },
+                { id: 'run-4a11', research: null, agent: 'claude', ended: '2026-11-21T11:41:00Z', why: 'done' },
+                { id: 'run-6c01', agent: 'claude', ended: 'soon', why: 'done' },
+                { id: 'run-6c02', research: 'P0001', agent: 'claude', ended: '2026-11-21T11:41:00Z' },
+            ],
+            agents: [{ id: 'claude', name: 'Claude', default: true }, { id: 'codex', name: 'Codex', default: true }, { id: 'Gemini' }, { id: 'claude' }, { id: 'aider' }],
+            working: [{ who: 'claude', since: '2026-11-21T10:05:00Z', task: 'křest', run: 'run-8f2c' }, { who: 'codex', since: '', task: 'x', run: 'bad id' }],
+            researches: [{ id: 'G0001', name: 'Kubíčkovi z Dolní Lhoty', state: 'active', run: 'run-1a07', canStart: false, why: 'running', agent: 'codex' },
+                { id: 'G0002', name: 'Malí z Horní Vsi', state: 'active', canStart: true, why: 'limit', agent: 'Codex' }],
+            queue: [{ id: 'T0390', text: 'oddací záznam', state: 'next', research: 'G0001', run: 'run-1a07' },
+                { id: 'T0391', text: 'odložený', state: 'parked', run: 'run-1a07' }],
+            queueCounts: { research: { G0001: 3 }, branch: {}, next: 9, parked: 1, rev: 'abcdef0123456789', general: 6 },
+        };
+        const s = sanitizeLiveStatus(raw)!;
+        expect(s.runs!.map(r => r.id)).toEqual(['run-8f2c', 'run-1a07', 'run-new']);
+        expect(s.runs![0]).toEqual({ id: 'run-8f2c', research: null, agent: 'claude', agentName: 'Claude', model: 'opus', since: '2026-11-21T10:02:00Z',
+            state: 'working', session: 'N0141', task: 'T0388', lastStep: 'x'.repeat(199) + '…', sessions: 3 });
+        expect(s.runs![1]).toEqual({ id: 'run-1a07', research: 'G0001', agent: 'claude', agentName: 'claude', since: '', state: 'paused',
+            paused: { until: '2026-11-21T14:00:00Z', reason: 'limit', since: '2026-11-21T11:00:00Z' } });
+        // A state not known here: a run that still runs.
+        expect(s.runs![2]).toEqual({ id: 'run-new', research: null, agent: 'codex', agentName: 'codex', since: '', state: 'working' });
+        expect(s.limits).toEqual({ maxRuns: 3, running: 2, cap: 10 });
+        expect(s.runsEnded).toEqual([
+            { id: 'run-5b20', research: 'G0003', agent: 'codex', since: '2026-11-21T09:10:00Z', ended: '2026-11-21T11:51:30Z', why: 'stopped' },
+            { id: 'run-4a11', research: null, agent: 'claude', since: '', ended: '2026-11-21T11:40:00Z', why: null },
+        ]);
+        expect(s.agents).toEqual([{ id: 'claude', name: 'Claude', default: true }, { id: 'codex', name: 'Codex' }, { id: 'aider', name: 'aider' }]);
+        expect(s.working.map(w => w.run)).toEqual(['run-8f2c', undefined]);
+        expect(s.researches[0]).toMatchObject({ run: 'run-1a07', canStart: false, why: 'running', agent: 'codex' });
+        // `why` only beside canStart: false; an agent's id only when valid.
+        expect(s.researches[1]).toEqual({ id: 'G0002', name: 'Malí z Horní Vsi', state: 'active', canStart: true });
+        expect(s.queue.map(q => q.run)).toEqual(['run-1a07', undefined]);
+        expect(s.queueCounts).toBeUndefined();
+        expect(sanitizeLiveStatus({ ...raw, features: ['run.lines', 'queue.page'] })!.queueCounts?.general).toBe(6);
+        // limits: maxRuns 1–99 a whole number; cap only at or above it.
+        const limits = (l: unknown) => sanitizeLiveStatus({ ...raw, limits: l })!.limits;
+        expect(limits({ maxRuns: 0, running: 0 })).toBeUndefined();
+        expect(limits({ maxRuns: 2.5 })).toBeUndefined();
+        expect(limits({ maxRuns: '3' })).toBeUndefined();
+        expect(limits({ maxRuns: 4 })).toEqual({ maxRuns: 4, running: 0 });
+        expect(limits({ maxRuns: 4, running: 1, cap: 2 })).toEqual({ maxRuns: 4, running: 1 });
+        // Not lists: nothing.
+        const odd = sanitizeLiveStatus({ ...raw, runs: { id: 'run-8f2c' }, agents: 'claude' })!;
+        expect(odd.runs).toBeUndefined();
+        expect(odd.agents).toBeUndefined();
+        // At most 20 runs.
+        const many = Array.from({ length: 30 }, (_, i) => ({ id: `run-${i}`, agent: 'claude', state: 'working' }));
+        expect(sanitizeLiveStatus({ ...raw, runs: many })!.runs).toHaveLength(20);
+        // An older research (no feature): as today.
+        const old = sanitizeLiveStatus({ ...raw, features: ['queue.page'] })!;
+        expect(old.runs).toBeUndefined();
+        expect(old.limits).toBeUndefined();
+        expect(old.runsEnded).toBeUndefined();
+        expect(old.agents).toBeUndefined();
+        expect(old.researches[0]).toEqual({ id: 'G0001', name: 'Kubíčkovi z Dolní Lhoty', state: 'active' });
+        // Agents need their own feature.
+        expect(sanitizeLiveStatus({ ...raw, features: ['run.lines'] })!.agents).toBeUndefined();
+    });
+
+    it('a history entry\'s run, and whether the terminal asks before a run (spec 126 U10)', () => {
+        const log = sanitizeLiveLog({ entries: [
+            { head: 'h1', at: '2026-11-21T10:30:00Z', what: ['x'], research: 'G0001', run: 'run-1a07' },
+            { head: 'h2', at: '2026-11-21T10:31:00Z', what: ['y'], run: 'run 1a07' },
+            { head: 'h3', at: '2026-11-21T10:32:00Z', what: ['z'] },
+        ] })!;
+        expect(log.map(e => e.run)).toEqual(['run-1a07', undefined, undefined]);
+        const work = (w: unknown) => sanitizeLiveStatus({ tree: { id: U, name: 'Kubíčkovi a Malí' }, head: 'abc1234', features: ['work.link'], work: w })!.work;
+        expect(work({ gate: null, minutes: 0, confirm: 'ask' })).toEqual({ gate: null, minutes: 0, confirm: 'ask' });
+        expect(work({ gate: null, minutes: 0, confirm: 'no' })).toEqual({ gate: null, minutes: 0, confirm: 'no' });
+        expect(work({ gate: null, minutes: 0, confirm: 'yes' })).toEqual({ gate: null, minutes: 0 });
+        expect(work({ gate: null, minutes: 0 })).toEqual({ gate: null, minutes: 0 });
+    });
 });
 
 describe('kinds of text lines (/log)', () => {
