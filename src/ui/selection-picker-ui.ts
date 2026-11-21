@@ -145,9 +145,8 @@ function pickerMarkup(): SelectionPickerMarkup {
         const name = l.name || l.id;
         return { sel: encodeSelectionRef(r), label: name, sub: strings.selection.lineSub, count: countOf(r), icon: selectionIcon('line'), q: rodPickKey(name), current: encodeSelectionRef(r) === current };
     });
-    const collator = new Intl.Collator(lang, { sensitivity: 'base', numeric: true });
-    const lists: SelectionPickRow[] = [...DataManager.getPersonLists()]
-        .sort((a, b) => collator.compare(listDisplayName(a), listDisplayName(b)))
+    // In the order of the dialog Lists of people (the ready-made one first).
+    const lists: SelectionPickRow[] = DataManager.getPersonLists()
         .map(l => {
             const r: SelectionRef = { kind: 'list', listId: l.id };
             const name = listDisplayName(l);
@@ -195,6 +194,11 @@ function saveListOptions(ref: SelectionRef): NewPersonListOptions | null {
 function selectionKey(): string {
     const ref = getSelection().ref;
     return ref ? encodeSelectionRef(ref) : '';
+}
+
+/** What the toolbar's choice was built for: the tree, the selection, the language. */
+function currentHostKey(): string {
+    return `${DataManager.getCurrentTreeId() ?? ''}|${selectionKey()}|${getCurrentLanguage()}`;
 }
 
 /** The next value of the generations' stepper: − from all to 10, + from 10 to all. */
@@ -302,7 +306,7 @@ export const selectionPickerMethods = uiModule({
         const view = TreeRenderer.getViewMode();
         const off = view === 'timeline' || view === 'map' || view === 'table';
         if (off) { el.hidden = true; return; }
-        const key = `${DataManager.getCurrentTreeId() ?? ''}|${selectionKey()}|${getCurrentLanguage()}`;
+        const key = currentHostKey();
         const built = !!el.querySelector('details.sp-rodpick');
         // The same tree and selection after a change of the data: the list is built again when it
         // opens, not after every edit; a chosen selection's name may have changed, so it is now.
@@ -323,7 +327,8 @@ export const selectionPickerMethods = uiModule({
         const el = document.getElementById('view-rod-picker');
         if (!el) return;
         if (!reopen && el.querySelector('details[open]')) return;
-        hostKey = `${DataManager.getCurrentTreeId() ?? ''}|${selectionKey()}|${getCurrentLanguage()}`;
+        if (hostTimer) { clearTimeout(hostTimer); hostTimer = null; }
+        hostKey = currentHostKey();
         hostGeneration = selectionIndexGeneration();
         hostFocus = TreeRenderer.getFocusPersonId();
         hostAbort?.abort();
@@ -346,8 +351,9 @@ export const selectionPickerMethods = uiModule({
             const chev = pick.querySelector('.sp-rodpick-chev');
             if (chev) chev.textContent = pick.open ? '▴' : '▾';
             if (pick.open && pick.isConnected
-                && (hostGeneration !== selectionIndexGeneration() || hostFocus !== TreeRenderer.getFocusPersonId())) {
-                // The data or the person in focus changed since it was built: the list again, open.
+                && (hostKey !== currentHostKey() || hostGeneration !== selectionIndexGeneration() || hostFocus !== TreeRenderer.getFocusPersonId())) {
+                // The selection, the data or the person in focus changed since it was built (opened
+                // before the deferred rebuild): the list again, open.
                 this.renderSelectionPickerHost(true);
                 return;
             }
