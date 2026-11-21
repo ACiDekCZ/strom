@@ -19,6 +19,7 @@ import { storedResearchBridge, announcedResearchScheme } from '../research-devic
 import {
     BatchSkip, BatchFolder, batchSkip, batchLimitsOf, batchOverLimit, batchEstimate, batchDefaultName, batchTree,
     batchFolderFiles, newBatchId, batchPathHeader, isZip, UnfinishedBatch, sanitizeUnfinishedBatch,
+    MEDIA_QUEUED_FEATURE, MEDIA_KNOWN_FEATURE, MediaKnownState, batchKnownChunk, parseMediaKnown, parseBatchDoneFiles,
 } from '../batch.js';
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { isWriteHeldCode, joinSaid, writeHeldOfRefusal } from '../research-write-held.js';
@@ -36,6 +37,8 @@ const UNFINISHED_KEY = 'strom-batch:';
 const MAX_ROWS = 400;
 const ASK_TIMEOUT_MS = 5000;
 const PUT_MIN_TIMEOUT_MS = 60_000;
+/** `POST /media/known` for a part of the batch: one ask instead of one per file (an index lookup, quick). */
+const KNOWN_TIMEOUT_MS = 30_000;
 
 /** The ask was given up for no answer in time (fetchWithTimeout aborted it). */
 function isTimeout(err: unknown): boolean {
@@ -75,6 +78,17 @@ interface Run {
     skipped: number;
     /** Files skipped before sending (GET said the research has them): never in the batch, counted here. */
     skippedAsked: number;
+    /**
+     * Files the bridge took to write with the batch's close (202 of `media.queued`, or `media/known` said
+     * they wait in its queue): sha → path. Neither received nor known yet: `batch/done` says what became of each.
+     */
+    queued: Map<string, string>;
+    /** The hash of each file of the queue by its index (made once: for `media/known` and its PUT). */
+    shaOf: Map<number, string>;
+    /** Indexes of the queue `media/known` was asked for (answered or not: not asked again). */
+    knownAsked: Set<number>;
+    /** What `media/known` said of a hash (absent: not said — the file is asked on its own as before). */
+    knownOf: Map<string, MediaKnownState>;
     refused: { path: string; why: string }[];
     current: string;
     paused: boolean;
@@ -783,7 +797,8 @@ export const batchMethods = uiModule({
             id: resume?.id ?? newBatchId(), treeId: link.treeId, researchId: link.researchId, base: bridge.base,
             name: s.name.trim() || strings.batch.defaultName(new Date().toLocaleDateString(getCurrentLanguage())),
             person, personId: s.personId, note: s.note.trim(), queue, index: 0, total: queue.length,
-            totalBytes: queue.reduce((sum, i) => sum + i.size, 0), doneBytes: 0, received: 0, skipped: 0, skippedAsked: 0, refused: [],
+            totalBytes: queue.reduce((sum, i) => sum + i.size, 0), doneBytes: 0, received: 0, skipped: 0, skippedAsked: 0,
+            queued: new Map(), shaOf: new Map(), knownAsked: new Set(), knownOf: new Map(), refused: [],
             current: '', paused: false, lost: false, held: '', heldSeal: false, cancelled: false, finished: false, hidden: false, result: null, resume: null,
             pauseAsked: false, waits: [],
         };
@@ -817,6 +832,8 @@ export const batchMethods = uiModule({
                 r.paused = true;
             }
             if (r.paused) {
+                // The research's changes held while it sent: read now, not after a pause that may last.
+                this.liveReleaseHeld();
                 draw(true);
                 wakeRun(r);
                 await new Promise<void>(resolve => { r.resume = resolve; });
@@ -848,6 +865,8 @@ export const batchMethods = uiModule({
             r.resume = null;
         }
         r.finished = true;
+        // The followed research's changes held while the batch went: its tree read once now.
+        this.liveReleaseHeld();
         window.removeEventListener('beforeunload', onLeave);
         writeUnfinished(r.treeId, null);
         // The Materials window open under it says the batch in its strip and reads the list again (spec 102 §8).
@@ -868,16 +887,26 @@ export const batchMethods = uiModule({
 
     /** One file: asked whether the research has it (not a ZIP), else sent with the batch's headers. */
     async batchSendOne(r: Run, item: Item): Promise<'ok' | 'again' | 'down' | 'held'> {
-        let sha: string;
-        try {
-            sha = await sha256OfBlob(item.file);
-        } catch {
-            r.refused.push({ path: item.path, why: strings.material.whyUnreadable });
-            return 'ok';
+        const features = this.researchStatusOf(r.researchId)?.features ?? [];
+        const zip = isZip(item.path);
+        // A bridge that says what it has of many files: asked once for the next part of the batch, not per file.
+        if (!zip && features.includes(MEDIA_KNOWN_FEATURE) && !r.knownAsked.has(r.index)) await this.batchAskKnown(r);
+        let sha = r.shaOf.get(r.index);
+        if (!sha) {
+            try {
+                sha = await sha256OfBlob(item.file);
+            } catch {
+                r.refused.push({ path: item.path, why: strings.material.whyUnreadable });
+                return 'ok';
+            }
+            r.shaOf.set(r.index, sha);
         }
         const url = `${r.base}/media/${sha}`;
-        const zip = isZip(item.path);
-        if (!zip) {
+        const said = zip ? undefined : r.knownOf.get(sha);
+        if (said === 'has') { r.skippedAsked++; return 'ok'; }
+        // Already came and waits in the bridge's queue (another window, an attempt before): never sent again.
+        if (said === 'queued') { r.queued.set(sha, item.path); return 'ok'; }
+        if (!zip && said === undefined) {
             try {
                 const res = await fetchWithTimeout(url, ASK_TIMEOUT_MS);
                 if (res.ok && mediaReplyId(await res.json().catch(() => null))) { r.skippedAsked++; return 'ok'; }
@@ -895,7 +924,11 @@ export const batchMethods = uiModule({
             ...(r.person ? { 'X-Strom-Person': r.person } : {}),
             ...(zip ? { 'X-Strom-Zip': '1' } : {}),
         };
-        const headBefore = await this.researchHeadBeforeWrite(r.researchId);
+        // A bridge that writes a batch as it is closed: the file is only taken now (202), nothing is written
+        // yet, so no head is asked before it nor taken after it — `batch/done` says what became of it.
+        const later = features.includes(MEDIA_QUEUED_FEATURE);
+        if (later) headers.Prefer = 'respond-async';
+        const headBefore = later ? '' : await this.researchHeadBeforeWrite(r.researchId);
         const ctl = typeof AbortController === 'function' ? new AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), Math.max(PUT_MIN_TIMEOUT_MS, item.size / 2000)) : null;
         try {
@@ -903,6 +936,10 @@ export const batchMethods = uiModule({
                 method: 'PUT', mode: 'cors', credentials: 'omit', cache: 'no-store', headers, body: item.file, signal: ctl?.signal,
             });
             const body = await res.json().catch(() => null) as Record<string, unknown> | null;
+            if (res.status === 202) {
+                r.queued.set(sha, item.path);
+                return 'ok';
+            }
             if (res.ok) {
                 // The research's new head is this write's own (a file, not the tree): the tree stays in step with it.
                 this.researchTakeOwnWriteHead(r.researchId, headBefore, body?.head, body?.parent);
@@ -938,6 +975,40 @@ export const batchMethods = uiModule({
             return 'ok';
         } catch {
             return 'down';
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
+    },
+
+    /**
+     * `POST /media/known` for the next part of the batch (media.known): its files hashed, one ask, what the
+     * research has of each kept (`knownOf`). No answer, or not one: those files are asked one by one as before.
+     */
+    async batchAskKnown(r: Run): Promise<void> {
+        const part = batchKnownChunk(r.queue, r.index, i => r.knownAsked.has(i));
+        const shas: string[] = [];
+        for (const i of part) {
+            r.knownAsked.add(i);
+            let sha = r.shaOf.get(i);
+            if (!sha) {
+                // Unreadable: its own turn says so.
+                try { sha = await sha256OfBlob(r.queue[i].file); } catch { continue; }
+                r.shaOf.set(i, sha);
+            }
+            shas.push(sha);
+        }
+        if (shas.length === 0) return;
+        const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+        const timer = ctl ? setTimeout(() => ctl.abort(), KNOWN_TIMEOUT_MS) : null;
+        try {
+            const res = await fetch(withAppVersion(`${r.base}/media/known`), {
+                method: 'POST', mode: 'cors', credentials: 'omit', cache: 'no-store',
+                headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: JSON.stringify({ shas: [...new Set(shas)] }), signal: ctl?.signal,
+            });
+            const said = res.ok ? parseMediaKnown(await res.json().catch(() => null), shas) : null;
+            for (const [sha, state] of said ?? []) r.knownOf.set(sha, state);
+        } catch {
+            // Asked one by one then (a bridge gone pauses there, as before).
         } finally {
             if (timer) clearTimeout(timer);
         }
@@ -986,7 +1057,7 @@ export const batchMethods = uiModule({
 
     /** `POST /batch/<id>/done`: the research closes the batch and makes its tasks ('down': its address turned down). */
     async batchClose(r: Run): Promise<DoneReply | null | 'down' | 'held'> {
-        const body = JSON.stringify({ name: r.name, files: r.received + r.skipped + r.skippedAsked + r.refused.length,
+        const body = JSON.stringify({ name: r.name, files: r.received + r.skipped + r.skippedAsked + r.queued.size + r.refused.length,
             ...(r.person ? { person: r.person } : {}), ...(r.note ? { note: r.note } : {}) });
         for (let attempt = 0; attempt < 4; attempt++) {
             const headBefore = await this.researchHeadBeforeWrite(r.researchId);
@@ -1002,6 +1073,7 @@ export const batchMethods = uiModule({
                 }
                 const j = await res.json().catch(() => null) as Record<string, unknown> | null;
                 this.researchTakeOwnWriteHead(r.researchId, headBefore, j?.head, j?.parent);
+                this.batchTakeDoneFiles(r, j?.files);
                 const n = (v: unknown): number => (typeof v === 'number' && v >= 0 ? Math.floor(v) : 0);
                 return j ? { inputs: n(j.inputs), known: n(j.known), refused: n(j.refused), tasks: Array.isArray(j.tasks) ? j.tasks.length : 0 } : null;
             } catch {
@@ -1009,6 +1081,37 @@ export const batchMethods = uiModule({
             }
         }
         return null;
+    },
+
+    /**
+     * Whether the followed research `researchId` has its changes held now: a batch of this page goes to it
+     * through a bridge that writes it as it is closed (media.queued) — one read of its tree after the close,
+     * not one per change meanwhile. An older bridge: each change read as it comes, as before.
+     */
+    batchHoldsLive(researchId: string): boolean {
+        const r = run;
+        if (!r || r.finished || r.paused || r.researchId.toLowerCase() !== researchId.toLowerCase()) return false;
+        return !!this.researchStatusOf(r.researchId)?.features?.includes(MEDIA_QUEUED_FEATURE);
+    },
+
+    /**
+     * What became of the files the bridge took to write at the close (`batch/done` → `files`, media.queued):
+     * each queued file received, known or refused (said in the app's language as a refused PUT is). Files
+     * answered at once (200) are counted already and left as they are.
+     */
+    batchTakeDoneFiles(r: Run, files: unknown): void {
+        for (const f of parseBatchDoneFiles(files)) {
+            const path = r.queued.get(f.sha);
+            if (path === undefined) continue;
+            r.queued.delete(f.sha);
+            if (f.zip) {
+                r.received += f.zip.inputs;
+                r.skipped += f.zip.known;
+                for (const z of f.zip.refused) r.refused.push({ path: z.path || path, why: this.batchRefusalText(r, z, '') });
+            } else if (f.input) r.received++;
+            else if (f.known) r.skipped++;
+            else if (f.refused) r.refused.push({ path: f.path || path, why: this.batchRefusalText(r, f.refused, f.refused.code || '') });
+        }
     },
 
     resumeBatchRun(): void {
@@ -1029,7 +1132,7 @@ export const batchMethods = uiModule({
     async cancelBatchRun(): Promise<void> {
         const r = run;
         if (!r) return;
-        const ok = await this.showConfirm(strings.batch.cancelConfirm(r.received), strings.batch.cancel, { confirmLabel: strings.batch.cancel, variant: 'danger' });
+        const ok = await this.showConfirm(strings.batch.cancelConfirm(r.received + r.queued.size), strings.batch.cancel, { confirmLabel: strings.batch.cancel, variant: 'danger' });
         if (!ok) return;
         r.cancelled = true;
         r.paused = false;

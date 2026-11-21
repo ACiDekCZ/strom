@@ -86,6 +86,15 @@ export interface FakeBridge {
     seen?: string[];
     /** Every `POST /batch/<id>/done`: the batch and its body. */
     batchDone?: { id: string; body: Record<string, unknown> }[];
+    /**
+     * Files taken with `Prefer: respond-async` (202, `media.queued` in `features`, Strom Research 1.36), by hash:
+     * written with their batch's close, which says in `files` what became of each.
+     */
+    mediaQueued?: Map<string, { batch: string; path: string }>;
+    /** A queued file the close refuses (its `files[].refused`), by hash. */
+    queuedRefuse?: Map<string, { code: string; why: string }>;
+    /** Every `POST /media/known` (`media.known` in `features`): the hashes asked. */
+    knownAsks?: string[][];
     /** Batches it reports in `/status.batches`. */
     batches?: unknown[];
     /** A file it has, sent again with a person or a note: it adds them to its input (`added`, Strom Research 1.12). */
@@ -2158,6 +2167,17 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             const code = b.tokenRefusal ?? 404;
             return code === 404 ? route.fulfill({ status: 404, headers: cors, body: '' }) : json(code, { error: 'unknown token' });
         }
+        if (method === 'POST' && url.pathname.endsWith('/media/known') && (b.features ?? []).includes('media.known')) {
+            let shas: string[] = [];
+            try { shas = (JSON.parse(route.request().postData() ?? '{}') as { shas: string[] }).shas ?? []; } catch { /* none */ }
+            (b.knownAsks ??= []).push(shas);
+            const known: Record<string, unknown> = {};
+            for (const sha of shas) {
+                const id = b.mediaKnown.get(sha);
+                known[sha] = id ? { id, kind: 'input', mime: 'image/jpeg', bytes: 10, here: true } : b.mediaQueued?.has(sha) ? { queued: true } : null;
+            }
+            return json(200, { known });
+        }
         const media = /\/media\/([0-9a-f]{64})$/.exec(url.pathname);
         if (media) {
             const sha = media[1];
@@ -2178,6 +2198,12 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                     const added = b.knownAdds && (h['x-strom-person'] || h['x-strom-note'])
                         ? { added: { persons: h['x-strom-person'] ? [h['x-strom-person']] : [], note: !!h['x-strom-note'] } } : {};
                     return json(200, { known: prior, kind: 'input', ...added });
+                }
+                const h = route.request().headers();
+                if ((b.features ?? []).includes('media.queued') && /respond-async/.test(h['prefer'] ?? '') && h['x-strom-batch']) {
+                    (b.mediaQueued ??= new Map()).set(sha, { batch: h['x-strom-batch'], path: decodeURIComponent(h['x-strom-path'] ?? '') });
+                    return route.fulfill({ status: 202, headers: { ...cors, 'content-type': 'application/json', 'preference-applied': 'respond-async' },
+                        body: JSON.stringify({ sha, bytes: body?.length ?? 0, queued: true, batch: h['x-strom-batch'] }) });
                 }
                 const id = `I${String(100 + b.mediaPuts.length).padStart(4, '0')}`;
                 b.mediaKnown.set(sha, id);
@@ -2491,7 +2517,19 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                     mat.files.push(materialFile(n, { batch: id, path: p.headers['x-strom-path'], name: (p.headers['x-strom-path'] ?? `scan-${n}.jpg`).split('/').pop()! }));
                 });
             }
-            return json(200, { batch: done[1], name: body.name, inputs: files, known: 0, refused: 0, nested: [], tasks: files ? ['T0101'] : [], head: b.head,
+            // Its queued files written with the close: what became of each (media.queued).
+            const queued = [...(b.mediaQueued ?? new Map<string, { batch: string; path: string }>())].filter(([, q]) => q.batch === decodeURIComponent(done[1]));
+            const taken = queued.map(([sha, q], i) => {
+                b.mediaQueued!.delete(sha);
+                const no = b.queuedRefuse?.get(sha);
+                if (no) return { sha, path: q.path, batch: q.batch, refused: no };
+                const id = `I${String(300 + i).padStart(4, '0')}`;
+                b.mediaKnown.set(sha, id);
+                return { sha, path: q.path, batch: q.batch, input: id };
+            });
+            const refusedQueued = taken.filter(t => 'refused' in t).length;
+            return json(200, { batch: done[1], name: body.name, inputs: files - refusedQueued, known: 0, refused: refusedQueued, nested: [], tasks: files ? ['T0101'] : [], head: b.head,
+                ...(queued.length || (b.features ?? []).includes('media.queued') ? { files: taken } : {}),
                 ...(b.material?.writeParent ? { parent: b.head } : {}) });
         }
         const ph = b.phone;

@@ -6,6 +6,8 @@
  * review list, and what this browser remembers of an unfinished batch.
  */
 
+import type { LiveChange, LiveLogEntry } from './research-link.js';
+
 /** Why a file is left out of a batch. */
 export type BatchSkip = 'system' | 'secret' | 'program' | 'archive' | 'tooBig' | 'ged';
 
@@ -159,4 +161,136 @@ export function sanitizeUnfinishedBatch(value: unknown): UnfinishedBatch | null 
         ...(typeof r.personId === 'string' ? { personId: r.personId } : {}),
         ...(typeof r.note === 'string' ? { note: r.note.slice(0, 500) } : {}),
     };
+}
+
+// ==================== THE BRIDGE'S FAST WAY (Strom Research 1.36) ====================
+
+/** The bridge answers a batch's file with `Prefer: respond-async` at once (202) and writes the batch as it is closed. */
+export const MEDIA_QUEUED_FEATURE = 'media.queued';
+/** The bridge says what it has of many files at once (`POST <token>/media/known {shas}`). */
+export const MEDIA_KNOWN_FEATURE = 'media.known';
+/** At most this many hashes in one `POST /media/known` (the bridge refuses more with 413). */
+export const MEDIA_KNOWN_MAX = 5000;
+/** One ask of `media/known` covers at most this many files… */
+export const KNOWN_CHUNK_FILES = 200;
+/** …or this many bytes to hash first (so a pause or a cancel is never far away). */
+export const KNOWN_CHUNK_BYTES = 64 * 1024 * 1024;
+
+/** What the research has of one file: the file (`has`), it waits in the bridge's queue (`queued`), or nothing (`none`). */
+export type MediaKnownState = 'has' | 'queued' | 'none';
+
+/**
+ * The files the next ask of `media/known` covers: from `from` on, those not
+ * asked yet and not a ZIP (a ZIP is opened by the research, never skipped),
+ * at most `maxFiles` of them and `maxBytes` to hash (at least one).
+ */
+export function batchKnownChunk(items: readonly { path: string; size: number }[], from: number, asked: (index: number) => boolean,
+    maxFiles = KNOWN_CHUNK_FILES, maxBytes = KNOWN_CHUNK_BYTES): number[] {
+    const out: number[] = [];
+    let bytes = 0;
+    const cap = Math.min(maxFiles, MEDIA_KNOWN_MAX);
+    for (let i = Math.max(0, from); i < items.length && out.length < cap; i++) {
+        if (asked(i) || isZip(items[i].path)) continue;
+        if (out.length > 0 && bytes + items[i].size > maxBytes) break;
+        out.push(i);
+        bytes += items[i].size;
+    }
+    return out;
+}
+
+/**
+ * The answer of `POST /media/known` (untrusted): each asked hash with what
+ * the research has of it. A hash it did not answer is left out (asked again
+ * one by one); null for an answer that is not one.
+ */
+export function parseMediaKnown(value: unknown, asked: readonly string[]): Map<string, MediaKnownState> | null {
+    const r = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+    const known = r?.known && typeof r.known === 'object' && !Array.isArray(r.known) ? r.known as Record<string, unknown> : null;
+    if (!known) return null;
+    const out = new Map<string, MediaKnownState>();
+    for (const sha of asked) {
+        if (!Object.prototype.hasOwnProperty.call(known, sha)) continue;
+        const v = known[sha];
+        if (v === null) out.set(sha, 'none');
+        else if (v && typeof v === 'object' && !Array.isArray(v)) {
+            const rec = v as Record<string, unknown>;
+            if (rec.queued === true) out.set(sha, 'queued');
+            else if (typeof rec.id === 'string' && rec.id) out.set(sha, 'has');
+        }
+    }
+    return out;
+}
+
+/** What became of one file of a batch as the research wrote it (`batch/done` → `files`, media.queued). */
+export interface BatchFileFate {
+    sha: string;
+    path: string;
+    /** The input it became… */
+    input?: string;
+    /** …or the record the research had of it already… */
+    known?: string;
+    /** …or why it was not taken (its code and the research's sentence). */
+    refused?: { code: string; why: string };
+    /** A ZIP: what came of the files inside it. */
+    zip?: { inputs: number; known: number; refused: { path: string; why: string }[] };
+}
+
+const fateId = (v: unknown): string | undefined => (typeof v === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(v) ? v : undefined);
+const countOf = (v: unknown): number => (Array.isArray(v) ? v.length : typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+
+/** `files` of a `batch/done` answer (untrusted): each file the research took from its queue, at most 10 000. */
+export function parseBatchDoneFiles(value: unknown): BatchFileFate[] {
+    if (!Array.isArray(value)) return [];
+    const out: BatchFileFate[] = [];
+    for (const x of value.slice(0, 10_000)) {
+        const r = x && typeof x === 'object' && !Array.isArray(x) ? x as Record<string, unknown> : null;
+        if (!r || typeof r.sha !== 'string' || !/^[0-9a-fA-F]{64}$/.test(r.sha)) continue;
+        const fate: BatchFileFate = { sha: r.sha.toLowerCase(), path: typeof r.path === 'string' ? r.path.slice(0, 500) : '' };
+        const input = fateId(r.input);
+        const known = fateId(r.known);
+        const ref = r.refused && typeof r.refused === 'object' && !Array.isArray(r.refused) ? r.refused as Record<string, unknown> : null;
+        const zip = r.zip && typeof r.zip === 'object' && !Array.isArray(r.zip) ? r.zip as Record<string, unknown> : null;
+        if (input) fate.input = input;
+        else if (known) fate.known = known;
+        else if (ref) fate.refused = { code: typeof ref.code === 'string' ? ref.code.slice(0, 60) : '', why: typeof ref.why === 'string' ? ref.why.slice(0, 400) : '' };
+        if (zip) {
+            fate.zip = {
+                inputs: countOf(zip.inputs), known: countOf(zip.known),
+                refused: (Array.isArray(zip.refused) ? zip.refused.slice(0, 200) : []).flatMap((z) => {
+                    const zr = z && typeof z === 'object' ? z as Record<string, unknown> : null;
+                    return zr ? [{ path: typeof zr.path === 'string' ? zr.path.slice(0, 500) : '', why: typeof zr.why === 'string' ? zr.why.slice(0, 400) : '' }] : [];
+                }),
+            };
+        }
+        out.push(fate);
+    }
+    return out;
+}
+
+/**
+ * The changes of a followed research held while a batch of this page is
+ * sent to it (oldest first) as one: its last head, every commit's entry
+ * (newest first, as a change gives them; one without entries gets one of its
+ * own lines) — the tree is read once for all of them.
+ */
+export function batchHeldChange(changes: readonly LiveChange[]): LiveChange | null {
+    if (changes.length === 0) return null;
+    const last = [...changes].reverse().find(c => c.head) ?? changes[changes.length - 1];
+    // Newest first; a commit the research described (its entries) wins over one only named by its head.
+    const entries: LiveLogEntry[] = [];
+    const at = new Map<string, number>();
+    for (const c of [...changes].reverse()) {
+        const said = !!c.entries;
+        const own: LiveLogEntry[] = c.entries ?? (c.head || c.what.length ? [{ head: c.head, at: c.at, what: c.what, task: '' }] : []);
+        for (const e of own) {
+            const i = e.head ? at.get(e.head) : undefined;
+            if (i === undefined) {
+                if (e.head) at.set(e.head, entries.length);
+                entries.push(e);
+            } else if (said) {
+                entries[i] = e;
+            }
+        }
+    }
+    return { head: last.head, at: changes.reduce((t, c) => (c.at > t ? c.at : t), ''), what: [], entries };
 }

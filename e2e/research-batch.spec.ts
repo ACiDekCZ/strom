@@ -62,6 +62,8 @@ test.describe('Add materials', () => {
         await expect(dialog.locator('.batch-confirm-title')).toContainText('Batch “Krabice” is in the research');
         await expect(dialog.locator('.batch-done-row').first()).toContainText('3');
         expect(b.mediaPuts).toHaveLength(3);
+        // An older research (no media.queued): no Prefer, each file answered with its record (200) as before.
+        expect(b.mediaPuts.every(p => p.headers['prefer'] === undefined)).toBe(true);
         const ids = new Set(b.mediaPuts.map(p => p.headers['x-strom-batch']));
         expect(ids.size).toBe(1);
         expect(b.mediaPuts.map(p => p.headers['x-strom-path']).sort()).toEqual(['Krabice/Dopisy/1946.jpg', 'Krabice/Dopisy/1947.jpg', 'Krabice/foto.jpg']);
@@ -93,6 +95,54 @@ test.describe('Add materials', () => {
         await expect(dialog.locator('.batch-done-row', { hasText: 'Already in the research' })).toContainText('1');
         expect(b.mediaPuts).toHaveLength(1);
         expect(b.batchDone![0].body).toMatchObject({ files: 2 });
+        // A research without media.known / media.queued: asked file by file, sent as before.
+        expect(b.mediaAsks).toHaveLength(2);
+        expect(b.knownAsks ?? []).toEqual([]);
+        expect(b.mediaPuts[0].headers['prefer']).toBeUndefined();
+    });
+
+    test('a research that writes a batch as it is closed (media.known, media.queued): one ask for all files, each sent once with 202 and nothing asked after it, what became of each from the close', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS, features: ['media.known', 'media.queued', 'media.codes'] });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as any).showBatchDialog());
+        await addFiles(page, ['Krabice/a.jpg', 'Krabice/b.jpg', 'Krabice/c.jpg', 'Krabice/d.jpg']);
+        const shaOf = (path: string): Promise<string> => page.evaluate(async (p) => {
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`obsah ${p}`));
+            return Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, '0')).join('');
+        }, path);
+        const [a, bb, c, d] = await Promise.all(['Krabice/a.jpg', 'Krabice/b.jpg', 'Krabice/c.jpg', 'Krabice/d.jpg'].map(shaOf));
+        // a: the research has it; b: came already and waits in its queue (another window); c: refused as the batch is written.
+        b.mediaKnown.set(a, 'I0007');
+        b.mediaQueued = new Map([[bb, { batch: 'another-window-batch', path: 'b.jpg' }]]);
+        b.queuedRefuse = new Map([[c, { code: 'media.something-new', why: 'the file is gone' }]]);
+        const dialog = page.locator('#batch-modal');
+        await dialog.locator('[data-act="next"]').click();
+        const seenBefore = (b.seen ?? []).length;
+        const gedBefore = b.treeGets ?? 0;
+        await dialog.getByRole('button', { name: 'Send 4 files' }).click();
+        await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');
+        // One ask of media/known for the whole batch, none file by file.
+        expect(b.knownAsks).toEqual([[a, bb, c, d]]);
+        expect(b.mediaAsks).toEqual([]);
+        // Only the two new files sent, each with Prefer: respond-async.
+        expect(b.mediaPuts.map(p => p.sha)).toEqual([c, d]);
+        expect(b.mediaPuts.every(p => p.headers['prefer'] === 'respond-async')).toBe(true);
+        // Nothing asked after a 202: from the first PUT to the close only the files went (no media asks, no tree read).
+        const during = (b.seen ?? []).slice(seenBefore);
+        const firstPut = during.findIndex(x => x.startsWith('PUT /media/'));
+        const close = during.findIndex(x => /^POST \/batch\/.+\/done$/.test(x));
+        expect(firstPut).toBeGreaterThanOrEqual(0);
+        expect(close).toBeGreaterThan(firstPut);
+        expect(during.slice(firstPut, close).filter(x => !x.startsWith('PUT /media/') && !/^GET \/status/.test(x))).toEqual([]);
+        expect(b.treeGets ?? 0).toBe(gedBefore);
+        expect(b.batchDone).toHaveLength(1);
+        expect(b.batchDone![0].body).toMatchObject({ files: 4 });
+        // The summary: d received, a already there, c refused with the research's sentence (its code unknown here).
+        await expect(dialog.locator('.batch-done-row').first()).toContainText('1');
+        await expect(dialog.locator('.batch-done-row', { hasText: 'Already in the research' })).toContainText('1');
+        await expect(dialog.locator('.batch-done-row.is-warn')).toContainText('Krabice/c.jpg');
+        await expect(dialog.locator('.batch-done-row.is-warn')).toContainText('the file is gone');
     });
 
     test('an unfinished batch: the block says so; Continue… opens the wizard with the banner; Discard forgets it', async ({ page }) => {

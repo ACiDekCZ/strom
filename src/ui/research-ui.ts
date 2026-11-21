@@ -20,6 +20,7 @@
  * The pure logic lives in src/research-link.ts.
  */
 
+import { batchHeldChange } from '../batch.js';
 import { allMedia } from '../media.js';
 import { noteOverviewSectionRows } from './overview-columns-ui.js';
 import { waitingAuditMarkEl, waitingAuditShown } from './waiting-task-ui.js';
@@ -836,6 +837,11 @@ let externalReady = false;
 /** Removes the listeners of the open ⋯ task menu (null: none open). */
 let liveTaskMenuCleanup: (() => void) | null = null;
 let live: LiveSession | null = null;
+/**
+ * The followed research's changes held while a batch of this page is sent to it
+ * (media.queued, batchHoldsLive): its tree is read once, after the batch's close.
+ */
+let heldLive: { session: LiveSession; changes: LiveChange[] } | null = null;
 /** The "Waiting for you" panel while no research is followed (the research's id). */
 let idlePanel: string | null = null;
 /**
@@ -4149,7 +4155,7 @@ export const researchUiMethods = uiModule({
         es.addEventListener('change', (e) => {
             this.liveBridgeBack(s);
             const change = sanitizeLiveChange(payload(e));
-            if (change) this.enqueueLive(s, () => this.onLiveChange(s, change));
+            if (change) this.liveChangeOrHold(s, change);
             // The stream stays open (hello comes once): a change may be a switch of mode
             // (`strom mode archive` commits), which only the status says.
             this.liveStatusSoon(s);
@@ -4322,6 +4328,30 @@ export const researchUiMethods = uiModule({
         }, ms);
     },
 
+    /**
+     * A change of the followed research: its tree read now — or, while a batch of this page goes to it
+     * (batchHoldsLive), held until the batch is closed and then read once for all (liveReleaseHeld).
+     */
+    liveChangeOrHold(s: LiveSession, change: LiveChange): void {
+        if (this.batchHoldsLive(s.researchId)) {
+            if (heldLive?.session !== s) heldLive = { session: s, changes: [] };
+            heldLive.changes.push(change);
+            return;
+        }
+        this.enqueueLive(s, () => this.onLiveChange(s, change));
+    },
+
+    /** The batch is closed (or paused): the changes held meanwhile read as one (nothing held: nothing). */
+    liveReleaseHeld(): void {
+        const held = heldLive;
+        heldLive = null;
+        const s = held?.session;
+        const change = held ? batchHeldChange(held.changes) : null;
+        // Following that ended or moved on meanwhile: nothing (onLiveChange looks again as it runs).
+        if (!s || !change || s.ended) return;
+        this.enqueueLive(s, () => this.onLiveChange(s, change));
+    },
+
     enqueueLive(s: LiveSession, job: () => Promise<void>): void {
         s.chain = s.chain.then(job).catch((err) => console.warn('Live update failed', err));
     },
@@ -4384,9 +4414,7 @@ export const researchUiMethods = uiModule({
         s.directionsRev = status.directionsRev;
         if (status.treeId) noteResearchWaiting(status.treeId, status.waiting, status);
         this.refreshActionMenuBadges();
-        if (status.head && status.head !== s.head) {
-            this.enqueueLive(s, () => this.onLiveChange(s, { head: status.head, what: [], at: '' }));
-        }
+        if (status.head && status.head !== s.head) this.liveChangeOrHold(s, { head: status.head, what: [], at: '' });
         this.refreshDirectionPeople(s, status.head || s.head);
         this.renderLivePanel();
     },
