@@ -127,6 +127,19 @@ test.describe('the toolbar\'s choice on a computer', () => {
         await expect.poll(focus).toBe('h1');
         await page.locator('.focus-toast-box .focus-toast-back').click();
         await expect.poll(focus).toBe('b16');
+
+        // The list, built while the focus was elsewhere, is built again as it opens; a query
+        // typed before that (the open's toggle comes as a task of its own) stays, Enter picks.
+        await page.evaluate(() => {
+            document.querySelector<HTMLElement>('#view-rod-picker summary')!.click();
+            const q = document.querySelector<HTMLInputElement>('#view-rod-picker .sp-rodpick-q')!;
+            q.value = 'bran';
+            q.dispatchEvent(new Event('input'));
+        });
+        await expect(host(page).locator('.sp-rodpick-q')).toHaveValue('bran');
+        await expect(host(page).locator('button.sp-rodpick-first')).toContainText('Brandvold');
+        await host(page).locator('.sp-rodpick-q').press('Enter');
+        await expect(pill(page).locator('.evidence-pill-label--pick')).toContainText('Brandvold');
     });
 
     test('Other families unfold the small lines alphabetically; one of them is chosen and marked', async ({ page }) => {

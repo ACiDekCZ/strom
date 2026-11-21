@@ -331,6 +331,8 @@ export const selectionPickerMethods = uiModule({
         hostKey = currentHostKey();
         hostGeneration = selectionIndexGeneration();
         hostFocus = TreeRenderer.getFocusPersonId();
+        // A query typed before the open's toggle came (it arrives as a task of its own) stays.
+        const typed = reopen ? el.querySelector<HTMLInputElement>('.sp-rodpick-q')?.value ?? '' : '';
         hostAbort?.abort();
         hostAbort = null;
         ensureFamilyPagesAppCss();
@@ -366,7 +368,12 @@ export const selectionPickerMethods = uiModule({
         el.hidden = false;
         if (reopen) {
             pick.open = true;
-            pick.querySelector<HTMLInputElement>('.sp-rodpick-q')?.focus({ preventScroll: true });
+            const q = pick.querySelector<HTMLInputElement>('.sp-rodpick-q');
+            q?.focus({ preventScroll: true });
+            if (q && typed) {
+                q.value = typed;
+                q.dispatchEvent(new Event('input'));
+            }
         }
     },
 
