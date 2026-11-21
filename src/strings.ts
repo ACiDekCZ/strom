@@ -1134,6 +1134,8 @@ const stringsEN = {
         undo: 'Undo',
         undone: 'Confirmation undone',
         confirmedAt: (d: string) => `Confirmed against the scan on ${d}`,
+        /** Under "Confirmed against the scan" while the value is still the family tree's (066 K6.3 §4.1). */
+        takenFrom: (prog: string, date: string) => `Taken from the family tree ${prog}, file ${date}`,
         reasonHead: (l: string, d: string) => (d ? `Stays ${l} · verified by the research on ${d}` : `Stays ${l}`),
         previewHead: (f: string) => `Verify ${f}`,
         what: 'What',
@@ -1230,6 +1232,8 @@ const stringsEN = {
         } as Record<string, string>,
         /** A fact the bridge names by a tag the app has no name for. */
         kindOther: 'Other fact',
+        /** The tree card mark's tip: opens the person card at the name's pill (066 K6.3 §5.2). */
+        nameAtPerson: 'The name in the person card ›',
     },
 
     // "Originally from the family tree" under a fact the research changed, with Revert (spec 066 §3)
@@ -11867,6 +11871,7 @@ const stringsCZ: StringsType = {
         undo: 'Vzít zpět',
         undone: 'Potvrzení vzato zpět',
         confirmedAt: (d: string) => `Potvrzeno podle skenu ${d}`,
+        takenFrom: (prog: string, date: string) => `Převzato z rodokmenu ${prog}, soubor ${date}`,
         reasonHead: (l: string, d: string) => (d ? `Zůstává ${l} · výzkum ověřil ${d}` : `Zůstává ${l}`),
         previewHead: (f: string) => `Ověřit ${f}`,
         what: 'Co',
@@ -11954,6 +11959,7 @@ const stringsCZ: StringsType = {
             NAME: 'Ověří se spolu se jménem.',
         } as Record<string, string>,
         kindOther: 'Jiný údaj',
+        nameAtPerson: 'Jméno v kartě osoby ›',
     },
 
     origin: {
@@ -22357,6 +22363,7 @@ const stringsDE: StringsType = {
         undo: 'Zurücknehmen',
         undone: 'Bestätigung zurückgenommen',
         confirmedAt: (d: string) => `Am ${d} anhand des Scans bestätigt`,
+        takenFrom: (prog: string, date: string) => `Übernommen aus ${prog}, Datei vom ${date}`,
         reasonHead: (l: string, d: string) => (d ? `Bleibt ${l} · von der Recherche geprüft am ${d}` : `Bleibt ${l}`),
         previewHead: (f: string) => `${f} prüfen`,
         what: 'Was',
@@ -22444,6 +22451,7 @@ const stringsDE: StringsType = {
             NAME: 'Der Name wird mitgeprüft.',
         } as Record<string, string>,
         kindOther: 'Andere Angabe',
+        nameAtPerson: 'Name in der Personenkarte ›',
     },
 
     origin: {

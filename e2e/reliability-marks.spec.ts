@@ -912,6 +912,173 @@ test.describe('verify and confirm the name (066 K6.3)', () => {
         await expect(tip.locator('.st-v-aside')).toHaveCount(0);
         expect(asks.verify).toEqual([]);
     });
+
+    /** Jan's name probable with a citation of quality 3 (●○), his birth and death proven (●●). */
+    const markGed = () => researchGed(HEAD, [
+        '1 BIRT', '2 DATE 3 FEB 1862', '2 PLAC Čapkov', '2 _STROM_STATUS proven', '2 _STROM_EID E0001', '2 SOUR @S0001@',
+        '1 DEAT', '2 DATE 1919', '2 _STROM_STATUS proven', '2 _STROM_EID E0002', '2 SOUR @S0001@',
+    ]).replace('1 NAME Jan /Fíšek/', [
+        '1 NAME Jan /Fíšek/', '2 GIVN Jan', '2 SURN Fíšek', '2 SOUR @S0001@', '3 QUAY 3', '2 _STROM_STATUS probable',
+        '2 _STROM_EID P0003.N', `3 _TXT ${NAME_MARK}`,
+    ].join('\n'));
+
+    test('the tree card\'s mark follows the name confirmed through the bridge at once, and Undo takes it back (§4.2)', async ({ page }) => {
+        // `origin`: the card's mark speaks the facts' steps.
+        const asks = await openVerifyTree(page, { features: [...NAMES, 'origin'], ged: markGed() });
+        // The cards drawn once more after the bridge's first answer (they were drawn before it).
+        await page.evaluate(() => window.Strom.TreeRenderer.render());
+        const mark = card(page, 'Jan').locator(':scope > .card-status-mark');
+        await expect(mark).toHaveAttribute('data-status', 'cs-p1');
+        await namePill(page).click();
+        await vAct(page, 'scan').click();
+        await expect.poll(() => asks.confirm).toEqual([{ fact: 'P0003.N', txt: NAME_MARK, confirm: true }]);
+        await expect(namePill(page)).toHaveClass(/fact-status-human/);
+        // No new load of the tree: the card's mark is drawn again from what the bridge took.
+        await expect(mark).toHaveAttribute('data-status', 'cs-p2');
+        await vAct(page, 'undo').click();
+        await expect.poll(() => asks.confirm.length).toBe(2);
+        await expect(namePill(page)).toHaveClass(/fact-status-probable/);
+        await expect(mark).toHaveAttribute('data-status', 'cs-p1');
+        // "Redo" from the toast: the card's mark again.
+        await page.locator('.toast', { hasText: 'Confirmation undone' }).locator('.toast-action').click();
+        await expect.poll(() => asks.confirm.length).toBe(3);
+        await expect(mark).toHaveAttribute('data-status', 'cs-p2');
+    });
+
+    test('the card mark\'s tip: "Verify facts (3)" counts the name, and "The name in the person card ›" opens it at the name\'s pinned tip (§5.2)', async ({ page }) => {
+        await openVerifyTree(page, { features: [...NAMES, 'origin'], ged: markGed() });
+        await personModal(page).getByRole('button', { name: 'Cancel' }).click();
+        await expect(personModal(page)).toBeHidden();
+        await page.evaluate(() => window.Strom.TreeRenderer.render());
+        const mark = card(page, 'Jan').locator(':scope > .card-status-mark');
+        await expect(mark).toHaveAttribute('data-status', 'cs-p1');
+        await mark.click();
+        const tip = page.locator('#status-tip');
+        await expect(tip).toBeVisible();
+        await expect(tip.locator('.st-applies')).toHaveText('Applies to: name');
+        await expect(tip.locator('.st-verify-person')).toContainText('Verify facts (3)');
+        const link = tip.locator('.st-name-at-person');
+        await expect(link).toHaveText('The name in the person card ›');
+        // A link, not an action of the research: no mark.
+        await expect(link.locator('.research-ai-badge, .research-open-mark')).toHaveCount(0);
+        await link.click();
+        await expect(personModal(page)).toBeVisible();
+        await expect(personModal(page).locator('#lastname-label button.fact-status.st-pinned')).toHaveCount(1);
+        await expect(tip).toBeVisible();
+        await expect(vAct(page, 'scan')).toBeVisible();
+        await expect(vAct(page, 'verify')).toBeVisible();
+    });
+
+    test('no link while the name does not hold the mark', async ({ page }) => {
+        // The birth probable without a record read (○) is weaker than the name (●○): the birth holds the mark.
+        await openVerifyTree(page, {
+            features: [...NAMES, 'origin'],
+            ged: markGed().replace('2 _STROM_STATUS proven\n2 _STROM_EID E0001\n2 SOUR @S0001@', '2 _STROM_STATUS probable\n2 _STROM_EID E0001'),
+        });
+        await personModal(page).getByRole('button', { name: 'Cancel' }).click();
+        await page.evaluate(() => window.Strom.TreeRenderer.render());
+        const mark = card(page, 'Jan').locator(':scope > .card-status-mark');
+        await expect(mark).toHaveAttribute('data-status', 'cs-res');
+        await mark.click();
+        const tip = page.locator('#status-tip');
+        await expect(tip.locator('.st-applies')).toHaveText('Applies to: birth');
+        await expect(tip.locator('.st-name-at-person')).toHaveCount(0);
+    });
+
+    test('an older research (no `name-status`): the name holds the mark, but no link', async ({ page }) => {
+        await openVerifyTree(page, { features: ['verify', 'facts.confirm', 'facts.confirm.value', 'origin'], ged: markGed() });
+        await personModal(page).getByRole('button', { name: 'Cancel' }).click();
+        await page.evaluate(() => window.Strom.TreeRenderer.render());
+        const mark = card(page, 'Jan').locator(':scope > .card-status-mark');
+        await expect(mark).toHaveAttribute('data-status', 'cs-p1');
+        await mark.click();
+        const tip = page.locator('#status-tip');
+        await expect(tip.locator('.st-applies')).toHaveText('Applies to: name');
+        await expect(tip.locator('.st-name-at-person')).toHaveCount(0);
+    });
+});
+
+// ==================== The name without a research (066 K6.3 §4.1, §6) ====================
+
+/** Another program's file: Bonifác's name cited (NAME.SOUR), his birth and death not. */
+function namedForeignGed(testInfo: TestInfo): string {
+    const lines = [
+        '0 HEAD', '1 SOUR FTM', '2 NAME Family Tree Maker', '2 VERS 24.0', '1 DATE 12 MAR 2024',
+        '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Bonifác /Kvapilík/', '2 SOUR @S1@', '3 PAGE fol. 45', '1 SEX M',
+        '1 BIRT', '2 DATE 3 FEB 1850', '1 DEAT', '2 DATE 1912',
+        '0 @S1@ SOUR', '1 TITL Matrika N Bramborov 1840–1870',
+        '0 TRLR', '',
+    ];
+    const p = testInfo.outputPath('kvapilik-name.ged');
+    writeFileSync(p, lines.join('\n'));
+    return p;
+}
+
+/** The file imported as a new tree; the death written here (so each fact has its own pill), Bonifác's card open. */
+async function openNamedForeign(page: Page, testInfo: TestInfo): Promise<void> {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await page.locator('#gedcom-input').setInputFiles(namedForeignGed(testInfo));
+    await page.locator('#gedcom-result-modal #gedcom-new-tree-btn').click();
+    const importDialog = page.locator('#import-tree-modal');
+    await importDialog.locator('#import-tree-name').fill('Kvapilík');
+    await importDialog.getByRole('button', { name: 'Import' }).click();
+    const next = page.locator('#import-next-card');
+    await expect(next).toBeVisible();
+    await next.locator('.import-next-close').click();
+    await cardAction(page, 'Bonifác', 'edit');
+    const modal = personModal(page);
+    await modal.locator('#input-deathdate').fill('1913');
+    await modal.getByRole('button', { name: 'Save' }).click();
+    await expect(modal).toBeHidden();
+    await waitForPersist(page, '1913');
+    await cardAction(page, 'Bonifác', 'edit');
+}
+
+async function exportTreeGedcom(page: Page): Promise<string> {
+    await page.evaluate(() => window.Strom.UI.showExportDialog());
+    await page.evaluate(() => window.Strom.UI.exportTargetTreeGedcom());
+    const pwd = page.locator('#export-password-modal');
+    await expect(pwd).toBeVisible();
+    await pwd.locator('#export-privacy-mode').selectOption('full');
+    const [download] = await Promise.all([page.waitForEvent('download'), pwd.locator('#export-submit-btn').click()]);
+    return readFileSync((await download.path())!, 'utf8');
+}
+
+test.describe('the name without a research (066 K6.3)', () => {
+    const namePill = (page: Page) => personModal(page).locator('label[for="input-firstname"] button.fact-status');
+
+    test('the scan at a cited name: the app\'s own ✓, the family tree it came from under it, `_STROM_CONFIRMED` under NAME in the file; the way to the research', async ({ page }, testInfo) => {
+        await openNamedForeign(page, testInfo);
+        const pill = namePill(page);
+        await expect(pill).toHaveClass(/fact-status-import/);
+        await pill.click();
+        const tip = page.locator('#status-tip');
+        await expect(tip).toBeVisible();
+        await expect(tip.locator('.st-v-aside')).toContainText('With the ancestor research an AI agent verifies the fact in the registers itself.');
+        await expect(vAct(page, 'verify')).toHaveCount(0);
+        await expect(tip.locator('.st-v-taken')).toHaveCount(0);
+        await vAct(page, 'scan').click();
+        await expect(pill).toHaveClass(/fact-status-human/);
+        await expect(tip.locator('.st-sentence')).toContainText('✓ Confirmed against the scan on');
+        await expect(tip.locator('.st-v-taken')).toHaveText('Taken from the family tree Family Tree Maker 24.0, file 12 Mar 2024');
+        await expect(vAct(page, 'undo')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await personModal(page).getByRole('button', { name: 'Cancel' }).click();
+        const ged = await exportTreeGedcom(page);
+        const name = ged.split(/\r?\n(?=1 )/).find(b => b.startsWith('1 NAME Bonifác'))!;
+        expect(name).toMatch(/^2 _STROM_CONFIRMED \d{4}-\d{2}-\d{2}$/m);
+    });
+
+    test('read only (a saved page): the name\'s tip without actions', async ({ page }, testInfo) => {
+        await openNamedForeign(page, testInfo);
+        await page.evaluate(() => { (window.Strom.DataManager as unknown as { viewMode: boolean }).viewMode = true; });
+        await namePill(page).click();
+        const tip = page.locator('#status-tip');
+        await expect(tip).toBeVisible();
+        await expect(tip.locator('.st-v-btn')).toHaveCount(0);
+    });
 });
 
 test.describe('verify facts at one fact in German', () => {
@@ -959,6 +1126,34 @@ test.describe('verify facts at one fact on a phone', () => {
         expect(tipBox.x).toBeGreaterThanOrEqual(0);
         expect(tipBox.x + tipBox.width).toBeLessThanOrEqual(390);
     }
+
+    test('"The name in the person card ›" in the card mark\'s tip: 44 px across the row of actions (066 K6.3 §5.2)', async ({ page }) => {
+        const ged = researchGed(HEAD, [
+            '1 BIRT', '2 DATE 3 FEB 1862', '2 PLAC Čapkov', '2 _STROM_STATUS proven', '2 _STROM_EID E0001', '2 SOUR @S0001@',
+            '1 DEAT', '2 DATE 1919', '2 _STROM_STATUS proven', '2 _STROM_EID E0002', '2 SOUR @S0001@',
+        ]).replace('1 NAME Jan /Fíšek/', [
+            '1 NAME Jan /Fíšek/', '2 GIVN Jan', '2 SURN Fíšek', '2 SOUR @S0001@', '3 QUAY 3', '2 _STROM_STATUS probable', '2 _STROM_EID P0003.N',
+        ].join('\n'));
+        await fakeBridge(page, { features: ['verify', 'facts.confirm', 'facts.confirm.value', 'name-status', 'origin'], treeGed: ged });
+        await verifyRoutes(page);
+        await openResearch(page, { ged });
+        // A touch screen does not ask the bridge by itself (onComputer): its word is given here, for the layout.
+        await page.evaluate((features) => {
+            (window.Strom.UI as unknown as { researchStatusOf: () => unknown }).researchStatusOf = () => ({ features });
+        }, ['verify', 'facts.confirm', 'facts.confirm.value', 'name-status', 'origin']);
+        const mark = card(page, 'Jan').locator(':scope > .card-status-mark');
+        await page.evaluate(() => window.Strom.TreeRenderer.render());
+        await expect(mark).toHaveAttribute('data-status', 'cs-p1');
+        await mark.tap();
+        const tip = page.locator('#status-tip');
+        const link = tip.locator('.st-name-at-person');
+        await expect(link).toBeVisible();
+        const box = (await link.boundingBox())!;
+        const row = (await tip.locator('.st-acts').boundingBox())!;
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        expect(box.width).toBeGreaterThanOrEqual(row.width - 1);
+        expect(box.x + box.width).toBeLessThanOrEqual(390);
+    });
 
     test('without a research: the scan 44 px across the tip, the way to the research 44 px; Undo the same', async ({ page }) => {
         await dropCited(page, { width: 390, height: 844 });

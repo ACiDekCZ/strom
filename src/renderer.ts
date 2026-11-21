@@ -5433,6 +5433,8 @@ class TreeRendererClass {
             // The one mark of sources and reliability (spec 066 P4 §1), bottom right inside the card.
             const statusHtml = signals.showStatus ? statusMarkHtml(signals.status, { mark: true }) : '';
             if (statusHtml) classes += ' has-status';
+            if (statusHtml && signals.status) this.statusAriaShown.set(id, cardStatusAria(signals.status));
+            else this.statusAriaShown.delete(id);
             // A narrow card (compact): the bottom-right edge's pills take their short forms (spec 066 P4 §2).
             if (this.config.cardWidth < 160) classes += ' edge-narrow';
             card.className = classes;
@@ -7015,6 +7017,45 @@ class TreeRendererClass {
     cardSignalsFor(personId: PersonId): CardSignalInfo | null {
         const person = DataManager.getPerson(personId);
         return person ? cardSignalInfo(person, this.signalContext()) : null;
+    }
+
+    /** The status mark's words in each drawn card's accessible name (refreshCardStatus swaps them). */
+    private statusAriaShown = new Map<PersonId, string>();
+
+    /**
+     * One person's status mark drawn again from the facts' steps now, without
+     * a render (066 K6.3 §4.2): a confirmation the research's bridge took
+     * stands over the tree until its next version comes, and the card says it
+     * at once. The mark and its words in the card's accessible name change in
+     * place; a mark that comes or goes changes the card's room, so the tree is
+     * drawn anew. A person without a card on the canvas: nothing.
+     */
+    refreshCardStatus(personId: PersonId): void {
+        const cards = [...document.querySelectorAll<HTMLElement>(`#tree-canvas .person-card[data-id="${CSS.escape(personId)}"]`)];
+        if (cards.length === 0) return;
+        const s = this.cardSignalsFor(personId);
+        const status = s?.showStatus ? s.status : null;
+        const html = status ? statusMarkHtml(status, { mark: true }) : '';
+        if (cards.some(card => !card.querySelector(':scope > .card-status-mark') !== !html)) {
+            this.render();
+            return;
+        }
+        if (!status) return;
+        const tpl = document.createElement('template');
+        tpl.innerHTML = html;
+        const fresh = tpl.content.firstElementChild as HTMLElement;
+        const aria = cardStatusAria(status);
+        const was = this.statusAriaShown.get(personId);
+        for (const card of cards) {
+            // The same element (a tip open at it stays anchored): its class, step and glyphs.
+            const mark = card.querySelector<HTMLElement>(':scope > .card-status-mark')!;
+            mark.className = fresh.className;
+            mark.dataset.status = fresh.dataset.status;
+            mark.innerHTML = fresh.innerHTML;
+            const label = card.getAttribute('aria-label');
+            if (label && was && was !== aria) card.setAttribute('aria-label', label.replace(was, aria));
+        }
+        this.statusAriaShown.set(personId, aria);
     }
 
     /** One action signal in words (badge label, tooltip row). */

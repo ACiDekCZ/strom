@@ -382,3 +382,61 @@ describe('verifyTogetherKind: what the preview says a fact goes with (066 K6.3)'
         expect(verifyTogetherKind([NAME, { fact: 'E0034', kind: 'BIRT' }], 'E0777')).toBeNull();
     });
 });
+
+describe('table 6.1: the name in each kind of tree (066 K6.3 §6)', () => {
+    const NAMES: VerifyResearch = { features: [...FULL.features, 'name-status'] };
+    const OFFLINE_NOW: VerifyResearch = { features: [], offline: true };
+    const NAMED: Record<string, ResearchFactVerify> = { name: { eid: 'P0012.N' }, birth: { eid: 'E0001' } };
+    const BY_APP = { confirmed: '2026-11-21', confirmedBy: 'app' } as FactVerifyInfo;
+    const BY_RESEARCH = { confirmed: '2026-11-21', confirmedBy: 'research' } as FactVerifyInfo;
+    type Tree = { research: VerifyResearch | null; researchTree: boolean; editable: boolean; verify: Record<string, ResearchFactVerify> };
+    const trees: Record<string, Tree> = {
+        'without a research': { research: null, researchTree: false, editable: true, verify: {} },
+        'an older research (no name-status)': { research: FULL, researchTree: true, editable: true, verify: NAMED },
+        'a new research, its bridge running': { research: NAMES, researchTree: true, editable: true, verify: NAMED },
+        'a new research, its bridge not running': { research: OFFLINE_NOW, researchTree: true, editable: true, verify: NAMED },
+        'read only (an exported page, the book)': { research: null, researchTree: false, editable: false, verify: {} },
+    };
+    /** Verify, the scan (and whether through the bridge), Undo of the app's own and of the research's confirmation. */
+    const row = (t: Tree) => {
+        const p = person(t.verify);
+        const at = (o: Partial<FactOfferInput>) => factOffer(p, 'name', input({ research: t.research, researchTree: t.researchTree, editable: t.editable, ...o }));
+        const open = at({ step: 'import' });
+        const app = at({ step: 'human', info: BY_APP });
+        const research = at({ step: 'human', info: BY_RESEARCH });
+        return {
+            verify: open.verify, scan: open.scan, scanViaBridge: open.scanViaBridge, aside: open.row === 'noResearch',
+            undoApp: app.undo, undoResearch: research.undo, undoViaBridge: research.undo && research.undoViaBridge,
+        };
+    };
+    const expected: Record<string, ReturnType<typeof row>> = {
+        // The app's own confirmation where the tree can be changed; the sentence with the way to the research.
+        'without a research': { verify: false, scan: true, scanViaBridge: false, aside: true, undoApp: true, undoResearch: false, undoViaBridge: false },
+        // Only an earlier confirmation of the app's own is taken back.
+        'an older research (no name-status)': { verify: false, scan: false, scanViaBridge: false, aside: false, undoApp: true, undoResearch: false, undoViaBridge: false },
+        'a new research, its bridge running': { verify: true, scan: true, scanViaBridge: true, aside: false, undoApp: true, undoResearch: true, undoViaBridge: true },
+        // The name with its id: the app's own confirmation, handed over with the tree; the research's as at a birth.
+        'a new research, its bridge not running': { verify: false, scan: true, scanViaBridge: false, aside: false, undoApp: true, undoResearch: true, undoViaBridge: false },
+        'read only (an exported page, the book)': { verify: false, scan: false, scanViaBridge: false, aside: true, undoApp: false, undoResearch: false, undoViaBridge: false },
+    };
+    for (const [name, t] of Object.entries(trees)) {
+        it(name, () => { expect(row(t)).toEqual(expected[name]); });
+    }
+
+    it('the name is offered as the birth is, in every kind of tree (Verify, the scan, Undo)', () => {
+        for (const t of Object.values(trees)) {
+            if (t.researchTree && !t.research?.features.includes('name-status') && !t.research?.offline) continue;
+            const p = person(t.verify);
+            for (const o of [{ step: 'import' as const }, { step: 'human' as const, info: BY_APP }, { step: 'human' as const, info: BY_RESEARCH }]) {
+                const opts = input({ research: t.research, researchTree: t.researchTree, editable: t.editable, ...o });
+                const { verify, scan, undo, scanViaBridge, undoViaBridge } = factOffer(p, 'birth', opts);
+                expect(factOffer(p, 'name', opts)).toMatchObject({ verify, scan, undo, scanViaBridge, undoViaBridge });
+            }
+        }
+    });
+
+    it('without a research the name has a kind, so its tip says the research would verify it (§6.1, question 7)', () => {
+        expect(verifyFactKind(person(), 'name')).toBe('NAME');
+        expect(factOffer(person(), 'name', input({ step: 'import', research: null, researchTree: false })).row).toBe('noResearch');
+    });
+});

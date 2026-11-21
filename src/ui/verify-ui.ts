@@ -16,6 +16,7 @@
  */
 
 import { DataManager } from '../data.js';
+import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
 import { shownName } from '../person-name.js';
@@ -25,9 +26,9 @@ import { factConfirmation, factConfirmMark, factPendingPosition, factSourceIds, 
 import { confirmRefusalText, verifyRefusalText } from '../verify-refusal.js';
 import { postFactConfirm, postVerify, type FactConfirmResult, type VerifyFact, type VerifyResult } from '../research-verify.js';
 import type { VerifyResearch } from '../verify-offer.js';
-import type { ReliabilityInput, ReliabilityStepName } from '../reliability.js';
+import type { FactReliability, ReliabilityInput, ReliabilityStepName } from '../reliability.js';
 import { type FactOffer, factOffer, verifyFactKind, verifyRecordText, verifyTogetherKind } from '../verify-ui-model.js';
-import { type FactPillTarget, reliabilityLabel, setFactPendingResolver } from './fact-status.js';
+import { type FactPillTarget, importOriginParts, reliabilityLabel, setFactPendingResolver } from './fact-status.js';
 import {
     type StatusTipContext, type StatusTipSlots, closeStatusTip, openStatusTip, refreshStatusTip, registerStatusTipExtension,
 } from './status-tip.js';
@@ -303,6 +304,8 @@ interface FactView {
     offer: FactOffer;
     info: FactVerifyInfo;
     step: ReliabilityStepName | null;
+    /** The fact's reliability as the tip read it (its import record while the value is the file's). */
+    reliability: FactReliability | null;
     key: string;
 }
 
@@ -357,7 +360,7 @@ export const verifyUiMethods = uiModule({
             localPending: !!localOf(holder, fact)?.pending,
             editable: !DataManager.isReadOnly(),
         });
-        return { holder, fact, target, offer, info, step, key: stateKey(holder, fact) };
+        return { holder, fact, target, offer, info, step, reliability: ctx.reliability ?? null, key: stateKey(holder, fact) };
     },
 
     /** The status tip's extension: the reason, the actions, the preview of one fact. */
@@ -391,6 +394,12 @@ export const verifyUiMethods = uiModule({
             }
             // The state the action led to: ✓ belongs to it, never to the action.
             sentence.innerHTML = `<span class="st-v-check" aria-hidden="true">✓</span> ${esc(text)}`;
+            // The family tree it came from stays as history under the confirmation (any fact, 066 K6.3 §4.1).
+            const rec = v.reliability?.fromImport ? v.reliability.importRecord : undefined;
+            if (rec) {
+                const o = importOriginParts(rec);
+                slots.reason.insertAdjacentHTML('afterbegin', `<div class="st-v-line st-v-taken">${esc(strings.verify.takenFrom(o.prog, o.date))}</div>`);
+            }
         }
         const checked = info.checked;
         if (offer.row === 'reason' && checked?.why && v.step) {
@@ -629,6 +638,8 @@ export const verifyUiMethods = uiModule({
             });
         }
         this.verifyRedraw(confirm ? 'undo' : 'scan');
+        // The tree's card says it at once too: the tree holds none of it until the research's next version.
+        if (v.target.personId) TreeRenderer.refreshCardStatus(v.target.personId as PersonId);
         if (opts.inToast) return { ok: true, text: strings.verify.confirmedAt(dayText(result.confirmed ?? localIsoDay())) };
         done();
         return undefined;

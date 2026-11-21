@@ -8,8 +8,9 @@
 import { describe, it, expect } from 'vitest';
 import {
     reliabilityHtml, reliabilityTitle, factStatusHtml, personMarksLayout, cardStatusMarkHtml, statusMarkHtml, reliabilityLabel,
-    cardStatusLegendLabel, cardStatusLabel, cardStatusAria, cardStatusWords,
+    cardStatusLegendLabel, cardStatusLabel, cardStatusAria, cardStatusWords, importOriginParts,
 } from '../ui/fact-status.js';
+import { setLanguage, strings } from '../strings.js';
 import { CardStatus, personOriginSummary, ReliabilityOptions } from '../reliability.js';
 import type { ImportRecord, Person, StromData } from '../types.js';
 
@@ -115,6 +116,24 @@ describe('reliabilityTitle', () => {
     it('a stronger step with a value from the file says where it came from', () => {
         const t = reliabilityTitle({ step: 'proven', dots: 2, fromImport: true, importRecord: I1 });
         expect(t).toMatch(/^Proven by AI: two readers of the record agree · taken from the family tree Rodokmenar/);
+    });
+
+    it('confirmed by a person, the value still the file\'s: the title keeps where it came from; the tip\'s line under "Confirmed against the scan" says it on its own (066 K6.3 §4.1)', () => {
+        const t = reliabilityTitle({ step: 'human', fromImport: true, importRecord: I1 });
+        expect(t).toMatch(/· taken from the family tree Rodokmenar, /);
+        expect(reliabilityTitle({ step: 'human', importRecord: I1 })).not.toMatch(/taken from/);
+        const o = importOriginParts(I1, 'en');
+        expect(strings.verify.takenFrom(o.prog, o.date)).toBe(`Taken from the family tree Rodokmenar, file ${o.date}`);
+        const said = { cs: 'Převzato z rodokmenu Rodokmenar, soubor', en: 'Taken from the family tree Rodokmenar, file', de: 'Übernommen aus Rodokmenar, Datei vom', pl: 'Przejęte z drzewa Rodokmenar, plik' } as const;
+        try {
+            for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+                setLanguage(lang);
+                const p = importOriginParts(I1, lang);
+                expect(strings.verify.takenFrom(p.prog, p.date), lang).toBe(`${said[lang]} ${p.date}`);
+            }
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('the short labels', () => {

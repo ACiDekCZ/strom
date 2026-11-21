@@ -3074,6 +3074,16 @@ class DataManagerClass {
             if (marriedBefore && !variants.some(v => key(v) === key(spelled))) variants = [...variants, spelled];
             person.nameVariants = variants.length > 0 ? variants : undefined;
         }
+        // The research's status of the married name belongs to the value its file
+        // gave (066 K6.3): that name written otherwise here (its surname, or the
+        // given names it is written with), or taken away, ends it, as a change of
+        // a value ends its confirmation.
+        if (person.marriedNameStatus) {
+            const marriedName = (first: string | undefined, surname: string): string => `${first ?? ''}\u001f${surname}`;
+            const was = marriedName(marriedFirstBefore || firstNameBefore, marriedBefore);
+            const now = marriedName(person.marriedFirstName?.trim() || person.firstName, marriedNow);
+            if (!marriedNow || now !== was) delete person.marriedNameStatus;
+        }
         // The narrative: an empty text means there is none.
         if ('story' in updates) {
             person.story = updates.story?.text.trim() ? updates.story : undefined;

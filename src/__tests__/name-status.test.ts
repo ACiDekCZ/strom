@@ -8,11 +8,14 @@
  * sends it back as it came; it never works one out. Invented data only.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
-import { migrateData } from '../data.js';
-import type { ImportRecord, Person, StromData } from '../types.js';
+import { DataManager, migrateData } from '../data.js';
+import { TreeManager } from '../tree-manager.js';
+import { AuditLogManager } from '../audit-log.js';
+import { UndoManager } from '../undo.js';
+import type { ImportRecord, Person, PersonId, StromData, TreeId } from '../types.js';
 import {
     cardStatus, CardStatusOptions, factReliability, factStatusOf, personOriginSummary, ReliabilityOptions,
 } from '../reliability.js';
@@ -319,5 +322,48 @@ describe('the name\'s id and confirmation in the file (_STROM_EID under NAME, 06
         expect(nameBlocks(saveGed(data), 'Hostivít')[0]).toContain('2 _STROM_CONFIRMED 2026-11-21');
         const back = byName(importGed(saveGed(data)), 'Hostivít');
         expect(factVerifyInfo(back, 'name')).toMatchObject({ confirmed: '2026-11-21', confirmedBy: 'app' });
+    });
+});
+
+describe('the married name\'s status ends with its value written here (066 K6.3)', () => {
+    beforeEach(() => {
+        vi.spyOn(TreeManager, 'saveTreeData').mockImplementation(() => {});
+        vi.spyOn(AuditLogManager, 'log').mockImplementation(() => {});
+        const dm = DataManager as unknown as {
+            data: StromData; currentTreeId: TreeId | null; viewMode: boolean; pendingBefore: StromData | null;
+        };
+        dm.data = importGed(RESEARCH_GED);
+        dm.currentTreeId = 'tree-name-status' as TreeId;
+        dm.viewMode = false;
+        dm.pendingBefore = null;
+        UndoManager.setActiveTree(null);
+        UndoManager.setActiveTree('tree-name-status' as TreeId);
+    });
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    const zdeslava = (): Person => byName(DataManager.getData(), 'Zdeslava');
+
+    it('Save without a change keeps it; the married surname written otherwise, or taken away, ends it', () => {
+        const id = zdeslava().id as PersonId;
+        expect(zdeslava().marriedNameStatus).toBe('possible');
+        DataManager.updatePerson(id, { marriedSurname: 'Šmudláková', firstName: 'Zdeslava' });
+        expect(zdeslava().marriedNameStatus).toBe('possible');
+        DataManager.updatePerson(id, { marriedSurname: 'Šmudlakova' });
+        expect(zdeslava()).toMatchObject({ marriedSurname: 'Šmudlakova' });
+        expect(zdeslava().marriedNameStatus).toBeUndefined();
+        // Not sent back either: the value is not the one the research's file gave.
+        expect(nameBlocks(sendGed(DataManager.getData()), 'Zdeslava')[1]).not.toContain('2 _STROM_STATUS possible');
+
+        DataManager.getData().persons[id].marriedSurname = 'Šmudláková';
+        DataManager.getData().persons[id].marriedNameStatus = 'possible';
+        DataManager.updatePerson(id, { marriedSurname: '' });
+        expect(zdeslava().marriedNameStatus).toBeUndefined();
+    });
+
+    it('the given name it is written with changed here ends it too; the birth name\'s status is not the married name\'s', () => {
+        const id = zdeslava().id as PersonId;
+        DataManager.updatePerson(id, { firstName: 'Zdislava' });
+        expect(DataManager.getPerson(id)).toMatchObject({ firstName: 'Zdislava', marriedSurname: 'Šmudláková' });
+        expect(DataManager.getPerson(id)?.marriedNameStatus).toBeUndefined();
     });
 });

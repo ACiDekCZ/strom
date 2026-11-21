@@ -34,7 +34,7 @@ import {
     verifyCostSplit, verifyFactKind, verifyRecordText,
 } from '../verify-ui-model.js';
 import { VerifyResearch, researchVerifies } from '../verify-offer.js';
-import { closeStatusTip, refreshStatusTip, registerStatusTipExtension } from './status-tip.js';
+import { closeStatusTip, openStatusTip, refreshStatusTip, registerStatusTipExtension } from './status-tip.js';
 import { reliabilityLabel } from './fact-status.js';
 import { researchBridgeActionLabel, researchLinkFlags } from './research-open-mark.js';
 import { activeResearchId, bridgeBase } from './history-ui.js';
@@ -244,7 +244,7 @@ export const verifyPersonMethods = uiModule({
         listening = true;
         registerStatusTipExtension((ctx, slots) => {
             if (ctx.kind !== 'card' || !ctx.personId) return;
-            this.verifyCardTipActions(ctx.personId as PersonId, slots.actions);
+            this.verifyCardTipActions(ctx.personId as PersonId, slots.actions, ctx.facts);
         });
         onBridgeStatus((rid, status) => this.noteVerifyStatus(rid, status));
     },
@@ -289,8 +289,54 @@ export const verifyPersonMethods = uiModule({
         return { research, facts, verify: researchVerifies(research) ? personVerifyAskCount(facts) : 0, pending: counts.pending };
     },
 
-    /** "Verify facts (N)" in a card mark's tip, else "N facts waiting to be verified". */
-    verifyCardTipActions(personId: PersonId, actions: HTMLElement): void {
+    /**
+     * "Verify facts (N)" in a card mark's tip, else "N facts waiting to be verified";
+     * and "The name in the person card ›" while the name holds the mark (`facts`) and
+     * its own pill offers more (066 K6.3 §5.2).
+     */
+    verifyCardTipActions(personId: PersonId, actions: HTMLElement, facts: readonly string[] = []): void {
+        this.verifyCardTipPersonActions(personId, actions);
+        if (facts.includes('name') && this.verifyNameMovable(personId, actions)) {
+            const link = document.createElement('button');
+            link.type = 'button';
+            link.className = 'st-link st-name-at-person';
+            link.textContent = strings.verify.nameAtPerson;
+            link.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeStatusTip();
+                this.verifyOpenNameAtPerson(personId);
+            });
+            actions.appendChild(link);
+        }
+    },
+
+    /**
+     * The name's own pill on the person card offers Verify or the scan: the
+     * same offer as its tip there (the name shown at its own pill, not only in
+     * the origin row's one for all facts).
+     */
+    verifyNameMovable(personId: PersonId, trigger: HTMLElement): boolean {
+        const person = DataManager.getData().persons[personId];
+        const view = person ? this.personReliabilityView(person) : null;
+        const r = view?.atFacts ? view.summary.facts.find(f => f.fact === 'name') : undefined;
+        if (!r) return false;
+        const v = this.verifyFactView({ kind: 'fact', personId, facts: ['name'], step: r.step, reliability: r, trigger });
+        return !!v && (v.offer.scan || v.offer.verify);
+    },
+
+    /** The person card open, the tip of the name's pill pinned beside it (at the surname, else at the given name). */
+    verifyOpenNameAtPerson(personId: PersonId): void {
+        this.clearDialogStack();
+        this.pushDialog('person-modal');
+        this.showEditPersonModal(personId);
+        const modal = document.getElementById('person-modal');
+        const pill = modal?.querySelector<HTMLElement>('#lastname-label button.fact-status[data-fact="name"]')
+            ?? modal?.querySelector<HTMLElement>('label[for="input-firstname"] button.fact-status[data-fact="name"]');
+        if (pill) openStatusTip(pill, { pinned: true });
+    },
+
+    /** The card tip's person-wide actions: Verify facts (N), or what waits. */
+    verifyCardTipPersonActions(personId: PersonId, actions: HTMLElement): void {
         const st = this.personVerifyState(personId);
         if (!st) return;
         if (st.verify > 0 && personResearchRef(DataManager.getData().persons[personId] ?? {})) {

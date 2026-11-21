@@ -886,6 +886,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         undo: 'Cofnij',
         undone: 'Potwierdzenie cofnięte',
         confirmedAt: (d: string) => `Potwierdzone według skanu ${d}`,
+        takenFrom: (prog: string, date: string) => `Przejęte z drzewa ${prog}, plik ${date}`,
         reasonHead: (l: string, d: string) => (d ? `Pozostaje ${l} · badanie sprawdziło ${d}` : `Pozostaje ${l}`),
         previewHead: (f: string) => `Zweryfikuj ${f}`,
         what: 'Co',
@@ -973,6 +974,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             NAME: 'Imię zostanie zweryfikowane razem z nią.',
         } as Record<string, string>,
         kindOther: 'Inna dana',
+        nameAtPerson: 'Imię w karcie osoby ›',
     },
 
     origin: {
