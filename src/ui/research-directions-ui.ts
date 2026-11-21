@@ -18,7 +18,7 @@ import { Person, PersonId } from '../types.js';
 import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
-import { LiveFold, LiveSession, el, liveSection, researchSession, pausedText, timeEl, workingNumberBadge, lightsGroup } from './research-ui.js';
+import { LiveFold, LiveSession, el, liveSection, researchSession, pausedText, workingHoldEl, timeEl, workingNumberBadge, lightsGroup } from './research-ui.js';
 import type { OverviewLinesState } from '../windows/overview-window.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import {
@@ -632,6 +632,8 @@ export const researchDirectionsMethods = uiModule({
             else {
                 const since = timeEl(w.since, 'sincefor');
                 if (since) parts.push(since);
+                const hold = workingHoldEl(w);
+                if (hold) parts.push(hold);
             }
             parts.forEach((part, i) => meta.append(...(i > 0 ? [' · ', part] : [part])));
             if (parts.length > 0) main.appendChild(meta);

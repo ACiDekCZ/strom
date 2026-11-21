@@ -13,7 +13,7 @@
  * the others forgotten. A request for a list no longer shown is aborted.
  */
 
-import { CENSUS_FEATURE, LiveQueueItem, QUEUE_TASK_KINDS, sanitizeQueue, withAppVersion, type QueueTaskKind } from './research-link.js';
+import { CENSUS_FEATURE, LiveQueueItem, QUEUE_TASK_KINDS, holdsSaid, sanitizeQueue, withAppVersion, type QueueTaskKind } from './research-link.js';
 import { BRIDGE_ANSWER_MS } from './bridge-ask.js';
 
 /** Tasks asked per page. */
@@ -192,7 +192,7 @@ export async function fetchQueuePage(base: string, filter: QueueFilter, from: nu
         const elsewhere = query ? sanitizeElsewhere(r.elsewhere) : undefined;
         return {
             ok: true,
-            items: sanitizeQueue(r.items, true, true, QUEUE_PAGE_MAX),
+            items: sanitizeQueue(r.items, true, true, QUEUE_PAGE_MAX, true, holdsSaid(features)),
             total,
             from: asCount(r.from) ?? from,
             next: next !== null && next > from ? next : null,
@@ -291,7 +291,8 @@ export function readQueuePage(v: unknown): QueuePageResult {
     const elsewhere = sanitizeElsewhere(r.elsewhere);
     return {
         ok: true,
-        items: sanitizeQueue(r.items, true, true, QUEUE_PAGE_MAX),
+        // The main window let through only what its research says (spec 127 holds included).
+        items: sanitizeQueue(r.items, true, true, QUEUE_PAGE_MAX, true, { task: true, archive: true }),
         total,
         from,
         next: next !== null && next > from ? next : null,

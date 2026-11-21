@@ -2293,6 +2293,52 @@ export interface LiveWorker {
     helps?: QueueHelpsBy;
     /** The branch of the task ("B-P0208"): outside the lines, or added to the line (with the feature `working.helps`). */
     branch?: string;
+    /** The session holds its task, kept alive by its signs (`task.holds`, spec 127). */
+    hold?: WorkHold;
+    /** The run waits for an archive another session uses (`archive.holds`, spec 127); `paused` says it too. */
+    waits?: { archive: string; since: string; until: string };
+}
+
+/** The bridge says who holds a task and till when (`working[].hold`, `queue[].heldBy`; spec 127). */
+export const TASK_HOLDS_FEATURE = 'task.holds';
+/** The bridge says which archive a run waits for and who uses it now (`working[].waits`, `queue[].archiveHeld`; spec 127). */
+export const ARCHIVE_HOLDS_FEATURE = 'archive.holds';
+/** Which of the two the research says (both false: an older research, nothing shown). */
+export interface HoldsSaid { task: boolean; archive: boolean }
+const NO_HOLDS: HoldsSaid = { task: false, archive: false };
+/** The holds a research's features let through. */
+export function holdsSaid(features: readonly string[] | null | undefined): HoldsSaid {
+    return { task: !!features?.includes(TASK_HOLDS_FEATURE), archive: !!features?.includes(ARCHIVE_HOLDS_FEATURE) };
+}
+
+/** Who started the holding session: a run, a conversation from the app, an agent working directly. */
+export type HoldBy = 'run' | 'chat' | 'agent';
+/** A session's hold of its task. */
+export interface WorkHold {
+    by: HoldBy;
+    since: string;
+    /** The last sign of life (a strom command, a run's beat). */
+    beat: string;
+    /** Free by then at the latest without another sign; absent: a live process on the research's computer holds it (free when it ends). */
+    until?: string;
+}
+/** A queued task another live session holds (`queue[].heldBy`). */
+export interface QueueHeldBy extends WorkHold {
+    session: string;
+    /** The agent's name ("Claude Code"; "Agent" in the research's language when unknown). */
+    who: string;
+}
+/** A queued task's archive with limited access, used by another session now (`queue[].archiveHeld`). */
+export interface QueueArchiveHeld {
+    site: string;
+    until: string;
+    /** True: a session of this research holds it; false: another research sharing the folder, or a bulk download. */
+    own: boolean;
+    /** `waiting`: nobody holds it, but other work has waited for it longer and goes first. */
+    by: HoldBy | 'fetch' | 'waiting';
+    session?: string;
+    since?: string;
+    beat?: string;
 }
 
 /** The bridge names the place record of a row of `working` (`working[].place`, research 1.28). */
@@ -3213,6 +3259,10 @@ export interface LiveQueueItem {
     book?: string;
     /** Put forward by "Downloaded book first" (`queue.sameBook`): the book of the last session (spec 105). */
     sameBook?: string;
+    /** Another live session holds the task (`task.holds`, spec 127); never with `archiveHeld`. */
+    heldBy?: QueueHeldBy;
+    /** The task's archive with limited access is used by another session now (`archive.holds`, spec 127). */
+    archiveHeld?: QueueArchiveHeld;
 }
 
 /** The kinds of a queued task the research names. */
@@ -3656,7 +3706,7 @@ const asCount = (v: unknown): number | null =>
     typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null;
 
 /** The `working` list (status field or `working` event). Untrusted input. */
-export function sanitizeWorking(value: unknown, helpsSaid = false): LiveWorker[] {
+export function sanitizeWorking(value: unknown, helpsSaid = false, holds: HoldsSaid = NO_HOLDS): LiveWorker[] {
     if (!Array.isArray(value)) return [];
     const out: LiveWorker[] = [];
     for (const item of value.slice(0, MAX_ITEMS)) {
@@ -3676,13 +3726,72 @@ export function sanitizeWorking(value: unknown, helpsSaid = false): LiveWorker[]
         // How the task helps its line, and its branch: only from a research that says so; `helps` only with the line.
         const helps = helpsSaid && research && typeof r.helps === 'string' && HELPS_BY.includes(r.helps) ? r.helps as QueueHelpsBy : null;
         const branch = helpsSaid ? researchBranchRef(r.branch) : null;
+        // The hold and the wait for an archive: only from a research that says them (spec 127).
+        const hold = holds.task ? sanitizeHold(r.hold) : null;
+        const waits = holds.archive ? sanitizeWaits(r.waits) : null;
         out.push({
             who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}), ...(family ? { family } : {}), ...(paused ? { paused } : {}),
             ...(research ? { research } : {}), ...(session ? { session } : {}), ...(place ? { place } : {}),
-            ...(helps ? { helps } : {}), ...(branch ? { branch } : {}),
+            ...(helps ? { helps } : {}), ...(branch ? { branch } : {}), ...(hold ? { hold } : {}), ...(waits ? { waits } : {}),
         });
     }
     return out;
+}
+
+/** An ISO time, or '' (missing or not a time). */
+function isoTime(v: unknown): string {
+    const t = cleanText(v, 40);
+    return t && Number.isFinite(Date.parse(t)) ? t : '';
+}
+
+const HOLD_BYS: readonly string[] = ['run', 'chat', 'agent'];
+
+/** `working[].hold` (and the shared part of `queue[].heldBy`), or null when a field is missing or wrong. Untrusted input. */
+export function sanitizeHold(value: unknown): WorkHold | null {
+    const r = asRecord(value);
+    if (!r || typeof r.by !== 'string' || !HOLD_BYS.includes(r.by)) return null;
+    const since = isoTime(r.since);
+    const beat = isoTime(r.beat);
+    if (!since || !beat) return null;
+    const until = isoTime(r.until);
+    return { by: r.by as HoldBy, since, beat, ...(until ? { until } : {}) };
+}
+
+/** `working[].waits`, or null. Untrusted input. */
+export function sanitizeWaits(value: unknown): { archive: string; since: string; until: string } | null {
+    const r = asRecord(value);
+    const archive = r ? cleanText(r.archive, 120) : '';
+    const since = r ? isoTime(r.since) : '';
+    const until = r ? isoTime(r.until) : '';
+    return archive && since && until ? { archive, since, until } : null;
+}
+
+/** `queue[].heldBy`, or null. Untrusted input. */
+export function sanitizeHeldBy(value: unknown): QueueHeldBy | null {
+    const hold = sanitizeHold(value);
+    const r = asRecord(value);
+    const session = researchSessionRef(r?.session);
+    const who = cleanText(r?.who, 80);
+    return hold && session && who ? { session, who, ...hold } : null;
+}
+
+const ARCHIVE_HELD_BYS: readonly string[] = ['run', 'chat', 'agent', 'fetch', 'waiting'];
+
+/** `queue[].archiveHeld`, or null. Untrusted input. */
+export function sanitizeArchiveHeld(value: unknown): QueueArchiveHeld | null {
+    const r = asRecord(value);
+    if (!r || typeof r.by !== 'string' || !ARCHIVE_HELD_BYS.includes(r.by) || typeof r.own !== 'boolean') return null;
+    const site = cleanText(r.site, 120);
+    const until = isoTime(r.until);
+    if (!site || !until) return null;
+    // The session: only one of this research's own.
+    const session = r.own ? researchSessionRef(r.session) : null;
+    const since = r.by === 'waiting' ? '' : isoTime(r.since);
+    const beat = r.by === 'waiting' ? '' : isoTime(r.beat);
+    return {
+        site, until, own: r.own, by: r.by as QueueArchiveHeld['by'],
+        ...(session ? { session } : {}), ...(since ? { since } : {}), ...(beat ? { beat } : {}),
+    };
 }
 
 const TASK_KINDS: readonly WaitingTaskKind[] = ['takeover', 'check', 'images', 'letter', 'family', 'web', 'other'];
@@ -3932,7 +4041,8 @@ function waitingHypothesisFields(r: Record<string, unknown>): Partial<LiveWaitin
 const MAX_QUEUE = 20;
 
 /** The `queue` list of the status. Untrusted input: bad items are dropped. */
-export function sanitizeQueue(value: unknown, offLine = false, branches = false, max = MAX_QUEUE, ownPlace = branches): LiveQueueItem[] {
+export function sanitizeQueue(value: unknown, offLine = false, branches = false, max = MAX_QUEUE, ownPlace = branches,
+    holds: HoldsSaid = NO_HOLDS): LiveQueueItem[] {
     if (!Array.isArray(value)) return [];
     const out: LiveQueueItem[] = [];
     for (const item of value) {
@@ -3960,11 +4070,15 @@ export function sanitizeQueue(value: unknown, offLine = false, branches = false,
         // The book of the task (spec 105): only a valid id.
         const book = researchBookRef(r.book);
         const sameBook = researchBookRef(r.sameBook);
+        // Who holds it, or the archive it waits for (spec 127): only from a research that says them, never both.
+        const heldBy = holds.task ? sanitizeHeldBy(r.heldBy) : null;
+        const archiveHeld = !heldBy && holds.archive ? sanitizeArchiveHeld(r.archiveHeld) : null;
         if (state) out.push({
             id, text, state, ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(off ? { offLine: off } : {}), ...(helps ? { helps } : {}),
             ...(branch ? { branch } : {}), ...(own ? { own } : {}), ...(why ? { why } : {}), ...(pos ? { pos } : {}),
             ...(kind ? { kind } : {}), ...(taskKind ? { taskKind } : {}), ...(book ? { book } : {}), ...(sameBook ? { sameBook } : {}),
+            ...(heldBy ? { heldBy } : {}), ...(archiveHeld ? { archiveHeld } : {}),
         });
     }
     return out;
@@ -4332,7 +4446,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         headAt: Number.isFinite(Date.parse(cleanText(r.headAt, 40))) ? cleanText(r.headAt, 40) : '',
         persons: asCount(r.persons),
         families: asCount(r.families),
-        working: sanitizeWorking(r.working, !!features?.includes(WORKING_HELPS_FEATURE)),
+        working: sanitizeWorking(r.working, !!features?.includes(WORKING_HELPS_FEATURE), holdsSaid(features)),
         waiting: [
             ...sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE),
                 !!features?.includes(TASKS_AUDIT_FEATURE)),
@@ -4341,7 +4455,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ],
         links: sanitizeResearchLinks(r.links),
         queue: sanitizeQueue(r.queue, !!features?.includes(TASKS_OFF_LINE_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE), undefined,
-            !!features?.includes(OFF_LINE_BRANCHES_FEATURE) || !!features?.includes(QUEUE_NEXT_FEATURE)),
+            !!features?.includes(OFF_LINE_BRANCHES_FEATURE) || !!features?.includes(QUEUE_NEXT_FEATURE), holdsSaid(features)),
         queueMore: asCount(r.queueMore) ?? 0,
         update: sanitizeUpdate(r.update),
         spend: sanitizeSpend(r.spend, !!features?.includes(SPEND_READERS_FEATURE)),

@@ -21,7 +21,7 @@ import {
     QUEUE_OWN_FEATURE, sanitizeQueue,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { LiveSession, el, liveQueueItem, liveSession, overviewViewing, queueKindTag, queuePaged, queueNoteText, researchSession } from './research-ui.js';
+import { LiveSession, el, liveQueueItem, liveSession, overviewViewing, queueHoldNote, queueKindTag, queuePaged, queueNoteText, researchSession } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { bookYears } from '../book-blocks.js';
 import { withBusyRetry } from '../research-directions.js';
@@ -856,6 +856,9 @@ export const researchOffLineMethods = uiModule({
             // Only a hand-set place: the rest of the reason repeats the branch's row.
             if (q.own) text.appendChild(el('span', 'research-offline__task-why', q.own === 'next' ? L.qWhyManualNext : L.qWhyManualLast));
             if (doing) text.appendChild(el('span', 'research-offline__task-why', L.taskDoing));
+            // Another session holds it, or its archive is used now (spec 127).
+            const held = doing ? null : queueHoldNote(q, s, 'research-offline__task-why research-offline__task-held');
+            if (held) text.appendChild(held);
             const problem = this.taskOrderProblem(q.id);
             if (problem) text.appendChild(taskProblemBox(problem, this.taskOrderRetry(q.id)));
             if (this.taskOrderBusy(q.id)) li.setAttribute('aria-busy', 'true');

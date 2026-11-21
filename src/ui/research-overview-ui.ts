@@ -37,6 +37,7 @@ import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-fo
 import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrived, imagesShortEl, itemKey, noteImagesArrived } from './waiting-images-ui.js';
 import { clearOverviewImages, foldOverviewImages, overviewImagesResult, auditFixedRowDrawn, waitingAuditMarkEl, waitingAuditShown } from './waiting-task-ui.js';
 import { formatLiveClock } from '../live-time.js';
+import { waitsText } from '../research-holds.js';
 import { MQ_PHONE_BAR, isPhoneBar } from '../breakpoints.js';
 import { openHeadMenu } from './table-view/table-headmenu.js';
 import {
@@ -49,7 +50,7 @@ import { uiModule } from './module.js';
 import {
     LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
     liveSession, nowHelpTopic, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip,
-    liveState, pausedText, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
+    liveState, pausedText, appendWorkingHold, workingHoldEl, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
     markWaitingFocus, waitingWhyEl, overviewViewing, OverviewViewing, onComputer, lightsGroup, markOverviewLit,
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
@@ -916,7 +917,8 @@ export const researchOverviewMethods = uiModule({
         const paused = stateCls === 'is-paused' ? s.working.find(w => w.paused) : undefined;
         const resumes = paused ? Date.parse(paused.paused!.until) : NaN;
         if (paused && Number.isFinite(resumes)) {
-            cell(L.state, state, L.pausedUntil(formatLiveClock(resumes, Date.now(), getCurrentLanguage())), stateCls,
+            // A run waiting for an archive gives up then rather than resumes (spec 127): its own sentence.
+            cell(L.state, state, paused.waits ? waitsText(paused) : L.pausedUntil(formatLiveClock(resumes, Date.now(), getCurrentLanguage())), stateCls,
                 [pausedText(paused), lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
         } else if (stateCls === 'is-lost') {
             cell(L.state, state, strings.research.reconnectingShort, stateCls, [lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
@@ -2578,6 +2580,7 @@ export const researchOverviewMethods = uiModule({
             if (w.paused) text.appendChild(el('span', 'live-paused', pausedText(w)));
             const since = timeEl(w.since, 'sincefor');
             if (since) text.appendChild(since);
+            appendWorkingHold(text, w);
             li.appendChild(text);
             // Its actions in a row of links under the text (the text keeps the whole width).
             const person = personByRefn(w.person);
@@ -2701,6 +2704,8 @@ export const researchOverviewMethods = uiModule({
             else {
                 const since = timeEl(w.since, 'sincefor');
                 if (since) parts.push(since);
+                const hold = workingHoldEl(w);
+                if (hold) parts.push(hold);
             }
             parts.filter(Boolean).forEach((part, j) => meta.append(...(j > 0 ? [' · ', part] : [part])));
             text.appendChild(meta);

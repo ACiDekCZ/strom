@@ -48,7 +48,7 @@ import { livePanelDrawnSections, livePanelNothingAtWork, livePanelWorkingOnly } 
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
     decideResearchOpen, stabilizeIds, keepEventShares, keepTitles, keepMarriedSurname, keepSurnameVariants, keepLineageOverrides, researchHasTitles, withResearchTitles, TITLES_FEATURE, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
-    sanitizeLiveEnd, sanitizeWorking, WORKING_HELPS_FEATURE, researchFamilyPartners, workingWithFamilyPersons, parseEventData, extractChangedRefs, personsByRefs,
+    sanitizeLiveEnd, sanitizeWorking, WORKING_HELPS_FEATURE, holdsSaid, researchFamilyPartners, workingWithFamilyPersons, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
@@ -67,6 +67,7 @@ import {
     taskDirectionName, workingLineCount, workingLineGroups,
 } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
+import { queueHoldText, waitsText, workingHoldText } from '../research-holds.js';
 import {
     branchName, focusQueueMoved, personByRefn, queueBranchFilter, queueNextFor, queueNextOffered, queueRowFlash, queueWhyText, setQueueBranchFilter, taskMenuOrders, taskOrderOffered,
     taskProblemBox, waitBranchText, workingWhyText,
@@ -654,6 +655,22 @@ function markQueueNextRow(li: HTMLElement, text: HTMLElement, q: LiveQueueItem, 
     }
 }
 
+/**
+ * The note of a queued task another session holds, or whose archive is used
+ * now (spec 127; null: none). A task in the status's window takes the
+ * status's word (fresh); a page's item beyond it keeps its own. `cls`: the
+ * note's class where the row is drawn.
+ */
+export function queueHoldNote(q: LiveQueueItem, s: LiveSession, cls = 'live-queue-note live-queue-held'): HTMLElement | null {
+    const fresh = s.queue.find(x => x.id === q.id) ?? q;
+    // The row names the task's line itself (two or more lines): the sentence leaves it out.
+    const text = queueHoldText(fresh, '');
+    if (!text) return null;
+    const note = el('span', cls, text);
+    note.dataset.held = fresh.heldBy ? 'task' : 'archive';
+    return note;
+}
+
 /** A queued task has its ⋯: the research's actions, a place by hand, or "Do next" for it. */
 function queueRowMenu(s: LiveSession, q: LiveQueueItem, canTask: boolean, canOrder: boolean): boolean {
     return canTask || canOrder || (queueNextOffered(s) && queueNextFor(s, q));
@@ -665,6 +682,9 @@ function queueRowMenu(s: LiveSession, q: LiveQueueItem, canTask: boolean, canOrd
  * in its title), else what an older research says of it.
  */
 function appendQueueNote(text: HTMLElement, q: LiveQueueItem, s: LiveSession): void {
+    // Who holds the task, or who uses its archive (spec 127): before anything else, whatever its place.
+    const held = queueHoldNote(q, s);
+    if (held) text.appendChild(held);
     // `queue.next`: a task set to come next carries its tag instead of the sentence.
     if (queueNextTagged(q, s)) return;
     const why = queueWhyText(q, s);
@@ -1718,10 +1738,26 @@ export function liveState(s: LiveSession): { label: string; cls: 'is-working' | 
 /** A paused run: "Paused · <why> · resumes at 21:30" (what the research says of it). */
 export function pausedText(w: LiveWorker): string {
     if (!w.paused) return '';
-    const ts = Date.parse(w.paused.until);
     const L = strings.live;
+    // Waiting for an archive (spec 127): which one, and when the run gives up (not "resumes").
+    if (w.waits) return [L.statePaused, waitsText(w)].join(' · ');
+    const ts = Date.parse(w.paused.until);
     return [L.statePaused, w.paused.reason, Number.isFinite(ts) ? L.pausedUntil(formatLiveClock(ts, Date.now(), getCurrentLanguage())) : '']
         .filter(Boolean).join(' · ');
+}
+
+/** A row at work: its last sign and when its hold ends (spec 127; nothing without a hold or beyond its since). */
+export function workingHoldEl(w: LiveWorker): HTMLElement | null {
+    const text = w.paused ? '' : workingHoldText(w.hold);
+    return text ? el('span', 'live-hold', text) : null;
+}
+
+/** `workingHoldEl` as a line of its own under a row's since (a block of its own there). */
+export function appendWorkingHold(host: HTMLElement, w: LiveWorker): void {
+    const hold = workingHoldEl(w);
+    if (!hold) return;
+    hold.classList.add('live-hold--line');
+    host.appendChild(hold);
 }
 
 /** "Preparing a newer version…" with a small spinner (the tree shown is an older one the bridge gave at once). */
@@ -4136,7 +4172,7 @@ export const researchUiMethods = uiModule({
         });
         es.addEventListener('working', (e) => {
             s.workingEvents = (s.workingEvents ?? 0) + 1;
-            s.working = withFamilyPersons(sanitizeWorking(payload(e), !!s.features?.includes(WORKING_HELPS_FEATURE)), s.bridge);
+            s.working = withFamilyPersons(sanitizeWorking(payload(e), !!s.features?.includes(WORKING_HELPS_FEATURE), holdsSaid(s.features)), s.bridge);
             this.renderLivePanel();
             // The event names only who works: the directions (their spinner, tasks and what waits) come with a status.
             this.liveStatusSoon(s);
@@ -5042,6 +5078,7 @@ export const researchUiMethods = uiModule({
             if (w.paused) li.appendChild(el('span', 'live-paused', pausedText(w)));
             const since = timeEl(w.since, 'sincefor');
             if (since) li.appendChild(since);
+            appendWorkingHold(li, w);
             working.appendChild(li);
         });
     },

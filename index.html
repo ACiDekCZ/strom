@@ -20400,6 +20400,7 @@
         .research-overview__older { display: block; margin: 8px 0 4px; font-size: 12px; color: var(--text-faint); }
         p.research-overview__group-more { margin: 2px 0 8px; color: var(--text-faint); font-size: 12px; }
         .live-panel-list .live-time { display: block; color: var(--text-faint); font-size: 11px; }
+        .live-panel-list .live-hold--line { display: block; color: var(--text-faint); font-size: 11px; }
         /* "Waiting on" in a compact row: two lines at most (the whole text is in the overview's detail). */
         .live-panel-list .live-waiting-on {
             display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
@@ -24204,6 +24205,8 @@
         @media (hover: hover) { .research-overview__now-actions > .link-button:hover { text-decoration-thickness: 2px; } }
         @media (pointer: coarse) { .research-overview__now-actions > .link-button { min-height: 44px; } }
         .research-overview__now .live-time { display: block; color: var(--text-faint); font-size: 12px; }
+        /* A hold's last sign and end under the since (spec 127), as quiet as it. */
+        .research-overview__now .live-hold--line { display: block; color: var(--text-faint); font-size: 12px; }
         /* Working lines (two or more at work, spec 011): a row per line, one can be selected. */
         /* The heading keeps its whole title; "All directions" goes to a row under it when both do not fit. */
         .live-section__headrow { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px; }
