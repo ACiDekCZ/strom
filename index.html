@@ -20854,6 +20854,9 @@
         @media (max-width: 640px) {
             #batch-modal .batch-dialog { max-width: calc(100vw - 16px); height: calc(100vh - 16px); }
             .batch-header { flex-wrap: wrap; }
+            /* The steps on a row of their own under the title and ×: beside them the title had no room
+               and ran under them (de "Materialien zur Forschung hinzufügen" at 390). */
+            .batch-header > .batch-steps { order: 1; flex-basis: 100%; margin-top: 0; }
             .batch-fields { grid-template-columns: 1fr; }
             .batch-row { grid-template-columns: minmax(0, 1fr) 70px; }
             .batch-row .batch-type, .batch-row-head span:nth-child(2), .batch-row-head span:nth-child(4) { display: none; }
@@ -25780,6 +25783,16 @@
             .toast--closable:not(.toast--rich) { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; align-items: start; }
             .toast--closable:not(.toast--rich) > .toast-actions { grid-column: 1; grid-row: 2; justify-self: start; margin: 8px 0 0; }
             .toast--closable:not(.toast--rich) > .toast-close { grid-column: 2; grid-row: 1; }
+            /* Its actions keep inside the toast's padding: the row takes the toast's whole width (under the ×
+               too) and wraps action by action where it is too short (de "Mit dem Agenten sortieren… KI" +
+               "Anzeigen" at 390); the 12px between two actions is a gap, so a wrapped one starts at the edge. */
+            .toast--closable:not(.toast--rich) > .toast-actions {
+                grid-column: 1 / -1; max-width: 100%; flex-wrap: wrap; column-gap: 12px; row-gap: 6px;
+            }
+            .toast--closable:not(.toast--rich) > .toast-actions > .toast-action:not([hidden]) ~ .toast-action:not([hidden]) { margin-left: 0; }
+            .toast--closable:not(.toast--rich) > .toast-actions > .toast-action { white-space: normal; text-align: start; }
+            .toast--closable:not(.toast--rich) > .toast-actions > .focus-toast-sep,
+            .toast--closable:not(.toast--rich) > .toast-actions > .undo-toast-sep { margin: 0 -8px 0 0; }
         }
 
         /* "Show in tree": the others dim, those found get a dashed frame; lines stay. */

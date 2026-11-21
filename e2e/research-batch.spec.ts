@@ -701,4 +701,64 @@ test.describe('Sorting a closed batch', () => {
         await expect(meta).toContainText('not sorted');
         await expect(meta).not.toContainText('waiting to be processed');
     });
+
+    // ==================== German on a phone: nothing runs over an edge (finding 1121) ====================
+
+    test.describe('in German on a phone', () => {
+        test.use({ locale: 'de-DE', viewport: { width: 390, height: 844 } });
+
+        /** How far boxes run past the right edge of a box's content (its padding inside); 0 when inside. */
+        async function overRight(page: Page, outer: string, inner: string): Promise<number> {
+            return page.evaluate(({ outer, inner }) => {
+                const box = document.querySelector(outer) as HTMLElement;
+                const r = box.getBoundingClientRect();
+                const right = r.right - parseFloat(getComputedStyle(box).paddingRight);
+                return Math.max(0, ...[...box.querySelectorAll(inner)].map(e => e.getBoundingClientRect().right - right));
+            }, { outer, inner });
+        }
+
+        test('the toast after one file: its actions stay inside the toast\'s padding', async ({ page }) => {
+            await setup(page, { features: [...SORT_FEATURES, 'intake.auto'], intake: fakeIntake(false) });
+            const dialog = await sendOne(page);
+            await dialog.getByRole('button', { name: '1 Datei senden' }).click();
+            const toast = page.locator('.toast', { hasText: 'An die Forschung gesendet' });
+            await expect(toast.locator('.toast-action')).toHaveCount(2);
+            await expect(toast.locator('.toast-action', { hasText: 'Mit dem Agenten sortieren…' })).toBeVisible();
+            await toast.evaluate(t => t.classList.add('e2e-toast'));
+            expect(await overRight(page, '.e2e-toast', '.toast-action')).toBeLessThanOrEqual(0.5);
+            const toastBox = (await toast.boundingBox())!;
+            for (const act of await toast.locator('.toast-action').all()) {
+                const b = (await act.boundingBox())!;
+                expect(b.x).toBeGreaterThanOrEqual(toastBox.x);
+                expect(b.x + b.width).toBeLessThanOrEqual(toastBox.x + toastBox.width);
+            }
+        });
+
+        test('the batch\'s header: the title and the steps never overlap', async ({ page }) => {
+            await setup(page, { features: [...SORT_FEATURES, 'intake.auto'], intake: fakeIntake(false) });
+            await page.evaluate(() => (window.Strom.UI as any).showBatchDialog());
+            await addFiles(page, ['Krabice/a.jpg', 'Krabice/b.jpg']);
+            const dialog = page.locator('#batch-modal');
+            await dialog.locator('[data-act="next"]').click();
+            await expect(dialog.getByRole('button', { name: '2 Dateien senden' })).toBeVisible();
+            // The text's own boxes (a word wider than its block runs out of it), against each step.
+            const hits = await page.evaluate(() => {
+                const head = document.querySelector('#batch-modal .batch-header .audit-log-heading')!;
+                const range = document.createRange();
+                range.selectNodeContents(head);
+                const text = [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0);
+                const steps = [...document.querySelectorAll('#batch-modal .batch-step')].map(e => e.getBoundingClientRect());
+                const close = document.querySelector('#batch-modal .batch-header .close-btn')!.getBoundingClientRect();
+                const cross = (a: DOMRect, b: DOMRect) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+                return { steps: steps.length, hits: text.filter(t => [...steps, close].some(s => cross(t, s))).length };
+            });
+            expect(hits.steps).toBe(3);
+            expect(hits.hits).toBe(0);
+            const header = (await dialog.locator('.batch-header').boundingBox())!;
+            for (const step of await dialog.locator('.batch-step').all()) {
+                const b = (await step.boundingBox())!;
+                expect(b.x + b.width).toBeLessThanOrEqual(header.x + header.width);
+            }
+        });
+    });
 });

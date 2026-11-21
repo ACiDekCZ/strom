@@ -160,7 +160,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         bigBatch: 'Cały folder? Dodaj materiały…',
         rejectedTypes: (n: number) => `Badanie nie przyjmie ${nPl(n,'pliku','plików','plików')} (programy, klucze, archiwa inne niż ZIP).`,
         sentToast: (n: number, p: string) => `Wysłano do badania: ${nPl(n,'plik','pliki','plików')} dla osoby ${p}. Badanie utworzy z nich zadanie.`,
-        sentWaitToast: (n: number, p: string) => `Wysłano do badania: ${nPl(n,'plik','pliki','plików')} dla ${p}. ${n === 1 ? 'Czeka w Materiałach nieposortowany.' : 'Czekają w Materiałach nieposortowane.'}`,
+        sentWaitToast: (n: number, p: string, source?: boolean) => `Wysłano do badania: ${nPl(n,'plik','pliki','plików')} ${source ? `dla źródła „${p}”` : `dla osoby ${p}`}. ${n === 1 ? 'Czeka w Materiałach nieposortowany.' : 'Czekają w Materiałach nieposortowane.'}`,
         savedArchiveToast: (n: number, p: string) => `Zapisano w Archiwum Strom: ${nPl(n,'plik','pliki','plików')} dla osoby ${p}.`,
         queuedToast: (n: number) => `${nPl(n,'plik czeka','pliki czekają','plików czeka')} w tej przeglądarce; ${plPl(n,'zostanie wysłany','zostaną wysłane','zostaną wysłane')}, gdy badanie będzie działać.`,
         noIdToast: (n: number) => `${nPl(n,'plik zostanie wysłany','pliki zostaną wysłane','plików zostanie wysłanych')}, gdy badanie pozna osobę.`,

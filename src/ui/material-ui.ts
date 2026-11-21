@@ -338,7 +338,7 @@ export const materialMethods = uiModule({
                     ? { action: { label: strings.materials.agentSort.sort, ai: true, run: () => void this.openSortForFiles(ids, 'personId' in target ? DataManager.getPerson(target.personId)?.refn : undefined) },
                         ...('action' in show ? { more: show.action } : {}) }
                     : show;
-                this.showToast(m.sentWaitToast(sent, name) + knownPart, 8000, { closable: true, ...sort });
+                this.showToast(m.sentWaitToast(sent, name, !('personId' in target)) + knownPart, 8000, { closable: true, ...sort });
                 return;
             }
             this.showToast((archive ? m.savedArchiveToast(sent, name) : m.sentToast(sent, name)) + knownPart, 6000, { closable: true, ...show });

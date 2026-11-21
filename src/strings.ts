@@ -2775,7 +2775,8 @@ const stringsEN = {
         bigBatch: 'A whole folder? Add materials…',
         rejectedTypes: (n: number) => `${nEn(n,'file','files')} the research won't take (programs, keys, archives other than ZIP).`,
         sentToast: (n: number, p: string) => `Sent to the research: ${nEn(n,'file','files')} for ${p}. The research will create a task.`,
-        sentWaitToast: (n: number, p: string) => `Sent to the research: ${nEn(n,'file','files')} for ${p}. ${n === 1 ? 'It waits' : 'They wait'} in Materials, not sorted yet.`,
+        // source: p is a source's title, not a person's name (Polish needs a phrase without declining it)
+        sentWaitToast: (n: number, p: string, _source?: boolean) => `Sent to the research: ${nEn(n,'file','files')} for ${p}. ${n === 1 ? 'It waits' : 'They wait'} in Materials, not sorted yet.`,
         savedArchiveToast: (n: number, p: string) => `Saved to the Strom archive: ${nEn(n,'file','files')} for ${p}.`,
         queuedToast: (n: number) => `${nEn(n,'file waits','files wait')} in this browser and will be sent once the research runs.`,
         noIdToast: (n: number) => `${nEn(n,'file','files')} will be sent once the research knows the person.`,
