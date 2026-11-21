@@ -965,7 +965,13 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         queuedToast: (n: number) => `${nPl(n, 'dana z oryginałem czeka', 'dane z oryginałem czekają', 'danych z oryginałem czeka')} na weryfikację, po kolei.`,
         details: 'Szczegóły',
         marriage: 'ślub',
-        kinds: { BIRT: 'Urodzenie', CHR: 'Chrzest', BAPM: 'Chrzest', MARR: 'Ślub', DEAT: 'Zgon', BURI: 'Pogrzeb' } as Record<string, string>,
+        kinds: { NAME: 'Imię', BIRT: 'Urodzenie', CHR: 'Chrzest', BAPM: 'Chrzest', MARR: 'Ślub', DEAT: 'Zgon', BURI: 'Pogrzeb' } as Record<string, string>,
+        together: {
+            BIRT: 'Zweryfikowane razem z urodzeniem.',
+            BAPM: 'Zweryfikowane razem z chrztem.',
+            CHR: 'Zweryfikowane razem z chrztem.',
+            NAME: 'Imię zostanie zweryfikowane razem z nią.',
+        } as Record<string, string>,
         kindOther: 'Inna dana',
     },
 

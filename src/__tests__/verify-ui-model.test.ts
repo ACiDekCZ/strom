@@ -10,7 +10,7 @@ import type { FactVerifyInfo } from '../verify.js';
 import type { VerifyResearch } from '../verify-offer.js';
 import {
     FactOfferInput, bulkScopeOptions, factOffer, personVerifyAskCount, personVerifyCounts, queuedToastDue, verifyCostSplit, verifyFactKind,
-    verifyRecordText,
+    verifyRecordText, verifyTogetherKind,
 } from '../verify-ui-model.js';
 
 const FULL: VerifyResearch = { features: ['verify', 'verify.bulk', 'facts.confirm'] };
@@ -49,7 +49,7 @@ const input = (o: Partial<FactOfferInput> = {}): FactOfferInput => ({
 });
 
 describe('verifyFactKind: the facts the research verifies', () => {
-    it('birth, death, a baptism, a burial and a couple\'s marriage; nothing else', () => {
+    it('the name, birth, death, a baptism, a burial and a couple\'s marriage; nothing else', () => {
         const p = person();
         expect(verifyFactKind(p, 'birth')).toBe('BIRT');
         expect(verifyFactKind(p, 'death')).toBe('DEAT');
@@ -57,7 +57,7 @@ describe('verifyFactKind: the facts the research verifies', () => {
         expect(verifyFactKind(p, 'event:e2')).toBe('BURI');
         expect(verifyFactKind(p, 'event:e3')).toBeNull();
         expect(verifyFactKind(p, 'event:missing')).toBeNull();
-        expect(verifyFactKind(p, 'name')).toBeNull();
+        expect(verifyFactKind(p, 'name')).toBe('NAME');
         expect(verifyFactKind(p, 'sex')).toBeNull();
         expect(verifyFactKind(couple(), 'marriage')).toBe('MARR');
         expect(verifyFactKind(couple(), 'divorce')).toBeNull();
@@ -158,8 +158,10 @@ describe('factOffer: table 10z as the tree knows the fact', () => {
         expect(factOffer(person(), 'birth', input({ step: 'human', research: OFFLINE, info: { confirmed: '2026-10-01', confirmedBy: 'research' } })).undo).toBe(false);
         expect(factOffer(p, 'birth', input({ research: OFFLINE, editable: false })).scan).toBe(false);
         expect(factOffer(p, 'birth', input({ step: 'human', research: OFFLINE, editable: false, info: { confirmed: '2026-10-01', confirmedBy: 'research' } })).undo).toBe(false);
-        // The name and the sex of a research tree: never.
-        expect(factOffer(p, 'name', input({ research: OFFLINE })).scan).toBe(false);
+        // The sex of a research tree: never. The name by its id (066 K6.3): the app's own as well; without its id never.
+        expect(factOffer(p, 'sex', input({ research: OFFLINE })).scan).toBe(false);
+        expect(factOffer(person({ name: { eid: 'P0001.N' } }), 'name', input({ research: OFFLINE }))).toMatchObject({ scan: true, scanViaBridge: false });
+        expect(factOffer(person(), 'name', input({ research: OFFLINE })).scan).toBe(false);
         // A bridge that answers without facts.confirm (an older research) still offers none.
         expect(factOffer(p, 'birth', input({ research: OLD })).scan).toBe(false);
     });
@@ -289,5 +291,94 @@ describe('the preview and the bulk dialog', () => {
         expect(queuedToastDue(fix, 0, null)).toBe(false);
         expect(queuedToastDue(undefined, 12, null)).toBe(false);
         expect(queuedToastDue({ at: '' }, 12, null)).toBe(false);
+    });
+});
+
+describe('the name with a research that takes names (066 K6.3)', () => {
+    /** A research with `name-status`: it verifies and confirms a name by its id. */
+    const NAMES: VerifyResearch = { features: [...FULL.features, 'name-status'] };
+    const NAMED: Record<string, ResearchFactVerify> = { name: { eid: 'P0012.N' }, birth: { eid: 'E0001' }, death: { eid: 'E0002' } };
+
+    it('a research without `name-status`: nothing at the name, as before (its id names nothing)', () => {
+        const o = factOffer(person(NAMED), 'name', input({ step: 'import' }));
+        expect(o).toMatchObject({ verify: false, scan: false, eid: null });
+        expect(o.cost).toBeUndefined();
+    });
+
+    it('with `name-status` and the id: "Verify" from the family tree, probable, possible, a lead, no source — not proven, not confirmed', () => {
+        const p = person(NAMED);
+        for (const step of ['import', 'probable', 'possible', 'lead'] as const) {
+            expect(factOffer(p, 'name', input({ step, research: NAMES })), step).toMatchObject({ verify: true, eid: 'P0012.N', scan: true, scanViaBridge: true });
+        }
+        expect(factOffer(p, 'name', input({ step: 'none', research: NAMES, cited: false })))
+            .toMatchObject({ verify: true, cost: 'high', scan: false });
+        expect(factOffer(p, 'name', input({ step: 'proven', research: NAMES })).verify).toBe(false);
+        expect(factOffer(p, 'name', input({ step: 'human', research: NAMES, info: { confirmed: '2026-11-21', confirmedBy: 'research' } })))
+            .toMatchObject({ verify: false, scan: false, undo: true, undoViaBridge: true, eid: 'P0012.N' });
+        // The sex stays as it was.
+        expect(factOffer(person({ ...NAMED, sex: { eid: 'E0007' } }), 'sex', input({ step: 'import', research: NAMES })))
+            .toMatchObject({ verify: false, scan: false });
+    });
+
+    it('without the name\'s id: no "Verify"; the scan is the app\'s own', () => {
+        const o = factOffer(person(), 'name', input({ step: 'probable', research: NAMES }));
+        expect(o).toMatchObject({ eid: null, verify: false, scan: true, scanViaBridge: false });
+    });
+
+    it('its bridge not running: with the id the app\'s own scan, no "Verify"; without the id nothing', () => {
+        const offline: VerifyResearch = { features: [], offline: true };
+        expect(factOffer(person(NAMED), 'name', input({ step: 'import', research: offline })))
+            .toMatchObject({ verify: false, scan: true, scanViaBridge: false, eid: 'P0012.N' });
+        expect(factOffer(person(), 'name', input({ step: 'import', research: offline }))).toMatchObject({ verify: false, scan: false });
+        // A tree that cannot be changed here: no scan without the bridge.
+        expect(factOffer(person(NAMED), 'name', input({ step: 'import', research: offline, editable: false })).scan).toBe(false);
+    });
+
+    it('"Confirm against the scan" (§3): with a record and `facts.confirm` through the bridge by the id; without a record none', () => {
+        const p = person(NAMED);
+        expect(factOffer(p, 'name', input({ step: 'probable', research: NAMES })))
+            .toMatchObject({ scan: true, scanViaBridge: true, eid: 'P0012.N' });
+        // The record the research read the name from (no citation of the name itself).
+        expect(factOffer(p, 'name', input({ step: 'probable', research: NAMES, cited: false, source: true })).scan).toBe(true);
+        expect(factOffer(p, 'name', input({ step: 'import', research: NAMES, cited: false, source: false })).scan).toBe(false);
+        // Through the bridge, a tree that cannot be changed here is confirmed too (the research writes it).
+        expect(factOffer(p, 'name', input({ step: 'probable', research: NAMES, editable: false })))
+            .toMatchObject({ scan: true, scanViaBridge: true });
+        // A research without `facts.confirm`: no scan.
+        expect(factOffer(p, 'name', input({ step: 'probable', research: { features: ['verify', 'name-status'] } })).scan).toBe(false);
+    });
+
+    it('"Verify facts (N)": the name with its id counts, without its id or from an older research it does not', () => {
+        const fact = (p: Person, f: string, research: VerifyResearch, step: 'probable' | 'proven' = 'probable') =>
+            ({ fact: f, kind: verifyFactKind(p, f), offer: factOffer(p, f, input({ step, research })), step });
+        const p = person(NAMED);
+        const base = [fact(p, 'birth', NAMES, 'proven'), fact(p, 'death', NAMES)];
+        expect(personVerifyAskCount(base)).toBe(2);
+        expect(personVerifyAskCount([...base, fact(p, 'name', NAMES)])).toBe(3);
+        expect(personVerifyAskCount([...base, fact(person({ birth: { eid: 'E0001' } }), 'name', NAMES)])).toBe(2);
+        expect(personVerifyAskCount([fact(p, 'birth', FULL, 'proven'), fact(p, 'death', FULL), fact(p, 'name', FULL)])).toBe(2);
+    });
+});
+
+describe('verifyTogetherKind: what the preview says a fact goes with (066 K6.3)', () => {
+    const NAME = { fact: 'P0012.N', kind: 'NAME' };
+    it('by `with`: the name with the birth, the baptism, the christening, and the birth with the name', () => {
+        expect(verifyTogetherKind([{ ...NAME, with: 'E0034' }, { fact: 'E0034', kind: 'BIRT', with: 'P0012.N' }], 'P0012.N')).toBe('BIRT');
+        expect(verifyTogetherKind([{ ...NAME, with: 'E0035' }, { fact: 'E0035', kind: 'BAPM' }], 'P0012.N')).toBe('BAPM');
+        expect(verifyTogetherKind([{ ...NAME, with: 'E0036' }, { fact: 'E0036', kind: 'CHR' }], 'P0012.N')).toBe('CHR');
+        expect(verifyTogetherKind([{ fact: 'E0034', kind: 'BIRT', with: 'P0012.N' }, { ...NAME, with: 'E0034' }], 'E0034')).toBe('NAME');
+    });
+
+    it('without `with`: a name beside a birth or baptism of the same answer', () => {
+        expect(verifyTogetherKind([NAME, { fact: 'E0034', kind: 'BIRT' }], 'P0012.N')).toBe('BIRT');
+        expect(verifyTogetherKind([{ fact: 'E0035', kind: 'BAPM' }, NAME], 'E0035')).toBe('NAME');
+    });
+
+    it('nothing else: the name alone, a death beside it, `with` naming a fact not in the answer, a fact not in the answer', () => {
+        expect(verifyTogetherKind([NAME], 'P0012.N')).toBeNull();
+        expect(verifyTogetherKind([NAME, { fact: 'E0040', kind: 'DEAT' }], 'P0012.N')).toBeNull();
+        expect(verifyTogetherKind([{ ...NAME, with: 'E0099' }], 'P0012.N')).toBeNull();
+        expect(verifyTogetherKind([{ fact: 'E0034', kind: 'BIRT' }, { fact: 'E0035', kind: 'BAPM' }], 'E0034')).toBeNull();
+        expect(verifyTogetherKind([NAME, { fact: 'E0034', kind: 'BIRT' }], 'E0777')).toBeNull();
     });
 });

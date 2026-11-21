@@ -118,7 +118,7 @@ import {
     JOINED_TAG, joinedEventKey, type JoinedMarks, ORIGINAL_ID_TAGS, parseImportMark as readImportMark, sanitizeImports, validExtraBlock,
     factValueSignature,
 } from './import-origin';
-import { FACT_MARK, parsePendingPosition, parseCheckedResult, parseReaders, parseVerifyPending, researchFactRef, researchFamilyRef, sanitizeResearchVerify } from './verify';
+import { FACT_MARK, parsePendingPosition, parseCheckedResult, parseReaders, parseVerifyPending, researchFactRefOf, researchFamilyRef, sanitizeResearchVerify } from './verify';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
 export { parseName };
@@ -411,13 +411,14 @@ function toResearchOrigin(raw: RawFactOrigin, mapRefs: (refs?: string[]) => stri
  * null when it says nothing valid: `_STROM_CONFIRMED` (a day), `_STROM_VERIFY`
  * (why it waits), `_STROM_CHECKED` with its day, reason and readers.
  */
-function toResearchVerify(raw: RawFactVerify | undefined): ResearchFactVerify | null {
+function toResearchVerify(raw: RawFactVerify | undefined, fact: string): ResearchFactVerify | null {
     if (!raw) return null;
     const checked = raw.checked ? parseCheckedResult(raw.checked.result) : null;
     const readers = raw.checked?.readers !== undefined ? parseReaders(raw.checked.readers) : null;
     const confirmed = raw.confirmed !== undefined ? researchIsoDate(raw.confirmed) : '';
     const position = raw.position !== undefined ? parsePendingPosition(raw.position) : null;
-    const eid = raw.eid !== undefined ? researchFactRef(raw.eid) : null;
+    // A name's id is the research's own shape (`P0012.N`), any other fact's `E0012`.
+    const eid = raw.eid !== undefined ? researchFactRefOf(fact, raw.eid) : null;
     const txt = eid && raw.txt !== undefined && FACT_MARK.test(raw.txt) ? raw.txt.toLowerCase() : null;
     return sanitizeResearchVerify({
         ...(txt ? { txt } : {}),
@@ -433,7 +434,7 @@ function toResearchVerify(raw: RawFactVerify | undefined): ResearchFactVerify | 
                 ...(readers ? { readers } : {}),
             },
         } : {}),
-    });
+    }, fact);
 }
 
 /**
@@ -7178,7 +7179,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
             if (!raw?.verify) return;
             if (gedcom.stromResearch) {
                 if (holder.researchVerify?.[fact]) return;
-                const v = toResearchVerify(raw.verify);
+                const v = toResearchVerify(raw.verify, fact);
                 if (!v) return;
                 // The value it was confirmed with: a change here ends the confirmation.
                 const value = v.confirmed ? factValueSignature(holder, fact) : '';

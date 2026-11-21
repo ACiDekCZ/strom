@@ -15,6 +15,7 @@ import {
     factConfirmation, factValueSignature, factVerifyInfo, factVerifyReaders, pendingFacts, factSourceIds,
     sanitizeResearchVerify, parseConfirmedDay, parseVerifyPending, parseCheckedResult, parseReaders,
     parsePendingPosition, researchFactRef, confirmationEdits, handedConfirmations,
+    researchNameRef, researchBridgeFactRef, factResearchEid,
 } from '../verify.js';
 import { factReliability } from '../reliability.js';
 import { contentFingerprint } from '../research-link.js';
@@ -169,6 +170,31 @@ describe('the research state of a fact (factVerifyInfo)', () => {
         expect(sanitizeResearchVerify({ pending: 'images', position: 2 })).toEqual({ pending: 'images' });
         expect(sanitizeResearchVerify({ pending: 'asked', position: 1.5 })).toEqual({ pending: 'asked' });
         expect(sanitizeResearchVerify({ position: 2 })).toBeNull();
+    });
+
+    it('a name\'s id is the research\'s own (066 K6.3); any other fact\'s only "E…"', () => {
+        const p = (eid: string, fact = 'name') => ({ id: Z, researchVerify: { [fact]: { eid } } }) as unknown as Person;
+        expect(factResearchEid(p('P0012.N'), 'name')).toBe('P0012.N');
+        expect(factResearchEid(p(' P0012.N '), 'name')).toBe('P0012.N');
+        expect(factResearchEid(p('P0012 N'), 'name')).toBeNull();
+        expect(factResearchEid(p(''), 'name')).toBeNull();
+        expect(factResearchEid(p('.N'), 'name')).toBeNull();
+        expect(factResearchEid(p('P0012.N', 'birth'), 'birth')).toBeNull();
+        expect(factResearchEid(p('E0012', 'birth'), 'birth')).toBe('E0012');
+        expect(researchNameRef('x'.repeat(65))).toBeNull();
+        expect(researchNameRef(12)).toBeNull();
+        // Kept while loading only for the name.
+        expect(sanitizeResearchVerify({ eid: 'P0012.N', txt: '3F9A0C1D2E4B5A69' }, 'name')).toEqual({ eid: 'P0012.N', txt: '3f9a0c1d2e4b5a69' });
+        expect(sanitizeResearchVerify({ eid: 'P0012.N' }, 'birth')).toBeNull();
+        expect(sanitizeResearchVerify({ eid: 'P0012.N' })).toBeNull();
+        const d = tree();
+        d.persons[Z].researchVerify = { name: { eid: 'P0012.N' }, birth: { eid: 'P0012.N' } };
+        const back = migrateData(JSON.parse(JSON.stringify({ ...d, version: STROM_DATA_VERSION })));
+        expect(back.persons[Z].researchVerify).toEqual({ name: { eid: 'P0012.N' } });
+        // What the bridge takes: a fact's or a name's id, never a fact's key here.
+        expect(researchBridgeFactRef('P0012.N')).toBe('P0012.N');
+        expect(researchBridgeFactRef('E7')).toBe('E7');
+        expect(researchBridgeFactRef('birth')).toBeNull();
     });
 });
 
@@ -370,6 +396,14 @@ describe('DataManager: "Verified from the scan" and taking it back', () => {
         d.persons[Z].confirmed = { birth: { at: '2026-10-01', withdrawn: true, value: 'x' } as never };
         const back = migrateData(JSON.parse(JSON.stringify({ ...d, version: STROM_DATA_VERSION })));
         expect(back.persons[Z].confirmed).toEqual({ birth: { at: '2026-10-01', withdrawn: true } });
+    });
+
+    it('confirms the name (066 K6.3) while it keeps its given name and surname', () => {
+        expect(DataManager.confirmFact({ personId: Z }, 'name', '2026-11-21')).toBe(true);
+        expect(factVerifyInfo(DataManager.getPerson(Z)!, 'name')).toEqual({ confirmed: '2026-11-21', confirmedBy: 'app' });
+        expect(factReliability({}, DataManager.getPerson(Z)!, 'name', OPTS)?.step).toBe('human');
+        DataManager.updatePerson(Z, { firstName: 'Zbyhňov' });
+        expect(factVerifyInfo(DataManager.getPerson(Z)!, 'name')).toEqual({});
     });
 
     it('a locked person is not confirmed', () => {

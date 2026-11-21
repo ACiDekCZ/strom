@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { verifyKindName } from '../ui/verify-ui.js';
-import { setLanguage } from '../strings.js';
+import { setLanguage, strings } from '../strings.js';
 
 const TAGS = [
     'BIRT', 'CHR', 'BAPM', 'DEAT', 'BURI', 'CREM', 'MARR', 'DIV', 'ENGA', 'MARB', 'CENS', 'ANUL',
@@ -44,5 +44,19 @@ describe('verifyKindName', () => {
         expect(verifyKindName('OCCU')).toBe('Beruf');
         setLanguage('pl');
         expect(verifyKindName('OCCU')).toBe('Zawód');
+    });
+
+    it('the name (066 K6.3) and what a fact is verified together with, in cs, en, de and pl', () => {
+        const names = { cs: 'Jméno', en: 'Name', de: 'Name', pl: 'Imię' } as const;
+        for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
+            setLanguage(lang);
+            expect(verifyKindName('NAME'), lang).toBe(names[lang]);
+            for (const kind of ['BIRT', 'BAPM', 'CHR', 'NAME']) expect(strings.verify.together[kind], `${lang} ${kind}`).toBeTruthy();
+        }
+        setLanguage('cs');
+        expect(strings.verify.together.BIRT).toBe('Ověří se spolu s narozením.');
+        expect(strings.verify.together.NAME).toBe('Ověří se spolu se jménem.');
+        setLanguage('en');
+        expect(strings.verify.together.BAPM).toBe('Verified together with the baptism.');
     });
 });

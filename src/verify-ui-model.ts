@@ -10,7 +10,7 @@ import type { LifeEvent } from './types.js';
 import type { FactHolder } from './import-origin.js';
 import { isPartnership } from './import-origin.js';
 import type { ReliabilityStepName } from './reliability.js';
-import { factPendingPosition, factResearchEid } from './verify.js';
+import { NAME_STATUS_FEATURE, factPendingPosition, factResearchEid } from './verify.js';
 import type { VerifyFact } from './research-verify.js';
 import { VerifyOffer, VerifyResearch, verifyOffer } from './verify-offer.js';
 import type { FactVerifyInfo } from './verify.js';
@@ -19,12 +19,14 @@ import type { FactVerifyInfo } from './verify.js';
 const EVENT_KINDS: Readonly<Record<string, string>> = { baptism: 'BAPM', burial: 'BURI' };
 
 /**
- * The GEDCOM tag of a fact the research re-verifies (birth, death, a
- * baptism, a burial, a couple's marriage), or null: names, sex, divorce
- * and the other events are not verified.
+ * The GEDCOM tag of a fact the research re-verifies (a person's name, birth,
+ * death, a baptism, a burial, a couple's marriage), or null: sex, divorce and
+ * the other events are not verified. Whether the research takes the name
+ * (`name-status`) is factOffer's call.
  */
 export function verifyFactKind(holder: FactHolder, fact: string): string | null {
     if (isPartnership(holder)) return fact === 'marriage' ? 'MARR' : null;
+    if (fact === 'name') return 'NAME';
     if (fact === 'birth') return 'BIRT';
     if (fact === 'death') return 'DEAT';
     if (fact.startsWith('event:')) {
@@ -63,8 +65,10 @@ export interface FactOffer extends VerifyOffer {
 /**
  * The offer of one fact (table 10z, as the tree knows it): `verifyOffer`,
  * then what the tree can do of it — "Verify" only for a fact the research
- * verifies and named by its id; in a tree of the research no name or sex
- * (it neither verifies nor confirms them); the scan through the bridge when
+ * verifies and named by its id; in a tree of the research no sex (it neither
+ * verifies nor confirms it), and a name only from a research that takes
+ * names (`name-status`), or one whose bridge does not run while the name
+ * has its id (066 K6.3); the scan through the bridge when
  * the fact has its id, else the app's own confirmation, only where the tree
  * can be changed. In a tree of the research the scan comes while its bridge
  * takes confirmations (`researchConfirms`, verifyOffer), a fact without its id
@@ -84,7 +88,12 @@ export function factOffer(holder: FactHolder, fact: string, input: FactOfferInpu
     });
     const out: FactOffer = { ...base, eid, scanViaBridge: false, undoViaBridge: false };
     if (!eid || !kind) { out.verify = false; delete out.cost; delete out.prioritize; }
-    if (input.researchTree && (fact === 'name' || fact === 'sex')) {
+    // A research before `name-status` neither verifies nor confirms a name; while its bridge does not
+    // run, a name it named by its id is confirmed as the app's own (handed over with the tree).
+    const nameOk = !!input.research && (input.research.features.includes(NAME_STATUS_FEATURE) || (!!input.research.offline && !!eid));
+    if (input.researchTree && (fact === 'sex' || (fact === 'name' && !nameOk))) {
+        // Nothing of it goes to the research by its id ("Verify facts (N)" does not count it either).
+        if (fact === 'name') out.eid = null;
         out.verify = false;
         delete out.prioritize;
         out.scan = false;
@@ -93,15 +102,15 @@ export function factOffer(holder: FactHolder, fact: string, input: FactOfferInpu
     // Its bridge not running: the app's own confirmation (or taking back), handed over with the tree, only of a
     // fact the research named by its id (a research that writes ids reads `_STROM_CONFIRMED`).
     const offline = !!input.research?.offline;
-    if (offline && !eid) { out.scan = false; out.undo = out.undo && input.info.confirmedBy === 'app'; }
+    if (offline && !out.eid) { out.scan = false; out.undo = out.undo && input.info.confirmedBy === 'app'; }
     if (out.scan) {
-        out.scanViaBridge = !!input.research && !!eid && !offline;
+        out.scanViaBridge = !!input.research && !!out.eid && !offline;
         if (!out.scanViaBridge && !input.editable) out.scan = false;
     }
     if (out.undo) {
         out.undoViaBridge = input.info.confirmedBy === 'research' && !offline;
         if (!out.undoViaBridge && !input.editable) out.undo = false;
-        if (out.undoViaBridge && !eid) out.undo = false;
+        if (out.undoViaBridge && !out.eid) out.undo = false;
     }
     return out;
 }
@@ -156,10 +165,33 @@ export function queuedToastDue(fix: { at: string } | undefined, waiting: number,
 
 /**
  * The kinds "Verify facts" of a person takes (spec 065 P6, Milan 16. 11.): the
- * birth, a baptism, a marriage, the death, a burial. A residence, an
- * occupation or another fact the research holds goes by "Verify" at the fact.
+ * name (066 K6.3), the birth, a baptism, a marriage, the death, a burial. A
+ * residence, an occupation or another fact the research holds goes by
+ * "Verify" at the fact.
  */
-export const PERSON_VERIFY_KINDS: ReadonlySet<string> = new Set(['BIRT', 'CHR', 'BAPM', 'MARR', 'DEAT', 'BURI']);
+export const PERSON_VERIFY_KINDS: ReadonlySet<string> = new Set(['NAME', 'BIRT', 'CHR', 'BAPM', 'MARR', 'DEAT', 'BURI']);
+
+/** The facts a name is verified together with: the record of the birth or the baptism names the person. */
+const NAME_TOGETHER_KINDS: ReadonlySet<string> = new Set(['BIRT', 'BAPM', 'CHR']);
+
+/**
+ * What a fact is verified together with, as a dry run of /verify says it (066
+ * K6.3): the kind of the fact its `with` names, else a name beside a birth or
+ * baptism in the same answer (and the other way round). Only a name with a
+ * birth, a baptism or a christening; null for anything else, or when the
+ * answer does not hold the fact `own`.
+ */
+export function verifyTogetherKind(facts: readonly Pick<VerifyFact, 'fact' | 'kind' | 'with'>[], own: string): string | null {
+    const mine = facts.find(f => f.fact === own);
+    if (!mine) return null;
+    const pairs = (a: string, b: string): boolean =>
+        (a === 'NAME' && NAME_TOGETHER_KINDS.has(b)) || (b === 'NAME' && NAME_TOGETHER_KINDS.has(a));
+    if (mine.with) {
+        const other = facts.find(f => f.fact === mine.with);
+        return other && pairs(mine.kind, other.kind) ? other.kind : null;
+    }
+    return facts.find(f => f.fact !== own && pairs(mine.kind, f.kind))?.kind ?? null;
+}
 
 /** One of a person's facts as "Verify facts · N" counts it. */
 export interface PersonAskFact {

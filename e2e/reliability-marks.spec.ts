@@ -420,7 +420,9 @@ interface VerifyAsks {
 interface Refusal { status: number; code: string }
 
 /** `/verify` and `/facts/confirm` of the research's bridge (the reply's place in the queue: `position`). */
-async function verifyRoutes(page: Page, opts: { position?: number; verifyRefusal?: Refusal; confirmRefusal?: Refusal } = {}): Promise<VerifyAsks> {
+async function verifyRoutes(page: Page, opts: {
+    position?: number; verifyRefusal?: Refusal; confirmRefusal?: Refusal; facts?: (fact: string) => unknown[];
+} = {}): Promise<VerifyAsks> {
     const asks: VerifyAsks = { verify: [], confirm: [] };
     const cors = { 'access-control-allow-origin': '*' };
     const json = (body: unknown) => ({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -433,7 +435,8 @@ async function verifyRoutes(page: Page, opts: { position?: number; verifyRefusal
         if (opts.verifyRefusal) return route.fulfill(refusal(opts.verifyRefusal));
         return route.fulfill(json({
             ok: true, ...(body.dry ? {} : { task: 'T0101', ...(opts.position ? { position: opts.position } : {}) }),
-            facts: [{ fact: body.fact, kind: 'BIRT', how: 'read', record: { source: 'S0001', title: 'Oddací matrika Čapkov', page: 'fol. 41' } }],
+            facts: opts.facts?.(body.fact)
+                ?? [{ fact: body.fact, kind: 'BIRT', how: 'read', record: { source: 'S0001', title: 'Oddací matrika Čapkov', page: 'fol. 41' } }],
             estimate: { sessions: 1, usd: 0.4 }, head: HEAD, parent: HEAD,
         }));
     });
@@ -450,10 +453,13 @@ async function verifyRoutes(page: Page, opts: { position?: number; verifyRefusal
 /** The research's tree with its bridge saying `features`; Jan's person editor open. */
 async function openVerifyTree(page: Page, opts: {
     features?: string[]; extra?: string[]; position?: number; ged?: string; verifyRefusal?: Refusal; confirmRefusal?: Refusal;
+    facts?: (fact: string) => unknown[];
 } = {}): Promise<VerifyAsks> {
     const ged = opts.ged ?? verifyGed(opts.extra);
     await fakeBridge(page, { features: opts.features ?? ['verify', 'facts.confirm'], treeGed: ged });
-    const asks = await verifyRoutes(page, { position: opts.position, verifyRefusal: opts.verifyRefusal, confirmRefusal: opts.confirmRefusal });
+    const asks = await verifyRoutes(page, {
+        position: opts.position, verifyRefusal: opts.verifyRefusal, confirmRefusal: opts.confirmRefusal, facts: opts.facts,
+    });
     await openResearch(page, { ged });
     await poll(page);
     await cardAction(page, 'Jan', 'edit');
@@ -812,6 +818,99 @@ test.describe('verify facts at one fact (spec 065 round 3)', () => {
         await vAct(page, 'undo').click();
         await expect(factPill(page, 'Birth')).toHaveClass(/fact-status-probable/);
         await expect(page.locator('.toast', { hasText: 'Confirmation undone' }).locator('.toast-action')).toHaveText('Redo');
+    });
+});
+
+// ==================== Verify and the scan at the name (066 K6.3) ====================
+
+test.describe('verify and confirm the name (066 K6.3)', () => {
+    test.beforeEach(async ({ page }) => { await page.setViewportSize({ width: 1440, height: 900 }); });
+
+    const NAME_MARK = '3f9a0c1d2e4b5a69';
+    /** Jan's name read from the record (probable), named by the research's id `P0003.N`, beside his birth (E0001). */
+    const namedGed = () => verifyGed().replace('1 NAME Jan /Fíšek/', [
+        '1 NAME Jan /Fíšek/', '2 GIVN Jan', '2 SURN Fíšek', '2 SOUR @S0001@', '2 _STROM_STATUS probable',
+        '2 _STROM_EID P0003.N', `3 _TXT ${NAME_MARK}`,
+    ].join('\n'));
+    const NAMES = ['verify', 'facts.confirm', 'facts.confirm.value', 'name-status'];
+    const RECORD = { source: 'S0001', title: 'Oddací matrika Čapkov', page: 'fol. 41' };
+    /** The research reads the name from the record of the birth: both in the answer, each `with` the other. */
+    const withBirth = (fact: string) => fact === 'P0003.N'
+        ? [{ fact: 'P0003.N', kind: 'NAME', how: 'read', record: RECORD, with: 'E0001' }, { fact: 'E0001', kind: 'BIRT', how: 'read', record: RECORD, with: 'P0003.N' }]
+        : [{ fact, kind: 'BIRT', how: 'read', record: RECORD }];
+    const namePill = (page: Page) => personModal(page).locator('label[for="input-firstname"] button.fact-status');
+
+    test('Verify at the name with the AI badge alone; the preview "Verify name" says it goes with the birth; Start sends the name\'s id', async ({ page }) => {
+        const asks = await openVerifyTree(page, { features: NAMES, ged: namedGed(), facts: withBirth, position: 2 });
+        const pill = namePill(page);
+        await expect(pill).toHaveClass(/fact-status-probable/);
+        await pill.click();
+        const tip = page.locator('#status-tip');
+        await expect(tip).toBeVisible();
+        await expect(vAct(page, 'verify').locator('.research-ai-badge')).toHaveCount(1);
+        await expect(vAct(page, 'verify').locator('.research-open-mark')).toHaveCount(0);
+        await expect(vAct(page, 'scan')).toContainText('Confirm against the scan');
+        await expect(vAct(page, 'scan').locator('.research-ai-badge, .research-open-mark')).toHaveCount(0);
+
+        await vAct(page, 'verify').click();
+        const preview = tip.locator('.st-preview');
+        await expect(preview.locator('.st-preview-head')).toHaveText('Verify name');
+        await expect(preview).toContainText('Jan Fíšek');
+        await expect(preview.locator('.st-preview-together')).toHaveText('Verified together with the birth.');
+        expect(asks.verify).toEqual([{ fact: 'P0003.N', dry: true }]);
+        await vAct(page, 'start').click();
+        await expect.poll(() => asks.verify.filter(a => !a.dry)).toEqual([{ fact: 'P0003.N' }]);
+        await expect(pill.locator('.fs-clock')).toHaveCount(1);
+        await expect(tip.locator('.st-v-state')).toHaveText("Waiting to be verified · 2nd in the research's queue");
+    });
+
+    test('the birth\'s preview says the name goes with it', async ({ page }) => {
+        const asks = await openVerifyTree(page, {
+            features: NAMES, ged: namedGed(),
+            facts: (fact) => [{ fact, kind: 'BIRT', how: 'read', record: RECORD, with: 'P0003.N' }, { fact: 'P0003.N', kind: 'NAME', how: 'read', record: RECORD, with: fact }],
+        });
+        await factPill(page, 'Birth').click();
+        await vAct(page, 'verify').click();
+        await expect(page.locator('#status-tip .st-preview-together')).toHaveText('The name is verified with it.');
+        expect(asks.verify).toEqual([{ fact: 'E0001', dry: true }]);
+    });
+
+    test('the scan confirms the name through the bridge by its id and mark; Undo takes it back with Redo', async ({ page }) => {
+        const asks = await openVerifyTree(page, { features: NAMES, ged: namedGed() });
+        const pill = namePill(page);
+        await pill.click();
+        await vAct(page, 'scan').click();
+        await expect.poll(() => asks.confirm).toEqual([{ fact: 'P0003.N', txt: NAME_MARK, confirm: true }]);
+        await expect(pill).toHaveClass(/fact-status-human/);
+        await expect(page.locator('#status-tip .st-sentence')).toContainText('✓ Confirmed against the scan on');
+        await vAct(page, 'undo').click();
+        await expect.poll(() => asks.confirm.length).toBe(2);
+        expect(asks.confirm[1]).toEqual({ fact: 'P0003.N', txt: NAME_MARK, confirm: false });
+        await expect(pill).toHaveClass(/fact-status-probable/);
+        const toast = page.locator('.toast', { hasText: 'Confirmation undone' });
+        await expect(toast.locator('.toast-action')).toHaveText('Redo');
+    });
+
+    test('409 confirm.changed at the name: nothing confirmed, "The fact has changed meanwhile"', async ({ page }) => {
+        const asks = await openVerifyTree(page, { features: NAMES, ged: namedGed(), confirmRefusal: { status: 409, code: 'confirm.changed' } });
+        await namePill(page).click();
+        await vAct(page, 'scan').click();
+        await expect.poll(() => asks.confirm).toEqual([{ fact: 'P0003.N', txt: NAME_MARK, confirm: true }]);
+        await expect(page.locator('.toast', { hasText: 'The fact has changed meanwhile; nothing was confirmed.' })).toBeVisible();
+        const load = page.getByRole('dialog').filter({ hasText: 'Load the research version?' });
+        await expect(load).toBeVisible();
+        await load.getByRole('button', { name: 'Cancel' }).click();
+        await expect(namePill(page)).toHaveClass(/fact-status-probable/);
+    });
+
+    test('a research without `name-status`: the name\'s tip has no action, as before', async ({ page }) => {
+        const asks = await openVerifyTree(page, { features: ['verify', 'facts.confirm', 'facts.confirm.value'], ged: namedGed() });
+        await namePill(page).click();
+        const tip = page.locator('#status-tip');
+        await expect(tip).toBeVisible();
+        await expect(tip.locator('[data-v-act]')).toHaveCount(0);
+        await expect(tip.locator('.st-v-aside')).toHaveCount(0);
+        expect(asks.verify).toEqual([]);
     });
 });
 

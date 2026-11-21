@@ -11,12 +11,13 @@
 import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
+import { migrateData } from '../data.js';
 import type { ImportRecord, Person, StromData } from '../types.js';
 import {
     cardStatus, CardStatusOptions, factReliability, factStatusOf, personOriginSummary, ReliabilityOptions,
 } from '../reliability.js';
 import { personMarksLayout } from '../ui/fact-status.js';
-import { NAME_STATUS_FEATURE } from '../verify.js';
+import { NAME_STATUS_FEATURE, factConfirmMark, factResearchEid, factVerifyInfo, factValueSignature } from '../verify.js';
 
 const RESEARCH_HEAD = `0 HEAD
 1 SOUR STROM_RESEARCH
@@ -155,7 +156,8 @@ describe('the status of a name in the file (_STROM_STATUS under NAME)', () => {
         const again = importGed(sent);
         expect(byName(again, 'Hostivít').nameStatus).toBe('probable');
         expect(byName(again, 'Zdeslava').marriedNameStatus).toBe('possible');
-        expect(sendGed(again)).toBe(sent);
+        // The name's id is the research's own: the app's file read back does not carry it (as an event's id).
+        expect(sendGed(again)).toBe(sent.replace('2 _STROM_EID P0012.N\n', ''));
         // The app's own file keeps it too (read back as the app's).
         const saved = saveGed(first);
         expect(nameBlocks(saved, 'Hostivít')[0]).toContain('2 _STROM_STATUS probable');
@@ -262,5 +264,60 @@ describe('the step of a name with a status (066 K6.3)', () => {
         const mixed = row(vaclav({ nameStatus: 'probable', birthStatus: 'proven', researchOrigins: { ...vaclav().researchOrigins, ...sex } }));
         expect(mixed.atFacts).toBe(true);
         expect(mixed.row?.text).toMatch(/^Facts marked “from family tree” come from MyHeritage/);
+    });
+});
+
+describe('the name\'s id and confirmation in the file (_STROM_EID under NAME, 066 K6.3)', () => {
+    const NAMED_GED = `${RESEARCH_HEAD}
+0 @P0012@ INDI
+1 NAME Hostivít /Šmudlák/
+2 GIVN Hostivít
+2 SURN Šmudlák
+2 _STROM_STATUS probable
+2 _STROM_EID P0012.N
+3 _TXT 3F9A0C1D2E4B5A69
+2 _STROM_CONFIRMED 2026-11-21
+1 NAME Hostiwít /Šmudlak/
+2 _STROM_EID P0012.N2
+1 SEX M
+1 REFN P0012
+1 BIRT
+2 DATE 3 FEB 1824
+2 _STROM_EID P0012.B
+0 TRLR`;
+
+    it('the primary name\'s id, its mark and confirmation are read; another name\'s id is not, a birth\'s only as "E…"', () => {
+        const vaclav = byName(importGed(NAMED_GED), 'Hostivít');
+        expect(factResearchEid(vaclav, 'name')).toBe('P0012.N');
+        expect(vaclav.researchVerify?.name).toMatchObject({ eid: 'P0012.N', txt: '3f9a0c1d2e4b5a69', confirmed: '2026-11-21' });
+        expect(factConfirmMark(vaclav, 'name')).toBe('3f9a0c1d2e4b5a69');
+        expect(factVerifyInfo(vaclav, 'name')).toMatchObject({ confirmed: '2026-11-21', confirmedBy: 'research' });
+        expect(vaclav.researchVerify?.birth).toBeUndefined();
+        expect(JSON.stringify(vaclav.researchVerify)).not.toContain('P0012.N2');
+        // A new given name: the mark no longer stands for what the name says.
+        vaclav.firstName = 'Hostimil';
+        expect(factConfirmMark(vaclav, 'name')).toBe('changed');
+    });
+
+    it('goes back under its NAME only to the research, and the round trip changes nothing', () => {
+        const first = importGed(NAMED_GED);
+        const sent = sendGed(first);
+        expect(nameBlocks(sent, 'Hostivít')[0]).toEqual(expect.arrayContaining(['2 _STROM_EID P0012.N', '2 _STROM_CONFIRMED 2026-11-21']));
+        expect(nameBlocks(sent, 'Hostivít')[1]).not.toContain('2 _STROM_EID P0012.N2');
+        // Stored and loaded (migrateData), the tree sends the same.
+        const again = migrateData(JSON.parse(JSON.stringify(first)));
+        expect(factResearchEid(byName(again, 'Hostivít'), 'name')).toBe('P0012.N');
+        expect(sendGed(again)).toBe(sent);
+        // A saved file of the app's own: no id of the research.
+        expect(saveGed(first)).not.toContain('_STROM_EID');
+    });
+
+    it('a tree without the research: the app\'s own confirmation of the name goes under NAME (`_STROM_CONFIRMED`)', () => {
+        const data = importGed(FOREIGN_GED);
+        const vaclav = byName(data, 'Hostivít');
+        vaclav.confirmed = { name: { at: '2026-11-21', value: factValueSignature(vaclav, 'name') } };
+        expect(nameBlocks(saveGed(data), 'Hostivít')[0]).toContain('2 _STROM_CONFIRMED 2026-11-21');
+        const back = byName(importGed(saveGed(data)), 'Hostivít');
+        expect(factVerifyInfo(back, 'name')).toMatchObject({ confirmed: '2026-11-21', confirmedBy: 'app' });
     });
 });

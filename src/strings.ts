@@ -1220,7 +1220,14 @@ const stringsEN = {
         queuedToast: (n: number) => `${nEn(n, 'fact with an original is', 'facts with an original are')} waiting to be verified, one by one.`,
         details: 'Details',
         marriage: 'marriage',
-        kinds: { BIRT: 'Birth', CHR: 'Christening', BAPM: 'Baptism', MARR: 'Marriage', DEAT: 'Death', BURI: 'Burial' } as Record<string, string>,
+        kinds: { NAME: 'Name', BIRT: 'Birth', CHR: 'Christening', BAPM: 'Baptism', MARR: 'Marriage', DEAT: 'Death', BURI: 'Burial' } as Record<string, string>,
+        /** The preview's line when the research verifies the fact together with another one (by its kind; 066 K6.3). */
+        together: {
+            BIRT: 'Verified together with the birth.',
+            BAPM: 'Verified together with the baptism.',
+            CHR: 'Verified together with the baptism.',
+            NAME: 'The name is verified with it.',
+        } as Record<string, string>,
         /** A fact the bridge names by a tag the app has no name for. */
         kindOther: 'Other fact',
     },
@@ -11939,7 +11946,13 @@ const stringsCZ: StringsType = {
         queuedToast: (n: number) => `${nCs(n, 'údaj s originálem čeká', 'údaje s originálem čekají', 'údajů s originálem čeká')} na ověření, ověřují se postupně.`,
         details: 'Podrobnosti',
         marriage: 'sňatek',
-        kinds: { BIRT: 'Narození', CHR: 'Křest', BAPM: 'Křest', MARR: 'Sňatek', DEAT: 'Úmrtí', BURI: 'Pohřeb' } as Record<string, string>,
+        kinds: { NAME: 'Jméno', BIRT: 'Narození', CHR: 'Křest', BAPM: 'Křest', MARR: 'Sňatek', DEAT: 'Úmrtí', BURI: 'Pohřeb' } as Record<string, string>,
+        together: {
+            BIRT: 'Ověří se spolu s narozením.',
+            BAPM: 'Ověří se spolu se křtem.',
+            CHR: 'Ověří se spolu se křtem.',
+            NAME: 'Ověří se spolu se jménem.',
+        } as Record<string, string>,
         kindOther: 'Jiný údaj',
     },
 
@@ -22423,7 +22436,13 @@ const stringsDE: StringsType = {
         queuedToast: (n: number) => `${nDe(n, 'Angabe mit Original wartet', 'Angaben mit Original warten')} auf Prüfung und ${n === 1 ? 'wird' : 'werden'} nacheinander geprüft.`,
         details: 'Details',
         marriage: 'Heirat',
-        kinds: { BIRT: 'Geburt', CHR: 'Taufe', BAPM: 'Taufe', MARR: 'Heirat', DEAT: 'Tod', BURI: 'Bestattung' } as Record<string, string>,
+        kinds: { NAME: 'Name', BIRT: 'Geburt', CHR: 'Taufe', BAPM: 'Taufe', MARR: 'Heirat', DEAT: 'Tod', BURI: 'Bestattung' } as Record<string, string>,
+        together: {
+            BIRT: 'Wird zusammen mit der Geburt geprüft.',
+            BAPM: 'Wird zusammen mit der Taufe geprüft.',
+            CHR: 'Wird zusammen mit der Taufe geprüft.',
+            NAME: 'Der Name wird mitgeprüft.',
+        } as Record<string, string>,
         kindOther: 'Andere Angabe',
     },
 

@@ -70,6 +70,35 @@ describe('bodies', () => {
         expect(factConfirmRequestBody('E9', false)).toEqual({ fact: 'E9', confirm: false });
         expect(factConfirmRequestBody('birth', true)).toBeNull();
     });
+
+    it('a name by its id (066 K6.3): /verify {fact} and /facts/confirm with its mark', () => {
+        expect(verifyRequestBody({ fact: 'P0012.N' }, true)).toEqual({ fact: 'P0012.N', dry: true });
+        expect(factConfirmRequestBody('P0012.N', true, '3F9A0C1D2E4B5A69')).toEqual({ fact: 'P0012.N', txt: '3f9a0c1d2e4b5a69', confirm: true });
+        expect(factConfirmRequestBody('P0012.N', false)).toEqual({ fact: 'P0012.N', confirm: false });
+        expect(factConfirmRequestBody('P0012 N', true)).toBeNull();
+        expect(verifyRequestBody({ fact: 'name' })).toBeNull();
+    });
+});
+
+describe('answers about a name (066 K6.3)', () => {
+    it('/verify: the name and the birth it goes with (`with`)', () => {
+        const r = verifyReply(200, { ok: true, task: null, estimate: { sessions: 1, usd: 0.4 }, facts: [
+            { fact: 'P0012.N', kind: 'NAME', how: 'read', with: 'E0034' },
+            { fact: 'E0034', kind: 'BIRT', how: 'read', with: 'P0012.N' },
+            { fact: 'E0035', kind: 'DEAT', how: 'search', with: 'not an id' },
+        ] });
+        expect(r.ok && r.facts).toEqual([
+            { fact: 'P0012.N', kind: 'NAME', how: 'read', with: 'E0034' },
+            { fact: 'E0034', kind: 'BIRT', how: 'read', with: 'P0012.N' },
+            { fact: 'E0035', kind: 'DEAT', how: 'search' },
+        ]);
+    });
+
+    it('/facts/confirm: the name\'s id said back', () => {
+        expect(factConfirmReply('P0012.N', 200, { ok: true, fact: 'P0012.N', owner: 'P0012', confirmed: '2026-11-21', head: HEAD }))
+            .toMatchObject({ ok: true, fact: 'P0012.N', owner: 'P0012', confirmed: '2026-11-21' });
+        expect(factConfirmReply('P0012.N', 200, { ok: true, fact: 'P0013.N', head: HEAD })).toMatchObject({ ok: false, code: 'unknown' });
+    });
 });
 
 describe('requests', () => {

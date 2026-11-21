@@ -101,10 +101,11 @@ export interface PersonVerifyState {
     pending: number;
 }
 
-/** The value of a fact as the preview names it ("3 Feb 1850, Horní Bříza"). */
+/** The value of a fact as the preview names it ("3 Feb 1850, Horní Bříza"; a name as shown). */
 function factValueText(holder: FactHolder, fact: string): string {
     const join = (date?: string, place?: string): string => [date ? formatFlexDate(date) : '', place ?? ''].filter(Boolean).join(', ');
     if (isPartnership(holder)) return fact === 'marriage' ? join(holder.startDate, holder.startPlace) : '';
+    if (fact === 'name') return shownName(holder);
     if (fact === 'birth') return join(holder.birthDate, holder.birthPlace);
     if (fact === 'death') return join(holder.deathDate, holder.deathPlace);
     if (fact.startsWith('event:')) {

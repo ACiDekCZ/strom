@@ -206,12 +206,36 @@ export function researchFactRef(id: unknown): string | null {
 }
 
 /**
+ * A name's id in the research (`2 _STROM_EID P0012.N` under the primary NAME,
+ * 066 K6.3), or null. Opaque: its shape is the research's, the app only sends
+ * it back.
+ */
+export function researchNameRef(id: unknown): string | null {
+    return typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(id.trim()) ? id.trim() : null;
+}
+
+/** The research's id of one fact as its file gives it: a name's own (researchNameRef), any other fact's "E0012". */
+export function researchFactRefOf(fact: string, id: unknown): string | null {
+    return fact === 'name' ? researchNameRef(id) : researchFactRef(id);
+}
+
+/**
+ * An id the bridge takes for a fact (/verify {fact}, /facts/confirm, their
+ * answers): a fact's "E0012", or a name's id. A name's id carries a number,
+ * so a fact's key here ("birth") is never sent as one.
+ */
+export function researchBridgeFactRef(id: unknown): string | null {
+    const ref = researchFactRef(id) ?? researchNameRef(id);
+    return ref && /\d/.test(ref) ? ref : null;
+}
+
+/**
  * The fact's id in the research (`2 _STROM_EID`), for /verify {fact} and
  * /facts/confirm; null when the research's file gave none (a fact made or
  * copied here, a file of a research before 065, another file).
  */
 export function factResearchEid(holder: FactHolder, fact: string): string | null {
-    return researchFactRef(holder.researchVerify?.[fact]?.eid);
+    return researchFactRefOf(fact, holder.researchVerify?.[fact]?.eid);
 }
 
 /**
@@ -314,8 +338,8 @@ function cleanConfirmation(value: unknown): FactConfirmation | null {
     return out;
 }
 
-/** One research verification state, valid fields only; null when nothing is left. */
-export function sanitizeResearchVerify(value: unknown): ResearchFactVerify | null {
+/** One research verification state of a fact (its id as the fact takes one), valid fields only; null when nothing is left. */
+export function sanitizeResearchVerify(value: unknown, fact = ''): ResearchFactVerify | null {
     if (!value || typeof value !== 'object') return null;
     const v = value as Record<string, unknown>;
     const out: ResearchFactVerify = {};
@@ -341,7 +365,7 @@ export function sanitizeResearchVerify(value: unknown): ResearchFactVerify | nul
             out.checked = checked;
         }
     }
-    const eid = researchFactRef(v.eid);
+    const eid = researchFactRefOf(fact, v.eid);
     if (eid) out.eid = eid;
     if (eid && typeof v.txt === 'string' && FACT_MARK.test(v.txt)) {
         out.txt = v.txt.toLowerCase();
@@ -350,7 +374,7 @@ export function sanitizeResearchVerify(value: unknown): ResearchFactVerify | nul
     return out.confirmed || out.pending || out.checked || out.eid ? out : null;
 }
 
-function cleanMap<T>(holder: FactHolder, field: 'confirmed' | 'researchVerify', clean: (v: unknown) => T | null): void {
+function cleanMap<T>(holder: FactHolder, field: 'confirmed' | 'researchVerify', clean: (v: unknown, fact: string) => T | null): void {
     const h = holder as unknown as Record<string, unknown>;
     if (!(field in h)) return;
     const raw = h[field];
@@ -359,7 +383,7 @@ function cleanMap<T>(holder: FactHolder, field: 'confirmed' | 'researchVerify', 
         const facts = new Set(factsOf(holder));
         for (const [fact, v] of Object.entries(raw as Record<string, unknown>)) {
             if (!facts.has(fact)) continue;
-            const c = clean(v);
+            const c = clean(v, fact);
             if (c) out[fact] = c;
         }
     }
