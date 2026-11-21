@@ -124,7 +124,7 @@ describe('reliabilityTitle', () => {
         expect(reliabilityTitle({ step: 'human', importRecord: I1 })).not.toMatch(/taken from/);
         const o = importOriginParts(I1, 'en');
         expect(strings.verify.takenFrom(o.prog, o.date)).toBe(`Taken from the family tree Rodokmenar, file ${o.date}`);
-        const said = { cs: 'Převzato z rodokmenu Rodokmenar, soubor', en: 'Taken from the family tree Rodokmenar, file', de: 'Übernommen aus Rodokmenar, Datei vom', pl: 'Przejęte z drzewa Rodokmenar, plik' } as const;
+        const said = { cs: 'Převzato z rodokmenu Rodokmenar, soubor', en: 'Taken from the family tree Rodokmenar, file', de: 'Übernommen aus dem Stammbaum Rodokmenar, Datei vom', pl: 'Przejęte z drzewa Rodokmenar, plik' } as const;
         try {
             for (const lang of ['cs', 'en', 'de', 'pl'] as const) {
                 setLanguage(lang);

@@ -42,3 +42,15 @@ describe('sent to the research or saved in the archive, for a source', () => {
         expect(m.sentToast(1, 'Karel Testovec')).toContain('k osobě Karel Testovec.');
     });
 });
+
+describe('pl: one verb for the agent going through files', () => {
+    it('the action is "Uporządkuj agentem…", so what waits is "nieuporządkowane", never "posortuje"/"nieposortowane"', () => {
+        const pl = getStringsForLang('pl');
+        const texts = [JSON.stringify(pl.batch), JSON.stringify(pl.material), JSON.stringify(pl.materials),
+            pl.material.sentWaitToast(1, 'Karel Testovec'), pl.material.sentWaitToast(2, 'Karel Testovec'),
+            pl.batch.sortedLine('Paczka', 1, 2)].join('\n');
+        expect(pl.materials.agentSort.sort).toBe('Uporządkuj agentem…');
+        expect(texts).not.toMatch(/posortu|posortow|nieposortow|Agent sortuje/);
+        expect(texts).toContain('nieuporządkowane');
+    });
+});

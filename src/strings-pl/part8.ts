@@ -278,7 +278,7 @@ export const plPart8: Pick<StringsType, 'history' | 'personPage' | 'familyPages'
         censusHeld: (n: number) => `Odłożone: ${nPl(n, 'zadanie', 'zadania', 'zadań')} spisu. ${n === 1 ? 'Wróci' : 'Wrócą'} po włączeniu.`,
         intakeSection: 'Materiały',
         intakeTitle: 'Pliki wysłane do badania agent przejrzy sam',
-        intakeDesc: 'Pliki wysłane do badania (paczki, pojedyncze pliki, skany źródeł) dostają zadania dla agenta: przypisuje je do osób, nazywa je i zakłada źródła. Zużywa subskrypcję lub kredyt. Wyłączone: pliki czekają w Materiałach i są sortowane tylko na żądanie.',
+        intakeDesc: 'Pliki wysłane do badania (paczki, pojedyncze pliki, skany źródeł) dostają zadania dla agenta: przypisuje je do osób, nazywa je i zakłada źródła. Zużywa subskrypcję lub kredyt. Wyłączone: pliki czekają w Materiałach i są porządkowane przez agenta tylko na żądanie.',
         hideAllMenu: 'Ukryj wszystko w tym drzewie',
         hideAllSub: 'także wydarzenia, które badanie znajdzie później',
         hideAllTitle: (r: string) => `Ukryć wszystko z regionu ${r}?`,

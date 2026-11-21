@@ -22606,7 +22606,7 @@ const stringsDE: StringsType = {
         undo: 'Zurücknehmen',
         undone: 'Bestätigung zurückgenommen',
         confirmedAt: (d: string) => `Am ${d} anhand des Scans bestätigt`,
-        takenFrom: (prog: string, date: string) => `Übernommen aus ${prog}, Datei vom ${date}`,
+        takenFrom: (prog: string, date: string) => `Übernommen aus dem Stammbaum ${prog}, Datei vom ${date}`,
         reasonHead: (l: string, d: string) => (d ? `Bleibt ${l} · von der Recherche geprüft am ${d}` : `Bleibt ${l}`),
         previewHead: (f: string) => `${f} prüfen`,
         what: 'Was',
