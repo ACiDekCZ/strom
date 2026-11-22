@@ -88,7 +88,8 @@ describe('GEDCOM _SHAR from RootsMagic', () => {
         const [h] = census('Hromuta');
         expect(census('Pelhan')).toHaveLength(0);
         expect(h.participants).toEqual([expect.objectContaining({ role: 'other', personId: p('Pelhan').id, note: 'Boarder' })]);
-        expect(JSON.stringify(data)).not.toContain('I99');
+        // The dropped person's xref as a value of its own (a random id such as shareId "9JbI997B" may hold the letters).
+        expect(JSON.stringify(data)).not.toMatch(/["@]I99["@]/);
     });
 
     it('makes a godparent at a baptism and a witness at a wedding participants of them', () => {
