@@ -174,6 +174,11 @@ test('a locked tree: step 1 says why, Add to a tree offers Manage trees', async 
     await expect(dialog.getByRole('button', { name: 'Choose another tree' })).toBeVisible();
     await dialog.getByRole('button', { name: 'Choose another tree' }).click();
     await expect(wizard).toBeVisible();
+    // No tree to name: the route is the file alone, the primary compares without a tree's name and waits.
+    await expect(wizard.locator('#merge-route')).not.toContainText('→');
+    await expect(wizard.locator('#merge-next')).toHaveText(/^Compare \d+ people$/);
+    await expect(wizard.locator('#merge-next')).toBeDisabled();
+    await expect(wizard.locator('#merge-counts')).not.toContainText('New tree');
     expect(await stored(page)).toBe(before);
 });
 

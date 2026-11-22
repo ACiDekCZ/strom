@@ -96,8 +96,10 @@ export function freshChoices(src: WizardSource, state: MergeState): WizardChoice
 }
 
 /** Where the import goes, "{source} → {target}" (the source alone for a new tree): the header's line, the toast of Save for later. */
-export function wizardRoute(choices: Pick<WizardChoices, 'mode' | 'source' | 'targetName'>): string {
-    return choices.mode === 'new' ? choices.source.label : `${choices.source.label} → ${choices.targetName}`;
+export function wizardRoute(choices: Pick<WizardChoices, 'mode' | 'source' | 'targetName'> & { targetTreeId?: WizardChoices['targetTreeId'] }): string {
+    // New tree, or no tree that can take the import (every tree blocked): the file alone.
+    if (choices.mode === 'new' || 'targetTreeId' in choices && !choices.targetTreeId) return choices.source.label;
+    return `${choices.source.label} → ${choices.targetName}`;
 }
 
 /** The window's title by where the import comes from (§1). */
@@ -462,7 +464,7 @@ export class MergeWizard {
         if (!this.plan) {
             const treePersons = Object.values(state.existingData.persons).filter(p => !p.isPlaceholder).length;
             const parts = [W.cntImport(c.source.persons)];
-            if (c.mode !== 'new') parts.push(W.cntTree(c.targetName, treePersons), W.cntAfterCompare);
+            if (c.mode !== 'new' && c.targetTreeId) parts.push(W.cntTree(c.targetName, treePersons), W.cntAfterCompare);
             box.className = 'merge-stats is-pre';
             box.innerHTML = `<span class="merge-stats-pre">${escapeHtml(parts.join(' · '))}</span>`
                 + `<span class="merge-stats-note">${escapeHtml(W.nothingYet)}</span>`;
@@ -590,7 +592,7 @@ export class MergeWizard {
             if (c.mode !== 'new') {
                 const env = this.host.step1?.();
                 // No target that can take it (all blocked): New tree is the way (§2).
-                if (!c.targetTreeId) return { label: W.btnCompare(c.source.persons, c.targetName), enabled: false, why: W.pickOther };
+                if (!c.targetTreeId) return { label: W.btnCompareAny(c.source.persons), enabled: false, why: W.pickOther };
                 // An encrypted tree is compared once it is unlocked (13f).
                 if (env?.encLocked()) return { label: W.btnCompare(c.source.persons, c.targetName), enabled: false, why: W.encLocked(c.targetName) };
                 if (!ws.compared) return { label: W.btnCompare(c.source.persons, c.targetName), enabled: !this.busy, why: '' };

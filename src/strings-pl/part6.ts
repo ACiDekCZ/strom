@@ -218,6 +218,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         saveList: 'Zapisz listę…',
         researchKept: (t: string) => `${t} ma badania: połączenie zostaje; wysłanie nowych osób wybiera się w ostatnim kroku.`,
         btnCompare: (n: number, t: string) => `Porównaj ${nPl(n, 'osobę', 'osoby', 'osób')} z drzewem ${t}`,
+        btnCompareAny: (n: number) => `Porównaj ${nPl(n, 'osobę', 'osoby', 'osób')}`,
         btnNewNext: (n: number) => `Dalej: Kogo dodać (${nPl(n, 'osoba', 'osoby', 'osób')})`,
         btnJson: 'Pobierz JSON',
         moreOptions: 'Więcej możliwości',
