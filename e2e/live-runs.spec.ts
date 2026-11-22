@@ -30,6 +30,22 @@ async function openMenu(page: Page, id: string): Promise<void> {
     await expect(page.locator('#live-direction-menu')).toBeVisible();
 }
 
+const T = new Date('2026-11-21T10:30:00Z');
+const at = (min: number): string => new Date(T.getTime() + min * 60_000).toISOString();
+/** The page's clock text of an ISO time (the browser's own zone). */
+const clockOf = (page: Page, iso: string) => page.evaluate(i => new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' }).format(new Date(i)), iso);
+
+/** The two runs of the sample with times of the test's clock, and G0002 waiting for the limit until `until` when asked. */
+function runsAt(opts: { limitUntil?: string } = {}): Record<string, unknown>[] {
+    const runs: Record<string, unknown>[] = RUNS.map((r, i) => ({ ...r, since: at(i === 0 ? -50 : -10) }));
+    if (opts.limitUntil) {
+        runs.push({ id: 'run-2c44', research: 'G0002', agent: 'codex', agentName: 'Codex', since: at(-30), state: 'paused',
+            paused: { until: opts.limitUntil, reason: 'limit' }, session: 'N0143', sessions: 2 });
+    }
+    return runs;
+}
+const workingAt = (): Record<string, unknown>[] => RUN_WORKING.map((w, i) => ({ ...w, since: at(i === 0 ? -4 : -2) }));
+
 test.describe('a direction\'s own run', () => {
     test('the detail offers it with AI + terminal and its sentence; ⋯ has the run before the conversation, each with its hint', async ({ page }) => {
         await followRuns(page);
@@ -57,14 +73,16 @@ test.describe('a direction\'s own run', () => {
     });
 
     test('a direction with its run: "Agent at work" with "In Now ›" in its row and detail, no run in ⋯; In Now lights its block', async ({ page }) => {
-        await followRuns(page);
+        // The test's clock (not midnight in any zone the tests run in): the run's start shows as a time alone.
+        await page.clock.setFixedTime(T);
+        await followRuns(page, { runs: runsAt(), working: workingAt() });
         await openOverview(page);
         const meta = directionRow(page, 'G0001').locator('.research-direction__meta');
         await expect(meta.locator('.research-direction__run-meta')).toHaveText('Agent at work: Claude');
         await expect(meta.locator('.research-direction__in-now')).toHaveText('In Now ›');
         await unfold(page, 'G0001');
         await expect(runBox(page, 'G0001').locator('[data-do="run"]')).toHaveCount(0);
-        await expect(runBox(page, 'G0001').locator('.research-direction__run-state')).toHaveText(/^Agent at work · Claude · since (?:\S+ )?\d{1,2}:\d{2}/);   // a date before the time across midnight
+        await expect(runBox(page, 'G0001').locator('.research-direction__run-state')).toHaveText(new RegExp(`^Agent at work · Claude · since ${await clockOf(page, at(-10))}`));
         await openMenu(page, 'G0001');
         await expect(page.locator('#live-direction-menu [data-do="run"]')).toHaveCount(0);
         await page.keyboard.press('Escape');
@@ -218,21 +236,6 @@ test.describe('the dialog before a direction\'s run', () => {
  * the general run skips, its own Finish and stop (by the run's id) and Stop
  * through the bridge (no mark); a run ended a moment ago stays a minute.
  */
-const T = new Date('2026-11-21T10:30:00Z');
-const at = (min: number): string => new Date(T.getTime() + min * 60_000).toISOString();
-/** The page's clock text of an ISO time (the browser's own zone). */
-const clockOf = (page: Page, iso: string) => page.evaluate(i => new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' }).format(new Date(i)), iso);
-
-/** The two runs of the sample with times of the test's clock, and G0002 waiting for the limit until `until` when asked. */
-function runsAt(opts: { limitUntil?: string } = {}): Record<string, unknown>[] {
-    const runs: Record<string, unknown>[] = RUNS.map((r, i) => ({ ...r, since: at(i === 0 ? -50 : -10) }));
-    if (opts.limitUntil) {
-        runs.push({ id: 'run-2c44', research: 'G0002', agent: 'codex', agentName: 'Codex', since: at(-30), state: 'paused',
-            paused: { until: opts.limitUntil, reason: 'limit' }, session: 'N0143', sessions: 2 });
-    }
-    return runs;
-}
-const workingAt = (): Record<string, unknown>[] => RUN_WORKING.map((w, i) => ({ ...w, since: at(i === 0 ? -4 : -2) }));
 const threeRunDirections = (): Record<string, unknown>[] => directions('G0002', { run: 'run-2c44', canStart: false, why: 'running', working: true });
 
 const now = (page: Page) => overview(page).locator('#ov-sec-now');
@@ -261,7 +264,7 @@ test.describe('the runs in Now', () => {
         await expect(g1.locator('.research-overview__run-name')).toHaveText('Kubíčkovi z Dolní Lhoty');
         await expect(g1.locator('.research-overview__run-code')).toHaveText('G0001');
         await expect(g1.locator('.research-overview__run-state')).toHaveText('working');
-        await expect(g1.locator('.research-overview__run-meta')).toHaveText(/^Claude · since (?:\S+ )?\d{1,2}:\d{2}/);
+        await expect(g1.locator('.research-overview__run-meta')).toHaveText(new RegExp(`^Claude · since ${await clockOf(page, at(-10))}`));
         await expect(g1.locator('.research-overview__run-person')).toHaveText('Vojtěch Kubíček');
         await expect(g1.locator('.research-overview__finish')).toHaveCount(1);
         await expect(g1).not.toContainText('Skips');
@@ -324,7 +327,7 @@ test.describe('the runs in Now', () => {
         b.runsEnded = [{ id: 'run-1a07', research: 'G0001', agent: 'claude', since: at(-10), ended, why: 'stopped' }];
         b.working = b.working.filter(w => w.run !== 'run-1a07');
         const g1 = block(page, 'run-1a07');
-        await expect(g1.locator('.research-overview__run-state')).toHaveText(/^ended at (?:\S+ )?\d{1,2}:\d{2}/, { timeout: 10000 });
+        await expect(g1.locator('.research-overview__run-state')).toHaveText(new RegExp(`^ended at ${await clockOf(page, ended)}`), { timeout: 10000 });
         await expect(g1).toHaveClass(/is-ended/);
         await expect(g1.locator('.research-overview__run-note')).toHaveText(['The whole queue takes the direction again.']);
         await expect(g1.locator('.research-overview__run-actions')).toHaveCount(0);
