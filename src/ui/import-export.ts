@@ -574,8 +574,31 @@ export const importExportMethods = uiModule({
             this.importFromTreeManager = fromManager;
             this.importToCurrentTree = toCurrent;
             this.leavePickDialog();
-            this.showGedcomResultDialog();
+            // Into an empty tree: today's summary with "Insert into tree";
+            // otherwise the import guide, its step 1 holding the summary (spec 134 §3).
+            if (toCurrent) this.showGedcomResultDialog();
+            else this.openGedcomGuide(fromManager);
         })();
+    },
+
+    /** The GEDCOM file just read, into the import guide: what it holds is step 1's left column. */
+    openGedcomGuide(fromManager: boolean): void {
+        const result = this.gedcomResult;
+        if (!result) return;
+        this.renderGedcomSummary();
+        const file = this.gedcomFileInfo;
+        // The guide returns to Manage trees itself when it started there.
+        this.importFromTreeManager = false;
+        MergerUI.startMerge(this.gedcomDataForImport(), file?.name || undefined, fromManager,
+            { gedcom: true, ...(result.importId ? { importId: result.importId } : {}) },
+            { kind: 'ged', ...(file?.sha ? { fingerprint: file.sha } : {}) },
+            { gedcomLive: true, ...(fromManager ? { mode: 'new' as const } : {}) });
+    },
+
+    /** The import guide let the GEDCOM file go (written, saved as JSON or closed). */
+    endGedcomGuide(): void {
+        this.gedcomResult = null;
+        this.gedcomRawBuffer = null;
     },
 
     /**
@@ -600,8 +623,18 @@ export const importExportMethods = uiModule({
         openFilePicker(document.getElementById(inputId) as HTMLInputElement | null);
     },
 
+    /**
+     * Today's GEDCOM summary drawn again (after another encoding, media
+     * attached or downloaded): in the import guide's step 1, the guide takes
+     * the changed data; otherwise the dialog of "Insert into tree".
+     */
     showGedcomResultDialog(): void {
         if (!this.gedcomResult) return;
+        if (MergerUI.hasGedcomGuide()) {
+            this.renderGedcomSummary();
+            MergerUI.replaceIncoming(this.gedcomDataForImport());
+            return;
+        }
 
         const modal = document.getElementById('gedcom-result-modal');
         if (!modal) return;
@@ -614,6 +647,19 @@ export const importExportMethods = uiModule({
         if (!alreadyOnStack && (this.importFromTreeManager || this.importToCurrentTree)) {
             this.pushDialog('gedcom-result-modal');
         }
+        this.renderGedcomSummary();
+        // The dialog is only "Insert into tree" now: the other ways are the import guide's.
+        const insertBtn = document.getElementById('gedcom-insert-btn');
+        if (insertBtn) insertBtn.style.display = '';
+        modal.classList.add('active');
+    },
+
+    /**
+     * What the GEDCOM file holds (`#gedcom-summary`): the tiles, the lines
+     * about what was not carried over, the encoding, images and external media.
+     */
+    renderGedcomSummary(): void {
+        if (!this.gedcomResult) return;
 
         // Update stats
         const personsEl = document.getElementById('gedcom-stat-persons');
@@ -718,35 +764,6 @@ export const importExportMethods = uiModule({
         const downloadBtn = document.getElementById('gedcom-media-download');
         const urlRefs = this.gedcomResult.externalMedia.filter(r => r.isUrl).length;
         if (downloadBtn) downloadBtn.style.display = urlRefs > 0 ? '' : 'none';
-
-        // Show/hide buttons based on context
-        const newTreeBtn = document.getElementById('gedcom-new-tree-btn');
-        const mergeBtn = document.getElementById('gedcom-merge-btn');
-        const saveJsonBtn = document.getElementById('gedcom-save-json-btn');
-        const insertBtn = document.getElementById('gedcom-insert-btn');
-
-        if (this.importToCurrentTree) {
-            // Importing to current tree (from empty state) - show only "Insert into tree"
-            if (newTreeBtn) newTreeBtn.style.display = 'none';
-            if (mergeBtn) mergeBtn.style.display = 'none';
-            if (saveJsonBtn) saveJsonBtn.style.display = 'none';
-            if (insertBtn) insertBtn.style.display = '';
-        } else if (this.importFromTreeManager) {
-            // From tree manager "New Tree" - only "Import as New Tree" and "Save as JSON"
-            // Merge is available via tree manager's "Merge into..." action
-            if (newTreeBtn) newTreeBtn.style.display = '';
-            if (mergeBtn) mergeBtn.style.display = 'none';
-            if (saveJsonBtn) saveJsonBtn.style.display = '';
-            if (insertBtn) insertBtn.style.display = 'none';
-        } else {
-            // Normal import - show standard options
-            if (newTreeBtn) newTreeBtn.style.display = '';
-            if (mergeBtn) mergeBtn.style.display = '';
-            if (saveJsonBtn) saveJsonBtn.style.display = '';
-            if (insertBtn) insertBtn.style.display = 'none';
-        }
-
-        modal.classList.add('active');
     },
 
     /**
@@ -968,6 +985,7 @@ export const importExportMethods = uiModule({
     setGedcomImportImages(checked: boolean): void {
         this.gedcomImportImages = checked;
         this.applyGedcomImagesChoice();
+        if (MergerUI.hasGedcomGuide() && this.gedcomResult) MergerUI.replaceIncoming(this.gedcomDataForImport());
     },
 
     /**
@@ -1033,37 +1051,6 @@ export const importExportMethods = uiModule({
             if (treeId) void this.afterImport(treeId, { gedcom: true, path: 'insert', ...(importId ? { importId } : {}) });
             return;
         }
-
-        // Save flag before close (which resets it)
-        const fromManager = this.importFromTreeManager;
-
-        // Close gedcom result but don't return to parent yet
-        document.getElementById('gedcom-result-modal')?.classList.remove('active');
-        this.dialogStack.pop(); // Remove gedcom-result-modal
-
-        // Show import tree dialog with parent preserved
-        this.showImportTreeDialog(this.gedcomDataForImport(), strings.treeManager.importTreeName, fromManager);
-        this.pendingGedcomImport = importId ? { importId } : {};
-        this.gedcomResult = null;
-    },
-
-    /**
-     * Merge GEDCOM data with existing tree
-     */
-    async mergeGedcomWithExisting(): Promise<void> {
-        const result = this.gedcomResult;
-        if (!result) return;
-        const incoming = this.gedcomDataForImport();
-        // §8: the matching runs under the working state of the choice, its words at once for large trees.
-        await runHeavy(activatedElement(), () => {
-            if (this.gedcomResult !== result) return;
-            const file = this.gedcomFileInfo;
-            MergerUI.startMerge(incoming, file?.name || undefined, false,
-                { gedcom: true, ...(result.importId ? { importId: result.importId } : {}) },
-                { kind: 'ged', ...(file?.sha ? { fingerprint: file.sha } : {}) });
-            this.gedcomResult = null;
-            this.closeGedcomResultDialog();
-        }, { label: strings.merge.analyzing, atOnce: mergeAnalysisLong(DataManager.getData(), incoming) });
     },
 
     // ---- JSON IMPORT WITH VALIDATION ----
@@ -1655,6 +1642,17 @@ export const importExportMethods = uiModule({
         this.restoreImportResearch(newTreeId);
 
         this.closeImportTreeDialog();
+        this.showImportedTree(newTreeId);
+        // If this import came from "open from file", attach that handle now.
+        void this.attachPendingFileHandle(newTreeId);
+        // M6: post-import health check — offer to review any data issues.
+        void this.afterImport(newTreeId, gedcomImport
+            ? { gedcom: true, path: 'new', ...(gedcomImport.importId ? { importId: gedcomImport.importId } : {}) }
+            : {});
+    },
+
+    /** A tree just imported as a new one, shown: the switcher, Manage trees, the canvas, search and the address. */
+    showImportedTree(newTreeId: TreeId): void {
         this.updateTreeSwitcher();
         this.updateTreeManagerList();
         TreeRenderer.render();
@@ -1662,12 +1660,23 @@ export const importExportMethods = uiModule({
         this.refreshSearch();
         // Update URL to reflect new tree
         this.updateUrlTreeParam(newTreeId);
-        // If this import came from "open from file", attach that handle now.
-        void this.attachPendingFileHandle(newTreeId);
-        // M6: post-import health check — offer to review any data issues.
-        void this.afterImport(newTreeId, gedcomImport
-            ? { gedcom: true, path: 'new', ...(gedcomImport.importId ? { importId: gedcomImport.importId } : {}) }
-            : {});
+    },
+
+    /**
+     * The import guide's New tree of a whole GEDCOM file (spec 134 §3): today's
+     * import of a new tree under the file's name, no name asked. `closed`
+     * runs once the tree is written (the guide closes), then the tree is shown
+     * with the "What next" card. False when nothing was written.
+     */
+    async importGuideNewTree(data: StromData, name: string, importId: string | undefined, closed: () => void): Promise<boolean> {
+        const btn = document.getElementById('merge-next');
+        const newTreeId = await busyLocal(btn, strings.busy.importing, () => DataManager.importAsNewTree(data, name),
+            () => ({ ok: false, kind: 'error', text: strings.busy.failed }));
+        if (!newTreeId) return false;
+        closed();
+        this.showImportedTree(newTreeId);
+        void this.afterImport(newTreeId, { gedcom: true, path: 'new', ...(importId ? { importId } : {}) });
+        return true;
     },
 
     /**

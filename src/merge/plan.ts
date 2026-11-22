@@ -156,6 +156,8 @@ export interface WizardChoices {
     scope: PlanScope;
     /** Source and target swapped (two trees, step 1). */
     swapped: boolean;
+    /** Step 1's "Save as JSON" (a GEDCOM file): the converted data downloaded, nothing written; the mode stays 'new'. */
+    json?: boolean;
     source: PlanSource;
     /** The target tree's name; for a new tree the new tree's name. */
     targetName: string;
@@ -530,6 +532,11 @@ export interface ApplyResult {
     sharedJoined?: number;
 }
 
+/** Every person of the source goes in: nobody left out, skipped or still to decide. */
+export function planTakesAll(plan: MergePlan): boolean {
+    return plan.items.every(i => !(i.kind === 'person-add' && !i.on) && i.kind !== 'skip' && i.kind !== 'person-pending');
+}
+
 /**
  * Write the plan: the target with the source merged in (a new tree: the
  * source, without the persons left out). Only what the plan says happens.
@@ -539,7 +546,7 @@ export interface ApplyResult {
 export async function applyPlan(plan: MergePlan, target: StromData, source: StromData): Promise<ApplyResult> {
     if (plan.mode === 'compare') throw new Error('A comparison plan is not written');
     const before = plan.mode === 'new' ? EMPTY_TREE() : target;
-    const allIn = plan.items.every(i => !(i.kind === 'person-add' && !i.on) && i.kind !== 'skip' && i.kind !== 'person-pending');
+    const allIn = planTakesAll(plan);
     let data: StromData;
     let trace: MergeTrace;
     let extra: Pick<ApplyResult, 'backupKey' | 'importMap' | 'sharedJoined'> = {};

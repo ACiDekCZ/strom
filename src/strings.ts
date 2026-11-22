@@ -6419,6 +6419,10 @@ const stringsEN = {
         researchKept: (t: string) => `${t} has a research: the link stays; sending the new people is chosen in the last step.`,
         btnCompare: (n: number, t: string) => `Compare ${nEn(n, 'person', 'people')} with the tree ${t}`,
         btnNewNext: (n: number) => `Continue: Whom to add (${nEn(n, 'person', 'people')})`,
+        btnJson: 'Download JSON',
+        moreOptions: 'More options',
+        notTakenTitle: 'Not taken over',
+        notTakenNote: 'Nothing of this is lost silently: the list can be saved.',
         // Step 2 - Who is who (§4)
         grpMaybe: 'Maybe the same',
         grpSame: 'The same',
@@ -17294,6 +17298,10 @@ const stringsCZ: StringsType = {
         researchKept: (t: string) => `${t} mají výzkum: napojení zůstane, posílání nových osob se vybere v posledním kroku.`,
         btnCompare: (n: number, t: string) => `Porovnat ${nCs(n, 'osobu', 'osoby', 'osob')} se stromem ${t}`,
         btnNewNext: (n: number) => `Pokračovat: Koho přidat (${nCs(n, 'osoba', 'osoby', 'osob')})`,
+        btnJson: 'Stáhnout JSON',
+        moreOptions: 'Další možnosti',
+        notTakenTitle: 'Strom nepřevezme',
+        notTakenNote: 'Nic z toho se neztratí tiše: seznam jde uložit.',
         // Step 2 - Who is who (§4)
         grpMaybe: 'Možná stejní',
         grpSame: 'Stejní',
@@ -28010,6 +28018,10 @@ const stringsDE: StringsType = {
         researchKept: (t: string) => `${t} hat eine Forschung: die Verbindung bleibt; das Senden der neuen Personen wird im letzten Schritt gewählt.`,
         btnCompare: (n: number, t: string) => `${nDe(n, 'Person', 'Personen')} mit dem Stammbaum ${t} vergleichen`,
         btnNewNext: (n: number) => `Weiter: Wen hinzufügen (${nDe(n, 'Person', 'Personen')})`,
+        btnJson: 'JSON herunterladen',
+        moreOptions: 'Weitere Möglichkeiten',
+        notTakenTitle: 'Nicht übernommen',
+        notTakenNote: 'Nichts davon geht stillschweigend verloren: die Liste lässt sich speichern.',
         // Step 2 - Who is who (§4)
         grpMaybe: 'Vielleicht gleich',
         grpSame: 'Gleich',

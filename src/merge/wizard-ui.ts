@@ -18,8 +18,11 @@ import { buildPlan, planCounts, type MergePlan, type PlanCounts, type PlanMode, 
 import { stepInfo, nextStep, previousStep, WIZARD_STEPS, type StepInfo, type WizardStep } from './wizard-steps.js';
 import { strings, countText } from '../strings.js';
 import { announceText } from '../ui/live-announce.js';
-import { escapeHtml, stepName, type StepContext } from './steps/context.js';
-import { renderStep1 } from './steps/step1-what.js';
+import { escapeHtml, stepName, type Step1Env, type StepContext, type TargetBlock } from './steps/context.js';
+import { TreeManager } from '../tree-manager.js';
+import { DataManager } from '../data.js';
+import { getUI } from '../ui-ref.js';
+import { renderStep1, parkGedcomSummary } from './steps/step1-what.js';
 import { renderStep2 } from './steps/step2-who.js';
 import { renderStep3 } from './steps/step3-whom.js';
 import { renderStep4 } from './steps/step4-rules.js';
@@ -43,6 +46,15 @@ export interface WizardHost {
     write(plan: MergePlan): Promise<void>;
     /** Today's list of pairs into step 2's body (until §4). */
     renderPairs(host: HTMLElement): void;
+    /**
+     * Step 1's Compare: the people of the import matched with the chosen
+     * target (the merge state replaced). False when it did not run.
+     */
+    compare(): Promise<boolean>;
+    /** Step 1's Download JSON (a GEDCOM file): the converted data saved, the guide closed, nothing written. */
+    downloadJson(): void;
+    /** What step 1 reads and does beyond the choices. */
+    step1?(): Step1Env;
 }
 
 /** Where the guide's import comes from and where it goes, for fresh choices. */
@@ -99,6 +111,39 @@ export function countsWords(c: PlanCounts): string {
     const W = strings.mergeWizard;
     return [`${W.cntJoined} ${countText(c.joined)}`, `${W.cntNew} ${countText(c.added)}`,
         `${W.cntSkipped} ${countText(c.skipped)}`, `${W.cntPending} ${countText(c.pending)}`].join(', ');
+}
+
+/**
+ * Why the tree cannot be the import's target (§2), null when it can: locked
+ * in Manage trees, from a newer app version, followed live from the research,
+ * or open read-only. A blocked tree stays in step 1's list, said why.
+ */
+export function targetBlock(treeId: TreeId): TargetBlock | null {
+    const meta = TreeManager.getTreeMetadata(treeId);
+    if (!meta) return 'readOnly';
+    if (meta.isLocked) return 'locked';
+    if (TreeManager.isTreeNewer(treeId)) return 'newer';
+    const open = !DataManager.isViewMode() && DataManager.getCurrentTreeId() === treeId;
+    if (open) {
+        let live = false;
+        try { live = getUI().isLiveFollowOn(); } catch { /* no UI (unit tests) */ }
+        if (live) return 'live';
+        if (DataManager.isReadOnly()) return 'readOnly';
+    }
+    return null;
+}
+
+/** The block said in words, for the tree's line and its tooltip. */
+export function targetBlockText(block: TargetBlock, treeId: TreeId): string {
+    const W = strings.mergeWizard;
+    const meta = TreeManager.getTreeMetadata(treeId);
+    const name = meta?.name ?? '';
+    switch (block) {
+        case 'locked': return W.blockLocked(name);
+        case 'newer': return W.blockNewer(name, meta?.dataVersion ?? 0);
+        case 'live': return W.blockLive;
+        case 'readOnly': return W.blockReadOnly;
+    }
 }
 
 export class MergeWizard {
@@ -173,8 +218,8 @@ export class MergeWizard {
         this.renderFooter();
     }
 
-    /** Merge a change of the choices in (the steps' `update`). */
-    private update(change?: Partial<WizardChoices>): void {
+    /** Merge a change of the choices in (the steps' `update`), the step drawn again. */
+    update(change?: Partial<WizardChoices>): void {
         const ws = this.ws;
         if (!ws) return;
         if (change) ws.choices = { ...ws.choices, ...change };
@@ -198,10 +243,38 @@ export class MergeWizard {
         const ws = this.ws;
         if (!ws || this.busy) return;
         const step = ws.step;
-        if (step === 1 && !ws.compared && ws.choices.mode !== 'new') {
-            ws.compared = true;
-            this.rebuild();
-            this.host.changed();
+        if (step === 1) {
+            const c = ws.choices;
+            // An import with nobody in it: only Close (13a).
+            if (c.source.persons === 0) {
+                this.host.finishCompare();
+                return;
+            }
+            if (c.json) {
+                this.host.downloadJson();
+                return;
+            }
+            if (!this.primary().enabled) return;
+            if (!ws.compared && c.mode !== 'new') {
+                this.busy = true;
+                this.renderFooter();
+                let ok = false;
+                try {
+                    ok = await this.host.compare();
+                } finally {
+                    this.busy = false;
+                }
+                // The merge state was replaced by the comparison's.
+                const now = this.ws;
+                if (!now) return;
+                if (!ok) {
+                    this.renderFooter();
+                    return;
+                }
+                now.compared = true;
+                this.rebuild();
+                this.host.changed();
+            }
         }
         if (step === 5) {
             if (ws.choices.mode === 'compare') {
@@ -286,6 +359,7 @@ export class MergeWizard {
             }
         }
         if (step === 1) {
+            if (ws.choices.json) return { text: W.modeJson };
             const mode = ws.choices.mode === 'new' ? W.modeNew : ws.choices.mode === 'compare' ? W.modeCompare : W.modeAdd;
             return { text: ws.choices.mode === 'new' ? mode : `${mode} · ${ws.choices.scope})` };
         }
@@ -380,6 +454,7 @@ export class MergeWizard {
             compared: ws.compared,
             update: change => this.update(change),
             renderPairs: el => this.host.renderPairs(el),
+            ...(this.host.step1 ? { step1: this.host.step1() } : {}),
         };
     }
 
@@ -388,6 +463,8 @@ export class MergeWizard {
         const body = document.getElementById('merge-step-body');
         if (!ws || !body) return;
         body.dataset.step = String(ws.step);
+        // Today's GEDCOM summary goes home before any body is drawn: step 1 takes it again.
+        parkGedcomSummary();
         const ctx = this.context();
         switch (ws.step) {
             case 1: renderStep1(body, ctx); break;
@@ -415,13 +492,23 @@ export class MergeWizard {
             const ok = info[5].state === 'ok' && !this.busy;
             return { label, enabled: ok, why: ok ? '' : why };
         }
-        if (ws.step === 1 && !ws.compared && c.mode !== 'new') {
-            return { label: W.btnCompare(c.source.persons, c.targetName), enabled: !this.busy, why: '' };
+        if (ws.step === 1) {
+            if (c.source.persons === 0) return { label: strings.buttons.close, enabled: true, why: '' };
+            if (c.json) return { label: W.btnJson, enabled: !this.busy, why: '' };
+            if (c.mode !== 'new') {
+                const env = this.host.step1?.();
+                // No target that can take it (all blocked): New tree is the way (§2).
+                if (!c.targetTreeId) return { label: W.btnCompare(c.source.persons, c.targetName), enabled: false, why: W.pickOther };
+                // An encrypted tree is compared once it is unlocked (13f).
+                if (env?.encLocked()) return { label: W.btnCompare(c.source.persons, c.targetName), enabled: false, why: W.encLocked(c.targetName) };
+                if (!ws.compared) return { label: W.btnCompare(c.source.persons, c.targetName), enabled: !this.busy, why: '' };
+            }
         }
         const to = nextStep(ws.step, this.availability());
         if (!to) return { label: W.done, enabled: false, why: '' };
         const ok = info[to].state === 'ok' && !this.busy;
-        return { label: W.btnNext(stepName(to)), enabled: ok, why: ok ? '' : why };
+        const label = ws.step === 1 && c.mode === 'new' && to === 3 ? W.btnNewNext(c.source.persons) : W.btnNext(stepName(to));
+        return { label, enabled: ok, why: ok ? '' : why };
     }
 
     renderFooter(): void {
@@ -450,7 +537,8 @@ export class MergeWizard {
         // where Save for later stands later on (ZADANI_DEV §2).
         const nothingYet = ws.step === 1 && !ws.compared;
         const cancel = document.getElementById('merge-cancel') as HTMLButtonElement | null;
-        if (cancel) cancel.hidden = !nothingYet;
+        // An empty import has only Close (13a).
+        if (cancel) cancel.hidden = !nothingYet || ws.choices.source.persons === 0;
         if (later) {
             later.textContent = strings.merge.closeSave;
             later.hidden = nothingYet;

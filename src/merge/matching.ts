@@ -2049,13 +2049,16 @@ export function quickMatchScore(p1: Person, p2: Person, data1?: StromData, data2
 // ==================== MERGE STATE HELPERS ====================
 
 /**
- * Create initial merge state from data
+ * Create initial merge state from data. With `match: false` nobody is
+ * compared yet (the guide's step 1, spec 134 §3): the comparison runs when
+ * it is asked for (`rebaseMergeState` over the chosen target).
  */
 export function createMergeState(
     existingData: StromData,
-    incomingData: StromData
+    incomingData: StromData,
+    opts: { match?: boolean } = {},
 ): MergeState {
-    const matches = findMatches(existingData, incomingData);
+    const matches = opts.match === false ? [] : findMatches(existingData, incomingData);
 
     // Find unmatched persons
     const matchedExisting = new Set(matches.map(m => m.existingId));

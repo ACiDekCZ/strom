@@ -18213,6 +18213,87 @@
             line-height: 1.45;
             margin: 0 0 8px;
         }
+        /* ---- Import guide, step 1: what the import holds | what to do with it (spec 134 §3) ---- */
+        .merge-step1 { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; align-items: start; }
+        .merge-s1-src, .merge-s1-what { min-width: 0; }
+        .merge-s1-h { font-size: 12px; font-weight: 600; color: var(--text-light); margin: 12px 0 6px; }
+        .merge-s1-srcbody > .merge-s1-h:first-child { margin-top: 0; }
+        .merge-s1-sumline { display: none; }
+        .merge-s1-file { display: flex; flex-direction: column; gap: 2px; margin: 0 0 10px; min-width: 0; }
+        .merge-s1-name, .merge-s1-end b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-s1-meta { font-size: 12px; color: var(--text-light); }
+        .merge-s1-src .gedcom-stats { margin: 0 0 8px; }
+        .merge-not-taken { margin: 8px 0; font-size: 12px; color: var(--text-light); line-height: 1.45; }
+        .merge-not-taken-line { margin: 0 0 2px; overflow-wrap: anywhere; }
+        .merge-not-taken-links { display: flex; gap: 12px; flex-wrap: wrap; }
+        .merge-s1-desc { font-size: 13px; color: var(--text-light); line-height: 1.45; margin: 6px 0 4px; }
+        .merge-s1-modes.sel-seg { display: inline-flex; max-width: 100%; overflow: hidden; }
+        .merge-s1-modes > .sel-opt { padding: 5px 12px; font-size: 13px; line-height: 1.2; white-space: nowrap; cursor: pointer; }
+        .merge-s1-targets, .merge-s1-scopes { display: flex; flex-direction: column; gap: 4px; }
+        .merge-s1-target {
+            display: grid; grid-template-columns: auto auto auto minmax(0, 1fr); align-items: center; gap: 8px;
+            min-height: 32px; padding: 4px 12px; cursor: pointer; box-sizing: border-box;
+        }
+        .merge-s1-target > input, .merge-s1-scope > input { margin: 0; }
+        .merge-s1-tname { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+        .merge-s1-tline { font-size: 12px; color: var(--text-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s1-target:not(.is-blocked) .merge-s1-lock { display: none; }
+        .merge-s1-lock { display: inline-flex; color: var(--text-light); }
+        .merge-s1-target.is-blocked { cursor: default; opacity: .7; }
+        .merge-s1-scope { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 5px 12px; cursor: pointer; }
+        .merge-s1-scope-text { display: flex; flex-direction: column; min-width: 0; }
+        .merge-s1-scope-title { color: var(--text); font-size: 13px; }
+        .merge-s1-scope-desc { font-size: 12px; color: var(--text-light); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s1-scope-desc.is-example { font-style: italic; }
+        .merge-s1-more { display: none; align-self: flex-start; }
+        .merge-s1-note { font-size: 12px; color: var(--text-light); line-height: 1.45; margin: 6px 0 0; }
+        .merge-s1-warn { font-size: 12px; color: var(--warning-text); line-height: 1.45; margin: 6px 0 0; }
+        .merge-s1-empty { font-size: 13px; line-height: 1.45; margin: 0; }
+        .merge-s1-fromto { margin: 0 0 10px; }
+        .merge-s1-fromto > .merge-s1-h { display: block; margin-top: 0; }
+        .merge-s1-route { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .merge-s1-end { display: flex; flex-direction: column; min-width: 0; flex: 0 1 auto; }
+        .merge-s1-arrow { color: var(--text-light); }
+        .merge-s1-swap { margin-left: auto; flex: none; white-space: nowrap; }
+        .merge-s1-swap[aria-disabled="true"] { opacity: .55; cursor: default; }
+        .merge-not-taken-note { font-size: 13px; color: var(--text-light); margin: 0 0 8px; }
+        .merge-not-taken-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; font-size: 13px; }
+        .merge-not-taken-list > li {
+            display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 4px 10px; align-items: baseline;
+            padding: 5px 0; border-bottom: 1px solid var(--border);
+        }
+        .merge-not-taken-count { color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .merge-not-taken-text { color: var(--text-light); overflow-wrap: anywhere; }
+        /* A tablet: the left column narrower. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .merge-step1 { grid-template-columns: 280px minmax(0, 1fr); gap: 16px; }
+        }
+        /* A phone (and a phone held sideways): the columns stacked, the summary one line a tap opens,
+           c) and d) behind "More options" unless one of them is chosen (§14a). */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-step1 { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+            .merge-s1-sumline {
+                display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 6px 12px; text-align: left;
+                border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+            }
+            .merge-s1-sumtext { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .merge-s1-src.is-open .merge-s1-chev { transform: rotate(180deg); }
+            .merge-s1-src:not(.is-open) .merge-s1-srcbody { display: none; }
+            .merge-s1-src.is-open .merge-s1-srcbody { margin-top: 8px; }
+            .merge-s1-modes.sel-seg { display: flex; width: 100%; }
+            .merge-s1-modes > .sel-opt { flex: 1 1 auto; min-width: 0; padding: 5px 6px; white-space: normal; text-align: center; }
+            .merge-s1-more { display: inline-block; }
+            .merge-s1-scopes:not(.is-more) > .merge-s1-scope:is([data-scope="c"], [data-scope="d"]) { display: none; }
+            .merge-s1-scopes.is-more > .merge-s1-more { display: none; }
+            .merge-s1-tname { max-width: 140px; }
+            .merge-s1-route { flex-wrap: wrap; }
+        }
+        @media (pointer: coarse) {
+            .merge-s1-target { min-height: 44px; }
+        }
+        @media (hover: hover) {
+            .merge-s1-sumline:hover { background: var(--surface-2); }
+        }
 
         /* The steps: .sel-tab (src/ui/sel-css.ts), the current one carries the line; a finished one is a button
            with its ✓, a skipped or a later one plain text. Each has its second line (.merge-step-sub). */
@@ -36169,90 +36250,76 @@
                 <h2 data-i18n="gedcom.resultTitle"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeGedcomResultDialog()">&times;</button>
             </div>
-            <div class="gedcom-stats">
-                <div class="stat-item">
-                    <div class="number" id="gedcom-stat-persons">0</div>
-                    <div class="label" data-i18n="gedcom.persons"></div>
+            <!-- What the file holds: shown here for "Insert into tree", moved into step 1 of the import guide otherwise (spec 134 §3). -->
+            <div id="gedcom-summary-home">
+            <div id="gedcom-summary" class="gedcom-summary">
+                <div class="gedcom-stats">
+                    <div class="stat-item">
+                        <div class="number" id="gedcom-stat-persons">0</div>
+                        <div class="label" data-i18n="gedcom.persons"></div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number" id="gedcom-stat-partnerships">0</div>
+                        <div class="label" data-i18n="gedcom.partnerships"></div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number" id="gedcom-stat-placeholders">0</div>
+                        <div class="label" data-i18n="gedcom.placeholders"></div>
+                    </div>
+                    <div class="stat-item" id="gedcom-stat-photos-item">
+                        <div class="number" id="gedcom-stat-photos">0</div>
+                        <div class="label" data-i18n="gedcom.photos"></div>
+                    </div>
+                    <div class="stat-item" id="gedcom-stat-documents-item">
+                        <div class="number" id="gedcom-stat-documents">0</div>
+                        <div class="label" data-i18n="gedcom.documents"></div>
+                    </div>
+                    <div class="stat-item" id="gedcom-stat-excerpts-item">
+                        <div class="number" id="gedcom-stat-excerpts">0</div>
+                        <div class="label" data-i18n="gedcom.excerpts"></div>
+                    </div>
+                    <div class="stat-item" id="gedcom-stat-sources-item">
+                        <div class="number" id="gedcom-stat-sources">0</div>
+                        <div class="label" data-i18n="gedcom.sources"></div>
+                    </div>
+                    <div class="stat-item" id="gedcom-stat-events-item">
+                        <div class="number" id="gedcom-stat-events">0</div>
+                        <div class="label" data-i18n="gedcom.events"></div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number skipped" id="gedcom-stat-unsupported">0</div>
+                        <div class="label" data-i18n="gedcom.unsupported"></div>
+                    </div>
                 </div>
-                <div class="stat-item">
-                    <div class="number" id="gedcom-stat-partnerships">0</div>
-                    <div class="label" data-i18n="gedcom.partnerships"></div>
+                <p id="gedcom-stat-detail" class="gedcom-stat-detail" style="display:none;"></p>
+                <!-- Text encoding of a file that does not state it plainly (ANSI, no CHAR …): a sample of names and a switch. -->
+                <div id="gedcom-encoding-row" class="gedcom-encoding-row" style="display:none;">
+                    <div class="gedcom-encoding-head">
+                        <label for="gedcom-encoding-select" data-i18n="gedcom.encodingLabel"></label>
+                        <select id="gedcom-encoding-select" onchange="window.Strom.UI.setGedcomEncoding(this.value)"></select>
+                    </div>
+                    <p class="gedcom-encoding-sample"><span class="gedcom-encoding-sample-label" data-i18n="gedcom.encodingSample"></span> <span id="gedcom-encoding-names"></span></p>
+                    <p id="gedcom-encoding-how" class="field-hint"></p>
                 </div>
-                <div class="stat-item">
-                    <div class="number" id="gedcom-stat-placeholders">0</div>
-                    <div class="label" data-i18n="gedcom.placeholders"></div>
+                <!-- Leave images out of this import (text of sources always stays). -->
+                <div id="gedcom-images-row" class="import-images-row" style="display:none;">
+                    <label class="import-images-check">
+                        <input type="checkbox" id="gedcom-import-images" onchange="window.Strom.UI.setGedcomImportImages(this.checked)">
+                        <span data-i18n="importImages.label"></span>
+                        <span id="gedcom-images-size" class="import-images-size"></span>
+                    </label>
+                    <p class="field-hint" data-i18n="importImages.hint"></p>
                 </div>
-                <div class="stat-item" id="gedcom-stat-photos-item">
-                    <div class="number" id="gedcom-stat-photos">0</div>
-                    <div class="label" data-i18n="gedcom.photos"></div>
-                </div>
-                <div class="stat-item" id="gedcom-stat-documents-item">
-                    <div class="number" id="gedcom-stat-documents">0</div>
-                    <div class="label" data-i18n="gedcom.documents"></div>
-                </div>
-                <div class="stat-item" id="gedcom-stat-excerpts-item">
-                    <div class="number" id="gedcom-stat-excerpts">0</div>
-                    <div class="label" data-i18n="gedcom.excerpts"></div>
-                </div>
-                <div class="stat-item" id="gedcom-stat-sources-item">
-                    <div class="number" id="gedcom-stat-sources">0</div>
-                    <div class="label" data-i18n="gedcom.sources"></div>
-                </div>
-                <div class="stat-item" id="gedcom-stat-events-item">
-                    <div class="number" id="gedcom-stat-events">0</div>
-                    <div class="label" data-i18n="gedcom.events"></div>
-                </div>
-                <div class="stat-item">
-                    <div class="number skipped" id="gedcom-stat-unsupported">0</div>
-                    <div class="label" data-i18n="gedcom.unsupported"></div>
+                <div id="gedcom-media-row" class="gedcom-media-row" style="display:none;">
+                    <span id="gedcom-media-text"></span>
+                    <button type="button" id="gedcom-media-download" onclick="window.Strom.UI.downloadGedcomMedia()" data-i18n="gedcom.downloadMedia" style="display:none;"></button>
+                    <button type="button" class="secondary" onclick="window.Strom.UI.pickGedcomMedia()" data-i18n="gedcom.attachMedia"></button>
+                    <input type="file" id="gedcom-media-input" multiple accept="image/*,.pdf" style="display:none;"
+                        onchange="window.Strom.UI.attachGedcomMedia(this.files)">
                 </div>
             </div>
-            <p id="gedcom-stat-detail" class="gedcom-stat-detail" style="display:none;"></p>
-            <!-- Text encoding of a file that does not state it plainly (ANSI, no CHAR …): a sample of names and a switch. -->
-            <div id="gedcom-encoding-row" class="gedcom-encoding-row" style="display:none;">
-                <div class="gedcom-encoding-head">
-                    <label for="gedcom-encoding-select" data-i18n="gedcom.encodingLabel"></label>
-                    <select id="gedcom-encoding-select" onchange="window.Strom.UI.setGedcomEncoding(this.value)"></select>
-                </div>
-                <p class="gedcom-encoding-sample"><span class="gedcom-encoding-sample-label" data-i18n="gedcom.encodingSample"></span> <span id="gedcom-encoding-names"></span></p>
-                <p id="gedcom-encoding-how" class="field-hint"></p>
-            </div>
-            <!-- Leave images out of this import (text of sources always stays). -->
-            <div id="gedcom-images-row" class="import-images-row" style="display:none;">
-                <label class="import-images-check">
-                    <input type="checkbox" id="gedcom-import-images" onchange="window.Strom.UI.setGedcomImportImages(this.checked)">
-                    <span data-i18n="importImages.label"></span>
-                    <span id="gedcom-images-size" class="import-images-size"></span>
-                </label>
-                <p class="field-hint" data-i18n="importImages.hint"></p>
-            </div>
-            <div id="gedcom-media-row" class="gedcom-media-row" style="display:none;">
-                <span id="gedcom-media-text"></span>
-                <button type="button" id="gedcom-media-download" onclick="window.Strom.UI.downloadGedcomMedia()" data-i18n="gedcom.downloadMedia" style="display:none;"></button>
-                <button type="button" class="secondary" onclick="window.Strom.UI.pickGedcomMedia()" data-i18n="gedcom.attachMedia"></button>
-                <input type="file" id="gedcom-media-input" multiple accept="image/*,.pdf" style="display:none;"
-                    onchange="window.Strom.UI.attachGedcomMedia(this.files)">
             </div>
             <div class="menu-options" id="gedcom-options">
-                <!-- Normal options (hidden when importing to current tree) -->
-                <button id="gedcom-new-tree-btn" class="menu-option" onclick="window.Strom.UI.importGedcomAsNewTree()">
-                    <span class="option-text">
-                        <span class="option-title" data-i18n="gedcom.importAsNew"></span>
-                        <span class="option-desc" data-i18n="gedcom.importAsNewDesc"></span>
-                    </span>
-                </button>
-                <button id="gedcom-merge-btn" class="menu-option" onclick="window.Strom.UI.mergeGedcomWithExisting()">
-                    <span class="option-text">
-                        <span class="option-title" data-i18n="gedcom.mergeExisting"></span>
-                        <span class="option-desc" data-i18n="gedcom.mergeExistingDesc"></span>
-                    </span>
-                </button>
-                <button id="gedcom-save-json-btn" class="menu-option" onclick="window.Strom.UI.downloadGedcomAsJson()">
-                    <span class="option-text">
-                        <span class="option-title" data-i18n="gedcom.saveAsJson"></span>
-                        <span class="option-desc" data-i18n="gedcom.saveAsJsonDesc"></span>
-                    </span>
-                </button>
                 <!-- Insert to current tree option (shown only when importing to current tree) -->
                 <button id="gedcom-insert-btn" class="menu-option" style="display: none;" onclick="window.Strom.UI.importGedcomAsNewTree()">
                     <span class="option-text">
@@ -36314,6 +36381,22 @@
                 <button type="button" class="secondary" id="merge-back" onclick="window.Strom.MergerUI.wizardBack()" data-i18n="mergeWizard.back" hidden>Back</button>
                 <button type="button" class="secondary" id="merge-cancel" data-dismiss onclick="window.Strom.MergerUI.closeMergeModal()" data-i18n="buttons.cancel">Cancel</button>
                 <button type="button" class="primary" id="merge-next" onclick="window.Strom.MergerUI.wizardNext()"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 1 of the import guide: every kind of line of the file the tree does not take over (spec 134 §3). -->
+    <div class="modal-overlay" id="merge-not-taken-modal" onclick="if(event.target===this) window.Strom.MergerUI.closeNotTaken()">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="merge-not-taken-title">
+            <div class="modal-header">
+                <h2 id="merge-not-taken-title" data-i18n="mergeWizard.notTakenTitle">Not taken over</h2>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.MergerUI.closeNotTaken()">&times;</button>
+            </div>
+            <p class="merge-not-taken-note" data-i18n="mergeWizard.notTakenNote"></p>
+            <ul id="merge-not-taken-list" class="merge-not-taken-list"></ul>
+            <div class="buttons">
+                <button type="button" class="link-button" onclick="window.Strom.MergerUI.saveNotTaken()" data-i18n="mergeWizard.saveList">Save list…</button>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeNotTaken()" data-i18n="buttons.close">Close</button>
             </div>
         </div>
     </div>

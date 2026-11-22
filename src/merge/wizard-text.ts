@@ -23,3 +23,13 @@ export function notTakenLine(stats: { droppedTags?: readonly GedcomDroppedTag[] 
     if (dropped.length > NOT_TAKEN_SHOWN) items.push('…');
     return t.notTaken(items.join(', '));
 }
+
+/**
+ * "Save list…" of step 1 (§3, K1.6): every kind of line the tree does not
+ * take over, one per line under the file's name, for a .txt file.
+ */
+export function notTakenText(sourceLabel: string, dropped: readonly GedcomDroppedTag[]): string {
+    const t = strings.mergeWizard;
+    const lines = dropped.filter(d => d.count > 0).map(d => t.notTakenItem(d.label ? `${d.tag} – ${d.label}` : d.tag, d.count, d.example));
+    return [`${t.notTakenTitle}: ${sourceLabel}`, '', ...lines, ''].join('\n');
+}
