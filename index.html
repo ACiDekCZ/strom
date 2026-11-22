@@ -4297,7 +4297,7 @@
         }
         /* Card nav pills are theme-aware by token (var(--surface)/--border/
            --accent/--text-light) — no dark-mode overrides needed. */
-        /* .merge-trees-option / .merge-trees-warning are tokenized — no dark override needed. */
+        /* .merge-trees-option is tokenized — no dark override needed. */
 
         .stat-item {
             text-align: center;
@@ -18438,6 +18438,8 @@
         }
         .merge-s2-side { display: flex; flex-direction: column; min-height: 0; gap: 8px; }
         .merge-s2-pane { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
+        /* The pane scrolls; its parts keep their height (a list of candidates is never squeezed to its border). */
+        .merge-s2-pane > * { flex-shrink: 0; }
         /* The groups are .sel-tab (src/ui/sel-css.ts) on the bar's hairline; only the layout here. */
         /* A narrow column (a long language, a phone held sideways) scrolls the groups, never overlaps them. */
         .merge-tabs { display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
@@ -18585,29 +18587,75 @@
             color: var(--text-light);
         }
         .merge-rest-warn { flex-basis: 100%; font-size: 11.5px; color: var(--text-faint); }
+        /* A recalculation after a decision (K3.3): a quiet line with Show. */
+        .merge-recalc { margin: 0; font-size: 12.5px; color: var(--text-light); }
+        .merge-recalc .link-button { padding: 0; min-height: 0; font-size: 12.5px; }
+        /* The phone's ways into the pair (14b): the list as a sheet, one column at a time; hidden elsewhere. */
+        /* Two classes for the seg: above .sel-seg (src/ui/sel-css.ts, injected later). */
+        .merge-pair-open, .merge-s2-pane .merge-pair-seg, .merge-s2-sheet-head { display: none; }
+        /* The comparison runs (4a, K3.5): the step's body is its progress with Stop. */
+        .merge-comparing { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 40px 60px; }
+        .merge-comparing-head { display: flex; align-items: center; gap: 8px; }
+        .merge-comparing-t { font-size: 15px; font-weight: 600; color: var(--text); }
+        .merge-comparing .merge-comparing-bar { width: min(520px, 100%); }
+        .merge-comparing p { margin: 0; font-size: 13px; color: var(--text-light); }
+        .merge-comparing-of { font-variant-numeric: tabular-nums; }
         @media (max-width: 1024px) {
+            .merge-comparing { padding: 24px 20px; }
             .merge-s2 { grid-template-columns: 260px minmax(0, 1fr); gap: 12px; }
             .pair { grid-template-columns: 80px minmax(0, 1fr) minmax(0, 1fr); }
             .pair.is-one { grid-template-columns: 80px minmax(0, 1fr); }
         }
-        /* A phone: one column, the step's body scrolls; the list keeps a part of the height. */
-        @media (max-width: 640px) {
+        /*
+         * A phone (14b) and a phone held sideways (14f): the pair takes the step; "Pair 7 of 17 ▾" opens the
+         * list as a sheet from the bottom (a chosen row closes it). Upright the pair shows one column at a time
+         * ({tree} / Import); sideways both side by side. The decisions are 44 px high.
+         */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .merge-step-body[data-step="2"] { display: block; overflow-y: auto; }
-            .merge-s2 { display: flex; flex-direction: column; gap: 12px; }
-            .merge-match-list { max-height: 38vh; }
+            .merge-s2 { display: block; }
+            .merge-s2-side { display: none; }
+            .merge-s2.is-list .merge-s2-side {
+                display: flex;
+                position: fixed;
+                left: 0; right: 0; bottom: 0;
+                z-index: 5;
+                max-height: 80%;
+                padding: 10px 14px 14px;
+                background: var(--surface);
+                border-top: 1px solid var(--border);
+                border-radius: var(--r-lg) var(--r-lg) 0 0;
+                box-shadow: var(--shadow-lg);
+            }
+            .merge-s2-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+            .merge-s2-sheet-close { min-width: 44px; min-height: 44px; border: 0; background: transparent; font-size: 20px; color: var(--text-light); }
+            .merge-pair-title { display: none; }
+            .merge-s2-sheet-head .merge-pair-title { display: inline; }
+            .merge-pair-open {
+                display: inline-flex; align-items: center; gap: 4px;
+                min-height: 44px; padding: 0 4px; border: 0; background: transparent;
+                font-weight: 600; font-size: 14px; color: var(--text);
+            }
             .merge-s2-pane { overflow: visible; }
             .merge-keys, .merge-dec .kbd { display: none; }
-            .pair { grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr); }
+            .merge-decide .merge-dec { min-height: 44px; justify-content: center; }
+            .merge-rest button, .merge-s2-foot button { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .merge-s2-pane .merge-pair-seg { display: inline-flex; margin-left: auto; }
+            .merge-pair-seg > .sel-opt { min-height: 44px; padding: 0 12px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .merge-pair-sub { flex-basis: 100%; order: 5; }
+            .pair { grid-template-columns: 72px minmax(0, 1fr); }
+            .pair.show-tree > .c2, .pair.show-import > .c1 { display: none; }
             .pair > div { padding: 4px 6px; font-size: 12px; }
             .pair .merge-pn { font-size: 15px; }
-            .merge-dec { flex: 1 1 calc(50% - 6px); justify-content: center; }
+            .merge-decide .merge-dec { flex: 1 1 calc(50% - 6px); }
+            .merge-comparing { padding: 16px 14px; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .merge-step-body[data-step="2"] { display: block; overflow-y: auto; }
-            .merge-s2 { grid-template-columns: 250px minmax(0, 1fr); }
             .merge-tabs .merge-tab { padding: 6px 4px; font-size: 11.5px; }
-            .merge-match-list { max-height: 60vh; }
-            .merge-s2-pane { overflow: visible; }
+            .merge-decide .merge-dec { padding: 0 12px; }
+            .merge-comparing { padding: 12px 20px; gap: 8px; }
         }
         @media (pointer: coarse) {
             .merge-item, .merge-cand { min-height: 44px; }
@@ -19695,18 +19743,6 @@
         .merge-trees-option-stats {
             font-size: 12px;
             color: var(--text-light);
-        }
-        .merge-trees-warning {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 12px;
-            background: var(--surface-2);
-            border-left: 3px solid var(--warning);
-            border-radius: 6px;
-            font-size: 13px;
-            color: var(--text-light);
-            margin-bottom: 16px;
         }
 
         /* Default person dialog */

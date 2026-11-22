@@ -544,8 +544,18 @@ export function mergeRow(wizard: Locator, text: string | RegExp): Locator {
     return wizard.locator('#merge-match-list .merge-item').filter({ hasText: text });
 }
 
+/** On a phone (and a phone held sideways) step 2's list is a sheet over the pair: opened by "Pair i of n ▾". */
+export async function mergeOpenList(wizard: Locator): Promise<void> {
+    if (await wizard.locator('#merge-match-list').isVisible()) return;
+    const open = wizard.locator('.merge-pair-open');
+    await open.click();
+    await expect(open).toHaveAttribute('aria-expanded', 'true');
+    await expect(wizard.locator('#merge-match-list')).toBeVisible();
+}
+
 /** Show a group of step 2 (its tab). */
 export async function mergeGroup(wizard: Locator, group: MergeGroup): Promise<void> {
+    await mergeOpenList(wizard);
     const tab = wizard.locator(`.merge-tab[data-group="${group}"]`);
     await tab.click();
     await expect(tab).toHaveAttribute('aria-selected', 'true');
@@ -558,6 +568,7 @@ export async function mergeGroup(wizard: Locator, group: MergeGroup): Promise<vo
  */
 export async function mergePair(wizard: Locator, text: string | RegExp, group?: MergeGroup): Promise<Locator> {
     const groups: MergeGroup[] = group ? [group] : ['maybe', 'same', 'new'];
+    await mergeOpenList(wizard);
     for (const g of groups) {
         const tab = wizard.locator(`.merge-tab[data-group="${g}"]`);
         if (await tab.getAttribute('aria-selected') !== 'true') await mergeGroup(wizard, g);
@@ -565,6 +576,7 @@ export async function mergePair(wizard: Locator, text: string | RegExp, group?: 
         if (await row.count() > 0) {
             await row.first().click();
             await expect(mergeRow(wizard, text).first()).toHaveAttribute('aria-selected', 'true');
+            await expect(wizard.locator('#merge-pair')).toBeVisible();
             return mergeRow(wizard, text).first();
         }
     }

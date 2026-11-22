@@ -225,9 +225,6 @@ export interface MergeResult {
 
 // ==================== UI STATE ====================
 
-/** Filter for match review UI */
-export type MatchFilter = 'all' | 'high' | 'medium' | 'low' | 'unmatched' | 'conflicts';
-
 /** Stats for merge review */
 export interface MergeStats {
     total: number;

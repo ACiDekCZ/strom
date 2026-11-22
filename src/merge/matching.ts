@@ -641,6 +641,44 @@ export async function findMatchesAsync(
     }
 }
 
+/**
+ * The pairs findMatches gives for two trees do not depend on any decision,
+ * so the comparison of a merge (step 1's, in parts) serves the later
+ * recalculations of the same merge (K3.3): a decision on a 10 000-person tree
+ * recalculates its undecided pairs without matching the trees again. Kept per
+ * merge state while it stands over the same two trees of the same size;
+ * handed out as copies (a pair's differences take answers).
+ */
+const matchMemo = new WeakMap<MergeState, { existing: StromData; incoming: StromData; size: string; matches: PersonMatch[] }>();
+
+function treesSize(existingData: StromData, incomingData: StromData): string {
+    const n = (d: StromData): string => `${Object.keys(d.persons).length}/${Object.keys(d.partnerships).length}`;
+    return `${n(existingData)}|${n(incomingData)}`;
+}
+
+function copyMatch(m: PersonMatch): PersonMatch {
+    return { ...m, reasons: [...m.reasons], conflicts: m.conflicts.map(c => ({ ...c })) };
+}
+
+/** The pairs of the merge's two trees, from its comparison when it stands over the same trees. */
+function matchesOf(state: MergeState): PersonMatch[] {
+    const memo = matchMemo.get(state);
+    if (memo && memo.existing === state.existingData && memo.incoming === state.incomingData
+        && memo.size === treesSize(state.existingData, state.incomingData)) {
+        return memo.matches.map(copyMatch);
+    }
+    const found = findMatches(state.existingData, state.incomingData);
+    rememberMatches(state, found);
+    return found;
+}
+
+function rememberMatches(state: MergeState, found: readonly PersonMatch[]): void {
+    matchMemo.set(state, {
+        existing: state.existingData, incoming: state.incomingData,
+        size: treesSize(state.existingData, state.incomingData), matches: found.map(copyMatch),
+    });
+}
+
 /** findMatches as steps: a step after each incoming person of the two scoring passes (the work of a pass runs in its caller's match pass). */
 function* findMatchesSteps(
     existingData: StromData,
@@ -2166,7 +2204,9 @@ export function updateConflictResolution(
  * Re-analyze matches after user changes
  * Preserves manual matches and propagates from them
  */
-export function reanalyzeMatches(state: MergeState): void {
+export function reanalyzeMatches(state: MergeState, found?: readonly PersonMatch[]): void {
+    // The pairs of a comparison just made (findMatchesAsync over these trees): kept for the merge's recalculations.
+    if (found) rememberMatches(state, found);
     // Get rejected and confirmed matches
     const rejectedIncoming = new Set<PersonId>();
     const manualMatches: PersonMatch[] = [];
@@ -2216,7 +2256,7 @@ export function reanalyzeMatches(state: MergeState): void {
     }
 
     // Find new automatic matches
-    const autoMatches = findMatches(state.existingData, state.incomingData)
+    const autoMatches = matchesOf(state)
         .filter(m => !rejectedIncoming.has(m.incomingId))
         .filter(m => !usedExisting.has(m.existingId))
         .filter(m => !usedIncoming.has(m.incomingId));
@@ -2255,7 +2295,7 @@ export function reanalyzeMatches(state: MergeState): void {
  * still there, an answered difference when both values are still the same.
  * The given state is not changed.
  */
-export function rebaseMergeState(state: MergeState, target: StromData, targetOf?: MergeTarget): MergeState {
+export function rebaseMergeState(state: MergeState, target: StromData, targetOf?: MergeTarget, found?: readonly PersonMatch[]): MergeState {
     const decisions = new Map<PersonId, MatchDecision>();
     const confirmed: PersonMatch[] = [];
     for (const [incomingId, decision] of state.decisions) {
@@ -2278,7 +2318,7 @@ export function rebaseMergeState(state: MergeState, target: StromData, targetOf?
         partnershipResolutions: new Map(state.partnershipResolutions ?? []),
         ...(targetOf ? { target: targetOf } : {}),
     };
-    reanalyzeMatches(rebased);
+    reanalyzeMatches(rebased, found);
     const matched = new Set(rebased.matches.map(m => m.existingId));
     rebased.unmatchedExisting = (Object.keys(target.persons) as PersonId[]).filter(id => !matched.has(id));
     // An answered difference keeps its answer while both of its values are the same.
@@ -2312,10 +2352,14 @@ export function recalcUndecided(state: MergeState, decidedId: PersonId): { chang
     const offerOf = (m: PersonMatch | undefined): string => m ? `${m.existingId}\u0000${m.score}` : '';
     const before = new Map(state.matches.map(m => [m.incomingId, m] as const));
     reanalyzeMatches(state);
-    // Decided persons keep their pairs as they were.
+    const again = new Map(state.matches.map(m => [m.incomingId, m] as const));
+    // Decided persons keep their pairs as they were; the person just decided
+    // with a person of the tree picked by hand ("Another person…", another
+    // candidate) gets that pair.
     const decidedPairs: PersonMatch[] = [];
-    for (const id of state.decisions.keys()) {
-        const was = before.get(id);
+    for (const [id, d] of state.decisions) {
+        let was = before.get(id);
+        if (id === decidedId && d.type === 'manual_match' && was?.existingId !== d.targetId) was = again.get(id) ?? was;
         if (was) decidedPairs.push(was);
     }
     const undecided = state.matches.filter(m => !state.decisions.has(m.incomingId));

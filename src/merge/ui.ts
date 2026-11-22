@@ -16,6 +16,7 @@ import { strings } from '../strings.js';
 import { runHeavy, activatedElement } from '../ui/busy.js';
 import {
     MergeState,
+    PersonMatch,
     PartnershipConflict,
     PartnershipConflictField
 } from './types.js';
@@ -24,7 +25,9 @@ import {
     updateMatchDecision,
     updateConflictResolution,
     reanalyzeMatches,
-    rebaseMergeState
+    rebaseMergeState,
+    findMatchesAsync,
+    recalcUndecided
 } from './matching.js';
 import {
     AUTO_CONFIRM_SCORE,
@@ -52,12 +55,13 @@ import { pendingImageOf } from '../research-image-refs.js';
 import { imgStateOf, smallPortraitHtml, type ImgState } from '../ui/image-slot.js';
 import { personPhotoKey } from '../ui/person-photo-model.js';
 import { personInitials } from '../initials.js';
-import { MergeWizard, targetBlock, targetBlockText, type WizardSource } from './wizard-ui.js';
+import { MergeWizard, targetBlock, targetBlockText, type CompareRun, type WizardSource } from './wizard-ui.js';
 import type { WizardStep } from './wizard-steps.js';
 import { isRepeatOf, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
 import { newTreeName, writePlanAsNewTree } from './write.js';
 import type { Step1Env, Step2Env, TargetRow, UnionConflictLine } from './steps/context.js';
 import { closeNotTaken, parkGedcomSummary } from './steps/step1-what.js';
+import { noteRecalc } from './steps/step2-who.js';
 import { notTakenText } from './wizard-text.js';
 import { listSnapshots } from '../snapshots.js';
 import { formatRelativeDateTime } from '../format.js';
@@ -120,7 +124,7 @@ class MergerUIClass {
         finishCompare: () => this.closeMergeModalInternal(),
         write: plan => this.write(plan),
         step2: () => this.step2Env(),
-        compare: () => this.compare(),
+        compare: run => this.compare(run),
         downloadJson: () => this.downloadJson(),
         step1: () => this.step1Env(),
     });
@@ -802,18 +806,31 @@ class MergerUIClass {
         this.wizard.refresh({ body: true });
     }
 
-    /** Step 1's Compare: the import matched with the chosen target (the state replaced). */
-    private async compare(): Promise<boolean> {
+    /**
+     * Step 1's Compare: the import matched with the chosen target (the state
+     * replaced), in parts with the window free between them (K3.5); stopped
+     * by `run.signal`: false, the state and step 1's choices as they were.
+     */
+    private async compare(run: CompareRun = {}): Promise<boolean> {
         const state = this.mergeState;
         const id = state?.wizard?.choices.targetTreeId;
         if (!state || !id) return false;
-        if (!await this.loadTarget(id) || this.mergeState !== state) return false;
+        if (!await this.loadTarget(id) || this.mergeState !== state || run.signal?.aborted) return false;
         const target = state.existingData;
-        const targetOf = { treeId: id, fingerprint: contentFingerprint(target) };
-        const done = await runHeavy(document.getElementById('merge-next'), () => (
-            this.mergeState === state ? rebaseMergeState(state, target, targetOf) : null
-        ), { label: strings.merge.analyzing, atOnce: mergeAnalysisLong(target, state.incomingData) });
-        if (!done || this.mergeState !== state) return false;
+        let found: PersonMatch[];
+        try {
+            found = await findMatchesAsync(target, state.incomingData, {
+                ...(run.onProgress ? { onProgress: run.onProgress } : {}),
+                ...(run.signal ? { signal: run.signal } : {}),
+            });
+        } catch (e) {
+            if ((e as Error)?.name === 'AbortError') return false;
+            throw e;
+        }
+        if (this.mergeState !== state || run.signal?.aborted) return false;
+        // The pairs just found serve the rebase and the merge's later recalculations.
+        const done = rebaseMergeState(state, target, { treeId: id, fingerprint: contentFingerprint(target) }, found);
+        if (this.mergeState !== state) return false;
         done.phase = 'reviewing';
         this.mergeState = done;
         this.exampleCache = null;
@@ -1001,6 +1018,8 @@ class MergerUIClass {
                 if (!state) return;
                 if (decision === null) state.decisions.delete(id);
                 else updateMatchDecision(state, id, decision);
+                // The undecided pairs again (K3.3); the step says whose offer changed.
+                noteRecalc(state, recalcUndecided(state, id).changed);
                 this.markUnsavedChanges();
                 this.renderModalContent();
             },
@@ -1008,6 +1027,7 @@ class MergerUIClass {
                 const state = this.mergeState;
                 if (!state || ids.length === 0) return;
                 for (const id of ids) updateMatchDecision(state, id, decision);
+                noteRecalc(state, recalcUndecided(state, ids[0]).changed);
                 this.markUnsavedChanges();
                 this.renderModalContent();
             },
@@ -1155,8 +1175,8 @@ class MergerUIClass {
         updateMatchDecision(this.mergeState, incomingId, { type: 'manual_match', targetId });
         this.markUnsavedChanges();
 
-        // Re-analyze matches to update matches and unmatchedIncoming lists
-        reanalyzeMatches(this.mergeState);
+        // The hand-picked pair, and the undecided pairs again (K3.3).
+        noteRecalc(this.mergeState, recalcUndecided(this.mergeState, incomingId).changed);
 
         // Auto-confirm if no conflicts
         const match = this.mergeState.matches.find(m => m.incomingId === incomingId);
@@ -1438,10 +1458,12 @@ class MergerUIClass {
     reanalyze(): Promise<void> {
         const state = this.mergeState;
         if (!state) return Promise.resolve();
-        // §8: the matching runs again over both trees, under the working state of the button.
-        return runHeavy(activatedElement(), () => {
+        // §8: the matching runs again over both trees, under the working state of the button,
+        // in parts (the window stays usable, K3.5).
+        return runHeavy(activatedElement(), async () => {
+            const found = await findMatchesAsync(state.existingData, state.incomingData);
             if (this.mergeState !== state) return;
-            reanalyzeMatches(state);
+            reanalyzeMatches(state, found);
             this.wizard.refresh({ body: true });
         }, { label: strings.merge.analyzing, atOnce: mergeAnalysisLong(state.existingData, state.incomingData) }).then(() => undefined);
     }

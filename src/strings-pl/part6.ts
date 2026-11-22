@@ -5,21 +5,9 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
     | 'treeManager' | 'share' | 'shareDiff' | 'viewMode' | 'encryption' | 'treePreview' | 'slideshow' | 'live'
     | 'viewLinks' | 'researchEdge'> = {
     merge: {
-        title: 'Scalanie danych',
         analyzing: 'Analizowanie osób…',
         conflicts: 'Konflikty',
-        tabAll: 'Wszystko',
-        highConfidence: 'Wysoka',
-        mediumConfidence: 'Średnia',
-        lowConfidence: 'Niska',
-        confirm: 'Potwierdź',
-        reject: 'Odrzuć',
-        skip: 'Pomiń',
-        unskip: 'Cofnij pominięcie',
-        skipped: 'Pominięte',
-        skipTooltip: 'Ta osoba w ogóle nie zostanie przeniesiona – ani scalona, ani dodana (w odróżnieniu od „Odrzuć”, które importuje ją jako nową osobę).',
         skippedCount: (n: number) => `pominięto: ${n}`,
-        changeMatch: 'Zmień',
         manualMatch: 'Przypisz do istniejącej',
         reanalyze: 'Analizuj ponownie',
         // "Only update existing" mode (Primitive 1)
@@ -39,10 +27,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         sharedAttach: (n: number) => `Dołącz do wspólnego wydarzenia (${nPl(n, 'osoba', 'osoby', 'osób')}) – własna kopia jest zgodna`,
         sharedJoined: (n: number) => `Wspólne wydarzenia: ${n} połączono`,
         noItems: 'Brak pozycji do wyświetlenia',
-        newPerson: 'Nowa',
         selectExisting: '-- Wybierz istniejącą osobę --',
         selectExistingError: 'Wymagany jest wybór osoby',
-        statsNew: 'Nowe',
 
         // Workflow
 
@@ -60,12 +46,6 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         discard: 'Odrzuć',
         reviewedCount: (reviewed: number, total: number) =>
             `sprawdzono ${reviewed}/${total}`,
-
-        // Tooltips
-        highConfidenceTooltip: 'Silne dopasowanie: imiona, daty i relacje się zgadzają',
-        mediumConfidenceTooltip: 'Prawdopodobne dopasowanie: częściowe dane lub powiązanie rodzinne – wymaga weryfikacji',
-        lowConfidenceTooltip: 'Możliwe dopasowanie: ograniczona zgodność danych – konieczne staranne sprawdzenie',
-        newPersonTooltip: 'Zostanie dodana jako nowa osoba',
 
         // Match reasons (shown in UI)
         matchReasons: {
@@ -269,6 +249,11 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         comparingOf: (a: number, n: number, t: string, eta: string) => `${a} z ${n} ${n === 1 ? 'osoby' : 'osób'} drzewa ${t} · pozostało ok. ${eta}`,
         comparingNote: 'Okno można dalej używać. Przerwanie nic nie gubi: wybory z kroku 1 zostają, a porównanie można uruchomić ponownie.',
         stop: 'Przerwij',
+        comparingSub: 'porównywanie…',
+        comparingOfNoEta: (a: number, n: number, t: string) => `${a} z ${n} ${n === 1 ? 'osoby' : 'osób'} drzewa ${t}`,
+        etaShort: (s: number) => s < 60 ? `${s} s` : `${Math.round(s / 60)} min`,
+        recalcShow: 'Pokaż',
+        pairSide: 'Wyświetlana kolumna',
         joinThis: 'Połącz z tą osobą',
         nextWho: 'Dalej: Kogo dodać',
         colImport: 'Import',

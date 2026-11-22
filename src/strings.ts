@@ -6177,21 +6177,9 @@ const stringsEN = {
 
     // Merge import
     merge: {
-        title: 'Merge data',
         analyzing: 'Analyzing people…',
         conflicts: 'Conflicts',
-        tabAll: 'All',
-        highConfidence: 'High',
-        mediumConfidence: 'Medium',
-        lowConfidence: 'Low',
-        confirm: 'Confirm',
-        reject: 'Reject',
-        skip: 'Skip',
-        unskip: 'Un-skip',
-        skipped: 'Skipped',
-        skipTooltip: 'Don\'t bring this person at all — neither merged nor added (unlike Reject, which imports them as a new person).',
         skippedCount: (n: number) => `${n} skipped`,
-        changeMatch: 'Change',
         manualMatch: 'Match to existing',
         reanalyze: 'Re-analyze',
         // "Update existing only" mode (Primitive 1)
@@ -6214,10 +6202,8 @@ const stringsEN = {
         /** The tree merge's summary: shared events found in both trees and joined. */
         sharedJoined: (n: number) => `Shared events: ${n} joined`,
         noItems: 'No items to display',
-        newPerson: 'New',
         selectExisting: '-- Select existing person --',
         selectExistingError: 'Please select a person',
-        statsNew: 'New',
 
         // Workflow
 
@@ -6235,12 +6221,6 @@ const stringsEN = {
         discard: 'Discard',
         reviewedCount: (reviewed: number, total: number) =>
             `${reviewed}/${total} reviewed`,
-
-        // Tooltips
-        highConfidenceTooltip: 'Strong match: names, dates, and relationships align',
-        mediumConfidenceTooltip: 'Likely match: partial data match or family connection - please verify',
-        lowConfidenceTooltip: 'Possible match: limited data agreement - careful review needed',
-        newPersonTooltip: 'Will be added as new person',
 
         // Match reasons (shown in UI)
         matchReasons: {
@@ -6449,6 +6429,11 @@ const stringsEN = {
         comparingOf: (a: number, n: number, t: string, eta: string) => `${a} of ${nEn(n, 'person', 'people')} of the tree ${t} · about ${eta} left`,
         comparingNote: 'The window stays usable. Stopping loses nothing: the choices of step 1 stay and the comparison can be run again.',
         stop: 'Stop',
+        comparingSub: 'comparing…',
+        comparingOfNoEta: (a: number, n: number, t: string) => `${a} of ${nEn(n, 'person', 'people')} of the tree ${t}`,
+        etaShort: (s: number) => s < 60 ? `${s} s` : `${Math.round(s / 60)} min`,
+        recalcShow: 'Show',
+        pairSide: 'Column shown',
         joinThis: 'Join with this person',
         nextWho: 'Continue: Whom to add',
         colImport: 'Import',
@@ -17065,21 +17050,9 @@ const stringsCZ: StringsType = {
 
     // Merge import
     merge: {
-        title: 'Sloučit data',
         analyzing: 'Analyzují se osoby…',
         conflicts: 'Konflikty',
-        tabAll: 'Vše',
-        highConfidence: 'Vysoká',
-        mediumConfidence: 'Střední',
-        lowConfidence: 'Nízká',
-        confirm: 'Potvrdit',
-        reject: 'Odmítnout',
-        skip: 'Přeskočit',
-        unskip: 'Zrušit přeskočení',
-        skipped: 'Přeskočeno',
-        skipTooltip: 'Tuto osobu vůbec nepřinášet — ani sloučit, ani přidat (na rozdíl od Odmítnout, které ji naimportuje jako novou osobu).',
         skippedCount: (n: number) => `${n} přeskočeno`,
-        changeMatch: 'Změnit',
         manualMatch: 'Přiřadit k existující',
         reanalyze: 'Znovu analyzovat',
         // Režim „jen doplnit existující“ (Primitive 1)
@@ -17099,10 +17072,8 @@ const stringsCZ: StringsType = {
         sharedAttach: (n: number) => `Připojit ke společné události (${nCs(n, 'osoba', 'osoby', 'osob')}) – vlastní kopie se shoduje`,
         sharedJoined: (n: number) => `Sdílené události: ${n} spojeno`,
         noItems: 'Žádné položky k zobrazení',
-        newPerson: 'Nová',
         selectExisting: '-- Vybrat existující osobu --',
         selectExistingError: 'Je potřeba vybrat osobu',
-        statsNew: 'Nové',
 
         // Workflow
 
@@ -17120,12 +17091,6 @@ const stringsCZ: StringsType = {
         discard: 'Zahodit',
         reviewedCount: (reviewed: number, total: number) =>
             `${reviewed}/${total} zkontrolováno`,
-
-        // Tooltips
-        highConfidenceTooltip: 'Silná shoda: jména, data a vztahy souhlasí',
-        mediumConfidenceTooltip: 'Pravděpodobná shoda: částečná data nebo rodinná souvislost - je potřeba ověřit',
-        lowConfidenceTooltip: 'Možná shoda: omezená shoda dat - nutná pečlivá kontrola',
-        newPersonTooltip: 'Bude přidána jako nová osoba',
 
         // Match reasons (shown in UI)
         matchReasons: {
@@ -17334,6 +17299,11 @@ const stringsCZ: StringsType = {
         comparingOf: (a: number, n: number, t: string, eta: string) => `${a} ${zeCs(n)} ${n} ${n === 1 ? 'osoby' : 'osob'} stromu ${t} · zbývá asi ${eta}`,
         comparingNote: 'Okno jde dál používat. Přerušit nic neztratí: rozhodnutí z kroku 1 zůstanou a porovnání jde spustit znovu.',
         stop: 'Přerušit',
+        comparingSub: 'porovnává se…',
+        comparingOfNoEta: (a: number, n: number, t: string) => `${a} ${zeCs(n)} ${n} ${n === 1 ? 'osoby' : 'osob'} stromu ${t}`,
+        etaShort: (s: number) => s < 60 ? `${s} s` : `${Math.round(s / 60)} min`,
+        recalcShow: 'Ukázat',
+        pairSide: 'Zobrazený sloupec',
         joinThis: 'Spojit s touto osobou',
         nextWho: 'Pokračovat: Koho přidat',
         colImport: 'Import',
@@ -27805,21 +27775,9 @@ const stringsDE: StringsType = {
 
     // Merge import
     merge: {
-        title: 'Daten zusammenführen',
         analyzing: 'Personen werden analysiert…',
         conflicts: 'Konflikte',
-        tabAll: 'Alle',
-        highConfidence: 'Hoch',
-        mediumConfidence: 'Mittel',
-        lowConfidence: 'Niedrig',
-        confirm: 'Bestätigen',
-        reject: 'Ablehnen',
-        skip: 'Überspringen',
-        unskip: 'Nicht überspringen',
-        skipped: 'Übersprungen',
-        skipTooltip: 'Diese Person gar nicht übernehmen — weder zusammenführen noch hinzufügen (anders als Ablehnen, das sie als neue Person importiert).',
         skippedCount: (n: number) => `${n} übersprungen`,
-        changeMatch: 'Ändern',
         manualMatch: 'Mit Vorhandener abgleichen',
         reanalyze: 'Neu analysieren',
         mergeViewDescription: 'Die aktuell angezeigten Personen zusammenführen mit:',
@@ -27837,10 +27795,8 @@ const stringsDE: StringsType = {
         sharedAttach: (n: number) => `Dem gemeinsamen Ereignis anschließen (${nDe(n, 'Person', 'Personen')}) – die eigene Kopie stimmt überein`,
         sharedJoined: (n: number) => `Gemeinsame Ereignisse: ${n} zusammengeführt`,
         noItems: 'Keine Einträge zum Anzeigen',
-        newPerson: 'Neu',
         selectExisting: '-- Vorhandene Person auswählen --',
         selectExistingError: 'Bitte eine Person wählen',
-        statsNew: 'Neu',
 
 
         closeConfirmTitle: 'Zusammenführen schließen?',
@@ -27856,10 +27812,6 @@ const stringsDE: StringsType = {
         reviewedCount: (reviewed: number, total: number) =>
             `${reviewed}/${total} geprüft`,
 
-        highConfidenceTooltip: 'Starke Übereinstimmung: Namen, Daten und Beziehungen passen zusammen',
-        mediumConfidenceTooltip: 'Wahrscheinliche Übereinstimmung: teilweise Datenübereinstimmung oder Familienverbindung — bitte prüfen',
-        lowConfidenceTooltip: 'Mögliche Übereinstimmung: geringe Datenübereinstimmung — sorgfältige Prüfung nötig',
-        newPersonTooltip: 'Wird als neue Person hinzugefügt',
 
         matchReasons: {
             exact_name_gender_birthdate: 'Exakter Name und Geburtsdatum',
@@ -28059,6 +28011,11 @@ const stringsDE: StringsType = {
         comparingOf: (a: number, n: number, t: string, eta: string) => `${a} von ${nDe(n, 'Person', 'Personen')} des Stammbaums ${t} · noch etwa ${eta}`,
         comparingNote: 'Das Fenster bleibt nutzbar. Abbrechen verliert nichts: die Wahl aus Schritt 1 bleibt, der Vergleich lässt sich neu starten.',
         stop: 'Abbrechen',
+        comparingSub: 'wird verglichen…',
+        comparingOfNoEta: (a: number, n: number, t: string) => `${a} von ${nDe(n, 'Person', 'Personen')} des Stammbaums ${t}`,
+        etaShort: (s: number) => s < 60 ? `${s} s` : `${Math.round(s / 60)} min`,
+        recalcShow: 'Zeigen',
+        pairSide: 'Angezeigte Spalte',
         joinThis: 'Mit dieser Person verbinden',
         nextWho: 'Weiter: Wen hinzufügen',
         colImport: 'Import',

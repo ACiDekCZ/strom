@@ -55,6 +55,13 @@ interface PairView {
     /** The decision came from the step: its row takes the focus again. */
     focusRow: boolean;
     scrollTop: number;
+    /** The undecided pairs whose offer the last decision changed (K3.3). */
+    recalc: PersonId[];
+    /** The list shows only those (Show). */
+    onlyRecalc: boolean;
+    /** A phone: the pair's column shown (§14, 14b), and the list open as a sheet. */
+    side: 'tree' | 'import';
+    listOpen: boolean;
 }
 
 const views = new WeakMap<MergeState, PairView>();
@@ -62,10 +69,23 @@ const views = new WeakMap<MergeState, PairView>();
 function viewOf(state: MergeState): PairView {
     let v = views.get(state);
     if (!v) {
-        v = { group: null, selected: null, query: '', cand: new Map(), checked: new Set(), advanceFrom: null, focusRow: false, scrollTop: 0 };
+        v = {
+            group: null, selected: null, query: '', cand: new Map(), checked: new Set(), advanceFrom: null, focusRow: false, scrollTop: 0,
+            recalc: [], onlyRecalc: false, side: 'tree', listOpen: false,
+        };
         views.set(state, v);
     }
     return v;
+}
+
+/**
+ * After a decision: the undecided pairs whose offer it changed (K3.3), said
+ * under the decisions until the next one; Show filters the list to them.
+ */
+export function noteRecalc(state: MergeState, changed: readonly PersonId[]): void {
+    const view = viewOf(state);
+    view.recalc = [...changed];
+    view.onlyRecalc = false;
 }
 
 /** The import's persons in the three groups, in the matching's order ("?" stand-ins go with their named partner). */
@@ -234,7 +254,7 @@ function recordsHtml(data: StromData, p: Person): string {
 const norm = (s: string): string => s.replace(/\s+/g, ' ').trim().toLowerCase();
 
 /** The grid of a pair (`tree` null: a new person, the import's column only). */
-function pairGridHtml(state: MergeState, targetName: string, inc: Person, tree: Person | null): string {
+function pairGridHtml(state: MergeState, targetName: string, inc: Person, tree: Person | null, side: 'tree' | 'import' = 'tree'): string {
     const W = strings.mergeWizard;
     const T = state.existingData;
     const F = state.incomingData;
@@ -276,12 +296,13 @@ function pairGridHtml(state: MergeState, targetName: string, inc: Person, tree: 
     add(rRecords, tree ? cell(recordsHtml(T, tree), '') : null, cell(recordsHtml(F, inc), ''));
 
     const two = !!tree;
-    const head = `<div class="hd"></div>${two ? `<div class="hd">${escapeHtml(W.mine(targetName))}</div>` : ''}<div class="hd">${escapeHtml(W.colImport)}</div>`;
+    // c1 = the tree's column, c2 = the import's (a phone shows one of them, 14b).
+    const head = `<div class="hd"></div>${two ? `<div class="hd c1">${escapeHtml(W.mine(targetName))}</div>` : ''}<div class="hd c2">${escapeHtml(W.colImport)}</div>`;
     const body = cells.map(([label, a, b, diff]) => {
         const x = diff ? ' x' : '';
-        return `<div class="k">${escapeHtml(label)}</div>${two && a ? `<div class="v${x}">${a.html}</div>` : ''}<div class="v${x}">${b.html}</div>`;
+        return `<div class="k">${escapeHtml(label)}</div>${two && a ? `<div class="v c1${x}">${a.html}</div>` : ''}<div class="v c2${x}">${b.html}</div>`;
     }).join('');
-    return `<div class="pair${two ? '' : ' is-one'}" role="table" aria-label="${escapeHtml(W.rows.join(' · '))}">${head}${body}</div>`;
+    return `<div class="pair${two ? ` show-${side}` : ' is-one'}" role="table" aria-label="${escapeHtml(W.rows.join(' · '))}">${head}${body}</div>`;
 }
 
 function reasonText(reason: string): string {
@@ -337,13 +358,15 @@ function drawData(ctx: StepContext, view: PairView): Drawn {
     const rows = pairRows(state);
     const fates = ctx.plan ? planFates(ctx.plan) : new Map<PersonId, PersonFate>();
     if (!view.group) view.group = defaultGroup(rows);
-    const inGroup = rows.filter(r => r.group === view.group);
+    if (view.onlyRecalc && view.recalc.length === 0) view.onlyRecalc = false;
+    const only = view.onlyRecalc ? new Set(view.recalc) : null;
+    const inGroup = only ? rows.filter(r => only.has(r.id)) : rows.filter(r => r.group === view.group);
     const shown = inGroup.filter(r => matchesQuery(state, r, view.query));
     // After a decision: the next pair still to decide (in this group's order, around).
     if (view.advanceFrom) {
         const from = inGroup.findIndex(r => r.id === view.advanceFrom);
         view.advanceFrom = null;
-        if (view.group === 'maybe' && from >= 0) {
+        if ((view.group === 'maybe' || only) && from >= 0) {
             const order = [...shown.slice(shown.findIndex(r => r.id === inGroup[from].id) + 1), ...shown];
             const next = order.find(r => fates.get(r.id) === 'pending');
             if (next) view.selected = next.id;
@@ -361,7 +384,7 @@ function tabsHtml(view: PairView, rows: readonly PairRow[]): string {
     const W = strings.mergeWizard;
     const count = (g: PairGroup): number => rows.filter(r => r.group === g).length;
     const tab = (g: PairGroup, label: string): string => {
-        const on = view.group === g;
+        const on = view.group === g && !view.onlyRecalc;
         return `<button type="button" class="merge-tab sel-tab${on ? ' active' : ''}" role="tab" aria-selected="${on}" data-sel-dir="down" data-group="${g}">`
             + `<span class="sel-l" data-label="${escapeHtml(label)}">${escapeHtml(label)}</span> <span class="tab-count">${count(g).toLocaleString()}</span></button>`;
     };
@@ -422,7 +445,7 @@ function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d
     const groupName = view.group === 'maybe' ? W.grpMaybe : view.group === 'same' ? W.grpSame : W.grpNew;
     const parts: string[] = [];
     if (view.group === 'same') parts.push(`<p class="merge-s2-note">${escapeHtml(W.sameNote)}</p>`);
-    if (!row) return parts.join('') + restHtml(d);
+    if (!row) return parts.join('') + recalcHtml(state, view) + restHtml(d);
     const inc = state.incomingData.persons[row.id];
     if (!inc) return parts.join('');
     const index = d.shown.indexOf(row) + 1;
@@ -444,11 +467,18 @@ function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d
     const tree = treeId ? state.existingData.persons[treeId] ?? null : null;
     const sub = cands.length > 1 ? W.candidates(cands.length) : groupName;
     const compare = env ? `<button type="button" class="link-button merge-btn-preview" data-action="${tree ? 'compare' : 'preview'}"${tree ? ` data-tree="${escapeHtml(tree.id)}"` : ''}>${escapeHtml(tree ? strings.treePreview.comparePersons : strings.treePreview.preview)}</button>` : '';
+    // A phone (14b): the title opens the list as a sheet; the seg shows one column of the pair.
+    const seg = tree
+        ? `<div class="sel-seg merge-pair-seg" role="radiogroup" aria-label="${escapeHtml(W.pairSide)}">`
+            + `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" data-side="tree" aria-checked="${view.side === 'tree'}">${escapeHtml(ctx.choices.targetName)}</button>`
+            + `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" data-side="import" aria-checked="${view.side === 'import'}">${escapeHtml(W.colImport)}</button></div>`
+        : '';
     parts.push(`<div class="merge-pair-head"><span class="merge-pair-title">${escapeHtml(W.pairOf(index, d.shown.length))}</span>`
-        + `<span class="merge-mut">· ${escapeHtml(sub)}</span><span class="merge-cand-sp"></span>${compare}`
+        + `<button type="button" class="merge-pair-open" aria-expanded="${view.listOpen}" aria-controls="merge-s2-side">${escapeHtml(W.pairOf(index, d.shown.length))} ▾</button>`
+        + `<span class="merge-mut merge-pair-sub">· ${escapeHtml(sub)}</span><span class="merge-cand-sp"></span>${compare}${seg}`
         + `<span class="merge-keys">${keysHintHtml()}</span></div>`);
     if (cands.length > 1) parts.push(candidatesHtml(state, inc, cands, chosen));
-    parts.push(pairGridHtml(state, ctx.choices.targetName, inc, tree));
+    parts.push(pairGridHtml(state, ctx.choices.targetName, inc, tree, view.side));
     if (tree) {
         const cand = cands.find(c => c.existingId === tree.id);
         const reasons = (row.match && row.match.existingId === tree.id ? row.match.reasons : cand?.reasons ?? [])
@@ -473,8 +503,20 @@ function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d
             + `${escapeHtml(decLabel(k))} <span class="kbd" aria-hidden="true">${escapeHtml(decKey(k))}</span></button>`;
     }).join('');
     parts.push(`<div class="merge-decide" role="radiogroup" aria-label="${escapeHtml(W.pairOf(index, d.shown.length))}" aria-keyshortcuts="${decisionsOf(row).map(decKey).join(' ')}">${opts}</div>`);
+    parts.push(recalcHtml(state, view));
     parts.push(restHtml(d));
     return parts.join('');
+}
+
+/** "The decision recalculated 3 suggestions for relatives (…). Decided pairs do not change." + Show (K3.3). */
+function recalcHtml(state: MergeState, view: PairView): string {
+    const W = strings.mergeWizard;
+    const ids = view.recalc;
+    if (ids.length === 0) return '';
+    const names = ids.map(id => state.incomingData.persons[id]).filter((p): p is Person => !!p).map(nameText);
+    const list = names.length > 3 ? `${names.slice(0, 3).join(', ')}…` : names.join(', ');
+    return `<p class="merge-recalc" role="status">${escapeHtml(W.recalc(ids.length, list))} `
+        + `<button type="button" class="link-button merge-recalc-show" aria-pressed="${view.onlyRecalc}">${escapeHtml(view.onlyRecalc ? W.showAll : W.recalcShow)}</button></p>`;
 }
 
 /** The pairs no one decided yet (the ones "to decide"). */
@@ -508,8 +550,11 @@ export function renderStep2(host: HTMLElement, ctx: StepContext): void {
     const d = drawData(ctx, view);
     const W = strings.mergeWizard;
     host.innerHTML = stepHeading(2).replace('class="merge-step-title"', 'class="merge-step-title merge-s2-title"')
-        + `<div class="merge-s2">`
-        + `<div class="merge-s2-side">${tabsHtml(view, d.rows)}`
+        + `<div class="merge-s2${view.listOpen ? ' is-list' : ''}">`
+        + `<div class="merge-s2-side" id="merge-s2-side">`
+        + `<div class="merge-s2-sheet-head"><span class="merge-pair-title">${escapeHtml(W.pairOf(d.row ? d.shown.indexOf(d.row) + 1 : 0, d.shown.length))}</span>`
+        + `<button type="button" class="merge-s2-sheet-close" aria-label="${escapeHtml(strings.buttons.close)}">×</button></div>`
+        + tabsHtml(view, d.rows)
         + `<div class="merge-s2-search"><input type="search" class="merge-s2-q" value="${escapeHtml(view.query)}" placeholder="${escapeHtml(W.searchName)}" aria-label="${escapeHtml(W.searchName)}"></div>`
         + `<div class="merge-match-list" id="merge-match-list" role="listbox" aria-label="${escapeHtml(W.grpMaybe)}">${listHtml(ctx, view, d)}</div>`
         + footHtml(view) + '</div>'
@@ -576,8 +621,9 @@ function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
     const env = ctx.step2;
     host.querySelectorAll<HTMLButtonElement>('.merge-tab').forEach(b => b.addEventListener('click', () => {
         const g = b.dataset.group as PairGroup;
-        if (view.group === g) return;
+        if (view.group === g && !view.onlyRecalc) return;
         view.group = g;
+        view.onlyRecalc = false;
         view.selected = null;
         view.scrollTop = 0;
         redraw(host, ctx, false);
@@ -601,7 +647,11 @@ function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
         const row = rowFromEl(ctx, t);
         if (!row) return;
         view.selected = row.id;
-        redraw(host, ctx, true);
+        // A phone: the chosen row closes the sheet, the pair shows.
+        const sheet = view.listOpen;
+        view.listOpen = false;
+        redraw(host, ctx, !sheet);
+        if (sheet) host.querySelector<HTMLElement>('.merge-pair-open')?.focus();
     });
     list?.addEventListener('change', e => {
         const box = (e.target as HTMLElement).closest<HTMLInputElement>('.merge-item-check');
@@ -619,12 +669,38 @@ function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
         env.decideMany(ids, 'reject');
     });
     host.querySelector<HTMLButtonElement>('.merge-reanalyze')?.addEventListener('click', () => env?.reanalyze());
+    host.querySelector<HTMLButtonElement>('.merge-s2-sheet-close')?.addEventListener('click', () => {
+        view.listOpen = false;
+        redraw(host, ctx, false);
+        host.querySelector<HTMLElement>('.merge-pair-open')?.focus();
+    });
     const pane = host.querySelector<HTMLElement>('#merge-pair');
     pane?.addEventListener('click', e => {
         const t = e.target as HTMLElement;
         const dec = t.closest<HTMLElement>('.merge-dec');
         if (dec) {
             decide(ctx, dec.dataset.dec as DecKind);
+            return;
+        }
+        if (t.closest('.merge-pair-open')) {
+            view.listOpen = !view.listOpen;
+            redraw(host, ctx, false);
+            if (view.listOpen) host.querySelector<HTMLElement>('.merge-item[aria-selected="true"]')?.focus({ preventScroll: true });
+            return;
+        }
+        const seg = t.closest<HTMLElement>('.merge-pair-seg [data-side]');
+        if (seg) {
+            view.side = seg.dataset.side === 'import' ? 'import' : 'tree';
+            redraw(host, ctx, false);
+            host.querySelector<HTMLElement>(`.merge-pair-seg [data-side="${view.side}"]`)?.focus();
+            return;
+        }
+        if (t.closest('.merge-recalc-show')) {
+            view.onlyRecalc = !view.onlyRecalc;
+            view.selected = null;
+            view.scrollTop = 0;
+            redraw(host, ctx, false);
+            host.querySelector<HTMLElement>('.merge-recalc-show')?.focus();
             return;
         }
         const rest = t.closest<HTMLElement>('[data-rest]');

@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { candidatesFor, createMergeState, recalcUndecided, timeConflict } from '../merge/matching.js';
+import { candidatesFor, createMergeState, findMatches, reanalyzeMatches, recalcUndecided, timeConflict } from '../merge/matching.js';
 import { MergeState } from '../merge/types.js';
 import { Partnership, PartnershipId, Person, PersonId, StromData } from '../types.js';
 import { mulberry32, randomDecisions, sourceTree, targetTree } from './helpers/merge-trees.js';
@@ -182,5 +182,59 @@ describe('recalcUndecided on random pairs of invented trees', () => {
             if (errors.length) failures.push(`seed ${seed}: ${errors.slice(0, 4).join('; ')}`);
         }
         expect(failures).toEqual([]);
+    });
+
+    it('gives the person just decided by hand the pair of the person picked', () => {
+        let checked = 0;
+        for (let seed = 1; seed <= 60 && checked < 10; seed++) {
+            const rnd = mulberry32(seed);
+            const existing = targetTree(rnd);
+            const state = createMergeState(existing, sourceTree(existing, rnd));
+            const pair = state.matches.find(m => !state.decisions.has(m.incomingId));
+            const used = new Set(state.matches.map(m => m.existingId));
+            const other = Object.values(existing.persons).find(p => !p.isPlaceholder && !used.has(p.id));
+            if (!pair || !other) continue;
+            state.decisions.set(pair.incomingId, { type: 'manual_match', targetId: other.id });
+            recalcUndecided(state, pair.incomingId);
+            const now = state.matches.filter(m => m.incomingId === pair.incomingId);
+            expect(now).toHaveLength(1);
+            expect(now[0].existingId).toBe(other.id);
+            expect(now[0].reasons).toEqual(['manual']);
+            checked++;
+        }
+        expect(checked).toBeGreaterThan(0);
+    });
+});
+
+describe('the pairs of a comparison made once serve the merge (K3.3, K3.5)', () => {
+    it('a recalculation works from the comparison handed in, not from matching the trees again', () => {
+        const rnd = mulberry32(7);
+        const existing = targetTree(rnd);
+        const state = createMergeState(existing, sourceTree(existing, rnd), { match: false });
+        const found = findMatches(state.existingData, state.incomingData);
+        expect(found.length).toBeGreaterThan(1);
+        // The comparison handed in knows one pair only: the recalculation keeps to it.
+        const one = found.slice(0, 1);
+        reanalyzeMatches(state, one);
+        expect(state.matches.map(m => m.incomingId)).toEqual([one[0].incomingId]);
+        state.decisions.set(one[0].incomingId, { type: 'confirm' });
+        recalcUndecided(state, one[0].incomingId);
+        expect(state.matches.map(m => m.incomingId)).toEqual([one[0].incomingId]);
+        // Handed out as copies: an answer on a difference does not reach the kept pairs.
+        state.matches[0].conflicts.forEach(c => { c.resolution = 'use_incoming'; });
+        reanalyzeMatches(state);
+        expect(state.matches[0].conflicts.every(c => c.resolution !== 'use_incoming' || one[0].conflicts.includes(c))).toBe(true);
+    });
+
+    it('another merge of the same trees matches them itself', () => {
+        const rnd = mulberry32(7);
+        const existing = targetTree(rnd);
+        const incoming = sourceTree(existing, rnd);
+        const a = createMergeState(existing, incoming, { match: false });
+        reanalyzeMatches(a, []);
+        expect(a.matches).toEqual([]);
+        const b = createMergeState(existing, incoming, { match: false });
+        reanalyzeMatches(b);
+        expect(b.matches.length).toBe(findMatches(existing, incoming).length);
     });
 });

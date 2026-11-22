@@ -24,6 +24,8 @@ import { DataManager } from '../data.js';
 import { getUI } from '../ui-ref.js';
 import { renderStep1, parkGedcomSummary } from './steps/step1-what.js';
 import { renderStep2 } from './steps/step2-who.js';
+import { barHtml, setBarShare } from '../ui/prog-bar.js';
+import { busySpinHtml } from '../ui/busy.js';
 import { renderStep3 } from './steps/step3-whom.js';
 import { renderStep4 } from './steps/step4-rules.js';
 import { renderStep5 } from './steps/step5-plan.js';
@@ -48,13 +50,20 @@ export interface WizardHost {
     step2?(): Step2Env;
     /**
      * Step 1's Compare: the people of the import matched with the chosen
-     * target (the merge state replaced). False when it did not run.
+     * target (the merge state replaced), in parts with its progress. False
+     * when it did not run or was stopped (the state as it was).
      */
-    compare(): Promise<boolean>;
+    compare(run?: CompareRun): Promise<boolean>;
     /** Step 1's Download JSON (a GEDCOM file): the converted data saved, the guide closed, nothing written. */
     downloadJson(): void;
     /** What step 1 reads and does beyond the choices. */
     step1?(): Step1Env;
+}
+
+/** A running comparison (K3.5): its progress in work units, and the signal that stops it. */
+export interface CompareRun {
+    onProgress?: (done: number, total: number) => void;
+    signal?: AbortSignal;
 }
 
 /** Where the guide's import comes from and where it goes, for fresh choices. */
@@ -138,6 +147,8 @@ export function targetBlockText(block: TargetBlock, treeId: TreeId): string {
 export class MergeWizard {
     private plan: MergePlan | null = null;
     private busy = false;
+    /** The comparison running from step 1 (K3.5): shown as step 2's progress, stopped by Stop or Back. */
+    private comparing: { ctrl: AbortController; started: number; share: number; treePersons: number } | null = null;
 
     constructor(private readonly host: WizardHost) {}
 
@@ -176,6 +187,17 @@ export class MergeWizard {
     close(): void {
         this.plan = null;
         this.busy = false;
+        this.stopCompare();
+    }
+
+    /** Stop the running comparison: back on step 1 with its choices (nothing lost, K3.5). */
+    stopCompare(): void {
+        this.comparing?.ctrl.abort();
+    }
+
+    /** The comparison of step 1 runs (its progress stands in step 2's place). */
+    get isComparing(): boolean {
+        return !!this.comparing;
     }
 
     /** The plan again from the choices and the decisions. */
@@ -245,19 +267,27 @@ export class MergeWizard {
             }
             if (!this.primary().enabled) return;
             if (!ws.compared && c.mode !== 'new') {
+                const state = this.host.state()!;
+                const ctrl = new AbortController();
                 this.busy = true;
-                this.renderFooter();
+                this.comparing = {
+                    ctrl, started: Date.now(), share: 0,
+                    treePersons: Object.values(state.existingData.persons).filter(p => !p.isPlaceholder).length,
+                };
+                this.render(true);
                 let ok = false;
                 try {
-                    ok = await this.host.compare();
+                    ok = await this.host.compare({ signal: ctrl.signal, onProgress: (done, total) => this.compareProgress(done, total) });
                 } finally {
                     this.busy = false;
+                    this.comparing = null;
                 }
                 // The merge state was replaced by the comparison's.
                 const now = this.ws;
                 if (!now) return;
                 if (!ok) {
-                    this.renderFooter();
+                    // Stopped (or the target could not be read): step 1 again, its choices kept.
+                    this.render(true);
                     return;
                 }
                 now.compared = true;
@@ -289,6 +319,10 @@ export class MergeWizard {
     back(): void {
         const ws = this.ws;
         if (!ws) return;
+        if (this.comparing) {
+            this.stopCompare();
+            return;
+        }
         const to = previousStep(ws.step, this.availability());
         if (to) this.go(to);
     }
@@ -368,12 +402,14 @@ export class MergeWizard {
         const info = this.info();
         const items: string[] = [];
         const bars: string[] = [];
+        // While the comparison runs, step 2 stands as the current one ("comparing…", 4a).
+        const at: WizardStep = this.comparing ? 2 : ws.step;
         for (const s of WIZARD_STEPS) {
             const name = `${s} ${stepName(s)}`;
-            const sub = this.stepSub(s, info[s]);
+            const sub = this.comparing && s === 2 ? { text: W.comparingSub } : this.stepSub(s, info[s]);
             const subHtml = `<span class="merge-step-sub${sub.warn ? ' is-warn' : ''}">${sub.text ? escapeHtml(sub.text) : '&nbsp;'}</span>`;
-            const current = s === ws.step;
-            const done = !current && info[s].state === 'ok' && s <= ws.reached;
+            const current = s === at;
+            const done = !current && (s === 1 && !!this.comparing || info[s].state === 'ok' && s <= ws.reached);
             const skipped = info[s].state === 'skip';
             const label = `<span class="merge-step-name">${done ? `<span class="merge-step-ok" aria-hidden="true">${glyph('joined', 11)}</span>` : ''}`
                 + `<span class="sel-l" data-label="${escapeHtml(name)}">${escapeHtml(name)}</span></span>`;
@@ -387,7 +423,7 @@ export class MergeWizard {
         }
         const open = nav.classList.contains('is-open');
         nav.innerHTML = `<button type="button" class="merge-progress-short" aria-expanded="${open}">`
-            + `<span class="merge-progress-short-text">${escapeHtml(W.stepShort(ws.step, stepName(ws.step)))}</span>`
+            + `<span class="merge-progress-short-text">${escapeHtml(W.stepShort(at, stepName(at)))}</span>`
             + `<span class="merge-bars" aria-hidden="true">${bars.join('')}</span></button>`
             + `<div class="merge-step-list">${items.join('')}</div>`;
         nav.querySelector<HTMLButtonElement>('.merge-progress-short')?.addEventListener('click', () => {
@@ -451,9 +487,14 @@ export class MergeWizard {
         const ws = this.ws;
         const body = document.getElementById('merge-step-body');
         if (!ws || !body) return;
-        body.dataset.step = String(ws.step);
         // Today's GEDCOM summary goes home before any body is drawn: step 1 takes it again.
         parkGedcomSummary();
+        if (this.comparing) {
+            body.dataset.step = 'compare';
+            this.renderComparing(body);
+            return;
+        }
+        body.dataset.step = String(ws.step);
         const ctx = this.context();
         switch (ws.step) {
             case 1: renderStep1(body, ctx); break;
@@ -465,6 +506,48 @@ export class MergeWizard {
         }
     }
 
+    /**
+     * The comparison runs (4a, K3.5): "Comparing people…", the bar, "a of n
+     * people of the tree t · about eta left", the note and Stop. Updated in
+     * place by `compareProgress`.
+     */
+    private renderComparing(body: HTMLElement): void {
+        const W = strings.mergeWizard;
+        body.innerHTML = `<h3 class="merge-step-title" tabindex="-1" data-step-title="2">${escapeHtml(stepName(2))}</h3>`
+            + `<div class="merge-comparing" aria-busy="true">`
+            + `<div class="merge-comparing-head">${busySpinHtml(16)}<span class="merge-comparing-t">${escapeHtml(W.comparing)}</span></div>`
+            + barHtml(0, { cls: 'merge-comparing-bar', attrs: `role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="${escapeHtml(W.comparing)}"` })
+            + `<p class="merge-comparing-of" aria-live="polite"></p>`
+            + `<p class="merge-comparing-note">${escapeHtml(W.comparingNote)}</p>`
+            + `<button type="button" class="secondary merge-compare-stop" id="merge-compare-stop">${escapeHtml(W.stop)}</button>`
+            + '</div>';
+        body.querySelector<HTMLButtonElement>('#merge-compare-stop')?.addEventListener('click', () => this.stopCompare());
+        this.compareProgress(0, 0);
+    }
+
+    /** A part of the comparison done: the bar, the count and the time left. */
+    private compareProgress(done: number, total: number): void {
+        const run = this.comparing;
+        if (!run || typeof document === 'undefined') return;
+        const W = strings.mergeWizard;
+        if (total > 0) run.share = Math.min(1, done / total);
+        const bar = document.querySelector<HTMLElement>('#merge-step-body .merge-comparing-bar');
+        if (bar) {
+            setBarShare(bar, run.share);
+            bar.setAttribute('aria-valuenow', String(Math.round(run.share * 100)));
+        }
+        const line = document.querySelector<HTMLElement>('#merge-step-body .merge-comparing-of');
+        if (!line) return;
+        const ws = this.ws;
+        const elapsed = Date.now() - run.started;
+        // The time left once a part of the work shows its pace.
+        const left = run.share >= 0.02 && elapsed >= 300 ? Math.max(1, Math.round(elapsed * (1 - run.share) / run.share / 1000)) : null;
+        const a = Math.round(run.share * run.treePersons);
+        line.textContent = left === null
+            ? W.comparingOfNoEta(a, run.treePersons, ws?.choices.targetName ?? '')
+            : W.comparingOf(a, run.treePersons, ws?.choices.targetName ?? '', W.etaShort(left));
+    }
+
     /** The primary button's words and whether it can be pressed (with the reason when not). */
     primary(): { label: string; enabled: boolean; why: string } {
         const W = strings.mergeWizard;
@@ -474,6 +557,8 @@ export class MergeWizard {
         const info = this.info();
         const pending = this.plan ? planCounts(this.plan).pending : 0;
         const why = pending > 0 ? W.nextWhyPairs(pending) : '';
+        // While comparing: the way on is step 2's, not yet (4a).
+        if (this.comparing) return { label: W.btnNext(stepName(nextStep(2, this.availability()) ?? 5)), enabled: false, why: '' };
         if (ws.step === 5) {
             const n = this.plan ? planCounts(this.plan) : null;
             if (c.mode === 'compare') return { label: W.done, enabled: true, why: '' };
@@ -519,12 +604,13 @@ export class MergeWizard {
         }
         if (back) {
             back.textContent = W.back;
-            back.hidden = !previousStep(ws.step, this.availability());
-            back.disabled = this.busy;
+            // While comparing, Back stops the comparison (step 1 again).
+            back.hidden = !this.comparing && !previousStep(ws.step, this.availability());
+            back.disabled = this.busy && !this.comparing;
         }
         // Step 1 before the comparison has nothing to save: Cancel stands
         // where Save for later stands later on (ZADANI_DEV §2).
-        const nothingYet = ws.step === 1 && !ws.compared;
+        const nothingYet = ws.step === 1 && !ws.compared && !this.comparing;
         const cancel = document.getElementById('merge-cancel') as HTMLButtonElement | null;
         // An empty import has only Close (13a).
         if (cancel) cancel.hidden = !nothingYet || ws.choices.source.persons === 0;
