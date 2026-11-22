@@ -41,6 +41,13 @@ const busy = (retry: number) => (route: Route) => route.fulfill({
     body: JSON.stringify({ error: 'the research is being written: ask again in a while', code: 'research.busy', retry }),
 });
 
+/** The research 1.36's reply when a file of the batch is held a moment by another program (W136-P1). */
+const held = (retry: number) => (route: Route) => route.fulfill({
+    status: 503, headers: { ...cors, 'content-type': 'application/json', 'Retry-After': String(retry) },
+    body: JSON.stringify({ error: 'Another program is holding a file sent from the app for a moment', code: 'media.held',
+        text: 'Another program is holding a file sent from the app for a moment', retry, batch: 'b' }),
+});
+
 const unfinished = (page: Page) => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('strom-batch:')));
 
 async function sendTwo(page: Page): Promise<void> {
@@ -54,9 +61,9 @@ async function sendTwo(page: Page): Promise<void> {
 test.describe('A batch whose close fails (W136)', () => {
     test.use({ viewport: DESKTOP });
 
-    test('busy twice (503 with retry): the window says the files still wait and closes it again; done only once it passes, with its count', async ({ page }) => {
+    test('busy, then a file held (503 research.busy / media.held with retry): the window says the files still wait and closes it again; done only once it passes, with its count', async ({ page }) => {
         const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS, features: ['media.known', 'media.queued'] });
-        const closes = await closeReplies(page, [busy(1), busy(1)]);
+        const closes = await closeReplies(page, [busy(1), held(1)]);
         await openResearch(page, { media: true });
         await poll(page);
         await sendTwo(page);

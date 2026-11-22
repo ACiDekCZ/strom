@@ -178,11 +178,6 @@ function writeUnfinished(treeId: string, rec: UnfinishedBatch | null): void {
     } catch { /* not remembered: a closed tab starts anew */ }
 }
 
-function retryAfterMs(value: string | null): number {
-    const n = Number(value);
-    return Number.isFinite(n) && n > 0 ? Math.min(60_000, Math.max(1000, n * 1000)) : 5000;
-}
-
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
 function onLeave(e: BeforeUnloadEvent): void {
@@ -1025,8 +1020,10 @@ export const batchMethods = uiModule({
                 else r.received++;
                 return 'ok';
             }
+            // Busy or a file held a moment by another program (`media.held`, W136): the body's `retry`
+            // (Retry-After is not exposed across origins), else the header, else the default.
             if (res.status === 503) {
-                await sleep(retryAfterMs(res.headers.get('Retry-After')));
+                await sleep(batchCloseWaitMs(body, res.headers.get('Retry-After')));
                 return 'again';
             }
             // Held by the research (sealed elsewhere, files not downloaded, a full disk): never a new batch, never again by itself.
