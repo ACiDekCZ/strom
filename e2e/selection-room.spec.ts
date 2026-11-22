@@ -144,6 +144,19 @@ test.describe('the map\'s scope switch', () => {
         expect(await name.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
     });
 
+    test('a touch tablet: the name stands in the middle of the 44 px part, as the other parts\' words do', async ({ browser }) => {
+        const ctx = await browser.newContext({ viewport: { width: 1024, height: 768 }, hasTouch: true });
+        const page = await ctx.newPage();
+        const pop = await mapWithList(page, LONG);
+        await pop.locator('li.sp-selpick-row[data-sec="lists"]', { hasText: LONG }).locator('button').click();
+        const part = (await page.locator('#map-scope-sel').boundingBox())!;
+        const name = (await page.locator('#map-scope-sel .map-scope-name').boundingBox())!;
+        expect(part.height).toBeGreaterThanOrEqual(43.5);
+        expect(Math.abs((name.y + name.height / 2) - (part.y + part.height / 2))).toBeLessThanOrEqual(2);
+        expect(await page.locator('#map-scope-sel .map-scope-name').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+        await ctx.close();
+    });
+
     test('a phone: the scope button with the long name does not spill over the page', async ({ browser }) => {
         const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
         const page = await ctx.newPage();

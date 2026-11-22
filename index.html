@@ -12829,6 +12829,8 @@
         .map-path-chip[hidden], .scope-seg[hidden] { display: none; }
         /* The scope's Selection part (spec 098 §3, §11.0; Map, Timeline, Table): the selection's name cut with "…", its count quiet. */
         .scope-seg .scope-sel-part { display: inline-flex; align-items: baseline; gap: 4px; min-width: 0; }
+        /* Touch: the 44 px part holds its text in the middle, as the other parts do (baseline put it at the top). */
+        @media (pointer: coarse) { .scope-seg .scope-sel-part { align-items: center; } }
         .scope-name { display: inline-block; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: inherit; }
         .scope-n { flex: none; color: var(--text-faint); font-weight: 400; }
         .scope-sel-part.active .scope-n { color: var(--text-light); }
