@@ -127,8 +127,8 @@ describe('K0.1 an undecided match below the auto-confirm score is added as a sep
 
 describe('K0.3 an undecided difference keeps the existing value', () => {
     it('"Jan" vs "Jan Nepomuk" and "1900" vs "3 MAR 1900" stay as the tree has them', async () => {
-        const eJ = P('eJ', 'Jan', 'Kořínek', { birthDate: '1900', birthPlace: 'Vlašim' });
-        const iJ = P('iJ', 'Jan Nepomuk', 'Kořínek', { birthDate: '3 MAR 1900', birthPlace: 'Vlašim' });
+        const eJ = P('eJ', 'Jan', 'Zubřenec', { birthDate: '1900', birthPlace: 'Hlubočnice' });
+        const iJ = P('iJ', 'Jan Nepomuk', 'Zubřenec', { birthDate: '3 MAR 1900', birthPlace: 'Hlubočnice' });
         const state: MergeState = {
             existingData: tree([eJ]), incomingData: tree([iJ]),
             matches: [match(eJ, iJ, 95)],
@@ -150,8 +150,8 @@ describe('K0.3 an undecided difference keeps the existing value', () => {
     });
 
     it('an empty value is still filled from the import', async () => {
-        const eJ = P('eJ', 'Jan', 'Kořínek', { birthDate: '1900' });
-        const iJ = P('iJ', 'Jan', 'Kořínek', { birthDate: '1900', deathDate: '1960', birthPlace: 'Vlašim' });
+        const eJ = P('eJ', 'Jan', 'Zubřenec', { birthDate: '1900' });
+        const iJ = P('iJ', 'Jan', 'Zubřenec', { birthDate: '1900', deathDate: '1960', birthPlace: 'Hlubočnice' });
         const state: MergeState = {
             existingData: tree([eJ]), incomingData: tree([iJ]),
             matches: [match(eJ, iJ, 95)],
@@ -161,7 +161,7 @@ describe('K0.3 an undecided difference keeps the existing value', () => {
         const result = await executeMerge(state);
         const jan = result.mergedData.persons['eJ' as PersonId];
         expect(jan.deathDate).toBe('1960');
-        expect(jan.birthPlace).toBe('Vlašim');
+        expect(jan.birthPlace).toBe('Hlubočnice');
     });
 });
 
@@ -232,7 +232,7 @@ describe('K0.2 classes found by random pairs of trees', () => {
     it('a person merged by hand without an offered match brings its data and files', async () => {
         const eT = P('eT', 'Tobiáš', 'Lindner', { birthDate: '1871' });
         const existingData = tree([eT]);
-        const iX = P('iX', 'Tobias', 'Lintner', { birthDate: '1871', birthPlace: 'Hrbolín' });
+        const iX = P('iX', 'Tibor', 'Ohnišťan', { birthDate: '1871', birthPlace: 'Vřesníkov' });
         const incomingData: StromData = {
             ...tree([iX]),
             media: { im1: { id: 'im1', name: 'im1.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,QUJD', sizeBytes: 3, places: [{ personId: 'iX' as PersonId }] } },
@@ -248,7 +248,7 @@ describe('K0.2 classes found by random pairs of trees', () => {
         expect(result.success).toBe(true);
         const merged = result.mergedData;
         expect(Object.keys(merged.persons)).toEqual(['eT']);
-        expect(merged.persons['eT' as PersonId].birthPlace).toBe('Hrbolín');
+        expect(merged.persons['eT' as PersonId].birthPlace).toBe('Vřesníkov');
         // The differing name is no choice made: the tree's stays.
         expect(merged.persons['eT' as PersonId].firstName).toBe('Tobiáš');
         expect(merged.media?.im1?.places).toEqual([{ personId: 'eT' }]);
