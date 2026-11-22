@@ -1,9 +1,9 @@
 import { test, expect, Page } from '@playwright/test';
 import {
-    fakeBridge, fakeMaterial, materialFile, materialSha, MATERIAL_FEATURES, openResearch, poll, researchGed, UUID, BRIDGE,
+    fakeBridge, fakeMaterial, materialFile, materialSha, MATERIAL_FEATURES, openResearch, poll, researchGed, UUID, BRIDGE, HEAD,
     FakeBridge, FakeMaterial, FakeMaterialFile,
 } from './research-bridge.js';
-import { openApp, seedTree, cardAction, personModal } from './helpers.js';
+import { openApp, seedTree, cardAction, personModal, seedResearchPromoSeen, seedSetting, seedWhatsNewSeen } from './helpers.js';
 
 /**
  * The tree's own writes on files (spec 102 §4, §9, §12h): "Link to…" (a
@@ -359,6 +359,163 @@ test.describe('Link to… beside an archive', () => {
         await expect(dialog(page)).toHaveCount(0);
         await expect(pill(page).locator('.undo-toast-msg')).toHaveText('The file was already in the tree; linked here too.');
         await expect.poll(() => treeRecordOf(page, sha)).toMatchObject({ places: 2 });
+    });
+});
+
+// ==================== A TREE FOLLOWED LIVE, A BUSY BRIDGE (1122 F) ====================
+
+/** A fourth person of the research (invented). */
+const KORDULA = ['0 @P0004@ INDI', '1 NAME Kordula /Fíšková/', '1 SEX F', '1 REFN P0004', '2 TYPE strom-research'];
+const FOUR = ['Josef Fíšek', 'Anna Svobodová', 'Jan Fíšek', 'Kordula Fíšková'];
+
+/** The research followed from its bridge (`?live=`): the tree is read-only meanwhile. */
+async function followLive(page: Page, material: FakeMaterial): Promise<FakeBridge> {
+    await page.addInitScript(() => {
+        // The bridge's events: the hello is the status (the routed fetch); nothing else comes.
+        class FakeEventSource {
+            url: string;
+            readyState = 1;
+            onerror: ((e: Event) => void) | null = null;
+            private listeners: Record<string, ((e: MessageEvent) => void)[]> = {};
+            constructor(url: string) {
+                this.url = url;
+                void fetch(url.replace(/\/events(\?.*)?$/, '/status')).then(r => r.json()).then(st => this.emit('hello', st));
+            }
+            addEventListener(type: string, fn: (e: MessageEvent) => void): void { (this.listeners[type] ??= []).push(fn); }
+            removeEventListener(): void { /* not needed */ }
+            close(): void { this.readyState = 2; }
+            emit(type: string, data: unknown): void {
+                for (const fn of this.listeners[type] ?? []) fn(new MessageEvent(type, { data: JSON.stringify(data) }));
+            }
+        }
+        Object.defineProperty(window, 'EventSource', { value: FakeEventSource, configurable: true, writable: true });
+    });
+    await seedResearchPromoSeen(page);
+    await seedWhatsNewSeen(page);
+    await seedSetting(page, 'fileCopyReminders', false);
+    await seedSetting(page, 'onThisDay', false);
+    const bridge = await fakeBridge(page, { accepts: MEDIA_ACCEPTS, features: MATERIAL_FEATURES, material, treeGed: researchGed(HEAD, KORDULA) });
+    await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+    await expect.poll(() => page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(true);
+    await poll(page);
+    return bridge;
+}
+
+async function pickFour(page: Page): Promise<void> {
+    for (const name of FOUR) await dialog(page).locator('.ppm-row', { hasText: name }).click();
+    await expect(go(page)).toHaveText('Link (4 people)');
+}
+
+const LINKED_FOUR = 'Linked to Josef Fíšek, Anna Svobodová, Jan Fíšek and Kordula Fíšková.';
+
+test.describe('Link to… never ends without a word (1122 F)', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('a tree followed live: a file only in the archive to four people says the tree is read-only; End following, then it links', async ({ page }) => {
+        const sha = materialSha('I0001');
+        const material = fakeMaterial({ files: [materialFile(1, { title: 'U stolu' })], batches: [], people: { ...PEOPLE, P0004: 'Kordula Fíšková' } });
+        const bridge = await followLive(page, material);
+        await view(page, 'U stolu');
+        await act(page, 'attach').click();
+        await expect(dialog(page).locator('.mdlg-sub')).toHaveText('scan-1.jpg · only in the archive');
+        await pickFour(page);
+        // Said at once, the choice kept: the button waits for the end of following.
+        const followed = dialog(page).locator('.mdlg-attach-followed');
+        await expect(followed).toContainText('The tree is followed live and is read-only. Linking is possible after following ends; the choice stays.');
+        await expect(go(page)).toBeDisabled();
+        await followed.getByRole('button', { name: 'End following' }).click();
+        await expect.poll(() => page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(false);
+        await expect(followed).toBeHidden();
+        await expect(go(page)).toHaveText('Link (4 people)');
+        await go(page).click();
+        await expect(dialog(page)).toHaveCount(0);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText(LINKED_FOUR);
+        await expect.poll(() => treeRecordOf(page, sha)).toEqual({ places: 4, mime: 'image/jpeg', copy: true });
+        expect(bridge.seen).toContain(`GET /media/${sha}`);
+    });
+
+    test('following that starts or ends while the dialog is open is said at once; a person locked meanwhile: the click says nothing was linked', async ({ page }) => {
+        const sha = materialSha('I0001');
+        await research(page, [materialFile(1, { title: 'U stolu' })]);
+        await view(page, 'U stolu');
+        await act(page, 'attach').click();
+        await dialog(page).locator('.ppm-row', { hasText: 'Jan Fíšek' }).click();
+        const followed = dialog(page).locator('.mdlg-attach-followed');
+        await expect(followed).toBeHidden();
+        await expect(go(page)).toBeEnabled();
+        await page.evaluate(() => window.Strom.DataManager.setLiveTree(window.Strom.DataManager.getCurrentTreeId()));
+        await expect(followed).toBeVisible();
+        await expect(go(page)).toBeDisabled();
+        await page.evaluate(() => window.Strom.DataManager.setLiveTree(null));
+        await expect(followed).toBeHidden();
+        await expect(go(page)).toBeEnabled();
+        // Jan locked meanwhile: nothing can be written, and the click says so; the button stays usable.
+        await page.evaluate(() => {
+            const jan = (Object.values(window.Strom.DataManager.getData().persons) as { firstName: string; isLocked?: boolean }[]).find(p => p.firstName === 'Jan')!;
+            jan.isLocked = true;
+        });
+        await go(page).click();
+        await expect(dialog(page).locator('.mdlg-error')).toHaveText('Nothing was linked: the tree or the chosen people are locked.');
+        await expect(go(page)).toBeEnabled();
+        expect(await treeRecordOf(page, sha)).toBeNull();
+    });
+
+    test('a busy bridge (503 with retry): said in the dialog with Try again, which links once it is free', async ({ page }) => {
+        const sha = materialSha('I0001');
+        await research(page, [materialFile(1, { title: 'U stolu' })]);
+        let busy = true;
+        let asks = 0;
+        await page.route(`${BRIDGE}/media/${sha}?**`, async (route) => {
+            // The file itself (`?file=1`); its previews go on as they are.
+            if (new URL(route.request().url()).searchParams.get('file') !== '1') return route.fallback();
+            asks++;
+            if (!busy) return route.fallback();
+            return route.fulfill({ status: 503, headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' },
+                body: JSON.stringify({ error: 'busy', code: 'research.busy', text: 'busy', retry: 2 }) });
+        });
+        await view(page, 'U stolu');
+        await act(page, 'attach').click();
+        await dialog(page).locator('.ppm-row', { hasText: 'Jan Fíšek' }).click();
+        // The viewer may read the file for itself: only the dialog's reads are counted.
+        const before = asks;
+        await go(page).click();
+        const error = dialog(page).locator('.mdlg-error');
+        await expect(error).toContainText('The research is busy; nothing changed.');
+        await expect(go(page)).toBeEnabled();
+        expect(await mediaCount(page)).toBe(0);
+        busy = false;
+        await error.getByRole('button', { name: 'Try again' }).click();
+        await expect(dialog(page)).toHaveCount(0);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Linked to Jan Fíšek.');
+        await expect.poll(() => treeRecordOf(page, sha)).toEqual({ places: 1, mime: 'image/jpeg', copy: true });
+        expect(asks - before).toBe(2);
+    });
+
+    test('a failed read (500 material.failed): said in the dialog; the next click asks again', async ({ page }) => {
+        const sha = materialSha('I0001');
+        await research(page, [materialFile(1, { title: 'U stolu' })]);
+        let fail = true;
+        let asks = 0;
+        await page.route(`${BRIDGE}/media/${sha}?**`, async (route) => {
+            // The file itself (`?file=1`); its previews go on as they are.
+            if (new URL(route.request().url()).searchParams.get('file') !== '1') return route.fallback();
+            asks++;
+            if (!fail) return route.fallback();
+            return route.fulfill({ status: 500, headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' },
+                body: JSON.stringify({ error: 'failed', code: 'material.failed', text: 'exit 1' }) });
+        });
+        await view(page, 'U stolu');
+        await act(page, 'attach').click();
+        await dialog(page).locator('.ppm-row', { hasText: 'Jan Fíšek' }).click();
+        const before = asks;
+        await go(page).click();
+        await expect(dialog(page).locator('.mdlg-error')).toContainText('The file could not be read from the archive. Nothing was linked.');
+        await expect(go(page)).toBeEnabled();
+        fail = false;
+        await go(page).click();
+        await expect(dialog(page)).toHaveCount(0);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Linked to Jan Fíšek.');
+        expect(asks - before).toBe(2);
     });
 });
 

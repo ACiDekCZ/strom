@@ -443,6 +443,8 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
             source: (what: string) => `Połączono ze źródłem ${what}.`,
         },
         attachFailed: 'Nie udało się wczytać pliku z archiwum. Nic nie połączono.',
+        attachFollowed: 'Drzewo jest śledzone na żywo i jest tylko do odczytu. Połączenie będzie możliwe po zakończeniu śledzenia, wybór zostanie zachowany.',
+        attachNothing: 'Nic nie połączono: drzewo lub wybrane osoby są zablokowane.',
         removeFromTree: 'Usuń z drzewa…',
         rmTitle: 'Usunąć z drzewa?',
         rmText: (title: string, n: number) => `${title} zostanie usunięty ze wszystkich miejsc w drzewie (${n}).`,

@@ -509,6 +509,9 @@ export async function storedTreeForExport(treeId: TreeId): Promise<StromData | n
  * DataManager.isLocked). The UI never offers one; this only guarantees that
  * an overlooked path cannot change the unsaved stand-in tree.
  */
+/** Fired on `window` when the open tree starts or stops following a live research (read-only meanwhile). */
+export const LIVE_FOLLOW_EVENT = 'strom:live-follow';
+
 export class DataLockedError extends Error {
     constructor() {
         super('Local data is locked; unlock it before editing');
@@ -785,7 +788,10 @@ class DataManagerClass {
 
     /** Mark the tree that follows a live research (null = none). */
     setLiveTree(treeId: TreeId | null): void {
+        const changed = this.liveTreeId !== treeId;
         this.liveTreeId = treeId;
+        // Open dialogs that write the tree say at once that it became read-only, or writable again.
+        if (changed && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(LIVE_FOLLOW_EVENT));
     }
 
     /** The tree that follows a live research, if any. */

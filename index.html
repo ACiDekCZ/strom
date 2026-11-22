@@ -32092,6 +32092,9 @@
         }
         .mdlg-note[hidden] { display: none; }
         .mdlg-attach-off { color: var(--warning-text); }
+        /* A tree followed live (1122 F): the sentence and End following beside it, wrapping on a phone. */
+        .mdlg-attach-followed { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; color: var(--warning-text); }
+        .mdlg-attach-followed[hidden] { display: none; }
         .mdlg-warn {
             display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--warn-line);
             border-radius: var(--r-md); background: var(--warning-soft); font-size: 13.5px; line-height: 1.45;
@@ -32211,7 +32214,7 @@
             .mdlg-btn:not(:disabled):hover { background: var(--hover-bg); }
             .mdlg-btn.is-primary:not(:disabled):hover { background: var(--primary-dark); }
         }
-        @media (pointer: coarse) { .mdlg-btn, .mdlg-attach-change, .mdlg-attach-newsource, .mdlg-dup-new { min-height: 44px; } }
+        @media (pointer: coarse) { .mdlg-btn, .mdlg-attach-change, .mdlg-attach-newsource, .mdlg-attach-endfollow, .mdlg-dup-new { min-height: 44px; } }
         @media (max-width: 640px) {
             .mdlg-overlay:not(.is-bubble) { align-items: flex-end; padding: 0; }
             .mdlg:not(.mdlg--bubble) { width: 100%; max-height: 92vh; border-radius: var(--r-lg) var(--r-lg) 0 0; }

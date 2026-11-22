@@ -13,10 +13,10 @@
  */
 
 import { isPendingImageUrl } from '../research-image-refs.js';
-import { DataManager } from '../data.js';
+import { DataManager, LIVE_FOLLOW_EVENT } from '../data.js';
 import { Attachment, MediaPlace, PartnershipId, Person, PersonId, Source } from '../types.js';
 import { strings } from '../strings.js';
-import { MaterialItem, directPersons, fileUrl, materialRecordNote } from '../materials.js';
+import { MATERIAL_TIMEOUT_MS, MaterialError, MaterialItem, directPersons, fileUrl, materialErrorOf, materialRecordNote } from '../materials.js';
 import { mediaAt, mediaPersonIds, placePersonId } from '../media.js';
 import { mediaPlaceLabel, mediaUseLabel, mediaUses } from '../media-uses.js';
 import { MultiPersonPicker, PersonPicker } from '../person-picker.js';
@@ -201,6 +201,19 @@ export const materialAttachMethods = uiModule({
         }
         const off = outside.length > 0 && !bridgeUp;
         if (off) dialog.body.appendChild(h('p', 'mdlg-text mdlg-attach-off', m.actionsWhenRunning));
+        // A tree followed live is read-only (1122 F): said at once with the way out, the choice kept meanwhile.
+        const followedNote = h('p', 'mdlg-text mdlg-attach-followed');
+        followedNote.setAttribute('role', 'status');
+        const endFollow = h('button', 'link-button mdlg-attach-endfollow', strings.research.stop);
+        endFollow.type = 'button';
+        endFollow.addEventListener('click', () => {
+            this.stopLiveFollow();
+            refresh();
+            if (!confirm.disabled) confirm.focus();
+        });
+        followedNote.append(h('span', '', m.attachFollowed), ' ', endFollow);
+        followedNote.hidden = true;
+        dialog.body.appendChild(followedNote);
 
         const confirm = button(m.attachBtn, 'is-primary', () => void run());
         confirm.disabled = true;
@@ -213,12 +226,17 @@ export const materialAttachMethods = uiModule({
         let single: PersonPicker | null = null;
         const cleanup = () => { multi?.destroy(); multi = null; single?.destroy(); single = null; };
         const close = dialog.close;
-        dialog.close = () => { cleanup(); close(); };
+        // Following that starts or ends while the dialog is open is said at once.
+        const onFollow = () => refresh();
+        window.addEventListener(LIVE_FOLLOW_EVENT, onFollow);
+        dialog.close = () => { window.removeEventListener(LIVE_FOLLOW_EVENT, onFollow); cleanup(); close(); };
 
         const refresh = () => {
             const n = target === 'person' ? chosenPeople.length : chosenPlace ? 1 : 0;
+            const followed = DataManager.isLiveFollowing();
+            followedNote.hidden = !followed;
             confirm.textContent = target === 'person' && n ? m.attachN(n) : m.attachBtn;
-            confirm.disabled = off || n === 0;
+            confirm.disabled = off || followed || n === 0;
             let text = '';
             if (target === 'person' && mc?.caps.list && chosenPeople.some(id => !researchPersonRef(DataManager.getPerson(id)?.refn))) {
                 text = mc.agent ? m.noRefnTreeResearch : m.noRefnTree;
@@ -395,32 +413,55 @@ export const materialAttachMethods = uiModule({
         });
         show('person');
 
+        /** A click that wrote nothing says why in the dialog, with Try again where another try may go (1122 F). */
+        const refused = (text: string, retry: boolean) => {
+            dialog.busy(false);
+            dialog.error(text, retry ? { label: m.retry, run: () => void run() } : undefined);
+        };
         const run = async () => {
             if (confirm.disabled || isBusy(confirm)) return;
             const places: MediaPlace[] = target === 'person' ? chosenPeople.map(id => ({ personId: id })) : chosenPlace ? [chosenPlace] : [];
             if (!places.length) return;
             dialog.busy(true);
             dialog.error(null);
-            const targets: Array<{ id: string } | { record: Omit<Attachment, 'id' | 'places'> }> = files.filter(i => treeRecord(i)).map(i => ({ id: treeRecord(i)!.id }));
-            for (const item of outside) {
-                const record = await this.materialWorkingCopy(item, mc);
-                if (!record) {
-                    dialog.busy(false);
-                    dialog.error(m.attachFailed);
+            try {
+                const targets: Array<{ id: string } | { record: Omit<Attachment, 'id' | 'places'> }> = files.filter(i => treeRecord(i)).map(i => ({ id: treeRecord(i)!.id }));
+                for (const item of outside) {
+                    const why: { error?: MaterialError } = {};
+                    const record = await this.materialWorkingCopy(item, mc, why);
+                    if (!record) {
+                        console.warn('Link to…: the working copy was not read', item.file?.id, why.error ?? 'no file or bridge');
+                        const busy = why.error?.kind === 'busy';
+                        refused(busy ? (mc?.agent ? m.errBusyResearch : m.errBusy) : m.attachFailed, true);
+                        return;
+                    }
+                    targets.push({ record });
+                }
+                // Read-only meanwhile (following began, the tree or a person locked): nothing is written, said so.
+                if (DataManager.isLiveFollowing()) {
+                    console.warn('Link to…: the tree is followed live (read-only)');
+                    refresh();
+                    refused(m.attachFollowed, false);
                     return;
                 }
-                targets.push({ record });
+                const data = DataManager.getData();
+                const toast = target === 'person'
+                    ? m.attachedToast.persons(chosenPeople.map(id => { const p = DataManager.getPerson(id); return p ? fullName(p) : id; }))
+                    : m.attachedToast[target](mediaPlaceLabel(data, places[0]));
+                const changed = DataManager.linkMedia(targets, places, { toast });
+                if (!changed.length) {
+                    console.warn('Link to…: nothing was written', { readOnly: DataManager.isReadOnly(), treeLocked: DataManager.isTreeLocked() });
+                    refused(m.attachNothing, false);
+                    return;
+                }
+                dialog.busy(false);
+                dialog.close();
+                this.afterMediaChange();
+                ctx.done?.();
+            } catch (err) {
+                console.warn('Link to… failed', err);
+                refused(m.errGeneric, true);
             }
-            const data = DataManager.getData();
-            const toast = target === 'person'
-                ? m.attachedToast.persons(chosenPeople.map(id => { const p = DataManager.getPerson(id); return p ? fullName(p) : id; }))
-                : m.attachedToast[target](mediaPlaceLabel(data, places[0]));
-            const changed = DataManager.linkMedia(targets, places, { toast });
-            dialog.busy(false);
-            if (!changed.length) return;
-            dialog.close();
-            this.afterMediaChange();
-            ctx.done?.();
         };
     },
 
@@ -429,7 +470,7 @@ export const materialAttachMethods = uiModule({
      * the bridge (an image reduced as an attachment, a PDF up to 2 MB; any
      * other kind only its original) and what the research knows of it.
      */
-    async materialWorkingCopy(item: MaterialItem, mc: MaterialsContext | null): Promise<Omit<Attachment, 'id' | 'places'> | null> {
+    async materialWorkingCopy(item: MaterialItem, mc: MaterialsContext | null, why?: { error?: MaterialError }): Promise<Omit<Attachment, 'id' | 'places'> | null> {
         const sha = materialItemSha(item);
         const file = item.file;
         if (!sha || !file || !mc?.base) return null;
@@ -445,9 +486,18 @@ export const materialAttachMethods = uiModule({
         };
         const shown = ATTACHMENT_IMAGE_TYPES.includes(mime) || (mime === 'application/pdf' && (file.bytes ?? 0) <= MAX_PDF_BYTES);
         if (!shown) return { name: file.name, mimeType: mime, dataUrl: ORIGINAL_ONLY_DATA_URL, sizeBytes: 0, original, originalOnly: true, ...details };
+        // A bridge that does not answer ends the wait too: never a click that waits for good (1122 F).
+        const timeout = new AbortController();
+        const timer = setTimeout(() => timeout.abort(), MATERIAL_TIMEOUT_MS);
         try {
-            const res = await fetch(fileUrl(mc.base, sha), { method: 'GET', mode: 'cors', credentials: 'omit' });
-            if (!res.ok) return null;
+            const res = await fetch(fileUrl(mc.base, sha), { method: 'GET', mode: 'cors', credentials: 'omit', signal: timeout.signal });
+            if (!res.ok) {
+                // Its answer (503 busy with retry, 500 material.failed, 410 gone) for the caller's sentence.
+                let body: unknown = null;
+                try { body = await res.json(); } catch { body = null; }
+                if (why) why.error = materialErrorOf(res.status, body, res.headers?.get?.('Retry-After') ?? null);
+                return null;
+            }
             const blob = await res.blob();
             const type = blob.type || mime;
             const picked = new File([blob], file.name, { type });
@@ -464,7 +514,10 @@ export const materialAttachMethods = uiModule({
             }
             return { name: file.name, mimeType, dataUrl, sizeBytes: dataUrlByteSize(dataUrl), original: { ...original, bytes: original.bytes || blob.size }, ...details };
         } catch {
+            if (why) why.error = { kind: timeout.signal.aborted ? 'aborted' : 'down', status: 0 };
             return null;
+        } finally {
+            clearTimeout(timer);
         }
     },
 
