@@ -506,6 +506,14 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
 
         // When this merge brings people into the tree (spec 084 §8).
         const mergedAt = new Date().toISOString();
+        /** A merged person of the tree takes the import's details (see MergeState.joinedDetails). */
+        const takeDetails = state.joinedDetails !== 'none';
+        const detailOptions = { notesOnlyWhenEmpty: state.joinedDetails === 'empty' };
+        const joinDetails = (existingPerson: Person, incoming: Person, conflicts: FieldConflict[]): void => {
+            if (!takeDetails) return;
+            const asked = state.joinedDetails === 'empty' ? conflicts.map(c => ({ ...c, resolution: 'keep_existing' as const })) : conflicts;
+            mergePersonData(existingPerson, shared(incoming), asked, mapping.persons, state.incomingData.persons, detailOptions);
+        };
         /** Incoming persons whose data came into the tree (merged or added): their files come along. */
         const carriedPersons = new Set<PersonId>();
         // Process confirmed matches - merge person data
@@ -516,19 +524,19 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
                 const existingPerson = mergedData.persons[match.existingId];
                 if (existingPerson) {
                     // Merge data according to conflict resolutions
-                    mergePersonData(existingPerson, shared(match.incomingPerson), match.conflicts, mapping.persons, state.incomingData.persons);
+                    joinDetails(existingPerson, match.incomingPerson, match.conflicts);
                     carriedPersons.add(match.incomingId);
                     carryMergedImports(existingPerson, state.existingData.persons[match.existingId], match.incomingPerson, importMap);
-                    keepEarlierAddedAt(existingPerson, match.incomingPerson);
+                    if (takeDetails) keepEarlierAddedAt(existingPerson, match.incomingPerson);
                     mergedCount++;
                 }
             } else if (decision?.type === 'manual_match') {
                 const existingPerson = mergedData.persons[decision.targetId];
                 if (existingPerson) {
-                    mergePersonData(existingPerson, shared(match.incomingPerson), match.conflicts, mapping.persons, state.incomingData.persons);
+                    joinDetails(existingPerson, match.incomingPerson, match.conflicts);
                     carriedPersons.add(match.incomingId);
                     carryMergedImports(existingPerson, state.existingData.persons[decision.targetId], match.incomingPerson, importMap);
-                    keepEarlierAddedAt(existingPerson, match.incomingPerson);
+                    if (takeDetails) keepEarlierAddedAt(existingPerson, match.incomingPerson);
                     mergedCount++;
                 }
             }
@@ -544,10 +552,10 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
             const existingPerson = mergedData.persons[decision.targetId];
             const incoming = state.incomingData.persons[incomingId];
             if (!existingPerson || !incoming) continue;
-            mergePersonData(existingPerson, shared(incoming), state.conflictResolutions.get(incomingId) ?? [], mapping.persons, state.incomingData.persons);
+            joinDetails(existingPerson, incoming, state.conflictResolutions.get(incomingId) ?? []);
             carriedPersons.add(incomingId);
             carryMergedImports(existingPerson, state.existingData.persons[decision.targetId], incoming, importMap);
-            keepEarlierAddedAt(existingPerson, incoming);
+            if (takeDetails) keepEarlierAddedAt(existingPerson, incoming);
             mergedCount++;
         }
         // A "?" of a family the tree already has (standInsOfKnownFamilies) is
@@ -558,7 +566,7 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
             const existingId = mapping.persons.get(incomingId)!;
             const existingPerson = mergedData.persons[existingId];
             if (!existingPerson?.isPlaceholder) continue;
-            mergePersonData(existingPerson, shared(incoming), [], mapping.persons, state.incomingData.persons);
+            joinDetails(existingPerson, incoming, []);
             carriedPersons.add(incomingId);
             carryMergedImports(existingPerson, state.existingData.persons[existingId], incoming, importMap);
         }
@@ -709,9 +717,9 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
 
             if (existingPartnership) {
                 unionTarget.set(pshipId, existingPartnership.id);
-                // Merge partnership data
-                mergePartnershipData(existingPartnership, partnership, mapping.persons, state.incomingData.persons);
-                const wins = partnershipWins.get(pshipId);
+                // Merge partnership data (none of it when the tree's details stay as they are)
+                if (takeDetails) mergePartnershipData(existingPartnership, partnership, mapping.persons, state.incomingData.persons);
+                const wins = takeDetails ? partnershipWins.get(pshipId) : undefined;
                 if (wins && wins.existingId === existingPartnership.id) {
                     for (const field of wins.fields) {
                         if (field === 'status') existingPartnership.status = partnership.status;
@@ -719,7 +727,7 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
                     }
                 }
                 carryMergedImports(existingPartnership, state.existingData.partnerships[existingPartnership.id], partnership, importMap);
-                takeUnrecordedMarriage(existingPartnership, state.existingData.partnerships[existingPartnership.id], partnership,
+                if (takeDetails) takeUnrecordedMarriage(existingPartnership, state.existingData.partnerships[existingPartnership.id], partnership,
                     state.existingData.imports, state.incomingData.imports);
             } else {
                 // Create new partnership with remapped IDs. Cloned wholesale so
@@ -1608,7 +1616,8 @@ export function mergePersonData(
     incoming: Person,
     conflicts: FieldConflict[],
     personIdMap?: Map<PersonId, PersonId>,
-    incomingPersons?: Record<PersonId, Person>
+    incomingPersons?: Record<PersonId, Person>,
+    options: { notesOnlyWhenEmpty?: boolean } = {}
 ): void {
     const marriedBefore = existing.marriedSurname;
     // Merge non-conflicting data (fill in missing values). An unknown sex is
@@ -1672,7 +1681,8 @@ export function mergePersonData(
     // Notes: keep both. Genealogy notes are cheap to store and expensive to
     // re-research, so the incoming note's parts the existing one does not
     // already say are appended (mergeNoteText) — never the same text twice.
-    const notes = mergeNoteText(existing.notes, incoming.notes);
+    // ("Only empty details": a note only when the person has none.)
+    const notes = options.notesOnlyWhenEmpty && existing.notes?.trim() ? existing.notes : mergeNoteText(existing.notes, incoming.notes);
     if (notes !== existing.notes) existing.notes = notes;
 
     // Apply conflict resolutions

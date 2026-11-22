@@ -138,6 +138,16 @@ export interface MergeState {
      */
     updateOnly?: boolean;
     /**
+     * What a merged (joined) person of the tree takes from the import (the
+     * plan's scope, spec 134 K2.3). Absent = everything as today (missing
+     * values filled, differences by their resolution, notes, events and
+     * citations joined). 'empty': only what the tree's person lacks (a note
+     * only when it has none; differences keep the tree's value). 'none':
+     * nothing of the person's or the couple's details changes; only links to
+     * the people the import brings, the files and the record ids come along.
+     */
+    joinedDetails?: 'none' | 'empty';
+    /**
      * The tree the merge goes into and the fingerprint of its data when the
      * matching ran (contentFingerprint). A resumed merge compares it with the
      * tree as it is now (spec 134 K0.6). Optional: older sessions lack it.
