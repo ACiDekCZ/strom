@@ -24382,9 +24382,12 @@
         .live-section__headrow > .live-section__head { flex: 1 0 auto; width: auto; max-width: 100%; }
         .live-lines-all { flex: none; margin: 0 0 4px auto; padding: 0; font-size: 12px; white-space: nowrap; }
         .live-panel-list li.live-line-item { padding: 1px 0; border-bottom: 0; }
+        /* The rows' highlight reaches 6px past the text on both sides: the list takes that room from the
+           panel's padding, so a row is never wider than its item (no horizontal overflow). */
+        .live-panel-list.live-lines { margin-left: -6px; margin-right: -6px; }
         .live-line {
             display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start;
-            width: calc(100% + 12px); margin: 0 -6px; padding: 8px 6px; box-sizing: border-box;
+            width: 100%; margin: 0; padding: 8px 6px; box-sizing: border-box;
             border: 0; border-radius: 8px; background: none; box-shadow: none; min-height: 0;
             font: inherit; color: var(--text); text-align: left; position: relative;
         }

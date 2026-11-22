@@ -338,7 +338,7 @@ for (const [locale, title] of [['en-US', 'At work · 2 directions'], ['de-DE', '
     test.describe(`the line heading with a selection (${locale})`, () => {
         test.use({ locale });
         for (const width of [1024, 1440]) {
-            test(`${width}: the heading and All directions do not overlap or overflow`, async ({ page }) => {
+            test(`${width}: the heading and All directions do not overlap or overflow, nor do the line rows`, async ({ page }) => {
                 await follow(page, [AGENT_UP, AGENT_DOWN], { width, height: 900 });
                 await line(page, 'G0001').click();
                 await expect(line(page, 'G0001')).toHaveAttribute('aria-pressed', 'true');
@@ -353,9 +353,13 @@ for (const [locale, title] of [['en-US', 'At work · 2 directions'], ['de-DE', '
                         apart: t.right <= a.left || a.top >= t.bottom - 1,
                         inside: t.left >= p.left - 0.5 && t.right <= p.right + 0.5 && a.left >= p.left - 0.5 && a.right <= p.right + 0.5,
                         rowFits: row.scrollWidth <= row.clientWidth,
+                        // The line rows' highlight bleeds into the panel's padding without overflowing the list.
+                        linesFit: [...document.querySelectorAll('#live-panel ul.live-lines, #live-panel li.live-line-item')]
+                            .every(e => e.scrollWidth <= e.clientWidth),
+                        bodyFits: (b => b.scrollWidth <= b.clientWidth)(document.querySelector('#live-panel .live-panel-body')!),
                     };
                 });
-                expect(box).toEqual({ apart: true, inside: true, rowFits: true });
+                expect(box).toEqual({ apart: true, inside: true, rowFits: true, linesFit: true, bodyFits: true });
             });
         }
     });
