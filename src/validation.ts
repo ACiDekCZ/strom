@@ -17,6 +17,8 @@ import { findDivergentShares, findSeparateSameEvents } from './shared-events.js'
 import { divergenceSentence, divergentPersons } from './shared-divergence.js';
 import { nameLinkLeads, type ParticipantRef } from './participant-match.js';
 import { isPendingImageUrl } from './research-image-refs.js';
+import { isPoolRef, looksLikePoolRef } from './image-ref.js';
+import { imageMetaOf, isOwnImage } from './image-meta.js';
 
 // ==================== ISSUE TYPES ====================
 
@@ -819,9 +821,31 @@ function checkCrossbranchAnomalies(
 const SAFE_IMAGE_DATA_URL = /^data:image\/(jpeg|png|webp|gif);base64,/i;
 const SAFE_PDF_DATA_URL = /^data:application\/pdf;base64,/i;
 
-/** A person photo must be a base64 JPEG/PNG/WebP/GIF data URL. */
+/**
+ * A pooled image's reference (`\u0000sm:<id>`, media-pool.ts) stands where a
+ * data URL may: exactly as the pool writes one, naming an image of this
+ * browser's own pool (image-meta.ts isOwnImage: the catalog has it, or a
+ * tree record or backup read from this browser's storage names it), and —
+ * when the catalog knows the image — of a type the place allows (the same
+ * test as for a data URL, on the data URL's head).
+ *
+ * The one load sanitizer (migrateData) runs on this browser's own trees and
+ * on every file from elsewhere alike, so where it is called cannot tell them
+ * apart; what the reference names can. A file from elsewhere (JSON, GEDCOM,
+ * HTML) carries data URLs, never references: one that does was crafted, and
+ * the image it names is not in this pool, so it goes like any unsafe
+ * payload. One naming an image this pool holds can only show a picture
+ * already here, of a type allowed at its place.
+ */
+function isSafePoolRef(value: string, ...allowed: RegExp[]): boolean {
+    if (!isPoolRef(value) || !isOwnImage(value)) return false;
+    const meta = imageMetaOf(value);
+    return !meta || allowed.some(re => re.test(meta.head));
+}
+
+/** A person photo must be a base64 JPEG/PNG/WebP/GIF data URL (or an own pooled one, isSafePoolRef). */
 export function isSafePhotoDataUrl(url: string): boolean {
-    return SAFE_IMAGE_DATA_URL.test(url);
+    return SAFE_IMAGE_DATA_URL.test(url) || isSafePoolRef(url, SAFE_IMAGE_DATA_URL);
 }
 
 /**
@@ -838,14 +862,14 @@ export function isOriginalOnlyAttachment(att: { dataUrl?: unknown; originalOnly?
         && typeof att.original?.sha256 === 'string' && /^[0-9a-f]{64}$/.test(att.original.sha256);
 }
 
-/** An attachment may also be a base64 PDF — nothing else (no HTML, SVG, script). */
+/** An attachment may also be a base64 PDF — nothing else (no HTML, SVG, script); a pooled one alike. */
 export function isSafeAttachmentDataUrl(url: string): boolean {
-    return SAFE_IMAGE_DATA_URL.test(url) || SAFE_PDF_DATA_URL.test(url);
+    return SAFE_IMAGE_DATA_URL.test(url) || SAFE_PDF_DATA_URL.test(url) || isSafePoolRef(url, SAFE_IMAGE_DATA_URL, SAFE_PDF_DATA_URL);
 }
 
-/** A source excerpt is a crop — a raster image only. */
+/** A source excerpt is a crop — a raster image only (a pooled one alike). */
 export function isSafeExcerptDataUrl(url: string): boolean {
-    return SAFE_IMAGE_DATA_URL.test(url);
+    return SAFE_IMAGE_DATA_URL.test(url) || isSafePoolRef(url, SAFE_IMAGE_DATA_URL);
 }
 
 /**
@@ -959,7 +983,7 @@ export function portraitSourceHolds(data: StromData, person: Person): boolean {
     if (person.photo && isPortraitSourceShape(src) && isValidRegion(src.region)) {
         if (src.attachmentId) {
             const att = personMediaById(data, person.id, src.attachmentId);
-            if (att && !isOriginalOnlyAttachment(att) && SAFE_IMAGE_DATA_URL.test(att.dataUrl)) image = att.dataUrl;
+            if (att && !isOriginalOnlyAttachment(att) && isSafeExcerptDataUrl(att.dataUrl)) image = att.dataUrl;
         } else if (src.partnershipId) {
             const union = data.partnerships?.[src.partnershipId];
             if (union?.photo && (union.person1Id === person.id || union.person2Id === person.id)) image = union.photo;
@@ -967,6 +991,61 @@ export function portraitSourceHolds(data: StromData, person: Person): boolean {
     }
     const size = image ? dataUrlImageSize(image) : null;
     return !!image && (!size || isPortraitRegionSquare((src as PortraitSource).region, size.w, size.h, (src as PortraitSource).quarterTurns));
+}
+
+/**
+ * Drop every pooled image reference — or text that starts like one — that
+ * stands where no image may: anywhere but a person's or a couple's photo, a
+ * file's data and an excerpt's data (those are checked by
+ * stripUnsafeMediaDataUrls). Text no person writes (it starts with NUL): a
+ * forged or stray reference, which must not turn into a picture where text
+ * belongs once images are put back. A reference inside longer text is only
+ * text and stays. Run last on load (migrateData), over everything kept.
+ * Mutates `data`; returns how many went.
+ */
+export function dropStrayPoolRefs(data: StromData): number {
+    // The places an image may be (built only once a reference is met: almost never).
+    let imageKey: Map<object, string> | null = null;
+    const imageKeyOf = (holder: object): string | undefined => {
+        if (!imageKey) {
+            imageKey = new Map<object, string>();
+            for (const person of Object.values(data.persons ?? {})) if (person && typeof person === 'object') imageKey.set(person, 'photo');
+            for (const union of Object.values(data.partnerships ?? {})) if (union && typeof union === 'object') imageKey.set(union, 'photo');
+            for (const att of allMedia(data)) if (att && typeof att === 'object') imageKey.set(att, 'dataUrl');
+            for (const src of Object.values(data.sources ?? {})) {
+                if (!src || typeof src !== 'object' || !Array.isArray(src.excerpts)) continue;
+                for (const exc of src.excerpts) if (exc && typeof exc === 'object') imageKey.set(exc, 'dataUrl');
+            }
+        }
+        return imageKey.get(holder);
+    };
+    let dropped = 0;
+    // Tree data is a tree (it comes from JSON): no object is met twice on one path. Deeper than
+    // any tree goes (64 levels) is not walked, so a crafted file cannot exhaust the stack.
+    const walk = (value: object, depth: number): void => {
+        if (depth > 64) return;
+        if (Array.isArray(value)) {
+            for (let i = value.length - 1; i >= 0; i--) {
+                const v: unknown = value[i];
+                if (typeof v === 'string') {
+                    if (v.charCodeAt(0) === 0 && looksLikePoolRef(v)) { value.splice(i, 1); dropped++; }
+                } else if (v && typeof v === 'object') walk(v, depth + 1);
+            }
+            return;
+        }
+        const obj = value as Record<string, unknown>;
+        let own: string | undefined | null = null;
+        for (const key in obj) {
+            const v = obj[key];
+            if (typeof v === 'string') {
+                if (v.charCodeAt(0) !== 0 || !looksLikePoolRef(v)) continue;
+                if (own === null) own = imageKeyOf(value);
+                if (key !== own) { delete obj[key]; dropped++; }
+            } else if (v && typeof v === 'object') walk(v, depth + 1);
+        }
+    };
+    walk(data, 0);
+    return dropped;
 }
 
 /** A crop region in fractions of the image: inside 0–1 with a positive size. */

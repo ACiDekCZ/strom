@@ -26,7 +26,7 @@ import { CryptoSession, EncryptedData } from './crypto.js';
 import { bytesToBase64, base64ToBytes, canonicalBase64Bytes } from './base64.js';
 import { sha256Bytes } from './sha256.js';
 import { takeImageBytes } from './known-image-bytes.js';
-import { computeImageMeta, imageMetaOf, setImageMeta, noteImageMeta, headMime, type ImageMeta, type ImageMetaRecord } from './image-meta.js';
+import { computeImageMeta, imageMetaOf, setImageMeta, noteImageMeta, noteOwnImages, headMime, type ImageMeta, type ImageMetaRecord } from './image-meta.js';
 
 /** Strings at least this long starting with "data:" go to the pool. */
 export const POOL_MIN_LENGTH = 1024;
@@ -216,6 +216,8 @@ const sizeOfStored = new Map<string, number>();
 /** Remember sizes other records already name (a backup's meta). */
 export function notePoolSizes(media: Record<string, number> | undefined): void {
     for (const [id, size] of Object.entries(media ?? {})) sizeOfStored.set(id, size);
+    // A record of this browser's own storage names them: references to them are its own (validation.ts).
+    noteOwnImages(media);
 }
 
 /**
@@ -261,6 +263,7 @@ export async function storeImages(urls: Set<string>, encrypted: boolean, scope: 
         if (batchBytes >= MEDIA_BATCH_BYTES || batch.length >= MEDIA_BATCH_COUNT) await writeBatch();
     }
     await writeBatch();
+    noteOwnImages(media);
     return { ids, media, meta };
 }
 

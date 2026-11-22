@@ -13,7 +13,8 @@
  * give for the data URL, so fingerprints stay the same.
  */
 
-import { dataUrlByteSize, dataUrlImageSize } from './photo.js';
+import { dataUrlTextByteSize as dataUrlByteSize, dataUrlTextImageSize as dataUrlImageSize } from './data-url-size.js';
+import { isPoolRef, poolIdOf } from './image-ref.js';
 import { base64ToBytes } from './base64.js';
 import { sha256Bytes } from './sha256.js';
 
@@ -49,6 +50,12 @@ export type ImageMetaRecord = Record<string, ImageMeta>;
  * all of 80 MB of images took seconds on every research update.
  */
 export function imageToken(url: string): string {
+    // A pooled image: the token of its data URL, from the catalog (see pooledImageToken).
+    if (isPoolRef(url)) return pooledImageToken(url);
+    return textImageToken(url);
+}
+
+function textImageToken(url: string): string {
     let h = 0x811c9dc5;
     for (let i = 0; i < url.length; i += 16) {
         h ^= url.charCodeAt(i);
@@ -80,6 +87,12 @@ export function fnvHash(text: string, start: number, step: number, seed: number)
  */
 export function mediaToken(url: string | undefined): string {
     if (!url) return '';
+    // A pooled image: the token of its data URL, from the catalog (see pooledImageToken).
+    if (isPoolRef(url)) return imageMetaOf(url)?.mtok ?? textMediaToken(url);
+    return textMediaToken(url);
+}
+
+function textMediaToken(url: string): string {
     const sample = fnvHash(url, 0, 64, 0x811c9dc5);
     const tail = fnvHash(url, Math.max(0, url.length - 64), 1, sample);
     return `${url.length.toString(36)}.${tail.toString(36)}`;
@@ -187,7 +200,75 @@ export function imageMetaFor(ids: Iterable<string>): ImageMetaRecord {
     return out;
 }
 
+// ---- this browser's own pooled images ----
+
+/**
+ * Content id → stored size of every image this browser's own pool holds as
+ * far as this window knows: the images it stored and the ones the tree
+ * records and backups it read name (their `media`, noted before their data
+ * reach the load sanitizer). A reference to any other id came from
+ * elsewhere (a crafted file): the sanitizer drops it (validation.ts).
+ */
+const ownImages = new Map<string, number>();
+
+/** Remember the images a record of this browser's own storage names (id → stored size). */
+export function noteOwnImages(media: Record<string, number> | undefined): void {
+    for (const [id, size] of Object.entries(media ?? {})) {
+        if (/^[pe]:[0-9a-f]{40}$/.test(id)) ownImages.set(id, typeof size === 'number' && size >= 0 ? size : 0);
+    }
+}
+
+/** The reference (or id) names an image of this browser's own pool: in the catalog or named by an own record. */
+export function isOwnImage(idOrRef: string): boolean {
+    const id = idOf(idOrRef);
+    return catalog.has(id) || ownImages.has(id);
+}
+
+// ---- answers for a reference, with the values the data URL gives ----
+
+/**
+ * dataUrlByteSize of a pooled image. Without its catalog entry: the stored
+ * size of an unencrypted image (its decoded bytes when stored as bytes, as
+ * nearly always), else 0 — not known here.
+ */
+export function pooledImageByteSize(ref: string): number {
+    const meta = imageMetaOf(ref);
+    if (meta) return meta.bytes;
+    const id = poolIdOf(ref);
+    return id?.startsWith('p:') ? ownImages.get(id) ?? 0 : 0;
+}
+
+/** dataUrlImageSize of a pooled image; null without its catalog entry (not known, as for a header that gives none). */
+export function pooledImageSize(ref: string): { w: number; h: number } | null {
+    const meta = imageMetaOf(ref);
+    return meta && meta.w && meta.h ? { w: meta.w, h: meta.h } : null;
+}
+
+/**
+ * imageToken of a pooled image. Without its catalog entry: the token of the
+ * reference itself — stable while the image is the same and another for
+ * another image (its id is the content's hash), though not the value its
+ * data URL gives (a fingerprint taken over the data URL then differs once).
+ */
+export function pooledImageToken(ref: string): string {
+    return imageMetaOf(ref)?.token ?? textImageToken(ref);
+}
+
+/**
+ * `img:<length>` of a long image, as the research changes' copies keep one:
+ * for a data URL of at least `min` characters, and for a pooled image whose
+ * data URL is (from the catalog). null otherwise — the value stays itself (a
+ * reference without its catalog entry too).
+ */
+export function imageLengthMark(value: string, min: number): string | null {
+    if (value.length >= min && value.startsWith('data:')) return `img:${value.length}`;
+    if (!isPoolRef(value)) return null;
+    const meta = imageMetaOf(value);
+    return meta && meta.len >= min ? `img:${meta.len}` : null;
+}
+
 /** Forget everything (tests). */
 export function clearImageMeta(): void {
     catalog.clear();
+    ownImages.clear();
 }

@@ -14,6 +14,7 @@ import { factValueSignature, handedConfirmations } from './verify.js';
 import type { FactHolder } from './import-origin.js';
 import { getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
 import { composePage, sourcePlaceDiffers, sourcePlaceKey } from './source-location.js';
+import { imageLengthMark } from './image-meta.js';
 
 export type ChangeKind =
     | 'added' | 'deleted' | 'name' | 'gender' | 'birth' | 'death' | 'marriage' | 'event'
@@ -57,7 +58,7 @@ const MARRIAGE_FIELDS: (keyof Partnership)[] = ['status', 'startDate', 'startPla
 /** JSON with sorted keys and images reduced to their length (two copies of one tree compare equal). */
 export function stable(value: unknown): string {
     return JSON.stringify(value, (_k, v) => {
-        if (typeof v === 'string' && v.length >= 256 && v.startsWith('data:')) return `img:${v.length}`;
+        if (typeof v === 'string') return imageLengthMark(v, 256) ?? v;
         if (v && typeof v === 'object' && !Array.isArray(v)) {
             return Object.keys(v).sort().reduce<Record<string, unknown>>((o, k) => { o[k] = (v as Record<string, unknown>)[k]; return o; }, {});
         }
@@ -99,7 +100,7 @@ export function baseCopy(data: StromData): StromData {
             // The rejected spelling suggestions: what the research holds of them (its "not sent yet").
             surnameRejections: data.surnameRejections ?? [] };
     return JSON.parse(JSON.stringify(kept,
-        (_k, v) => typeof v === 'string' && v.length >= 256 && v.startsWith('data:') ? `img:${v.length}` : v)) as StromData;
+        (_k, v) => typeof v === 'string' ? imageLengthMark(v, 256) ?? v : v)) as StromData;
 }
 
 /**

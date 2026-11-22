@@ -27,6 +27,8 @@ import { researchPersonRef, researchFamilyRef, personResearchRef, familyResearch
 import { TASKS_AUDIT_FEATURE, sanitizeWaitingAudit, type WaitingAudit } from './research-audit.js';
 import { HISTORY_KINDS, isHistoryKind, parseHistoryKindList, type HistoryKind } from './history.js';
 import { sourcePlaceKey } from './source-location.js';
+import { isImageValue, isPoolRef } from './image-ref.js';
+import { pooledImageToken } from './image-meta.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -969,6 +971,7 @@ const FINGERPRINT_V2 = 'v2-';
  * 80 MB of images took seconds on every research update.
  */
 function imageToken(url: string): string {
+    if (isPoolRef(url)) return pooledImageToken(url);
     let h = 0x811c9dc5;
     for (let i = 0; i < url.length; i += 16) {
         h ^= url.charCodeAt(i);
@@ -989,7 +992,7 @@ function imageToken(url: string): string {
  */
 export function contentFingerprint(data: StromData): string {
     const text = JSON.stringify(fingerprintParts(data), (_key, value) =>
-        typeof value === 'string' && value.length >= 1024 && value.startsWith('data:') ? imageToken(value) : value);
+        typeof value === 'string' && ((value.length >= 1024 && value.startsWith('data:')) || isPoolRef(value)) ? imageToken(value) : value);
     return `${FINGERPRINT_V2}${text.length.toString(36)}-${fnv1a(text, 0x811c9dc5).toString(36)}-${fnv1a(text, 0x01000193).toString(36)}`;
 }
 
@@ -1922,7 +1925,7 @@ export const MEDIA_BASE_MAX = 20000;
 /** One place of a file in the base (researchMediaKeys): its owner in the research, what it is there, its content. */
 function mediaPlaceKey(owner: string | null, kind: 'p' | 'c' | 'a', content: string | null | undefined): string | null {
     if (!owner || !content) return null;
-    const text = `${owner}|${kind}|${content.startsWith('data:') ? imageToken(content) : content}`;
+    const text = `${owner}|${kind}|${isImageValue(content) ? imageToken(content) : content}`;
     return `${fnv1a(text, 0x811c9dc5).toString(36)}.${fnv1a(text, 0x01000193).toString(36)}`;
 }
 

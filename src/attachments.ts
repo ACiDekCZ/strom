@@ -8,6 +8,7 @@
 import { Person, StromData } from './types.js';
 import { personSourceIds, partnershipSourceIds } from './model-values.js';
 import { dataUrlByteSize, dataUrlImageSize, stripPhotos } from './photo.js';
+import { isImageValue } from './image-ref.js';
 import { allMedia, personMedia as personMediaOf } from './media.js';
 import { pendingImageOf } from './research-image-refs.js';
 
@@ -201,7 +202,7 @@ export function countImages(data: StromData): ImageCount {
     const out: ImageCount = { photos: 0, attachments: 0, excerpts: 0, bytes: 0 };
     const seen = new Set<string>();
     const weigh = (dataUrl: string | undefined): void => {
-        if (!dataUrl || !dataUrl.startsWith('data:') || seen.has(dataUrl)) return;
+        if (!isImageValue(dataUrl) || seen.has(dataUrl)) return;
         seen.add(dataUrl);
         // An image still on its way (spec 116): the size its stand-in says.
         out.bytes += pendingImageOf(dataUrl)?.bytes ?? dataUrlByteSize(dataUrl);

@@ -16,7 +16,8 @@
  * in while the element is on screen and lets it go when it is not.
  */
 
-import { POOL_REF, loadImageBlobs, dataUrlBlob } from './media-pool.js';
+import { loadImageBlobs, dataUrlBlob } from './media-pool.js';
+import { POOL_REF, poolIdOf, isPoolRef } from './image-ref.js';
 
 /** The cache keeps object URLs of at most this many bytes … */
 export const IMAGE_CACHE_MAX_BYTES = 64 * 1024 * 1024;
@@ -29,20 +30,10 @@ export const IMAGE_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP//
 /** The attribute naming the pooled image of an element built by imgSrcAttr. */
 export const POOL_REF_ATTR = 'data-pool-ref';
 
-const REF_ID = /^\u0000sm:([pe]:[0-9a-f]+)$/;
 const ID = /^[pe]:[0-9a-f]+$/;
 
-/** The pool id of a reference, or null when the value is none. */
-export function poolIdOf(value: unknown): string | null {
-    if (typeof value !== 'string' || !value.startsWith(POOL_REF)) return null;
-    const m = REF_ID.exec(value);
-    return m ? m[1] : null;
-}
-
-/** The value is a pooled image's reference. */
-export function isPoolRef(value: unknown): value is string {
-    return poolIdOf(value) !== null;
-}
+/** A reference's pool id, and whether a value is one (image-ref.ts: exactly as the pool writes them). */
+export { poolIdOf, isPoolRef };
 
 // ---- the cache ----
 

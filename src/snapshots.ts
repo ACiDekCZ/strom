@@ -383,6 +383,8 @@ export async function getSnapshotPayload(id: string): Promise<{ json: string; mi
     const text = await readSnapshotText(s);
     if (text === null) return null;
     await unpackImageMeta(s.imageMeta);
+    // The images it names are this browser's own: its references pass the load sanitizer (validation.ts).
+    notePoolSizes(s.meta?.media);
     const { json, missing } = await unpoolJson(text);
     return {
         json, missingImages: missing,

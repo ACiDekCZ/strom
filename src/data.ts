@@ -66,7 +66,7 @@ import { buildLineages, cleanLineageOverrides, LineagePatch, type LineageIndex }
 import { sanitizeQualityDismissed, sanitizeSurnameRejections, dismissalKey, surnameRejectionKey } from './quality-dismiss.js';
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
 import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
-import { ValidationIssue, stripUnsafeMediaDataUrls, cleanPortraitSources, isSafePhotoDataUrl, translateValidationType } from './validation.js';
+import { ValidationIssue, stripUnsafeMediaDataUrls, cleanPortraitSources, dropStrayPoolRefs, isSafePhotoDataUrl, translateValidationType } from './validation.js';
 import { isPortraitSourceShape } from './photo.js';
 import { cloneTreeData, cloneTreeDataAsJson } from './clone.js';
 import { sanitizeMediaRecords, moveLegacyAttachments, givePortraitsRecords, pruneMedia, findMedia, treeMedia, personMedia, mediaOf, mediaAt, placeKey as mediaPlaceKey, putMedia, dropMediaPlaces, deleteMedia, placePersonId } from './media.js';
@@ -488,6 +488,8 @@ export function migrateData(data: unknown): StromData {
     normalizeSingleParents(result);
     // The places of the files name only what is in the tree (after the people and couples are settled).
     pruneMedia(result);
+    // A pooled image's reference only where an image may be (validation.ts dropStrayPoolRefs).
+    dropStrayPoolRefs(result);
 
     return result;
 }
