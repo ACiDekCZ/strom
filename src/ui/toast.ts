@@ -34,8 +34,8 @@ export interface ToastOptions {
      * end (✓ for 4 s, or the error with "Try again" and ✕, not closing by itself); `run` gives that end.
      */
     action?: ToastAction;
-    /** A second action beside `action` (e.g. "Export GEDCOM" beside "Try again"). */
-    more?: { label: string; run: () => void };
+    /** A second action beside `action` (e.g. "Export GEDCOM" beside "Try again"); `research`/`ai` as with `action`. */
+    more?: { label: string; run: () => void; research?: boolean; ai?: boolean };
     /** A third one after them (an output's "Cancel" beside "Try again" and "Continue without", spec 116 §8). */
     third?: { label: string; run: () => void };
     hold?: boolean;

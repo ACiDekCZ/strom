@@ -20,7 +20,7 @@ import { yearOf } from '../dates.js';
 import { filterAndSort } from '../person-picker.js';
 import { withBusyRetry } from '../research-directions.js';
 import {
-    createDirection, directionPeopleKept, editDirection, fetchDirectionPeople, previewDirection, DirectionCreateBody, DirectionEditBody,
+    createDirection, directionPeopleKept, editDirection, fetchDirectionPeople, previewDirection, undoGather, DirectionCreateBody, DirectionEditBody,
 } from '../research-directions-write.js';
 import { directionsMoveOn } from '../research-runs.js';
 import type { PersonMenuAction } from './context-menu.js';
@@ -950,6 +950,8 @@ export const directionFormMethods = uiModule({
         const head = await this.waitingHeadBeforeWrite(s);
         // The tasks of the wider directions: said only when the form asked (an older research gets the body as before).
         const body = { ...this.directionFormBody(f, year), ...moveTasksSent(f.moveOffer, f.moveChecked) };
+        // How many wider directions they came from, for the words of their way back (the form closes meanwhile).
+        const wider = f.moveOffer?.inside.length ?? 1;
         const r = await withBusyRetry(() => createDirection(base, body));
         f.sending = false;
         if (researchSession() !== s || s.ended) {
@@ -984,11 +986,48 @@ export const directionFormMethods = uiModule({
         }
         // "Work on this direction": an agent in the research's terminal (a computer only).
         const work = made && !this.activeResearchNoAgent() ? this.activeResearchLink('chat', { research: made.id }) : null;
-        this.showToast(createdToastText(r.moved), 8000, {
-            kind: 'direction',
-            ...(work ? { action: { label: L.dirWork, run: () => this.launchResearchLink(work, 'agent'), ...researchLinkFlags(work) } } : {}),
-        });
+        const workAction = work ? { label: L.dirWork, run: () => this.launchResearchLink(work, 'agent'), ...researchLinkFlags(work) } : null;
+        const moved = r.moved ?? 0;
+        if (made && moved > 0) {
+            // Tasks moved: "Undo the move" first (through the bridge, worked in the toast; the direction stays), then the work.
+            this.showToast(createdToastText(moved), 10000, {
+                kind: 'direction',
+                action: {
+                    label: L.dirMoveUndo, work: { label: strings.busy.reverting, sub: made.name },
+                    run: () => this.undoDirectionMove(made.id, moved, wider),
+                },
+                ...(workAction ? { more: workAction } : {}),
+            });
+        } else {
+            this.showToast(createdToastText(r.moved), 8000, {
+                kind: 'direction',
+                ...(workAction ? { action: workAction } : {}),
+            });
+        }
         this.researchStatusAfterWrite(s);
+    },
+
+    /**
+     * Take back the tasks moved into a new direction (`gather/undo`), in its toast: their number back in the
+     * wider direction(s), "Nothing to undo." when the tasks changed meanwhile, the research's own words, or a
+     * failure with Try again. Nothing (the toast just goes) when the research went away.
+     */
+    async undoDirectionMove(id: string, moved: number, wider: number): Promise<ToastWorkEnd | undefined> {
+        const s = researchSession();
+        if (!s || s.ended) return undefined;
+        const L = strings.live;
+        const head = await this.waitingHeadBeforeWrite(s);
+        const r = await withBusyRetry(() => undoGather(s.bridge.base, id));
+        if (researchSession() !== s || s.ended) return undefined;
+        if (r.ok) {
+            if (r.head) this.researchTakeOwnWriteHead(s.researchId, head, r.head, r.parent);
+            this.researchStatusAfterWrite(s);
+            return { ok: true, text: L.dirMoveUndone(r.back > 0 ? r.back : moved, wider) };
+        }
+        if (r.code === 'conflict' && r.errorCode === 'gather.none') return { ok: false, text: L.dirMoveNone, whole: true, retry: false };
+        const said = r.code === 'held' ? r.held?.said || r.reason : r.reason;
+        // The research's own words: another try does not change them (no Try again).
+        return said ? { ok: false, text: L.dirUndoFailedSaid(said), whole: true, retry: false } : { ok: false, text: L.dirUndoFailed, whole: true };
     },
 
     /** Save an edit: only what changed; the research's sentence about tasks moved (or Saved) with Undo. */

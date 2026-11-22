@@ -1124,6 +1124,9 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
             ? `Nowa linia leży wewnątrz linii ${joinAndPl(names)}. Osoby z niej pozostają też w szerszych liniach.`
             : `Nowa linia leży wewnątrz linii ${names[0] ?? ''}. Osoby z niej pozostają też w szerszej linii.`,
         dirToastMoved: (n: number) => `Założono linię. Przeniesiono ${nPl(n, 'zadanie', 'zadania', 'zadań')}.`,
+        dirMoveUndo: 'Cofnij przeniesienie',
+        dirMoveUndone: (n: number, wider: number) => `Przeniesienie cofnięte · ${nPl(n, 'zadanie', 'zadania', 'zadań')} z powrotem w ${wider > 1 ? 'szerszych liniach' : 'szerszej linii'}`,
+        dirMoveNone: 'Nie ma czego cofnąć.',
         dirLocked: 'Rodzaju i osoby nie można zmienić. Inna osoba to nowa linia.',
         dirKindFromBranch: 'Wstępnie wypełnione według pokrewieństwa, można przełączyć.',
         dirPauseReason: 'Powód wstrzymania (opcjonalnie)',

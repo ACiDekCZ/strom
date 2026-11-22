@@ -285,7 +285,60 @@ test.describe('a new direction inside a wider one (spec 126 U10, K2.15)', () => 
         await f.locator('#direction-form-submit').click();
         await expect.poll(() => creates(b).map(w => w.body)).toEqual([{ ...sent, moveTasks: true }]);
         await expect(f).toHaveCount(0);
-        await expect(page.locator('.toast[data-kind="direction"]')).toContainText('Direction created. 7 tasks moved.');
+        const toast = page.locator('.toast[data-kind="direction"]');
+        await expect(toast).toContainText('Direction created. 7 tasks moved.');
+        // Undo the move first (through the bridge: no mark), then the work (AI + the terminal's mark).
+        await expect(toast.locator('.toast-action')).toHaveText(['Undo the move', /Work on this direction/]);
+        await expect(toast.locator('.toast-action').first().locator('.research-ai-badge, .research-open-mark')).toHaveCount(0);
+        await expect(toast.locator('.toast-action').nth(1).locator('.research-ai-badge')).toHaveCount(1);
+        await expect(toast.locator('.toast-action').nth(1).locator('.research-open-mark')).toHaveCount(1);
+    });
+
+    test('Undo the move in its toast: Reverting…, the tasks back in the wider direction, the direction stays (cs)', async ({ page }) => {
+        const b = await followManaged(page, { features: MOVE, preview: { inside: ['G0001'], move: 7 } });
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+        await openOverview(page);
+        await openNew(page);
+        const f = form(page);
+        await pick(page, 'fiskova', 'Marie Fíšková');
+        await expect(f.locator('.direction-form__move-text')).toHaveText(/^Převést sem 7 otevřených úkolů/);
+        await expect(f.locator('#direction-form-move-tasks')).toBeChecked();
+        await f.locator('#direction-form-submit').click();
+        await expect(f).toHaveCount(0);
+        const toast = page.locator('.toast[data-kind="direction"]');
+        await expect(toast).toContainText('Linie založena. Převedeno 7 úkolů.');
+        await expect(toast.locator('.toast-action')).toHaveText(['Vrátit převod', /Pracovat na této linii/]);
+        // The bridge answers once let go: the toast says the work meanwhile.
+        let release!: () => void;
+        const held = new Promise<void>(res => { release = res; });
+        await page.route(/\/directions\/G\d+\/gather\/undo/, async route => { await held; await route.fallback(); });
+        await toast.locator('.toast-action', { hasText: 'Vrátit převod' }).click();
+        await expect(toast.locator('.toast-title')).toHaveText('Vrací se…');
+        await expect(toast.locator('.t-sub')).toHaveText('Předci: Marie Fíšková');
+        release();
+        await expect(toast).toContainText('Převod vrácen · 7 úkolů zpět v širší linii');
+        await expect(toast.locator('.ok')).toHaveText('✓');
+        expect(directionWrites(b).map(w => w.path)).toEqual(['directions/preview', 'directions', 'directions/G0014/gather/undo']);
+        await expect(directionRow(page, 'G0014')).toHaveCount(1);
+    });
+
+    test('Undo the move when the tasks changed meanwhile: 409 gather.none says Nothing to undo, no Try again', async ({ page }) => {
+        const b = await followManaged(page, { features: MOVE, preview: { inside: ['G0001'], move: 7 } });
+        await openOverview(page);
+        await openNew(page);
+        await pick(page, 'fiskova', 'Marie Fíšková');
+        await expect(form(page).locator('.direction-form__move-text')).toHaveText(/^Move 7 open tasks here/);
+        await form(page).locator('#direction-form-submit').click();
+        const toast = page.locator('.toast[data-kind="direction"]');
+        await expect(toast).toContainText('Direction created. 7 tasks moved.');
+        b.gathered = {};
+        await toast.locator('.toast-action', { hasText: 'Undo the move' }).click();
+        await expect(toast).toContainText('Nothing to undo.');
+        await expect(toast).toHaveAttribute('role', 'alert');
+        await expect(toast.locator('.toast-action')).toHaveCount(0);
+        await expect(toast.locator('.toast-close')).toHaveCount(1);
+        expect(directionWrites(b).map(w => w.path).at(-1)).toBe('directions/G0014/gather/undo');
+        await expect(directionRow(page, 'G0014')).toHaveCount(1);
     });
 
     test('unticked, the create says moveTasks false and the toast is the usual one', async ({ page }) => {
@@ -298,7 +351,10 @@ test.describe('a new direction inside a wider one (spec 126 U10, K2.15)', () => 
         await expect(f.locator('#direction-form-move-tasks')).not.toBeChecked();
         await f.locator('#direction-form-submit').click();
         await expect.poll(() => creates(b).map(w => w.body)).toEqual([{ ...sent, moveTasks: false }]);
-        await expect(page.locator('.toast[data-kind="direction"]')).toContainText('Direction created · at the end of the order');
+        const toast = page.locator('.toast[data-kind="direction"]');
+        await expect(toast).toContainText('Direction created · at the end of the order');
+        // Nothing moved, nothing to take back: the work alone.
+        await expect(toast.locator('.toast-action')).toHaveText([/Work on this direction/]);
     });
 
     test('nothing to move: the sentence alone, no question, the body as before', async ({ page }) => {

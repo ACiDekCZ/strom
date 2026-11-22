@@ -123,4 +123,33 @@ describe('a new direction inside wider ones (spec 126 U10, K2.15)', () => {
         setLanguage('de');
         expect(createdToastText(1)).toBe('Richtung angelegt. 1 Aufgabe übernommen.');
     });
+
+    it('the move undone counts the tasks back and names the wider direction(s) in each language', () => {
+        const L = () => strings.live;
+        expect(L().dirMoveUndo).toBe('Undo the move');
+        expect([[1, 1], [7, 2]].map(([n, w]) => L().dirMoveUndone(n, w)))
+            .toEqual(['Move undone · 1 task back in the wider direction', 'Move undone · 7 tasks back in the wider directions']);
+        setLanguage('cs');
+        expect(L().dirMoveUndo).toBe('Vrátit převod');
+        expect(L().dirMoveNone).toBe('Není co vrátit.');
+        expect([1, 2, 5].map(n => L().dirMoveUndone(n, 1))).toEqual([
+            'Převod vrácen · 1 úkol zpět v širší linii', 'Převod vrácen · 2 úkoly zpět v širší linii', 'Převod vrácen · 5 úkolů zpět v širší linii',
+        ]);
+        expect(L().dirMoveUndone(7, 2)).toBe('Převod vrácen · 7 úkolů zpět v širších liniích');
+        setLanguage('de');
+        expect([1, 2, 5].map(n => L().dirMoveUndone(n, 1))).toEqual([
+            'Übernahme rückgängig gemacht · 1 Aufgabe zurück in der weiteren Richtung',
+            'Übernahme rückgängig gemacht · 2 Aufgaben zurück in der weiteren Richtung',
+            'Übernahme rückgängig gemacht · 5 Aufgaben zurück in der weiteren Richtung',
+        ]);
+        expect(L().dirMoveUndone(5, 3)).toBe('Übernahme rückgängig gemacht · 5 Aufgaben zurück in den weiteren Richtungen');
+        setLanguage('pl');
+        expect([1, 2, 5].map(n => L().dirMoveUndone(n, 1))).toEqual([
+            'Przeniesienie cofnięte · 1 zadanie z powrotem w szerszej linii',
+            'Przeniesienie cofnięte · 2 zadania z powrotem w szerszej linii',
+            'Przeniesienie cofnięte · 5 zadań z powrotem w szerszej linii',
+        ]);
+        expect(L().dirMoveUndone(2, 2)).toBe('Przeniesienie cofnięte · 2 zadania z powrotem w szerszych liniach');
+        expect(L().dirMoveNone).toBe('Nie ma czego cofnąć.');
+    });
 });

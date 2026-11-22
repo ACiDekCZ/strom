@@ -17747,6 +17747,12 @@
         /* Two actions side by side ("Cancel" "Show", "Try again" "Install…") stand 12px apart (screen 2c);
            a hidden one leaves no gap before the first one shown. */
         .toast-actions > .toast-action:not([hidden]) ~ .toast-action:not([hidden]) { margin-left: 12px; }
+        /* A group wider than the toast itself (two long actions on a narrow screen: "Undo the move" beside
+           "Work on this direction" with its marks) wraps inside it, each action whole, never past the toast's
+           edge; the gap between two actions is a column gap, so a wrapped one starts at the group's left edge. */
+        .toast-actions { flex-wrap: wrap; row-gap: 6px; max-width: calc(100% - 12px); }
+        .toast-actions:not(:has(> .focus-toast-sep, > .undo-toast-sep)) { column-gap: 12px; }
+        .toast-actions:not(:has(> .focus-toast-sep, > .undo-toast-sep)) > .toast-action:not([hidden]) ~ .toast-action:not([hidden]) { margin-left: 0; }
         .toast-actions > .focus-toast-sep:first-child,
         .toast-actions > .undo-toast-sep:first-child { display: none; }
         .toast-actions > .focus-toast-sep,

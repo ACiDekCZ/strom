@@ -7302,6 +7302,9 @@ const stringsEN = {
             ? `The new direction lies inside the directions ${joinAnd('en', names)}. The people in it stay in the wider directions too.`
             : `The new direction lies inside the direction ${names[0] ?? ''}. The people in it stay in the wider direction too.`,
         dirToastMoved: (n: number) => `Direction created. ${nEn(n, 'task', 'tasks')} moved.`,
+        dirMoveUndo: 'Undo the move',
+        dirMoveUndone: (n: number, wider: number) => `Move undone · ${nEn(n, 'task', 'tasks')} back in the wider ${wider > 1 ? 'directions' : 'direction'}`,
+        dirMoveNone: 'Nothing to undo.',
         dirLocked: 'Kind and person cannot change. Another person means a new direction.',
         dirKindFromBranch: 'Pre-filled from the relation, can be switched.',
         dirPauseReason: 'Reason for the pause (optional)',
@@ -18019,6 +18022,9 @@ const stringsCZ: StringsType = {
             ? `Nová linie je uvnitř linií ${joinAnd('cs', names)}. Lidé v ní zůstávají i v širších liniích.`
             : `Nová linie je uvnitř linie ${names[0] ?? ''}. Lidé v ní zůstávají i v širší linii.`,
         dirToastMoved: (n: number) => `Linie založena. ${plural('cs', n, 'Převeden', 'Převedeny', 'Převedeno')} ${nCs(n, 'úkol', 'úkoly', 'úkolů')}.`,
+        dirMoveUndo: 'Vrátit převod',
+        dirMoveUndone: (n: number, wider: number) => `Převod vrácen · ${nCs(n, 'úkol', 'úkoly', 'úkolů')} zpět ${wider > 1 ? 'v širších liniích' : 'v širší linii'}`,
+        dirMoveNone: 'Není co vrátit.',
         dirLocked: 'Druh a osobu nejde změnit. Jiná osoba = nová linie.',
         dirKindFromBranch: 'Předvyplněno podle vazby, jde přepnout.',
         dirPauseReason: 'Důvod pozastavení (nepovinný)',
@@ -28581,6 +28587,9 @@ const stringsDE: StringsType = {
             ? `Die neue Richtung liegt innerhalb der Richtungen ${joinAnd('de', names)}. Die Personen darin bleiben auch in den weiteren Richtungen.`
             : `Die neue Richtung liegt innerhalb der Richtung ${names[0] ?? ''}. Die Personen darin bleiben auch in der weiteren Richtung.`,
         dirToastMoved: (n: number) => `Richtung angelegt. ${nDe(n, 'Aufgabe', 'Aufgaben')} übernommen.`,
+        dirMoveUndo: 'Übernahme rückgängig',
+        dirMoveUndone: (n: number, wider: number) => `Übernahme rückgängig gemacht · ${nDe(n, 'Aufgabe', 'Aufgaben')} zurück in ${wider > 1 ? 'den weiteren Richtungen' : 'der weiteren Richtung'}`,
+        dirMoveNone: 'Nichts rückgängig zu machen.',
         dirLocked: 'Art und Person lassen sich nicht ändern. Eine andere Person ergibt eine neue Richtung.',
         dirKindFromBranch: 'Nach der Beziehung vorausgefüllt, umschaltbar.',
         dirPauseReason: 'Grund der Pause (optional)',
