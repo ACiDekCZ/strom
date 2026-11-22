@@ -1851,6 +1851,14 @@ interface GedcomFamily {
 }
 
 /** Parsed GEDCOM data */
+/** A kind of line of a loaded file the tree does not take over (the import's "not taken" list). */
+export interface GedcomDroppedTag {
+    tag: string;
+    count: number;
+    example: string;
+    label?: string;
+}
+
 export interface ParsedGedcom {
     /**
      * The QUAY of each citation, by the list its pointer is in (the very
@@ -1872,6 +1880,8 @@ export interface ParsedGedcom {
     repositories: Map<string, string>;
     /** Tags our data model cannot represent, with occurrence counts. */
     droppedTags: Map<string, number>;
+    /** The first value written on a line of each not carried over tag, with the person's name when under a person. */
+    droppedTagExamples?: Map<string, string>;
     /** Coordinates read from PLAC > MAP > LATI/LONG, keyed by placeKey(). */
     places: Map<string, PlaceGeo>;
     /** Strom Research's place records (`0 @L0012@ _STROM_PLACE`), by id; only valid ones. */
@@ -2005,6 +2015,12 @@ export interface GedcomConversionResult {
         unsupportedTags: number;
         /** Human-readable breakdown, e.g. "TITL ×3, SSN ×2". Empty when none. */
         droppedTagSummary: string;
+        /**
+         * The same tags one by one, most frequent first: how many lines and an
+         * example (the first value written, "Name: value" under a person; '' when
+         * no line had a value). `label` is a reader's name of the tag, when known.
+         */
+        droppedTags: GedcomDroppedTag[];
         /** Individuals with SEX other than M/F (SEX U or none): imported with the sex unknown, never guessed. */
         unknownSexPersons: number;
         /**
@@ -3099,7 +3115,19 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
         if (c && ref && c.id === ref && q >= 0 && q <= 3 && c.quay === undefined) c.quay = q;
     };
     const droppedTags = new Map<string, number>();
-    const count = (tag: string): void => { droppedTags.set(tag, (droppedTags.get(tag) ?? 0) + 1); };
+    /** The first value of a not carried over tag, with the person it was under. */
+    const droppedTagExamples = new Map<string, string>();
+    /** The value of the line being read (for droppedTagExamples). */
+    let lineValue = '';
+    const count = (tag: string): void => {
+        droppedTags.set(tag, (droppedTags.get(tag) ?? 0) + 1);
+        if (droppedTagExamples.has(tag)) return;
+        const value = lineValue.trim();
+        if (!value || GED_POINTER.test(value) || DATA_URL_IN_LINE.test(value)) return;
+        const indi = currentType === 'INDI' ? currentRecord as GedcomIndividual | null : null;
+        const name = indi ? [indi.firstName, indi.lastName].filter(n => n && n !== '?').join(' ').trim() : '';
+        droppedTagExamples.set(tag, name ? `${name}: ${value}` : value);
+    };
     /** The level of the line being read, and where it is in the file. */
     let lineLevel = 0;
     let lineIndex = -1;
@@ -3649,6 +3677,7 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
         let value = rec.value;
         lineLevel = level;
         lineIndex = rec.src;
+        lineValue = value;
 
         // Another program's own level-1 tag being kept (spec 066 G8): the
         // lines under it are taken from the file as written, nothing reads them.
@@ -5564,7 +5593,7 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
     const surnameMarkers = { groups: surnameNoteLines.groups !== null, rejections: surnameNoteLines.rejections !== null };
 
     return {
-        individuals, families, sources, repositories, droppedTags, places, surnameGroups,
+        individuals, families, sources, repositories, droppedTags, droppedTagExamples, places, surnameGroups,
         ...(placeRecords.size > 0 ? { placeRecords } : {}),
         ...(placeRefs.size > 0 ? { placeRefs } : {}),
         ...(surnameRejections.length > 0 ? { surnameRejections } : {}),
@@ -7321,6 +7350,9 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
                 .sort((a, b) => b[1] - a[1])
                 .map(([tag, n]) => `${tag} ×${n}`)
                 .join(', '),
+            droppedTags: [...droppedTags.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .map(([tag, n]) => ({ tag, count: n, example: gedcom.droppedTagExamples?.get(tag) ?? '' })),
             unknownSexPersons,
             skippedMedia,
             keptTags: [...keptTags.values()].reduce((a, b) => a + b, 0),
