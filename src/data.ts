@@ -1095,12 +1095,12 @@ class DataManagerClass {
             }
 
             case 'update': {
-                // Update existing tree — a backup of what it held first (as any import over a tree).
+                // Update existing tree — a backup of what it held first (as any import over a tree),
+                // whatever the automatic backups setting (spec 134 K0.4).
                 if (existingTree) {
-                    if (TreeManager.isAutoBackupEnabled(existingTree.id)) {
-                        const before = await TreeManager.getTreeData(existingTree.id);
-                        if (before) await createSnapshot(existingTree.id, before, 'pre-import', Date.now());
-                    }
+                    const before = await TreeManager.getTreeData(existingTree.id);
+                    if (before) await createSnapshot(existingTree.id, before, 'pre-import', Date.now(),
+                        TreeManager.backupResearchBase(existingTree.id, TreeManager.researchBaseOf(existingTree.id)));
                     TreeManager.updateTreeFromImport(existingTree.id, data);
                     this.currentTreeId = existingTree.id;
                     TreeManager.setActiveTree(existingTree.id);
@@ -1945,10 +1945,10 @@ class DataManagerClass {
     async snapshotNow(reason: SnapshotReason): Promise<string | null> {
         if (this.viewMode || !this.currentTreeId) return null;
         // Around the research a backup is taken whatever the setting: the app never trusts the research blindly.
-        // Before a merge too (spec 134 K0.4): the backup "Before merge" is promised whatever the setting.
-        const always = reason === 'manual' || reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge';
+        // Before a merge or an import too (spec 134 K0.4): "Before merge" and "Before import" are promised whatever the setting.
+        const always = reason === 'manual' || reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge' || reason === 'pre-import';
         if (!always && !TreeManager.isAutoBackupEnabled(this.currentTreeId)) return null;
-        if (reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge') {
+        if (reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge' || reason === 'pre-import') {
             try {
                 return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now(), this.backupBase())).id;
             } catch (err) {

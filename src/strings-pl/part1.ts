@@ -365,7 +365,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         deleted: 'Usunięto kopię zapasową',
         persistenceSave: 'Eksportuj',
         autoLabel: 'Automatyczne kopie zapasowe tego drzewa',
-        autoHint: 'Codziennie oraz przed importem; przed scaleniem zawsze. Wyłączenie opłaca się przy drzewie zapisanym gdzie indziej albo przy drzewie, którego skany powiększają kopie; „Utwórz kopię zapasową teraz” działa nadal.',
+        autoHint: 'Codziennie; przed importem i scaleniem zawsze. Wyłączenie opłaca się przy drzewie zapisanym gdzie indziej albo przy drzewie, którego skany powiększają kopie; „Utwórz kopię zapasową teraz” działa nadal.',
         autoOffTitle: 'Wyłączyć automatyczne kopie zapasowe?',
         autoOffMessage: (count: number, size: string) => `Drzewo ma ${nPl(count, 'kopię zapasową', 'kopie zapasowe', 'kopii zapasowych')}${size ? ` (${size})` : ''}. Zachować je czy usunąć i zwolnić miejsce?`,
         autoOffKeep: 'Zachowaj kopie',

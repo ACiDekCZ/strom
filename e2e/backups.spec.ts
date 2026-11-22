@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { openApp, createFirstPerson, card, cardAction, waitForPersist } from './helpers';
 
+const GED = 'e2e/fixtures/rodokmen-jilmovi.ged';
+
 /**
  * Versioned backups (time capsules): create a manual backup, mutate the tree,
  * then restore the backup and verify the earlier state comes back.
@@ -90,11 +92,33 @@ test('automatic backups can be turned off per tree; the existing ones may go too
     const id = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
     expect(await page.evaluate((id) => window.Strom.TreeManager.isAutoBackupEnabled(id), id)).toBe(false);
 
-    // No automatic backup any more (not even before an import); manual still works.
-    await page.evaluate(async () => { await window.Strom.DataManager.snapshotNow('pre-import'); });
+    // No automatic backup any more; manual still works.
+    await page.evaluate(async () => { await window.Strom.DataManager.snapshotNow('auto'); });
     await page.evaluate(() => window.Strom.UI.renderSnapshotsList());
     await expect(modal.locator('.snapshot-row')).toHaveCount(0);
     await page.evaluate(async () => { await window.Strom.DataManager.snapshotNow('manual'); });
     await page.evaluate(() => window.Strom.UI.renderSnapshotsList());
     await expect(modal.locator('.snapshot-row')).toHaveCount(1);
+});
+
+test('with automatic backups off, a file put into the open tree still takes the backup "Before import"', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await waitForPersist(page, 'Jan');
+    await page.evaluate(() => {
+        const id = window.Strom.TreeManager.getActiveTreeId()!;
+        window.Strom.TreeManager.setAutoBackups(id, false);
+    });
+
+    await page.evaluate(() => { (window.Strom.UI as unknown as { importToCurrentTree: boolean }).importToCurrentTree = true; });
+    await page.locator('#gedcom-input').setInputFiles(GED);
+    await page.locator('#gedcom-result-modal #gedcom-insert-btn').click();
+    await expect(page.locator('#gedcom-result-modal')).toBeHidden();
+
+    await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
+    const modal = page.locator('#snapshots-modal');
+    await expect(modal.locator('#snapshots-auto-toggle')).not.toBeChecked();
+    const rows = modal.locator('.snapshot-row');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('Before import');
 });
