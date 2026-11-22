@@ -479,7 +479,7 @@ function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d
         : '';
     parts.push(`<div class="merge-pair-head"><span class="merge-pair-title">${escapeHtml(W.pairOf(index, d.shown.length))}</span>`
         + `<button type="button" class="merge-pair-open" aria-expanded="${view.listOpen}" aria-controls="merge-s2-side">${escapeHtml(W.pairOf(index, d.shown.length))} ▾</button>`
-        + `<span class="merge-mut merge-pair-sub">· ${escapeHtml(sub)}</span><span class="merge-cand-sp"></span>${compare}${seg}`
+        + `<span class="merge-mut merge-pair-sub"><span class="merge-pair-dot" aria-hidden="true">· </span>${escapeHtml(sub)}</span><span class="merge-cand-sp"></span>${compare}${seg}`
         + `<span class="merge-keys">${keysHintHtml()}</span></div>`);
     if (cands.length > 1) parts.push(candidatesHtml(state, inc, cands, chosen));
     parts.push(pairGridHtml(state, ctx.choices.targetName, inc, tree, view.side));

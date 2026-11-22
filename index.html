@@ -18243,6 +18243,8 @@
         .merge-s1-target:not(.is-blocked) .merge-s1-lock { display: none; }
         .merge-s1-lock { display: inline-flex; color: var(--text-light); }
         .merge-s1-target.is-blocked { cursor: default; opacity: .7; }
+        /* A blocked tree's line says why: whole, wrapped, never cut. */
+        .merge-s1-target.is-blocked .merge-s1-tline { white-space: normal; }
         .modal label.merge-s1-scope { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; margin: 0; padding: 5px 12px; cursor: pointer; }
         .merge-s1-scope-text { display: flex; flex-direction: column; min-width: 0; }
         .merge-s1-scope-title { color: var(--text); font-size: 13px; }
@@ -18651,6 +18653,7 @@
             .merge-s2-pane .merge-pair-seg { display: inline-flex; margin-left: auto; }
             .merge-pair-seg > .sel-opt { min-height: 44px; padding: 0 12px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             .merge-pair-sub { flex-basis: 100%; order: 5; }
+            .merge-pair-dot { display: none; }
             .pair { grid-template-columns: 72px minmax(0, 1fr); }
             .pair.show-tree > .c2, .pair.show-import > .c1 { display: none; }
             .pair > div { padding: 4px 6px; font-size: 12px; }

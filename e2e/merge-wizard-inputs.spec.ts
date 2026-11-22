@@ -167,6 +167,8 @@ test('a locked tree: step 1 says why, Add to a tree offers Manage trees', async 
     const tile = target(wizard, 'Modřínovi');
     await expect(tile).toHaveAttribute('data-block', 'locked');
     await expect(tile.locator('.merge-s1-tline')).toContainText('The tree Modřínovi is locked: it cannot be written to.');
+    // The reason is read whole (wrapped), never cut with "…".
+    expect(await tile.locator('.merge-s1-tline').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     // Every tree blocked: a dialog says why, with Manage trees and Choose another tree.
     const dialog = page.locator('#confirmation-modal');
     await expect(dialog).toHaveClass(/active/);
