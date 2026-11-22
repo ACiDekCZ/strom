@@ -18,6 +18,7 @@ import { postRunLimit, postRunStop, runLimitRaise } from '../research-runs-write
 import { createDirection, previewDirection, undoGather } from '../research-directions-write.js';
 import { setLanguage, strings } from '../strings.js';
 import { pausedReasonText } from '../ui/research-ui.js';
+import { runEndedText } from '../research-runs-text.js';
 
 const TREE = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
 const FEATURES = ['run.lines', 'run.agents', 'run.stop', 'run.limit', 'directions.move', 'queue.page', 'offLine.branches'];
@@ -430,6 +431,21 @@ describe('the texts of the runs in Now (§3, §4)', () => {
         setLanguage('en');
         expect([1, 3].map(n => strings.live.nowAgents(n))).toEqual(['Now · 1 agent', 'Now · 3 agents']);
         expect([1, 3].map(n => strings.live.stateAgents(n))).toEqual(['1 agent working', '3 agents working']);
+    });
+
+    it('says why a run ended only for the limit and an error (runEndedText)', () => {
+        const all = ['done', 'stopped', 'limit', 'gate', 'time', 'archive', 'error', undefined] as const;
+        expect(all.map(w => runEndedText(w))).toEqual([
+            '', '', 'The subscription limit ran out.', '', '', '', 'The agent stopped with an error; the details are in the research terminal.', '',
+        ]);
+        setLanguage('cs');
+        expect(runEndedText('limit')).toBe('Došel limit předplatného.');
+        expect(runEndedText('error')).toBe('Agent skončil chybou; podrobnosti jsou v terminálu výzkumu.');
+        expect(runEndedText('stopped')).toBe('');
+        setLanguage('de');
+        expect(runEndedText('limit')).toBe('Das Abo-Limit ist aufgebraucht.');
+        setLanguage('pl');
+        expect(runEndedText('error')).toBe('Agent zakończył się błędem; szczegóły są w terminalu badania.');
     });
 
     it('says the codes of a paused run in the app\'s words and a reason of the research as it is', () => {

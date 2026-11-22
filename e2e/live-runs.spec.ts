@@ -128,6 +128,55 @@ test.describe('a direction\'s own run', () => {
         await expect(runBox(page, 'G0002').locator('.research-direction__run-why')).toHaveText('Nothing in the direction\'s queue.');
     });
 
+    for (const [why, text] of [
+        ['noAgent', 'This computer has no agent installed that the research can start.'],
+        ['oldRun', 'An agent started by an older version of the research is working on the tree; a direction\'s agent cannot start beside it. It can once that one ends.'],
+        ['xyz', 'An agent cannot be put on this direction now.'],
+    ] as const) {
+        test(`held by the research (${why}): its sentence under the button and in ⋯`, async ({ page }) => {
+            await followRuns(page, { researches: directions('G0002', { canStart: false, why }) });
+            await openOverview(page);
+            await unfold(page, 'G0002');
+            await expect(runBox(page, 'G0002').locator('[data-do="run"]')).toHaveAttribute('aria-disabled', 'true');
+            await expect(runBox(page, 'G0002').locator('.research-direction__run-why')).toHaveText(text);
+            await openMenu(page, 'G0002');
+            const item = page.locator('#live-direction-menu [data-do="run"]');
+            await expect(item).toHaveAttribute('aria-disabled', 'true');
+            await expect(item.locator('.research-direction-menu__hint')).toHaveText(text);
+        });
+    }
+
+    test('the dialog open when the research holds the run: Start held, the sentence above it', async ({ page }) => {
+        const b = await followRuns(page, { fastReconnect: true });
+        await openOverview(page);
+        await unfold(page, 'G0002');
+        await runBox(page, 'G0002').locator('[data-do="run"]').click();
+        const d = dialog(page);
+        await expect(d.locator('#queue-work-open')).toBeEnabled();
+        b.researches = directions('G0002', { canStart: false, why: 'oldRun' });
+        await expect(d.locator('#queue-work-held')).toHaveText(
+            'An agent started by an older version of the research is working on the tree; a direction\'s agent cannot start beside it. It can once that one ends.',
+            { timeout: 10000 });
+        await expect(d.locator('#queue-work-open')).toBeDisabled();
+        b.researches = directions('G0002', { canStart: false, why: 'noAgent' });
+        await expect(d.locator('#queue-work-held')).toHaveText('This computer has no agent installed that the research can start.', { timeout: 10000 });
+    });
+
+    test('de at 1440: the long sentence of an older run wraps inside ⋯, nothing overflows', async ({ page }) => {
+        await followRuns(page, { researches: directions('G0002', { canStart: false, why: 'oldRun' }) });
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await openOverview(page);
+        await openMenu(page, 'G0002');
+        const menu = page.locator('#live-direction-menu');
+        const hint = menu.locator('[data-do="run"] .research-direction-menu__hint');
+        await expect(hint).toHaveText('Am Stammbaum arbeitet ein Agent, den eine ältere Forschungsversion gestartet hat; daneben startet kein Agent der Richtung. Das geht, sobald er fertig ist.');
+        const over = await menu.evaluate(m => [m, ...m.querySelectorAll<HTMLElement>('*')].filter(e => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflowX !== 'visible').length
+            + [...m.querySelectorAll<HTMLElement>('.research-direction-menu__hint')].filter(h => h.getBoundingClientRect().right > m.getBoundingClientRect().right + 0.5).length);
+        expect(over).toBe(0);
+        const box = await menu.boundingBox();
+        expect(box!.x + box!.width).toBeLessThanOrEqual(1440);
+    });
+
     test('a phone offers nothing to start, the row says the state only', async ({ page }) => {
         await followRuns(page, { size: { width: 390, height: 844 } });
         await page.locator('#live-panel .live-panel-toggle').click();
@@ -338,6 +387,55 @@ test.describe('the runs in Now', () => {
         await expect(g1).toHaveCount(0);
         await expect(now(page).locator('.research-overview__run')).toHaveCount(0);
         await expect(now(page).locator('.research-overview__now-row')).toHaveCount(1);
+    });
+
+    test('why a run ended: the limit and an error said quietly, before "the whole queue takes it again"; done and stopped without', async ({ page }) => {
+        await page.clock.install({ time: T });
+        await followRuns(page, {
+            runs: [{ ...RUNS[1], since: at(-10) }], working: [{ ...RUN_WORKING[1], since: at(-2) }],
+            researches: directions('G0003', { state: 'active', canStart: true, why: undefined }),
+            runsEnded: [
+                { id: 'run-9e10', research: null, agent: 'claude', since: at(-60), ended: at(-0.2), why: 'limit' },
+                { id: 'run-2c44', research: 'G0002', agent: 'codex', since: at(-30), ended: at(-0.3), why: 'error' },
+                { id: 'run-5b20', research: 'G0003', agent: 'codex', since: at(-40), ended: at(-0.25), why: 'limit' },
+            ],
+        });
+        await openOverview(page);
+        await expect(block(page, 'run-5b20').locator('.research-overview__run-note'))
+            .toHaveText(['The subscription limit ran out.', 'The whole queue takes the direction again.']);
+        await expect(block(page, 'run-2c44').locator('.research-overview__run-note'))
+            .toHaveText(['The agent stopped with an error; the details are in the research terminal.', 'The whole queue takes the direction again.']);
+        // The general run: its reason alone.
+        await expect(block(page, 'run-9e10').locator('.research-overview__run-note')).toHaveText(['The subscription limit ran out.']);
+        // Quiet, not a warning: the colour of any other note.
+        const colours = await now(page).evaluate(n => [...n.querySelectorAll<HTMLElement>('.research-overview__run.is-ended .research-overview__run-note')]
+            .map(e => getComputedStyle(e).color));
+        expect(new Set(colours).size).toBe(1);
+    });
+
+    test('a run done or stopped ends without a reason; the phone in de says the limit too', async ({ page }) => {
+        await page.clock.install({ time: T });
+        await followRuns(page, {
+            runs: [{ ...RUNS[1], since: at(-10) }], working: [{ ...RUN_WORKING[1], since: at(-2) }],
+            researches: directions('G0003', { state: 'active', canStart: true, why: undefined }),
+            runsEnded: [
+                { id: 'run-9e10', research: null, agent: 'claude', since: at(-60), ended: at(-0.2), why: 'done' },
+                { id: 'run-2c44', research: 'G0002', agent: 'codex', since: at(-30), ended: at(-0.3), why: 'limit' },
+                { id: 'run-5b20', research: 'G0003', agent: 'codex', since: at(-40), ended: at(-0.25), why: 'stopped' },
+            ],
+            size: { width: 390, height: 844 },
+        });
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await page.locator('#live-panel .live-panel-toggle').click();
+        await expect(overview(page)).toHaveClass(/research-overview--sheet/);
+        await expect(block(page, 'run-9e10').locator('.research-overview__run-note')).toHaveCount(0);
+        await expect(block(page, 'run-5b20').locator('.research-overview__run-note'))
+            .toHaveText(['Die Richtung übernimmt wieder die ganze Warteschlange.']);
+        await expect(block(page, 'run-2c44').locator('.research-overview__run-note'))
+            .toHaveText(['Das Abo-Limit ist aufgebraucht.', 'Die Richtung übernimmt wieder die ganze Warteschlange.']);
+        const over = await now(page).evaluate(n => [...n.querySelectorAll<HTMLElement>('.research-overview__run, .research-overview__run-note')]
+            .filter(e => e.scrollWidth > e.clientWidth + 1).length);
+        expect(over).toBe(0);
     });
 
     test('a phone: every block and its state, Show in tree only', async ({ page }) => {

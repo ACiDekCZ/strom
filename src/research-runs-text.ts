@@ -1,11 +1,11 @@
 /**
- * The words of a run (spec 126 U10) shared by Now and the choice of the run followed (§7): its name and
- * what a waiting run waits for, in the app's words.
+ * The words of a run (spec 126 U10) shared by Now and the choice of the run followed (§7): its name,
+ * what a waiting run waits for and why an ended one ended, in the app's words.
  */
 
 import { strings, getCurrentLanguage } from './strings.js';
 import { formatLiveClock } from './live-time.js';
-import type { LiveDirection } from './research-link.js';
+import type { LiveDirection, RunEndedWhy } from './research-link.js';
 import type { LiveRun } from './research-runs.js';
 
 /** A run's name: the direction's ("Kubíčkovi z Dolní Lhoty"), the general run's "Whole queue". */
@@ -29,4 +29,13 @@ export function runWaitText(run: Pick<LiveRun, 'wait'>): string {
         : why === 'browser' ? L.runStateBrowser
         : why === 'download' ? L.runStateDownload
         : t ? L.runStateWaitingUntil(t) : L.runStateWaiting;
+}
+
+/**
+ * Why a run ended, as a quiet line under "ended at …": only the subscription limit and an error are
+ * said; a run done, stopped by hand, held by the gate, out of time, gone to an archive, or an end not
+ * said gets none ('').
+ */
+export function runEndedText(why: RunEndedWhy | undefined): string {
+    return why === 'limit' ? strings.live.runEndedLimit : why === 'error' ? strings.live.runEndedError : '';
 }

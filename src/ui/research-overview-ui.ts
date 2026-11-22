@@ -17,7 +17,7 @@ import { noteQueueStartStatus, QUEUE_SCOPE, QUEUE_START_MS, type QueueStartView 
 import { NOW_LIMIT_NOTE, runsSideBySide } from './queue-work-dialog.js';
 import { RUN_ENDED_MS, linesWithRun, liveRuns, orderRuns, runCount, runLinesOn, runStopOn, runsShown, type LiveRun } from '../research-runs.js';
 import { postRunStop } from '../research-runs-write.js';
-import { runName, runWaitText } from '../research-runs-text.js';
+import { runEndedText, runName, runWaitText } from '../research-runs-text.js';
 import { busySpinHtml, busyStatusEl } from './busy.js';
 import { canvasBusy } from './canvas-busy.js';
 import type { RowRefusal } from './waiting-row-notes.js';
@@ -2925,6 +2925,9 @@ export const researchOverviewMethods = uiModule({
         }
         if (shown.state === 'waiting' && shown.wait?.for === 'browser') note(L.runBrowserNote);
         if (shown.state === 'waiting' && shown.wait?.reason) note(shown.wait.reason);
+        // An ended run: why it ended (the limit, an error) first, then a direction's run gives it back to the whole queue.
+        const endWhy = shown.state === 'ended' ? runEndedText(run.endedWhy) : '';
+        if (endWhy) note(endWhy);
         if (shown.state === 'ended' && run.kind === 'line') note(L.runAfterStop);
         if (local?.state === 'failed' && shown.state !== 'ended') {
             const failed = el('div', 'research-overview__run-note research-overview__run-failed', local.text);
