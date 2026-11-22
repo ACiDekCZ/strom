@@ -149,6 +149,8 @@ test.describe('the map\'s scope switch', () => {
         const page = await ctx.newPage();
         const pop = await mapWithList(page, LONG);
         await pop.locator('li.sp-selpick-row[data-sec="lists"]', { hasText: LONG }).locator('button').click();
+        // The part is measured once it shows the list's name (the boundingBox does not wait for it).
+        await expect(page.locator('#map-scope-sel .map-scope-name')).toContainText(LONG);
         const part = (await page.locator('#map-scope-sel').boundingBox())!;
         const name = (await page.locator('#map-scope-sel .map-scope-name').boundingBox())!;
         expect(part.height).toBeGreaterThanOrEqual(43.5);
