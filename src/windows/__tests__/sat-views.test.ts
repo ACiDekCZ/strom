@@ -154,7 +154,7 @@ describe('another window from a satellite', () => {
         const got: WindowMessage[] = [];
         const next = new WindowBus('cafe0001', hub.channel());
         next.onAny(m => got.push(m));
-        next.post({ type: 'hello', windowId: 'cafe0001', kind: 'map', treeId: TREE });
+        next.post({ type: 'hello', takesData: true, windowId: 'cafe0001', kind: 'map', treeId: TREE });
         await settle();
         const init = got.filter(m => m.type === 'init');
         expect(init).toEqual([expect.objectContaining({ to: 'cafe0001', kind: 'map', state: { kind: 'map', center: { lat: 49.2, lon: 16.6 }, zoom: 9 } })]);
@@ -167,9 +167,9 @@ describe('another window from a satellite', () => {
         openWindowFromSatellite(sat, deps());
         await settle();
         const next = new WindowBus('cafe0001', hub.channel());
-        next.post({ type: 'hello', windowId: 'cafe0001', kind: 'map', treeId: TREE });
+        next.post({ type: 'hello', takesData: true, windowId: 'cafe0001', kind: 'map', treeId: TREE });
         const foreign = new WindowBus('f00d0001', hub.channel());
-        foreign.post({ type: 'hello', windowId: 'f00d0001', kind: 'table', treeId: TREE });
+        foreign.post({ type: 'hello', takesData: true, windowId: 'f00d0001', kind: 'table', treeId: TREE });
         await settle();
         void registry.focusWindow('cafe0001');
         expect(mainOpened).toEqual([{ url: '', name: 'strom-w-cafe0001', features: '' }]);

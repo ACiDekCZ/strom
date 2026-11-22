@@ -12,6 +12,8 @@
  * overview open). A satellite's edit still travels as JSON (`json`).
  * A satellite that reaches the main window (`imageRefs` in its hello) gets
  * the images as references and takes them from there (window-images.ts).
+ * A window that does not say `takesData` (3.31 and before) gets the tree as
+ * one JSON string (`json`), and while one is open, so do all.
  */
 
 import type { TreeId } from '../types.js';
@@ -79,7 +81,7 @@ export type WindowMessageBody =
      * state (K4). `agent`: the window's own following of the agent (spec 097
      * §1–§3; none without a live session), for the order of taking over (§7).
      */
-    | { type: 'hello'; windowId: string; kind: SatelliteKind; treeId: TreeId | null; state?: unknown; agent?: AgentFollow | null; imageRefs?: true }
+    | { type: 'hello'; windowId: string; kind: SatelliteKind; treeId: TreeId | null; state?: unknown; agent?: AgentFollow | null; takesData?: true; imageRefs?: true }
     /** main → sat: the view's starting state from openSatellite (once, before `tree`). */
     | { type: 'init'; to: string; kind: SatelliteKind; state: unknown }
     /**

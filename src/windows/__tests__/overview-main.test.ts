@@ -77,7 +77,7 @@ afterEach(() => {
 async function connectOverview() {
     const id = registry.openSatellite('overview')!;
     const sat = listener(hub, id);
-    sat.bus.post({ type: 'hello', windowId: id, kind: 'overview', treeId: TREE });
+    sat.bus.post({ type: 'hello', takesData: true, windowId: id, kind: 'overview', treeId: TREE });
     await settle();
     return { id, ...sat };
 }
@@ -86,7 +86,7 @@ describe('research-state', () => {
     it('nothing is built or posted while no overview window is open (a Table window does not count)', async () => {
         const by = listener(hub, 'bystander');
         const table = registry.openSatellite('table')!;
-        listener(hub, table).bus.post({ type: 'hello', windowId: table, kind: 'table', treeId: TREE });
+        listener(hub, table).bus.post({ type: 'hello', takesData: true, windowId: table, kind: 'table', treeId: TREE });
         await settle();
         overviewChanged();
         main.changed();
@@ -100,7 +100,7 @@ describe('research-state', () => {
         const sat = await connectOverview();
         expect(sat.of('research-state')).toEqual([expect.objectContaining({ from: 'main-1', state: { v: 1, n: 1 } })]);
         // F5 in the overview window: the same id says hello again.
-        sat.bus.post({ type: 'hello', windowId: sat.id, kind: 'overview', treeId: TREE });
+        sat.bus.post({ type: 'hello', takesData: true, windowId: sat.id, kind: 'overview', treeId: TREE });
         await settle();
         expect(sat.of('research-state')).toHaveLength(2);
     });

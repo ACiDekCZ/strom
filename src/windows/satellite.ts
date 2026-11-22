@@ -527,7 +527,7 @@ export class SatelliteClient {
     private hello(): void {
         this.helloAt = Date.now();
         this.images = this.imageSource();
-        this.bus.post({ type: 'hello', windowId: this.windowId, kind: this._kind, treeId: this._treeId ?? this.requestedTreeId, agent: this._agent, ...(this.images ? { imageRefs: true as const } : {}) });
+        this.bus.post({ type: 'hello', windowId: this.windowId, kind: this._kind, treeId: this._treeId ?? this.requestedTreeId, agent: this._agent, takesData: true, ...(this.images ? { imageRefs: true as const } : {}) });
     }
 
     private setConnection(c: SatelliteConnection): void {

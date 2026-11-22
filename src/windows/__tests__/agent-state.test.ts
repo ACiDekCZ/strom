@@ -261,7 +261,7 @@ describe('startAgentMain', () => {
     async function connect(kind: 'table' | 'overview') {
         const id = registry.openSatellite(kind)!;
         const sat = listener(hub, id);
-        sat.bus.post({ type: 'hello', windowId: id, kind, treeId: TREE });
+        sat.bus.post({ type: 'hello', takesData: true, windowId: id, kind, treeId: TREE });
         await settle();
         return { id, ...sat };
     }

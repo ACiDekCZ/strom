@@ -106,6 +106,8 @@ export interface WindowEntry {
     agent?: AgentFollow | null;
     /** It takes the tree's images from this window (window-images.ts): they go as references. */
     imageRefs?: boolean;
+    /** It takes the tree as `data` (an older window, 3.31 and before, only as one JSON string). */
+    takesData?: boolean;
 }
 
 interface Entry extends WindowEntry {
@@ -558,7 +560,7 @@ export class WindowRegistry {
             return;
         }
         // One message for all: images as references only when every window takes them from here.
-        const out = this.outgoing([...this.entries.values()].every(e => !e.connected || e.imageRefs === true));
+        const out = this.outgoing([...this.entries.values()].filter(e => e.connected));
         if (prev && prev.treeId === treeId && prev.withData) {
             this.bus.post({ type: 'patch', treeId, revision: this.rev, ...out });
         } else {
@@ -578,14 +580,16 @@ export class WindowRegistry {
     private sendTreeTo(to: string): void {
         const treeId = this.host.treeId();
         if (!treeId || this.host.locked()) return;   // the status says why
-        this.bus.post({ type: 'tree', to, treeId, name: this.host.treeName(treeId), revision: this.rev, ...this.outgoing(this.entries.get(to)?.imageRefs === true), ...this.focusField() });
+        this.bus.post({ type: 'tree', to, treeId, name: this.host.treeName(treeId), revision: this.rev, ...this.outgoing([this.entries.get(to)]), ...this.focusField() });
         if (!this.lastSent) this.lastSent = { treeId, withData: true };
     }
 
-    /** The open tree to send; its images as references when the receivers take them from here. */
-    private outgoing(imageRefs: boolean): { data: unknown; imageRefs?: true } {
+    /** The open tree to send: as data, its images as references when all receivers take them from here. */
+    private outgoing(to: (WindowEntry | undefined)[]): { data: unknown; imageRefs?: true } | { json: string } {
         const data = this.host.storedData();
-        return imageRefs ? { data: this.images.replaceImages(data), imageRefs: true } : { data };
+        // A window of an older version takes only one JSON string (as long as one is open).
+        if (to.some(e => e?.takesData !== true)) return { json: JSON.stringify(data) };
+        return to.every(e => e?.imageRefs === true) ? { data: this.images.replaceImages(data), imageRefs: true } : { data };
     }
 
     /** A satellite could not take an image from here: the whole tree with its images, and so from now on. */
@@ -678,6 +682,7 @@ export class WindowRegistry {
         entry.connected = true;
         entry.agent = parseAgentFollow(m.agent);
         entry.imageRefs = m.imageRefs === true;
+        entry.takesData = m.takesData === true;
         if (m.state !== undefined) entry.state = m.state;
         this.entries.set(id, entry);
         if (!entry.initSent) {

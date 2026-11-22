@@ -716,5 +716,7 @@ describe('images taken from the main window (1122)', () => {
         sat.start();
         await settle();
         expect(of('hello')[0].imageRefs).toBeUndefined();
+        // It still takes the tree as data (an older main window sends JSON, taken as well).
+        expect(of('hello')[0].takesData).toBe(true);
     });
 });

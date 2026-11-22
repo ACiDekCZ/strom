@@ -94,7 +94,7 @@ afterEach(() => {
 async function connect(initial?: unknown) {
     const id = registry.openSatellite('table', initial)!;
     const sat = listener(hub, id);
-    sat.bus.post({ type: 'hello', windowId: id, kind: 'table', treeId: TREE });
+    sat.bus.post({ type: 'hello', takesData: true, windowId: id, kind: 'table', treeId: TREE });
     await settle();
     return { id, ...sat };
 }
@@ -145,7 +145,7 @@ describe('opening and hello', () => {
 
     it('the starting state goes once: a reloaded satellite keeps its own', async () => {
         const sat = await connect({ rowType: 'persons' });
-        sat.bus.post({ type: 'hello', windowId: sat.id, kind: 'table', treeId: TREE });
+        sat.bus.post({ type: 'hello', takesData: true, windowId: sat.id, kind: 'table', treeId: TREE });
         await settle();
         expect(sat.of('init')).toHaveLength(1);
         expect(sat.of('tree')).toHaveLength(2);
@@ -164,7 +164,7 @@ describe('the main window\'s person with the tree', () => {
         });
         registry.start();
         const sat = listener(hub, 'sat-f5');
-        sat.bus.post({ type: 'hello', windowId: 'sat-f5', kind: 'family', treeId: TREE });
+        sat.bus.post({ type: 'hello', takesData: true, windowId: 'sat-f5', kind: 'family', treeId: TREE });
         await settle();
         expect(sat.of('tree')[0]).toMatchObject({ to: 'sat-f5', treeId: TREE, focus: { personId: 'p-zdislava', depthUp: 2, depthDown: 1 } });
 
@@ -177,7 +177,7 @@ describe('the main window\'s person with the tree', () => {
 
         // No person here: the tree goes without one.
         focus = null;
-        sat.bus.post({ type: 'hello', windowId: 'sat-f5', kind: 'family', treeId: 'reg-tree-2' as TreeId });
+        sat.bus.post({ type: 'hello', takesData: true, windowId: 'sat-f5', kind: 'family', treeId: 'reg-tree-2' as TreeId });
         await settle();
         expect(last(sat.of('tree'))).not.toHaveProperty('focus');
     });
@@ -365,7 +365,7 @@ describe('the list of windows', () => {
     it('close: the reference closes the window; one without a reference is asked to close itself', async () => {
         const a = await connect();
         const foreign = listener(hub, 'foreign1');
-        foreign.bus.post({ type: 'hello', windowId: 'foreign1', kind: 'table', treeId: TREE });
+        foreign.bus.post({ type: 'hello', takesData: true, windowId: 'foreign1', kind: 'table', treeId: TREE });
         await settle();
         registry.closeAll();
         await settle();
@@ -407,7 +407,7 @@ describe('the windows\' own following of the agent (spec 097 §7)', () => {
         expect(changes).not.toHaveBeenCalled();
         // The status says it at once, not only with the next heartbeat (a main window closing meanwhile).
         expect(last(a.of('status'))?.agents).toEqual({ [a.id]: 'detached' });
-        a.bus.post({ type: 'hello', windowId: a.id, kind: 'table', treeId: TREE, agent: 'paused' });
+        a.bus.post({ type: 'hello', takesData: true, windowId: a.id, kind: 'table', treeId: TREE, agent: 'paused' });
         await settle();
         expect(registry.list()[0].agent).toBe('paused');
         // The status names it for every window (the order of taking over).
@@ -517,7 +517,7 @@ describe('the fan\'s family-line colours (spec 114 §3)', () => {
         // A fan window opened later: the memory with its hello, to it alone.
         const id = registry.openSatellite('fan')!;
         const fan = listener(hub, id);
-        fan.bus.post({ type: 'hello', windowId: id, kind: 'fan', treeId: TREE });
+        fan.bus.post({ type: 'hello', takesData: true, windowId: id, kind: 'fan', treeId: TREE });
         await settle();
         expect(fan.of('fan-rod-colors')).toEqual([expect.objectContaining({ to: id, treeId: TREE, memory: mem })]);
         expect(table.of('fan-rod-colors')).toHaveLength(1);
@@ -531,7 +531,7 @@ describe('the fan\'s family-line colours (spec 114 §3)', () => {
         expect(last(fan.of('fan-rod-colors'))).toMatchObject({ memory: [] });
         const id2 = registry.openSatellite('fan')!;
         const fan2 = listener(hub, id2);
-        fan2.bus.post({ type: 'hello', windowId: id2, kind: 'fan', treeId: TREE });
+        fan2.bus.post({ type: 'hello', takesData: true, windowId: id2, kind: 'fan', treeId: TREE });
         await settle();
         expect(fan2.of('fan-rod-colors')).toHaveLength(0);
     });
@@ -590,7 +590,7 @@ describe('images of the tree to a satellite that reaches this window (1122)', ()
     async function hello(kind: 'overview' | 'table', imageRefs: boolean) {
         const id = registry.openSatellite(kind)!;
         const sat = listener(hub, id);
-        sat.bus.post({ type: 'hello', windowId: id, kind, treeId: TREE, ...(imageRefs ? { imageRefs: true as const } : {}) });
+        sat.bus.post({ type: 'hello', takesData: true, windowId: id, kind, treeId: TREE, ...(imageRefs ? { imageRefs: true as const } : {}) });
         await settle();
         return { id, ...sat };
     }
@@ -647,5 +647,32 @@ describe('images of the tree to a satellite that reaches this window (1122)', ()
         DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
         await settle(PATCH_INTERVAL_MS);
         expect(treeOf(last(sat.of('patch'))!.data).persons[pid].photo).toBe(photo);
+    });
+});
+
+describe('a satellite of an older version (3.31 and before) among the windows (1122)', () => {
+    it('gets the tree as one JSON string with its images, and so do the others while it is open; then data again', async () => {
+        const pid = DataManager.getAllPersons()[0].id;
+        const photo = 'data:image/jpeg;base64,' + 'Q'.repeat(4000);
+        DataManager.updatePerson(pid, { photo });
+        await settle(PATCH_INTERVAL_MS);
+        const fresh = await connect();
+        const id = registry.openSatellite('overview')!;
+        const old = listener(hub, id);
+        old.bus.post({ type: 'hello', windowId: id, kind: 'overview', treeId: TREE });
+        await settle();
+        const tree = old.of('tree')[0] as unknown as { json?: string; data?: unknown };
+        expect(tree.data).toBeUndefined();
+        expect((JSON.parse(tree.json!) as StromData).persons[pid].photo).toBe(photo);
+        DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
+        await settle(PATCH_INTERVAL_MS);
+        const patch = last(fresh.of('patch'))! as unknown as { json?: string; data?: unknown };
+        expect(patch.data).toBeUndefined();
+        expect(Object.keys((JSON.parse(patch.json!) as StromData).persons)).toHaveLength(2);
+        old.bus.post({ type: 'bye', windowId: id });
+        await settle();
+        DataManager.createPerson({ firstName: 'Ludmila', lastName: 'Okurková', gender: 'female' });
+        await settle(PATCH_INTERVAL_MS);
+        expect(treeOf(last(fresh.of('patch'))!.data).persons[pid].photo).toBe(photo);
     });
 });
