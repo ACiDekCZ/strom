@@ -7409,8 +7409,8 @@
         .pm-context-row[hidden] { display: none; }
         .pm-context-sep { font-size: 12px; color: var(--text-light); }
         .pm-context-sep[hidden], .pm-portrait-link[hidden] { display: none; }
-        .pm-portrait-link { font-size: 12.5px; padding: 0; text-align: left; }
-        @media (pointer: coarse) { .pm-portrait-link { min-height: 32px; } }
+        #person-modal .pm-portrait-link { font-size: 12.5px; padding: 0; min-height: 0; text-align: left; }
+        @media (pointer: coarse) { #person-modal .pm-portrait-link { min-height: 32px; } }
         /* The header's circle is a button only beside "Portrait from a photo…". */
         button.pm-avatar { padding: 0; border: 0; font: inherit; color: inherit; cursor: pointer; }
         button.pm-avatar:disabled { cursor: default; opacity: 1; }
