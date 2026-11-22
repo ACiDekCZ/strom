@@ -82,23 +82,26 @@ function result(source: Record<string, unknown>): Record<string, unknown> {
     };
 }
 
+/**
+ * Poll until `target` says `text`. The dialog polls on its own: a poll asked while that one runs is
+ * skipped and the dialog would stay on the old state until its next tick (up to 5 s), so poll again.
+ */
+const pollUntil = (page: Page, target: Locator, text: string) => expect(async () => {
+    await poll(page);
+    await expect(target).toHaveText(text, { timeout: 1000 });
+}).toPass();
+
 /** "Read" in the source's input; the progress follows, then the result once the research is done. */
 async function readAndFinish(page: Page, b: FakeBridge, d: Locator, source: Record<string, unknown>): Promise<void> {
     await d.locator('[data-act="read"]').click();
     await expect.poll(() => b.read!.sourcePosts?.length ?? 0).toBe(1);
     await expect(d.locator('#read-title')).toHaveText('Reading again');
     // The comparison with the transcript is named as such, even with one reader.
-    // The dialog polls on its own: a poll asked while that one runs is skipped and the
-    // dialog would stay on the old state until its next tick (up to 5 s), so poll again.
-    const pollUntil = (target: Locator, text: string) => expect(async () => {
-        await poll(page);
-        await expect(target).toHaveText(text, { timeout: 1000 });
-    }).toPass();
     b.read!.reads[0].state = 'checking';
-    await pollUntil(d.locator('.read-run-title'), 'Comparing with the source’s transcript');
+    await pollUntil(page, d.locator('.read-run-title'), 'Comparing with the source’s transcript');
     b.read!.reads[0].state = 'done';
     b.read!.results.set(READ_ID, result(source));
-    await pollUntil(d.locator('#read-title'), 'Source read again');
+    await pollUntil(page, d.locator('#read-title'), 'Source read again');
 }
 
 test.describe('Read a source again from its original', () => {
@@ -235,8 +238,7 @@ test.describe('Read a source again from its original', () => {
             entries: [{ id: 'e1', page: 1, region: [0.03, 0.72, 0.45, 0.2], transcript: 'Josef Fíšek a Anně\nAnno 1774', persons: [], events: [], relations: [],
                 variants: [{ at: 'Fíšek', other: 'Fišek' }, { at: 'Anno 1774', other: '' }] }],
         });
-        await poll(page);
-        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        await pollUntil(page, d.locator('#read-title'), 'Source read again');
         // Two parts of the same page: excerpts, not pages.
         await expect(d.locator('.read-page-tab')).toHaveText(['Excerpt 1', 'Excerpt 2']);
         await expect(d.locator('.read-scan-img')).toHaveAttribute('alt', 'Excerpt 1');
@@ -296,8 +298,7 @@ test.describe('Read a source again from its original', () => {
             entries: [{ id: 'e1', page: 1, transcript: CELLS, variants, events: [], relations: [],
                 persons: [{ ref: 'p1', role: 'child', given: 'Martinus', surname: 'Zvonařík', written: 'Martinus Zvonařík' }] }],
         });
-        await poll(page);
-        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        await pollUntil(page, d.locator('#read-title'), 'Source read again');
         return d;
     }
 
@@ -394,8 +395,7 @@ test.describe('Read a source again from its original', () => {
             entries: [{ id: 'e1', page: 1, transcript: VLK_NEW, variants: [], persons: [], events: [], relations: [] }],
             ...extra,
         });
-        await poll(page);
-        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        await pollUntil(page, d.locator('#read-title'), 'Source read again');
         return d;
     }
 
@@ -831,8 +831,7 @@ test.describe('Read a source again from its original', () => {
         await expect(d.locator('#read-title')).toHaveText('Reading again');
         b.read!.reads[0].state = 'done';
         b.read!.results.set(READ_ID, result({ id: 'S0001', agree: 'same', variants: [] }));
-        await poll(page);
-        await expect(d.locator('#read-title')).toHaveText('Source read again');
+        await pollUntil(page, d.locator('#read-title'), 'Source read again');
         expect(b.read!.sourcePosts).toHaveLength(1);
     });
 
