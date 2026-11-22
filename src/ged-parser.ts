@@ -2638,6 +2638,29 @@ export function imageHeldReason(value: string): SourceImageHeld {
     return why === 'scope' || why === 'limit' || why === 'later' || why === 'missing' ? why : 'other';
 }
 
+/** A person's name for an example of a not taken over line ('' for "?" or none). */
+function personNameText(first: string | undefined, last: string | undefined): string {
+    return [first, last].filter(n => n && n !== '?').join(' ').trim();
+}
+
+/** A GEDCOM NAME value as read ("Jan /Novák/" → "Jan Novák"). */
+function gedNameText(name: string | undefined): string {
+    const text = (name ?? '').replace(/\//g, ' ').replace(/\s+/g, ' ').trim();
+    return text === '?' ? '' : text;
+}
+
+/** The value of a raw GEDCOM line ("1 _TAG value" → "value"). */
+function extraLineValue(line: string): string {
+    return line.replace(/^\s*\d+\s+(?:@[^@]+@\s+)?\S+ ?/, '');
+}
+
+/** An example of a not taken over line: its value, after the person's name ("Name: value"); '' for no value, a pointer or a data URL. */
+function droppedExample(value: string, name: string): string {
+    const v = value.trim();
+    if (!v || GED_POINTER.test(v) || DATA_URL_IN_LINE.test(v)) return '';
+    return name ? `${name}: ${v}` : v;
+}
+
 /**
  * Pure bookkeeping tags (platform sync ids, change stamps). Ignored WITHOUT
  * counting them as unsupported — a MyHeritage export carries three of these
@@ -3119,14 +3142,15 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
     const droppedTagExamples = new Map<string, string>();
     /** The value of the line being read (for droppedTagExamples). */
     let lineValue = '';
-    const count = (tag: string): void => {
+    /** `value`: the counted line's own value when it is not the line being read (a kept block counted at its end). */
+    const count = (tag: string, value = lineValue): void => {
         droppedTags.set(tag, (droppedTags.get(tag) ?? 0) + 1);
         if (droppedTagExamples.has(tag)) return;
-        const value = lineValue.trim();
-        if (!value || GED_POINTER.test(value) || DATA_URL_IN_LINE.test(value)) return;
         const indi = currentType === 'INDI' ? currentRecord as GedcomIndividual | null : null;
-        const name = indi ? [indi.firstName, indi.lastName].filter(n => n && n !== '?').join(' ').trim() : '';
-        droppedTagExamples.set(tag, name ? `${name}: ${value}` : value);
+        // The person's first and last name are read when the record ends; until then its NAME line says it.
+        const name = indi ? ([indi.firstName, indi.lastName].filter(n => n && n !== '?').join(' ').trim() || gedNameText(indi.name)) : '';
+        const example = droppedExample(value, name);
+        if (example) droppedTagExamples.set(tag, example);
     };
     /** The level of the line being read, and where it is in the file. */
     let lineLevel = 0;
@@ -3553,7 +3577,7 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
         if (!block.pointer && validExtraBlock(raw) && !raw.some(l => DATA_URL_IN_LINE.test(l))) {
             (block.target.extras ??= []).push({ tag: block.tag, lines: raw, ...(block.quiet ? { quiet: true } : {}) });
         } else if (!block.quiet) {
-            count(block.tag);
+            count(block.tag, extraLineValue(raw[0] ?? ''));
         }
     };
 
@@ -5633,6 +5657,15 @@ export function convertToStrom(gedcom: ParsedGedcom, options: GedcomConvertOptio
 /** `convertToStrom` in parts: a step every few hundred persons and families (§8, C52), the same result. */
 export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConvertOptions = {}): Generator<GedcomStep, GedcomConversionResult, void> {
     const { individuals, families, sources: gedSources, droppedTags } = gedcom;
+    /** Examples of the not taken over lines: the parser's, and those of the lines counted here. */
+    const droppedExamples = new Map(gedcom.droppedTagExamples ?? []);
+    /** Count another program's own tag that is not carried over, with its first value as the example. */
+    const dropExtra = (e: RawExtra, name: string): void => {
+        droppedTags.set(e.tag, (droppedTags.get(e.tag) ?? 0) + 1);
+        if (droppedExamples.has(e.tag)) return;
+        const example = droppedExample(extraLineValue(e.lines[0] ?? ''), name);
+        if (example) droppedExamples.set(e.tag, example);
+    };
     /** A file the app or the research wrote keeps the import marks it carries (spec 066). */
     const ownFile = !!(gedcom.stromApp || gedcom.stromResearch);
     const readMarks = !!options.importOrigin && ownFile;
@@ -7074,8 +7107,11 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
     // Another program's own tags with no import to keep them for (the file is
     // not loaded as an import): not carried over, so counted.
     if (!extrasKept) {
-        for (const raw of [...individuals.values(), ...families.values(), ...gedSources.values()]) {
-            for (const e of raw.extras ?? []) if (!e.quiet) droppedTags.set(e.tag, (droppedTags.get(e.tag) ?? 0) + 1);
+        for (const indi of individuals.values()) {
+            for (const e of indi.extras ?? []) if (!e.quiet) dropExtra(e, personNameText(indi.firstName, indi.lastName));
+        }
+        for (const raw of [...families.values(), ...gedSources.values()]) {
+            for (const e of raw.extras ?? []) if (!e.quiet) dropExtra(e, '');
         }
     }
 
@@ -7089,17 +7125,20 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
      */
     function applyFileExtras(from?: string): void {
         extrasKept = true;
-        const put = (holder: ExtraHolder | undefined, mark: string | undefined, extras: RawExtra[] | undefined): void => {
+        const put = (holder: ExtraHolder | undefined, mark: string | undefined, extras: RawExtra[] | undefined, name = ''): void => {
             for (const e of extras ?? []) {
                 const to = from ?? mark;
-                if (!holder || !to) { if (!e.quiet) droppedTags.set(e.tag, (droppedTags.get(e.tag) ?? 0) + 1); continue; }
+                if (!holder || !to) {
+                    if (!e.quiet) dropExtra(e, name);
+                    continue;
+                }
                 addGedcomExtra(holder, { from: to, lines: e.lines });
                 if (!e.quiet) keptTags.set(e.tag, (keptTags.get(e.tag) ?? 0) + 1);
             }
         };
         for (const [gedId, indi] of individuals) {
             const pid = personIdMap.get(gedId);
-            put(pid ? persons[pid] : undefined, indi.importMark, indi.extras);
+            put(pid ? persons[pid] : undefined, indi.importMark, indi.extras, personNameText(indi.firstName, indi.lastName));
         }
         for (const [gedFamId, fam] of families) put(famPartnership.get(gedFamId), fam.importMark, fam.extras);
         for (const [gedId, raw] of gedSources) {
@@ -7352,7 +7391,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
                 .join(', '),
             droppedTags: [...droppedTags.entries()]
                 .sort((a, b) => b[1] - a[1])
-                .map(([tag, n]) => ({ tag, count: n, example: gedcom.droppedTagExamples?.get(tag) ?? '' })),
+                .map(([tag, n]) => ({ tag, count: n, example: droppedExamples.get(tag) ?? '' })),
             unknownSexPersons,
             skippedMedia,
             keptTags: [...keptTags.values()].reduce((a, b) => a + b, 0),
