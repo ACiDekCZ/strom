@@ -20,6 +20,7 @@ import {
     BatchSkip, BatchFolder, batchSkip, batchLimitsOf, batchOverLimit, batchEstimate, batchDefaultName, batchTree,
     batchFolderFiles, newBatchId, batchPathHeader, isZip, UnfinishedBatch, sanitizeUnfinishedBatch,
     MEDIA_QUEUED_FEATURE, MEDIA_KNOWN_FEATURE, MediaKnownState, batchKnownChunk, parseMediaKnown, parseBatchDoneFiles, batchSorting,
+    batchCloseWaitMs, CLOSE_RETRY_DEFAULT_MS, CLOSE_RETRY_TOTAL_MS,
 } from '../batch.js';
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { isWriteHeldCode, joinSaid, writeHeldOfRefusal } from '../research-write-held.js';
@@ -59,6 +60,12 @@ type Step = 'pick' | 'check' | 'send' | 'progress' | 'done';
 
 /** `batch/<id>/done`: counts, and with `intake.auto` (spec 130) whether this batch is sorted by tasks (`sort`) and the setting (`auto`). */
 interface DoneReply { inputs: number; known: number; refused: number; tasks: number; sort?: boolean; auto?: boolean }
+
+/**
+ * What came of one `batch/<id>/done`: closed (its reply), nothing there to close (`none`: no file of it came),
+ * its address turned down (`down`), held by the research (`held`), or not closed — asked again after `again` ms.
+ */
+type CloseOutcome = DoneReply | 'none' | 'down' | 'held' | { again: number };
 
 interface Run {
     id: string;
@@ -107,6 +114,14 @@ interface Run {
     pauseAsked: boolean;
     /** Who waits for the loop to reach a pause or its end (the states of Pause and Cancel). */
     waits: (() => void)[];
+    /** The close failed and is asked again shortly: the batch is not done yet (W136). */
+    closeWait: boolean;
+    /** Paused because the closes kept failing: Continue closes it again. */
+    closeFailed: boolean;
+    /** The run ended (cancelled) with the batch not closed: remembered unfinished, never said done. */
+    unclosed: boolean;
+    /** What the toast of a hidden window last said of a close not done ('' nothing yet). */
+    closeSaid: '' | 'soon' | 'continue';
 }
 
 let st: {
@@ -524,16 +539,17 @@ export const batchMethods = uiModule({
                 <ul>${r.refused.slice(0, 200).map(x => `<li>${esc(`${x.path}: ${x.why}`)}</li>`).join('')}</ul>
             </details>` : '';
         return `
-                <div class="modal-content batch-content batch-progress${r.paused ? ' is-paused' : ''}">
-                    <div class="batch-progress-title">${r.paused ? '' : '<i class="busy-spin s12" aria-hidden="true"></i>'}${esc(r.paused ? b.paused : b.progressTitle)}</div>
+                <div class="modal-content batch-content batch-progress${r.paused ? ' is-paused' : ''}${r.closeWait || r.closeFailed ? ' is-closing' : ''}">
+                    <div class="batch-progress-title">${r.paused ? '' : '<i class="busy-spin s12" aria-hidden="true"></i>'}${esc(r.paused ? b.paused : r.closeWait ? b.closingTitle : b.progressTitle)}</div>
                     <div class="batch-progress-sub">${esc(b.progressSub(r.name, research))}</div>
                     <div class="prog batch-prog">
                         <div class="prog-line batch-progress-count" role="status"><span>${esc(b.progressSize(formatBytesShort(r.doneBytes), formatBytesShort(r.totalBytes)))}</span>
                             <strong class="prog-k">${esc(b.progressCount(done, r.total))}</strong></div>
                         ${barHtml(share, { paused: r.paused })}
                     </div>
-                    ${r.paused ? `<p class="batch-paused-note">${esc(r.held || (r.lost ? b.bridgeLost : b.pausedNote))}${r.held && r.heldSeal && this.activeResearchLink('seal')
+                    ${r.paused ? `<p class="batch-paused-note">${esc(r.held || (r.closeFailed ? `${this.batchCloseWhat(r)} ${b.closeAgainContinue}` : r.lost ? b.bridgeLost : b.pausedNote))}${r.held && r.heldSeal && this.activeResearchLink('seal')
                         ? ` <button type="button" class="link-button" data-act="seal">${this.researchSyncActionLabel('sealTakeOver', strings.sync.held.sealButton)}</button>` : ''}</p>`
+                        : r.closeWait ? `<p class="batch-paused-note batch-close-wait" role="status">${esc(`${this.batchCloseWhat(r)} ${b.closeAgainSoon}`)}</p>`
                         : cur ? `<p class="batch-now">${esc(b.now(cur.path, formatBytesShort(cur.size)))}</p>` : ''}
                     ${r.skipped + r.skippedAsked ? `<p class="batch-skipped">${esc(b.skipped)} · ${r.skipped + r.skippedAsked}</p>` : ''}
                     ${refused}
@@ -657,6 +673,8 @@ export const batchMethods = uiModule({
                     const r = run;
                     if (!r || r.paused || r.pauseAsked) break;
                     r.pauseAsked = true;
+                    // Waiting to close the batch again: the pause comes now, not after the wait.
+                    if (r.closeWait) r.resume?.();
                     void runBusy(el, () => runReached(r, () => r.paused || r.finished), { label: strings.busy.pausing, kind: 'local' });
                     break;
                 }
@@ -809,7 +827,7 @@ export const batchMethods = uiModule({
             totalBytes: queue.reduce((sum, i) => sum + i.size, 0), doneBytes: 0, received: 0, skipped: 0, skippedAsked: 0,
             queued: new Map(), shaOf: new Map(), knownAsked: new Set(), knownOf: new Map(), refused: [],
             current: '', paused: false, lost: false, held: '', heldSeal: false, cancelled: false, finished: false, hidden: false, result: null, resume: null,
-            pauseAsked: false, waits: [],
+            pauseAsked: false, waits: [], closeWait: false, closeFailed: false, unclosed: false, closeSaid: '',
         };
         s.step = 'progress';
         window.addEventListener('beforeunload', onLeave);
@@ -863,20 +881,63 @@ export const batchMethods = uiModule({
         }
         // Closed with what came (cancelled too: what was sent stays and is sorted). Its address turned
         // down meanwhile (a new token, N37): paused like a file, Continue closes it at the new one.
+        // A close that fails is no end (W136): the files may still wait in the bridge's queue — closed
+        // again after the research's `retry`, for a while, then paused; never said done until it passes.
+        let failingSince = 0;
         for (;;) {
             const closed = await this.batchClose(r);
-            if ((closed !== 'down' && closed !== 'held') || r.cancelled) { r.result = closed === 'down' || closed === 'held' ? null : closed; break; }
+            if (closed === 'none') { r.result = null; break; }
+            if (typeof closed === 'object' && !('again' in closed)) { r.result = closed; break; }
+            if (r.cancelled) { r.unclosed = true; break; }
+            if (typeof closed === 'object') {
+                failingSince ||= Date.now();
+                if (!r.pauseAsked && Date.now() - failingSince + closed.again <= CLOSE_RETRY_TOTAL_MS) {
+                    r.closeWait = true;
+                    this.batchSayNotClosed(r, 'soon');
+                    draw(true);
+                    await new Promise<void>(resolve => {
+                        const timer = setTimeout(resolve, closed.again);
+                        r.resume = () => { clearTimeout(timer); resolve(); };
+                    });
+                    r.resume = null;
+                    if (r.cancelled) {
+                        // Cancelled while it waited: one close more (what was sent is closed if it can be), no more waiting.
+                        const last = await this.batchClose(r);
+                        if (typeof last === 'object' && !('again' in last)) { r.result = last; break; }
+                        if (last === 'none') { r.result = null; break; }
+                        r.unclosed = true;
+                        break;
+                    }
+                    // Pause asked while it waited: paused now, Continue closes it again.
+                    if (!r.pauseAsked) continue;
+                }
+                r.closeFailed = true;
+            }
+            r.closeWait = false;
+            r.pauseAsked = false;
             r.paused = true;
             r.lost = closed === 'down';
+            if (r.closeFailed) this.batchSayNotClosed(r, 'continue');
             draw(true);
             wakeRun(r);
             await new Promise<void>(resolve => { r.resume = resolve; });
             r.resume = null;
+            failingSince = 0;
         }
+        r.closeWait = false;
+        r.closeFailed = false;
         r.finished = true;
         // The followed research's changes held while the batch went: its tree read once now.
         this.liveReleaseHeld();
         window.removeEventListener('beforeunload', onLeave);
+        if (r.unclosed) {
+            // Not closed: the batch stays remembered unfinished (the same folder chosen again closes it), no summary.
+            this.closeBatchDialog();
+            this.showToast(`${strings.batch.notClosed(r.name)} ${this.batchCloseWhat(r)}`, 8000, { closable: true });
+            wakeRun(r);
+            this.refreshResearchSyncUi();
+            return;
+        }
         writeUnfinished(r.treeId, null);
         // The Materials window open under it says the batch in its strip and reads the list again (spec 102 §8).
         this.materialsBatchAdded(r.result?.inputs ?? r.received);
@@ -1064,33 +1125,53 @@ export const batchMethods = uiModule({
         }
     },
 
-    /** `POST /batch/<id>/done`: the research closes the batch and makes its tasks ('down': its address turned down). */
-    async batchClose(r: Run): Promise<DoneReply | null | 'down' | 'held'> {
+    /**
+     * `POST /batch/<id>/done`, once: the research closes the batch and makes its tasks. Not closed (W136:
+     * busy, an error, no answer, a reply that is no JSON) is never taken for done — asked again after the
+     * research's `retry`; a 404 `batch.none` (no file of it came) has nothing to close.
+     */
+    async batchClose(r: Run): Promise<CloseOutcome> {
         const body = JSON.stringify({ name: r.name, files: r.received + r.skipped + r.skippedAsked + r.queued.size + r.refused.length,
             ...(r.person ? { person: r.person } : {}), ...(r.note ? { note: r.note } : {}) });
-        for (let attempt = 0; attempt < 4; attempt++) {
-            const headBefore = await this.researchHeadBeforeWrite(r.researchId);
-            try {
-                const res = await fetch(withAppVersion(`${r.base}/batch/${encodeURIComponent(r.id)}/done`), {
-                    method: 'POST', mode: 'cors', credentials: 'omit', cache: 'no-store',
-                    headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body,
-                });
-                if (res.status === 503) { await sleep(retryAfterMs(res.headers.get('Retry-After'))); continue; }
-                if (!res.ok) {
-                    if (this.batchHeld(r, res.status, await res.clone().json().catch(() => null))) return 'held';
-                    return await this.batchAddressGone(r, res.status) ? 'down' : null;
-                }
-                const j = await res.json().catch(() => null) as Record<string, unknown> | null;
-                this.researchTakeOwnWriteHead(r.researchId, headBefore, j?.head, j?.parent);
-                this.batchTakeDoneFiles(r, j?.files);
-                const n = (v: unknown): number => (typeof v === 'number' && v >= 0 ? Math.floor(v) : 0);
-                return j ? { inputs: n(j.inputs), known: n(j.known), refused: n(j.refused), tasks: Array.isArray(j.tasks) ? j.tasks.length : 0,
-                    ...(typeof j.sort === 'boolean' ? { sort: j.sort } : {}), ...(typeof j.auto === 'boolean' ? { auto: j.auto } : {}) } : null;
-            } catch {
-                return null;
-            }
+        const headBefore = await this.researchHeadBeforeWrite(r.researchId);
+        let res: Response;
+        try {
+            res = await fetch(withAppVersion(`${r.base}/batch/${encodeURIComponent(r.id)}/done`), {
+                method: 'POST', mode: 'cors', credentials: 'omit', cache: 'no-store',
+                headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body,
+            });
+        } catch {
+            return { again: CLOSE_RETRY_DEFAULT_MS };
         }
-        return null;
+        const j = await res.json().catch(() => null) as Record<string, unknown> | null;
+        if (!res.ok) {
+            if (this.batchHeld(r, res.status, j)) return 'held';
+            if (res.status === 404 && j?.code === 'batch.none') return 'none';
+            if (await this.batchAddressGone(r, res.status)) return 'down';
+            return { again: batchCloseWaitMs(j, res.headers.get('Retry-After')) };
+        }
+        if (!j || typeof j !== 'object') return { again: CLOSE_RETRY_DEFAULT_MS };
+        this.researchTakeOwnWriteHead(r.researchId, headBefore, j.head, j.parent);
+        this.batchTakeDoneFiles(r, j.files);
+        const n = (v: unknown): number => (typeof v === 'number' && v >= 0 ? Math.floor(v) : 0);
+        return { inputs: n(j.inputs), known: n(j.known), refused: n(j.refused), tasks: Array.isArray(j.tasks) ? j.tasks.length : 0,
+            ...(typeof j.sort === 'boolean' ? { sort: j.sort } : {}), ...(typeof j.auto === 'boolean' ? { auto: j.auto } : {}) };
+    },
+
+    /** What a batch not closed yet means: its files wait in the bridge's queue (media.queued), or they are in and only the close is missing. */
+    batchCloseWhat(r: Run): string {
+        const queued = r.queued.size > 0 || !!this.researchStatusOf(r.researchId)?.features?.includes(MEDIA_QUEUED_FEATURE);
+        return queued ? strings.batch.closeWaitQueued : strings.batch.closeWaitOpen;
+    },
+
+    /** The window hidden: a toast says the batch is not closed yet (once for each state), with Show. */
+    batchSayNotClosed(r: Run, what: 'soon' | 'continue'): void {
+        if (!(r.hidden || !document.getElementById(DIALOG_ID)) || r.closeSaid === what) return;
+        r.closeSaid = what;
+        const b = strings.batch;
+        this.showToast(`${b.notClosed(r.name)} ${this.batchCloseWhat(r)} ${what === 'soon' ? b.closeAgainSoon : b.closeAgainContinue}`, 8000, {
+            closable: true, action: { label: b.show, run: () => { r.hidden = false; this.openBatchOverlay(); this.renderBatchDialog(); } },
+        });
     },
 
     /**
@@ -1133,6 +1214,7 @@ export const batchMethods = uiModule({
         run.paused = false;
         run.pauseAsked = false;
         run.lost = false;
+        run.closeFailed = false;
         run.held = '';
         run.heldSeal = false;
         run.resume?.();
@@ -1191,6 +1273,9 @@ export const batchMethods = uiModule({
             + `<span class="research-sync-line2-text">${esc(text)}</span>${links}</div>`;
         const btn = (label: string, call: string): string =>
             `<button type="button" class="research-sync-link" role="menuitem" onclick="window.Strom.UI.${call}">${esc(label)}</button>`;
+        if (run && !run.finished && run.treeId === link.treeId && (run.closeWait || run.closeFailed)) {
+            return line(b.notClosed(run.name), btn(b.show, 'showBatchDialog()'), run.closeFailed);
+        }
         if (run && !run.finished && run.treeId === link.treeId) {
             return line(`${b.sendingTitle(run.name)} · ${b.sendingSub(run.index, run.total)}`, btn(b.show, 'showBatchDialog()'));
         }

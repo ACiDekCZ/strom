@@ -176,6 +176,29 @@ export const KNOWN_CHUNK_FILES = 200;
 /** …or this many bytes to hash first (so a pause or a cancel is never far away). */
 export const KNOWN_CHUNK_BYTES = 64 * 1024 * 1024;
 
+/** A failed close of a batch is asked again after this long when the research says no `retry`. */
+export const CLOSE_RETRY_DEFAULT_MS = 5000;
+/** One wait between closes is never longer than this, whatever the research says. */
+export const CLOSE_RETRY_MAX_MS = 60_000;
+/** Closes failing this long in a row: no more by itself, the run pauses (Continue closes it again). */
+export const CLOSE_RETRY_TOTAL_MS = 10 * 60_000;
+
+/**
+ * How long to wait before closing a batch again after `batch/<id>/done` failed: the
+ * research's `retry` (seconds) of its JSON body first, then its `Retry-After` header
+ * (seconds; a browser reads it only when the bridge exposes it), else 5 s — between
+ * 1 s and a minute.
+ */
+export function batchCloseWaitMs(body: unknown, retryAfter: string | null | undefined): number {
+    const seconds = (v: unknown): number | null => {
+        const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN;
+        return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    const said = (body && typeof body === 'object' ? seconds((body as Record<string, unknown>).retry) : null) ?? seconds(retryAfter);
+    if (said === null) return CLOSE_RETRY_DEFAULT_MS;
+    return Math.min(CLOSE_RETRY_MAX_MS, Math.max(1000, Math.round(said * 1000)));
+}
+
 /**
  * How a closed batch is sorted (spec 130), said at the end of sending it:
  * - `older`: a research without `intake.auto` sorts every batch by itself, as it always did;

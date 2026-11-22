@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     batchSkip, batchLimitsOf, batchOverLimit, batchEstimate, batchDefaultName, batchTree, batchFolderFiles,
-    batchPathHeader, sanitizeUnfinishedBatch, isZip,
+    batchPathHeader, sanitizeUnfinishedBatch, isZip, batchCloseWaitMs, CLOSE_RETRY_DEFAULT_MS, CLOSE_RETRY_MAX_MS,
 } from '../batch.js';
 
 const MB = 1024 * 1024;
@@ -76,5 +76,20 @@ describe('the name and the list', () => {
         expect(sanitizeUnfinishedBatch({ id: '4f1c0000-aaaa', name: 'Krabice', total: 214, done: 80, bytes: 5, startedAt: 'x' }))
             .toEqual({ id: '4f1c0000-aaaa', name: 'Krabice', total: 214, done: 80, bytes: 5, startedAt: 'x' });
         expect(sanitizeUnfinishedBatch({ id: 'bad id', name: 'x' })).toBeNull();
+    });
+});
+
+describe('the wait before a failed close of a batch is asked again (W136)', () => {
+    it('the research\'s `retry` of its body first, then Retry-After, else 5 s; between 1 s and a minute', () => {
+        expect(batchCloseWaitMs({ retry: 1 }, null)).toBe(1000);
+        expect(batchCloseWaitMs({ retry: 7, code: 'research.busy' }, '30')).toBe(7000);
+        expect(batchCloseWaitMs({ error: 'busy' }, '12')).toBe(12_000);
+        expect(batchCloseWaitMs(null, '3')).toBe(3000);
+        expect(batchCloseWaitMs(null, null)).toBe(CLOSE_RETRY_DEFAULT_MS);
+        expect(batchCloseWaitMs({ retry: 'soon' }, 'Wed, 21 Oct 2026 07:28:00 GMT')).toBe(CLOSE_RETRY_DEFAULT_MS);
+        expect(batchCloseWaitMs({ retry: 0 }, '')).toBe(CLOSE_RETRY_DEFAULT_MS);
+        expect(batchCloseWaitMs({ retry: 0.2 }, null)).toBe(1000);
+        expect(batchCloseWaitMs({ retry: 3600 }, null)).toBe(CLOSE_RETRY_MAX_MS);
+        expect(batchCloseWaitMs({ retry: '2' }, null)).toBe(2000);
     });
 });
