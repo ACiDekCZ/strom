@@ -52,7 +52,8 @@ import { sharedEventMarkSvg } from '../../icons.js';
 import { pinSvg } from './table-pins.js';
 import { branchSignsHtml } from '../../branch-sign.js';
 import { imgStateAttr, waitingTileHtml } from '../image-slot.js';
-import { BRANCH_MARKERS, type BranchMarker } from '../../types.js';
+import { type BranchMarker } from '../../types.js';
+import { BRANCH_MARKERS } from '../../model-values.js';
 
 export interface GridInput {
     model: TableModel;

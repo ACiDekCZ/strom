@@ -15,7 +15,8 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
-import { PersonId, StromData, TreeId, LAST_FOCUSED } from '../types.js';
+import { PersonId, StromData, TreeId } from '../types.js';
+import { LAST_FOCUSED } from '../model-values.js';
 import {
     decomposeIntoFamilies, seedIdsFor, bestRenderFocus, perspectiveCutCandidates,
     FamilyComponent, SplitMode,

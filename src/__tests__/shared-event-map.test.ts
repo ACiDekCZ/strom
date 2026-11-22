@@ -14,7 +14,9 @@ import { collectDatedPlacePoints, datedRowCount } from '../map-time.js';
 import { buildSharedEventIndex } from '../shared-events.js';
 import { sharedIndexOf, sharedNames } from '../shared-with-line.js';
 import { applyLivingPrivacy } from '../privacy.js';
-import { LifeEvent, Person, PersonId, StromData, STROM_DATA_VERSION, toPersonId } from '../types.js';
+import { LifeEvent, Person, PersonId, StromData } from '../types.js';
+import { toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const PLACE = 'Dolní Smyšlenice';
 const KEY = 'dolni smyslenice';

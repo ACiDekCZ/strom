@@ -5,7 +5,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { computeEvidenceGaps } from '../stats.js';
-import { StromData, Person, PersonId, PartnershipId, toPersonId, toPartnershipId } from '../types.js';
+import { StromData, Person, PersonId, PartnershipId } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
 
 const id = (s: string): PersonId => toPersonId(s);
 

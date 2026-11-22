@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { STROM_DATA_VERSION, StromData, Person, PersonId, Partnership, PartnershipId } from '../types.js';
+import { StromData, Person, PersonId, Partnership, PartnershipId } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import type { ReadEntry, ReadPerson } from '../research-read.js';
 import {
     initialPropose, proposeItems, proposeCounts, linkAdditions, carryPropose, readGender, eventPrincipals,

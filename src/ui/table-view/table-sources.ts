@@ -11,7 +11,8 @@
  * count; a story's sources are not a fact's.
  */
 
-import { PARTNERSHIP_CITATION_FIELDS, PERSON_CITATION_FIELDS, type Partnership, type Person, type Source, type StromData } from '../../types.js';
+import { type Partnership, type Person, type Source, type StromData } from '../../types.js';
+import { PARTNERSHIP_CITATION_FIELDS, PERSON_CITATION_FIELDS } from '../../model-values.js';
 import type { SourceRow } from './table-model.js';
 import { safeWebUrl } from '../../validation.js';
 import { orderedCitations, shownCitationOrder, shownCitationsOn } from '../../citation-order.js';

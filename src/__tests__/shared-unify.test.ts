@@ -22,7 +22,9 @@ import { sharedDraftFor, sharedEditFrom } from '../shared-event-editor.js';
 import { divergentPersons, editorDivergence, unifyDefaults, unifyModel, unifyValues } from '../shared-divergence.js';
 import { buildTableModel } from '../ui/table-view/table-model.js';
 import { buildCheckIndex, issueTargets } from '../ui/table-view/table-checks.js';
-import { STROM_DATA_VERSION, toPersonId, type LifeEvent, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { type LifeEvent, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const TREE = 'shared-unify' as TreeId;
 const HOSTIVIT = toPersonId('p_hostivit');

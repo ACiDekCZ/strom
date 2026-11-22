@@ -29,8 +29,10 @@ import { buildFamilyBook } from '../book.js';
 import { PRIMARY_NAME_TAG } from '../gedcom-names.js';
 import { setLanguage } from '../strings.js';
 import {
-    Person, PrimaryName, StromData, SurnameDisplay, TreeId, toPersonId, toPartnershipId, isPrimaryName, mergedPrimaryName,
+    Person, PrimaryName, StromData, SurnameDisplay, TreeId, 
 } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
+import { isPrimaryName, mergedPrimaryName } from '../model-values.js';
 
 const fixture = (name: string): string =>
     readFileSync(new URL(`../../e2e/fixtures/research-primary-${name}.ged`, import.meta.url), 'utf8');

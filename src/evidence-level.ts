@@ -12,7 +12,8 @@
  * rules (src/stats.ts).
  */
 
-import { Partnership, Person, PersonId, StromData, personSourceIds, partnershipSourceIds } from './types.js';
+import { Partnership, Person, PersonId, StromData } from './types.js';
+import { personSourceIds, partnershipSourceIds } from './model-values.js';
 
 export type EvidenceLevel = 'none' | 'partial' | 'full';
 

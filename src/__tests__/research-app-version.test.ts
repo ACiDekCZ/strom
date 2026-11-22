@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { withAppVersion } from '../research-link.js';
-import { APP_VERSION } from '../types.js';
+import { APP_VERSION } from '../version.js';
 
 const BASE = 'http://127.0.0.1:5998/0123456789abcdef0123456789abcdef';
 

@@ -5,7 +5,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { DataManager } from '../data.js';
 import { recordDateOfFile, citeEventPlaces, preselectCitePlace } from '../ui/source-docs-ui.js';
-import { Person, StromData, toPartnershipId, toPersonId } from '../types.js';
+import { Person, StromData } from '../types.js';
+import { toPartnershipId, toPersonId } from '../ids.js';
 
 const P = toPersonId('p_hostivit');
 const Q = toPersonId('p_borislava');

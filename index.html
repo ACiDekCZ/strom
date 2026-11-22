@@ -15781,7 +15781,7 @@
            shown de-emphasized so the blood line stays dominant. */
         .person-card.indirect { opacity: 0.5; }
 
-        /* ---- Card density (A8). Box sizes MUST match CARD_SIZE in types.ts,
+        /* ---- Card density (A8). Box sizes MUST match CARD_SIZE in layout-config.ts,
            the layout engine spaces cards from those numbers. ---- */
         /* Compact: names only — no avatar, no meta row — so the card is shorter
            and narrower and the name centres in the whole box. */
@@ -17052,7 +17052,7 @@
            its shape; the settings' preview card carries its own (data-photo, data-shape). With
            small + circle (the default) no rule here applies. Every card with an avatar
            (.has-avatar: a photo or the initials, spec 103 K2.1) takes the size; a placeholder has
-           none. Box sizes MUST match NORMAL_PHOTO_BOX in types.ts: medium 200 × 64 (avatar 48,
+           none. Box sizes MUST match NORMAL_PHOTO_BOX in layout-config.ts: medium 200 × 64 (avatar 48,
            padding 8), large 236 × 96 (avatar 80, padding 10; its height inline,
            LayoutConfig.personHeights). The text column beside the avatar stays 126px
            (src/card-width.ts normalCardTextWidth). ---- */

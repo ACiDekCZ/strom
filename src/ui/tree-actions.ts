@@ -13,7 +13,8 @@
 
 import { researchOpenMark, researchOpenSrHtml } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
-import { TreeId, LAST_FOCUSED } from '../types.js';
+import { TreeId } from '../types.js';
+import { LAST_FOCUSED } from '../model-values.js';
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { DataManager } from '../data.js';

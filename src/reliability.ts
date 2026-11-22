@@ -24,7 +24,7 @@
 import type {
     CoupleEvent, LifeEvent, FactPart, FactStatus, FactOriginKind, ImportRecord, Partnership, Person, ResearchFactOrigin, ResearchFactWas, StromData,
 } from './types.js';
-import { personSourceIds } from './types.js';
+import { personSourceIds } from './model-values.js';
 import { CitationHolder, citationQuality } from './citation-quality.js';
 import {
     FactHolder, factImportParts, factParts, factsOf, factValue, importRecordOf, isPartnership,

@@ -32,7 +32,8 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { LAST_FOCUSED, Person, PersonId, StromData, TreeId } from '../types.js';
+import { Person, PersonId, StromData, TreeId } from '../types.js';
+import { LAST_FOCUSED } from '../model-values.js';
 import {
     validateTreeData, translateValidationType, groupValidationIssues, validationCounts, ValidationResult, ValidationIssue,
 } from '../validation.js';
@@ -45,7 +46,7 @@ import {
     DeathAgeSummary, PeriodMedian, GenerationChildren, Rememberer, rememberers, remembererGaps, remembererDeathGaps,
     researchCertainty, ResearchCertainty, CertaintyCounts, percentNumber,
 } from '../tree-overview.js';
-import { FACT_STATUSES } from '../types.js';
+import { FACT_STATUSES } from '../model-values.js';
 import { factStatusLabel } from './fact-status.js';
 import { computeFamilyStats, computeCompleteness, computeEvidenceGaps, EvidenceKind, FamilyStats, Completeness } from '../stats.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';

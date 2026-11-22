@@ -7,7 +7,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Source, StromData, STROM_DATA_VERSION } from '../types.js';
+import { Source, StromData } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {

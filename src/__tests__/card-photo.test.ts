@@ -16,7 +16,8 @@ import {
     cardAvatarSize, cardHeadBlock, cardLinesTop, customCardHeight, customCardViewHeight, customCardMetrics, customCardRows,
     customCardSpouseLineY, CustomCardEntry, CARD_AVATAR_SIZE, avatarInitialsSize,
 } from '../card-width.js';
-import { CARD_SIZE, NORMAL_PHOTO_BOX, DEFAULT_LAYOUT_CONFIG, layoutConfigFor, PersonId } from '../types.js';
+import { PersonId } from '../types.js';
+import { CARD_SIZE, NORMAL_PHOTO_BOX, DEFAULT_LAYOUT_CONFIG, layoutConfigFor } from '../layout-config.js';
 import { SettingsManager } from '../settings.js';
 import { runLayoutPipeline } from '../layout/pipeline/index.js';
 import { loadFixture } from '../layout/__tests__/helpers/loadFixture.js';

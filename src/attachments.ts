@@ -5,7 +5,8 @@
  * inline so they travel with the single-file export.
  */
 
-import { Person, StromData, personSourceIds, partnershipSourceIds } from './types.js';
+import { Person, StromData } from './types.js';
+import { personSourceIds, partnershipSourceIds } from './model-values.js';
 import { dataUrlByteSize, dataUrlImageSize, stripPhotos } from './photo.js';
 import { allMedia, personMedia as personMediaOf } from './media.js';
 import { pendingImageOf } from './research-image-refs.js';

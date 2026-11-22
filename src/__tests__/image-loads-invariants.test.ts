@@ -62,7 +62,9 @@ import {
 } from '../image-loads.js';
 import { pendingImageUrl, sha256Hex, type ImageFetchDeps } from '../research-image-refs.js';
 import { imageBySha } from '../renderer.js';
-import { STROM_DATA_VERSION, toPersonId, type StromData, type TreeId, type TreeMetadata } from '../types.js';
+import { type StromData, type TreeId, type TreeMetadata } from '../types.js';
+import { toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 /** A small JPEG; `salt` makes its bytes (and hash) its own. */
 function jpeg(width: number, height: number, salt: number): Buffer {

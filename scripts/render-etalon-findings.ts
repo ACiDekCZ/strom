@@ -11,7 +11,8 @@ import { join } from 'path';
 import { loadFixture } from '../src/layout/__tests__/helpers/loadFixture.js';
 import { generateSvg } from '../src/layout/__tests__/helpers/generateSvg.js';
 import { runLayoutPipeline } from '../src/layout/pipeline/index.js';
-import { PersonId, DEFAULT_LAYOUT_CONFIG } from '../src/types.js';
+import { PersonId } from '../src/types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../src/layout-config.js';
 
 interface Finding {
     fixture: string;

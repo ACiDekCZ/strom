@@ -23,7 +23,8 @@ import { measureSubtrees } from '../pipeline/4-measure.js';
 import { DisplayPolicy, FamilyBlockModel } from '../pipeline/types.js';
 import { assertNoNodeOverlap, assertValidPositions } from './helpers/assertions.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
-import { Person, PersonId, PartnershipId, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { Person, PersonId, PartnershipId, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 
 const config = DEFAULT_LAYOUT_CONFIG;
 const data = loadFixture('t5b_wife_of_father_and_son');

@@ -13,7 +13,8 @@ import { describe, it, expect } from 'vitest';
 import { runLayoutPipeline } from '../pipeline/index.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
 import { parseGedcom, convertToStrom } from '../../ged-parser.js';
-import { DEFAULT_LAYOUT_CONFIG, PersonId, PartnershipId, Person, StromData } from '../../types.js';
+import { PersonId, PartnershipId, Person, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 import type { LayoutResult, Connection } from '../pipeline/types.js';
 
 const W = DEFAULT_LAYOUT_CONFIG.cardWidth;

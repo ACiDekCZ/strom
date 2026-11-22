@@ -39,7 +39,8 @@ import { runLayoutPipeline, planShownChildrenFolding } from '../pipeline/index.j
 import { assertNoNodeOverlap, assertValidPositions } from './helpers/assertions.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
 import { auditBands, syntheticPersonHeights } from './helpers/bandAudit.js';
-import { PersonId, LayoutConfig, DEFAULT_LAYOUT_CONFIG, StromData } from '../../types.js';
+import { PersonId, LayoutConfig, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 import type { LayoutResult } from '../pipeline/types.js';
 import { normalizeSingleParents } from '../../single-parent.js';
 import { hiddenChildIds, marriagesInOrder } from '../../marriage-order.js';

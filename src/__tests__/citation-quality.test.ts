@@ -28,7 +28,8 @@ import {
     citationQuality, setCitationQuality, unionCitations, remapCitations, cleanTreeCitationQuay,
     qualityOnlySources, joinQualityOnlySources,
 } from '../citation-quality.js';
-import { StromData, Person, Source, TreeId, LifeEvent, STROM_DATA_VERSION } from '../types.js';
+import { StromData, Person, Source, TreeId, LifeEvent } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 // ---------- fixtures ----------
 

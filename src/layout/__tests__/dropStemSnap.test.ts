@@ -11,7 +11,8 @@ import { describe, it, expect } from 'vitest';
 import { loadFixture } from './helpers/loadFixture.js';
 import { runLayoutPipeline } from '../pipeline/index.js';
 import { DROP_STEM_SNAP } from '../pipeline/7-route-edges.js';
-import { DEFAULT_LAYOUT_CONFIG, PersonId, PartnershipId, Person, Partnership, Gender, StromData } from '../../types.js';
+import { PersonId, PartnershipId, Person, Partnership, Gender, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 
 describe('stem and drop in one axis (T09)', () => {
     const data = loadFixture('edge-ancestor-span');

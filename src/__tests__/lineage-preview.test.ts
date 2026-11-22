@@ -7,7 +7,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { buildLineages, previewOverride, rodOf, PreviewLine } from '../lineage.js';
 import { lineagePreviewTexts } from '../lineage-preview.js';
 import { setLanguage } from '../strings.js';
-import { Person, PersonId, StromData, STROM_DATA_VERSION } from '../types.js';
+import { Person, PersonId, StromData } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 type Sex = 'male' | 'female';
 const P = (id: string): PersonId => id as PersonId;

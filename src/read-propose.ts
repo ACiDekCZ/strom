@@ -7,7 +7,7 @@
  * writes); the dialog draws from them and writes on the click.
  */
 
-import { gendersCompatible } from './types.js';
+import { gendersCompatible } from './model-values.js';
 import type { Gender, LifeEvent, LifeEventType, Person, PersonId, StromData, Partnership, PartnershipId, Source } from './types.js';
 import type { ReadEntry, ReadEvent, ReadPerson, ReadVariant } from './research-read.js';
 import { researchPersonRef } from './research-link.js';

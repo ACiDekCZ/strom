@@ -9,7 +9,8 @@
  * person's lineage is not mentioned under initials or hidden names (§3.4).
  */
 
-import { Partnership, PartnershipId, Person, PersonId, Source, StromData, Story, personSourceIds } from './types.js';
+import { Partnership, PartnershipId, Person, PersonId, Source, StromData, Story } from './types.js';
+import { personSourceIds } from './model-values.js';
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang } from './strings.js';
 import { sourceEntryText, sourcePlaceParts } from './source-location.js';

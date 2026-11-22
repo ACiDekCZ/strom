@@ -12,7 +12,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { PersonId, DEFAULT_LAYOUT_CONFIG, FamilyTreeData } from '../src/types.js';
+import { PersonId, FamilyTreeData } from '../src/types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../src/layout-config.js';
 import { selectSubgraph } from '../src/layout/pipeline/1-select-subgraph.js';
 import { buildLayoutModel } from '../src/layout/pipeline/2-build-model.js';
 import { assignGenerations } from '../src/layout/pipeline/3-assign-generations.js';

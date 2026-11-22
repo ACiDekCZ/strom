@@ -10,7 +10,8 @@
  * the X placement and the bus lanes are unchanged.
  */
 
-import { LayoutConfig, PersonId, personCardHeight } from '../../../types.js';
+import { LayoutConfig, PersonId } from '../../../types.js';
+import { personCardHeight } from '../../../layout-config.js';
 import type { LayoutResult } from '../../pipeline/types.js';
 
 const EPS = 0.01;

@@ -11,7 +11,8 @@ import { describe, it, expect } from 'vitest';
 import { DESCRIPTIONS, NO_NAME, noName, notAName, parseName, readGedcomName } from '../gedcom-names.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
-import { APP_VERSION, Person, StromData } from '../types.js';
+import { Person, StromData } from '../types.js';
+import { APP_VERSION } from '../version.js';
 import { appUnknownIsNoSurname, compareAppVersions, isAppVersion } from '../app-version.js';
 
 const importGed = (ged: string): StromData => convertToStrom(parseGedcom(ged)).data;

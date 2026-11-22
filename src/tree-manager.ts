@@ -15,12 +15,12 @@ import {
     PartnershipId,
     Person,
     Partnership,
-    generateTreeId,
-    uniqueIdSuffix,
-    LAST_FOCUSED,
+    
     LastFocusedMarker,
-    STROM_DATA_VERSION
 } from './types.js';
+import { generateTreeId, uniqueIdSuffix } from './ids.js';
+import { LAST_FOCUSED } from './model-values.js';
+import { STROM_DATA_VERSION } from './version.js';
 import { strings } from './strings.js';
 import { isEncrypted, EncryptedData, CryptoSession, decrypt, classifyCryptoError, CryptoFailure } from './crypto.js';
 import { SettingsManager } from './settings.js';

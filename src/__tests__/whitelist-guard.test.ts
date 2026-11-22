@@ -36,8 +36,10 @@ import { extractSubtree } from '../subtree.js';
 import { decomposeIntoFamilies, seedIdsFor } from '../split-families.js';
 import {
     StromData, Person, Partnership, PersonId, PartnershipId, TreeId,
-    toPersonId, toPartnershipId, LAST_FOCUSED, STROM_DATA_VERSION,
 } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
+import { LAST_FOCUSED } from '../model-values.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const ALICE = toPersonId('p_alice');
 const BOB = toPersonId('p_bob');

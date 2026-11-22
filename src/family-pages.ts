@@ -12,7 +12,8 @@
  */
 
 import { personMedia, personMediaCount } from './media.js';
-import { Partnership, PartnershipId, Person, PersonId, StromData, personSourceIds } from './types.js';
+import { Partnership, PartnershipId, Person, PersonId, StromData } from './types.js';
+import { personSourceIds } from './model-values.js';
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang, Language } from './strings.js';
 import { yearOf } from './dates.js';

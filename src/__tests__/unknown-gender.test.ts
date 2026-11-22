@@ -14,8 +14,10 @@ import { detectConflicts, quickMatchScore } from '../merge/matching.js';
 import { mergePersonData } from '../merge/executor.js';
 import { normalizeSingleParents } from '../single-parent.js';
 import {
-    StromData, Person, PersonId, STROM_DATA_VERSION, oppositeGender, coupleSides, parentSlots, gendersCompatible, isGender,
+    StromData, Person, PersonId, 
 } from '../types.js';
+import { oppositeGender, coupleSides, parentSlots, gendersCompatible, isGender } from '../model-values.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 function person(id: string, gender: unknown, extra: Partial<Person> = {}): Person {
     return {

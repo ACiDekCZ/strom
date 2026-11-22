@@ -14,7 +14,8 @@
  * decides how much text fits; sizes in the SVG are px / ppu.
  */
 
-import { StromData, Person, PersonId, ParentChildRelType, parentSlots } from './types.js';
+import { StromData, Person, PersonId, ParentChildRelType } from './types.js';
+import { parentSlots } from './model-values.js';
 import { dateSortKey } from './dates.js';
 import { shownName, shownNameFull } from './person-name.js';
 import { strings } from './strings.js';

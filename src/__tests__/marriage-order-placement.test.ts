@@ -23,7 +23,8 @@ import { measureUnionOrderPill, measureTabRows, rowKey } from '../union-order-me
 import { StromLayoutEngine, computeLayout } from '../layout/index.js';
 import { loadFixture } from '../layout/__tests__/helpers/loadFixture.js';
 import { setLanguage, strings, Language } from '../strings.js';
-import { StromData, Person, PersonId, PartnershipId, Partnership, DEFAULT_LAYOUT_CONFIG, LayoutConfig } from '../types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, LayoutConfig } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../layout-config.js';
 
 const P = (id: string) => id as PersonId;
 

@@ -10,7 +10,8 @@
  * so the result is internally consistent and passes validation.
  */
 
-import { StromData, Person, PersonId, Partnership, PartnershipId, EventParticipant, personSourceIds, partnershipSourceIds } from './types.js';
+import { StromData, Person, PersonId, Partnership, PartnershipId, EventParticipant } from './types.js';
+import { personSourceIds, partnershipSourceIds } from './model-values.js';
 import { placeKey } from './places.js';
 import { allMedia, mediaSourceIds, placePartnershipId, placePersonId, pruneMedia } from './media.js';
 import { dismissalsWithin } from './quality-dismiss.js';

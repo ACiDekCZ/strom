@@ -10,7 +10,8 @@
 import { describe, it, expect } from 'vitest';
 import { runLayoutPipeline } from '../pipeline/index.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
-import { DEFAULT_LAYOUT_CONFIG, Person, PersonId, PartnershipId, StromData } from '../../types.js';
+import { Person, PersonId, PartnershipId, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 import { normalizeSingleParents } from '../../single-parent.js';
 
 function tree(): StromData {

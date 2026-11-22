@@ -9,7 +9,7 @@
  */
 
 import type { EventParticipant, LifeEvent, LifeEventType, ParticipantRole, Partnership, Person, PersonId } from '../../types.js';
-import { parentSlots, partnershipSourceIds, personSourceIds } from '../../types.js';
+import { parentSlots, partnershipSourceIds, personSourceIds } from '../../model-values.js';
 import { ageRangeBetween, approxAgeBetween, flexDateParts, parseFlexDate, type DateQualifier } from '../../dates.js';
 import { recordedAgeGap } from '../../recorded-age.js';
 import { shownNameOrEmpty } from '../../person-name.js';

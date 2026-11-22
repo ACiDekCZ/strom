@@ -25,8 +25,8 @@ import { stripAttachments } from '../attachments.js';
 import { personMedia, mediaSourceId } from '../media.js';
 import {
     StromData, Person, Partnership, PersonId, PartnershipId,
-    toPersonId, toPartnershipId,
 } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
 
 const ALICE = toPersonId('p_alice');
 const BOB = toPersonId('p_bob');

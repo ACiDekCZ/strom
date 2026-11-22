@@ -8,7 +8,8 @@ import {
     posterPngScales, PNG_SAFE_SIDE_PX, PNG_MAX_SIDE_PX, PNG_FIREFOX_SIDE_PX, PNG_MAX_AREA_PX, PNG_MIN_SCALE,
 } from '../export-image.js';
 import type { BranchSet } from '../branch-colors.js';
-import { StromData, Person, PersonId, PartnershipId, Position, DEFAULT_LAYOUT_CONFIG } from '../types.js';
+import { StromData, Person, PersonId, PartnershipId, Position } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../layout-config.js';
 import { MeasureTexts, normalCardHeights, cardNameMaxRows } from '../card-width.js';
 import type { CardValueLines } from '../card-fields.js';
 

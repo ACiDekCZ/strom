@@ -10,7 +10,9 @@ import {
 } from '../shared-with-line.js';
 import { buildSharedEventIndex } from '../shared-events.js';
 import { applyLivingPrivacy, PrivacyMode } from '../privacy.js';
-import { LifeEvent, Person, PersonId, StromData, STROM_DATA_VERSION, toPersonId } from '../types.js';
+import { LifeEvent, Person, PersonId, StromData } from '../types.js';
+import { toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const SHARE = 'sh_census1921';
 

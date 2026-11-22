@@ -23,9 +23,9 @@ import {
     RelationContext,
     StromData,
     TreeId,
-    LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
+import { LAST_FOCUSED } from '../model-values.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatFileSize, formatRelativeDateTime } from '../format.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';

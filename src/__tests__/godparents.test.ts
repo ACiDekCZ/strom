@@ -10,8 +10,8 @@ import { describe, it, expect } from 'vitest';
 import { recurringParticipants, godparentLeads } from '../godparents.js';
 import {
     StromData, Person, PersonId, PartnershipId, EventParticipant,
-    toPersonId, toPartnershipId,
 } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
 
 function person(id: string, firstName: string, lastName: string): Person {
     return {

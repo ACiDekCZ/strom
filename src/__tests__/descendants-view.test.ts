@@ -7,7 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import { runLayoutPipeline } from '../layout/pipeline/index.js';
 import { getDemoTree } from '../demo-tree.js';
-import { DEFAULT_LAYOUT_CONFIG, StromData, PersonId } from '../types.js';
+import { StromData, PersonId } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../layout-config.js';
 
 /** All descendants of a person (transitive childIds), excluding the person. */
 function descendantsOf(data: StromData, rootId: PersonId): Set<PersonId> {

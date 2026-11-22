@@ -20,7 +20,9 @@ import { UndoManager } from '../undo.js';
 import { setLanguage } from '../strings.js';
 import { findSeparateSameEvents, shareCopiesOf, shareDivergence } from '../shared-events.js';
 import { validateTreeData } from '../validation.js';
-import { STROM_DATA_VERSION, toPersonId, type LifeEvent, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { type LifeEvent, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const TREE = 'shared-quality-join' as TreeId;
 const DOBROSLAV = toPersonId('p_dobroslav');

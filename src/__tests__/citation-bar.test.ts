@@ -13,7 +13,8 @@ import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { CiteBarGates, citeBar, citeBarHtml, citeMainToast, resetUnciteWarned, unciteToast } from '../citation-bar.js';
 import { setLanguage, strings } from '../strings.js';
-import { Person, Source, StromData, TreeId, toPartnershipId, toPersonId } from '../types.js';
+import { Person, Source, StromData, TreeId } from '../types.js';
+import { toPartnershipId, toPersonId } from '../ids.js';
 
 const TREE = 'citation-bar-tree' as TreeId;
 const P = toPersonId('p_dobroslav');

@@ -11,7 +11,8 @@
  */
 
 import { strings } from '../strings.js';
-import { StromData, LifeEventType, isGender } from '../types.js';
+import { StromData, LifeEventType } from '../types.js';
+import { isGender } from '../model-values.js';
 import { diffValues, ValueChange } from '../research-changes.js';
 import { formatFlexDate } from '../dates.js';
 import { diffLines } from '../line-diff.js';

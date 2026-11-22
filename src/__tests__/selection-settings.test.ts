@@ -6,7 +6,8 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SettingsManager, migrateMapScopeByTree, migrateRodByTree } from '../settings.js';
-import { SETTINGS_KEY, type AppSettings } from '../types.js';
+import { type AppSettings } from '../types.js';
+import { SETTINGS_KEY } from '../model-values.js';
 import type { RodId } from '../lineage.js';
 
 const rod = (id: string) => id as RodId;

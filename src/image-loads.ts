@@ -20,7 +20,7 @@
  */
 
 import type { Attachment, MediaPlace, PartnershipId, PersonId, PortraitSource, SourceExcerpt, StromData } from './types.js';
-import { personSourceIds } from './types.js';
+import { personSourceIds } from './model-values.js';
 import {
     IMAGE_BATCH, IMAGE_CONCURRENCY, ImageBatchFailed, fetchImageBatch, isPendingImageUrl, pendingImageOf, pendingImageUrl,
     type ImageFailReason, type ImageFetchDeps, type ImageRef,

@@ -9,7 +9,8 @@ import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnE
 import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, besideTop, bubbleBox, touchBubbleBox, touchBubbleBounds, touchBubbleSide, BUBBLE_WINDOW_MARGIN, BUBBLE_LOW_WINDOW_NAMES, bubbleNameCounts, bubbleNamesToFit, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
 import { branchTabKind, branchTabsInOrder } from '../marriage-order.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
-import { PersonId, PartnershipId, Person, StromData, DEFAULT_LAYOUT_CONFIG } from '../types.js';
+import { PersonId, PartnershipId, Person, StromData } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../layout-config.js';
 import { runLayoutPipeline } from '../layout/pipeline/index.js';
 import { loadFixture } from '../layout/__tests__/helpers/loadFixture.js';
 

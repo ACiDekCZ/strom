@@ -16,8 +16,9 @@ import { auditGeometry } from './helpers/geometryAudit.js';
 import { auditBands } from './helpers/bandAudit.js';
 import { assertNoNodeOverlap, assertValidPositions } from './helpers/assertions.js';
 import {
-    StromData, Person, Partnership, PersonId, PartnershipId, Gender, LayoutConfig, DEFAULT_LAYOUT_CONFIG,
+    StromData, Person, Partnership, PersonId, PartnershipId, Gender, LayoutConfig, 
 } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 import type { LayoutResult, Connection } from '../pipeline/types.js';
 
 function build(): StromData {

@@ -9,7 +9,8 @@
  * lanes grows instead (LayoutResult.gapExtra).
  */
 
-import { LayoutConfig, personCardHeight } from '../../../types.js';
+import { LayoutConfig } from '../../../types.js';
+import { personCardHeight } from '../../../layout-config.js';
 import type { LayoutResult } from '../../pipeline/types.js';
 
 /** Runs closer than `min` px to the top or bottom edge of a card under or over them. */

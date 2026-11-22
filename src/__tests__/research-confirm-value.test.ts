@@ -21,7 +21,9 @@ import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { loadResearchCopy } from '../research-copy.js';
-import { StromData, Person, Partnership, PersonId, PartnershipId, TreeId, toPersonId, toPartnershipId, STROM_DATA_VERSION } from '../types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, TreeId } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import {
     factVerifyInfo, factValueSignature, handedConfirmations, confirmationEdits, researchConfirmation,
     fillResearchConfirmedValues, hasUnvaluedResearchConfirmations,

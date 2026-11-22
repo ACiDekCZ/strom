@@ -9,7 +9,9 @@
  */
 
 import { keepPersonListData } from './person-lists-data.js';
-import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName, PlaceRecordBy, LifeEvent, EventRoleAt, PortraitSource, Attachment, MediaPlace } from './types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, PlaceRecordBy, LifeEvent, EventRoleAt, PortraitSource, Attachment, MediaPlace } from './types.js';
+import { isPrimaryName } from './model-values.js';
+import { APP_VERSION } from './version.js';
 import { allMedia, isPersonPlace, personMedia, personMediaIndex, placePersonId, samePlace } from './media.js';
 import { eventIsShareable, eventValueIsOnTag } from './events.js';
 import { SUPPORTED_LANGUAGES, getStringsForLang } from './strings.js';

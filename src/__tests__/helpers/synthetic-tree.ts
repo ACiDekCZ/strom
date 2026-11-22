@@ -9,8 +9,9 @@
  */
 
 import {
-    StromData, Person, PersonId, PartnershipId, Partnership, toPersonId, toPartnershipId,
+    StromData, Person, PersonId, PartnershipId, Partnership, 
 } from '../../types.js';
+import { toPersonId, toPartnershipId } from '../../ids.js';
 
 export interface SyntheticOptions {
     /** Stop after this many persons (default 5000). */

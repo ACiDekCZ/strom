@@ -20,7 +20,8 @@
  *   the order the highlight's "Next ›" walks (src/ui/evidence-ui.ts).
  */
 
-import { StromData, Person, PersonId, Partnership, parentSlots, FactStatus, FACT_STATUSES } from './types.js';
+import { StromData, Person, PersonId, Partnership, FactStatus } from './types.js';
+import { parentSlots, FACT_STATUSES } from './model-values.js';
 import { parseFlexDate, ageBetween, ageRangeBetween, toCanonical, yearOf } from './dates.js';
 import { assignGenerations } from './generations.js';
 import { personEvidence, unionsByPerson } from './evidence-level.js';

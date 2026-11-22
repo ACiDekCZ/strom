@@ -25,7 +25,9 @@
 import { allMedia, mediaSourceIds, personMediaIndex, placeKey as mediaPlaceKey, placePartnershipId, treeMedia } from './media.js';
 import { researchHeaderLines, ResearchHeaderInfo, TitlesInGedcom } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
-import { APP_VERSION, StromData, Person, Partnership, CoupleEvent, EventParticipant, Source, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, MaterialKind, MediaPlace, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas, coupleSides } from './types.js';
+import { StromData, Person, Partnership, CoupleEvent, EventParticipant, Source, PersonId, OriginalIds, PartnershipId, LifeEventType, LifeEvent, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, MaterialKind, MediaPlace, AlsoChildOf, FactStatus, ResearchFactOrigin, ResearchFactWas } from './types.js';
+import { coupleSides } from './model-values.js';
+import { APP_VERSION } from './version.js';
 import { normalizeSha256 } from './sha256.js';
 import { sourceReadState } from './source-confirm.js';
 import { regionHeader, regionToStored } from './originals.js';

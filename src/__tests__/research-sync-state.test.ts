@@ -13,7 +13,8 @@ import {
 } from '../research-sync.js';
 import { getStringsForLang } from '../strings.js';
 import { sanitizeAccepts, sanitizeInbox, sanitizeLiveStatus, researchHeaderLines, stabilizeIds, sanitizeSyncReply } from '../research-link.js';
-import { ResearchLink, ResearchSend, Source, StromData, STROM_DATA_VERSION } from '../types.js';
+import { ResearchLink, ResearchSend, Source, StromData } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 

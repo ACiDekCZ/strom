@@ -9,7 +9,8 @@
 import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
-import { coupleSides, StromData, Person } from '../types.js';
+import { StromData, Person } from '../types.js';
+import { coupleSides } from '../model-values.js';
 
 function ged(indis: [string, string, string | null][], fam: string[]): string {
     return [

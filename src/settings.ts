@@ -4,7 +4,9 @@
  */
 
 import { personMediaCount } from './media.js';
-import { AppSettings, BranchMarker, BRANCH_MARKERS, ThemeMode, SurnameDisplay, SURNAME_DISPLAYS, LanguageSetting, CardDensity, TreeSpacing, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE, CardPhotoSize, CardPhotoShape, NORMAL_PHOTO_BOX } from './types.js';
+import { AppSettings, BranchMarker, ThemeMode, SurnameDisplay, LanguageSetting, CardDensity, TreeSpacing, StromData, CardPhotoSize, CardPhotoShape } from './types.js';
+import { CARD_SIZE, NORMAL_PHOTO_BOX } from './layout-config.js';
+import { BRANCH_MARKERS, SURNAME_DISPLAYS, SETTINGS_KEY, personSourceIds } from './model-values.js';
 import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields, normalizeCardPhoto } from './card-fields.js';
 import { initLanguage, Language } from './strings.js';
 import { MapKind, MAP_KINDS, isMapKind, readPlacesSort, type PlacesSort } from './places.js';

@@ -10,7 +10,8 @@ import { diffValues, placeNumberAdded } from '../research-changes.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { stabilizeIds } from '../research-link.js';
 import { setLanguage, getStringsForLang } from '../strings.js';
-import { STROM_DATA_VERSION, type Source, type StromData } from '../types.js';
+import { type Source, type StromData } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 beforeAll(() => setLanguage('cs'));
 

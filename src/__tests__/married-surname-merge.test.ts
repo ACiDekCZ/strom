@@ -11,7 +11,8 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { createMergeState, detectConflicts, updateConflictResolution } from '../merge/matching.js';
 import { executeMerge, isEffectivelyConfirmed, mergePersonData } from '../merge/executor.js';
 import { StorageManager } from '../storage.js';
-import { Person, PersonId, StromData, toPersonId } from '../types.js';
+import { Person, PersonId, StromData } from '../types.js';
+import { toPersonId } from '../ids.js';
 
 /** A MyHeritage-style export: NAME with the birth surname, GIVN, SURN and _MARNM. */
 const MH_GED = [

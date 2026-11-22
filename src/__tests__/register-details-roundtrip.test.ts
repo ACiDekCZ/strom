@@ -13,7 +13,9 @@ import { exportToGedcom } from '../ged-exporter.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { validateTreeData } from '../validation.js';
 import { applyLivingPrivacy, stripResearchWork } from '../privacy.js';
-import { StromData, Person, Partnership, toPersonId, toPartnershipId, STROM_DATA_VERSION } from '../types.js';
+import { StromData, Person, Partnership } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const JAN = toPersonId('p_jan');
 const ANNA = toPersonId('p_anna');

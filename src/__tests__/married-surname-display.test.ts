@@ -14,7 +14,8 @@ import { buildFamilyBook } from '../book.js';
 import { surnamesInTree, marriedSurnameHolders } from '../surnames.js';
 import { fitBirthRow } from '../export-image.js';
 import { setLanguage } from '../strings.js';
-import { Person, PersonId, StromData, SurnameDisplay, toPersonId } from '../types.js';
+import { Person, PersonId, StromData, SurnameDisplay } from '../types.js';
+import { toPersonId } from '../ids.js';
 
 function person(id: string, firstName: string, lastName: string, extra: Partial<Person> = {}): Person {
     return {

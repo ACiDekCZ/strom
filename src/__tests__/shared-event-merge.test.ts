@@ -22,7 +22,9 @@ import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { setLanguage } from '../strings.js';
 import { MARRIAGE_EVENT_ID, joinSameShareCopies, personMergeShares, shareCopiesOf } from '../shared-events.js';
-import { STROM_DATA_VERSION, toPersonId, type LifeEvent, type PartnershipId, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { type LifeEvent, type PartnershipId, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const TREE = 'shared-merge' as TreeId;
 const DOBROMIL = toPersonId('p_dobromil');

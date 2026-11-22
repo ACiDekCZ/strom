@@ -17,9 +17,11 @@
 import { eventIsShareable, coupleEventTypeOfTag } from './events.js';
 import { isValidShareId, shareIdMaker } from './shared-events.js';
 import {
-    CoupleEvent, CoupleEventType, EventParticipant, generateLifeEventId, LifeEvent, LifeEventType,
-    Partnership, PartnershipId, ParticipantRole, PARTICIPANT_ROLES, Person, PersonId,
+    CoupleEvent, CoupleEventType, EventParticipant, LifeEvent, LifeEventType,
+    Partnership, PartnershipId, ParticipantRole, Person, PersonId,
 } from './types.js';
+import { generateLifeEventId } from './ids.js';
+import { PARTICIPANT_ROLES } from './model-values.js';
 
 /**
  * "Not this person" of a godparent or a witness recorded by name

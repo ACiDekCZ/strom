@@ -6,7 +6,9 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { migrateData, DataManager } from '../data.js';
-import { StromData, Person, Partnership, PersonId, PartnershipId, TreeId, toPersonId, toPartnershipId, STROM_DATA_VERSION } from '../types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, TreeId } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';

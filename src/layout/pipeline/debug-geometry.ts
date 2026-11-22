@@ -4,7 +4,8 @@
  * Computes geometric primitives for the debug overlay visualization.
  */
 
-import { LayoutConfig, personCardHeight } from '../../types.js';
+import { LayoutConfig } from '../../types.js';
+import { personCardHeight } from '../../layout-config.js';
 import { computeGenerationBands } from './bands.js';
 import {
     DebugSnapshot,

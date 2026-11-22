@@ -10,7 +10,8 @@
  * Partners are ordered: male left, otherwise alphabetically by ID.
  */
 
-import { PersonId, PartnershipId, Partnership, StromData, coupleSides } from '../../types.js';
+import { PersonId, PartnershipId, Partnership, StromData } from '../../types.js';
+import { coupleSides } from '../../model-values.js';
 import { compareMarriages, marriageDates } from '../../marriage-order.js';
 import {
     BuildModelInput,

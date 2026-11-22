@@ -19,32 +19,26 @@ import {
     StromData,
     NewPersonData,
     TreeId,
-    generatePersonId,
-    generateLifeEventId,
+    
     LifeEvent,
     CoupleEvent,
-    partnershipParticipants,
-    generateSourceId,
-    generateParticipantId,
+    
     ParticipantRole,
     EventParticipant,
     Source,
-    generateAttachmentId,
     Attachment,
     MediaPlace,
     MediaBy,
     MaterialKind,
     ParentChildRelType,
-    generatePartnershipId,
-    LAST_FOCUSED,
+    
     LastFocusedMarker,
     TableView,
     PersonList,
     PersonListRule,
     PersonListSort,
-    STROM_DATA_VERSION, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, PersonCitationField, isGender, oppositeGender, isPrimaryName, PrimaryName, mergedPrimaryName,
+    PersonCitationField, PrimaryName, 
     EmbeddedDataEnvelope,
-    isEmbeddedEnvelope,
     FamilyWizardSpec,
     FamilyWizardMember,
     PlaceGeo,
@@ -53,6 +47,9 @@ import {
     QualityDismissal,
     SurnameRejection,
 } from './types.js';
+import { generatePersonId, generateLifeEventId, generateSourceId, generateParticipantId, generateAttachmentId, generatePartnershipId } from './ids.js';
+import { partnershipParticipants, LAST_FOCUSED, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, oppositeGender, isPrimaryName, mergedPrimaryName, isEmbeddedEnvelope } from './model-values.js';
+import { STROM_DATA_VERSION } from './version.js';
 import { convertLegacyCensusEvents, isCoupleEventType } from './events.js';
 import { sanitizeGedcomDates } from './gedcom-date-form.js';
 import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';

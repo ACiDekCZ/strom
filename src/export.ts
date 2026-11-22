@@ -4,9 +4,11 @@
 
 import { TreeManager } from './tree-manager.js';
 import { noteExportAll } from './research-device.js';
-import { UI } from './ui.js';
+import { getUI } from './ui-ref.js';
 import { strings } from './strings.js';
-import { TreeId, StromData, EmbeddedDataEnvelope, APP_VERSION, generateExportId } from './types.js';
+import { TreeId, StromData, EmbeddedDataEnvelope } from './types.js';
+import { generateExportId } from './ids.js';
+import { APP_VERSION } from './version.js';
 import { encrypt, EncryptedData } from './crypto.js';
 import { AuditLogManager } from './audit-log.js';
 import { applyLivingPrivacy, applyContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
@@ -209,15 +211,15 @@ class AppExporterClass {
     async exportApp(treeId?: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false, share?: ShareOptions): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
-            UI.showAlert(strings.export.devModeNotSupported, 'warning');
+            getUI().showAlert(strings.export.devModeNotSupported, 'warning');
             return;
         }
 
         try {
             // Determine which tree to export
-            const targetTreeId = treeId || UI.getExportTargetTreeId() || TreeManager.getActiveTreeId();
+            const targetTreeId = treeId || getUI().getExportTargetTreeId() || TreeManager.getActiveTreeId();
             if (!targetTreeId) {
-                UI.showAlert(strings.export.failed, 'error');
+                getUI().showAlert(strings.export.failed, 'error');
                 return;
             }
 
@@ -227,7 +229,7 @@ class AppExporterClass {
             // Get data for the specified tree (privacy filter applied to a copy)
             const rawData = await storedTreeForExport(targetTreeId);
             if (!rawData) {
-                UI.showAlert(strings.export.failed, 'error');
+                getUI().showAlert(strings.export.failed, 'error');
                 return;
             }
             let data = applyLivingPrivacy(rawData, privacyMode);
@@ -278,7 +280,7 @@ class AppExporterClass {
             if (privacyMode === 'full') TreeManager.noteFileCopy([targetTreeId], { [targetTreeId]: data });
         } catch (error) {
             console.error('Export failed:', error);
-            UI.showAlert(strings.export.failed, 'error');
+            getUI().showAlert(strings.export.failed, 'error');
         }
     }
 
@@ -290,7 +292,7 @@ class AppExporterClass {
     async exportAllAsApp(password?: string | null, includeAuditLog = false, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
-            UI.showAlert(strings.export.devModeNotSupported, 'warning');
+            getUI().showAlert(strings.export.devModeNotSupported, 'warning');
             return;
         }
 
@@ -366,7 +368,7 @@ class AppExporterClass {
             }
         } catch (error) {
             console.error('Export all failed:', error);
-            UI.showAlert(strings.export.failed, 'error');
+            getUI().showAlert(strings.export.failed, 'error');
         }
     }
 
@@ -380,7 +382,7 @@ class AppExporterClass {
     async exportFocusAsApp(focusedData: StromData, filename: string, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false, share?: ShareOptions & { treeName?: string; trackTreeId?: TreeId }): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
-            UI.showAlert(strings.export.devModeNotSupported, 'warning');
+            getUI().showAlert(strings.export.devModeNotSupported, 'warning');
             return;
         }
 
@@ -431,7 +433,7 @@ class AppExporterClass {
             this.downloadHtml(exportedHtml, filename);
         } catch (error) {
             console.error('Export focus as app failed:', error);
-            UI.showAlert(strings.export.failed, 'error');
+            getUI().showAlert(strings.export.failed, 'error');
         }
     }
 
@@ -447,7 +449,7 @@ class AppExporterClass {
         URL.revokeObjectURL(a.href);
 
         // Mark as exported for embedded mode unsaved changes tracking
-        UI.markExported();
+        getUI().markExported();
     }
 }
 

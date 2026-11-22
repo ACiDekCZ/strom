@@ -5,7 +5,8 @@
  * for inspection and assertion.
  */
 
-import { StromData, PersonId, LayoutConfig, DEFAULT_LAYOUT_CONFIG } from '../../../types.js';
+import { StromData, PersonId, LayoutConfig } from '../../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../../layout-config.js';
 import {
     selectSubgraph,
     buildLayoutModel,

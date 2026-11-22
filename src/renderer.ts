@@ -6,7 +6,7 @@
 import { DataManager } from './data.js';
 import { IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, imageLoads, personsByNearness } from './image-loads.js';
 import { cardAvatarHtml, cardImageRowHtml, cardImageView, cardTooltipPhotoHtml, imgPhaseDelay, imgStateOf, setImgState, withImgAria, type CardImageView } from './ui/image-slot.js';
-import { UI } from './ui.js';
+import { getUI } from './ui-ref.js';
 import { cardStatusAria, cardStatusWords, statusMarkHtml } from './ui/fact-status.js';
 import { ZoomPan } from './zoom.js';
 import { strings } from './strings.js';
@@ -15,18 +15,18 @@ import {
     PersonId,
     PartnershipId,
     Position,
-    DEFAULT_LAYOUT_CONFIG,
     LayoutConfig,
-    layoutConfigFor,
     TreeSpacing,
     TreeId,
     StromData,
-    personCardHeight
 } from './types.js';
+import { DEFAULT_LAYOUT_CONFIG, layoutConfigFor, personCardHeight } from './layout-config.js';
 import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
-import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode, ResearchEdgeHypo, CardPhotoSize, CardPhotoShape, NORMAL_PHOTO_BOX } from './types.js';
+import { ViewMode, ResearchEdgeMode, ResearchEdgeHypo, CardPhotoSize, CardPhotoShape } from './types.js';
+import { NORMAL_PHOTO_BOX } from './layout-config.js';
+import { STANDALONE_VIEWS } from './model-values.js';
 import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, formatAge, isFieldCardDensity } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
@@ -819,15 +819,15 @@ class TreeRendererClass {
         const el = document.getElementById('table-container');
         if (el) {
             el.style.display = 'flex';
-            UI.renderTableView?.(el);
+            getUI().renderTableView?.(el);
         }
         this.updateFocusUI();
-        UI.updateViewModeUI?.();
+        getUI().updateViewModeUI?.();
         // A followed research's card stands below the table's bar (fitted again whenever the bar's height changes).
-        UI.placeLivePanel?.();
-        UI.updateMinimap?.();
-        UI.updateGenLabels?.();
-        UI.updateViewLinksIndicator?.();
+        getUI().placeLivePanel?.();
+        getUI().updateMinimap?.();
+        getUI().updateGenLabels?.();
+        getUI().updateViewLinksIndicator?.();
     }
 
     private async renderInternal(liveLoad: { previous: StromData; quiet: boolean } | null = null): Promise<void> {
@@ -847,7 +847,7 @@ class TreeRendererClass {
             closeOpenBubble();
             // A re-render invalidates the anchor of the cross-tree chooser (its
             // badge card is about to be removed) — close it first.
-            UI.hideCrossTreeChooser?.();
+            getUI().hideCrossTreeChooser?.();
         }
 
         // The other trees the cards are matched against (IndexedDB) are read
@@ -871,7 +871,7 @@ class TreeRendererClass {
                 };
             } else {
                 closeOpenBubble();
-                UI.hideCrossTreeChooser?.();
+                getUI().hideCrossTreeChooser?.();
             }
         }
 
@@ -904,7 +904,7 @@ class TreeRendererClass {
             const table = document.getElementById('table-container');
             if (table) table.style.display = 'none';
             this.updateFocusUI();
-            UI.updateViewLinksIndicator?.();
+            getUI().updateViewLinksIndicator?.();
             return;
         }
         if (empty) empty.style.display = 'none';
@@ -996,7 +996,7 @@ class TreeRendererClass {
             document.body.style.setProperty('--card-date-col', `${metrics.dateColumn}px`);
             document.body.style.setProperty('--card-label-col', `${metrics.labelColumn ?? 0}px`);
             // The settings preview states the card size: keep it in step with the view.
-            if (document.getElementById('settings-modal')?.classList.contains('active')) UI.renderCardPreview?.();
+            if (document.getElementById('settings-modal')?.classList.contains('active')) getUI().renderCardPreview?.();
             const measured: LayoutConfig = {
                 ...this.config, cardWidth: metrics.cardWidth, cardHeight: metrics.cardHeight,
                 personHeights: metrics.personHeights,
@@ -1058,13 +1058,13 @@ class TreeRendererClass {
         const standalone: Partial<Record<ViewMode, { id: string; display: string; draw: (el: HTMLElement) => void }>> = {
             timeline: { id: 'timeline-container', display: 'block', draw: el => this.renderTimeline(el) },
             fan: { id: 'fan-container', display: 'flex', draw: el => this.renderFan(el) },
-            map: { id: 'map-container', display: 'block', draw: el => UI.renderMapView?.(el) },
+            map: { id: 'map-container', display: 'block', draw: el => getUI().renderMapView?.(el) },
         };
         const active = standalone[this.viewMode];
         // §5.2: leaving the Fan view forgets its way back.
         if (this.viewMode !== 'fan') this.fanView?.deactivate();
         // The Timeline's history popover (spec 121 §2) belongs to that view only.
-        if (this.viewMode !== 'timeline') UI.closeTimelinePopover?.();
+        if (this.viewMode !== 'timeline') getUI().closeTimelinePopover?.();
         // Chrome that belongs to some views only (the evidence pill) reads it here.
         // A followed research's card stood below the Fan's, the Timeline's or the Table view's bar: back at the top it is placed again.
         const was = document.body.dataset.viewMode;
@@ -1083,11 +1083,11 @@ class TreeRendererClass {
                 canvas.style.display = 'none';
                 active.draw(el);
                 this.updateFocusUI();
-                UI.updateViewModeUI?.();
-                if (leftFan) UI.placeLivePanel?.();
-                UI.updateMinimap?.();  // hidden outside the tree canvas
-                UI.updateGenLabels?.();  // clears labels for standalone views
-                UI.updateViewLinksIndicator?.();  // none outside the Family and Descendants views
+                getUI().updateViewModeUI?.();
+                if (leftFan) getUI().placeLivePanel?.();
+                getUI().updateMinimap?.();  // hidden outside the tree canvas
+                getUI().updateGenLabels?.();  // clears labels for standalone views
+                getUI().updateViewLinksIndicator?.();  // none outside the Family and Descendants views
                 return;
             }
         }
@@ -1115,17 +1115,17 @@ class TreeRendererClass {
         // Update focus UI (shows panel with focused person name, generation controls)
         this.updateFocusUI();
         // Keep the view-mode segment + descendants badge in sync.
-        UI.updateViewModeUI?.();
+        getUI().updateViewModeUI?.();
         // A followed research's card stood below the fan's toolbar, fitted to that room:
         // back at the top it is fitted again with this view's chrome in place, not when
         // the hidden toolbar reports a frame or two later.
-        if (leftFan) UI.placeLivePanel?.();
+        if (leftFan) getUI().placeLivePanel?.();
         // Refresh the overview minimap for the new layout.
-        UI.updateMinimap?.();
+        getUI().updateMinimap?.();
         // Rebuild the sticky generation-label overlay for the new layout.
-        UI.updateGenLabels?.();
+        getUI().updateGenLabels?.();
         // "Linked in the view only · n" over the view, the open list in step.
-        UI.updateViewLinksIndicator?.();
+        getUI().updateViewLinksIndicator?.();
         // Pills on a bottom edge came out otherwise than measured: once more at their size
         // (after a live load's scene, quietly: the same data, the cards kept).
         const again = this.edgeRoomRerenderSeq === seq && seq === this.renderSeq;
@@ -1149,7 +1149,7 @@ class TreeRendererClass {
             || live.positions.get(ownerId)?.x !== this.positions.get(ownerId)?.x || live.positions.get(ownerId)?.y !== this.positions.get(ownerId)?.y)) {
             closeOpenBubble();
         }
-        if (live.redrawn.size > 0 || live.cards.size > 0) UI.hideCrossTreeChooser?.();
+        if (live.redrawn.size > 0 || live.cards.size > 0) getUI().hideCrossTreeChooser?.();
 
         const data = DataManager.getData();
         const diff = live.quiet ? { added: [], removed: [], changed: new Map(), merged: new Map(), moved: [] } as LiveDiff : diffLive(live.previous, data);
@@ -3929,7 +3929,7 @@ class TreeRendererClass {
             e.preventDefault();
             e.stopPropagation();
             closeOpenBubble();
-            UI.showPersonBottomSheet(personId, true);
+            getUI().showPersonBottomSheet(personId, true);
         });
         const more = bubble.querySelector<HTMLElement>(':scope > .badge-tooltip-more');
         const names = [...bubble.querySelectorAll<HTMLElement>(':scope > [data-name-group]')];
@@ -4266,8 +4266,8 @@ class TreeRendererClass {
         viewStep();
         // The Table view and the others share the person in focus (spec 073 U9):
         // the table's active row's person goes along, and the table opens at the focus.
-        const fromTable = this.viewMode === 'table' ? UI.tableFocusPerson?.(this.focusPersonId) ?? null : null;
-        if (mode === 'table') UI.tableTakeFocus?.(this.focusPersonId);
+        const fromTable = this.viewMode === 'table' ? getUI().tableFocusPerson?.(this.focusPersonId) ?? null : null;
+        if (mode === 'table') getUI().tableTakeFocus?.(this.focusPersonId);
         // A satellite window's view is switched in its header (spec 079 §2 K2): another tree opens in it too.
         if (this.windowView) this.windowView = mode;
         this.viewMode = mode;
@@ -4275,7 +4275,7 @@ class TreeRendererClass {
         this.persistViewMode();
         // Following the research agent opens the fan around its own centre
         // (the person focused before following, a pinned or a chosen one).
-        const centre = mode === 'fan' ? UI.liveFollowFanCenter?.() ?? null : null;
+        const centre = mode === 'fan' ? getUI().liveFollowFanCenter?.() ?? null : null;
         if (centre && centre !== this.focusPersonId && DataManager.getPerson(centre)) {
             this.fanView?.deactivate();
             await beforeLayout?.();
@@ -4744,7 +4744,7 @@ class TreeRendererClass {
         this.markTimelineWindowSelected();
         if (!changed) return;
         if (this.viewMode === 'fan') this.fanView?.redraw();
-        if (this.viewMode === 'map') UI.revealMapPerson(null);
+        if (this.viewMode === 'map') getUI().revealMapPerson(null);
     }
 
     /** The Timeline's row of the person selected in another window. */
@@ -4771,7 +4771,7 @@ class TreeRendererClass {
             this.markTimelineWindowSelected();
             this.scrollTimelineToPerson(id);
         } else if (this.viewMode === 'map') {
-            UI.revealMapPerson(id);
+            getUI().revealMapPerson(id);
         }
     }
 
@@ -4922,7 +4922,7 @@ class TreeRendererClass {
      * place: the button ends before it.
      */
     private markSelectionCenter(card: HTMLElement, outside: boolean): void {
-        const offer = outside ? UI.selectionCenterOffer?.() ?? null : null;
+        const offer = outside ? getUI().selectionCenterOffer?.() ?? null : null;
         let btn = card.querySelector<HTMLButtonElement>(':scope > .card-tag--center');
         if (!offer) {
             if (btn) {
@@ -4940,7 +4940,7 @@ class TreeRendererClass {
             btn.dataset.action = 'focus-selection-center';
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                UI.focusSelectionCenter?.();
+                getUI().focusSelectionCenter?.();
             });
             // The card's own keys (Enter opens its menu) stay out of the button's.
             btn.addEventListener('keydown', (e) => {
@@ -5472,23 +5472,23 @@ class TreeRendererClass {
                 // without a pointer) the menu of what to open, or straight what the research knows.
                 if (mark && kind === 'badge-stack') {
                     e.stopPropagation();
-                    UI.openCardSignalsMenu(id, mark, e.detail === 0);
+                    getUI().openCardSignalsMenu(id, mark, e.detail === 0);
                     return;
                 }
                 if (mark && kind !== 'status') {
                     if (window.matchMedia?.('(pointer: coarse)').matches) {
                         e.stopPropagation();
-                        UI.openCardMarkTip(id, mark);
+                        getUI().openCardMarkTip(id, mark);
                         return;
                     }
                     if (kind === 'badge' || kind === 'agent' || kind === 'story') {
                         e.stopPropagation();
-                        if (kind === 'story') UI.openPersonStory(id);
-                        else UI.openCardSignal(id, kind === 'agent' ? 'agent' : mark.dataset.signal ?? '');
+                        if (kind === 'story') getUI().openPersonStory(id);
+                        else getUI().openCardSignal(id, kind === 'agent' ? 'agent' : mark.dataset.signal ?? '');
                         return;
                     }
                 }
-                UI.showContextMenu(id, e);
+                getUI().showContextMenu(id, e);
             };
 
             // Keyboard (review S37): the card is a button; Enter / Space open
@@ -5506,7 +5506,7 @@ class TreeRendererClass {
                 const stack = e.key === 'ArrowDown' ? (e.target as HTMLElement).closest?.<HTMLElement>('.card-signal-stack') : null;
                 if (stack) {
                     e.preventDefault();
-                    UI.openCardSignalsMenu(id, stack, true);
+                    getUI().openCardSignalsMenu(id, stack, true);
                     return;
                 }
                 if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
@@ -5515,7 +5515,7 @@ class TreeRendererClass {
             });
 
             // Touch: long-press opens the mobile bottom sheet (coarse pointer only).
-            UI.attachCardLongPress(card, id, (x, y) => this.openBubbleByTouch(x, y));
+            getUI().attachCardLongPress(card, id, (x, y) => this.openBubbleByTouch(x, y));
 
             // The name as shown: the given name with the title before it, the
             // person's own lastName (maiden name for women) with the title
@@ -5692,7 +5692,7 @@ class TreeRendererClass {
             let badgeHtml = '';
             let dotHtml = '';
             const actionMarks = cardActionMarksHtml(id, signals,
-                signals.actions.length >= 2 && signals.waiting ? UI.waitingCountOf(id) : 1);
+                signals.actions.length >= 2 && signals.waiting ? getUI().waitingCountOf(id) : 1);
             const agentHtml = signals.showAgent
                 ? `<span class="card-agent-mark" data-mark="agent"><span class="card-agent" style="animation-delay:${spinDelay}" aria-hidden="true"></span></span>`
                     + markTip('agent', c.tipAgentHead, [clipText(signals.agent ?? '')], c.tipClickAgent) : '';
@@ -5954,7 +5954,7 @@ class TreeRendererClass {
             if (imgView.aria) card.setAttribute('aria-label', withImgAria(card.getAttribute('aria-label') ?? '', imgView.aria));
             card.innerHTML = html;
             const edgeButton = card.querySelector<HTMLElement>('.research-edge');
-            if (edgeButton) UI.bindResearchEdge(id, edgeButton);
+            if (edgeButton) getUI().bindResearchEdge(id, edgeButton);
 
             // Tooltip flip: the default hover card sits ~30px above the card, but
             // near the top of the viewport it would be clipped. On first hover we
@@ -6042,7 +6042,7 @@ class TreeRendererClass {
             if (relIcon) {
                 relIcon.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    UI.showRelationshipsPanel(id);
+                    getUI().showRelationshipsPanel(id);
                 });
             }
 
@@ -6073,7 +6073,7 @@ class TreeRendererClass {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const action = (btn as HTMLElement).dataset.action as 'parent' | 'child' | 'partner' | 'sibling';
-                    UI.addRelation(id, action);
+                    getUI().addRelation(id, action);
                 });
             });
 
@@ -6086,13 +6086,13 @@ class TreeRendererClass {
                     e.stopPropagation();
                     // By touch its bubble first, with "Go to the tree" as its button.
                     if (window.matchMedia?.('(pointer: coarse)').matches) {
-                        UI.openCardMarkTip(id, crossTreeBadge as HTMLElement);
+                        getUI().openCardMarkTip(id, crossTreeBadge as HTMLElement);
                         return;
                     }
                     if (crossTreeMatches.length === 1) {
-                        UI.switchToTreeAndFocus(crossTreeMatches[0].treeId, crossTreeMatches[0].personId);
+                        getUI().switchToTreeAndFocus(crossTreeMatches[0].treeId, crossTreeMatches[0].personId);
                     } else {
-                        UI.showCrossTreeChooser(crossTreeMatches, crossTreeBadge as HTMLElement);
+                        getUI().showCrossTreeChooser(crossTreeMatches, crossTreeBadge as HTMLElement);
                     }
                 });
             }
@@ -6667,7 +6667,7 @@ class TreeRendererClass {
                 pill.dataset.edgePerson = id;
                 pill.dataset.edgeHypo = hypo.id;
                 canvas.appendChild(pill);
-                UI.bindEdgeLinkPill(id, pill, joinId, hypo.id);
+                getUI().bindEdgeLinkPill(id, pill, joinId, hypo.id);
             }
             if (away.length === 0) continue;
             const pill = document.createElement('button');
@@ -6690,7 +6690,7 @@ class TreeRendererClass {
             pill.dataset.edgePerson = id;
             pill.dataset.edgeHypo = hypo.id;
             canvas.appendChild(pill);
-            UI.bindEdgeLinkPill(id, pill, byRefn.get(away[0].join)!, hypo.id, away.length > 1
+            getUI().bindEdgeLinkPill(id, pill, byRefn.get(away[0].join)!, hypo.id, away.length > 1
                 ? away.map(f => ({ personId: byRefn.get(f.join)!, variants: f.variants, size: f.size })) : undefined);
         }
     }
@@ -6740,7 +6740,7 @@ class TreeRendererClass {
             canvas.appendChild(wrap);
             btn.onclick = (e) => {
                 e.stopPropagation();
-                UI.showViewLinkFromIsland(btn, offers);
+                getUI().showViewLinkFromIsland(btn, offers);
             };
         }
     }
@@ -6805,7 +6805,7 @@ class TreeRendererClass {
             data,
             unions: unionsByPerson(data),
             treeHasSources: treeHasAnySource(data),
-            reliability: UI.reliabilityOptionsNow(),
+            reliability: getUI().reliabilityOptionsNow(),
             settings: SettingsManager.getCardSignals(),
             research: researchCardInfoNow(),
         };
@@ -7565,7 +7565,7 @@ class TreeRendererClass {
             label.style.top = `${spot.y}px`;
             label.onclick = (e) => {
                 e.stopPropagation();
-                UI.showPersonResearchDialog(viewLinkHolder(DataManager.getData(), link), { hypo: { id: link.hypo, variant: link.variant } });
+                getUI().showPersonResearchDialog(viewLinkHolder(DataManager.getData(), link), { hypo: { id: link.hypo, variant: link.variant } });
             };
         }
     }
@@ -7770,13 +7770,13 @@ class TreeRendererClass {
                 lookDiffers: () => this.fanLookDiffers(),
                 saveLookAsDefault: () => {
                     this.saveFanLookAsDefault();
-                    UI.showToast(strings.fan.lookSavedToast, 3000);
+                    getUI().showToast(strings.fan.lookSavedToast, 3000);
                 },
                 resetLookToDefault: () => this.resetFanLookToDefault(),
-                openSettings: () => UI.showSettingsDialog('fan'),
+                openSettings: () => getUI().showSettingsDialog('fan'),
                 active: () => this.viewMode === 'fan',
                 setFocus: id => this.setFocus(id),
-                addParent: (childId, gender) => UI.addRelation(childId, 'parent', gender),
+                addParent: (childId, gender) => getUI().addRelation(childId, 'parent', gender),
                 editable: () => !DataManager.isReadOnly() && !DataManager.isTreeLocked(),
                 showKekule: () => SettingsManager.isFanKekuleEnabled(),
                 esc: (t) => this.escapeHtml(t),
@@ -7784,25 +7784,25 @@ class TreeRendererClass {
                 addParentLabel: () => strings.contextMenu.addParent,
                 afterDraw: () => {
                     if (this.evidenceIds || this.evidenceLevelMap || this.fanRodPreview) this.applyEvidenceHighlight();
-                    UI.applyFanFollowMarks?.();
+                    getUI().applyFanFollowMarks?.();
                 },
-                pinnedCenter: () => UI.liveFollowPinned?.() ?? null,
-                menuExtra: (id, isCentre) => UI.fanFollowMenuItems?.(id, isCentre) ?? [],
-                unpinCenter: () => UI.unpinFanCenter?.(),
+                pinnedCenter: () => getUI().liveFollowPinned?.() ?? null,
+                menuExtra: (id, isCentre) => getUI().fanFollowMenuItems?.(id, isCentre) ?? [],
+                unpinCenter: () => getUI().unpinFanCenter?.(),
                 homeChanged: () => updateDefaultFocusButtons(),
-                menuClosed: () => UI.fanFollowMenuClosed?.(),
-                selectedRod: () => UI.selectedRod(),
-                highlightedRod: () => (UI.evidenceHighlightKind() === 'selection' ? UI.selectedRod() : null),
+                menuClosed: () => getUI().fanFollowMenuClosed?.(),
+                selectedRod: () => getUI().selectedRod(),
+                highlightedRod: () => (getUI().evidenceHighlightKind() === 'selection' ? getUI().selectedRod() : null),
                 keepOnly: () => this.fanKeepOnly(),
-                selectRod: id => UI.selectRodFromFan(id),
+                selectRod: id => getUI().selectRodFromFan(id),
                 previewRod: group => this.setFanRodPreview(group),
-                personDetail: id => UI.runPersonMenuAction(id, 'edit'),
-                personPage: id => UI.runPersonMenuAction(id, 'page'),
-                menuSheet: (menu, onClose) => UI.presentMenuSheet(menu.title, [
+                personDetail: id => getUI().runPersonMenuAction(id, 'edit'),
+                personPage: id => getUI().runPersonMenuAction(id, 'page'),
+                menuSheet: (menu, onClose) => getUI().presentMenuSheet(menu.title, [
                     { rows: menu.items.map(it => ({ label: it.label, run: it.run, id: `fan-menu-${it.id}` })) },
                     { divider: true, rows: [{ label: strings.fan.menuCancel, run: () => { /* closes */ }, id: 'fan-menu-cancel' }] },
                 ], { subtitle: menu.sub, overlayClass: 'fan-menu-sheet', onClose }),
-                hideMenuSheet: () => UI.hideBottomSheet(),
+                hideMenuSheet: () => getUI().hideBottomSheet(),
                 remembersPrefs: () => !DataManager.isWindowCopy(),
                 windowSelected: () => this.windowSelectedId,
                 // The main window tells its satellites the family lines' colours it remembers (spec 114 §3).
@@ -7844,7 +7844,7 @@ class TreeRendererClass {
 
     private renderTimeline(container: HTMLElement): void {
         // The view's bar (scope, spec 098 §11a) stays; the chart is drawn into the body under it.
-        const body = UI.timelineChrome(container);
+        const body = getUI().timelineChrome(container);
         // Delegate bar clicks once (safe against odd person ids in JSON imports).
         if (!container.dataset.wired) {
             container.dataset.wired = '1';
@@ -7853,7 +7853,7 @@ class TreeRendererClass {
                 const c = (e.target as Element).closest('.tl-hist[data-hist-ids]');
                 if (!c) return false;
                 const ids = (c.getAttribute('data-hist-ids') ?? '').split(' ').filter(Boolean).map(decodeURIComponent);
-                UI.openTimelineHistoryRow(ids, this.focusPersonId, c);
+                getUI().openTimelineHistoryRow(ids, this.focusPersonId, c);
                 return true;
             };
             container.addEventListener('click', (e) => {
@@ -7862,15 +7862,15 @@ class TreeRendererClass {
                 if (histCluster(e)) return;
                 // The row's label opens its options (spec 121 §5); "Clear filter" of an empty filter (§10).
                 const histBtn = (e.target as Element).closest<HTMLElement>('.tl-hist-btn');
-                if (histBtn) { UI.toggleTimelineHistoryOptions(histBtn); return; }
-                if ((e.target as Element).closest('.tl-hist-clear')) { UI.clearTimelineHistoryFilter(); return; }
+                if (histBtn) { getUI().toggleTimelineHistoryOptions(histBtn); return; }
+                if ((e.target as Element).closest('.tl-hist-clear')) { getUI().clearTimelineHistoryFilter(); return; }
                 if ((e.target as Element).closest('.tl-hist-row')) return;
                 // A local symbol on a life line (spec 121 §7): that person's card on the event's row, a sheet on touch.
                 const loc = (e.target as Element).closest('.tl-loc[data-hist-ids]');
                 const locRow = loc?.closest<SVGGElement>('[data-person-id]');
                 if (loc && locRow?.dataset.personId) {
                     const ids = (loc.getAttribute('data-hist-ids') ?? '').split(' ').filter(Boolean).map(decodeURIComponent);
-                    UI.openTimelineHistory(locRow.dataset.personId, ids);
+                    getUI().openTimelineHistory(locRow.dataset.personId, ids);
                     return;
                 }
                 const g = (e.target as Element).closest('[data-person-id]') as HTMLElement | null;
@@ -7910,15 +7910,15 @@ class TreeRendererClass {
         }
 
         // The rows of the Timeline's scope (spec 098 §11a): This view, the selection or the whole tree.
-        const ids = UI.timelineScopePersons() as unknown as string[];
+        const ids = getUI().timelineScopePersons() as unknown as string[];
         const todayYear = new Date().getFullYear();
         // The history row of the whole timeline (spec 121 §1): kept while the rows and the data stay, the focus only its line.
-        const history = UI.timelineHistoryAll(ids, this.focusPersonId);
+        const history = getUI().timelineHistoryAll(ids, this.focusPersonId);
         const model = computeTimelineModel(DataManager.getData(), ids, todayYear, history ? { history } : {});
-        UI.setTimelineHistoryDrawn(model.history?.events ?? [], model.rows.map(r => r.personId), model.history);
+        getUI().setTimelineHistoryDrawn(model.history?.events ?? [], model.rows.map(r => r.personId), model.history);
         // The window's selection highlighted with This view or the Whole tree (11a·2).
-        const selection = UI.timelineHighlightIds();
-        UI.renderTimelineNote(model.rows.length, model.omittedCount, !!selection);
+        const selection = getUI().timelineHighlightIds();
+        getUI().renderTimelineNote(model.rows.length, model.omittedCount, !!selection);
 
         const isMobile = isMobileViewport();
         const ROW_H = isMobile ? 28 : 30;
@@ -8032,7 +8032,7 @@ class TreeRendererClass {
         container.dataset.rowsDrawn = win ? `${win.from}-${win.to}` : 'all';
         this.markTimelineWindowSelected();
         // The row's label drawn anew: open while its options are.
-        UI.syncTimelineHistoryButton();
+        getUI().syncTimelineHistoryButton();
         if (focusedCluster) {
             container.querySelector<SVGGElement>(`.tl-hist[data-hist-ids="${CSS.escape(focusedCluster)}"]`)?.focus({ preventScroll: true });
         }
@@ -8043,7 +8043,7 @@ class TreeRendererClass {
      * spec 098 §11a): the poster prints the same rows.
      */
     getTimelinePersonIds(opts: { output?: boolean } = {}): string[] {
-        return UI.timelineScopePersons(opts.output ? () => this.getVisiblePersonIds() : undefined) as unknown as string[];
+        return getUI().timelineScopePersons(opts.output ? () => this.getVisiblePersonIds() : undefined) as unknown as string[];
     }
 
     /**

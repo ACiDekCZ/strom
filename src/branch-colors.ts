@@ -9,7 +9,8 @@
  * person itself is never tagged.
  */
 
-import { StromData, PersonId, Person, parentSlots } from './types.js';
+import { StromData, PersonId, Person } from './types.js';
+import { parentSlots } from './model-values.js';
 
 export type Branch = 'paternal' | 'maternal' | 'descendant';
 

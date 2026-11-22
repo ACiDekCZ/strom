@@ -14,7 +14,8 @@ import { UndoManager } from '../undo.js';
 import { extractSubtree } from '../subtree.js';
 import { setLanguage } from '../strings.js';
 import { keepTableViews, sanitizeTableView, sanitizeTableViews } from '../table-views-data.js';
-import { STROM_DATA_VERSION, type PersonId, type StromData, type TableView, type TreeId } from '../types.js';
+import { type PersonId, type StromData, type TableView, type TreeId } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import {
     applyView, builtinView, builtinViews, customViews, defaultViewId, findView, isBuiltinId, readTableWork, takenViewNames, uniqueViewName,
     viewChanged, viewFromState, workStorageKey, writeTableWork, BUILTIN_VIEWS, sortForView, stateForView,

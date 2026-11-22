@@ -17,17 +17,16 @@ import {
     EventParticipant,
     EventRoleAt,
     CoupleEvent,
-    generateLifeEventId,
-    partnershipParticipants,
+    
     Attachment,
     MediaPlace,
     Source,
-    generatePersonId,
-    generatePartnershipId,
-    PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, gendersCompatible, mergedPrimaryName,
+    
     ImportRecord,
     PortraitSource,
 } from '../types.js';
+import { generateLifeEventId, generatePersonId, generatePartnershipId } from '../ids.js';
+import { partnershipParticipants, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, gendersCompatible, mergedPrimaryName } from '../model-values.js';
 import { allMedia, findMedia, personMedia, putMedia, samePlace } from '../media.js';
 import { dropDanglingPortraitSources } from '../photo.js';
 import { importProgramName } from '../import-next.js';

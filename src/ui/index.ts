@@ -19,12 +19,12 @@ import {
     RelationContext,
     StromData,
     TreeId,
-    LAST_FOCUSED,
     LastFocusedMarker,
     PlaceGeo,
     EventParticipant,
     Source
 } from '../types.js';
+import { LAST_FOCUSED } from '../model-values.js';
 import { strings } from '../strings.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult, GedcomDecoding } from '../ged-parser.js';
 import {
@@ -213,6 +213,7 @@ import { researchLoadMethods } from './research-load-ui.js';
 import { tourMethods, TourStepDef } from './tour.js';
 import { releaseNotesMethods } from './release-notes-ui.js';
 import { helpMethods } from './help-ui.js';
+import { setUIGetter } from '../ui-ref.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -1254,3 +1255,6 @@ export interface UIClass extends HelpMethods {}
 Object.assign(UIClass.prototype, helpMethods);
 
 export const UI = new UIClass();
+
+// The modules that UI itself depends on reach it through getUI() (src/ui-ref.ts).
+setUIGetter(() => UI);

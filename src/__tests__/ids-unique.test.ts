@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { generatePersonId, generatePartnershipId, generateSourceId } from '../types.js';
+import { generatePersonId, generatePartnershipId, generateSourceId } from '../ids.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 
 describe('generated ids', () => {

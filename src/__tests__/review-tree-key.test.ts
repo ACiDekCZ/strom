@@ -44,7 +44,8 @@ import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { CryptoSession, encrypt, decrypt, isEncrypted, EncryptedData } from '../crypto.js';
-import { StromData, TreeId, TreeMetadata, STROM_DATA_VERSION } from '../types.js';
+import { StromData, TreeId, TreeMetadata } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 let encryptionOn = false;
 const events: Array<{ type: string; treeId?: string }> = [];

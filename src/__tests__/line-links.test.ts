@@ -11,7 +11,8 @@ import { tabLabel, branchTabRestHtml, measureTabRows, rowKey } from '../union-or
 import { buildTreeSvg, lineLinkLabel, PosterLayout } from '../export-image.js';
 import { setLanguage, strings } from '../strings.js';
 import { OmittedEdge, UnionId } from '../layout/pipeline/types.js';
-import { Person, PersonId, PartnershipId, Position, StromData, DEFAULT_LAYOUT_CONFIG, DENSE_LAYOUT_CONFIG } from '../types.js';
+import { Person, PersonId, PartnershipId, Position, StromData } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG, DENSE_LAYOUT_CONFIG } from '../layout-config.js';
 import type { Connection } from '../layout/pipeline/types.js';
 
 const P = (id: string) => id as PersonId;

@@ -11,7 +11,9 @@ import {
     divergentCopies, divergentPersons, divergenceSentence, takeAllFrom, unifyDefaults, unifyValues, sameFields,
 } from '../shared-divergence.js';
 import { setLanguage } from '../strings.js';
-import { STROM_DATA_VERSION, toPersonId, type Person, type PersonId, type StromData } from '../types.js';
+import { type Person, type PersonId, type StromData } from '../types.js';
+import { toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const OTAKAR = toPersonId('p_otakar');
 const LUDMILA = toPersonId('p_ludmila');

@@ -14,7 +14,8 @@
  * and the tint the signs are the tint's 16px squares (data-shape="none").
  */
 
-import { BranchMarker, BRANCH_MARKERS } from '../types.js';
+import { BranchMarker } from '../types.js';
+import { BRANCH_MARKERS } from '../model-values.js';
 import { strings } from '../strings.js';
 
 export type BranchLine = 'paternal' | 'maternal' | 'descendant';

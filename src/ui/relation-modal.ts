@@ -14,14 +14,14 @@ import {
     PersonId,
     PartnershipId,
     PartnershipStatus,
-    Gender, isGender, oppositeGender,
+    Gender, 
     RelationType,
     RelationContext,
     StromData,
     TreeId,
-    LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
+import { isGender, oppositeGender, LAST_FOCUSED } from '../model-values.js';
 import { strings } from '../strings.js';
 import { normalizeDateInput } from '../dates.js';
 import { bindDeceasedAutoTick } from './deceased-autotick.js';

@@ -21,7 +21,9 @@ import {
     findSeparateCopies, isSameEvent, ownSameEvent, personMergeShares, sameEventAddress, sameEventKey, shareCopiesOf, shareDivergence,
 } from '../shared-events.js';
 import { addToDraft, sharedDraftFor } from '../shared-event-editor.js';
-import { STROM_DATA_VERSION, toPersonId, type LifeEvent, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { type LifeEvent, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const TREE = 'shared-join' as TreeId;
 const SUDIVOJ = toPersonId('p_sudivoj');

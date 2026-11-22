@@ -51,7 +51,8 @@ import { SettingsManager } from '../settings.js';
 import { CryptoSession } from '../crypto.js';
 import { createSnapshot, deleteSnapshotsForTree, getSnapshotJson, totalSnapshotBytes } from '../snapshots.js';
 import { collectPoolGarbage } from '../media-pool.js';
-import { StromData, TreeId, TreeMetadata, STROM_DATA_VERSION } from '../types.js';
+import { StromData, TreeId, TreeMetadata } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 let encryptionOn = false;
 

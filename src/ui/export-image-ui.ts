@@ -22,7 +22,8 @@ import { buildTimelinePosterSvg, timelinePosterGeometry } from '../timeline-char
 import { uiModule } from './module.js';
 import { runBusy, activatedElement, nextPaint } from './busy.js';
 import { imagesBeforeOutput } from './output-images.js';
-import { LayoutConfig, Person, StromData, TreeSpacing, ViewMode, layoutConfigFor, personCardHeight } from '../types.js';
+import { LayoutConfig, Person, StromData, TreeSpacing, ViewMode } from '../types.js';
+import { layoutConfigFor, personCardHeight } from '../layout-config.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
 import { classifyBranches, BranchSet } from '../branch-colors.js';
 import { computeIndirectIds } from '../indirect.js';

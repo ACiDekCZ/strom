@@ -4,7 +4,8 @@ import { buildLayoutModel } from '../pipeline/2-build-model.js';
 import { assignGenerations } from '../pipeline/3-assign-generations.js';
 import { measureSubtrees } from '../pipeline/4-measure.js';
 import { placeX } from '../pipeline/5-place-x.js';
-import { PersonId, PartnershipId, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { PersonId, PartnershipId } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 import { GraphSelection, FamilyBlockModel } from '../pipeline/types.js';
 
 describe('debug positions', () => {

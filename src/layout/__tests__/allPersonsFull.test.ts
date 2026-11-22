@@ -37,7 +37,8 @@ import {
 import { auditGeometry } from './helpers/geometryAudit.js';
 import { auditBands, syntheticPersonHeights } from './helpers/bandAudit.js';
 import { auditBusClearance } from './helpers/busClearance.js';
-import { PersonId, LayoutConfig, StromData, DEFAULT_LAYOUT_CONFIG, DENSE_LAYOUT_CONFIG } from '../../types.js';
+import { PersonId, LayoutConfig, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG, DENSE_LAYOUT_CONFIG } from '../../layout-config.js';
 
 const DEFAULT_FIXTURES = [
     'comprehensive',

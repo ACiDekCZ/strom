@@ -3,7 +3,8 @@
  * Smart heuristics to detect genealogical inconsistencies and data errors
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId, Source, LifeEventType, PortraitSource, personSourceIds, partnershipSourceIds, partnershipParticipants, gendersCompatible } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, Source, LifeEventType, PortraitSource } from './types.js';
+import { personSourceIds, partnershipSourceIds, partnershipParticipants, gendersCompatible } from './model-values.js';
 import { parseFlexDate, FlexDate, ageRangeBetween, approxAgeBetween } from './dates.js';
 import { dataUrlImageSize, isPortraitRegionSquare, isPortraitSourceShape } from './photo.js';
 import { collectPlaces } from './places.js';

@@ -5,7 +5,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { evidenceLevel, personEvidence, treeHasAnySource } from '../evidence-level.js';
-import { StromData, Person, PersonId, PartnershipId, toPersonId, toPartnershipId } from '../types.js';
+import { StromData, Person, PersonId, PartnershipId } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
 
 function person(pid: string, extra: Partial<Person> = {}): Person {
     return {

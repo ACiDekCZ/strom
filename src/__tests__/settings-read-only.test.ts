@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SettingsManager, CARD_SIGNALS_KEY, MAP_KINDS_KEY } from '../settings.js';
-import { SETTINGS_KEY } from '../types.js';
+import { SETTINGS_KEY } from '../model-values.js';
 
 let store: Map<string, string>;
 let writes: string[];

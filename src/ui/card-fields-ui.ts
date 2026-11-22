@@ -16,8 +16,9 @@ import { TreeRenderer } from '../renderer.js';
 import { SettingsManager, CardSignals } from '../settings.js';
 import { strings } from '../strings.js';
 import {
-    CARD_SIZE, CardDensity, CardPhotoShape, CardPhotoSize, NORMAL_PHOTO_BOX, Person, PersonId, Partnership, PartnershipId, StromData,
+    CardDensity, CardPhotoShape, CardPhotoSize, Person, PersonId, Partnership, PartnershipId, StromData,
 } from '../types.js';
+import { CARD_SIZE, NORMAL_PHOTO_BOX } from '../layout-config.js';
 import { ActionSignal, ACTION_GLYPH, storyFoldHtml } from '../card-signals.js';
 import { statusMarkHtml } from './fact-status.js';
 import {

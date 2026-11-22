@@ -11,7 +11,8 @@ import { describe, it, expect } from 'vitest';
 import { runLayoutPipeline } from '../pipeline/index.js';
 import { assertNoNodeOverlap, assertValidPositions } from './helpers/assertions.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
-import { StromData, Person, Partnership, PersonId, PartnershipId, Gender, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, Gender } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 import type { LayoutResult } from '../pipeline/types.js';
 
 const config = DEFAULT_LAYOUT_CONFIG;

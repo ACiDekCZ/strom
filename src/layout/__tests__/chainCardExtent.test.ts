@@ -18,7 +18,9 @@
 import { describe, it, expect } from 'vitest';
 import { getBlockCardExtent } from '../pipeline/index.js';
 import { FamilyBlock, FamilyBlockId, UnionId, LayoutModel } from '../pipeline/types.js';
-import { DEFAULT_LAYOUT_CONFIG, PersonId, toPersonId } from '../../types.js';
+import { PersonId } from '../../types.js';
+import { toPersonId } from '../../ids.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 
 const config = DEFAULT_LAYOUT_CONFIG;
 const CARD = config.cardWidth;

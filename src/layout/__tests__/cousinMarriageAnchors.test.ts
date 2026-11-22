@@ -13,7 +13,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { runLayoutPipeline } from '../pipeline/index.js';
-import { StromData, PersonId, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { StromData, PersonId } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 
 const FIXTURE = join(__dirname, '../../../test/devel-demo.json');
 

@@ -9,7 +9,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { findComponents } from '../components.js';
-import { StromData, Person, PersonId, PartnershipId, toPersonId, toPartnershipId } from '../types.js';
+import { StromData, Person, PersonId, PartnershipId } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
 
 function person(id: string, firstName: string, lastName: string, birthDate?: string): Person {
     return {

@@ -35,7 +35,8 @@ import { measureSubtrees } from '../pipeline/4-measure.js';
 import { placeX } from '../pipeline/5-place-x.js';
 import { applyConstraints } from '../pipeline/6-constraints.js';
 import { routeEdges } from '../pipeline/7-route-edges.js';
-import { PersonId, PartnershipId, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { PersonId, PartnershipId, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 import { GraphSelection, RoutedModel, UnionId } from '../pipeline/types.js';
 
 describe('routeEdges - bus routing', () => {

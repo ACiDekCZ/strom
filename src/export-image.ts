@@ -7,9 +7,10 @@
  */
 
 import {
-    StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG, PartnershipStatus, PersonId, personCardHeight,
-    CardPhotoSize, CardPhotoShape, NORMAL_PHOTO_BOX,
+    StromData, LayoutConfig, PartnershipStatus, PersonId, 
+    CardPhotoSize, CardPhotoShape, 
 } from './types.js';
+import { DEFAULT_LAYOUT_CONFIG, personCardHeight, NORMAL_PHOTO_BOX } from './layout-config.js';
 import { LayoutResult } from './layout/pipeline/types.js';
 import { displayYear } from './dates.js';
 import { personInitials } from './initials.js';

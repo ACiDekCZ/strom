@@ -11,7 +11,8 @@
  * little beyond the tree itself.
  */
 
-import { StromData, uniqueIdSuffix } from './types.js';
+import { StromData } from './types.js';
+import { uniqueIdSuffix } from './ids.js';
 import { StorageManager } from './storage.js';
 import { SettingsManager } from './settings.js';
 import { CryptoSession, EncryptedData } from './crypto.js';

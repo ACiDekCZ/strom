@@ -16,19 +16,18 @@ import {
     PartnershipId,
     PartnershipStatus,
     Gender,
-    GENDERS,
-    isGender,
+    
     LifeEvent,
     Story,
     RelationType,
     RelationContext,
     StromData,
     TreeId,
-    LAST_FOCUSED,
     LastFocusedMarker,
     PortraitCrop,
     PortraitSource
 } from '../types.js';
+import { GENDERS, isGender, LAST_FOCUSED } from '../model-values.js';
 import { coupleEventLabel, newestLifeEvent } from '../events.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { storyFactText } from '../story-sources.js';
@@ -52,7 +51,8 @@ import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
 import { lifelineChips, setLifelineChip, newLifelineCard } from '../lifeline-view.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, MediaOriginal, personSourceIds, isPrimaryName } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, MediaOriginal } from '../types.js';
+import { personSourceIds, isPrimaryName } from '../model-values.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';

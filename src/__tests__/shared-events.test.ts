@@ -32,9 +32,10 @@ import {
     personSharedEvents, sharedWith, MARRIAGE_EVENT_ID,
 } from '../shared-events.js';
 import {
-    StromData, Person, PersonId, PartnershipId, TreeId, LifeEvent, EmbeddedDataEnvelope, STROM_DATA_VERSION,
-    toPersonId, toPartnershipId,
+    StromData, Person, PersonId, PartnershipId, TreeId, LifeEvent, EmbeddedDataEnvelope, 
 } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import { strings, getStringsForLang } from '../strings.js';
 
 const TREE = 'shared-events' as TreeId;

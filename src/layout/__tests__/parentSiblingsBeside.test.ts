@@ -24,7 +24,8 @@ import { loadFixture } from './helpers/loadFixture.js';
 import { runLayoutPipeline, planShownChildrenFolding } from '../pipeline/index.js';
 import { assertNoNodeOverlap } from './helpers/assertions.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
-import { PersonId, PartnershipId, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { PersonId, PartnershipId, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 import type { LayoutResult } from '../pipeline/types.js';
 import type { ViewLink } from '../../view-links.js';
 

@@ -4,7 +4,8 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SettingsManager } from '../settings.js';
-import { SETTINGS_KEY, AppSettings } from '../types.js';
+import { AppSettings } from '../types.js';
+import { SETTINGS_KEY } from '../model-values.js';
 
 let store: Map<string, string>;
 const internals = SettingsManager as unknown as { load(): void; settings: AppSettings };

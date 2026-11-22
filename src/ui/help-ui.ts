@@ -20,7 +20,7 @@
 
 import { strings, getCurrentLanguage } from '../strings.js';
 import { tourShown } from './tour.js';
-import { APP_VERSION } from '../types.js';
+import { APP_VERSION } from '../version.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { findRule, hasHelpData, helpDocInfo, helpLangOf, loadHelp } from '../help/help-data.js';
 import {

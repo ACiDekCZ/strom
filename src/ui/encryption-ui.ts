@@ -23,9 +23,9 @@ import {
     RelationContext,
     StromData,
     TreeId,
-    LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
+import { LAST_FOCUSED } from '../model-values.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PrivacyMode, ContentOptions, ContentPreset, CONTENT_PRESETS, matchContentPreset, applyContentOptions, applyLivingPrivacy } from '../privacy.js';
 import { totalPhotoBytes } from '../photo.js';
@@ -43,7 +43,8 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, PERSON_CITATION_FIELDS } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { PERSON_CITATION_FIELDS } from '../model-values.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData, isCryptoAvailable } from '../crypto.js';
 import { cryptoErrorText, cryptoFailureText, resetPasswordError, requireCrypto } from '../crypto-errors.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';

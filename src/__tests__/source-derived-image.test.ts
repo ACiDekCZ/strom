@@ -16,7 +16,8 @@ import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { setLanguage } from '../strings.js';
-import { STROM_DATA_VERSION, type Source, type StromData, type TreeId } from '../types.js';
+import { type Source, type StromData, type TreeId } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 beforeAll(() => setLanguage('cs'));
 

@@ -26,7 +26,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
-import { APP_VERSION } from '../types.js';
+import { APP_VERSION } from '../version.js';
 import { aboutChangelogLink, changelogIsBeta } from '../about-links.js';
 import {
     EmbeddedReleaseNotes,

@@ -22,7 +22,8 @@ import { fitNameHtml } from '../person-name.js';
 import { keepMarriedSurname, keepDismissedMarriedSuggestions, stabilizeIds, contentFingerprint, MARRIED_SURNAME_FEATURE } from '../research-link.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { SettingsManager } from '../settings.js';
-import { Person, PersonId, PartnershipId, Partnership, StromData, TreeId, toPersonId } from '../types.js';
+import { Person, PersonId, PartnershipId, Partnership, StromData, TreeId } from '../types.js';
+import { toPersonId } from '../ids.js';
 
 function person(id: string, firstName: string, lastName: string, gender: Person['gender'], extra: Partial<Person> = {}): Person {
     return {

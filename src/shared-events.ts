@@ -17,8 +17,9 @@
 import { eventIsShareable } from './events.js';
 import { parseFlexDate, toCanonical, yearOf } from './dates.js';
 import {
-    EventParticipant, LifeEvent, LifeEventType, Person, ParticipantRole, PARTICIPANT_ROLES, PersonId, PartnershipId, StromData,
+    EventParticipant, LifeEvent, LifeEventType, Person, ParticipantRole, PersonId, PartnershipId, StromData,
 } from './types.js';
+import { PARTICIPANT_ROLES } from './model-values.js';
 
 // ==================== FORMAT ====================
 

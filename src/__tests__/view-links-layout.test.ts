@@ -20,7 +20,8 @@ import { buildFanModel } from '../fan-chart.js';
 import { computeTimelineModel } from '../timeline.js';
 import { buildFamilyBook } from '../book.js';
 import { normalizeSingleParents } from '../single-parent.js';
-import { DEFAULT_LAYOUT_CONFIG, Person, PersonId, StromData } from '../types.js';
+import { Person, PersonId, StromData } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../layout-config.js';
 import { loadHypothesisLinksTree } from './helpers/hypothesis-links-fixture.js';
 
 const { data: TREE, id } = loadHypothesisLinksTree();

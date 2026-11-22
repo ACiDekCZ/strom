@@ -19,7 +19,8 @@
  * intermarried tree bounded (its further ancestors are already in that line).
  */
 
-import { StromData, Person, PersonId, PlaceGeo, parentSlots } from './types.js';
+import { StromData, Person, PersonId, PlaceGeo } from './types.js';
+import { parentSlots } from './model-values.js';
 import { placeKey } from './places.js';
 import { yearOf } from './dates.js';
 

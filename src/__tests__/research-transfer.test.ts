@@ -12,7 +12,8 @@ import {
 import { legacyInstallLine, legacyNpmLines, sanitizeInstallRecord, newInstallRecord } from '../research-install.js';
 import { researchNewUrl, sanitizeAdoptOffer } from '../research-link.js';
 import { researchKeepsTakenBack } from '../research-sync.js';
-import { STROM_DATA_VERSION, StromData, PersonId } from '../types.js';
+import { StromData, PersonId } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const TOKEN = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcd';
 const BETA = 'https://beta.stromapp.info/run/';

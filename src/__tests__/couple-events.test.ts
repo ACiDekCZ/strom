@@ -26,9 +26,10 @@ import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import {
-    CoupleEvent, Partnership, Person, StromData, TreeId, STROM_DATA_VERSION,
-    toPartnershipId, toPersonId,
+    CoupleEvent, Partnership, Person, StromData, TreeId, 
 } from '../types.js';
+import { toPartnershipId, toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const JAN = toPersonId('p_jan');
 const MARIE = toPersonId('p_marie');

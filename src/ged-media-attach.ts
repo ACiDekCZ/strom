@@ -9,7 +9,8 @@
  */
 
 import { addPersonMedia, givePortraitsRecords } from './media.js';
-import { PersonId, PartnershipId, StromData, uniqueIdSuffix } from './types.js';
+import { PersonId, PartnershipId, StromData } from './types.js';
+import { uniqueIdSuffix } from './ids.js';
 import { MAX_PDF_BYTES } from './attachments.js';
 import { dropMediaLink } from './import-origin.js';
 import { strings } from './strings.js';

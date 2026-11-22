@@ -3,7 +3,8 @@
  * Reusable component for displaying a focused tree view in an overlay
  */
 
-import { PersonId, StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG } from './types.js';
+import { PersonId, StromData, LayoutConfig } from './types.js';
+import { DEFAULT_LAYOUT_CONFIG } from './layout-config.js';
 import { computeLayout, runLayoutPipeline, LayoutResult, StromLayoutEngine, SelectionPolicy, Connection, SpouseLine } from './layout/index.js';
 import { extractSubtree } from './subtree.js';
 import { bestRenderFocus } from './split-families.js';

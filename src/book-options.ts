@@ -5,7 +5,8 @@
  * or `lifelineDefaults` (§4.3).
  */
 
-import { PersonId, StromData, personSourceIds, partnershipSourceIds } from './types.js';
+import { PersonId, StromData } from './types.js';
+import { personSourceIds, partnershipSourceIds } from './model-values.js';
 import { PrivacyMode } from './privacy.js';
 import { getStringsForLang } from './strings.js';
 import { yearOf } from './dates.js';

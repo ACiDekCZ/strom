@@ -11,7 +11,8 @@ import { auditBusClearance } from './helpers/busClearance.js';
 import { runLayoutPipeline } from '../pipeline/index.js';
 import { denseGapExtra, LANE_OFFSET } from '../pipeline/7-route-edges.js';
 import type { Connection, LayoutResult } from '../pipeline/types.js';
-import { DEFAULT_LAYOUT_CONFIG, DENSE_LAYOUT_CONFIG, LayoutConfig, PersonId, layoutConfigFor } from '../../types.js';
+import { LayoutConfig, PersonId } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG, DENSE_LAYOUT_CONFIG, layoutConfigFor } from '../../layout-config.js';
 
 describe('layoutConfigFor', () => {
     it('normal is the default configuration, value for value', () => {

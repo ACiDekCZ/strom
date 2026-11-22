@@ -15,7 +15,8 @@ import {
 } from '../tree-overview.js';
 import { computeFamilyStats, computeEvidenceGaps } from '../stats.js';
 import { setLanguage, getStringsForLang } from '../strings.js';
-import { StromData, Person, PersonId, Partnership, PartnershipId, toPersonId, toPartnershipId } from '../types.js';
+import { StromData, Person, PersonId, Partnership, PartnershipId } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
 
 const id = (s: string): PersonId => toPersonId(s);
 

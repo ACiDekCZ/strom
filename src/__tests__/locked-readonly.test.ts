@@ -46,7 +46,8 @@ import { TreeManager } from '../tree-manager.js';
 import { DataManager, DataLockedError } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { CryptoSession, isEncrypted, EncryptedData } from '../crypto.js';
-import { StromData, TreeId, TreeMetadata, LAST_FOCUSED } from '../types.js';
+import { StromData, TreeId, TreeMetadata } from '../types.js';
+import { LAST_FOCUSED } from '../model-values.js';
 
 const PASSWORD = 'correct horse battery';
 const T1 = 't1' as TreeId;

@@ -9,7 +9,8 @@ import { marriagesInOrder, unionOrderBadges, compareMarriages, unionSummaries, v
 import { buildTreeSvg } from '../export-image.js';
 import { runLayoutPipeline } from '../layout/pipeline/index.js';
 import { setLanguage, strings } from '../strings.js';
-import { StromData, Person, PersonId, PartnershipId, Partnership, DEFAULT_LAYOUT_CONFIG, DENSE_LAYOUT_CONFIG, LayoutConfig } from '../types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, LayoutConfig } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG, DENSE_LAYOUT_CONFIG } from '../layout-config.js';
 
 const P = (id: string) => id as PersonId;
 

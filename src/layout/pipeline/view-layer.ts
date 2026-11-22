@@ -28,7 +28,8 @@
  * family, `virtual` for the line(s) that exist only because of a link.
  */
 
-import { Person, PersonId, PartnershipId, Partnership, StromData, oppositeGender } from '../../types.js';
+import { Person, PersonId, PartnershipId, Partnership, StromData } from '../../types.js';
+import { oppositeGender } from '../../model-values.js';
 import { isPurePlaceholder } from '../../single-parent.js';
 import { ViewLink, ViewLinkContext, viewLinkChildOf, viewLinkContext, viewLinkIsland, viewLinkTreeSide } from '../../view-links.js';
 import { LayoutModel, LayoutResult, LayoutViewLayer } from './types.js';

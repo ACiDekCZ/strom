@@ -11,7 +11,8 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { getDemoTree, DEMO_FOCUS, type DemoImageMaker } from '../demo-tree.js';
 import { personMedia, allMedia } from '../media.js';
 import { countImages } from '../attachments.js';
-import { STROM_DATA_VERSION, type PersonId, type StromData } from '../types.js';
+import { type PersonId, type StromData } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const PNG2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';

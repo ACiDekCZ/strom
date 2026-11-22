@@ -22,7 +22,8 @@ import { conflictTakeovers } from '../research-sync.js';
 import { shownName } from '../person-name.js';
 import { buildPersonsCsv } from '../csv-export.js';
 import { initLanguage } from '../strings.js';
-import { Person, PersonId, StromData, TreeId, toPersonId } from '../types.js';
+import { Person, PersonId, StromData, TreeId } from '../types.js';
+import { toPersonId } from '../ids.js';
 
 const importGed = (ged: string): StromData => convertToStrom(parseGedcom(ged)).data;
 const people = (data: StromData): Person[] => Object.values(data.persons);

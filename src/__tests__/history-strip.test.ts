@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { historyStripShows, parseHistoryPayload, type HistoryPayload, type HistoryStripEnv } from '../history.js';
 import { SettingsManager } from '../settings.js';
-import { SETTINGS_KEY } from '../types.js';
+import { SETTINGS_KEY } from '../model-values.js';
 
 const AT = '2026-10-28T10:00:00Z';
 

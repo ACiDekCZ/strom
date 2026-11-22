@@ -21,7 +21,9 @@ import { setLanguage } from '../strings.js';
 import { MARRIAGE_EVENT_ID } from '../shared-events.js';
 import { ownRecordPrefill, ownRecordType, derivedParticipations, type OwnRecordPrefill } from '../derived-participations.js';
 import { derivedRowsMethods } from '../ui/derived-rows-ui.js';
-import { STROM_DATA_VERSION, toPersonId, type LifeEvent, type PartnershipId, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { type LifeEvent, type PartnershipId, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const TREE = 'record-own-part' as TreeId;
 const HM = toPersonId('p_hm');

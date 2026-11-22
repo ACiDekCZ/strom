@@ -7,7 +7,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { runLayoutPipeline, collectBloodDescendants, collectBloodRelatives } from '../pipeline/index.js';
-import { StromData, Person, PersonId, PartnershipId, Gender, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { StromData, Person, PersonId, PartnershipId, Gender } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 
 function person(id: string, gender: Gender, o: Partial<Person> = {}): Person {
     return {

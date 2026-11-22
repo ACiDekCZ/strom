@@ -7,7 +7,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { StromData, PersonId, PartnershipId, STROM_DATA_VERSION } from '../types.js';
+import { StromData, PersonId, PartnershipId } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 // Helper to create test StromData with specific version
 function createTestData(version?: number): StromData {

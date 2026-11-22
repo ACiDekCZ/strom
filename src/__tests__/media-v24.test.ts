@@ -7,7 +7,8 @@ import { migrateData } from '../data.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { personMedia, mediaSourceId, allMedia } from '../media.js';
-import { STROM_DATA_VERSION, type PersonId, type StromData } from '../types.js';
+import { type PersonId, type StromData } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import { ORIGINAL_ONLY_DATA_URL } from '../validation.js';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

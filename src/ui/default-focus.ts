@@ -15,7 +15,7 @@
 
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
-import { UI } from '../ui.js';
+import { getUI } from '../ui-ref.js';
 import { strings } from '../strings.js';
 import { iconSvg } from '../icons.js';
 import { shownName } from '../person-name.js';
@@ -52,7 +52,7 @@ export function resolveDefaultTarget(): DefaultTarget | null {
 /** The person in the middle of the view: the fan's pinned centre while one is pinned, else the focus. */
 function shownCentre(): PersonId | null {
     const focus = TreeRenderer.getFocusPersonId();
-    if (TreeRenderer.getViewMode() === 'fan') return UI.liveFollowPinned?.() ?? focus;
+    if (TreeRenderer.getViewMode() === 'fan') return getUI().liveFollowPinned?.() ?? focus;
     return focus;
 }
 
@@ -79,9 +79,9 @@ export function focusDefaultPerson(source: 'button' | 'shortcut'): boolean {
     if (!isDefaultFocusContext()) return false;
     const t = resolveDefaultTarget();
     if (!t || isAtDefault(t)) return false;
-    if (TreeRenderer.getViewMode() === 'fan' && UI.liveFollowPinned?.()) {
+    if (TreeRenderer.getViewMode() === 'fan' && getUI().liveFollowPinned?.()) {
         // Released without the rule's own re-centring: the fan goes straight to the default person.
-        UI.unpinFanCenter?.(false);
+        getUI().unpinFanCenter?.(false);
         if (TreeRenderer.getFocusPersonId() === t.id) {
             TreeRenderer.getFanView()?.recenterAsOrigin(t.id);
             updateDefaultFocusButtons();
@@ -120,7 +120,7 @@ function buttonView(btn: HTMLElement): ViewMode {
 
 /** The keys of the action for `aria-keyshortcuts` (§6). */
 function keyShortcuts(): string {
-    return UI.isMacPlatform() ? 'H Meta+1' : 'H Control+1';
+    return getUI().isMacPlatform() ? 'H Meta+1' : 'H Control+1';
 }
 
 /**

@@ -21,14 +21,12 @@ import { stampAddedAt } from './person-lists-data.js';
 import { normalizeSingleParents } from './single-parent.js';
 import {
     FactStatus,
-    parseFactStatus,
     PersonId,
     PartnershipId,
     Person,
     Partnership,
     PartnershipStatus,
     Gender,
-    oppositeGender,
     StromData,
     LifeEvent,
     SourceExcerpt,
@@ -45,11 +43,8 @@ import {
     MaterialKind,
     MediaPlace,
     MediaOriginal,
-    toPersonId,
-    toPartnershipId,
-    generateLifeEventId,
-    generateParticipantId,
-    generateSourceId,
+    
+    
     PlaceGeo,
     PlaceRecord,
     PersonResearch,
@@ -72,9 +67,10 @@ import {
     OriginalIdLine,
     ResearchFactOrigin,
     ResearchFactVerify,
-    uniqueIdSuffix,
     PrimaryName,
 } from './types';
+import { toPersonId, toPartnershipId, generateLifeEventId, generateParticipantId, generateSourceId, uniqueIdSuffix } from './ids.js';
+import { parseFactStatus, oppositeGender } from './model-values.js';
 import { dateSortKey, formatFlexDate, instantLocalDay } from './dates';
 import { gedcomDatePhrase, parseGedcomDate } from './gedcom-date-read';
 import { localAge } from './recorded-age';

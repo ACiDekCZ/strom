@@ -9,14 +9,15 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    isEmbeddedEnvelope,
-    generateExportId,
+    
     EmbeddedDataEnvelope,
     StromData,
     PersonId,
     PartnershipId,
-    STROM_DATA_VERSION
 } from '../types.js';
+import { generateExportId } from '../ids.js';
+import { isEmbeddedEnvelope } from '../model-values.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 describe('generateExportId', () => {
     it('generates unique IDs', () => {

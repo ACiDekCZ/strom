@@ -7,7 +7,7 @@
 
 import type { Language } from './strings.js';
 import { getStringsForLang } from './strings.js';
-import { BETA_HOSTNAME, PWA_HOSTNAME } from './types.js';
+import { BETA_HOSTNAME, PWA_HOSTNAME } from './model-values.js';
 
 export const USERS_GROUP_URL = 'https://www.facebook.com/groups/stromapp';
 

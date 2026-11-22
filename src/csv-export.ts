@@ -6,7 +6,8 @@
  * Dates are kept in the canonical flex form (unambiguous, sortable).
  */
 
-import { StromData, Person, PersonId, parentSlots } from './types.js';
+import { StromData, Person, PersonId } from './types.js';
+import { parentSlots } from './model-values.js';
 import { strings } from './strings.js';
 
 const SEP = ';';

@@ -28,7 +28,7 @@
  */
 
 import type { Gender, LifeEvent, PartnershipId, PartnershipStatus, PartnershipUpdates, Person, PersonId, StromData } from '../../types.js';
-import { GENDERS } from '../../types.js';
+import { GENDERS } from '../../model-values.js';
 import { formatDateForInput, normalizeDateInput } from '../../dates.js';
 import { strings } from '../../strings.js';
 import { unionPartners, unionWithoutWedding, type ColumnDef } from './table-columns.js';

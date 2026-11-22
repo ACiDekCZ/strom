@@ -10,7 +10,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { runLayoutPipeline } from '../pipeline/index.js';
-import { StromData, Person, Partnership, PersonId, PartnershipId, Gender, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, Gender } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 
 function build(): StromData {
     const persons: Record<string, Person> = {};

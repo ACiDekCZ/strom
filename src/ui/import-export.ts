@@ -29,10 +29,10 @@ import {
     RelationContext,
     StromData,
     TreeId,
-    LAST_FOCUSED,
     LastFocusedMarker,
     EmbeddedDataEnvelope
 } from '../types.js';
+import { LAST_FOCUSED } from '../model-values.js';
 import { strings } from '../strings.js';
 import { extractSubtree } from '../subtree.js';
 import { findComponents } from '../components.js';

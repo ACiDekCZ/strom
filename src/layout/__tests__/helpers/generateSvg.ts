@@ -3,7 +3,8 @@
  * Deterministic output for reliable comparisons.
  */
 
-import { StromData, DEFAULT_LAYOUT_CONFIG } from '../../../types.js';
+import { StromData } from '../../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../../layout-config.js';
 import { LayoutResult } from '../../pipeline/types.js';
 
 interface SvgOptions {

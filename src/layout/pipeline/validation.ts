@@ -9,7 +9,8 @@
  * 4. All connections and omitted lines reference existing persons
  */
 
-import { PersonId, Position, LayoutConfig, personCardHeight } from '../../types.js';
+import { PersonId, Position, LayoutConfig } from '../../types.js';
+import { personCardHeight } from '../../layout-config.js';
 import { LayoutResult, ValidationResult } from './types.js';
 import { layoutSegments, findLineViolations } from './line-geometry.js';
 

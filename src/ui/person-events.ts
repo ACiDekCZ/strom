@@ -10,8 +10,8 @@
 import { DataManager } from '../data.js';
 import {
     LifeEvent, LifeEventType, EventParticipant, ParticipantRole, PersonId, PartnershipId,
-    generateParticipantId,
 } from '../types.js';
+import { generateParticipantId } from '../ids.js';
 import { PersonPicker } from '../person-picker.js';
 import { extraParticipantRole } from '../godparents.js';
 import { strings } from '../strings.js';

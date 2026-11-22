@@ -32,7 +32,8 @@ import { buildLineages } from '../lineage.js';
 import { setLanguage, strings } from '../strings.js';
 import { syntheticTree } from './helpers/synthetic-tree.js';
 import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
-import { STROM_DATA_VERSION, type Partnership, type PartnershipId, type Person, type PersonId, type PersonList, type ResearchPlace, type StromData, type TreeId } from '../types.js';
+import { type Partnership, type PartnershipId, type Person, type PersonId, type PersonList, type ResearchPlace, type StromData, type TreeId } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const id = (s: string) => s as PersonId;
 const uid = (s: string) => s as PartnershipId;

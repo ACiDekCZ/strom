@@ -21,7 +21,8 @@ import { runLayoutPipeline } from '../pipeline/index.js';
 import { assertNoNodeOverlap, assertValidPositions } from './helpers/assertions.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
 import type { LayoutResult } from '../pipeline/types.js';
-import { PersonId, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { PersonId, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 
 const config = DEFAULT_LAYOUT_CONFIG;
 const data = loadFixture('t5c_husband_of_mother_and_widow');

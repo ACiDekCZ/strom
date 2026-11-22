@@ -15,7 +15,8 @@ import { migrateData } from '../data.js';
 import { moveLegacyAttachments, personMedia } from '../media.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { buildChangePacket, applyPacketOntoData, applyChangePacket } from '../share-diff.js';
-import { StromData, STROM_DATA_VERSION } from '../types.js';
+import { StromData } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import { ORIGINAL_ONLY_DATA_URL } from '../validation.js';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

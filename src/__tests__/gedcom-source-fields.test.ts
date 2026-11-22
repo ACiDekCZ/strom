@@ -11,7 +11,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { migrateData } from '../data.js';
-import { APP_VERSION, Source, StromData, STROM_DATA_VERSION } from '../types.js';
+import { Source, StromData } from '../types.js';
+import { APP_VERSION, STROM_DATA_VERSION } from '../version.js';
 import { setLanguage, strings } from '../strings.js';
 
 beforeAll(() => setLanguage('cs'));

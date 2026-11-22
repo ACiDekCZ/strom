@@ -6,8 +6,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { migrateData, DataManager } from '../data.js';
 import {
-    StromData, Person, Partnership, PersonId, PartnershipId, TreeId, toPersonId, toPartnershipId,
+    StromData, Person, Partnership, PersonId, PartnershipId, TreeId, 
 } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
 import {
     factImportParts, factValue, importedValueOf, isFromImport, keepImports, markTreeImported,
     nextImportId, sanitizeImports, addImportRecords,

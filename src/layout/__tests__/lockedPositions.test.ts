@@ -9,7 +9,8 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { PersonId, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { PersonId } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 import { loadFixture } from './helpers/loadFixture.js';
 import { selectSubgraph } from '../pipeline/1-select-subgraph.js';
 import { buildLayoutModel } from '../pipeline/2-build-model.js';

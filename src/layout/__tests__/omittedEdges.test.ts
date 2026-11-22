@@ -23,7 +23,8 @@ import { omitUnroutableDrops, sharedLaneOverlaps } from '../pipeline/7-route-edg
 import { auditGeometry } from './helpers/geometryAudit.js';
 import { syntheticPersonHeights } from './helpers/bandAudit.js';
 import { loadFixture } from './helpers/loadFixture.js';
-import { DEFAULT_LAYOUT_CONFIG, LayoutConfig, Person, PartnershipId, PersonId, StromData } from '../../types.js';
+import { LayoutConfig, Person, PartnershipId, PersonId, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 
 function layout(data: StromData, focus: string, expanded: boolean, depth = 5, config: LayoutConfig = DEFAULT_LAYOUT_CONFIG): LayoutResult {
     return runLayoutPipeline({

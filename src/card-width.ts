@@ -37,7 +37,7 @@
 
 import type { CardHeightMode, CardLine, CardLineStyle, CardValueLines } from './card-fields.js';
 import type { CardDensity, CardPhotoSize } from './types.js';
-import { NORMAL_PHOTO_BOX } from './types.js';
+import { NORMAL_PHOTO_BOX } from './layout-config.js';
 
 export const CUSTOM_CARD_MIN_WIDTH = 200;
 /** The medium width's cap: the card before the width choice, and the default. */
@@ -833,7 +833,7 @@ export function customCardCutLines<L extends CardLineText>(entries: Iterable<Cus
 
 // ============= The Normal card's name on rows (T40) =============
 
-/** The Normal card's height with a name of at most two rows (types.ts CARD_SIZE, index.html .person-card). */
+/** The Normal card's height with a name of at most two rows (layout-config.ts CARD_SIZE, index.html .person-card). */
 export const NORMAL_CARD_HEIGHT = 64;
 /**
  * The Normal card's text column: 188 − 2 × 1 (border) − 2 × 9 (padding) − 34
@@ -863,7 +863,7 @@ export interface NormalCardName {
 
 /**
  * The Normal card's text column in a view of a photo size (spec 096 §2,
- * types.ts NORMAL_PHOTO_BOX): beside the avatar 126px in every size (the box
+ * layout-config.ts NORMAL_PHOTO_BOX): beside the avatar 126px in every size (the box
  * grows with the avatar, a photo or the initials alike, spec 103 K2.1); a
  * card without an avatar (a placeholder) the card's width less its border
  * and padding of 9.

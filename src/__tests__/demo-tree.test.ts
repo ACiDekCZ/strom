@@ -16,7 +16,8 @@ import { setLanguage } from '../strings.js';
 import { runLayoutPipeline } from '../layout/pipeline/index.js';
 import { assertNoNodeOverlap, assertValidPositions } from '../layout/__tests__/helpers/assertions.js';
 import { auditGeometry } from '../layout/__tests__/helpers/geometryAudit.js';
-import { PersonId, DEFAULT_LAYOUT_CONFIG } from '../types.js';
+import { PersonId } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../layout-config.js';
 
 // The default card, and the Register card the sample opens with (five lines).
 const CONFIGS = [

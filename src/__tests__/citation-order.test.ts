@@ -16,7 +16,8 @@ import {
     citationRemoveTaken, researchTakes, setCitationFeaturesLookup,
 } from '../citation-gates.js';
 import { TreeManager } from '../tree-manager.js';
-import { Person, Source, StromData, TreeId, TreeMetadata, toPartnershipId, toPersonId } from '../types.js';
+import { Person, Source, StromData, TreeId, TreeMetadata } from '../types.js';
+import { toPartnershipId, toPersonId } from '../ids.js';
 
 const P = toPersonId('p_zbyhnev');
 const U = toPartnershipId('u_zbyhnev');

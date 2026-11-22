@@ -22,7 +22,8 @@
  * roomBelowExtra). The bus stays in the middle of the taller gap.
  */
 
-import { LayoutConfig, PersonId, personCardHeight } from '../../types.js';
+import { LayoutConfig, PersonId } from '../../types.js';
+import { personCardHeight } from '../../layout-config.js';
 import { GenerationalModel, GenerationBand } from './types.js';
 
 export interface GenerationBands {

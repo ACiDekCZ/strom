@@ -11,7 +11,8 @@
  */
 
 import { personMediaCount } from './media.js';
-import { StromData, Person, PersonId, PartnershipId, Partnership, oppositeGender } from './types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership } from './types.js';
+import { oppositeGender } from './model-values.js';
 
 /**
  * A stand-in and nothing more: no name, no data of its own, no parents —

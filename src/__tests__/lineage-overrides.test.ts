@@ -22,7 +22,8 @@ import { exportToGedcom } from '../ged-exporter.js';
 import { keepLineageOverrides, contentFingerprint } from '../research-link.js';
 import { diffOther, sentOtherRows, RESEARCH_UNREAD_KINDS } from '../research-changes.js';
 import { extractSubtree } from '../subtree.js';
-import { StromData, PersonId, Person, Partnership, PartnershipId, TreeId, STROM_DATA_VERSION } from '../types.js';
+import { StromData, PersonId, Person, Partnership, PartnershipId, TreeId } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 type Sex = 'male' | 'female';
 interface Spec { first: string; last: string; sex: Sex; born?: string; parents?: string[]; place?: string }

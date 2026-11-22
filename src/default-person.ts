@@ -5,7 +5,8 @@
  * Pure: reads only the data handed in.
  */
 
-import { LAST_FOCUSED, type PersonId, type StromData } from './types.js';
+import { type PersonId, type StromData } from './types.js';
+import { LAST_FOCUSED } from './model-values.js';
 
 type DefaultData = Pick<StromData, 'persons' | 'defaultPersonId' | 'lastFocusPersonId'>;
 

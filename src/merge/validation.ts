@@ -7,8 +7,9 @@ import {
     PersonId,
     PartnershipId,
     StromData,
-    STROM_DATA_VERSION, isGender
 } from '../types.js';
+import { isGender } from '../model-values.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import { migrateData } from '../data.js';
 import { ValidationResult } from './types.js';
 

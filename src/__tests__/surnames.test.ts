@@ -13,7 +13,8 @@ import {
     masculineForm, feminineForm, czechRulesApply, feminineFormIn, masculineFormIn, genderRulesApply,
 } from '../surnames.js';
 import { setLanguage } from '../strings.js';
-import { StromData, Person, PersonId, toPersonId } from '../types.js';
+import { StromData, Person, PersonId } from '../types.js';
+import { toPersonId } from '../ids.js';
 
 const tree = (groups?: string[][], people: Person[] = []): StromData => ({
     persons: Object.fromEntries(people.map(p => [p.id, p])) as Record<PersonId, Person>,

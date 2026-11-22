@@ -27,7 +27,8 @@ import { createMergeState, updateMatchDecision } from '../merge/matching.js';
 import { detectPartnershipConflicts, executeMerge, isEffectivelyConfirmed, updatePartnershipConflictResolution } from '../merge/executor.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { factCitations } from '../import-origin.js';
-import { StromData, STROM_DATA_VERSION, Partnership } from '../types.js';
+import { StromData, Partnership } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const FILE = readFileSync(join(process.cwd(), 'test', 'gedcom-066-combined.ged'), 'utf-8');
 const RESEARCH = readFileSync(join(process.cwd(), 'test', 'gedcom-066-combined-research.ged'), 'utf-8');

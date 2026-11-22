@@ -25,7 +25,8 @@
  */
 
 import { moveLegacyAttachments, personMediaCount, pruneMedia } from './media.js';
-import { StromData, Person, Partnership, Source, Attachment, PlaceGeo, PersonId, PartnershipId, STROM_DATA_VERSION } from './types.js';
+import { StromData, Person, Partnership, Source, Attachment, PlaceGeo, PersonId, PartnershipId } from './types.js';
+import { STROM_DATA_VERSION } from './version.js';
 import { addSurnameGroup } from './surnames.js';
 import { shownNameOrEmpty } from './person-name.js';
 

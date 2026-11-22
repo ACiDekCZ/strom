@@ -5,7 +5,8 @@
  * Pure: no DOM, no storage.
  */
 
-import { StromData, Person, Partnership, PartnershipId, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo, isPrimaryName, personSourceIds } from './types.js';
+import { StromData, Person, Partnership, PartnershipId, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo } from './types.js';
+import { isPrimaryName, personSourceIds } from './model-values.js';
 import { isPurePlaceholder } from './single-parent.js';
 import { mediaPersonIds, mediaSourceId, mediaSourceIds, personMediaIndex, placePersonId, placeSourceId, samePlace } from './media.js';
 import { collectPlaces } from './places.js';

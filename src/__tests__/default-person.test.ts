@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { startupPerson, defaultTarget } from '../default-person.js';
-import { LAST_FOCUSED, type PersonId, type StromData } from '../types.js';
+import { type PersonId, type StromData } from '../types.js';
+import { LAST_FOCUSED } from '../model-values.js';
 
 type Data = Pick<StromData, 'persons' | 'defaultPersonId' | 'lastFocusPersonId'>;
 

@@ -4,7 +4,8 @@
  */
 
 import { parseFlexDate, yearOf } from '../dates.js';
-import { PersonId, Person, Partnership, StromData, gendersCompatible } from '../types.js';
+import { PersonId, Person, Partnership, StromData } from '../types.js';
+import { gendersCompatible } from '../model-values.js';
 import { sameSurname, withSurnameRules } from '../surnames.js';
 import { detectPartnershipConflicts, AUTO_CONFIRM_SCORE } from './executor.js';
 import { idEvidence, sameFileRecord, strongIdIndex, StrongIdIndex } from './id-match.js';

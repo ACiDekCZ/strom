@@ -11,7 +11,8 @@ import { describe, it, expect } from 'vitest';
 import { loadFixture } from './helpers/loadFixture.js';
 import { runPipeline } from './helpers/runPipeline.js';
 import { assertPartnerOrdering } from './helpers/assertions.js';
-import { PersonId, PartnershipId, Person, Partnership, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { PersonId, PartnershipId, Person, Partnership, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 import { runLayoutPipeline } from '../pipeline/index.js';
 import type { PartnerOrder } from '../pipeline/types.js';
 

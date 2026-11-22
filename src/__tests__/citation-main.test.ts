@@ -14,7 +14,8 @@ import { UndoManager } from '../undo.js';
 import { remapCitations, unionCitations } from '../citation-quality.js';
 import { sourceUsage } from '../ui/table-view/table-sources.js';
 import { getStringsForLang } from '../strings.js';
-import { Person, Source, StromData, TreeId, toPartnershipId, toPersonId } from '../types.js';
+import { Person, Source, StromData, TreeId } from '../types.js';
+import { toPartnershipId, toPersonId } from '../ids.js';
 
 const TREE = 'citation-main-tree' as TreeId;
 const P = toPersonId('p_zbyhnev');

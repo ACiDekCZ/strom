@@ -6,7 +6,8 @@
  * registers it and drives the update handshake. Data (IndexedDB) is never touched by the SW.
  */
 
-import { AppMode, BETA_HOSTNAME, PWA_HOSTNAME } from './types.js';
+import { AppMode } from './types.js';
+import { BETA_HOSTNAME, PWA_HOSTNAME } from './model-values.js';
 import { detectAppBrowser } from './research-transfer.js';
 import { isIosDevice } from './file-copy.js';
 

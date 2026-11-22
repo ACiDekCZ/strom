@@ -14,7 +14,8 @@ vi.mock('../settings.js', () => ({
 import { DataManager, storedTreeForExport } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { validateJsonImport } from '../merge/validation.js';
-import { STROM_DATA_VERSION, TreeId } from '../types.js';
+import { TreeId } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const TREE = 'stored-v11' as TreeId;
 const person = (id: string, gender?: unknown) => ({

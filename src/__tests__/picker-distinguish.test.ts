@@ -9,7 +9,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { setLanguage } from '../strings.js';
-import { Person, StromData, Partnership, toPersonId, toPartnershipId, LifeEvent } from '../types.js';
+import { Person, StromData, Partnership, LifeEvent } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
 import { distinguishFeatures, distinguishLine, PickerDistinguisher, rowKey } from '../picker-distinguish.js';
 
 function person(id: string, firstName: string, lastName: string, extra: Partial<Person> = {}): Person {

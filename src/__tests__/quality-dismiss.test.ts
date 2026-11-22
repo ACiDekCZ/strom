@@ -21,7 +21,8 @@ import {
     visibleIssues, visibleValidation, dismissalFor, dismissalKey, summaryKind, dismissBody,
     parseQualityReply, marksInTree, mergeResearchMarks, researchMarkKey, sanitizeQualityDismissed,
 } from '../quality-dismiss.js';
-import { StromData, Person, PersonId, TreeId, STROM_DATA_VERSION, QualityDismissal } from '../types.js';
+import { StromData, Person, PersonId, TreeId, QualityDismissal } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const TREE = 'quality-test-tree' as TreeId;
 const RESEARCH_ID = '0b4c7a52-1c1f-4d7e-9a53-2f4a3c1e8b10';

@@ -22,7 +22,9 @@ import { buildTableModel, type TableModel } from '../ui/table-view/table-model.j
 import { columnById } from '../ui/table-view/table-columns.js';
 import { editChangeOf, editTargetOf, editValueOf, type EditTarget } from '../ui/table-view/table-edit.js';
 import type { GridLine } from '../ui/table-view/table-subrows.js';
-import { STROM_DATA_VERSION, toPersonId, type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { type Person, type PersonId, type StromData, type TreeId } from '../types.js';
+import { toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const TREE = 'shared-edit-paths' as TreeId;
 const HOSTIVIT = toPersonId('p_hostivit');

@@ -25,7 +25,8 @@ import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { allMedia } from '../media.js';
 import { countImages } from '../attachments.js';
-import { toPersonId, type StromData, type TreeId } from '../types.js';
+import { type StromData, type TreeId } from '../types.js';
+import { toPersonId } from '../ids.js';
 
 /** A small JPEG; `salt` makes its bytes (and hash) its own. */
 function jpeg(width: number, height: number, salt: number): Buffer {

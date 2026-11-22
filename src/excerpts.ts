@@ -4,7 +4,8 @@
  * tests can use them; the canvas cropping lives in the UI.
  */
 
-import { SourceExcerpt, generateExcerptId } from './types.js';
+import { SourceExcerpt } from './types.js';
+import { generateExcerptId } from './ids.js';
 import { dataUrlByteSize } from './photo.js';
 import { isSafeExcerptDataUrl } from './validation.js';
 

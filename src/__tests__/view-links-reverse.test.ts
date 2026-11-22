@@ -18,7 +18,8 @@ import {
 } from '../view-links.js';
 import { buildViewLayer, runLayoutPipeline } from '../layout/pipeline/index.js';
 import { viewOnlyRelationship } from '../view-link-kinship.js';
-import { DEFAULT_LAYOUT_CONFIG, Person, PersonId, StromData } from '../types.js';
+import { Person, PersonId, StromData } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../layout-config.js';
 import { loadHypothesisLinksTree } from './helpers/hypothesis-links-fixture.js';
 
 const REVERSE_GED = readFileSync(new URL('../../e2e/fixtures/research-hypothesis-reverse.ged', import.meta.url), 'utf8');

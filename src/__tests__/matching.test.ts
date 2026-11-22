@@ -10,7 +10,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { normalizeName, stringSimilarity, findMatches } from '../merge/matching.js';
-import { Person, StromData, toPersonId } from '../types.js';
+import { Person, StromData } from '../types.js';
+import { toPersonId } from '../ids.js';
 
 describe('normalizeName', () => {
     it('converts to lowercase', () => {

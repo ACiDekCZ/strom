@@ -56,7 +56,8 @@ import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { CryptoSession } from '../crypto.js';
 import { listSnapshots, getSnapshotJson } from '../snapshots.js';
-import { StromData, TreeId, TreeMetadata, STROM_DATA_VERSION } from '../types.js';
+import { StromData, TreeId, TreeMetadata } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const T1 = 't1' as TreeId;
 const T2 = 't2' as TreeId;

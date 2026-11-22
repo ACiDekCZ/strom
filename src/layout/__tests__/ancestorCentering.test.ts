@@ -18,7 +18,8 @@
 import { describe, it, expect } from 'vitest';
 import { loadFixture } from './helpers/loadFixture.js';
 import { runLayoutPipeline } from '../pipeline/index.js';
-import { DEFAULT_LAYOUT_CONFIG, PersonId } from '../../types.js';
+import { PersonId } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 
 const config = DEFAULT_LAYOUT_CONFIG;
 

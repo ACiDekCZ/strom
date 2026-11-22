@@ -17,7 +17,8 @@
  * which step 7 and the built-in validation use); the audit adds the cards.
  */
 
-import { PersonId, LayoutConfig, personCardHeight } from '../../../types.js';
+import { PersonId, LayoutConfig } from '../../../types.js';
+import { personCardHeight } from '../../../layout-config.js';
 import { LayoutResult } from '../../pipeline/types.js';
 import { layoutSegments, findLineViolations } from '../../pipeline/line-geometry.js';
 

@@ -11,7 +11,8 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { createMergeState } from '../merge/matching.js';
 import { executeMerge } from '../merge/executor.js';
 import { StorageManager } from '../storage.js';
-import { StromData, Source, STROM_DATA_VERSION } from '../types.js';
+import { StromData, Source } from '../types.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const READ = 'D20261019153012-a1b2';
 const READ2 = 'D20261020091500-c3d4';

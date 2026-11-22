@@ -13,7 +13,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { loadFixture } from './helpers/loadFixture.js';
 import { selectSubgraph, extendAncestorDepth, expandChildrenInSelection } from '../pipeline/1-select-subgraph.js';
 import { planShownChildrenFolding, runLayoutPipeline } from '../pipeline/index.js';
-import { PersonId, PartnershipId, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { PersonId, PartnershipId, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../layout-config.js';
 import { GraphSelection } from '../pipeline/types.js';
 
 describe('selectSubgraph', () => {

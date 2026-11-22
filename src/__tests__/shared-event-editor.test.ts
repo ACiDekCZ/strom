@@ -20,7 +20,9 @@ import {
     sharedSaveMessage, familyCandidates, aliveInYear, sharedDeleteLines, orderDraftRows,
 } from '../shared-event-editor.js';
 import { sharedWith } from '../shared-events.js';
-import { StromData, Person, PersonId, TreeId, LifeEvent, STROM_DATA_VERSION, toPersonId, toPartnershipId } from '../types.js';
+import { StromData, Person, PersonId, TreeId, LifeEvent } from '../types.js';
+import { toPersonId, toPartnershipId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import { getStringsForLang } from '../strings.js';
 
 const TREE = 'shared-editor' as TreeId;

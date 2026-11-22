@@ -10,7 +10,8 @@
 import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
-import { StromData, Person, Partnership, parseFactStatus } from '../types.js';
+import { StromData, Person, Partnership } from '../types.js';
+import { parseFactStatus } from '../model-values.js';
 import { factStatusLabel } from '../ui/fact-status.js';
 
 const TREE_GED = `0 HEAD

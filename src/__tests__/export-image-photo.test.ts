@@ -8,8 +8,9 @@ import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import { buildTreeSvg, PosterLayout, PosterOptions, ROUNDED_AVATAR_RADIUS } from '../export-image.js';
 import {
-    StromData, Person, PersonId, PartnershipId, Position, DEFAULT_LAYOUT_CONFIG, LayoutConfig, CardPhotoSize, CardPhotoShape, NORMAL_PHOTO_BOX,
+    StromData, Person, PersonId, PartnershipId, Position, LayoutConfig, CardPhotoSize, CardPhotoShape, 
 } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG, NORMAL_PHOTO_BOX } from '../layout-config.js';
 import { MeasureTexts, normalCardHeights, normalCardTextWidth, cardAvatarSize } from '../card-width.js';
 import { cardLines, DEFAULT_CARD_FIELDS } from '../card-fields.js';
 

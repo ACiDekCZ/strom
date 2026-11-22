@@ -30,8 +30,10 @@
 
 import {
     StromData, Person, Partnership, PersonId, PartnershipId, Gender, PlaceGeo, Source, LifeEvent,
-    EventParticipant, Attachment, toPersonId, toPartnershipId, STROM_DATA_VERSION,
+    EventParticipant, Attachment, 
 } from './types.js';
+import { toPersonId, toPartnershipId } from './ids.js';
+import { STROM_DATA_VERSION } from './version.js';
 import { strings } from './strings.js';
 import { localAge } from './recorded-age.js';
 import { placeKey } from './places.js';

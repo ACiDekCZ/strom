@@ -55,7 +55,9 @@ import { UndoManager } from '../undo.js';
 import { AuditLogManager } from '../audit-log.js';
 import { imageLoads, resetImageLoads, startImageLoad, takePendingImages, type ImageLoadQueue } from '../image-loads.js';
 import { pendingImageUrl, sha256Hex } from '../research-image-refs.js';
-import { STROM_DATA_VERSION, toPersonId, type PersonId, type StromData, type TreeId, type TreeMetadata } from '../types.js';
+import { type PersonId, type StromData, type TreeId, type TreeMetadata } from '../types.js';
+import { toPersonId } from '../ids.js';
+import { STROM_DATA_VERSION } from '../version.js';
 import {
     openPhotoModel, personPhotoKey, setModelPhoto, photoModelState, photoArrived, photoFollowsData,
     photoSaveFields, photoSaved, photoChanged, canRecropPhoto, type PhotoModel,

@@ -15,7 +15,8 @@
  * Also creates spouse lines between partners in unions.
  */
 
-import { PersonId, LayoutConfig, spouseLineOffset, personCardHeight } from '../../types.js';
+import { PersonId, LayoutConfig } from '../../types.js';
+import { spouseLineOffset, personCardHeight } from '../../layout-config.js';
 import { computeGenerationBands, roomBelowExtra } from './bands.js';
 import { findChainExtraPartner } from './6-constraints.js';
 import { connectionSegments, layoutSegments, LineViolation, LINE_EPS, SegmentIndex } from './line-geometry.js';

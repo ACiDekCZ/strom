@@ -24,7 +24,8 @@ import { computeTimelineModel, computePersonLifeline } from '../timeline.js';
 import { researchFactLabel } from '../ui/person-research-ui.js';
 import { humanizeChange } from '../research-link.js';
 import { getStringsForLang, setLanguage, strings } from '../strings.js';
-import { Person, PersonId, StromData, TreeId, toPersonId } from '../types.js';
+import { Person, PersonId, StromData, TreeId } from '../types.js';
+import { toPersonId } from '../ids.js';
 
 const importGed = (ged: string): StromData => convertToStrom(parseGedcom(ged)).data;
 const people = (data: StromData): Person[] => Object.values(data.persons);

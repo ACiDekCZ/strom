@@ -21,7 +21,8 @@ import {
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
-import { CONFLICT_REVIEW_SOURCE_RETRACTED, type Partnership, type PartnershipId, type Person, type PersonId, type StromData, type TreeId, type TreeMetadata } from '../types.js';
+import { type Partnership, type PartnershipId, type Person, type PersonId, type StromData, type TreeId, type TreeMetadata } from '../types.js';
+import { CONFLICT_REVIEW_SOURCE_RETRACTED } from '../model-values.js';
 
 const BASE = 'http://127.0.0.1:5998/0123456789abcdef0123456789abcdef';
 

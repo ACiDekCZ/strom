@@ -5,7 +5,8 @@
  * defined in CLAUDE.md (Layout Invariants section).
  */
 
-import { PersonId, Position, DEFAULT_LAYOUT_CONFIG, LayoutConfig } from '../../../types.js';
+import { PersonId, Position, LayoutConfig } from '../../../types.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../../../layout-config.js';
 import { Connection, RoutedModel } from '../../pipeline/types.js';
 
 const DEFAULT_CARD_WIDTH = DEFAULT_LAYOUT_CONFIG.cardWidth;

@@ -28,9 +28,9 @@ import {
     RelationContext,
     StromData,
     TreeId,
-    LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
+import { LAST_FOCUSED } from '../model-values.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { CARD_STATUS_CLASSES } from '../reliability.js';
 import { cardStatusLegendLabel, statusMarkHtml } from './fact-status.js';
@@ -49,7 +49,9 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, APP_VERSION, ViewMode, STANDALONE_VIEWS, SurnameDisplay } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, ViewMode, SurnameDisplay } from '../types.js';
+import { STANDALONE_VIEWS } from '../model-values.js';
+import { APP_VERSION } from '../version.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';

@@ -19,11 +19,10 @@ import {
     RelationContext,
     StromData,
     TreeId,
-    LAST_FOCUSED,
     LastFocusedMarker,
     BranchMarker,
-    BRANCH_MARKERS
 } from '../types.js';
+import { LAST_FOCUSED, BRANCH_MARKERS } from '../model-values.js';
 import { applyBranchMarkerAttrs } from '../branch-marker-attrs.js';
 import { syncBranchMarkerSetting } from './branch-marker-ui.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -49,7 +48,8 @@ function formatDateTime(iso: string): string {
 }
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, APP_VERSION, SurnameDisplay } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, SurnameDisplay } from '../types.js';
+import { APP_VERSION } from '../version.js';
 import { importFromFileUrl } from '../pwa.js';
 import { normalizeCardDensity } from '../card-fields.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';

@@ -47,7 +47,9 @@ vi.mock('../storage.js', () => ({
 import { TreeManager } from '../tree-manager.js';
 import { DataManager, DataLockedError } from '../data.js';
 import { SettingsManager } from '../settings.js';
-import { StromData, TreeId, TreeMetadata, STROM_DATA_VERSION, LAST_FOCUSED, PersonId } from '../types.js';
+import { StromData, TreeId, TreeMetadata, PersonId } from '../types.js';
+import { LAST_FOCUSED } from '../model-values.js';
+import { STROM_DATA_VERSION } from '../version.js';
 
 const events: Array<{ treeId?: string; dataVersion?: number }> = [];
 const refused: string[] = [];
