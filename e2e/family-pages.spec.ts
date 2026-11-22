@@ -624,7 +624,8 @@ test.describe('family pages: the entries on a phone', () => {
         await page.locator('#bb-view-more').click();
         await page.locator('#sheet-family').click();
         const sub = page.locator('.bottom-sheet-subpage');
-        await expect(sub.locator('.bottom-sheet-items .bottom-sheet-item')).toHaveText(['Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
+        // A phone has Materials first (the desktop keeps it beside For the family ›).
+        await expect(sub.locator('.bottom-sheet-items .bottom-sheet-item')).toHaveText([/^Materials\s*0$/, 'Family book', 'Family pages', 'Pages for the whole tree', 'Poster…', 'Slideshow (TV)']);
         const row = page.locator('#sheet-pages');
         expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await row.click();
