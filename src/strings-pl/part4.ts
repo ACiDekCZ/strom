@@ -901,6 +901,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         sumScans: (n: number) => nPl(n, 'skan', 'skany', 'skanów'),
         sumPhoto: 'zdjęcie',
         sumNote: 'notatka',
+        sumEmail: 'e-mail',
         sumNone: 'puste',
     },
 

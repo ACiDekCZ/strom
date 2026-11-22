@@ -2099,3 +2099,14 @@ describe('a shared event on the person page (spec 085 §2b–2c)', () => {
         expect(line).not.toContain('B. P.');
     });
 });
+
+describe('the person\'s contact (spec 134 K0.10)', () => {
+    it('in the app\'s window an e-mail line with a mail link under the notes; never in a page a file carries', () => {
+        const d = fiskTree();
+        d.persons['jan' as PersonId].emails = ['hromoslav@example.org'];
+        const app = body(d);
+        expect(app).toContain('<p class="pp-contact">E-mail: <a href="mailto:hromoslav@example.org">hromoslav@example.org</a></p>');
+        expect(doc(d)).not.toContain('hromoslav@');
+        expect(body(d, { mode: 'print', links: 'plain' })).not.toContain('hromoslav@');
+    });
+});

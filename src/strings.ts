@@ -5039,6 +5039,7 @@ const stringsEN = {
         sumScans: (n: number) => n === 1 ? '1 scan' : `${n} scans`,
         sumPhoto: 'photo',
         sumNote: 'note',
+        sumEmail: 'e-mail',
         sumNone: 'empty',
     },
 
@@ -15970,6 +15971,7 @@ const stringsCZ: StringsType = {
         sumScans: (n: number) => nCs(n, 'sken', 'skeny', 'skenů'),
         sumPhoto: 'fotografie',
         sumNote: 'poznámka',
+        sumEmail: 'e-mail',
         sumNone: 'prázdné',
     },
 
@@ -26725,6 +26727,7 @@ const stringsDE: StringsType = {
         sumScans: (n: number) => n === 1 ? '1 Scan' : `${n} Scans`,
         sumPhoto: 'Foto',
         sumNote: 'Notiz',
+        sumEmail: 'E-Mail',
         sumNone: 'leer',
     },
 

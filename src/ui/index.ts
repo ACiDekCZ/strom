@@ -315,6 +315,8 @@ export class UIClass {
         nameVariants: string;
         refn: string;
         question: string;
+        /** The contact's e-mails as typed (comma-separated). */
+        emails: string;
         /** Quick-entry event fields (occupation note / residence place). */
         occupation: string;
         residence: string;

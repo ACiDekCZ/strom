@@ -4,6 +4,8 @@
  */
 
 import { DataManager, auditPersonName } from '../data.js';
+import { emailsFromInput } from '../person-contact.js';
+import { shownEvents } from './person-events.js';
 import { readFormFields, writeFormFields, type PersonDraft } from '../windows/window-drafts.js';
 import { placeKey } from '../places.js';
 import { TreeManager } from '../tree-manager.js';
@@ -182,6 +184,8 @@ export const personModalMethods = uiModule({
         if (refnClear) refnClear.value = '';
         const questionClear = document.getElementById('input-question') as HTMLInputElement | null;
         if (questionClear) questionClear.value = '';
+        const emailsClear = document.getElementById('input-emails') as HTMLInputElement | null;
+        if (emailsClear) emailsClear.value = '';
         const addDeceased = document.getElementById('input-is-deceased') as HTMLInputElement;
         if (addDeceased) addDeceased.checked = false;
         bindDeceasedAutoTick('input-is-deceased', ['input-deathdate', 'input-deathplace']);
@@ -207,7 +211,7 @@ export const personModalMethods = uiModule({
         this.personModalSnapshot = {
             firstName: '', lastName: '', gender: 'unknown',
             birthDate: '', birthPlace: '', deathDate: '', deathPlace: '', notes: '',
-            nameVariants: '', refn: '', question: '',
+            nameVariants: '', refn: '', question: '', emails: '',
             occupation: '', residence: '',
             storyTitle: '', storyText: '',
             deceased: false, photo: '', details: this.personDetailsSnapshot(),
@@ -263,7 +267,7 @@ export const personModalMethods = uiModule({
     setPersonFormReadOnly(readOnly: boolean): void {
         for (const id of ['input-firstname', 'input-lastname', 'input-birthdate', 'input-birthplace',
             'input-deathdate', 'input-deathplace', 'input-notes', 'input-name-variants', 'input-refn',
-            'input-question', 'input-occupation', 'input-residence', 'input-story-title', 'input-story',
+            'input-question', 'input-emails', 'input-occupation', 'input-residence', 'input-story-title', 'input-story',
             ...PERSON_DETAIL_FIELDS.map(([inputId]) => inputId)]) {
             const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
             if (el) el.readOnly = readOnly;
@@ -641,7 +645,7 @@ export const personModalMethods = uiModule({
 
         const deathParts: string[] = [];
         if (person.deathDate) deathParts.push(S.sumDeceased);
-        const eventCount = person.events?.length || 0;
+        const eventCount = shownEvents(person).length;
         if (eventCount) deathParts.push(S.sumEvents(eventCount));
         set('pm-sum-deathevents', deathParts);
 
@@ -655,6 +659,7 @@ export const personModalMethods = uiModule({
         const photoNoteParts: string[] = [];
         if (person.photo) photoNoteParts.push(S.sumPhoto);
         if (person.notes?.trim()) photoNoteParts.push(S.sumNote);
+        if (person.emails?.length) photoNoteParts.push(S.sumEmail);
         set('pm-sum-photonotes', photoNoteParts);
 
         const storyParts: string[] = [];
@@ -787,6 +792,7 @@ export const personModalMethods = uiModule({
             'name-variants-group': !!person?.nameVariants?.length,
             'refn-group': !!person?.refn?.trim(),
             'question-group': !!person?.question?.trim(),
+            'emails-group': !!person?.emails?.length,
             'person-sources-section': !!person?.sourceIds?.length,
             'attachments-section': !!person && DataManager.personMedia(person.id).length > 0,
         };
@@ -921,6 +927,8 @@ export const personModalMethods = uiModule({
         if (refnInput) refnInput.value = person.refn || '';
         const questionInput = document.getElementById('input-question') as HTMLInputElement | null;
         if (questionInput) questionInput.value = person.question || '';
+        const emailsInput = document.getElementById('input-emails') as HTMLInputElement | null;
+        if (emailsInput) emailsInput.value = (person.emails ?? []).join(', ');
 
         // Quick-entry event fields: the newest occupation/residence event —
         // the same one the detailed card density displays.
@@ -970,6 +978,7 @@ export const personModalMethods = uiModule({
             nameVariants: (document.getElementById('input-name-variants') as HTMLInputElement | null)?.value || '',
             refn: (document.getElementById('input-refn') as HTMLInputElement | null)?.value || '',
             question: (document.getElementById('input-question') as HTMLInputElement | null)?.value || '',
+            emails: (document.getElementById('input-emails') as HTMLInputElement | null)?.value || '',
             occupation: occupationInput?.value || '',
             residence: residenceInput?.value || '',
             ...this.storySnapshot(),
@@ -2026,6 +2035,8 @@ export const personModalMethods = uiModule({
             .split(',').map(v => v.trim()).filter(Boolean);
         const refn = (document.getElementById('input-refn') as HTMLInputElement | null)?.value.trim() || '';
         const question = (document.getElementById('input-question') as HTMLInputElement | null)?.value.trim() || '';
+        // The contact: addresses separated by commas, semicolons or spaces.
+        const emails = emailsFromInput((document.getElementById('input-emails') as HTMLInputElement | null)?.value ?? '');
         const occupation = (document.getElementById('input-occupation') as HTMLInputElement | null)?.value.trim() || '';
         const residence = (document.getElementById('input-residence') as HTMLInputElement | null)?.value.trim() || '';
         // Explicit alive/deceased override; a death date already implies deceased.
@@ -2089,6 +2100,7 @@ export const personModalMethods = uiModule({
                     nameVariants,
                     refn,
                     question,
+                    emails,
                     // A death date implies deceased; otherwise only a toggle speaks.
                     ...(deathDate ? { isDeceased: undefined }
                         : deceasedToggled ? { isDeceased: deceasedChecked } : {}),
@@ -2117,7 +2129,7 @@ export const personModalMethods = uiModule({
                     ...(details.marriedSurname && this.primaryNameDraft ? { primaryName: this.primaryNameDraft } : {}),
                 });
                 // Update with extended info if provided
-                if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question
+                if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question || emails.length > 0
                     || photoFields.photo || story || nameVariants.length > 0 || (deceasedChecked && !deathDate)
                     || Object.values(details).some(Boolean)) {
                     DataManager.updatePerson(created.id, {
@@ -2130,6 +2142,7 @@ export const personModalMethods = uiModule({
                         nameVariants,
                         refn,
                         question,
+                        emails,
                         // Ticked while adding = known to be deceased (was ignored).
                         ...(deceasedChecked && !deathDate ? { isDeceased: true } : {}),
                         ...photoFields,
@@ -2289,6 +2302,7 @@ export const personModalMethods = uiModule({
         const notes = (document.getElementById('input-notes') as HTMLTextAreaElement)?.value || '';
         const refn = (document.getElementById('input-refn') as HTMLInputElement)?.value || '';
         const question = (document.getElementById('input-question') as HTMLInputElement)?.value || '';
+        const emails = (document.getElementById('input-emails') as HTMLInputElement | null)?.value || '';
         const occupation = (document.getElementById('input-occupation') as HTMLInputElement | null)?.value || '';
         const residence = (document.getElementById('input-residence') as HTMLInputElement | null)?.value || '';
         const nameVariants = (document.getElementById('input-name-variants') as HTMLInputElement | null)?.value || '';
@@ -2298,7 +2312,7 @@ export const personModalMethods = uiModule({
         return firstName !== s.firstName || lastName !== s.lastName || gender !== s.gender
             || birthDate !== s.birthDate || birthPlace !== s.birthPlace
             || deathDate !== s.deathDate || deathPlace !== s.deathPlace
-            || notes !== s.notes || refn !== s.refn || question !== s.question
+            || notes !== s.notes || refn !== s.refn || question !== s.question || emails !== s.emails
             || occupation !== s.occupation || residence !== s.residence
             || nameVariants !== s.nameVariants || deceased !== s.deceased || photoChanged(this.photoModel, s.photo)
             || story.storyTitle !== s.storyTitle || story.storyText !== s.storyText

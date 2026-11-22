@@ -9,7 +9,7 @@
 
 import { DataManager } from '../data.js';
 import {
-    LifeEvent, LifeEventType, EventParticipant, ParticipantRole, PersonId, PartnershipId,
+    LifeEvent, LifeEventType, EventParticipant, ParticipantRole, Person, PersonId, PartnershipId,
 } from '../types.js';
 import { generateParticipantId } from '../ids.js';
 import { PersonPicker } from '../person-picker.js';
@@ -24,6 +24,20 @@ import { autoGrowAll } from './autogrow.js';
 import { DETAIL_KEYS, offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { sharedWith } from '../shared-events.js';
+import { isEmptyResidence } from '../person-contact.js';
+
+/**
+ * The person's events as the list shows them: an empty residence (what an
+ * older import made of a contact's address, spec 134 K0.10) is kept in the
+ * data, only not shown.
+ */
+export function shownEvents(person: Person): LifeEvent[] {
+    const events = person.events ?? [];
+    if (!events.some(e => isEmptyResidence(e))) return events;
+    const withFiles = new Set(DataManager.personMedia(person.id).flatMap(a => a.places ?? [])
+        .flatMap(pl => 'personId' in pl && pl.personId === person.id && pl.eventId ? [pl.eventId] : []));
+    return events.filter(e => !isEmptyResidence(e, withFiles.has(e.id)));
+}
 
 /** HTML-escape a user string for safe innerHTML insertion. */
 function esc(text: string): string {
@@ -101,7 +115,7 @@ export const personEventsMethods = uiModule({
         const entries = orderLifeList(
             hasBirth ? { date: person.birthDate } : null,
             hasDeath ? { date: person.deathDate } : null,
-            person.events ?? []);
+            shownEvents(person));
         // A part at another's event (spec 085 §5) stands among the own rows by its date, undated ones last.
         const derived = this.derivedRowsOf(this.currentId);
         let nextDerived = 0;
