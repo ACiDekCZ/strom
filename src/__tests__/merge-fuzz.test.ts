@@ -174,6 +174,15 @@ function sourceTree(target: StromData, rnd: () => number): StromData {
         b.family(u, 1900, 1);
     }
     b.decorate(SOURCE_TITLES.slice(2));
+    // A source under an id the target uses for another source (two trees that
+    // once shared an ancestry), cited by a few persons.
+    const targetSources = Object.values(target.sources ?? {});
+    if (targetSources.length && b.chance(0.3)) {
+        const taken = b.pick(targetSources);
+        const s = { id: taken.id, title: `${taken.title} – opis`, transcript: 'jiný zápis' } as Source;
+        b.data.sources![s.id] = s;
+        for (const q of Object.values(b.data.persons)) if (!q.isPlaceholder && b.chance(0.2)) q.sourceIds = [...(q.sourceIds ?? []), s.id];
+    }
     // Some of the target's files again (same bytes) at their copies.
     for (const att of Object.values(target.media ?? {})) {
         const at = 'personId' in att.places[0] ? copy.get(att.places[0].personId) : undefined;
@@ -254,7 +263,21 @@ async function runOne(seed: number): Promise<string[]> {
         for (const parent of p.parentIds) if (!merged.persons[p.id]?.parentIds.includes(parent)) errors.push(`tree link ${p.id}←${parent} gone`);
     }
     for (const id of Object.keys(existing.partnerships)) if (!merged.partnerships[id as PartnershipId]) errors.push(`tree couple ${id} gone`);
-    for (const id of Object.keys(existing.sources ?? {})) if (!merged.sources?.[id]) errors.push(`tree source ${id} gone`);
+    for (const [id, src] of Object.entries(existing.sources ?? {})) {
+        if (!merged.sources?.[id]) errors.push(`tree source ${id} gone`);
+        else if (merged.sources[id].title !== src.title) errors.push(`tree source ${id} replaced`);
+    }
+    // Every incoming source is in the result (as its own entry or joined to one of the same title).
+    const mergedTitles = new Set(Object.values(merged.sources ?? {}).map(x => x.title));
+    for (const src of Object.values(incoming.sources ?? {})) if (!mergedTitles.has(src.title)) errors.push(`incoming source ${src.id} lost`);
+    // A person new to the tree cites sources by their titles in the import.
+    for (const p of Object.values(incoming.persons)) {
+        const to = result.trace?.persons.get(p.id);
+        if (!to || existing.persons[to] || !merged.persons[to]) continue;
+        const want = (p.sourceIds ?? []).map(id => incoming.sources?.[id]?.title).sort();
+        const got = (merged.persons[to].sourceIds ?? []).map(id => merged.sources?.[id]?.title).sort();
+        if (JSON.stringify(want) !== JSON.stringify(got)) errors.push(`added ${p.id} cites ${JSON.stringify(got)}, import ${JSON.stringify(want)}`);
+    }
     for (const id of Object.keys(existing.media ?? {})) if (!merged.media?.[id]) errors.push(`tree file ${id} gone`);
     // Every incoming person where its decision says.
     let expectedAdded = 0;

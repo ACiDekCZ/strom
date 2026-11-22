@@ -25,7 +25,7 @@ import {
     ImportRecord,
     PortraitSource,
 } from '../types.js';
-import { generateLifeEventId, generatePersonId, generatePartnershipId } from '../ids.js';
+import { generateLifeEventId, generatePersonId, generatePartnershipId, generateSourceId } from '../ids.js';
 import { partnershipParticipants, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, gendersCompatible, mergedPrimaryName } from '../model-values.js';
 import { allMedia, findMedia, personMedia, putMedia, samePlace } from '../media.js';
 import { dropDanglingPortraitSources } from '../photo.js';
@@ -406,8 +406,12 @@ const BLANK_UNION_FIELDS = new Set(['id', 'person1Id', 'person2Id', 'childIds', 
 /**
  * Execute the merge operation
  */
-export async function executeMerge(state: MergeState): Promise<MergeResult> {
+export async function executeMerge(givenState: MergeState): Promise<MergeResult> {
     try {
+        // A source of the import under an id the tree uses for another source
+        // comes as a source of its own (spec 134 K0.3): the tree's is never replaced.
+        const { state, renamedSources } = withOwnSourceIds(givenState);
+
         // Create backup
         const backupKey = await createMergeBackup(state.existingData);
 
@@ -448,6 +452,8 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 }
                 continue;
             }
+            // The tree's own source (the same one under the same id) keeps its marks.
+            if (state.existingData.sources?.[id]) continue;
             const src = mergedData.sources?.[id];
             if (src?.importId) src.importId = importMap.get(src.importId) ?? src.importId;
             if (src) remapSourceImports(src, importMap);
@@ -832,7 +838,10 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         // The check before saving (spec 134 K0.2): nothing of either tree is
         // lost and no reference points at nothing. When it fails nothing is
         // saved and the problems say why.
-        const trace: MergeTrace = { persons: mapping.persons, partnerships: unionTarget, sources: sourceRemap };
+        // Sources by the ids the merge used and, for a renamed one, by its id in the given import.
+        const sourceTrace = new Map(sourceRemap);
+        for (const [was, now] of renamedSources) sourceTrace.set(was, sourceRemap.get(now) ?? now);
+        const trace: MergeTrace = { persons: mapping.persons, partnerships: unionTarget, sources: sourceTrace };
         const check = checkMergeResult(state, { mergedData, trace });
         if (!check.ok) {
             console.warn('Merge check failed:', check.problems);
@@ -865,7 +874,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         console.error('Merge execution failed:', error);
         return {
             success: false,
-            mergedData: state.existingData,
+            mergedData: givenState.existingData,
             stats: { merged: 0, added: 0, skipped: 0, partnerships: 0 },
             errors: [String(error)]
         };
@@ -1204,10 +1213,54 @@ function sameAttachment(a: Attachment, b: Attachment): boolean {
 }
 
 /**
+ * Whether an incoming source under the id of a tree's source is that source:
+ * the same research number, the same citation, or the same title, repository
+ * and place (not two citations of one file record at another QUAY).
+ */
+function sameSourceUnderOneId(kept: Source, incoming: Source): boolean {
+    if (JSON.stringify(kept) === JSON.stringify(incoming)) return true;
+    if (kept.refn || incoming.refn) return !!kept.refn && kept.refn === incoming.refn;
+    const cite = citationKey(incoming);
+    if (cite && cite === citationKey(kept)) return true;
+    const key = sourceKey(incoming);
+    if (!key || key !== sourceKey(kept)) return false;
+    const otherCitation = !!incoming.originalIds?.length && !!kept.originalIds?.length
+        && incoming.quality !== undefined && kept.quality !== undefined && incoming.quality !== kept.quality;
+    return !otherCitation;
+}
+
+/**
+ * The merge's view of its input with every incoming source that shares an id
+ * with another source of the tree under a new id, its citations, files and
+ * stories in the incoming tree following it. The given state is not changed;
+ * without such a source it is returned as it is.
+ */
+function withOwnSourceIds(state: MergeState): { state: MergeState; renamedSources: Map<string, string> } {
+    const existing = state.existingData.sources ?? {};
+    const renamed = new Map<string, string>();
+    for (const [id, src] of Object.entries(state.incomingData.sources ?? {})) {
+        const kept = existing[id];
+        if (kept && !sameSourceUnderOneId(kept, src)) renamed.set(id, generateSourceId());
+    }
+    if (renamed.size === 0) return { state, renamedSources: renamed };
+    const incomingData = structuredClone(state.incomingData);
+    const before = incomingData.sources!;
+    const sources: Record<string, Source> = {};
+    for (const [id, src] of Object.entries(before)) {
+        const to = renamed.get(id) ?? id;
+        sources[to] = to === id ? src : { ...src, id: to };
+    }
+    incomingData.sources = sources;
+    remapSourceReferences(incomingData, renamed, before);
+    const matches = state.matches.map(m => ({ ...m, incomingPerson: incomingData.persons[m.incomingId] ?? m.incomingPerson }));
+    return { state: { ...state, incomingData, matches }, renamedSources: renamed };
+}
+
+/**
  * Add the incoming source catalog to the merged tree. A source whose title,
  * repository and reference match one the tree already has is NOT added; the
- * returned map sends its id to the kept one. Same id = same source (the two
- * trees share an ancestry) — the incoming copy replaces it as before.
+ * returned map sends its id to the kept one. Same id = the same source (the
+ * two trees share an ancestry, see withOwnSourceIds): it joins the tree's.
  */
 function mergeSourceCatalogs(
     mergedData: StromData,
@@ -1248,6 +1301,12 @@ function mergeSourceCatalogs(
             remap.set(id, kept);
             takeCitationQuality(catalog[kept], src, mergedData, incomingImports);
             absorbSourceDetails(catalog[kept], src);
+            continue;
+        }
+        if (catalog[id]) {
+            // The same source under the same id (withOwnSourceIds renamed any
+            // other): it fills in what the tree's lacks, never replaces it.
+            absorbSourceDetails(catalog[id], src);
             continue;
         }
         catalog[id] = structuredClone(src);
@@ -1973,7 +2032,8 @@ function carryLoneParentLinks(
             const parentId = personMap.get(incomingParent);
             const parent = parentId ? mergedData.persons[parentId] : undefined;
             if (!parent || parent.id === child.id || child.parentIds.includes(parent.id)) continue;
-            if (child.parentIds.filter(id => mergedData.persons[id]).length >= 2) continue;
+            // Counted as the tree will hold them: a link to oneself does not stay.
+            if (child.parentIds.filter(id => id !== child.id && mergedData.persons[id]).length >= 2) continue;
             if (isAncestorOrSelf(mergedData, child.id, parent.id)) continue;
             child.parentIds.push(parent.id);
             if (!parent.childIds.includes(child.id)) parent.childIds.push(child.id);

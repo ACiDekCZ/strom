@@ -10,7 +10,7 @@ import { executeMerge, AUTO_CONFIRM_SCORE } from '../merge/executor.js';
 import { calculateMergeStats, createMergeState, detectConflicts } from '../merge/matching.js';
 import { StorageManager } from '../storage.js';
 import { MergeState, PersonMatch } from '../merge/types.js';
-import { StromData, Person, Partnership, PersonId, PartnershipId, Gender } from '../types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, Gender, Source } from '../types.js';
 
 type PersonOverrides = Partial<Omit<Person, 'partnerships' | 'parentIds' | 'childIds'>> & {
     partnerships?: string[]; parentIds?: string[]; childIds?: string[];
@@ -286,6 +286,32 @@ describe('K0.2 classes found by random pairs of trees', () => {
         }
     });
 
+    it('a link to oneself from a match into the wrong generation does not take a real parent\'s place', async () => {
+        // The tree: Tobiáš (son of Ignác) married to Marta. The import: Tobiáš
+        // and Marta with a daughter Klára, merged by hand into Tobiáš himself:
+        // the link Tobiáš ← Tobiáš goes, the link Tobiáš ← Marta (one parent
+        // free) stays, as the check expects.
+        const eF = P('eF', 'Ignác', 'Lindner', { birthDate: '1840', childIds: ['eT'] });
+        const eT = P('eT', 'Tobiáš', 'Lindner', { birthDate: '1871', parentIds: ['eF'], partnerships: ['eU'] });
+        const eM = P('eM', 'Marta', 'Bergerová', { gender: 'female', birthDate: '1875', partnerships: ['eU'] });
+        const existingData = tree([eF, eT, eM], [U('eU', 'eT', 'eM', [])]);
+        const iT = P('iT', 'Tobiáš', 'Lindner', { birthDate: '1871', partnerships: ['iU'], childIds: ['iK'] });
+        const iM = P('iM', 'Marta', 'Bergerová', { gender: 'female', birthDate: '1875', partnerships: ['iU'], childIds: ['iK'] });
+        const iK = P('iK', 'Klára', 'Lindnerová', { gender: 'female', birthDate: '1900', parentIds: ['iT', 'iM'] });
+        const incomingData = tree([iT, iM, iK], [U('iU', 'iT', 'iM', ['iK'])]);
+        const state: MergeState = {
+            existingData, incomingData,
+            matches: [match(eT, iT, 95), match(eM, iM, 95)],
+            unmatchedExisting: ['eF'] as PersonId[], unmatchedIncoming: ['iK'] as PersonId[],
+            decisions: new Map([['iK' as PersonId, { type: 'manual_match', targetId: 'eT' as PersonId }]]),
+            conflictResolutions: new Map(), phase: 'executing',
+        };
+        const result = await executeMerge(state);
+        expect(result.check?.problems).toEqual([]);
+        expect(result.success).toBe(true);
+        expect(result.mergedData.persons['eT' as PersonId].parentIds).toEqual(['eF', 'eM']);
+    });
+
     it('a link that would make a person its own ancestor is left out, and the check says so', async () => {
         // Tobiáš merged by hand into the tree's Ignác, Tobiáš's own son: the
         // link Ignác ← Tobiáš (= Ignác's son) would close a circle.
@@ -308,5 +334,48 @@ describe('K0.2 classes found by random pairs of trees', () => {
         expect(result.mergedData.persons['eF' as PersonId].parentIds).toEqual([]);
         expect(result.mergedData.persons['eT' as PersonId].parentIds).toEqual(['eF']);
         expect(result.check?.tallies.links).toMatchObject({ source: 1, left: 1, lost: 0 });
+    });
+});
+
+describe('K0.3 a source of the import under an id the tree uses never replaces the tree\'s source', () => {
+    function sourceFixture(incomingSource: Record<string, unknown>): MergeState {
+        const eA = P('eA', 'Kvido', 'Hrbolec', { birthDate: '1850', sourceIds: ['s1'] });
+        const existingData: StromData = {
+            ...tree([eA]),
+            sources: { s1: { id: 's1', title: 'Matrika Lhotka 1850', transcript: 'Kvido, syn Ctibora' } },
+        };
+        const iB = P('iB', 'Drahoš', 'Kořenáč', { birthDate: '1902', sourceIds: ['s1'] });
+        const incomingData: StromData = {
+            ...tree([iB]),
+            sources: { s1: { id: 's1', ...incomingSource } as Source },
+        };
+        return {
+            existingData, incomingData, matches: [],
+            unmatchedExisting: ['eA'] as PersonId[], unmatchedIncoming: ['iB'] as PersonId[],
+            decisions: new Map(), conflictResolutions: new Map(), phase: 'executing',
+        };
+    }
+
+    it('another source under the same id comes as a new source, its citations follow it', async () => {
+        const result = await executeMerge(sourceFixture({ title: 'Kronika obce', transcript: 'Drahoš přišel z Lhotky' }));
+        expect(result.success).toBe(true);
+        const merged = result.mergedData;
+        expect(merged.sources?.s1).toEqual({ id: 's1', title: 'Matrika Lhotka 1850', transcript: 'Kvido, syn Ctibora' });
+        expect(merged.persons['eA' as PersonId].sourceIds).toEqual(['s1']);
+        const added = Object.values(merged.sources ?? {}).filter(s => s.id !== 's1');
+        expect(added.map(s => [s.title, s.transcript])).toEqual([['Kronika obce', 'Drahoš přišel z Lhotky']]);
+        const drahos = Object.values(merged.persons).find(p => p.firstName === 'Drahoš')!;
+        expect(drahos.sourceIds).toEqual([added[0].id]);
+        expect(result.check?.tallies.sources).toMatchObject({ source: 1, added: 1, lost: 0 });
+    });
+
+    it('the same source under the same id joins it: only what it lacks is filled in', async () => {
+        const result = await executeMerge(sourceFixture({ title: 'Matrika Lhotka 1850', transcript: 'jiný přepis', recordDate: '1850' }));
+        expect(result.success).toBe(true);
+        const merged = result.mergedData;
+        expect(Object.keys(merged.sources ?? {})).toEqual(['s1']);
+        expect(merged.sources?.s1).toMatchObject({ title: 'Matrika Lhotka 1850', transcript: 'Kvido, syn Ctibora', recordDate: '1850' });
+        const drahos = Object.values(merged.persons).find(p => p.firstName === 'Drahoš')!;
+        expect(drahos.sourceIds).toEqual(['s1']);
     });
 });
