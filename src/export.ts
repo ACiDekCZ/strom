@@ -85,7 +85,8 @@ export const EXPORT_DYNAMIC_CONTAINER_IDS: readonly string[] = [
     'audit-log-list', 'export-modal-tree-name', 'existing-export-tree-name',
     // Wizards, merge and share dialogs
     'family-wizard-anchor', 'wiz-parents', 'wiz-partner', 'wiz-siblings', 'wiz-children',
-    'merge-wizard-explanation', 'merge-validation-banner', 'merge-manual-incoming',
+    'merge-route', 'merge-progress', 'merge-counts', 'merge-step-body', 'merge-next-why',
+    'merge-validation-banner', 'merge-manual-incoming',
     'merge-manual-picker', 'person-merge-keep', 'person-merge-picker', 'person-merge-other',
     'person-merge-delete-info', 'person-merge-field-conflicts', 'person-merge-partnership-list',
     'merge-trees-description', 'share-welcome-title', 'share-welcome-counts', 'share-reply-title',

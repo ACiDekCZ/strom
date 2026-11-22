@@ -521,8 +521,8 @@ class MergerUIClass {
 
         // A merge saved before the guide existed had its comparison run.
         this.renderValidationBanner();
-        this.wizard.open(this.wizardSource(), { compared: this.resumedState });
         modal.classList.add('active');
+        this.wizard.open(this.wizardSource(), { compared: this.resumedState });
     }
 
     /** Whether the open merge was resumed (its comparison ran), for the guide's start. */

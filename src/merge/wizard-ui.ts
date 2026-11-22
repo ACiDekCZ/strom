@@ -312,7 +312,8 @@ export class MergeWizard {
             const current = s === ws.step;
             const done = !current && info[s].state === 'ok' && s <= ws.reached;
             const skipped = info[s].state === 'skip';
-            const label = `<span class="sel-l" data-label="${escapeHtml(name)}">${done ? `<span class="merge-step-ok" aria-hidden="true">${glyph('joined', 11)}</span>` : ''}${escapeHtml(name)}</span>`;
+            const label = `<span class="merge-step-name">${done ? `<span class="merge-step-ok" aria-hidden="true">${glyph('joined', 11)}</span>` : ''}`
+                + `<span class="sel-l" data-label="${escapeHtml(name)}">${escapeHtml(name)}</span></span>`;
             if (done) {
                 items.push(`<button type="button" class="merge-step sel-tab is-done" data-sel-dir="down" data-step="${s}">${label}${subHtml}</button>`);
             } else {

@@ -7280,9 +7280,10 @@
         .modal.modal--sm { width: 440px; max-width: min(440px, 94vw); }
         .modal.modal--md { width: 560px; max-width: min(560px, 94vw); }
         .modal.modal--lg { width: 720px; max-width: min(720px, 94vw); }
-        /* The merge wizard: its footer's four buttons in one row in German too, Re-analyze holding its working words
-           "Wird analysiert…" from the start (§1.2). */
-        @media (min-width: 641px) { .modal.modal--lg.merge-modal { width: 760px; max-width: min(760px, 94vw); } }
+        /* The import guide (spec 134 §1): 94vw on a tablet, 960 px from a 1100 px window, one height for every
+           step so the footer does not jump; full screen on a phone (below). */
+        @media (min-width: 641px) { .modal.modal--lg.merge-modal { width: 94vw; max-width: 94vw; height: min(760px, 88vh); max-height: min(760px, 88vh); } }
+        @media (min-width: 1100px) { .modal.modal--lg.merge-modal { width: 960px; max-width: 960px; } }
         @media (max-width: 640px) {
             .modal.modal--sm, .modal.modal--md, .modal.modal--lg { width: 100%; max-width: 100vw; }
         }
@@ -18169,28 +18170,142 @@
 
         /* ==================== MERGE MODAL ==================== */
         .merge-modal {
-            max-width: 700px;
-            max-height: 85vh;
             display: flex;
             flex-direction: column;
         }
-        .merge-stats {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-        /* Paper chips: a soft --surface pill with a hairline border. Meaning is
-           carried by the coloured SVG glyph in the label, not the box fill. */
-        .merge-stat {
-            flex: 1;
+        .merge-head {
             display: flex;
             flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+        .merge-head h2 {
+            font-family: var(--font-serif);
+        }
+        .merge-src {
+            font-size: 12.5px;
+            color: var(--text-light);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        /* One window, no scroll of its own: the step's body scrolls under the steps and the counts. */
+        .merge-modal .modal-content {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            gap: 12px;
+        }
+        .merge-step-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+        }
+        .merge-step-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin: 0 0 8px;
+            outline: none;
+        }
+        .merge-step-note {
+            font-size: 13px;
+            color: var(--text-light);
+            line-height: 1.45;
+            margin: 0 0 8px;
+        }
+
+        /* The steps: .sel-tab (src/ui/sel-css.ts), the current one carries the line; a finished one is a button
+           with its ✓, a skipped or a later one plain text. Each has its second line (.merge-step-sub). */
+        .merge-progress {
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--divider);
+        }
+        .merge-step-list {
+            display: flex;
+        }
+        .merge-step {
+            flex: 1 1 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1px;
+            padding: 9px 10px 8px;
+            border: 0;
+            background: transparent;
+            font: inherit;
+            text-align: left;
+            cursor: default;
+        }
+        .merge-step-name {
+            display: inline-flex;
             align-items: center;
             gap: 4px;
+            font-size: 12.5px;
+            white-space: nowrap;
+        }
+        .merge-step-sub {
+            font-size: 11px;
+            color: var(--text-faint);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+        .merge-step-sub.is-warn { color: var(--warning-text); }
+        .merge-step.is-done { cursor: pointer; }
+        .merge-step.is-done .merge-step-ok { display: inline-flex; color: var(--primary); }
+        .merge-step.is-skipped .merge-step-name,
+        .merge-step.is-future .merge-step-name { color: var(--text-faint); }
+        @media (hover: hover) {
+            .merge-progress .merge-step.sel-tab:not(.is-done):not(.active):hover { box-shadow: none; }
+            .merge-progress .merge-step.is-done:hover .merge-step-name { color: var(--text); }
+        }
+        /* The phone's short form ("Step 2 of 6 · Who is who" and six bars): shown only up to 640 px. */
+        .merge-progress-short {
+            display: none;
+        }
+        .merge-bars {
+            display: flex;
+            gap: 4px;
+        }
+        .merge-bar {
+            flex: 1 1 0;
+            height: 3px;
+            border-radius: var(--r-pill);
+            background: var(--divider);
+        }
+        .merge-bar.is-done { background: var(--line-color); }
+        .merge-bar.is-current { background: var(--text); }
+
+        /* The counts: four chips from the plan and their sum; numbers keep their width. */
+        .merge-stats {
+            display: flex;
+            align-items: stretch;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .merge-stats.is-pre {
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 4px 12px;
+            font-size: 13px;
+            color: var(--text-light);
+        }
+        .merge-stats-note {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+        .merge-stat {
+            flex: 1 1 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: var(--r-md);
-            padding: 8px 6px;
+            padding: 6px 10px;
         }
         .merge-stat-label {
             display: flex;
@@ -18198,31 +18313,60 @@
             gap: 4px;
             font-size: 11px;
             color: var(--text-light);
+            white-space: nowrap;
         }
         .merge-stat-glyph { display: inline-flex; align-items: center; }
-        .merge-stat.highlight .merge-stat-glyph { color: var(--primary); }
-        .merge-stat.warning .merge-stat-glyph { color: var(--warning); }
+        .merge-stat.highlight .merge-stat-glyph,
         .merge-stat.new .merge-stat-glyph { color: var(--primary); }
-        .merge-stat.skipped .merge-stat-glyph { color: var(--text-faint); }
+        .merge-stat.warning .merge-stat-glyph { color: var(--warning-text); }
+        .merge-stat.skipped .merge-stat-glyph,
+        .merge-stat.is-zero .merge-stat-glyph { color: var(--text-faint); }
         .merge-stat-value {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 600;
+            font-variant-numeric: tabular-nums;
         }
-        .merge-stat.highlight .merge-stat-value {
-            color: var(--primary);
+        .merge-stat.warning .merge-stat-value { color: var(--warning-text); }
+        .merge-stat-sum {
+            flex: 1.4 1 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 2px;
+            font-size: 12px;
+            color: var(--text-light);
         }
-        .merge-stat.warning .merge-stat-value {
-            color: var(--warning);
+        .merge-stat-total { color: var(--text); font-variant-numeric: tabular-nums; }
+        /* The phone's one line of counts (shown only up to 640 px). */
+        .merge-stats--line {
+            display: none;
         }
-        .merge-stat.new .merge-stat-value {
-            color: var(--primary);
+
+        /* Step 2 until its own screen: today's filter tabs, the undecided rest at once, the list. */
+        .merge-step2 {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .merge-rest {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 4px 12px;
+            font-size: 13px;
+            color: var(--text-light);
+        }
+        .merge-rest[hidden] { display: none; }
+        .merge-reanalyze {
+            display: flex;
+            justify-content: flex-end;
         }
         /* The filter tabs are .sel-tab (src/ui/sel-css.ts: the line at the foot
            of the chosen one) on the bar's hairline; only the layout here. */
         .merge-tabs {
             display: flex;
             gap: 4px;
-            margin-bottom: 16px;
             flex-wrap: wrap;
             border-bottom: 1px solid var(--border);
         }
@@ -18234,32 +18378,21 @@
             cursor: pointer;
             transition: color 0.15s;
         }
+        .sel-tab { white-space: nowrap; }
         /* The count keeps one weight, so a tab does not widen when chosen. */
         .tab-count {
             display: inline-block;
             padding: 0 6px;
             margin-left: 4px;
-            background: rgba(0,0,0,0.1);
-            border-radius: 10px;
+            background: var(--surface-2);
+            border-radius: var(--r-pill);
             font-size: 10px;
             font-weight: 600;
         }
-        /* Justified inner-scroll exception: the merge match list scrolls on its
-           own so the filter tabs and stats above it stay visible. The modal body
-           itself does not scroll (see .merge-modal .modal-content below), so
-           there is still only one scrollbar per dialog. */
+        /* The list scrolls with the step's body: one scrollbar in the window. */
         .merge-match-list {
-            flex: 1 1 auto;
-            min-height: 140px;
-            overflow-y: auto;
-            margin-bottom: 16px;
             border: 1px solid var(--border);
-            border-radius: 8px;
-        }
-        .merge-modal .modal-content {
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            border-radius: var(--r-md);
         }
         .merge-item {
             padding: 12px 14px;
@@ -18426,34 +18559,6 @@
         }
         .merge-stat.skipped .merge-stat-label { color: var(--text-faint); }
         .merge-stat.skipped .merge-stat-value { color: var(--text-faint); }
-        /* "Update existing only" toggle */
-        .merge-update-only {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            padding: 8px 12px;
-            margin: 0 0 10px;
-            background: var(--surface-2);
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        .merge-update-only input {
-            margin-top: 2px;
-            flex-shrink: 0;
-        }
-        .merge-update-only-text {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-        .merge-update-only-label {
-            font-weight: 600;
-        }
-        .merge-update-only-hint {
-            font-size: 11px;
-            color: var(--text-light);
-        }
         .merge-empty {
             padding: 40px;
             text-align: center;
@@ -18461,6 +18566,13 @@
         }
         .merge-actions {
             justify-content: flex-end;
+        }
+        .merge-actions #merge-save-later,
+        .merge-actions #merge-cancel { margin-right: auto; }
+        .merge-actions [hidden] { display: none; }
+        .merge-next-why {
+            font-size: 12px;
+            color: var(--text-light);
         }
         .merge-manual-person {
             padding: 10px 12px;
@@ -18673,25 +18785,17 @@
             font-size: 13px;
         }
 
-        /* Merge wizard header */
-        .merge-wizard-explanation {
-            font-size: 13px;
-            color: var(--text-light);
-            margin-bottom: 12px;
-            line-height: 1.4;
-        }
+        /* Errors already in a tree: one plain line on step 1 (no box), shown only when there are some. */
         .merge-validation-banner {
-            font-size: 13px;
+            display: none;
+            font-size: 12.5px;
             line-height: 1.4;
-            margin-bottom: 12px;
-            padding: 8px 12px;
-            border-radius: 8px;
-            background: var(--warning-soft);
-            border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
-            color: var(--text);
+            color: var(--warning-text);
+            flex-shrink: 0;
         }
+        .merge-validation-banner.has-issues:not([hidden]) { display: block; }
         .merge-validation-banner-hint {
-            opacity: 0.85;
+            color: var(--text-light);
         }
         .conflict-photo {
             max-width: 72px;
@@ -18703,23 +18807,6 @@
         /* The open tree's portrait on its way or not come (spec 116 §5): the initials in a 72 px square. */
         .conflict-photo.img-slot-pic { width: 72px; height: 72px; }
         .conflict-photo .avatar-initials { font-size: 20px; }
-        .merge-progress {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-        }
-        /* The steps are .sel-tab (src/ui/sel-css.ts): the current one carries the
-           line, a finished one its ✓ in the text; they are not buttons, so no hover. */
-        .merge-step {
-            padding: 6px 12px;
-            font-size: 12px;
-            cursor: default;
-            transition: color 0.2s;
-        }
-        .merge-step.complete::before { content: '✓ '; }
-        @media (hover: hover) { .merge-progress > .merge-step.sel-tab:not(.active):hover { box-shadow: none; color: var(--text-light); } }
-
         /* Merge close confirmation */
         .merge-close-message {
             font-size: 14px;
@@ -28069,62 +28156,60 @@
                 max-height: 50vh;
             }
 
-            /* Merge modal on mobile */
-            .merge-modal {
-                max-width: 95vw;
+            /* The import guide on a phone (spec 134 §14): full screen, the short step list (a tap opens
+               the whole list), the counts in one line, the footer stacked with the primary on top. */
+            .modal.modal--lg.merge-modal {
+                width: 100vw;
+                max-width: 100vw;
+                height: 100dvh;
+                max-height: 100dvh;
+                border-radius: 0;
             }
-            .merge-modal .modal-header {
-                padding: 8px 10px;
-            }
-            .merge-modal .modal-header h2 {
-                font-size: 14px;
-            }
-            .merge-wizard-explanation {
-                font-size: 10px;
-                margin-bottom: 4px;
-                line-height: 1.2;
-                color: var(--text-light);
-            }
-            .merge-progress {
-                gap: 3px;
-                margin-bottom: 4px;
-            }
-            .merge-progress .merge-step {
-                font-size: 8px;
-                padding: 2px 5px;
-            }
-            .merge-stats {
-                gap: 4px;
-                padding: 4px 6px;
-                margin-bottom: 4px;
-            }
-            .merge-stat {
-                gap: 1px;
-            }
-            .merge-stat-value {
+            .merge-modal .modal-content { padding: 10px 16px; gap: 10px; }
+            .merge-progress { border-bottom: 0; }
+            .merge-progress-short {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                width: 100%;
+                padding: 4px 0;
+                border: 0;
+                background: transparent;
+                font: inherit;
                 font-size: 13px;
+                text-align: left;
+                color: var(--text);
+                cursor: pointer;
             }
-            .merge-stat-label {
-                font-size: 8px;
+            .merge-step-list { display: none; }
+            .merge-progress.is-open .merge-step-list {
+                display: flex;
+                flex-direction: column;
+                margin-top: 6px;
+                border-top: 1px solid var(--divider);
             }
-            .merge-tabs {
+            .merge-progress.is-open .merge-step { padding: 8px 0; }
+            .merge-stat, .merge-stat-sum { display: none; }
+            .merge-stats--line {
+                display: flex;
+                flex-direction: column;
                 gap: 2px;
-                margin-bottom: 4px;
-            }
-            .merge-tab {
-                padding: 3px 4px;
-                font-size: 8px;
-            }
-            .tab-count {
-                font-size: 7px;
-                padding: 0 2px;
-                margin-left: 1px;
-            }
-            .merge-match-list {
-                margin-bottom: 0;
+                font-size: 13px;
+                font-variant-numeric: tabular-nums;
             }
             .merge-modal .buttons.merge-actions {
-                padding: 10px;
+                flex-direction: column-reverse;
+                align-items: stretch;
+                gap: 8px;
+                padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+            }
+            .merge-actions #merge-save-later,
+            .merge-actions #merge-cancel { margin-right: 0; }
+            .merge-actions button { width: 100%; }
+            .merge-next-why { text-align: center; }
+            .merge-tabs { gap: 2px; }
+            .merge-tab { padding: 6px 6px; font-size: 11px; }            .merge-match-list {
+                margin-bottom: 0;
             }
             .merge-item {
                 padding: 8px 10px;
@@ -28141,17 +28226,6 @@
                 padding: 4px 8px;
                 font-size: 10px;
             }
-            .merge-actions {
-                flex-wrap: wrap;
-                gap: 6px;
-                margin-top: 8px;
-            }
-            .merge-actions button {
-                flex: 1 1 auto;
-                min-width: 45%;
-                font-size: 11px;
-                padding: 8px 10px;
-            }
             .merge-close-buttons {
                 flex-direction: column;
                 gap: 6px;
@@ -28162,43 +28236,25 @@
             }
         }
 
-        /* Landscape mobile: hide less important elements */
+        /* A phone held sideways (§14f): only the current step in the step list, of the counts only "To decide",
+           the footer in one row. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .merge-wizard-explanation {
-                display: none;
+            .modal.modal--lg.merge-modal {
+                width: 100vw;
+                max-width: 100vw;
+                height: 100dvh;
+                max-height: 100dvh;
+                border-radius: 0;
             }
-            .merge-progress {
-                display: none;
-            }
-            .merge-stats {
-                padding: 3px 6px;
-                margin-bottom: 3px;
-            }
-            .merge-stat-value {
-                font-size: 12px;
-            }
-            .merge-stat-label {
-                font-size: 7px;
-            }
-            .merge-tabs {
-                margin-bottom: 3px;
-            }
-            .merge-modal {
-                max-height: 95vh;
-            }
-            .merge-modal .modal-header {
-                padding: 6px 8px;
-            }
-            .merge-modal .modal-header h2 {
-                font-size: 13px;
-            }
+            .merge-modal .modal-header { padding: 6px 16px; }
+            .merge-modal .modal-content { padding: 6px 16px; gap: 6px; }
+            .merge-step:not(.active) { display: none; }
+            .merge-step { flex: 0 0 auto; flex-direction: row; align-items: baseline; gap: 8px; padding: 4px 0; }
+            .merge-stat:not([data-count="pending"]), .merge-stat-sum { display: none; }
+            .merge-stat { flex: 0 0 auto; padding: 3px 8px; flex-direction: row; align-items: baseline; gap: 6px; }
+            .merge-stat-value { font-size: 14px; }
             .merge-modal .buttons.merge-actions {
-                padding: 6px 8px;
-                gap: 4px;
-            }
-            .merge-actions button {
-                padding: 6px 8px;
-                font-size: 10px;
+                padding: 6px 16px calc(6px + env(safe-area-inset-bottom));
             }
         }
 
