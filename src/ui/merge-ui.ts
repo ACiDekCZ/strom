@@ -64,26 +64,39 @@ export const mergeUiMethods = uiModule({
         // crash mid-review) is offered at startup; sessions saved on purpose
         // ("Save for later") wait in the tree manager.
         if (!await getCurrentMergeInfo()) return;
-        void this.showPendingMergeDialog();
+        void this.showPendingMergeDialog({ atStart: true });
     },
 
     /**
-     * Show pending merge dialog
+     * Show pending merge dialog. At start (`atStart`) a merge left open is
+     * one that did not finish (13g): the line above says so and that its
+     * tree and the file are unchanged.
      */
-    async showPendingMergeDialog(): Promise<void> {
+    async showPendingMergeDialog(opts: { atStart?: boolean } = {}): Promise<void> {
         const modal = document.getElementById('pending-merge-modal');
         const list = document.getElementById('pending-merge-list');
         if (!modal || !list) return;
 
         const currentMerge = await getCurrentMergeInfo();
         const savedSessions = await listMergeSessionsInfo();
+        const current = currentMerge ? await getCurrentMerge() : null;
+
+        const message = modal.querySelector<HTMLElement>('.pending-merge-message');
+        if (message) {
+            const choices = current?.wizard?.choices;
+            const targetName = choices && choices.mode !== 'new'
+                ? choices.targetName || (current?.target ? TreeManager.getTreeMetadata(current.target.treeId)?.name ?? '' : '')
+                : '';
+            const crashed = !!(opts.atStart && currentMerge && targetName);
+            message.textContent = crashed ? strings.mergeWizard.crashed(targetName) : strings.merge.pendingMergeFound;
+        }
 
         let html = '';
 
         // Current auto-saved merge
         if (currentMerge) {
             const date = new Date(currentMerge.savedAt).toLocaleString();
-            const { meta, changed } = await this.pendingMergeLines(await getCurrentMerge(), currentMerge.stats);
+            const { meta, changed } = await this.pendingMergeLines(current, currentMerge.stats);
             html += `
                 <div class="pending-merge-item" data-session-id="current">
                     <div class="pending-merge-info">

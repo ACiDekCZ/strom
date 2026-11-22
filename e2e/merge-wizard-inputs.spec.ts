@@ -242,6 +242,8 @@ test('a reload in an unfinished guide: the merge is offered again, the tree unch
     await reloadApp(page);
     const pending = page.locator('#pending-merge-modal');
     await expect(pending).toHaveClass(/active/);
+    // A merge that did not finish (13g): its tree and the file are unchanged.
+    await expect(pending.locator('.pending-merge-message')).toHaveText('Last time the merge did not finish. The tree Modřínovi and the file are unchanged.');
     const item = pending.locator('.pending-merge-item');
     await expect(item).toHaveCount(1);
     await expect(item.locator('.pending-merge-meta')).toContainText('Step 2 of 6 · Who is who');

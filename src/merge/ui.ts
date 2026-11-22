@@ -55,7 +55,7 @@ import { pendingImageOf } from '../research-image-refs.js';
 import { imgStateOf, smallPortraitHtml, type ImgState } from '../ui/image-slot.js';
 import { personPhotoKey } from '../ui/person-photo-model.js';
 import { personInitials } from '../initials.js';
-import { MergeWizard, targetBlock, targetBlockText, type CompareRun, type WizardSource } from './wizard-ui.js';
+import { MergeWizard, targetBlock, targetBlockText, wizardRoute, type CompareRun, type WizardSource } from './wizard-ui.js';
 import type { WizardStep } from './wizard-steps.js';
 import { isRepeatOf, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
 import { newTreeName, writePlanAsNewTree } from './write.js';
@@ -427,15 +427,7 @@ class MergerUIClass {
      * Handle close confirmation: save for later
      */
     handleCloseSave(): void {
-        if (this.mergeState && this.resumedSessionId) {
-            void updateMergeSession(this.resumedSessionId, this.mergeState);
-        } else if (this.mergeState) {
-            // Generate display name from tree names
-            const displayName = this.targetTreeName && this.sourceTreeName
-                ? `${this.targetTreeName} + ${this.sourceTreeName}`
-                : this.incomingFileName || 'Merge';
-            void saveMergeSession(this.mergeState, displayName, this.targetTreeName, this.sourceTreeName);
-        }
+        this.storeForLater();
         this.hideCloseConfirmation();
         this.closeMergeModalInternal();
 
@@ -451,20 +443,31 @@ class MergerUIClass {
     }
 
     /**
-     * Save current merge for later (direct action from button)
+     * Store the open merge as a saved session (a resumed one in its own place)
+     * and say where it waits (13j): "Saved for later · {source → target} ·
+     * step {i} · in Manage trees under Unfinished merges".
      */
-    saveForLater(): void {
-        if (this.mergeState && this.resumedSessionId) {
-            void updateMergeSession(this.resumedSessionId, this.mergeState);
-            getUI().showToast(strings.merge.closeSave);
-        } else if (this.mergeState) {
+    private storeForLater(): void {
+        const state = this.mergeState;
+        if (!state) return;
+        if (this.resumedSessionId) {
+            void updateMergeSession(this.resumedSessionId, state);
+        } else {
             // Generate display name from tree names
             const displayName = this.targetTreeName && this.sourceTreeName
                 ? `${this.targetTreeName} + ${this.sourceTreeName}`
                 : this.incomingFileName || 'Merge';
-            void saveMergeSession(this.mergeState, displayName, this.targetTreeName, this.sourceTreeName);
-            getUI().showToast(strings.merge.closeSave);
+            void saveMergeSession(state, displayName, this.targetTreeName, this.sourceTreeName);
         }
+        const ws = state.wizard;
+        getUI().showToast(ws ? strings.mergeWizard.savedLater(wizardRoute(ws.choices), ws.step) : strings.merge.closeSave, 6000);
+    }
+
+    /**
+     * Save current merge for later (direct action from button)
+     */
+    saveForLater(): void {
+        this.storeForLater();
         this.closeMergeModalInternal();
 
         // Refresh tree manager if open

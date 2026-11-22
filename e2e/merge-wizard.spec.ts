@@ -128,6 +128,8 @@ test('Save for later keeps the decision and the step; the merge goes on from Man
 
     await wizard.locator('#merge-save-later').click();
     await expect(wizard).toBeHidden();
+    // The toast says where it waits (13j).
+    await expect(page.locator('.toast')).toHaveText('Saved for later · rodokmen-jilmovi.ged → Modřínovi · step 2 · in Manage trees under Unfinished merges');
     await expect.poll(() => page.evaluate(async () =>
         (await window.Strom.MergerUI.getPendingMergeInfo()).saved.length)).toBe(1);
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());

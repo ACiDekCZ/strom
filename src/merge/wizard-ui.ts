@@ -95,6 +95,11 @@ export function freshChoices(src: WizardSource, state: MergeState): WizardChoice
     };
 }
 
+/** Where the import goes, "{source} → {target}" (the source alone for a new tree): the header's line, the toast of Save for later. */
+export function wizardRoute(choices: Pick<WizardChoices, 'mode' | 'source' | 'targetName'>): string {
+    return choices.mode === 'new' ? choices.source.label : `${choices.source.label} → ${choices.targetName}`;
+}
+
 /** The window's title by where the import comes from (§1). */
 export function wizardTitle(choices: Pick<WizardChoices, 'mode' | 'source'>): string {
     const W = strings.mergeWizard;
@@ -361,8 +366,7 @@ export class MergeWizard {
         if (title) title.textContent = wizardTitle(ws.choices);
         const route = document.getElementById('merge-route');
         if (route) {
-            const c = ws.choices;
-            const text = c.mode === 'new' ? c.source.label : `${c.source.label} → ${c.targetName}`;
+            const text = wizardRoute(ws.choices);
             route.textContent = text;
             route.title = text;
         }
