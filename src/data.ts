@@ -68,7 +68,7 @@ import { ChangePacket, applyPacketOntoData } from './share-diff.js';
 import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
 import { ValidationIssue, stripUnsafeMediaDataUrls, cleanPortraitSources, isSafePhotoDataUrl, translateValidationType } from './validation.js';
 import { isPortraitSourceShape } from './photo.js';
-import { cloneTreeData } from './clone.js';
+import { cloneTreeData, cloneTreeDataAsJson } from './clone.js';
 import { sanitizeMediaRecords, moveLegacyAttachments, givePortraitsRecords, pruneMedia, findMedia, treeMedia, personMedia, mediaOf, mediaAt, placeKey as mediaPlaceKey, putMedia, dropMediaPlaces, deleteMedia, placePersonId } from './media.js';
 import { UndoManager, type UndoMark } from './undo.js';
 import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
@@ -1580,14 +1580,17 @@ class DataManagerClass {
     }
 
     /**
-     * Satellite: take the tree as the main window sent it (a JSON string of
-     * the whole data). No storage is read or written; the undo history stays
-     * the main window's. A staged dialog is not overwritten — the caller
-     * holds the data back until it ends (isEditSessionActive()).
+     * Satellite: take the tree as the main window sent it (the whole data as
+     * the channel cloned it; an older main window's: a JSON string). No
+     * storage is read or written; the undo history stays the main window's.
+     * A staged dialog is not overwritten — the caller holds the data back
+     * until it ends (isEditSessionActive()).
      */
-    loadFromWindow(treeId: TreeId, json: string): void {
+    loadFromWindow(treeId: TreeId, data: unknown): void {
+        const raw = typeof data === 'string' ? JSON.parse(data) as StromData : data as StromData;
+        if (!raw || typeof raw !== 'object') throw new Error('no tree data');
         this.currentTreeId = treeId;
-        this.data = migrateData(JSON.parse(json) as StromData);
+        this.data = migrateData(raw);
         this.pendingBefore = null;
         this.revision++;
         this.contentRevision++;
@@ -1603,10 +1606,16 @@ class DataManagerClass {
     }
 
     /**
-     * Main window: the open tree as stored, as one JSON string (what the
-     * satellites get). A staged dialog's changes are not stored yet: its
-     * starting state is sent instead.
+     * Main window: the open tree as stored (what the satellites get), as a
+     * JSON-shaped copy sharing its strings with the data (images included):
+     * the channel clones it without one string of the whole tree. A staged
+     * dialog's changes are not stored yet: its starting state is sent instead.
      */
+    storedWindowData(): StromData {
+        return cloneTreeDataAsJson(this.editSession ? this.editSession.before : this.data);
+    }
+
+    /** The same as one JSON string. */
     storedDataJson(): string {
         return JSON.stringify(this.editSession ? this.editSession.before : this.data);
     }

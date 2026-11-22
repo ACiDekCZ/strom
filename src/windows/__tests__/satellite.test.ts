@@ -242,6 +242,26 @@ describe('edits', () => {
 });
 
 describe('patches', () => {
+    it('the tree and a patch as an object (data) are taken as well as an older main window\'s JSON string', async () => {
+        const parse = vi.spyOn(JSON, 'parse');
+        sat.start();
+        await settle();
+        main.post({ type: 'status', ...status({ revision: 100 }) });
+        main.post({ type: 'tree', to: SAT, treeId: TREE, name: 'Hrachovcovi', revision: 100, data: JSON.parse(treeJson(['p1', 'Bořivoj'])) });
+        main.post({ type: 'patch', treeId: TREE, revision: 101, data: JSON.parse(treeJson(['p1', 'Bořivoj'], ['p2', 'Ctibor'])) });
+        parse.mockClear();
+        await settle();
+        expect(DataManager.getPerson('p2' as PersonId)!.firstName).toBe('Ctibor');
+        expect(sat.revision).toBe(101);
+        // No string of the whole tree is parsed for it.
+        expect(parse.mock.calls.filter(c => typeof c[0] === 'string' && c[0].includes('Ctibor'))).toEqual([]);
+        parse.mockRestore();
+        main.post({ type: 'patch', treeId: TREE, revision: 102, json: treeJson(['p1', 'Bořivoj'], ['p2', 'Ctibor Hrachovec']) });
+        await settle();
+        expect(DataManager.getPerson('p2' as PersonId)!.firstName).toBe('Ctibor Hrachovec');
+        expectNoStorage();
+    });
+
     it('a newer patch replaces the copy; an older one or another tree\'s is ignored', async () => {
         await connect();
         main.post({ type: 'patch', treeId: TREE, revision: 105, json: treeJson(['p1', 'Bořivoj Ctibor']) });

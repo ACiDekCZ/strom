@@ -27,7 +27,8 @@ import type { AgentFollow } from './agent-follow-state.js';
 /** Where the satellite's copy of the tree lives (DataManager; a test may pass its own). */
 export interface SatelliteDataTarget {
     setWindowSink(sink: WindowEditSink | null): void;
-    loadFromWindow(treeId: TreeId, json: string): void;
+    /** `data`: the tree as the channel cloned it (an older main window's: a JSON string). */
+    loadFromWindow(treeId: TreeId, data: unknown): void;
     windowDataJson(): string;
     isEditSessionActive(): boolean;
 }
@@ -617,7 +618,7 @@ export class SatelliteClient {
         this.queue.length = 0;
         this.inFlight = null;
         this._mainFocus = m.focus ?? null;
-        this.data.loadFromWindow(m.treeId, m.json);
+        this.data.loadFromWindow(m.treeId, m.data ?? m.json);
         this._treeId = m.treeId;
         this._treeName = m.name;
         this._revision = m.revision;
@@ -638,7 +639,7 @@ export class SatelliteClient {
 
     private applyPatch(m: MessageOf<'patch'>): void {
         this.heldPatch = null;
-        this.data.loadFromWindow(m.treeId, m.json);
+        this.data.loadFromWindow(m.treeId, m.data ?? m.json);
         this._revision = m.revision;
         this.emit('data', { treeId: m.treeId, revision: m.revision, source: 'patch' });
     }

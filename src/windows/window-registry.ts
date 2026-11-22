@@ -27,8 +27,8 @@ export interface MainWindowHost {
     treeId(): TreeId | null;
     treeName(treeId: TreeId): string;
     treeExists(treeId: TreeId): boolean;
-    /** The open tree as stored, as one JSON string. */
-    storedJson(): string;
+    /** The open tree as stored, as a JSON-shaped object for the channel to clone (never one string of the whole tree). */
+    storedData(): unknown;
     /** Values that change whenever the open tree changes (compared item by item, by identity). */
     stateStamp(): readonly unknown[];
     /** Save a satellite's edit as an edit of this window (one undo step named `label`). */
@@ -67,7 +67,7 @@ export function dataManagerHost(overrides: Partial<MainWindowHost> = {}): MainWi
         treeId: () => DataManager.getCurrentTreeId(),
         treeName: (id) => TreeManager.getTrees().find(t => t.id === id)?.name ?? '',
         treeExists: (id) => TreeManager.getTrees().some(t => t.id === id),
-        storedJson: () => DataManager.storedDataJson(),
+        storedData: () => DataManager.storedWindowData(),
         stateStamp: () => [DataManager.getCurrentTreeId(), DataManager.getData(), DataManager.getContentRevision(), DataManager.isLocked()],
         applyEdit: (json, label, listsOnly) => DataManager.applyWindowEdit(json, label, listsOnly),
         busy: () => DataManager.isEditSessionActive(),
@@ -540,21 +540,35 @@ export class WindowRegistry {
             this.postStatus(true);
             return;
         }
-        const json = this.host.storedJson();
+        // No window holds a copy of the tree: nothing is copied or sent. A
+        // window that says hello later gets the whole tree then (onHello),
+        // and the first broadcast after it a patch.
+        if (!this.anyConnected()) {
+            this.lastSent = null;
+            this.postStatus(false);
+            return;
+        }
+        const data = this.host.storedData();
         if (prev && prev.treeId === treeId && prev.withData) {
-            this.bus.post({ type: 'patch', treeId, revision: this.rev, json });
+            this.bus.post({ type: 'patch', treeId, revision: this.rev, data });
         } else {
             const replaces = prev?.treeId && prev.treeId !== treeId ? { treeId: prev.treeId, exists: this.host.treeExists(prev.treeId) } : undefined;
-            this.bus.post({ type: 'tree', treeId, name: this.host.treeName(treeId), revision: this.rev, json, ...(replaces ? { replaces } : {}), ...this.focusField() });
+            this.bus.post({ type: 'tree', treeId, name: this.host.treeName(treeId), revision: this.rev, data, ...(replaces ? { replaces } : {}), ...this.focusField() });
         }
         this.postStatus(false);
+    }
+
+    /** A satellite said hello and is still listed (it holds the tree, or gets it). */
+    private anyConnected(): boolean {
+        for (const e of this.entries.values()) if (e.connected) return true;
+        return false;
     }
 
     /** The whole open tree to one window (after its hello, after a refused edit). */
     private sendTreeTo(to: string): void {
         const treeId = this.host.treeId();
         if (!treeId || this.host.locked()) return;   // the status says why
-        this.bus.post({ type: 'tree', to, treeId, name: this.host.treeName(treeId), revision: this.rev, json: this.host.storedJson(), ...this.focusField() });
+        this.bus.post({ type: 'tree', to, treeId, name: this.host.treeName(treeId), revision: this.rev, data: this.host.storedData(), ...this.focusField() });
         if (!this.lastSent) this.lastSent = { treeId, withData: true };
     }
 

@@ -98,8 +98,10 @@ async function connect(initial?: unknown) {
     return { id, ...sat };
 }
 
-function treeOf(json: string): StromData {
-    return JSON.parse(json) as StromData;
+/** The tree a `tree`/`patch` message carries (an object the channel cloned, never one JSON string). */
+function treeOf(data: unknown): StromData {
+    expect(typeof data).toBe('object');
+    return data as StromData;
 }
 
 describe('opening and hello', () => {
@@ -125,7 +127,7 @@ describe('opening and hello', () => {
         const tree = sat.of('tree');
         expect(tree).toHaveLength(1);
         expect(tree[0]).toMatchObject({ to: sat.id, treeId: TREE, name: 'Okurkovi', revision: registry.revision });
-        expect(Object.values(treeOf(tree[0].json).persons).map(p => (p as Person).firstName)).toEqual(['Zdislava']);
+        expect(Object.values(treeOf(tree[0].data).persons).map(p => (p as Person).firstName)).toEqual(['Zdislava']);
         expect(sat.got.findIndex(m => m.type === 'init')).toBeLessThan(sat.got.findIndex(m => m.type === 'tree'));
         expect(last(sat.of('status'))).toMatchObject({ treeId: TREE, treeExists: true, live: false, locked: false, windows: [sat.id] });
         expect(other.of('tree')).toHaveLength(0);
@@ -186,7 +188,7 @@ describe('edits from a satellite', () => {
         const other = listener(hub, 'sat-b');
         const base = sat.of('tree')[0].revision;
         saveSpy.mockClear();
-        const next = treeOf(sat.of('tree')[0].json);
+        const next = treeOf(sat.of('tree')[0].data);
         const p = Object.values(next.persons)[0] as Person;
         p.firstName = 'Zdislava Marie';
         sat.bus.post({ type: 'edit', windowId: sat.id, editId: 'e1', treeId: TREE, baseRevision: base, json: JSON.stringify(next), label: 'editing Zdislava Okurková' });
@@ -203,7 +205,7 @@ describe('edits from a satellite', () => {
         const patch = other.of('patch');
         expect(patch).toHaveLength(1);
         expect(patch[0].revision).toBe(base + 1);
-        expect((treeOf(patch[0].json).persons[p.id] as Person).firstName).toBe('Zdislava Marie');
+        expect((treeOf(patch[0].data).persons[p.id] as Person).firstName).toBe('Zdislava Marie');
 
         // Undo here takes it back.
         DataManager.undo();
@@ -215,7 +217,7 @@ describe('edits from a satellite', () => {
         const other = await connect();
         const base = sat.of('tree')[0].revision;
         DataManager.createPerson({ firstName: 'Bořivoj', lastName: 'Hrachovec', gender: 'male' });   // the main window changed meanwhile
-        const stale = treeOf(sat.of('tree')[0].json);
+        const stale = treeOf(sat.of('tree')[0].data);
         sat.bus.post({ type: 'edit', windowId: sat.id, editId: 'e2', treeId: TREE, baseRevision: base, json: JSON.stringify(stale), label: 'x' });
         const treesOther = other.of('tree').length;
         await settle();
@@ -223,7 +225,7 @@ describe('edits from a satellite', () => {
         expect(sat.of('edit-result')).toEqual([expect.objectContaining({ ok: false, reason: 'revision', revision: base + 1 })]);
         const fresh = last(sat.of('tree'))!;
         expect(fresh.to).toBe(sat.id);
-        expect(Object.keys(treeOf(fresh.json).persons)).toHaveLength(2);
+        expect(Object.keys(treeOf(fresh.data).persons)).toHaveLength(2);
         expect(other.of('tree')).toHaveLength(treesOther);
         expect(DataManager.getAllPersons()).toHaveLength(2);
     });
@@ -241,7 +243,7 @@ describe('edits from a satellite', () => {
     it('while following a research a satellite\'s change of the lists alone is taken: only the lists, a list\'s step undone (N2)', async () => {
         const sat = await connect();
         DataManager.setLiveTree(TREE);
-        const copy = treeOf(last(sat.of('tree'))!.json);
+        const copy = treeOf(last(sat.of('tree'))!.data);
         const list = { id: 'pl_1', name: 'Picked', dynamic: false, personIds: Object.keys(copy.persons), created: '2026-11-12T10:00:00.000Z', updated: '2026-11-12T10:00:00.000Z' };
         // Anything else in the copy (a person renamed) is not taken with the lists.
         const pid = Object.keys(copy.persons)[0];
@@ -273,7 +275,7 @@ describe('edits from a satellite', () => {
         expect(DataManager.getAllPersons()).toHaveLength(1);
         const patch = sat.of('patch');
         expect(patch.length).toBe(before + 1);
-        expect(Object.keys(treeOf(last(patch)!.json).persons)).toHaveLength(1);
+        expect(Object.keys(treeOf(last(patch)!.data).persons)).toHaveLength(1);
         expect(last(sat.of('status'))).toMatchObject({ canUndo: false, canRedo: true });
     });
 
@@ -284,7 +286,40 @@ describe('edits from a satellite', () => {
         for (let i = 0; i < 5; i++) DataManager.createPerson({ firstName: `Bořivoj ${i}`, lastName: 'Hrachovec', gender: 'male' });
         await settle(PATCH_INTERVAL_MS);
         expect(sat.of('patch').length).toBe(before + 1);
-        expect(Object.keys(treeOf(last(sat.of('patch'))!.json).persons)).toHaveLength(6);
+        expect(Object.keys(treeOf(last(sat.of('patch'))!.data).persons)).toHaveLength(6);
+    });
+
+    it('no window holds the tree: saves copy nothing; a window saying hello then gets the whole tree, later saves a patch — never as one JSON string', async () => {
+        const stringified = vi.spyOn(DataManager, 'storedDataJson');
+        const json = vi.spyOn(DataManager, 'storedWindowData');
+        for (let i = 0; i < 5; i++) {
+            DataManager.createPerson({ firstName: `Bořivoj ${i}`, lastName: 'Hrachovec', gender: 'male' });
+            await settle(PATCH_INTERVAL_MS);
+        }
+        await settle(3000);
+        // The revision still follows every change (a satellite's edit is checked against it).
+        expect(registry.revision).toBeGreaterThan(Date.now() - 60_000);
+        expect(json).not.toHaveBeenCalled();
+
+        const sat = await connect();
+        expect(json).toHaveBeenCalledTimes(1);
+        expect(Object.keys(treeOf(sat.of('tree')[0].data).persons)).toHaveLength(6);
+        expect(sat.of('tree')[0].revision).toBe(registry.revision);
+        DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Hrachovcová', gender: 'female' });
+        await settle(PATCH_INTERVAL_MS);
+        expect(sat.of('patch')).toHaveLength(1);
+        expect(Object.keys(treeOf(sat.of('patch')[0].data).persons)).toHaveLength(7);
+        expect(sat.of('tree')).toHaveLength(1);
+        expect([...sat.of('tree'), ...sat.of('patch')].some(m => 'json' in m)).toBe(false);
+        expect(stringified).not.toHaveBeenCalled();
+
+        // The last window went: nothing copied again.
+        sat.bus.post({ type: 'bye', windowId: sat.id });
+        await settle();
+        json.mockClear();
+        DataManager.createPerson({ firstName: 'Ctibor', lastName: 'Hrachovec', gender: 'male' });
+        await settle(PATCH_INTERVAL_MS);
+        expect(json).not.toHaveBeenCalled();
     });
 
     it('where the work stands here (focus, default person, default view) is no change: the edit made meanwhile passes, and the main window keeps its own', async () => {
@@ -298,7 +333,7 @@ describe('edits from a satellite', () => {
         await settle(PATCH_INTERVAL_MS);
         expect(registry.revision).toBe(base);
 
-        const next = treeOf(sat.of('tree')[0].json);
+        const next = treeOf(sat.of('tree')[0].data);
         (next.persons[zdislava.id] as Person).birthPlace = 'Lhota';
         sat.bus.post({ type: 'edit', windowId: sat.id, editId: 'e9', treeId: TREE, baseRevision: base, json: JSON.stringify(next), label: 'editing Zdislava Okurková' });
         await settle();
@@ -523,7 +558,7 @@ describe('images that came after the tree (spec 116, I6)', () => {
             window.dispatchEvent(new CustomEvent(IMAGES_ARRIVED_EVENT, { detail: { treeId: TREE, seq: 1, keys: [`person:${id}:photo`] } }));
             await settle(PATCH_INTERVAL_MS);
             expect(sat.of('patch').length).toBe(before + 1);
-            expect(treeOf(last(sat.of('patch'))!.json).persons[id].photo).toBe(url);
+            expect(treeOf(last(sat.of('patch'))!.data).persons[id].photo).toBe(url);
             expect(saveSpy).not.toHaveBeenCalled();
             expect(UndoManager.canUndo()).toBe(false);
         } finally {

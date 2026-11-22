@@ -27,7 +27,7 @@ function fakeHost(): MainWindowHost {
         treeId: () => TREE,
         treeName: () => 'Okurkovi',
         treeExists: () => true,
-        storedJson: () => '{"persons":{},"partnerships":{}}',
+        storedData: () => ({ persons: {}, partnerships: {} }),
         stateStamp: () => [TREE],
         applyEdit: () => true,
         busy: () => false,

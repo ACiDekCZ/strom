@@ -4,9 +4,12 @@
  * being the sending window's id; a message with `to` is meant for that
  * window only. A window never handles its own messages.
  *
- * The tree travels as one JSON string of the whole data (`json`): the
- * receiver parses it in a fraction of the time a structured clone of the
- * object takes, and it holds exactly what storage would (prototype S0).
+ * The tree goes to the satellites as the whole data object (`data`, a
+ * JSON-shaped copy the channel clones): no window builds a string of the
+ * whole tree. A big tree's images made that string hundreds of MB, twice
+ * over with any non-Latin letter, once in the main window and once more in
+ * every window it reached, at every change (out of memory with the Research
+ * overview open). A satellite's edit still travels as JSON (`json`).
  */
 
 import type { TreeId } from '../types.js';
@@ -85,9 +88,9 @@ export type WindowMessageBody =
      * (`{ personId, depthUp, depthDown }`), where a window without a state of
      * its own starts.
      */
-    | { type: 'tree'; to?: string; treeId: TreeId; name: string; revision: number; json: string; replaces?: { treeId: TreeId; exists: boolean }; focus?: unknown }
-    /** main → all: the tree after a save (any: own edit, a satellite's, undo, the research). */
-    | { type: 'patch'; treeId: TreeId; revision: number; json: string }
+    | { type: 'tree'; to?: string; treeId: TreeId; name: string; revision: number; data?: unknown; json?: string; replaces?: { treeId: TreeId; exists: boolean }; focus?: unknown }
+    /** main → all: the tree after a save (any: own edit, a satellite's, undo, the research); `data` (an older main window's: `json`). */
+    | { type: 'patch'; treeId: TreeId; revision: number; data?: unknown; json?: string }
     /** sat → main: an edit made on the copy of revision `baseRevision`; `json` = the whole data after it. */
     | { type: 'edit'; windowId: string; editId: string; treeId: TreeId; baseRevision: number; json: string; label: string; listsOnly?: true }
     /** main → sat: the edit's result; `ok: false` = not applied (a fresh `tree` follows to that window). */
