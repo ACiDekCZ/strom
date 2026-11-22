@@ -280,12 +280,12 @@ describe('media/known and a refusal', () => {
     });
 
     it('a refusal\'s hashes: valid ones, each once; they go with data for the rest of the page', async () => {
-        expect(MEDIA_REF_UNKNOWN_CODE).toBe('sync.mediaRef-unknown');
+        expect(MEDIA_REF_UNKNOWN_CODE).toBe('sync.media-ref-unknown');
         expect(mediaRefUnknownShas({ ok: false, code: MEDIA_REF_UNKNOWN_CODE, shas: [sha(1), sha(1).toUpperCase(), 'x', 7] })).toEqual([sha(1)]);
         expect(mediaRefUnknownShas({ code: MEDIA_REF_UNKNOWN_CODE })).toEqual([]);
         expect(mediaRefUnknownShas(null)).toEqual([]);
         // The code as the research writes it (not lower case: read from the body itself).
-        expect(isMediaRefUnknown({ ok: false, code: 'sync.mediaRef-unknown' })).toBe(true);
+        expect(isMediaRefUnknown({ ok: false, code: 'sync.media-ref-unknown' })).toBe(true);
         expect(isMediaRefUnknown({ ok: false, code: 'sync.mediaref-unknown' })).toBe(false);
         expect(isMediaRefUnknown(null)).toBe(false);
 

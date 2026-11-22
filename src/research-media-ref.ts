@@ -8,7 +8,7 @@
  *
  * What the research holds is asked with `POST <base>/media/known` before a
  * send. A reference it no longer finds refuses the whole send
- * (`sync.mediaRef-unknown` with the hashes): the same tree then goes once with
+ * (`sync.media-ref-unknown` with the hashes): the same tree then goes once with
  * every picture's data, and those hashes go with data for the rest of the page.
  */
 
@@ -23,7 +23,7 @@ import type { StromData } from './types.js';
 /** `/status.features`: the bridge takes a send with pictures by reference. */
 export const SYNC_MEDIA_REF_FEATURE = 'sync.mediaRef';
 /** A send's refusal: a `_STROM_DATA` hash the research does not have (`shas` names them). */
-export const MEDIA_REF_UNKNOWN_CODE = 'sync.mediaRef-unknown';
+export const MEDIA_REF_UNKNOWN_CODE = 'sync.media-ref-unknown';
 /** At most this many hashes of a refusal are taken (the research names 50 at most). */
 export const MEDIA_REF_UNKNOWN_MAX = 200;
 /** How long one ask of `media/known` may take before the send goes with data. */
@@ -153,7 +153,7 @@ export function isMediaRefUnknown(body: unknown): boolean {
     return !!body && typeof body === 'object' && !Array.isArray(body) && (body as Record<string, unknown>).code === MEDIA_REF_UNKNOWN_CODE;
 }
 
-/** The hashes a refusal names (`shas` of `sync.mediaRef-unknown`, untrusted): valid ones, each once. */
+/** The hashes a refusal names (`shas` of `sync.media-ref-unknown`, untrusted): valid ones, each once. */
 export function mediaRefUnknownShas(body: unknown): string[] {
     const r = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
     if (!Array.isArray(r?.shas)) return [];

@@ -1,7 +1,7 @@
 /**
  * A send to a research that takes pictures by reference (spec 133 U1): it
  * asks `media/known`, sends what the research holds by reference, and after
- * a refusal `sync.mediaRef-unknown` sends the same tree once more with every
+ * a refusal `sync.media-ref-unknown` sends the same tree once more with every
  * picture's data — once, nothing told. Without the feature the send is as ever.
  *
  * StorageManager is an in-memory Map; fetch is a stub for the bridge. All data is invented.
@@ -208,7 +208,7 @@ afterEach(async () => {
     vi.unstubAllGlobals();
 });
 
-const REFUSED = { status: 409, body: { ok: false, code: 'sync.mediaRef-unknown', error: 'A picture by reference is not here.', shas: [sha(1)] } };
+const REFUSED = { status: 409, body: { ok: false, code: 'sync.media-ref-unknown', error: 'A picture by reference is not here.', shas: [sha(1)] } };
 
 describe('a send with pictures by reference (spec 133 U1)', () => {
     it('what the research holds goes by reference; refused, the same tree goes once with every picture\'s data, nothing told', async () => {
