@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeWriteAndSwitch } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeSetMode, mergeWriteAndSwitch } from './helpers.js';
 
 /**
  * The import guide's frame (spec 134 §1): a GEDCOM file merged into the open
@@ -12,9 +12,8 @@ test('a GEDCOM file opens the six-step guide; Esc after the comparison asks with
     await importJsonAsNewTree(page, 'e2e/fixtures/modrinovi.json', 'Modřínovi');
 
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/rodokmen-jilmovi.ged');
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    await result.locator('#gedcom-merge-btn').click();
 
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
@@ -57,9 +56,8 @@ async function openGuide(page: Page): Promise<Locator> {
     await openApp(page);
     await importJsonAsNewTree(page, 'e2e/fixtures/modrinovi.json', 'Modřínovi');
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/rodokmen-jilmovi.ged');
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    await result.locator('#gedcom-merge-btn').click();
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
     return wizard;
@@ -144,9 +142,7 @@ test('Save for later keeps the decision and the step; the merge goes on from Man
 test('Only compare: the same steps, step 5 says Done and nothing is written', async ({ page }) => {
     const wizard = await openGuide(page);
     const treesBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
-    // The mode is set on the guide's choices, as step 1's option would (§3; its options are not drawn yet).
-    await page.evaluate(() =>
-        (window.Strom.MergerUI as unknown as { wizard: { update(c: { mode: string }): void } }).wizard.update({ mode: 'compare' }));
+    await mergeSetMode(wizard, 'compare');
     await expect(wizard.locator('#merge-title')).toHaveText('Comparison (nothing is written)');
     await mergeCompare(wizard);
     await wizard.locator('#merge-next').click();

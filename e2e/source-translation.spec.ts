@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson } from './helpers.js';
+import { openApp, createFirstPerson, mergeCreateNewTree } from './helpers.js';
 
 /**
  * The research's translation of a source's transcript (a "Překlad:" section of
@@ -14,13 +14,9 @@ async function importFixture(page: Page): Promise<void> {
     await createFirstPerson(page, 'Seed', 'Person');
     await page.evaluate(() => window.Strom.UI.startGedcomImportPlain());
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/research-source-translation.ged');
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    await result.locator('#gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await expect(importDialog).toBeVisible();
-    await importDialog.getByRole('button', { name: 'Import' }).click();
-    await expect(importDialog).toBeHidden();
+    await mergeCreateNewTree(page, result);
 }
 
 const openSource = (page: Page, ref: string) => page.evaluate((ref) => {

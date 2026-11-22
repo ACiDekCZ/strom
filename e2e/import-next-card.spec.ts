@@ -1,6 +1,6 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'fs';
-import { openApp, createFirstPerson, waitForPersist, mergeCompare, mergeCount, mergeWriteAndSwitch } from './helpers.js';
+import { openApp, createFirstPerson, waitForPersist, mergeCompare, mergeCount, mergeWriteAndSwitch, mergeCreateNewTree } from './helpers.js';
 import { fakeBridge, openResearch, poll } from './research-bridge.js';
 import { VERIFY_FEATURES, fakeVerify, verifyGed } from './verify-bridge.js';
 
@@ -41,14 +41,9 @@ function writeOtherProgramGedcom(testInfo: TestInfo, opts: { finding?: boolean; 
 /** Load a GEDCOM file and take it as a new tree. */
 async function importAsNewTree(page: Page, file: string, name = 'Habrcetl'): Promise<void> {
     await page.locator('#gedcom-input').setInputFiles(file);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    await result.locator('#gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await expect(importDialog).toBeVisible();
-    await importDialog.locator('#import-tree-name').fill(name);
-    await importDialog.getByRole('button', { name: 'Import' }).click();
-    await expect(importDialog).toBeHidden();
+    await mergeCreateNewTree(page, result, name);
 }
 
 function nextCard(page: Page) {
@@ -155,6 +150,7 @@ test('"Insert into tree": the card says where the people went, and a backup was 
 
     await page.evaluate(() => { (window.Strom.UI as unknown as { importToCurrentTree: boolean }).importToCurrentTree = true; });
     await page.locator('#gedcom-input').setInputFiles(writeOtherProgramGedcom(testInfo, { finding: true }));
+    // Into the open tree: today's summary dialog with "Insert into tree" (not the import guide).
     const result = page.locator('#gedcom-result-modal');
     await expect(result).toBeVisible();
     await result.locator('#gedcom-insert-btn').click();
@@ -174,9 +170,8 @@ test('a merge with a GEDCOM: the card in the merged tree, with the new and updat
     await waitForPersist(page, 'Vendelin');
 
     await page.locator('#gedcom-input').setInputFiles(writeOtherProgramGedcom(testInfo, { oneFamily: true }));
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    await result.locator('#gedcom-merge-btn').click();
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
     await mergeCompare(wizard);

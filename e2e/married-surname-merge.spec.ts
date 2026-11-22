@@ -48,9 +48,8 @@ async function mergeWithEvaAnswered(page: Page): Promise<Locator> {
 
     await page.evaluate(() => window.Strom.UI.startGedcomImportPlain());
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-marnm.ged');
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    await result.locator('#gedcom-merge-btn').click();
 
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();

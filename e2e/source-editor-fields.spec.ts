@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp } from './helpers.js';
+import { openApp, mergeCreateNewTree } from './helpers.js';
 
 /**
  * The source editor's place of an entry (spec 075 §1): archive and call
@@ -92,13 +92,9 @@ test.describe('source editor: where the entry stands', () => {
         await pwd.locator('#export-privacy-mode').selectOption('full');
         const [download] = await Promise.all([page.waitForEvent('download'), pwd.locator('#export-submit-btn').click()]);
         await page.locator('#gedcom-input').setInputFiles(await download.path());
-        const result = page.locator('#gedcom-result-modal');
+        const result = page.locator('#merge-modal');
         await expect(result).toBeVisible();
-        await result.locator('#gedcom-new-tree-btn').click();
-        const dialog = page.locator('#import-tree-modal');
-        await dialog.locator('#import-tree-name').fill('Back from GEDCOM');
-        await dialog.getByRole('button', { name: 'Import' }).click();
-        await expect(dialog).toBeHidden();
+        await mergeCreateNewTree(page, result, 'Back from GEDCOM');
         const back = await page.evaluate(() => Object.values(window.Strom.DataManager.getData().sources ?? {})
             .find(s => s.title === 'Oddací matrika Pokusov 1820–1835'));
         expect(back).toMatchObject({ repository: 'Zemský archiv Vzorov', callNumber: 'O 3', folio: 'fol. 31 recto', image: '3', reference: 'no. 2a' });

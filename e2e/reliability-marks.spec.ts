@@ -1,6 +1,6 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'fs';
-import { openApp, createFirstPerson, waitForPersist, cardAction, personModal, card } from './helpers.js';
+import { openApp, createFirstPerson, waitForPersist, cardAction, personModal, card, importGedcomAsNewTree } from './helpers.js';
 import { BRIDGE, HEAD, fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
 
 /**
@@ -32,11 +32,7 @@ function writeGedcom(testInfo: TestInfo, cited = false): string {
 }
 
 async function importTree(page: Page, testInfo: TestInfo, cited = false): Promise<void> {
-    await page.locator('#gedcom-input').setInputFiles(writeGedcom(testInfo, cited));
-    await page.locator('#gedcom-result-modal #gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await importDialog.locator('#import-tree-name').fill('Kvapilík');
-    await importDialog.getByRole('button', { name: 'Import' }).click();
+    await importGedcomAsNewTree(page, writeGedcom(testInfo, cited));
     const next = page.locator('#import-next-card');
     await expect(next).toBeVisible();
     await next.locator('.import-next-close').click();
@@ -1019,11 +1015,7 @@ function namedForeignGed(testInfo: TestInfo): string {
 async function openNamedForeign(page: Page, testInfo: TestInfo): Promise<void> {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openApp(page);
-    await page.locator('#gedcom-input').setInputFiles(namedForeignGed(testInfo));
-    await page.locator('#gedcom-result-modal #gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await importDialog.locator('#import-tree-name').fill('Kvapilík');
-    await importDialog.getByRole('button', { name: 'Import' }).click();
+    await importGedcomAsNewTree(page, namedForeignGed(testInfo));
     const next = page.locator('#import-next-card');
     await expect(next).toBeVisible();
     await next.locator('.import-next-close').click();

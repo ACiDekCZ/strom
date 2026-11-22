@@ -3,8 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import {
     openApp, createFirstPerson, card, cardAction, importJsonAsNewTree, focusViaSearch,
-    mergeCompare,
-} from './helpers.js';
+    mergeCompare, mergeCreateNewTree } from './helpers.js';
 
 /**
  * Security & privacy regressions (review 2026-09-22, K1–K4): markup in data
@@ -279,15 +278,11 @@ test('XSS: markup in GEDCOM names and places stays text', async ({ page }, testI
     writeFileSync(gedPath, ged);
 
     await page.locator('#gedcom-input').setInputFiles(gedPath);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     await expect(page.locator('#gedcom-stat-persons')).toHaveText('2');
     await expect(result.locator('img[src="x"], svg[onload]')).toHaveCount(0);
-    await result.locator('#gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await expect(importDialog).toBeVisible();
-    await importDialog.getByRole('button', { name: 'Import' }).click();
-    await expect(importDialog).toBeHidden();
+    await mergeCreateNewTree(page, result);
 
     await expect(card(page, 'Gil')).toBeVisible();
     await expect(card(page, 'Gil').locator('.name-text')).toContainText('<img');

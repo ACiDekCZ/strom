@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, seedTree, card, cardAction, personModal, SeedPerson } from './helpers.js';
+import { openApp, seedTree, card, cardAction, personModal, SeedPerson, mergeCreateNewTree } from './helpers.js';
 
 /**
  * The surname a person goes by (spec 024, K1.1, K1.2, K1.6): under a filled
@@ -268,13 +268,9 @@ test('GEDCOM: a name marked _STROM_PRIMARY shows on the card, the married one as
     await family(page);
     await page.evaluate(() => window.Strom.UI.startGedcomImportPlain());
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/research-primary-birth.ged');
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    await result.locator('#gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await expect(importDialog).toBeVisible();
-    await importDialog.getByRole('button', { name: 'Import' }).click();
-    await expect(importDialog).toBeHidden();
+    await mergeCreateNewTree(page, result);
 
     const jana = card(page, 'Jana');
     await expect(jana.locator('.name-text')).toHaveAttribute('data-surname', 'Lhotová');

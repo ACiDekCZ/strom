@@ -56,7 +56,7 @@ test.describe('import from a file (9a)', () => {
         await (await chooser).setFiles({ name: 'rodina-rybizek.ged', mimeType: 'text/plain', buffer: Buffer.from(GED) });
         await expect(modal).toHaveClass(/active/);
         await expect(row.locator('.option-busy')).toContainText('Loading rodina-rybizek.ged…');
-        await expect(page.locator('#gedcom-result-modal')).toBeVisible();
+        await expect(page.locator('#merge-modal')).toBeVisible();
         await expect(page.locator('#gedcom-stat-persons')).toHaveText('3');
         await expect(modal).not.toHaveClass(/active/);
     });
@@ -73,7 +73,7 @@ test.describe('import from a file (9a)', () => {
         await expect(msg).toContainText('The file cannot be read: it is neither GEDCOM nor a Strom backup.');
         await expect(modal).toHaveClass(/active/);
         await expect(page.locator('#alert-modal')).toHaveCount(0);
-        await expect(page.locator('#gedcom-result-modal')).toBeHidden();
+        await expect(page.locator('#merge-modal')).toBeHidden();
         // "Choose another file" opens the system's dialog again; a good file goes on.
         chooser = page.waitForEvent('filechooser');
         await msg.getByRole('button', { name: 'Choose another file' }).click();
@@ -173,7 +173,7 @@ test.describe('photos of a GEDCOM import', () => {
             await route.fulfill({ path: 'e2e/fixtures/avatar.png', contentType: 'image/png' });
         });
         await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-style.ged');
-        const dialog = page.locator('#gedcom-result-modal');
+        const dialog = page.locator('#merge-modal');
         const btn = dialog.locator('#gedcom-media-download');
         await btn.click();
         await expect(btn).toHaveAttribute('aria-busy', 'true');
@@ -215,7 +215,7 @@ test.describe('a large GEDCOM read in parts (C52, §8)', () => {
         await row.click();
         const framesBefore = await page.evaluate(() => (window as unknown as { __ged: { frames: number } }).__ged.frames);
         await (await chooser).setFiles({ name: 'rybizkovi-velky.ged', mimeType: 'text/plain', buffer: Buffer.from(lines.join('\n')) });
-        await expect(page.locator('#gedcom-result-modal')).toBeVisible({ timeout: 30_000 });
+        await expect(page.locator('#merge-modal')).toBeVisible({ timeout: 30_000 });
         await expect(page.locator('#gedcom-stat-persons')).toHaveText(String(n));
         const ged = await page.evaluate(() => (window as unknown as { __ged: { steps: string[]; frames: number } }).__ged);
         const counts = ged.steps.map(t => /^Loading rybizkovi-velky\.ged… ([\d,]+) people$/.exec(t)?.[1]).filter(Boolean)

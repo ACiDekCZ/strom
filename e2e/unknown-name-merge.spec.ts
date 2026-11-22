@@ -39,9 +39,8 @@ test('a wife of unknown given name pairs through her matched husband, for review
 
     await page.evaluate(() => window.Strom.UI.startGedcomImportPlain());
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-unknown-name.ged');
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    await result.locator('#gedcom-merge-btn').click();
 
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();

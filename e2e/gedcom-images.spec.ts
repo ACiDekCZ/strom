@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { openApp } from './helpers.js';
+import { openApp, mergeCreateNewTree } from './helpers.js';
 
 /**
  * Images through GEDCOM, the way a user does it: a tree with a portrait, a
@@ -89,16 +89,11 @@ async function exportGedcom(page: Page): Promise<string> {
 
 async function importGedcom(page: Page, gedPath: string, name: string, withImages: boolean): Promise<void> {
     await page.locator('#gedcom-input').setInputFiles(gedPath);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     const images = result.locator('#gedcom-import-images');
     if ((await images.isChecked()) !== withImages) await images.setChecked(withImages);
-    await result.locator('#gedcom-new-tree-btn').click();
-    const dialog = page.locator('#import-tree-modal');
-    await expect(dialog).toBeVisible();
-    await dialog.locator('#import-tree-name').fill(name);
-    await dialog.getByRole('button', { name: 'Import' }).click();
-    await expect(dialog).toBeHidden();
+    await mergeCreateNewTree(page, result, name);
 }
 
 /** The imported person (by name) with the images the open tree holds for it. */

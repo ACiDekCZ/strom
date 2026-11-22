@@ -552,13 +552,74 @@ export async function mergeWrite(wizard: Locator): Promise<void> {
 }
 
 /**
- * Set the guide's scope (a: only add new people, b: also fill what the tree
- * lacks, c: also the differences, d: only update existing people) on its
- * choices, as step 1's option would (§3; its options are not drawn yet).
+ * Choose the guide's scope in step 1 (a: only add new people, b: also fill
+ * what the tree lacks, c: also the differences, d: only update existing
+ * people, §3): from a later step through step 1 and back to that step.
  */
 export async function mergeSetScope(page: Page, scope: 'a' | 'b' | 'c' | 'd'): Promise<void> {
-    await page.evaluate((scope) =>
-        (window.Strom.MergerUI as unknown as { wizard: { update(c: { scope: string }): void } }).wizard.update({ scope }), scope);
+    const wizard = page.locator('#merge-modal');
+    const current = mergeCurrentStep(wizard);
+    const was = await current.getAttribute('data-step');
+    if (was !== '1') {
+        await wizard.locator('#merge-progress button.merge-step[data-step="1"]').click();
+        await expect(current).toHaveAttribute('data-step', '1');
+    }
+    const more = wizard.locator('.merge-s1-more');
+    if (await more.isVisible() && (scope === 'c' || scope === 'd')) await more.click();
+    await wizard.locator(`.merge-s1-scope[data-scope="${scope}"]`).click();
+    await expect(wizard.locator(`.merge-s1-scope[data-scope="${scope}"] input`)).toBeChecked();
+    if (was && was !== '1') {
+        await wizard.locator(`#merge-progress button.merge-step[data-step="${was}"]`).click();
+        await expect(current).toHaveAttribute('data-step', was);
+    }
+}
+
+/** Choose the guide's mode in step 1: New tree, Add to a tree, Only compare or Save as JSON (§3). */
+export async function mergeSetMode(wizard: Locator, mode: 'new' | 'add' | 'compare' | 'json'): Promise<void> {
+    const option = wizard.locator(`.merge-s1-modes [data-mode="${mode}"]`);
+    await option.click();
+    await expect(option).toHaveAttribute('aria-checked', 'true');
+}
+
+/**
+ * The guide on step 1 makes the import a new tree (spec 134 §3): New tree,
+ * on to step 5, its primary creates the tree (named after the file; `name`
+ * renames it afterwards). Resolves once the guide is closed and the new tree
+ * is the open one.
+ */
+export async function mergeCreateNewTree(page: Page, wizard: Locator, name?: string): Promise<string> {
+    const before: string[] = await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { id: string }) => t.id));
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+    await mergeSetMode(wizard, 'new');
+    await wizard.locator('#merge-next').click();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
+    await wizard.locator('#merge-next').click();
+    await expect(wizard).toBeHidden();
+    const id = await page.evaluate((before) =>
+        window.Strom.TreeManager.getTrees().find((t: { id: string }) => !before.includes(t.id))?.id, before);
+    expect(id, 'a new tree').toBeTruthy();
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(id);
+    if (name) {
+        await page.evaluate(({ id, name }) => {
+            window.Strom.TreeManager.renameTree(id as never, name);
+            window.Strom.UI.updateTreeSwitcher();
+        }, { id: id!, name });
+    }
+    return id!;
+}
+
+/**
+ * A GEDCOM file imported as a new tree through the import guide: the file
+ * read, then `mergeCreateNewTree`. `inStep1` runs on step 1 first (the
+ * file's summary is there: images, media, encoding).
+ */
+export async function importGedcomAsNewTree(page: Page, file: string,
+    opts: { name?: string; inStep1?: (wizard: Locator) => Promise<void> } = {}): Promise<string> {
+    await page.locator('#gedcom-input').setInputFiles(file);
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    if (opts.inStep1) await opts.inStep1(wizard);
+    return mergeCreateNewTree(page, wizard, opts.name);
 }
 
 /**
