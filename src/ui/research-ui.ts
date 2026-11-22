@@ -2553,12 +2553,15 @@ export const researchUiMethods = uiModule({
             return;
         }
         if (!header.isStromResearch) {
-            // The same dialog as Import → GEDCOM (new tree / merge).
+            // The same way as Import → GEDCOM: the import guide, the file's summary in its step 1.
             this.importFromTreeManager = false;
             this.importToCurrentTree = false;
             this.gedcomResult = result;
+            this.gedcomFileInfo = null;
+            this.gedcomRawBuffer = null;
+            this.gedcomDecoding = null;
             this.gedcomImportImages = null;
-            this.showGedcomResultDialog();
+            this.openGedcomGuide(false);
             return;
         }
         if (!await this.ensureLocalUnlocked()) return;
