@@ -4,6 +4,7 @@
  */
 
 import { earlierAddedAt } from '../person-lists-data.js';
+import { addEmails } from '../person-contact.js';
 import { rewriteStorySources } from '../story-sources.js';
 import { remapCitations, unionCitations } from '../citation-quality.js';
 import {
@@ -1670,6 +1671,9 @@ export function mergePersonData(
 
     // Open question / reference number / death-status: fill when missing.
     if (!existing.question && incoming.question) existing.question = incoming.question;
+    // The contact (spec 134 K0.10): the incoming addresses join the existing
+    // ones, each once ("Only empty details": only when the person has none).
+    if (incoming.emails?.length && !(options.notesOnlyWhenEmpty && existing.emails?.length)) addEmails(existing, incoming.emails);
     if (!existing.refn && incoming.refn) {
         existing.refn = incoming.refn;
         if (incoming.refnType) existing.refnType = incoming.refnType;

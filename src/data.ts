@@ -50,6 +50,7 @@ import {
 import { generatePersonId, generateLifeEventId, generateSourceId, generateParticipantId, generateAttachmentId, generatePartnershipId } from './ids.js';
 import { partnershipParticipants, LAST_FOCUSED, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, oppositeGender, isPrimaryName, mergedPrimaryName, isEmbeddedEnvelope } from './model-values.js';
 import { STROM_DATA_VERSION } from './version.js';
+import { moveContactsIntoPeople, cleanEmails } from './person-contact.js';
 import { convertLegacyCensusEvents, isCoupleEventType } from './events.js';
 import { sanitizeGedcomDates } from './gedcom-date-form.js';
 import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
@@ -397,6 +398,10 @@ export function migrateData(data: unknown): StromData {
     if (typeof d.version === 'number' && d.version < 25) givePortraitsRecords(result, typeof d.researchAsOf === 'string');
     // v23 (spec 107): only portrait sources whose original is still there.
     cleanPortraitSources(result);
+    // v26 (spec 134 K0.10): the e-mails kept as residences or lines of a note
+    // are the people's contact. Every load: a research version may bring
+    // such a residence back, and the move changes nothing the second time.
+    moveContactsIntoPeople(result);
 
     // Preserve place coordinates. This object is rebuilt field by field, so
     // anything not named here is dropped on EVERY load — tree switch, app
@@ -3058,6 +3063,13 @@ class DataManagerClass {
             person.refn = updates.refn || undefined;
         }
         if (updates.question !== undefined) person.question = updates.question || undefined;
+        // The contact (spec 134 K0.10): the addresses as typed, each once; none = no contact.
+        if (updates.emails !== undefined) {
+            const emails = cleanEmails(updates.emails);
+            const was = person.emails ?? [];
+            if ((emails ?? []).join('\n') !== was.join('\n')) diff(strings.labels.emails, was.join(', '), (emails ?? []).join(', '));
+            person.emails = emails;
+        }
         // Empty list means none — do not keep an empty array around.
         if (updates.nameVariants !== undefined) {
             const kept = updates.nameVariants.map(v => v.trim()).filter(Boolean);

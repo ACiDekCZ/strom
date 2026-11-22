@@ -108,6 +108,7 @@ import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } fro
 import { appUnknownIsNoSurname } from './app-version';
 import { lastMarriageSurnameIndex } from './married-suggestion';
 import { researchClaimValue } from './research-claim';
+import { addEmails, isContactResidence } from './person-contact.js';
 import {
     addGedcomExtra, addOriginalIds, CITE_TAG, gedcomHtmlText, joinedBlock, NOTED_TAG, notedBlock, notedStructures, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
     IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
@@ -1270,7 +1271,7 @@ interface RawEvent {
     typeText?: string;
     /** 2 _STROM_STATUS: the research's status of the event. */
     status?: FactStatus;
-    /** 2 EMAIL under the event as written (LifeEvent.gedcomEmails). */
+    /** 2 EMAIL under the event as written: the person's contact (Person.emails). */
     emails?: string[];
     /** The value written on the event's own line, where Strom has no field for it (LifeEvent.gedcomValue). */
     lineValue?: string;
@@ -5112,11 +5113,9 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
                             }
                             currentEvent.note = (currentEvent.note ?? '') + more;
                         } else if (tag === 'EMAIL' && value) {
-                            // MyHeritage keeps contact e-mail under RESI: a line of
-                            // the note to read, the address itself to go back.
-                            const line = strings.gedcomNotes.email(value);
-                            currentEvent.note = currentEvent.note
-                                ? `${currentEvent.note}\n${line}` : line;
+                            // An e-mail in the event's address structure (MyHeritage's
+                            // RESI): the person's contact (spec 134 K0.10), never a
+                            // line of the event's note.
                             (currentEvent.emails ??= []).push(value.trim());
                         } else if (tag === 'ASSO' && value) {
                             // Godparent/witness who has a record of their own.
@@ -6025,7 +6024,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
         if (dateForms) person.gedcomDates = dateForms;
         // Facts with no field of their own join the note, labelled, ahead of
         // whatever free text the file wrote (see NOTED_INDI_TAGS).
-        const factLines = indi.noteFacts.map(factToNoteLine);
+        const factLines = indi.noteFacts.filter(f => f.tag !== 'EMAIL').map(factToNoteLine);
         const allNotes = [...factLines, ...(indi.notes ? [indi.notes] : [])];
         // What the file wrote in place of a name ("Mrtvě narozený"), kept as
         // written — after the rest, and only once.
@@ -6065,8 +6064,20 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
             };
         };
 
-        if (indi.events.length > 0) {
-            person.events = indi.events.map((ev): LifeEvent => {
+        // The person's contact (spec 134 K0.10): the e-mails under the
+        // events and right under the person (`1 EMAIL`). A RESI of a contact
+        // alone is no residence (isContactResidence): no event of it.
+        const emails = [...indi.events.flatMap(ev => ev.emails ?? []),
+            ...indi.noteFacts.filter(f => f.tag === 'EMAIL').map(f => f.value)];
+        if (emails.length > 0) addEmails(person, emails);
+        const ownEvents = indi.events.filter(ev => ev.type !== 'residence' || !isContactResidence({
+            date: ev.date, place: ev.place, address: ev.address, cause: ev.cause, age: ev.age,
+            note: [ev.note, ev.lineValue, ev.tagValue, ev.typeText].filter(Boolean).join('\n'),
+            sources: ev.sourceRefs?.length, files: ev.media?.length, participants: (ev.participants?.length ?? 0) + (ev.shars?.length ?? 0),
+            other: !!(ev.share || ev.roleAt || ev.customLabel || (ev.status && ev.status !== 'lead')), emails: ev.emails,
+        }));
+        if (ownEvents.length > 0) {
+            person.events = ownEvents.map((ev): LifeEvent => {
                 const out: LifeEvent = { id: generateLifeEventId(), type: ev.type };
                 if (ev.media?.length) eventIdOfRaw.set(ev, out.id);
                 if (ev.customLabel) out.customLabel = ev.customLabel;
@@ -6077,7 +6088,8 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
                 if (ev.address) out.address = ev.address;
                 if (ev.note) out.note = ev.note;
                 if (ev.status) out.status = ev.status;
-                if (ev.emails?.length && ev.note) out.gedcomEmails = ev.emails;
+                // Where the file wrote the contact's e-mail, for "Back to {prog}".
+                if (ev.emails?.length) out.gedcomEmails = ev.emails;
                 if (ev.lineValue && ev.note && (ev.note === ev.lineValue || ev.note.startsWith(`${ev.lineValue}\n`))) {
                     out.gedcomValue = ev.lineValue;
                 }

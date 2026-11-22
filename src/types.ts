@@ -141,9 +141,11 @@ export interface LifeEvent {
     status?: FactStatus;
     /**
      * The e-mail addresses the GEDCOM file gave under the event (`2 EMAIL`,
-     * MyHeritage's contact under RESI), as written. Each is also a line of
-     * the note ("E-mail: …"), which is what the app shows; "Back to {prog}"
-     * writes it back as `2 EMAIL` while that line is still in the note.
+     * MyHeritage's contact under RESI), as written. They are the person's
+     * contact (Person.emails, data v26); "Back to {prog}" writes each back as
+     * `2 EMAIL` under this event while the contact still has it. A tree of an
+     * older app had each as a line of the note ("E-mail: …") too, written
+     * back while that line was still there.
      */
     gedcomEmails?: string[];
     /**
@@ -648,6 +650,13 @@ export interface Person {
      * born?"). Travels with shared/exported files so a relative can answer it.
      */
     question?: string;
+    /**
+     * The person's e-mail addresses (data version 26, spec 134 K0.10): the
+     * contact a GEDCOM file gives as `1 RESI` / `2 EMAIL` (MyHeritage) or
+     * `1 EMAIL`, or one typed in the person editor. A contact, not an event:
+     * written out as `1 RESI` / `2 EMAIL` (see src/person-contact.ts).
+     */
+    emails?: string[];
     /**
      * Other written forms of this person's name: how the registers actually
      * spell it (Fischek / Fíšek / Fissek), an alias, or the Czech "jméno po

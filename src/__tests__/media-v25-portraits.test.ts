@@ -49,8 +49,8 @@ function stored(data: StromData, version: number): Record<string, unknown> {
 const portraitRecords = (data: StromData) => allMedia(data).filter(a => a.dataUrl === PNG);
 
 describe('data v25: every portrait is in a record of the files', () => {
-    it('is the current data version', () => {
-        expect(STROM_DATA_VERSION).toBe(25);
+    it('is the data version or older than it', () => {
+        expect(STROM_DATA_VERSION).toBeGreaterThanOrEqual(25);
     });
 
     it('a v21 tree with portraits: one record of each picture with every person of it, kind photo, name and date kept', () => {

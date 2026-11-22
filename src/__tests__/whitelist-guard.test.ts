@@ -349,7 +349,7 @@ type EditedByUpdatePerson =
     | 'firstName' | 'lastName' | 'titleBefore' | 'titleAfter' | 'marriedSurname' | 'primaryName' | 'dismissedMarriedSuggestion' | 'gender' | 'nameVariants'
     | 'birthDate' | 'birthPlace' | 'birthAddress' | 'deathDate' | 'deathPlace'
     | 'deathCause' | 'deathAge' | 'deathAddress'
-    | 'notes' | 'refn' | 'question' | 'isDeceased' | 'isLocked' | 'photo' | 'photoSource' | 'story';
+    | 'notes' | 'refn' | 'question' | 'emails' | 'isDeceased' | 'isLocked' | 'photo' | 'photoSource' | 'story';
 
 /**
  * Fields updatePerson deliberately does NOT touch, and who owns them instead.
@@ -449,6 +449,8 @@ describe('updatePerson applies every field it owns', () => {
         notes: 'Kept bees.',
         refn: 'box 12/1880',
         question: 'Who were her parents?',
+        // The contact (data v26, spec 134 K0.10).
+        emails: ['hromoslav@example.org', 'h.ozubec@example.org'],
         isDeceased: true,
         isLocked: true,
         photo: 'data:image/png;base64,iVBORw0KGgo=',

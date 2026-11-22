@@ -4180,6 +4180,7 @@ const stringsEN = {
         photoRecrop: 'Edit crop',
         maidenName: 'Maiden name',
         refn: 'Reference number',
+        emails: 'E-mail',
         question: 'Open question',
         // Partnership dates - used based on status
         startDateMarried: 'Wedding date',
@@ -4220,6 +4221,7 @@ const stringsEN = {
         lastName: 'Last name',
         maidenName: 'Surname at birth',
         refn: 'e.g. archive box 12, or an id from another program',
+        emails: 'e.g. name@example.org, more separated by commas',
         question: 'e.g. does anyone know her birth date?',
         flexDateShort: 'e.g. 1880',
         flexDate: '15 May 1880 · 5/15/1880 · 1880-05-15 · about 1880'
@@ -6060,7 +6062,6 @@ const stringsEN = {
         association: (name: string, label: string) => `Association: ${name} (${label})`,
         /** GEDCOM 7 ASSO roles the app has no role for, kept in the participant's note. */
         assoRoles: { CHIL: 'child', FATH: 'father', FRIEND: 'friend', HUSB: 'husband', MOTH: 'mother', MULTIPLE: 'several roles', NGHBR: 'neighbour', PARENT: 'parent', SPOU: 'spouse', WIFE: 'wife' } as Record<string, string>,
-        email: (value: string) => `E-mail: ${value}`,
         adoptedChild: 'adopted child',
         fosterChild: 'foster child',
         child: 'child',
@@ -15117,6 +15118,7 @@ const stringsCZ: StringsType = {
         photoRecrop: 'Upravit výřez',
         maidenName: 'Rodné příjmení',
         refn: 'Referenční číslo',
+        emails: 'E-mail',
         question: 'Otevřená otázka',
         // Partnership dates - used based on status
         startDateMarried: 'Datum sňatku',
@@ -15156,6 +15158,7 @@ const stringsCZ: StringsType = {
         lastName: 'Příjmení',
         maidenName: 'Příjmení z narození',
         refn: 'např. archivní karton 12 nebo id z jiného programu',
+        emails: 'např. jmeno@example.org, další oddělené čárkou',
         question: 'např. neví někdo, kdy se narodila?',
         flexDateShort: 'např. 1880',
         flexDate: '15.5.1880 · 5.1880 · 1880 · kolem 1880'
@@ -16937,7 +16940,6 @@ const stringsCZ: StringsType = {
         remarriageNoDate: (married: string) => `Rozvod, nový sňatek ${married}`,
         association: (name: string, label: string) => `Vztah: ${name} (${label})`,
         assoRoles: { CHIL: 'dítě', FATH: 'otec', FRIEND: 'přítel', HUSB: 'manžel', MOTH: 'matka', MULTIPLE: 'více rolí', NGHBR: 'soused', PARENT: 'rodič', SPOU: 'manžel nebo manželka', WIFE: 'manželka' } as Record<string, string>,
-        email: (value: string) => `E-mail: ${value}`,
         adoptedChild: 'osvojené dítě',
         fosterChild: 'dítě v pěstounské péči',
         child: 'dítě',
@@ -25882,6 +25884,7 @@ const stringsDE: StringsType = {
         photoRecrop: 'Ausschnitt bearbeiten',
         maidenName: 'Geburtsname',
         refn: 'Referenznummer',
+        emails: 'E-Mail',
         question: 'Offene Frage',
         startDateMarried: 'Hochzeitsdatum',
         startDatePartners: 'Beginn der Beziehung',
@@ -25916,6 +25919,7 @@ const stringsDE: StringsType = {
         lastName: 'Nachname',
         maidenName: 'Nachname bei der Geburt',
         refn: 'z. B. Archivkasten 12 oder eine ID aus einem anderen Programm',
+        emails: 'z. B. name@example.org, weitere durch Kommas getrennt',
         question: 'z. B. Kennt jemand ihr Geburtsdatum?',
         flexDateShort: 'z. B. 1880',
         flexDate: '15.5.1880 · 5.1880 · 1880 · um 1880'
@@ -27682,7 +27686,6 @@ const stringsDE: StringsType = {
         remarriageNoDate: (married: string) => `Geschieden, erneut geheiratet ${married}`,
         association: (name: string, label: string) => `Verknüpfung: ${name} (${label})`,
         assoRoles: { CHIL: 'Kind', FATH: 'Vater', FRIEND: 'Freund', HUSB: 'Ehemann', MOTH: 'Mutter', MULTIPLE: 'mehrere Rollen', NGHBR: 'Nachbar', PARENT: 'Elternteil', SPOU: 'Ehepartner', WIFE: 'Ehefrau' } as Record<string, string>,
-        email: (value: string) => `E-Mail: ${value}`,
         adoptedChild: 'adoptiertes Kind',
         fosterChild: 'Pflegekind',
         child: 'Kind',

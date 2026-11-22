@@ -639,9 +639,10 @@ describe('MyHeritage export quirks (M1, real-export shapes)', () => {
         expect(r.stats.droppedTagSummary).not.toMatch(/_UPD|RIN|_UID/);
     });
 
-    it('RESI e-mail lands in the event note with @@ unescaped', () => {
+    it('a RESI of an e-mail alone is the person\'s contact with @@ unescaped, no residence (spec 134 K0.10)', () => {
         const jana = Object.values(importGed(MH).persons).find(p => p.firstName === 'Jana')!;
-        expect(jana.events!.find(e => e.type === 'residence')!.note).toBe('E-mail: jana@example.com');
+        expect(jana.emails).toEqual(['jana@example.com']);
+        expect(jana.events?.some(e => e.type === 'residence')).toBeFalsy();
     });
 
     it('ENGA becomes the couple\'s engagement event', () => {
