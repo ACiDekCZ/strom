@@ -389,7 +389,7 @@ test('scope a)–d) said on a person of the tree; the chosen scope stays', async
 
     await scope('b').click();
     await expect(scope('b').locator('input')).toBeChecked();
-    await expect(mergeCurrentStep(wizard).locator('.merge-step-sub')).toHaveText('Add to a tree · b)');
+    await expect(mergeCurrentStep(wizard).locator('.merge-step-sub')).toHaveText('Add · b)');
     await mergeCompare(wizard);
     await wizard.locator('#merge-progress button.merge-step[data-step="1"]').click();
     await expect(scope('b').locator('input')).toBeChecked();

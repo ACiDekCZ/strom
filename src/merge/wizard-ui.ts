@@ -399,7 +399,7 @@ export class MergeWizard {
         }
         if (step === 1) {
             if (ws.choices.json) return { text: W.modeJson };
-            const mode = ws.choices.mode === 'new' ? W.modeNew : ws.choices.mode === 'compare' ? W.modeCompare : W.modeAdd;
+            const mode = ws.choices.mode === 'new' ? W.modeNew : ws.choices.mode === 'compare' ? W.modeCompare : W.subAdd;
             return { text: ws.choices.mode === 'new' ? mode : `${mode} · ${ws.choices.scope})` };
         }
         if (step === 2 && this.plan) {

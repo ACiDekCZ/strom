@@ -181,6 +181,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         whatToDo: 'Co z tym zrobić',
         modeNew: 'Nowe drzewo',
         modeAdd: 'Dodaj do drzewa',
+        subAdd: 'Dodaj',
         modeCompare: 'Tylko porównaj',
         modeJson: 'Zapisz jako JSON',
         modeNewDesc: (name: string, n: number) => `Powstanie nowe drzewo „${name}” z ${nPl(n, 'osobą', 'osobami', 'osobami')}. Nie będzie połączone z badaniami. Istniejące drzewa pozostaną bez zmian.`,

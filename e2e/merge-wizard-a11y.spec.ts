@@ -147,7 +147,7 @@ test.describe('a tablet', () => {
         const subs = wizard.locator('#merge-progress .merge-step-sub');
         await expect(wizard.locator('#merge-progress .merge-step.active .merge-step-sub')).toBeVisible();
         await expect(subs.filter({ visible: true })).toHaveCount(1);
-        await expect(wizard.locator('#merge-progress .merge-step[data-step="1"]')).toHaveAttribute('title', /^1 What to do · Add to a tree/);
+        await expect(wizard.locator('#merge-progress .merge-step[data-step="1"]')).toHaveAttribute('title', /^1 What to do · Add · a\)$/);
         await expect(wizard.locator('#merge-progress .merge-step[data-step="4"]')).toHaveAttribute('title', /^4 Who is right · /);
         // Nothing of the step list is wider than its place.
         const spill = await wizard.locator('#merge-progress .merge-step').evaluateAll(els => els.filter(el => el.scrollWidth > el.clientWidth + 1).length);
