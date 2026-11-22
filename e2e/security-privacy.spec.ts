@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import {
     openApp, createFirstPerson, card, cardAction, importJsonAsNewTree, focusViaSearch,
-    mergeCompare, mergeCreateNewTree, mergePair } from './helpers.js';
+    mergeCompare, mergeCreateNewTree, mergePair, mergeTreeInto } from './helpers.js';
 
 /**
  * Security & privacy regressions (review 2026-09-22, K1–K4): markup in data
@@ -227,14 +227,7 @@ test('XSS: the tree-merge compare preview of a foreign file renders names as tex
         const trees = window.Strom.TreeManager.getTrees() as { id: string; name: string }[];
         return [trees.find((t) => t.name === 'Evil A')?.id, trees.find((t) => t.name === 'Evil B')?.id];
     });
-    await page.evaluate((id) => window.Strom.UI.showMergeTreesDialog(id), aId);
-    const pick = page.locator('#merge-trees-modal');
-    await expect(pick).toBeVisible();
-    await page.evaluate((id) => window.Strom.UI.selectMergeTarget(id), bId);
-    await pick.locator('#merge-trees-btn').click();
-
-    const wizard = page.locator('#merge-modal');
-    await expect(wizard).toBeVisible();
+    const wizard = await mergeTreeInto(page, aId!, bId!);
     await mergeCompare(wizard);
     await expect(wizard.locator('#merge-match-list .merge-item').first()).toBeVisible();
     await mergePair(wizard, `Ada${IMG}`);

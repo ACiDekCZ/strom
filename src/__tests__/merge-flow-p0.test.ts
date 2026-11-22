@@ -129,7 +129,7 @@ const ui = {
     importNextPendingFor: vi.fn(() => false),
 };
 
-type MergerInternals = { mergeState: MergeState | null; preMergeBackup: Promise<string | null> | null };
+type MergerInternals = { mergeState: MergeState | null; loadTarget(id: TreeId): Promise<boolean> };
 const internals = () => MergerUI as unknown as MergerInternals;
 
 beforeEach(async () => {
@@ -151,7 +151,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-    await internals().preMergeBackup;
     await TreeManager.flush();
     MergerUI.handleCloseCancel();
     (MergerUI as unknown as { closeMergeModalInternal(): void }).closeMergeModalInternal();
@@ -216,38 +215,43 @@ describe('K0.2 · a failed check before saving', () => {
 });
 
 describe('K0.4 · the backup "Before merge"', () => {
-    it('is taken when the wizard starts from a file, also with automatic backups off', async () => {
+    it('is taken at the write from a file, also with automatic backups off; opening and comparing take none', async () => {
         TreeManager.setAutoBackups(T1, false);
-        MergerUI.startMerge(structuredClone(INCOMING), 'cousins.ged', false, { gedcom: true });
-        await internals().preMergeBackup;
-        expect(await preMergeSnapshots(T1)).toBe(1);
-    });
-
-    it('is taken once for a tree into a tree', async () => {
-        const self = {
-            mergeViewSourceLabel: '',
-            updateUrlTreeParam() {},
-            closeMergeTreesDialog() {},
-            closeTreeManagerDialog() {},
-        };
-        await mergeUiMethods.runTreeMerge.call(self as never, null, T1, T2);
-        await internals().preMergeBackup;
-        await new Promise(r => setTimeout(r, 0));
-        expect(await preMergeSnapshots(T1)).toBe(1);
-    });
-
-    it('is none for a view (snapshotNow says null there)', async () => {
-        vi.spyOn(DataManager, 'isViewMode').mockReturnValue(true);
-        const viewData = DataManager as unknown as { viewMode: boolean };
-        const was = viewData.viewMode;
-        viewData.viewMode = true;
-        try {
-            MergerUI.startMerge(structuredClone(INCOMING), 'cousins.ged');
-            expect(await internals().preMergeBackup).toBeNull();
-        } finally {
-            viewData.viewMode = was;
-        }
+        started();
         expect(await preMergeSnapshots(T1)).toBe(0);
+        await writePlan();
+        expect(await preMergeSnapshots(T1)).toBe(1);
+    });
+
+    it('a tree into another: the target is read, not opened, and backed up once at the write', async () => {
+        // The open tree is the one merged: the other tree is the target (§2, 2c).
+        const self = { ...ui, mergeTargetReady: mergeUiMethods.mergeTargetReady };
+        await mergeUiMethods.showMergeTreesDialog.call(self as never, T1);
+        const opened = internals().mergeState!;
+        const m = MergerUI as unknown as { wizardSource(): WizardSource };
+        opened.wizard ??= { step: 1, reached: 1, compared: false, choices: freshChoices(m.wizardSource(), opened) };
+        expect(opened.wizard.choices.targetTreeId).toBe(T2);
+        expect(await internals().loadTarget(T2)).toBe(true);
+        expect(DataManager.getCurrentTreeId()).toBe(T1);
+        const state = rebaseMergeState(opened, opened.existingData, opened.target);
+        state.phase = 'reviewing';
+        state.wizard = opened.wizard;
+        for (const x of state.matches) updateMatchDecision(state, x.incomingId, 'confirm');
+        internals().mergeState = state;
+        expect(await preMergeSnapshots(T2)).toBe(0);
+        await writePlan();
+        expect(await preMergeSnapshots(T2)).toBe(1);
+        expect(await preMergeSnapshots(T1)).toBe(0);
+        expect(DataManager.getCurrentTreeId()).toBe(T1);
+    });
+
+    it('a resumed saved merge backs up its target as it is at the write', async () => {
+        const state = started();
+        const id = await saveMergeSession(state, 'Family + cousins', 'Family', 'Cousins');
+        (MergerUI as unknown as { closeMergeModalInternal(): void }).closeMergeModalInternal();
+        expect(await MergerUI.resumeSavedMerge(id)).toBe(true);
+        await writePlan();
+        expect(await preMergeSnapshots(T1)).toBe(1);
     });
 });
 

@@ -1959,6 +1959,24 @@ class DataManagerClass {
         return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now(), this.backupBase())).id;
     }
 
+    /**
+     * A backup of a tree as it is now, the open one or another one read from
+     * storage (the target of a merge, spec 134 K0.4), whatever the automatic
+     * backups setting. Null when the tree cannot be read or the backup written.
+     */
+    async snapshotTreeNow(treeId: TreeId, reason: 'pre-merge'): Promise<string | null> {
+        if (!this.viewMode && treeId === this.currentTreeId) return this.snapshotNow(reason);
+        try {
+            const data = await TreeManager.getTreeData(treeId);
+            if (!data) return null;
+            const base = TreeManager.backupResearchBase(treeId, TreeManager.researchBaseOf(treeId));
+            return (await createSnapshot(treeId, data, reason, Date.now(), base)).id;
+        } catch (err) {
+            console.warn('The backup could not be written', reason, err);
+            return null;
+        }
+    }
+
     /** The research base a backup of the current data keeps (N61-3). */
     private backupBase() {
         return this.currentTreeId ? TreeManager.backupResearchBase(this.currentTreeId, TreeManager.researchBaseOf(this.currentTreeId)) : null;

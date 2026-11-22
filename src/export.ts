@@ -89,7 +89,7 @@ export const EXPORT_DYNAMIC_CONTAINER_IDS: readonly string[] = [
     'merge-validation-banner', 'merge-manual-incoming',
     'merge-manual-picker', 'person-merge-keep', 'person-merge-picker', 'person-merge-other',
     'person-merge-delete-info', 'person-merge-field-conflicts', 'person-merge-partnership-list',
-    'merge-trees-description', 'share-welcome-title', 'share-welcome-counts', 'share-reply-title',
+    'share-welcome-title', 'share-welcome-counts', 'share-reply-title',
     'share-reply-intro', 'share-packet-title', 'share-packet-intro', 'share-packet-body',
 ];
 

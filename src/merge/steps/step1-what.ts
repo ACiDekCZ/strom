@@ -87,8 +87,12 @@ function targetsHtml(ctx: StepContext, env: Step1Env): string {
     const research = target?.research ? `<p class="merge-s1-note">${escapeHtml(W.researchKept(target.name))}</p>` : '';
     const locked = target && env.encLocked()
         ? `<p class="merge-s1-warn" id="merge-s1-enc"><span>${escapeHtml(W.encLocked(target.name))}</span> <button type="button" class="link-button" data-s1="unlock">${escapeHtml(strings.storageSafety.unlock)}</button></p>` : '';
+    // A tree followed live from the research (2f): why, and End following, after which it takes the import.
+    const liveRow = rows.find(r => r.block === 'live');
+    const live = liveRow
+        ? `<p class="merge-s1-warn" id="merge-s1-live"><strong>${escapeHtml(W.blockLiveTitle(liveRow.name))}</strong> <span>${escapeHtml(W.blockLive)}</span> <button type="button" class="link-button" data-s1="end-follow">${escapeHtml(strings.research.stop)}</button></p>` : '';
     return `<h4 class="merge-s1-h" id="merge-s1-targets-h">${escapeHtml(W.whichTree)}</h4>
-        <div class="merge-s1-targets" role="radiogroup" aria-labelledby="merge-s1-targets-h">${items}</div>${research}${locked}`;
+        <div class="merge-s1-targets" role="radiogroup" aria-labelledby="merge-s1-targets-h">${items}</div>${live}${research}${locked}`;
 }
 
 function scopeHtml(ctx: StepContext, env: Step1Env | undefined): string {
@@ -251,6 +255,7 @@ export function renderStep1(host: HTMLElement, ctx: StepContext): void {
             case 'not-taken-save': env?.saveNotTaken(); break;
             case 'swap': env?.swap(); break;
             case 'unlock': env?.unlock(); break;
+            case 'end-follow': env?.endFollow(); break;
             case 'more': {
                 const box = b.closest('.merge-s1-scopes');
                 const open = box?.classList.toggle('is-more') ?? false;

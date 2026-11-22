@@ -26,7 +26,7 @@ import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-pars
 import {
     validateJsonImport,
     ValidationResult,
-    MergerUI, MERGE_ANALYSIS_LONG_AT,
+    MergerUI,
     getCurrentMergeInfo,
     listMergeSessionsInfo,
     deleteMergeSession,
@@ -42,7 +42,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
-import { runHeavy, activatedElement } from './busy.js';
+import { targetBlock } from '../merge/wizard-ui.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { personMergeShares, type PersonMergeShareRow } from '../shared-events.js';
 import { lifeEventLabel } from '../person-sources.js';
@@ -668,11 +668,11 @@ export const mergeUiMethods = uiModule({
     // ---- MERGE CURRENT VIEW INTO A TREE (Primitive 3) ----
     /**
      * "Merge this view into…": take exactly the persons currently shown (the
-     * WYSIWYG subtree of the focus view) and merge them into another tree via
-     * the normal merge wizard. No intermediate tree is created — the subtree
-     * lives only in memory as the merge source. Edit-flow only.
+     * WYSIWYG subtree of the focus view) as the import of the guide, whose
+     * step 1 chooses the target among the other trees (spec 134 §2, 2d). No
+     * intermediate tree is created — the subtree lives only in memory. Edit-flow only.
      */
-    mergeViewInto(): void {
+    async mergeViewInto(): Promise<void> {
         if (DataManager.isReadOnly()) return;
         const visibleIds = TreeRenderer.getVisiblePersonIds();
         // Empty view (e.g. fan/timeline/map don't populate layout positions, or
@@ -681,188 +681,55 @@ export const mergeUiMethods = uiModule({
             this.showToast(strings.merge.mergeViewEmpty);
             return;
         }
-
-        // Merging a view into its OWN tree is person-merge territory, not this
-        // flow — so the picker excludes the active tree. If that leaves nothing,
-        // there is no target.
+        // Merging a view into its OWN tree is person-merge territory, not this flow.
         const activeTreeId = TreeManager.getActiveTreeId();
-        const targets = TreeManager.getTrees().filter(t => t.id !== activeTreeId);
-        if (targets.length === 0) {
-            this.showToast(strings.merge.mergeViewNoTarget);
-            return;
-        }
+        if (!await this.mergeTargetReady(activeTreeId)) return;
 
         // Snapshot the subtree now, while the active tree is still current.
-        this.mergeViewSourceData = extractSubtree(DataManager.getData(), visibleIds);
+        const data = extractSubtree(DataManager.getData(), visibleIds);
         const activeName = activeTreeId ? TreeManager.getTreeMetadata(activeTreeId)?.name : undefined;
-        this.mergeViewSourceLabel = activeName
+        const label = activeName
             ? `${activeName} — ${strings.merge.mergeViewSourceLabel}`
             : strings.merge.mergeViewSourceLabel;
-
-        this.showMergeViewTargetPicker(targets);
+        MergerUI.startMerge(data, label, false, undefined, { kind: 'view' }, activeTreeId ? { exclude: activeTreeId } : {});
     },
 
+    // ---- MERGE A TREE INTO ANOTHER ----
     /**
-     * Populate and open the shared merge-trees picker for the view-merge flow.
-     * Reuses the merge-trees-modal DOM (radio options + Start Merge button);
-     * startTreeMerge branches on mergeViewSourceData being set.
+     * Manage trees → ⋯ → "Merge into another tree…": the guide with the row's
+     * tree as the import and the open tree as the target (another one when the
+     * row is the open tree), Swap in its step 1 (spec 134 §2, 2c). The target
+     * is read for the comparison only; nothing is switched to before the write.
      */
-    showMergeViewTargetPicker(targets: ReturnType<typeof TreeManager.getTrees>): void {
-        const modal = document.getElementById('merge-trees-modal');
-        const description = document.getElementById('merge-trees-description');
-        const options = document.getElementById('merge-trees-options');
-        if (!modal || !description || !options) return;
-
-        // View-merge has no source TREE — only in-memory data.
-        this.mergeSourceTreeId = null;
-        this.mergeTargetTreeId = null;
-
-        this.clearDialogStack();
-        this.pushDialog('merge-trees-modal');
-
-        description.textContent = strings.merge.mergeViewDescription;
-
-        let html = '';
-        for (const tree of targets) {
-            html += `
-                <div class="merge-trees-option sel-opt" data-sel-form="tile" onclick="window.Strom.UI.selectMergeTarget('${tree.id}')">
-                    <input type="radio" name="merge-target" value="${tree.id}">
-                    <div class="merge-trees-option-info">
-                        <div class="merge-trees-option-name">${this.escapeHtml(tree.name)}</div>
-                        <div class="merge-trees-option-stats">${strings.treeManager.persons(tree.personCount)}</div>
-                    </div>
-                </div>
-            `;
-        }
-        options.innerHTML = html;
-        modal.classList.add('active');
-    },
-
-    // ---- MERGE TREES DIALOG ----
-    /**
-     * Show merge trees dialog
-     */
-    showMergeTreesDialog(sourceTreeId: string, parentDialogId?: string): void {
-        const modal = document.getElementById('merge-trees-modal');
-        const description = document.getElementById('merge-trees-description');
-        const options = document.getElementById('merge-trees-options');
-        if (!modal || !description || !options) return;
-
-        this.mergeSourceTreeId = sourceTreeId as TreeId;
-        this.mergeTargetTreeId = null;
-
-        // Handle dialog stack for ESC navigation
-        this.clearDialogStack();
-        if (parentDialogId) {
-            this.pushDialog(parentDialogId);
-            this.closeDialogById(parentDialogId);
-        }
-        this.pushDialog('merge-trees-modal');
-
-        const sourceTree = TreeManager.getTreeMetadata(this.mergeSourceTreeId);
-        if (!sourceTree) return;
-
-        description.innerHTML = `${strings.treeManager.mergeSourceTree} <strong>${this.escapeHtml(sourceTree.name)}</strong> ${strings.treeManager.mergeIntoTree}:`;
-
-        // Build target options (all trees except source)
-        const trees = TreeManager.getTrees().filter(t => t.id !== sourceTreeId);
-        let html = '';
-        for (const tree of trees) {
-            html += `
-                <div class="merge-trees-option sel-opt" data-sel-form="tile" onclick="window.Strom.UI.selectMergeTarget('${tree.id}')">
-                    <input type="radio" name="merge-target" value="${tree.id}">
-                    <div class="merge-trees-option-info">
-                        <div class="merge-trees-option-name">${this.escapeHtml(tree.name)}</div>
-                        <div class="merge-trees-option-stats">${strings.treeManager.persons(tree.personCount)}</div>
-                    </div>
-                </div>
-            `;
-        }
-
-        if (trees.length === 0) {
-            html = `<p style="text-align:center;color:var(--text-light);">${strings.merge.noItems}</p>`;
-        }
-
-        options.innerHTML = html;
-        modal.classList.add('active');
-    },
-
-    /**
-     * Select merge target tree
-     */
-    selectMergeTarget(targetId: string): void {
-        this.mergeTargetTreeId = targetId as TreeId;
-
-        // Update UI
-        document.querySelectorAll('.merge-trees-option').forEach(opt => {
-            opt.classList.remove('selected');
-            const radio = opt.querySelector('input[type="radio"]') as HTMLInputElement;
-            if (radio) radio.checked = false;
-        });
-
-        const selected = document.querySelector(`.merge-trees-option input[value="${targetId}"]`)?.closest('.merge-trees-option');
-        if (selected) {
-            selected.classList.add('selected');
-            const radio = selected.querySelector('input[type="radio"]') as HTMLInputElement;
-            if (radio) radio.checked = true;
-        }
-    },
-
-    /**
-     * Close merge trees dialog
-     */
-    closeMergeTreesDialog(): void {
-        document.getElementById('merge-trees-modal')?.classList.remove('active');
-        this.mergeSourceTreeId = null;
-        this.mergeTargetTreeId = null;
-        this.mergeViewSourceData = null;
-        this.mergeViewSourceLabel = undefined;
-        this.returnToParentDialog();
-    },
-
-    /**
-     * Start tree merge process. Two source kinds share this button:
-     *  - a source TREE (tree-to-tree merge from the tree manager), or
-     *  - the in-memory current-view subtree (mergeViewSourceData, Primitive 3).
-     */
-    async startTreeMerge(): Promise<void> {
-        const viewSource = this.mergeViewSourceData;
-
-        if (!this.mergeTargetTreeId || (!viewSource && !this.mergeSourceTreeId)) {
-            this.clearDialogStack();
-            this.pushDialog('merge-trees-modal');
-            this.showAlert(strings.treeManager.selectTargetTree, 'warning');
+    async showMergeTreesDialog(sourceTreeId: string, parentDialogId?: string): Promise<void> {
+        const sourceId = sourceTreeId as TreeId;
+        if (!TreeManager.getTreeMetadata(sourceId)) return;
+        if (!await this.mergeTargetReady(sourceId)) return;
+        const open = !DataManager.isViewMode() && DataManager.getCurrentTreeId() === sourceId;
+        const data = open ? structuredClone(DataManager.getData()) : await TreeManager.getTreeData(sourceId);
+        if (!data) {
+            this.showAlert(strings.mergeWizard.unreadable(TreeManager.getTreeMetadata(sourceId)?.name ?? ''), 'error');
             return;
         }
-
-        // §8: switching to the target and matching both trees run under the working state of Start merge,
-        // its words at once for large trees (the matching blocks the page).
-        const el = activatedElement();
-        const targetId = this.mergeTargetTreeId;
-        const sourceId = this.mergeSourceTreeId;
-        const long = (TreeManager.getTreeMetadata(targetId)?.personCount ?? 0)
-            + (viewSource ? Object.keys(viewSource.persons).length : TreeManager.getTreeMetadata(sourceId!)?.personCount ?? 0) >= MERGE_ANALYSIS_LONG_AT;
-        await runHeavy(el, () => this.runTreeMerge(viewSource, targetId, sourceId), { label: strings.merge.analyzing, atOnce: long });
+        // From Manage trees, closing the guide goes back there.
+        const fromManager = parentDialogId === 'tree-manager-modal';
+        if (fromManager) this.closeTreeManagerDialog();
+        MergerUI.startMerge(data, sourceId, fromManager, undefined, { kind: 'tree' });
     },
 
-    /** The merge of `startTreeMerge`: the source read, the target opened, the matching (with the target's backup), the wizard. */
-    async runTreeMerge(viewSource: StromData | null, targetId: TreeId, sourceId: TreeId | null): Promise<void> {
-        // Resolve the source data (either the extracted view, or a loaded tree).
-        const sourceData = viewSource ?? await TreeManager.getTreeData(sourceId!);
-        if (!sourceData) return;
-        const sourceLabelOrId = viewSource ? this.mergeViewSourceLabel : sourceId!;
-
-        // Switch to target tree first
-        await DataManager.switchTree(targetId);
-        // Update URL to reflect target tree
-        this.updateUrlTreeParam(targetId);
-
-        // Start merge with source data (it backs up the target, spec 134 K0.4). fromTreeManager only for the tree-to-tree
-        // path (so ESC/close returns to the tree manager it was launched from);
-        // the view-merge path was launched from the actions menu, not the manager.
-        MergerUI.startMerge(sourceData, sourceLabelOrId, !viewSource, undefined, { kind: viewSource ? 'view' : 'tree' });
-
-        this.closeMergeTreesDialog();
-        this.closeTreeManagerDialog();
+    /**
+     * Whether a tree other than `except` can take the import (§2): none at all
+     * says so; every one blocked (locked, followed live…) says why in a dialog
+     * with its way out (Open Manage trees, End following), false unless that
+     * way frees the tree.
+     */
+    async mergeTargetReady(except: TreeId | null): Promise<boolean> {
+        const others = TreeManager.getTrees().filter(t => t.id !== except);
+        if (others.length === 0) {
+            this.showToast(strings.merge.mergeViewNoTarget);
+            return false;
+        }
+        if (others.some(t => !targetBlock(t.id))) return true;
+        return MergerUI.blockDialog(others[0].id);
     },
 });

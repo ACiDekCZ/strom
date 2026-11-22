@@ -635,6 +635,23 @@ export async function mergeSetMode(wizard: Locator, mode: 'new' | 'add' | 'compa
 }
 
 /**
+ * Manage trees → ⋯ → Merge into another tree… (spec 134 §2, 2c): the guide
+ * with the tree `sourceId` as the import, Add to a tree and the tree
+ * `targetId` chosen in step 1. Resolves with the guide on step 1.
+ */
+export async function mergeTreeInto(page: Page, sourceId: string, targetId: string): Promise<Locator> {
+    await page.evaluate((id) => window.Strom.UI.showMergeTreesDialog(id), sourceId);
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+    await mergeSetMode(wizard, 'add');
+    const tile = wizard.locator(`.merge-s1-target[data-tree="${targetId}"]`);
+    await tile.click();
+    await expect(tile.locator('input')).toBeChecked();
+    return wizard;
+}
+
+/**
  * The guide on step 1 makes the import a new tree (spec 134 §3): New tree,
  * on to step 5, its primary creates the tree (named after the file; `name`
  * renames it afterwards). Resolves once the guide is closed and the new tree

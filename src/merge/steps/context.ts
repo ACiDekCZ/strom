@@ -93,6 +93,8 @@ export interface Step1Env {
     /** Source and target swapped (two trees): the reason it cannot be, '' when it can. */
     swapBlocked(): string;
     swap(): void;
+    /** "End following" of a target followed live from the research (2f): the open tree takes the import again. */
+    endFollow(): void;
     /** The chosen target is encrypted and locked: it can be compared only once unlocked (13f). */
     encLocked(): boolean;
     unlock(): void;

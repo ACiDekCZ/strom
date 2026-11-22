@@ -256,13 +256,6 @@ export class UIClass {
     // Tree management state
     renameTreeId: TreeId | null = null;
     duplicateTreeId: TreeId | null = null;
-    mergeSourceTreeId: TreeId | null = null;
-    mergeTargetTreeId: TreeId | null = null;
-    // In-memory source for "Merge this view into…" (Primitive 3): the extracted
-    // subtree of the current view. When set, the merge-trees picker targets it
-    // instead of a source tree. Cleared when the picker closes.
-    mergeViewSourceData: StromData | null = null;
-    mergeViewSourceLabel: string | undefined = undefined;
     importTreeData: StromData | null = null;
     /** The `research` tie named by the JSON file being imported (restored on the new tree). */
     pendingImportResearch: { id: string; head?: string } | null = null;

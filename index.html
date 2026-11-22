@@ -4297,7 +4297,6 @@
         }
         /* Card nav pills are theme-aware by token (var(--surface)/--border/
            --accent/--text-light) — no dark-mode overrides needed. */
-        /* .merge-trees-option is tokenized — no dark override needed. */
 
         .stat-item {
             text-align: center;
@@ -19710,39 +19709,6 @@
         /* Phone held sideways: targets still 44 px. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             #tree-validation-content :is(.vq-samejoin-review, .vq-samejoin-join, .vq-samejoin-later, .vq-samejoin-back) { min-height: 44px; }
-        }
-
-        /* Merge trees dialog */
-        .merge-trees-description {
-            font-size: 14px;
-            color: var(--text);
-            margin-bottom: 16px;
-        }
-        .merge-trees-options {
-            margin-bottom: 16px;
-        }
-        /* A choice is a .sel-opt tile (src/ui/sel-css.ts): the chosen one framed 2 px; its 1 px edge, the padding keeps the size. */
-        .merge-trees-option {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 13px;
-            cursor: pointer;
-            margin-bottom: 8px;
-        }
-        .merge-trees-option input[type="radio"] {
-            width: auto;
-            margin: 0;
-        }
-        .merge-trees-option-info {
-            flex: 1;
-        }
-        .merge-trees-option-name {
-            font-weight: 500;
-        }
-        .merge-trees-option-stats {
-            font-size: 12px;
-            color: var(--text-light);
         }
 
         /* Default person dialog */
@@ -36724,24 +36690,6 @@
             <div class="buttons">
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeDefaultPersonDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.UI.confirmDefaultPerson()" data-i18n="buttons.save">Save</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Merge Trees Dialog -->
-    <div class="modal-overlay" id="merge-trees-modal">
-        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
-            <div class="modal-header">
-                <h2 data-i18n="treeManager.mergeIntoTitle">Merge into another tree</h2>
-                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeMergeTreesDialog()">&times;</button>
-            </div>
-            <p id="merge-trees-description" class="merge-trees-description"></p>
-            <div id="merge-trees-options" class="merge-trees-options">
-                <!-- Target tree options rendered here -->
-            </div>
-            <div class="buttons">
-                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeMergeTreesDialog()" data-i18n="buttons.cancel">Cancel</button>
-                <button class="primary" id="merge-trees-btn" onclick="window.Strom.UI.startTreeMerge()" data-i18n="treeManager.startMerge" data-i18n-busy="busy.analyzing">Start merge</button>
             </div>
         </div>
     </div>

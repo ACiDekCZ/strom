@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
-import { openApp, createFirstPerson, cardAction, focusViaSearch, openTreeStructure, mergeCompare, mergeCount, mergeGroup, mergePair, mergeRow, mergeSetScope, mergeWrite } from './helpers.js';
+import { openApp, createFirstPerson, cardAction, focusViaSearch, openTreeStructure, mergeCompare, mergeCount, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeSetScope, mergeWrite } from './helpers.js';
 
 /**
  * The tree merge driven end to end through the real UI: tree manager row menu
@@ -58,15 +58,14 @@ async function startMergeFromManager(page: Page, sourceName: string, targetName:
     await row.locator('.tree-row-menu-btn').click();
     await (await openTreeStructure(page, row)).locator('.tree-row-menu-item', { hasText: 'Merge into' }).click();
 
-    const pick = page.locator('#merge-trees-modal');
-    await expect(pick).toBeVisible();
-    await pick.locator('.merge-trees-option', { hasText: targetName }).click();
-    await expect(pick.locator('.merge-trees-option.selected')).toHaveCount(1);
-    await pick.locator('#merge-trees-btn').click();
-
+    // The guide opens at once (spec 134 §2): the target is chosen in its step 1.
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
-    await expect(pick).toBeHidden();
+    await expect(manager).toBeHidden();
+    await mergeSetMode(wizard, 'add');
+    const tile = wizard.locator('.merge-s1-target', { has: page.locator('.merge-s1-tname', { hasText: new RegExp(`^${targetName}$`) }) });
+    await tile.click();
+    await expect(tile.locator('input')).toBeChecked();
     if (opts.compare !== false) await mergeCompare(wizard);
     return wizard;
 }

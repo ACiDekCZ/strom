@@ -110,8 +110,10 @@ class MergerUIClass {
      * thrown away; its state is saved back into it (spec 134 K0.6).
      */
     private resumedSessionId?: string;
-    /** The backup "Before merge" of the target started with the merge, awaited before writing (spec 134 K0.4). */
-    private preMergeBackup: Promise<string | null> | null = null;
+    /** A tree the import cannot go to beside the source tree (a view's own tree, §2). */
+    private excludeTarget?: TreeId;
+    /** The target chosen at the start that is not the open tree: read after the guide opens (§2). */
+    private initialTarget: TreeId | null = null;
     /** What the import is, for the guide's fresh choices (spec 134 §1). */
     private sourceInfo: Pick<PlanSource, 'kind' | 'fingerprint' | 'treeId'> = { kind: 'json' };
 
@@ -151,16 +153,12 @@ class MergerUIClass {
         incomingData: StromData, sourceTreeIdOrFileName?: string | TreeId, fromTreeManager: boolean = false,
         gedcomImport?: { gedcom: true; importId?: string },
         source?: Partial<Pick<PlanSource, 'kind' | 'fingerprint'>>,
-        opts: { mode?: PlanMode; gedcomLive?: boolean } = {},
+        opts: { mode?: PlanMode; gedcomLive?: boolean; exclude?: TreeId } = {},
     ): void {
         const existingData = DataManager.getData();
         this.gedcomImport = gedcomImport;
         this.resumedSessionId = undefined;
-
-        // The backup "Before merge" of the target, whatever the way into the
-        // merge (file, tree, view, share) and the automatic backups setting
-        // (spec 134 K0.4). A view or a read-only tree gets none.
-        this.preMergeBackup = DataManager.snapshotNow('pre-merge').catch(() => null);
+        this.excludeTarget = opts.exclude;
 
         // Create merge state: nobody compared yet, step 1's Compare matches
         // the import with the chosen target (spec 134 §3).
@@ -173,14 +171,21 @@ class MergerUIClass {
         this.backups.clear();
         // The target and its data as matched, for a resumed merge to compare (spec 134 K0.6).
         // The open tree is the target when it can be one; otherwise the import starts as a new tree.
+        // Two trees or a view (§2): the open tree, else the first tree that can take it, read only
+        // for the comparison; nothing is switched to before the write.
         const openId = DataManager.isViewMode() ? null : DataManager.getCurrentTreeId();
         const sourceTreeId = sourceTreeIdOrFileName && TreeManager.getTreeMetadata(sourceTreeIdOrFileName as TreeId)
             ? sourceTreeIdOrFileName as TreeId : null;
-        const targetId = openId && openId !== sourceTreeId && !targetBlock(openId) ? openId : null;
-        if (targetId) this.mergeState.target = { treeId: targetId, fingerprint: contentFingerprint(existingData) };
-        this.targetLoaded = targetId;
+        const usable = (id: TreeId | null): id is TreeId => !!id && id !== sourceTreeId && id !== opts.exclude && !targetBlock(id);
+        const twoTrees = source?.kind === 'tree' || source?.kind === 'view';
+        const targetId = usable(openId) ? openId
+            : twoTrees ? TreeManager.getTrees().map(t => t.id).find(usable) ?? null : null;
+        const targetOpen = !!targetId && targetId === openId;
+        if (targetOpen) this.mergeState.target = { treeId: targetId, fingerprint: contentFingerprint(existingData) };
+        this.targetLoaded = targetOpen ? targetId : null;
+        this.initialTarget = targetId && !targetOpen ? targetId : null;
         // Into an empty tree there is nothing to compare with: New tree first (the tree stays a choice).
-        const emptyOpen = !!targetId && Object.values(existingData.persons).every(p => p.isPlaceholder);
+        const emptyOpen = targetOpen && Object.values(existingData.persons).every(p => p.isPlaceholder);
         if (!targetId) this.initialMode = 'new';
         else if (emptyOpen && !this.initialMode) this.initialMode = 'new';
         this.hasUnsavedChanges = false;
@@ -211,6 +216,9 @@ class MergerUIClass {
 
         // Show modal
         this.showMergeModal();
+        // A target that is not the open tree: read for the comparison, the step drawn again with it.
+        const later = this.initialTarget;
+        if (later) void this.loadTarget(later).then(ok => { if (ok) this.wizard.refresh({ body: true }); });
     }
 
     /**
@@ -225,7 +233,8 @@ class MergerUIClass {
         this.exampleCache = null;
         this.targetLoaded = state.target?.treeId ?? null;
         this.resumedSessionId = undefined;
-        this.preMergeBackup = null;
+        this.excludeTarget = undefined;
+        this.initialTarget = null;
         this.hasUnsavedChanges = false;
         this.incomingFileName = fileName;
         this.targetTreeName = targetTreeName;
@@ -564,7 +573,7 @@ class MergerUIClass {
     /** The import and its target, for the guide's fresh choices. */
     private wizardSource(): WizardSource {
         const state = this.mergeState!;
-        const targetTreeId = state.target?.treeId ?? null;
+        const targetTreeId = state.target?.treeId ?? this.initialTarget ?? null;
         const label = this.sourceTreeName || this.incomingFileName || strings.mergeWizard.titleImport;
         return {
             source: {
@@ -606,6 +615,7 @@ class MergerUIClass {
                 return block && id ? targetBlockText(block, id) : block ? strings.mergeWizard.blockReadOnly : '';
             },
             swap: () => { void this.swap(); },
+            endFollow: () => this.endFollow(),
             encLocked: () => this.encLocked(),
             unlock: () => { void this.unlockTarget(); },
             example: () => this.example(),
@@ -665,10 +675,53 @@ class MergerUIClass {
         };
     }
 
+    /**
+     * A tree that cannot take the import, when it is the only one (§2: 2f,
+     * 2g, 2j): a dialog says why with its way out. Locked: Open Manage trees;
+     * followed live: End following (true, the tree takes it then). False:
+     * another tree to choose, or nothing to do now.
+     */
+    async blockDialog(treeId: TreeId): Promise<boolean> {
+        const block = targetBlock(treeId);
+        if (!block) return true;
+        const W = strings.mergeWizard;
+        const name = TreeManager.getTreeMetadata(treeId)?.name ?? '';
+        const ui = getUI();
+        if (block === 'live') {
+            const end = await ui.showConfirm(W.blockLive, W.blockLiveTitle(name),
+                { ok: strings.research.stop, cancel: W.pickOther });
+            if (!end) return false;
+            ui.setLiveFollow(false);
+            return !targetBlock(treeId);
+        }
+        if (block === 'locked') {
+            const manage = await ui.showConfirm(targetBlockText(block, treeId), W.blockLiveTitle(name),
+                { ok: strings.treeManager.manageTreesTitle, cancel: W.pickOther });
+            if (manage) ui.showTreeManagerDialog();
+            return false;
+        }
+        await ui.showAlert(targetBlockText(block, treeId), 'warning', W.blockLiveTitle(name));
+        return false;
+    }
+
+    /** "End following" of step 1's line (2f): the open tree is written to again, step 1 goes on with it as the target. */
+    private endFollow(): void {
+        const ws = this.mergeState?.wizard;
+        if (!ws) return;
+        getUI().setLiveFollow(false);
+        const id = DataManager.isViewMode() ? null : DataManager.getCurrentTreeId();
+        if (!id || targetBlock(id)) {
+            this.wizard.refresh({ body: true });
+            return;
+        }
+        if (ws.choices.mode === 'new') ws.choices = { ...ws.choices, mode: 'add', json: false };
+        void this.selectTarget(id);
+    }
+
     /** The trees the import can go to (the source tree aside), the open one first. */
     private targetRows(): TargetRow[] {
         const source = this.sourceInfo.kind === 'tree' ? this.sourceInfo.treeId : undefined;
-        const rows = TreeManager.getTrees().filter(t => t.id !== source).map(t => this.targetRow(t.id));
+        const rows = TreeManager.getTrees().filter(t => t.id !== source && t.id !== this.excludeTarget).map(t => this.targetRow(t.id));
         rows.sort((a, b) => Number(b.open) - Number(a.open));
         this.loadBackups(rows.map(r => r.treeId));
         return rows;
@@ -700,12 +753,23 @@ class MergerUIClass {
             return;
         }
         if (!ws.choices.targetTreeId) {
-            const first = this.targetRows().find(r => !r.block);
+            const rows = this.targetRows();
+            const first = rows.find(r => !r.block);
             if (first) {
                 ws.choices = { ...ws.choices, mode, json: false };
                 void this.selectTarget(first.treeId);
                 return;
             }
+            // Every tree blocked: the first one's reason in a dialog with its way out (2f, 2g); the step shows the list.
+            this.wizard.update({ mode, json: false });
+            const blocked = rows[0];
+            if (blocked) {
+                void this.blockDialog(blocked.treeId).then(free => {
+                    if (free && this.mergeState?.wizard === ws) void this.selectTarget(blocked.treeId);
+                    else this.wizard.refresh({ body: true });
+                });
+            }
+            return;
         }
         this.wizard.update({ mode, json: false });
     }
@@ -992,7 +1056,8 @@ class MergerUIClass {
         this.sourceTreeName = undefined;
         this.openedFromTreeManager = false;
         this.resumedSessionId = undefined;
-        this.preMergeBackup = null;
+        this.excludeTarget = undefined;
+        this.initialTarget = null;
 
         // Return to tree manager if it was opened from there
         if (shouldReturnToTreeManager) {
@@ -1507,8 +1572,9 @@ class MergerUIClass {
             validateTreeData(state.incomingData),
         ];
 
-        // The backup "Before merge" of the target is in place before anything is written (spec 134 K0.4).
-        if (this.preMergeBackup) await this.preMergeBackup;
+        // The backup "Before merge" of the target as it is at the write, whatever the way into the merge
+        // (file, tree, view, share, a resumed merge) and the automatic backups setting (spec 134 K0.4, §2).
+        if (plan.target.treeId) await DataManager.snapshotTreeNow(plan.target.treeId, 'pre-merge');
 
         // Nothing created, nothing saved on a failure: the wizard stays open
         // with its answers, the message says what would have gone wrong
@@ -1530,7 +1596,6 @@ class MergerUIClass {
         // A resumed saved merge is done: its session goes.
         if (this.resumedSessionId) await deleteMergeSession(this.resumedSessionId);
         this.resumedSessionId = undefined;
-        this.preMergeBackup = null;
 
         // Mark as no unsaved changes to prevent close confirmation
         this.hasUnsavedChanges = false;

@@ -231,7 +231,7 @@ test('an encrypted locked target: the row says so, Compare waits, Unlock asks th
     expect(counts.reduce((a, b) => a + b, 0)).toBe(4);
 });
 
-/** Tree manager → the source row's ⋯ → Change structure → Merge into → the target → Start: the guide on step 1. */
+/** Tree manager → the source row's ⋯ → Change structure → Merge into: the guide on step 1, the target chosen there. */
 async function mergeTrees(page: Page, sourceName: string, targetName: string): Promise<Locator> {
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     const manager = page.locator('#tree-manager-modal');
@@ -240,12 +240,13 @@ async function mergeTrees(page: Page, sourceName: string, targetName: string): P
     });
     await row.locator('.tree-row-menu-btn').click();
     await (await openTreeStructure(page, row)).locator('.tree-row-menu-item', { hasText: 'Merge into' }).click();
-    const pick = page.locator('#merge-trees-modal');
-    await pick.locator('.merge-trees-option', { hasText: targetName }).click();
-    await pick.locator('#merge-trees-btn').click();
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+    await mergeSetMode(wizard, 'add');
+    const tile = wizard.locator('.merge-s1-target', { has: page.locator('.merge-s1-tname', { hasText: new RegExp(`^${targetName}$`) }) });
+    await tile.click();
+    await expect(tile.locator('input')).toBeChecked();
     return wizard;
 }
 
