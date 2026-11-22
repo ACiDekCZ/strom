@@ -46,7 +46,8 @@ test('a wife of unknown given name pairs through her matched husband, for review
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
     await expect(wizard.locator('#merge-stat-matches')).toHaveText('3');
-    await expect(wizard.locator('#merge-stat-new')).toHaveText('0');
+    // The offered wife, left undecided, would come in as a separate person.
+    await expect(wizard.locator('#merge-stat-new')).toHaveText('1');
 
     const wifeRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Nováková' });
     await expect(wifeRow).toHaveCount(1);
@@ -57,6 +58,7 @@ test('a wife of unknown given name pairs through her matched husband, for review
 
     await wifeRow.locator('.merge-btn-confirm').click();
     await expect(wizard.locator('#merge-match-list .merge-item.confirmed')).toHaveCount(3);
+    await expect(wizard.locator('#merge-stat-new')).toHaveText('0');
 
     await wizard.locator('.merge-actions .primary').click();
     const prompt = page.locator('#confirmation-modal.active.dialog-prompt');

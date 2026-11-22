@@ -246,7 +246,8 @@ test('GEDCOM result: "Merge with existing" matches the shared person and adds th
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
     await expect(wizard.locator('#merge-stat-matches')).toHaveText('1');
-    await expect(wizard.locator('#merge-stat-new')).toHaveText('2');
+    // Left undecided, the offered Jan would come in as a separate person too.
+    await expect(wizard.locator('#merge-stat-new')).toHaveText('3');
     await expect(wizard.locator('#merge-match-list')).toContainText('Jan');
 
     // Name + birth year alone (score below 80) is only offered for review:
@@ -256,6 +257,7 @@ test('GEDCOM result: "Merge with existing" matches the shared person and adds th
     await expect(janRow).toHaveClass(/pending/);
     await janRow.locator('.merge-btn-confirm').click();
     await expect(janRow).toHaveClass(/confirmed/);
+    await expect(wizard.locator('#merge-stat-new')).toHaveText('2');
     await wizard.getByRole('button', { name: 'Execute merge' }).click();
     const confirm = page.locator('#confirmation-modal');
     await expect(confirm).toBeVisible();
