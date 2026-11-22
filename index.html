@@ -18427,40 +18427,28 @@
             display: none;
         }
 
-        /* Step 2 until its own screen: today's filter tabs, the undecided rest at once, the list. */
-        .merge-step2 {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
+        /* Step 2 – Who is who (spec 134 §4): the list left (its own scroll), the pair right. */
+        .merge-step-body[data-step="2"] { display: flex; flex-direction: column; overflow: hidden; }
+        .merge-s2 {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: 300px minmax(0, 1fr);
+            gap: 16px;
         }
-        .merge-rest {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: baseline;
-            gap: 4px 12px;
-            font-size: 13px;
-            color: var(--text-light);
-        }
-        .merge-rest[hidden] { display: none; }
-        .merge-reanalyze {
-            display: flex;
-            justify-content: flex-end;
-        }
-        /* The filter tabs are .sel-tab (src/ui/sel-css.ts: the line at the foot
-           of the chosen one) on the bar's hairline; only the layout here. */
-        .merge-tabs {
-            display: flex;
-            gap: 4px;
-            flex-wrap: wrap;
-            border-bottom: 1px solid var(--border);
-        }
-        .merge-tab {
-            padding: 8px 12px;
+        .merge-s2-side { display: flex; flex-direction: column; min-height: 0; gap: 8px; }
+        .merge-s2-pane { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
+        /* The groups are .sel-tab (src/ui/sel-css.ts) on the bar's hairline; only the layout here. */
+        /* A narrow column (a long language, a phone held sideways) scrolls the groups, never overlaps them. */
+        .merge-tabs { display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+        /* Two classes: above the window's own button padding (.modal button). */
+        .merge-tabs .merge-tab {
+            flex: 1 0 auto;
+            padding: 8px 5px;
             border: 0;
             background: transparent;
-            font-size: 12px;
+            font-size: 12.5px;
             cursor: pointer;
-            transition: color 0.15s;
         }
         .sel-tab { white-space: nowrap; }
         /* The count keeps one weight, so a tab does not widen when chosen. */
@@ -18472,174 +18460,161 @@
             border-radius: var(--r-pill);
             font-size: 10px;
             font-weight: 600;
+            font-variant-numeric: tabular-nums;
         }
-        /* The list scrolls with the step's body: one scrollbar in the window. */
+        .merge-s2-q {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 13px;
+        }
         .merge-match-list {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
             border: 1px solid var(--border);
             border-radius: var(--r-md);
         }
         .merge-item {
-            padding: 12px 14px;
-            border-bottom: 1px solid var(--divider);
-            cursor: pointer;
-            transition: background 0.15s;
-        }
-        .merge-item:last-child {
-            border-bottom: none;
-        }
-        @media (hover: hover) { .merge-item:hover {
-            background: var(--hover-bg);
-        } }
-        .merge-item.confirmed {
-            background: var(--primary-soft);
-        }
-        .merge-item.rejected {
-            background: var(--danger-soft);
-            opacity: 0.7;
-        }
-        .merge-item.pending {
-            background: var(--warning-soft);
-            border-left: 3px solid var(--warning);
-        }
-        .merge-item-header {
             display: flex;
             align-items: center;
             gap: 8px;
-            flex-wrap: wrap;
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--divider);
+            cursor: pointer;
         }
+        .merge-item:last-child { border-bottom: 0; }
+        .merge-item-pick { display: inline-flex; flex: none; }
         .merge-item-status {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
+            flex: none;
+            width: 16px;
+            display: inline-flex;
             justify-content: center;
+            font-weight: 700;
             font-size: 12px;
-            background: var(--surface-2);
-            flex-shrink: 0;
+            color: var(--text-faint);
         }
-        .merge-item-status.confirmed {
-            background: var(--primary);
-            color: var(--on-primary);
-        }
-        .merge-item-status.rejected {
-            background: var(--danger);
-            color: var(--on-primary);
-        }
-        .merge-item-status.new {
-            background: var(--primary);
-            color: var(--on-primary);
-        }
-        .merge-item-status.pending {
-            background: var(--warning);
-            color: var(--on-primary);
-        }
-        .merge-item-names {
-            flex: 1;
-            font-size: 14px;
-            min-width: 0;
-        }
+        .merge-item-status[data-fate="joined"] { color: var(--primary); }
+        .merge-item-status[data-fate="pending"] { color: var(--warning); }
+        .merge-item-names { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+        .merge-item-name, .merge-item-other { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-item-name .merge-pn { font-size: 13.5px; }
+        .merge-item-year, .merge-item-other { font-size: 11.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         .merge-item-score {
-            font-size: 11px;
-            font-weight: 600;
-            padding: 2px 9px;
+            flex: none;
+            padding: 0 6px;
             border-radius: var(--r-tag);
             background: var(--surface-2);
-            white-space: nowrap;
-        }
-        .merge-item-score.confidence-high {
-            background: color-mix(in srgb, var(--primary) 18%, var(--surface));
-            color: var(--primary-dark);
-        }
-        .merge-item-score.confidence-medium {
-            background: var(--warning-soft);
-            color: var(--text);
-        }
-        .merge-item-score.confidence-low {
-            background: var(--danger-soft);
-            color: var(--danger);
-        }
-        .merge-item-reasons {
-            font-size: 11px;
             color: var(--text-light);
-            margin: 4px 0 4px 24px;
-            font-style: italic;
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
         }
-        .merge-item-badge {
-            font-size: 10px;
-            padding: 2px 8px;
-            border-radius: var(--r-tag);
+        .merge-pn { font-family: var(--font-serif); }
+        .merge-mut { color: var(--text-light); font-size: 12px; }
+        .merge-s2-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+        .merge-s2-foot .merge-reanalyze { margin-left: auto; }
+        .merge-s2-note { margin: 0; font-size: 12.5px; color: var(--text-light); }
+        .merge-pair-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 13px; }
+        .merge-pair-title { font-weight: 600; }
+        .merge-cand-sp { flex: 1 1 auto; }
+        .merge-keys { font-size: 11.5px; color: var(--text-light); }
+        .kbd {
+            display: inline-block;
+            min-width: 18px;
+            padding: 0 4px;
+            border: 1px solid var(--border);
+            border-bottom-width: 2px;
+            border-radius: var(--r-sm);
+            font-size: 11px;
+            line-height: 16px;
+            text-align: center;
+            color: var(--text-light);
+            background: var(--surface);
+            font-variant-numeric: tabular-nums;
         }
-        .merge-item-badge.new {
-            background: var(--info-soft);
-            color: var(--primary);
+        .pair {
+            flex: none;
+            display: grid;
+            grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr);
+            border: 1px solid var(--border);
+            border-radius: var(--r-lg);
+            overflow: hidden;
+            background: var(--surface);
         }
-        /* The merge's warning mark: a stroked triangle (no emoji) in the warning text colour. */
-        .conflict-indicator {
+        .pair.is-one { grid-template-columns: 96px minmax(0, 1fr); }
+        .pair > div { padding: 5px 10px; border-bottom: 1px solid var(--divider); min-width: 0; font-size: 12.5px; overflow-wrap: anywhere; }
+        .pair > .k, .pair > .hd { color: var(--text-light); font-size: 12px; background: var(--surface-2); }
+        .pair > .x { background: var(--warning-soft); }
+        .pair .merge-pn { font-size: 17px; }
+        .pair .merge-ok, .merge-cand .merge-ok { color: var(--primary); }
+        .merge-ok svg { vertical-align: -1px; }
+        .merge-whys p { margin: 0 0 4px; font-size: 12.5px; }
+        .merge-why-union { display: block; }
+        .merge-why-union.is-resolved { color: var(--text-light); }
+        .merge-whys .link-button { padding: 0; min-height: 0; font-size: 12.5px; }
+        .merge-decide { display: flex; flex-wrap: wrap; gap: 6px; }
+        .merge-decide .merge-dec {
             display: inline-flex;
             align-items: center;
-            flex: none;
-            color: var(--warning-text);
+            gap: 6px;
+            padding: 6px 12px;
+            font-size: 13px;
+            border: 1px solid var(--border);
+            background: var(--surface);
         }
-        .merge-warning-mark { flex: none; color: var(--warning-text); vertical-align: -2px; }
-        .merge-validation-banner-msg .merge-warning-mark { margin-right: 6px; }
-        .merge-item-conflicts {
+        .merge-decide .merge-dec[aria-checked="true"] { border-color: var(--sel-border); }
+        .merge-s2 button.secondary { padding: 6px 12px; font-size: 13px; }
+        .merge-cand-import { margin: 0; font-size: 13px; }
+        .merge-cands { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+        .merge-cand { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--divider); cursor: pointer; font-size: 13px; }
+        .merge-cand:last-child { border-bottom: 0; }
+        .merge-cand-why { flex-basis: 100%; padding-left: 24px; font-size: 11.5px; color: var(--text-light); }
+        .merge-cand { flex-wrap: wrap; }
+        .merge-rest {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 8px;
-            font-size: 11px;
-        }
-        .conflict-field {
-            padding: 2px 8px;
-            background: var(--warning-soft);
-            border-radius: 6px;
-            color: var(--text);
-        }
-        .merge-item-actions {
-            display: flex;
-            gap: 6px;
-            margin-top: 10px;
-        }
-        .merge-item-actions button {
-            padding: 5px 10px;
-            font-size: 11px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: var(--surface);
-            color: var(--text);
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-        @media (hover: hover) { .merge-item-actions button:hover {
-            border-color: var(--primary);
-        } }
-        .merge-btn-confirm.active {
-            background: var(--primary);
-            border-color: var(--primary);
-            color: var(--on-primary);
-        }
-        .merge-btn-reject.active {
-            background: var(--danger);
-            border-color: var(--danger);
-            color: var(--on-primary);
-        }
-        .merge-btn-skip.active {
-            background: var(--text-faint);
-            border-color: var(--text-faint);
-            color: var(--surface);
-        }
-        .merge-item.skipped {
-            background: var(--surface-2);
-            opacity: 0.6;
-        }
-        .merge-item-status.skipped {
-            background: var(--text-faint);
-            color: var(--surface);
-        }
-        .merge-item-badge.skipped {
-            background: var(--surface-2);
+            align-items: center;
+            gap: 6px 10px;
+            padding-top: 8px;
+            border-top: 1px solid var(--divider);
+            font-size: 13px;
             color: var(--text-light);
+        }
+        .merge-rest-warn { flex-basis: 100%; font-size: 11.5px; color: var(--text-faint); }
+        @media (max-width: 1024px) {
+            .merge-s2 { grid-template-columns: 260px minmax(0, 1fr); gap: 12px; }
+            .pair { grid-template-columns: 80px minmax(0, 1fr) minmax(0, 1fr); }
+            .pair.is-one { grid-template-columns: 80px minmax(0, 1fr); }
+        }
+        /* A phone: one column, the step's body scrolls; the list keeps a part of the height. */
+        @media (max-width: 640px) {
+            .merge-step-body[data-step="2"] { display: block; overflow-y: auto; }
+            .merge-s2 { display: flex; flex-direction: column; gap: 12px; }
+            .merge-match-list { max-height: 38vh; }
+            .merge-s2-pane { overflow: visible; }
+            .merge-keys, .merge-dec .kbd { display: none; }
+            .pair { grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr); }
+            .pair > div { padding: 4px 6px; font-size: 12px; }
+            .pair .merge-pn { font-size: 15px; }
+            .merge-dec { flex: 1 1 calc(50% - 6px); justify-content: center; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-step-body[data-step="2"] { display: block; overflow-y: auto; }
+            .merge-s2 { grid-template-columns: 250px minmax(0, 1fr); }
+            .merge-tabs .merge-tab { padding: 6px 4px; font-size: 11.5px; }
+            .merge-match-list { max-height: 60vh; }
+            .merge-s2-pane { overflow: visible; }
+        }
+        @media (pointer: coarse) {
+            .merge-item, .merge-cand { min-height: 44px; }
+            .merge-keys, .merge-dec .kbd { display: none; }
+        }
+        @media (hover: hover) {
+            .merge-item:hover, .merge-cand:hover { background: var(--hover-bg); }
         }
         .merge-stat.skipped .merge-stat-label { color: var(--text-faint); }
         .merge-stat.skipped .merge-stat-value { color: var(--text-faint); }
@@ -18901,16 +18876,6 @@
             flex-wrap: wrap;
             gap: 8px;
         }
-
-        /* Merge resolve button */
-        .merge-btn-resolve {
-            background: var(--warning-soft) !important;
-            border-color: var(--warning) !important;
-            color: var(--text) !important;
-        }
-        @media (hover: hover) { .merge-btn-resolve:hover {
-            background: color-mix(in srgb, var(--warning) 22%, var(--warning-soft)) !important;
-        } }
 
         /* ==================== TREE MANAGER ==================== */
         .tree-manager-modal {
@@ -28291,25 +28256,6 @@
             .merge-actions #merge-cancel { margin-right: 0; }
             .merge-actions button { width: 100%; }
             .merge-next-why { text-align: center; }
-            .merge-tabs { gap: 2px; }
-            .merge-tab { padding: 6px 6px; font-size: 11px; }            .merge-match-list {
-                margin-bottom: 0;
-            }
-            .merge-item {
-                padding: 8px 10px;
-            }
-            .merge-item-header {
-                font-size: 12px;
-            }
-            .merge-item-actions {
-                flex-wrap: wrap;
-                gap: 4px;
-                margin-top: 6px;
-            }
-            .merge-item-actions button {
-                padding: 4px 8px;
-                font-size: 10px;
-            }
             .merge-close-buttons {
                 flex-direction: column;
                 gap: 6px;
@@ -36422,7 +36368,7 @@
             <div class="buttons">
                 <button id="merge-manual-preview-btn" class="secondary merge-btn-preview-wide" onclick="window.Strom.MergerUI.previewManualMatch()" data-i18n-title="treePreview.preview" data-i18n-aria-label="treePreview.preview" data-i18n="treePreview.preview">Preview</button>
                 <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeManualMatchDialog()" data-i18n="buttons.cancel">Cancel</button>
-                <button class="primary" onclick="window.Strom.MergerUI.confirmManualMatch()" data-i18n="buttons.save">Save</button>
+                <button class="primary" onclick="window.Strom.MergerUI.confirmManualMatch()" data-i18n="mergeWizard.joinThis">Join with this person</button>
             </div>
         </div>
     </div>

@@ -6,7 +6,7 @@
 
 import type { MergeState } from '../types.js';
 import type { MergePlan, PlanCounts, ScopeExample, WizardChoices } from '../plan.js';
-import type { TreeId } from '../../types.js';
+import type { PartnershipId, PersonId, TreeId } from '../../types.js';
 import type { GedcomDroppedTag } from '../../ged-parser.js';
 import type { WizardStep } from '../wizard-steps.js';
 import { strings } from '../../strings.js';
@@ -21,10 +21,38 @@ export interface StepContext {
     readonly compared: boolean;
     /** The choices changed (merged in), or only the merge state: the guide saves and redraws. */
     update(change?: Partial<WizardChoices>): void;
-    /** Today's list of pairs (until step 2 of part A4 replaces it). */
-    renderPairs?(host: HTMLElement): void;
+    /** What step 2 does beyond the choices (§4). */
+    step2?: Step2Env;
     /** What step 1 reads and does beyond the choices (§3). */
     step1?: Step1Env;
+}
+
+/** A decision of step 2: same, new, not added, another person of the tree; null = undecided again. */
+export type PairDecision = 'confirm' | 'reject' | 'skip' | { type: 'manual_match'; targetId: PersonId };
+
+/** A couple both trees know that differs (a line under "What speaks against"). */
+export interface UnionConflictLine {
+    id: PartnershipId;
+    text: string;
+    resolved: boolean;
+}
+
+/** Step 2 of the guide: the decisions on the pairs and what opens from them (§4). */
+export interface Step2Env {
+    decide(incomingId: PersonId, decision: PairDecision | null): void;
+    /** Several persons at once (the undecided rest, the joins of the selected undone). */
+    decideMany(incomingIds: readonly PersonId[], decision: 'reject' | 'skip'): void;
+    /** "Another person…": the tree's person picked by hand (#merge-manual-dialog). */
+    other(incomingId: PersonId): void;
+    /** The differences of a joined pair, one by one (the conflict dialog, until step 4). */
+    resolve(incomingId: PersonId): void;
+    /** The couples of the person both trees know that differ. */
+    unionConflicts(incomingId: PersonId): UnionConflictLine[];
+    resolveUnion(id: PartnershipId): void;
+    /** The pair side by side in both trees, or the import's person in its tree. */
+    compare(incomingId: PersonId, treeId?: PersonId): void;
+    preview(incomingId: PersonId): void;
+    reanalyze(): void;
 }
 
 /** Why a tree cannot be the target (§2), or why it cannot be compared yet (13f). */
@@ -74,6 +102,20 @@ export interface Step1Env {
     repeat(): string;
     /** "Save list…": the lines not taken over as a .txt file. */
     saveNotTaken(): void;
+}
+
+const GLYPH = {
+    joined: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+    added: '<path d="M12 5v14M5 12h14"/>',
+    skipped: '<circle cx="12" cy="12" r="8"/><path d="M6.5 6.5l11 11"/>',
+    pending: '<path d="M12 5v9"/><path d="M12 18h.01"/>',
+} as const;
+
+export type GlyphKind = keyof typeof GLYPH;
+
+/** A person's fate as a stroked glyph: ✓ joined, + added, ⊘ not added, ! to decide. */
+export function glyph(kind: GlyphKind, size = 12, width = 2.5): string {
+    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GLYPH[kind]}</svg>`;
 }
 
 /** The step's name ("Who is who"). */

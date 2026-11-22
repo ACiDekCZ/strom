@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, createFirstPerson, mergeCompare, mergeCount, mergeSetScope, mergeWriteAndSwitch } from './helpers.js';
+import { openApp, createFirstPerson, mergeCompare, mergeCount, mergePair, mergeSetScope, mergeWriteAndSwitch } from './helpers.js';
 
 /**
  * The surname after marriage brought into an existing tree by merging a
@@ -57,11 +57,10 @@ async function mergeWithEvaAnswered(page: Page): Promise<Locator> {
     await expect(mergeCount(wizard, 'joined')).toHaveText('5');
     await expect(mergeCount(wizard, 'added')).toHaveText('0');
 
-    await wizard.locator('.merge-tab[data-filter="conflicts"]').click();
-    await expect(wizard.locator('#tab-count-conflicts')).toHaveText('1');
-    const evaRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Eva' });
-    await expect(evaRow.locator('.merge-item-conflicts')).toContainText('Married surname: Procházková → Svobodová');
-    await evaRow.locator('.merge-btn-resolve').click();
+    // Eva's pair (joined, score 80+): what speaks against it, and its differences one by one.
+    await mergePair(wizard, 'Eva', 'same');
+    await expect(wizard.locator('#merge-pair .merge-why-no')).toContainText('Married surname: Procházková → Svobodová');
+    await wizard.locator('#merge-pair .merge-btn-resolve[data-action="resolve"]').click();
     const dialog = page.locator('#merge-conflict-dialog');
     await expect(dialog).toHaveClass(/active/);
     const married = dialog.locator('.conflict-row[data-field="marriedSurname"]');

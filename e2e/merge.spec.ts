@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, card, cardAction, addRelation, openTreeActions, openTreeStructure, mergeCompare, mergeCount, mergeSetScope } from './helpers.js';
+import { openApp, createFirstPerson, card, cardAction, addRelation, openTreeActions, openTreeStructure, mergeCompare, mergeCount, mergePair, mergeSetScope } from './helpers.js';
 import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 function personCount(page: Page): Promise<number> {
@@ -88,7 +88,7 @@ test('tree merge wizard matches a shared person and merges without duplicates', 
     const count = async (kind: 'joined' | 'pending') => Number(await mergeCount(wizard, kind).textContent());
     await expect.poll(async () => await count('joined') + await count('pending')).toBeGreaterThan(0);
     await expect(wizard.locator('#merge-match-list .merge-item').first()).toBeVisible();
-    await expect(wizard.locator('#merge-match-list')).toContainText('Jan');
+    await mergePair(wizard, 'Jan');
 
     // Round 11: the count chips are paper chips whose meaning rides on an
     // inline SVG glyph, not an emoji. All four chips (joined, new, not added,
@@ -152,10 +152,9 @@ test('merge wizard: scope d) (only update existing people) drops "New" to 0, and
     await expect(mergeCount(wizard, 'added')).toHaveText('1');
 
     // The Anna match row can be skipped (neither merged nor added).
-    const matchRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Anna' }).first();
-    await expect(matchRow).toBeVisible();
-    await matchRow.locator('.merge-btn-skip').click();
-    await expect(matchRow).toHaveClass(/skipped/);
+    const matchRow = await mergePair(wizard, 'Anna');
+    await wizard.locator('#merge-pair .merge-dec[data-dec="skip"]').click();
+    await expect(matchRow).toHaveAttribute('data-fate', 'skipped');
     await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
 });
 

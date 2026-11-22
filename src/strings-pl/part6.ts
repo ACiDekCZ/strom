@@ -271,6 +271,11 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         stop: 'Przerwij',
         joinThis: 'Połącz z tą osobą',
         nextWho: 'Dalej: Kogo dodać',
+        colImport: 'Import',
+        searchName: 'Szukaj imienia',
+        candidates: (n: number) => nPl(n, 'kandydat', 'kandydaci', 'kandydatów'),
+        sameNote: 'Ci sami (wynik 80+) są połączeni z góry. Każde połączenie można cofnąć: Nowa osoba lub Nie dodawaj.',
+        decKeys: ['T', 'N', 'I', 'X'],
         emptySource: 'Plik nie zawiera osób. Nic nie zostanie zapisane.',
         sameAsTarget: (n: number, t: string) => n === 1
             ? `Jedyna osoba jest już w drzewie ${t} i nie wnosi nic nowego.`

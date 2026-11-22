@@ -1,6 +1,6 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'fs';
-import { openApp, createFirstPerson, waitForPersist, mergeCompare, mergeCount, mergeWriteAndSwitch, mergeCreateNewTree } from './helpers.js';
+import { openApp, createFirstPerson, waitForPersist, mergeCompare, mergeCount, mergeDecide, mergeRow, mergeWriteAndSwitch, mergeCreateNewTree } from './helpers.js';
 import { fakeBridge, openResearch, poll } from './research-bridge.js';
 import { VERIFY_FEATURES, fakeVerify, verifyGed } from './verify-bridge.js';
 
@@ -177,9 +177,8 @@ test('a merge with a GEDCOM: the card in the merged tree, with the new and updat
     await mergeCompare(wizard);
     await expect(mergeCount(wizard, 'pending')).toHaveText('1');
     // A name and a birth year are only offered (below 80): confirmed by hand.
-    const match = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Vendelin' });
-    await match.locator('.merge-btn-confirm').click();
-    await expect(match).toHaveClass(/confirmed/);
+    await mergeDecide(wizard, 'Vendelin', 'same', 'maybe');
+    await expect(mergeRow(wizard, 'Vendelin')).toHaveAttribute('data-fate', 'joined');
     await expect(mergeCount(wizard, 'joined')).toHaveText('1');
     // Written into a new tree "{my tree} + {file}"; "Switch to the new tree?" accepted.
     const merged = await mergeWriteAndSwitch(page, wizard);

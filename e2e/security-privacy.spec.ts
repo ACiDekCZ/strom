@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import {
     openApp, createFirstPerson, card, cardAction, importJsonAsNewTree, focusViaSearch,
-    mergeCompare, mergeCreateNewTree } from './helpers.js';
+    mergeCompare, mergeCreateNewTree, mergePair } from './helpers.js';
 
 /**
  * Security & privacy regressions (review 2026-09-22, K1–K4): markup in data
@@ -237,13 +237,13 @@ test('XSS: the tree-merge compare preview of a foreign file renders names as tex
     await expect(wizard).toBeVisible();
     await mergeCompare(wizard);
     await expect(wizard.locator('#merge-match-list .merge-item').first()).toBeVisible();
-    await expect(wizard.locator('#merge-match-list')).toContainText(`Ada${IMG}`);
+    await mergePair(wizard, `Ada${IMG}`);
     await expect(wizard.locator('img[src="x"], svg[onload]')).toHaveCount(0);
     await expectNoXss(page, fired);
 
     // Open the side-by-side compare preview for Ada's match.
-    const adaItem = wizard.locator('#merge-match-list .merge-item', { hasText: 'Ada' }).first();
-    await adaItem.locator('.merge-btn-preview[data-action="compare"]').click();
+    await mergePair(wizard, 'Ada');
+    await wizard.locator('#merge-pair .merge-btn-preview[data-action="compare"]').click();
     const compare = page.locator('.tree-compare-overlay');
     await expect(compare).toBeVisible();
     await expect(compare).toContainText('Ada<img');

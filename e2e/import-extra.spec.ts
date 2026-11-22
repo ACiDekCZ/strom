@@ -1,6 +1,6 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'fs';
-import { openApp, createFirstPerson, addRelation, card, waitForPersist, mergeCompare, mergeCount, mergeCurrentStep, mergeSetMode, mergeWrite } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card, waitForPersist, mergeCompare, mergeCount, mergeCurrentStep, mergeDecide, mergePair, mergeRow, mergeSetMode, mergeWrite } from './helpers.js';
 
 /**
  * Import paths beyond the plain JSON file: an exported HTML app (plain and
@@ -244,16 +244,16 @@ test('GEDCOM import guide: "Add to a tree" matches the shared person and adds th
     await expect(wizard.locator('.merge-s1-modes [data-mode="add"]')).toHaveAttribute('aria-checked', 'true');
     await mergeCompare(wizard);
     await expect(mergeCount(wizard, 'added')).toHaveText('2');
-    await expect(wizard.locator('#merge-match-list')).toContainText('Jan');
+    await mergePair(wizard, 'Jan', 'maybe');
 
     // Name + birth year alone (score below 80) is only offered for review:
     // left to decide, the write waits for it (no "undecided" question at the end).
-    const janRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Jan' });
-    await expect(janRow).toHaveClass(/pending/);
+    const janRow = mergeRow(wizard, 'Jan');
+    await expect(janRow).toHaveAttribute('data-fate', 'pending');
     await expect(mergeCount(wizard, 'pending')).toHaveText('1');
     await expect(wizard.locator('#merge-next')).toBeDisabled();
-    await janRow.locator('.merge-btn-confirm').click();
-    await expect(janRow).toHaveClass(/confirmed/);
+    await mergeDecide(wizard, 'Jan', 'same', 'maybe');
+    await expect(janRow).toHaveAttribute('data-fate', 'joined');
     await expect(mergeCount(wizard, 'joined')).toHaveText('1');
     await expect(mergeCount(wizard, 'pending')).toHaveText('0');
     await expect(mergeCount(wizard, 'added')).toHaveText('2');

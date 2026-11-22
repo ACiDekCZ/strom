@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, createFirstPerson, mergeCompare, mergeCount, mergeWriteAndSwitch } from './helpers.js';
+import { openApp, createFirstPerson, mergeCompare, mergeCount, mergePair, mergeRow, mergeWriteAndSwitch } from './helpers.js';
 
 /**
  * A person of unknown given name in a merge (spec 010, K1.2): MyHeritage
@@ -52,15 +52,17 @@ test('a wife of unknown given name pairs through her matched husband, for review
     await expect(wizard.locator('#merge-next')).toBeDisabled();
     await expect(wizard.locator('#merge-next-why')).toHaveText('1 pair left to decide');
 
-    const wifeRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Nováková' });
-    await expect(wifeRow).toHaveCount(1);
-    await expect(wifeRow).toHaveClass(/pending/);
-    await expect(wifeRow.locator('.merge-item-score')).toContainText('Medium');
-    await expect(wifeRow.locator('.merge-item-reasons')).toContainText('Unknown given name – matched through a relative');
-    await expect(wizard.locator('#merge-match-list .merge-item.confirmed')).toHaveCount(2);
+    // Her pair stands among Maybe the same (score below 80), "? Nováková" with no given name.
+    const wifeRow = await mergePair(wizard, 'Nováková', 'maybe');
+    await expect(mergeRow(wizard, 'Nováková')).toHaveCount(1);
+    await expect(wifeRow).toHaveAttribute('data-fate', 'pending');
+    const score = Number((await wifeRow.locator('.merge-item-score').textContent())?.replace(/\D/g, ''));
+    expect(score).toBeLessThan(80);
+    await expect(wizard.locator('#merge-pair .merge-why')).toContainText('Unknown given name – matched through a relative');
+    await expect(wizard.locator('#merge-pair .pair')).toContainText('no name');
 
-    await wifeRow.locator('.merge-btn-confirm').click();
-    await expect(wizard.locator('#merge-match-list .merge-item.confirmed')).toHaveCount(3);
+    await wizard.locator('#merge-pair .merge-dec[data-dec="same"]').click();
+    await expect(wifeRow).toHaveAttribute('data-fate', 'joined');
     await expect(mergeCount(wizard, 'joined')).toHaveText('3');
     await expect(mergeCount(wizard, 'pending')).toHaveText('0');
     await expect(mergeCount(wizard, 'added')).toHaveText('0');

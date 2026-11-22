@@ -6451,6 +6451,12 @@ const stringsEN = {
         stop: 'Stop',
         joinThis: 'Join with this person',
         nextWho: 'Continue: Whom to add',
+        colImport: 'Import',
+        searchName: 'Search a name',
+        candidates: (n: number) => nEn(n, 'candidate', 'candidates'),
+        sameNote: 'The same (score 80+) are joined in advance. Each join can be undone: New person or Do not add.',
+        /** The keys of decSame, decNew, decOther, decSkip (one letter each). */
+        decKeys: ['S', 'N', 'A', 'X'] as string[],
         // Edge states (§13)
         emptySource: 'The file contains no people. Nothing is written.',
         sameAsTarget: (n: number, t: string) => n === 1
@@ -17330,6 +17336,11 @@ const stringsCZ: StringsType = {
         stop: 'Přerušit',
         joinThis: 'Spojit s touto osobou',
         nextWho: 'Pokračovat: Koho přidat',
+        colImport: 'Import',
+        searchName: 'Hledat jméno',
+        candidates: (n: number) => nCs(n, 'kandidát', 'kandidáti', 'kandidátů'),
+        sameNote: 'Stejní (skóre 80+) jsou předem spojení. Každé spojení jde zrušit: Nová osoba nebo Nepřidávat.',
+        decKeys: ['S', 'N', 'J', 'X'],
         // Edge states (§13)
         emptySource: 'Soubor neobsahuje žádné osoby. Nic se nezapíše.',
         sameAsTarget: (n: number, t: string) => n === 1
@@ -28050,6 +28061,11 @@ const stringsDE: StringsType = {
         stop: 'Abbrechen',
         joinThis: 'Mit dieser Person verbinden',
         nextWho: 'Weiter: Wen hinzufügen',
+        colImport: 'Import',
+        searchName: 'Namen suchen',
+        candidates: (n: number) => nDe(n, 'Kandidat', 'Kandidaten'),
+        sameNote: 'Gleiche (Wert 80+) sind vorab verbunden. Jede Verbindung lässt sich aufheben: Neue Person oder Nicht übernehmen.',
+        decKeys: ['D', 'N', 'A', 'X'],
         // Edge states (§13)
         emptySource: 'Die Datei enthält keine Personen. Nichts wird geschrieben.',
         sameAsTarget: (n: number, t: string) => n === 1

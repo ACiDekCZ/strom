@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeSetMode, openTreeStructure } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergePair, mergeSetMode, openTreeStructure } from './helpers.js';
 
 /**
  * Step 1 of the import guide, What to do (spec 134 §3, §13): the target
@@ -281,7 +281,7 @@ test('Swap of two trees: the source and the target change places and the counts 
     await mergeCompare(wizard);
     await expect(mergeCount(wizard, 'joined')).toHaveText('1');
     await expect(mergeCount(wizard, 'added')).toHaveText('2');
-    await expect(wizard.locator('#merge-match-list')).toContainText('Teofil');
+    await mergePair(wizard, 'Teofil');
     // Nothing written by comparing.
     expect(await peopleOf(page, 'Jilmovi')).toEqual(['Amos', 'Kvido']);
     expect(await peopleOf(page, 'Modřínovi')).toEqual(['Florentýna', 'Kvido', 'Teofil']);

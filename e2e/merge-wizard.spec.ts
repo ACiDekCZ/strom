@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeSetMode, mergeWriteAndSwitch } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeDecide, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeWriteAndSwitch } from './helpers.js';
 
 /**
  * The import guide's frame (spec 134 §1): a GEDCOM file merged into the open
@@ -38,12 +38,12 @@ test('a GEDCOM file opens the six-step guide; Esc after the comparison asks with
     const counts = await wizard.locator('#merge-counts .merge-stat .merge-stat-value').allTextContents();
     expect(counts).toHaveLength(4);
     expect(counts.map(Number).reduce((a, b) => a + b, 0)).toBe(4);
-    await expect(wizard.locator('#merge-match-list')).toContainText('Kvido');
+    await mergePair(wizard, 'Kvido');
     await expect(wizard.locator('#merge-back')).toBeVisible();
     await expect(wizard.locator('#merge-save-later')).toBeVisible();
 
     // A decision, then Esc: the 1b question with its three buttons.
-    await wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Kvido' }).locator('.merge-btn-confirm').click();
+    await mergeDecide(wizard, 'Kasián', 'skip');
     await page.keyboard.press('Escape');
     const ask = page.locator('#merge-close-confirm');
     await expect(ask).toBeVisible();
@@ -73,7 +73,10 @@ async function peopleOf(page: Page, name: string): Promise<string[]> {
     }, name);
 }
 
-const kasian = (wizard: Locator) => wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Kasián' });
+/** Kasián's row, a new person of the file (the group New shown). */
+async function kasian(wizard: Locator): Promise<Locator> {
+    return mergePair(wizard, 'Kasián', 'new');
+}
 
 // (A pair left to decide holding the write: unknown-name-merge.spec.ts and import-extra.spec.ts.)
 test('Back keeps the decisions; step 5 writes a new tree named after both and the tree stays as it was', async ({ page }) => {
@@ -83,7 +86,7 @@ test('Back keeps the decisions; step 5 writes a new tree named after both and th
     // Kvido is joined at once; Kasián is not to be added.
     await expect(mergeCount(wizard, 'joined')).toHaveText('1');
     await expect(mergeCount(wizard, 'added')).toHaveText('3');
-    await kasian(wizard).locator('.merge-btn-skip').click();
+    await mergeDecide(wizard, 'Kasián', 'skip', 'new');
     await expect(mergeCount(wizard, 'added')).toHaveText('2');
     await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
     await expect(wizard.locator('#merge-next-why')).toBeHidden();
@@ -99,14 +102,14 @@ test('Back keeps the decisions; step 5 writes a new tree named after both and th
     // Back to step 2: the decision is still there.
     await wizard.locator('#merge-back').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
-    await expect(kasian(wizard)).toHaveClass(/skipped/);
+    await expect(await kasian(wizard)).toHaveAttribute('data-fate', 'skipped');
     // Step 1 again (a done step is a button), and on without a new comparison.
     await wizard.locator('#merge-progress button.merge-step[data-step="1"]').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
     await expect(wizard.locator('#merge-next')).toHaveText('Continue: Who is who');
     await wizard.locator('#merge-next').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
-    await expect(kasian(wizard)).toHaveClass(/skipped/);
+    await expect(await kasian(wizard)).toHaveAttribute('data-fate', 'skipped');
     await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
 
     // The write: no question about the name, a new tree "{tree} + {file}".
@@ -120,7 +123,7 @@ test('Back keeps the decisions; step 5 writes a new tree named after both and th
 test('Save for later keeps the decision and the step; the merge goes on from Manage trees', async ({ page }) => {
     const wizard = await openGuide(page);
     await mergeCompare(wizard);
-    await kasian(wizard).locator('.merge-btn-skip').click();
+    await mergeDecide(wizard, 'Kasián', 'skip', 'new');
     await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
 
     await wizard.locator('#merge-save-later').click();
@@ -135,7 +138,7 @@ test('Save for later keeps the decision and the step; the merge goes on from Man
     await pending.locator('.tree-open-btn').click();
     await expect(wizard).toBeVisible();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
-    await expect(kasian(wizard)).toHaveClass(/skipped/);
+    await expect(await kasian(wizard)).toHaveAttribute('data-fate', 'skipped');
     await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
 });
 
@@ -154,4 +157,42 @@ test('Only compare: the same steps, step 5 says Done and nothing is written', as
 
     expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().length)).toBe(treesBefore);
     expect(await peopleOf(page, 'Modřínovi')).toEqual(['Florentýna', 'Kvido', 'Teofil']);
+});
+
+test('step 2 by keys: ↑ ↓ choose the pair, the letters decide, a letter typed into the search is the search\'s', async ({ page }) => {
+    const wizard = await openGuide(page);
+    await mergeCompare(wizard);
+    // Nothing only offered: The same first, Kvido's pair with its grid and keys.
+    await expect(wizard.locator('.merge-tab[data-group="same"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(wizard.locator('#merge-pair .pair')).toContainText('Kvido');
+    await expect(wizard.locator('#merge-pair .merge-dec .kbd')).toHaveText(['S', 'N', 'A', 'X']);
+
+    // New: the first row chosen; ↓ the next one, X leaves it out (the focus stays on the list).
+    await mergeGroup(wizard, 'new');
+    const rows = wizard.locator('#merge-match-list .merge-item');
+    await expect(rows).toHaveCount(3);
+    await rows.first().click();
+    await expect(rows.first()).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('ArrowDown');
+    await expect(rows.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await expect(rows.nth(1)).toBeFocused();
+    const name = (await rows.nth(1).locator('.merge-item-name .merge-pn').textContent())!;
+    await page.keyboard.press('x');
+    await expect(mergeRow(wizard, name)).toHaveAttribute('data-fate', 'skipped');
+    await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
+    // N makes it a new person again.
+    await mergePair(wizard, name, 'new');
+    await page.keyboard.press('n');
+    await expect(mergeRow(wizard, name)).toHaveAttribute('data-fate', 'added');
+    await expect(mergeCount(wizard, 'skipped')).toHaveText('0');
+
+    // In the search a letter is typed, nothing is decided.
+    const search = wizard.locator('.merge-s2-q');
+    await search.fill('');
+    await search.pressSequentially('kas');
+    await expect(search).toHaveValue('kas');
+    await expect(rows).toHaveCount(1);
+    await page.keyboard.press('x');
+    await expect(search).toHaveValue('kasx');
+    await expect(mergeCount(wizard, 'skipped')).toHaveText('0');
 });

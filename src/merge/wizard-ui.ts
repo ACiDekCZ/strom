@@ -18,7 +18,7 @@ import { buildPlan, planCounts, type MergePlan, type PlanCounts, type PlanMode, 
 import { stepInfo, nextStep, previousStep, WIZARD_STEPS, type StepInfo, type WizardStep } from './wizard-steps.js';
 import { strings, countText } from '../strings.js';
 import { announceText } from '../ui/live-announce.js';
-import { escapeHtml, stepName, type Step1Env, type StepContext, type TargetBlock } from './steps/context.js';
+import { escapeHtml, glyph, stepName, type GlyphKind, type Step1Env, type Step2Env, type StepContext, type TargetBlock } from './steps/context.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { getUI } from '../ui-ref.js';
@@ -44,8 +44,8 @@ export interface WizardHost {
     finishCompare(): void;
     /** Write the plan (step 5); resolves when the write ended either way. */
     write(plan: MergePlan): Promise<void>;
-    /** Today's list of pairs into step 2's body (until §4). */
-    renderPairs(host: HTMLElement): void;
+    /** What step 2 does beyond the choices. */
+    step2?(): Step2Env;
     /**
      * Step 1's Compare: the people of the import matched with the chosen
      * target (the merge state replaced). False when it did not run.
@@ -64,17 +64,6 @@ export interface WizardSource {
     targetTreeId: TreeId | null;
     targetName: string;
     research?: boolean;
-}
-
-const GLYPH = {
-    joined: '<path d="M5 12.5l4.5 4.5L19 7"/>',
-    added: '<path d="M12 5v14M5 12h14"/>',
-    skipped: '<circle cx="12" cy="12" r="8"/><path d="M6.5 6.5l11 11"/>',
-    pending: '<path d="M12 5v9"/><path d="M12 18h.01"/>',
-} as const;
-
-function glyph(kind: keyof typeof GLYPH, size = 12): string {
-    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GLYPH[kind]}</svg>`;
 }
 
 function newPlanId(): string {
@@ -429,7 +418,7 @@ export class MergeWizard {
         }
         const n = planCounts(this.plan);
         const note = ws.step === 5 && c.mode !== 'compare' ? W.writeOnlyHere : W.nothingYet;
-        const chip = (kind: keyof typeof GLYPH, cls: string, label: string, v: number): string =>
+        const chip = (kind: GlyphKind, cls: string, label: string, v: number): string =>
             `<div class="merge-stat ${cls}" data-count="${kind}"><span class="merge-stat-label"><span class="merge-stat-glyph">${glyph(kind)}</span>${escapeHtml(label)}</span>`
             + `<span class="merge-stat-value">${countText(v)}</span></div>`;
         const line = [`${W.cntJoined} ${countText(n.joined)}`, `${W.cntNew} ${countText(n.added)}`,
@@ -453,7 +442,7 @@ export class MergeWizard {
             counts: this.plan ? planCounts(this.plan) : null,
             compared: ws.compared,
             update: change => this.update(change),
-            renderPairs: el => this.host.renderPairs(el),
+            ...(this.host.step2 ? { step2: this.host.step2() } : {}),
             ...(this.host.step1 ? { step1: this.host.step1() } : {}),
         };
     }

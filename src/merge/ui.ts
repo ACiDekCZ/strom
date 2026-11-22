@@ -13,18 +13,14 @@ import { PersonId, PartnershipId, Person, StromData, TreeId, PartnershipStatus }
 import { contentFingerprint } from '../research-link.js';
 import { isGender } from '../model-values.js';
 import { strings } from '../strings.js';
-import { runHeavy, activatedElement, busyButtonHtml } from '../ui/busy.js';
+import { runHeavy, activatedElement } from '../ui/busy.js';
 import {
     MergeState,
-    PersonMatch,
-    MatchFilter,
-    MergeStats,
     PartnershipConflict,
     PartnershipConflictField
 } from './types.js';
 import {
     createMergeState,
-    calculateMergeStats,
     updateMatchDecision,
     updateConflictResolution,
     reanalyzeMatches,
@@ -49,7 +45,7 @@ import {
     listMergeSessionsInfo,
     hasPendingMerges
 } from './persistence.js';
-import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
+import { shownNameOrEmpty } from '../person-name.js';
 import { iconSvg } from '../icons.js';
 import { imageLoads } from '../image-loads.js';
 import { pendingImageOf } from '../research-image-refs.js';
@@ -60,7 +56,7 @@ import { MergeWizard, targetBlock, targetBlockText, type WizardSource } from './
 import type { WizardStep } from './wizard-steps.js';
 import { isRepeatOf, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
 import { newTreeName, writePlanAsNewTree } from './write.js';
-import type { Step1Env, TargetRow } from './steps/context.js';
+import type { Step1Env, Step2Env, TargetRow, UnionConflictLine } from './steps/context.js';
 import { closeNotTaken, parkGedcomSummary } from './steps/step1-what.js';
 import { notTakenText } from './wizard-text.js';
 import { listSnapshots } from '../snapshots.js';
@@ -77,12 +73,6 @@ const AUTO_SAVE_DELAY = 2000;
 /** The warning mark of the merge (no emoji): a stroked triangle in the warning colour, the text beside it says what. */
 const MERGE_WARNING_MARK = iconSvg('alert-triangle', { size: 14, className: 'merge-warning-mark' });
 
-/** A row's conflict mark: the triangle, named by its count for screen readers and on hover. */
-function conflictMark(count: number): string {
-    const label = `${strings.merge.conflicts}: ${count}`;
-    return `<span class="conflict-indicator" role="img" title="${label}" aria-label="${label}">${MERGE_WARNING_MARK}</span>`;
-}
-
 /**
  * MergerUI class - handles merge modal UI
  */
@@ -97,8 +87,6 @@ export function mergeAnalysisLong(a: StromData, b: StromData): boolean {
 
 class MergerUIClass {
     private mergeState: MergeState | null = null;
-    private currentFilter: MatchFilter = 'all';
-    private selectedMatchIndex: number = -1;
     private manualMatchPicker: PersonPicker | null = null;
 
     // Escape handling and auto-save
@@ -131,7 +119,7 @@ class MergerUIClass {
         saveForLater: () => this.saveForLater(),
         finishCompare: () => this.closeMergeModalInternal(),
         write: plan => this.write(plan),
-        renderPairs: host => this.renderPairs(host),
+        step2: () => this.step2Env(),
         compare: () => this.compare(),
         downloadJson: () => this.downloadJson(),
         step1: () => this.step1Env(),
@@ -191,8 +179,6 @@ class MergerUIClass {
         const emptyOpen = !!targetId && Object.values(existingData.persons).every(p => p.isPlaceholder);
         if (!targetId) this.initialMode = 'new';
         else if (emptyOpen && !this.initialMode) this.initialMode = 'new';
-        this.currentFilter = 'all';
-        this.selectedMatchIndex = -1;
         this.hasUnsavedChanges = false;
         this.openedFromTreeManager = fromTreeManager;
 
@@ -236,8 +222,6 @@ class MergerUIClass {
         this.targetLoaded = state.target?.treeId ?? null;
         this.resumedSessionId = undefined;
         this.preMergeBackup = null;
-        this.currentFilter = 'all';
-        this.selectedMatchIndex = -1;
         this.hasUnsavedChanges = false;
         this.incomingFileName = fileName;
         this.targetTreeName = targetTreeName;
@@ -399,7 +383,7 @@ class MergerUIClass {
             const state = this.mergeState;
             if (message && state) {
                 const pairs = state.matches.length;
-                const open = this.openPairs().length;
+                const open = state.matches.filter(m => !state.decisions.has(m.incomingId) && m.score < AUTO_CONFIRM_SCORE).length;
                 message.textContent = strings.mergeWizard.closeMsg(pairs - open, pairs);
             }
             dialog.classList.add('active');
@@ -985,7 +969,6 @@ class MergerUIClass {
         const shouldReturnToTreeManager = this.openedFromTreeManager;
 
         this.mergeState = null;
-        this.selectedMatchIndex = -1;
         this.hasUnsavedChanges = false;
         this.incomingFileName = undefined;
         this.targetTreeName = undefined;
@@ -1006,524 +989,104 @@ class MergerUIClass {
      */
     private renderModalContent(): void {
         if (!this.mergeState) return;
-        this.wizard.refresh();
-        if (!document.getElementById('merge-match-list')) return;
-        this.updateFilterTabs(calculateMergeStats(this.mergeState));
-        this.renderRest();
-        this.renderMatchList();
+        // Step 2 draws its list and pair again; the other steps keep their body.
+        this.wizard.refresh({ body: this.wizard.step === 2 });
     }
 
-    /**
-     * Today's list of pairs inside step 2's body (until §4 replaces it):
-     * the filter tabs, the undecided rest at once, and the list.
-     */
-    private renderPairs(host: HTMLElement): void {
-        const state = this.mergeState;
-        if (!state) return;
-        const M = strings.merge;
-        const W = strings.mergeWizard;
-        const tab = (filter: MatchFilter, label: string, count = true): string =>
-            `<button type="button" class="merge-tab sel-tab${this.currentFilter === filter ? ' active' : ''}" data-sel-dir="down" data-filter="${filter}">`
-            + `<span class="sel-l" data-label="${this.escapeHtml(label)}">${this.escapeHtml(label)}</span>${count ? ` <span class="tab-count" id="tab-count-${filter}">0</span>` : ''}</button>`;
-        host.innerHTML = `<div class="merge-tabs">${tab('all', M.tabAll, false)}${tab('high', M.highConfidence)}${tab('medium', M.mediumConfidence)}`
-            + `${tab('low', M.lowConfidence)}${tab('unmatched', M.statsNew)}${tab('conflicts', M.conflicts)}</div>`
-            + `<div class="merge-rest" id="merge-rest"></div>`
-            + `<div class="merge-match-list" id="merge-match-list"></div>`
-            // Its working words drawn with it, as the static buttons get theirs (§1.2).
-            + `<div class="merge-reanalyze"><button type="button" class="link-button" data-busy="idle">${busyButtonHtml(this.escapeHtml(M.reanalyze), strings.busy.analyzing, undefined, { own: true })}</button></div>`;
-        host.querySelectorAll<HTMLButtonElement>('.merge-tab').forEach(b =>
-            b.addEventListener('click', () => this.setFilter(b.dataset.filter as MatchFilter)));
-        host.querySelector<HTMLElement>('#merge-rest')?.addEventListener('click', e => {
-            const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-rest]');
-            if (b) this.decideRest(b.dataset.rest as 'reject' | 'skip');
-        });
-        this.renderRest();
-        host.querySelector<HTMLButtonElement>('.merge-reanalyze button')?.addEventListener('click', () => { void this.reanalyze(); });
-        this.updateFilterTabs(calculateMergeStats(state));
-        this.renderMatchList();
+    /** Step 2: the decisions on the pairs and what opens from them (spec 134 §4). */
+    private step2Env(): Step2Env {
+        return {
+            decide: (id, decision) => {
+                const state = this.mergeState;
+                if (!state) return;
+                if (decision === null) state.decisions.delete(id);
+                else updateMatchDecision(state, id, decision);
+                this.markUnsavedChanges();
+                this.renderModalContent();
+            },
+            decideMany: (ids, decision) => {
+                const state = this.mergeState;
+                if (!state || ids.length === 0) return;
+                for (const id of ids) updateMatchDecision(state, id, decision);
+                this.markUnsavedChanges();
+                this.renderModalContent();
+            },
+            other: id => this.showManualMatchDialog(id),
+            resolve: id => this.showConflictResolution(id),
+            unionConflicts: id => this.unionConflictLines(id),
+            resolveUnion: id => this.showPartnershipConflictResolution(id),
+            compare: (id, treeId) => this.showCompareView(id, treeId),
+            preview: id => this.showPreviewView(id),
+            reanalyze: () => { void this.reanalyze(); },
+        };
     }
 
-    /** The line "Remaining N undecided: Add as new · Do not add" above step 2's list. */
-    private renderRest(): void {
-        const box = document.getElementById('merge-rest');
-        if (!box) return;
-        const W = strings.mergeWizard;
-        const n = this.openPairs().length;
-        box.hidden = n === 0;
-        box.innerHTML = n === 0 ? '' : `<span class="merge-rest-label">${this.escapeHtml(W.restLabel(n))}</span>`
-            + `<button type="button" class="link-button" data-rest="reject">${this.escapeHtml(W.restAdd(n))}</button>`
-            + `<button type="button" class="link-button" data-rest="skip">${this.escapeHtml(W.restSkip(n))}</button>`;
-    }
-
-    /** The pairs no one decided and the score does not join (the ones "to decide"). */
-    private openPairs(): PersonMatch[] {
+    /** The couples of an import's person both trees know that differ, as lines of "What speaks against". */
+    private unionConflictLines(incomingId: PersonId): UnionConflictLine[] {
         const state = this.mergeState;
         if (!state) return [];
-        return state.matches.filter(m => !state.decisions.has(m.incomingId) && m.score < AUTO_CONFIRM_SCORE);
-    }
-
-    /** The undecided rest at once: added as new people (reject) or not added (skip). */
-    private decideRest(decision: 'reject' | 'skip'): void {
-        const state = this.mergeState;
-        if (!state) return;
-        for (const m of this.openPairs()) updateMatchDecision(state, m.incomingId, decision);
-        this.markUnsavedChanges();
-        this.wizard.refresh({ body: true });
-    }
-
-    /**
-     * Update filter tab counts
-     */
-    private updateFilterTabs(stats: MergeStats): void {
-        const tabs: { filter: MatchFilter; countId: string }[] = [
-            { filter: 'high', countId: 'tab-count-high' },
-            { filter: 'medium', countId: 'tab-count-medium' },
-            { filter: 'low', countId: 'tab-count-low' },
-            { filter: 'unmatched', countId: 'tab-count-unmatched' },
-            { filter: 'conflicts', countId: 'tab-count-conflicts' }
-        ];
-
-        for (const { filter, countId } of tabs) {
-            const el = document.getElementById(countId);
-            if (!el) continue;
-
-            let count = 0;
-            switch (filter) {
-                case 'high': count = stats.highConfidence; break;
-                case 'medium': count = stats.mediumConfidence; break;
-                case 'low': count = stats.lowConfidence; break;
-                case 'unmatched': count = stats.unmatched; break;
-                case 'conflicts': count = stats.withConflicts + stats.partnershipConflicts; break;
-            }
-            el.textContent = String(count);
-        }
-    }
-
-    // ==================== FILTER HANDLING ====================
-
-    /**
-     * Set current filter
-     */
-    setFilter(filter: MatchFilter): void {
-        this.currentFilter = filter;
-        this.selectedMatchIndex = -1;
-
-        // Update active tab
-        document.querySelectorAll('#merge-step-body .merge-tab').forEach(tab => {
-            tab.classList.toggle('active', (tab as HTMLElement).dataset.filter === filter);
+        return this.groupPartnershipConflicts().filter(group => {
+            const u = state.incomingData.partnerships[group[0].incomingPartnershipId];
+            return !!u && (u.person1Id === incomingId || u.person2Id === incomingId);
+        }).map(group => {
+            const first = group[0];
+            const fields = group.map(c => `${this.partnershipFieldLabel(c.field)}: ${this.partnershipValueText(c.field, c.existingValue)} → ${this.partnershipValueText(c.field, c.incomingValue)}`);
+            return {
+                id: first.incomingPartnershipId,
+                text: `${strings.merge.partnershipConflict} ${this.partnershipCoupleName(first.existingPartnershipId)}: ${fields.join(', ')}`,
+                resolved: state.partnershipResolutions?.has(first.incomingPartnershipId) ?? false,
+            };
         });
-
-        this.renderMatchList();
     }
 
-    // ==================== MATCH LIST ====================
-
-    /**
-     * Render the list of matches based on current filter
-     */
-    private renderMatchList(): void {
-        if (!this.mergeState) return;
-
-        const listContainer = document.getElementById('merge-match-list');
-        if (!listContainer) return;
-
-        const items = this.getFilteredItems();
-        // Unions both trees know but describe differently are listed first
-        // in the "all" and "conflicts" views, like persons with conflicts.
-        const unionGroups = (this.currentFilter === 'all' || this.currentFilter === 'conflicts')
-            ? this.groupPartnershipConflicts()
-            : [];
-
-        if (items.length === 0 && unionGroups.length === 0) {
-            listContainer.innerHTML = `<div class="merge-empty">${strings.merge.noItems}</div>`;
-            return;
-        }
-
-        listContainer.innerHTML =
-            unionGroups.map(group => this.renderPartnershipConflictItem(group)).join('')
-            + items.map((item, index) => this.renderMatchItem(item, index)).join('');
-
-        // Attach event listeners
-        this.attachMatchListeners();
-    }
-
-    /**
-     * Get items based on current filter
-     */
-    private getFilteredItems(): Array<PersonMatch | { type: 'unmatched'; person: Person; personId: PersonId }> {
-        if (!this.mergeState) return [];
-
-        const items: Array<PersonMatch | { type: 'unmatched'; person: Person; personId: PersonId }> = [];
-
-        if (this.currentFilter === 'all' || this.currentFilter === 'unmatched') {
-            // Add unmatched
-            for (const id of this.mergeState.unmatchedIncoming) {
-                const person = this.mergeState.incomingData.persons[id];
-                if (person) {
-                    items.push({ type: 'unmatched', person, personId: id });
-                }
-            }
-        }
-
-        if (this.currentFilter !== 'unmatched') {
-            // Add matches based on filter
-            for (const match of this.mergeState.matches) {
-                if (this.currentFilter === 'all') {
-                    items.push(match);
-                } else if (this.currentFilter === 'high' && match.confidence === 'high') {
-                    items.push(match);
-                } else if (this.currentFilter === 'medium' && match.confidence === 'medium') {
-                    items.push(match);
-                } else if (this.currentFilter === 'low' && match.confidence === 'low') {
-                    items.push(match);
-                } else if (this.currentFilter === 'conflicts' && match.conflicts.length > 0) {
-                    items.push(match);
-                }
-            }
-        }
-
-        return items;
-    }
-
-    /**
-     * Get tooltip for confidence level
-     */
-    private getConfidenceTooltip(confidence: string): string {
-        switch (confidence) {
-            case 'high': return strings.merge.highConfidenceTooltip;
-            case 'medium': return strings.merge.mediumConfidenceTooltip;
-            case 'low': return strings.merge.lowConfidenceTooltip;
-            default: return '';
-        }
-    }
-
-    /**
-     * Get localized match reason
-     */
-    private getMatchReasonText(reason: string): string {
-        const reasonStrings = (strings.merge as Record<string, unknown>).matchReasons as Record<string, string> | undefined;
-        if (reasonStrings && reasonStrings[reason]) {
-            return reasonStrings[reason];
-        }
-        // Fallback to formatted reason name
-        return reason.replace(/_/g, ' ');
-    }
-
-    /**
-     * Render a single match item
-     */
-    private renderMatchItem(
-        item: PersonMatch | { type: 'unmatched'; person: Person; personId: PersonId },
-        index: number
-    ): string {
-        if ('type' in item && item.type === 'unmatched') {
-            return this.renderUnmatchedItem(item.person, item.personId, index);
-        }
-
-        const match = item as PersonMatch;
-        const decision = this.mergeState?.decisions.get(match.incomingId);
-
-        // Determine status: confirmed, rejected, skipped, or pending (needs review)
-        // Score >= AUTO_CONFIRM_SCORE is pre-confirmed, anything below it is
-        // only offered and requires explicit user action.
-        // Skip is independent: the incoming person is neither merged nor added.
-        const isSkipped = decision?.type === 'skip';
-        const isConfirmed = decision?.type === 'confirm' || (!decision && match.score >= AUTO_CONFIRM_SCORE);
-        const isRejected = decision?.type === 'reject';
-        const isPending = !decision && match.score < AUTO_CONFIRM_SCORE; // Needs user review
-
-        const confidenceClass = match.confidence;
-        const confidenceLabel = strings.merge[`${match.confidence}Confidence`] || match.confidence;
-        const confidenceTooltip = this.getConfidenceTooltip(match.confidence);
-
-        // Format person info
-        const existingInfo = this.formatPersonInfoHtml(match.existingPerson);
-        const incomingInfo = this.formatPersonInfoHtml(match.incomingPerson);
-
-        // Match reasons
-        const reasonsText = match.reasons
-            .filter(r => r !== 'manual') // Skip 'manual' as it's obvious
-            .map(r => this.getMatchReasonText(r))
-            .join(', ');
-        const reasonsHtml = reasonsText
-            ? `<div class="merge-item-reasons">${this.escapeHtml(reasonsText)}</div>`
-            : '';
-
-        // Conflict indicator
-        const hasConflicts = match.conflicts.length > 0;
-        const conflictIndicator = hasConflicts ? conflictMark(match.conflicts.length) : '';
-
-        // Resolve conflicts button
-        const resolveBtn = hasConflicts
-            ? `<button class="merge-btn-resolve" data-action="resolve">${strings.merge.resolveConflicts}</button>`
-            : '';
-
-        const statusClass = isSkipped ? 'skipped' : isConfirmed ? 'confirmed' : isRejected ? 'rejected' : 'pending';
-        const statusSymbol = isSkipped ? '⊘' : isConfirmed ? '✓' : isRejected ? '✗' : '?';
-
-        return `
-            <div class="merge-item ${isConfirmed ? 'confirmed' : ''} ${isRejected ? 'rejected' : ''} ${isSkipped ? 'skipped' : ''} ${isPending ? 'pending' : ''}"
-                 data-index="${index}" data-incoming-id="${this.escapeHtml(match.incomingId)}">
-                <div class="merge-item-header">
-                    <span class="merge-item-status ${statusClass}">
-                        ${statusSymbol}
-                    </span>
-                    <span class="merge-item-names">
-                        ${existingInfo} ↔ ${incomingInfo}
-                    </span>
-                    ${conflictIndicator}
-                    <span class="merge-item-score confidence-${confidenceClass}" title="${confidenceTooltip}">
-                        ${match.score} % · ${confidenceLabel}
-                    </span>
-                </div>
-                ${reasonsHtml}
-                ${hasConflicts ? this.renderConflictSummary(match) : ''}
-                <div class="merge-item-actions">
-                    <button class="merge-btn-confirm ${isConfirmed ? 'active' : ''}" data-action="confirm">
-                        ${strings.merge.confirm}
-                    </button>
-                    <button class="merge-btn-reject ${isRejected ? 'active' : ''}" data-action="reject">
-                        ${strings.merge.reject}
-                    </button>
-                    <button class="merge-btn-skip ${isSkipped ? 'active' : ''}" data-action="skip" title="${this.escapeHtml(strings.merge.skipTooltip)}">
-                        ${strings.merge.skip}
-                    </button>
-                    <button class="merge-btn-change" data-action="change">
-                        ${strings.merge.changeMatch}
-                    </button>
-                    ${resolveBtn}
-                    <button class="merge-btn-preview" data-action="compare" title="${strings.treePreview.comparePersons}" aria-label="${strings.treePreview.comparePersons}">
-                        ${strings.treePreview.comparePersons}
-                    </button>
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Render unmatched item
-     */
-    private renderUnmatchedItem(person: Person, personId: PersonId, index: number): string {
-        const info = this.formatPersonInfoHtml(person);
-        const isSkipped = this.mergeState?.decisions.get(personId)?.type === 'skip';
-
-        // In updateOnly mode every unmatched person is left out anyway; the badge
-        // says so, and per-person skip is redundant (but harmless) there.
-        const willBeAdded = !isSkipped && !this.mergeState?.updateOnly;
-        const badge = willBeAdded
-            ? `<span class="merge-item-badge new" title="${strings.merge.newPersonTooltip}">${strings.merge.newPerson}</span>`
-            : `<span class="merge-item-badge skipped" title="${this.escapeHtml(strings.merge.skipTooltip)}">${strings.merge.skipped}</span>`;
-
-        return `
-            <div class="merge-item unmatched ${isSkipped ? 'skipped' : ''}" data-index="${index}" data-incoming-id="${this.escapeHtml(personId)}">
-                <div class="merge-item-header">
-                    <span class="merge-item-status ${isSkipped ? 'skipped' : 'new'}">${isSkipped ? '⊘' : '+'}</span>
-                    <span class="merge-item-names">
-                        ${info}
-                    </span>
-                    ${badge}
-                </div>
-                <div class="merge-item-actions">
-                    <button class="merge-btn-change" data-action="manual">
-                        ${strings.merge.manualMatch}
-                    </button>
-                    <button class="merge-btn-skip ${isSkipped ? 'active' : ''}" data-action="skip" title="${this.escapeHtml(strings.merge.skipTooltip)}">
-                        ${isSkipped ? strings.merge.unskip : strings.merge.skip}
-                    </button>
-                    <button class="merge-btn-preview" data-action="preview" title="${strings.treePreview.preview}" aria-label="${strings.treePreview.preview}">
-                        ${strings.treePreview.preview}
-                    </button>
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Render conflict summary
-     */
-    private renderConflictSummary(match: PersonMatch): string {
-        const conflicts = match.conflicts.slice(0, 3); // Show max 3
-        const more = match.conflicts.length > 3 ? ` +${match.conflicts.length - 3}` : '';
-
-        return `
-            <div class="merge-item-conflicts">
-                ${conflicts.map(c => {
-                    const fieldLabel = strings.labels[c.field as keyof typeof strings.labels] || c.field;
-                    // Never spell out a photo's data URL in the compact summary —
-                    // just say the portraits differ (the ⚠ + resolve dialog show them).
-                    if (c.field === 'photo') {
-                        return `<span class="conflict-field">${fieldLabel}: ${strings.merge.photoConflict}</span>`;
-                    }
-                    return `<span class="conflict-field">${fieldLabel}: ${this.escapeHtml(c.existingValue || '—')} → ${this.escapeHtml(c.incomingValue || '—')}</span>`;
-                }).join('')}
-                ${more}
-            </div>
-        `;
-    }
-
-    /**
-     * Format person info for display
-     */
     private formatPersonInfo(person: Person): string {
         const name = shownNameOrEmpty(person);
         const year = person.birthDate?.split('-')[0] || '';
         return year ? `${name} (*${year})` : name;
     }
 
-    /** formatPersonInfo as HTML for a list row: a married surname's birth note shortens to fit. */
-    private formatPersonInfoHtml(person: Person): string {
-        const year = person.birthDate?.split('-')[0] || '';
-        return fitNameHtml(person, shownNameOrEmpty(person), year ? `(*${year})` : '');
-    }
-
-    /**
-     * Attach event listeners to match list
-     */
-    private attachMatchListeners(): void {
-        const listContainer = document.getElementById('merge-match-list');
-        if (!listContainer) return;
-
-        // Action buttons
-        listContainer.querySelectorAll('.merge-btn-confirm, .merge-btn-reject, .merge-btn-skip, .merge-btn-change, .merge-btn-resolve, .merge-btn-preview').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const item = (e.target as HTMLElement).closest('.merge-item');
-                const incomingId = item?.getAttribute('data-incoming-id') as PersonId;
-                const action = (e.target as HTMLElement).dataset.action;
-
-                const partnershipId = item?.getAttribute('data-partnership-id');
-                if (action === 'resolve-partnership' && partnershipId) {
-                    this.showPartnershipConflictResolution(partnershipId as PartnershipId);
-                    return;
-                }
-
-                if (incomingId && action) {
-                    this.handleMatchAction(incomingId, action);
-                }
-            });
-        });
-
-        // Item click for expand/details
-        listContainer.querySelectorAll('.merge-item').forEach(item => {
-            item.addEventListener('click', (e) => {
-                // Don't expand if clicking a button
-                if ((e.target as HTMLElement).closest('button')) return;
-
-                const index = parseInt(item.getAttribute('data-index') || '-1');
-                this.toggleItemDetails(index);
-            });
-        });
-    }
-
-    /**
-     * Handle match action (confirm/reject/change/resolve)
-     */
-    private handleMatchAction(incomingId: PersonId, action: string): void {
-        if (!this.mergeState) return;
-
-        switch (action) {
-            case 'confirm':
-                updateMatchDecision(this.mergeState, incomingId, 'confirm');
-                this.markUnsavedChanges();
-                break;
-            case 'reject':
-                updateMatchDecision(this.mergeState, incomingId, 'reject');
-                this.markUnsavedChanges();
-                break;
-            case 'skip': {
-                // Toggle skip. Unlike reject (import as a NEW separate person),
-                // skip drops the incoming person entirely. Clicking an already
-                // skipped row un-skips it back to its default (undecided) state.
-                const current = this.mergeState.decisions.get(incomingId);
-                if (current?.type === 'skip') {
-                    this.mergeState.decisions.delete(incomingId);
-                } else {
-                    updateMatchDecision(this.mergeState, incomingId, 'skip');
-                }
-                this.markUnsavedChanges();
-                break;
-            }
-            case 'change':
-            case 'manual':
-                this.showManualMatchDialog(incomingId);
-                return;
-            case 'resolve':
-                this.showConflictResolution(incomingId);
-                return;
-            case 'compare':
-                this.showCompareView(incomingId);
-                return;
-            case 'preview':
-                this.showPreviewView(incomingId);
-                return;
-        }
-
-        this.renderModalContent();
-    }
-
-    /**
-     * Show comparison view for matched persons
-     */
-    private showCompareView(incomingId: PersonId): void {
-        if (!this.mergeState) return;
-
-        // Find the match for this incoming ID
-        const match = this.mergeState.matches.find(m => m.incomingId === incomingId);
-        if (!match) return;
-
-        const existingData = this.mergeState.existingData;
-        const incomingData = this.mergeState.incomingData;
-
+    /** The pair side by side in both trees (the tree's person: the one chosen in the step). */
+    private showCompareView(incomingId: PersonId, treeId?: PersonId): void {
+        const state = this.mergeState;
+        if (!state) return;
+        const match = state.matches.find(m => m.incomingId === incomingId);
+        const existingId = treeId ?? match?.existingId;
+        const existing = existingId ? state.existingData.persons[existingId] : undefined;
+        const incoming = state.incomingData.persons[incomingId];
+        if (!existingId || !existing || !incoming) return;
         TreeCompare.showComparison({
             left: {
-                data: existingData,
-                focusPersonId: match.existingId,
+                data: state.existingData,
+                focusPersonId: existingId,
                 depthUp: 2,
                 depthDown: 2,
                 title: this.targetTreeName || strings.merge.existingTree,
-                subtitle: this.formatPersonInfo(match.existingPerson)
+                subtitle: this.formatPersonInfo(existing),
             },
             right: {
-                data: incomingData,
-                focusPersonId: match.incomingId,
+                data: state.incomingData,
+                focusPersonId: incomingId,
                 depthUp: 2,
                 depthDown: 2,
                 title: this.sourceTreeName || this.incomingFileName || strings.merge.incomingTree,
-                subtitle: this.formatPersonInfo(match.incomingPerson)
-            }
+                subtitle: this.formatPersonInfo(incoming),
+            },
         });
     }
 
-    /**
-     * Show preview view for unmatched person
-     */
+    /** The import's person in its own tree (a new person has no pair). */
     private showPreviewView(incomingId: PersonId): void {
-        if (!this.mergeState) return;
-
-        const incomingData = this.mergeState.incomingData;
-        const person = incomingData.persons[incomingId];
-        if (!person) return;
-
+        const state = this.mergeState;
+        const person = state?.incomingData.persons[incomingId];
+        if (!state || !person) return;
         TreePreview.show({
-            data: incomingData,
+            data: state.incomingData,
             focusPersonId: incomingId,
             depthUp: 2,
             depthDown: 2,
             title: this.sourceTreeName || this.incomingFileName || strings.merge.incomingTree,
-            subtitle: this.formatPersonInfo(person)
+            subtitle: this.formatPersonInfo(person),
         });
-    }
-
-    /**
-     * Toggle item details view
-     */
-    private toggleItemDetails(index: number): void {
-        if (this.selectedMatchIndex === index) {
-            this.selectedMatchIndex = -1;
-        } else {
-            this.selectedMatchIndex = index;
-        }
-        // Could expand to show conflict resolution UI
     }
 
     // ==================== MANUAL MATCH DIALOG ====================
@@ -1759,37 +1322,18 @@ class MergerUIClass {
         return strings.merge.partnershipFields[field];
     }
 
+    /** A partnership conflict value as text; status is localized. */
+    private partnershipValueText(field: PartnershipConflictField, v: string): string {
+        if (field === 'status' && v in strings.partnershipStatus) return strings.partnershipStatus[v as PartnershipStatus];
+        return v || '—';
+    }
+
     /** A partnership conflict value as safe HTML; status is localized. */
     private partnershipValueHtml(field: PartnershipConflictField, v: string): string {
         if (field === 'status' && v in strings.partnershipStatus) {
             return this.escapeHtml(strings.partnershipStatus[v as PartnershipStatus]);
         }
         return this.escapeHtml(v || '—');
-    }
-
-    /** One list row for a union with conflicts (same look as a person row). */
-    private renderPartnershipConflictItem(group: PartnershipConflict[]): string {
-        const first = group[0];
-        const resolved = this.mergeState?.partnershipResolutions?.has(first.incomingPartnershipId) ?? false;
-        const summary = group.map(c =>
-            `<span class="conflict-field">${this.escapeHtml(this.partnershipFieldLabel(c.field))}: ${this.partnershipValueHtml(c.field, c.existingValue)} → ${this.partnershipValueHtml(c.field, c.incomingValue)}</span>`
-        ).join('');
-        return `
-            <div class="merge-item partnership-conflict ${resolved ? 'confirmed' : 'pending'}"
-                 data-index="-1" data-partnership-id="${this.escapeHtml(first.incomingPartnershipId)}">
-                <div class="merge-item-header">
-                    <span class="merge-item-status ${resolved ? 'confirmed' : 'pending'}">${resolved ? '✓' : '?'}</span>
-                    <span class="merge-item-names">
-                        ${this.escapeHtml(strings.merge.partnershipConflict)}: ${this.escapeHtml(this.partnershipCoupleName(first.existingPartnershipId))}
-                    </span>
-                    ${conflictMark(group.length)}
-                </div>
-                <div class="merge-item-conflicts">${summary}</div>
-                <div class="merge-item-actions">
-                    <button class="merge-btn-resolve" data-action="resolve-partnership">${strings.merge.resolveConflicts}</button>
-                </div>
-            </div>
-        `;
     }
 
     /** Open the conflict dialog for one union (same rows as for a person). */
@@ -1991,7 +1535,6 @@ class MergerUIClass {
 
         // Reset state
         this.mergeState = null;
-        this.selectedMatchIndex = -1;
         this.incomingFileName = undefined;
         this.targetTreeName = undefined;
         this.sourceTreeName = undefined;

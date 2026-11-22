@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
-import { openApp, createFirstPerson, cardAction, focusViaSearch, openTreeStructure, mergeCompare, mergeCount, mergeSetScope, mergeWrite } from './helpers.js';
+import { openApp, createFirstPerson, cardAction, focusViaSearch, openTreeStructure, mergeCompare, mergeCount, mergeGroup, mergePair, mergeRow, mergeSetScope, mergeWrite } from './helpers.js';
 
 /**
  * The tree merge driven end to end through the real UI: tree manager row menu
@@ -71,9 +71,14 @@ async function startMergeFromManager(page: Page, sourceName: string, targetName:
     return wizard;
 }
 
-/** A review row whose names contain `text`. */
-function row(wizard: Locator, text: string): Locator {
-    return wizard.locator('#merge-match-list .merge-item').filter({ hasText: text });
+/** The row of step 2 whose names contain `text`, chosen (in whichever group it stands): its pair shows on the right. */
+function row(wizard: Locator, text: string): Promise<Locator> {
+    return mergePair(wizard, text);
+}
+
+/** A decision on the chosen pair (its button on the right). */
+function decide(wizard: Locator, decision: 'same' | 'new' | 'other' | 'skip'): Promise<void> {
+    return wizard.locator(`#merge-pair .merge-dec[data-dec="${decision}"]`).click();
 }
 
 const confirmModal = (page: Page) => page.locator('#confirmation-modal.active');
@@ -165,31 +170,32 @@ test('tree merge runs to completion: filters, confirm, execute — the new tree 
     await expect(mergeCount(wizard, 'skipped')).toHaveText('0');
     await expect(mergeCount(wizard, 'pending')).toHaveText('0');
 
-    // "New" filter: only the two persons the target does not know.
-    await wizard.locator('.merge-tab[data-filter="unmatched"]').click();
-    await expect(wizard.locator('.merge-tab[data-filter="unmatched"]')).toHaveClass(/active/);
-    await expect(wizard.locator('#tab-count-unmatched')).toHaveText('2');
+    // Nothing is only offered: the guide opens on The same.
+    await expect(wizard.locator('.merge-tab[data-group="same"]')).toHaveAttribute('aria-selected', 'true');
+    // New: only the two persons the target does not know.
+    await mergeGroup(wizard, 'new');
+    await expect(wizard.locator('.merge-tab[data-group="new"] .tab-count')).toHaveText('2');
     await expect(wizard.locator('#merge-match-list .merge-item')).toHaveCount(2);
-    await expect(row(wizard, 'Marta')).toHaveClass(/unmatched/);
-    await expect(row(wizard, 'Lucie')).toHaveClass(/unmatched/);
-    await expect(row(wizard, 'Jan Novak')).toHaveCount(0);
+    await expect(mergeRow(wizard, 'Marta')).toHaveAttribute('data-fate', 'added');
+    await expect(mergeRow(wizard, 'Lucie')).toHaveAttribute('data-fate', 'added');
+    await expect(mergeRow(wizard, 'Jan Novak')).toHaveCount(0);
 
-    // "High" filter: the shared Jan, and nothing else.
-    await wizard.locator('.merge-tab[data-filter="high"]').click();
+    // The same: the shared Jan, and nothing else; nothing speaks against the pair.
+    await mergeGroup(wizard, 'same');
     await expect(wizard.locator('#merge-match-list .merge-item')).toHaveCount(1);
-    const janRow = row(wizard, 'Jan Novak');
-    await expect(janRow).toContainText('Jan Novak (*1940) ↔ Jan Novak (*1940)');
+    const janRow = mergeRow(wizard, 'Jan Novak');
+    await expect(janRow).toContainText('↔ Jan Novak 1940');
+    await expect(wizard.locator('#merge-pair .merge-why-no')).toHaveCount(0);
 
-    // "Conflicts" filter: no field differs on both sides → empty list.
-    await wizard.locator('.merge-tab[data-filter="conflicts"]').click();
+    // Maybe the same: none → empty list.
+    await mergeGroup(wizard, 'maybe');
     await expect(wizard.locator('#merge-match-list .merge-empty')).toBeVisible();
 
-    // Back to "All", confirm the match explicitly.
-    await wizard.locator('.merge-tab[data-filter="all"]').click();
-    await expect(wizard.locator('#merge-match-list .merge-item')).toHaveCount(3);
-    await janRow.locator('.merge-btn-confirm').click();
-    await expect(janRow.locator('.merge-btn-confirm')).toHaveClass(/active/);
-    await expect(janRow).toHaveClass(/confirmed/);
+    // Confirm the match explicitly.
+    await row(wizard, 'Jan Novak');
+    await decide(wizard, 'same');
+    await expect(wizard.locator('#merge-pair .merge-dec[data-dec="same"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(janRow).toHaveAttribute('data-fate', 'joined');
 
     // Scope b): the import also fills what the tree lacks (Jan's death date).
     await mergeSetScope(page, 'b');
@@ -258,16 +264,13 @@ async function answerDvorakConflicts(page: Page): Promise<Locator> {
     const wizard = await startMergeFromManager(page, 'Dvorak Source', 'Dvorak Target');
     await expect(mergeCount(wizard, 'joined')).toHaveText('3');
     await expect(mergeCount(wizard, 'added')).toHaveText('0');
-    // One person with conflicts + one union with conflicts (the filter's count below).
-
-    await wizard.locator('.merge-tab[data-filter="conflicts"]').click();
-    await expect(wizard.locator('#tab-count-conflicts')).toHaveText('2');
-    await expect(wizard.locator('#merge-match-list .merge-item')).toHaveCount(2);
+    // Petr's pair: his details and his couple speak against it.
+    await row(wizard, 'Petr Dvorak');
+    const against = wizard.locator('#merge-pair .merge-why-no');
+    await expect(against).toContainText('Brno → Olomouc');
 
     // Person conflict: take the imported birthplace, keep the existing death place.
-    const petrRow = row(wizard, 'Petr Dvorak (*1890) ↔');
-    await expect(petrRow.locator('.merge-item-conflicts')).toContainText('Brno → Olomouc');
-    await petrRow.locator('.merge-btn-resolve').click();
+    await wizard.locator('#merge-pair .merge-btn-resolve[data-action="resolve"]').click();
     const dialog = page.locator('#merge-conflict-dialog');
     await expect(dialog).toHaveClass(/active/);
     await expect(dialog.locator('.modal-header h2')).toHaveText('Conflicts: Petr Dvorak');
@@ -282,8 +285,8 @@ async function answerDvorakConflicts(page: Page): Promise<Locator> {
     await expect(dialog).not.toHaveClass(/active/);
 
     // Union conflict: take the imported wedding date.
-    const unionRow = wizard.locator('#merge-match-list .merge-item.partnership-conflict');
-    await expect(unionRow).toHaveClass(/pending/);
+    const unionRow = wizard.locator('#merge-pair .merge-why-union');
+    await expect(unionRow).not.toHaveClass(/is-resolved/);
     await expect(unionRow).toContainText('1915-06-01 → 1916-06-01');
     await unionRow.locator('.merge-btn-resolve').click();
     await expect(dialog).toHaveClass(/active/);
@@ -293,10 +296,10 @@ async function answerDvorakConflicts(page: Page): Promise<Locator> {
     await dialog.locator('.conflict-row[data-field="startDate"] .conflict-option', { hasText: '1916-06-01' }).click();
     await dialog.getByRole('button', { name: 'Save' }).click();
     await expect(dialog).not.toHaveClass(/active/);
-    await expect(unionRow).toHaveClass(/confirmed/);
+    await expect(unionRow).toHaveClass(/is-resolved/);
 
     // Re-opening the person dialog shows the saved answers.
-    await row(wizard, 'Petr Dvorak (*1890) ↔').locator('.merge-btn-resolve').click();
+    await wizard.locator('#merge-pair .merge-btn-resolve[data-action="resolve"]').click();
     await expect(dialog.locator('.conflict-row[data-field="birthPlace"] input[value="use_incoming"]')).toBeChecked();
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).not.toHaveClass(/active/);
@@ -336,7 +339,7 @@ test.fixme('tree merge conflicts: the chosen value wins for a person field and f
     expect(d.unions[0].childIds).toEqual([d.one('Karel').id]);
 });
 
-test('tree merge conflicts carry drawn marks, no emoji: the row\'s triangle and the plain suggestion label', async ({ page }) => {
+test('tree merge conflicts carry no emoji: what speaks against the pair and the plain suggestion label', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');
 
@@ -350,13 +353,12 @@ test('tree merge conflicts carry drawn marks, no emoji: the row\'s triangle and 
         ]) });
 
     const wizard = await startMergeFromManager(page, 'Mark Source', 'Mark Target');
-    const petrRow = row(wizard, 'Petr Dvorak (*1890) ↔');
-    const mark = petrRow.locator('.conflict-indicator');
-    await expect(mark.locator('svg')).toBeVisible();
-    await expect(mark).toHaveAttribute('aria-label', 'Conflicts: 1');
-    expect(await mark.textContent()).not.toMatch(/[\u26A0\uFE0F]/);
+    await row(wizard, 'Petr Dvorak');
+    const against = wizard.locator('#merge-pair .merge-why-no');
+    await expect(against).toContainText('Brno → Brno, Morava');
+    expect(await against.textContent()).not.toMatch(/[\u26A0\uFE0F]/);
 
-    await petrRow.locator('.merge-btn-resolve').click();
+    await against.locator('.merge-btn-resolve').click();
     const dialog = page.locator('#merge-conflict-dialog');
     await expect(dialog).toHaveClass(/active/);
     const suggested = dialog.locator('.conflict-row[data-field="deathPlace"] .conflict-suggested');
@@ -391,7 +393,8 @@ test('tree merge manual match: an unmatched person is paired by hand and lands o
     await expect(mergeCount(wizard, 'added')).toHaveText('2');
 
     // Cancel path first: open the dialog for Ota and close it unchanged.
-    await row(wizard, 'Ota Kovar').locator('[data-action="manual"]').click();
+    await row(wizard, 'Ota Kovar');
+    await decide(wizard, 'other');
     const manual = page.locator('#merge-manual-dialog');
     await expect(manual).toHaveClass(/active/);
     await expect(manual.locator('#merge-manual-incoming')).toHaveText('Ota Kovar (*1910)');
@@ -402,7 +405,8 @@ test('tree merge manual match: an unmatched person is paired by hand and lands o
     await expect(manual).not.toHaveClass(/active/);
     await expect(mergeCount(wizard, 'added')).toHaveText('2');
 
-    await row(wizard, 'Vaclav Kovar').locator('[data-action="manual"]').click();
+    await row(wizard, 'Vaclav Kovar');
+    await decide(wizard, 'other');
     await expect(manual).toHaveClass(/active/);
     await expect(manual.locator('#merge-manual-incoming')).toHaveText('Vaclav Kovar');
 
@@ -417,12 +421,12 @@ test('tree merge manual match: an unmatched person is paired by hand and lands o
     await compare.locator('.tree-preview-close').click();
     await expect(compare).toHaveCount(0);
     await expect(manual).toHaveClass(/active/);
-    await manual.getByRole('button', { name: 'Save' }).click();
+    await manual.getByRole('button', { name: 'Join with this person' }).click();
     await expect(manual).not.toHaveClass(/active/);
 
     // Vaclav is now a (manual, 100 %) match with Wenzel; only Ota stays new.
-    const matchRow = row(wizard, 'Wenzel Schmidt (*1880) ↔ Vaclav Kovar');
-    await expect(matchRow).toBeVisible();
+    const matchRow = await row(wizard, 'Wenzel Schmidt');
+    await expect(matchRow).toContainText('↔ Vaclav Kovar');
     await expect(matchRow.locator('.merge-item-score')).toContainText('100 %');
     await expect(mergeCount(wizard, 'joined')).toHaveText('1');
     await expect(mergeCount(wizard, 'added')).toHaveText('1');
@@ -461,7 +465,8 @@ test('tree merge save for later → resume from the tree manager keeps the decis
 
     let wizard = await startMergeFromManager(page, 'Source', 'Target');
     // Decide something worth saving: Bob is skipped.
-    await row(wizard, 'Bob Novy').locator('.merge-btn-skip').click();
+    await row(wizard, 'Bob Novy');
+    await decide(wizard, 'skip');
     await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
     await expect(mergeCount(wizard, 'added')).toHaveText('1');
 
@@ -491,7 +496,7 @@ test('tree merge save for later → resume from the tree manager keeps the decis
     // It opens where it was left: step 2.
     await expect(wizard.locator('#merge-progress [aria-current="step"]')).toHaveAttribute('data-step', '2');
     await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
-    await expect(row(wizard, 'Bob Novy')).toHaveClass(/skipped/);
+    await expect(await row(wizard, 'Bob Novy')).toHaveAttribute('data-fate', 'skipped');
     await expect(mergeCount(wizard, 'added')).toHaveText('1');
     // The saved session stays while the merge is open (spec 134 K0.6) and
     // goes once the merged tree is written.
@@ -525,8 +530,9 @@ test('tree merge close → save → pending-merge dialog resume, then discard le
     const treeCountBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
 
     let wizard = await startMergeFromManager(page, 'Source', 'Target');
-    await row(wizard, 'Anna Sdilena (*1900) ↔').locator('.merge-btn-reject').click();
-    await expect(row(wizard, 'Anna Sdilena (*1900) ↔')).toHaveClass(/rejected/);
+    const annaRow = await row(wizard, 'Anna Sdilena');
+    await decide(wizard, 'new');
+    await expect(annaRow).toHaveAttribute('data-fate', 'added');
 
     // Closing with an unsaved decision asks; "Continue merging" keeps the wizard.
     const closeConfirm = page.locator('#merge-close-confirm');
@@ -559,7 +565,7 @@ test('tree merge close → save → pending-merge dialog resume, then discard le
     await expect(pendingDialog).not.toHaveClass(/active/);
     wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
-    await expect(row(wizard, 'Anna Sdilena (*1900) ↔')).toHaveClass(/rejected/);
+    await expect(await row(wizard, 'Anna Sdilena')).toHaveAttribute('data-fate', 'added');
 
     // Save it once more, then discard it from the pending-merge dialog.
     await wizard.getByRole('button', { name: 'Save for later' }).click();
@@ -574,7 +580,8 @@ test('tree merge close → save → pending-merge dialog resume, then discard le
 
     // A second round discarded via the close confirmation: nothing is saved.
     wizard = await startMergeFromManager(page, 'Source', 'Target');
-    await row(wizard, 'Bob Novy').locator('.merge-btn-skip').click();
+    await row(wizard, 'Bob Novy');
+    await decide(wizard, 'skip');
     await page.keyboard.press('Escape');
     await expect(closeConfirm).toHaveClass(/active/);
     await closeConfirm.getByRole('button', { name: 'Discard changes' }).click();
@@ -748,7 +755,8 @@ test('tree merge: Escape closes the side-by-side comparison opened from a review
         { name: 'Target', data: treeData([{ ...anna, id: 't_anna' }]) },
         { name: 'Source', data: treeData([{ ...anna, id: 's_anna' }]) });
     const wizard = await startMergeFromManager(page, 'Source', 'Target');
-    await row(wizard, 'Anna Sdilena (*1900) ↔').locator('.merge-btn-preview').click();
+    await row(wizard, 'Anna Sdilena');
+    await wizard.locator('#merge-pair .merge-btn-preview[data-action="compare"]').click();
     const compare = page.locator('.tree-compare-overlay');
     await expect(compare).toBeVisible();
     await page.keyboard.press('Escape');
@@ -772,7 +780,8 @@ test('tree merge: a merge auto-saved mid-review is offered again after a reload'
             ]),
         });
     const wizard = await startMergeFromManager(page, 'Source', 'Target');
-    await row(wizard, 'Bob Novy').locator('.merge-btn-skip').click();
+    await row(wizard, 'Bob Novy');
+    await decide(wizard, 'skip');
     // Wait for the debounced auto-save to land.
     await expect.poll(() => page.evaluate(async () =>
         (await window.Strom.MergerUI.getPendingMergeInfo()).current !== null), { timeout: 10_000 }).toBe(true);
@@ -783,5 +792,5 @@ test('tree merge: a merge auto-saved mid-review is offered again after a reload'
     await expect(pendingDialog).toHaveClass(/active/);
     await pendingDialog.locator('.pending-merge-item[data-session-id="current"] .btn-resume').click();
     await expect(page.locator('#merge-modal')).toBeVisible();
-    await expect(row(page.locator('#merge-modal'), 'Bob Novy')).toHaveClass(/skipped/);
+    await expect(await row(page.locator('#merge-modal'), 'Bob Novy')).toHaveAttribute('data-fate', 'skipped');
 });

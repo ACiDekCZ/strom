@@ -536,6 +536,47 @@ export async function mergeCompare(wizard: Locator): Promise<void> {
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
 }
 
+/** Step 2's groups: Maybe the same, The same (score 80+), New. */
+export type MergeGroup = 'maybe' | 'same' | 'new';
+
+/** A row of step 2's list (the shown group only). */
+export function mergeRow(wizard: Locator, text: string | RegExp): Locator {
+    return wizard.locator('#merge-match-list .merge-item').filter({ hasText: text });
+}
+
+/** Show a group of step 2 (its tab). */
+export async function mergeGroup(wizard: Locator, group: MergeGroup): Promise<void> {
+    const tab = wizard.locator(`.merge-tab[data-group="${group}"]`);
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+}
+
+/**
+ * Choose the pair (or new person) whose row says `text` in step 2, in
+ * whichever group it stands (`group` to look in one only): the pair shows on
+ * the right. Returns the chosen row.
+ */
+export async function mergePair(wizard: Locator, text: string | RegExp, group?: MergeGroup): Promise<Locator> {
+    const groups: MergeGroup[] = group ? [group] : ['maybe', 'same', 'new'];
+    for (const g of groups) {
+        const tab = wizard.locator(`.merge-tab[data-group="${g}"]`);
+        if (await tab.getAttribute('aria-selected') !== 'true') await mergeGroup(wizard, g);
+        const row = mergeRow(wizard, text);
+        if (await row.count() > 0) {
+            await row.first().click();
+            await expect(mergeRow(wizard, text).first()).toHaveAttribute('aria-selected', 'true');
+            return mergeRow(wizard, text).first();
+        }
+    }
+    throw new Error(`No pair "${String(text)}" in step 2`);
+}
+
+/** A decision on the pair whose row says `text`: same, new, another person (its dialog opens) or not added. */
+export async function mergeDecide(wizard: Locator, text: string | RegExp, decision: 'same' | 'new' | 'other' | 'skip', group?: MergeGroup): Promise<void> {
+    await mergePair(wizard, text, group);
+    await wizard.locator(`#merge-pair .merge-dec[data-dec="${decision}"]`).click();
+}
+
 /**
  * On to step 5 (What will happen; steps 3 and 4 are passed over in part A)
  * and press its primary button: the plan is written into a new tree
