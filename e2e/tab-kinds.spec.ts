@@ -204,9 +204,11 @@ test.describe('a toast over a bubble', () => {
 
     test('a toast coming while a bubble is open where it stands: above the bubble, 8 px over its top edge; the bubble open; back at its place when the bubble closes (round 6 §44)', async ({ page }) => {
         await setup(page);
-        await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
+        // Its place, read while it stands: the clock also runs in real time, and a loaded machine let a
+        // toast of 800 ms go before it was read. Gone on the clock afterwards.
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
         const own = await settledRect(page, '.toast.show');
-        await page.clock.runFor(1200);
+        await page.clock.runFor(10400);
         await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
         const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
         await family.hover();
@@ -230,9 +232,11 @@ test.describe('a toast over a bubble', () => {
     test('reduced motion: the toast stands over the bubble and back at once, no glide (round 6 §44)', async ({ page }) => {
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await setup(page);
-        await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
+        // Its place, read while it stands: the clock also runs in real time, and a loaded machine let a
+        // toast of 800 ms go before it was read. Gone on the clock afterwards.
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
         const own = await settledRect(page, '.toast.show');
-        await page.clock.runFor(1200);
+        await page.clock.runFor(10400);
         await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
         const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
         await family.hover();
@@ -328,9 +332,11 @@ test.describe('a toast over a bubble', () => {
 
     test('a press on the toast over the bubble leaves the bubble open: the toast stays under the finger', async ({ page }) => {
         await setup(page);
-        await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
+        // Its place, read while it stands: the clock also runs in real time, and a loaded machine let a
+        // toast of 800 ms go before it was read. Gone on the clock afterwards.
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
         const own = await settledRect(page, '.toast.show');
-        await page.clock.runFor(1200);
+        await page.clock.runFor(10400);
         await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
         const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
         await family.hover();
@@ -364,9 +370,11 @@ test.describe('a toast over a bubble', () => {
             await page.setViewportSize({ width: 390, height: 844 });
             await page.evaluate(() => window.Strom.ZoomPan.centerOnPerson('g1' as never));
             await page.clock.runFor(400);
-            await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
+            // Its place, read while it stands: the clock also runs in real time, and a loaded machine let a
+            // toast of 800 ms go before it was read. Gone on the clock afterwards.
+            await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
             const own = await settledRect(page, '.toast.show');
-            await page.clock.runFor(1200);
+            await page.clock.runFor(10400);
             await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
             const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
             await hold(page, family);
