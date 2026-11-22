@@ -12493,6 +12493,10 @@
             overflow: hidden;
             box-shadow: var(--shadow-sm);
         }
+        /* The selection's name takes the corner's room (up to the zoom buttons): cut with "…" only when it ends. */
+        .map-scope.sel-seg > .sel-opt { flex: none; }
+        .map-scope.sel-seg > .scope-sel-part { flex: 0 1 auto; min-width: 0; }
+        .map-scope .scope-name { flex: 0 1 auto; min-width: 0; max-width: none; }
         .map-kinds {
             position: relative;
             display: flex;
@@ -15465,7 +15469,11 @@
         .rod-picker-host .sp-rodpick-pfx { white-space: pre; }
         .rod-picker-host .sp-rodpick-v b { display: inline-block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; vertical-align: bottom; }
         .rod-picker-host details[open] > .sp-rodpick-btn { border-color: var(--primary); background: var(--read-scan-bg); }
-        .rod-picker-host .sp-rodpick-pop { display: flex; flex-direction: column; max-height: min(420px, calc(100vh - 200px)); box-shadow: var(--shadow-lg); }
+        /* As tall as the window allows under the toolbar (16 px to its bottom edge): all of it at 1440×900, a low window scrolls the list. */
+        .rod-picker-host .sp-rodpick-pop {
+            display: flex; flex-direction: column; box-shadow: var(--shadow-lg);
+            max-height: min(760px, calc(100vh - var(--toolbar-h, 56px) - 16px)); max-height: min(760px, calc(100dvh - var(--toolbar-h, 56px) - 16px));
+        }
         .rod-picker-host .sp-rodpick-list { flex: 1 1 auto; min-height: 0; max-height: none; }
         :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-x {
             box-sizing: border-box; display: grid; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 8px;

@@ -676,10 +676,11 @@ class ZoomPanClass {
     }
 
     /**
-     * The scale and centre that show every card with a margin, or null when
-     * nothing is rendered. The scale is not clamped.
+     * The scale and centre that show every card with a margin, clear of the
+     * floating pills (the band between them), or null when nothing is
+     * rendered. The scale is not clamped.
      */
-    private computeFit(): { scale: number; centerX: number; centerY: number } | null {
+    private computeFit(): { scale: number; centerX: number; centerY: number; bandTop: number; bandBottom: number } | null {
         const container = document.getElementById('tree-container');
         const canvas = document.getElementById('tree-canvas');
         if (!container || !canvas) return null;
@@ -700,9 +701,31 @@ class ZoomPanClass {
 
         const treeWidth = maxX - minX + 2 * FIT_PADDING;
         const treeHeight = maxY - minY + 2 * FIT_PADDING;
-        const scale = Math.min(container.clientWidth / treeWidth, container.clientHeight / treeHeight);
+        const band = this.pillFreeBand(container);
+        const scale = Math.min(container.clientWidth / treeWidth, (band.bottom - band.top) / treeHeight);
         if (!isFinite(scale) || scale <= 0) return null;
-        return { scale, centerX: (minX + maxX) / 2, centerY: (minY + maxY) / 2 };
+        return { scale, centerX: (minX + maxX) / 2, centerY: (minY + maxY) / 2, bandTop: band.top, bandBottom: band.bottom };
+    }
+
+    /**
+     * The tree's rows free of the floating pills (the selection's or a
+     * highlighted group's, the follow pill), in the container's coordinates:
+     * a pill in the upper half (a computer, a tablet) moves the top edge
+     * below it, one in the lower half (a phone, above the bottom bar) the
+     * bottom edge above it. The whole height when no pill is up.
+     */
+    private pillFreeBand(container: HTMLElement): { top: number; bottom: number } {
+        const h = container.clientHeight;
+        let top = 0, bottom = h;
+        const cr = container.getBoundingClientRect();
+        for (const p of treePillRects()) {
+            const pTop = p.top - cr.top, pBottom = p.bottom - cr.top;
+            if (pBottom <= 0 || pTop >= h || p.right <= cr.left || p.left >= cr.left + container.clientWidth) continue;
+            if ((pTop + pBottom) / 2 < h / 2) top = Math.max(top, pBottom + PILL_CLEARANCE);
+            else bottom = Math.min(bottom, pTop - PILL_CLEARANCE);
+        }
+        // A pill taking most of the view (a tiny window): the whole height, as before.
+        return bottom - top < h / 2 ? { top: 0, bottom: h } : { top, bottom };
     }
 
     /**
@@ -740,7 +763,7 @@ class ZoomPanClass {
         // Don't zoom in too much if the tree is small
         this.scale = Math.max(FIT_MIN_SCALE, Math.min(FIT_MAX_SCALE, fit.scale));
         this.tx = container.clientWidth / 2 - fit.centerX * this.scale;
-        this.ty = container.clientHeight / 2 - fit.centerY * this.scale;
+        this.ty = (fit.bandTop + fit.bandBottom) / 2 - fit.centerY * this.scale;
 
         this.apply();
     }

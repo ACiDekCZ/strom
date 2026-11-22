@@ -89,14 +89,19 @@ test.describe('the map scope Selection on a computer', () => {
         await expect(sel(page)).toHaveText('Selection▾');
     });
 
-    test('a long name is cut with an ellipsis, its whole in the title', async ({ page }) => {
+    test('a long name is cut with an ellipsis only where the corner\'s room ends, its whole in the title', async ({ page }) => {
+        // A narrow window: the name longer than the room left of the zoom buttons (a wide one shows it whole, selection-room.spec.ts).
+        await page.setViewportSize({ width: 700, height: 900 });
         await setup(page);
         await sel(page).click();
         await pickList(page, 'Letters to the parish offices');
         const name = sel(page).locator('.map-scope-name');
         await expect(name).toContainText('Letters to the parish offices');
         await expect.poll(() => name.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
-        expect((await name.boundingBox())!.width).toBeLessThanOrEqual(200.5);
+        // Cut at the room's end: the switch ends before the zoom buttons, the name wider than the old fixed 200 px.
+        const seg = (await page.locator('.map-scope').boundingBox())!;
+        expect(seg.x + seg.width).toBeLessThanOrEqual((await page.locator('.map-controls').boundingBox())!.x);
+        expect((await name.boundingBox())!.width).toBeGreaterThan(200);
         await expect(sel(page)).toHaveAttribute('title', /Letters to the parish offices of Lambda, Mu and the neighbouring villages/);
         await expect(marker(page, 'lambda')).toBeVisible();
         await expect(marker(page, 'mu')).toBeVisible();
