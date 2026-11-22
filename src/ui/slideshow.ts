@@ -23,6 +23,8 @@ import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT } from '../image-l
 import { imgStateOf, smallPortraitHtml, type ImgState } from './image-slot.js';
 import { personPhotoKey } from './person-photo-model.js';
 import { personInitials } from '../initials.js';
+import { isPoolRef } from '../image-ref.js';
+import { builtHtml } from '../image-src.js';
 
 let slideshowImagesWired = false;
 
@@ -32,7 +34,7 @@ let slideshowImagesWired = false;
  * (as without a photo, spec 116 §5).
  */
 export function slideshowPhotoHtml(person: Pick<Person, 'firstName' | 'lastName' | 'photo'>, state: ImgState): string {
-    const photo = person.photo && /^data:image\//.test(person.photo) ? person.photo : '';
+    const photo = person.photo && (/^data:image\//.test(person.photo) || isPoolRef(person.photo)) ? person.photo : '';
     if (!photo && state !== 'loading') return '';
     return `<div class="slideshow-photo">${smallPortraitHtml('slideshow-pic', photo, personInitials(person.firstName, person.lastName), state)}</div>`;
 }
@@ -195,7 +197,7 @@ export const slideshowMethods = uiModule({
             if (!person || !box) return;
             const html = slideshowPhotoHtml(person, imgStateOf(personPhotoKey(person.id), !!person.photo));
             const shown = box.querySelector('.slideshow-photo');
-            if (shown?.outerHTML === html) return;
+            if (shown && builtHtml(shown) === html) return;
             if (shown) shown.remove();
             if (html) box.insertAdjacentHTML('afterbegin', html);
         };

@@ -11,11 +11,17 @@
  * The page disables browser zoom (viewport user-scalable=no), so the viewer
  * does its own: the stage takes all touches (touch-action: none) and the math
  * lives in src/image-zoom.ts.
+ *
+ * An image is a data URL (or another address) or a pooled image's reference
+ * (`\u0000sm:…`, image-src.ts): the viewer reads such an image into an
+ * object URL of its own, revoked when it closes or goes to another item.
  */
 
 import { strings } from '../strings.js';
 import { iconSvg } from '../icons.js';
 import { busySpinHtml } from './busy.js';
+import { poolIdOf } from '../image-ref.js';
+import { imageBlob } from '../image-src.js';
 import {
     ZoomView, ZoomBox, fitView, clampView, zoomAt, panBy, zoomPercent, isFitted, scaleLimits, ZOOM_STEP,
 } from '../image-zoom.js';
@@ -315,12 +321,61 @@ let originalAbort: AbortController | null = null;
 
 function mediaBar(): HTMLElement | null { return el('image-viewer-media'); }
 
+// ==================== POOLED IMAGES ====================
+
+/** Pool id → the object URL the viewer made for it (revoked by releaseHeld). */
+const heldUrls = new Map<string, string>();
+/** Bumped by releaseHeld: a read still running when the viewer moved on makes no URL. */
+let heldEpoch = 0;
+/** Bumped by every image put on the stage: a late read of an earlier one is dropped. */
+let stageToken = 0;
+
+/** Let the object URLs the viewer made go (it closed, or went to another item). */
+function releaseHeld(): void {
+    heldEpoch++;
+    for (const url of heldUrls.values()) URL.revokeObjectURL(url);
+    heldUrls.clear();
+}
+
+/**
+ * The address to show `value` from: itself, or for a pooled image an object
+ * URL of the viewer's own (at once when it has one, else once read; '' when
+ * the pool gives none).
+ */
+function viewerSrc(value: string): string | Promise<string> {
+    const id = poolIdOf(value);
+    if (!id) return value;
+    const have = heldUrls.get(id);
+    if (have) return have;
+    const epoch = heldEpoch;
+    return imageBlob(value).then((blob) => {
+        if (!blob || epoch !== heldEpoch) return '';
+        const again = heldUrls.get(id);
+        if (again) return again;
+        const url = URL.createObjectURL(blob);
+        heldUrls.set(id, url);
+        return url;
+    }, () => '');
+}
+
+/** The object URLs the viewer holds now (tests). */
+export function viewerHeldUrls(): string[] {
+    return [...heldUrls.values()];
+}
+
 /** Show an image in the stage, keeping the view fitted. */
 function showSrc(src: string): void {
     const image = img();
     if (!image) return;
-    image.onload = () => { measure(); fit(); image.style.visibility = ''; };
-    image.src = src;
+    const token = ++stageToken;
+    const put = (url: string): void => {
+        if (!url || token !== stageToken || !isOpen()) return;
+        image.onload = () => { measure(); fit(); image.style.visibility = ''; };
+        image.src = url;
+    };
+    const at = viewerSrc(src);
+    if (typeof at === 'string') put(at);
+    else void at.then(put);
 }
 
 /** Draw the media bar for `original`: the button, the progress, or the chip with "Back to preview". */
@@ -438,6 +493,23 @@ export function openImageViewer(dataUrl: string, close?: () => void, original?: 
     const ov = overlay();
     if (!image || !ov || !dataUrl) return;
     if (list && isOpen()) closeImageViewer();
+    // A pooled image is read first; one the pool does not give opens nothing (as no image).
+    const at = viewerSrc(dataUrl);
+    if (typeof at !== 'string') {
+        const token = ++stageToken;
+        void at.then((url) => {
+            if (url && token === stageToken) openOn(image, ov, dataUrl, url, close, original, whole);
+        });
+        return;
+    }
+    openOn(image, ov, dataUrl, at, close, original, whole);
+}
+
+/** openImageViewer once the image's address is known (`src`: the value's, `value`: the image as given). */
+function openOn(image: HTMLImageElement, ov: HTMLElement, value: string, src: string, close?: () => void, original?: ViewerOriginal, whole?: string | null): void {
+    if (!src) return;
+    const dataUrl = value;
+    stageToken++;
     previewSrc = dataUrl;
     renderMediaBar(original);
     renderWholeSwitch(dataUrl, whole ?? undefined);
@@ -454,7 +526,7 @@ export function openImageViewer(dataUrl: string, close?: () => void, original?: 
     };
     image.style.visibility = 'hidden';
     image.onload = show;
-    image.src = dataUrl;
+    image.src = src;
     ov.classList.add('active');
     if (image.complete && image.naturalWidth > 0) show();
     document.addEventListener('keydown', onKey, true);
@@ -469,6 +541,8 @@ export function closeImageViewer(): void {
     ov.classList.remove('active', 'is-zoomed', 'is-panning', 'is-animating');
     const image = img();
     if (image) { image.onload = null; image.removeAttribute('src'); image.style.transform = ''; }
+    stageToken++;
+    releaseHeld();
     // The original stays in memory only while it is shown.
     originalAbort?.abort();
     originalAbort = null;
@@ -550,6 +624,21 @@ export function viewerListIndex(): number {
 }
 
 function listImage(src: string, preview: string | null | undefined, failed: (() => void) | undefined, token: number): void {
+    const a = viewerSrc(src);
+    const b = preview ? viewerSrc(preview) : preview;
+    if (typeof a === 'string' && (b === null || b === undefined || typeof b === 'string')) {
+        listImageAt(a, b, failed, token);
+        return;
+    }
+    // A pooled image (or its preview): read first, then as any other.
+    void Promise.all([a, b]).then(([s, p]) => {
+        if (token !== listToken || !isOpen()) return;
+        if (!s && !p) { failed?.(); return; }
+        listImageAt(s || p!, p, failed, token);
+    });
+}
+
+function listImageAt(src: string, preview: string | null | undefined, failed: (() => void) | undefined, token: number): void {
     const image = img();
     const ov = overlay();
     const card = el('image-viewer-card');
@@ -666,6 +755,8 @@ function drawListItem(): void {
     const panel = el('image-viewer-panel');
     if (!l || !ov || !panel) return;
     const token = ++listToken;
+    // The object URLs of the item before go (its image stays drawn until this one's comes).
+    releaseHeld();
     listNote(null);
     pointers.clear();
     gesture = null;

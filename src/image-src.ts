@@ -8,27 +8,48 @@
  * - imageUrlNow(value): the same, synchronously, from what is at hand ('' for
  *   a reference not read yet).
  * - imageBlob(value): the image's bytes as a Blob (a download, a PDF).
+ * - setImageSource / showsImage / builtHtml: the same for elements in the DOM.
+ *
+ * A pooled image becomes an object URL or a Blob only as a raster image
+ * (JPEG, PNG, WebP, GIF) or a PDF; a record of any other type, one the pool
+ * does not have and an encrypted one while the session is locked give
+ * nothing (the place shows no picture).
  *
  * Object URLs are kept in a small LRU cache, bounded by bytes and count; one
- * pushed out is revoked (the browser frees its bytes). Places built as HTML
+ * pushed out is revoked (the browser frees its bytes). An image on screen
+ * (a hydrator's element in view) is not pushed out: it goes once off screen. Places built as HTML
  * text write imgSrcAttr(value): a reference becomes a transparent placeholder
  * with `data-pool-ref`, and the hydrator (startImageHydrator) puts the image
  * in while the element is on screen and lets it go when it is not.
  */
 
 import { loadImageBlobs, dataUrlBlob } from './media-pool.js';
-import { POOL_REF, poolIdOf, isPoolRef } from './image-ref.js';
+import { POOL_REF, poolIdOf, isPoolRef, IMAGE_PLACEHOLDER, POOL_REF_ATTR, imageAddrAttr } from './image-ref.js';
 
 /** The cache keeps object URLs of at most this many bytes … */
 export const IMAGE_CACHE_MAX_BYTES = 64 * 1024 * 1024;
 /** … and at most this many images. */
 export const IMAGE_CACHE_MAX_COUNT = 400;
 
-/** A transparent 1×1 GIF: what an element shows until its image is in. */
-export const IMAGE_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+/** The placeholder and the attribute naming an element's pooled image (image-ref.ts). */
+export { IMAGE_PLACEHOLDER, POOL_REF_ATTR };
 
-/** The attribute naming the pooled image of an element built by imgSrcAttr. */
-export const POOL_REF_ATTR = 'data-pool-ref';
+/**
+ * The only types a pooled image is shown or handed on as: the raster images
+ * the load sanitizer lets in and a PDF (a file). Anything else in the pool
+ * (a forged or a damaged record) gives nothing — no object URL of another
+ * type (an SVG or HTML page with script) is ever made from it.
+ */
+const SHOWN_TYPE = /^(image\/(jpeg|png|webp|gif)|application\/pdf)$/i;
+
+/** Whether a Blob of this type may be shown (SHOWN_TYPE). */
+export function isShownImageType(type: string): boolean {
+    return SHOWN_TYPE.test(type.trim());
+}
+
+function shown(blob: Blob | null | undefined): Blob | null {
+    return blob && isShownImageType(blob.type) ? blob : null;
+}
 
 const ID = /^[pe]:[0-9a-f]+$/;
 
@@ -74,13 +95,44 @@ function remember(id: string, blob: Blob): string {
     const entry = { url: URL.createObjectURL(blob), size: blob.size };
     cache.set(id, entry);
     cacheBytes += entry.size;
-    // The oldest go; the one just put in always stays.
+    trim(id);
+    return entry.url;
+}
+
+/** Tells whether an image is on screen somewhere (a hydrator): its object URL is not let go then. */
+type OnScreen = (id: string) => boolean;
+const onScreenChecks = new Set<OnScreen>();
+
+function onScreen(id: string): boolean {
+    for (const check of onScreenChecks) if (check(id)) return true;
+    return false;
+}
+
+/**
+ * Keep the cache to its bounds: the least recently used go, except `keep`
+ * (the one just put in) and those on screen — the cache may stay over its
+ * bounds while more is on screen than they allow (else the images on screen
+ * would push each other out and be read again and again); they go once off
+ * screen (trimImageCache).
+ */
+function trim(keep?: string): void {
     for (const [oldId, oldEntry] of cache) {
-        if (cache.size <= 1 || (cacheBytes <= limits.bytes && cache.size <= limits.count)) break;
-        if (oldId === id) continue;
+        if (cacheBytes <= limits.bytes && cache.size <= limits.count) break;
+        if (oldId === keep || onScreen(oldId)) continue;
         revoke(oldId, oldEntry);
     }
-    return entry.url;
+}
+
+let trimQueued = false;
+
+/** Trim the cache soon (images went off screen); several asks in one tick, one trim. */
+function trimSoon(): void {
+    if (trimQueued) return;
+    trimQueued = true;
+    queueMicrotask(() => {
+        trimQueued = false;
+        trim();
+    });
 }
 
 /** Revoke every object URL (a lock of the session, tests). */
@@ -92,6 +144,7 @@ export function releaseImageUrls(): void {
 export function setImageCacheLimits(bytes = IMAGE_CACHE_MAX_BYTES, count = IMAGE_CACHE_MAX_COUNT): void {
     limits.bytes = bytes;
     limits.count = count;
+    trim();
 }
 
 /** What the cache holds now (tests, diagnostics). */
@@ -112,7 +165,7 @@ function flushQueue(): void {
     loadImageBlobs(ids).then((blobs) => {
         for (const id of ids) {
             inflight.delete(id);
-            const blob = blobs.get(id);
+            const blob = shown(blobs.get(id));
             batch.get(id)!.resolve(blob ? remember(id, blob) : '');
         }
     }, (err) => {
@@ -157,18 +210,17 @@ export function imageUrlNow(value: string): string {
     return touch(id)?.url ?? '';
 }
 
-/** The image's bytes as a Blob of its type (null: none, a locked or missing pooled image, not a data URL). */
+/**
+ * The image's bytes as a Blob of its type (null: none, a locked or missing
+ * pooled image, a pooled one of a type not shown, not a data URL).
+ */
 export async function imageBlob(value: string): Promise<Blob | null> {
     const id = poolIdOf(value);
     if (!id) return dataUrlBlob(value);
-    return (await loadImageBlobs([id])).get(id) ?? null;
+    return shown((await loadImageBlobs([id])).get(id));
 }
 
 // ---- HTML text ----
-
-function esc(text: string): string {
-    return text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
-}
 
 /**
  * The address attributes of an <img> built as HTML text: `src="…"` for a data
@@ -177,10 +229,57 @@ function esc(text: string): string {
  * screen (starting it when there is a document).
  */
 export function imgSrcAttr(value: string): string {
+    if (poolIdOf(value) && typeof document !== 'undefined') startImageHydrator(document);
+    return imageAddrAttr(value);
+}
+
+// ---- elements in the DOM ----
+
+/**
+ * Show `value` in an element (an <img>, an SVG <image>): an address as its
+ * src (href), a reference as `data-pool-ref` with its object URL when at
+ * hand, else the placeholder until the hydrator puts it in.
+ */
+export function setImageSource(el: Element, value: string): void {
+    const attr = addressAttr(el);
     const id = poolIdOf(value);
-    if (!id) return `src="${esc(value)}"`;
-    if (typeof document !== 'undefined') startImageHydrator(document);
-    return `src="${IMAGE_PLACEHOLDER}" ${POOL_REF_ATTR}="${id}"`;
+    if (!id) {
+        if (el.hasAttribute(POOL_REF_ATTR)) el.removeAttribute(POOL_REF_ATTR);
+        el.setAttribute(attr, value);
+        return;
+    }
+    el.setAttribute(attr, imageUrlNow(value) || IMAGE_PLACEHOLDER);
+    el.setAttribute(POOL_REF_ATTR, id);
+    const doc = el.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
+    if (doc) startImageHydrator(doc);
+}
+
+/** Whether an element shows `value` already (a reference: by its id, whatever object URL it has now). */
+export function showsImage(el: Element | null | undefined, value: string): boolean {
+    if (!el) return false;
+    const id = poolIdOf(value);
+    if (id) return el.getAttribute(POOL_REF_ATTR) === id;
+    return !el.hasAttribute(POOL_REF_ATTR) && el.getAttribute(addressAttr(el)) === value;
+}
+
+/** Whether two elements show the same image (pooled ones by their id, whatever object URL each has now). */
+export function sameImgSource(a: Element, b: Element): boolean {
+    const ia = a.getAttribute(POOL_REF_ATTR), ib = b.getAttribute(POOL_REF_ATTR);
+    if (ia !== null || ib !== null) return ia === ib;
+    return a.getAttribute(addressAttr(a)) === b.getAttribute(addressAttr(b));
+}
+
+/**
+ * An element's HTML as it was built: the object URLs the hydrator put in
+ * since read back as the placeholder (a place comparing what it drew with
+ * what it would draw now).
+ */
+export function builtHtml(el: Element): string {
+    if (!el.hasAttribute(POOL_REF_ATTR) && !el.querySelector(`[${POOL_REF_ATTR}]`)) return el.outerHTML;
+    const copy = el.cloneNode(true) as Element;
+    const all = [copy, ...copy.querySelectorAll(`[${POOL_REF_ATTR}]`)];
+    for (const x of all) if (x.hasAttribute(POOL_REF_ATTR)) x.setAttribute(addressAttr(x), IMAGE_PLACEHOLDER);
+    return copy.outerHTML;
 }
 
 // ---- the hydrator ----
@@ -212,6 +311,33 @@ export function startImageHydrator(doc: Document): void {
 
     const visible = new Set<Element>();
     const watched = new Set<Element>();
+    /** The watched elements by the id they carry (one image in several places: the card and its tooltip). */
+    const byId = new Map<string, Set<Element>>();
+    const idOf = new Map<Element, string>();
+
+    const index = (el: Element): void => {
+        const id = el.getAttribute(POOL_REF_ATTR) ?? '';
+        const was = idOf.get(el);
+        if (was === id) return;
+        if (was !== undefined) {
+            const set = byId.get(was);
+            set?.delete(el);
+            if (set && set.size === 0) byId.delete(was);
+        }
+        idOf.set(el, id);
+        let set = byId.get(id);
+        if (!set) { set = new Set(); byId.set(id, set); }
+        set.add(el);
+    };
+
+    const unindex = (el: Element): void => {
+        const was = idOf.get(el);
+        if (was === undefined) return;
+        idOf.delete(el);
+        const set = byId.get(was);
+        set?.delete(el);
+        if (set && set.size === 0) byId.delete(was);
+    };
 
     const fill = (el: Element): void => {
         const id = el.getAttribute(POOL_REF_ATTR);
@@ -223,8 +349,14 @@ export function startImageHydrator(doc: Document): void {
             return;
         }
         void imageUrl(POOL_REF + id).then((url) => {
+            if (!url) return;
             // Still the same image, still wanted.
-            if (url && el.getAttribute(POOL_REF_ATTR) === id && visible.has(el)) el.setAttribute(attr, url);
+            if (el.getAttribute(POOL_REF_ATTR) === id && visible.has(el)) el.setAttribute(attr, url);
+            // The same image elsewhere waiting for it (a card's tooltip): in as well, no wait when it shows.
+            for (const x of byId.get(id) ?? []) {
+                const a = addressAttr(x);
+                if (x !== el && x.getAttribute(POOL_REF_ATTR) === id && x.getAttribute(a) === IMAGE_PLACEHOLDER) x.setAttribute(a, url);
+            }
         }, () => { /* left as the placeholder */ });
     };
 
@@ -234,7 +366,16 @@ export function startImageHydrator(doc: Document): void {
         const src = el.getAttribute(attr);
         if (!id || !src || src === IMAGE_PLACEHOLDER) return;
         if (imageUrlNow(POOL_REF + id) !== src) el.setAttribute(attr, IMAGE_PLACEHOLDER);
+        // Off screen: the cache may let it go now, if over its bounds.
+        trimSoon();
     };
+
+    /** An image of this document on screen (or about to be): the cache keeps its object URL. */
+    const shownHere: OnScreen = (id) => {
+        for (const el of byId.get(id) ?? []) if (visible.has(el)) return true;
+        return false;
+    };
+    onScreenChecks.add(shownHere);
 
     const io = new IO((entries) => {
         for (const e of entries) {
@@ -249,8 +390,9 @@ export function startImageHydrator(doc: Document): void {
     }, { rootMargin: '300px' });
 
     const watch = (el: Element): void => {
-        if (watched.has(el)) { fill(el); return; }
+        if (watched.has(el)) { index(el); fill(el); return; }
         watched.add(el);
+        index(el);
         // At hand already: in before the next paint, no placeholder seen.
         const id = el.getAttribute(POOL_REF_ATTR);
         if (id) {
@@ -262,7 +404,8 @@ export function startImageHydrator(doc: Document): void {
 
     const unwatch = (el: Element): void => {
         if (!watched.delete(el)) return;
-        visible.delete(el);
+        unindex(el);
+        if (visible.delete(el)) trimSoon();
         io.unobserve(el);
     };
 
@@ -291,8 +434,8 @@ export function startImageHydrator(doc: Document): void {
     scan(root, true);
 
     // A URL pushed out of the cache: elements off screen showing it go back to the placeholder.
-    const off = onImageUrlRevoked((_id, url) => {
-        for (const el of watched) {
+    const off = onImageUrlRevoked((id, url) => {
+        for (const el of byId.get(id) ?? []) {
             if (!visible.has(el) && el.getAttribute(addressAttr(el)) === url) el.setAttribute(addressAttr(el), IMAGE_PLACEHOLDER);
         }
     });
@@ -312,9 +455,12 @@ export function startImageHydrator(doc: Document): void {
             mo.disconnect();
             io.disconnect();
             off();
+            onScreenChecks.delete(shownHere);
             doc.removeEventListener('error', onError, true);
             watched.clear();
             visible.clear();
+            byId.clear();
+            idOf.clear();
         },
     });
 }

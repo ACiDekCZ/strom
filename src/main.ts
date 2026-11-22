@@ -32,6 +32,7 @@ import { FILE_COPY_EVENT, RESEARCH_BASE_EVENT, UPDATE_BACKUP_FAILED_EVENT } from
 import { SNAPSHOTS_TRIMMED_EVENT, SNAPSHOT_CREATED_EVENT, SnapshotTrim } from './snapshots.js';
 import { collectPoolGarbage } from './media-pool.js';
 import { backfillImageMeta } from './image-meta-backfill.js';
+import { imageCacheStats, setImageCacheLimits, releaseImageUrls } from './image-src.js';
 import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
@@ -72,6 +73,11 @@ declare global {
             SettingsManager: typeof SettingsManager;
             TreePreview: typeof TreePreview;
             TreeCompare: typeof TreeCompare;
+            Images: {
+                imageCacheStats: typeof imageCacheStats;
+                setImageCacheLimits: typeof setImageCacheLimits;
+                releaseImageUrls: typeof releaseImageUrls;
+            };
             /** The main window's registry of its satellite windows (spec 079; absent in other windows). */
             Windows?: WindowRegistry;
         };
@@ -646,7 +652,9 @@ function initShell(): DebugOptions {
         MergerUI,
         SettingsManager,
         TreePreview,
-        TreeCompare
+        TreeCompare,
+        // The pooled images' object URLs (image-src.ts): their count and bounds.
+        Images: { imageCacheStats, setImageCacheLimits, releaseImageUrls },
     };
 
     // Parse debug options from URL

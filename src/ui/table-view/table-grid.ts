@@ -54,6 +54,8 @@ import { branchSignsHtml } from '../../branch-sign.js';
 import { imgStateAttr, waitingTileHtml } from '../image-slot.js';
 import { type BranchMarker } from '../../types.js';
 import { BRANCH_MARKERS } from '../../model-values.js';
+import { isPoolRef } from '../../image-ref.js';
+import { imgSrcAttr } from '../../image-src.js';
 
 export interface GridInput {
     model: TableModel;
@@ -455,7 +457,9 @@ export function researchHtml(d: ResearchCellDetail, hit = ''): string {
 /**
  * A picture in a cell by an object URL of its own (spec 107 §8), made once
  * per picture: the rows drawn anew on every scroll do not carry the whole
- * photo in their markup.
+ * photo in their markup. A pooled image's reference is not kept here: its
+ * object URL is the resolver's, by the image's id (imgSrcAttr, image-src.ts),
+ * put in while the cell is on screen and let go after.
  */
 const thumbUrls = new Map<string, string>();
 function thumbUrl(dataUrl: string): string {
@@ -492,7 +496,9 @@ export function thumbHtml(value: Pick<CellValue, 'thumb' | 'thumbState'>, col: C
     if (st === 'failed' && !value.thumb) {
         return waitingTileHtml('failed', { tag: 'span', cls: 'tv-thumb', px: 0, glyph: 11, attrs: ` role="img" aria-label="${label}"` });
     }
-    const img = value.thumb ? `<img src="${esc(thumbUrl(value.thumb))}" loading="lazy" decoding="async" alt="">` : '';
+    const img = !value.thumb ? ''
+        : isPoolRef(value.thumb) ? `<img ${imgSrcAttr(value.thumb)} loading="lazy" decoding="async" alt="">`
+            : `<img src="${esc(thumbUrl(value.thumb))}" loading="lazy" decoding="async" alt="">`;
     return `<button type="button" class="tv-thumb" tabindex="-1" aria-label="${label}"${imgStateAttr(st === 'failed' ? 'none' : st ?? 'none')}>${img}</button>`;
 }
 

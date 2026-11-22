@@ -17,6 +17,8 @@ import { isPendingImageUrl, pendingImageOf } from '../research-image-refs.js';
 import { sharedPhaseDelay } from '../card-signals.js';
 import { iconSvg } from '../icons.js';
 import { strings } from '../strings.js';
+import { isPoolRef } from '../image-ref.js';
+import { imgSrcAttr, imageUrl, imageUrlNow, setImageSource, showsImage } from '../image-src.js';
 
 /** none: no image on its way (as always); loaded: it came (in place, fading in). */
 export type ImgState = 'none' | 'loading' | 'refresh' | 'loaded' | 'failed';
@@ -62,14 +64,23 @@ export function imgPhaseStyle(now?: number): string {
  * window asks for reduced motion; the same image stays as it is). A veil
  * that starts here takes the window's phase, so it pulses with the others.
  * Nothing else of the host's content changes (its initials, a tile's glyph
- * are the caller's).
+ * are the caller's). `src` may be a pooled image's reference: the host
+ * keeps what it shows until the image is read, then it fades in the same
+ * way (one the pool does not give: the state is taken off, nothing else).
  */
 export function setImgState(host: HTMLElement, state: ImgState, src?: string): void {
     const was = host.getAttribute(ATTR);
     if (state === 'loaded') {
         const img = host.querySelector('img');
-        if (!src || img?.getAttribute('src') === src) {
+        if (!src || showsImage(img, src)) {
             if (was !== null) host.removeAttribute(ATTR);
+            return;
+        }
+        if (isPoolRef(src) && !imageUrlNow(src)) {
+            void imageUrl(src).then((url) => {
+                if (url) setImgState(host, 'loaded', src);
+                else if (host.getAttribute(ATTR) !== null) host.removeAttribute(ATTR);
+            }, () => { if (host.getAttribute(ATTR) !== null) host.removeAttribute(ATTR); });
             return;
         }
         const win = host.ownerDocument?.defaultView ?? null;
@@ -78,7 +89,7 @@ export function setImgState(host: HTMLElement, state: ImgState, src?: string): v
         // The attribute stays 'loaded' while the image fades in (index.html: the transition is under [data-img-state]).
         host.setAttribute(ATTR, 'loaded');
         if (fade) fresh.classList.add('is-arriving');
-        fresh.setAttribute('src', src);
+        setImageSource(fresh, src);
         fresh.setAttribute('alt', '');
         host.replaceChildren(fresh);
         if (fade) arriveNext(fresh, win);
@@ -104,16 +115,17 @@ export function imgGlyphHtml(kind: 'image' | 'image-off', note?: string, size = 
  * photo (an older one coming anew under the veil), or the person's
  * initials in the photo's place — under the veil while it comes, calm when
  * it did not come (`failedTitle` then says so). '' without a photo and
- * without one on its way. `photo` is the field's value: a stand-in is none.
+ * without one on its way. `photo` is the field's value (an image's data URL
+ * or a pooled image's reference): a stand-in is none.
  * The host carries `cls` and `attrs` (` data-x="…"`, escaped by the caller)
  * and is `aria-hidden` (a picture of the row).
  */
 export function smallPortraitHtml(cls: string, photo: string | undefined, initials: string, state: ImgState, failedTitle?: string, attrs = ''): string {
-    const real = photo && /^data:image\//.test(photo) && !isPendingImageUrl(photo) ? photo : '';
+    const real = photo && (/^data:image\//.test(photo) || isPoolRef(photo)) && !isPendingImageUrl(photo) ? photo : '';
     if (real && state === 'refresh') {
-        return `<span class="${cls} img-slot-pic"${attrs}${imgStateAttr('refresh')} aria-hidden="true"><img src="${esc(real)}" alt=""></span>`;
+        return `<span class="${cls} img-slot-pic"${attrs}${imgStateAttr('refresh')} aria-hidden="true"><img ${imgSrcAttr(real)} alt=""></span>`;
     }
-    if (real) return `<img class="${cls}"${attrs} src="${esc(real)}" alt="" aria-hidden="true">`;
+    if (real) return `<img class="${cls}"${attrs} ${imgSrcAttr(real)} alt="" aria-hidden="true">`;
     if (state !== 'loading' && state !== 'refresh' && state !== 'failed') return '';
     const title = state === 'failed' && failedTitle ? ` title="${esc(failedTitle)}"` : '';
     return `<span class="${cls} img-slot-pic is-initials"${attrs}${state === 'failed' ? '' : imgStateAttr('loading')}${title} aria-hidden="true">`
@@ -257,7 +269,7 @@ export function cardImageView(state: ImgState, hasPhoto: boolean): CardImageView
 export function cardAvatarHtml(view: CardImageView, photo: string | undefined, initials: string, sha: string | undefined, phase: string): string {
     const veil = view.avatar === 'loading' || view.avatar === 'refresh';
     const attrs = sha ? ` data-img-sha="${esc(sha)}"${imgStateAttr(view.avatar)}${veil ? ` style="--img-phase:${esc(phase)}"` : ''}` : '';
-    const inner = photo ? `<img src="${esc(photo)}" alt="">` : `<span class="avatar-initials">${esc(initials)}</span>`;
+    const inner = photo ? `<img ${imgSrcAttr(photo)} alt="">` : `<span class="avatar-initials">${esc(initials)}</span>`;
     return `<div class="card-avatar"${attrs}>${inner}</div>`;
 }
 
@@ -273,7 +285,7 @@ export function cardImageRowHtml(row: CardImageView['ttRow']): string {
 
 /** The tooltip's photo column ('' without one). */
 export function cardTooltipPhotoHtml(view: CardImageView, photo: string | undefined, initials: string): string {
-    if (view.ttPhoto === 'img' && photo) return `<img class="tt-photo" src="${esc(photo)}" alt="">`;
+    if (view.ttPhoto === 'img' && photo) return `<img class="tt-photo" ${imgSrcAttr(photo)} alt="">`;
     if (view.ttPhoto === 'initials') {
         return `<span class="tt-photo"${imgStateAttr('loading')}><span class="avatar-initials">${esc(initials)}</span></span>`;
     }

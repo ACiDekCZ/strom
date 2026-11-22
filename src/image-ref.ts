@@ -35,3 +35,25 @@ export function looksLikePoolRef(value: unknown): value is string {
 export function isImageValue(value: unknown): value is string {
     return typeof value === 'string' && (value.startsWith('data:') || isPoolRef(value));
 }
+
+/** A transparent 1×1 GIF: what an element shows until its pooled image is in. */
+export const IMAGE_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+/** The attribute naming the pooled image of an element built as HTML text (image-src.ts fills it). */
+export const POOL_REF_ATTR = 'data-pool-ref';
+
+function escAttr(text: string): string {
+    return text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}
+
+/**
+ * The address attribute of an image built as HTML or SVG text, without
+ * starting anything (image-src.ts imgSrcAttr starts the hydrator too):
+ * `<attr>="…"` for a data URL or any other address, for a reference the
+ * placeholder and `data-pool-ref="<id>"`.
+ */
+export function imageAddrAttr(value: string, attr: 'src' | 'href' = 'src'): string {
+    const id = poolIdOf(value);
+    if (!id) return `${attr}="${escAttr(value)}"`;
+    return `${attr}="${IMAGE_PLACEHOLDER}" ${POOL_REF_ATTR}="${id}"`;
+}

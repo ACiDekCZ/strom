@@ -17,6 +17,7 @@
 import { StromData, Person, PersonId, ParentChildRelType } from './types.js';
 import { parentSlots } from './model-values.js';
 import { dateSortKey } from './dates.js';
+import { imageAddrAttr } from './image-ref.js';
 import { shownName, shownNameFull } from './person-name.js';
 import { strings } from './strings.js';
 import { compareMarriages, marriageDates } from './marriage-order.js';
@@ -378,8 +379,10 @@ export function buildFanModel(data: StromData, focusId: PersonId, opts: number |
 
 /**
  * A person's portrait in the fan (spec 118 §6): the photo (`href`, a square
- * data URL), or a photo on its way — the initials on grey under a veil, or
- * the stored photo under it while a newer one comes (spec 116).
+ * data URL, or a pooled image's reference: the placeholder with
+ * `data-pool-ref`, which image-src.ts fills on screen), or a photo on its
+ * way — the initials on grey under a veil, or the stored photo under it
+ * while a newer one comes (spec 116).
  */
 export type FanPortrait = { href: string; loading?: false } | { loading: true; initials: string; href?: string };
 
@@ -734,7 +737,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         let out = '';
         if (ph.href) {
             if (photoFilter) photoFilterUsed = true;
-            out += `<image href="${esc(ph.href)}" x="${fmt(cx - r)}" y="${fmt(cy - r)}" width="${fmt(2 * r)}" height="${fmt(2 * r)}"`
+            out += `<image ${imageAddrAttr(ph.href, 'href')} x="${fmt(cx - r)}" y="${fmt(cy - r)}" width="${fmt(2 * r)}" height="${fmt(2 * r)}"`
                 + ` preserveAspectRatio="xMidYMid slice" clip-path="url(#${clip})"${photoFilter ? ` filter="url(#${uid}${photoFilter})"` : ''}/>`;
         } else if (ph.loading) {
             out += `<circle class="fan-photo-wait" ${c}/>`

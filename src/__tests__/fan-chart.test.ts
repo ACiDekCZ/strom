@@ -852,6 +852,17 @@ describe('portraits (spec 118 §6)', () => {
         expect(buildFanSvg(m, { ...svgOpts, uid: 'pn', measure: estimate, ppu: 2, portrait: () => null })).not.toContain('fan-photo');
     });
 
+    it('a pooled image\'s reference: the placeholder with its id, filled on screen (spec 135)', () => {
+        const id = 'p:' + 'ab'.repeat(20);
+        const d = withPhotos(3);
+        for (const p of Object.values(d.persons)) p.photo = '\u0000sm:' + id;
+        const m = buildFanModel(d, 'a1' as PersonId, { generations: 3, shape: 'half' })!;
+        const svg = buildFanSvg(m, { ...svgOpts, uid: 'pr', measure: estimate, ppu: 2, portrait: photoOf });
+        expect(images(svg)).toBe(7);
+        expect((svg.match(new RegExp(`<image href="data:image/gif;base64,[^"]+" data-pool-ref="${id}" x="-?[0-9.]+" y="-?[0-9.]+"`, 'g')) ?? []).length).toBe(7);
+        expect(svg).not.toContain('\u0000');
+    });
+
     it('two-way: the centre and the ancestors only, never the descendants', () => {
         const d = withPhotos(3);
         d.persons['k1' as PersonId] = person('k1', 'male', ['a1'], { photo: PHOTO });

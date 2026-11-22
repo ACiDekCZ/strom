@@ -57,6 +57,7 @@ import { canEditUnionPhoto, photoKb, unionPhotoKey } from './union-photo-ui.js';
 import { IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, imageLoads, type ImagesArrivedDetail } from '../image-loads.js';
 import { imgStateOf, imgGlyphHtml, imgPhaseStyle, setImgState, type ImgState } from './image-slot.js';
 import { busySpinHtml } from './busy.js';
+import { imgSrcAttr } from '../image-src.js';
 import { unionPhotoCaption } from '../union-photo.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
@@ -467,9 +468,9 @@ export const relationshipsPanelMethods = uiModule({
         const shape = `--pg-ratio:${ratio.toFixed(3)}`;
         let thumb = '';
         if (state === 'refresh' && photo) {
-            thumb = `<span class="pg-photo-thumb" data-img-state="refresh" style="${shape};${imgPhaseStyle()}"><img src="${this.escapeHtml(photo)}" alt=""></span>`;
+            thumb = `<span class="pg-photo-thumb" data-img-state="refresh" style="${shape};${imgPhaseStyle()}"><img ${imgSrcAttr(photo)} alt=""></span>`;
         } else if (photo) {
-            thumb = `<button type="button" class="pg-photo-thumb" data-partnership-id="${id}" aria-label="${caption}"><img src="${this.escapeHtml(photo)}" alt=""></button>`;
+            thumb = `<button type="button" class="pg-photo-thumb" data-partnership-id="${id}" aria-label="${caption}"><img ${imgSrcAttr(photo)} alt=""></button>`;
         } else if (waiting) {
             thumb = `<span class="pg-photo-thumb pg-photo-wait" data-img-state="loading" role="img" aria-label="${this.escapeHtml(p.ariaLoading)}" style="${shape};${imgPhaseStyle()}">${imgGlyphHtml('image', undefined, 18)}</span>`;
         } else if (failed) {

@@ -44,6 +44,8 @@ import { syncFanLegendLift } from './legend-lift.js';
 import { isMobile } from '../breakpoints.js';
 import { FAN_STORAGE_KEYS } from '../storage-keys.js';
 import { fanStylePreviewSvg } from '../fan-look.js';
+import { isPoolRef } from '../image-ref.js';
+import { startImageHydrator } from '../image-src.js';
 
 export interface FanViewSettings {
     generations: number;
@@ -62,14 +64,15 @@ export interface FanViewSettings {
 
 /**
  * A person's portrait in the fan (spec 118 §6): the stored photo (a data
- * URL, never the stand-in of an image still on its way); with `live`, the
+ * URL or a pooled image's reference, never the stand-in of an image still
+ * on its way); with `live`, the
  * cards' states of a load of images (spec 116): on its way = the initials
  * under the veil (or the stored photo under it), failed without a photo =
  * none. `live` false (outputs, after imagesBeforeOutput): the photo or none.
  */
 export function fanPhotoPortrait(p: Person, live = true): FanPortrait | null {
     const raw = p.photo;
-    const photo = typeof raw === 'string' && raw.startsWith('data:image/') && !isPendingImageUrl(raw) ? raw : undefined;
+    const photo = typeof raw === 'string' && (raw.startsWith('data:image/') || isPoolRef(raw)) && !isPendingImageUrl(raw) ? raw : undefined;
     if (!live) return photo ? { href: photo } : null;
     const state = imgStateOf(`person:${p.id}:photo`, !!photo);
     if (state === 'loading' || state === 'refresh') {
@@ -477,6 +480,8 @@ export class FanViewController {
             uid: SVG_UID,
             ...this.svgExtras(),
         });
+        // Pooled portraits are put in while on screen (image-src.ts).
+        if (portraits) startImageHydrator(document);
         this.setupSectors(keyFocused);
         this.syncPortraitState();
         this.host.afterDraw();
