@@ -5,6 +5,13 @@ on:
     # main = the public app (/run/); beta = the pre-release test build (beta.stromapp.info)
     branches: [main, beta]
     tags: ['v*']
+  # The whole suite every night as well (02:30 UTC, away from midnight): GitHub
+  # runs a schedule from the default branch only. Tests only: every deploy and
+  # release job below runs on a push alone (not on a schedule or by hand).
+  schedule:
+    - cron: '30 2 * * *'
+  # By hand (Actions → Run workflow): the whole suite on any branch, no deploy.
+  workflow_dispatch:
 
 jobs:
   build:
@@ -115,7 +122,7 @@ jobs:
         env:
           STROM_DOC_MAIN_DIR: ${{ runner.temp }}/strom-doc-main
 
-  # The browser suite against the very strom.html built above, in 4 parallel
+  # The browser suite against the very strom.html built above, in 8 parallel
   # shards (each with fewer workers than vCPUs: an overloaded runner flakes).
   # Not on a tag: a release tag is the commit main has just tested.
   e2e:
@@ -125,7 +132,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v7
 
@@ -164,8 +171,8 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps --dry-run chromium || npx playwright install-deps chromium
 
-      - name: E2E tests (shard ${{ matrix.shard }}/4)
-        run: npx playwright test --shard=${{ matrix.shard }}/4
+      - name: E2E tests (shard ${{ matrix.shard }}/8)
+        run: npx playwright test --shard=${{ matrix.shard }}/8
 
       - name: Flaky tests in the summary
         if: always()
@@ -183,7 +190,7 @@ jobs:
               }
             };
             for (const s of r.suites || []) walk(s, [s.title]);
-            const line = `Shard ${process.env.SHARD}/4: ${st.expected ?? 0} passed, ${st.flaky ?? 0} flaky, ${st.unexpected ?? 0} failed, ${Math.round((st.duration ?? 0) / 1000)} s`;
+            const line = `Shard ${process.env.SHARD}/8: ${st.expected ?? 0} passed, ${st.flaky ?? 0} flaky, ${st.unexpected ?? 0} failed, ${Math.round((st.duration ?? 0) / 1000)} s`;
             let md = `### ${line}\n`;
             for (const f of flaky) { md += `- flaky: ${f}\n`; console.log(`::warning title=Flaky e2e test::${f}`); }
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
@@ -203,7 +210,7 @@ jobs:
   deploy-pwa:
     needs: [build, unit, e2e, typecheck]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v8
@@ -248,7 +255,7 @@ jobs:
   deploy-beta:
     needs: [build, unit, e2e, typecheck]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/beta'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/beta'
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v8
@@ -286,7 +293,7 @@ jobs:
   release-latest:
     needs: [build, unit, e2e, typecheck]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
     steps:
@@ -313,7 +320,7 @@ jobs:
   release-tagged:
     needs: [build, unit]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     steps:

@@ -46,7 +46,7 @@ export default defineConfig({
     // One retry on CI: a flake does not stop a deploy, and the run reports it
     // as "flaky" (the workflow puts the count in the job summary).
     retries: process.env.CI ? 1 : 0,
-    // CI runs the suite in 4 shards (deploy.yml); a GitHub runner has 4 vCPUs,
+    // CI runs the suite in 8 shards (deploy.yml); a GitHub runner has 4 vCPUs,
     // and 4 Chromium workers on it overloaded it into flakes — 3 per shard.
     // Locally E2E_WORKERS overrides Playwright's default (half the cores).
     workers: process.env.CI ? 3 : process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : undefined,
