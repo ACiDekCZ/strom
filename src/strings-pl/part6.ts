@@ -1268,8 +1268,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         lineRunStart: 'Uruchom',
         lineRunConfirm: 'Agent zacznie w nowym oknie terminala. Pracę zatrzymuje Ctrl-C w jego oknie lub „Dokończ i zakończ” w sekcji Teraz.',
         // Przebiegi w Teraz i zatrzymanie każdego z osobna (spec 126 U10 §3, §4).
-        nowAgents: (n: number) => `Teraz · agenci: ${n}`,
-        stateAgents: (n: number) => `Pracuje agentów: ${n}`,
+        nowAgents: (n: number) => `Teraz · ${nPl(n, 'agent', 'agenci', 'agentów')}`,
+        stateAgents: (n: number) => plPl(n, 'Pracuje 1 agent', `Pracują ${n} agenci`, `Pracuje ${n} agentów`),
         stateAgentsWaiting: (k: number, t: string) => `${k} ${plPl(k, 'czeka', 'czekają', 'czeka')} na limit do ${t}`,
         stateAgentsWaitingNoTime: (k: number) => `${k} ${plPl(k, 'czeka', 'czekają', 'czeka')} na limit`,
         runWhole: 'Cała kolejka',

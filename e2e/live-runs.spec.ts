@@ -93,6 +93,22 @@ test.describe('a direction\'s own run', () => {
         await expect(block).toBeFocused();
     });
 
+    test('a direction whose run waits for an archive says so in its row and detail, as Now does, never "Agent at work"', async ({ page }) => {
+        await page.clock.setFixedTime(T);
+        const until = at(45);
+        const runs = runsAt().map(r => r.id === 'run-1a07' ? { ...r, state: 'paused', paused: { until, reason: 'archive' } } : r);
+        await followRuns(page, { runs, working: workingAt() });
+        await openOverview(page);
+        const wait = `Claude · waiting for the archive until ${await clockOf(page, until)}`;
+        const meta = directionRow(page, 'G0001').locator('.research-direction__meta');
+        await expect(meta.locator('.research-direction__run-meta')).toHaveText(wait);
+        await expect(meta.locator('.research-direction__in-now')).toHaveText('In Now ›');
+        await expect(overview(page).locator('#ov-sec-now [data-run="run-1a07"] .research-overview__run-state'))
+            .toHaveText(`waiting for the archive until ${await clockOf(page, until)}`);
+        await unfold(page, 'G0001');
+        await expect(runBox(page, 'G0001').locator('.research-direction__run-state')).toHaveText(wait);
+    });
+
     test('held, never hidden: paused, nothing in its queue, the most runs at once (with Settings ›)', async ({ page }) => {
         await followRuns(page, { researches: directions('G0002', { canStart: false, why: 'limit' }) });
         await openOverview(page);
@@ -430,9 +446,9 @@ test.describe('the runs in Now', () => {
         await expect(overview(page)).toHaveClass(/research-overview--sheet/);
         await expect(block(page, 'run-9e10').locator('.research-overview__run-note')).toHaveCount(0);
         await expect(block(page, 'run-5b20').locator('.research-overview__run-note'))
-            .toHaveText(['Die Richtung übernimmt wieder die ganze Warteschlange.']);
+            .toHaveText(['Die ganze Warteschlange übernimmt die Richtung wieder.']);
         await expect(block(page, 'run-2c44').locator('.research-overview__run-note'))
-            .toHaveText(['Das Abo-Limit ist aufgebraucht.', 'Die Richtung übernimmt wieder die ganze Warteschlange.']);
+            .toHaveText(['Das Abo-Limit ist aufgebraucht.', 'Die ganze Warteschlange übernimmt die Richtung wieder.']);
         const over = await now(page).evaluate(n => [...n.querySelectorAll<HTMLElement>('.research-overview__run, .research-overview__run-note')]
             .filter(e => e.scrollWidth > e.clientWidth + 1).length);
         expect(over).toBe(0);

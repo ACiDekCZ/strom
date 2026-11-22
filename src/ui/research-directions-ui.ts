@@ -30,6 +30,7 @@ import { undoInToast } from './toast.js';
 import { announceBusy, busyStatusEl, prepareBusy } from './busy.js';
 import { RowBusy, drawRowLinkBusy, drawRowMoreBusy, rowBusyStatusEl } from './row-busy.js';
 import { type LiveRun, type LineRunBlock, lineRunBlock, lineRunOf, liveRuns, runCount, runLimit, runLinesOn } from '../research-runs.js';
+import { lineRunWaitLine } from '../research-runs-text.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
@@ -983,7 +984,11 @@ export const researchDirectionsMethods = uiModule({
             }
             if (own.kind === 'starting') meta.appendChild(el('span', 'research-direction__run-meta', strings.live.runStateStarting));
             else {
-                meta.appendChild(el('span', 'research-direction__run-meta', L.lineRunWorkingMeta(own.run?.agentName || d.agent || '')));
+                // A run that waits (an archive, the limit) says so, as Now and "Following:" do.
+                const agent = own.run?.agentName || d.agent || '';
+                const wait = lineRunWaitLine(own.run, agent);
+                const span = meta.appendChild(el('span', 'research-direction__run-meta', wait ?? L.lineRunWorkingMeta(agent)));
+                if (wait) span.classList.add('is-wait');
                 if (mode !== 'sheet') meta.appendChild(this.lineRunInNowLink(own.id, d.id));
             }
             if (d.state !== 'paused') for (const t of limitTexts(d)) meta.appendChild(el('span', 'research-direction__limit', t));
@@ -1174,12 +1179,18 @@ export const researchDirectionsMethods = uiModule({
             const dot = el('span', 'research-direction__run-dot');
             dot.setAttribute('aria-hidden', 'true');
             state.appendChild(dot);
-            state.appendChild(el('strong', undefined, L.lineRunWorking));
-            const at = offer.run?.since ? Date.parse(offer.run.since) : NaN;
-            const since = Number.isFinite(at) ? formatLiveClock(at, Date.now(), getCurrentLanguage()) : '';
             const agent = offer.run?.agentName || d.agent || '';
-            const rest = agent && since ? L.lineRunWorkingSince(agent, since) : agent;
-            if (rest) state.appendChild(el('span', undefined, ` · ${rest}`));
+            const wait = lineRunWaitLine(offer.run, agent);
+            if (wait) {
+                state.classList.add('is-wait');
+                state.appendChild(el('span', undefined, wait));
+            } else {
+                state.appendChild(el('strong', undefined, L.lineRunWorking));
+                const at = offer.run?.since ? Date.parse(offer.run.since) : NaN;
+                const since = Number.isFinite(at) ? formatLiveClock(at, Date.now(), getCurrentLanguage()) : '';
+                const rest = agent && since ? L.lineRunWorkingSince(agent, since) : agent;
+                if (rest) state.appendChild(el('span', undefined, ` · ${rest}`));
+            }
             box.appendChild(state);
             if (offer.id) box.appendChild(this.lineRunInNowLink(offer.id, d.id));
             return box;

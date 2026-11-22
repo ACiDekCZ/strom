@@ -18,7 +18,7 @@ import { postRunLimit, postRunStop, runLimitRaise } from '../research-runs-write
 import { createDirection, previewDirection, undoGather } from '../research-directions-write.js';
 import { setLanguage, strings } from '../strings.js';
 import { pausedReasonText } from '../ui/research-ui.js';
-import { runEndedText } from '../research-runs-text.js';
+import { lineRunWaitLine, runEndedText } from '../research-runs-text.js';
 
 const TREE = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
 const FEATURES = ['run.lines', 'run.agents', 'run.stop', 'run.limit', 'directions.move', 'queue.page', 'offLine.branches'];
@@ -424,8 +424,10 @@ describe('the texts of the runs in Now (§3, §4)', () => {
         expect([1, 2, 5].map(n => strings.live.stateAgents(n))).toEqual(['1 Agent arbeitet', '2 Agenten arbeiten', '5 Agenten arbeiten']);
         expect(strings.live.stateAgentsWaiting(2, '14:00')).toBe('2 warten auf das Limit bis 14:00');
         setLanguage('pl');
-        expect([1, 2, 5].map(n => strings.live.nowAgents(n))).toEqual(['Teraz · agenci: 1', 'Teraz · agenci: 2', 'Teraz · agenci: 5']);
-        expect([1, 2, 5].map(n => strings.live.stateAgents(n))).toEqual(['Pracuje agentów: 1', 'Pracuje agentów: 2', 'Pracuje agentów: 5']);
+        expect([1, 2, 5].map(n => strings.live.nowAgents(n))).toEqual(['Teraz · 1 agent', 'Teraz · 2 agenci', 'Teraz · 5 agentów']);
+        expect([1, 2, 5].map(n => strings.live.stateAgents(n))).toEqual(['Pracuje 1 agent', 'Pracują 2 agenci', 'Pracuje 5 agentów']);
+        expect([12, 22].map(n => strings.live.nowAgents(n))).toEqual(['Teraz · 12 agentów', 'Teraz · 22 agenci']);
+        expect([12, 22].map(n => strings.live.stateAgents(n))).toEqual(['Pracuje 12 agentów', 'Pracują 22 agenci']);
         expect([1, 2, 5].map(k => strings.live.stateAgentsWaiting(k, '14:00')))
             .toEqual(['1 czeka na limit do 14:00', '2 czekają na limit do 14:00', '5 czeka na limit do 14:00']);
         setLanguage('en');
@@ -455,5 +457,18 @@ describe('the texts of the runs in Now (§3, §4)', () => {
         expect(pausedReasonText('Archiv má dnes údržbu')).toBe('Archiv má dnes údržbu');
         setLanguage('en');
         expect(pausedReasonText('limit')).toBe('waiting for the subscription limit');
+    });
+});
+
+describe('a direction\'s own run in its row and detail', () => {
+    it('a run waiting for an archive says so, as Now does; a working one says nothing here (the row says "Agent at work")', () => {
+        setLanguage('cs');
+        // Before the fix the closed row said "Agent pracuje: Claude" whatever the run's state.
+        expect(lineRunWaitLine({ state: 'waiting', wait: { for: 'archive' } }, 'Claude')).toBe('Claude · čeká na archiv');
+        expect(lineRunWaitLine({ state: 'waiting', wait: { for: 'limit' } }, '')).toBe('čeká na limit předplatného');
+        expect(lineRunWaitLine({ state: 'working', wait: null } as never, 'Claude')).toBeNull();
+        expect(lineRunWaitLine(null, 'Claude')).toBeNull();
+        setLanguage('en');
+        expect(lineRunWaitLine({ state: 'waiting', wait: { for: 'archive' } }, 'Claude')).toBe('Claude · waiting for the archive');
     });
 });

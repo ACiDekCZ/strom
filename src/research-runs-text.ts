@@ -32,6 +32,17 @@ export function runWaitText(run: Pick<LiveRun, 'wait'>): string {
 }
 
 /**
+ * A direction's own run as its row and detail say it: a run that waits says
+ * what for and until when, as Now does ("Claude · waiting for the archive
+ * until 14:00"); null: it works (the row says "Agent at work").
+ */
+export function lineRunWaitLine(run: Pick<LiveRun, 'state' | 'wait'> | null | undefined, agent: string): string | null {
+    if (run?.state !== 'waiting') return null;
+    const wait = runWaitText(run);
+    return agent ? `${agent} · ${wait}` : wait;
+}
+
+/**
  * Why a run ended, as a quiet line under "ended at …": only the subscription limit and an error are
  * said; a run done, stopped by hand, held by the gate, out of time, gone to an archive, or an end not
  * said gets none ('').
