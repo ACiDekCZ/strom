@@ -1106,15 +1106,18 @@ export interface ResearchMediaOut {
     appMedia: boolean;
     /** Each file's date (`2 _DATE`): a research that keeps what the app says of a file. */
     mediaDates: boolean;
+    /** The people's contact (Person.emails as `1 RESI` / `2 EMAIL`): a research that keeps it (CONTACT_FEATURE). */
+    contacts?: boolean;
 }
 
-/** A research that has said nothing: the files go as they always went. */
-export const NO_MEDIA_FEATURES: ResearchMediaOut = { appMedia: false, mediaDates: false };
+/** A research that has said nothing: the files go as they always went, no contact. */
+export const NO_MEDIA_FEATURES: ResearchMediaOut = { appMedia: false, mediaDates: false, contacts: false };
 
 /** How a tree's files go to this research, by its `/status.features` (not reached: as ever). */
 export function researchMediaOut(status: { features: readonly string[] | null } | null | undefined): ResearchMediaOut {
     const features = status?.features ?? [];
-    return { appMedia: features.includes(MEDIA_APP_FEATURE), mediaDates: features.includes(MATERIAL_LINKS_FEATURE) };
+    return { appMedia: features.includes(MEDIA_APP_FEATURE), mediaDates: features.includes(MATERIAL_LINKS_FEATURE),
+        contacts: features.includes(CONTACT_FEATURE) };
 }
 
 /**
@@ -1401,6 +1404,52 @@ export function keepDismissedMarriedSuggestions(next: StromData, previous: Strom
         if (!nextId || !p || p.dismissedMarriedSuggestion) continue;
         persons ??= { ...next.persons };
         persons[nextId] = { ...p, dismissedMarriedSuggestion: was.dismissedMarriedSuggestion };
+    }
+    return persons ? { ...next, persons } : next;
+}
+
+/**
+ * The research reads and writes the people's contact (Person.emails, spec 134
+ * K0.10): `1 RESI` / `2 EMAIL` both ways. Without it (an older research) the
+ * app sends no contact (it would come back as a residence with no place) and
+ * keeps the contact itself (keepContacts).
+ */
+export const CONTACT_FEATURE = 'person.contact';
+
+/**
+ * The people's contact (Person.emails) when a research version comes in. A
+ * research without `person.contact` in its `features` (not known = an older
+ * research) never had it: each person of `next` takes the previous state's
+ * contact (none included: one taken off in the app stays off), matched by
+ * REFN, else by the same id, else (no REFN yet) by matchUnlinkedPersons; a
+ * person new from the research keeps what its version gave. With the feature
+ * the research decides and `next` comes back as it is. Returns a new object
+ * when any person changed; neither input is changed.
+ */
+export function keepContacts(next: StromData, previous: StromData, features: readonly string[] | null | undefined): StromData {
+    if (features?.includes(CONTACT_FEATURE)) return next;
+    const prevToNext = new Map<string, string>();
+    const nextByRefn = uniqueRefns(next);
+    for (const [refn, prevId] of uniqueRefns(previous)) {
+        const nextId = nextByRefn.get(refn);
+        if (nextId) prevToNext.set(prevId, nextId);
+    }
+    let unlinked: Map<string, string> | null = null;
+    let persons: StromData['persons'] | null = null;
+    const taken = new Set<string>();
+    for (const [prevId, was] of Object.entries(previous.persons ?? {})) {
+        if (!was) continue;
+        const sameId = next.persons?.[prevId as PersonId] && (!was.refn?.trim() || next.persons[prevId as PersonId].refn?.trim() === was.refn.trim());
+        let nextId = prevToNext.get(prevId) ?? (sameId ? prevId : undefined);
+        if (!nextId) nextId = (unlinked ??= matchUnlinkedPersons(next, previous)).get(prevId);
+        const p = nextId ? next.persons[nextId as PersonId] : undefined;
+        if (!nextId || !p || taken.has(nextId)) continue;
+        taken.add(nextId);
+        if ((p.emails ?? []).join('\n') === (was.emails ?? []).join('\n')) continue;
+        persons ??= { ...next.persons };
+        const changed: Person = { ...p };
+        if (was.emails?.length) changed.emails = [...was.emails]; else delete changed.emails;
+        persons[nextId as PersonId] = changed;
     }
     return persons ? { ...next, persons } : next;
 }

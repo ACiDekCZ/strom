@@ -96,8 +96,8 @@ describe('gates of a research that keeps the app’s files (/status.features)', 
         expect(researchKeepsAppMedia({ features: ['material.links'] })).toBe(false);
         expect(researchKeepsAppMedia({ features: null })).toBe(false);
         expect(researchKeepsAppMedia(null)).toBe(false);
-        expect(researchMediaOut({ features: ['media.app', 'material.links'] })).toEqual({ appMedia: true, mediaDates: true });
-        expect(researchMediaOut({ features: ['material.links'] })).toEqual({ appMedia: false, mediaDates: true });
+        expect(researchMediaOut({ features: ['media.app', 'material.links'] })).toEqual({ appMedia: true, mediaDates: true, contacts: false });
+        expect(researchMediaOut({ features: ['material.links'] })).toEqual({ appMedia: false, mediaDates: true, contacts: false });
         expect(researchMediaOut(undefined)).toEqual(NO_MEDIA_FEATURES);
     });
 

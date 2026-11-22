@@ -6,11 +6,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import { migrateData } from '../data.js';
-import { isContactResidence, isEmptyResidence, cleanEmails, emailsFromInput, addEmails } from '../person-contact.js';
+import { isContactAddressLabel, isContactResidence, isEmptyResidence, cleanEmails, emailsFromInput, addEmails } from '../person-contact.js';
 import type { LifeEvent, Person, PersonId, StromData } from '../types.js';
 import { NOTED_TAG } from '../import-origin.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { mergePersonData } from '../merge/executor.js';
+import { exportToGedcom } from '../ged-exporter.js';
+import { CONTACT_FEATURE, keepContacts, NO_MEDIA_FEATURES, researchMediaOut } from '../research-link.js';
 
 const H = 'p_hromoslav' as PersonId;
 
@@ -185,6 +187,16 @@ describe('import: an e-mail of the file is the person\'s contact', () => {
         expect(p.notes).toBeUndefined();
     });
 
+    it('an address part "Telefon" / "Phone" is a label, never a house, also under a residence with a place', () => {
+        expect(isContactAddressLabel('Telefon')).toBe(true);
+        expect(isContactAddressLabel(' TELEFÓN ')).toBe(true);
+        expect(isContactAddressLabel('Tel.')).toBe(true);
+        expect(isContactAddressLabel('Mechová 7')).toBe(false);
+        const p = myHeritage(['1 RESI', '2 PLAC Křemenná', '2 ADDR', '3 ADR1 Phone', '2 EMAIL hromoslav@@example.org']);
+        expect(p.events!.find(e => e.type === 'residence')!.address).toBeUndefined();
+        expect(myHeritage(['1 RESI', '2 ADDR', '3 ADR1 Phone']).events?.some(e => e.type === 'residence')).toBeFalsy();
+    });
+
     it('a RESI of a date or a source stays a residence', () => {
         expect(myHeritage(['1 RESI', '2 DATE 1921', '2 EMAIL hromoslav@@example.org']).events?.some(e => e.type === 'residence')).toBe(true);
     });
@@ -201,5 +213,41 @@ describe('merging two people joins their contacts', () => {
         const c = {} as Person;
         mergePersonData(c, { emails: ['h.ozubec@example.org'] } as Person, [], undefined, undefined, { notesOnlyWhenEmpty: true });
         expect(c.emails).toEqual(['h.ozubec@example.org']);
+    });
+});
+
+describe('the research and the contact (person.contact)', () => {
+    const withRefn = (emails?: string[]): StromData => tree({ refn: '7', ...(emails ? { emails } : {}) });
+
+    it('a file for the research carries the contact only to one that keeps it', () => {
+        const data = load(withRefn(['hromoslav@example.org']));
+        const link = { id: 'r-test' };
+        const without = exportToGedcom(data, 'Ozubec', { research: link, ...researchMediaOut({ features: ['media.app'] }) }).content;
+        expect(without).not.toContain('hromoslav@');
+        const unknown = exportToGedcom(data, 'Ozubec', { research: link, ...NO_MEDIA_FEATURES }).content;
+        expect(unknown).not.toContain('hromoslav@');
+        const keeps = exportToGedcom(data, 'Ozubec', { research: link, ...researchMediaOut({ features: [CONTACT_FEATURE] }) }).content;
+        expect(keeps).toContain('1 RESI\n2 EMAIL hromoslav@@example.org\n');
+    });
+
+    it('a version of a research without the feature: each person keeps the contact the app had (none included)', () => {
+        const previous = load(withRefn(['hromoslav@example.org']));
+        const next = load(withRefn());
+        expect(hrom(keepContacts(next, previous, ['media.app'])).emails).toEqual(['hromoslav@example.org']);
+        expect(hrom(keepContacts(next, previous, null)).emails).toEqual(['hromoslav@example.org']);
+        expect(next.persons[H].emails).toBeUndefined();
+        // Taken off in the app, brought back by an older research's residence note: stays off.
+        const back = load(withRefn(['h.ozubec@example.org']));
+        expect(hrom(keepContacts(back, load(withRefn()), null)).emails).toBeUndefined();
+        // The same id with no REFN on either side.
+        expect(hrom(keepContacts(load(tree({})), load(tree({ emails: ['hromoslav@example.org'] })), null)).emails).toEqual(['hromoslav@example.org']);
+    });
+
+    it('a research with the feature decides; nothing to carry returns the version itself', () => {
+        const previous = load(withRefn(['hromoslav@example.org']));
+        const next = load(withRefn(['h.ozubec@example.org']));
+        expect(keepContacts(next, previous, [CONTACT_FEATURE])).toBe(next);
+        const same = load(withRefn(['hromoslav@example.org']));
+        expect(keepContacts(same, previous, null)).toBe(same);
     });
 });
