@@ -17749,8 +17749,10 @@
         .toast-actions > .toast-action:not([hidden]) ~ .toast-action:not([hidden]) { margin-left: 12px; }
         /* A group wider than the toast itself (two long actions on a narrow screen: "Undo the move" beside
            "Work on this direction" with its marks) wraps inside it, each action whole, never past the toast's
-           edge; the gap between two actions is a column gap, so a wrapped one starts at the group's left edge. */
-        .toast-actions { flex-wrap: wrap; row-gap: 6px; max-width: calc(100% - 12px); }
+           edge; the gap between two actions is a column gap, so a wrapped one starts at the group's left edge.
+           A group that fits keeps its one row: beside a title in a flex toast it never shrinks to wrap there
+           ("Cancel" "Install…" of the progress toast at 390), the title wraps instead. */
+        .toast-actions { flex-wrap: wrap; row-gap: 6px; max-width: calc(100% - 12px); flex-shrink: 0; }
         .toast-actions:not(:has(> .focus-toast-sep, > .undo-toast-sep)) { column-gap: 12px; }
         .toast-actions:not(:has(> .focus-toast-sep, > .undo-toast-sep)) > .toast-action:not([hidden]) ~ .toast-action:not([hidden]) { margin-left: 0; }
         .toast-actions > .focus-toast-sep:first-child,
