@@ -2181,3 +2181,75 @@ test.describe('following one of several runs', () => {
         await expect(overview(page).locator('.research-overview__run-follow, .research-overview__followed')).toHaveCount(0);
     });
 });
+
+test.describe('Back and Forward beside the legends while following (1122 E)', () => {
+    /** Every Back / Forward button on screen against every legend panel on screen: the pairs that overlap. */
+    const clashes = (page: Page) => page.evaluate(() => {
+        const shown = (el: Element): DOMRect | null => {
+            const r = el.getBoundingClientRect();
+            const s = getComputedStyle(el);
+            return r.width && r.height && s.display !== 'none' && s.visibility !== 'hidden' ? r : null;
+        };
+        const out: string[] = [];
+        const legends = [...document.querySelectorAll('#follow-legend, #fan-legend, .fan-legend-chip, .tree-legend')];
+        for (const id of ['focus-back-btn', 'focus-forward-btn']) {
+            const a = shown(document.getElementById(id)!);
+            if (!a) continue;
+            for (const el of legends) {
+                const b = shown(el);
+                if (b && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) {
+                    out.push(`${id} × ${el.id || el.className}`);
+                }
+            }
+        }
+        return out;
+    });
+    /** Legends that reach past the top of the window or of the fan's stage. */
+    const cut = (page: Page) => page.evaluate(() => {
+        const stage = document.getElementById('fan-legend')?.parentElement?.getBoundingClientRect();
+        const out: string[] = [];
+        for (const el of document.querySelectorAll('#follow-legend, #fan-legend')) {
+            const r = el.getBoundingClientRect();
+            if (!r.height) continue;
+            const top = el.closest('#map-container') ? 0 : stage?.top ?? 0;
+            if (r.top < top - 0.5) out.push(`${el.id} ${Math.round(r.top)} < ${Math.round(top)}`);
+        }
+        return out;
+    });
+
+    test('the round buttons and the legends never overlap: fan, family, descendants, map at 1440, 1024, 390 and held sideways, cs and de', async ({ page }) => {
+        await stubTiles(page);
+        const bridge = await follow(page, { idle: 60_000, on: true, quick: true, ged: LINE_GED });
+        bridge.features = ['working.place'];
+        bridge.place = 'L0003';
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await seedMapPlaces(page);
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();
+        // A trail opens the legend of following (its rows and the trail's switch); the fan by family lines
+        // makes its own card long.
+        for (const p of ['P0001', 'P0002', 'P0012']) { bridge.person = p; await nextStatus(bridge); }
+        await expect(page.locator('#follow-legend[data-view="fan"] .follow-legend-card')).toBeVisible();
+        await page.evaluate(() => window.Strom.TreeRenderer.setFanColorMode('rod'));
+        // Back and Forward both show.
+        await page.evaluate(() => window.Strom.TreeRenderer.goBack());
+        await expect(page.locator('#focus-back-btn')).toBeVisible();
+        await expect(page.locator('#focus-forward-btn')).toBeVisible();
+        const sizes = [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 390, height: 844 }, { width: 844, height: 390 }];
+        for (const lang of ['cs', 'de']) {
+            await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+            for (const view of ['fan', 'family', 'descendants', 'map']) {
+                for (const size of sizes) {
+                    await page.setViewportSize(size);
+                    if (view === 'descendants') await page.evaluate(() => window.Strom.UI.setDisplayViewMode('descendants'));
+                    else await page.evaluate((v) => window.Strom.UI.setLiveFollowView(v as never), view);
+                    await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe(view);
+                    if (view === 'fan' && size.width > 1024) await expect(page.locator('#follow-legend .follow-legend-card')).toBeVisible();
+                    const where = `${lang} ${view} ${size.width}×${size.height}`;
+                    await expect.poll(() => clashes(page), { message: where }).toEqual([]);
+                    await expect.poll(() => cut(page), { message: where }).toEqual([]);
+                }
+            }
+        }
+    });
+});

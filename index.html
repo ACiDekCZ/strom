@@ -13876,11 +13876,12 @@
         }
         /* Legend: a card bottom-left, its head folds it (remembered on the device). A long one
            (family lines, spec 114) stops under the top-left row of pills (⌂, the original person's
-           pill, the pinned centre), --fan-legend-top; --fan-legend-nav keeps room for back / forward. */
+           pill, the pinned centre), --fan-legend-top; --fan-legend-nav keeps room for back / forward and
+           --fan-legend-follow (src/ui/follow-legend-ui.ts) for the legend of following above them. */
         .fan-legend {
             position: absolute; left: 14px; bottom: 14px; z-index: 3;
             --fan-legend-top: 56px;
-            max-width: 280px; max-height: calc(100% - 14px - var(--fan-legend-top) - var(--fan-legend-nav, 0px)); overflow: auto; box-sizing: border-box;
+            max-width: 280px; max-height: calc(100% - 14px - var(--fan-legend-top) - var(--fan-legend-nav, 0px) - var(--fan-legend-follow, 0px)); overflow: auto; box-sizing: border-box;
             padding: 6px 12px; border-radius: var(--r-lg);
             background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
             font-size: 12.5px; color: var(--text);
@@ -14466,6 +14467,11 @@
            stands above them, also before the map's background is agreed to (no status bar yet, 1106). */
         body.focus-nav-shown #map-container > .follow-legend-host { bottom: max(calc(var(--map-status-reach, 0px) + 12px), 76px); }
         #map-container:has(.map-timebar:not([hidden])) > .follow-legend-host { bottom: calc(max(62px, calc(var(--map-status-reach, 0px) + 8px)) + 76px); }
+        /* The fan: src/ui/follow-legend-ui.ts sets the legend 8px above the fan's card, where back / forward
+           stand too while they show (--nav-lift): the legend stands 8px above them instead (44px + 8px), and
+           24px + 44px + 8px from the bottom without the card (1122 E). */
+        body.focus-nav-shown .follow-legend-host[data-view="fan"] { margin-bottom: 52px; }
+        body.focus-nav-shown:not(.fan-legend-shown) .follow-legend-host[data-view="fan"] { margin-bottom: 62px; }
         .follow-legend {
             display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; margin: 0; min-height: 34px; max-width: 100%;
             padding: 0 14px 0 12px; border-radius: var(--r-md); border: 1px solid var(--border);

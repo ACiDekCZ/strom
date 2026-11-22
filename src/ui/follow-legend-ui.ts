@@ -19,33 +19,56 @@ import {
     currentFollowTargets, followLegendOpen, followNumbered, followTrail, setFollowLegendOpen,
 } from './live-follow-ui.js';
 
-/** Keeps the fan's legend of following above the fan's own legend (its height changes when it folds). */
+/** Keeps the fan's legend of following above the fan's own legend (their heights change when they fold). */
 let fanLegendWatch: ResizeObserver | null = null;
 let fanLegendWatched: Element | null = null;
+let followHostWatched: Element | null = null;
 
 function esc(t: string): string {
     return t.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }
 
-/** Lift the legend over the fan's own colour legend (bottom left). */
+/**
+ * The room the fan's card leaves above itself for the legend of following
+ * (its height and the 8px gap), so a long card (family lines) does not push
+ * the legend past the top of the fan; null gives it back.
+ */
+function reserveForFollow(own: HTMLElement | null, host: HTMLElement | null): void {
+    if (!own) return;
+    const h = host ? Math.ceil(host.getBoundingClientRect().height) : 0;
+    const v = h ? `${h + 8}px` : '';
+    if (own.style.getPropertyValue('--fan-legend-follow') !== v) {
+        if (v) own.style.setProperty('--fan-legend-follow', v);
+        else own.style.removeProperty('--fan-legend-follow');
+    }
+}
+
+/**
+ * Lift the legend over the fan's own colour legend (bottom left). Back /
+ * forward stand right above that card too while they show: the CSS in
+ * index.html lifts the legend over them (1122 E).
+ */
 function liftOverFanLegend(host: HTMLElement): void {
     const own = document.getElementById('fan-legend');
     const place = (): void => {
         // The fan's legend stands higher while the focus buttons are shown: measure where it is.
+        reserveForFollow(own, host);
         const parent = host.parentElement;
         const r = own && !own.hidden ? own.getBoundingClientRect() : null;
-        if (!parent || !r || !r.height) { host.style.bottom = '14px'; return; }
-        host.style.bottom = `${Math.round(parent.getBoundingClientRect().bottom - r.top + 8)}px`;
+        const bottom = !parent || !r || !r.height ? '14px' : `${Math.round(parent.getBoundingClientRect().bottom - r.top + 8)}px`;
+        if (host.style.bottom !== bottom) host.style.bottom = bottom;
     };
     place();
-    if (typeof ResizeObserver === 'undefined' || !own || fanLegendWatched === own) return;
+    if (typeof ResizeObserver === 'undefined' || !own || (fanLegendWatched === own && followHostWatched === host)) return;
     fanLegendWatch?.disconnect();
     fanLegendWatch = new ResizeObserver(() => {
         const h = document.getElementById('follow-legend');
         if (h?.dataset.view === 'fan') place();
     });
     fanLegendWatch.observe(own);
+    fanLegendWatch.observe(host);
     fanLegendWatched = own;
+    followHostWatched = host;
 }
 
 export const followLegendMethods = uiModule({
@@ -60,6 +83,7 @@ export const followLegendMethods = uiModule({
         if (!parent || isPhoneBar() || (!targets.length && !trail.length)
             || (mode === 'map' && !parent.querySelector('.map-canvas'))) {
             old?.remove();
+            reserveForFollow(document.getElementById('fan-legend'), null);
             return;
         }
         let host = old;
@@ -119,7 +143,10 @@ export const followLegendMethods = uiModule({
             if (focused) host.querySelector<HTMLElement>(open ? '.follow-legend-close' : '.follow-legend')?.focus();
         }
         if (mode === 'fan') liftOverFanLegend(host);
-        else host.style.bottom = '';
+        else {
+            host.style.bottom = '';
+            reserveForFollow(document.getElementById('fan-legend'), null);
+        }
     },
 
     /** Open or fold the legend (remembered while following runs). */
