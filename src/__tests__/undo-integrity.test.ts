@@ -5,11 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DataManager } from '../data.js';
+import { DataManager, migrateData } from '../data.js';
+import { validateTreeData } from '../validation.js';
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
-import { StromData, TreeId, PersonId } from '../types.js';
+import { StromData, TreeId, PersonId, PartnershipId } from '../types.js';
 
 const TREE = 'undo-int-tree' as TreeId;
 
@@ -91,5 +92,26 @@ describe('delete cascades', () => {
         const after = DataManager.getPerson(kid.id)!;
         expect(after.parentIds).toHaveLength(0);
         expect(after.parentRelTypes?.[dad.id]).toBeUndefined();
+    });
+});
+
+describe('a person listing a couple that is not there (spec 134 K0.7)', () => {
+    it('loading keeps it as it is, the tree check finds it and its repair removes it', () => {
+        const p = DataManager.createPerson({ firstName: 'Kvido', lastName: 'Hrbolec', gender: 'male' });
+        const w = DataManager.createPerson({ firstName: 'Radmila', lastName: 'Hrbolcová', gender: 'female' });
+        const u = DataManager.createPartnership(p.id, w.id)!;
+        DataManager.getPerson(p.id)!.partnerships.push('u_gone' as PartnershipId);
+
+        // Loading (migration) changes nothing on its own.
+        const loaded = migrateData(structuredClone(DataManager.getData()));
+        expect(loaded.persons[p.id].partnerships).toEqual([u.id, 'u_gone']);
+
+        const issues = validateTreeData(DataManager.getData()).issues.filter(i => i.type === 'orphanedPartnershipRef');
+        expect(issues).toHaveLength(1);
+        expect(issues[0].personIds).toEqual([p.id]);
+        expect(DataManager.isFixableIssue(issues[0])).toBe(true);
+        expect(DataManager.repairValidationIssue(issues[0])).toBe(true);
+        expect(DataManager.getPerson(p.id)!.partnerships).toEqual([u.id]);
+        expect(validateTreeData(DataManager.getData()).issues.filter(i => i.type === 'orphanedPartnershipRef')).toEqual([]);
     });
 });
