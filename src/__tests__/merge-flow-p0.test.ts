@@ -159,10 +159,19 @@ afterEach(async () => {
     vi.restoreAllMocks();
 });
 
-/** The wizard over the target with the file's people, every offered match answered "same person". */
+/**
+ * The wizard over the target with the file's people, compared as step 1's
+ * Compare does (starting a merge pairs nobody), every offered match
+ * answered "same person".
+ */
 function started(): MergeState {
     MergerUI.startMerge(structuredClone(INCOMING), 'cousins.ged');
-    const state = internals().mergeState!;
+    const opened = internals().mergeState!;
+    expect(opened.matches).toEqual([]);
+    const state = rebaseMergeState(opened, opened.existingData, opened.target);
+    state.phase = 'reviewing';
+    internals().mergeState = state;
+    expect(state.matches.length).toBeGreaterThan(0);
     for (const m of state.matches) updateMatchDecision(state, m.incomingId, 'confirm');
     return state;
 }
