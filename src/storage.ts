@@ -262,6 +262,44 @@ class StorageManagerClass {
     }
 
     /**
+     * Read a value and write what `change` makes of it, in ONE transaction: no
+     * other write lands in between. `change` gets the stored value (null when
+     * none) and returns the new one, or undefined to leave it as it is.
+     * Resolves true when it wrote. `change` must not await anything.
+     */
+    update<T>(store: StoreName, key: string, change: (value: T | null) => T | undefined): Promise<boolean> {
+        const db = this.dbFor(store);
+        if (!db) return Promise.reject(new Error('StorageManager not initialized'));
+        const promise = new Promise<boolean>((resolve, reject) => {
+            const tx = db.transaction(store, 'readwrite');
+            const os = tx.objectStore(store);
+            let wrote = false;
+            const req = os.get(key);
+            req.onsuccess = () => {
+                let next: T | undefined;
+                try {
+                    next = change((req.result as T) ?? null);
+                } catch (err) {
+                    tx.abort();
+                    reject(err);
+                    return;
+                }
+                if (next !== undefined) { os.put(next, key); wrote = true; }
+            };
+            tx.oncomplete = () => resolve(wrote);
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+        });
+        const tracked = promise.then(() => undefined);
+        this.pendingWrites.push(tracked);
+        tracked.finally(() => {
+            const idx = this.pendingWrites.indexOf(tracked);
+            if (idx >= 0) this.pendingWrites.splice(idx, 1);
+        }).catch(() => { /* reported through the returned promise */ });
+        return promise;
+    }
+
+    /**
      * Delete a key from an object store
      */
     async delete(store: StoreName, key: string): Promise<void> {

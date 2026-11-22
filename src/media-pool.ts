@@ -26,6 +26,7 @@ import { CryptoSession, EncryptedData } from './crypto.js';
 import { bytesToBase64, base64ToBytes, canonicalBase64Bytes } from './base64.js';
 import { sha256Bytes } from './sha256.js';
 import { takeImageBytes } from './known-image-bytes.js';
+import { computeImageMeta, imageMetaOf, setImageMeta, noteImageMeta, headMime, type ImageMeta, type ImageMetaRecord } from './image-meta.js';
 
 /** Strings at least this long starting with "data:" go to the pool. */
 export const POOL_MIN_LENGTH = 1024;
@@ -50,10 +51,11 @@ interface StoredMedia {
     encrypted?: EncryptedData;
 }
 
-/** What a writer stored: each image's content id, and id → stored bytes. */
+/** What a writer stored: each image's content id, id → stored bytes, and id → catalog entry (image-meta.ts). */
 export interface PooledImages {
     ids: Map<string, string>;
     media: Record<string, number>;
+    meta: ImageMetaRecord;
 }
 
 // ---- the lock ----
@@ -159,19 +161,30 @@ function ownBuffer(bytes: Uint8Array): ArrayBuffer {
         : bytes.slice().buffer as ArrayBuffer;
 }
 
-async function encodeMedia(url: string, encrypted: boolean): Promise<{ record: StoredMedia; size: number }> {
+/** The stored form of an image; `bytes`: its decoded bytes when they came along (for its catalog entry). */
+async function encodeMedia(url: string, encrypted: boolean): Promise<{ record: StoredMedia; size: number; bytes?: Uint8Array }> {
     const known = takeImageBytes(url);
     if (encrypted) {
         const enc = await CryptoSession.encrypt(url);
-        return { record: { encrypted: enc }, size: enc.data.length };
+        return { record: { encrypted: enc }, size: enc.data.length, ...(known ? { bytes: known } : {}) };
     }
     const comma = url.indexOf(',');
     const head = url.slice(0, comma + 1);
     if (!head.endsWith(';base64,')) return { record: { text: url }, size: url.length };
     // Only bytes that give back exactly the same text are stored as bytes.
     const bytes = known ?? canonicalBase64Bytes(url.slice(comma + 1));
-    if (bytes) return { record: { head, bytes: ownBuffer(bytes) }, size: bytes.byteLength };
+    if (bytes) return { record: { head, bytes: ownBuffer(bytes) }, size: bytes.byteLength, bytes };
     return { record: { text: url }, size: url.length };
+}
+
+/** The catalog entry of an image (computed once per window, image-meta.ts). */
+async function metaOf(id: string, url: string, bytes?: Uint8Array): Promise<ImageMeta> {
+    let meta = imageMetaOf(id);
+    if (!meta) {
+        meta = await computeImageMeta(url, bytes);
+        setImageMeta(id, meta);
+    }
+    return meta;
 }
 
 type Decrypt = (enc: EncryptedData) => Promise<string>;
@@ -206,14 +219,15 @@ export function notePoolSizes(media: Record<string, number> | undefined): void {
 }
 
 /**
- * Make sure every image of `urls` is in the pool; returns their ids and
- * sizes. Call under withPoolLock, and write the record naming them before
- * releasing it.
+ * Make sure every image of `urls` is in the pool; returns their ids, sizes
+ * and catalog entries. Call under withPoolLock, and write the record naming
+ * them before releasing it.
  */
 export async function storeImages(urls: Set<string>, encrypted: boolean, scope: string): Promise<PooledImages> {
     const ids = await contentIds(urls, encrypted, scope);
     const stored = new Set(await StorageManager.keys('media'));
     const media: Record<string, number> = {};
+    const meta: ImageMetaRecord = {};
     // New images go in a few transactions, not one each (a transaction per
     // image took 1.5 s for a thousand photos; one took 0.2 s).
     let batch: { store: 'media'; key: string; value: StoredMedia }[] = [];
@@ -230,18 +244,78 @@ export async function storeImages(urls: Set<string>, encrypted: boolean, scope: 
         if (media[id] !== undefined) continue;
         if (stored.has(id)) {
             const known = sizeOfStored.get(id);
-            if (known !== undefined) { media[id] = known; continue; }
+            if (known !== undefined) { media[id] = known; meta[id] = await metaOf(id, url); continue; }
             const record = await StorageManager.get<StoredMedia>('media', id);
-            if (record) { media[id] = storedSize(record); sizeOfStored.set(id, media[id]); continue; }
+            if (record) {
+                media[id] = storedSize(record);
+                sizeOfStored.set(id, media[id]);
+                meta[id] = await metaOf(id, url, record.bytes && record.head !== undefined ? new Uint8Array(record.bytes) : undefined);
+                continue;
+            }
         }
-        const { record, size } = await encodeMedia(url, encrypted);
+        const { record, size, bytes } = await encodeMedia(url, encrypted);
+        meta[id] = await metaOf(id, url, bytes);
         batch.push({ store: 'media', key: id, value: record });
         batchBytes += size;
         media[id] = size;
         if (batchBytes >= MEDIA_BATCH_BYTES || batch.length >= MEDIA_BATCH_COUNT) await writeBatch();
     }
     await writeBatch();
-    return { ids, media };
+    return { ids, media, meta };
+}
+
+// ---- the catalog in stored records ----
+
+/**
+ * The catalog entries as a stored record keeps them: plain, or — for an
+ * encrypted record — encrypted like its data (the entries carry the bytes'
+ * hash, which would tell which pictures a tree has).
+ */
+export async function packImageMeta(meta: ImageMetaRecord, encrypted: boolean): Promise<ImageMetaRecord | EncryptedData | undefined> {
+    if (Object.keys(meta).length === 0) return undefined;
+    return encrypted ? CryptoSession.encrypt(JSON.stringify(meta)) : meta;
+}
+
+/**
+ * Take a stored record's catalog entries into memory (image-meta.ts) and
+ * return them; null when there are none or they cannot be read (locked,
+ * another key: the entries are computed again when needed).
+ */
+export async function unpackImageMeta(stored: unknown, decrypt?: Decrypt): Promise<ImageMetaRecord | null> {
+    if (!stored || typeof stored !== 'object') return null;
+    let record: unknown = stored;
+    if ((stored as { encrypted?: unknown }).encrypted === true) {
+        try {
+            if (decrypt) record = JSON.parse(await decrypt(stored as EncryptedData));
+            else if (CryptoSession.isUnlocked()) record = JSON.parse(await CryptoSession.decrypt(stored as EncryptedData));
+            else return null;
+        } catch {
+            return null;
+        }
+    }
+    if (!record || typeof record !== 'object') return null;
+    noteImageMeta(record);
+    return record as ImageMetaRecord;
+}
+
+/**
+ * The catalog entry of a pooled image, read from the pool when this window
+ * has none yet (one image at a time). Null: not in the pool, or encrypted and
+ * the session is locked.
+ */
+export async function pooledImageMeta(id: string): Promise<ImageMeta | null> {
+    const known = imageMetaOf(id);
+    if (known) return known;
+    const record = await StorageManager.get<StoredMedia>('media', id);
+    if (!record) return null;
+    if (record.encrypted && !CryptoSession.isUnlocked()) return null;
+    let url: string;
+    try {
+        url = await decodeMedia(record);
+    } catch {
+        return null;
+    }
+    return metaOf(id, url, record.bytes && record.head !== undefined ? new Uint8Array(record.bytes) : undefined);
 }
 
 /** JSON of `data` with its pooled images written as references. */
@@ -264,6 +338,68 @@ export function replacePooled<T>(value: T, ids: Map<string, string>): T {
 }
 
 // ---- reading images back ----
+
+/**
+ * A pooled image as a Blob of its bytes: straight from the stored bytes (no
+ * base64 on the way), from a stored text, or decrypted. Null: not in the
+ * pool, or encrypted and the session is locked.
+ */
+async function blobOf(record: StoredMedia): Promise<Blob | null> {
+    if (record.bytes && record.head !== undefined) {
+        return new Blob([record.bytes], { type: headMime(record.head) });
+    }
+    let url: string;
+    if (record.encrypted) {
+        if (!CryptoSession.isUnlocked()) return null;
+        try {
+            url = await CryptoSession.decrypt(record.encrypted);
+        } catch {
+            return null;
+        }
+    } else {
+        url = record.text ?? '';
+    }
+    return dataUrlBlob(url);
+}
+
+/** The bytes a data URL carries as a Blob of its type (null: not a data URL). */
+export function dataUrlBlob(url: string): Blob | null {
+    const comma = url.indexOf(',');
+    if (!url.startsWith('data:') || comma < 0) return null;
+    const head = url.slice(0, comma + 1);
+    const type = headMime(head);
+    const body = url.slice(comma + 1);
+    if (head.endsWith(';base64,')) {
+        try {
+            return new Blob([base64ToBytes(body.replace(/\s+/g, '')) as BlobPart], { type });
+        } catch {
+            return null;
+        }
+    }
+    let text: string;
+    try {
+        text = decodeURIComponent(body);
+    } catch {
+        text = body;
+    }
+    return new Blob([text], { type });
+}
+
+/**
+ * Pooled images as Blobs, read in one transaction (image-src.ts). An id
+ * missing from the pool, or encrypted while the session is locked, maps to
+ * null.
+ */
+export async function loadImageBlobs(ids: readonly string[]): Promise<Map<string, Blob | null>> {
+    const out = new Map<string, Blob | null>();
+    if (ids.length === 0) return out;
+    const records = await StorageManager.getMany<StoredMedia>('media', [...ids]);
+    for (const id of ids) {
+        const record = records.get(id);
+        out.set(id, record ? await blobOf(record) : null);
+    }
+    return out;
+}
 
 /** The images of `ids` from the pool (missing ones left out). */
 async function loadImages(ids: Set<string>, decrypt?: Decrypt): Promise<Map<string, string>> {

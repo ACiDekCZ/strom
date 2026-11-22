@@ -14,6 +14,7 @@
 
 import { hasTreeMedia, personFilesAnyVersion } from './media.js';
 import type { PersonId, StromData } from './types.js';
+import { mediaToken as token, fnvHash as fnv } from './image-meta.js';
 
 /**
  * Does a tree's research keep its portraits, couples' photos and attachments,
@@ -26,28 +27,6 @@ import type { PersonId, StromData } from './types.js';
  */
 export function archiveHoldsAppMedia(o: { keeps: boolean | null; researchId: string; sentTo: string | undefined }): boolean {
     return o.keeps !== false && !!o.researchId && o.sentTo === o.researchId;
-}
-
-function fnv(text: string, start: number, step: number, seed: number): number {
-    let h = seed >>> 0;
-    for (let i = start; i < text.length; i += step) {
-        h ^= text.charCodeAt(i);
-        h = Math.imul(h, 0x01000193) >>> 0;
-    }
-    return h;
-}
-
-/**
- * Stands for one picture or file: its length and a hash of a sample (every
- * 64th character) and the tail. A new picture, a new crop or a rotation
- * changes the length or the sample; hashing every byte of a tree's images on
- * each edit would cost far more than the indicator is worth.
- */
-function token(url: string | undefined): string {
-    if (!url) return '';
-    const sample = fnv(url, 0, 64, 0x811c9dc5);
-    const tail = fnv(url, Math.max(0, url.length - 64), 1, sample);
-    return `${url.length.toString(36)}.${tail.toString(36)}`;
 }
 
 /**

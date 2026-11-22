@@ -51,7 +51,9 @@ import { imageLoads, type PendingImageNotes } from './image-loads.js';
 import {
     withPoolLock, collectPoolable, storeImages, stringifyPooled, replacePooled,
     unpoolJson, unpoolObject, registerPoolReferences, forgetPoolScope, seedPoolScope, notePoolSizes,
+    packImageMeta, unpackImageMeta,
 } from './media-pool.js';
+import type { ImageMetaRecord } from './image-meta.js';
 
 /** People in a tree, without the "?" stand-ins (as the focus bar counts them). */
 function realPersonCount(data: StromData): number {
@@ -178,6 +180,8 @@ interface PooledTreeRecord {
     data?: StromData;
     encrypted?: EncryptedData;
     media: Record<string, number>;
+    /** The images' catalog entries (image-meta.ts; encrypted with the data); filled in by image-meta-backfill.ts. */
+    imageMeta?: ImageMetaRecord | EncryptedData;
 }
 
 function isPooledTree(raw: unknown): raw is PooledTreeRecord {
@@ -969,6 +973,7 @@ class TreeManagerClass {
         // hash them or read them back.
         await seedPoolScope(id, urls, !!raw.encrypted).catch(() => {});
         notePoolSizes(raw.media);
+        await unpackImageMeta(raw.imageMeta);
         // Never expected (the cleanup keeps what a tree names); the rest of
         // the tree still loads, the load sanitiser drops the empty images.
         if (missing > 0) console.error('Tree images missing from the pool:', id, missing);
@@ -1348,7 +1353,8 @@ class TreeManagerClass {
             if (!this.index.trees.some(t => t.id === id)) return;
             const encrypted = SettingsManager.isEncryptionEnabled();
             if (encrypted && !CryptoSession.isUnlocked()) throw new Error('locked');
-            const { ids, media } = await storeImages(images, encrypted, id);
+            const { ids, media, meta } = await storeImages(images, encrypted, id);
+            const imageMeta = await packImageMeta(meta, encrypted);
             let record: PooledTreeRecord;
             let sizeBytes: number;
             if (encrypted) {
@@ -1359,6 +1365,7 @@ class TreeManagerClass {
                 record = { pooled: 1, data: replacePooled(data, ids), media };
                 sizeBytes = estimateJsonBytes(data);
             }
+            if (imageMeta) record.imageMeta = imageMeta;
             await this.writeTreeRecord(id, record, base);
             this.updateMetadata(id, data, sizeBytes);
         });

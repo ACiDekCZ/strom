@@ -31,6 +31,7 @@ import { PERSISTENCE_EVENT } from './persistence.js';
 import { FILE_COPY_EVENT, RESEARCH_BASE_EVENT, UPDATE_BACKUP_FAILED_EVENT } from './tree-manager.js';
 import { SNAPSHOTS_TRIMMED_EVENT, SNAPSHOT_CREATED_EVENT, SnapshotTrim } from './snapshots.js';
 import { collectPoolGarbage } from './media-pool.js';
+import { backfillImageMeta } from './image-meta-backfill.js';
 import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
@@ -1084,13 +1085,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     // file is saved into local storage (ensureLocalUnlocked).
     // Pooled images no stored tree or backup names any more (an image removed
     // from a tree stays in the pool until a cleanup). Off the startup path.
-    setTimeout(() => { void collectPoolGarbage(); }, 30_000);
+    // Then the image catalog for trees stored before it (one image at a time;
+    // encrypted ones once unlocked — again a while after unlocking).
+    setTimeout(() => {
+        void collectPoolGarbage()
+            .then(() => backfillImageMeta(TreeManager.getTrees().map(t => t.id)))
+            .catch(err => console.warn('Image catalog backfill failed', err));
+    }, 30_000);
 
     const showingEmbedded = DataManager.isViewMode() || DataManager.hasNewerVersionData();
     if (!showingEmbedded && SettingsManager.isEncryptionEnabled() && !CryptoSession.isUnlocked()
         && await TreeManager.hasEncryptedTrees()) {
         void UI.showLocalUnlockPrompt(async () => {
             await UI.onLocalDataUnlocked?.();
+            setTimeout(() => {
+                void backfillImageMeta(TreeManager.getTrees().map(t => t.id)).catch(err => console.warn('Image catalog backfill failed', err));
+            }, 30_000);
         });
         console.log(`Strom v${APP_VERSION} initialized (locked)`);
         return;

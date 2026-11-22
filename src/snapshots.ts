@@ -16,8 +16,9 @@ import { uniqueIdSuffix } from './ids.js';
 import { StorageManager } from './storage.js';
 import { SettingsManager } from './settings.js';
 import { CryptoSession, EncryptedData } from './crypto.js';
+import type { ImageMetaRecord } from './image-meta.js';
 import {
-    withPoolLock, collectPoolable, storeImages, stringifyPooled, unpoolJson, notePoolSizes,
+    withPoolLock, collectPoolable, storeImages, stringifyPooled, unpoolJson, notePoolSizes, packImageMeta, unpackImageMeta,
     collectPoolGarbageLocked, registerPoolReferences, bytesToBase64, base64ToBytes,
 } from './media-pool.js';
 
@@ -58,6 +59,8 @@ interface StoredSnapshot {
     encrypted?: EncryptedData;   // encryption on → same path as tree data
     gzip?: string;               // base64(gzip(JSON))
     plain?: string;              // uncompressed JSON (fallback)
+    /** Catalog entries of its pooled images (image-meta.ts), encrypted with an encrypted payload. */
+    imageMeta?: ImageMetaRecord | EncryptedData;
 }
 
 /** Keep at most this many snapshots per tree (oldest dropped). */
@@ -132,11 +135,13 @@ function dayKey(ms: number): string {
 async function writeSnapshot(data: StromData, meta: SnapshotMeta): Promise<SnapshotMeta> {
     const encrypted = SettingsManager.isEncryptionEnabled() && CryptoSession.isUnlocked();
     for (const m of await allMetas()) notePoolSizes(m.media);
-    const { ids, media } = await storeImages(collectPoolable(data), encrypted, meta.treeId);
+    const { ids, media, meta: imageMeta } = await storeImages(collectPoolable(data), encrypted, meta.treeId);
     const json = stringifyPooled(data, ids);
     const stored: StoredSnapshot = { meta: { ...meta, sizeBytes: 0 } };
     delete stored.meta.media;
     if (Object.keys(media).length) stored.meta.media = media;
+    const packed = await packImageMeta(imageMeta, encrypted);
+    if (packed) stored.imageMeta = packed;
     if (encrypted) {
         stored.encrypted = await CryptoSession.encrypt(json);
         stored.meta.sizeBytes = JSON.stringify(stored.encrypted).length;
@@ -377,6 +382,7 @@ export async function getSnapshotPayload(id: string): Promise<{ json: string; mi
     if (!s) return null;
     const text = await readSnapshotText(s);
     if (text === null) return null;
+    await unpackImageMeta(s.imageMeta);
     const { json, missing } = await unpoolJson(text);
     return {
         json, missingImages: missing,
