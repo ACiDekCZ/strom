@@ -112,6 +112,30 @@ export function existingTargetOf(state: MergeState, incomingId: PersonId): Perso
     return undefined;
 }
 
+/**
+ * The incoming persons the merge adds as NEW persons under the current
+ * decisions, each once: a match the person rejected or left undecided below
+ * AUTO_CONFIRM_SCORE (the dialog promises "a separate person" for those), and
+ * every person without a match — except one skipped or merged by hand. In
+ * "update existing only" mode nothing is added. The one rule for both the
+ * executor and the "will add" count.
+ */
+export function incomingAddedAsNew(state: MergeState): PersonId[] {
+    if (state.updateOnly) return [];
+    const out = new Set<PersonId>();
+    const added = (id: PersonId): boolean => {
+        const type = state.decisions.get(id)?.type;
+        return type !== 'skip' && type !== 'manual_match';
+    };
+    for (const match of state.matches) {
+        if (!isEffectivelyConfirmed(state, match) && added(match.incomingId)) out.add(match.incomingId);
+    }
+    for (const id of state.unmatchedIncoming) {
+        if (added(id)) out.add(id);
+    }
+    return [...out];
+}
+
 const PARTNERSHIP_CONFLICT_FIELDS: readonly PartnershipConflictField[] = ['status', 'startDate', 'startPlace', 'endDate'];
 
 /**
@@ -515,9 +539,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             carryMergedImports(existingPerson, state.existingData.persons[existingId], incoming, importMap);
         }
 
-        // Which incoming persons get added as NEW persons.
-        //
-        // Two independent gates decide this:
+        // Which incoming persons get added as NEW persons (incomingAddedAsNew):
         //  - updateOnly (Primitive 1): the whole-import toggle. When on, nothing
         //    is added — only matched persons are enriched. The placeholder block
         //    and the partnership loop below key off `toAdd`/added persons, so an
@@ -526,19 +548,9 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         //    enforceRelationshipSymmetry to sweep up).
         //  - per-match skip (Primitive 2): "don't bring this person at all".
         //    A skipped incoming person is neither merged nor added, regardless of
-        //    updateOnly. rejected still means "import as a NEW separate person".
-        const toAdd: PersonId[] = state.updateOnly ? [] : [
-            ...state.matches
-                .filter(m => {
-                    const decision = state.decisions.get(m.incomingId);
-                    return decision?.type === 'reject';
-                })
-                .map(m => m.incomingId),
-            ...state.unmatchedIncoming.filter(id => {
-                const decision = state.decisions.get(id);
-                return decision?.type !== 'manual_match' && decision?.type !== 'skip';
-            })
-        ];
+        //    updateOnly. A rejected match, and an undecided one below the
+        //    auto-confirm score, is imported as a NEW separate person.
+        const toAdd: PersonId[] = incomingAddedAsNew(state);
 
         for (const incomingId of toAdd) {
             const incoming = state.incomingData.persons[incomingId] && shared(state.incomingData.persons[incomingId]);
@@ -1867,8 +1879,16 @@ function enforceRelationshipSymmetry(data: StromData): void {
             list.push(person.id);
         }
     }
+    // The order a person's children already had stays (a hand reorder, a
+    // file's CHIL order); a child new to the person comes after them. Taking
+    // the derived list as it is would reorder every parent's children by the
+    // order the persons are stored in (spec 134 K0.8).
     for (const person of Object.values(persons)) {
-        person.childIds = childrenOf.get(person.id) ?? [];
+        const derived = childrenOf.get(person.id) ?? [];
+        const valid = new Set(derived);
+        const kept = [...new Set(person.childIds.filter(cid => valid.has(cid)))];
+        const keptSet = new Set(kept);
+        person.childIds = [...kept, ...derived.filter(cid => !keptSet.has(cid))];
     }
 
     // A partnership may only list children that acknowledge BOTH partners as

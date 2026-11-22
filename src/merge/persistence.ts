@@ -75,6 +75,19 @@ function serializeState(state: MergeState): SerializableMergeState {
 }
 
 function deserializeState(serialized: SerializableMergeState): MergeState {
+    // A session saved before suggestions stopped being the default holds them
+    // as resolutions: on a person nobody answered for, a suggested
+    // "use the import" goes back to keeping the existing value (spec 134 K0.3).
+    const answered = new Set(serialized.conflictResolutions.map(([id]) => id));
+    for (const match of serialized.matches) {
+        if (answered.has(match.incomingId)) continue;
+        for (const conflict of match.conflicts) {
+            if (conflict.suggestedReason && conflict.resolution === 'use_incoming') {
+                conflict.suggested ??= 'use_incoming';
+                conflict.resolution = 'keep_existing';
+            }
+        }
+    }
     return {
         existingData: serialized.existingData,
         incomingData: serialized.incomingData,

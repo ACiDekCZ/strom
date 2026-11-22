@@ -24,6 +24,7 @@ import { applyLivingPrivacy, CONTENT_PRESETS } from '../privacy.js';
 import { researchGedcom } from '../ui/research-ui.js';
 import { StorageManager } from '../storage.js';
 import { createMergeState, updateMatchDecision } from '../merge/matching.js';
+import type { MergeState } from '../merge/types.js';
 import { detectPartnershipConflicts, executeMerge, isEffectivelyConfirmed, updatePartnershipConflictResolution } from '../merge/executor.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { factCitations } from '../import-origin.js';
@@ -572,6 +573,11 @@ const paforderCouple = (data: StromData): Partnership =>
 const divorcedCouple = (data: StromData): Partnership =>
     Object.values(data.partnerships).find(p => data.persons[p.person1Id]?.firstName === 'Mračoslav')!;
 
+/** A person confirms every match the dialog only offers (below the auto-confirm score). */
+const confirmOffered = (state: MergeState): void => {
+    for (const m of state.matches) if (!isEffectivelyConfirmed(state, m)) state.decisions.set(m.incomingId, { type: 'confirm' });
+};
+
 describe('The combined 066 file merged into the tree it was imported into', () => {
     beforeEach(() => { vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never); });
     afterEach(() => { vi.restoreAllMocks(); });
@@ -579,7 +585,12 @@ describe('The combined 066 file merged into the tree it was imported into', () =
     it('doubles nothing, and "Back to" is the fresh import\'s', async () => {
         const tree = load(FILE, '2026-11-08');
         const fresh = backTo(tree);
-        const result = await executeMerge(createMergeState(tree, load(FILE, '2026-11-09')));
+        const state = createMergeState(tree, load(FILE, '2026-11-09'));
+        // The two nameless sisters of case 24 are only offered (below the
+        // auto-confirm score): a person confirms them, else they would come in
+        // as separate persons (spec 134 K0.1).
+        confirmOffered(state);
+        const result = await executeMerge(state);
         expect(result.success).toBe(true);
         const merged = result.mergedData!;
         const size = (d: StromData) => [Object.keys(d.persons).length, Object.keys(d.partnerships).length, Object.keys(d.sources ?? {}).length];
@@ -593,6 +604,7 @@ describe('The combined 066 file merged into the tree it was imported into', () =
         const sisters = (d: StromData) => Object.values(d.persons).find(p => p.firstName === 'Ťapkoslav')!.childIds;
         const pairs = sisters(state.incomingData).map(id => state.matches.find(m => m.incomingId === id)?.existingId);
         expect(pairs).toEqual(sisters(tree));
+        confirmOffered(state);
         const merged = (await executeMerge(state)).mergedData!;
         expect(Object.values(merged.persons).filter(p => p.lastName === 'Čvachtová')).toHaveLength(2);
         expect(record(backTo(merged), '@F2401@')).toEqual(expect.arrayContaining(['1 CHIL @I2403@', '1 CHIL @I2404@']));

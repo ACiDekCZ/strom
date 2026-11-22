@@ -7,7 +7,7 @@ import { parseFlexDate, yearOf } from '../dates.js';
 import { PersonId, Person, Partnership, StromData } from '../types.js';
 import { gendersCompatible } from '../model-values.js';
 import { sameSurname, withSurnameRules } from '../surnames.js';
-import { detectPartnershipConflicts, AUTO_CONFIRM_SCORE } from './executor.js';
+import { detectPartnershipConflicts, AUTO_CONFIRM_SCORE, incomingAddedAsNew } from './executor.js';
 import { idEvidence, sameFileRecord, strongIdIndex, StrongIdIndex } from './id-match.js';
 import {
     PersonMatch,
@@ -1647,8 +1647,8 @@ function calculatePartnerMatchScore(
  * Detect conflicting fields between two persons
  */
 /**
- * Suggest which side of a conflict is objectively MORE INFORMATIVE, so the
- * default resolution is not a blind keep-existing:
+ * Suggest which side of a conflict is objectively MORE INFORMATIVE — a hint
+ * the conflict dialog shows, never the default (the default keeps existing):
  * - dates: same year, but one side has more precision (day > month > year) or
  *   no ~/</> qualifier — prefer it; contradicting components stay for a human;
  * - names/places: one normalized value contains the other ("Praha" vs
@@ -1719,13 +1719,15 @@ export function detectConflicts(existing: Person, incoming: Person): FieldConfli
 
         // Conflict if both have values and they differ
         if (existingValue && incomingValue && existingValue !== incomingValue) {
+            // The suggestion is a hint only: an undecided difference keeps the
+            // existing value (spec 134 K0.3).
             const suggestion = suggestResolution(field, existingValue, incomingValue);
             conflicts.push({
                 field,
                 existingValue,
                 incomingValue,
-                resolution: suggestion.resolution,
-                ...(suggestion.reason ? { suggestedReason: suggestion.reason } : {})
+                resolution: 'keep_existing',
+                ...(suggestion.reason ? { suggestedReason: suggestion.reason, suggested: suggestion.resolution } : {})
             });
         }
         // Not a conflict if only one has value (can be merged)
@@ -2004,20 +2006,10 @@ export function calculateMergeStats(state: MergeState): MergeStats {
         if (decision.type === 'skip') skipped++;
     }
 
-    // Truthful "will add N new persons" count. updateOnly adds nothing; per-match
-    // skip and manual matches never add. An unmatched person with no decision is
-    // added as new; a rejected match ("not the same person") is added as new.
-    let willAdd = 0;
-    if (!state.updateOnly) {
-        for (const id of state.unmatchedIncoming) {
-            const decision = state.decisions.get(id);
-            // A rejected match lands here after reanalyzeMatches: still added.
-            if (!decision || decision.type === 'reject') willAdd++;
-        }
-        for (const match of state.matches) {
-            if (state.decisions.get(match.incomingId)?.type === 'reject') willAdd++;
-        }
-    }
+    // Truthful "will add N new persons" count: exactly whom the executor adds
+    // (updateOnly adds nothing; skip and manual matches never add; a rejected
+    // match and an undecided one below the auto-confirm score are added).
+    const willAdd = incomingAddedAsNew(state).length;
 
     return {
         total: Object.keys(state.incomingData.persons).length,

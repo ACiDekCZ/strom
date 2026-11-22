@@ -1240,14 +1240,14 @@ class MergerUIClass {
                             ${conflict.resolution === 'keep_existing' ? 'checked' : ''}>
                         <span class="conflict-value existing">${this.conflictValueHtml(conflict.field, conflict.existingValue, match.existingId)}</span>
                         <span class="conflict-badge existing">${strings.merge.keepExisting}</span>
-                        ${conflict.resolution === 'keep_existing' ? suggestedLabel(conflict) : ''}
+                        ${(conflict.suggested ?? 'keep_existing') === 'keep_existing' ? suggestedLabel(conflict) : ''}
                     </label>
                     <label class="conflict-option sel-opt" data-sel-form="tile">
                         <input type="radio" name="conflict-${conflict.field}" value="use_incoming"
                             ${conflict.resolution === 'use_incoming' ? 'checked' : ''}>
                         <span class="conflict-value incoming">${this.conflictValueHtml(conflict.field, conflict.incomingValue)}</span>
                         <span class="conflict-badge incoming">${strings.merge.useImport}</span>
-                        ${conflict.resolution === 'use_incoming' ? suggestedLabel(conflict) : ''}
+                        ${conflict.suggested === 'use_incoming' ? suggestedLabel(conflict) : ''}
                     </label>
                 </div>
             </div>

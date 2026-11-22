@@ -63,6 +63,12 @@ export interface FieldConflict {
      * suggestResolution). Absent = plain keep-existing default, no opinion.
      */
     suggestedReason?: 'more_precise_date' | 'more_complete';
+    /**
+     * The side the heuristics recommend (with suggestedReason). Only a hint
+     * the dialog shows: `resolution` starts as keep_existing and changes only
+     * by a person's choice, so nothing existing is replaced without one.
+     */
+    suggested?: 'keep_existing' | 'use_incoming';
 }
 
 /** Partnership fields that can conflict when both trees know the same union. */
