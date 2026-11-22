@@ -35,7 +35,7 @@ export type DroppedTag = GedcomDroppedTag;
 
 export interface PlanSource {
     kind: 'ged' | 'json' | 'tree' | 'view' | 'share';
-    /** File name or tree name ("rodokmen-Habrovi.ged", "Habrovi – zkouška"). */
+    /** File name or tree name ("rodokmen-Jilmovi.ged", "Jilmovi – zkouška"). */
     label: string;
     program?: string;
     fileDate?: string;

@@ -25,12 +25,12 @@ const SCOPES: readonly PlanScope[] = ['a', 'b', 'c', 'd'];
 const FIELDS = ['firstName', 'lastName', 'marriedSurname', 'titleBefore', 'titleAfter', 'gender', 'birthDate', 'birthPlace',
     'birthAddress', 'birthAge', 'deathDate', 'deathPlace', 'deathAddress', 'deathAge', 'deathCause', 'notes', 'photo'] as const;
 
-const SOURCE: PlanSource = { kind: 'ged', label: 'rodokmen-Habrovi.ged', persons: 0 };
+const SOURCE: PlanSource = { kind: 'ged', label: 'rodokmen-Jilmovi.ged', persons: 0 };
 
 function choices(over: Partial<WizardChoices> = {}): WizardChoices {
     return {
-        mode: 'add', targetTreeId: 'tree-javor' as WizardChoices['targetTreeId'], scope: 'c', swapped: false,
-        source: SOURCE, targetName: 'Javorovi', targetFingerprint: 'fp-target', planId: 'mp-test', createdAt: '2026-05-04T10:00:00.000Z',
+        mode: 'add', targetTreeId: 'tree-modřín' as WizardChoices['targetTreeId'], scope: 'c', swapped: false,
+        source: SOURCE, targetName: 'Modřínovi', targetFingerprint: 'fp-target', planId: 'mp-test', createdAt: '2026-05-04T10:00:00.000Z',
         ...over,
     };
 }
@@ -309,17 +309,17 @@ function tree(): { data: StromData; person: (id: string, first: string, last: st
 describe('scopeExample', () => {
     it('says the scopes on a person both trees know with a documented birth', () => {
         const t = tree();
-        const tHer = t.person('t2', 'Dobroslava', 'Javorová', { gender: 'female', birthDate: '1852' });
-        t.couple(t.person('t1', 'Velemír', 'Javor', { birthDate: '1850-03-12', birthPlace: 'Lipová' }), tHer);
+        const tHer = t.person('t2', 'Dobroslava', 'Modřínová', { gender: 'female', birthDate: '1852' });
+        t.couple(t.person('t1', 'Velemír', 'Modřín', { birthDate: '1850-03-12', birthPlace: 'Lipová' }), tHer);
         const s = tree();
-        const sHim = s.person('s1', 'Velemír', 'Javor', { birthDate: '1850-03-12', birthPlace: 'Lipová', deathDate: '1911' });
-        s.couple(sHim, s.person('s2', 'Dobroslava', 'Javorová', { gender: 'female', birthDate: '1852' }),
-            [s.person('s3', 'Kojata', 'Javor', { birthDate: '1878' })]);
+        const sHim = s.person('s1', 'Velemír', 'Modřín', { birthDate: '1850-03-12', birthPlace: 'Lipová', deathDate: '1911' });
+        s.couple(sHim, s.person('s2', 'Dobroslava', 'Modřínová', { gender: 'female', birthDate: '1852' }),
+            [s.person('s3', 'Kojata', 'Modřín', { birthDate: '1878' })]);
         const ex = scopeExample(s.data, t.data);
         expect(ex).not.toBeNull();
-        expect(ex!.person).toBe('Velemír Javor');
-        expect(ex!.a).toContain('Kojata Javor');
-        expect(ex!.d).toContain('Kojata Javor');
+        expect(ex!.person).toBe('Velemír Modřín');
+        expect(ex!.a).toContain('Kojata Modřín');
+        expect(ex!.d).toContain('Kojata Modřín');
         // The detail the tree lacks (the death) fills in b), one the tree has stays.
         expect(ex!.b).toContain('1911');
         expect(ex!.b).toContain('Velemír');
@@ -327,12 +327,12 @@ describe('scopeExample', () => {
 
     it('is null without a sure pair: another name, or the same name with no birth to go by', () => {
         const t = tree();
-        t.person('t1', 'Velemír', 'Javor');
+        t.person('t1', 'Velemír', 'Modřín');
         const s = tree();
-        s.person('s1', 'Velemír', 'Javor');
+        s.person('s1', 'Velemír', 'Modřín');
         expect(scopeExample(s.data, t.data)).toBeNull();
         const other = tree();
-        other.person('s1', 'Hostivít', 'Habr', { birthDate: '1850' });
+        other.person('s1', 'Hostivít', 'Jilm', { birthDate: '1850' });
         expect(scopeExample(other.data, t.data)).toBeNull();
         expect(scopeExample({ persons: {}, partnerships: {} }, t.data)).toBeNull();
     });
@@ -340,28 +340,28 @@ describe('scopeExample', () => {
 
 describe('isRepeatOf', () => {
     const record = (id: string, at: string, source: Partial<PlanSource>, state: MergeRecord['state'] = 'valid'): MergeRecord => ({
-        id, at, source: { ...SOURCE, ...source }, target: { name: 'Javorovi', newTree: false },
+        id, at, source: { ...SOURCE, ...source }, target: { name: 'Modřínovi', newTree: false },
         counts: { joined: 0, added: 0, skipped: 0, pending: 0, total: 0, fieldChanges: 0, differencesKept: 0, partnerships: 0, links: 0 },
         state, added: [], joined: [], fields: [], partnerships: [], sources: [], places: [], media: [],
     });
 
     it('finds the latest merge of the same source by its import id or fingerprint, not an undone one', () => {
         const merges = [
-            record('m1', '2026-03-01T10:00:00.000Z', { importId: 'imp-habr' }),
-            record('m2', '2026-04-01T10:00:00.000Z', { importId: 'imp-habr' }),
-            record('m3', '2026-05-01T10:00:00.000Z', { importId: 'imp-habr' }, 'undone'),
+            record('m1', '2026-03-01T10:00:00.000Z', { importId: 'imp-jilm' }),
+            record('m2', '2026-04-01T10:00:00.000Z', { importId: 'imp-jilm' }),
+            record('m3', '2026-05-01T10:00:00.000Z', { importId: 'imp-jilm' }, 'undone'),
             record('m4', '2026-02-01T10:00:00.000Z', { fingerprint: 'sha-dubova' }),
         ];
-        expect(isRepeatOf({ ...SOURCE, importId: 'imp-habr' }, merges)?.id).toBe('m2');
+        expect(isRepeatOf({ ...SOURCE, importId: 'imp-jilm' }, merges)?.id).toBe('m2');
         expect(isRepeatOf({ ...SOURCE, fingerprint: 'sha-dubova' }, merges)?.id).toBe('m4');
         expect(isRepeatOf({ ...SOURCE, importId: 'imp-other', fingerprint: 'sha-dubova' }, merges)?.id).toBe('m4');
     });
 
     it('is null for a source merged never, without ids, or with no merges at all', () => {
-        const merges = [record('m1', '2026-03-01T10:00:00.000Z', { importId: 'imp-habr' })];
-        expect(isRepeatOf({ ...SOURCE, importId: 'imp-javor' }, merges)).toBeNull();
+        const merges = [record('m1', '2026-03-01T10:00:00.000Z', { importId: 'imp-jilm' })];
+        expect(isRepeatOf({ ...SOURCE, importId: 'imp-modřín' }, merges)).toBeNull();
         expect(isRepeatOf(SOURCE, merges)).toBeNull();
-        expect(isRepeatOf({ ...SOURCE, importId: 'imp-habr' }, undefined)).toBeNull();
-        expect(isRepeatOf({ ...SOURCE, importId: 'imp-habr' }, [record('m1', '2026-03-01T10:00:00.000Z', { importId: 'imp-habr' }, 'undone')])).toBeNull();
+        expect(isRepeatOf({ ...SOURCE, importId: 'imp-jilm' }, undefined)).toBeNull();
+        expect(isRepeatOf({ ...SOURCE, importId: 'imp-jilm' }, [record('m1', '2026-03-01T10:00:00.000Z', { importId: 'imp-jilm' }, 'undone')])).toBeNull();
     });
 });

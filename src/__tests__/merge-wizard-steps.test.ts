@@ -24,8 +24,8 @@ function plan(o: { pending?: boolean; unions?: number; differences?: number } = 
     if (o.pending) items.push({ kind: 'person-pending', id: 'i2' as PersonId, candidate: 't2' as PersonId, score: 60 });
     return {
         id: 'mp-test', mode: 'add', scope: 'a',
-        source: { kind: 'ged', label: 'rodokmen-Habrovi.ged', persons: 2 },
-        target: { treeId: null, name: 'Javorovi', persons: 2, fingerprint: 'fp', research: false },
+        source: { kind: 'ged', label: 'rodokmen-Jilmovi.ged', persons: 2 },
+        target: { treeId: null, name: 'Modřínovi', persons: 2, fingerprint: 'fp', research: false },
         items, notTaken: [], rules: { all: 'mine' }, createdAt: '2026-05-04T10:00:00.000Z',
         conflicts: { differences: o.differences ?? 0, unions: o.unions ?? 0 },
     };

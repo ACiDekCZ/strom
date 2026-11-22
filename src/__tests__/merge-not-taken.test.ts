@@ -20,19 +20,19 @@ const byTag = (list: GedcomDroppedTag[]): Record<string, GedcomDroppedTag> => Ob
 
 describe('droppedTags of a GEDCOM file', () => {
     const file = ged(
-        ['0 @I1@ INDI', '1 NAME Velemír /Javor/', '1 SEX M', '1 _UPD 12 MAR 2020 10:00:00 GMT -0500',
-            '1 FOOX Mlýn v Lipové', '1 BIRT', '2 DATE 1850', '2 PLAC Lipová',
-            '1 OBJE', '2 FILE https://example.invalid/javor.jpg', '2 FORM jpg', '2 _PHOTO_RIN MH:P1', '2 _FILESIZE 1234',
-            '1 _ZZQ kovář v Dubové'],
-        ['0 @I2@ INDI', '1 NAME Hostivít /Habr/', '1 SEX M', '1 FOOX Hájovna', '1 _UPD 12 MAR 2020',
-            '1 OBJE', '2 FILE https://example.invalid/habr.jpg', '2 _PHOTO_RIN MH:P2'],
+        ['0 @I1@ INDI', '1 NAME Velemír /Modřín/', '1 SEX M', '1 _UPD 12 MAR 2020 10:00:00 GMT -0500',
+            '1 FOOX Mlýn v Křemenné', '1 BIRT', '2 DATE 1850', '2 PLAC Lipová',
+            '1 OBJE', '2 FILE https://example.invalid/modřín.jpg', '2 FORM jpg', '2 _PHOTO_RIN MH:P1', '2 _FILESIZE 1234',
+            '1 _ZZQ kovář v Mechové'],
+        ['0 @I2@ INDI', '1 NAME Hostivít /Jilm/', '1 SEX M', '1 FOOX Hájovna', '1 _UPD 12 MAR 2020',
+            '1 OBJE', '2 FILE https://example.invalid/jilm.jpg', '2 _PHOTO_RIN MH:P2'],
     );
 
     it('names each unknown kind of line with its count and the first value under the person’s name', () => {
         const tags = byTag(dropped(file));
-        expect(tags.FOOX).toEqual({ tag: 'FOOX', count: 2, example: 'Velemír Javor: Mlýn v Lipové' });
+        expect(tags.FOOX).toEqual({ tag: 'FOOX', count: 2, example: 'Velemír Modřín: Mlýn v Křemenné' });
         // Another program's own tag, with the person it was under (not the next person's line).
-        expect(tags._ZZQ).toMatchObject({ count: 1, example: 'Velemír Javor: kovář v Dubové' });
+        expect(tags._ZZQ).toMatchObject({ count: 1, example: 'Velemír Modřín: kovář v Mechové' });
     });
 
     it('does not count MyHeritage’s bookkeeping (_UPD, _PHOTO_RIN, _FILESIZE)', () => {
@@ -45,19 +45,19 @@ describe('droppedTags of a GEDCOM file', () => {
     it('lists the kinds most frequent first and nothing for a file the tree takes over whole', () => {
         const list = dropped(file);
         expect(list[0].tag).toBe('FOOX');
-        expect(dropped(ged(['0 @I1@ INDI', '1 NAME Hostivít /Habr/', '1 SEX M', '1 BIRT', '2 DATE 1820', '1 _UPD 1 JAN 2021']))).toEqual([]);
+        expect(dropped(ged(['0 @I1@ INDI', '1 NAME Hostivít /Jilm/', '1 SEX M', '1 BIRT', '2 DATE 1820', '1 _UPD 1 JAN 2021']))).toEqual([]);
     });
 
     it('an unknown line outside a person has its value alone as the example', () => {
-        const tags = byTag(dropped(ged(['0 @F1@ FAM', '1 FOOX Svatba v Lipové'])));
-        expect(tags.FOOX?.example).toBe('Svatba v Lipové');
+        const tags = byTag(dropped(ged(['0 @F1@ FAM', '1 FOOX Svatba v Křemenné'])));
+        expect(tags.FOOX?.example).toBe('Svatba v Křemenné');
     });
 });
 
 describe('notTakenLine (step 1)', () => {
     afterEach(() => setLanguage('en'));
 
-    const line = (n: number): GedcomDroppedTag[] => [{ tag: 'FOOX', count: n, example: 'Velemír Javor: Mlýn' }];
+    const line = (n: number): GedcomDroppedTag[] => [{ tag: 'FOOX', count: n, example: 'Velemír Modřín: Mlýn' }];
 
     it('is empty when the tree takes over everything', () => {
         expect(notTakenLine(null)).toBe('');
@@ -66,10 +66,10 @@ describe('notTakenLine (step 1)', () => {
     });
 
     const expected: Record<'en' | 'cs' | 'de' | 'pl', (n: number) => string> = {
-        en: n => `The tree will not take over: FOOX (${n}×, e.g. “Velemír Javor: Mlýn”).`,
-        cs: n => `Strom nepřevezme: FOOX (${n}×, např. „Velemír Javor: Mlýn“).`,
-        de: n => `Nicht übernommen wird: FOOX (${n}×, z. B. „Velemír Javor: Mlýn“).`,
-        pl: n => `Drzewo nie przejmie: FOOX (${n}×, np. „Velemír Javor: Mlýn”).`,
+        en: n => `The tree will not take over: FOOX (${n}×, e.g. “Velemír Modřín: Mlýn”).`,
+        cs: n => `Strom nepřevezme: FOOX (${n}×, např. „Velemír Modřín: Mlýn“).`,
+        de: n => `Nicht übernommen wird: FOOX (${n}×, z. B. „Velemír Modřín: Mlýn“).`,
+        pl: n => `Drzewo nie przejmie: FOOX (${n}×, np. „Velemír Modřín: Mlýn”).`,
     };
     for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
         it(`says 1, 2 and 5 lines in ${lang}`, () => {
