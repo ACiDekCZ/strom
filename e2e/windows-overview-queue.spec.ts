@@ -109,6 +109,9 @@ test.describe('the queue in the overview\'s own window (queue-list through the m
         await ov(popup).locator('.live-queue-load').click();
         await expect(rows(popup)).toHaveCount(100);
         await expect(ov(popup).locator('.live-queue-load')).toBeFocused();
+        // Drawn again (a status, the main window's snapshot): the focus stays on Load more.
+        await popup.evaluate(() => (window.Strom.UI as unknown as { renderResearchOverview(): void }).renderResearchOverview());
+        await expect(ov(popup).locator('.live-queue-load')).toBeFocused();
 
         await search(popup, 'T0950');
         await expect(result(popup)).toContainText('T0950 is no longer in the queue (done).');

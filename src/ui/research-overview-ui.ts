@@ -86,6 +86,20 @@ import { agentMirror } from '../windows/agent-mirror.js';
 import { greyOverviewActions } from './overview-window-states.js';
 import { arrangeOverviewColumns, beginOverviewColumns, noteOverviewSectionRows, nodesAfter, resetOverviewColumns } from './overview-columns-ui.js';
 
+/**
+ * "Load more" of the queue keeps the keyboard's focus over any redraw (a status, the own window's
+ * snapshot): the overview is drawn anew, and the focus went to the page with the old button.
+ */
+function keepQueueLoadFocus(): () => void {
+    const a = document.activeElement as HTMLElement | null;
+    if (!a?.matches?.('#research-overview .live-queue-load')) return () => {};
+    return () => {
+        const now = document.activeElement;
+        if (now && now !== document.body && now.isConnected) return;
+        document.querySelector<HTMLElement>('#research-overview .live-queue-load')?.focus({ preventScroll: true });
+    };
+}
+
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
 /** The chip chosen in "Awaiting action" (per device). */
@@ -681,6 +695,7 @@ export const researchOverviewMethods = uiModule({
         queueMicrotask(keepAnswerFocus());
         queueMicrotask(keepKeyFocus());
         queueMicrotask(keepSectionControlFocus());
+        queueMicrotask(keepQueueLoadFocus());
         // A task just moved by "Do next": focused once drawn first.
         queueMicrotask(focusQueueMoved);
         // The followed research's, else the open tree's viewed without following (spec 057 §7.2).
