@@ -50,7 +50,7 @@ import { mergeNoteText } from './notes.js';
 import { censusTypeText, isLegacyCensus } from '../events.js';
 import { sourcePlaceKey } from '../source-location.js';
 import { sameFileRecord } from './id-match.js';
-import { checkMergeResult } from './merge-check.js';
+import { checkMergeResult, isAncestorOrSelf } from './merge-check.js';
 import { MARRIAGE_EVENT_ID, allShareCopies, joinSameShareCopies, shareIdMaker, tidyShares, treeShareIds } from '../shared-events.js';
 
 // ==================== BACKUP ====================
@@ -528,6 +528,22 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             }
             // Rejected matches are added as new persons below
         }
+        // A person merged by hand without an offered match (buildIdMapping
+        // already sends its links to the chosen person): its data and files
+        // come along like a match's. Without a conflict asked about, only
+        // what the tree lacks is filled in.
+        for (const incomingId of state.unmatchedIncoming) {
+            const decision = state.decisions.get(incomingId);
+            if (decision?.type !== 'manual_match') continue;
+            const existingPerson = mergedData.persons[decision.targetId];
+            const incoming = state.incomingData.persons[incomingId];
+            if (!existingPerson || !incoming) continue;
+            mergePersonData(existingPerson, shared(incoming), state.conflictResolutions.get(incomingId) ?? [], mapping.persons, state.incomingData.persons);
+            carriedPersons.add(incomingId);
+            carryMergedImports(existingPerson, state.existingData.persons[decision.targetId], incoming, importMap);
+            keepEarlierAddedAt(existingPerson, incoming);
+            mergedCount++;
+        }
         // A "?" of a family the tree already has (standInsOfKnownFamilies) is
         // the tree's "?": it takes what the file says of it (its ids).
         const matchedIncoming = new Set(state.matches.map(m => m.incomingId));
@@ -762,6 +778,9 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 
         // Update parent-child relationships for merged persons
         updateRelationships(mergedData, state, mapping);
+        // A merged child's link to a parent that came along, when the union
+        // it came through stayed out (the other parent skipped or left).
+        carryLoneParentLinks(mergedData, state, mapping.persons);
 
         // Guarantee childIds/parentIds are symmetric and partnership children
         // agree with parentIds — no dangling or one-sided links survive.
@@ -1931,6 +1950,34 @@ function enforceRelationshipSymmetry(data: StromData): void {
                 && child.parentIds.includes(partnership.person2Id);
         });
         partnership.childIds = [...new Set(kept)];
+    }
+}
+
+/**
+ * Parent links of the incoming tree between two persons that both came into
+ * the merged tree, which no union brought (its other partner was skipped or
+ * left out): the link comes alone, as it does for an added child. A child
+ * with two parents takes no third, and a link that would make a person its
+ * own ancestor (a hand-picked match into the wrong generation) stays out.
+ */
+function carryLoneParentLinks(
+    mergedData: StromData,
+    state: MergeState,
+    personMap: ReadonlyMap<PersonId, PersonId>,
+): void {
+    for (const [incomingId, incoming] of Object.entries(state.incomingData.persons) as [PersonId, Person][]) {
+        const childId = personMap.get(incomingId);
+        const child = childId ? mergedData.persons[childId] : undefined;
+        if (!child) continue;
+        for (const incomingParent of incoming.parentIds ?? []) {
+            const parentId = personMap.get(incomingParent);
+            const parent = parentId ? mergedData.persons[parentId] : undefined;
+            if (!parent || parent.id === child.id || child.parentIds.includes(parent.id)) continue;
+            if (child.parentIds.filter(id => mergedData.persons[id]).length >= 2) continue;
+            if (isAncestorOrSelf(mergedData, child.id, parent.id)) continue;
+            child.parentIds.push(parent.id);
+            if (!parent.childIds.includes(child.id)) parent.childIds.push(child.id);
+        }
     }
 }
 

@@ -67,6 +67,20 @@ function parentLinks(data: StromData): Array<[PersonId, PersonId]> {
     return out;
 }
 
+/** True when `ancestor` is `person` or among the persons above it (parent links, upwards). */
+export function isAncestorOrSelf(data: StromData, ancestor: PersonId, person: PersonId): boolean {
+    const seen = new Set<PersonId>();
+    const queue: PersonId[] = [person];
+    while (queue.length) {
+        const id = queue.pop()!;
+        if (id === ancestor) return true;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        queue.push(...(data.persons[id]?.parentIds ?? []));
+    }
+    return false;
+}
+
 function sameAttachment(a: Attachment, b: Attachment): boolean {
     if (a.id === b.id) return true;
     if (a.originalOnly || b.originalOnly) return !!a.originalOnly && !!b.originalOnly && !!a.original?.sha256 && a.original.sha256 === b.original?.sha256;
@@ -198,6 +212,9 @@ export function checkMergeResult(state: MergeState, result: { mergedData: StromD
             else t.added++;
         } else if (parents.filter(id => id !== p && merged.persons[id]).length >= 2) {
             // A child with two parents already takes no third.
+            t.left++;
+        } else if (isAncestorOrSelf(merged, c, p)) {
+            // Nobody becomes their own ancestor (a match into the wrong generation).
             t.left++;
         } else {
             t.lost++;

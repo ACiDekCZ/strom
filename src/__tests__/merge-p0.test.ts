@@ -227,3 +227,86 @@ describe('K0.8 a merge keeps the order of the children the tree already has', ()
         expect(merged.partnerships['eU' as PartnershipId].childIds).toEqual(['eC', 'eA', 'eB']);
     });
 });
+
+describe('K0.2 classes found by random pairs of trees', () => {
+    it('a person merged by hand without an offered match brings its data and files', async () => {
+        const eT = P('eT', 'Tobiáš', 'Lindner', { birthDate: '1871' });
+        const existingData = tree([eT]);
+        const iX = P('iX', 'Tobias', 'Lintner', { birthDate: '1871', birthPlace: 'Hrbolín' });
+        const incomingData: StromData = {
+            ...tree([iX]),
+            media: { im1: { id: 'im1', name: 'im1.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,QUJD', sizeBytes: 3, places: [{ personId: 'iX' as PersonId }] } },
+        };
+        const state: MergeState = {
+            existingData, incomingData, matches: [],
+            unmatchedExisting: ['eT'] as PersonId[], unmatchedIncoming: ['iX'] as PersonId[],
+            decisions: new Map([['iX' as PersonId, { type: 'manual_match', targetId: 'eT' as PersonId }]]),
+            conflictResolutions: new Map(), phase: 'executing',
+        };
+        const result = await executeMerge(state);
+        expect(result.check?.problems).toEqual([]);
+        expect(result.success).toBe(true);
+        const merged = result.mergedData;
+        expect(Object.keys(merged.persons)).toEqual(['eT']);
+        expect(merged.persons['eT' as PersonId].birthPlace).toBe('Hrbolín');
+        // The differing name is no choice made: the tree's stays.
+        expect(merged.persons['eT' as PersonId].firstName).toBe('Tobiáš');
+        expect(merged.media?.im1?.places).toEqual([{ personId: 'eT' }]);
+    });
+
+    /** Existing: Ignác and Tobiáš, not linked. Incoming: Tobiáš, child of Ignác and Marta. */
+    function parentLinkFixture(): MergeState {
+        const eF = P('eF', 'Ignác', 'Lindner', { birthDate: '1840' });
+        const eT = P('eT', 'Tobiáš', 'Lindner', { birthDate: '1871' });
+        const existingData = tree([eF, eT]);
+        const iF = P('iF', 'Ignác', 'Lindner', { birthDate: '1840', partnerships: ['iU'], childIds: ['iT'] });
+        const iM = P('iM', 'Marta', 'Bergerová', { gender: 'female', birthDate: '1845', partnerships: ['iU'], childIds: ['iT'] });
+        const iT = P('iT', 'Tobiáš', 'Lindner', { birthDate: '1871', parentIds: ['iF', 'iM'] });
+        const incomingData = tree([iF, iM, iT], [U('iU', 'iF', 'iM', ['iT'])]);
+        return {
+            existingData, incomingData,
+            matches: [match(eF, iF, 95), match(eT, iT, 95)],
+            unmatchedExisting: [], unmatchedIncoming: ['iM'] as PersonId[],
+            decisions: new Map(), conflictResolutions: new Map(), phase: 'executing',
+        };
+    }
+
+    it('a merged child keeps its link to a merged parent when the other parent stays out', async () => {
+        for (const leaveOut of ['skip', 'updateOnly'] as const) {
+            const state = parentLinkFixture();
+            if (leaveOut === 'skip') state.decisions.set('iM' as PersonId, { type: 'skip' });
+            else state.updateOnly = true;
+            const result = await executeMerge(state);
+            expect(result.check?.problems, leaveOut).toEqual([]);
+            expect(result.success, leaveOut).toBe(true);
+            const merged = result.mergedData;
+            expect(Object.keys(merged.persons).sort(), leaveOut).toEqual(['eF', 'eT']);
+            expect(merged.persons['eT' as PersonId].parentIds, leaveOut).toEqual(['eF']);
+            expect(merged.persons['eF' as PersonId].childIds, leaveOut).toEqual(['eT']);
+        }
+    });
+
+    it('a link that would make a person its own ancestor is left out, and the check says so', async () => {
+        // Tobiáš merged by hand into the tree's Ignác, Tobiáš's own son: the
+        // link Ignác ← Tobiáš (= Ignác's son) would close a circle.
+        const eF = P('eF', 'Ignác', 'Lindner', { birthDate: '1840', childIds: ['eT'] });
+        const eT = P('eT', 'Tobiáš', 'Lindner', { birthDate: '1871', parentIds: ['eF'] });
+        const existingData = tree([eF, eT]);
+        const iF = P('iF', 'Ignác', 'Lindner', { birthDate: '1840', childIds: ['iT'] });
+        const iT = P('iT', 'Tobiáš', 'Lindner', { birthDate: '1871', parentIds: ['iF'] });
+        const incomingData = tree([iF, iT]);
+        const state: MergeState = {
+            existingData, incomingData,
+            matches: [match(eF, iF, 95), match(eT, iT, 95)],
+            unmatchedExisting: [], unmatchedIncoming: [],
+            decisions: new Map([['iT' as PersonId, { type: 'manual_match', targetId: 'eF' as PersonId }], ['iF' as PersonId, { type: 'manual_match', targetId: 'eT' as PersonId }]]),
+            conflictResolutions: new Map(), phase: 'executing',
+        };
+        const result = await executeMerge(state);
+        expect(result.check?.problems).toEqual([]);
+        expect(result.success).toBe(true);
+        expect(result.mergedData.persons['eF' as PersonId].parentIds).toEqual([]);
+        expect(result.mergedData.persons['eT' as PersonId].parentIds).toEqual(['eF']);
+        expect(result.check?.tallies.links).toMatchObject({ source: 1, left: 1, lost: 0 });
+    });
+});
