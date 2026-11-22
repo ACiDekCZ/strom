@@ -8,6 +8,7 @@ import {
     MergeState,
     MergePhase,
     MergeTarget,
+    MergeWizardState,
     PersonMatch,
     FieldConflict,
     MatchDecision,
@@ -40,6 +41,8 @@ export interface SerializableMergeState {
     updateOnly?: boolean;
     /** The target tree and its data's fingerprint at the matching (spec 134 K0.6). Optional: old sessions lack it. */
     target?: MergeTarget;
+    /** The guide's step, reached step, comparison done and choices (spec 134 §1). Optional: old sessions lack it. */
+    wizard?: MergeWizardState;
 }
 
 /** Saved merge session metadata */
@@ -74,7 +77,8 @@ function serializeState(state: MergeState): SerializableMergeState {
         partnershipResolutions: Array.from(state.partnershipResolutions?.entries() ?? []),
         phase: state.phase,
         updateOnly: state.updateOnly,
-        ...(state.target ? { target: state.target } : {})
+        ...(state.target ? { target: state.target } : {}),
+        ...(state.wizard ? { wizard: structuredClone(state.wizard) } : {})
     };
 }
 
@@ -104,7 +108,8 @@ function deserializeState(serialized: SerializableMergeState): MergeState {
         phase: serialized.phase,
         // Old saved sessions predate the flag → default to normal mode.
         updateOnly: serialized.updateOnly ?? false,
-        ...(serialized.target ? { target: serialized.target } : {})
+        ...(serialized.target ? { target: serialized.target } : {}),
+        ...(serialized.wizard ? { wizard: serialized.wizard } : {})
     };
 }
 

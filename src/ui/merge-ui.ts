@@ -860,7 +860,7 @@ export const mergeUiMethods = uiModule({
         // Start merge with source data (it backs up the target, spec 134 K0.4). fromTreeManager only for the tree-to-tree
         // path (so ESC/close returns to the tree manager it was launched from);
         // the view-merge path was launched from the actions menu, not the manager.
-        MergerUI.startMerge(sourceData, sourceLabelOrId, !viewSource);
+        MergerUI.startMerge(sourceData, sourceLabelOrId, !viewSource, undefined, { kind: viewSource ? 'view' : 'tree' });
 
         this.closeMergeTreesDialog();
         this.closeTreeManagerDialog();

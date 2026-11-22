@@ -522,6 +522,12 @@ export interface ApplyResult {
     record: MergeRecord;
     trace?: MergeTrace;
     issues: VerifyIssue[];
+    /** The write's working backup (executeMerge), to delete once the result is stored. */
+    backupKey?: string;
+    /** The source's import record id → its id in the result (spec 066). */
+    importMap?: Map<string, string>;
+    /** Shared events of the source joined with one the tree holds (spec 085 §7). */
+    sharedJoined?: number;
 }
 
 /**
@@ -536,6 +542,7 @@ export async function applyPlan(plan: MergePlan, target: StromData, source: Stro
     const allIn = plan.items.every(i => !(i.kind === 'person-add' && !i.on) && i.kind !== 'skip' && i.kind !== 'person-pending');
     let data: StromData;
     let trace: MergeTrace;
+    let extra: Pick<ApplyResult, 'backupKey' | 'importMap' | 'sharedJoined'> = {};
     if (plan.mode === 'new' && allIn) {
         // A new tree of the whole source, as the import made it so far.
         data = structuredClone(source);
@@ -549,15 +556,20 @@ export async function applyPlan(plan: MergePlan, target: StromData, source: Stro
         const result = await executeMerge(stateOfPlan(plan, target, source));
         if (!result.success || !result.trace) {
             const issues: VerifyIssue[] = result.check?.problems.map(p => ({ ...p })) ?? [];
-            return { ok: false, data: target, record: emptyRecord(plan), issues };
+            return { ok: false, data: target, record: emptyRecord(plan), issues, ...(result.backupKey ? { backupKey: result.backupKey } : {}) };
         }
         data = result.mergedData;
         trace = result.trace;
+        extra = {
+            ...(result.backupKey ? { backupKey: result.backupKey } : {}),
+            ...(result.importMap ? { importMap: result.importMap } : {}),
+            ...(result.stats.sharedJoined ? { sharedJoined: result.stats.sharedJoined } : {}),
+        };
     }
     traces.set(data, trace);
     const issues = verifyResult(plan, before, source, data, trace);
-    if (issues.length) return { ok: false, data: target, record: emptyRecord(plan), trace, issues };
-    return { ok: true, data, record: recordOf(plan, before, source, data), trace, issues };
+    if (issues.length) return { ok: false, data: target, record: emptyRecord(plan), trace, issues, ...extra };
+    return { ok: true, data, record: recordOf(plan, before, source, data), trace, issues, ...extra };
 }
 
 function emptyRecord(plan: MergePlan): MergeRecord {

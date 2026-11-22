@@ -153,6 +153,21 @@ export interface MergeState {
      * tree as it is now (spec 134 K0.6). Optional: older sessions lack it.
      */
     target?: MergeTarget;
+    /**
+     * The import guide's place and choices (spec 134 §1), saved with the
+     * merge so a resumed one opens at its step. Optional: older sessions lack it.
+     */
+    wizard?: MergeWizardState;
+}
+
+/** Where the import guide stands: its step, the furthest step reached, its choices. */
+export interface MergeWizardState {
+    step: 1 | 2 | 3 | 4 | 5 | 6;
+    /** The furthest step reached: a reached step can be entered again from the step list. */
+    reached: 1 | 2 | 3 | 4 | 5 | 6;
+    /** The comparison of step 1 ran: the plan exists from here on. */
+    compared: boolean;
+    choices: import('./plan.js').WizardChoices;
 }
 
 /** The target of a merge: its tree and the fingerprint of the data the matching ran over. */

@@ -75,6 +75,7 @@ import { listSnapshots } from '../snapshots.js';
 import { contentFingerprint } from '../research-link.js';
 import { mergeUiMethods } from '../ui/merge-ui.js';
 import { strings } from '../strings.js';
+import { freshChoices, type WizardSource } from '../merge/wizard-ui.js';
 import type { MergeState } from '../merge/types.js';
 import type { PersonId, StromData, TreeId, TreeMetadata } from '../types.js';
 
@@ -120,7 +121,6 @@ const ui = {
     confirmAnswer: false,
     showAlert: vi.fn(async (m: string) => { ui.alerts.push(m); }),
     showConfirm: vi.fn(async (m: string) => { ui.confirms.push(m); return ui.confirmAnswer; }),
-    showPrompt: vi.fn(async () => 'Merged'),
     showToast: vi.fn(),
     showTreeManagerDialog: vi.fn(),
     closeTreeManagerDialog: vi.fn(),
@@ -167,6 +167,22 @@ function started(): MergeState {
     return state;
 }
 
+/**
+ * The guide's step 5 pressed: its comparison done, the plan of the answers
+ * written (a new tree "{target} + {source}", no name asked).
+ */
+async function writePlan(): Promise<void> {
+    const m = MergerUI as unknown as {
+        wizard: { rebuild(): void; next(): Promise<void> };
+        wizardSource(): WizardSource;
+    };
+    const state = internals().mergeState!;
+    state.wizard ??= { step: 1, reached: 1, compared: false, choices: freshChoices(m.wizardSource(), state) };
+    Object.assign(state.wizard, { step: 5, reached: 5, compared: true });
+    m.wizard.rebuild();
+    await m.wizard.next();
+}
+
 async function preMergeSnapshots(id: TreeId): Promise<number> {
     return (await listSnapshots(id)).filter(s => s.reason === 'pre-merge').length;
 }
@@ -180,7 +196,7 @@ describe('K0.2 · a failed check before saving', () => {
             stats: { merged: 0, added: 0, skipped: 0, partnerships: 0 },
             check: { ok: false, problems: [{ kind: 'personLost', count: 2 }] } as never,
         });
-        await MergerUI.executeMerge();
+        await writePlan();
 
         expect(TreeManager.getTrees().map(t => t.id)).toEqual([T1, T2]);
         expect(ui.alerts).toEqual([mergeCheckMessage([{ kind: 'personLost', count: 2 }])]);
@@ -231,7 +247,7 @@ describe('K0.5 · success only after the written tree', () => {
         const state = started();
         // Every tree written from now on fails (the browser's storage is full).
         failing.write = (store, key) => store === 'trees' && key.startsWith('tree_');
-        await MergerUI.executeMerge();
+        await writePlan();
 
         expect(ui.alerts).toEqual([strings.merge.saveFailed]);
         expect(ui.confirms.some(m => m.includes(strings.merge.complete))).toBe(false);
@@ -246,11 +262,11 @@ describe('K0.5 · success only after the written tree', () => {
         let storedAtSuccess = false;
         ui.showConfirm.mockImplementationOnce(async (m: string) => {
             ui.confirms.push(m);
-            const id = TreeManager.getTrees().find(t => t.name === 'Merged')?.id;
+            const id = TreeManager.getTrees().find(t => t.name === 'Family + cousins')?.id;
             storedAtSuccess = !!id && st('trees').has(id);
             return false;
         });
-        await MergerUI.executeMerge();
+        await writePlan();
 
         expect(ui.alerts).toEqual([]);
         expect(storedAtSuccess).toBe(true);
@@ -278,7 +294,7 @@ describe('K0.6 · a saved merge resumed', () => {
     it('goes when the merge is written', async () => {
         const id = await savedMerge();
         await MergerUI.resumeSavedMerge(id);
-        await MergerUI.executeMerge();
+        await writePlan();
         expect(await listMergeSessionsInfo()).toEqual([]);
     });
 

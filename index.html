@@ -36240,77 +36240,24 @@
 
     <!-- Merge Import Modal -->
     <div class="modal-overlay" id="merge-modal">
-        <div class="modal merge-modal modal--lg" role="dialog" data-dialog-kind="form" aria-modal="true">
+        <div class="modal merge-modal modal--lg" role="dialog" data-dialog-kind="form" aria-modal="true" aria-labelledby="merge-title">
             <div class="modal-header">
-                <h2 data-i18n="merge.wizardTitle">Merge data</h2>
+                <div class="merge-head">
+                    <h2 id="merge-title" data-i18n="mergeWizard.titleImport">Import a family tree</h2>
+                    <span id="merge-route" class="merge-src"></span>
+                </div>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.MergerUI.closeMergeModal()">&times;</button>
             </div>
-            <p id="merge-wizard-explanation" class="merge-wizard-explanation" data-i18n="merge.wizardExplanation"></p>
-            <div id="merge-validation-banner" class="merge-validation-banner" style="display:none"></div>
-            <div class="merge-progress">
-                <span id="merge-step-review" class="merge-step sel-tab active" data-sel-dir="down"><span class="sel-l" data-i18n="merge.stepReview">1. Review matches</span></span>
-                <span id="merge-step-resolve" class="merge-step sel-tab" data-sel-dir="down"><span class="sel-l" data-i18n="merge.stepResolve">2. Resolve conflicts</span></span>
-                <span id="merge-step-execute" class="merge-step sel-tab" data-sel-dir="down"><span class="sel-l" data-i18n="merge.stepExecute">3. Execute merge</span></span>
-            </div>
-            <div class="merge-stats">
-                <div class="merge-stat">
-                    <span class="merge-stat-label" data-i18n="merge.importCount">Import</span>
-                    <span class="merge-stat-value" id="merge-stat-import">0</span>
-                </div>
-                <div class="merge-stat">
-                    <span class="merge-stat-label" data-i18n="merge.existingCount">Existing</span>
-                    <span class="merge-stat-value" id="merge-stat-existing">0</span>
-                </div>
-                <div class="merge-stat highlight">
-                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span data-i18n="merge.statsMatches">Matches</span></span>
-                    <span class="merge-stat-value" id="merge-stat-matches">0</span>
-                </div>
-                <div class="merge-stat warning">
-                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v9"/><path d="M12 18h.01"/></svg></span><span data-i18n="merge.statsConflicts">Conflicts</span></span>
-                    <span class="merge-stat-value" id="merge-stat-conflicts">0</span>
-                </div>
-                <div class="merge-stat new">
-                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span><span data-i18n="merge.statsNew">New</span></span>
-                    <span class="merge-stat-value" id="merge-stat-new">0</span>
-                </div>
-                <div class="merge-stat skipped" id="merge-stat-skipped-card" style="display:none;">
-                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M6.5 6.5l11 11"/></svg></span><span data-i18n="merge.statsSkipped">Skipped</span></span>
-                    <span class="merge-stat-value" id="merge-stat-skipped">0</span>
-                </div>
-            </div>
-            <label class="merge-update-only" id="merge-update-only-row">
-                <input type="checkbox" id="merge-update-only-toggle" onchange="window.Strom.MergerUI.toggleUpdateOnly(this.checked)">
-                <span class="merge-update-only-text">
-                    <span class="merge-update-only-label" data-i18n="merge.updateOnlyLabel">Only update existing people (don't add new)</span>
-                    <span class="merge-update-only-hint" data-i18n="merge.updateOnlyHint">Enrich matched people from the import, but add no new people.</span>
-                </span>
-            </label>
-            <div class="merge-tabs">
-                <button class="merge-tab sel-tab active" data-sel-dir="down" data-filter="all" onclick="window.Strom.MergerUI.setFilter('all')"><span class="sel-l" data-i18n="merge.tabAll">All</span></button>
-                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="high" onclick="window.Strom.MergerUI.setFilter('high')">
-                    <span class="sel-l" data-i18n="merge.highConfidence">High</span> <span class="tab-count" id="tab-count-high">0</span>
-                </button>
-                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="medium" onclick="window.Strom.MergerUI.setFilter('medium')">
-                    <span class="sel-l" data-i18n="merge.mediumConfidence">Medium</span> <span class="tab-count" id="tab-count-medium">0</span>
-                </button>
-                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="low" onclick="window.Strom.MergerUI.setFilter('low')">
-                    <span class="sel-l" data-i18n="merge.lowConfidence">Low</span> <span class="tab-count" id="tab-count-low">0</span>
-                </button>
-                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="unmatched" onclick="window.Strom.MergerUI.setFilter('unmatched')">
-                    <span class="sel-l" data-i18n="merge.statsNew">New</span> <span class="tab-count" id="tab-count-unmatched">0</span>
-                </button>
-                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="conflicts" onclick="window.Strom.MergerUI.setFilter('conflicts')">
-                    <span class="sel-l" data-i18n="merge.conflicts">Conflicts</span> <span class="tab-count" id="tab-count-conflicts">0</span>
-                </button>
-            </div>
-            <div class="merge-match-list" id="merge-match-list">
-                <!-- Match items rendered here -->
-            </div>
+            <nav id="merge-progress" class="merge-progress" aria-label="Steps of the import" data-i18n-aria-label="mergeWizard.stepsNav"></nav>
+            <div id="merge-counts" class="merge-stats" role="status" aria-live="polite"></div>
+            <div id="merge-validation-banner" class="merge-validation-banner"></div>
+            <div id="merge-step-body" class="merge-step-body"></div>
             <div class="buttons merge-actions">
-                <button class="secondary" onclick="window.Strom.MergerUI.saveForLater()" data-i18n="merge.closeSave">Save for later</button>
-                <button class="secondary" onclick="window.Strom.MergerUI.reanalyze()" data-i18n="merge.reanalyze" data-i18n-busy="busy.analyzing">Re-analyze</button>
-                <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeMergeModal()" data-i18n="buttons.cancel">Cancel</button>
-                <button class="primary" onclick="window.Strom.MergerUI.executeMerge()" data-i18n="merge.execute">Execute merge</button>
+                <button type="button" class="link-button" id="merge-save-later" onclick="window.Strom.MergerUI.saveForLater()" data-i18n="merge.closeSave">Save for later</button>
+                <span id="merge-next-why" class="merge-next-why" hidden></span>
+                <button type="button" class="secondary" id="merge-back" onclick="window.Strom.MergerUI.wizardBack()" data-i18n="mergeWizard.back" hidden>Back</button>
+                <button type="button" class="secondary" id="merge-cancel" data-dismiss onclick="window.Strom.MergerUI.closeMergeModal()" data-i18n="buttons.cancel">Cancel</button>
+                <button type="button" class="primary" id="merge-next" onclick="window.Strom.MergerUI.wizardNext()"></button>
             </div>
         </div>
     </div>

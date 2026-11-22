@@ -83,6 +83,17 @@ export function announceLive(diff: LiveDiff, previous: StromData, data: StromDat
     else timer = setTimeout(say, wait);
 }
 
+/**
+ * Say one line now in the same polite region (a step of a guide, spec 134
+ * §1): it does not wait for, nor delay, the live loads' announcements.
+ */
+export function announceText(text: string): void {
+    if (typeof document === 'undefined' || !text) return;
+    const el = region();
+    el.textContent = '';
+    el.textContent = text;
+}
+
 /** Tests: forget the timing. */
 export function resetLiveAnnounce(): void {
     if (timer) clearTimeout(timer);

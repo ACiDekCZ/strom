@@ -117,3 +117,25 @@ describe('merge session persistence — suggestions are not resolutions (spec 13
         expect(resumed!.matches[0].conflicts[0].resolution).toBe('use_incoming');
     });
 });
+
+describe('the import guide\'s place (spec 134 §1)', () => {
+    it('step, reached step, comparison and choices survive a save/resume round-trip', async () => {
+        const state = baseState();
+        state.wizard = {
+            step: 2, reached: 2, compared: true,
+            choices: {
+                mode: 'add', targetTreeId: null, scope: 'a', swapped: false, targetName: 'Modřínovi',
+                source: { kind: 'ged', label: 'rodokmen-jilmovi.ged', persons: 3, fingerprint: 'abc' },
+                targetFingerprint: 'f1', planId: 'plan-1',
+            },
+        };
+        await saveCurrentMerge(state, 'rodokmen-jilmovi.ged');
+        const back = await getCurrentMerge();
+        expect(back?.wizard).toEqual(state.wizard);
+    });
+
+    it('a merge saved before the guide resumes without a place', async () => {
+        await saveCurrentMerge(baseState(), 'old.json');
+        expect((await getCurrentMerge())?.wizard).toBeUndefined();
+    });
+});

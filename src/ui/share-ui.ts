@@ -409,7 +409,7 @@ export const shareUiMethods = uiModule({
         const incoming = applyChangePacket(base, packet);
         await runHeavy(el?.isConnected ? el : null, () => {
             this.closeChangePacketPreview();
-            MergerUI.startMerge(incoming, packet.senderName || strings.share.unknownSender);
+            MergerUI.startMerge(incoming, packet.senderName || strings.share.unknownSender, false, undefined, { kind: 'share' });
         }, { label: strings.merge.analyzing, atOnce: mergeAnalysisLong(DataManager.getData(), incoming) });
     },
 
@@ -499,7 +499,7 @@ export const shareUiMethods = uiModule({
         });
         this.updateTreeSwitcher();
         await TreeRenderer.renderAsync();
-        MergerUI.startMerge(incoming, sender);
+        MergerUI.startMerge(incoming, sender, false, undefined, { kind: 'share' });
     },
 
     /** Reply → import as a completely new tree (fallback). */

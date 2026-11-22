@@ -11,7 +11,6 @@ import { ZoomPan } from '../zoom.js';
 import { TreePreview, TreeCompare } from '../tree-preview.js';
 import { PersonId, PartnershipId, Person, StromData, TreeId, PartnershipStatus } from '../types.js';
 import { contentFingerprint } from '../research-link.js';
-import { mergeCheckMessage } from './merge-check.js';
 import { isGender } from '../model-values.js';
 import { strings } from '../strings.js';
 import { runHeavy, activatedElement } from '../ui/busy.js';
@@ -32,13 +31,10 @@ import {
     rebaseMergeState
 } from './matching.js';
 import {
-    executeMerge,
-    deleteBackup,
     AUTO_CONFIRM_SCORE,
     detectPartnershipConflicts,
     updatePartnershipConflictResolution
 } from './executor.js';
-import { AuditLogManager } from '../audit-log.js';
 import { validateTreeData, ValidationResult } from '../validation.js';
 import { PersonPicker } from '../person-picker.js';
 import {
@@ -60,6 +56,10 @@ import { pendingImageOf } from '../research-image-refs.js';
 import { imgStateOf, smallPortraitHtml, type ImgState } from '../ui/image-slot.js';
 import { personPhotoKey } from '../ui/person-photo-model.js';
 import { personInitials } from '../initials.js';
+import { MergeWizard, type WizardSource } from './wizard-ui.js';
+import type { WizardStep } from './wizard-steps.js';
+import type { MergePlan, PlanSource } from './plan.js';
+import { newTreeName, writePlanAsNewTree } from './write.js';
 
 // Auto-save debounce delay (ms)
 const AUTO_SAVE_DELAY = 2000;
@@ -110,6 +110,19 @@ class MergerUIClass {
     private resumedSessionId?: string;
     /** The backup "Before merge" of the target started with the merge, awaited before writing (spec 134 K0.4). */
     private preMergeBackup: Promise<string | null> | null = null;
+    /** What the import is, for the guide's fresh choices (spec 134 §1). */
+    private sourceInfo: Pick<PlanSource, 'kind' | 'fingerprint' | 'treeId'> = { kind: 'json' };
+
+    /** The import guide's frame: steps, counts, footer (spec 134 §1). */
+    private readonly wizard = new MergeWizard({
+        state: () => this.mergeState,
+        changed: () => this.markUnsavedChanges(),
+        moved: () => { if (this.hasUnsavedChanges) this.scheduleAutoSave(); },
+        saveForLater: () => this.saveForLater(),
+        finishCompare: () => this.closeMergeModalInternal(),
+        write: plan => this.write(plan),
+        renderPairs: host => this.renderPairs(host),
+    });
 
     // ==================== INITIALIZATION ====================
 
@@ -118,10 +131,12 @@ class MergerUIClass {
      * @param incomingData The data to merge into current tree
      * @param sourceTreeIdOrFileName Either a TreeId (for tree-to-tree merge) or a filename (for file import)
      * @param fromTreeManager Whether this merge was opened from the tree manager
+     * @param source What the import is (a shared packet, a view…) and its fingerprint, for the guide
      */
     startMerge(
         incomingData: StromData, sourceTreeIdOrFileName?: string | TreeId, fromTreeManager: boolean = false,
         gedcomImport?: { gedcom: true; importId?: string },
+        source?: Partial<Pick<PlanSource, 'kind' | 'fingerprint'>>,
     ): void {
         const existingData = DataManager.getData();
         this.gedcomImport = gedcomImport;
@@ -135,6 +150,7 @@ class MergerUIClass {
         // Create merge state
         this.mergeState = createMergeState(existingData, incomingData);
         this.mergeState.phase = 'reviewing';
+        this.resumedState = false;
         // The target and its data as matched, for a resumed merge to compare (spec 134 K0.6).
         const targetId = DataManager.isViewMode() ? null : DataManager.getCurrentTreeId();
         if (targetId) this.mergeState.target = { treeId: targetId, fingerprint: contentFingerprint(existingData) };
@@ -148,7 +164,8 @@ class MergerUIClass {
         this.targetTreeName = activeTreeId ? TreeManager.getTreeMetadata(activeTreeId)?.name : undefined;
 
         // Determine if this is a tree-to-tree merge or file import
-        if (sourceTreeIdOrFileName && TreeManager.getTreeMetadata(sourceTreeIdOrFileName as TreeId)) {
+        const fromTree = !!sourceTreeIdOrFileName && !!TreeManager.getTreeMetadata(sourceTreeIdOrFileName as TreeId);
+        if (fromTree) {
             const sourceTreeId = sourceTreeIdOrFileName as TreeId;
             this.sourceTreeName = TreeManager.getTreeMetadata(sourceTreeId)?.name;
             this.incomingFileName = this.sourceTreeName;
@@ -156,6 +173,11 @@ class MergerUIClass {
             this.sourceTreeName = undefined;
             this.incomingFileName = sourceTreeIdOrFileName as string | undefined;
         }
+        this.sourceInfo = {
+            kind: source?.kind ?? (gedcomImport ? 'ged' : fromTree ? 'tree' : 'json'),
+            ...(source?.fingerprint ? { fingerprint: source.fingerprint } : {}),
+            ...(fromTree ? { treeId: sourceTreeIdOrFileName as TreeId } : {}),
+        };
 
         // Setup escape handler
         this.setupEscapeHandler();
@@ -169,6 +191,7 @@ class MergerUIClass {
      */
     resumeMerge(state: MergeState, fileName?: string, targetTreeName?: string, sourceTreeName?: string): void {
         this.mergeState = state;
+        this.resumedState = true;
         this.gedcomImport = undefined;
         this.resumedSessionId = undefined;
         this.preMergeBackup = null;
@@ -178,6 +201,7 @@ class MergerUIClass {
         this.incomingFileName = fileName;
         this.targetTreeName = targetTreeName;
         this.sourceTreeName = sourceTreeName;
+        this.sourceInfo = { kind: sourceTreeName ? 'tree' : 'json' };
 
         // Setup escape handler
         this.setupEscapeHandler();
@@ -328,6 +352,13 @@ class MergerUIClass {
     private showCloseConfirmation(): void {
         const dialog = document.getElementById('merge-close-confirm');
         if (dialog) {
+            const message = dialog.querySelector('.merge-close-message');
+            const state = this.mergeState;
+            if (message && state) {
+                const pairs = state.matches.length;
+                const open = this.openPairs().length;
+                message.textContent = strings.mergeWizard.closeMsg(pairs - open, pairs);
+            }
             dialog.classList.add('active');
         }
     }
@@ -488,9 +519,49 @@ class MergerUIClass {
         const modal = document.getElementById('merge-modal');
         if (!modal) return;
 
-        this.renderModalContent();
+        // A merge saved before the guide existed had its comparison run.
         this.renderValidationBanner();
+        this.wizard.open(this.wizardSource(), { compared: this.resumedState });
         modal.classList.add('active');
+    }
+
+    /** Whether the open merge was resumed (its comparison ran), for the guide's start. */
+    private resumedState = false;
+
+    /** The import and its target, for the guide's fresh choices. */
+    private wizardSource(): WizardSource {
+        const state = this.mergeState!;
+        const targetTreeId = state.target?.treeId ?? null;
+        const label = this.sourceTreeName || this.incomingFileName || strings.mergeWizard.titleImport;
+        return {
+            source: {
+                kind: this.sourceInfo.kind,
+                label,
+                persons: Object.values(state.incomingData.persons).filter(p => !p.isPlaceholder).length,
+                ...(this.sourceInfo.fingerprint ? { fingerprint: this.sourceInfo.fingerprint } : {}),
+                ...(this.sourceInfo.treeId ? { treeId: this.sourceInfo.treeId } : {}),
+                ...(this.gedcomImport?.importId ? { importId: this.gedcomImport.importId } : {}),
+            },
+            targetTreeId,
+            targetName: this.targetTreeName
+                || (targetTreeId ? TreeManager.getTreeMetadata(targetTreeId)?.name : undefined)
+                || strings.treeManager.newTree,
+        };
+    }
+
+    /** The guide's primary button (footer). */
+    wizardNext(): Promise<void> {
+        return this.wizard.next();
+    }
+
+    /** The guide's Back button (footer). */
+    wizardBack(): void {
+        this.wizard.back();
+    }
+
+    /** Go to a step of the guide that can be entered. */
+    wizardGo(step: WizardStep): void {
+        this.wizard.go(step);
     }
 
     /**
@@ -504,11 +575,11 @@ class MergerUIClass {
         const existingErrors = validateTreeData(this.mergeState.existingData).stats.errors;
         const incomingErrors = validateTreeData(this.mergeState.incomingData).stats.errors;
         if (existingErrors === 0 && incomingErrors === 0) {
-            banner.style.display = 'none';
+            banner.classList.remove('has-issues');
             banner.innerHTML = '';
             return;
         }
-        banner.style.display = '';
+        banner.classList.add('has-issues');
         banner.innerHTML =
             `<span class="merge-validation-banner-msg">${MERGE_WARNING_MARK}${this.escapeHtml(strings.merge.preValidationWarning(existingErrors, incomingErrors))}</span>`
             + ` <span class="merge-validation-banner-hint">${this.escapeHtml(strings.merge.preValidationHint)}</span>`;
@@ -531,6 +602,7 @@ class MergerUIClass {
     private closeMergeModalInternal(): void {
         const modal = document.getElementById('merge-modal');
         modal?.classList.remove('active');
+        this.wizard.close();
 
         // Cleanup
         this.removeEscapeHandler();
@@ -557,109 +629,73 @@ class MergerUIClass {
     }
 
     /**
-     * Render modal content based on current state
+     * Draw the guide again after a decision: its plan, steps, counts and
+     * footer, and step 2's list in place.
      */
     private renderModalContent(): void {
         if (!this.mergeState) return;
-
-        const stats = calculateMergeStats(this.mergeState);
-
-        // Update wizard header
-        this.updateWizardHeader(stats);
-
-        // Update stats display
-        this.updateStatsDisplay(stats);
-
-        // Update filter tabs
-        this.updateFilterTabs(stats);
-
-        // Render match list
+        this.wizard.refresh();
+        if (!document.getElementById('merge-match-list')) return;
+        this.updateFilterTabs(calculateMergeStats(this.mergeState));
+        this.renderRest();
         this.renderMatchList();
     }
 
     /**
-     * Update wizard header and progress steps
+     * Today's list of pairs inside step 2's body (until §4 replaces it):
+     * the filter tabs, the undecided rest at once, and the list.
      */
-    private updateWizardHeader(stats: MergeStats): void {
-        // Update explanation text
-        const explanation = document.getElementById('merge-wizard-explanation');
-        if (explanation) {
-            explanation.textContent = strings.merge.wizardExplanation;
-        }
-
-        // Calculate progress
-        const totalItems = stats.total;
-        const reviewedItems = this.mergeState?.decisions.size || 0;
-        // Person conflicts and partnership conflicts share the resolve step.
-        const itemsWithConflicts = stats.withConflicts + stats.partnershipConflicts;
-        const resolvedConflicts = (this.mergeState?.conflictResolutions.size || 0) + stats.partnershipConflictsResolved;
-
-        // Update step indicators: exactly ONE step reads as current (filled),
-        // finished steps get an outlined checkmark style, upcoming stay muted.
-        const step1 = document.getElementById('merge-step-review');
-        const step2 = document.getElementById('merge-step-resolve');
-        const step3 = document.getElementById('merge-step-execute');
-
-        const step1Complete = reviewedItems >= totalItems * 0.5; // At least 50% reviewed
-        const hasConflicts = itemsWithConflicts > 0;
-        const step2Complete = !hasConflicts || resolvedConflicts >= itemsWithConflicts;
-        const current = !step1Complete ? 1 : (hasConflicts && !step2Complete) ? 2 : 3;
-
-        if (step1) {
-            step1.classList.toggle('active', current === 1);
-            step1.classList.toggle('complete', step1Complete && current !== 1);
-        }
-        if (step2) {
-            step2.style.display = hasConflicts ? '' : 'none';
-            step2.classList.toggle('active', current === 2);
-            step2.classList.toggle('complete', hasConflicts && step2Complete && current !== 2);
-        }
-        if (step3) {
-            step3.classList.toggle('active', current === 3);
-            step3.classList.remove('complete');
-        }
+    private renderPairs(host: HTMLElement): void {
+        const state = this.mergeState;
+        if (!state) return;
+        const M = strings.merge;
+        const W = strings.mergeWizard;
+        const tab = (filter: MatchFilter, label: string, count = true): string =>
+            `<button type="button" class="merge-tab sel-tab${this.currentFilter === filter ? ' active' : ''}" data-sel-dir="down" data-filter="${filter}">`
+            + `<span class="sel-l" data-label="${this.escapeHtml(label)}">${this.escapeHtml(label)}</span>${count ? ` <span class="tab-count" id="tab-count-${filter}">0</span>` : ''}</button>`;
+        host.innerHTML = `<div class="merge-tabs">${tab('all', M.tabAll, false)}${tab('high', M.highConfidence)}${tab('medium', M.mediumConfidence)}`
+            + `${tab('low', M.lowConfidence)}${tab('unmatched', M.statsNew)}${tab('conflicts', M.conflicts)}</div>`
+            + `<div class="merge-rest" id="merge-rest"></div>`
+            + `<div class="merge-match-list" id="merge-match-list"></div>`
+            + `<div class="merge-reanalyze"><button type="button" class="link-button" data-i18n-busy="busy.analyzing">${this.escapeHtml(M.reanalyze)}</button></div>`;
+        host.querySelectorAll<HTMLButtonElement>('.merge-tab').forEach(b =>
+            b.addEventListener('click', () => this.setFilter(b.dataset.filter as MatchFilter)));
+        host.querySelector<HTMLElement>('#merge-rest')?.addEventListener('click', e => {
+            const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-rest]');
+            if (b) this.decideRest(b.dataset.rest as 'reject' | 'skip');
+        });
+        this.renderRest();
+        host.querySelector<HTMLButtonElement>('.merge-reanalyze button')?.addEventListener('click', () => { void this.reanalyze(); });
+        this.updateFilterTabs(calculateMergeStats(state));
+        this.renderMatchList();
     }
 
-    /**
-     * Update stats display
-     */
-    private updateStatsDisplay(stats: MergeStats): void {
-        const importCount = document.getElementById('merge-stat-import');
-        const existingCount = document.getElementById('merge-stat-existing');
-        const matchCount = document.getElementById('merge-stat-matches');
-        const conflictCount = document.getElementById('merge-stat-conflicts');
-        const newCount = document.getElementById('merge-stat-new');
-
-        if (importCount) importCount.textContent = String(stats.total);
-        // People, not the "?" stand-ins for unknown parents.
-        if (existingCount) existingCount.textContent = String(Object.values(this.mergeState!.existingData.persons).filter(p => !p.isPlaceholder).length);
-        if (matchCount) matchCount.textContent = String(stats.matched);
-        if (conflictCount) conflictCount.textContent = String(stats.withConflicts + stats.partnershipConflicts);
-        // Truthful "will add N": drops to 0 in updateOnly mode, and per-match
-        // skip / manual matches don't count (see calculateMergeStats).
-        if (newCount) newCount.textContent = String(stats.willAdd);
-
-        // Skipped card only appears once at least one person is skipped.
-        const skippedCard = document.getElementById('merge-stat-skipped-card');
-        const skippedCount = document.getElementById('merge-stat-skipped');
-        if (skippedCard) skippedCard.style.display = stats.skipped > 0 ? '' : 'none';
-        if (skippedCount) skippedCount.textContent = String(stats.skipped);
-
-        // Reflect the persisted updateOnly flag on the toggle (matters on resume).
-        const updateOnlyToggle = document.getElementById('merge-update-only-toggle') as HTMLInputElement | null;
-        if (updateOnlyToggle) updateOnlyToggle.checked = !!this.mergeState!.updateOnly;
+    /** The line "Remaining N undecided: Add as new · Do not add" above step 2's list. */
+    private renderRest(): void {
+        const box = document.getElementById('merge-rest');
+        if (!box) return;
+        const W = strings.mergeWizard;
+        const n = this.openPairs().length;
+        box.hidden = n === 0;
+        box.innerHTML = n === 0 ? '' : `<span class="merge-rest-label">${this.escapeHtml(W.restLabel(n))}</span>`
+            + `<button type="button" class="link-button" data-rest="reject">${this.escapeHtml(W.restAdd(n))}</button>`
+            + `<button type="button" class="link-button" data-rest="skip">${this.escapeHtml(W.restSkip(n))}</button>`;
     }
 
-    /**
-     * Toggle "update existing only" mode (Primitive 1). Flipping it re-renders
-     * so the stats ("will add N") tell the truth immediately, and marks the
-     * session dirty so the flag is auto-saved.
-     */
-    toggleUpdateOnly(checked: boolean): void {
-        if (!this.mergeState) return;
-        this.mergeState.updateOnly = checked;
+    /** The pairs no one decided and the score does not join (the ones "to decide"). */
+    private openPairs(): PersonMatch[] {
+        const state = this.mergeState;
+        if (!state) return [];
+        return state.matches.filter(m => !state.decisions.has(m.incomingId) && m.score < AUTO_CONFIRM_SCORE);
+    }
+
+    /** The undecided rest at once: added as new people (reject) or not added (skip). */
+    private decideRest(decision: 'reject' | 'skip'): void {
+        const state = this.mergeState;
+        if (!state) return;
+        for (const m of this.openPairs()) updateMatchDecision(state, m.incomingId, decision);
         this.markUnsavedChanges();
-        this.renderModalContent();
+        this.wizard.refresh({ body: true });
     }
 
     /**
@@ -700,7 +736,7 @@ class MergerUIClass {
         this.selectedMatchIndex = -1;
 
         // Update active tab
-        document.querySelectorAll('.merge-tab').forEach(tab => {
+        document.querySelectorAll('#merge-step-body .merge-tab').forEach(tab => {
             tab.classList.toggle('active', (tab as HTMLElement).dataset.filter === filter);
         });
 
@@ -1489,44 +1525,19 @@ class MergerUIClass {
         return runHeavy(activatedElement(), () => {
             if (this.mergeState !== state) return;
             reanalyzeMatches(state);
-            this.renderModalContent();
+            this.wizard.refresh({ body: true });
         }, { label: strings.merge.analyzing, atOnce: mergeAnalysisLong(state.existingData, state.incomingData) }).then(() => undefined);
     }
 
     /**
-     * Execute the merge - prompts for new tree name and creates a new tree
+     * Write the guide's plan (step 5): a new tree "{target} + {source}"
+     * through applyPlan and its check before saving (spec 134 §8, the interim
+     * way). On a failure nothing is saved and the guide stays open; after the
+     * write, today's ending: Manage trees and the offer to switch.
      */
-    async executeMerge(): Promise<void> {
+    private async write(plan: MergePlan): Promise<void> {
         const state = this.mergeState;
         if (!state) return;
-
-        // Gate: matches the user has NOT decided and the score does not
-        // pre-confirm (the ✓/? bar in the list) are treated as separate
-        // persons, not silently merged — make that explicit before running.
-        const pending = state.matches.filter(m =>
-            !state.decisions.has(m.incomingId) && m.score < AUTO_CONFIRM_SCORE);
-        if (pending.length > 0) {
-            const proceed = await getUI().showConfirm(strings.merge.pendingGate(pending.length));
-            if (!proceed) return;
-        }
-
-        // Generate default name for new tree
-        const defaultName = this.targetTreeName && this.sourceTreeName
-            ? `${this.targetTreeName} + ${this.sourceTreeName}`
-            : this.targetTreeName
-                ? `${this.targetTreeName} (merged)`
-                : strings.treeManager.newTree;
-
-        // Prompt for new tree name
-        const newTreeName = await getUI().showPrompt(
-            strings.merge.newTreeNamePrompt,
-            defaultName
-        );
-
-        if (!newTreeName) {
-            // User cancelled
-            return;
-        }
 
         state.phase = 'executing';
 
@@ -1540,47 +1551,23 @@ class MergerUIClass {
         // The backup "Before merge" of the target is in place before anything is written (spec 134 K0.4).
         if (this.preMergeBackup) await this.preMergeBackup;
 
-        const result = await executeMerge(state);
-
-        if (!result.success) {
-            // Nothing created, nothing saved: the wizard stays open with its
-            // answers. A failed check before saving says what would have gone
-            // wrong (spec 134 K0.2); any other failure has its detail in the
-            // console (executeMerge logs it), the person a translated message.
+        // Nothing created, nothing saved on a failure: the wizard stays open
+        // with its answers, the message says what would have gone wrong
+        // (spec 134 K0.2, K0.5).
+        const result = await writePlanAsNewTree(plan, state.existingData, state.incomingData, newTreeName(plan));
+        if (!result.ok) {
             state.phase = 'reviewing';
-            const problems = result.check && !result.check.ok ? result.check.problems : [];
-            await getUI().showAlert(problems.length > 0 ? mergeCheckMessage(problems) : strings.merge.failed, 'error');
+            await getUI().showAlert(result.message, 'error');
             return;
         }
+        if (state.wizard) state.wizard.choices = { ...state.wizard.choices, writtenAt: new Date().toISOString() };
+        const newTreeId = result.treeId;
+        const counts = result.record.counts;
 
         // Did the merge itself introduce new error/warning issues (beyond
         // what the two inputs already carried)? Compared by issue type.
-        const newIssueCount = this.countNewMergeIssues(preIssues, validateTreeData(result.mergedData));
+        const newIssueCount = this.countNewMergeIssues(preIssues, validateTreeData(result.data));
 
-        // Create new tree with merged data, and wait for its write to land
-        // (spec 134 K0.5): the merge counts as done, and its working
-        // backup and saved state go, only once the tree is stored.
-        const newTreeId = TreeManager.createTree(newTreeName);
-        if (!await TreeManager.saveTreeDataConfirmed(newTreeId, result.mergedData)) {
-            // Nothing of it stays behind: no empty or half tree in the list.
-            await TreeManager.deleteTree(newTreeId).catch(() => false);
-            state.phase = 'reviewing';
-            await getUI().showAlert(strings.merge.saveFailed, 'error');
-            return;
-        }
-        TreeManager.noteUserChange(newTreeId);
-
-        // Audit log - record merge summary in the new tree
-        const sourceName = this.sourceTreeName || this.incomingFileName || '?';
-        AuditLogManager.log(
-            newTreeId, 'data.import',
-            strings.auditLog.treeMerge(result.stats.merged, result.stats.added, sourceName)
-        );
-
-        // Clean up backup after success
-        if (result.backupKey) {
-            await deleteBackup(result.backupKey);
-        }
         // A resumed saved merge is done: its session goes.
         if (this.resumedSessionId) await deleteMergeSession(this.resumedSessionId);
         this.resumedSessionId = undefined;
@@ -1592,6 +1579,7 @@ class MergerUIClass {
         // Close merge modal first
         const modal = document.getElementById('merge-modal');
         modal?.classList.remove('active');
+        this.wizard.close();
         this.removeEscapeHandler();
         this.clearAutoSave();
         void clearCurrentMerge();
@@ -1603,7 +1591,7 @@ class MergerUIClass {
             const importId = gedcomImport.importId ? result.importMap?.get(gedcomImport.importId) : undefined;
             void getUI().afterImport(newTreeId, {
                 gedcom: true, path: 'merge', ...(importId ? { importId } : {}),
-                added: result.stats.added, updated: result.stats.merged,
+                added: counts.added, updated: counts.joined,
             });
         }
 
@@ -1616,9 +1604,9 @@ class MergerUIClass {
         this.openedFromTreeManager = false;
 
         // Show success message and offer to switch to new tree
-        const stats = strings.merge.stats(result.stats.merged, result.stats.added)
-            + (result.stats.skipped > 0 ? `\n${strings.merge.skippedCount(result.stats.skipped)}` : '')
-            + ((result.stats.sharedJoined ?? 0) > 0 ? `\n${strings.merge.sharedJoined(result.stats.sharedJoined!)}` : '');
+        const stats = strings.merge.stats(counts.joined, counts.added)
+            + (counts.skipped > 0 ? `\n${strings.merge.skippedCount(counts.skipped)}` : '')
+            + ((result.sharedJoined ?? 0) > 0 ? `\n${strings.merge.sharedJoined(result.sharedJoined!)}` : '');
 
         // Dispatch event to update tree list
         window.dispatchEvent(new CustomEvent('strom:merge-session-changed'));

@@ -1057,8 +1057,10 @@ export const importExportMethods = uiModule({
         // §8: the matching runs under the working state of the choice, its words at once for large trees.
         await runHeavy(activatedElement(), () => {
             if (this.gedcomResult !== result) return;
-            MergerUI.startMerge(incoming, undefined, false,
-                { gedcom: true, ...(result.importId ? { importId: result.importId } : {}) });
+            const file = this.gedcomFileInfo;
+            MergerUI.startMerge(incoming, file?.name || undefined, false,
+                { gedcom: true, ...(result.importId ? { importId: result.importId } : {}) },
+                { kind: 'ged', ...(file?.sha ? { fingerprint: file.sha } : {}) });
             this.gedcomResult = null;
             this.closeGedcomResultDialog();
         }, { label: strings.merge.analyzing, atOnce: mergeAnalysisLong(DataManager.getData(), incoming) });
