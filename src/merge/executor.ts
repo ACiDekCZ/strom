@@ -42,13 +42,15 @@ import {
     IdMapping,
     FieldConflict,
     PartnershipConflict,
-    PartnershipConflictField
+    PartnershipConflictField,
+    MergeTrace
 } from './types.js';
 import { StorageManager } from '../storage.js';
 import { mergeNoteText } from './notes.js';
 import { censusTypeText, isLegacyCensus } from '../events.js';
 import { sourcePlaceKey } from '../source-location.js';
 import { sameFileRecord } from './id-match.js';
+import { checkMergeResult } from './merge-check.js';
 import { MARRIAGE_EVENT_ID, allShareCopies, joinSameShareCopies, shareIdMaker, tidyShares, treeShareIds } from '../shared-events.js';
 
 // ==================== BACKUP ====================
@@ -650,6 +652,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                     }
                     adoptIncomingMarks(newPerson, mapping.persons, importMap);
                     mergedData.persons[newId] = newPerson;
+                    carriedPersons.add(pid);
                 }
             }
         }
@@ -740,6 +743,15 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             }
         }
 
+        // A person new to the tree lists only the couples that came along: a
+        // couple whose other partner was skipped or left out is not there, and
+        // its id would point at nothing (spec 134 K0.2). The tree's own
+        // persons are not touched.
+        for (const person of Object.values(mergedData.persons)) {
+            if (state.existingData.persons[person.id]) continue;
+            person.partnerships = person.partnerships.filter(id => !!mergedData.partnerships[id]);
+        }
+
         // The incoming tree's files at the persons, couples and sources that came along (data v24).
         carryIncomingMedia(mergedData, state.incomingData, mapping.persons, carriedPersons, unionTarget, sourceRemap);
         // The original of each portrait that came from the incoming tree (spec 107).
@@ -798,9 +810,27 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             console.warn('Merge validation warnings:', validationErrors);
         }
 
+        // The check before saving (spec 134 K0.2): nothing of either tree is
+        // lost and no reference points at nothing. When it fails nothing is
+        // saved and the problems say why.
+        const trace: MergeTrace = { persons: mapping.persons, partnerships: unionTarget, sources: sourceRemap };
+        const check = checkMergeResult(state, { mergedData, trace });
+        if (!check.ok) {
+            console.warn('Merge check failed:', check.problems);
+            return {
+                success: false,
+                mergedData: state.existingData,
+                stats: { merged: 0, added: 0, skipped: 0, partnerships: 0 },
+                errors: check.problems.map(p => `${p.kind}: ${p.count}`),
+                check,
+            };
+        }
+
         return {
             success: true,
             mergedData,
+            trace,
+            check,
             stats: {
                 merged: mergedCount,
                 added: addedCount,

@@ -109,12 +109,18 @@ describe('K0.1 an undecided match below the auto-confirm score is added as a sep
         skipped.decisions.set('iT' as PersonId, { type: 'skip' });
         expect(calculateMergeStats(skipped).willAdd).toBe(3);
         const r1 = await executeMerge(skipped);
+        expect(r1.success).toBe(true);
         expect(Object.values(r1.mergedData.persons).filter(p => p.firstName === 'Tobiáš')).toHaveLength(1);
+        // The wife came, her couple with the skipped Tobiáš did not: she names no couple that is not there.
+        const wife = Object.values(r1.mergedData.persons).find(p => p.firstName === 'Rozálie')!;
+        expect(wife.partnerships).toEqual([]);
+        expect(r1.check?.ok).toBe(true);
 
         const onlyUpdate = weakMatchFixture().state;
         onlyUpdate.updateOnly = true;
         expect(calculateMergeStats(onlyUpdate).willAdd).toBe(0);
         const r2 = await executeMerge(onlyUpdate);
+        expect(r2.success).toBe(true);
         expect(Object.keys(r2.mergedData.persons)).toEqual(['eT']);
     });
 });

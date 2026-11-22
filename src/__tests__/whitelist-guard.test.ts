@@ -541,6 +541,9 @@ describe('updatePerson applies every field it owns', () => {
 const FOCUS_FIELDS: (keyof StromData)[] =
     ['defaultPersonId', 'defaultView', 'lastFocusPersonId', 'lastFocusDepthUp', 'lastFocusDepthDown'];
 
+const skipAll = (data: StromData): MergeState['decisions'] =>
+    new Map(Object.keys(data.persons).map(id => [id as PersonId, { type: 'skip' as const }]));
+
 describe('merge keeps every tree-level field', () => {
     beforeEach(() => {
         vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never);
@@ -571,7 +574,9 @@ describe('merge keeps every tree-level field', () => {
             existingData: fullTree(),
             incomingData: incoming,
             matches: [], unmatchedExisting: [], unmatchedIncoming: [],
-            decisions: new Map(), conflictResolutions: new Map(), phase: 'executing',
+            // Only the registries matter here: the incoming persons are skipped
+            // (left out by a decision, never silently lost — spec 134 K0.2).
+            decisions: skipAll(incoming), conflictResolutions: new Map(), phase: 'executing',
         };
         const result = await executeMerge(state);
         expect(result.success).toBe(true);
@@ -593,7 +598,9 @@ describe('merge keeps every tree-level field', () => {
             existingData: fullTree(),
             incomingData: incoming,
             matches: [], unmatchedExisting: [], unmatchedIncoming: [],
-            decisions: new Map(), conflictResolutions: new Map(), phase: 'executing',
+            // Only the registries matter here: the incoming persons are skipped
+            // (left out by a decision, never silently lost — spec 134 K0.2).
+            decisions: skipAll(incoming), conflictResolutions: new Map(), phase: 'executing',
         };
         const result = await executeMerge(state);
         expect(result.mergedData.placeRecords?.['L0012']).toEqual(fullTree().placeRecords['L0012']);

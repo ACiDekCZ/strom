@@ -6288,6 +6288,21 @@ const stringsEN = {
         pendingGate: (n: number) => `${n} uncertain match${n === 1 ? '' : 'es'} left undecided — those people will be imported as SEPARATE people (they can be merged later). Continue?`,
         suggestedPrecise: 'suggested — more precise date',
         suggestedComplete: 'suggested — more complete value',
+        // The check before a merge is saved (spec 134 K0.2); mergeCheckMessage joins the parts.
+        mergeCheck: {
+            failed: (parts: string) => `The merge was not saved: ${parts}. The tree stays unchanged.`,
+            personLost: (n: number) => `${n} ${n === 1 ? 'person' : 'people'} from the import would be lost`,
+            unionLost: (n: number) => `${n} ${n === 1 ? 'couple' : 'couples'} from the import would be lost`,
+            linkLost: (n: number) => `${n} parent–child ${n === 1 ? 'link' : 'links'} from the import would be lost`,
+            sourceLost: (n: number) => `${n} ${n === 1 ? 'source' : 'sources'} from the import would be lost`,
+            fileLost: (n: number) => `${n} ${n === 1 ? 'file' : 'files'} from the import would be lost`,
+            targetPersonLost: (n: number) => `${n} ${n === 1 ? 'person' : 'people'} of the tree would disappear`,
+            targetUnionLost: (n: number) => `${n} ${n === 1 ? 'couple' : 'couples'} of the tree would disappear`,
+            targetLinkLost: (n: number) => `${n} parent–child ${n === 1 ? 'link' : 'links'} of the tree would disappear`,
+            targetSourceLost: (n: number) => `${n} ${n === 1 ? 'source' : 'sources'} of the tree would disappear`,
+            targetFileLost: (n: number) => `${n} ${n === 1 ? 'file' : 'files'} of the tree would disappear`,
+            danglingRef: (n: number) => `${n} ${n === 1 ? 'reference' : 'references'} would point to nothing`,
+        },
 
         // Photo conflict (two different portraits — shown as thumbnails in the dialog)
         photoConflict: 'two different photos',
@@ -17028,6 +17043,21 @@ const stringsCZ: StringsType = {
         pendingGate: (n: number) => `${n} ${plural('cs', n, 'nejistá shoda zůstala nerozhodnutá', 'nejisté shody zůstaly nerozhodnuté', 'nejistých shod zůstalo nerozhodnutých')} — tito lidé se naimportují jako SAMOSTATNÉ osoby (sloučit je jde i později). Pokračovat?`,
         suggestedPrecise: 'navrženo — přesnější datum',
         suggestedComplete: 'navrženo — úplnější hodnota',
+        // Kontrola před uložením sloučení (spec 134 K0.2); části spojí mergeCheckMessage.
+        mergeCheck: {
+            failed: (parts: string) => `Sloučení se neuložilo: ${parts}. Strom zůstal beze změny.`,
+            personLost: (n: number) => nCs(n, 'osoba z importu by se ztratila', 'osoby z importu by se ztratily', 'osob z importu by se ztratilo'),
+            unionLost: (n: number) => nCs(n, 'pár z importu by se ztratil', 'páry z importu by se ztratily', 'párů z importu by se ztratilo'),
+            linkLost: (n: number) => nCs(n, 'vazba rodič–dítě z importu by se ztratila', 'vazby rodič–dítě z importu by se ztratily', 'vazeb rodič–dítě z importu by se ztratilo'),
+            sourceLost: (n: number) => nCs(n, 'pramen z importu by se ztratil', 'prameny z importu by se ztratily', 'pramenů z importu by se ztratilo'),
+            fileLost: (n: number) => nCs(n, 'soubor z importu by se ztratil', 'soubory z importu by se ztratily', 'souborů z importu by se ztratilo'),
+            targetPersonLost: (n: number) => nCs(n, 'osoba stromu by zmizela', 'osoby stromu by zmizely', 'osob stromu by zmizelo'),
+            targetUnionLost: (n: number) => nCs(n, 'pár stromu by zmizel', 'páry stromu by zmizely', 'párů stromu by zmizelo'),
+            targetLinkLost: (n: number) => nCs(n, 'vazba rodič–dítě stromu by zmizela', 'vazby rodič–dítě stromu by zmizely', 'vazeb rodič–dítě stromu by zmizelo'),
+            targetSourceLost: (n: number) => nCs(n, 'pramen stromu by zmizel', 'prameny stromu by zmizely', 'pramenů stromu by zmizelo'),
+            targetFileLost: (n: number) => nCs(n, 'soubor stromu by zmizel', 'soubory stromu by zmizely', 'souborů stromu by zmizelo'),
+            danglingRef: (n: number) => nCs(n, 'odkaz by vedl do prázdna', 'odkazy by vedly do prázdna', 'odkazů by vedlo do prázdna'),
+        },
 
         // Photo conflict (dvě různé fotografie — v dialogu zobrazeny jako náhledy)
         photoConflict: 'dvě různé fotografie',
@@ -27614,6 +27644,21 @@ const stringsDE: StringsType = {
         pendingGate: (n: number) => `${n} unsichere ${n === 1 ? 'Übereinstimmung' : 'Übereinstimmungen'} noch offen — diese Personen werden als GETRENNTE Personen importiert (sie lassen sich später zusammenführen). Fortfahren?`,
         suggestedPrecise: 'vorgeschlagen — genaueres Datum',
         suggestedComplete: 'vorgeschlagen — vollständigerer Wert',
+        // Die Prüfung vor dem Speichern einer Zusammenführung (Spec 134 K0.2); mergeCheckMessage fügt die Teile zusammen.
+        mergeCheck: {
+            failed: (parts: string) => `Die Zusammenführung wurde nicht gespeichert: ${parts}. Der Stammbaum bleibt unverändert.`,
+            personLost: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'} aus dem Import ${n === 1 ? 'ginge' : 'gingen'} verloren`,
+            unionLost: (n: number) => `${n} ${n === 1 ? 'Paar' : 'Paare'} aus dem Import ${n === 1 ? 'ginge' : 'gingen'} verloren`,
+            linkLost: (n: number) => `${n} Eltern-Kind-${n === 1 ? 'Verbindung' : 'Verbindungen'} aus dem Import ${n === 1 ? 'ginge' : 'gingen'} verloren`,
+            sourceLost: (n: number) => `${n} ${n === 1 ? 'Quelle' : 'Quellen'} aus dem Import ${n === 1 ? 'ginge' : 'gingen'} verloren`,
+            fileLost: (n: number) => `${n} ${n === 1 ? 'Datei' : 'Dateien'} aus dem Import ${n === 1 ? 'ginge' : 'gingen'} verloren`,
+            targetPersonLost: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'} des Stammbaums ${n === 1 ? 'würde' : 'würden'} verschwinden`,
+            targetUnionLost: (n: number) => `${n} ${n === 1 ? 'Paar' : 'Paare'} des Stammbaums ${n === 1 ? 'würde' : 'würden'} verschwinden`,
+            targetLinkLost: (n: number) => `${n} Eltern-Kind-${n === 1 ? 'Verbindung' : 'Verbindungen'} des Stammbaums ${n === 1 ? 'würde' : 'würden'} verschwinden`,
+            targetSourceLost: (n: number) => `${n} ${n === 1 ? 'Quelle' : 'Quellen'} des Stammbaums ${n === 1 ? 'würde' : 'würden'} verschwinden`,
+            targetFileLost: (n: number) => `${n} ${n === 1 ? 'Datei' : 'Dateien'} des Stammbaums ${n === 1 ? 'würde' : 'würden'} verschwinden`,
+            danglingRef: (n: number) => `${n} ${n === 1 ? 'Verweis würde' : 'Verweise würden'} ins Leere zeigen`,
+        },
 
         photoConflict: 'zwei verschiedene Fotos',
 

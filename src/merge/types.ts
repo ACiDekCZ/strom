@@ -149,6 +149,17 @@ export interface IdMapping {
 
 // ==================== MERGE RESULT ====================
 
+/**
+ * Where the merge put each record of the incoming tree: a person's id in the
+ * merged tree (an existing one when merged), a couple's (the tree's own or
+ * its new copy) and a source's when it joined one the tree holds.
+ */
+export interface MergeTrace {
+    persons: ReadonlyMap<PersonId, PersonId>;
+    partnerships: ReadonlyMap<PartnershipId, PartnershipId>;
+    sources: ReadonlyMap<string, string>;
+}
+
 /** Result of merge execution */
 export interface MergeResult {
     success: boolean;
@@ -165,6 +176,14 @@ export interface MergeResult {
     errors?: string[];
     /** Incoming import record id -> its id in the merged tree (spec 066). */
     importMap?: Map<string, string>;
+    /** Where the incoming records went (see MergeTrace). */
+    trace?: MergeTrace;
+    /**
+     * The check before saving (spec 134 K0.2). When it fails, `success` is
+     * false, `mergedData` is the tree as it was and `problems` say what would
+     * have gone wrong (mergeCheckMessage in merge-check.ts).
+     */
+    check?: import('./merge-check.js').MergeCheckResult;
 }
 
 // ==================== UI STATE ====================

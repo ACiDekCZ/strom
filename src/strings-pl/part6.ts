@@ -115,6 +115,21 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
         pendingGate: (n: number) => `${n} ${plPl(n, 'niepewne dopasowanie pozostało nierozstrzygnięte', 'niepewne dopasowania pozostały nierozstrzygnięte', 'niepewnych dopasowań pozostało nierozstrzygniętych')} – te osoby zostaną zaimportowane jako ODRĘBNE osoby (można je scalić także później). Kontynuować?`,
         suggestedPrecise: 'proponowane – dokładniejsza data',
         suggestedComplete: 'proponowane – pełniejsza wartość',
+        // Kontrola przed zapisaniem scalenia (spec 134 K0.2); części łączy mergeCheckMessage.
+        mergeCheck: {
+            failed: (parts: string) => `Scalenie nie zostało zapisane: ${parts}. Drzewo pozostało bez zmian.`,
+            personLost: (n: number) => `${n} ${plPl(n, 'osoba z importu zostałaby utracona', 'osoby z importu zostałyby utracone', 'osób z importu zostałoby utraconych')}`,
+            unionLost: (n: number) => `${n} ${plPl(n, 'para z importu zostałaby utracona', 'pary z importu zostałyby utracone', 'par z importu zostałoby utraconych')}`,
+            linkLost: (n: number) => `${n} ${plPl(n, 'powiązanie rodzic–dziecko z importu zostałoby utracone', 'powiązania rodzic–dziecko z importu zostałyby utracone', 'powiązań rodzic–dziecko z importu zostałoby utraconych')}`,
+            sourceLost: (n: number) => `${n} ${plPl(n, 'źródło z importu zostałoby utracone', 'źródła z importu zostałyby utracone', 'źródeł z importu zostałoby utraconych')}`,
+            fileLost: (n: number) => `${n} ${plPl(n, 'plik z importu zostałby utracony', 'pliki z importu zostałyby utracone', 'plików z importu zostałoby utraconych')}`,
+            targetPersonLost: (n: number) => `${n} ${plPl(n, 'osoba drzewa by zniknęła', 'osoby drzewa by zniknęły', 'osób drzewa by zniknęło')}`,
+            targetUnionLost: (n: number) => `${n} ${plPl(n, 'para drzewa by zniknęła', 'pary drzewa by zniknęły', 'par drzewa by zniknęło')}`,
+            targetLinkLost: (n: number) => `${n} ${plPl(n, 'powiązanie rodzic–dziecko drzewa by zniknęło', 'powiązania rodzic–dziecko drzewa by zniknęły', 'powiązań rodzic–dziecko drzewa by zniknęło')}`,
+            targetSourceLost: (n: number) => `${n} ${plPl(n, 'źródło drzewa by zniknęło', 'źródła drzewa by zniknęły', 'źródeł drzewa by zniknęło')}`,
+            targetFileLost: (n: number) => `${n} ${plPl(n, 'plik drzewa by zniknął', 'pliki drzewa by zniknęły', 'plików drzewa by zniknęło')}`,
+            danglingRef: (n: number) => `${n} ${plPl(n, 'odwołanie wskazywałoby donikąd', 'odwołania wskazywałyby donikąd', 'odwołań wskazywałoby donikąd')}`,
+        },
 
         // Photo conflict (two different photos — shown as thumbnails in the dialog)
         photoConflict: 'dwa różne zdjęcia',
