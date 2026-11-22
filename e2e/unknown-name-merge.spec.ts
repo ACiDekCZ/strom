@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, createFirstPerson } from './helpers.js';
+import { openApp, createFirstPerson, mergeCompare, mergeCount, mergeWriteAndSwitch } from './helpers.js';
 
 /**
  * A person of unknown given name in a merge (spec 010, K1.2): MyHeritage
@@ -45,9 +45,13 @@ test('a wife of unknown given name pairs through her matched husband, for review
 
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
-    await expect(wizard.locator('#merge-stat-matches')).toHaveText('3');
-    // The offered wife, left undecided, would come in as a separate person.
-    await expect(wizard.locator('#merge-stat-new')).toHaveText('1');
+    await mergeCompare(wizard);
+    await expect(mergeCount(wizard, 'joined')).toHaveText('2');
+    // The offered wife is left to decide: nobody is added, and the write waits for her.
+    await expect(mergeCount(wizard, 'pending')).toHaveText('1');
+    await expect(mergeCount(wizard, 'added')).toHaveText('0');
+    await expect(wizard.locator('#merge-next')).toBeDisabled();
+    await expect(wizard.locator('#merge-next-why')).toHaveText('1 pair left to decide');
 
     const wifeRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Nováková' });
     await expect(wifeRow).toHaveCount(1);
@@ -58,18 +62,11 @@ test('a wife of unknown given name pairs through her matched husband, for review
 
     await wifeRow.locator('.merge-btn-confirm').click();
     await expect(wizard.locator('#merge-match-list .merge-item.confirmed')).toHaveCount(3);
-    await expect(wizard.locator('#merge-stat-new')).toHaveText('0');
+    await expect(mergeCount(wizard, 'joined')).toHaveText('3');
+    await expect(mergeCount(wizard, 'pending')).toHaveText('0');
+    await expect(mergeCount(wizard, 'added')).toHaveText('0');
 
-    await wizard.locator('.merge-actions .primary').click();
-    const prompt = page.locator('#confirmation-modal.active.dialog-prompt');
-    await expect(prompt).toBeVisible();
-    await prompt.locator('#prompt-input').fill('Merged');
-    await prompt.locator('#confirm-ok-btn').click();
-    await expect(page.locator('#confirm-title')).toHaveText('Merge complete');
-    await page.locator('#confirmation-modal.active #confirm-ok-btn').click();
-    await expect.poll(() => page.evaluate(() =>
-        window.Strom.TreeManager.getTrees().find((t: { name: string }) => t.name === 'Merged')?.id
-        === window.Strom.TreeManager.getActiveTreeId())).toBe(true);
+    await mergeWriteAndSwitch(page, wizard);
     const persons = await page.evaluate(async () => {
         const TM = window.Strom.TreeManager;
         return Object.values((await TM.getTreeData(TM.getActiveTreeId()!))!.persons);

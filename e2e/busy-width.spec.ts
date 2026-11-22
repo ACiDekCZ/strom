@@ -165,6 +165,9 @@ for (const wide of [false, true]) {
             await release(page);
             const wizard = page.locator('#merge-modal');
             await expect(wizard).toBeVisible({ timeout: 30_000 });
+            // Re-analyze stands in step 2's list of pairs: the guide compares first.
+            await wizard.locator('#merge-next').click();
+            await expect(wizard.locator('#merge-progress [aria-current="step"]')).toHaveAttribute('data-step', '2', { timeout: 30_000 });
             const again = wizard.getByRole('button', { name: 'Neu analysieren' });
             const footer = wizard.locator('.merge-actions');
             const footerHeight = (await footer.boundingBox())!.height;

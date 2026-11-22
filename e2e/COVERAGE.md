@@ -21,13 +21,13 @@ the table honest.
 | Standalone-HTML app export → open in view mode | `export-app-viewmode.spec.ts` | covered | opened via `file://`; read-only (edit controls hidden) |
 | Encrypted export → open, wrong vs right password | `export-app-viewmode.spec.ts` | covered | encrypted HTML-app open flow (supports retry) |
 | Encrypted JSON import, wrong password → retry | `data-import-export.spec.ts` | covered | retry bug fixed in review; error shown, same prompt accepts the right password |
-| Tree merge (two trees, shared person) | `merge.spec.ts` | covered | target-picker + wizard opens + shared match detected + shown in review list |
-| Tree merge execute (two trees → filters → confirm → execute → new tree) | `merge-execute.spec.ts` | covered | review filters (New/High/Conflicts/All), explicit confirm, name prompt, switch offer; merged tree has the shared person once with both trees' facts + relations; both input trees unchanged, exactly one new tree |
-| Tree merge conflict resolution (person + union) | `merge-execute.spec.ts` | covered | per-field answers kept on reopen; the chosen value wins, a one-sided value is filled in |
+| Tree merge (two trees, shared person) | `merge.spec.ts` | covered | target-picker + import guide opens, compares (step 1) + shared pair counted + shown in step 2's list; scope d) drops New to 0 |
+| Tree merge execute (two trees → filters → confirm → execute → new tree) | `merge-execute.spec.ts` | covered | step 2's filters (New/High/Conflicts/All), explicit confirm, step 5 writes a new tree "{target} + {source}" without a name prompt, switch offer; with scope b) the merged tree has the shared person once with both trees' facts + relations; both input trees unchanged, exactly one new tree |
+| Tree merge conflict resolution (person + union) | `merge-execute.spec.ts` | covered | per-field answers kept on reopen; scope a) leaves the tree's values; the chosen value winning is `test.fixme` until step 4 (spec 134 part B) |
 | Tree merge manual match | `merge-execute.spec.ts` | covered | "Match to existing" (the picker list stays shut until asked for — fixed: it opened over Cancel / Save), side-by-side preview (Escape closes it — fixed: the wizard swallowed the key); the source person's child ends up under the chosen person |
-| Tree merge save for later / resume / discard | `merge-execute.spec.ts` | covered | Save for later (button + close dialog) survives a reload; resume from the tree manager and from Pending merges keeps decisions; an auto-saved merge interrupted by a reload is offered at startup (fixed: nothing offered it); discard leaves both trees intact |
+| Tree merge save for later / resume / discard | `merge-execute.spec.ts`, `merge-wizard.spec.ts` | covered | Save for later (button + close dialog) survives a reload; resume from the tree manager and from Pending merges keeps decisions; an auto-saved merge interrupted by a reload is offered at startup (fixed: nothing offered it); discard leaves both trees intact |
 | Person merge with partnerships on both sides | `merge-execute.spec.ts` | covered | preview (single + compare), field + partnership conflicts; "Merge" collapses the shared union (fixed: the answer was keyed by the kept union and looked up by the removed one, so it always kept both); "Keep both" |
-| GEDCOM result "Merge with existing" | `import-extra.spec.ts` | covered | 1 match + 2 new in the wizard; executed merge → named tree, original unchanged |
+| GEDCOM result "Merge with existing" | `import-extra.spec.ts` | covered | 1 pair to decide + 2 new in the guide, the write waits for the pair; written → new tree "{tree} + {file}", original unchanged |
 | Exported HTML app / password-protected HTML app → "From HTML file" | `import-extra.spec.ts` | covered | real file picker; counts in the import dialog; wrong password → retry; local encryption stays off |
 | Password-protected "Export all" JSON restore | `import-extra.spec.ts` | covered | decrypt → "2 trees" confirm → every tree restored |
 | GEDCOM result "Save as JSON" | `import-extra.spec.ts` | covered | family-tree.json with persons/relations; no tree added |
@@ -157,7 +157,7 @@ the table honest.
 | Toolbar Add-family button (opt-in setting) | `family-wizard.spec.ts` | covered | hidden by default; setting reveals; opens wizard on focus |
 | GEDCOM fidelity: divorce w/o date, dropped-tag summary, unknown sex, CONC wrap, multi-line event notes | — (`gedcom-roundtrip.test.ts` unit) | covered | 9 unit tests over the parser/exporter pair |
 | GEDCOM media (OBJE) + standard repositories/citation PAGE | — (`gedcom-roundtrip.test.ts` unit) | covered | photo/attachment round-trip, external files counted |
-| Merge safety: undecided weak match imports separately | — (`merge-scoring.test.ts` unit) | covered | executor gating + first scoring tests; UI gate dialog not e2e-driven |
+| Merge safety: undecided weak match imports separately | — (`merge-scoring.test.ts` unit) | covered | executor gating + first scoring tests; in the guide a pair left to decide holds step 5 (`unknown-name-merge.spec.ts`, `import-extra.spec.ts`) |
 | Merge smart: flex dates + transitive propagation | — (`merge-scoring.test.ts` unit) | covered | ~dates match exact dates; chains resolve through generations |
 | CSV person-table export | `data-import-export.spec.ts` + `csv-export.test.ts` (unit) | covered | localized headers, escaping, BOM |
 | Locale date form in edit inputs | — (`dates.test.ts` unit) | covered | round-trip guaranteed by tests; visual form is cosmetic |

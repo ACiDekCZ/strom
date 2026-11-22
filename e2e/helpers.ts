@@ -560,3 +560,20 @@ export async function mergeSetScope(page: Page, scope: 'a' | 'b' | 'c' | 'd'): P
     await page.evaluate((scope) =>
         (window.Strom.MergerUI as unknown as { wizard: { update(c: { scope: string }): void } }).wizard.update({ scope }), scope);
 }
+
+/**
+ * Write (`mergeWrite`) and accept "Switch to the new tree?" after "Merge
+ * complete": resolves with the new tree's id and name once it is the active tree.
+ */
+export async function mergeWriteAndSwitch(page: Page, wizard: Locator): Promise<{ id: string; name: string }> {
+    const before: string[] = await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { id: string }) => t.id));
+    await mergeWrite(wizard);
+    await expect(wizard).toBeHidden();
+    await expect(page.locator('#confirm-title')).toHaveText('Merge complete');
+    await page.locator('#confirmation-modal.active #confirm-ok-btn').click();
+    const tree = await page.evaluate((before) =>
+        window.Strom.TreeManager.getTrees().find((t: { id: string }) => !before.includes(t.id)) as { id: string; name: string } | undefined, before);
+    expect(tree, 'a new tree').toBeTruthy();
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(tree!.id);
+    return { id: tree!.id, name: tree!.name };
+}

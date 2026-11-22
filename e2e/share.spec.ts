@@ -1,6 +1,6 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { pathToFileURL } from 'url';
-import { openApp, createFirstPerson, card, addRelation } from './helpers.js';
+import { openApp, createFirstPerson, card, addRelation, mergeCompare } from './helpers.js';
 
 /**
  * Collaboration round-trip ("send to a relative"):
@@ -71,6 +71,8 @@ test('share round-trip: welcome, collaboration bar, reply merge offer', { tag: '
     // The merge wizard opens over MY tree with the uncle's addition proposed.
     const merge = page.locator('#merge-modal');
     await expect(merge).toBeVisible();
+    // The guide's comparison: step 2 lists the uncle's addition.
+    await mergeCompare(merge);
     await expect(merge).toContainText('Strycek');
 });
 

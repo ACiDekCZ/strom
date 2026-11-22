@@ -1,6 +1,6 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'fs';
-import { openApp, createFirstPerson, waitForPersist } from './helpers.js';
+import { openApp, createFirstPerson, waitForPersist, mergeCompare, mergeCount, mergeWriteAndSwitch } from './helpers.js';
 import { fakeBridge, openResearch, poll } from './research-bridge.js';
 import { VERIFY_FEATURES, fakeVerify, verifyGed } from './verify-bridge.js';
 
@@ -179,24 +179,21 @@ test('a merge with a GEDCOM: the card in the merged tree, with the new and updat
     await result.locator('#gedcom-merge-btn').click();
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
-    await expect(wizard.locator('#merge-stat-matches')).toHaveText('1');
+    await mergeCompare(wizard);
+    await expect(mergeCount(wizard, 'pending')).toHaveText('1');
     // A name and a birth year are only offered (below 80): confirmed by hand.
     const match = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Vendelin' });
     await match.locator('.merge-btn-confirm').click();
     await expect(match).toHaveClass(/confirmed/);
-    await wizard.getByRole('button', { name: 'Execute merge' }).click();
-    const confirm = page.locator('#confirmation-modal');
-    await expect(confirm).toBeVisible();
-    await confirm.locator('#prompt-input').fill('Habrcetl merged');
-    await confirm.locator('#confirm-ok-btn').click();
-    // "Switch to the new tree?"
-    await expect(confirm).toContainText(/switch/i);
-    await confirm.locator('#confirm-ok-btn').click();
+    await expect(mergeCount(wizard, 'joined')).toHaveText('1');
+    // Written into a new tree "{my tree} + {file}"; "Switch to the new tree?" accepted.
+    const merged = await mergeWriteAndSwitch(page, wizard);
+    expect(merged.name).toMatch(/ \+ /);
 
     const card = nextCard(page);
     await expect(card).toBeVisible();
     await expect(card.locator('.import-next-origin'))
-        .toHaveText(`Merged into the tree Habrcetl merged: 2 new people, 1 updated · from Family Tree Maker 24.0 (file 12 Mar 2024)`);
+        .toHaveText(`Merged into the tree ${merged.name}: 2 new people, 1 updated · from Family Tree Maker 24.0 (file 12 Mar 2024)`);
     await expect(page.locator('#tree-manager-modal')).not.toHaveClass(/active/);
 });
 

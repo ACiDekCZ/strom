@@ -1,6 +1,6 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'fs';
-import { openApp, createFirstPerson, addRelation, card, waitForPersist } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card, waitForPersist, mergeCompare, mergeCount, mergeWrite } from './helpers.js';
 
 /**
  * Import paths beyond the plain JSON file: an exported HTML app (plain and
@@ -242,32 +242,32 @@ test('GEDCOM result: "Merge with existing" matches the shared person and adds th
     await result.locator('#gedcom-merge-btn').click();
     await expect(result).toBeHidden();
 
-    // The merge wizard pairs the file's Jan with mine and offers Eva + Karel as new.
+    // The import guide's comparison pairs the file's Jan with mine and offers Eva + Karel as new.
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
-    await expect(wizard.locator('#merge-stat-matches')).toHaveText('1');
-    // Left undecided, the offered Jan would come in as a separate person too.
-    await expect(wizard.locator('#merge-stat-new')).toHaveText('3');
+    await mergeCompare(wizard);
+    await expect(mergeCount(wizard, 'added')).toHaveText('2');
     await expect(wizard.locator('#merge-match-list')).toContainText('Jan');
 
     // Name + birth year alone (score below 80) is only offered for review:
-    // confirmed by hand, so the run raises no "undecided" gate; the result
-    // goes to a new tree named in the prompt.
+    // left to decide, the write waits for it (no "undecided" question at the end).
     const janRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Jan' });
     await expect(janRow).toHaveClass(/pending/);
+    await expect(mergeCount(wizard, 'pending')).toHaveText('1');
+    await expect(wizard.locator('#merge-next')).toBeDisabled();
     await janRow.locator('.merge-btn-confirm').click();
     await expect(janRow).toHaveClass(/confirmed/);
-    await expect(wizard.locator('#merge-stat-new')).toHaveText('2');
-    await wizard.getByRole('button', { name: 'Execute merge' }).click();
-    const confirm = page.locator('#confirmation-modal');
-    await expect(confirm).toBeVisible();
-    await expect(confirm.locator('#prompt-input')).toHaveValue(/merged|\+/i);
-    await confirm.locator('#prompt-input').fill('Merged with GEDCOM');
-    await confirm.locator('#confirm-ok-btn').click();
+    await expect(mergeCount(wizard, 'joined')).toHaveText('1');
+    await expect(mergeCount(wizard, 'pending')).toHaveText('0');
+    await expect(mergeCount(wizard, 'added')).toHaveText('2');
+    // The result goes to a new tree "{my tree} + {file}", no name asked.
+    await mergeWrite(wizard);
+    await expect(page.locator('#confirmation-modal.active.dialog-prompt')).toHaveCount(0);
 
     await expect.poll(async () => (await treeSummaries(page)).length).toBe(2);
     const trees = await treeSummaries(page);
-    const merged = trees.find(t => t.name === 'Merged with GEDCOM')!;
+    const merged = trees.find(t => t.id !== originalId)!;
+    expect(merged.name).toMatch(/ \+ /);
     // Jan appears once (matched), Eva and Karel were added.
     expect(merged.names).toEqual(['Eva', 'Jan', 'Karel']);
     // My original tree is unchanged.

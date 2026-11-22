@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import {
     openApp, createFirstPerson, card, cardAction, importJsonAsNewTree, focusViaSearch,
+    mergeCompare,
 } from './helpers.js';
 
 /**
@@ -235,6 +236,7 @@ test('XSS: the tree-merge compare preview of a foreign file renders names as tex
 
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
+    await mergeCompare(wizard);
     await expect(wizard.locator('#merge-match-list .merge-item').first()).toBeVisible();
     await expect(wizard.locator('#merge-match-list')).toContainText(`Ada${IMG}`);
     await expect(wizard.locator('img[src="x"], svg[onload]')).toHaveCount(0);
