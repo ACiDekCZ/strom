@@ -16,7 +16,7 @@ import { isPendingImageUrl } from '../research-image-refs.js';
 import { DataManager } from '../data.js';
 import { Attachment, MediaPlace, PartnershipId, Person, PersonId, Source } from '../types.js';
 import { strings } from '../strings.js';
-import { MaterialItem, directPersons, fileUrl } from '../materials.js';
+import { MaterialItem, directPersons, fileUrl, materialRecordNote } from '../materials.js';
 import { mediaAt, mediaPersonIds, placePersonId } from '../media.js';
 import { mediaPlaceLabel, mediaUseLabel, mediaUses } from '../media-uses.js';
 import { MultiPersonPicker, PersonPicker } from '../person-picker.js';
@@ -435,10 +435,13 @@ export const materialAttachMethods = uiModule({
         if (!sha || !file || !mc?.base) return null;
         const mime = file.mime || item.mime || 'application/octet-stream';
         const original = { sha256: sha, name: file.name, mimeType: mime, bytes: file.bytes ?? 0 };
+        // The sender's note goes with it: a send of the tree without it would take it off in the research.
+        const note = materialRecordNote(item);
         const details = {
             ...(item.titled ? { title: item.title } : {}),
             ...(item.kind ? { kind: item.kind } : {}),
             ...(item.date ? { date: item.date } : {}),
+            ...(note ? { note } : {}),
         };
         const shown = ATTACHMENT_IMAGE_TYPES.includes(mime) || (mime === 'application/pdf' && (file.bytes ?? 0) <= MAX_PDF_BYTES);
         if (!shown) return { name: file.name, mimeType: mime, dataUrl: ORIGINAL_ONLY_DATA_URL, sizeBytes: 0, original, originalOnly: true, ...details };

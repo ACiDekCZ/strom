@@ -557,6 +557,19 @@ function noteOfSender(file: MaterialFile): string | undefined {
     return notes.length ? notes.join('\n') : undefined;
 }
 
+/**
+ * The note a research file takes along when it becomes a file of the tree
+ * (linked, used as a portrait or as a source's file): the sender's last note,
+ * the one the research reads as the file's note in a send (a file of the
+ * tree without it reads as its note taken off). A file of the tree already:
+ * its own note. None: no note of the sender.
+ */
+export function materialRecordNote(item: Pick<MaterialItem, 'file' | 'attachment'>): string | undefined {
+    if (item.attachment) return item.attachment.note || undefined;
+    const last = [...(item.file?.notes ?? [])].reverse().find(n => n.by === 'user');
+    return last?.text || undefined;
+}
+
 function batchMap(list: Pick<MaterialList, 'batches'>): Map<string, MaterialBatch> {
     return new Map(list.batches.map(b => [b.id, b]));
 }
