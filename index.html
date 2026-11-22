@@ -17879,6 +17879,23 @@
             padding: 6px 14px; border-radius: var(--r-md); opacity: 0.3;
         }
         body.slideshow-paused #slideshow-pause { background: var(--primary, #4a7c59); }
+        /* Without a hover (touch) the controls stay fully visible as 44 px targets; the keyboard hint
+           has nothing to say there. A phone and a tablet put them at the top right: at the bottom the
+           caption (up to 90vw wide) would lie over them. */
+        @media (pointer: coarse) {
+            .slideshow-controls { opacity: 1; }
+            .slideshow-controls button { width: 44px; height: 44px; font-size: 18px; }
+        }
+        @media (pointer: coarse), (max-width: 640px) {
+            .slideshow-hint { display: none; }
+        }
+        @media (max-width: 1024px) {
+            .slideshow-controls {
+                top: calc(16px + env(safe-area-inset-top, 0px));
+                right: calc(16px + env(safe-area-inset-right, 0px));
+                bottom: auto;
+            }
+        }
 
         /* ==================== MOBILE NAVIGATION (≤1024px) ==================== */
         /* Top-bar ⋯ actions button and the fixed bottom bar replace the old
