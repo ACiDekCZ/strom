@@ -180,7 +180,10 @@ test.describe('Use as portrait… on a picture of the research (1121)', () => {
     });
 
     test('the research stopped: off for a file only in the research, nothing written', async ({ page }) => {
-        const { bridge } = await setup(page);
+        const { bridge, material } = await setup(page);
+        // The rows come from the list remembered while the bridge ran: the poll asks for it without waiting
+        // for it, so a loaded machine turned the bridge off before the list was asked (no rows to open).
+        await expect.poll(() => material.asks.some(q => !/(^|&)(person|batch|files0)=/.test(q))).toBe(true);
         bridge.down = true;
         await poll(page);
         await editModal(page, 'Josef');
