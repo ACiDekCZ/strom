@@ -428,7 +428,13 @@ export const bottomSheetMethods = uiModule({
         // Lists of people (spec 084 §2, 15a): after Sources, an exported page reads them too.
         const listsRow: MenuRow = { label: s.lists.title, id: 'sheet-lists', run: () => this.showPersonLists() };
         // "For the family ›": the book and the family pages (an exported page has them too), the poster, the fly-through.
+        // Materials on a phone: the desktop has them in the same block beside "For the family ›";
+        // the phone's first level stays without scrolling, so they head this page instead.
+        const materialsRow: MenuRow | null = active && !viewMode && this.isMaterialsMenuOffered()
+            ? { label: s.materials.menu, id: 'sheet-materials', value: this.materialsAppCount().toLocaleString(getCurrentLanguage()), run: () => this.openMaterials() }
+            : null;
         const familyRow: MenuRow = { label: s.menu.forFamily, id: 'sheet-family', run: () => {}, page: { title: s.menu.forFamily, rows: [
+            ...(materialsRow && isPhoneBar() ? [materialsRow] : []),
             ...(active || viewMode ? [bookRow, pagesRow, treePagesRow] : []),
             { label: s.menu.poster, id: 'sheet-poster', run: () => this.showPosterDialog() },
             slideshowRow,
@@ -444,8 +450,7 @@ export const bottomSheetMethods = uiModule({
                 ...(active ? [annRow] : []),
                 ...(active && this.isSourcesMenuOffered() ? [{ label: s.sources.menu, run: () => this.showSourcesDialog() }] : []),
                 // Materials N (spec 102 §1) on a tablet; a phone's sheet keeps its first level without scrolling.
-                ...(active && this.isMaterialsMenuOffered() && !isPhoneBar()
-                    ? [{ label: s.materials.menu, id: 'sheet-materials', value: this.materialsAppCount().toLocaleString(getCurrentLanguage()), run: () => this.openMaterials() }] : []),
+                ...(materialsRow && !isPhoneBar() ? [materialsRow] : []),
                 ...(active ? [listsRow] : []),
                 // One Export…: the whole tree or the current view, chosen in its dialog
                 // (locked data exports what it shows).

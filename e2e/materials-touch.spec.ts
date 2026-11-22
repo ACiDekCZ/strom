@@ -77,6 +77,25 @@ async function swipe(page: Page, dx: number): Promise<void> {
 test.describe('Materials on a phone', () => {
     test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
+    test('More › For the family › Materials opens the window; the row carries the count (the desktop keeps it beside For the family ›)', async ({ page }) => {
+        await tree(page);
+        await page.locator('#bb-view-more').tap();
+        const sheet = page.locator('.bottom-sheet-menu');
+        await expect(sheet).toBeVisible();
+        // The first level stays without it (no scrolling); the page For the family › starts with it.
+        await expect(sheet.locator(':scope > .bottom-sheet-items #sheet-materials')).toHaveCount(0);
+        await page.locator('#sheet-family').tap();
+        const row = sheet.locator('.bottom-sheet-subpage #sheet-materials');
+        await expect(row).toBeVisible();
+        await expect(row).toContainText('Materials');
+        await expect(row).toContainText('8');
+        const box = (await row.boundingBox())!;
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        await row.tap();
+        await expect(win(page)).toBeVisible();
+        await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
+    });
+
     test('3 columns without text; the review filters in the Filters sheet; a long press selects; the bar has three actions and ⋯', async ({ page }) => {
         await tree(page);
         await openWindow(page);
