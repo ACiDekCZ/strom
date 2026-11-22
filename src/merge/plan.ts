@@ -429,6 +429,15 @@ export function planCounts(plan: MergePlan): PlanCounts {
     return c;
 }
 
+/**
+ * The import is a copy of the tree (13b): everyone joined and the write
+ * would change nothing (no one new, no detail, no couple, no link).
+ */
+export function bringsNothingNew(c: PlanCounts): boolean {
+    return c.total > 0 && c.joined === c.total && c.added === 0 && c.pending === 0 && c.skipped === 0
+        && c.fieldChanges === 0 && c.partnerships === 0 && c.links === 0;
+}
+
 /** Each source person's fate in the plan ("?" stand-ins aside). */
 export function planFates(plan: MergePlan): Map<PersonId, PersonFate> {
     const out = new Map<PersonId, PersonFate>();

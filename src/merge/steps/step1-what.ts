@@ -52,7 +52,7 @@ function sourceHtml(ctx: StepContext, env: Step1Env | undefined, gedcom: boolean
     const meta = tree ? treeLine(tree) : env?.sourceMeta() ?? '';
     const summary = [c.source.label, W.treeLine(c.source.persons, false, false, null)].join(' · ');
     return `<section class="merge-s1-src" aria-label="${escapeHtml(W.whatInFile)}">
-            <button type="button" class="merge-s1-sumline" aria-expanded="false"><span class="merge-s1-sumtext">${escapeHtml(summary)}</span><span class="merge-s1-chev" aria-hidden="true">▾</span></button>
+            <button type="button" class="merge-s1-sumline" aria-expanded="false" title="${escapeHtml(summary)}"><span class="merge-s1-sumtext">${escapeHtml(summary)}</span><span class="merge-s1-chev" aria-hidden="true">▾</span></button>
             <div class="merge-s1-srcbody">
                 <h4 class="merge-s1-h">${escapeHtml(W.whatInFile)}</h4>
                 <div class="merge-s1-file"><b class="merge-s1-name" title="${escapeHtml(c.source.label)}">${escapeHtml(c.source.label)}</b>${meta ? `<span class="merge-s1-meta">${escapeHtml(meta)}</span>` : ''}</div>

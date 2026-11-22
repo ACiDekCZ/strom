@@ -6443,6 +6443,7 @@ const stringsEN = {
         decKeys: ['S', 'N', 'A', 'X'] as string[],
         // Edge states (§13)
         emptySource: 'The file contains no people. Nothing is written.',
+        showComparison: 'Show the comparison',
         sameAsTarget: (n: number, t: string) => n === 1
             ? `The only person is already in the tree ${t} and brings nothing new.`
             : `All ${n} people are already in the tree ${t} and bring nothing new.`,
@@ -17306,6 +17307,7 @@ const stringsCZ: StringsType = {
         decKeys: ['S', 'N', 'J', 'X'],
         // Edge states (§13)
         emptySource: 'Soubor neobsahuje žádné osoby. Nic se nezapíše.',
+        showComparison: 'Ukázat porovnání',
         sameAsTarget: (n: number, t: string) => n === 1
             ? `Jediná osoba už ve stromu ${t} je a nic nového nepřinese.`
             : n >= 2 && n <= 4 ? `Všechny ${n} osoby už ve stromu ${t} jsou a nic nového nepřinesou.`
@@ -28012,6 +28014,7 @@ const stringsDE: StringsType = {
         decKeys: ['D', 'N', 'A', 'X'],
         // Edge states (§13)
         emptySource: 'Die Datei enthält keine Personen. Nichts wird geschrieben.',
+        showComparison: 'Vergleich zeigen',
         sameAsTarget: (n: number, t: string) => n === 1
             ? `Die einzige Person ist schon im Stammbaum ${t} und bringt nichts Neues.`
             : `Alle ${n} Personen sind schon im Stammbaum ${t} und bringen nichts Neues.`,

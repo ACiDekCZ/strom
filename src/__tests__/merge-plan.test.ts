@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { AUTO_CONFIRM_SCORE, existingTargetOf } from '../merge/executor.js';
 import { createMergeState } from '../merge/matching.js';
 import {
-    applyPlan, buildPlan, isRepeatOf, planCounts, planFates, planFingerprint, scopeExample,
+    applyPlan, bringsNothingNew, buildPlan, isRepeatOf, planCounts, planFates, planFingerprint, scopeExample,
     MergePlan, MergeRecord, PersonFate, PlanScope, PlanSource, WizardChoices,
 } from '../merge/plan.js';
 import { MergeState } from '../merge/types.js';
@@ -335,6 +335,19 @@ describe('scopeExample', () => {
         other.person('s1', 'Hostivít', 'Jilm', { birthDate: '1850' });
         expect(scopeExample(other.data, t.data)).toBeNull();
         expect(scopeExample({ persons: {}, partnerships: {} }, t.data)).toBeNull();
+    });
+});
+
+describe('bringsNothingNew (13b)', () => {
+    it('a copy of the tree brings nothing new; a file with new people does', () => {
+        const { target, state } = pairOf(7);
+        const copy = createMergeState(target, structuredClone(target));
+        const counts = planCounts(buildPlan(copy, choices({ scope: 'a' })));
+        expect(counts.joined).toBe(counts.total);
+        expect(bringsNothingNew(counts)).toBe(true);
+        expect(bringsNothingNew(planCounts(buildPlan(state, choices({ scope: 'a' }))))).toBe(false);
+        expect(bringsNothingNew({ ...counts, fieldChanges: 1 })).toBe(false);
+        expect(bringsNothingNew({ ...counts, total: 0, joined: 0 })).toBe(false);
     });
 });
 

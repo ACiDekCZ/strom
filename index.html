@@ -18227,8 +18227,9 @@
         .merge-not-taken-line { margin: 0 0 2px; overflow-wrap: anywhere; }
         .merge-not-taken-links { display: flex; gap: 12px; flex-wrap: wrap; }
         .merge-s1-desc { font-size: 13px; color: var(--text-light); line-height: 1.45; margin: 6px 0 4px; }
+        /* The cells keep one line while they fit; a long language (de) wraps a cell's words instead of cutting the last cell. */
         .merge-s1-modes.sel-seg { display: inline-flex; max-width: 100%; overflow: hidden; }
-        .merge-s1-modes > .sel-opt { padding: 5px 12px; font-size: 13px; line-height: 1.2; white-space: nowrap; cursor: pointer; }
+        .merge-s1-modes > .sel-opt { flex: 0 1 auto; min-width: 0; padding: 5px 12px; font-size: 13px; line-height: 1.2; text-align: center; hyphens: auto; overflow-wrap: break-word; cursor: pointer; }
         .merge-s1-targets, .merge-s1-scopes { display: flex; flex-direction: column; gap: 4px; }
         /* The tiles are <label>s: ".modal label" (display: block, a bottom margin) must not win. */
         .modal label.merge-s1-target {
@@ -18283,7 +18284,7 @@
             .merge-s1-src:not(.is-open) .merge-s1-srcbody { display: none; }
             .merge-s1-src.is-open .merge-s1-srcbody { margin-top: 8px; }
             .merge-s1-modes.sel-seg { display: flex; width: 100%; }
-            .merge-s1-modes > .sel-opt { flex: 1 1 auto; min-width: 0; padding: 5px 6px; white-space: normal; text-align: center; }
+            .merge-s1-modes > .sel-opt { flex: 1 1 auto; min-width: 0; padding: 5px 4px; white-space: normal; text-align: center; }
             .merge-s1-more { display: inline-block; }
             .merge-s1-scopes:not(.is-more) > .merge-s1-scope:is([data-scope="c"], [data-scope="d"]) { display: none; }
             .merge-s1-scopes.is-more > .merge-s1-more { display: none; }
@@ -18335,7 +18336,13 @@
             text-overflow: ellipsis;
             max-width: 100%;
         }
+        .merge-step-name { max-width: 100%; }
+        .merge-step-name > .sel-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .merge-step-sub.is-warn { color: var(--warning-text); }
+        /* Under 1100 px only the current step keeps its second line (§13, 14j); the whole text stays in the step's title. */
+        @media (max-width: 1099px) {
+            .merge-step:not(.active) > .merge-step-sub { display: none; }
+        }
         .merge-step.is-done { cursor: pointer; }
         .merge-step.is-done .merge-step-ok { display: inline-flex; color: var(--primary); }
         .merge-step.is-skipped .merge-step-name,

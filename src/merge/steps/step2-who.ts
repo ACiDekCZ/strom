@@ -21,7 +21,7 @@ import type { MergeState, PersonMatch, MatchDecision } from '../types.js';
 import type { Partnership, Person, PersonId, StromData } from '../../types.js';
 import { AUTO_CONFIRM_SCORE, existingTargetOf } from '../executor.js';
 import { candidatesFor, timeConflict, type MatchCandidateInfo } from '../matching.js';
-import { planFates, type PersonFate } from '../plan.js';
+import { bringsNothingNew, planFates, type PersonFate } from '../plan.js';
 import type { StepContext, Step2Env, PairDecision } from './context.js';
 import { escapeHtml, glyph, stepHeading } from './context.js';
 import { shownName } from '../../person-name.js';
@@ -62,6 +62,8 @@ interface PairView {
     /** A phone: the pair's column shown (§14, 14b), and the list open as a sheet. */
     side: 'tree' | 'import';
     listOpen: boolean;
+    /** A copy of the tree (13b): the comparison shown on Show the comparison. */
+    showCopy: boolean;
 }
 
 const views = new WeakMap<MergeState, PairView>();
@@ -71,7 +73,7 @@ function viewOf(state: MergeState): PairView {
     if (!v) {
         v = {
             group: null, selected: null, query: '', cand: new Map(), checked: new Set(), advanceFrom: null, focusRow: false, scrollTop: 0,
-            recalc: [], onlyRecalc: false, side: 'tree', listOpen: false,
+            recalc: [], onlyRecalc: false, side: 'tree', listOpen: false, showCopy: false,
         };
         views.set(state, v);
     }
@@ -402,11 +404,13 @@ function rowHtml(state: MergeState, view: PairView, row: PairRow, fate: PersonFa
     const other = tree ? `<span class="merge-item-other">↔ ${escapeHtml(nameText(inc))}${yearText(inc) ? ` ${escapeHtml(yearText(inc))}` : ''}</span>` : '';
     const score = row.match ? `<span class="merge-item-score">${row.match.score} %</span>` : '';
     const pick = row.group === 'same'
-        ? `<span class="merge-item-pick"><input type="checkbox" class="merge-item-check" aria-label="${escapeHtml(nameText(first))}"${view.checked.has(row.id) ? ' checked' : ''}></span>`
+        // The box is the mouse's: the row (an option) carries the tick for a keyboard and a reader (Space), no control inside an option.
+        ? `<span class="merge-item-pick"><input type="checkbox" class="merge-item-check" tabindex="-1" aria-hidden="true"${view.checked.has(row.id) ? ' checked' : ''}></span>`
         : '';
-    return `<div class="merge-item sel-opt is-${f}" data-sel-form="row" role="option" aria-selected="${selected}" tabindex="${selected ? 0 : -1}" data-incoming-id="${escapeHtml(row.id)}" data-fate="${f}">`
+    const checked = row.group === 'same' ? ` aria-checked="${view.checked.has(row.id)}"` : '';
+    return `<div class="merge-item sel-opt is-${f}" data-sel-form="row" role="option" aria-selected="${selected}"${checked} tabindex="${selected ? 0 : -1}" data-incoming-id="${escapeHtml(row.id)}" data-fate="${f}">`
         + pick
-        + `<span class="merge-item-status" data-fate="${f}" title="${escapeHtml(fateLabel(f))}" aria-label="${escapeHtml(fateLabel(f))}">${FATE_GLYPH[f]}</span>`
+        + `<span class="merge-item-status" data-fate="${f}" role="img" title="${escapeHtml(fateLabel(f))}" aria-label="${escapeHtml(fateLabel(f))}">${FATE_GLYPH[f]}</span>`
         + `<span class="merge-item-names"><span class="merge-item-name">${nameHtml(first)}${year ? ` <span class="merge-item-year">${escapeHtml(year)}</span>` : ''}</span>${other}</span>`
         + score + '</div>';
 }
@@ -470,7 +474,7 @@ function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d
     // A phone (14b): the title opens the list as a sheet; the seg shows one column of the pair.
     const seg = tree
         ? `<div class="sel-seg merge-pair-seg" role="radiogroup" aria-label="${escapeHtml(W.pairSide)}">`
-            + `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" data-side="tree" aria-checked="${view.side === 'tree'}">${escapeHtml(ctx.choices.targetName)}</button>`
+            + `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" data-side="tree" aria-checked="${view.side === 'tree'}" title="${escapeHtml(ctx.choices.targetName)}">${escapeHtml(ctx.choices.targetName)}</button>`
             + `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" data-side="import" aria-checked="${view.side === 'import'}">${escapeHtml(W.colImport)}</button></div>`
         : '';
     parts.push(`<div class="merge-pair-head"><span class="merge-pair-title">${escapeHtml(W.pairOf(index, d.shown.length))}</span>`
@@ -543,8 +547,25 @@ function footHtml(view: PairView): string {
 }
 
 /** Draw step 2: the groups and the list left, the pair right. */
+/** The import is a copy of the target: everyone joined, the write would change nothing (13b). */
+export function isCopyOfTarget(ctx: Pick<StepContext, 'counts' | 'choices'>): boolean {
+    return ctx.choices.mode !== 'new' && !!ctx.counts && bringsNothingNew(ctx.counts);
+}
+
 export function renderStep2(host: HTMLElement, ctx: StepContext): void {
     const view = viewOf(ctx.state);
+    // A copy of the tree (13b): one sentence, the comparison behind a link.
+    if (!view.showCopy && isCopyOfTarget(ctx)) {
+        host.innerHTML = stepHeading(2)
+            + `<p class="merge-step-note merge-s2-copy">${escapeHtml(strings.mergeWizard.sameAsTarget(ctx.counts!.total, ctx.choices.targetName))} `
+            + `<button type="button" class="link-button merge-s2-show-copy">${escapeHtml(strings.mergeWizard.showComparison)}</button></p>`;
+        host.querySelector<HTMLButtonElement>('.merge-s2-show-copy')?.addEventListener('click', () => {
+            view.showCopy = true;
+            view.focusRow = true;
+            renderStep2(host, ctx);
+        });
+        return;
+    }
     const oldList = host.querySelector<HTMLElement>('#merge-match-list');
     if (oldList) view.scrollTop = oldList.scrollTop;
     const d = drawData(ctx, view);
@@ -617,6 +638,18 @@ function decide(ctx: StepContext, kind: DecKind): void {
     env.decide(row.id, decision);
 }
 
+/** A join of The same ticked or not: the box, the row's state and Undo the joins of the selected. */
+function setChecked(host: HTMLElement, view: PairView, id: PersonId, on: boolean): void {
+    if (on) view.checked.add(id);
+    else view.checked.delete(id);
+    const item = Array.from(host.querySelectorAll<HTMLElement>('#merge-match-list .merge-item')).find(el => el.dataset.incomingId === id);
+    item?.setAttribute('aria-checked', String(on));
+    const box = item?.querySelector<HTMLInputElement>('.merge-item-check');
+    if (box) box.checked = on;
+    const unjoin = host.querySelector<HTMLButtonElement>('.merge-unjoin');
+    if (unjoin) unjoin.disabled = view.checked.size === 0;
+}
+
 function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
     const env = ctx.step2;
     host.querySelectorAll<HTMLButtonElement>('.merge-tab').forEach(b => b.addEventListener('click', () => {
@@ -657,10 +690,7 @@ function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
         const box = (e.target as HTMLElement).closest<HTMLInputElement>('.merge-item-check');
         const row = rowFromEl(ctx, box);
         if (!box || !row) return;
-        if (box.checked) view.checked.add(row.id);
-        else view.checked.delete(row.id);
-        const unjoin = host.querySelector<HTMLButtonElement>('.merge-unjoin');
-        if (unjoin) unjoin.disabled = view.checked.size === 0;
+        setChecked(host, view, row.id, box.checked);
     });
     host.querySelector<HTMLButtonElement>('.merge-unjoin')?.addEventListener('click', () => {
         if (!env || view.checked.size === 0) return;
@@ -771,6 +801,15 @@ function installKeys(host: HTMLElement): void {
             e.preventDefault();
             view.selected = d.shown[next].id;
             redraw(body, ctx, true);
+            return;
+        }
+        // Space on a row of The same ticks it (its box is the mouse's).
+        if (e.key === ' ') {
+            const item = (e.target as HTMLElement).closest?.<HTMLElement>('.merge-item[aria-checked]');
+            const id = item?.dataset.incomingId as PersonId | undefined;
+            if (!item || !id) return;
+            e.preventDefault();
+            setChecked(body, view, id, !view.checked.has(id));
             return;
         }
         if (e.key.length !== 1) return;

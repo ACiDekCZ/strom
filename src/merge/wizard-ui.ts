@@ -23,7 +23,7 @@ import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { getUI } from '../ui-ref.js';
 import { renderStep1, parkGedcomSummary } from './steps/step1-what.js';
-import { renderStep2 } from './steps/step2-who.js';
+import { isCopyOfTarget, renderStep2 } from './steps/step2-who.js';
 import { barHtml, setBarShare } from '../ui/prog-bar.js';
 import { busySpinHtml } from '../ui/busy.js';
 import { renderStep3 } from './steps/step3-whom.js';
@@ -300,6 +300,10 @@ export class MergeWizard {
                 this.host.changed();
             }
         }
+        if (step >= 2 && step <= 5 && this.isCopy()) {
+            this.host.finishCompare();
+            return;
+        }
         if (step === 5) {
             if (ws.choices.mode === 'compare') {
                 this.host.finishCompare();
@@ -319,6 +323,12 @@ export class MergeWizard {
         }
         const to = nextStep(step, this.availability());
         if (to) this.go(to);
+    }
+
+    /** The import is a copy of the target (13b): the write would change nothing. */
+    private isCopy(): boolean {
+        const ws = this.ws;
+        return !!ws && !!this.plan && ws.compared && isCopyOfTarget({ choices: ws.choices, counts: planCounts(this.plan) });
     }
 
     back(): void {
@@ -417,11 +427,13 @@ export class MergeWizard {
             const skipped = info[s].state === 'skip';
             const label = `<span class="merge-step-name">${done ? `<span class="merge-step-ok" aria-hidden="true">${glyph('joined', 11)}</span>` : ''}`
                 + `<span class="sel-l" data-label="${escapeHtml(name)}">${escapeHtml(name)}</span></span>`;
+            // The whole name and second line as a tooltip: a narrow window cuts them (§13).
+            const title = escapeHtml(sub.text ? `${name} · ${sub.text}` : name);
             if (done) {
-                items.push(`<button type="button" class="merge-step sel-tab is-done" data-sel-dir="down" data-step="${s}">${label}${subHtml}</button>`);
+                items.push(`<button type="button" class="merge-step sel-tab is-done" data-sel-dir="down" data-step="${s}" title="${title}">${label}${subHtml}</button>`);
             } else {
                 const cls = current ? ' active' : skipped ? ' is-skipped' : ' is-future';
-                items.push(`<span class="merge-step sel-tab${cls}" data-sel-dir="down" data-step="${s}"${current ? ' aria-current="step"' : ''}>${label}${subHtml}</span>`);
+                items.push(`<span class="merge-step sel-tab${cls}" data-sel-dir="down" data-step="${s}" title="${title}"${current ? ' aria-current="step"' : ''}>${label}${subHtml}</span>`);
             }
             bars.push(`<span class="merge-bar${current ? ' is-current' : done ? ' is-done' : ''}"></span>`);
         }
@@ -563,6 +575,8 @@ export class MergeWizard {
         const why = pending > 0 ? W.nextWhyPairs(pending) : '';
         // While comparing: the way on is step 2's, not yet (4a).
         if (this.comparing) return { label: W.btnNext(stepName(nextStep(2, this.availability()) ?? 5)), enabled: false, why: '' };
+        // A copy of the tree (13b): nothing to write, only Close.
+        if (this.isCopy() && ws.step >= 2 && ws.step <= 5) return { label: strings.buttons.close, enabled: true, why: '' };
         if (ws.step === 5) {
             const n = this.plan ? planCounts(this.plan) : null;
             if (c.mode === 'compare') return { label: W.done, enabled: true, why: '' };

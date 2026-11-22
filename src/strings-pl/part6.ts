@@ -261,6 +261,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         sameNote: 'Ci sami (wynik 80+) są połączeni z góry. Każde połączenie można cofnąć: Nowa osoba lub Nie dodawaj.',
         decKeys: ['T', 'N', 'I', 'X'],
         emptySource: 'Plik nie zawiera osób. Nic nie zostanie zapisane.',
+        showComparison: 'Pokaż porównanie',
         sameAsTarget: (n: number, t: string) => n === 1
             ? `Jedyna osoba jest już w drzewie ${t} i nie wnosi nic nowego.`
             : `${plPl(n, 'Wszystkie', 'Wszystkie', 'Wszystkich')} ${nPl(n, 'osoba', 'osoby', 'osób')} ${plPl(n, 'jest', 'są', 'jest')} już w drzewie ${t} i nie wnoszą nic nowego.`,
