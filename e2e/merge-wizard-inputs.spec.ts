@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, openTreeActions, openTreeStructure, reloadApp } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, mergeWriteAndSwitch, openTreeActions, openTreeStructure, reloadApp } from './helpers.js';
 
 /**
  * The ways into the import guide and its first moment (spec 134 §2): a
@@ -261,4 +261,93 @@ test('a reload in an unfinished guide: the merge is offered again, the tree unch
     await reloadApp(page);
     await expect(pending).toHaveClass(/active/);
     await expect(item.locator('.pending-merge-changed')).toHaveText('The tree Modřínovi has changed since (1 edit): suggestions are recalculated, decisions stay.');
+});
+
+/** The backups "Before merge" of the tree `treeId`, as its backups dialog lists them (the dialog closed again). */
+async function preMergeBackups(page: Page, treeId: string): Promise<string[]> {
+    await page.evaluate((id) => window.Strom.UI.showSnapshotsDialog(id), treeId);
+    const rows = page.locator('#snapshots-modal .snapshot-row');
+    await expect(page.locator('#snapshots-modal')).toBeVisible();
+    const texts = (await rows.allTextContents()).filter(t => t.includes('Before merge'));
+    await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
+    return texts;
+}
+
+/** Automatic backups off for the tree: the backup "Before merge" is taken all the same (K0.4). */
+async function autoBackupsOff(page: Page, treeId: string): Promise<void> {
+    await page.evaluate((id) => window.Strom.TreeManager.setAutoBackups(id, false), treeId);
+}
+
+const openTreeId = (page: Page): Promise<string> => page.evaluate(() => window.Strom.DataManager.getCurrentTreeId()!);
+
+for (const way of ['GEDCOM file', 'view', 'share'] as const) {
+    test(`the backup Before merge from a ${way}: none while comparing, one of the target at the write, with automatic backups off`, async ({ page }) => {
+        await openModrinovi(page);
+        const jilmovi = await seedJilmovi(page);
+        const modrinovi = await openTreeId(page);
+        const target = way === 'view' ? jilmovi : modrinovi;
+        await autoBackupsOff(page, target);
+
+        if (way === 'GEDCOM file') {
+            await page.locator('#gedcom-input').setInputFiles(GED);
+        } else if (way === 'view') {
+            const structure = await openTreeStructure(page, await openTreeActions(page));
+            await structure.locator('.tree-switcher-action').filter({ hasText: 'Merge view into' }).click();
+        } else {
+            // A relative's reply to a shared file, as Review and merge takes it.
+            await page.evaluate(async (id) => {
+                const UI = window.Strom.UI as unknown as { pendingReplyEnvelope: unknown; shareReplyMerge(): Promise<void> };
+                UI.pendingReplyEnvelope = {
+                    senderName: 'Amos',
+                    data: {
+                        version: 26, partnerships: {},
+                        persons: { r1: { id: 'r1', firstName: 'Amos', lastName: 'Jilm', gender: 'male', birthDate: '1925', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] } },
+                    },
+                };
+                document.getElementById('share-reply-modal')!.dataset.targetTreeId = id;
+                await UI.shareReplyMerge();
+            }, modrinovi);
+        }
+        const wizard = page.locator('#merge-modal');
+        await expect(wizard).toBeVisible();
+        await mergeCompare(wizard);
+        expect(await preMergeBackups(page, target)).toEqual([]);
+
+        await mergeWriteAndSwitch(page, wizard);
+        const backups = await preMergeBackups(page, target);
+        expect(backups).toHaveLength(1);
+        expect(backups[0]).toContain(way === 'view' ? '1 person' : '3 people');
+    });
+}
+
+test('a saved merge whose tree changed, gone on with as saved: the backup Before merge holds the tree as it is at the write', async ({ page }) => {
+    await openModrinovi(page);
+    const modrinovi = await openTreeId(page);
+    await autoBackupsOff(page, modrinovi);
+    await page.locator('#gedcom-input').setInputFiles(GED);
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    await mergeCompare(wizard);
+    await wizard.locator('#merge-save-later').click();
+    await expect(wizard).toBeHidden();
+    await expect.poll(() => page.evaluate(async () => (await window.Strom.MergerUI.getPendingMergeInfo()).saved.length)).toBe(1);
+
+    // The tree gets a fourth person meanwhile.
+    await page.evaluate(() => {
+        window.Strom.DataManager.createPerson({ firstName: 'Hostivít', lastName: 'Modřín', gender: 'male', birthDate: '1950' });
+    });
+
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    await page.locator('#tree-manager-modal .tree-manager-item.pending-merge .tree-open-btn').click();
+    const ask = page.locator('#confirmation-modal');
+    await expect(page.locator('#confirm-title')).toHaveText('The tree has changed');
+    await ask.getByRole('button', { name: 'Go on as saved' }).click();
+    await expect(wizard).toBeVisible();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
+    expect(await preMergeBackups(page, modrinovi)).toEqual([]);
+
+    await mergeWriteAndSwitch(page, wizard);
+    const backups = await preMergeBackups(page, modrinovi);
+    expect(backups).toHaveLength(1);
+    expect(backups[0]).toContain('4 people');
 });
