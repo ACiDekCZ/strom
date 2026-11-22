@@ -4,7 +4,7 @@
 
 ## 3.31.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 22. listopadu 2026.*
 
 - **Výběr osob v pohledech**: *Výběr ▾* vybere rod, předky nebo potomky osoby, linii výzkumu nebo seznam osob. *Mapa*, *Časová osa* a *Tabulka* ukazují *Tento pohled*, *Výběr* nebo *Celý strom*; *Rodina* a *Vějíř* výběr zvýrazní a *Skrýt ostatní* nechá jen jeho osoby. Když je zaměřená osoba mimo výběr, *Zaměřit na …* přesune zaměření na střed výběru.
 - **Portrét z fotek osoby**: *Vybrat fotku* v dialogu osoby nabídne fotky osoby, ze kterých jde vyříznout portrét – soubory stromu i obrázky výzkumu, které osobu jmenují, od nejnovějších. Obrázek, který výzkum připojil k osobě, nabízí *Použít jako portrét…* v jejích *Materiálech* i v prohlížeči a na fotce více lidí dostane každý vlastní výřez.
@@ -13,7 +13,7 @@
 - **Údaje z výzkumu**: jméno osoby má stav jako ostatní údaje a ověřuje se i potvrzuje proti skenu jako narození. *Ověřit údaje ve stromu…* jde nejdřív vyzkoušet na několika osobách a *Zpracovat hned* spustí práci v terminálu výzkumu, když výzkum nepracuje. Domácnosti ze *Sčítání lidu* se ukazují jako jedna společná událost svých osob, osoba mimo strom připojená jako dítě rodiny ve stromu se ukáže pod rodiči jen v zobrazení a seznamy osob zůstávají otevřené i při sledování výzkumu. Funkce výzkumu potřebují verzi výzkumu, která je nabízí; se starší vše funguje jako dřív.
 - **Dějiny na Časové ose a styly vějíře**: *Časová osa* má řádek *Dějiny* po celé ose, se shluky událostí, druhy, oblastmi a místními dějinami na čarách života. *Vějíř* má čtyři styly (*Barevný*, *Pastelový*, *Starobylý*, *Černobílý*), *Hlavní rody*, volbu, co ukazují výseče, a kulaté portréty uprostřed.
 - **Telefon a dotyk**: na telefonu se *Materiály* otevírají z *Více › Pro rodinu ›*; tlačítka mapy, ovládání *Průletu stromem* a odkazy v textu stránek osoby a rodiny se prstem trefí snáz.
-- **Data**: datová verze 25 (každý portrét má záznam mezi soubory stromu); starší verze aplikace takový strom otevřou jen ke čtení. Když se nepodaří záloha před úpravou dat, strom se nepřevede.
+- **Data**: datová verze 25 (každý portrét má záznam mezi soubory stromu); starší verze aplikace takový strom otevřou jen ke čtení. Strom ze 3.27 a starších, který se převádí při otevření, se nepřevede, když se nepodaří záloha před úpravou dat.
 - **Opravy**: plakát příliš široký pro obrázek se zmenší, místo aby se uložil jako prázdný soubor; žena vdaná víckrát má příjmení po posledním sňatku; načtení verze výzkumu řekne jednou větou, kolika pramenům přibylo číslo snímku; dávka souborů, jejíž uzavření ve výzkumu selže, se už neohlásí jako hotová: okno řekne, že soubory ještě čekají na zápis do výzkumu, a uzavření samo zopakuje; poznámka souboru výzkumu připojeného do stromu jde s odesláním stromu; *Připojit k…* ve stromu sledovaném živě řekne, že je strom jen pro čtení, a nabídne ukončit sledování, a zaneprázdněný nebo chybující výzkum to řekne se *Zkusit znovu*, nikdy klik bez odpovědi; ve *Vějíři* kulatá tlačítka Zpět a Vpřed už nezakrývají *Co značí zvýraznění* a přizpůsobení stromu oknu nechá strom mimo výběr; drobné opravy v *Materiálech*, *Tabulce*, liště nástrojů a na telefonu drženém naležato.
 
 ## 3.30.0
