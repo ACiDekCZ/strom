@@ -515,3 +515,48 @@ export async function setFollowMode(page: Page, mode: 'switch' | 'mark' | 'off')
     await page.locator(`.sat-follow-menu [role="menuitemradio"][data-mode="${mode}"]`).click();
     await expect(page.locator('.sat-follow')).toHaveAttribute('data-mode', mode);
 }
+
+// ---------------------------------------------------------------------------
+// The import guide (spec 134): steps, counts and the write of part A.
+
+/** The step the import guide stands on (its `aria-current` item in the step list). */
+export function mergeCurrentStep(wizard: Locator): Locator {
+    return wizard.locator('#merge-progress [aria-current="step"]');
+}
+
+/** One of the guide's four counts (joined, added = new, skipped = not added, pending = to decide). */
+export function mergeCount(wizard: Locator, kind: 'joined' | 'added' | 'skipped' | 'pending'): Locator {
+    return wizard.locator(`#merge-counts [data-count="${kind}"] .merge-stat-value`);
+}
+
+/** Step 1 → the primary button compares: the guide stands on step 2 with the list of pairs. */
+export async function mergeCompare(wizard: Locator): Promise<void> {
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+    await wizard.locator('#merge-next').click();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
+}
+
+/**
+ * On to step 5 (What will happen; steps 3 and 4 are passed over in part A)
+ * and press its primary button: the plan is written into a new tree
+ * "{target} + {source}" without asking its name.
+ */
+export async function mergeWrite(wizard: Locator): Promise<void> {
+    const current = mergeCurrentStep(wizard);
+    if (await current.getAttribute('data-step') !== '5') {
+        await wizard.locator('#merge-next').click();
+        await expect(current).toHaveAttribute('data-step', '5');
+    }
+    await expect(wizard.locator('#merge-next')).toBeEnabled();
+    await wizard.locator('#merge-next').click();
+}
+
+/**
+ * Set the guide's scope (a: only add new people, b: also fill what the tree
+ * lacks, c: also the differences, d: only update existing people) on its
+ * choices, as step 1's option would (§3; its options are not drawn yet).
+ */
+export async function mergeSetScope(page: Page, scope: 'a' | 'b' | 'c' | 'd'): Promise<void> {
+    await page.evaluate((scope) =>
+        (window.Strom.MergerUI as unknown as { wizard: { update(c: { scope: string }): void } }).wizard.update({ scope }), scope);
+}

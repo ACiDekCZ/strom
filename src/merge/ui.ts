@@ -13,7 +13,7 @@ import { PersonId, PartnershipId, Person, StromData, TreeId, PartnershipStatus }
 import { contentFingerprint } from '../research-link.js';
 import { isGender } from '../model-values.js';
 import { strings } from '../strings.js';
-import { runHeavy, activatedElement } from '../ui/busy.js';
+import { runHeavy, activatedElement, busyButtonHtml } from '../ui/busy.js';
 import {
     MergeState,
     PersonMatch,
@@ -657,7 +657,8 @@ class MergerUIClass {
             + `${tab('low', M.lowConfidence)}${tab('unmatched', M.statsNew)}${tab('conflicts', M.conflicts)}</div>`
             + `<div class="merge-rest" id="merge-rest"></div>`
             + `<div class="merge-match-list" id="merge-match-list"></div>`
-            + `<div class="merge-reanalyze"><button type="button" class="link-button" data-i18n-busy="busy.analyzing">${this.escapeHtml(M.reanalyze)}</button></div>`;
+            // Its working words drawn with it, as the static buttons get theirs (§1.2).
+            + `<div class="merge-reanalyze"><button type="button" class="link-button" data-busy="idle">${busyButtonHtml(this.escapeHtml(M.reanalyze), strings.busy.analyzing, undefined, { own: true })}</button></div>`;
         host.querySelectorAll<HTMLButtonElement>('.merge-tab').forEach(b =>
             b.addEventListener('click', () => this.setFilter(b.dataset.filter as MatchFilter)));
         host.querySelector<HTMLElement>('#merge-rest')?.addEventListener('click', e => {

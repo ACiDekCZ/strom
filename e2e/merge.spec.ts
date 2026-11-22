@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, card, cardAction, addRelation, openTreeActions, openTreeStructure } from './helpers.js';
+import { openApp, createFirstPerson, card, cardAction, addRelation, openTreeActions, openTreeStructure, mergeCompare, mergeCount, mergeSetScope } from './helpers.js';
 import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 function personCount(page: Page): Promise<number> {
@@ -78,31 +78,34 @@ test('tree merge wizard matches a shared person and merges without duplicates', 
     await page.evaluate((id) => window.Strom.UI.selectMergeTarget(id), treeBId);
     await pick.locator('#merge-trees-btn').click();
 
-    // The merge wizard opens, detects the shared person as a match, and shows it
-    // in the review list. (Executing the merge through the multi-step wizard is
-    // not driven here — see e2e/COVERAGE.md, tree-merge = partial.)
+    // The import guide opens; its comparison detects the shared person as a
+    // match and step 2 shows it in the list of pairs. (The write is driven in
+    // merge-execute.spec.ts.)
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
-    await expect(wizard.locator('#merge-stat-matches')).not.toHaveText('0');
+    await mergeCompare(wizard);
+    // Jan is a pair: joined at once or left to decide.
+    const count = async (kind: 'joined' | 'pending') => Number(await mergeCount(wizard, kind).textContent());
+    await expect.poll(async () => await count('joined') + await count('pending')).toBeGreaterThan(0);
     await expect(wizard.locator('#merge-match-list .merge-item').first()).toBeVisible();
     await expect(wizard.locator('#merge-match-list')).toContainText('Jan');
 
-    // Round 11: stat boxes are paper chips whose meaning rides on an inline SVG
-    // glyph, not an emoji. The meaning classes survive (the flow above targets
-    // them), the highlight/warning/new chips each carry an <svg> glyph, and no
-    // stat label leaks a ✓/⚠/⊘/＋ glyph character.
+    // Round 11: the count chips are paper chips whose meaning rides on an
+    // inline SVG glyph, not an emoji. All four chips (joined, new, not added,
+    // to decide) carry an <svg> glyph, and no label leaks a ✓/⚠/⊘/＋ character.
     await expect(wizard.locator('.merge-stat.highlight .merge-stat-glyph svg')).toBeVisible();
-    await expect(wizard.locator('.merge-stat.warning .merge-stat-glyph svg')).toBeVisible();
     await expect(wizard.locator('.merge-stat.new .merge-stat-glyph svg')).toBeVisible();
+    await expect(wizard.locator('.merge-stat.skipped .merge-stat-glyph svg')).toBeVisible();
+    await expect(wizard.locator('.merge-stat[data-count="pending"] .merge-stat-glyph svg')).toBeVisible();
     const statLabels = (await wizard.locator('.merge-stat-label').allInnerTexts()).join('');
     expect(statLabels).not.toMatch(/[\u2713\u26A0\u2298\uFF0B\uFE0E\uFE0F]/);
 
-    // Exactly ONE wizard step reads as current.
+    // Exactly ONE step of the guide reads as current: step 2.
     await expect(wizard.locator('.merge-step.active')).toHaveCount(1);
-    await expect(wizard.locator('.merge-step.active')).toHaveText(/Review matches/);
+    await expect(wizard.locator('.merge-step.active')).toHaveText(/Who is who/);
 });
 
-test('merge wizard: update-only toggle drops "New" to 0, and a match row can be skipped', async ({ page }) => {
+test('merge wizard: scope d) (only update existing people) drops "New" to 0, and a match row can be skipped', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');
 
@@ -135,24 +138,25 @@ test('merge wizard: update-only toggle drops "New" to 0, and a match row can be 
 
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
+    await mergeCompare(wizard);
 
     // Bob is the only unmatched new person → "New" = 1.
-    await expect(wizard.locator('#merge-stat-new')).toHaveText('1');
+    await expect(mergeCount(wizard, 'added')).toHaveText('1');
 
-    // Flip "update existing only" → nothing new will be added (stat truthfully 0).
-    const toggle = page.locator('#merge-update-only-toggle');
-    await expect(toggle).toBeVisible();
-    await toggle.check();
-    await expect(wizard.locator('#merge-stat-new')).toHaveText('0');
-    await toggle.uncheck();
-    await expect(wizard.locator('#merge-stat-new')).toHaveText('1');
+    // Scope d) "only update existing people" → nothing new will be added
+    // (count truthfully 0, Bob not added); scope a) again → 1.
+    await mergeSetScope(page, 'd');
+    await expect(mergeCount(wizard, 'added')).toHaveText('0');
+    await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
+    await mergeSetScope(page, 'a');
+    await expect(mergeCount(wizard, 'added')).toHaveText('1');
 
     // The Anna match row can be skipped (neither merged nor added).
     const matchRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Anna' }).first();
     await expect(matchRow).toBeVisible();
     await matchRow.locator('.merge-btn-skip').click();
     await expect(matchRow).toHaveClass(/skipped/);
-    await expect(wizard.locator('#merge-stat-skipped')).toHaveText('1');
+    await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
 });
 
 test('actions menu "Merge view into…" (Tree: → From the current view) opens the target picker', async ({ page }) => {
@@ -256,6 +260,7 @@ test.describe('the matching of large trees (C23/C86, waiting buttons §8)', () =
         const wizard = page.locator('#merge-modal');
         await expect(wizard).toBeVisible({ timeout: 60_000 });
         expect((await said()).some(t => t === 'Analyzing…')).toBe(true);
+        await mergeCompare(wizard);
 
         const again = wizard.getByRole('button', { name: 'Re-analyze' });
         await expect(again).toBeVisible();
