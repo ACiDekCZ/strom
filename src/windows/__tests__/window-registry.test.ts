@@ -7,6 +7,7 @@
  * the list follows hello, bye and closed windows; the selection does not loop.
  */
 
+import { IMAGE_REF_PREFIX, restoreImages, WindowImageStore } from '../window-images.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataManager } from '../../data.js';
 import { TreeManager } from '../../tree-manager.js';
@@ -565,5 +566,86 @@ describe('images that came after the tree (spec 116, I6)', () => {
             registry.stop();
             vi.unstubAllGlobals();
         }
+    });
+});
+
+describe('images of the tree to a satellite that reaches this window (1122)', () => {
+    const photo = 'data:image/jpeg;base64,' + 'Q'.repeat(4000);
+    const bigImages = (text: string) => text.match(/data:image[^"]{1000,}/g) ?? [];
+
+    function withStore(): WindowImageStore {
+        registry.stop();
+        const images = new WindowImageStore();
+        registry = new WindowRegistry({
+            bus: new WindowBus('main-refs', hub.channel()),
+            host: dataManagerHost({ treeName: () => treeName, treeExists: () => true, focusSelf: () => {}, hasFocus: () => true }),
+            openWindow: () => fakeWindow() as unknown as Window,
+            geometry: () => null,
+            images,
+        });
+        registry.start();
+        return images;
+    }
+
+    async function hello(kind: 'overview' | 'table', imageRefs: boolean) {
+        const id = registry.openSatellite(kind)!;
+        const sat = listener(hub, id);
+        sat.bus.post({ type: 'hello', windowId: id, kind, treeId: TREE, ...(imageRefs ? { imageRefs: true as const } : {}) });
+        await settle();
+        return { id, ...sat };
+    }
+
+    it('the tree and every patch carry references, not the images; they stand for this window\'s own strings', async () => {
+        const images = withStore();
+        const pid = DataManager.getAllPersons()[0].id;
+        DataManager.updatePerson(pid, { photo });
+        await settle(PATCH_INTERVAL_MS);
+        const sat = await hello('overview', true);
+        const tree = sat.of('tree')[0];
+        expect(tree.imageRefs).toBe(true);
+        expect(bigImages(JSON.stringify(tree))).toEqual([]);
+        const copy = treeOf(tree.data);
+        expect(restoreImages(copy, id => images.get(id))).toBe(true);
+        expect(copy.persons[pid].photo).toBe(photo);
+        // A change of the tree: the patch again without the image, the same reference.
+        DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
+        await settle(PATCH_INTERVAL_MS);
+        const patch = last(sat.of('patch'))!;
+        expect(patch.imageRefs).toBe(true);
+        expect(bigImages(JSON.stringify(patch))).toEqual([]);
+        expect(treeOf(patch.data).persons[pid].photo).toBe(IMAGE_REF_PREFIX + '1');
+        expect(images.get(1)).toBe(DataManager.getPerson(pid)!.photo);
+    });
+
+    it('a window that does not reach it (a second tab, an older version) gets the images; one message for all then carries them', async () => {
+        withStore();
+        const pid = DataManager.getAllPersons()[0].id;
+        DataManager.updatePerson(pid, { photo });
+        await settle(PATCH_INTERVAL_MS);
+        const refs = await hello('overview', true);
+        const plain = await hello('table', false);
+        expect(treeOf(plain.of('tree')[0].data).persons[pid].photo).toBe(photo);
+        expect(plain.of('tree')[0].imageRefs).toBeUndefined();
+        DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
+        await settle(PATCH_INTERVAL_MS);
+        expect(treeOf(last(refs.of('patch'))!.data).persons[pid].photo).toBe(photo);
+        expect(last(refs.of('patch'))!.imageRefs).toBeUndefined();
+    });
+
+    it('a window that could not take an image asks again: the whole tree with its images, and so from now on', async () => {
+        withStore();
+        const pid = DataManager.getAllPersons()[0].id;
+        DataManager.updatePerson(pid, { photo });
+        await settle(PATCH_INTERVAL_MS);
+        const sat = await hello('overview', true);
+        sat.bus.post({ type: 'resend', windowId: sat.id });
+        await settle();
+        const again = last(sat.of('tree'))!;
+        expect(sat.of('tree')).toHaveLength(2);
+        expect(again.imageRefs).toBeUndefined();
+        expect(treeOf(again.data).persons[pid].photo).toBe(photo);
+        DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
+        await settle(PATCH_INTERVAL_MS);
+        expect(treeOf(last(sat.of('patch'))!.data).persons[pid].photo).toBe(photo);
     });
 });

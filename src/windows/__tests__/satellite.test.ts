@@ -8,6 +8,7 @@
  * window that went quiet and let its lock go counts as closed.
  */
 
+import { IMAGE_REF_PREFIX } from '../window-images.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataManager } from '../../data.js';
 import { TreeManager } from '../../tree-manager.js';
@@ -650,5 +651,70 @@ describe('bring to front', () => {
         await settle(FOCUS_WAIT_MS + 50);
         expect(of('focused')).toHaveLength(1);
         expect(attention).not.toHaveBeenCalled();
+    });
+});
+
+describe('images taken from the main window (1122)', () => {
+    const photo = 'data:image/jpeg;base64,' + 'Q'.repeat(4000);
+    const known = new Map<number, string>([[7, photo]]);
+
+    function withImages(source: (() => ((id: number) => string | undefined) | null)): void {
+        sat.stop();
+        sat = new SatelliteClient({ kind: 'overview', treeId: TREE, windowId: SAT, newId: false }, {
+            bus: new WindowBus(SAT, hub.channel()),
+            storage: { getItem: k => session.get(k) ?? null, setItem: (k, v) => { session.set(k, v); } },
+            locks: noLocks(),
+            closeSelf: () => {},
+            hasFocus: () => true,
+            bounds: () => undefined,
+            imageSource: source,
+        });
+    }
+
+    function withRef(id: number, ...names: [string, string][]): unknown {
+        const data = JSON.parse(treeJson(...names)) as StromData;
+        (data.persons as Record<string, Person>)['p1'].photo = IMAGE_REF_PREFIX + id;
+        return data;
+    }
+
+    it('the main window\'s own image stands in the copy; an edit here sends it back whole', async () => {
+        withImages(() => id => known.get(id));
+        sat.start();
+        await settle();
+        expect(of('hello')[0].imageRefs).toBe(true);
+        main.post({ type: 'status', ...status({ revision: 100 }) });
+        main.post({ type: 'tree', to: SAT, treeId: TREE, name: 'Hrachovcovi', revision: 100, data: withRef(7, ['p1', 'Bořivoj']), imageRefs: true });
+        await settle();
+        expect(DataManager.getPerson('p1' as PersonId)!.photo).toBe(photo);
+        main.post({ type: 'patch', treeId: TREE, revision: 101, data: withRef(7, ['p1', 'Bořivoj'], ['p2', 'Ctibor']), imageRefs: true });
+        await settle();
+        expect(DataManager.getPerson('p2' as PersonId)!.firstName).toBe('Ctibor');
+        expect(DataManager.getPerson('p1' as PersonId)!.photo).toBe(photo);
+        DataManager.createPerson({ firstName: 'Zdislava', lastName: 'Okurková', gender: 'female' });
+        await settle();
+        const edit = of('edit')[0];
+        expect((JSON.parse(edit.json) as StromData).persons['p1' as PersonId].photo).toBe(photo);
+        expect(of('resend')).toEqual([]);
+    });
+
+    it('an image it cannot take: the copy stays, the main window is asked for the whole tree with its images', async () => {
+        withImages(() => id => known.get(id));
+        sat.start();
+        await settle();
+        main.post({ type: 'status', ...status({ revision: 100 }) });
+        main.post({ type: 'tree', to: SAT, treeId: TREE, name: 'Hrachovcovi', revision: 100, data: withRef(7, ['p1', 'Bořivoj']), imageRefs: true });
+        await settle();
+        main.post({ type: 'patch', treeId: TREE, revision: 101, data: withRef(8, ['p1', 'Bořivoj Ctibor']), imageRefs: true });
+        await settle();
+        expect(of('resend')).toEqual([expect.objectContaining({ windowId: SAT })]);
+        expect(DataManager.getPerson('p1' as PersonId)!.firstName).toBe('Bořivoj');
+        expect(sat.revision).toBe(100);
+    });
+
+    it('a window that does not reach the main window does not ask for references', async () => {
+        withImages(() => null);
+        sat.start();
+        await settle();
+        expect(of('hello')[0].imageRefs).toBeUndefined();
     });
 });

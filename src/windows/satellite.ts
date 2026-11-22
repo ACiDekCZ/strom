@@ -17,6 +17,7 @@
  *   heartbeat may be slowed down by the browser).
  */
 
+import { findImageSource, restoreImages, type ImageLookup } from './window-images.js';
 import { DataManager, type WindowEditSink } from '../data.js';
 import type { TreeId } from '../types.js';
 import { WindowBus, answerWhenFocused, FOCUS_WAIT_MS, type MessageOf, type WindowStatus, type EditRefusal, type WindowBounds } from './window-bus.js';
@@ -126,6 +127,8 @@ export interface SatelliteClientOptions {
     hasFocus?: () => boolean;
     /** Where the window stands (sent with bye; K4). */
     bounds?: () => WindowBounds | undefined;
+    /** Where this window takes the tree's images from (default: the main window through `opener`; null: nowhere). */
+    imageSource?: () => ImageLookup | null;
 }
 
 interface QueuedEdit {
@@ -147,6 +150,9 @@ export class SatelliteClient {
     private readonly closeSelf: () => void;
     private readonly hasFocus: () => boolean;
     private readonly bounds: () => WindowBounds | undefined;
+    private readonly imageSource: () => ImageLookup | null;
+    /** The main window's images as this window reaches them (null: they come in the data). */
+    private images: ImageLookup | null = null;
     private readonly listeners = new Map<keyof SatelliteEvents, Set<(p: unknown) => void>>();
     private readonly unsubscribe: (() => void)[] = [];
 
@@ -196,6 +202,7 @@ export class SatelliteClient {
         this.closeSelf = opts.closeSelf ?? (() => { if (typeof window !== 'undefined') window.close(); });
         this.hasFocus = opts.hasFocus ?? (() => typeof document !== 'undefined' && document.hasFocus());
         this.bounds = opts.bounds ?? defaultBounds;
+        this.imageSource = opts.imageSource ?? (() => findImageSource());
         this.sentMode = this.sendMode;
     }
 
@@ -519,7 +526,8 @@ export class SatelliteClient {
 
     private hello(): void {
         this.helloAt = Date.now();
-        this.bus.post({ type: 'hello', windowId: this.windowId, kind: this._kind, treeId: this._treeId ?? this.requestedTreeId, agent: this._agent });
+        this.images = this.imageSource();
+        this.bus.post({ type: 'hello', windowId: this.windowId, kind: this._kind, treeId: this._treeId ?? this.requestedTreeId, agent: this._agent, ...(this.images ? { imageRefs: true as const } : {}) });
     }
 
     private setConnection(c: SatelliteConnection): void {
@@ -596,7 +604,21 @@ export class SatelliteClient {
         this.emit('tree-gone', { treeId: this._treeId });
     }
 
+    /**
+     * Put the main window's images in place of their references (at once: the
+     * main window keeps an image a while only). False when one could not be
+     * taken: the main window is asked for the whole tree with its images.
+     */
+    private takeImages(m: { data?: unknown; imageRefs?: true }): boolean {
+        if (!m.imageRefs) return true;
+        if (this.images && restoreImages(m.data, this.images)) return true;
+        this.images = null;
+        this.bus.post({ type: 'resend', windowId: this.windowId });
+        return false;
+    }
+
     private onTree(m: MessageOf<'tree'>): void {
+        if (!this.takeImages(m)) return;
         if (this.data.isEditSessionActive()) {
             this.heldTree = m;
             return;
@@ -630,6 +652,7 @@ export class SatelliteClient {
 
     private onPatch(m: MessageOf<'patch'>): void {
         if (m.treeId !== this._treeId || m.revision <= this._revision || this.gone) return;
+        if (!this.takeImages(m)) return;
         if (this.inFlight || this.queue.length > 0 || this.data.isEditSessionActive()) {
             this.heldPatch = m;
             return;

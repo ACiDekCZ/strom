@@ -14,6 +14,7 @@
  * last focus, the default person) raises nothing: no edit is refused for it.
  */
 
+import { publishImageSource, WindowImageStore } from './window-images.js';
 import { DataManager } from '../data.js';
 import { IMAGES_ARRIVED_EVENT } from '../image-loads.js';
 import { TreeManager } from '../tree-manager.js';
@@ -103,6 +104,8 @@ export interface WindowEntry {
     bounds?: WindowBounds;
     /** Its own following of the agent as it last said (spec 097; null: none, no live session). */
     agent?: AgentFollow | null;
+    /** It takes the tree's images from this window (window-images.ts): they go as references. */
+    imageRefs?: boolean;
 }
 
 interface Entry extends WindowEntry {
@@ -185,6 +188,8 @@ export interface WindowRegistryOptions {
     /** window.open (a test passes its own). */
     openWindow?: (url: string, name: string, features: string) => Window | null;
     geometry?: () => ScreenGeometry | null;
+    /** Where the satellites find this window's images (default: published on `window`). */
+    images?: WindowImageStore;
 }
 
 /** Patches go out at most this often (a burst of changes, e.g. Undo ×10, makes one). */
@@ -241,12 +246,15 @@ export class WindowRegistry {
     private lastSelection: string | null = null;
     private applyingRemoteSelection = false;
     private started = false;
+    private readonly images: WindowImageStore;
 
     constructor(opts: WindowRegistryOptions) {
         this.bus = opts.bus;
         this.host = opts.host ?? dataManagerHost();
         this.openWindowFn = opts.openWindow ?? ((url, name, features) => (typeof window !== 'undefined' ? window.open(url, name, features) : null));
         this.geometry = opts.geometry ?? currentGeometry;
+        this.images = opts.images ?? new WindowImageStore();
+        if (!opts.images) publishImageSource(this.images);
     }
 
     /** This main window's id (the `from` of its messages). */
@@ -262,6 +270,7 @@ export class WindowRegistry {
         const b = this.bus;
         this.unsubscribe.push(
             b.on('hello', m => this.onHello(m)),
+            b.on('resend', m => this.onResend(m.windowId || m.from)),
             b.on('edit', m => this.onEdit(m)),
             b.on('undo', () => { this.host.undo(); this.sync(); }),
             b.on('redo', () => { this.host.redo(); this.sync(); }),
@@ -548,12 +557,13 @@ export class WindowRegistry {
             this.postStatus(false);
             return;
         }
-        const data = this.host.storedData();
+        // One message for all: images as references only when every window takes them from here.
+        const out = this.outgoing([...this.entries.values()].every(e => !e.connected || e.imageRefs === true));
         if (prev && prev.treeId === treeId && prev.withData) {
-            this.bus.post({ type: 'patch', treeId, revision: this.rev, data });
+            this.bus.post({ type: 'patch', treeId, revision: this.rev, ...out });
         } else {
             const replaces = prev?.treeId && prev.treeId !== treeId ? { treeId: prev.treeId, exists: this.host.treeExists(prev.treeId) } : undefined;
-            this.bus.post({ type: 'tree', treeId, name: this.host.treeName(treeId), revision: this.rev, data, ...(replaces ? { replaces } : {}), ...this.focusField() });
+            this.bus.post({ type: 'tree', treeId, name: this.host.treeName(treeId), revision: this.rev, ...out, ...(replaces ? { replaces } : {}), ...this.focusField() });
         }
         this.postStatus(false);
     }
@@ -568,8 +578,22 @@ export class WindowRegistry {
     private sendTreeTo(to: string): void {
         const treeId = this.host.treeId();
         if (!treeId || this.host.locked()) return;   // the status says why
-        this.bus.post({ type: 'tree', to, treeId, name: this.host.treeName(treeId), revision: this.rev, data: this.host.storedData(), ...this.focusField() });
+        this.bus.post({ type: 'tree', to, treeId, name: this.host.treeName(treeId), revision: this.rev, ...this.outgoing(this.entries.get(to)?.imageRefs === true), ...this.focusField() });
         if (!this.lastSent) this.lastSent = { treeId, withData: true };
+    }
+
+    /** The open tree to send; its images as references when the receivers take them from here. */
+    private outgoing(imageRefs: boolean): { data: unknown; imageRefs?: true } {
+        const data = this.host.storedData();
+        return imageRefs ? { data: this.images.replaceImages(data), imageRefs: true } : { data };
+    }
+
+    /** A satellite could not take an image from here: the whole tree with its images, and so from now on. */
+    private onResend(id: string): void {
+        const entry = this.entries.get(id);
+        if (!entry) return;
+        entry.imageRefs = false;
+        this.sendTreeTo(id);
     }
 
     /** The person in the centre here, with the tree (a satellite without a state of its own starts there). */
@@ -653,6 +677,7 @@ export class WindowRegistry {
         entry.treeId = m.treeId;
         entry.connected = true;
         entry.agent = parseAgentFollow(m.agent);
+        entry.imageRefs = m.imageRefs === true;
         if (m.state !== undefined) entry.state = m.state;
         this.entries.set(id, entry);
         if (!entry.initSent) {
