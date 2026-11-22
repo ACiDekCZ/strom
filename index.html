@@ -5893,6 +5893,8 @@
         .surnames-more summary::-webkit-details-marker { display: none; }
         .surnames-more[open] summary { margin-bottom: 4px; }
         .surnames-more p { font-size: 12.5px; }
+        /* Touch: "More" is 8 px taller above and below; an inline box's padding takes no room. */
+        @media (pointer: coarse) { .surnames-more summary { padding-block: 8px; } }
         .surnames-groups-title, .surnames-add-title {
             font-size: 12px; font-weight: 600; color: var(--text-light);
             text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;
@@ -7479,6 +7481,8 @@
         @media (pointer: coarse) {
             .modal button.pm-rod-more-btn { min-width: 44px; height: 44px; margin: -14px -6px -14px 0; }
             .modal button.pm-rod-item { min-height: 44px; }
+            /* A name in the text is 6 px taller above and below; an inline box's padding takes no room. */
+            .pm-rod-link { padding-block: 6px; }
         }
         @media (max-width: 640px) {
             .pm-rod { flex-wrap: wrap; row-gap: 0; }
@@ -30732,6 +30736,8 @@
             #export-password-modal .export-dialog--ged .export-back-size { order: -2; }
         }
         .snapshots-persistence .link-button { font-size: inherit; padding: 0; }
+        /* Touch: the link in the sentence is 6 px taller above and below, the lines unmoved. */
+        @media (pointer: coarse) { .snapshots-persistence .link-button { padding-block: 6px; margin-block: -6px; } }
         .snapshot-delete { padding: 4px 8px; }
         .snapshots-auto { margin: 0 0 12px; }
         .snapshots-budget-note { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: var(--text-light); }

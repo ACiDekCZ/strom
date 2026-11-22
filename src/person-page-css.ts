@@ -423,6 +423,9 @@ span.pp-gal-thumb { cursor: default; }
   .pp-ft-story { min-height: 32px; }
   .pp-zoom { width: 44px; height: 44px; }
   .pp-fig-scan a { display: inline-flex; align-items: center; min-height: 44px; }
+  /* A link in the text (a name, a place) is 5 px taller above and below for a finger, without
+     moving the lines: an inline box's padding takes no room, a button's negative margin gives it back. */
+  .pp-link { padding-block: 5px; margin-block: -5px; }
 }
 @media (max-width: 640px) {
   .pp-hero--photo { flex-direction: column; }

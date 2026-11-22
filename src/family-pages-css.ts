@@ -249,7 +249,7 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
 }
 @media (pointer: coarse) {
   .sp-anc-sum { min-height: 44px; }
-  .sp-sel-n > .pp-link, .sp-anc-n > .pp-link { display: inline-flex; align-items: center; min-height: 44px; }
+  .sp-sel-n > .pp-link, .sp-anc-n > .pp-link { display: inline-flex; align-items: center; min-height: 44px; padding-block: 0; margin-block: 0; }
   .sp-sel-row, .sp-anc-row { padding: 2px 0; }
 }
 /* The whole tree (spec 026 P3 §1, §2.3): its introduction, the choice of a line, "Other families". */
@@ -349,6 +349,7 @@ button.sp-clip { margin: 0; padding: 0; border: 0; background: none; font: inher
   .sp-rodpick-q, .sp-rods-f .sp-q, .sp-fbar .sp-q { height: 44px; }
   .sp-fbar-home { min-height: 44px; line-height: 44px; }
   .sp-ofam-names > span, .sp-ofam-p > .pp-link:first-child { display: inline-flex; align-items: center; min-height: 44px; }
+  .sp-ofam-p > .pp-link:first-child { padding-block: 0; margin-block: 0; }
 }
 /* The file's bar (§3.1): the name, the search, Index and Map of places; on a phone the magnifier and Menu. */
 .sp-fbar { position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -540,7 +541,7 @@ html.sp-lb-open { overflow: hidden; }
 }
 @media (pointer: coarse) {
   .sp-tl-chip, .sp-tl-seg button { min-height: 44px; }
-  .sp-tl-go .pp-link, .sp-card-tl { display: inline-flex; align-items: center; min-height: 44px; }
+  .sp-tl-go .pp-link, .sp-card-tl { display: inline-flex; align-items: center; min-height: 44px; padding-block: 0; margin-block: 0; }
   .sp-cardw > .sp-card-tl { bottom: 4px; right: 10px; padding: 0 8px; }
 }
 @media (max-width: 640px) {
@@ -628,7 +629,14 @@ export const FAMILY_PAGES_APP_CSS = FAMILY_PAGES_BODY_CSS.replace(PRINT_ROOT_CSS
   .sp-app .sp-crumbs > .sp-crumb-back { display: inline-flex; }
 }
 @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .sp-app { padding: 12px 24px 24px; } }
-@media (pointer: coarse) { .sp-app .sp-crumbs button { min-height: 44px; } }
+@media (pointer: coarse) {
+  .sp-app .sp-crumbs button { min-height: 44px; }
+  /* The links in the text as on the person page (5 px more above and below, the lines unmoved);
+     the links already 44 px tall keep their size. */
+  .sp-app button.pp-link { padding-block: 5px; margin-block: -5px; }
+  .sp-app .sp-sel-n > button.pp-link, .sp-app .sp-anc-n > button.pp-link, .sp-app .sp-ofam-p > button.pp-link:first-child,
+  .sp-app .sp-tl-go button.pp-link, .sp-app button.pp-link.sp-card-tl { padding-block: 0; margin-block: 0; }
+}
 .sp-appset .sp-fbar button.sp-fbar-home, .sp-appset .sp-fbar button.sp-fbar-a, .sp-appset button.sp-menu-a, .sp-app button.sp-tab, .sp-app button.sp-letter {
   font: inherit; background: none; margin: 0; cursor: pointer; text-align: inherit;
 }
