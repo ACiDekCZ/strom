@@ -4,7 +4,7 @@
  */
 
 import { earlierAddedAt } from '../person-lists-data.js';
-import { addEmails } from '../person-contact.js';
+import { addEmails, noteWithoutEmailLines } from '../person-contact.js';
 import { rewriteStorySources } from '../story-sources.js';
 import { remapCitations, unionCitations } from '../citation-quality.js';
 import {
@@ -1161,6 +1161,24 @@ function lineValueTwin(byContent: ReadonlyMap<string, LifeEvent>, event: LifeEve
 }
 
 /**
+ * The tree's event an incoming one with the e-mails its file wrote under it
+ * (LifeEvent.gedcomEmails, data v26: the person's contact, no note line) is
+ * when an older app loaded the file: the same event whose note has a line
+ * "E-mail: x@y" of each of them besides the incoming note, and no record of
+ * the e-mails of its own.
+ */
+function emailTwin(events: readonly LifeEvent[], event: LifeEvent): LifeEvent | undefined {
+    const emails = event.gedcomEmails;
+    if (!emails?.length) return undefined;
+    const key = eventKey(event);
+    return events.find(e => {
+        if (e.type !== event.type || e.gedcomEmails?.length || !e.note) return false;
+        const rest = noteWithoutEmailLines(e.note, emails);
+        return rest !== null && eventKey({ ...e, note: rest }) === key;
+    });
+}
+
+/**
  * The other families the incoming file recorded a person in as a child
  * (Person.alsoChildOf) follow the person into the merged tree, naming the
  * union each family became there; a link to a family that did not come
@@ -1772,6 +1790,15 @@ export function mergePersonData(
                 valued.note = event.note;
                 valued.gedcomValue = event.gedcomValue;
                 byContent.set(eventKey(valued), valued);
+            }
+            // A tree loaded before the file's e-mails were the person's contact: its event with
+            // the e-mails as lines of the note is this one, and its lines go (the contact has them).
+            const mailed = !byContent.has(eventKey(event)) ? emailTwin(existing.events, event) : undefined;
+            if (mailed) {
+                byContent.delete(eventKey(mailed));
+                if (event.note) mailed.note = event.note; else delete mailed.note;
+                mailed.gedcomEmails = [...event.gedcomEmails!];
+                byContent.set(eventKey(mailed), mailed);
             }
             const twin = byContent.get(eventKey(event));
             if (twin) {

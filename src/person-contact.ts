@@ -124,6 +124,24 @@ function labelledEmail(line: string, emails?: readonly string[]): string | null 
     return null;
 }
 
+/**
+ * A note without its lines of `emails` as the import of an older app wrote
+ * them ("E-mail: x@y"), and whether every one of `emails` had its line; null
+ * when one has none (the note is then not what that import wrote).
+ */
+export function noteWithoutEmailLines(note: string | undefined, emails: readonly string[]): string | undefined | null {
+    if (!note || emails.length === 0) return null;
+    const found = new Set<string>();
+    const left: string[] = [];
+    for (const line of note.split('\n')) {
+        const email = labelledEmail(line.trimEnd(), emails);
+        if (email && !found.has(email)) found.add(email);
+        else left.push(line);
+    }
+    if (!emails.every(e => found.has(e))) return null;
+    return left.join('\n').trim() || undefined;
+}
+
 /** "E-mail: x@y" / "E-Mail: x@y" (the label of every language the import wrote it in). */
 const EMAIL_NOTE_LINE = /^(?:E-?mail|E-Mail):\s*(\S+@\S+)$/i;
 /** The research's word of the status a fact had, which an older research wrote into the note. */
