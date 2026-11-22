@@ -48,7 +48,8 @@ export async function writePlanAsNewTree(plan: MergePlan, target: StromData, sou
     if (!applied.ok) return { ok: false, message: writeIssuesMessage(applied.issues) };
 
     const treeId = TreeManager.createTree(name);
-    if (!await TreeManager.saveTreeDataConfirmed(treeId, applied.data)) {
+    // Quiet: only the merge's own message says it failed, not the general "saving failed" toast too.
+    if (!await TreeManager.saveTreeDataConfirmed(treeId, applied.data, { quiet: true })) {
         await TreeManager.deleteTree(treeId).catch(() => false);
         return { ok: false, message: strings.merge.saveFailed };
     }

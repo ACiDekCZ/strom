@@ -1101,6 +1101,8 @@ class TreeManagerClass {
     private queuedWrites = new Map<TreeId, number>();
     /** Trees whose latest write failed, until one of theirs lands (saveTreeDataConfirmed). */
     private failedWrites = new Set<TreeId>();
+    /** Trees whose failed write the caller reports itself (saveTreeDataConfirmed `quiet`). */
+    private quietWrites = new Set<TreeId>();
 
     /** Rescue keys of closed windows this one stored at start, per tree, until that write lands. */
     private restoredRescues = new Map<TreeId, string>();
@@ -1292,15 +1294,21 @@ class TreeManagerClass {
     /**
      * Save a tree's data and wait until the write has landed (spec 134 K0.5):
      * true once stored, false when the save was refused (unreadable, newer,
-     * stale tree) or its write failed. A failure still raises
-     * strom:save-failed as any save does.
+     * stale tree) or its write failed. A failure raises strom:save-failed
+     * as any save does, unless `quiet`: the caller says it itself (a merge's
+     * new tree, P0 N2 - the general toast would speak of lost edits).
      */
-    async saveTreeDataConfirmed(id: TreeId, data: StromData): Promise<boolean> {
+    async saveTreeDataConfirmed(id: TreeId, data: StromData, opts: { quiet?: boolean } = {}): Promise<boolean> {
         const queued = this.queuedWrites.get(id) ?? 0;
-        this.saveTreeData(id, data);
-        if ((this.queuedWrites.get(id) ?? 0) === queued) return false;
-        await this.flush(id);
-        return !this.failedWrites.has(id) && this.index.trees.some(t => t.id === id);
+        if (opts.quiet) this.quietWrites.add(id);
+        try {
+            this.saveTreeData(id, data);
+            if ((this.queuedWrites.get(id) ?? 0) === queued) return false;
+            await this.flush(id);
+            return !this.failedWrites.has(id) && this.index.trees.some(t => t.id === id);
+        } finally {
+            if (opts.quiet) this.quietWrites.delete(id);
+        }
     }
 
     /** Put a state on the tree's write queue (see saveTreeData). */
@@ -1351,7 +1359,7 @@ class TreeManagerClass {
             // completely silent, leaving memory and disk divergent.
             console.error('saveTreeData failed', id, err);
             this.failedWrites.add(id);
-            dispatchSaveFailed(id, err);
+            if (!this.quietWrites.has(id)) dispatchSaveFailed(id, err);
         });
         this.saveQueues.set(id, next);
     }

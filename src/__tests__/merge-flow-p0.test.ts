@@ -260,7 +260,11 @@ describe('K0.5 · success only after the written tree', () => {
         const state = started();
         // Every tree written from now on fails (the browser's storage is full).
         failing.write = (store, key) => store === 'trees' && key.startsWith('tree_');
+        // The app-wide "saving failed" toast would contradict the merge's own message (P0 N2).
+        const saveFailed = vi.fn();
+        window.addEventListener('strom:save-failed', saveFailed);
         await writePlan();
+        expect(saveFailed).not.toHaveBeenCalled();
 
         expect(ui.alerts).toEqual([strings.merge.saveFailed]);
         expect(ui.confirms.some(m => m.includes(strings.merge.complete))).toBe(false);
