@@ -20194,6 +20194,8 @@
             overflow-wrap: anywhere;
         }
         .toast button { overflow-wrap: normal; }
+        /* A toast whose action concerns the open dialog (a file dropped over it): over the dialog, placed above its footer. */
+        .toast[data-kind="over-dialog"] { z-index: 210; }
         .toast.show {
             transform: translateX(-50%) translateY(0);
             opacity: 1;
@@ -27502,6 +27504,11 @@
         .pending-merge-meta {
             font-size: 12px;
             color: var(--text-light);
+            margin-top: 4px;
+        }
+        .pending-merge-changed {
+            font-size: 12px;
+            color: var(--warning-text);
             margin-top: 4px;
         }
         .pending-merge-actions {

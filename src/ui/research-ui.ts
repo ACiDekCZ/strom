@@ -124,6 +124,9 @@ import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { bridgeGivesEtag, bridgeGivesImagesByHash, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeAsksAppMedia, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, treeReplyImages, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
 import { addHeldImages, findImageRefs, findNamedFileShas, forgetHeldImages, imagesUrlOf, refTreeUrl, resolveHeldImageRefs, resolveImageRefs, sha256Hex, type ImageRef, type ImageResolveDeps } from '../research-image-refs.js';
 import { completeStatus, statusAskUrl } from '../status-parts.js';
+import { looksLikeGedcom } from './file-pick.js';
+import { createSha256 } from '../sha256.js';
+import { localIsoDay } from '../import-origin.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -2228,7 +2231,12 @@ export const researchUiMethods = uiModule({
                 box.innerHTML = '';
                 box.appendChild(el('div', 'drop-overlay-title', strings.batch.dropTitle));
                 box.appendChild(el('div', 'drop-overlay-sub', strings.batch.dropSub));
-            } else if (box) box.textContent = strings.research.dropHint;
+            } else if (box) {
+                // The import guide opens for the file; nothing is written before its last step (spec 134 §2, 2a).
+                box.innerHTML = '';
+                box.appendChild(el('div', 'drop-overlay-title', strings.research.dropHint));
+                box.appendChild(el('div', 'drop-overlay-sub', strings.mergeWizard.dropGedSub));
+            }
             node.classList.add('active');
         };
 
@@ -2247,7 +2255,8 @@ export const researchUiMethods = uiModule({
                 if (!hasFiles(e) || onFileInput(e)) return;
                 // Without this the browser would navigate away to the file.
                 e.preventDefault();
-                if (e.dataTransfer) e.dataTransfer.dropEffect = modalOpen() || dropCancelled ? 'none' : 'copy';
+                // With a dialog open the drop is taken too: a GEDCOM file then says the dialog needs finishing first (2k).
+                if (e.dataTransfer) e.dataTransfer.dropEffect = dropCancelled ? 'none' : 'copy';
                 if (readZones && !dropCancelled) {
                     const at = zoneAt(e);
                     document.querySelectorAll<HTMLElement>('#drop-overlay .drop-zone').forEach(z => z.classList.toggle('is-over', z.dataset.zone === at));
@@ -2268,9 +2277,15 @@ export const researchUiMethods = uiModule({
                 depth = 0;
                 overlay(false);
                 if (!hasFiles(e) || onFileInput(e)) return;
+                // A place inside a dialog took the files itself.
+                if (e.defaultPrevented) return;
                 e.preventDefault();
-                if (modalOpen()) return;
                 if (dropCancelled) { dropCancelled = false; return; }
+                if (modalOpen()) {
+                    const one = e.dataTransfer?.files?.[0];
+                    if (e.dataTransfer?.files.length === 1 && one && isGedcomFileName(one.name)) this.gedcomDropAfterDialog(one);
+                    return;
+                }
                 // The tree is being replaced: a file dropped now waits for the load (§2.6).
                 if (TreeEditLock.refuse()) return;
                 const files = Array.from(e.dataTransfer?.files ?? []);
@@ -2292,6 +2307,37 @@ export const researchUiMethods = uiModule({
         } catch (err) {
             console.warn('Drag and drop unavailable', err);
         }
+    },
+
+    /**
+     * A GEDCOM file dropped while a dialog is open (spec 134 §2, 2k): a toast
+     * says the dialog needs finishing first, with Open now, which closes the
+     * dialog as its Esc does and opens the file in the guide; a dialog that
+     * stays (it asks about its changes) keeps the file out.
+     */
+    gedcomDropAfterDialog(file: File): void {
+        const open = Array.from(document.querySelectorAll<HTMLElement>('.modal-overlay.active'));
+        const top = open[open.length - 1];
+        const title = top?.querySelector('h2, h3, [role="dialog"] [id$="-title"]')?.textContent?.trim()
+            || top?.querySelector('[role="dialog"]')?.getAttribute('aria-label') || '';
+        // Over the dialog (its action can be pressed), above the dialog's buttons.
+        const foot = top?.id ? `#${top.id} :is(.buttons, [class*="footer"])` : undefined;
+        const toast = this.showToast(strings.mergeWizard.otherDialog(title), 10000, {
+            closable: true,
+            kind: 'over-dialog',
+            ...(foot ? { clearOf: foot } : {}),
+            action: {
+                label: strings.mergeWizard.openNow,
+                run: () => {
+                    toast.close?.();
+                    const at = document.activeElement ?? document.body;
+                    at.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+                    window.setTimeout(() => {
+                        if (!document.querySelector('.modal-overlay.active')) void this.openGedcomFile(file);
+                    }, 0);
+                },
+            },
+        });
     },
 
     /** A local file (dropped or from the file handler). */
@@ -2316,10 +2362,18 @@ export const researchUiMethods = uiModule({
             try {
                 text = decodeGedcomFile(buffer);
             } catch {
-                await this.showAlert(strings.gedcom.parseError, 'error');
+                await this.showAlert(strings.mergeWizard.unreadable(file.name), 'error');
                 return;
             }
-            await this.openGedcomText(text);
+            // Not a GEDCOM file (no header): said so, nothing changed (spec 134 §2, 2i).
+            if (!looksLikeGedcom(text)) {
+                await this.showAlert(strings.mergeWizard.unreadable(file.name), 'error');
+                return;
+            }
+            // The guide's step 1 names the file and keeps its fingerprint, as Import → GEDCOM does.
+            const sha = createSha256();
+            sha.update(new Uint8Array(buffer));
+            await this.openGedcomText(text, { file: { name: file.name, sha: sha.digestHex(), at: localIsoDay() } });
         });
     },
 
@@ -2538,7 +2592,9 @@ export const researchUiMethods = uiModule({
         /** The images the research's file names by their hash, resolved (readResearchTreeFile). */
         images?: ReadonlyMap<string, string>;
         /** The file came with the tree's own files (spec 108 §5). */
-        appMedia?: boolean } = {}): Promise<void> {
+        appMedia?: boolean;
+        /** A local file (dropped, opened from the system): its name and fingerprint for the import guide. */
+        file?: { name: string; sha: string; at: string } } = {}): Promise<void> {
         if (DataManager.isViewMode()) {
             this.showToast(strings.research.notInViewMode, 5000);
             return;
@@ -2557,7 +2613,7 @@ export const researchUiMethods = uiModule({
             this.importFromTreeManager = false;
             this.importToCurrentTree = false;
             this.gedcomResult = result;
-            this.gedcomFileInfo = null;
+            this.gedcomFileInfo = opts.file ?? null;
             this.gedcomRawBuffer = null;
             this.gedcomDecoding = null;
             this.gedcomImportImages = null;

@@ -28,6 +28,8 @@ import {
     ValidationResult,
     MergerUI,
     getCurrentMergeInfo,
+    getCurrentMerge,
+    loadMergeSession,
     listMergeSessionsInfo,
     deleteMergeSession,
     renameMergeSession
@@ -43,6 +45,9 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { targetBlock } from '../merge/wizard-ui.js';
+import { treeEditCount } from '../merge/resume-change.js';
+import { contentFingerprint } from '../research-link.js';
+import type { MergeState } from '../merge/types.js';
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { personMergeShares, type PersonMergeShareRow } from '../shared-events.js';
 import { lifeEventLabel } from '../person-sources.js';
@@ -78,12 +83,12 @@ export const mergeUiMethods = uiModule({
         // Current auto-saved merge
         if (currentMerge) {
             const date = new Date(currentMerge.savedAt).toLocaleString();
-            const progress = strings.merge.reviewedCount(currentMerge.stats.reviewed, currentMerge.stats.total);
+            const { meta, changed } = await this.pendingMergeLines(await getCurrentMerge(), currentMerge.stats);
             html += `
                 <div class="pending-merge-item" data-session-id="current">
                     <div class="pending-merge-info">
                         <div class="pending-merge-name">${this.escapeHtml(currentMerge.incomingFileName || strings.merge.pendingMergeLabel)}</div>
-                        <div class="pending-merge-meta">${date} • ${progress}</div>
+                        <div class="pending-merge-meta">${this.escapeHtml([date, ...meta].join(' • '))}</div>${changed}
                     </div>
                     <div class="pending-merge-actions">
                         <button class="btn-resume" onclick="window.Strom.UI.resumePendingMerge('current')">${strings.merge.resume}</button>
@@ -96,12 +101,12 @@ export const mergeUiMethods = uiModule({
         // Saved sessions
         for (const session of savedSessions) {
             const date = new Date(session.savedAt).toLocaleString();
-            const progress = strings.merge.reviewedCount(session.stats.reviewed, session.stats.total);
+            const { meta, changed } = await this.pendingMergeLines(await loadMergeSession(session.id), session.stats);
             html += `
                 <div class="pending-merge-item" data-session-id="${session.id}">
                     <div class="pending-merge-info">
                         <div class="pending-merge-name">${this.escapeHtml(session.incomingFileName || strings.merge.pendingMergeLabel)}</div>
-                        <div class="pending-merge-meta">${date} • ${progress}</div>
+                        <div class="pending-merge-meta">${this.escapeHtml([date, ...meta].join(' • '))}</div>${changed}
                     </div>
                     <div class="pending-merge-actions">
                         <button class="btn-resume" onclick="window.Strom.UI.resumePendingMerge('${session.id}')">${strings.merge.resume}</button>
@@ -113,6 +118,33 @@ export const mergeUiMethods = uiModule({
 
         list.innerHTML = html;
         modal.classList.add('active');
+    },
+
+    /**
+     * A saved merge's lines in the offer to go on (spec 134 §2, 13c): the
+     * guide's step and the decisions made, and when its target changed since
+     * the matching, by how many edits (the merge goes on and finds the
+     * suggestions again; nothing is decided here).
+     */
+    async pendingMergeLines(state: MergeState | null, stats: { reviewed: number; total: number }): Promise<{ meta: string[]; changed: string }> {
+        const W = strings.mergeWizard;
+        const meta: string[] = [];
+        const step = state?.wizard?.step;
+        if (step) meta.push(W.stepShort(step, W.steps[step - 1] ?? ''));
+        meta.push(strings.merge.reviewedCount(stats.reviewed, stats.total));
+        const target = state?.target;
+        if (!state || !target) return { meta, changed: '' };
+        try {
+            const current = !DataManager.isViewMode() && DataManager.getCurrentTreeId() === target.treeId
+                ? DataManager.getData()
+                : TreeManager.getTreeMetadata(target.treeId) ? await TreeManager.getTreeData(target.treeId) : null;
+            if (!current || contentFingerprint(current) === target.fingerprint) return { meta, changed: '' };
+            const name = TreeManager.getTreeMetadata(target.treeId)?.name ?? '';
+            const n = Math.max(1, treeEditCount(state.existingData, current));
+            return { meta, changed: `<div class="pending-merge-changed">${this.escapeHtml(W.resumeChanged(name, n))}</div>` };
+        } catch {
+            return { meta, changed: '' };
+        }
     },
 
     /**
