@@ -193,3 +193,26 @@ test.describe('Minimap', () => {
         });
     }
 });
+
+// A phone (also held sideways) never shows the minimap: Settings leave its switch out,
+// and the row after it opens the group without a line above it (mobile review 5a, point 4).
+test.describe('Minimap switch on a phone', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('left out of Settings on a phone and a phone held sideways, offered on a tablet', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const row = page.locator('#minimap-setting-row');
+        const next = page.locator('#minimap-setting-row + .settings-row');
+        const topLine = () => next.evaluate((el) => getComputedStyle(el).borderTopStyle);
+        await expect(page.locator('#settings-modal')).toHaveClass(/active/);
+        await expect(row).toBeHidden();
+        await expect(next).toBeVisible();
+        expect(await topLine()).toBe('none');
+        await page.setViewportSize({ width: 844, height: 390 });
+        await expect(row).toBeHidden();
+        await page.setViewportSize({ width: 1024, height: 768 });
+        await expect(row).toBeVisible();
+        expect(await topLine()).toBe('solid');
+    });
+});

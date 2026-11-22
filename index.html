@@ -2682,6 +2682,11 @@
             padding: 11px 14px;
         }
         .settings-row + .settings-row { border-top: 1px solid var(--divider); }
+        /* A phone (also held sideways) never shows the minimap (src/ui/minimap.ts): its switch is left out. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            #minimap-setting-row { display: none; }
+            #minimap-setting-row + .settings-row { border-top: none; }
+        }
         .settings-text {
             flex: 1;
             min-width: 0;
@@ -35120,7 +35125,7 @@
             <section class="settings-group" aria-labelledby="settings-group-tree">
                 <h3 class="settings-group-title" id="settings-group-tree" data-i18n="settings.groupTree"></h3>
                 <div class="settings-group-body">
-                    <label class="settings-checkbox settings-row">
+                    <label class="settings-checkbox settings-row" id="minimap-setting-row">
                         <input type="checkbox" id="minimap-toggle" onchange="window.Strom.UI.toggleMinimap(this.checked)">
                         <span class="settings-text">
                             <span class="settings-name" data-i18n="minimap.settingLabel"></span>
