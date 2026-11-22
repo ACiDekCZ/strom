@@ -10,12 +10,17 @@
  * A synthetic tree (invented names, deterministic) of 2 000 people merged
  * with a copy of itself. The time is judged against a calibration run right
  * before it (helpers/perf-budget.ts), so a busy machine does not fail it.
+ *
+ * The comparison in parts (findMatchesAsync, spec 134 K3.5): on a 10 000-person
+ * tree it reports progress and stops when asked, leaving its inputs as they
+ * were; on smaller trees it gives exactly what findMatches gives.
  */
 
 import { describe, it, expect } from 'vitest';
 import { syntheticTree } from './helpers/synthetic-tree.js';
 import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
-import { findMatches } from '../merge/matching.js';
+import { createMergeState, findMatches, findMatchesAsync } from '../merge/matching.js';
+import { mulberry32, sourceTree, targetTree } from './helpers/merge-trees.js';
 
 /** The pass took about 0.6 s on the reference machine; before the fix about a minute. */
 const BUDGET_MS = 3000;
@@ -44,4 +49,67 @@ describe('merge matching performance', () => {
         console.log(budgetReport('findMatches 2000 people, same tree', m, BUDGET_MS));
         if (m.judged) expect(m.ms).toBeLessThan(BUDGET_MS);
     }, 600_000);
+});
+
+describe('merge matching in parts (findMatchesAsync)', () => {
+    it('reports progress on a 10 000-person tree and stops on the signal, changing nothing', async () => {
+        const { data } = syntheticTree({ persons: 10_000 });
+        expect(Object.keys(data.persons)).toHaveLength(10_000);
+        const existing = structuredClone(data);
+        const incoming = structuredClone(data);
+        // A comparison already made (of a part of the trees) stays as it was.
+        const state = createMergeState(existing, { persons: {}, partnerships: {} });
+        const stateBefore = JSON.stringify({ ...state, decisions: [...state.decisions] });
+        const existingBefore = JSON.stringify(existing);
+        const incomingBefore = JSON.stringify(incoming);
+        const named = Object.values(incoming.persons).filter(p => !p.isPlaceholder).length;
+
+        const controller = new AbortController();
+        const progress: Array<[number, number]> = [];
+        const run = findMatchesAsync(existing, incoming, {
+            signal: controller.signal,
+            chunk: 50,
+            onProgress: (done, total) => {
+                progress.push([done, total]);
+                if (progress.length === 3) controller.abort();
+            },
+        });
+        await expect(run).rejects.toMatchObject({ name: 'AbortError' });
+        expect(progress).toHaveLength(3);
+        for (const [done, total] of progress) {
+            expect(total).toBe(2 * named);
+            expect(done).toBeGreaterThan(0);
+            expect(done).toBeLessThan(total);
+        }
+        expect(progress[1][0]).toBeGreaterThanOrEqual(progress[0][0]);
+        expect(progress[2][0]).toBeGreaterThanOrEqual(progress[1][0]);
+        expect(JSON.stringify(existing)).toBe(existingBefore);
+        expect(JSON.stringify(incoming)).toBe(incomingBefore);
+        expect(JSON.stringify({ ...state, decisions: [...state.decisions] })).toBe(stateBefore);
+    }, 120_000);
+
+    it('a signal already given stops it before any work', async () => {
+        const existing = targetTree(mulberry32(5));
+        const controller = new AbortController();
+        controller.abort();
+        const onProgress = (): void => { throw new Error('no progress expected'); };
+        await expect(findMatchesAsync(existing, structuredClone(existing), { signal: controller.signal, onProgress }))
+            .rejects.toMatchObject({ name: 'AbortError' });
+    });
+
+    it('gives what findMatches gives, in many small parts', async () => {
+        const { data } = syntheticTree({ persons: 1500 });
+        const copy = structuredClone(data);
+        const progress: number[] = [];
+        const parts = await findMatchesAsync(data, copy, { chunk: 7, onProgress: done => progress.push(done) });
+        expect(parts).toEqual(findMatches(data, copy));
+        expect(progress.length).toBeGreaterThan(2);
+        expect(progress[progress.length - 1]).toBe(2 * Object.values(copy.persons).filter(p => !p.isPlaceholder).length);
+        for (let seed = 1; seed <= 30; seed++) {
+            const rnd = mulberry32(seed);
+            const existing = targetTree(rnd);
+            const incoming = sourceTree(existing, rnd);
+            expect(await findMatchesAsync(existing, incoming, { chunk: 3 })).toEqual(findMatches(existing, incoming));
+        }
+    }, 120_000);
 });
