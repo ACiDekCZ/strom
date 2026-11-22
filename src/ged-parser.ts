@@ -108,7 +108,7 @@ import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } fro
 import { appUnknownIsNoSurname } from './app-version';
 import { lastMarriageSurnameIndex } from './married-suggestion';
 import { researchClaimValue } from './research-claim';
-import { addEmails, isContactResidence } from './person-contact.js';
+import { addEmails, isContactAddressLabel, isContactResidence } from './person-contact.js';
 import {
     addGedcomExtra, addOriginalIds, CITE_TAG, gedcomHtmlText, joinedBlock, NOTED_TAG, notedBlock, notedStructures, type ExtraHolder, withoutCiteLines, mediaDateValue, cleanImportOrigin, cleanOriginalIdLine, cleanOriginalIds, factPartOf, ID_ENTRIES_MAX, ID_LINES_MAX,
     IMPORT_TAG, markFactImported, markTreeImported, XID_TAG,
@@ -1087,8 +1087,6 @@ const NOTED_SILENT_TAGS = new Set(['TYPE']);
 
 /** The parts of an address structure (ADDR > ADR1 …), read where the ADDR line has no value. */
 const ADDRESS_PART_TAGS = new Set(['ADR1', 'ADR2', 'ADR3', 'CITY', 'STAE', 'POST', 'CTRY']);
-/** A field's label written as its value (`3 ADR1 Email`, MyHeritage): no address. */
-const ADDRESS_PART_LABEL = /^e-?mail$/i;
 
 /** A fact being read: its value on the tag line, its date and place below it. */
 interface RawNoteFact {
@@ -3836,7 +3834,7 @@ export function* parseGedcomSteps(content: string): Generator<GedcomStep, Parsed
             }
             if (level <= openDetail.level) flushDetail();
             else if (level === openDetail.level + 1 && openDetail.parts && ADDRESS_PART_TAGS.has(tag)
-                && value.trim() && !ADDRESS_PART_LABEL.test(value.trim())) {
+                && value.trim() && !isContactAddressLabel(value)) {
                 openDetail.parts.push(value.trim());
             }
         }

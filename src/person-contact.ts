@@ -63,8 +63,18 @@ export function addEmails(person: Person, emails: readonly string[]): boolean {
     return true;
 }
 
-/** The label an address part carries in place of a value (`3 ADR1 Email`, MyHeritage). */
-export const CONTACT_ADDRESS_LABEL = /^e-?mail$/i;
+/**
+ * The label an address part carries in place of a value (MyHeritage's
+ * `3 ADR1 Email`; also "Phone", "Telefon", "Tel", "Fax", "WWW", "Web"):
+ * never a house. Case and diacritics do not count (the research reads the
+ * same labels).
+ */
+const CONTACT_LABEL = /^(?:e-?mail|phone|telefon|tel\.?|fax|www|web)$/;
+
+/** Is this value of an address part a contact's label, not an address? */
+export function isContactAddressLabel(value: string): boolean {
+    return CONTACT_LABEL.test(value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase());
+}
 
 /**
  * What a GEDCOM RESI carries, as far as the contact rule asks (see
@@ -96,7 +106,7 @@ export interface ResidenceParts {
  */
 export function isContactResidence(r: ResidenceParts): boolean {
     const address = r.address?.trim();
-    return !r.date && !r.place?.trim() && (!address || CONTACT_ADDRESS_LABEL.test(address))
+    return !r.date && !r.place?.trim() && (!address || isContactAddressLabel(address))
         && !r.cause?.trim() && !r.age?.trim() && !r.note?.trim()
         && !r.sources && !r.files && !r.participants && !r.other;
 }
