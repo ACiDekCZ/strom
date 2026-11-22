@@ -454,7 +454,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 
     });
 }
 
-test('GEDCOM › Compare: a large file says "Analyzing people…" at step 1\'s Compare before the matching (C57, waiting buttons §8)', async ({ page }, testInfo) => {
+test('GEDCOM › Compare: a large file is compared from step 1\'s Compare, its progress in step 2 (C57, spec 134 K3.5)', async ({ page }, testInfo) => {
     test.setTimeout(90_000);
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1950' });
@@ -467,16 +467,7 @@ test('GEDCOM › Compare: a large file says "Analyzing people…" at step 1\'s C
     await page.locator('#gedcom-input').setInputFiles(file);
     const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    const btn = result.locator('#merge-next');
-    await btn.evaluate((b) => {
-        const w = window as unknown as { __said: string[] };
-        w.__said = [];
-        new MutationObserver(() => {
-            if (b.getAttribute('aria-busy') === 'true') w.__said.push(b.textContent ?? '');
-        }).observe(b, { attributes: true, childList: true, subtree: true, characterData: true });
-    });
-    await btn.click();
+    // The button no longer waits itself: step 2 shows the comparison's progress (its own tests).
+    await result.locator('#merge-next').click();
     await expect(mergeCurrentStep(result)).toHaveAttribute('data-step', '2', { timeout: 60_000 });
-    const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
-    expect(said.some(t => t.includes('Analyzing people…'))).toBe(true);
 });

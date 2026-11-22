@@ -1,6 +1,6 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { pathToFileURL } from 'url';
-import { openApp, createFirstPerson, card, addRelation, mergeCompare } from './helpers.js';
+import { openApp, createFirstPerson, card, addRelation, mergeCompare, mergeGroup } from './helpers.js';
 
 /**
  * Collaboration round-trip ("send to a relative"):
@@ -73,7 +73,8 @@ test('share round-trip: welcome, collaboration bar, reply merge offer', { tag: '
     await expect(merge).toBeVisible();
     // The guide's comparison: step 2 lists the uncle's addition.
     await mergeCompare(merge);
-    await expect(merge).toContainText('Strycek');
+    await mergeGroup(merge, 'new');
+    await expect(merge.locator('#merge-match-list')).toContainText('Strycek');
 });
 
 test('a plain (non-shared) export shows no welcome screen', async ({ page, browser }, testInfo) => {
