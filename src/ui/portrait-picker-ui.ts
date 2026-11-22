@@ -26,6 +26,8 @@ import { isCoarsePointer } from './bottom-sheet.js';
 import { setTileState, tileFailedHtml, waitingTileHtml } from './image-slot.js';
 import { busySpinHtml } from './busy.js';
 import { uiModule } from './module.js';
+import { researchActionLabel } from './research-open-mark.js';
+import type { ResearchActionMark } from '../research-link.js';
 
 /** Where the picker was opened: the person dialog (the portrait waits for Save) or the person page (written at once). */
 export type PortraitPickWhere = 'dialog' | 'page';
@@ -77,8 +79,8 @@ export interface PortraitPickerView {
     model: PortraitPickerModel;
     busy: string | null;
     failed: string | null;
-    /** The "Start research" link's label (trusted markup with its mark), null: none. */
-    start: string | null;
+    /** The "Start research" link's mark (drawn with its label), null: no link. */
+    start: ResearchActionMark | null;
     thumbs?: { urlOf(sha: string, px: number): string | null; isWaiting(sha: string, px: number): boolean };
     px?: number;
 }
@@ -131,7 +133,7 @@ export function portraitPickerHtml(v: PortraitPickerView): string {
         : `<div class="portrait-pick-head"><span class="portrait-pick-title">${esc(p.pickTitle)}</span><span class="portrait-pick-count">${n || ''}</span></div>`;
     const grid = n ? `<div class="portrait-pick-grid">${v.model.shown.map((c, i) => tileHtml(c, v, i === 0)).join('')}</div>` : '';
     const note = v.model.researchOnly > 0
-        ? `<p class="portrait-pick-note" role="note">${esc(p.researchDown(v.model.researchOnly))}${v.start ? ` <button type="button" class="link-button portrait-pick-start" data-pick-act="start">${v.start}</button>` : ''}</p>`
+        ? `<p class="portrait-pick-note" role="note">${esc(p.researchDown(v.model.researchOnly))}${v.start ? ` <button type="button" class="link-button portrait-pick-start" data-pick-act="start">${researchActionLabel(strings.sync.startResearch, v.start)}</button>` : ''}</p>`
         : '';
     let status = '';
     if (v.busy) status = `<p class="portrait-pick-status busy-st" role="status">${busySpinHtml(12)} ${esc(p.pickLoading)}</p>`;
@@ -369,7 +371,7 @@ export const portraitPickerMethods = uiModule({
             model,
             busy: st.busy,
             failed: st.failed,
-            start: computer && model.researchOnly > 0 && this.researchStartUrl() ? this.researchSyncActionLabel('startResearch', strings.sync.startResearch) : null,
+            start: computer && model.researchOnly > 0 && this.researchStartUrl() ? this.researchSyncActionMark('startResearch') : null,
             thumbs: queue,
             px,
         });

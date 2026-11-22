@@ -141,7 +141,7 @@ describe('rows', () => {
         const ctx = { treeId: 't1', researchId: 'r1', base: null, agent: true } as unknown as MaterialsContext;
         const note = (lang: 'en' | 'cs' | 'de') => {
             setLanguage(lang);
-            const html = materialsMethods.materialRowHtml.call({} as never, item, ctx, null, false);
+            const html = materialsMethods.materialRowHtml.call({ materialWaitingLabel: () => 'Waiting' } as never, item, ctx, null, false);
             return /<span class="material-note">([^<]*)<\/span>/.exec(html)?.[1];
         };
         expect(note('en')).toBe('\u201cFrom the attic box\u201d');

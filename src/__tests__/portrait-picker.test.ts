@@ -150,7 +150,7 @@ function makeUi(): Ui {
         portraitIntoPersonModal: vi.fn(async () => {}),
         dropImageWait: () => {},
         researchStartUrl: () => 'strom://start',
-        researchSyncActionLabel: (_id: string, label: string) => `${label}<span class="mark"></span>`,
+        researchSyncActionMark: () => 'terminal',
         researchSyncAction: vi.fn(),
         researchNoteMenuWrittenSeen: () => {},
         exportReminderClosed: () => {},
@@ -363,7 +363,10 @@ describe('the research and its bridge (§4)', () => {
         const note = popover()!.querySelector('.portrait-pick-note')!;
         expect(note.getAttribute('role')).toBe('note');
         expect(note.textContent).toContain('Fotky z výzkumu (3) jsou dostupné, když výzkum běží.');
-        expect(note.querySelector('[data-pick-act="start"]')?.textContent).toBe('Spustit výzkum');
+        const start = note.querySelector('[data-pick-act="start"]')!;
+        // The label with the terminal mark of its group (the research opens its terminal).
+        expect(start.textContent).toBe('Spustit výzkum, otevře se ve výzkumu');
+        expect(start.querySelector('.research-open-mark')).not.toBeNull();
         click(note.querySelector('[data-pick-act="start"]')!);
         expect(ui.researchSyncAction).toHaveBeenCalledWith('startResearch');
     });

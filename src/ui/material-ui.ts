@@ -24,6 +24,7 @@ import { formatBytesShort, QueueOutcome, researchKnownAdded, researchRefusalOf, 
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
+import { RESEARCH_BRIDGE_MARKS } from '../research-link.js';
 
 const DIALOG_ID = 'material-modal';
 /** At most this many files in one go (more: a whole folder belongs to "Add materials"). */
@@ -335,7 +336,7 @@ export const materialMethods = uiModule({
             if (waits) {
                 const ids = saved.map(f => f.id);
                 const sort = this.materialsListOn() && this.materialSortGate() === 'on' && ids.length
-                    ? { action: { label: strings.materials.agentSort.sort, ai: true, run: () => void this.openSortForFiles(ids, 'personId' in target ? DataManager.getPerson(target.personId)?.refn : undefined) },
+                    ? { action: { label: strings.materials.agentSort.sort, ai: RESEARCH_BRIDGE_MARKS['material-sort'] === 'bridgeAgent', run: () => void this.openSortForFiles(ids, 'personId' in target ? DataManager.getPerson(target.personId)?.refn : undefined) },
                         ...('action' in show ? { more: show.action } : {}) }
                     : show;
                 this.showToast(m.sentWaitToast(sent, name, !('personId' in target)) + knownPart, 8000, { closable: true, ...sort });
