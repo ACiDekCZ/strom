@@ -13765,6 +13765,13 @@
             .map-popup-body { flex: none; min-height: auto; overflow: visible; }
             .map-popup-foot { position: sticky; bottom: 0; background: var(--surface); }
         }
+        /* Touch: the map's own controls (zoom ±, fit, Over time) and on a phone the scope and Kinds
+           buttons are 44 px targets (they were 30–34 px). Over time keeps its width from its word. */
+        @media (pointer: coarse) {
+            .map-controls button { width: 44px; height: 44px; font-size: 20px; }
+            .map-controls button.map-time-toggle { width: auto; min-width: 44px; }
+            .map-kinds-btn, .map-scope-btn { height: 44px; }
+        }
         @media (pointer: coarse) {
             .map-popup-close { min-width: 44px; min-height: 44px; margin: -12px -12px -12px 0; }
             .map-popup-person, .map-popup-more { min-height: 36px; }
