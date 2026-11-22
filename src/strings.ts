@@ -6179,31 +6179,23 @@ const stringsEN = {
     merge: {
         title: 'Merge data',
         analyzing: 'Analyzing people…',
-        matches: 'Matches',
         conflicts: 'Conflicts',
-        newPersons: 'New people',
         tabAll: 'All',
         highConfidence: 'High',
         mediumConfidence: 'Medium',
         lowConfidence: 'Low',
-        unmatched: 'Unmatched',
         confirm: 'Confirm',
         reject: 'Reject',
         skip: 'Skip',
         unskip: 'Un-skip',
         skipped: 'Skipped',
         skipTooltip: 'Don\'t bring this person at all — neither merged nor added (unlike Reject, which imports them as a new person).',
-        statsSkipped: 'Skipped',
         skippedCount: (n: number) => `${n} skipped`,
         changeMatch: 'Change',
         manualMatch: 'Match to existing',
         reanalyze: 'Re-analyze',
-        execute: 'Execute merge',
         // "Update existing only" mode (Primitive 1)
-        updateOnlyLabel: 'Only update existing people (don\'t add new)',
-        updateOnlyHint: 'Enrich matched people from the import, but add no new people.',
         // "Merge this view into…" action (Primitive 3)
-        mergeViewInto: 'Merge this view into…',
         mergeViewDescription: 'Merge the currently shown people into:',
         mergeViewSourceLabel: 'Current view',
         mergeViewEmpty: 'Nothing to merge — the current view is empty.',
@@ -6225,19 +6217,9 @@ const stringsEN = {
         newPerson: 'New',
         selectExisting: '-- Select existing person --',
         selectExistingError: 'Please select a person',
-        importCount: 'Import',
-        existingCount: 'Existing',
-        statsMatches: 'Matches',
-        statsConflicts: 'Conflicts',
         statsNew: 'New',
-        mergeInto: 'Merge into existing tree',
 
         // Workflow
-        wizardTitle: 'Merge data',
-        wizardExplanation: 'Review how imported people match with existing data. Green = confirmed match, Yellow = needs review, Blue = new person.',
-        stepReview: 'Review matches',
-        stepResolve: 'Resolve conflicts',
-        stepExecute: 'Execute merge',
 
         // Close confirmation
         closeConfirmTitle: 'Close merge?',
@@ -6251,8 +6233,6 @@ const stringsEN = {
         pendingMergeFound: 'Pending merge session found',
         resume: 'Resume',
         discard: 'Discard',
-        savedAt: 'Saved',
-        progress: 'Progress',
         reviewedCount: (reviewed: number, total: number) =>
             `${reviewed}/${total} reviewed`,
 
@@ -6286,8 +6266,6 @@ const stringsEN = {
         resolveConflicts: 'Resolve',
 
         // New tree name prompt
-        newTreeNamePrompt: 'Enter name for the merged tree:',
-        pendingGate: (n: number) => `${n} uncertain match${n === 1 ? '' : 'es'} left undecided — those people will be imported as SEPARATE people (they can be merged later). Continue?`,
         suggestedPrecise: 'suggested — more precise date',
         suggestedComplete: 'suggested — more complete value',
         // The check before a merge is saved (spec 134 K0.2); mergeCheckMessage joins the parts.
@@ -17079,31 +17057,23 @@ const stringsCZ: StringsType = {
     merge: {
         title: 'Sloučit data',
         analyzing: 'Analyzují se osoby…',
-        matches: 'Shody',
         conflicts: 'Konflikty',
-        newPersons: 'Nové osoby',
         tabAll: 'Vše',
         highConfidence: 'Vysoká',
         mediumConfidence: 'Střední',
         lowConfidence: 'Nízká',
-        unmatched: 'Bez shody',
         confirm: 'Potvrdit',
         reject: 'Odmítnout',
         skip: 'Přeskočit',
         unskip: 'Zrušit přeskočení',
         skipped: 'Přeskočeno',
         skipTooltip: 'Tuto osobu vůbec nepřinášet — ani sloučit, ani přidat (na rozdíl od Odmítnout, které ji naimportuje jako novou osobu).',
-        statsSkipped: 'Přeskočeno',
         skippedCount: (n: number) => `${n} přeskočeno`,
         changeMatch: 'Změnit',
         manualMatch: 'Přiřadit k existující',
         reanalyze: 'Znovu analyzovat',
-        execute: 'Provést sloučení',
         // Režim „jen doplnit existující“ (Primitive 1)
-        updateOnlyLabel: 'Jen doplnit existující osoby (nepřidávat nové)',
-        updateOnlyHint: 'Doplní spárované osoby z importu, ale nepřidá žádné nové osoby.',
         // Akce „Sloučit tento pohled do…“ (Primitive 3)
-        mergeViewInto: 'Sloučit tento pohled do…',
         mergeViewDescription: 'Sloučit aktuálně zobrazené osoby do:',
         mergeViewSourceLabel: 'Aktuální pohled',
         mergeViewEmpty: 'Není co sloučit — aktuální pohled je prázdný.',
@@ -17122,19 +17092,9 @@ const stringsCZ: StringsType = {
         newPerson: 'Nová',
         selectExisting: '-- Vybrat existující osobu --',
         selectExistingError: 'Je potřeba vybrat osobu',
-        importCount: 'Import',
-        existingCount: 'Stávající',
-        statsMatches: 'Shody',
-        statsConflicts: 'Konflikty',
         statsNew: 'Nové',
-        mergeInto: 'Sloučit do existujícího stromu',
 
         // Workflow
-        wizardTitle: 'Sloučení dat',
-        wizardExplanation: 'Kontrola, jak importované osoby odpovídají existujícím datům. Zelená = potvrzená shoda, Žlutá = vyžaduje kontrolu, Modrá = nová osoba.',
-        stepReview: 'Zkontrolovat shody',
-        stepResolve: 'Vyřešit konflikty',
-        stepExecute: 'Provést sloučení',
 
         // Close confirmation
         closeConfirmTitle: 'Zavřít sloučení?',
@@ -17148,8 +17108,6 @@ const stringsCZ: StringsType = {
         pendingMergeFound: 'Nalezeno nedokončené sloučení',
         resume: 'Pokračovat',
         discard: 'Zahodit',
-        savedAt: 'Uloženo',
-        progress: 'Postup',
         reviewedCount: (reviewed: number, total: number) =>
             `${reviewed}/${total} zkontrolováno`,
 
@@ -17183,8 +17141,6 @@ const stringsCZ: StringsType = {
         resolveConflicts: 'Vyřešit',
 
         // New tree name prompt
-        newTreeNamePrompt: 'Název sloučeného stromu:',
-        pendingGate: (n: number) => `${n} ${plural('cs', n, 'nejistá shoda zůstala nerozhodnutá', 'nejisté shody zůstaly nerozhodnuté', 'nejistých shod zůstalo nerozhodnutých')} — tito lidé se naimportují jako SAMOSTATNÉ osoby (sloučit je jde i později). Pokračovat?`,
         suggestedPrecise: 'navrženo — přesnější datum',
         suggestedComplete: 'navrženo — úplnější hodnota',
         // Kontrola před uložením sloučení (spec 134 K0.2); části spojí mergeCheckMessage.
@@ -27832,29 +27788,21 @@ const stringsDE: StringsType = {
     merge: {
         title: 'Daten zusammenführen',
         analyzing: 'Personen werden analysiert…',
-        matches: 'Übereinstimmungen',
         conflicts: 'Konflikte',
-        newPersons: 'Neue Personen',
         tabAll: 'Alle',
         highConfidence: 'Hoch',
         mediumConfidence: 'Mittel',
         lowConfidence: 'Niedrig',
-        unmatched: 'Ohne Übereinstimmung',
         confirm: 'Bestätigen',
         reject: 'Ablehnen',
         skip: 'Überspringen',
         unskip: 'Nicht überspringen',
         skipped: 'Übersprungen',
         skipTooltip: 'Diese Person gar nicht übernehmen — weder zusammenführen noch hinzufügen (anders als Ablehnen, das sie als neue Person importiert).',
-        statsSkipped: 'Übersprungen',
         skippedCount: (n: number) => `${n} übersprungen`,
         changeMatch: 'Ändern',
         manualMatch: 'Mit Vorhandener abgleichen',
         reanalyze: 'Neu analysieren',
-        execute: 'Zusammenführen ausführen',
-        updateOnlyLabel: 'Nur vorhandene Personen aktualisieren (keine neuen hinzufügen)',
-        updateOnlyHint: 'Abgeglichene Personen aus dem Import anreichern, aber keine neuen Personen hinzufügen.',
-        mergeViewInto: 'Diese Ansicht zusammenführen mit…',
         mergeViewDescription: 'Die aktuell angezeigten Personen zusammenführen mit:',
         mergeViewSourceLabel: 'Aktuelle Ansicht',
         mergeViewEmpty: 'Nichts zusammenzuführen — die aktuelle Ansicht ist leer.',
@@ -27873,18 +27821,8 @@ const stringsDE: StringsType = {
         newPerson: 'Neu',
         selectExisting: '-- Vorhandene Person auswählen --',
         selectExistingError: 'Bitte eine Person wählen',
-        importCount: 'Import',
-        existingCount: 'Vorhanden',
-        statsMatches: 'Übereinstimmungen',
-        statsConflicts: 'Konflikte',
         statsNew: 'Neu',
-        mergeInto: 'In vorhandenen Stammbaum zusammenführen',
 
-        wizardTitle: 'Daten zusammenführen',
-        wizardExplanation: 'Prüfen, wie importierte Personen mit vorhandenen Daten übereinstimmen. Grün = bestätigte Übereinstimmung, Gelb = zu prüfen, Blau = neue Person.',
-        stepReview: 'Übereinstimmungen prüfen',
-        stepResolve: 'Konflikte lösen',
-        stepExecute: 'Zusammenführen ausführen',
 
         closeConfirmTitle: 'Zusammenführen schließen?',
         closeConfirmMessage: 'Die Zusammenführung hat ungespeicherten Fortschritt.',
@@ -27896,8 +27834,6 @@ const stringsDE: StringsType = {
         pendingMergeFound: 'Eine Zusammenführungssitzung steht noch aus',
         resume: 'Fortsetzen',
         discard: 'Verwerfen',
-        savedAt: 'Gespeichert',
-        progress: 'Fortschritt',
         reviewedCount: (reviewed: number, total: number) =>
             `${reviewed}/${total} geprüft`,
 
@@ -27927,8 +27863,6 @@ const stringsDE: StringsType = {
 
         resolveConflicts: 'Lösen',
 
-        newTreeNamePrompt: 'Name für den zusammengeführten Stammbaum:',
-        pendingGate: (n: number) => `${n} unsichere ${n === 1 ? 'Übereinstimmung' : 'Übereinstimmungen'} noch offen — diese Personen werden als GETRENNTE Personen importiert (sie lassen sich später zusammenführen). Fortfahren?`,
         suggestedPrecise: 'vorgeschlagen — genaueres Datum',
         suggestedComplete: 'vorgeschlagen — vollständigerer Wert',
         // Die Prüfung vor dem Speichern einer Zusammenführung (Spec 134 K0.2); mergeCheckMessage fügt die Teile zusammen.

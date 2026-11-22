@@ -7,31 +7,23 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
     merge: {
         title: 'Scalanie danych',
         analyzing: 'Analizowanie osób…',
-        matches: 'Dopasowania',
         conflicts: 'Konflikty',
-        newPersons: 'Nowe osoby',
         tabAll: 'Wszystko',
         highConfidence: 'Wysoka',
         mediumConfidence: 'Średnia',
         lowConfidence: 'Niska',
-        unmatched: 'Bez dopasowania',
         confirm: 'Potwierdź',
         reject: 'Odrzuć',
         skip: 'Pomiń',
         unskip: 'Cofnij pominięcie',
         skipped: 'Pominięte',
         skipTooltip: 'Ta osoba w ogóle nie zostanie przeniesiona – ani scalona, ani dodana (w odróżnieniu od „Odrzuć”, które importuje ją jako nową osobę).',
-        statsSkipped: 'Pominięte',
         skippedCount: (n: number) => `pominięto: ${n}`,
         changeMatch: 'Zmień',
         manualMatch: 'Przypisz do istniejącej',
         reanalyze: 'Analizuj ponownie',
-        execute: 'Wykonaj scalanie',
         // "Only update existing" mode (Primitive 1)
-        updateOnlyLabel: 'Tylko uzupełnianie istniejących osób (bez dodawania nowych)',
-        updateOnlyHint: 'Uzupełnia dopasowane osoby danymi z importu, ale nie dodaje żadnych nowych osób.',
         // "Merge this view into…" action (Primitive 3)
-        mergeViewInto: 'Scal ten widok z…',
         mergeViewDescription: 'Scal aktualnie wyświetlane osoby z:',
         mergeViewSourceLabel: 'Bieżący widok',
         mergeViewEmpty: 'Nie ma czego scalać – bieżący widok jest pusty.',
@@ -50,19 +42,9 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         newPerson: 'Nowa',
         selectExisting: '-- Wybierz istniejącą osobę --',
         selectExistingError: 'Wymagany jest wybór osoby',
-        importCount: 'Import',
-        existingCount: 'Istniejące',
-        statsMatches: 'Dopasowania',
-        statsConflicts: 'Konflikty',
         statsNew: 'Nowe',
-        mergeInto: 'Scal z istniejącym drzewem',
 
         // Workflow
-        wizardTitle: 'Scalanie danych',
-        wizardExplanation: 'Sprawdzenie, jak importowane osoby odpowiadają istniejącym danym. Zielony = potwierdzone dopasowanie, żółty = wymaga sprawdzenia, niebieski = nowa osoba.',
-        stepReview: 'Sprawdź dopasowania',
-        stepResolve: 'Rozstrzygnij konflikty',
-        stepExecute: 'Wykonaj scalanie',
 
         // Close confirmation
         closeConfirmTitle: 'Zamknąć scalanie?',
@@ -76,8 +58,6 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         pendingMergeFound: 'Znaleziono niedokończone scalanie',
         resume: 'Kontynuuj',
         discard: 'Odrzuć',
-        savedAt: 'Zapisano',
-        progress: 'Postęp',
         reviewedCount: (reviewed: number, total: number) =>
             `sprawdzono ${reviewed}/${total}`,
 
@@ -111,8 +91,6 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         resolveConflicts: 'Rozstrzygnij',
 
         // New tree name prompt
-        newTreeNamePrompt: 'Nazwa scalonego drzewa:',
-        pendingGate: (n: number) => `${n} ${plPl(n, 'niepewne dopasowanie pozostało nierozstrzygnięte', 'niepewne dopasowania pozostały nierozstrzygnięte', 'niepewnych dopasowań pozostało nierozstrzygniętych')} – te osoby zostaną zaimportowane jako ODRĘBNE osoby (można je scalić także później). Kontynuować?`,
         suggestedPrecise: 'proponowane – dokładniejsza data',
         suggestedComplete: 'proponowane – pełniejsza wartość',
         // Kontrola przed zapisaniem scalenia (spec 134 K0.2); części łączy mergeCheckMessage.
