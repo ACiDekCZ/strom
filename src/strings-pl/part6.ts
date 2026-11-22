@@ -130,6 +130,13 @@ export const plPart6: Pick<StringsType, 'merge' | 'personMerge' | 'exportMenu' |
             targetFileLost: (n: number) => `${n} ${plPl(n, 'plik drzewa by zniknął', 'pliki drzewa by zniknęły', 'plików drzewa by zniknęło')}`,
             danglingRef: (n: number) => `${n} ${plPl(n, 'odwołanie wskazywałoby donikąd', 'odwołania wskazywałyby donikąd', 'odwołań wskazywałoby donikąd')}`,
         },
+        // A merge written or resumed (spec 134 K0.5, K0.6).
+        saveFailed: 'Scalenie nie zostało zapisane: nowego drzewa nie udało się zapisać w tej przeglądarce. Drzewo pozostało bez zmian, a rozpoczęte scalanie pozostaje otwarte.',
+        resumeTargetChangedTitle: 'Drzewo się zmieniło',
+        resumeTargetChanged: 'Drzewo zmieniło się od zapisania tego scalania. Dopasowania można wyszukać ponownie na jego obecnych danych; odpowiedzi zostają tam, gdzie ich osoby nadal istnieją. W przeciwnym razie scalanie trwa na drzewie takim, jakie było przy wyszukiwaniu, a zmian od tamtej pory nie będzie w scalonym drzewie.',
+        resumeRecompute: 'Wyszukaj ponownie',
+        resumeKeepCopy: 'Kontynuuj jak zapisano',
+        resumeTargetMissing: 'Drzewo, od którego zaczęło się scalanie, nie jest teraz dostępne. Scalanie trwa na drzewie takim, jakie było przy wyszukiwaniu.',
 
         // Photo conflict (two different photos — shown as thumbnails in the dialog)
         photoConflict: 'dwa różne zdjęcia',

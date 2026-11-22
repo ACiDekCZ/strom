@@ -601,7 +601,7 @@ const stringsEN = {
         deleted: 'Backup deleted',
         persistenceSave: 'Export',
         autoLabel: 'Automatic backups of this tree',
-        autoHint: 'Daily and before an import or merge. Turn off for a tree kept elsewhere or whose scans make backups heavy; "Create backup now" still works.',
+        autoHint: 'Daily and before an import; before a merge always. Turn off for a tree kept elsewhere or whose scans make backups heavy; "Create backup now" still works.',
         autoOffTitle: 'Turn off automatic backups?',
         autoOffMessage: (count: number, size: string) => `This tree has ${nEn(count, 'backup', 'backups')}${size ? ` (${size})` : ''}. Keep them, or delete them to free the space?`,
         autoOffKeep: 'Keep backups',
@@ -6303,6 +6303,13 @@ const stringsEN = {
             targetFileLost: (n: number) => `${n} ${n === 1 ? 'file' : 'files'} of the tree would disappear`,
             danglingRef: (n: number) => `${n} ${n === 1 ? 'reference' : 'references'} would point to nothing`,
         },
+        // A merge written or resumed (spec 134 K0.5, K0.6).
+        saveFailed: 'The merge was not saved: the new tree could not be written in this browser. The tree stays unchanged and the merge stays open.',
+        resumeTargetChangedTitle: 'The tree has changed',
+        resumeTargetChanged: 'The tree has changed since this merge was saved. The matches can be found again over its current data; answers stay where their people still exist. Otherwise the merge goes on over the tree as it was at the matching, and the changes since then are not in the merged tree.',
+        resumeRecompute: 'Find matches again',
+        resumeKeepCopy: 'Go on as saved',
+        resumeTargetMissing: 'The tree this merge started from is not available now. The merge goes on over the tree as it was at the matching.',
 
         // Photo conflict (two different portraits — shown as thumbnails in the dialog)
         photoConflict: 'two different photos',
@@ -11503,7 +11510,7 @@ const stringsCZ: StringsType = {
         deleted: 'Záloha smazána',
         persistenceSave: 'Exportovat',
         autoLabel: 'Automatické zálohy tohoto stromu',
-        autoHint: 'Denně a před importem nebo sloučením. Vypnout se vyplatí u stromu uloženého jinde nebo u stromu, jehož skeny zálohy nafukují; „Vytvořit zálohu teď“ funguje dál.',
+        autoHint: 'Denně a před importem; před sloučením vždy. Vypnout se vyplatí u stromu uloženého jinde nebo u stromu, jehož skeny zálohy nafukují; „Vytvořit zálohu teď“ funguje dál.',
         autoOffTitle: 'Vypnout automatické zálohy?',
         autoOffMessage: (count: number, size: string) => `Strom má ${nCs(count, 'zálohu', 'zálohy', 'záloh')}${size ? ` (${size})` : ''}. Ponechat je, nebo je smazat a uvolnit místo?`,
         autoOffKeep: 'Ponechat zálohy',
@@ -17058,6 +17065,13 @@ const stringsCZ: StringsType = {
             targetFileLost: (n: number) => nCs(n, 'soubor stromu by zmizel', 'soubory stromu by zmizely', 'souborů stromu by zmizelo'),
             danglingRef: (n: number) => nCs(n, 'odkaz by vedl do prázdna', 'odkazy by vedly do prázdna', 'odkazů by vedlo do prázdna'),
         },
+        // A merge written or resumed (spec 134 K0.5, K0.6).
+        saveFailed: 'Sloučení se neuložilo: nový strom se nepodařilo zapsat do prohlížeče. Strom zůstal beze změny a rozdělané sloučení zůstává otevřené.',
+        resumeTargetChangedTitle: 'Strom se mezitím změnil',
+        resumeTargetChanged: 'Strom se od uložení tohoto sloučení změnil. Shody lze najít znovu nad jeho současnými daty; odpovědi zůstanou tam, kde jejich osoby dál existují. Jinak sloučení pokračuje nad stromem, jak byl při hledání shod, a změny od té doby ve sloučeném stromu nebudou.',
+        resumeRecompute: 'Najít shody znovu',
+        resumeKeepCopy: 'Pokračovat jak uloženo',
+        resumeTargetMissing: 'Strom, nad kterým sloučení začalo, teď není k dispozici. Sloučení pokračuje nad stromem, jak byl při hledání shod.',
 
         // Photo conflict (dvě různé fotografie — v dialogu zobrazeny jako náhledy)
         photoConflict: 'dvě různé fotografie',
@@ -22153,7 +22167,7 @@ const stringsDE: StringsType = {
         deleted: 'Sicherung gelöscht',
         persistenceSave: 'Exportieren',
         autoLabel: 'Automatische Sicherungen dieses Stammbaums',
-        autoHint: 'Täglich und vor einem Import oder Zusammenführen. Ausschalten für einen Stammbaum, der anderswo aufbewahrt wird oder dessen Scans die Sicherungen groß machen; „Jetzt sichern“ funktioniert weiter.',
+        autoHint: 'Täglich und vor einem Import; vor dem Zusammenführen immer. Ausschalten für einen Stammbaum, der anderswo aufbewahrt wird oder dessen Scans die Sicherungen groß machen; „Jetzt sichern“ funktioniert weiter.',
         autoOffTitle: 'Automatische Sicherungen ausschalten?',
         autoOffMessage: (count: number, size: string) => `Dieser Stammbaum hat ${nDe(count, 'Sicherung', 'Sicherungen')}${size ? ` (${size})` : ''}. Behalten oder löschen, um Platz freizugeben?`,
         autoOffKeep: 'Sicherungen behalten',
@@ -27659,6 +27673,13 @@ const stringsDE: StringsType = {
             targetFileLost: (n: number) => `${n} ${n === 1 ? 'Datei' : 'Dateien'} des Stammbaums ${n === 1 ? 'würde' : 'würden'} verschwinden`,
             danglingRef: (n: number) => `${n} ${n === 1 ? 'Verweis würde' : 'Verweise würden'} ins Leere zeigen`,
         },
+        // A merge written or resumed (spec 134 K0.5, K0.6).
+        saveFailed: 'Die Zusammenführung wurde nicht gespeichert: Der neue Stammbaum konnte in diesem Browser nicht geschrieben werden. Der Stammbaum bleibt unverändert, die Zusammenführung bleibt offen.',
+        resumeTargetChangedTitle: 'Der Stammbaum hat sich geändert',
+        resumeTargetChanged: 'Der Stammbaum hat sich geändert, seit diese Zusammenführung gespeichert wurde. Die Übereinstimmungen lassen sich über seine jetzigen Daten neu suchen; Antworten bleiben, wo ihre Personen noch existieren. Sonst geht die Zusammenführung über den Stammbaum weiter, wie er bei der Suche war, und die Änderungen seitdem fehlen im zusammengeführten Stammbaum.',
+        resumeRecompute: 'Neu suchen',
+        resumeKeepCopy: 'Wie gespeichert weiter',
+        resumeTargetMissing: 'Der Stammbaum, mit dem die Zusammenführung begann, ist jetzt nicht verfügbar. Die Zusammenführung geht über den Stammbaum weiter, wie er bei der Suche war.',
 
         photoConflict: 'zwei verschiedene Fotos',
 

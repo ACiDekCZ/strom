@@ -3,7 +3,7 @@
  * Types for smart merge import functionality
  */
 
-import { PersonId, PartnershipId, Person, StromData } from '../types.js';
+import { PersonId, PartnershipId, Person, StromData, TreeId } from '../types.js';
 
 // ==================== VALIDATION ====================
 
@@ -137,6 +137,18 @@ export interface MergeState {
      * without this field default to false.
      */
     updateOnly?: boolean;
+    /**
+     * The tree the merge goes into and the fingerprint of its data when the
+     * matching ran (contentFingerprint). A resumed merge compares it with the
+     * tree as it is now (spec 134 K0.6). Optional: older sessions lack it.
+     */
+    target?: MergeTarget;
+}
+
+/** The target of a merge: its tree and the fingerprint of the data the matching ran over. */
+export interface MergeTarget {
+    treeId: TreeId;
+    fingerprint: string;
 }
 
 // ==================== ID MAPPING ====================

@@ -456,11 +456,13 @@ test('tree merge save for later → resume from the tree manager keeps the decis
     await expect(wizard.locator('#merge-stat-skipped')).toHaveText('1');
     await expect(row(wizard, 'Bob Novy')).toHaveClass(/skipped/);
     await expect(wizard.locator('#merge-stat-new')).toHaveText('1');
-    // Resuming consumed the saved session.
-    await expect.poll(() => page.evaluate(async () =>
-        (await window.Strom.MergerUI.getPendingMergeInfo()).saved.length)).toBe(0);
+    // The saved session stays while the merge is open (spec 134 K0.6) and
+    // goes once the merged tree is written.
+    expect((await page.evaluate(async () => (await window.Strom.MergerUI.getPendingMergeInfo()).saved.length))).toBe(1);
 
     await executeAndSwitch(page, wizard, 'Target + Source');
+    await expect.poll(() => page.evaluate(async () =>
+        (await window.Strom.MergerUI.getPendingMergeInfo()).saved.length)).toBe(0);
 
     const d = await activeData(page);
     expect(d.persons.map(p => p.firstName).sort()).toEqual(['Anna', 'Cyril']); // Bob skipped

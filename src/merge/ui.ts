@@ -10,6 +10,8 @@ import { getUI } from '../ui-ref.js';
 import { ZoomPan } from '../zoom.js';
 import { TreePreview, TreeCompare } from '../tree-preview.js';
 import { PersonId, PartnershipId, Person, StromData, TreeId, PartnershipStatus } from '../types.js';
+import { contentFingerprint } from '../research-link.js';
+import { mergeCheckMessage } from './merge-check.js';
 import { isGender } from '../model-values.js';
 import { strings } from '../strings.js';
 import { runHeavy, activatedElement } from '../ui/busy.js';
@@ -26,7 +28,8 @@ import {
     calculateMergeStats,
     updateMatchDecision,
     updateConflictResolution,
-    reanalyzeMatches
+    reanalyzeMatches,
+    rebaseMergeState
 } from './matching.js';
 import {
     executeMerge,
@@ -46,6 +49,7 @@ import {
     saveMergeSession,
     loadMergeSession,
     deleteMergeSession,
+    updateMergeSession,
     listMergeSessionsInfo,
     hasPendingMerges
 } from './persistence.js';
@@ -99,6 +103,13 @@ class MergerUIClass {
     private openedFromTreeManager: boolean = false;
     private targetTreeName?: string;
     private sourceTreeName?: string;
+    /**
+     * A resumed saved merge: its session, kept until the merge is written or
+     * thrown away; its state is saved back into it (spec 134 K0.6).
+     */
+    private resumedSessionId?: string;
+    /** The backup "Before merge" of the target started with the merge, awaited before writing (spec 134 K0.4). */
+    private preMergeBackup: Promise<string | null> | null = null;
 
     // ==================== INITIALIZATION ====================
 
@@ -114,10 +125,19 @@ class MergerUIClass {
     ): void {
         const existingData = DataManager.getData();
         this.gedcomImport = gedcomImport;
+        this.resumedSessionId = undefined;
+
+        // The backup "Before merge" of the target, whatever the way into the
+        // merge (file, tree, view, share) and the automatic backups setting
+        // (spec 134 K0.4). A view or a read-only tree gets none.
+        this.preMergeBackup = DataManager.snapshotNow('pre-merge').catch(() => null);
 
         // Create merge state
         this.mergeState = createMergeState(existingData, incomingData);
         this.mergeState.phase = 'reviewing';
+        // The target and its data as matched, for a resumed merge to compare (spec 134 K0.6).
+        const targetId = DataManager.isViewMode() ? null : DataManager.getCurrentTreeId();
+        if (targetId) this.mergeState.target = { treeId: targetId, fingerprint: contentFingerprint(existingData) };
         this.currentFilter = 'all';
         this.selectedMatchIndex = -1;
         this.hasUnsavedChanges = false;
@@ -150,6 +170,8 @@ class MergerUIClass {
     resumeMerge(state: MergeState, fileName?: string, targetTreeName?: string, sourceTreeName?: string): void {
         this.mergeState = state;
         this.gedcomImport = undefined;
+        this.resumedSessionId = undefined;
+        this.preMergeBackup = null;
         this.currentFilter = 'all';
         this.selectedMatchIndex = -1;
         this.hasUnsavedChanges = false;
@@ -168,11 +190,13 @@ class MergerUIClass {
      * Resume current pending merge (auto-saved)
      */
     async resumeCurrentMerge(): Promise<boolean> {
-        const state = await getCurrentMerge();
-        if (!state) return false;
+        const saved = await getCurrentMerge();
+        if (!saved) return false;
+        const state = await this.overCurrentTarget(saved);
 
         const info = await getCurrentMergeInfo();
         this.resumeMerge(state, info?.incomingFileName);
+        if (state !== saved) this.markUnsavedChanges();
         return true;
     }
 
@@ -186,15 +210,43 @@ class MergerUIClass {
         const session = sessions.find(s => s.id === sessionId);
         if (!session) return false;
 
-        const state = await loadMergeSession(sessionId);
-        if (!state) return false;
+        const saved = await loadMergeSession(sessionId);
+        if (!saved) return false;
+        const state = await this.overCurrentTarget(saved);
 
-        // Delete the saved session after loading (will be auto-saved again)
-        await deleteMergeSession(sessionId);
-
+        // The session stays until the merge is written or thrown away: the
+        // state goes back into it (spec 134 K0.6). Deleting it here lost the
+        // merge when the wizard closed before the next save.
         this.openedFromTreeManager = fromTreeManager;
         this.resumeMerge(state, session.incomingFileName, session.targetTreeName, session.sourceTreeName);
+        this.resumedSessionId = sessionId;
+        if (state !== saved) this.markUnsavedChanges();
         return true;
+    }
+
+    /**
+     * A resumed merge over its target as the tree is now (spec 134 K0.6):
+     * when the tree changed since the matching, the person is told and the
+     * matches can be found again over the current data, the answers kept
+     * where their people still exist. Otherwise (or when the tree cannot be
+     * read) the merge goes on over the copy from the matching, said so.
+     */
+    private async overCurrentTarget(state: MergeState): Promise<MergeState> {
+        const target = state.target;
+        if (!target) return state;   // a session saved before the target was kept
+        const current = !DataManager.isViewMode() && DataManager.getCurrentTreeId() === target.treeId
+            ? DataManager.getData()
+            : TreeManager.getTreeMetadata(target.treeId) ? await TreeManager.getTreeData(target.treeId) : null;
+        if (!current) {
+            await getUI().showAlert(strings.merge.resumeTargetMissing, 'warning');
+            return state;
+        }
+        const fingerprint = contentFingerprint(current);
+        if (fingerprint === target.fingerprint) return state;
+        const again = await getUI().showConfirm(strings.merge.resumeTargetChanged, strings.merge.resumeTargetChangedTitle,
+            { ok: strings.merge.resumeRecompute, cancel: strings.merge.resumeKeepCopy });
+        if (!again) return state;
+        return rebaseMergeState(state, current, { treeId: target.treeId, fingerprint });
     }
 
     // ==================== ESCAPE HANDLING ====================
@@ -295,6 +347,7 @@ class MergerUIClass {
      */
     handleCloseDiscard(): void {
         this.hideCloseConfirmation();
+        if (this.resumedSessionId) void deleteMergeSession(this.resumedSessionId);
         void clearCurrentMerge();
         this.closeMergeModalInternal();
     }
@@ -303,7 +356,9 @@ class MergerUIClass {
      * Handle close confirmation: save for later
      */
     handleCloseSave(): void {
-        if (this.mergeState) {
+        if (this.mergeState && this.resumedSessionId) {
+            void updateMergeSession(this.resumedSessionId, this.mergeState);
+        } else if (this.mergeState) {
             // Generate display name from tree names
             const displayName = this.targetTreeName && this.sourceTreeName
                 ? `${this.targetTreeName} + ${this.sourceTreeName}`
@@ -328,7 +383,10 @@ class MergerUIClass {
      * Save current merge for later (direct action from button)
      */
     saveForLater(): void {
-        if (this.mergeState) {
+        if (this.mergeState && this.resumedSessionId) {
+            void updateMergeSession(this.resumedSessionId, this.mergeState);
+            getUI().showToast(strings.merge.closeSave);
+        } else if (this.mergeState) {
             // Generate display name from tree names
             const displayName = this.targetTreeName && this.sourceTreeName
                 ? `${this.targetTreeName} + ${this.sourceTreeName}`
@@ -369,7 +427,9 @@ class MergerUIClass {
      * Perform auto-save
      */
     private performAutoSave(): void {
-        if (this.mergeState) {
+        if (this.mergeState && this.resumedSessionId) {
+            void updateMergeSession(this.resumedSessionId, this.mergeState);
+        } else if (this.mergeState) {
             void saveCurrentMerge(this.mergeState, this.incomingFileName);
         }
     }
@@ -487,6 +547,8 @@ class MergerUIClass {
         this.targetTreeName = undefined;
         this.sourceTreeName = undefined;
         this.openedFromTreeManager = false;
+        this.resumedSessionId = undefined;
+        this.preMergeBackup = null;
 
         // Return to tree manager if it was opened from there
         if (shouldReturnToTreeManager) {
@@ -1435,13 +1497,14 @@ class MergerUIClass {
      * Execute the merge - prompts for new tree name and creates a new tree
      */
     async executeMerge(): Promise<void> {
-        if (!this.mergeState) return;
+        const state = this.mergeState;
+        if (!state) return;
 
         // Gate: matches the user has NOT decided and the score does not
         // pre-confirm (the ✓/? bar in the list) are treated as separate
         // persons, not silently merged — make that explicit before running.
-        const pending = this.mergeState.matches.filter(m =>
-            !this.mergeState!.decisions.has(m.incomingId) && m.score < AUTO_CONFIRM_SCORE);
+        const pending = state.matches.filter(m =>
+            !state.decisions.has(m.incomingId) && m.score < AUTO_CONFIRM_SCORE);
         if (pending.length > 0) {
             const proceed = await getUI().showConfirm(strings.merge.pendingGate(pending.length));
             if (!proceed) return;
@@ -1465,118 +1528,138 @@ class MergerUIClass {
             return;
         }
 
-        this.mergeState.phase = 'executing';
+        state.phase = 'executing';
 
         // Snapshot the issues that already exist in BOTH inputs, so we can tell
         // afterwards whether the merge itself INTRODUCED anything new.
         const preIssues = [
-            validateTreeData(this.mergeState.existingData),
-            validateTreeData(this.mergeState.incomingData),
+            validateTreeData(state.existingData),
+            validateTreeData(state.incomingData),
         ];
 
-        const result = await executeMerge(this.mergeState);
+        // The backup "Before merge" of the target is in place before anything is written (spec 134 K0.4).
+        if (this.preMergeBackup) await this.preMergeBackup;
 
-        if (result.success) {
-            // Did the merge itself introduce new error/warning issues (beyond
-            // what the two inputs already carried)? Compared by issue type.
-            const newIssueCount = this.countNewMergeIssues(preIssues, validateTreeData(result.mergedData));
+        const result = await executeMerge(state);
 
-            // Create new tree with merged data
-            const newTreeId = TreeManager.createTree(newTreeName);
-            TreeManager.saveTreeData(newTreeId, result.mergedData);
-            TreeManager.noteUserChange(newTreeId);
+        if (!result.success) {
+            // Nothing created, nothing saved: the wizard stays open with its
+            // answers. A failed check before saving says what would have gone
+            // wrong (spec 134 K0.2); any other failure has its detail in the
+            // console (executeMerge logs it), the person a translated message.
+            state.phase = 'reviewing';
+            const problems = result.check && !result.check.ok ? result.check.problems : [];
+            await getUI().showAlert(problems.length > 0 ? mergeCheckMessage(problems) : strings.merge.failed, 'error');
+            return;
+        }
 
-            // Audit log - record merge summary in the new tree
-            const sourceName = this.sourceTreeName || this.incomingFileName || '?';
-            AuditLogManager.log(
-                newTreeId, 'data.import',
-                strings.auditLog.treeMerge(result.stats.merged, result.stats.added, sourceName)
+        // Did the merge itself introduce new error/warning issues (beyond
+        // what the two inputs already carried)? Compared by issue type.
+        const newIssueCount = this.countNewMergeIssues(preIssues, validateTreeData(result.mergedData));
+
+        // Create new tree with merged data, and wait for its write to land
+        // (spec 134 K0.5): the merge counts as done, and its working
+        // backup and saved state go, only once the tree is stored.
+        const newTreeId = TreeManager.createTree(newTreeName);
+        if (!await TreeManager.saveTreeDataConfirmed(newTreeId, result.mergedData)) {
+            // Nothing of it stays behind: no empty or half tree in the list.
+            await TreeManager.deleteTree(newTreeId).catch(() => false);
+            state.phase = 'reviewing';
+            await getUI().showAlert(strings.merge.saveFailed, 'error');
+            return;
+        }
+        TreeManager.noteUserChange(newTreeId);
+
+        // Audit log - record merge summary in the new tree
+        const sourceName = this.sourceTreeName || this.incomingFileName || '?';
+        AuditLogManager.log(
+            newTreeId, 'data.import',
+            strings.auditLog.treeMerge(result.stats.merged, result.stats.added, sourceName)
+        );
+
+        // Clean up backup after success
+        if (result.backupKey) {
+            await deleteBackup(result.backupKey);
+        }
+        // A resumed saved merge is done: its session goes.
+        if (this.resumedSessionId) await deleteMergeSession(this.resumedSessionId);
+        this.resumedSessionId = undefined;
+        this.preMergeBackup = null;
+
+        // Mark as no unsaved changes to prevent close confirmation
+        this.hasUnsavedChanges = false;
+
+        // Close merge modal first
+        const modal = document.getElementById('merge-modal');
+        modal?.classList.remove('active');
+        this.removeEscapeHandler();
+        this.clearAutoSave();
+        void clearCurrentMerge();
+
+        // What the import brought, for the steps after it.
+        const gedcomImport = this.gedcomImport;
+        this.gedcomImport = undefined;
+        if (gedcomImport) {
+            const importId = gedcomImport.importId ? result.importMap?.get(gedcomImport.importId) : undefined;
+            void getUI().afterImport(newTreeId, {
+                gedcom: true, path: 'merge', ...(importId ? { importId } : {}),
+                added: result.stats.added, updated: result.stats.merged,
+            });
+        }
+
+        // Reset state
+        this.mergeState = null;
+        this.selectedMatchIndex = -1;
+        this.incomingFileName = undefined;
+        this.targetTreeName = undefined;
+        this.sourceTreeName = undefined;
+        this.openedFromTreeManager = false;
+
+        // Show success message and offer to switch to new tree
+        const stats = strings.merge.stats(result.stats.merged, result.stats.added)
+            + (result.stats.skipped > 0 ? `\n${strings.merge.skippedCount(result.stats.skipped)}` : '')
+            + ((result.stats.sharedJoined ?? 0) > 0 ? `\n${strings.merge.sharedJoined(result.stats.sharedJoined!)}` : '');
+
+        // Dispatch event to update tree list
+        window.dispatchEvent(new CustomEvent('strom:merge-session-changed'));
+
+        // Show tree manager with new tree visible
+        getUI().showTreeManagerDialog();
+
+        // Push tree manager to dialog stack so ESC returns to it
+        getUI().pushDialog('tree-manager-modal');
+
+        // Show confirmation dialog to switch to new tree
+        const shouldSwitch = await getUI().showConfirm(
+            `${strings.merge.complete}\n${stats}\n\n${strings.merge.switchToNewTree}`,
+            strings.merge.complete
+        );
+
+        if (shouldSwitch) {
+            // Switch to new tree and close tree manager
+            await DataManager.switchTree(newTreeId);
+            getUI().updateTreeSwitcher();
+            TreeRenderer.restoreFromSession();
+            await TreeRenderer.renderAsync();
+            getUI().refreshSearch();
+            // Center view on focused person
+            ZoomPan.centerOnFocusWithContext();
+            window.dispatchEvent(new CustomEvent('strom:tree-switched'));
+            getUI().closeTreeManagerDialog();
+        }
+        // If user cancels (ESC), stay in tree manager
+
+        // If the merge introduced new issues, offer to open validation on
+        // the merged tree so the user can review (and fix) them right away.
+        // A file from another program: its "What next" card carries the data check.
+        if (newIssueCount > 0 && !getUI().importNextPendingFor(newTreeId)) {
+            const openValidation = await getUI().showConfirm(
+                strings.merge.newIssues(newIssueCount),
+                strings.merge.newIssuesTitle
             );
-
-            // Clean up backup after success
-            if (result.backupKey) {
-                await deleteBackup(result.backupKey);
+            if (openValidation) {
+                await getUI().showTreeValidationDialog(newTreeId);
             }
-
-            // Mark as no unsaved changes to prevent close confirmation
-            this.hasUnsavedChanges = false;
-
-            // Close merge modal first
-            const modal = document.getElementById('merge-modal');
-            modal?.classList.remove('active');
-            this.removeEscapeHandler();
-            this.clearAutoSave();
-            void clearCurrentMerge();
-
-            // What the import brought, for the steps after it.
-            const gedcomImport = this.gedcomImport;
-            this.gedcomImport = undefined;
-            if (gedcomImport) {
-                const importId = gedcomImport.importId ? result.importMap?.get(gedcomImport.importId) : undefined;
-                void getUI().afterImport(newTreeId, {
-                    gedcom: true, path: 'merge', ...(importId ? { importId } : {}),
-                    added: result.stats.added, updated: result.stats.merged,
-                });
-            }
-
-            // Reset state
-            this.mergeState = null;
-            this.selectedMatchIndex = -1;
-            this.incomingFileName = undefined;
-            this.targetTreeName = undefined;
-            this.sourceTreeName = undefined;
-            this.openedFromTreeManager = false;
-
-            // Show success message and offer to switch to new tree
-            const stats = strings.merge.stats(result.stats.merged, result.stats.added)
-                + (result.stats.skipped > 0 ? `\n${strings.merge.skippedCount(result.stats.skipped)}` : '')
-                + ((result.stats.sharedJoined ?? 0) > 0 ? `\n${strings.merge.sharedJoined(result.stats.sharedJoined!)}` : '');
-
-            // Dispatch event to update tree list
-            window.dispatchEvent(new CustomEvent('strom:merge-session-changed'));
-
-            // Show tree manager with new tree visible
-            getUI().showTreeManagerDialog();
-
-            // Push tree manager to dialog stack so ESC returns to it
-            getUI().pushDialog('tree-manager-modal');
-
-            // Show confirmation dialog to switch to new tree
-            const shouldSwitch = await getUI().showConfirm(
-                `${strings.merge.complete}\n${stats}\n\n${strings.merge.switchToNewTree}`,
-                strings.merge.complete
-            );
-
-            if (shouldSwitch) {
-                // Switch to new tree and close tree manager
-                await DataManager.switchTree(newTreeId);
-                getUI().updateTreeSwitcher();
-                TreeRenderer.restoreFromSession();
-                await TreeRenderer.renderAsync();
-                getUI().refreshSearch();
-                // Center view on focused person
-                ZoomPan.centerOnFocusWithContext();
-                window.dispatchEvent(new CustomEvent('strom:tree-switched'));
-                getUI().closeTreeManagerDialog();
-            }
-            // If user cancels (ESC), stay in tree manager
-
-            // If the merge introduced new issues, offer to open validation on
-            // the merged tree so the user can review (and fix) them right away.
-            // A file from another program: its "What next" card carries the data check.
-            if (newIssueCount > 0 && !getUI().importNextPendingFor(newTreeId)) {
-                const openValidation = await getUI().showConfirm(
-                    strings.merge.newIssues(newIssueCount),
-                    strings.merge.newIssuesTitle
-                );
-                if (openValidation) {
-                    await getUI().showTreeValidationDialog(newTreeId);
-                }
-            }
-        } else {
-            // The technical detail is in the console (executeMerge logs it); the
-            // user gets the translated message, not a raw exception text.
-            getUI().showAlert(strings.merge.failed, 'error');
         }
     }
 

@@ -1099,6 +1099,8 @@ class TreeManagerClass {
 
     /** How many states were handed to the queue per tree (a read can tell a write made meanwhile). */
     private queuedWrites = new Map<TreeId, number>();
+    /** Trees whose latest write failed, until one of theirs lands (saveTreeDataConfirmed). */
+    private failedWrites = new Set<TreeId>();
 
     /** Rescue keys of closed windows this one stored at start, per tree, until that write lands. */
     private restoredRescues = new Map<TreeId, string>();
@@ -1287,6 +1289,20 @@ class TreeManagerClass {
         this.queueWrite(id, { data: snapshot, base: this.researchBaseOf(id) });
     }
 
+    /**
+     * Save a tree's data and wait until the write has landed (spec 134 K0.5):
+     * true once stored, false when the save was refused (unreadable, newer,
+     * stale tree) or its write failed. A failure still raises
+     * strom:save-failed as any save does.
+     */
+    async saveTreeDataConfirmed(id: TreeId, data: StromData): Promise<boolean> {
+        const queued = this.queuedWrites.get(id) ?? 0;
+        this.saveTreeData(id, data);
+        if ((this.queuedWrites.get(id) ?? 0) === queued) return false;
+        await this.flush(id);
+        return !this.failedWrites.has(id) && this.index.trees.some(t => t.id === id);
+    }
+
     /** Put a state on the tree's write queue (see saveTreeData). */
     private queueWrite(id: TreeId, entry: { data: StromData; base: ResearchBase | null }): void {
         this.queuedWrites.set(id, (this.queuedWrites.get(id) ?? 0) + 1);
@@ -1305,6 +1321,7 @@ class TreeManagerClass {
             const pending = this.pendingSaves.get(id);
             this.pendingSaves.delete(id);
             if (!pending) return;
+            this.failedWrites.delete(id);
             const latest = pending.data;
             // Deleted meanwhile: never resurrect the record (review S20).
             if (!this.index.trees.some(t => t.id === id)) {
@@ -1333,6 +1350,7 @@ class TreeManagerClass {
             // Surface instead of swallowing: quota/lock failures used to be
             // completely silent, leaving memory and disk divergent.
             console.error('saveTreeData failed', id, err);
+            this.failedWrites.add(id);
             dispatchSaveFailed(id, err);
         });
         this.saveQueues.set(id, next);

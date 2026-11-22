@@ -1940,13 +1940,14 @@ class DataManagerClass {
     async snapshotNow(reason: SnapshotReason): Promise<string | null> {
         if (this.viewMode || !this.currentTreeId) return null;
         // Around the research a backup is taken whatever the setting: the app never trusts the research blindly.
-        const always = reason === 'manual' || reason === 'pre-research-load' || reason === 'pre-first-send';
+        // Before a merge too (spec 134 K0.4): the backup "Before merge" is promised whatever the setting.
+        const always = reason === 'manual' || reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge';
         if (!always && !TreeManager.isAutoBackupEnabled(this.currentTreeId)) return null;
-        if (reason === 'pre-research-load' || reason === 'pre-first-send') {
+        if (reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge') {
             try {
                 return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now(), this.backupBase())).id;
             } catch (err) {
-                console.warn('The backup before the research could not be written', err);
+                console.warn('The backup could not be written', reason, err);
                 return null;
             }
         }

@@ -845,7 +845,7 @@ export const mergeUiMethods = uiModule({
         await runHeavy(el, () => this.runTreeMerge(viewSource, targetId, sourceId), { label: strings.merge.analyzing, atOnce: long });
     },
 
-    /** The merge of `startTreeMerge`: the source read, the target opened and backed up, the matching, the wizard. */
+    /** The merge of `startTreeMerge`: the source read, the target opened, the matching (with the target's backup), the wizard. */
     async runTreeMerge(viewSource: StromData | null, targetId: TreeId, sourceId: TreeId | null): Promise<void> {
         // Resolve the source data (either the extracted view, or a loaded tree).
         const sourceData = viewSource ?? await TreeManager.getTreeData(sourceId!);
@@ -857,10 +857,7 @@ export const mergeUiMethods = uiModule({
         // Update URL to reflect target tree
         this.updateUrlTreeParam(targetId);
 
-        // Back up the target tree before merging into it.
-        await DataManager.snapshotNow('pre-merge');
-
-        // Start merge with source data. fromTreeManager only for the tree-to-tree
+        // Start merge with source data (it backs up the target, spec 134 K0.4). fromTreeManager only for the tree-to-tree
         // path (so ESC/close returns to the tree manager it was launched from);
         // the view-merge path was launched from the actions menu, not the manager.
         MergerUI.startMerge(sourceData, sourceLabelOrId, !viewSource);

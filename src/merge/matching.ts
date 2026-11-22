@@ -15,7 +15,9 @@ import {
     MatchReason,
     FieldConflict,
     MergeState,
-    MergeStats
+    MergeStats,
+    MergeTarget,
+    MatchDecision
 } from './types.js';
 
 // ==================== ONE MATCHING PASS ====================
@@ -2145,6 +2147,58 @@ export function reanalyzeMatches(state: MergeState): void {
         .filter(id => !matchedIncoming.has(id as PersonId))
         .filter(id => !state.incomingData.persons[id as PersonId].isPlaceholder)
         .map(id => id as PersonId);
+}
+
+/**
+ * The merge over the target tree as it is now (spec 134 K0.6: a saved merge
+ * resumed after the tree changed). The matching runs again over `target`;
+ * the answers stay where their people still exist: not the same / leave out
+ * always, a match confirmed or picked by hand when its person of the tree is
+ * still there, an answered difference when both values are still the same.
+ * The given state is not changed.
+ */
+export function rebaseMergeState(state: MergeState, target: StromData, targetOf?: MergeTarget): MergeState {
+    const decisions = new Map<PersonId, MatchDecision>();
+    const confirmed: PersonMatch[] = [];
+    for (const [incomingId, decision] of state.decisions) {
+        if (!state.incomingData.persons[incomingId]) continue;
+        if (decision.type === 'manual_match' && !target.persons[decision.targetId]) continue;
+        if (decision.type === 'confirm') {
+            const match = state.matches.find(m => m.incomingId === incomingId);
+            const existing = match ? target.persons[match.existingId] : undefined;
+            if (!match || !existing) continue;
+            confirmed.push({ ...match, existingPerson: existing, conflicts: detectConflicts(existing, match.incomingPerson) });
+        }
+        decisions.set(incomingId, decision);
+    }
+    const rebased: MergeState = {
+        ...state,
+        existingData: target,
+        matches: confirmed,
+        decisions,
+        conflictResolutions: new Map(),
+        partnershipResolutions: new Map(state.partnershipResolutions ?? []),
+        ...(targetOf ? { target: targetOf } : {}),
+    };
+    reanalyzeMatches(rebased);
+    const matched = new Set(rebased.matches.map(m => m.existingId));
+    rebased.unmatchedExisting = (Object.keys(target.persons) as PersonId[]).filter(id => !matched.has(id));
+    // An answered difference keeps its answer while both of its values are the same.
+    for (const match of rebased.matches) {
+        const answered = state.conflictResolutions.get(match.incomingId);
+        if (!answered) continue;
+        let kept = false;
+        for (const conflict of match.conflicts) {
+            const was = answered.find(c => c.field === conflict.field
+                && c.existingValue === conflict.existingValue && c.incomingValue === conflict.incomingValue);
+            if (!was) continue;
+            conflict.resolution = was.resolution;
+            if (was.resolvedValue !== undefined) conflict.resolvedValue = was.resolvedValue;
+            kept = true;
+        }
+        if (kept) rebased.conflictResolutions.set(match.incomingId, match.conflicts);
+    }
+    return rebased;
 }
 
 // ==================== DUPLICATE SUGGESTIONS ====================
