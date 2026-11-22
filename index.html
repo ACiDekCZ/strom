@@ -15119,7 +15119,8 @@
         /* Sub-dialogs that appear above merge-modal */
         #merge-manual-dialog,
         #merge-conflict-dialog,
-        #merge-close-confirm {
+        #merge-close-confirm,
+        #merge-not-taken-modal {
             z-index: 400;  /* Above merge-modal (300), below confirmation (500) */
         }
 
@@ -18230,17 +18231,19 @@
         .merge-s1-modes.sel-seg { display: inline-flex; max-width: 100%; overflow: hidden; }
         .merge-s1-modes > .sel-opt { padding: 5px 12px; font-size: 13px; line-height: 1.2; white-space: nowrap; cursor: pointer; }
         .merge-s1-targets, .merge-s1-scopes { display: flex; flex-direction: column; gap: 4px; }
-        .merge-s1-target {
+        /* The tiles are <label>s: ".modal label" (display: block, a bottom margin) must not win. */
+        .modal label.merge-s1-target {
             display: grid; grid-template-columns: auto auto auto minmax(0, 1fr); align-items: center; gap: 8px;
-            min-height: 32px; padding: 4px 12px; cursor: pointer; box-sizing: border-box;
+            margin: 0; padding: 4px 12px; cursor: pointer; box-sizing: border-box;
         }
+        .merge-s1-target { min-height: 32px; }
         .merge-s1-target > input, .merge-s1-scope > input { margin: 0; }
         .merge-s1-tname { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
         .merge-s1-tline { font-size: 12px; color: var(--text-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .merge-s1-target:not(.is-blocked) .merge-s1-lock { display: none; }
         .merge-s1-lock { display: inline-flex; color: var(--text-light); }
         .merge-s1-target.is-blocked { cursor: default; opacity: .7; }
-        .merge-s1-scope { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 5px 12px; cursor: pointer; }
+        .modal label.merge-s1-scope { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; margin: 0; padding: 5px 12px; cursor: pointer; }
         .merge-s1-scope-text { display: flex; flex-direction: column; min-width: 0; }
         .merge-s1-scope-title { color: var(--text); font-size: 13px; }
         .merge-s1-scope-desc { font-size: 12px; color: var(--text-light); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

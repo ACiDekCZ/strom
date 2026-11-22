@@ -187,9 +187,26 @@ export function closeNotTaken(): boolean {
     return true;
 }
 
+/**
+ * The control that has the focus inside the step, as a selector that finds
+ * the same control after the step is drawn again (a choice redraws it, and
+ * a keyboard user must not be thrown out to the page).
+ */
+function focusedKey(host: HTMLElement): string | null {
+    const el = typeof document === 'undefined' ? null : document.activeElement as HTMLElement | null;
+    if (!el || !host.contains(el)) return null;
+    const quote = (v: string): string => `"${v.replace(/["\\]/g, '\\$&')}"`;
+    if (el instanceof HTMLInputElement && el.name) return `input[name=${quote(el.name)}][value=${quote(el.value)}]`;
+    if (el.dataset.mode) return `.merge-s1-modes [data-mode=${quote(el.dataset.mode)}]`;
+    if (el.dataset.s1) return `[data-s1=${quote(el.dataset.s1)}]`;
+    if (el.classList.contains('merge-s1-sumline')) return '.merge-s1-sumline';
+    return null;
+}
+
 export function renderStep1(host: HTMLElement, ctx: StepContext): void {
     const env = ctx.step1;
     const summary = env?.gedcomSummary() ?? null;
+    const focused = focusedKey(host);
     host.innerHTML = `<div class="merge-step1">${sourceHtml(ctx, env, !!summary)}${whatHtml(ctx, env, ctx.choices.source.kind === 'ged' && !!summary)}</div>`;
 
     const lines = notTakenHtml(env);
@@ -242,4 +259,5 @@ export function renderStep1(host: HTMLElement, ctx: StepContext): void {
             }
         }
     });
+    if (focused) host.querySelector<HTMLElement>(focused)?.focus({ preventScroll: true });
 }
