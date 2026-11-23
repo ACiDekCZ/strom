@@ -16,8 +16,10 @@
  */
 
 import type { StromData } from './types.js';
-import { poolIdOf } from './image-ref.js';
-import { POOL_MIN_LENGTH, loadImageUrls, pooledIds, ensureImageMeta, type Decrypt } from './media-pool.js';
+import { poolIdOf, POOL_REF } from './image-ref.js';
+import {
+    POOL_MIN_LENGTH, loadImageUrls, pooledIds, ensureImageMeta, withPoolLock, storeImages, forgetPoolScope, type Decrypt,
+} from './media-pool.js';
 import { imageMetaOf } from './image-meta.js';
 
 type Holder = Record<string, unknown>;
@@ -86,6 +88,76 @@ export function internImages(data: StromData | null | undefined, map: ReadonlyMa
         if (next !== undefined && next !== v) { holder[key] = next; n++; }
     });
     return n;
+}
+
+/**
+ * A copy of `data` with every image `map` names replaced; the input is not
+ * changed and shares with the copy all it did not need changed (a record
+ * without a replaced image is the same object in both).
+ */
+export function withImagesReplaced(data: StromData, map: ReadonlyMap<string, string>): StromData {
+    const swap = (v: unknown): string | undefined => typeof v === 'string' ? map.get(v) : undefined;
+    const records = <T extends object>(list: Record<string, T> | undefined, key: string): Record<string, T> | undefined => {
+        if (!list) return list;
+        let out: Record<string, T> | undefined;
+        for (const [id, rec] of Object.entries(list)) {
+            const next = rec && typeof rec === 'object' ? swap((rec as Holder)[key]) : undefined;
+            if (next === undefined) continue;
+            out ??= { ...list };
+            out[id] = { ...rec, [key]: next };
+        }
+        return out ?? list;
+    };
+    const copy: StromData = { ...data };
+    copy.persons = records(data.persons, 'photo') ?? data.persons;
+    copy.partnerships = records(data.partnerships, 'photo') ?? data.partnerships;
+    if (data.media) copy.media = records(data.media, 'dataUrl');
+    if (data.sources) {
+        let sources: typeof data.sources | undefined;
+        for (const [id, src] of Object.entries(data.sources)) {
+            const list = src && typeof src === 'object' ? (src as { excerpts?: unknown }).excerpts : undefined;
+            if (!Array.isArray(list) || !list.some(e => e && typeof e === 'object' && swap((e as Holder).dataUrl) !== undefined)) continue;
+            sources ??= { ...data.sources };
+            sources[id as keyof typeof sources] = {
+                ...src,
+                excerpts: list.map(e => {
+                    const next = e && typeof e === 'object' ? swap((e as Holder).dataUrl) : undefined;
+                    return next === undefined ? e : { ...e, dataUrl: next };
+                }),
+            } as typeof src;
+        }
+        if (sources) copy.sources = sources;
+    }
+    return copy;
+}
+
+/**
+ * Tree data from outside the trees (a file or a packet to merge) with their
+ * new images stored in the pool, as an import stores them: a copy holding
+ * references where the data hold long data URLs (withImagesReplaced; the
+ * input stays as it is). `adopt` takes the copy while the pool lock is still
+ * held — the holder that names its images (pool-memory.ts) has them before
+ * a cleanup can look — and says whether it did. Null when nothing was
+ * stored (no long data URL, or not adopted).
+ */
+export async function poolTreeImages(
+    data: StromData, scope: string, encrypted: boolean, adopt: (pooled: StromData) => boolean,
+): Promise<StromData | null> {
+    if (treeImages(data).urls.size === 0) return null;
+    return withPoolLock(async () => {
+        // Asked again under the lock: the data may have changed meanwhile.
+        const { urls } = treeImages(data);
+        if (urls.size === 0) return null;
+        try {
+            const { ids } = await storeImages(urls, encrypted, scope);
+            const map = new Map<string, string>();
+            for (const [url, id] of ids) map.set(url, POOL_REF + id);
+            const pooled = withImagesReplaced(data, map);
+            return adopt(pooled) ? pooled : null;
+        } finally {
+            forgetPoolScope(scope);
+        }
+    });
 }
 
 /** Every string of `value` that is exactly a pool reference, outside the places of an image. */

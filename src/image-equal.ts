@@ -18,9 +18,9 @@
  * another picture: a dedup then keeps both, nothing is lost.
  */
 
-import { poolIdOf } from './image-ref.js';
+import { poolIdOf, isImageValue } from './image-ref.js';
 import { imageMetaOf, imageToken } from './image-meta.js';
-import { sha256Bytes } from './sha256.js';
+import { sha256Bytes, createSha256 } from './sha256.js';
 import { base64ToBytes } from './base64.js';
 
 function hex(buf: ArrayBuffer, bytes: number): string {
@@ -84,4 +84,106 @@ export async function sameImage(a: string | undefined, b: string | undefined): P
     try { bytes = base64ToBytes(url.slice(comma + 1)); } catch { return false; }
     const digest = await sha256Bytes(bytes);
     return hex(digest, 32) === sha;
+}
+
+/**
+ * sameImage, synchronously and exact, for code that compares as it goes (a
+ * merge, a change packet, a research version against the tree): what the
+ * catalog cannot tell is hashed here — a data URL's text against a `p:` id,
+ * its bytes against an `e:` id's catalog hash. Only a data URL against a
+ * reference whose catalog entry matches it gets that far (one hash), so a
+ * comparison of two different pictures costs nothing.
+ */
+export function sameImageSync(a: string | undefined, b: string | undefined): boolean {
+    const now = sameImageNow(a, b);
+    if (now !== null) return now;
+    const idA = poolIdOf(a);
+    const [id, url] = idA ? [idA, b as string] : [poolIdOf(b) as string, a as string];
+    const sha = createSha256();
+    if (id.startsWith('p:')) {
+        sha.update(new TextEncoder().encode(url));
+        return 'p:' + sha.digestHex().slice(0, 40) === id;
+    }
+    const want = imageMetaOf(id)?.sha;
+    const comma = url.indexOf(',');
+    if (!want || !url.slice(0, comma).endsWith(';base64')) return false;
+    try { sha.update(base64ToBytes(url.slice(comma + 1))); } catch { return false; }
+    return sha.digestHex() === want;
+}
+
+/** What an image stands as in imageFreeJson (no tree text is a NUL and these letters). */
+const IMAGE_MARK = '\u0000image';
+
+/**
+ * A value's JSON with each image (a data URL or a pooled image's reference,
+ * isImageValue) put as one mark, and the images in their order. `sorted`:
+ * object keys in sorted order (a comparison that ignores the keys' order).
+ */
+export function imageFreeJson(value: unknown, sorted = false): { json: string; images: string[] } {
+    const images: string[] = [];
+    if (!sorted) {
+        const json = JSON.stringify(value, (_k, v: unknown) => {
+            if (!isImageValue(v)) return v;
+            images.push(v);
+            return IMAGE_MARK;
+        }) ?? 'undefined';
+        return { json, images };
+    }
+    // As share-diff's stableStringify writes it, undefined values included.
+    const walk = (v: unknown): string | undefined => {
+        if (isImageValue(v)) { images.push(v); return JSON.stringify(IMAGE_MARK); }
+        if (v === null || typeof v !== 'object') return JSON.stringify(v);
+        if (Array.isArray(v)) return `[${v.map(walk).join(',')}]`;
+        const obj = v as Record<string, unknown>;
+        return `{${Object.keys(obj).sort().map(k => `${JSON.stringify(k)}:${walk(obj[k])}`).join(',')}}`;
+    };
+    return { json: String(walk(value)), images };
+}
+
+/**
+ * Two values the same as JSON (`sorted`: whatever their keys' order), an
+ * image the same picture in either form (a tree's pooled reference and the
+ * data URL a file or a packet brings of it).
+ */
+export function sameWithImages(a: unknown, b: unknown, sorted = false): boolean {
+    if (a === b) return true;
+    const x = imageFreeJson(a, sorted);
+    const y = imageFreeJson(b, sorted);
+    if (x.json !== y.json || x.images.length !== y.images.length) return false;
+    return x.images.every((v, i) => sameImageSync(v, y.images[i]));
+}
+
+/** The length of an image's data URL: its own, or a reference's from the catalog (undefined: not known). */
+function imageLength(value: string): number | undefined {
+    const id = poolIdOf(value);
+    if (id) return imageMetaOf(id)?.len;
+    return value.startsWith('data:') ? value.length : undefined;
+}
+
+/**
+ * Look up among many images the one that is the same picture as a given one
+ * (a file of the tree for a file of the import): by the string itself, then
+ * by sameImageSync among those whose data URL is as long. The first given
+ * wins.
+ */
+export function imageFinder<T>(entries: Iterable<readonly [string | undefined, T]>): (value: string | undefined) => T | undefined {
+    const exact = new Map<string, T>();
+    const byLength = new Map<number, Array<readonly [string, T]>>();
+    for (const [value, item] of entries) {
+        if (!value) continue;
+        if (!exact.has(value)) exact.set(value, item);
+        const len = imageLength(value);
+        if (len !== undefined) {
+            const list = byLength.get(len);
+            if (list) list.push([value, item]); else byLength.set(len, [[value, item]]);
+        }
+    }
+    return (value) => {
+        if (!value) return undefined;
+        const hit = exact.get(value);
+        if (hit !== undefined) return hit;
+        const len = imageLength(value);
+        const list = len === undefined ? undefined : byLength.get(len);
+        return list?.find(([v]) => sameImageSync(v, value))?.[1];
+    };
 }

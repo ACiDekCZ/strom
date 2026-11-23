@@ -5,12 +5,14 @@
  */
 
 import type { StromData } from '../types.js';
+import { sameWithImages } from '../image-equal.js';
 
 function recordEdits(before: Record<string, unknown>, after: Record<string, unknown>): number {
     let n = 0;
     for (const id of Object.keys(before)) {
         if (!(id in after)) n++;
-        else if (JSON.stringify(before[id]) !== JSON.stringify(after[id])) n++;
+        // An image saved meanwhile (its data URL now a pooled reference) is no change.
+        else if (!sameWithImages(before[id], after[id])) n++;
     }
     for (const id of Object.keys(after)) if (!(id in before)) n++;
     return n;

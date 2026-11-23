@@ -17,6 +17,9 @@ import { mergeNoteText } from './notes.js';
 import { checkMergeResult, MergeCheckProblem } from './merge-check.js';
 import { FieldConflict, MergeRelations, MergeState, MergeTrace, PartnershipConflictField, PersonMatch } from './types.js';
 import { addPersonMedia, allMedia } from '../media.js';
+import { imageFinder } from '../image-equal.js';
+import { imageMetaOf, headMime } from '../image-meta.js';
+import { dataUrlByteSize } from '../photo.js';
 import { contentFingerprint } from '../research-link.js';
 import type { GedcomDroppedTag } from '../ged-parser.js';
 import {
@@ -435,11 +438,12 @@ export function buildPlan(state: MergeState, w: WizardChoices): MergePlan {
         items.push(same ? { kind: 'place', id: key, joinedWith: same, on: true } : { kind: 'place', id: key, on: true });
     }
     const standInSet = new Set(items.flatMap(i => i.kind === 'skip' && i.standIn ? [i.id] : []));
-    const treeFiles = new Map(newTree ? [] : allMedia(tree).filter(m => m.dataUrl).map(m => [m.dataUrl, m.id] as const));
+    // The tree's file the same as the import's in either form (a pooled reference, a data URL); the last one listed, as before.
+    const treeFiles = imageFinder(newTree ? [] : allMedia(tree).filter(m => m.dataUrl).map(m => [m.dataUrl, m.id] as const).reverse());
     for (const m of allMedia(source)) {
         const at = m.places.find(pl => 'personId' in pl && fate.has(pl.personId) && !standInSet.has(pl.personId));
         if (!at && m.places.some(pl => 'personId' in pl)) continue;
-        const same = m.dataUrl ? treeFiles.get(m.dataUrl) : undefined;
+        const same = m.dataUrl ? treeFiles(m.dataUrl) : undefined;
         items.push(same ? { kind: 'media', id: m.id, joinedWith: same, on: true } : { kind: 'media', id: m.id, on: true });
     }
 
@@ -935,10 +939,11 @@ function keepAlongside(plan: MergePlan, data: StromData, source: StromData): voi
             }
             if (field.endsWith('Date')) ev.date = item.value; else ev.place = item.value;
         } else if (field === 'photo' && incoming.photo) {
-            const mime = /^data:([^;,]+)/.exec(incoming.photo)?.[1] ?? 'image/jpeg';
+            const head = imageMetaOf(incoming.photo)?.head ?? incoming.photo;
+            const mime = headMime(head.slice(0, 100)) || 'image/jpeg';
             addPersonMedia(data, person.id, {
                 id: generateAttachmentId(), name: incoming.photoOriginalName ?? 'photo', mimeType: mime, dataUrl: incoming.photo,
-                sizeBytes: Math.round(incoming.photo.length * 0.75), kind: 'photo', ...(incoming.photoDate ? { date: incoming.photoDate } : {}),
+                sizeBytes: dataUrlByteSize(incoming.photo), kind: 'photo', ...(incoming.photoDate ? { date: incoming.photoDate } : {}),
             });
         } else {
             const value = field === 'gender' && (item.value === 'male' || item.value === 'female') ? strings.gender[item.value] : item.value;

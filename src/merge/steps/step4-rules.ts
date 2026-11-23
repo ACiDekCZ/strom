@@ -29,6 +29,8 @@ import { imgStateOf, smallPortraitHtml, type ImgState } from '../../ui/image-slo
 import { personPhotoKey } from '../../ui/person-photo-model.js';
 import { personInitials } from '../../initials.js';
 import { imageLoads } from '../../image-loads.js';
+import { imgSrcAttr } from '../../image-src.js';
+import { isPoolRef } from '../../image-ref.js';
 
 const RULES: readonly RuleChoice[] = ['mine', 'import', 'both', 'precise', 'each'];
 /** How many persons "By person" draws before "Show n more". */
@@ -124,8 +126,9 @@ export function conflictPhotoHtml(v: string | undefined, initials: string, state
         const shown = pending ? state : imageLoads.stateOfSha(standIn!.sha)?.state === 'pending' ? 'loading' : 'failed';
         return smallPortraitHtml('conflict-photo', v, initials, shown, strings.photos.failed) || '—';
     }
-    if (v && v.startsWith('data:')) {
-        return `<img class="conflict-photo" src="${escapeHtml(v)}" alt="${escapeHtml(strings.labels.photo)}">`;
+    // A data URL, or a pooled image's reference (put in by the image hydrator).
+    if (v && (v.startsWith('data:') || isPoolRef(v))) {
+        return `<img class="conflict-photo" ${imgSrcAttr(v)} alt="${escapeHtml(strings.labels.photo)}">`;
     }
     return '—';
 }

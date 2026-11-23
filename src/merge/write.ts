@@ -22,6 +22,7 @@ import { DataManager } from '../data.js';
 import { AuditLogManager } from '../audit-log.js';
 import { strings } from '../strings.js';
 import { contentFingerprint } from '../research-link.js';
+import { sameWithImages } from '../image-equal.js';
 import { keptBackupAtRisk } from '../snapshots.js';
 import type { PersonId, StromData, TreeId } from '../types.js';
 import { applyPlan, type MergePlan, type MergeRecord, type PlanTarget, type VerifyIssue } from './plan.js';
@@ -166,7 +167,7 @@ export function verifyTargetUnchanged(target: PlanTarget, now: StromData, before
         if (p.isPlaceholder) continue;
         const was = before.persons[p.id];
         if (!was) added++;
-        else if (JSON.stringify(was) !== JSON.stringify(p)) edited++;
+        else if (!sameWithImages(was, p)) edited++;
     }
     for (const p of Object.values(before.persons)) if (!p.isPlaceholder && !now.persons[p.id as PersonId]) edited++;
     return { when, added, edited };

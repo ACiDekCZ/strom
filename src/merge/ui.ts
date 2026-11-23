@@ -67,6 +67,9 @@ import { SettingsManager } from '../settings.js';
 import { CryptoSession } from '../crypto.js';
 import { importProgramName } from '../import-next.js';
 import type { GedcomDroppedTag } from '../ged-parser.js';
+import { poolTreeImages, treeImages } from '../image-intern.js';
+import { ensureImageMeta } from '../media-pool.js';
+import { registerMemoryImages, collectPoolRefIds } from '../pool-memory.js';
 
 // Auto-save debounce delay (ms)
 const AUTO_SAVE_DELAY = 2000;
@@ -88,6 +91,8 @@ export function mergeAnalysisLong(a: StromData, b: StromData): boolean {
 
 class MergerUIClass {
     private mergeState: MergeState | null = null;
+    /** The import's new images going into the pool (poolIncoming); what reads the import whole waits for it. */
+    private incomingPooling: Promise<void> = Promise.resolve();
     private manualMatchPicker: PersonPicker | null = null;
 
     // Escape handling and auto-save
@@ -214,6 +219,8 @@ class MergerUIClass {
         // Setup escape handler
         this.setupEscapeHandler();
 
+        this.poolIncoming();
+
         // Show modal
         this.showMergeModal();
         // A target that is not the open tree: read for the comparison, the step drawn again with it.
@@ -240,6 +247,8 @@ class MergerUIClass {
         this.targetTreeName = targetTreeName;
         this.sourceTreeName = sourceTreeName;
         this.sourceInfo = { kind: sourceTreeName ? 'tree' : 'json' };
+        // A session saved before images were pooled holds their data URLs.
+        this.poolIncoming();
 
         // Setup escape handler
         this.setupEscapeHandler();
@@ -451,14 +460,18 @@ class MergerUIClass {
     private storeForLater(): void {
         const state = this.mergeState;
         if (!state) return;
-        if (this.resumedSessionId) {
-            void updateMergeSession(this.resumedSessionId, state);
+        // Saved once the import's images are pooled: the session names them by reference.
+        const pooled = this.incomingPooling;
+        const sessionId = this.resumedSessionId;
+        if (sessionId) {
+            void pooled.then(() => updateMergeSession(sessionId, state));
         } else {
             // Generate display name from tree names
             const displayName = this.targetTreeName && this.sourceTreeName
                 ? `${this.targetTreeName} + ${this.sourceTreeName}`
                 : this.incomingFileName || 'Merge';
-            void saveMergeSession(state, displayName, this.targetTreeName, this.sourceTreeName);
+            const { targetTreeName, sourceTreeName } = this;
+            void pooled.then(() => saveMergeSession(state, displayName, targetTreeName, sourceTreeName));
         }
         const ws = state.wizard;
         getUI().showToast(ws ? strings.mergeWizard.savedLater(wizardRoute(ws.choices), ws.step) : strings.merge.closeSave, 6000);
@@ -502,11 +515,45 @@ class MergerUIClass {
      * Perform auto-save
      */
     private performAutoSave(): void {
-        if (this.mergeState && this.resumedSessionId) {
-            void updateMergeSession(this.resumedSessionId, this.mergeState);
-        } else if (this.mergeState) {
-            void saveCurrentMerge(this.mergeState, this.incomingFileName);
-        }
+        const state = this.mergeState;
+        if (!state) return;
+        // After the import's images are in the pool: the session holds their references.
+        void this.incomingPooling.then(() => {
+            if (this.mergeState !== state) return;
+            if (this.resumedSessionId) void updateMergeSession(this.resumedSessionId, state);
+            else void saveCurrentMerge(state, this.incomingFileName);
+        });
+    }
+
+    /**
+     * The import's images into the pool (spec 135 D10a), as an import of a
+     * file stores them: the merge holds the import with references, not with
+     * hundreds of MB of data URLs, and its saved sessions name them. The
+     * import's data as given stay as they are (another part of the app may
+     * hold them); the merge takes the pooled copy while it still has that
+     * import. Encrypted and locked: the import stays as it is.
+     */
+    private poolIncoming(): void {
+        const state = this.mergeState;
+        if (!state) return;
+        const encrypted = SettingsManager.isEncryptionEnabled();
+        if (encrypted && !CryptoSession.isUnlocked()) return;
+        const original = state.incomingData;
+        this.incomingPooling = poolTreeImages(original, 'merge:incoming', encrypted, pooled => {
+            if (this.mergeState !== state || state.incomingData !== original) return false;
+            state.incomingData = pooled;
+            this.exampleCache = null;
+            return true;
+        })
+            // A saved session's images: their catalog entries, so they compare with the tree's (image-equal.ts).
+            .then(() => ensureImageMeta(treeImages(state.incomingData).refIds))
+            .then(() => undefined, err => { console.warn('The import\'s images could not be pooled', err); });
+    }
+
+    /** The content ids of the pooled images the open merge holds (its trees, the import), for the pool's cleanup. */
+    heldImageIds(): Set<string> {
+        const state = this.mergeState;
+        return state ? collectPoolRefIds([state.existingData, state.incomingData], new Set()) : new Set();
     }
 
     /**
@@ -880,6 +927,7 @@ class MergerUIClass {
      * by `run.signal`: false, the state and step 1's choices as they were.
      */
     private async compare(run: CompareRun = {}): Promise<boolean> {
+        await this.incomingPooling;
         const state = this.mergeState;
         const id = state?.wizard?.choices.targetTreeId;
         if (!state || !id) return false;
@@ -982,6 +1030,7 @@ class MergerUIClass {
         const ws = state?.wizard;
         if (!state || !ws || !this.gedcomLive) return;
         state.incomingData = data;
+        this.poolIncoming();
         state.matches = [];
         state.unmatchedExisting = [];
         ws.choices = { ...ws.choices, source: { ...ws.choices.source, persons: Object.values(data.persons).filter(p => !p.isPlaceholder).length } };
@@ -1384,6 +1433,7 @@ class MergerUIClass {
         // §8: the matching runs again over both trees, under the working state of the button,
         // in parts (the window stays usable, K3.5).
         return runHeavy(activatedElement(), async () => {
+            await this.incomingPooling;
             const found = await findMatchesAsync(state.existingData, state.incomingData);
             if (this.mergeState !== state) return;
             reanalyzeMatches(state, found);
@@ -1480,6 +1530,7 @@ class MergerUIClass {
      * write, today's ending: Manage trees and the offer to switch.
      */
     private async write(plan: MergePlan, opts: { retention?: 'keep-both' | 'drop-oldest' } = {}): Promise<void> {
+        await this.incomingPooling;
         const state = this.mergeState;
         if (!state) return;
 
@@ -1682,3 +1733,6 @@ class MergerUIClass {
 }
 
 export const MergerUI = new MergerUIClass();
+
+// The open merge's images stay in the pool while it is open (spec 135 D7).
+registerMemoryImages(() => MergerUI.heldImageIds());

@@ -12,6 +12,7 @@ import { forEachCitationHolder } from '../citation-quality.js';
 import { partnershipParticipants } from '../model-values.js';
 import { MergeState, MergeTrace } from './types.js';
 import { strings } from '../strings.js';
+import { sameImageSync } from '../image-equal.js';
 
 /** What a check can find wrong. `target*` = something of the tree the merge goes into. */
 export type MergeCheckKind =
@@ -84,7 +85,8 @@ export function isAncestorOrSelf(data: StromData, ancestor: PersonId, person: Pe
 function sameAttachment(a: Attachment, b: Attachment): boolean {
     if (a.id === b.id) return true;
     if (a.originalOnly || b.originalOnly) return !!a.originalOnly && !!b.originalOnly && !!a.original?.sha256 && a.original.sha256 === b.original?.sha256;
-    return !!a.dataUrl && a.dataUrl === b.dataUrl;
+    // The same file in either form: a pooled reference and the data URL it was stored from.
+    return !!a.dataUrl && !!b.dataUrl && sameImageSync(a.dataUrl, b.dataUrl);
 }
 
 /**

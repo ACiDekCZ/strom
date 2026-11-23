@@ -5,6 +5,7 @@
 
 import { parseFlexDate, yearOf } from '../dates.js';
 import { PersonId, Person, Partnership, StromData } from '../types.js';
+import { sameImageSync } from '../image-equal.js';
 import { gendersCompatible } from '../model-values.js';
 import { sameSurname, withSurnameRules } from '../surnames.js';
 import { detectPartnershipConflicts, AUTO_CONFIRM_SCORE, incomingAddedAsNew, existingTargetOf } from './executor.js';
@@ -1853,7 +1854,9 @@ export function detectConflicts(existing: Person, incoming: Person): FieldConfli
         if (field === 'gender' && (existingValue === 'unknown' || incomingValue === 'unknown')) continue;
 
         // Conflict if both have values and they differ
-        if (existingValue && incomingValue && existingValue !== incomingValue) {
+        // A portrait the same picture in either form (the tree's pooled reference, the file's data URL) is no difference.
+        const differs = field === 'photo' ? !sameImageSync(existingValue, incomingValue) : existingValue !== incomingValue;
+        if (existingValue && incomingValue && differs) {
             // The suggestion is a hint only: an undecided difference keeps the
             // existing value (spec 134 K0.3).
             const suggestion = suggestResolution(field, existingValue, incomingValue);

@@ -30,6 +30,7 @@ import { generateLifeEventId, generatePersonId, generatePartnershipId, generateS
 import { partnershipParticipants, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, gendersCompatible, mergedPrimaryName } from '../model-values.js';
 import { allMedia, findMedia, personMedia, putMedia, samePlace } from '../media.js';
 import { dropDanglingPortraitSources } from '../photo.js';
+import { sameImageSync, sameWithImages } from '../image-equal.js';
 import { importProgramName } from '../import-next.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import { cleanLineageOverrides } from '../lineage.js';
@@ -1254,7 +1255,8 @@ function sameAttachment(a: Attachment, b: Attachment): boolean {
     if (a.id === b.id) return true;
     // Originals only share the page icon as their data: the same document by the original's hash.
     if (a.originalOnly || b.originalOnly) return !!a.originalOnly && !!b.originalOnly && !!a.original?.sha256 && a.original.sha256 === b.original?.sha256;
-    return !!a.dataUrl && a.dataUrl === b.dataUrl;
+    // The same file in either form: the tree's pooled reference, the import's data URL.
+    return !!a.dataUrl && !!b.dataUrl && sameImageSync(a.dataUrl, b.dataUrl);
 }
 
 /**
@@ -1263,7 +1265,7 @@ function sameAttachment(a: Attachment, b: Attachment): boolean {
  * and place (not two citations of one file record at another QUAY).
  */
 function sameSourceUnderOneId(kept: Source, incoming: Source): boolean {
-    if (JSON.stringify(kept) === JSON.stringify(incoming)) return true;
+    if (sameWithImages(kept, incoming)) return true;
     if (kept.refn || incoming.refn) return !!kept.refn && kept.refn === incoming.refn;
     const cite = citationKey(incoming);
     if (cite && cite === citationKey(kept)) return true;
@@ -1427,7 +1429,7 @@ function absorbSourceDetails(kept: Source, incoming: Source): void {
     // "Transcription verified" belongs to that very wording.
     if (!kept.transcriptVerified && incoming.transcriptVerified && kept.transcript === incoming.transcript) kept.transcriptVerified = true;
     for (const exc of incoming.excerpts ?? []) {
-        if (kept.excerpts?.some(e => e.dataUrl === exc.dataUrl)) continue;
+        if (kept.excerpts?.some(e => e.dataUrl === exc.dataUrl || (!!e.dataUrl && !!exc.dataUrl && sameImageSync(e.dataUrl, exc.dataUrl)))) continue;
         (kept.excerpts ??= []).push(structuredClone(exc));
     }
 }
@@ -1454,22 +1456,22 @@ function carryPortraitSources(
         const own = state.existingData.persons[target.id];
         delete target.photoSource;
         // The tree's own portrait stayed: its own source, if it has one.
-        if (own?.photoSource && target.photo && own.photo === target.photo) {
+        if (own?.photoSource && target.photo && sameImageSync(own.photo, target.photo)) {
             target.photoSource = structuredClone(own.photoSource);
             continue;
         }
         const src = incoming.photoSource;
-        if (!src || !incoming.photo || incoming.photo !== target.photo) continue;
+        if (!src || !incoming.photo || !sameImageSync(incoming.photo, target.photo)) continue;
         const next: PortraitSource = structuredClone(src);
         if (src.attachmentId) {
             const att = findMedia(state.incomingData, src.attachmentId);
-            const kept = att && personMedia(data, target.id).find(a => a.dataUrl === att.dataUrl && !a.originalOnly);
+            const kept = att?.dataUrl && personMedia(data, target.id).find(a => !a.originalOnly && sameImageSync(a.dataUrl, att.dataUrl));
             if (!kept) continue;
             next.attachmentId = kept.id;
         } else if (src.partnershipId) {
             const union = unionTarget.get(src.partnershipId);
             const photo = state.incomingData.partnerships[src.partnershipId]?.photo;
-            if (!union || !photo || data.partnerships[union]?.photo !== photo) continue;
+            if (!union || !photo || !sameImageSync(data.partnerships[union]?.photo, photo)) continue;
             next.partnershipId = union;
         }
         target.photoSource = next;

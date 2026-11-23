@@ -29,6 +29,7 @@ import { HISTORY_KINDS, isHistoryKind, parseHistoryKindList, type HistoryKind } 
 import { sourcePlaceKey } from './source-location.js';
 import { isImageValue, isPoolRef } from './image-ref.js';
 import { pooledImageToken } from './image-meta.js';
+import { sameImageSync, imageFinder } from './image-equal.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -2088,7 +2089,7 @@ export function carryOverMedia(next: StromData, previous: StromData, base?: Read
         }
         unionNow.set(uid, cur.id);
         // The same photo back without its original's hash (a research that does not keep it): the original stays named.
-        if (cur.photo === old.photo && old.photoOriginal && !cur.photoOriginal) {
+        if (sameImageSync(cur.photo, old.photo) && old.photoOriginal && !cur.photoOriginal) {
             partnerships[cur.id] = { ...cur, photoOriginal: old.photoOriginal };
             unionsChanged = true;
             continue;
@@ -2114,7 +2115,7 @@ export function carryOverMedia(next: StromData, previous: StromData, base?: Read
     const sameFileIn = (have: readonly Attachment[], a: Attachment): Attachment | undefined => {
         const sha = a.original?.sha256?.toLowerCase();
         return have.find(h => h.id === a.id
-            || (!!a.dataUrl && !a.originalOnly && !h.originalOnly && h.dataUrl === a.dataUrl)
+            || (!!a.dataUrl && !a.originalOnly && !h.originalOnly && sameImageSync(h.dataUrl, a.dataUrl))
             || (!!sha && (a.originalOnly || base !== undefined) && h.original?.sha256?.toLowerCase() === sha));
     };
     const addPlaces = (rec: Attachment, places: readonly MediaPlace[]): void => {
@@ -2183,16 +2184,16 @@ export function carryOverMedia(next: StromData, previous: StromData, base?: Read
         // keeps no such link, so it comes along with the portrait it belongs
         // to while its original is still there.
         const src = old.photoSource;
-        if (src && old.photo && out.photo === old.photo && !cur.photoSource) {
+        if (src && old.photo && sameImageSync(out.photo, old.photo) && !cur.photoSource) {
             let carriedSource: PortraitSource | undefined;
             if (src.attachmentId) {
                 const att = oldFiles.find(a => a.id === src.attachmentId);
-                const now = att && personMedia(view, curId).find(a => a.id === att.id || (!a.originalOnly && a.dataUrl === att.dataUrl));
+                const now = att && personMedia(view, curId).find(a => a.id === att.id || (!a.originalOnly && !!att.dataUrl && sameImageSync(a.dataUrl, att.dataUrl)));
                 if (now) carriedSource = { ...src, attachmentId: now.id };
             } else if (src.partnershipId) {
                 const uid = unionNow.get(src.partnershipId);
                 const union = uid ? partnerships[uid] : undefined;
-                if (union && union.photo === previous.partnerships[src.partnershipId]?.photo
+                if (union && sameImageSync(union.photo, previous.partnerships[src.partnershipId]?.photo)
                     && (union.person1Id === curId || union.person2Id === curId)) carriedSource = { ...src, partnershipId: union.id };
             }
             if (carriedSource) {
@@ -2263,11 +2264,12 @@ export function carryOverMedia(next: StromData, previous: StromData, base?: Read
         }
         const have = cur.excerpts ?? [];
         const ids = new Set(have.map(e => e.id));
-        const urls = new Set(have.map(e => e.dataUrl));
+        // The same crop in either form (the tree's pooled reference, the research's data URL).
+        const sameCrop = imageFinder(have.map(e => [e.dataUrl, true] as const));
         // A research file need not mark its crops (clip): when the research
         // brings crops of its own, only those cut here from an attachment are
         // surely the app's — anything else could duplicate a newer crop.
-        const extra = own.filter(e => !ids.has(e.id) && !urls.has(e.dataUrl) && (!have.length || e.fromAttachmentId));
+        const extra = own.filter(e => !ids.has(e.id) && !sameCrop(e.dataUrl) && (!have.length || e.fromAttachmentId));
         if (extra.length) sources[id] = { ...cur, excerpts: [...have, ...extra] };
     }
 

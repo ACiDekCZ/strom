@@ -7,6 +7,8 @@
  */
 
 import { Partnership, PartnershipId, Person, PersonId, StromData } from '../types.js';
+import { imageMetaOf } from '../image-meta.js';
+import { isPoolRef } from '../image-ref.js';
 import { detectConflicts, suggestResolution } from './matching.js';
 import { detectPartnershipConflicts, existingTargetOf, incomingAddedAsNew } from './executor.js';
 import { isAncestorOrSelf } from './merge-check.js';
@@ -36,10 +38,15 @@ export function fieldKind(field: string): FieldKind {
     return FIELD_KIND.get(field as keyof Person & string) ?? 'events';
 }
 
+/** The length of an image's data URL: a pooled image's from its catalog entry (the same in either form). */
+function imageTextLength(value: string): number {
+    return isPoolRef(value) ? imageMetaOf(value)?.len ?? value.length : value.length;
+}
+
 /** A detail as plan text: a photo by its name and size (never the data URL), an unknown sex as nothing. */
 export function fieldText(person: Person | undefined, field: string): string {
     if (!person) return '';
-    if (field === 'photo') return person.photo ? `${person.photoOriginalName ?? 'photo'} (${person.photo.length})` : '';
+    if (field === 'photo') return person.photo ? `${person.photoOriginalName ?? 'photo'} (${imageTextLength(person.photo)})` : '';
     if (field === 'gender') return person.gender === 'unknown' ? '' : person.gender ?? '';
     const v = (person as unknown as Record<string, unknown>)[field];
     return typeof v === 'string' ? v : v === undefined || v === null ? '' : String(v);
