@@ -1775,6 +1775,8 @@ class MergerUIClass {
             kind: 'merged', title: n => strings.mergeWizard.toastAdded(n, w.name),
             personIds: ids, recount: null, cite: false,
         });
+        // The first person added centred at once (as Next ›): the people added often stand outside the view.
+        getUI().evidenceNext();
     }
 
     /** "{n} added to the tree {t}" · Undo (while the write is Undo's last step) · What happened. */

@@ -114,12 +114,17 @@ test('the toast\'s What happened opens step 6 again; Show in the tree closes the
         return ms[ms.length - 1]?.added ?? [];
     });
     expect(added).toHaveLength(3);
-    // Next › steps onto the people added: each one's card highlighted, nobody else's.
-    await page.locator('#evidence-pill .evidence-pill-next').click();
+    // The first person added is centred at once (as Next ›), without a click: their card in the view.
+    await expect(page.locator('#evidence-pill .evidence-pill-label')).toContainText('1 / 3');
+    await expect(page.locator(`.person-card[data-id="${added[0]}"]`)).toBeInViewport();
     const hit = page.locator('.person-card.evidence-hit');
     await expect(hit.first()).toBeVisible();
     const ids = await hit.evaluateAll(els => els.map(e => (e as HTMLElement).dataset.id));
     expect(ids.every(id => added.includes(id)), JSON.stringify(ids)).toBe(true);
+    // Next › steps on to the second.
+    await page.locator('#evidence-pill .evidence-pill-next').click();
+    await expect(page.locator('#evidence-pill .evidence-pill-label')).toContainText('2 / 3');
+    await expect(page.locator(`.person-card[data-id="${added[1]}"]`)).toBeInViewport();
 });
 
 test('a new tree: step 6 without Undo the merge…; Show in the tree opens the new tree', async ({ page }) => {
