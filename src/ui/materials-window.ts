@@ -61,6 +61,7 @@ import { barHtml } from './prog-bar.js';
 import { selectionDeletable, treeFileSource, withoutTreeFiles } from '../material-delete.js';
 import { formatBytesShort } from './originals-ui.js';
 import { closeHeadMenu, openHeadMenu, SEP, type MenuEntry } from './table-view/table-headmenu.js';
+import { materialScopeSource } from './search-scope-ui.js';
 
 const MODAL_ID = 'materials-modal';
 const VIEW_KEY = 'strom.materials.view';
@@ -2205,6 +2206,8 @@ export const materialsWindowMethods = uiModule({
             w.picker = new PersonPicker({
                 containerId: 'mw-person-picker',
                 filter: p => w.model === 'app' || !!researchPersonRef(p.refn),
+                // The window covers the view: Whole tree / Direct line of the tree's main person (spec 137 §1.5).
+                scope: materialScopeSource(null),
                 onSelect: (id) => {
                     const key = w.model === 'app' ? (DataManager.getPerson(id) ? id : null) : researchPersonRef(DataManager.getPerson(id)?.refn);
                     if (!key) return;

@@ -1284,7 +1284,7 @@
         /* Phone-only parts of the search (the rest of the widths keep the pill). */
         .toolbar-tree-icon, .toolbar-state-dot, .search-query-count, .search-clear-btn,
         .search-filters-head, .search-filters-sheet-foot, .search-filters-backdrop,
-        .search-cancel-btn, .search-open-btn { display: none; }
+        .search-cancel-btn, .search-open-btn, .search-filters-scope { display: none; }
 
         /* Phone top bar (≤640px, 1a–1e): the tree icon, the tree's name with all
            the room, the magnifier. Search states as body classes (search.ts):
@@ -1412,6 +1412,9 @@
                 font-size: 24px; line-height: 1; color: var(--text-light); cursor: pointer;
             }
             .search-filters .search-filters-footer { display: none; }
+            /* The search narrowed to the direct line or the view (spec 137 §5): said above the foot, no switch here. */
+            .search-filters .search-filters-scope { display: block; font-size: 13px; line-height: 1.4; color: var(--text-light); margin: 2px 2px 0; }
+            .search-filters .search-filters-scope[hidden] { display: none; }
             .search-filters .search-filters-sheet-foot {
                 display: flex; gap: 8px; position: sticky; bottom: 0; margin: auto -16px 0;
                 padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
@@ -28342,6 +28345,42 @@
             color: var(--text-light);
             font-size: 14px;
         }
+        /* The search scope head (spec 137 §1): segments Whole tree / Direct line / In view,
+           the count and a line saying what the narrowing keeps. Only the rows scroll. */
+        .person-picker-dropdown.has-scope { max-height: none; overflow: hidden; min-width: 340px; }
+        .person-picker-head { padding: 6px 8px; border-bottom: 1px solid var(--divider); background: var(--surface); }
+        .person-picker-head[hidden] { display: none; }
+        .person-picker-head-row { display: flex; align-items: center; gap: 10px; }
+        .person-picker-scope > .sel-opt { height: 26px; padding: 0 9px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+        .person-picker-scope > .sel-opt[hidden] { display: none; }
+        /* A segment not offered is hidden: the last one shown takes the frame's corners. */
+        .person-picker-scope > .sel-opt.is-last { border-radius: 0 calc(var(--sel-r) - 1px) calc(var(--sel-r) - 1px) 0; }
+        .person-picker-scope > .sel-opt.is-last:first-child { border-radius: calc(var(--sel-r) - 1px); }
+        .person-picker-count { margin-left: auto; padding-right: 4px; font-size: 12px; color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .person-picker-ref { margin: 5px 4px 0 2px; font-size: 12px; line-height: 1.4; color: var(--text-light); white-space: normal; }
+        .person-picker-ref[hidden] { display: none; }
+        .person-picker-ref b { font-weight: 600; color: var(--text); }
+        .person-picker-list { max-height: 250px; overflow-y: auto; }
+        /* Nobody in the narrowed scope, matches in the whole tree (§3): a plain paragraph with the way there. */
+        .person-picker-narrow-empty { padding: 14px 14px 12px; font-size: 13px; line-height: 1.45; color: var(--text-light); white-space: normal; }
+        .person-picker-whole { margin-top: 6px; min-height: 28px; font-weight: 600; color: var(--primary); }
+        /* In the toolbar's search the ".toolbar button" fill would paint the segments and the link green. */
+        .toolbar .person-picker-scope > .sel-opt { background: var(--surface); color: var(--text-light); transition: none; }
+        .toolbar .person-picker-scope > .sel-opt[aria-checked="true"], .person-picker-scope > .sel-opt[aria-checked="true"] { color: var(--sel-fg); font-weight: 600; }
+        .toolbar .person-picker-dropdown .person-picker-whole { padding: 0; border-radius: 0; background: none; color: var(--primary); font-size: 13px; }
+        /* The multi-person picker: the head above its list, inside the dialog. */
+        .person-picker--multi .ppm-head { border: 1px solid var(--divider); border-bottom: 0; border-radius: var(--r-sm) var(--r-sm) 0 0; margin-top: 6px; }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            /* A phone (§5): the segments across the width, 44px tall; the count ends the line under them. */
+            .person-picker-dropdown.has-scope { min-width: 0; }
+            .person-picker-head { padding: 8px; }
+            .person-picker-scope { display: flex; width: 100%; }
+            /* Equal thirds; a long label (de "Ganzer Stammbaum" at 390px) takes two lines inside the 44px. */
+            .person-picker-scope > .sel-opt { flex: 1; min-width: 0; height: 44px; font-size: 14px; padding: 0 6px; white-space: normal; line-height: 1.15; }
+            .person-picker-head-row .person-picker-count { display: none; }
+            .person-picker-ref { margin: 7px 4px 0; }
+            .person-picker-whole, .toolbar .person-picker-dropdown .person-picker-whole { min-height: 44px; font-size: 15px; }
+        }
 
         /* Tablet toolbar regime (500–1024px, toolbar-regime exception — see the
            breakpoint map): focus info in toolbar, bottom bar, hide floating */
@@ -34588,6 +34627,7 @@
                     <span id="search-result-count" class="search-result-count"></span>
                     <button type="button" class="secondary" onclick="window.Strom.UI.clearSearchFilters()" data-i18n="searchFilters.clear"></button>
                 </div>
+                <p id="search-filters-scope" class="search-filters-scope" hidden></p>
                 <div class="search-filters-sheet-foot">
                     <button type="button" class="secondary" onclick="window.Strom.UI.clearFilterFields()" data-i18n="searchFilters.clearFilters"></button>
                     <button type="button" id="search-filters-show" class="primary" onclick="window.Strom.UI.toggleSearchFilters()"></button>

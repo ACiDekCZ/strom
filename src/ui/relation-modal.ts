@@ -48,6 +48,7 @@ import { uiModule } from './module.js';
 import { chainLinkSvg } from '../icons.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { viewLinkChildOf } from '../view-links.js';
+import { dialogScopeSource } from './search-scope-ui.js';
 export const relationModalMethods = uiModule({
     // ---- RELATION MODAL ----
     addRelation(personId: PersonId, relationType: RelationType, gender?: Gender): void {
@@ -351,7 +352,9 @@ export const relationModalMethods = uiModule({
                 }
             },
             placeholder: strings.relationModal.selectPerson,
-            persons: filteredPersons
+            persons: filteredPersons,
+            // Whole tree / Direct line of the dialog's person / In view (spec 137 §1.5).
+            scope: dialogScopeSource(() => personId),
         });
     },
 

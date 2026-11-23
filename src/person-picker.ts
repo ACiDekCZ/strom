@@ -12,6 +12,145 @@ import { displayYear } from './dates.js';
 import { nameHtml, surnameDisplay, shownName, shownNameParts, shownSurnameIsBirth, titlesShown, birthNoteText } from './person-name.js';
 import { surnameForms } from './surnames.js';
 import { PickerDistinguisher } from './picker-distinguish.js';
+import {
+    directLineIds, effectiveScope, getSearchScope, narrowIds, offeredScopes, onSearchScope, setSearchScope, stepScope,
+    SEARCH_SCOPES, type ScopeSets, type SearchScope,
+} from './search-scope.js';
+import { isPhoneBar } from './breakpoints.js';
+
+/**
+ * Where a picker's scope comes from (spec 137 §1.5): the person whose direct
+ * line it narrows to and the people of the view behind it.
+ */
+export interface PickerScopeSource {
+    /** The direct line's person; null = the segment Direct line is not offered. */
+    refPersonId(): PersonId | null;
+    /** 'main' = the tree's main person (Map, Table): the line under the segments says so. */
+    refKind(): 'center' | 'main' | 'dialog';
+    /** The view's people; null = no view behind the picker, or it shows the whole tree: In view is not offered. */
+    viewPersonIds(): ReadonlySet<PersonId> | null;
+    /** The view's name for "In view: Family · 24 people". */
+    viewLabel(): string;
+}
+
+/** What a picker's scope head shows (renderScopeHead). */
+interface ScopeHeadState {
+    sets: ScopeSets;
+    refPerson: Person | null;
+    refKind: 'center' | 'main' | 'dialog';
+    viewLabel: string;
+    /** The rows after the narrowing. */
+    count: number;
+}
+
+function escHtml(text: string): string {
+    return (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** "Jan Ostrožný (*1871)": the name and the birth year as the picker's rows give it. */
+function refPlain(p: Person): string {
+    const year = p.birthDate ? p.birthDate.split('-')[0] : '';
+    return `${shownName(p)}${year ? ` (*${year})` : ''}`;
+}
+
+/** The same with the name in bold (HTML). */
+function refHtml(p: Person): string {
+    const year = p.birthDate ? p.birthDate.split('-')[0] : '';
+    return `<b>${escHtml(shownName(p))}</b>${year ? ` (*${escHtml(year)})` : ''}`;
+}
+
+/** Keyboards (a fine pointer) get the shortcut in the segments' titles. */
+function hasKeyboardHint(): boolean {
+    return typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: fine)').matches;
+}
+
+/** The scope head's markup: the segments, the count and the line saying what the narrowing keeps. */
+function buildScopeHead(): HTMLElement {
+    const S = strings.searchScope;
+    const head = document.createElement('div');
+    head.className = 'person-picker-head';
+    const label = (s: SearchScope) => s === 'tree' ? S.tree : s === 'line' ? S.line : S.view;
+    head.innerHTML = `<div class="person-picker-head-row">`
+        + `<div class="sel-seg person-picker-scope" role="radiogroup" aria-label="${escHtml(S.group)}">`
+        + SEARCH_SCOPES.map(s => `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" aria-checked="false" tabindex="-1" data-scope="${s}">${escHtml(label(s))}</button>`).join('')
+        + `</div><span class="person-picker-count" aria-live="polite"></span></div>`
+        + `<div class="person-picker-ref" hidden></div>`;
+    return head;
+}
+
+/**
+ * Draw a scope head's state (both pickers draw the same): the offered
+ * segments (a scope not offered here is hidden), the one in effect checked,
+ * the titles, the count and the line under the segments. The buttons stay
+ * (no redraw), so the focus and the hover are kept.
+ */
+function renderScopeHead(head: HTMLElement, st: ScopeHeadState): void {
+    const S = strings.searchScope;
+    const scope = effectiveScope(getSearchScope(), st.sets);
+    const offered = offeredScopes(st.sets);
+    const keys = hasKeyboardHint() ? ` ${S.altKeys}` : '';
+    head.querySelectorAll<HTMLButtonElement>('.person-picker-scope > [data-scope]').forEach(btn => {
+        const s = btn.dataset.scope as SearchScope;
+        btn.hidden = !offered.includes(s);
+        btn.classList.toggle('is-last', s === offered[offered.length - 1]);
+        btn.setAttribute('aria-checked', String(s === scope));
+        btn.tabIndex = s === scope ? 0 : -1;
+        const title = s === 'tree' ? S.treeTitle
+            : s === 'line' ? (st.refPerson ? S.lineTitle(refPlain(st.refPerson)) : '')
+            : S.viewTitle(st.sets.view?.size ?? 0);
+        btn.title = title + keys;
+    });
+    const countText = strings.search.resultCount(st.count);
+    const count = head.querySelector<HTMLElement>('.person-picker-count');
+    if (count && count.textContent !== countText) count.textContent = countText;
+    const ref = head.querySelector<HTMLElement>('.person-picker-ref');
+    if (!ref) return;
+    let html = '';
+    if (scope === 'line' && st.refPerson) {
+        html = st.refKind === 'main' ? S.lineRefMain(refHtml(st.refPerson)) : S.lineRef(refHtml(st.refPerson));
+    } else if (scope === 'view' && st.sets.view) {
+        html = S.viewRef(escHtml(st.viewLabel), st.sets.view.size);
+    }
+    // A phone has no room beside the segments: the count ends the line under them.
+    if (isPhoneBar()) html = html ? `${html} · <b>${escHtml(countText)}</b>` : `<b>${escHtml(countText)}</b>`;
+    ref.hidden = !html;
+    if (ref.innerHTML !== html) ref.innerHTML = html;
+}
+
+/**
+ * Wire a scope head: a press keeps the focus in the field (a blur would fold
+ * the toolbar's search or close a dialog's list), a click chooses, ←/→ walk
+ * the segments, Esc goes back to the field.
+ */
+function wireScopeHead(head: HTMLElement, input: HTMLInputElement, sets: () => ScopeSets): void {
+    const keep = (e: Event) => { if ((e.target as HTMLElement).closest('.person-picker-head')) e.preventDefault(); };
+    head.addEventListener('pointerdown', keep);
+    head.addEventListener('mousedown', keep);
+    head.addEventListener('click', (e) => {
+        const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-scope]');
+        if (!btn) return;
+        e.stopPropagation();
+        const keyboard = document.activeElement === btn;
+        setSearchScope(btn.dataset.scope as SearchScope);
+        // Chosen on the segment by the keyboard: it keeps the focus; by a click the field has it.
+        if (!keyboard) input.focus();
+    });
+    head.addEventListener('keydown', (e) => {
+        const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-scope]');
+        if (!btn) return;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            const next = stepScope(getSearchScope(), sets(), e.key === 'ArrowLeft' ? -1 : 1);
+            setSearchScope(next);
+            head.querySelector<HTMLButtonElement>(`[data-scope="${next}"]`)?.focus();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            input.focus();
+        }
+    });
+}
 
 /**
  * Sort persons by name (lastName, firstName)
@@ -148,6 +287,8 @@ export interface PersonPickerOptions {
      * The link closes the list and clears the field.
      */
     rowNote?: (person: Person) => { tag: string; action?: { label: string; run: (id: PersonId) => void } } | null;
+    /** The search scope (spec 137): without it the picker has no scope head. */
+    scope?: PickerScopeSource;
 }
 
 const BATCH_SIZE = 50;
@@ -167,6 +308,14 @@ export class PersonPicker {
     private displayedCount: number = BATCH_SIZE;
     /** Lines telling apart the rows of the same name in the current result. */
     private distinguisher: PickerDistinguisher | null = null;
+    /** The scrolled list of rows: the dropdown itself, or under the scope head (spec 137). */
+    private list: HTMLElement;
+    private head: HTMLElement | null = null;
+    /** The narrowed scopes' people, worked out when the list opens (never while typing). */
+    private scopeSets: ScopeSets | null = null;
+    /** The matches in the whole tree before the narrowing. */
+    private wholeCount = 0;
+    private offScope: (() => void) | null = null;
 
     constructor(options: PersonPickerOptions) {
         this.options = {
@@ -182,6 +331,7 @@ export class PersonPicker {
         this.container = container;
         this.input = document.createElement('input');
         this.dropdown = document.createElement('div');
+        this.list = this.dropdown;
         this.toggleBtn = document.createElement('button');
 
         this.init();
@@ -222,8 +372,29 @@ export class PersonPicker {
         // Dropdown
         this.dropdown = document.createElement('div');
         this.dropdown.className = 'person-picker-dropdown';
-        this.dropdown.setAttribute('role', 'listbox');
-        this.dropdown.setAttribute('aria-label', this.options.placeholder || strings.personPicker.placeholder);
+        this.list = this.dropdown;
+        if (this.options.scope) {
+            // The scope head stands, only the rows scroll (spec 137 §1.2).
+            this.dropdown.classList.add('has-scope');
+            this.dropdown.setAttribute('role', 'presentation');
+            this.head = buildScopeHead();
+            this.list = document.createElement('div');
+            this.list.className = 'person-picker-list';
+            this.dropdown.append(this.head, this.list);
+            wireScopeHead(this.head, this.input, () => this.currentSets());
+            // Tab from the last segment (or away by a click elsewhere): the list closes.
+            this.dropdown.addEventListener('focusout', (e) => {
+                const to = e.relatedTarget as Node | null;
+                if (to && !this.container.contains(to)) this.hide();
+            });
+            this.offScope = onSearchScope(() => {
+                if (!this.isOpen) return;
+                this.computeScopeSets();
+                this.renderDropdown();
+            });
+        }
+        this.list.setAttribute('role', 'listbox');
+        this.list.setAttribute('aria-label', this.options.placeholder || strings.personPicker.placeholder);
         this.container.appendChild(this.dropdown);
 
         // Event listeners
@@ -273,6 +444,8 @@ export class PersonPicker {
      * Show dropdown
      */
     show(): void {
+        // The narrowed sets are worked out on opening, not on every keystroke (spec 137 §0.2).
+        if (!this.isOpen || !this.scopeSets) this.computeScopeSets();
         this.isOpen = true;
         // Render first so the dropdown has content: its width is content-driven
         // (see positionDropdown), which requires the items to be in the DOM and
@@ -295,6 +468,20 @@ export class PersonPicker {
         const inputRect = this.input.getBoundingClientRect();
         const margin = 8;  // keep the dropdown off the very screen edge
         this.dropdown.style.top = `${inputRect.bottom + 4}px`;
+        if (this.head && isPhoneBar()) {
+            // A phone (spec 137 §5): the three 44px segments need the room — the
+            // screen's width upright, sideways from the field's left edge, at most 440px.
+            // 8px under the field: the 44px hit areas of the field's × and funnel reach below it.
+            this.dropdown.style.top = `${inputRect.bottom + 8}px`;
+            const upright = window.innerWidth <= 640;
+            const left = upright ? margin : Math.max(margin, inputRect.left);
+            const width = upright ? window.innerWidth - margin * 2 : Math.min(440, window.innerWidth - margin - left);
+            this.dropdown.style.minWidth = '';
+            this.dropdown.style.maxWidth = '';
+            this.dropdown.style.width = `${width}px`;
+            this.dropdown.style.left = `${left}px`;
+            return;
+        }
         this.dropdown.style.minWidth = `${inputRect.width}px`;
         this.dropdown.style.maxWidth = `${Math.max(inputRect.width, window.innerWidth - margin * 2)}px`;
         this.dropdown.style.width = 'max-content';
@@ -371,6 +558,11 @@ export class PersonPicker {
                 break;
             case 'Enter':
                 e.preventDefault();
+                // Nobody in the narrowed scope, matches in the whole tree: Enter searches there (spec 137 §3).
+                if (this.isOpen && this.narrowedEmpty()) {
+                    setSearchScope('tree');
+                    break;
+                }
                 if (this.selectedIndex >= 0 && this.filteredPersons[this.selectedIndex]) {
                     this.selectPerson(this.filteredPersons[this.selectedIndex].id);
                 } else if (this.filteredPersons.length > 0) {
@@ -386,9 +578,63 @@ export class PersonPicker {
                 }
                 break;
             case 'Tab':
+                // Open with a scope head: Tab goes to the segment in effect (spec 137 §1.4).
+                if (this.head && this.isOpen && !e.shiftKey) {
+                    const seg = this.head.querySelector<HTMLButtonElement>('[data-scope][aria-checked="true"]');
+                    if (seg) {
+                        e.preventDefault();
+                        seg.focus();
+                        break;
+                    }
+                }
                 this.hide();
                 break;
+            case 'ArrowLeft':
+            case 'ArrowRight':
+                // Alt+←/→: the previous or next offered scope, the focus staying in the field.
+                if (this.head && this.isOpen && e.altKey && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    setSearchScope(stepScope(getSearchScope(), this.currentSets(), e.key === 'ArrowLeft' ? -1 : 1));
+                }
+                break;
         }
+    }
+
+    /** The narrowed scopes' people (both null before they are worked out or without a scope). */
+    private currentSets(): ScopeSets {
+        return this.scopeSets ?? { line: null, view: null };
+    }
+
+    /** Work out the people of the direct line and of the view (on opening, a change of the scope or of the view). */
+    private computeScopeSets(): void {
+        const src = this.options.scope;
+        if (!src) { this.scopeSets = null; return; }
+        const data = this.searchData();
+        const ref = src.refPersonId();
+        const person = ref && data ? data.persons[ref] : undefined;
+        let revision: number | undefined;
+        if (!this.options.data) {
+            try { revision = DataManager.getRevision(); } catch { revision = undefined; }
+        }
+        const line = person && !person.isPlaceholder && data ? directLineIds(data, person.id, revision) : null;
+        this.scopeSets = { line, view: src.viewPersonIds() };
+    }
+
+    /**
+     * The view or the centre changed (spec 137 §2.5): an open list works out
+     * its sets and draws anew; a closed one only forgets them.
+     */
+    refreshScope(): void {
+        if (!this.options.scope) return;
+        if (!this.isOpen) { this.scopeSets = null; return; }
+        this.computeScopeSets();
+        this.renderDropdown();
+    }
+
+    /** Nobody in the narrowed scope while the whole tree has matches. */
+    private narrowedEmpty(): boolean {
+        return !!this.head && this.filteredPersons.length === 0 && this.wholeCount > 0
+            && effectiveScope(getSearchScope(), this.currentSets()) !== 'tree';
     }
 
     /**
@@ -449,15 +695,37 @@ export class PersonPicker {
     private renderDropdown(): void {
         const query = this.input.value.trim();
         const data = this.searchData();
-        this.filteredPersons = filterAndSort(query, this.allPersons, data, !!this.options.searchDetails);
+        const whole = filterAndSort(query, this.allPersons, data, !!this.options.searchDetails);
+        this.wholeCount = whole.length;
+        // The scope narrows the matches (a Set lookup per row): the direct line or the view.
+        const narrow = this.head ? narrowIds(getSearchScope(), this.currentSets()) : null;
+        this.filteredPersons = narrow ? whole.filter(p => narrow.has(p.id)) : whole;
         // Same names of the whole result are counted now; each row's line is worked out when it is drawn.
         this.distinguisher = new PickerDistinguisher(this.filteredPersons, data, !!this.options.showBirthYear,
             person => htmlToText(this.matchHtml(person)));
         this.selectedIndex = -1;
         this.displayedCount = BATCH_SIZE;
+        this.renderHead();
+        this.list.scrollTop = 0;
 
+        if (this.narrowedEmpty()) {
+            // Nobody here, someone in the whole tree (spec 137 §3): say so, with the way there.
+            const S = strings.searchScope;
+            const text = effectiveScope(getSearchScope(), this.currentSets()) === 'line' ? S.emptyLine(this.wholeCount) : S.emptyView(this.wholeCount);
+            this.list.innerHTML = `<div class="person-picker-narrow-empty">${escHtml(text)}<br>`
+                + `<button type="button" class="link-button person-picker-whole">${escHtml(S.searchWhole)}</button></div>`;
+            const btn = this.list.querySelector<HTMLButtonElement>('.person-picker-whole');
+            btn?.addEventListener('pointerdown', e => e.preventDefault());
+            btn?.addEventListener('mousedown', e => e.preventDefault());
+            btn?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setSearchScope('tree');
+                this.input.focus();
+            });
+            return;
+        }
         if (this.filteredPersons.length === 0) {
-            this.dropdown.innerHTML = `
+            this.list.innerHTML = `
                 <div class="person-picker-empty">${strings.personPicker.noResults}</div>
             `;
             return;
@@ -467,6 +735,21 @@ export class PersonPicker {
         this.attachScrollListener();
     }
 
+    /** The scope head's state now (renderScopeHead). */
+    private renderHead(): void {
+        const src = this.options.scope;
+        if (!this.head || !src) return;
+        const data = this.searchData();
+        const ref = src.refPersonId();
+        renderScopeHead(this.head, {
+            sets: this.currentSets(),
+            refPerson: ref && data ? data.persons[ref] ?? null : null,
+            refKind: src.refKind(),
+            viewLabel: src.viewLabel(),
+            count: this.filteredPersons.length,
+        });
+    }
+
     /**
      * Render currently visible items
      */
@@ -474,12 +757,12 @@ export class PersonPicker {
         const itemsToShow = this.filteredPersons.slice(0, this.displayedCount);
         const hasMore = this.displayedCount < this.filteredPersons.length;
 
-        this.dropdown.innerHTML = itemsToShow
+        this.list.innerHTML = itemsToShow
             .map((person, index) => this.renderItem(person, index))
             .join('') + (hasMore ? '<div class="person-picker-loading">…</div>' : '');
 
         // Attach click listeners
-        this.dropdown.querySelectorAll<HTMLElement>('.person-picker-rowact').forEach(btn => {
+        this.list.querySelectorAll<HTMLElement>('.person-picker-rowact').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const id = btn.closest<HTMLElement>('.person-picker-item')?.dataset.id as PersonId | undefined;
@@ -490,7 +773,7 @@ export class PersonPicker {
                 if (id && run) run(id);
             });
         });
-        this.dropdown.querySelectorAll('.person-picker-item').forEach(item => {
+        this.list.querySelectorAll('.person-picker-item').forEach(item => {
             item.addEventListener('click', () => {
                 const personId = item.getAttribute('data-id') as PersonId;
                 if (personId) {
@@ -504,8 +787,8 @@ export class PersonPicker {
      * Attach scroll listener for lazy loading
      */
     private attachScrollListener(): void {
-        this.dropdown.onscroll = () => {
-            const { scrollTop, scrollHeight, clientHeight } = this.dropdown;
+        this.list.onscroll = () => {
+            const { scrollTop, scrollHeight, clientHeight } = this.list;
             // Load more when scrolled near bottom (within 50px)
             if (scrollTop + clientHeight >= scrollHeight - 50) {
                 this.loadMore();
@@ -627,6 +910,8 @@ export class PersonPicker {
             document.removeEventListener('click', this.outsideClickHandler);
             this.outsideClickHandler = null;
         }
+        this.offScope?.();
+        this.offScope = null;
         this.container.innerHTML = '';
     }
 }
@@ -662,6 +947,8 @@ export interface MultiPersonPickerOptions {
     /** At most this many chips, then "+ N more" (moreLabel); default all. */
     chipsShown?: number;
     moreLabel?: (n: number) => string;
+    /** The search scope (spec 137 §1.5): the same head as PersonPicker's above the list. */
+    scope?: PickerScopeSource;
 }
 
 const MULTI_BATCH = 100;
@@ -677,6 +964,10 @@ export class MultiPersonPicker {
     private filtered: Person[] = [];
     private shown = MULTI_BATCH;
     private chosen: PersonId[] = [];
+    private head: HTMLElement | null = null;
+    private scopeSets: ScopeSets = { line: null, view: null };
+    private wholeCount = 0;
+    private offScope: (() => void) | null = null;
 
     constructor(options: MultiPersonPickerOptions) {
         this.options = { max: 50, ...options };
@@ -711,6 +1002,29 @@ export class MultiPersonPicker {
         this.note.className = 'ppm-note';
         this.note.hidden = true;
         this.container.append(this.chips, this.input, this.list, this.note);
+        if (this.options.scope) {
+            this.head = buildScopeHead();
+            this.head.classList.add('ppm-head');
+            this.container.insertBefore(this.head, this.list);
+            wireScopeHead(this.head, this.input, () => this.scopeSets);
+            this.computeScopeSets();
+            this.offScope = onSearchScope(() => {
+                // A picker whose dialog went without destroy() stops listening.
+                if (!this.container.isConnected) { this.offScope?.(); this.offScope = null; return; }
+                this.computeScopeSets();
+                this.shown = MULTI_BATCH;
+                this.renderList();
+            });
+            this.input.addEventListener('keydown', (e) => {
+                if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.altKey && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    setSearchScope(stepScope(getSearchScope(), this.scopeSets, e.key === 'ArrowLeft' ? -1 : 1));
+                } else if (e.key === 'Enter' && this.narrowedEmpty()) {
+                    e.preventDefault();
+                    setSearchScope('tree');
+                }
+            });
+        }
         this.input.addEventListener('input', () => { this.shown = MULTI_BATCH; this.renderList(); });
         this.input.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowDown') {
@@ -794,10 +1108,53 @@ export class MultiPersonPicker {
         }).join('') + (rest > 0 && this.options.moreLabel ? `<span class="ppm-chip ppm-chip--more">${this.esc(this.options.moreLabel(rest))}</span>` : '');
     }
 
+    /** The people of the direct line and of the view (spec 137 §0.2): on building and on a change of the scope. */
+    private computeScopeSets(): void {
+        const src = this.options.scope;
+        if (!src) return;
+        const data = this.searchData();
+        const ref = src.refPersonId();
+        const person = ref && data ? data.persons[ref] : undefined;
+        let revision: number | undefined;
+        if (!this.options.data) {
+            try { revision = DataManager.getRevision(); } catch { revision = undefined; }
+        }
+        const line = person && !person.isPlaceholder && data ? directLineIds(data, person.id, revision) : null;
+        this.scopeSets = { line, view: src.viewPersonIds() };
+    }
+
+    private narrowedEmpty(): boolean {
+        return !!this.head && this.filtered.length === 0 && this.wholeCount > 0
+            && effectiveScope(getSearchScope(), this.scopeSets) !== 'tree';
+    }
+
     private renderList(refilter = true): void {
-        if (refilter) this.filtered = filterAndSort(this.input.value, this.allPersons, this.searchData());
+        if (refilter) {
+            const whole = filterAndSort(this.input.value, this.allPersons, this.searchData());
+            this.wholeCount = whole.length;
+            const narrow = this.head ? narrowIds(getSearchScope(), this.scopeSets) : null;
+            this.filtered = narrow ? whole.filter(p => narrow.has(p.id)) : whole;
+        }
+        const src = this.options.scope;
+        if (this.head && src) {
+            const data = this.searchData();
+            const ref = src.refPersonId();
+            renderScopeHead(this.head, {
+                sets: this.scopeSets, refPerson: ref && data ? data.persons[ref] ?? null : null,
+                refKind: src.refKind(), viewLabel: src.viewLabel(), count: this.filtered.length,
+            });
+        }
         const scroll = this.list.scrollTop;
-        if (this.filtered.length === 0) {
+        if (this.narrowedEmpty()) {
+            const S = strings.searchScope;
+            const text = effectiveScope(getSearchScope(), this.scopeSets) === 'line' ? S.emptyLine(this.wholeCount) : S.emptyView(this.wholeCount);
+            this.list.innerHTML = `<div class="person-picker-narrow-empty">${this.esc(text)}<br>`
+                + `<button type="button" class="link-button person-picker-whole">${this.esc(S.searchWhole)}</button></div>`;
+            this.list.querySelector<HTMLButtonElement>('.person-picker-whole')?.addEventListener('click', () => {
+                setSearchScope('tree');
+                this.input.focus();
+            });
+        } else if (this.filtered.length === 0) {
             this.list.innerHTML = `<div class="person-picker-empty">${strings.personPicker.noResults}</div>`;
         } else {
             const full = this.full();
@@ -831,6 +1188,8 @@ export class MultiPersonPicker {
     }
 
     destroy(): void {
+        this.offScope?.();
+        this.offScope = null;
         this.container.innerHTML = '';
     }
 }

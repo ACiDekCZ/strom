@@ -53,6 +53,7 @@ import { personMergeShares, type PersonMergeShareRow } from '../shared-events.js
 import { lifeEventLabel } from '../person-sources.js';
 import { formatFlexDate } from '../dates.js';
 import { sharedEventMarkSvg } from '../icons.js';
+import { dialogScopeSource } from './search-scope-ui.js';
 
 export const mergeUiMethods = uiModule({
     // ---- PENDING MERGES ----
@@ -292,7 +293,8 @@ export const mergeUiMethods = uiModule({
                 }
             },
             placeholder: strings.personMerge.selectPerson,
-            persons: allPersons
+            persons: allPersons,
+            scope: dialogScopeSource(() => keepId),
         });
         if (otherId && allPersons.some(p => p.id === otherId)) {
             this.personMergePicker.setValue(otherId);

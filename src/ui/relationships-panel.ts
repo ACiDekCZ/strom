@@ -59,6 +59,7 @@ import { imgStateOf, imgGlyphHtml, imgPhaseStyle, setImgState, type ImgState } f
 import { busySpinHtml } from './busy.js';
 import { imgSrcAttr } from '../image-src.js';
 import { unionPhotoCaption } from '../union-photo.js';
+import { dialogScopeSource } from './search-scope-ui.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
         // Setup dialog stack for standalone mode (when opened directly from card, not from edit dialog)
@@ -802,6 +803,7 @@ export const relationshipsPanelMethods = uiModule({
         new PersonPicker({
             containerId: 'reassign-picker',
             persons: DataManager.getAllPersons().filter(p => !excluded.has(p.id as PersonId)),
+            scope: dialogScopeSource(() => childId),
             onSelect: (newParentId) => {
                 close();
                 const newParent = DataManager.getPerson(newParentId);
