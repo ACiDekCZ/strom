@@ -146,6 +146,8 @@ class MergerUIClass {
     private written: WrittenMerge | null = null;
     /** The last merge written and closed, with its state: the toast's What happened opens its step 6 again. */
     private lastWritten: { w: WrittenMerge; state: MergeState; plan: MergePlan } | null = null;
+    /** The toast of the last Done ("{n} added…" · Undo · What happened): it goes when its merge is undone. */
+    private writtenToast: { recordId: string; close: () => void } | null = null;
 
     /** The import guide's frame: steps, counts, footer (spec 134 §1). */
     private readonly wizard = new MergeWizard({
@@ -1682,11 +1684,12 @@ class MergerUIClass {
     /** "{n} added to the tree {t}" · Undo (while the write is Undo's last step) · What happened. */
     private toastWritten(w: WrittenMerge): void {
         const W = strings.mergeWizard;
-        getUI().showToast(W.toastAdded(w.record.counts.added, w.name), 10000, {
+        const toast = getUI().showToast(W.toastAdded(w.record.counts.added, w.name), 10000, {
             closable: true,
             ...(this.undoableWrite(w) ? { action: { label: strings.undo.undo, run: () => this.undoWritten(w) } } : {}),
             more: { label: W.whatHappened, run: () => this.reopenWritten(w) },
         });
+        this.writtenToast = { recordId: w.record.id, close: () => toast.close() };
     }
 
     /** The write is the open tree's last step of Undo: one Undo takes it back whole (K8.5). */
@@ -1745,11 +1748,16 @@ class MergerUIClass {
     }
 
     /**
-     * Merge `recordId` was undone from step 6 (§10): the guide closes without
-     * its toast, and the toast of an earlier Done no longer reopens it.
+     * Merge `recordId` was undone (§10): the guide on its step 6 closes
+     * without its toast, and the toast of an earlier Done goes (its Undo and
+     * What happened would speak of a merge no longer there).
      */
     closeUndone(recordId: string): void {
         if (this.lastWritten?.w.record.id === recordId) this.lastWritten = null;
+        if (this.writtenToast?.recordId === recordId) {
+            this.writtenToast.close();
+            this.writtenToast = null;
+        }
         if (this.written?.record.id !== recordId) return;
         this.openedFromTreeManager = false;
         this.gedcomImport = undefined;

@@ -19286,7 +19286,7 @@
             .merge-undo-grp > summary { min-height: 44px; align-items: center; }
         }
         @media (max-width: 640px) {
-            #merge-history-modal .modal, #merge-undo-modal .modal, #merge-record-modal .modal { width: 100%; max-width: 100vw; height: 100%; max-height: 100%; border-radius: 0; display: flex; flex-direction: column; }
+            #merge-history-modal .modal.modal--lg, #merge-undo-modal .modal.modal--md, #merge-record-modal .modal.modal--lg { width: 100vw; max-width: 100vw; min-width: 0; height: 100dvh; max-height: 100dvh; border-radius: 0; display: flex; flex-direction: column; }
             .merge-hist-list, .merge-undo-body { max-height: none; flex: 1 1 auto; min-height: 0; }
             .merge-hist-row { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "what" "acts"; }
             .merge-hist-what { white-space: normal; }

@@ -145,7 +145,9 @@ export const mergeHistoryMethods = uiModule({
         if (!data || !record || !modal) return;
         const W = strings.mergeWizard;
         const name = treeName(treeId);
-        const key = shownRecord?.record.id === id ? shownRecord.key : {};
+        // Drawn again while open: its search and open groups stay; opened anew (also after Escape): fresh.
+        const again = modal.classList.contains('active') && shownRecord?.treeId === treeId && shownRecord.record.id === id;
+        const key = again ? shownRecord!.key : {};
         shownRecord = { treeId, record, key };
         const body = modal.querySelector<HTMLElement>('.merge-record-body')!;
         const shown = { treeId, name, record, mode: record.target.newTree ? 'new' as const : 'add' as const };
@@ -376,11 +378,11 @@ export const mergeHistoryMethods = uiModule({
         const { treeId, recordId, parent } = st;
         const removed = res.items.filter(id => id.startsWith('p:') && !res.before.persons[id.slice(2) as keyof StromData['persons']]?.isPlaceholder).length;
         const kept = new Set(res.kept.map(k => k.id)).size;
-        // The dialog closes; the guide's step 6 (stale now) closes with it, a history comes back with the new state.
+        // The dialog closes; the guide's step 6 and the toast of its Done (stale now) go with it, a history comes back with the new state.
         document.getElementById(UNDO_ID)?.classList.remove('active');
         undoState = null;
         this.clearDialogStack();
-        if (parent === 'merge-modal') MergerUI.closeUndone(recordId);
+        MergerUI.closeUndone(recordId);
         await this.afterMergeUndoWrite(treeId);
         if (parent === HISTORY_ID || parent === RECORD_ID) {
             document.getElementById(RECORD_ID)?.classList.remove('active');
