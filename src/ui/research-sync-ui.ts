@@ -605,12 +605,15 @@ export const researchSyncMethods = uiModule({
         this.researchAutoArm();
     },
 
-    /** The active tree's research link, when the new behaviour applies to it (else null). */
+    /**
+     * The active tree's research link, when the new behaviour applies to it (else null).
+     * Only the research's owner has one: a copy is a tree without research (spec 139 K5.1).
+     */
     researchSyncLink(): { treeId: TreeId; link: ResearchLink } | null {
         if (DataManager.isViewMode()) return null;
         const treeId = DataManager.getCurrentTreeId();
         const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
-        return treeId && link ? { treeId, link } : null;
+        return treeId && link && TreeManager.canSendToResearch(treeId) ? { treeId, link } : null;
     },
 
     /**
@@ -997,7 +1000,8 @@ export const researchSyncMethods = uiModule({
     researchAutoOn(link: ResearchLink | undefined): boolean {
         // (Out of "only load" with changes waiting: the first send goes by hand, through "What will be sent";
         // a merge not sent yet waits for a send by hand too, spec 134 K9.2.)
-        return !!link && researchSendMode(link) === 'auto' && !link.previewDue && !link.mergeHold && this.researchSyncCapable(link.id) && !safariBrowser();
+        // A copy never sends (spec 139 K5.1; postResearchSend asks the owner too).
+        return !!link && !link.copy && researchSendMode(link) === 'auto' && !link.previewDue && !link.mergeHold && this.researchSyncCapable(link.id) && !safariBrowser();
     },
 
     /** The bridge answered within FRESH_MS. */
@@ -1613,7 +1617,8 @@ export const researchSyncMethods = uiModule({
         // nothing waits to be sent and nothing goes.
         if (DataManager.getCurrentTreeId() === treeId && DataManager.isLiveFollowing()) return;
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        if (!link || !this.researchSyncCapable(link.id)) return;
+        // A copy: nothing waits for a research it does not own (spec 139 K5.1).
+        if (!link || !TreeManager.canSendToResearch(treeId) || !this.researchSyncCapable(link.id)) return;
         fpCache = null;
         const st = researchAutoState(treeId);
         patchResearchAutoState(treeId, {
@@ -1760,7 +1765,7 @@ export const researchSyncMethods = uiModule({
      */
     async researchAutoSend(treeId: TreeId, why: 'quiet' | 'switch' | 'leave' | 'bridge' | 'newer' | 'media'): Promise<void> {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        if (!link || !this.researchAutoOn(link) || link.refused) return;
+        if (!link || !TreeManager.canSendToResearch(treeId) || !this.researchAutoOn(link) || link.refused) return;
         // A send taken back and a research that would write it again from a copy: the user decides first
         // (Send again, or the research's version), never a copy by itself (finding 43).
         if (this.researchHoldsForUndo(link)) return;
@@ -1992,9 +1997,10 @@ export const researchSyncMethods = uiModule({
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!link || sendingTree) return;
-        // The sample tree never goes to a research (a tie it got before 3.29 included).
-        if (meta?.demo) {
-            console.warn('Not sending the sample tree to a research', treeId);
+        // Only the research's owner writes to it: never a copy, a second tree of the same research, nor the
+        // sample tree (a tie it got before 3.29 included; spec 139 K5.1).
+        if (!TreeManager.canSendToResearch(treeId)) {
+            console.warn('Not sending a tree that does not own its research', treeId);
             return;
         }
         const s = strings.sync;
@@ -2033,7 +2039,7 @@ export const researchSyncMethods = uiModule({
     async postResearchSendNow(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean; again?: boolean; undoAgain?: boolean; noIdsRetried?: boolean; mediaRefRetried?: boolean }): Promise<void> {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
-        if (!link || sendingTree || meta?.demo) return;
+        if (!link || sendingTree || !TreeManager.canSendToResearch(treeId)) return;
         const s = strings.sync;
         // Never while a switch reads this tree to open it: what goes is the tree's own data, with its own
         // id and link. Sent by itself, it waits for the next answer of the bridge once it is open.
@@ -2719,7 +2725,8 @@ export const researchSyncMethods = uiModule({
     /** Tree menus' "Send changes": the same send for any tree (switched to first when a running research takes it straight). */
     async researchSendTree(treeId: TreeId, opts: { thenLoad?: boolean; undoAgain?: boolean } = {}): Promise<void> {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        if (!link) return;
+        // A copy is a tree without research: nothing of it goes there (spec 139 K5.1).
+        if (!link || !TreeManager.canSendToResearch(treeId)) return;
         if (!this.researchSyncCapable(link.id)) {
             await this.sendTreeToResearch(treeId);
             return;

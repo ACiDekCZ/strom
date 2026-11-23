@@ -42,6 +42,7 @@ import { convertLegacyCensusEvents } from './events.js';
 import { fillResearchConfirmedValues, hasUnvaluedResearchConfirmations } from './verify.js';
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
+import { isResearchOwner, researchCopyOrigin } from './research-owner.js';
 import { asciiSlug } from './filenames.js';
 import { browserMediaFingerprint } from './browser-media.js';
 import { looksLikeSampleTree } from './demo-sample.js';
@@ -626,8 +627,9 @@ class TreeManagerClass {
             sizeBytes,
             // A newer app's tree stays one in its copy (read-only here too).
             dataVersion: sourceData.version ?? 1,
-            // A duplicate of a research tree can be sent back too, as a copy.
-            ...(source?.research ? { research: { ...withoutSendState(source.research), copy: true } } : {}),
+            // A duplicate of a research tree is a tree without research: one research, one tree (spec 139 K5.1,
+            // K5.2). It only names the tree it was copied from (a copy of a copy: that copy).
+            ...(source && (source.research || source.copyOf) ? { copyOf: { treeId: source.id, name: source.name } } : {}),
         };
 
         // Add to index, then save through the encrypting path — a direct
@@ -1908,10 +1910,23 @@ class TreeManagerClass {
         return this.index.trees.find(t => t.research?.id === id && !t.research.copy) || null;
     }
 
-    /** Every tree tied to the research, copies included (what can be sent back). */
+    /** Every tree tied to the research, copies included (only its owner writes to it: canSendToResearch). */
     findTreesByResearchId(researchId: string): TreeMetadata[] {
         const id = researchId.toLowerCase();
         return this.index.trees.filter(t => t.research?.id === id);
+    }
+
+    /**
+     * The tree may write to its research (spec 139 K5.1): it owns the tie — a
+     * copy, a second tree of the same research and the sample tree never do.
+     */
+    canSendToResearch(treeId: TreeId | null | undefined): boolean {
+        return isResearchOwner(this.index.trees, treeId);
+    }
+
+    /** A copy of a tree with a research: the name of the tree it was copied from (src/research-owner.ts). */
+    researchCopyOrigin(treeId: TreeId): { name: string | null } | null {
+        return researchCopyOrigin(this.index.trees, treeId);
     }
 
     /**
@@ -1956,6 +1971,20 @@ class TreeManagerClass {
     private noteBaseChange(treeId: TreeId, before: ResearchBase | null): void {
         if (sameBase(before, this.researchBaseOf(treeId)) || typeof window === 'undefined') return;
         window.dispatchEvent(new CustomEvent(RESEARCH_BASE_EVENT, { detail: { treeId } }));
+    }
+
+    /**
+     * Make a tree a copy of `of` without research (spec 139 K5.1, K5.2): its
+     * tie goes, `copyOf` names the tree it is a copy of. The tree's data stay.
+     */
+    detachAsCopy(treeId: TreeId, of: { treeId: TreeId; name: string }): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (!tree) return;
+        const before = this.researchBaseOf(treeId);
+        delete tree.research;
+        tree.copyOf = { treeId: of.treeId, name: of.name };
+        this.saveIndex();
+        this.noteBaseChange(treeId, before);
     }
 
     /** Change part of a tree's research link (a send, its fate, the transcript setting); no-op without a link. */
@@ -2059,8 +2088,3 @@ registerPoolReferences('trees', async () => {
     return ids;
 });
 
-/** A research link without the state of a send (a duplicate starts with none, nor with sources waiting to be retracted). */
-function withoutSendState(link: ResearchLink): ResearchLink {
-    const { sent: _sent, refused: _refused, deletedSources: _deleted, ...rest } = link;
-    return rest;
-}

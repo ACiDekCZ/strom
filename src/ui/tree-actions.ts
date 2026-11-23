@@ -163,6 +163,8 @@ export const treeActionsMethods = uiModule({
         // The tree manager's dialogs return to it on close.
         const parent = source === 'manager' ? 'tree-manager-modal' : undefined;
         const id = tree.id;
+        // Only the research's owner has research actions: a copy is a tree without research (spec 139 K5.1).
+        const owner = TreeManager.canSendToResearch(id);
         // Read-only: a locked tree, the open tree followed live or locked data
         // (menu 1020 §10), a tree a newer app saved — only what reads the
         // tree, and Unlock when locked.
@@ -204,9 +206,10 @@ export const treeActionsMethods = uiModule({
             { key: 'research', header: g.research, rows: [
                 // The open tree's research overview, followed or not, read-only too, where no Research menu has it
                 // (a phone, a tablet; spec 057 §7.1, §6b).
-                ...(isActive && tree.research && this.canOpenResearchOverview() && !this.researchMenuShown()
+                ...(isActive && owner && this.canOpenResearchOverview() && !this.researchMenuShown()
                     ? [{ key: 'researchOverview', label: strings.live.overviewTitle, run: () => this.openResearchOverview() }] : []),
-                ...(!editable ? [] : by.researchSend && tree.research && researchRunsHere()
+                // A copy is a tree without research: nothing to send, no research settings (spec 139 K5.1, K5.2).
+                ...(!editable ? [] : by.researchSend && owner && tree.research && researchRunsHere()
                     // Through the bridge with no mark; without it, the send link opens the research's terminal.
                     ? [{ key: 'researchSend', label: strings.research.sendMenu, editOnly: true,
                         research: !this.researchSyncCapable(tree.research.id) && this.researchLinkAvailable('send') && researchLinkMark('send') !== 'none',
@@ -257,6 +260,9 @@ export const treeActionsMethods = uiModule({
     treeResearchRow(id: TreeId, isActive: boolean): TreeActionRow[] {
         const tree = TreeManager.getTreeMetadata(id);
         if (!tree) return [];
+        // A copy of a research tree: a tree without research, its tie only a mark of where it came from. Turning
+        // its research on (a new research, spec 139 K5.4) is not offered yet — never the original's research.
+        if (tree.research && !TreeManager.canSendToResearch(id)) return [];
         if (tree.research) {
             if (this.researchTranscriptsCapable(tree.research.id)) {
                 return [{ key: 'researchSettings', label: strings.sync.treeSettings, run: () => void this.showResearchTreeSettings(id) }];
@@ -291,6 +297,8 @@ export const treeActionsMethods = uiModule({
             .filter(group => group.rows.length > 0);
         const isActive = treeId === TreeManager.getActiveTreeId();
         const t = strings.treeActions;
+        // A copy of a research tree says so, never "linked to research" (spec 139 K5.2).
+        const copy = TreeManager.researchCopyOrigin(treeId);
 
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
@@ -332,7 +340,8 @@ export const treeActionsMethods = uiModule({
             formatFileSize(tree.sizeBytes, lang),
             isActive
                 ? t.edited(formatRelativeDateTime(new Date(tree.lastModifiedAt).getTime(), lang))
-                : (tree.research ? t.researchLinked : t.researchNone),
+                : (copy ? '' : tree.research ? t.researchLinked : t.researchNone),
+            copy ? strings.research.copyOf(copy.name) : '',
         ].filter(Boolean);
         for (const fact of facts) {
             const span = document.createElement('span');

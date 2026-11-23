@@ -990,6 +990,9 @@ export const treeManagementMethods = uiModule({
             }
 
             const s = strings.treeManager;
+            // A copy of a research tree is a tree without research, said so (spec 139 K5.2): no "Research on" switch.
+            const copyOrigin = TreeManager.researchCopyOrigin(tree.id);
+            const copyOf = copyOrigin ? strings.research.copyOf(copyOrigin.name) : '';
 
             // Status as explicit text chips — a leading glyph was easy to miss
             // and its meaning unclear. Active reads green, hidden/locked gray.
@@ -1008,9 +1011,10 @@ export const treeManagementMethods = uiModule({
                     <div class="tree-manager-item-stats-row">
                         ${s.persons(tree.personCount)} • ${s.families(familyCount)}
                         ${defaultPersonDisplay ? ` • ${this.escapeHtml(defaultPersonDisplay)}` : ''}
+                        ${copyOf ? ` • <span class="tree-manager-item-copy">${this.escapeHtml(copyOf)}</span>` : ''}
                     </div>
                     ${this.treeManagerHoldHtml(tree)}
-                    ${tree.research?.id && !tree.research.copy ? this.researchLiveSlotHtml(tree.id) : ''}
+                    ${TreeManager.canSendToResearch(tree.id) ? this.researchLiveSlotHtml(tree.id) : ''}
                     <div class="tree-manager-item-actions">
                         <button class="tree-open-btn" data-tree-id="${tree.id}" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>
                         ${isActive ? `<span class="tree-opened-label">${s.opened}</span>` : ''}

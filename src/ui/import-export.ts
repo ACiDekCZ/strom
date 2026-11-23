@@ -1607,13 +1607,18 @@ export const importExportMethods = uiModule({
     /**
      * Tie the tree made from a JSON file to the research the file names: it
      * receives the research's updates when no other tree does, else it is a
-     * copy (still offered when sending changes back).
+     * copy of that tree without research (spec 139 K5.1, K5.2).
      */
     restoreImportResearch(treeId: TreeId): void {
         const research = this.pendingImportResearch;
         this.pendingImportResearch = null;
         if (!research) return;
         const holder = TreeManager.findTreeByResearchId(research.id);
+        // Another tree takes the research's updates: this one is its copy, without research (spec 139 K5.1, K5.2).
+        if (holder && holder.id !== treeId) {
+            TreeManager.detachAsCopy(treeId, { treeId: holder.id, name: holder.name });
+            return;
+        }
         TreeManager.setResearchLink(treeId, {
             id: research.id,
             // Unknown since the research sent it (the file may hold edits made
@@ -1621,7 +1626,6 @@ export const importExportMethods = uiModule({
             fingerprint: '',
             syncedAt: new Date().toISOString(),
             ...(research.head ? { head: research.head } : {}),
-            ...(holder && holder.id !== treeId ? { copy: true } : {}),
         }, { agentless: this.researchAgentlessFor(research.id) });
     },
 

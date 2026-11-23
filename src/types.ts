@@ -2438,6 +2438,13 @@ export interface TreeMetadata {
      */
     research?: ResearchLink;
     /**
+     * A copy of a tree with a research (Duplicate, "Open as a new copy", a
+     * second import of the research's file): the tree it was copied from and
+     * its name then. The copy itself has no research (spec 139 K5.1, K5.2):
+     * it is described as "copy of the tree <name> · no research".
+     */
+    copyOf?: { treeId: TreeId; name: string };
+    /**
      * "Start research with this tree" is under way: the one-time token the
      * research brings back (?adopt=) to name this tree. Valid for an hour.
      */
@@ -2512,8 +2519,10 @@ export interface ResearchLink {
     head?: string;
     /**
      * An older copy of the research (the tree kept by "Open as a new copy", a
-     * duplicate, a second import): offered when sending changes back, never
-     * updated from the research — only the tree without `copy` is.
+     * duplicate, a second import): only a mark of where the tree came from.
+     * A copy is a tree without research — it sends nothing there and is never
+     * updated from it; only the tree without `copy` is (spec 139 K5.1,
+     * src/research-owner.ts).
      */
     copy?: boolean;
     /** The last send straight to the bridge and what became of it (a research that announces `accepts`). */

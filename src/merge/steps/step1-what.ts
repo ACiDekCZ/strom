@@ -34,7 +34,7 @@ function modeOf(c: WizardChoices): StepMode {
 }
 
 function treeLine(row: TargetRow): string {
-    return strings.mergeWizard.treeLine(row.persons, row.open, row.research, row.backup);
+    return [strings.mergeWizard.treeLine(row.persons, row.open, row.research, row.backup), row.copyOf].filter(Boolean).join(' · ');
 }
 
 const LOCK = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
@@ -77,7 +77,7 @@ function targetsHtml(ctx: StepContext, env: Step1Env): string {
     const chosen = ctx.choices.targetTreeId;
     const items = rows.map(r => {
         const on = r.treeId === chosen && !r.block;
-        const line = r.block ? [W.treeLine(r.persons, r.open, false, null), r.why].join(' · ') : treeLine(r);
+        const line = r.block ? [W.treeLine(r.persons, r.open, false, null), r.copyOf, r.why].filter(Boolean).join(' · ') : treeLine(r);
         return `<label class="sel-opt merge-s1-target${r.block ? ' is-blocked' : ''}" data-sel-form="tile" data-tree="${escapeHtml(r.treeId)}"${r.block ? ` aria-disabled="true" data-block="${r.block}"` : ''} title="${escapeHtml(r.block ? r.why : r.name)}">`
             + `<input type="radio" name="merge-target" value="${escapeHtml(r.treeId)}"${on ? ' checked' : ''}${r.block ? ' disabled' : ''}>`
             + `<span class="merge-s1-tname">${escapeHtml(r.name)}</span>${r.block ? `<span class="merge-s1-lock">${LOCK}</span>` : ''}`

@@ -115,8 +115,8 @@ describe('otherBridgeTargets', () => {
         ];
         expect(otherBridgeTargets(entries, 't1')).toEqual(['R2', 'R5']);
         expect(otherBridgeTargets(entries, 't1', ['R5'])).toEqual(['R2']);
-        // A copy open: its research's bridge is the open tree's own ask.
-        expect(otherBridgeTargets(entries, 't2c')).toEqual(['R1', 'R5']);
+        // A copy open is a tree without research (spec 139 K5.1): its original's research is asked as another tree's.
+        expect(otherBridgeTargets(entries, 't2c')).toEqual(['R1', 'R2', 'R5']);
     });
 });
 

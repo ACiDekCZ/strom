@@ -137,8 +137,9 @@ export interface ResearchTreeEntry {
  * copies, not archives, only with an address known; each research once.
  */
 export function otherBridgeTargets(entries: readonly ResearchTreeEntry[], activeTreeId: string | null, skipResearchIds: readonly string[] = []): string[] {
-    // The open tree's research is asked by its own poll (a copy open too: its research is the same bridge).
-    const active = entries.find(e => e.treeId === activeTreeId)?.researchId ?? null;
+    // The open tree's research is asked by its own poll. A copy open asks none (a tree without research,
+    // spec 139 K5.1): its original's research is another tree's, asked here.
+    const active = entries.find(e => e.treeId === activeTreeId && !e.copy)?.researchId ?? null;
     const out: string[] = [];
     for (const e of entries) {
         if (e.copy || e.archive || !e.hasAddress || e.treeId === activeTreeId) continue;

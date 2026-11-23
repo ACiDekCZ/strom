@@ -696,14 +696,15 @@ class MergerUIClass {
                 persons: Object.values(state.incomingData.persons).filter(p => !p.isPlaceholder).length,
                 ...(this.sourceInfo.fingerprint ? { fingerprint: this.sourceInfo.fingerprint } : {}),
                 ...(this.sourceInfo.treeId ? { treeId: this.sourceInfo.treeId } : {}),
-                ...(this.sourceInfo.kind === 'tree' && this.sourceInfo.treeId && TreeManager.getTreeMetadata(this.sourceInfo.treeId)?.research ? { research: true as const } : {}),
+                ...(this.sourceInfo.kind === 'tree' && TreeManager.canSendToResearch(this.sourceInfo.treeId) ? { research: true as const } : {}),
                 ...(this.gedcomImport?.importId ? { importId: this.gedcomImport.importId } : {}),
             },
             ...(this.initialMode ? { mode: this.initialMode } : {}),
             targetTreeId,
             targetName: (targetTreeId ? this.targetTreeName || TreeManager.getTreeMetadata(targetTreeId)?.name : undefined)
                 || strings.treeManager.newTree,
-            ...(targetTreeId && TreeManager.getTreeMetadata(targetTreeId)?.research ? { research: true } : {}),
+            // Only a tree that owns its research has one: a copy is a tree without research (spec 139 K5.3).
+            ...(TreeManager.canSendToResearch(targetTreeId) ? { research: true } : {}),
         };
     }
 
@@ -780,12 +781,15 @@ class MergerUIClass {
     private targetRow(id: TreeId): TargetRow {
         const meta = TreeManager.getTreeMetadata(id);
         const block = targetBlock(id);
+        // A copy of a research tree is a tree without research, said as in Manage trees (spec 139 K5.2, K5.3).
+        const copy = TreeManager.researchCopyOrigin(id);
         return {
             treeId: id,
             name: meta?.name ?? '',
             persons: meta?.personCount ?? 0,
             open: !DataManager.isViewMode() && DataManager.getCurrentTreeId() === id,
-            research: !!meta?.research,
+            research: TreeManager.canSendToResearch(id),
+            copyOf: copy ? strings.research.copyOf(copy.name) : '',
             backup: this.backups.get(id) ?? null,
             block,
             why: block ? targetBlockText(block, id) : '',
@@ -856,7 +860,7 @@ class MergerUIClass {
                 const row = this.targetRow(id);
                 if (row.block) return;
                 const line = document.querySelector(`#merge-step-body .merge-s1-target[data-tree="${CSS.escape(id)}"] .merge-s1-tline`);
-                if (line) line.textContent = strings.mergeWizard.treeLine(row.persons, row.open, row.research, row.backup);
+                if (line) line.textContent = [strings.mergeWizard.treeLine(row.persons, row.open, row.research, row.backup), row.copyOf].filter(Boolean).join(' · ');
             }).catch(() => undefined);
         }
     }
@@ -925,7 +929,7 @@ class MergerUIClass {
         if (!state || !ws || !meta || targetBlock(id)) return;
         const { targetResearch: _r, targetFingerprint: _f, ...rest } = ws.choices;
         const { research: _sr, ...oldSource } = ws.choices.source;
-        ws.choices = { ...rest, targetTreeId: id, targetName: meta.name, ...(meta.research ? { targetResearch: true } : {}) };
+        ws.choices = { ...rest, targetTreeId: id, targetName: meta.name, ...(TreeManager.canSendToResearch(id) ? { targetResearch: true } : {}) };
         ws.compared = false;
         ws.reached = 1;
         this.exampleCache = null;
@@ -973,12 +977,12 @@ class MergerUIClass {
                 source: {
                     ...oldSource, label: sourceName, treeId: targetId,
                     persons: Object.values(incoming.persons).filter(p => !p.isPlaceholder).length,
-                    ...(TreeManager.getTreeMetadata(targetId)?.research ? { research: true as const } : {}),
+                    ...(TreeManager.canSendToResearch(targetId) ? { research: true as const } : {}),
                 },
                 targetTreeId: sourceId,
                 targetName,
                 targetFingerprint: fingerprint,
-                ...(TreeManager.getTreeMetadata(sourceId)?.research ? { targetResearch: true } : {}),
+                ...(TreeManager.canSendToResearch(sourceId) ? { targetResearch: true } : {}),
             },
         };
         this.mergeState = next;
@@ -1052,7 +1056,7 @@ class MergerUIClass {
         const target = c.mode !== 'new' && !c.json ? c.targetTreeId : null;
         let linked: Array<{ id: TreeId; name: string }>;
         try {
-            linked = TreeManager.getTrees().filter(t => t.research && t.id !== source && t.id !== target);
+            linked = TreeManager.getTrees().filter(t => TreeManager.canSendToResearch(t.id) && t.id !== source && t.id !== target);
         } catch {
             return null;
         }

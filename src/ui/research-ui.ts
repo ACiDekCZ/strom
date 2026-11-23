@@ -53,7 +53,7 @@ import {
     decideResearchOpen, stabilizeIds, keepContacts, keepEventShares, keepTitles, keepMarriedSurname, keepSurnameVariants, keepLineageOverrides, researchHasTitles, withResearchTitles, TITLES_FEATURE, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeLiveEnd, sanitizeWorking, WORKING_HELPS_FEATURE, holdsSaid, researchFamilyPartners, workingWithFamilyPersons, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
-    parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
+    parseSendBridge, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
     LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, LiveBusy, LiveRunWire, LiveRunEnded, LiveRunLimits, LiveAgent, LiveWork, ResearchCaps, BrowserInfo, LiveOffLine, LiveBooks, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
     LiveQueueCounts, QUEUE_PAGE_FEATURE, QUEUE_SEARCH_FEATURE, type QueueTaskKind,
@@ -100,7 +100,6 @@ import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom, countFamilies, type GedcomMediaCounts, type GedcomMediaRef } from '../ged-exporter.js';
 import { NO_CITATION_FEATURES, researchCitationsOut, type ResearchCitationsOut } from '../citation-gates.js';
-import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
 import {
     noteResearchLinks, announcedResearchLinks, announcedResearchScheme, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
@@ -2911,11 +2910,16 @@ export const researchUiMethods = uiModule({
         let tieBefore: ResearchLinkBefore | undefined;
         /** The images of the file still to come, by their place in the tree as loaded. */
         let waiting: PendingImage[] = [];
+        /** The tree kept as it was ("Open as a new copy"): a copy of the new tree, without research. */
+        let copied: TreeId | null = null;
         if (!existing || asCopy) {
             // The new tree takes the updates: the next open of this research
-            // updates it. The tree the user changed stays exactly as it is and
-            // keeps its tie as a copy — its changes can still be sent back.
-            if (existing?.research) TreeManager.setResearchLink(existing.id, { ...existing.research, copy: true });
+            // updates it. The tree the user changed stays exactly as it is, as a copy without research (one
+            // research, one tree: spec 139 K5.1): marked a copy at once, its tie dropped once the new tree has it.
+            if (existing?.research) {
+                TreeManager.setResearchLink(existing.id, { ...existing.research, copy: true });
+                copied = existing.id;
+            }
             const treeName = existing ? strings.research.copyName(name, formatFlexDate(todayIso())) : name;
             // Everyone comes into the new tree now, or on the research's own date (spec 084 §8).
             // Images still on their way stay out of what is stored: the tree shows at once, they follow (spec 116).
@@ -2966,6 +2970,7 @@ export const researchUiMethods = uiModule({
             else if (treeAsksAppMedia(this.researchStatusOf(source.treeId)?.features, includeImages)) this.researchMediaMissed(treeId, source.treeId);
             this.researchKeepCopy(treeId, base);
         }
+        if (copied) TreeManager.detachAsCopy(copied, { treeId, name: TreeManager.getTreeMetadata(treeId)?.name ?? '' });
         // "Restore the state before loading", offered while the tree is just what was loaded.
         if (backupId && DataManager.getCurrentTreeId() === treeId) {
             patchResearchAutoState(treeId, { loadBackup: { id: backupId, at: new Date().toISOString(), fingerprint: contentFingerprint(DataManager.getData()),
@@ -3100,25 +3105,13 @@ export const researchUiMethods = uiModule({
             return;
         }
         const researchName = status.name || r.defaultName;
-        const trees = TreeManager.findTreesByResearchId(status.treeId);
-        let tree = pickSendDefault(trees, DataManager.getCurrentTreeId());
+        // Only the research's owner is sent: a copy is a tree without research (spec 139 K5.1).
+        const owner = TreeManager.findTreeByResearchId(status.treeId);
+        const tree = owner && TreeManager.canSendToResearch(owner.id) ? owner : null;
         if (!tree) {
             cancel('no-tree');
             await this.showAlert(r.sendNoTree(researchName), 'info');
             return;
-        }
-        if (trees.length > 1) {
-            // Never more than one tree: the user picks (suggested one last = primary).
-            const lang = getCurrentLanguage();
-            const suggested = tree;
-            const ordered = [...trees.filter(t => t.id !== suggested.id), suggested];
-            const pick = await this.showChoice(r.sendPickMessage(researchName), r.sendPickTitle,
-                ordered.map(t => ({
-                    id: t.id,
-                    label: r.sendPickItem(t.name, formatRelativeDateTime(Date.parse(t.changedAt ?? t.lastModifiedAt) || Date.now(), lang)),
-                })));
-            if (pick === null) { cancel('cancelled'); return; }
-            tree = trees.find(t => t.id === pick) ?? suggested;
         }
         const link = tree.research;
         if (!link) { cancel('no-tree'); return; }
@@ -3274,11 +3267,12 @@ export const researchUiMethods = uiModule({
         versionWait = null;
     },
 
-    /** The active tree's research id, when it is a research tree (the app's own trees: null). */
+    /** The active tree's research id, when it is a research tree (the app's own trees and copies of a research's: null). */
     activeResearchId(): string | null {
         if (DataManager.isViewMode()) return null;
         const id = DataManager.getCurrentTreeId();
-        return (id ? TreeManager.getTreeMetadata(id)?.research?.id : undefined) ?? null;
+        // A copy is a tree without research (spec 139 K5.1): no Research menu of the original's research.
+        return (id && TreeManager.canSendToResearch(id) ? TreeManager.getTreeMetadata(id)?.research?.id : undefined) ?? null;
     },
 
     /** A strom-research:// link for the active research tree, or null (not announced, not a research tree, bad id). */
@@ -3730,6 +3724,8 @@ export const researchUiMethods = uiModule({
 
     /** Tree menu "Send changes to the research": one click when the research handles it, else the way there. */
     async sendTreeToResearch(treeId: TreeId): Promise<void> {
+        // A copy is a tree without research: no way to send it there either (spec 139 K5.1).
+        if (!TreeManager.canSendToResearch(treeId)) return;
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         const url = link && this.researchLinkAvailable('send') ? researchSchemeUrl('send', { tree: link.id }, announcedResearchScheme()) : null;
         if (url) this.launchResearchLink(url, 'terminal');

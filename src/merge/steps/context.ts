@@ -129,7 +129,10 @@ export interface TargetRow {
     persons: number;
     /** The tree open in the window. */
     open: boolean;
+    /** The tree owns a research (a copy of a research tree does not: src/research-owner.ts). */
     research: boolean;
+    /** "copy of the tree … · no research" for a copy of a research tree, else ''. */
+    copyOf?: string;
     /** The latest backup, as said ("today 9:12"), or null. */
     backup: string | null;
     block: TargetBlock | null;

@@ -222,7 +222,7 @@ test('a tree followed live: step 1 says so, End following frees it', async ({ pa
 
 test('a copy of a research tree with ◎ on: the import merges into it, it is not followed', async ({ page }) => {
     await openModrinovi(page);
-    // The research tree's copy (Duplicate keeps its link as a copy) open, ◎ left on from the research tree:
+    // An older copy of a research tree (made when Duplicate kept the link, marked a copy) open, ◎ left on from the research tree:
     // no live session of this tree, so following does not apply and the tree can take the import.
     await page.evaluate(() => {
         window.Strom.TreeManager.setResearchLink(window.Strom.DataManager.getCurrentTreeId()!,

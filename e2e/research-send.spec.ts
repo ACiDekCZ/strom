@@ -130,26 +130,27 @@ test.describe('send changes back to the research', () => {
         await expect.poll(() => cancels).toEqual(['unchanged', 'cancelled']);
     });
 
-    test('several tied trees: the user picks one (the open tree suggested); only that one is sent', async ({ page }) => {
+    test('a copy of the tree is no tree of the research: the send link sends the original, never the copy', async ({ page }) => {
         await openResearch(page, true);
         const firstId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
-        await page.evaluate((id) => window.Strom.TreeManager.duplicateTree(id, 'Fíškovi – pokus'), firstId);
-        const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees());
-        expect(trees.find((t: any) => t.name === 'Fíškovi – pokus').research.copy).toBe(true);
+        const copyId = await page.evaluate((id) => window.Strom.TreeManager.duplicateTree(id, 'Fíškovi – pokus'), firstId);
+        const copy = await page.evaluate((id) => window.Strom.TreeManager.getTreeMetadata(id), copyId);
+        expect(copy.research).toBeUndefined();
+        expect(copy.copyOf).toEqual({ treeId: firstId, name: 'Fíškovi' });
+        // Even with the copy open, the link offers no pick: the tree that takes the research's updates is sent.
+        await page.evaluate((id) => window.Strom.UI.switchToTree(id), copyId);
+        await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Fíškovi – pokus');
         const { posts } = await bridge(page);
 
         const done = send(page);
-        await expect(dialog(page)).toContainText('Several trees in the app come from the research');
-        const buttons = dialog(page).locator('#confirm-buttons button');
-        await expect(buttons.last()).toContainText('Fíškovi (changed');   // the open tree, primary
-        await dialog(page).getByRole('button', { name: /Fíškovi – pokus/ }).click();
-        await expect(dialog(page)).toContainText('the tree “Fíškovi – pokus”');
-        // The tree being sent is the one on screen behind the dialog.
-        await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Fíškovi – pokus');
+        await expect(dialog(page)).toContainText('the tree “Fíškovi”');
+        await expect(dialog(page)).not.toContainText('Fíškovi – pokus');
         await dialog(page).getByRole('button', { name: 'Send' }).click();
         await expect(page.locator('.toast--progress')).toContainText('Sent.');
         await done;
         expect(posts).toHaveLength(1);
+        expect(posts[0].body).toContain(`1 _STROM_APP_TREE ${firstId}`);
+        expect(posts[0].body).not.toContain(copyId);
     });
 
     test('no tree of this research; a refusal shows the reason; a foreign address is refused', async ({ page }) => {
@@ -250,14 +251,15 @@ test.describe('send changes back to the research', () => {
         ]);
         expect(JSON.parse(readFileSync(await redacted.path(), 'utf-8')).research).toBeUndefined();
 
-        // Importing the faithful file makes a tree tied as a copy (the original still takes updates).
+        // Importing the faithful file while the original is here makes a copy of it without research (one research, one tree).
         await page.locator('#file-input').setInputFiles({ name: 'back.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(json)) });
         const imp = page.locator('#import-tree-modal');
         await imp.locator('#import-tree-name').fill('Z jiného počítače');
         await imp.getByRole('button', { name: 'Import' }).click();
         await expect(imp).toBeHidden();
-        const tied = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata().research);
-        expect(tied).toMatchObject({ id: UUID, head: HEAD, copy: true });
+        const meta = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
+        expect(meta.research).toBeUndefined();
+        expect(meta.copyOf).toMatchObject({ name: 'Fíškovi' });
         // Stored tree data never carries the field.
         const stored = await page.evaluate(() => (window.Strom.DataManager.getData() as any).research);
         expect(stored).toBeUndefined();
