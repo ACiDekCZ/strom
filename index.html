@@ -18731,6 +18731,74 @@
             .pair.is-one { grid-template-columns: 80px minmax(0, 1fr); }
         }
         /*
+         * Step 2 on a wider window (dotaz 10, 4f–4h; `.is-wide` is set by the step when the window is not a
+         * phone's): the pair's controls one row that never scrolls, the candidates compact, the table fills
+         * the rest and only it scrolls (its head stays), the undecided rest at the list's foot; the list
+         * folds to a rail of 48 px.
+         */
+        .merge-s2.is-wide { grid-template-columns: 280px minmax(0, 1fr); }
+        .merge-s2.is-wide.is-folded { grid-template-columns: 48px minmax(0, 1fr); }
+        .merge-s2-side[hidden] { display: none; }
+        .merge-s2-rail { display: flex; flex-direction: column; align-items: center; gap: 8px; border-right: 1px solid var(--divider); }
+        .merge-s2-rail-n { font-size: 11.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .merge-s2 .merge-icon-btn {
+            flex: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            background: var(--surface);
+            color: var(--text-light);
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .merge-s2 .merge-icon-btn:disabled { opacity: .4; cursor: default; }
+        .merge-s2.is-wide .merge-s2-pane { overflow: hidden; gap: 8px; padding-right: 0; }
+        .merge-pair-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; font-size: 13px; }
+        .merge-pair-ctl .merge-pair-title { font-size: 14px; white-space: nowrap; }
+        .merge-pair-ctl .merge-pair-sub { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-pair-ctl .merge-btn-preview { white-space: nowrap; }
+        .merge-pair-ctl .merge-decide { flex-wrap: nowrap; gap: 4px; }
+        .merge-pair-ctl .merge-decide .merge-dec { padding: 4px 10px; white-space: nowrap; }
+        .merge-cands-box { display: flex; flex-direction: column; gap: 4px; }
+        .merge-cands-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+        .modal .merge-s2.is-wide label.merge-cand { flex-wrap: nowrap; min-height: 30px; padding: 3px 10px; }
+        .merge-s2.is-wide .merge-cand .merge-pn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-s2.is-wide .merge-cand .merge-mut, .merge-s2.is-wide .merge-cand-why { flex: none; white-space: nowrap; }
+        .merge-s2.is-wide .merge-cand-why { flex-basis: auto; padding-left: 0; }
+        .merge-s2.is-wide .merge-pair-scroll {
+            flex: 0 1 auto;
+            min-height: 0;
+            overflow: auto;
+            border: 1px solid var(--border);
+            border-radius: var(--r-lg);
+            background: var(--surface);
+        }
+        .merge-pair-scroll > .pair { border: 0; border-radius: 0; overflow: visible; grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1fr); }
+        .merge-pair-scroll > .pair.is-one { grid-template-columns: 120px minmax(0, 1fr); }
+        .merge-pair-scroll > .pair > .hd {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            font-weight: 600;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .pair .ln { display: block; }
+        .pair .merge-records-more { padding: 0; min-height: 0; font-size: 12px; }
+        .merge-s2.is-wide .merge-s2-side .merge-rest { flex-direction: column; align-items: stretch; gap: 6px; }
+        .merge-s2.is-wide .merge-s2-side .merge-rest-warn { flex-basis: auto; }
+        @media (min-width: 1800px) {
+            .merge-s2.is-wide:not(.is-folded) { grid-template-columns: 320px minmax(0, 1fr); }
+        }
+        /*
          * A phone (14b) and a phone held sideways (14f): the pair takes the step; "Pair 7 of 17 ▾" opens the
          * list as a sheet from the bottom (a chosen row closes it). Upright the pair shows one column at a time
          * ({tree} / Import); sideways both side by side. The decisions are 44 px high.
@@ -18788,6 +18856,7 @@
         }
         @media (hover: hover) {
             .merge-item:hover, .merge-cand:hover { background: var(--hover-bg); }
+            .merge-s2 .merge-icon-btn:not(:disabled):hover { color: var(--text); border-color: var(--text-light); }
         }
         /*
          * Step 3 – Whom to add (spec 134 §5): the variants, the tabs, the tools, the list by groups

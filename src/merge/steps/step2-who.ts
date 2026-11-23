@@ -31,6 +31,7 @@ import { factReliability, reliabilityOptionsOf } from '../../reliability.js';
 import { factReliabilityHtml } from '../../ui/fact-status.js';
 import { SettingsManager } from '../../settings.js';
 import { busyButtonHtml } from '../../ui/busy.js';
+import { isPhoneBar, MQ_PHONE_BAR } from '../../breakpoints.js';
 
 export type PairGroup = 'maybe' | 'same' | 'new';
 
@@ -68,6 +69,10 @@ interface PairView {
      * right after the comparison, never in place of the list being worked in.
      */
     showCopy: boolean;
+    /** A wider window (dotaz 10, 4h): the list of pairs folded to a rail; kept until the guide closes, never saved. */
+    pairsHidden: boolean;
+    /** The pair whose records are shown whole ("2 more ▸", 4f); one pair at a time. */
+    recordsOpen: PersonId | null;
 }
 
 const views = new WeakMap<MergeState, PairView>();
@@ -77,7 +82,7 @@ function viewOf(state: MergeState): PairView {
     if (!v) {
         v = {
             group: null, selected: null, query: '', cand: new Map(), checked: new Set(), advanceFrom: null, focusRow: false, scrollTop: 0,
-            recalc: [], onlyRecalc: false, side: 'tree', listOpen: false, showCopy: false,
+            recalc: [], onlyRecalc: false, side: 'tree', listOpen: false, showCopy: false, pairsHidden: false, recordsOpen: null,
         };
         views.set(state, v);
     }
@@ -235,23 +240,60 @@ function relativesHtml(ids: readonly PersonId[], data: StromData, joined: (id: P
     return names.length > max ? `${names.length}: ${shown.join(', ')}…` : shown.join(', ');
 }
 
-function partnersHtml(p: Person, data: StromData, joined: (id: PersonId) => boolean): string {
+/** A relative's years ("1871–1933", "1873"); '' with none known. */
+function lifeYears(p: Person): string {
+    const by = yearOf(p.birthDate);
+    const dy = yearOf(p.deathDate);
+    if (by === null && dy === null) return '';
+    return dy === null ? String(by) : `${by ?? ''}–${dy}`;
+}
+
+/** A wider window (4f): every relative on a line of its own, "Name (1871–1933) ✓". */
+function relativeLinesHtml(ids: readonly PersonId[], data: StromData, joined: (id: PersonId) => boolean): string {
+    const list = ids.map(id => data.persons[id]).filter((p): p is Person => !!p);
+    if (list.length === 0) return '—';
+    return list.map(p => {
+        const years = lifeYears(p);
+        return `<span class="ln">${escapeHtml(nameText(p))}${years ? ` (${escapeHtml(years)})` : ''}${joined(p.id) ? ` ${okMark()}` : ''}</span>`;
+    }).join('');
+}
+
+function partnersHtml(p: Person, data: StromData, joined: (id: PersonId) => boolean, lines = false): string {
     const list = partnersOf(p, data).filter(x => data.persons[x.id] && !data.persons[x.id].isPlaceholder);
     if (list.length === 0) return '—';
     return list.map(({ id, u }) => {
         const y = yearOf(u.startDate);
         const name = `${escapeHtml(nameText(data.persons[id]))}${y !== null ? ` (${y})` : ''}`;
-        return `${name}${joined(id) ? ` ${okMark()}` : ''}`;
-    }).join(', ');
+        const html = `${name}${joined(id) ? ` ${okMark()}` : ''}`;
+        return lines ? `<span class="ln">${html}</span>` : html;
+    }).join(lines ? '' : ', ');
+}
+
+/** How many records a wider window shows before "N more ▸" (4f). */
+const RECORDS_SHOWN = 3;
+
+function sourceRowsOf(data: StromData, p: Person): ReturnType<typeof personSourceRows> {
+    try {
+        return personSourceRows(data, p.id);
+    } catch {
+        return [];
+    }
+}
+
+/** A wider window (4f): the first three records on lines, then "2 more ▸" (or all and Collapse). */
+function recordLinesHtml(data: StromData, p: Person, open: boolean): string {
+    const W = strings.mergeWizard;
+    const rows = sourceRowsOf(data, p);
+    if (rows.length === 0) return '—';
+    const shown = open ? rows : rows.slice(0, RECORDS_SHOWN);
+    const lines = shown.map(r => `<span class="ln">${escapeHtml(r.source.title || '?')}</span>`).join('');
+    if (rows.length <= RECORDS_SHOWN) return lines;
+    const label = open ? W.recordsLess : W.recordsMore(rows.length - RECORDS_SHOWN);
+    return `${lines}<button type="button" class="link-button merge-records-more" aria-expanded="${open}">${escapeHtml(label)}</button>`;
 }
 
 function recordsHtml(data: StromData, p: Person): string {
-    let rows: ReturnType<typeof personSourceRows> = [];
-    try {
-        rows = personSourceRows(data, p.id);
-    } catch {
-        rows = [];
-    }
+    const rows = sourceRowsOf(data, p);
     if (rows.length === 0) return '—';
     const titles = rows.slice(0, 2).map(r => escapeHtml(r.source.title || '?'));
     return rows.length > 2 ? `${rows.length}: ${titles.join(', ')}…` : titles.join(', ');
@@ -260,7 +302,8 @@ function recordsHtml(data: StromData, p: Person): string {
 const norm = (s: string): string => s.replace(/\s+/g, ' ').trim().toLowerCase();
 
 /** The grid of a pair (`tree` null: a new person, the import's column only). */
-function pairGridHtml(state: MergeState, targetName: string, inc: Person, tree: Person | null, side: 'tree' | 'import' = 'tree'): string {
+function pairGridHtml(state: MergeState, targetName: string, inc: Person, tree: Person | null, side: 'tree' | 'import' = 'tree',
+    wide: { source: string; recordsOpen: boolean } | null = null): string {
     const W = strings.mergeWizard;
     const T = state.existingData;
     const F = state.incomingData;
@@ -290,25 +333,32 @@ function pairGridHtml(state: MergeState, targetName: string, inc: Person, tree: 
     add(rDeath,
         tree ? cell(escapeHtml(lifeFact(tree, 'death')) + (lifeFact(tree, 'death') ? factMark(T, tree, 'death') : ''), lifeFact(tree, 'death')) : null,
         cell(escapeHtml(lifeFact(inc, 'death')) + (lifeFact(inc, 'death') ? factMark(F, inc, 'death') : ''), lifeFact(inc, 'death')), true);
+    // A wider window lists the relatives on lines and the records by three (4f); a phone keeps its short form.
+    const rel = (ids: readonly PersonId[], data: StromData, joined: (id: PersonId) => boolean): string =>
+        wide ? relativeLinesHtml(ids, data, joined) : relativesHtml(ids, data, joined);
+    const rec = (data: StromData, p: Person): string => wide ? recordLinesHtml(data, p, wide.recordsOpen) : recordsHtml(data, p);
     add(rParents,
-        tree ? cell(relativesHtml(tree.parentIds, T, treeJoined(parentsIn)), '') : null,
-        cell(relativesHtml(inc.parentIds, F, tree ? incJoined(tree.parentIds) : () => false), ''));
+        tree ? cell(rel(tree.parentIds, T, treeJoined(parentsIn)), '') : null,
+        cell(rel(inc.parentIds, F, tree ? incJoined(tree.parentIds) : () => false), ''));
     add(rPartners,
-        tree ? cell(partnersHtml(tree, T, treeJoined(partnersIn)), '') : null,
-        cell(partnersHtml(inc, F, tree ? incJoined(partnersOf(tree, T).map(x => x.id)) : () => false), ''));
+        tree ? cell(partnersHtml(tree, T, treeJoined(partnersIn), !!wide), '') : null,
+        cell(partnersHtml(inc, F, tree ? incJoined(partnersOf(tree, T).map(x => x.id)) : () => false, !!wide), ''));
     add(rChildren,
-        tree ? cell(relativesHtml(tree.childIds, T, treeJoined(childrenIn)), '') : null,
-        cell(relativesHtml(inc.childIds, F, tree ? incJoined(tree.childIds) : () => false), ''));
-    add(rRecords, tree ? cell(recordsHtml(T, tree), '') : null, cell(recordsHtml(F, inc), ''));
+        tree ? cell(rel(tree.childIds, T, treeJoined(childrenIn)), '') : null,
+        cell(rel(inc.childIds, F, tree ? incJoined(tree.childIds) : () => false), ''));
+    add(rRecords, tree ? cell(rec(T, tree), '') : null, cell(rec(F, inc), ''));
 
     const two = !!tree;
     // c1 = the tree's column, c2 = the import's (a phone shows one of them, 14b).
-    const head = `<div class="hd"></div>${two ? `<div class="hd c1">${escapeHtml(W.mine(targetName))}</div>` : ''}<div class="hd c2">${escapeHtml(W.colImport)}</div>`;
+    const importHead = wide ? W.importCol(wide.source) : W.colImport;
+    const head = `<div class="hd"></div>${two ? `<div class="hd c1">${escapeHtml(W.mine(targetName))}</div>` : ''}<div class="hd c2" title="${escapeHtml(importHead)}">${escapeHtml(importHead)}</div>`;
     const body = cells.map(([label, a, b, diff]) => {
         const x = diff ? ' x' : '';
         return `<div class="k">${escapeHtml(label)}</div>${two && a ? `<div class="v c1${x}">${a.html}</div>` : ''}<div class="v c2${x}">${b.html}</div>`;
     }).join('');
-    return `<div class="pair${two ? ` show-${side}` : ' is-one'}" role="table" aria-label="${escapeHtml(W.rows.join(' · '))}">${head}${body}</div>`;
+    const grid = `<div class="pair${two ? ` show-${side}` : ' is-one'}" role="table" aria-label="${escapeHtml(W.rows.join(' · '))}">${head}${body}</div>`;
+    // A wider window: only the table scrolls, its head stays (4f).
+    return wide ? `<div class="merge-pair-scroll">${grid}</div>` : grid;
 }
 
 function reasonText(reason: string): string {
@@ -446,17 +496,17 @@ function candidatesHtml(state: MergeState, inc: Person, cands: readonly MatchCan
         + `<div class="merge-cands" role="radiogroup" aria-label="${escapeHtml(W.candidates(cands.length))}">${items}</div>`;
 }
 
-function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d: Drawn): string {
-    const W = strings.mergeWizard;
-    const state = ctx.state;
-    const row = d.row;
-    const groupName = view.group === 'maybe' ? W.grpMaybe : view.group === 'same' ? W.grpSame : W.grpNew;
-    const parts: string[] = [];
-    if (view.group === 'same') parts.push(`<p class="merge-s2-note">${escapeHtml(W.sameNote)}</p>`);
-    if (!row) return parts.join('') + recalcHtml(state, view) + restHtml(d);
+/** The chosen pair: the import's person, the tree's candidates (several: 4b), the chosen one and the tree's person shown. */
+interface PairShown {
+    inc: Person;
+    cands: MatchCandidateInfo[];
+    chosen: PersonId | null;
+    tree: Person | null;
+}
+
+function pairShown(state: MergeState, view: PairView, row: PairRow): PairShown | null {
     const inc = state.incomingData.persons[row.id];
-    if (!inc) return parts.join('');
-    const index = d.shown.indexOf(row) + 1;
+    if (!inc) return null;
     // Several candidates of the tree (4b): the chosen one stands in the grid.
     let cands: MatchCandidateInfo[] = [];
     if (row.group === 'maybe') {
@@ -473,8 +523,58 @@ function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d
         ?? treePersonOf(state, row);
     const treeId = row.group === 'new' ? null : chosen;
     const tree = treeId ? state.existingData.persons[treeId] ?? null : null;
+    return { inc, cands, chosen, tree };
+}
+
+function compareHtml(env: Step2Env | undefined, tree: Person | null): string {
+    return env ? `<button type="button" class="link-button merge-btn-preview" data-action="${tree ? 'compare' : 'preview'}"${tree ? ` data-tree="${escapeHtml(tree.id)}"` : ''}>${escapeHtml(tree ? strings.treePreview.comparePersons : strings.treePreview.preview)}</button>` : '';
+}
+
+/** Why yes / What speaks against (4d). */
+function whysHtml(state: MergeState, env: Step2Env | undefined, row: PairRow, pair: PairShown): string {
+    const W = strings.mergeWizard;
+    const { inc, tree, cands } = pair;
+    if (!tree) return '';
+    const cand = cands.find(c => c.existingId === tree.id);
+    const reasons = (row.match && row.match.existingId === tree.id ? row.match.reasons : cand?.reasons ?? [])
+        .filter(r => r !== 'manual').map(reasonText);
+    const against = againstLines(state, inc, tree, row.match);
+    const unions = env?.unionConflicts(row.id) ?? [];
+    const why: string[] = [];
+    if (reasons.length) why.push(`<p class="merge-why"><b>${escapeHtml(W.whyYes)}</b> ${escapeHtml(reasons.join(', '))}</p>`);
+    if (against.length || unions.length) {
+        const unionLines = unions.map(u => `<span class="merge-why-union" data-union="${escapeHtml(u.id)}">${escapeHtml(u.text)}</span>`).join('');
+        why.push(`<p class="merge-why-no"><b>${escapeHtml(W.whyNo)}</b> ${against.map(escapeHtml).join('; ')}${unionLines}</p>`);
+    }
+    return why.length ? `<div class="merge-whys">${why.join('')}</div>` : '';
+}
+
+/** The decisions with their keys (S N A X). */
+function decideHtml(state: MergeState, row: PairRow, label: string): string {
+    const on = decisionKind(state, row);
+    const opts = decisionsOf(row).map(k => {
+        const checked = on === k;
+        return `<button type="button" class="sel-opt merge-dec" role="radio" aria-checked="${checked}" data-dec="${k}">`
+            + `${escapeHtml(decLabel(k))} <span class="kbd" aria-hidden="true">${escapeHtml(decKey(k))}</span></button>`;
+    }).join('');
+    return `<div class="merge-decide" role="radiogroup" aria-label="${escapeHtml(label)}" aria-keyshortcuts="${decisionsOf(row).map(decKey).join(' ')}">${opts}</div>`;
+}
+
+/** A phone (and a phone held sideways): the pair's head, the candidates, the grid, why, the decisions, the rest under them. */
+function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d: Drawn): string {
+    const W = strings.mergeWizard;
+    const state = ctx.state;
+    const row = d.row;
+    const groupName = view.group === 'maybe' ? W.grpMaybe : view.group === 'same' ? W.grpSame : W.grpNew;
+    const parts: string[] = [];
+    if (view.group === 'same') parts.push(`<p class="merge-s2-note">${escapeHtml(W.sameNote)}</p>`);
+    if (!row) return parts.join('') + recalcHtml(state, view) + restHtml(d);
+    const pair = pairShown(state, view, row);
+    if (!pair) return parts.join('');
+    const { inc, cands, chosen, tree } = pair;
+    const index = d.shown.indexOf(row) + 1;
     const sub = cands.length > 1 ? W.candidates(cands.length) : groupName;
-    const compare = env ? `<button type="button" class="link-button merge-btn-preview" data-action="${tree ? 'compare' : 'preview'}"${tree ? ` data-tree="${escapeHtml(tree.id)}"` : ''}>${escapeHtml(tree ? strings.treePreview.comparePersons : strings.treePreview.preview)}</button>` : '';
+    const compare = compareHtml(env, tree);
     // A phone (14b): the title opens the list as a sheet; the seg shows one column of the pair.
     const seg = tree
         ? `<div class="sel-seg merge-pair-seg" role="radiogroup" aria-label="${escapeHtml(W.pairSide)}">`
@@ -487,29 +587,74 @@ function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d
         + `<span class="merge-keys">${keysHintHtml()}</span></div>`);
     if (cands.length > 1) parts.push(candidatesHtml(state, inc, cands, chosen));
     parts.push(pairGridHtml(state, ctx.choices.targetName, inc, tree, view.side));
-    if (tree) {
-        const cand = cands.find(c => c.existingId === tree.id);
-        const reasons = (row.match && row.match.existingId === tree.id ? row.match.reasons : cand?.reasons ?? [])
-            .filter(r => r !== 'manual').map(reasonText);
-        const against = againstLines(state, inc, tree, row.match);
-        const unions = env?.unionConflicts(row.id) ?? [];
-        const why: string[] = [];
-        if (reasons.length) why.push(`<p class="merge-why"><b>${escapeHtml(W.whyYes)}</b> ${escapeHtml(reasons.join(', '))}</p>`);
-        if (against.length || unions.length) {
-            const unionLines = unions.map(u => `<span class="merge-why-union" data-union="${escapeHtml(u.id)}">${escapeHtml(u.text)}</span>`).join('');
-            why.push(`<p class="merge-why-no"><b>${escapeHtml(W.whyNo)}</b> ${against.map(escapeHtml).join('; ')}${unionLines}</p>`);
-        }
-        if (why.length) parts.push(`<div class="merge-whys">${why.join('')}</div>`);
-    }
-    const on = decisionKind(state, row);
-    const opts = decisionsOf(row).map(k => {
-        const checked = on === k;
-        return `<button type="button" class="sel-opt merge-dec" role="radio" aria-checked="${checked}" data-dec="${k}">`
-            + `${escapeHtml(decLabel(k))} <span class="kbd" aria-hidden="true">${escapeHtml(decKey(k))}</span></button>`;
-    }).join('');
-    parts.push(`<div class="merge-decide" role="radiogroup" aria-label="${escapeHtml(W.pairOf(index, d.shown.length))}" aria-keyshortcuts="${decisionsOf(row).map(decKey).join(' ')}">${opts}</div>`);
+    parts.push(whysHtml(state, env, row, pair));
+    parts.push(decideHtml(state, row, W.pairOf(index, d.shown.length)));
     parts.push(recalcHtml(state, view));
     parts.push(restHtml(d));
+    return parts.join('');
+}
+
+const ICON_HIDE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>';
+const ICON_LIST = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>';
+
+/** A wider window (4f): the tree's candidates as compact rows of 30 px, the recalculation said in their head. */
+function wideCandidatesHtml(ctx: StepContext, view: PairView, cands: readonly MatchCandidateInfo[], chosen: PersonId | null): string {
+    const W = strings.mergeWizard;
+    const state = ctx.state;
+    const items = cands.map(c => {
+        const p = state.existingData.persons[c.existingId];
+        if (!p) return '';
+        const years = lifeYears(p);
+        const facts = [years, p.birthPlace ?? ''].filter(Boolean).join(' · ');
+        return `<label class="sel-opt merge-cand" data-sel-form="row" data-cand="${escapeHtml(c.existingId)}">`
+            + `<input type="radio" name="merge-cand" value="${escapeHtml(c.existingId)}"${c.existingId === chosen ? ' checked' : ''}>`
+            + `<span class="merge-pn">${escapeHtml(nameText(p))}</span>`
+            + (facts ? `<span class="merge-mut">${escapeHtml(facts)}</span>` : '')
+            + (c.relativesJoined > 0 ? okMark() : '')
+            + (c.timeConflict ? `<span class="merge-cand-why">· ${escapeHtml(W.notFirstTime)}</span>` : '')
+            + `<span class="merge-cand-sp"></span><span class="merge-item-score">${c.score} %</span>`
+            + '</label>';
+    }).join('');
+    return `<div class="merge-cands-box"><div class="merge-cands-head"><span class="merge-mut">${escapeHtml(W.candidatesIn(ctx.choices.targetName, cands.length))}</span>`
+        + `<span class="merge-cand-sp"></span>${recalcHtml(state, view)}</div>`
+        + `<div class="merge-cands" role="radiogroup" aria-label="${escapeHtml(W.candidates(cands.length))}">${items}</div></div>`;
+}
+
+/**
+ * A wider window (dotaz 10, 4f): the pair's controls one row that never
+ * scrolls (‹ hide the list · Pair 7 of 17 · group · ↑ ↓ · the decisions),
+ * the candidates compact, the table filling the rest (only it scrolls, its
+ * head stays), why yes and what speaks against under it. The undecided rest
+ * stands at the foot of the list.
+ */
+function widePaneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d: Drawn): string {
+    const W = strings.mergeWizard;
+    const state = ctx.state;
+    const row = d.row;
+    const groupName = view.group === 'maybe' ? W.grpMaybe : view.group === 'same' ? W.grpSame : W.grpNew;
+    const index = row ? d.shown.indexOf(row) + 1 : 0;
+    const toggle = view.pairsHidden ? ''
+        : `<button type="button" class="merge-icon-btn merge-pairs-toggle" aria-label="${escapeHtml(W.pairsHide)}" title="${escapeHtml(W.pairsHide)}" aria-expanded="true" aria-controls="merge-s2-side">${ICON_HIDE}</button>`;
+    const move = (dir: -1 | 1, label: string, glyphText: string): string => {
+        const off = !row || (dir < 0 ? index <= 1 : index >= d.shown.length);
+        return `<button type="button" class="merge-icon-btn merge-pair-move" data-move="${dir}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${off ? ' disabled' : ''}>${glyphText}</button>`;
+    };
+    const head = `${toggle}<span class="merge-pair-title">${escapeHtml(W.pairOf(index, d.shown.length))}</span>`
+        + `<span class="merge-mut merge-pair-sub"><span class="merge-pair-dot" aria-hidden="true">· </span>${escapeHtml(groupName)}</span>`
+        + move(-1, W.prevPair, '↑') + move(1, W.nextPair, '↓') + '<span class="merge-cand-sp"></span>';
+    const note = view.group === 'same' ? `<p class="merge-s2-note">${escapeHtml(W.sameNote)}</p>` : '';
+    if (!row) return `<div class="merge-pair-ctl">${head}</div>${note}${recalcHtml(state, view)}`;
+    const pair = pairShown(state, view, row);
+    if (!pair) return `<div class="merge-pair-ctl">${head}</div>`;
+    const { inc, cands, chosen, tree } = pair;
+    const parts: string[] = [];
+    parts.push(`<div class="merge-pair-ctl">${head}${compareHtml(env, tree)}${decideHtml(state, row, W.pairOf(index, d.shown.length))}</div>`);
+    if (note) parts.push(note);
+    if (cands.length > 1) parts.push(wideCandidatesHtml(ctx, view, cands, chosen));
+    else parts.push(recalcHtml(state, view));
+    parts.push(pairGridHtml(state, ctx.choices.targetName, inc, tree, view.side,
+        { source: ctx.choices.source.label, recordsOpen: view.recordsOpen === row.id }));
+    parts.push(whysHtml(state, env, row, pair));
     return parts.join('');
 }
 
@@ -588,17 +733,29 @@ export function renderStep2(host: HTMLElement, ctx: StepContext): void {
     // decision made it one): the sentence says why the primary only closes.
     const copyNote = isCopyOfTarget(ctx)
         ? `<p class="merge-step-note merge-s2-copy-note">${escapeHtml(W.sameAsTarget(ctx.counts!.total, ctx.choices.targetName))}</p>` : '';
+    // A wider window (dotaz 10, 4f–4h): the pair fills the window, the list
+    // can fold to a rail, the undecided rest stands at the list's foot. A
+    // phone keeps its sheet and the pane as it was.
+    const wide = !isPhoneBar();
+    const index = d.row ? d.shown.indexOf(d.row) + 1 : 0;
+    const hidden = wide && view.pairsHidden;
+    const rail = hidden
+        ? `<div class="merge-s2-rail"><button type="button" class="merge-icon-btn merge-pairs-toggle" aria-label="${escapeHtml(W.pairsShow)}" title="${escapeHtml(W.pairsShow)}" aria-expanded="false" aria-controls="merge-s2-side">${ICON_LIST}</button>`
+            + `<span class="merge-s2-rail-n" aria-hidden="true">${index}/${d.shown.length}</span></div>`
+        : '';
     host.innerHTML = stepHeading(2).replace('class="merge-step-title"', 'class="merge-step-title merge-s2-title"')
         + copyNote
-        + `<div class="merge-s2${view.listOpen ? ' is-list' : ''}">`
-        + `<div class="merge-s2-side" id="merge-s2-side">`
-        + `<div class="merge-s2-sheet-head"><span class="merge-pair-title">${escapeHtml(W.pairOf(d.row ? d.shown.indexOf(d.row) + 1 : 0, d.shown.length))}</span>`
+        + `<div class="merge-s2${view.listOpen ? ' is-list' : ''}${wide ? ' is-wide' : ''}${hidden ? ' is-folded' : ''}">`
+        + rail
+        + `<div class="merge-s2-side" id="merge-s2-side"${hidden ? ' hidden' : ''}>`
+        + `<div class="merge-s2-sheet-head"><span class="merge-pair-title">${escapeHtml(W.pairOf(index, d.shown.length))}</span>`
         + `<button type="button" class="merge-s2-sheet-close" aria-label="${escapeHtml(strings.buttons.close)}">×</button></div>`
         + tabsHtml(view, d.rows)
         + `<div class="merge-s2-search"><input type="search" class="merge-s2-q" value="${escapeHtml(view.query)}" placeholder="${escapeHtml(W.searchName)}" aria-label="${escapeHtml(W.searchName)}"></div>`
         + `<div class="merge-match-list" id="merge-match-list" role="listbox" aria-label="${escapeHtml(W.grpMaybe)}">${listHtml(ctx, view, d)}</div>`
+        + (wide ? restHtml(d) : '')
         + footHtml(view) + '</div>'
-        + `<div class="merge-s2-pane" id="merge-pair">${paneHtml(ctx, ctx.step2, view, d)}</div>`
+        + `<div class="merge-s2-pane" id="merge-pair">${wide ? widePaneHtml(ctx, ctx.step2, view, d) : paneHtml(ctx, ctx.step2, view, d)}</div>`
         + '</div>';
     const list = host.querySelector<HTMLElement>('#merge-match-list');
     if (list) {
@@ -614,6 +771,20 @@ export function renderStep2(host: HTMLElement, ctx: StepContext): void {
         sel?.focus({ preventScroll: true });
     }
     installKeys(host);
+    watchWidth(host);
+}
+
+/** The window crossing the phone's width (a turn, a resize): step 2 drawn again in its other form. */
+function watchWidth(host: HTMLElement): void {
+    const h = host as HTMLElement & { __step2Width?: boolean; __step2?: StepContext };
+    if (h.__step2Width || typeof window.matchMedia !== 'function') return;
+    h.__step2Width = true;
+    const mq = window.matchMedia(MQ_PHONE_BAR);
+    mq.addEventListener?.('change', () => {
+        const ctx = h.__step2;
+        if (!ctx || host.dataset.step !== '2' || !host.isConnected || !host.querySelector('.merge-s2')) return;
+        redraw(host, ctx, false);
+    });
 }
 
 /** The view changed (group, pair, search, candidate): the step drawn again, keeping the focus on the step. */
@@ -725,9 +896,44 @@ function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
         redraw(host, ctx, false);
         host.querySelector<HTMLElement>('.merge-pair-open')?.focus();
     });
+    /** "Add as new · Do not add" for the undecided rest: under the pair on a phone, at the list's foot on a wider window. */
+    const restClick = (t: HTMLElement): boolean => {
+        const rest = t.closest<HTMLElement>('[data-rest]');
+        if (!rest || !env) return false;
+        const d = drawData(ctx, view);
+        view.showCopy = true;
+        env.decideMany(openIds(d), rest.dataset.rest as 'reject' | 'skip');
+        return true;
+    };
+    host.querySelector<HTMLElement>('#merge-s2-side')?.addEventListener('click', e => { restClick(e.target as HTMLElement); });
+    // A wider window: the list folds to a rail and back (4h), the focus stays on the toggle.
+    host.querySelectorAll<HTMLButtonElement>('.merge-pairs-toggle').forEach(b => b.addEventListener('click', () => {
+        view.pairsHidden = !view.pairsHidden;
+        redraw(host, ctx, false);
+        host.querySelector<HTMLElement>('.merge-pairs-toggle')?.focus();
+    }));
     const pane = host.querySelector<HTMLElement>('#merge-pair');
     pane?.addEventListener('click', e => {
         const t = e.target as HTMLElement;
+        if (t.closest('.merge-pairs-toggle')) return;
+        const move = t.closest<HTMLButtonElement>('.merge-pair-move');
+        if (move) {
+            const d = drawData(ctx, view);
+            const i = d.row ? d.shown.indexOf(d.row) : -1;
+            const next = d.shown[i + Number(move.dataset.move)];
+            if (!next) return;
+            view.selected = next.id;
+            redraw(host, ctx, false);
+            const again = host.querySelector<HTMLButtonElement>(`.merge-pair-move[data-move="${move.dataset.move}"]`);
+            (again && !again.disabled ? again : host.querySelector<HTMLElement>('.merge-pair-move:not(:disabled)'))?.focus();
+            return;
+        }
+        if (t.closest('.merge-records-more')) {
+            view.recordsOpen = view.recordsOpen === view.selected ? null : view.selected;
+            redraw(host, ctx, false);
+            host.querySelector<HTMLElement>('.merge-records-more')?.focus();
+            return;
+        }
         const dec = t.closest<HTMLElement>('.merge-dec');
         if (dec) {
             decide(ctx, dec.dataset.dec as DecKind);
@@ -754,13 +960,7 @@ function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
             host.querySelector<HTMLElement>('.merge-recalc-show')?.focus();
             return;
         }
-        const rest = t.closest<HTMLElement>('[data-rest]');
-        if (rest && env) {
-            const d = drawData(ctx, view);
-            view.showCopy = true;
-            env.decideMany(openIds(d), rest.dataset.rest as 'reject' | 'skip');
-            return;
-        }
+        if (restClick(t)) return;
         const action = t.closest<HTMLElement>('[data-action]')?.dataset.action;
         const id = view.selected;
         if (!action || !id || !env) return;

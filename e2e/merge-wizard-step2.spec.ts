@@ -184,7 +184,7 @@ test.describe('step 2: decisions (K3.3, K3.4)', () => {
         await expect(wizard.locator('#merge-next')).toContainText('Whom to add');
         await expect(wizard.locator('#merge-next-why')).toHaveText('2 pairs left to decide');
 
-        // Under the pair: "Remaining 2 undecided: Add as new (2) · Do not add (2)".
+        // At the list's foot (a wider window, dotaz 10): "Remaining 2 undecided: Add as new (2) · Do not add (2)".
         await mergeGroup(wizard, 'maybe');
         const rest = wizard.locator('#merge-rest');
         await expect(rest).toContainText('Remaining 2 undecided');
@@ -239,7 +239,8 @@ test.describe('step 2: decisions (K3.3, K3.4)', () => {
         await mergeCompare(wizard);
         await mergePair(wizard, /Teofil/, 'maybe');
         const pane = wizard.locator('#merge-pair');
-        await expect(pane.locator('.merge-pair-sub')).toContainText('2 candidates');
+        // A wider window says the candidates in their own head (dotaz 10, 4f).
+        await expect(pane.locator('.merge-cands-head')).toContainText('2 candidates in the tree Modřínovi');
         const cands = pane.locator('.merge-cand');
         await expect(cands).toHaveCount(2);
         // A candidate row is a flex row (radio, name, reason), not a block label.
