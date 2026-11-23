@@ -10,7 +10,7 @@ import { createMergeState } from '../merge/matching.js';
 import { applyPlan, buildPlan, MergeRecord, PlanScope, PlanSource, WizardChoices } from '../merge/plan.js';
 import { applyUndo } from '../merge/undo-plan.js';
 import {
-    canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel, undoResearchView,
+    canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel, undoResearchView, undoShown,
 } from '../merge/undo-view.js';
 import { setLanguage, getCurrentLanguage } from '../strings.js';
 import { StorageManager } from '../storage.js';
@@ -174,6 +174,74 @@ describe('the undo dialog (10a–10d)', () => {
         expect(peopleRemoved(m, new Set([`p:${edited}`]), null, now)).toBe(m.people);
         expect(peopleRemoved(m, new Set(), new Set([`p:${other}`]), now)).toBe(1);
         expect(peopleRemoved(m, new Set(), new Set([`p:${edited}`]), now)).toBe(0);
+    });
+
+    it('10b a person kept is not among what goes, nor a couple kept with them; Undo of the segment puts both back; the count is the button\'s', async () => {
+        // A merge whose new couple has one partner added and one of the tree's (joined or there before).
+        let found: { after: StromData; record: MergeRecord; added: PersonId; couple: string } | null = null;
+        for (let seed = 1; seed < 400 && !found; seed++) {
+            const m = await merged(seed);
+            for (const uid of m.record.partnerships) {
+                const u = m.after.partnerships[uid as keyof StromData['partnerships']];
+                if (!u) continue;
+                const ours = [u.person1Id, u.person2Id].filter(p => m.record.added.includes(p) && !m.after.persons[p]?.isPlaceholder);
+                const theirs = [u.person1Id, u.person2Id].filter(p => !m.record.added.includes(p));
+                if (ours.length === 1 && theirs.length === 1) { found = { ...m, added: ours[0], couple: `u:${uid}` }; break; }
+            }
+        }
+        expect(found).not.toBeNull();
+        const { after, record, added, couple } = found!;
+        const now = structuredClone(after);
+        now.persons[added].notes = 'Hajný v Jilmově.';
+        const m = undoModel(record, now);
+        const person = `p:${added}`;
+        // The model as before: the person counted among what goes when nothing is kept.
+        expect(m.lines.some(l => l.id === person)).toBe(true);
+        expect(m.keep.map(k => k.id)).toEqual(expect.arrayContaining([person, couple]));
+
+        const kept = undoShown(m, record, now, new Set());
+        const goes = kept.lines.filter(l => l.group === 'remove').map(l => l.id);
+        expect(goes).not.toContain(person);
+        expect(goes).not.toContain(couple);
+        expect(kept.people).toBe(m.people - 1);
+        expect(kept.people).toBe(peopleRemoved(m, new Set(), null, now));
+        expect(kept.couples).toBe(m.couples - 1);
+        expect(kept.keep.map(k => k.id)).toEqual(expect.arrayContaining([person, couple]));
+
+        const undone = undoShown(m, record, now, new Set([person]));
+        const back = undone.lines.filter(l => l.group === 'remove').map(l => l.id);
+        expect(back).toContain(person);
+        expect(back).toContain(couple);
+        expect(undone.people).toBe(m.people);
+        expect(undone.people).toBe(peopleRemoved(m, new Set([person]), null, now));
+        // The couple's row goes with its partner: it no longer stays.
+        expect(undone.keep.map(k => k.id)).toEqual([person]);
+    });
+
+    it('10b the dialog says what the write does: what goes is what applyUndo takes away, for any edit kept or chosen', async () => {
+        let keptSome = 0;
+        for (let seed = 1; seed <= 40; seed++) {
+            const { after, record } = await merged(seed);
+            const now = structuredClone(after);
+            const real = realAdded(now, record);
+            if (!real.length) continue;
+            const rnd = mulberry32(seed * 7);
+            for (const pid of real) if (rnd() < 0.4) now.persons[pid].notes = `Úprava ${seed}.`;
+            const m = undoModel(record, now);
+            const undo = new Set(m.keep.filter(k => k.canUndo && rnd() < 0.5).map(k => k.id));
+            const shown = undoShown(m, record, now, undo);
+            const res = applyUndo(record, now, { undo: [...undo], at: '2026-05-10T08:00:00.000Z' });
+            const removedIds = new Set(m.preview.remove.map(i => i.id));
+            const written = res.items.filter(id => removedIds.has(id)).sort();
+            const said = shown.lines.filter(l => l.group === 'remove').map(l => l.id);
+            const placeholders = written.filter(id => id.startsWith('p:') && now.persons[id.slice(2) as PersonId]?.isPlaceholder);
+            expect([...said].sort(), `seed ${seed}`).toEqual(written.filter(id => !placeholders.includes(id)));
+            const gone = real.filter(pid => !res.data.persons[pid]).length;
+            expect(shown.people, `seed ${seed}`).toBe(gone);
+            expect(peopleRemoved(m, undo, null, now), `seed ${seed}`).toBe(gone);
+            if (shown.people < m.people) keptSome++;
+        }
+        expect(keptSome).toBeGreaterThan(5);
     });
 
     it('10c a later merge standing on it: said with its day, its rows warned', async () => {
