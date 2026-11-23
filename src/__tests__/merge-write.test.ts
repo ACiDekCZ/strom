@@ -582,9 +582,11 @@ describe('the undo of a merge written (K8.4)', () => {
         expect(stored.merges?.map(r => [r.id, r.state])).toEqual([[plan.id, 'undone']]);
         expect(stored.merges?.[0].undone?.[0].at).toBe('2026-05-05T10:00:00.000Z');
         expect(DataManager.getDataFor(T1)?.merges?.[0].state).toBe('undone');
-        const backups = (await premerge(T1)).filter(b => b.keepFor === plan.id);
-        expect(backups.map(b => b.id)).toContain(undone.backupId);
-        expect(backups).toHaveLength(2);
+        // The merge's backup "Before merge", and the undo's own "Before undoing a merge" (N5), both kept for the merge.
+        const kept = (await listSnapshots(T1)).filter(b => b.keepFor === plan.id);
+        expect(kept.map(b => b.reason).sort()).toEqual(['pre-merge', 'pre-merge-undo']);
+        expect(kept.find(b => b.reason === 'pre-merge-undo')?.id).toBe(undone.backupId);
+        expect(strings.snapshots.reasons['pre-merge-undo']).toBe('Before undoing a merge');
         expect(linkOf(T1)).toEqual(RESEARCH);
 
         expect(await writeRestore(T1, undone.before, plan.id)).toBe(true);

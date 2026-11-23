@@ -359,7 +359,7 @@ export async function writeUndo(treeId: TreeId, recordId: string, choices: Omit<
     if (!before || !record) return { ok: false, reason: 'missing', why: strings.merge.failed };
     let backupId: string;
     try {
-        backupId = (await DataManager.backupBeforeMerge(treeId, { keepFor: record.id })).id;
+        backupId = (await DataManager.backupBeforeMerge(treeId, { keepFor: record.id }, 'pre-merge-undo')).id;
     } catch (err) {
         return { ok: false, reason: 'backup', why: await backupFailureWhy(err), detail: errorText(err) };
     }

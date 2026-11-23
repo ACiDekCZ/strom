@@ -406,6 +406,7 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             manual: 'Ręczna',
             'pre-import': 'Przed importem',
             'pre-merge': 'Przed scaleniem',
+            'pre-merge-undo': 'Przed cofnięciem scalenia',
             'other-window': 'To okno, zanim nadpisało je inne',
             'pre-research-load': 'Przed wczytaniem wersji z badania',
             'pre-first-send': 'Przed pierwszym wysłaniem do badania',

@@ -2028,9 +2028,9 @@ class DataManagerClass {
         if (this.viewMode || !this.currentTreeId) return null;
         // Around the research a backup is taken whatever the setting: the app never trusts the research blindly.
         // Before a merge or an import too (spec 134 K0.4): "Before merge" and "Before import" are promised whatever the setting.
-        const always = reason === 'manual' || reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge' || reason === 'pre-import';
+        const always = reason === 'manual' || reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge' || reason === 'pre-merge-undo' || reason === 'pre-import';
         if (!always && !TreeManager.isAutoBackupEnabled(this.currentTreeId)) return null;
-        if (reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge' || reason === 'pre-import') {
+        if (reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge' || reason === 'pre-merge-undo' || reason === 'pre-import') {
             try {
                 return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now(), this.backupBase())).id;
             } catch (err) {
@@ -2046,13 +2046,15 @@ class DataManagerClass {
      * K0.4, K6.6): the open tree's data, or another tree's as stored, whatever
      * the automatic backups setting, `keepFor` kept out of the rotation.
      * Throws when the tree cannot be read or the backup written (§8 8d).
+     * The undo of a merge takes the same backup under its own name
+     * (`reason` 'pre-merge-undo', "Before undoing a merge").
      */
-    async backupBeforeMerge(treeId: TreeId, opts: SnapshotOptions = {}): Promise<SnapshotMeta> {
+    async backupBeforeMerge(treeId: TreeId, opts: SnapshotOptions = {}, reason: 'pre-merge' | 'pre-merge-undo' = 'pre-merge'): Promise<SnapshotMeta> {
         const open = !this.viewMode && treeId === this.currentTreeId;
         const data = open ? this.data : await TreeManager.getTreeData(treeId);
         if (!data) throw new Error('The tree could not be read');
         const base = open ? this.backupBase() : TreeManager.backupResearchBase(treeId, TreeManager.researchBaseOf(treeId));
-        return createSnapshot(treeId, data, 'pre-merge', Date.now(), base, opts);
+        return createSnapshot(treeId, data, reason, Date.now(), base, opts);
     }
 
     /**
