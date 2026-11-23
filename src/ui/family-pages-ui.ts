@@ -42,6 +42,8 @@ import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT } from '../image-l
 import { pageImageWait } from './image-slot.js';
 import { hasPoolRefs } from '../image-expand.js';
 import { pageSetImageIds, withImagesWhole } from '../page-images.js';
+import { poolImagesChars } from '../memory-limit.js';
+import { forEachImagePlace } from '../image-intern.js';
 import { treeWithStandIns, withFamilyPageImages } from './family-pages-images.js';
 
 /**
@@ -337,6 +339,26 @@ function stepOf(page: SetPage | undefined): string {
         case 'index': return S.index;
         default: return S.other;
     }
+}
+
+/**
+ * The images' volume (data URL characters, from the catalog) a file of the
+ * set carries whole: the pooled images its pages can show (as buildPagesFile
+ * reads them), plus the images not pooled yet in the tree (counted whole).
+ */
+export function pagesImageChars(data: StromData, spec: BookSelectionSpec, opts: PageSetOptions): number {
+    const pooled = hasPoolRefs(data)
+        ? (() => {
+            const named = buildPageSet(data, spec, opts, { treeName: treeName() });
+            return poolImagesChars(pageSetImageIds(data, named.personSlug.keys(), named.familySlug.keys()));
+        })()
+        : 0;
+    let inline = 0;
+    forEachImagePlace(data, (holder, key) => {
+        const v = holder[key];
+        if (typeof v === 'string' && v.startsWith('data:')) inline += v.length;
+    });
+    return pooled + inline;
 }
 
 /**

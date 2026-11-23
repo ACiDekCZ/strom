@@ -8,8 +8,11 @@
  *   tree is opened, and after an edit at most once a minute (a walk over the
  *   data, no JSON string built).
  * - Before an output with the images (the export dialog, saving to a file,
- *   the working file): a confirm, Continue or Cancel; where the output can
- *   leave the images out (the export dialog's Content), a checkbox to do so.
+ *   the working file, sharing, the book, the family pages, the poster): a
+ *   confirm, Continue or Cancel; where the output can leave the images out
+ *   (the export dialog's Content), a checkbox to do so. A file written a few
+ *   images at a time asks only much later than one that holds its images
+ *   whole (src/memory-limit.ts).
  * - Before reading a large file: a confirm, Continue or Cancel.
  *
  * `window.Strom.MemoryLimit` (tests): `setLimit(bytes | null)` stands in for
@@ -162,6 +165,20 @@ export interface OutputCheck {
     content?: ImageContent;
     /** The output can leave its images out: the question offers it. */
     canLeaveOut?: boolean;
+    /**
+     * The output holds its images whole (sealed under a password, the book,
+     * the family pages, the poster, the change packet); else it is written a
+     * few images at a time.
+     */
+    whole?: boolean;
+    /**
+     * The images' volume the output really carries, when it carries only
+     * some of the tree's (the family pages' set, the poster's portraits):
+     * worked out only when the tree's images would be near the limit.
+     */
+    refine?: () => number;
+    /** What the question names: a file (default), the book or the poster. */
+    what?: 'file' | 'book' | 'poster';
 }
 
 /** The images' volume of an output (all trees: the stored sizes of the others, the open one measured). */
@@ -176,17 +193,37 @@ function outputImageChars(o: OutputCheck): number {
 }
 
 /**
+ * The images' volume of an output when it may go past the limit, else null
+ * (synchronous: an output that must start in its click, as a window, asks
+ * only when this says so).
+ */
+export function outputNearLimit(o: OutputCheck = {}): number | null {
+    const heap = steadyNow();
+    const limit = currentLimit();
+    const whole = !!o.whole;
+    let chars = outputImageChars(o);
+    if (!nearLimitOutput(chars, heap, limit, whole)) return null;
+    if (o.refine) {
+        chars = Math.max(0, o.refine());
+        if (!nearLimitOutput(chars, heap, limit, whole)) return null;
+    }
+    return chars;
+}
+
+/**
  * Before an output with images: 'go' (not near the limit, or Continue),
  * 'without' (Continue with "Leave the images out" ticked) or 'cancel'.
  */
 export async function confirmMemoryForOutput(o: OutputCheck = {}): Promise<'go' | 'without' | 'cancel'> {
-    const chars = outputImageChars(o);
-    if (!nearLimitOutput(chars, steadyNow(), currentLimit())) return 'go';
+    const chars = outputNearLimit(o);
+    if (chars === null) return 'go';
     const m = strings.memoryLimit;
     const size = TreeManager.formatBytes(chars);
     const treeId = o.treeId ?? DataManager.getCurrentTreeId();
     const name = treeId ? TreeManager.getTreeMetadata(treeId)?.name ?? '' : '';
-    const message = o.allTrees ? m.outputAll(size) : m.output(name, size);
+    const message = o.what === 'book' ? m.book(name, size)
+        : o.what === 'poster' ? m.poster(size)
+            : o.allTrees ? m.outputAll(size) : m.output(name, size);
     const ui = getUI();
     const leaveOut = !!o.canLeaveOut && chars > 0;
     const asked = ui.showConfirm(message, m.title, {

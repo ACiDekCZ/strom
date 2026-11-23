@@ -141,3 +141,67 @@ test('reading a file near the limit: Cancel reads nothing, Continue goes on to t
     await confirm.locator('#confirm-ok-btn').click();
     await expect(importDialog).toBeVisible();
 });
+
+test('the book near the limit asks first: Cancel opens no window and keeps the dialog, Continue opens the book', async ({ page, context }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Tamsin', 'Varenne');
+    await giveFirstPersonAPhoto(page);
+    await page.evaluate((l) => window.Strom.MemoryLimit.setLimit(l), LOW_LIMIT);
+    const confirm = page.locator('#confirmation-modal');
+    await page.evaluate(() => window.Strom.UI.showBookDialog());
+    const dialog = page.locator('#book-modal');
+    let windows = 0;
+    context.on('page', () => { windows++; });
+
+    await dialog.getByRole('button', { name: 'Open book' }).click();
+    await expect(confirm).toHaveClass(/active/);
+    await expect(confirm.locator('#confirm-message')).toContainText('The book with the images of');
+    // The book cannot leave its images out: no checkbox.
+    await expect(confirm.locator('.confirm-check-label')).toHaveCount(0);
+    await confirm.locator('#confirm-cancel-btn').click();
+    await expect(confirm).not.toHaveClass(/active/);
+    await expect(dialog).toBeVisible();
+    await page.waitForTimeout(300);
+    expect(windows).toBe(0);
+
+    const [book] = await Promise.all([
+        context.waitForEvent('page'),
+        (async () => {
+            await dialog.getByRole('button', { name: 'Open book' }).click();
+            await confirm.locator('#confirm-ok-btn').click();
+        })(),
+    ]);
+    await book.waitForLoadState('domcontentloaded');
+    await expect(book.locator('main.book')).toBeAttached();
+    await book.close();
+});
+
+test('the poster near the limit asks first: Cancel makes no file, Continue the poster', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Tamsin', 'Varenne');
+    await giveFirstPersonAPhoto(page);
+    await page.evaluate((l) => window.Strom.MemoryLimit.setLimit(l), LOW_LIMIT);
+    const confirm = page.locator('#confirmation-modal');
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    const svg = page.locator('#poster-modal .menu-option', { hasText: 'SVG' });
+    let downloads = 0;
+    page.on('download', () => { downloads++; });
+
+    await svg.click();
+    await expect(confirm).toHaveClass(/active/);
+    await expect(confirm.locator('#confirm-message')).toContainText('The poster with its portraits');
+    await confirm.locator('#confirm-cancel-btn').click();
+    await expect(confirm).not.toHaveClass(/active/);
+    await expect(page.locator('#poster-modal')).toBeVisible();
+    await page.waitForTimeout(300);
+    expect(downloads).toBe(0);
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        (async () => {
+            await svg.click();
+            await confirm.locator('#confirm-ok-btn').click();
+        })(),
+    ]);
+    expect(readFileSync(await download.path(), 'utf-8')).toContain('<svg');
+});

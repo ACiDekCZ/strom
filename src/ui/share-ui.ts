@@ -22,6 +22,7 @@ import { uiModule } from './module.js';
 import { activatedElement, busyLocal, busyToast, runHeavy } from './busy.js';
 import { imagesToAwait } from '../image-loads.js';
 import { imagesBeforeOutput } from './output-images.js';
+import { confirmMemoryForOutput } from './memory-limit-ui.js';
 import { expandedData } from '../image-expand.js';
 import { holdLeave } from './busy-leave.js';
 import { autoGrowAll } from './autogrow.js';
@@ -131,13 +132,19 @@ export const shareUiMethods = uiModule({
         const waits = imagesToAwait(treeId);
         if (await imagesBeforeOutput(strings.photos.out.backup, { el: btn, treeId }) === 'cancelled') return;
         if (waits) await TreeManager.flush(treeId);
+        // The file with its images may need more memory than the page has (spec 135): asked first. The change
+        // packet holds the tree and its shared version whole, a file under a password is sealed whole.
+        const focused = scope === 'branch' ? TreeRenderer.getFocusedData() : null;
+        if (await confirmMemoryForOutput({
+            treeId, whole: scope === 'changes' || !!password, ...(focused ? { data: focused } : {}),
+        }) === 'cancel') return;
         const made = await busyLocal(btn, strings.busy.saving, async () => {
             const release = holdLeave('export');
             try {
                 if (scope === 'changes') {
                     await this.exportChangePacket(treeId, senderName, senderMessage);
                 } else if (scope === 'branch') {
-                    const focusedData = TreeRenderer.getFocusedData();
+                    const focusedData = focused;
                     const treeName = TreeManager.getActiveTreeMetadata()?.name || 'Family Tree';
                     if (focusedData) {
                         const safe = treeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

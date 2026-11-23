@@ -155,13 +155,19 @@ function keyImage(key: string, urls: Map<string, string>): string | null {
     return orient ? withExifOrientation(url, orient) : url;
 }
 
-/** HTML or SVG text with every pooled image it names whole (see the module's comment). */
-export async function expandImageText(text: string, o: ExpandOptions = {}): Promise<Expanded<string>> {
-    if (!text.includes(POOL_REF_ATTR) && !text.includes(POOL_REF) && !text.includes('\\u0000sm:')) return { data: text, missing: 0 };
+/** The pooled images an HTML or SVG text names (their ids), as expandImageText reads them. */
+export function imageTextIds(text: string): Set<string> {
     const ids = new Set<string>();
+    if (!text.includes(POOL_REF_ATTR) && !text.includes(POOL_REF) && !text.includes('\\u0000sm:')) return ids;
     for (const re of [PLACEHOLDER_ATTR, RAW_REF, JSON_REF]) {
         for (const m of text.matchAll(re)) ids.add(poolKeyParts(m[m.length - 1]).id);
     }
+    return ids;
+}
+
+/** HTML or SVG text with every pooled image it names whole (see the module's comment). */
+export async function expandImageText(text: string, o: ExpandOptions = {}): Promise<Expanded<string>> {
+    const ids = imageTextIds(text);
     if (ids.size === 0) return { data: text, missing: 0 };
     const urls = await loadImageUrls([...ids]);
     let missing = 0;

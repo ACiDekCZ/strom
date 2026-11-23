@@ -1,13 +1,15 @@
 /**
  * The memory limit's estimate (spec 135, D9b): the thresholds measured in
  * D9a (docs: limit 2 GB → a tree warns past ~80 MB of JSON without images,
- * an output past ~190–210 MB of images, an import past ~400 MB of file).
+ * an output that holds its images whole past ~190–210 MB of images, one
+ * written a few images at a time (D10c) past ~530 MB, an import past ~400 MB
+ * of file).
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import {
     MB, DEFAULT_LIMIT, TOUCH_LIMIT,
     heapLimit, steadyHeap, nearLimitSteady, nearLimitOutput, nearLimitImport, outputPeak, importPeak,
-    treeImageChars, jsonBytesWithoutImages,
+    treeImageChars, jsonBytesWithoutImages, poolImagesChars, OUTPUT_IMAGE_FACTOR, WHOLE_OUTPUT_IMAGE_FACTOR,
 } from '../memory-limit.js';
 import { estimateJsonBytes } from '../clone.js';
 import { setImageMeta, clearImageMeta } from '../image-meta.js';
@@ -63,18 +65,47 @@ describe('memory limit: the steady heap and its notice', () => {
     });
 });
 
-describe('memory limit: an output with the images', () => {
+describe('memory limit: an output that holds its images whole', () => {
     const h = steadyHeap(1 * MB); // a small tree: 30 MB
     it('S_out = 6.5 × images + 3 × H', () => {
-        expect(outputPeak(100 * MB, h)).toBe(650 * MB + 90 * MB);
+        expect(WHOLE_OUTPUT_IMAGE_FACTOR).toBe(6.5);
+        expect(outputPeak(100 * MB, h, true)).toBe(650 * MB + 90 * MB);
     });
     it('L = 2 GB: past ~207 MB of images', () => {
-        expect(nearLimitOutput(200 * MB, h, L2)).toBe(false);
-        expect(nearLimitOutput(210 * MB, h, L2)).toBe(true);
+        expect(nearLimitOutput(200 * MB, h, L2, true)).toBe(false);
+        expect(nearLimitOutput(210 * MB, h, L2, true)).toBe(true);
     });
     it('L = 3.7 GB (Chrome on a desktop): past ~390 MB of images', () => {
-        expect(nearLimitOutput(380 * MB, h, 3760 * MB)).toBe(false);
-        expect(nearLimitOutput(395 * MB, h, 3760 * MB)).toBe(true);
+        expect(nearLimitOutput(380 * MB, h, 3760 * MB, true)).toBe(false);
+        expect(nearLimitOutput(395 * MB, h, 3760 * MB, true)).toBe(true);
+    });
+    it('no images, a small tree: never', () => {
+        expect(nearLimitOutput(0, h, L2, true)).toBe(false);
+    });
+});
+
+describe('memory limit: an output written a few images at a time (D10c)', () => {
+    const h = steadyHeap(1 * MB); // a small tree: 30 MB
+    it('S_out = 2.5 × images + 3 × H (the default)', () => {
+        expect(OUTPUT_IMAGE_FACTOR).toBe(2.5);
+        expect(outputPeak(100 * MB, h)).toBe(250 * MB + 90 * MB);
+        expect(outputPeak(100 * MB, h, false)).toBe(outputPeak(100 * MB, h));
+    });
+    it('L = 2 GB: past ~537 MB of images, where a whole output asks from ~207 MB', () => {
+        expect(nearLimitOutput(530 * MB, h, L2)).toBe(false);
+        expect(nearLimitOutput(540 * MB, h, L2)).toBe(true);
+        // The measured 2000 × 80 kB (~166 MB) and 4000 × 80 kB (~335 MB): no question any more.
+        expect(nearLimitOutput(166 * MB, h, L2)).toBe(false);
+        expect(nearLimitOutput(335 * MB, h, L2)).toBe(false);
+        expect(nearLimitOutput(335 * MB, h, L2, true)).toBe(true);
+    });
+    it('L = 3.7 GB (Chrome on a desktop): past ~1 GB of images', () => {
+        expect(nearLimitOutput(1010 * MB, h, 3760 * MB)).toBe(false);
+        expect(nearLimitOutput(1025 * MB, h, 3760 * MB)).toBe(true);
+    });
+    it('L = 1 GB (a touch device): past ~250 MB of images', () => {
+        expect(nearLimitOutput(245 * MB, h, L1)).toBe(false);
+        expect(nearLimitOutput(255 * MB, h, L1)).toBe(true);
     });
     it('no images, a small tree: never', () => {
         expect(nearLimitOutput(0, h, L2)).toBe(false);
@@ -125,6 +156,14 @@ describe('memory limit: the tree\'s sizes', () => {
         expect(treeImageChars(d, { photos: false, attachments: false, sources: true, sourceImages: 'app' })).toBe(excerpt);
         expect(treeImageChars(d, { photos: false, attachments: true, sources: true, sourceImages: 'none' })).toBe(pdf);
         expect(treeImageChars(d, { photos: false, attachments: true, sources: false })).toBe(pdf);
+    });
+
+    it('the volume of some pooled images (a page set, a poster): each once, from the catalog', () => {
+        setImageMeta(idA, { len: 10_000, head: 'data:image/jpeg;base64,', bytes: 7000, token: 't', mtok: 'm' } as never);
+        setImageMeta(idB, { len: 20_000, head: 'data:image/jpeg;base64,', bytes: 14000, token: 't', mtok: 'm' } as never);
+        expect(poolImagesChars([idA, idB, idA])).toBe(30_000);
+        expect(poolImagesChars([idA, 'p:' + 'c'.repeat(40)])).toBe(10_000);
+        expect(poolImagesChars([])).toBe(0);
     });
 
     it('a pooled image the catalog does not know counts 0', () => {

@@ -21,7 +21,7 @@ vi.mock('../settings.js', async (orig) => {
 
 import { StorageManager } from '../storage.js';
 import { CryptoSession, decrypt as decryptWith } from '../crypto.js';
-import { expandImages, expandedData, expandImageText, hasPoolRefs } from '../image-expand.js';
+import { expandImages, expandedData, expandImageText, hasPoolRefs, imageTextIds } from '../image-expand.js';
 import { POOL_REF, IMAGE_PLACEHOLDER, imageAddrAttr, turnedPoolRef } from '../image-ref.js';
 import { noteOwnImages, clearImageMeta } from '../image-meta.js';
 import { withExifOrientation } from '../excerpts.js';
@@ -227,6 +227,16 @@ describe('expandImageText', () => {
         const plain = '<img src="data:image/png;base64,AAAA">';
         expect((await expandImageText(plain)).data).toBe(plain);
         expect(reads).toBe(2);
+    });
+
+    it('the images a text names, read nothing (a poster\'s memory check)', () => {
+        const a = pooled(13), b = pooled(14), c = pooled(15);
+        const svg = `<svg><image ${imageAddrAttr(a.ref, 'href')}/><image href="${escapeXml(b.ref)}"/>`
+            + `<image ${imageAddrAttr(turnedPoolRef(c.ref, 6), 'href')}/><image ${imageAddrAttr(a.ref, 'href')}/></svg>`
+            + `<script>var d=${JSON.stringify({ p: b.ref })}</script>`;
+        expect([...imageTextIds(svg)].sort()).toEqual([a.id, b.id, c.id].sort());
+        expect(imageTextIds('<img src="data:image/png;base64,AAAA">').size).toBe(0);
+        expect(reads).toBe(0);
     });
 });
 

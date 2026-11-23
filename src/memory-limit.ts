@@ -16,9 +16,15 @@
  * - the tree is near the limit while it is open: 2 × H > 0.5 × L (or the
  *   browser's own figure over 60 % of L, where it has one — it lags behind,
  *   so when it says so it is bad already);
- * - an output with the tree's images (every image whole in memory, a few
- *   times over while the file is made): 6.5 × the images' volume + 3 × H
- *   > 0.7 × L;
+ * - an output with the tree's images: k × the images' volume + 3 × H
+ *   > 0.7 × L, where k depends on how the output holds them. A file written
+ *   a few images at a time (JSON, the saved app, the working file, GEDCOM:
+ *   image-stream.ts, ged-export-images.ts) holds the file's bytes outside
+ *   the page's heap and only a few images in it: k = OUTPUT_IMAGE_FACTOR
+ *   (measured in D10c). An output that holds its images whole (a file
+ *   sealed under a password, the book, the family pages, the poster, the
+ *   change packet; every image whole in memory, a few times over while it
+ *   is made): k = WHOLE_OUTPUT_IMAGE_FACTOR (measured in D9a);
  * - an import of a file: 3.5 × the file's size + H > 0.7 × L.
  *
  * The formulas are pure (tests: src/__tests__/memory-limit.test.ts); the
@@ -52,8 +58,20 @@ export const STEADY_SHARE = 0.5;
 export const USED_SHARE = 0.6;
 /** An output's or import's peak over this share of L. */
 export const PEAK_SHARE = 0.7;
-/** An output: the images' volume counts this many times. */
-export const OUTPUT_IMAGE_FACTOR = 6.5;
+/**
+ * An output written a few images at a time (image-stream.ts,
+ * ged-export-images.ts): the images' volume counts this many times. Measured
+ * (D10c, 2000 images of 80 kB): the JSON file's peak about 0.3 × the images,
+ * the saved app's about 2 × (the share baseline it keeps is the tree's JSON
+ * with its images whole, written once the file is made).
+ */
+export const OUTPUT_IMAGE_FACTOR = 2.5;
+/**
+ * An output that holds its images whole (sealed under a password, the book,
+ * the family pages, the poster, the change packet): the images' volume
+ * counts this many times.
+ */
+export const WHOLE_OUTPUT_IMAGE_FACTOR = 6.5;
 /** An output: the steady heap counts this many times. */
 export const OUTPUT_HEAP_FACTOR = 3;
 /** An import: the file's size counts this many times. */
@@ -85,14 +103,18 @@ export function nearLimitSteady(heap: number, limit: number, used?: number | nul
     return typeof used === 'number' && used > 0 && used > USED_SHARE * limit;
 }
 
-/** The peak of an output carrying `imageChars` of images (data URL characters). */
-export function outputPeak(imageChars: number, heap: number): number {
-    return OUTPUT_IMAGE_FACTOR * Math.max(0, imageChars) + OUTPUT_HEAP_FACTOR * heap;
+/**
+ * The peak of an output carrying `imageChars` of images (data URL
+ * characters); `whole`: the output holds its images whole (see above).
+ */
+export function outputPeak(imageChars: number, heap: number, whole = false): number {
+    const k = whole ? WHOLE_OUTPUT_IMAGE_FACTOR : OUTPUT_IMAGE_FACTOR;
+    return k * Math.max(0, imageChars) + OUTPUT_HEAP_FACTOR * heap;
 }
 
-/** An output may go past the limit. */
-export function nearLimitOutput(imageChars: number, heap: number, limit: number): boolean {
-    return outputPeak(imageChars, heap) > PEAK_SHARE * limit;
+/** An output may go past the limit (`whole`: it holds its images whole). */
+export function nearLimitOutput(imageChars: number, heap: number, limit: number, whole = false): boolean {
+    return outputPeak(imageChars, heap, whole) > PEAK_SHARE * limit;
 }
 
 /** The peak of an import of a file of `fileBytes`. */
@@ -143,6 +165,18 @@ export function treeImageChars(data: StromData, content?: ImageContent): number 
             if (Array.isArray(list)) for (const e of list) if (e && typeof e === 'object') add(e as Record<string, unknown>, 'dataUrl');
         }
     }
+    return n;
+}
+
+/**
+ * The volume of these pooled images as data URL characters (from the
+ * catalog; an id it does not know counts 0): what an output that carries
+ * only some of the tree's images (the family pages' set, a poster's
+ * portraits) holds.
+ */
+export function poolImagesChars(ids: Iterable<string>): number {
+    let n = 0;
+    for (const id of new Set(ids)) n += imageMetaOf(id)?.len ?? 0;
     return n;
 }
 

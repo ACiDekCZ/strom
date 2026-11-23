@@ -10,6 +10,7 @@
  */
 
 import { DataManager } from '../data.js';
+import { SettingsManager } from '../settings.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { TreeId, type StromData } from '../types.js';
@@ -156,7 +157,8 @@ export const fileAccessMethods = uiModule({
         if (await imagesBeforeOutput(strings.photos.out.backup, { el: origin, treeId }) === 'cancelled') return;
         if (waits) await TreeManager.flush(treeId);
         // The file with its images may need more memory than the page has (spec 135): asked first.
-        if (await confirmMemoryForOutput({ treeId }) === 'cancel') return;
+        // Under encryption the file is sealed whole (its images whole in memory).
+        if (await confirmMemoryForOutput({ treeId, whole: SettingsManager.isEncryptionEnabled() }) === 'cancel') return;
         const save = async (): Promise<void> => {
             const release = holdLeave('export');
             try {

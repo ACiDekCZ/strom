@@ -305,6 +305,8 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
         notice: (name: string) => `Drzewo „${name}” zbliża się do granicy pamięci, którą ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Więcej miejsca da zamknięcie innych okien aplikacji i usunięcie niepotrzebnych obrazów.`,
         output: (name: string, size: string) => `Plik z obrazami drzewa „${name}” (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji lub usunąć niepotrzebne obrazy.`,
         outputAll: (size: string) => `Plik z obrazami wszystkich drzew (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji lub usunąć niepotrzebne obrazy.`,
+        book: (name: string, size: string) => `Książka z obrazami drzewa „${name}” (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji lub usunąć niepotrzebne obrazy.`,
+        poster: (size: string) => `Plakat z portretami (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji lub pokazać mniej portretów.`,
         leaveOut: 'Pominąć obrazy w pliku',
         import: (name: string, size: string) => `Wczytanie pliku „${name}” (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji.`,
         continue: 'Kontynuuj',

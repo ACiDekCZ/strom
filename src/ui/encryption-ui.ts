@@ -1276,8 +1276,9 @@ export const encryptionUiMethods = uiModule({
     /**
      * The file with the images near the memory limit (spec 135): Continue, Cancel, or
      * Continue without the images (the Content choices then leave them out). Whether to go on.
+     * `sealed`: the file goes under a password (sealed whole, its images whole in memory).
      */
-    async exportMemoryCheck(): Promise<boolean> {
+    async exportMemoryCheck(sealed = false): Promise<boolean> {
         const contentShown = document.getElementById('export-content-section')?.style.display === 'block';
         const go = await confirmMemoryForOutput({
             allTrees: exportAllTrees,
@@ -1285,6 +1286,7 @@ export const encryptionUiMethods = uiModule({
             treeId: exportTreeIdFor ?? DataManager.getCurrentTreeId(),
             content: this.readExportContentOptions(),
             canLeaveOut: contentShown && this.exportGedcomPurpose() !== 'back',
+            whole: sealed,
         });
         if (go === 'cancel') return false;
         if (go === 'without') {
@@ -1337,7 +1339,7 @@ export const encryptionUiMethods = uiModule({
             // The tree as stored (its photos stored once they all came) is what goes into the file.
             if (waits) await TreeManager.flush();
             // The file with its images may need more memory than the page has (spec 135): asked first.
-            if (!(await this.exportMemoryCheck()) || this.exportPasswordCallback !== callback) return;
+            if (!(await this.exportMemoryCheck(!!password)) || this.exportPasswordCallback !== callback) return;
         }
         if (!btn || isBusy(btn)) {
             saved(await work());

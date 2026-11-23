@@ -35,7 +35,9 @@ import { appFontFaceCss, POSTER_SERIF_FACES, POSTER_LINE_FACES } from '../poster
 import { shownNameOrEmpty } from '../person-name.js';
 import { unionOrderBadges } from '../marriage-order.js';
 import { measureUnionOrderPill } from '../union-order-measure.js';
-import { expandImageText } from '../image-expand.js';
+import { expandImageText, imageTextIds } from '../image-expand.js';
+import { poolImagesChars } from '../memory-limit.js';
+import { confirmMemoryForOutput } from './memory-limit-ui.js';
 
 /** The face of the marriage-order pill's text (index.html .union-order-pill). */
 const PILL_FACE = { family: 'Instrument Sans', weight: 600 };
@@ -443,6 +445,23 @@ async function buildPosterOutput(look?: FanLook): Promise<PosterBuild | null> {
     return poster ? { ...poster, svg: (await expandImageText(poster.svg)).data } : null;
 }
 
+/**
+ * The poster as a file or a print holds its portraits whole: near the memory
+ * limit asked first (spec 135). The tree's photos are the first estimate; only
+ * when they would be near, the poster's own portraits are counted.
+ */
+function posterMemory(): Promise<'go' | 'without' | 'cancel'> {
+    return confirmMemoryForOutput({
+        whole: true,
+        what: 'poster',
+        content: { photos: true, attachments: false, sources: false },
+        refine: () => {
+            const poster = buildCurrentPoster(posterLook.look());
+            return poster ? poolImagesChars(imageTextIds(poster.svg)) : 0;
+        },
+    });
+}
+
 function downloadBlob(content: string, type: string, filename: string): void {
     const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
@@ -648,6 +667,7 @@ export const exportImageMethods = uiModule({
         // The tree's photos still on their way: the file waits for them (spec 116 §8).
         const el = activatedElement();
         if (await imagesBeforeOutput(strings.photos.out.svg, { el }) === 'cancelled') return;
+        if (await posterMemory() === 'cancel') return;
         await posterBusy(async () => {
             const poster = await buildPosterOutput(posterLook.look());
             if (!poster) {
@@ -663,6 +683,7 @@ export const exportImageMethods = uiModule({
     async exportPosterPng(): Promise<void> {
         const el = activatedElement();
         if (await imagesBeforeOutput(strings.photos.out.png, { el }) === 'cancelled') return;
+        if (await posterMemory() === 'cancel') return;
         await posterBusy(async () => {
             const poster = await buildPosterOutput(posterLook.look());
             if (!poster) {
@@ -739,6 +760,7 @@ export const exportImageMethods = uiModule({
     async printPosterPdf(): Promise<void> {
         // The tree's photos still on their way: the print waits for them, its row says so (spec 116 §8, 8a).
         if (await imagesBeforeOutput(strings.photos.out.poster) === 'cancelled') return;
+        if (await posterMemory() === 'cancel') return;
         const poster = await buildPosterOutput(posterLook.look());
         if (!poster) {
             this.showAlert(strings.poster.empty, 'warning');
