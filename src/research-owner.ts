@@ -52,3 +52,69 @@ export function researchCopyOrigin(trees: readonly ResearchTieOf[], treeId: stri
     const original = researchOwnerIn(trees, tree.research.id);
     return { name: original && original.id !== treeId ? original.name ?? null : null };
 }
+
+/** What the one-time repair reads of a tree besides its tie: when it was made, its last send. */
+export interface SharedTieOf extends ResearchTieOf {
+    createdAt?: string;
+    research?: { id: string; copy?: boolean; sent?: { at: string; state: string } };
+}
+
+/** One tree the one-time repair takes off its research (planSharedTieRepair). */
+export interface SharedTieDetach {
+    treeId: string;
+    /** The tree that keeps the research, and its name. */
+    keeper: { treeId: string; name: string };
+    /**
+     * The tree sent changes to that research after it became a copy (its
+     * last send, as it is recorded): the notice tells how the research takes
+     * them back. Null: nothing it sent itself is known to stand there.
+     */
+    sentAfterCopy: { at: string; state: string } | null;
+}
+
+function madeAt(tree: SharedTieOf): number {
+    const t = Date.parse(tree.createdAt ?? '');
+    return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * One research, one tree for trees tied before that rule (spec 139 K5.1,
+ * package 134 point 13): every research tied to more than one tree of the
+ * app keeps only one of them — the tree without `copy` (of several such the
+ * oldest; when every tie is a copy, the oldest copy stays as it is, writing
+ * nothing). Every other tree of that research is to be detached. A copy
+ * alone with its research shares it with no tree and stays as it is (it
+ * writes nothing either: isResearchOwner).
+ *
+ * A send counts as the copy's own when it went after the copy was made: the
+ * later of the two trees' creation (a duplicate is the younger tree; "Open as
+ * a new copy" turns the older tree into the copy when the new one is made).
+ * One taken back or discarded in the research stands there no more.
+ */
+export function planSharedTieRepair(trees: readonly SharedTieOf[]): SharedTieDetach[] {
+    const groups = new Map<string, SharedTieOf[]>();
+    for (const t of trees) {
+        if (!t.research?.id) continue;
+        const id = t.research.id.toLowerCase();
+        groups.set(id, [...(groups.get(id) ?? []), t]);
+    }
+    const out: SharedTieDetach[] = [];
+    for (const ties of groups.values()) {
+        if (ties.length < 2) continue;
+        const oldestFirst = [...ties].sort((a, b) => madeAt(a) - madeAt(b));
+        const keeper = oldestFirst.find(t => !t.research?.copy) ?? oldestFirst[0];
+        for (const t of ties) {
+            if (t === keeper) continue;
+            const sent = t.research?.sent;
+            const copiedAt = Math.max(madeAt(t), madeAt(keeper));
+            const own = !!sent && (sent.state === 'pending' || sent.state === 'written')
+                && Number.isFinite(copiedAt) && Date.parse(sent.at) > copiedAt;
+            out.push({
+                treeId: t.id,
+                keeper: { treeId: keeper.id, name: keeper.name ?? '' },
+                sentAfterCopy: own && sent ? { at: sent.at, state: sent.state } : null,
+            });
+        }
+    }
+    return out;
+}

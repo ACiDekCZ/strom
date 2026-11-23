@@ -42,7 +42,7 @@ import { convertLegacyCensusEvents } from './events.js';
 import { fillResearchConfirmedValues, hasUnvaluedResearchConfirmations } from './verify.js';
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
-import { isResearchOwner, researchCopyOrigin } from './research-owner.js';
+import { isResearchOwner, researchCopyOrigin, planSharedTieRepair } from './research-owner.js';
 import { asciiSlug } from './filenames.js';
 import { browserMediaFingerprint } from './browser-media.js';
 import { looksLikeSampleTree } from './demo-sample.js';
@@ -253,6 +253,8 @@ class TreeManagerClass {
             this.initialized = true;
             // Self-heal: an earlier bug could persist a hidden ACTIVE tree.
             this.ensureActiveVisible();
+            // Before anything can send: no two trees of this browser write to one research.
+            await this.repairSharedResearchTies();
             forgetResearchKeysOfGoneTrees(new Set(storedIndex.trees.map(t => t.id)));
             this.restoreRescuedSaves();
             return;
@@ -286,6 +288,8 @@ class TreeManagerClass {
             this.index.trees.push(metadata);
             this.index.activeTreeId = treeId;
         }
+        // A new index never held trees sharing one research (repairSharedResearchTies).
+        this.index.researchTiesRepaired = new Date().toISOString();
 
         // Save the index
         this.saveIndex();
@@ -1985,6 +1989,59 @@ class TreeManagerClass {
         tree.copyOf = { treeId: of.treeId, name: of.name };
         this.saveIndex();
         this.noteBaseChange(treeId, before);
+    }
+
+    /**
+     * The one-time repair of trees that share one research (package 134
+     * point 13; spec 139 K5.1): of every research tied to more than one tree
+     * here only one tree keeps it (planSharedTieRepair); every other is taken
+     * off it as a copy of that tree (detachAsCopy, its data untouched). Each
+     * such tree is backed up first ("Before the data update of a new
+     * version"); a tree whose data cannot be read now (encrypted and locked)
+     * is not read: only its index entry changes. The tie it had is kept in
+     * `researchDetached` (with what the one-time notice says). Runs once per
+     * index (`researchTiesRepaired`); an index without the mark (an older
+     * one brought back) is looked at again.
+     */
+    async repairSharedResearchTies(): Promise<void> {
+        if (this.index.researchTiesRepaired) return;
+        const plan = planSharedTieRepair(this.index.trees);
+        const at = new Date().toISOString();
+        for (const step of plan) {
+            const tree = this.index.trees.find(t => t.id === step.treeId);
+            const link = tree?.research;
+            if (!tree || !link) continue;
+            await this.backupBeforeTieRepair(tree.id);
+            const keeper = { treeId: step.keeper.treeId as TreeId, name: step.keeper.name };
+            this.detachAsCopy(tree.id, keeper);
+            tree.researchDetached = {
+                link, keeper, at,
+                ...(step.sentAfterCopy ? { sentAfterCopy: step.sentAfterCopy } : {}),
+            };
+        }
+        this.index.researchTiesRepaired = at;
+        this.saveIndex();
+    }
+
+    /** The backup before the tie repair: best-effort, never reading a tree that cannot be read now. */
+    private async backupBeforeTieRepair(id: TreeId): Promise<void> {
+        try {
+            const raw = await StorageManager.get<unknown>('trees', id);
+            if (!raw || (encryptedPart(raw) && !CryptoSession.isUnlocked()) || this.isTreeNewer(id)) return;
+            const read = await this.readStoredRecord(id);
+            if (read.status !== 'ok' || Object.keys(read.data.persons ?? {}).length === 0) return;
+            await createSnapshot(id, read.data, 'pre-migration', Date.now(), this.backupResearchBase(id, this.researchBaseOf(id)));
+        } catch (err) {
+            console.warn('The backup before taking a copy off its research could not be written', id, err);
+        }
+    }
+
+    /** The one-time notice of a tree taken off a shared research was shown. */
+    markResearchDetachedNoticed(treeId: TreeId): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (!tree?.researchDetached || tree.researchDetached.noticed) return;
+        tree.researchDetached.noticed = true;
+        this.saveIndex();
     }
 
     /** Change part of a tree's research link (a send, its fate, the transcript setting); no-op without a link. */

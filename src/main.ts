@@ -961,6 +961,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         UI.initMaterials();
         // A tree downloaded in Safari to move to another browser for the research: its banner.
         UI.initResearchTransferBanner();
+        // A copy the one-time repair took off a shared research: said once, at its opening.
+        UI.initResearchDetachedNotice();
         // A private window: its trees go when it closes (said once).
         void UI.initPrivateWindowNotice();
         // A tree near the memory one page may use: said once (spec 135).

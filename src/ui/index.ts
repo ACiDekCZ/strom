@@ -94,6 +94,7 @@ import { hypothesisWaitingMethods } from './hypothesis-waiting-ui.js';
 import { conflictPanelMethods } from './conflict-panel-ui.js';
 import { researchAdoptMethods } from './research-adopt-ui.js';
 import { researchInstallMethods } from './research-install-ui.js';
+import { researchDetachedMethods } from './research-detached-ui.js';
 import { materialMethods } from './material-ui.js';
 import { materialsMethods } from './materials-ui.js';
 import { materialsWindowMethods } from './materials-window.js';
@@ -807,6 +808,10 @@ Object.assign(UIClass.prototype, researchAdoptMethods);
 type ResearchInstallMethods = typeof researchInstallMethods;
 export interface UIClass extends ResearchInstallMethods {}
 Object.assign(UIClass.prototype, researchInstallMethods);
+
+type ResearchDetachedMethods = typeof researchDetachedMethods;
+export interface UIClass extends ResearchDetachedMethods {}
+Object.assign(UIClass.prototype, researchDetachedMethods);
 
 type MaterialMethods = typeof materialMethods;
 export interface UIClass extends MaterialMethods {}

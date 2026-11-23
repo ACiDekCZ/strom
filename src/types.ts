@@ -2445,6 +2445,20 @@ export interface TreeMetadata {
      */
     copyOf?: { treeId: TreeId; name: string };
     /**
+     * The one-time repair of trees sharing one research (package 134 point
+     * 13, TreeManager.repairSharedResearchTies) took this tree off its
+     * research: the tie as it was (kept, nothing else of it is), the tree
+     * that keeps the research, when, and the copy's last send there when it
+     * went after the copy was made. `noticed`: the notice was shown (once).
+     */
+    researchDetached?: {
+        link: ResearchLink;
+        keeper: { treeId: TreeId; name: string };
+        at: string;
+        sentAfterCopy?: { at: string; state: string };
+        noticed?: true;
+    };
+    /**
      * "Start research with this tree" is under way: the one-time token the
      * research brings back (?adopt=) to name this tree. Valid for an hour.
      */
@@ -2729,5 +2743,7 @@ export interface TreeIndex {
     // Default tree settings (exports with "Export All")
     defaultTreeId?: TreeId | LastFocusedMarker;  // undefined = first tree, LAST_FOCUSED = where user left off, TreeId = specific
     lastTreeId?: TreeId;  // used when defaultTreeId === LAST_FOCUSED
+    /** When the one-time repair of trees sharing one research ran (ISO; TreeManager.repairSharedResearchTies). */
+    researchTiesRepaired?: string;
 }
 
