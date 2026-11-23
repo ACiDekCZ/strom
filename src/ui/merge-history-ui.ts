@@ -19,10 +19,12 @@ import { targetBlock } from '../merge/wizard-ui.js';
 import { renderDone, writtenWhen } from '../merge/steps/step6-done.js';
 import { renderGroupsReadOnly } from '../merge/steps/step5-plan.js';
 import type { Step6Env } from '../merge/steps/context.js';
-import { MERGE_HOLD_EVENT, noteResearchSends, settleMergeHold, treeHold, unsentMerges } from '../merge/research-hold.js';
-import { onBridgeStatus } from './research-sync-ui.js';
+import { MERGE_HOLD_EVENT, noteResearchSends, resolveSentInput, settleMergeHold, treeHold, unsentMerges } from '../merge/research-hold.js';
+import { lastBridgeStatus, onBridgeStatus } from './research-sync-ui.js';
+import { undoResearchStep } from '../merge/undo-plan.js';
+import { HELP_LINKS } from '../help/topics.js';
 import {
-    canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel,
+    canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel, undoResearchView,
     type UndoLine, type UndoModel,
 } from '../merge/undo-view.js';
 
@@ -292,15 +294,31 @@ export const mergeHistoryMethods = uiModule({
             }
             if (record.backupId) parts.push(`<p class="merge-undo-note merge-undo-vs">${esc(W.vsBackup(day))}</p>`);
         }
-        // The research's part (11c) comes here.
-        parts.push('<div class="merge-undo-research" hidden></div>');
+        // The research's part (11c): only for a merge already sent there.
+        const res = model.empty ? null : undoResearchView(record, model.people);
+        if (res) {
+            const how = res.command
+                ? `<div class="merge-undo-cmd-row"><code class="merge-undo-cmd">${esc(res.command)}</code>`
+                    + `<button type="button" class="secondary btn-sm merge-undo-copy" data-act="copy-undo">${esc(W.copy)}</button></div>`
+                : `<p><button type="button" class="link-button merge-undo-help" data-act="undo-help">${esc(W.resUndoHelpLink)}</button></p>`;
+            parts.push(`<section class="merge-undo-research">
+  <p>${esc(res.sent)}</p>
+  <p>${esc(res.step)}</p>
+  ${how}
+  ${res.comesBack ? `<p class="merge-undo-note">${esc(res.comesBack)}</p>` : ''}
+</section>`);
+        }
         if (st.error) parts.push(`<p class="merge-undo-err" role="alert">${esc(st.error)}</p>`);
 
         const body = modal.querySelector<HTMLElement>('.merge-undo-body')!;
         body.innerHTML = parts.join('\n');
         body.onclick = e => {
-            const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-keep]');
+            const t = e.target as HTMLElement;
+            const b = t.closest<HTMLButtonElement>('button[data-keep]');
             if (b) this.chooseUndoKeep(b.dataset.keep!, b.dataset.v === 'undo');
+            const act = t.closest<HTMLButtonElement>('button[data-act]');
+            if (act?.dataset.act === 'copy-undo') void this.copyUndoResearchStep(act);
+            else if (act?.dataset.act === 'undo-help') this.showHelp(HELP_LINKS.mergeUndoResearch, act);
         };
         body.onkeydown = e => {
             const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-keep]');
@@ -315,10 +333,53 @@ export const mergeHistoryMethods = uiModule({
             this.updateUndoButton();
         };
 
+        // The input of a send not named yet: the research's sends may name it now (redrawn when they do).
+        if (res && !res.command && record.sentIntake) void this.resolveUndoResearchInput(st);
+
         const pick = modal.querySelector<HTMLButtonElement>('[data-act="pick"]')!;
         pick.hidden = !!block || model.empty;
         pick.textContent = picking ? W.pickAll : W.pickSome;
         this.updateUndoButton();
+    },
+
+    /** Copy of the research's undo step (11c): the command to the clipboard, the button says Copied. */
+    async copyUndoResearchStep(btn: HTMLButtonElement): Promise<void> {
+        const st = undoState;
+        const command = st && undoResearchStep(st.record)?.command;
+        if (!command) return;
+        const W = strings.mergeWizard;
+        try {
+            await navigator.clipboard.writeText(command);
+        } catch {
+            // Not allowed here: the line is selected for copying by hand.
+            const code = btn.parentElement?.querySelector('code');
+            const sel = window.getSelection();
+            if (code && sel) {
+                sel.removeAllRanges();
+                const range = document.createRange();
+                range.selectNodeContents(code);
+                sel.addRange(range);
+            }
+            return;
+        }
+        btn.textContent = W.copied;
+        btn.classList.add('copied');
+        setTimeout(() => {
+            if (!btn.isConnected) return;
+            btn.textContent = W.copy;
+            btn.classList.remove('copied');
+        }, 2000);
+    },
+
+    /** The send's input read from the research's last sends (11c); the dialog redrawn when it is named now. */
+    async resolveUndoResearchInput(st: UndoState): Promise<void> {
+        const link = TreeManager.getTreeMetadata(st.treeId)?.research;
+        const sends = link ? lastBridgeStatus(link.id)?.sends : null;
+        if (!sends?.length) return;
+        const record = await resolveSentInput(st.treeId, st.recordId, sends);
+        if (!record?.sentToResearch || undoState !== st) return;
+        st.record = { ...st.record, sentToResearch: record.sentToResearch };
+        this.renderUndoMerge();
     },
 
     /** Keep or Undo of a kept item's segment; focus stays on the chosen cell. */

@@ -13,7 +13,7 @@ import { inferBirthUpperBounds, isLivingPerson } from '../privacy.js';
 import { displayName, familyName } from './plan-select.js';
 import { fold, yearsText } from './steps/step3-model.js';
 import type { PlanLine, PlanListGroup } from './steps/step5-plan.js';
-import { relativesOf, undoneItems, undoPreview, type ChangedSince, type ChangedWhat, type UndoPreview } from './undo-plan.js';
+import { relativesOf, undoneItems, undoPreview, undoResearchStep, type ChangedSince, type ChangedWhat, type UndoPreview } from './undo-plan.js';
 
 // ==================== WORDS ====================
 
@@ -326,4 +326,33 @@ export function peopleRemoved(model: UndoModel, undo: ReadonlySet<string>, only:
     const kept = new Set(model.keep.filter(k => !undo.has(k.id) || !k.canUndo).map(k => k.id));
     return model.preview.remove.filter(i => i.kind === 'person' && !data.persons[i.ref as PersonId]?.isPlaceholder
         && (!only || only.has(i.id)) && !kept.has(i.id)).length;
+}
+
+// ==================== THE RESEARCH OF AN UNDO (11c) ====================
+
+/**
+ * What the undo dialog says of the research (spec 134 11c, K9.3): nothing
+ * for a merge not sent there (the undo stays in the app, the research gets
+ * nothing of it); for one sent, when it went, the research's step that
+ * removes its people (`strom sync undo I…`, null when the send's input is
+ * not known: the help says how) and what the research's next version
+ * brings back until then (`people`: the people the undo removes).
+ */
+export interface UndoResearchView {
+    sent: string;
+    command: string | null;
+    step: string;
+    comesBack: string;
+}
+
+export function undoResearchView(record: MergeRecord, people: number): UndoResearchView | null {
+    if (!record.sentAt && !record.sentToResearch) return null;
+    const W = strings.mergeWizard;
+    const command = undoResearchStep(record)?.command ?? null;
+    return {
+        sent: W.resSent(dayText(record.sentAt ?? record.at)),
+        command,
+        step: command ? W.resUndoStep : W.resUndoHelp,
+        comesBack: people > 0 ? W.resComesBack(people) : '',
+    };
 }

@@ -19308,13 +19308,24 @@
         .merge-undo-kwhy.is-warn { color: var(--warning-text); }
         .sel-seg.merge-undo-seg { flex: none; display: flex; }
         .modal .merge-undo-seg > .sel-opt { min-width: 84px; padding: 4px 10px; font-size: 12.5px; }
-        .merge-undo-research[hidden] { display: none; }
+        /* The research of a merge already sent there (11c): what it takes, its step in a code line with Copy. */
+        .merge-undo-research { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 13px; }
+        .merge-undo-cmd-row { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+        .merge-undo-cmd {
+            flex: 1 1 220px; min-width: 0; display: block; padding: 8px 12px; border-radius: var(--r-md);
+            background: var(--code-bg); color: var(--code-text); border: 1px solid var(--code-border);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5;
+            word-break: break-all; user-select: all; -webkit-user-select: all;
+        }
+        .modal .merge-undo-copy { flex: none; min-width: 96px; }
+        .modal .merge-undo-copy.copied { background: var(--primary-soft); color: var(--primary-dark); border-color: transparent; }
         .merge-undo-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .merge-undo-foot .merge-hist-gap { flex: 1 1 auto; }
         .merge-undo-foot [hidden] { display: none; }
         @media (pointer: coarse) {
             .modal .merge-undo-seg > .sel-opt { min-height: 44px; }
             .merge-undo-grp > summary { min-height: 44px; align-items: center; }
+            .modal .merge-undo-copy, .merge-undo-help { min-height: 44px; }
         }
         @media (max-width: 640px) {
             #merge-history-modal .modal.modal--lg, #merge-undo-modal .modal.modal--md, #merge-record-modal .modal.modal--lg { width: 100vw; max-width: 100vw; min-width: 0; height: 100dvh; max-height: 100dvh; border-radius: 0; display: flex; flex-direction: column; }
@@ -19326,6 +19337,8 @@
             .sel-seg.merge-undo-seg > .sel-opt { flex: 1 1 0; min-height: 44px; }
             .merge-undo-lines { columns: 1; }
             .merge-undo-gdesc { white-space: normal; }
+            .merge-undo-cmd-row { flex-direction: column; }
+            .modal .merge-undo-copy { width: 100%; }
             .merge-record-body { display: block; overflow-y: auto; }
             .merge-record-body .merge-s6 { display: flex; flex-direction: column; gap: 12px; }
             .merge-record-body .merge-s6-main, .merge-record-body .merge-s6-side { display: contents; }

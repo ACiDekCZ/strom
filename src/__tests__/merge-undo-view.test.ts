@@ -10,7 +10,7 @@ import { createMergeState } from '../merge/matching.js';
 import { applyPlan, buildPlan, MergeRecord, PlanScope, PlanSource, WizardChoices } from '../merge/plan.js';
 import { applyUndo } from '../merge/undo-plan.js';
 import {
-    canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel,
+    canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel, undoResearchView,
 } from '../merge/undo-view.js';
 import { setLanguage, getCurrentLanguage } from '../strings.js';
 import { StorageManager } from '../storage.js';
@@ -209,5 +209,43 @@ describe('the undo dialog (10a–10d)', () => {
         const m = undoModel(res.record, res.data);
         expect(m.empty).toBe(true);
         expect(stateLabel(res.record.state)).toBe('undone');
+    });
+});
+
+describe('the research in the undo dialog (11c, K9.3)', () => {
+    it('a merge not sent to the research: nothing of the research', async () => {
+        const { record } = await richMerge();
+        expect(undoResearchView(record, 5)).toBeNull();
+    });
+
+    it('sent with a known input: when it went, the step in the research\'s terminal and what comes back until then', async () => {
+        const { record } = await richMerge();
+        const v = undoResearchView({ ...record, sentAt: LATER, sentIntake: 'R0007', sentToResearch: 'I0412' }, 143)!;
+        expect(v.sent).toBe(`The merge is already in the research (sent ${dayText(LATER)}). The research does not delete people by itself.`);
+        expect(v.command).toBe('strom sync undo I0412');
+        expect(v.step).toBe('In the app the undo happens at once. In the research one step in the research’s terminal is needed:');
+        expect(v.comesBack).toBe('Until then the research’s next version brings 143 people back – the app then offers to remove them.');
+    });
+
+    it('sent without a known input: no command, the help says how; no one to remove, nothing comes back', async () => {
+        const { record } = await richMerge();
+        const v = undoResearchView({ ...record, sentAt: LATER, sentIntake: 'R0007' }, 0)!;
+        expect(v.command).toBeNull();
+        expect(v.step).toBe('In the app the undo happens at once. How the people are removed in the research is in the help:');
+        expect(v.comesBack).toBe('');
+        // An input that is not one (not I + digits) gives no command either.
+        expect(undoResearchView({ ...record, sentAt: LATER, sentToResearch: 'R0007; rm -rf' }, 1)!.command).toBeNull();
+    });
+
+    it('in Czech', async () => {
+        const { record } = await richMerge();
+        setLanguage('cs');
+        try {
+            const v = undoResearchView({ ...record, sentAt: '2026-11-22T14:41:00.000Z', sentToResearch: 'I0412' }, 1)!;
+            expect(v.sent).toBe('Sloučení už je ve výzkumu (odesláno 22. 11. 2026). Výzkum osoby sám nesmaže.');
+            expect(v.comesBack).toBe('Do té doby výzkum při příští verzi vrátí 1 osobu zpět – aplikace je pak nabídne k odebrání.');
+        } finally {
+            setLanguage('en');
+        }
     });
 });
