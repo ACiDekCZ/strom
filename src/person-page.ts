@@ -31,7 +31,9 @@ import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
 import { asciiSlug, safeFileName } from './filenames.js';
 import { isSafeExcerptDataUrl, safeHttpUrl, isOriginalOnlyAttachment } from './validation.js';
 import { dataUrlImageSize } from './photo.js';
+import { POOL_REF, imageAddrAttr, poolIdOf, poolKeyOf, poolKeyParts } from './image-ref.js';
 import { isPendingImageUrl } from './research-image-refs.js';
+import { imageMetaOf } from './image-meta.js';
 import { imgGlyphHtml, imgStateAttr, type ImgState } from './ui/image-slot.js';
 import { nameSourceCodes, storyBasisBodyHtml, storyBasisEmpty, storyBasisHead, storyBasisShown, storyBasisWords, storyFactText } from './story-sources.js';
 import { storyProseHtml, coupleStories, coupleStoryYears, splitProseLead, partnershipsInOrder, partnershipSortKey } from './story-text.js';
@@ -178,6 +180,12 @@ export interface PersonPageOptions {
      * print never have one (they wait for the images, §8).
      */
     imageWait?: (src: string, key?: string) => PageImageWait;
+    /**
+     * The app's window only (spec 135): the pages of a PDF file held in the
+     * pool, by its reference (null: not known yet, or not readable). A file
+     * reads them from its data URL.
+     */
+    pdfPages?: (ref: string) => number | null;
     /**
      * The app's window only (spec 107 §2): a person without a portrait who has
      * a photo to cut one from — the initials and "Portrait from a photo…" under
@@ -338,8 +346,15 @@ export function cleanWorkNote(text: string): string {
         .trim();
 }
 
-/** A raster image data URL safe to embed (the app's check plus a clean base64 body). */
+/**
+ * A raster image data URL safe to embed (the app's check plus a clean base64
+ * body); in the app's window a pooled image's address (its reference, or one
+ * turned upright, image-ref.ts) of a raster image too — shown by the hydrator
+ * (image-src.ts), never written into a file.
+ */
 export function safeImage(url: string | undefined): string | null {
+    const key = url ? poolKeyOf(url) : null;
+    if (key) return isSafeExcerptDataUrl(POOL_REF + poolKeyParts(key).id) ? url! : null;
     if (!url || !isSafeExcerptDataUrl(url)) return null;
     const comma = url.indexOf(',');
     return /^[A-Za-z0-9+/=\s]*$/.test(url.slice(comma + 1)) ? url : null;
@@ -352,6 +367,11 @@ function isPdfAttachment(a: Attachment): boolean {
 /** A PDF attachment's data URL safe to embed as a download link, else null. */
 function safePdf(a: Attachment): string | null {
     if (!isPdfAttachment(a) || isOriginalOnlyAttachment(a)) return null;
+    // A pooled one (the app's window): its reference, when the catalog does not name another type.
+    if (poolIdOf(a.dataUrl)) {
+        const head = imageMetaOf(a.dataUrl)?.head;
+        return !head || /^data:application\/pdf[;,]/i.test(head) ? a.dataUrl : null;
+    }
     const m = /^data:application\/pdf(;[\w=.-]+)*;base64,([A-Za-z0-9+/=\s]+)$/.exec(a.dataUrl ?? '');
     return m ? `data:application/pdf;base64,${m[2].replace(/\s+/g, '')}` : null;
 }
@@ -1192,8 +1212,8 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
         const corner = `<span class="pp-portrait-zoom" aria-hidden="true">⤢</span>`;
         const refresh = wait?.state === 'refresh' ? imgStateAttr('refresh') : '';
         if (c.imgs) avatar = `<a class="pp-portrait" href="#obr-p" aria-label="${esc(P.zoom)}">${imgHtml(c, photo, '', 'pp-photo')}${corner}</a>`;
-        else if (c.app) avatar = `<button type="button" class="pp-portrait"${refresh} data-pp-zoom aria-label="${esc(P.zoom)}"><img class="pp-photo" src="${esc(photo)}" alt="">${corner}</button>`;
-        else avatar = `<span class="pp-portrait"><img class="pp-photo" src="${esc(photo)}" alt=""></span>`;
+        else if (c.app) avatar = `<button type="button" class="pp-portrait"${refresh} data-pp-zoom aria-label="${esc(P.zoom)}"><img class="pp-photo" ${imageAddrAttr(photo)} alt="">${corner}</button>`;
+        else avatar = `<span class="pp-portrait"><img class="pp-photo" ${imageAddrAttr(photo)} alt=""></span>`;
     } else {
         // A poor person (a name and a year at most) gets the smaller initials.
         const small = facts.length <= 1 && !(person.nameVariants ?? []).length;
@@ -2307,7 +2327,7 @@ function figureHtml(c: Ctx, src: string, caption: string, id?: string, link = ''
     const tile = waitTileHtml(c, src, 'pp-fig-img', 'div');
     if (tile) return `<figure class="pp-fig"${idAttr}>${tile}<figcaption>${esc(caption)}</figcaption>${scan}</figure>`;
     const zoom = c.app ? `<button type="button" class="pp-zoom" data-pp-zoom aria-label="${esc(c.P.zoom)}">⤢</button>` : '';
-    return `<figure class="pp-fig"${idAttr}><img src="${esc(src)}" alt="${esc(caption)}" loading="lazy">${zoom}`
+    return `<figure class="pp-fig"${idAttr}><img ${imageAddrAttr(src)} alt="${esc(caption)}" loading="lazy">${zoom}`
         + `<figcaption>${esc(caption)}</figcaption>${scan}</figure>`;
 }
 
@@ -2524,7 +2544,7 @@ export function personBookTimelineHtml(page: PersonPageData, opts: PersonPageOpt
             const src = shownExcerpt(ex.excerpt);
             const caption = P.excerptCaption(ex.event, registerKindOf(ex.source.title), pt.place ?? '', pt.year);
             if (src) {
-                fig = `<figure class="pp-fig book-clip"><img src="${esc(src)}" alt="${esc(caption)}">`
+                fig = `<figure class="pp-fig book-clip"><img ${imageAddrAttr(src)} alt="${esc(caption)}">`
                     + `<figcaption>${esc(caption)}${o.cite?.(ex.source.id) ?? ''}</figcaption></figure>`;
             }
         }
@@ -2563,7 +2583,7 @@ export function personBookClipsHtml(page: PersonPageData, opts: PersonPageOption
             const caption = ev?.event
                 ? P.excerptCaption(ev.event, registerKindOf(s.title), ev.place, ev.year)
                 : stripResearchIds(e.caption?.trim() ?? '').text || [ev?.label ?? '', title].filter(Boolean).join(', ');
-            figs.push(`<figure class="pp-fig book-clip"><img src="${esc(src)}" alt="${esc(caption)}">`
+            figs.push(`<figure class="pp-fig book-clip"><img ${imageAddrAttr(src)} alt="${esc(caption)}">`
                 + `<figcaption>${esc(caption)}${cite?.(s.id) ?? ''}</figcaption></figure>`);
         }
     }
@@ -2635,7 +2655,7 @@ function imgHtml(c: Ctx, src: string, alt: string, cls: string): string {
     const e = imgEntry(c, src);
     // A set's registry that carries no images of the kind: none (the file stays without them).
     if (!e && c.imgs && c.opts.images) return '';
-    if (!e) return `<img class="${cls}" src="${esc(src)}" alt="${esc(alt)}" loading="lazy">`;
+    if (!e) return `<img class="${cls}" ${imageAddrAttr(src)} alt="${esc(alt)}" loading="lazy">`;
     return `<span class="pp-img ${cls} img-${e.n}"${alt ? ` role="img" aria-label="${esc(alt)}"` : ' aria-hidden="true"'}></span>`;
 }
 
@@ -2776,7 +2796,7 @@ function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
                 const src = shownExcerpt(e);
                 if (!src) continue;
                 const caption = main || stripResearchIds(e.caption?.trim() ?? '').text || peekTitle(title);
-                const size = e.width > 0 && e.height > 0 ? { w: e.width, h: e.height } : dataUrlImageSize(src);
+                const size = e.width > 0 && e.height > 0 ? { w: e.width, h: e.height } : imageSize(src);
                 out.push({ src, kind, caption, sub: sub === caption ? '' : sub, year, wide: !!size && isWide(kind, size.w, size.h) });
             }
         }
@@ -2795,7 +2815,7 @@ function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
         const sub = [s ? peekTitle(s.title) : '', year !== null && !caption.includes(String(year)) ? String(year) : ''].filter(Boolean).join(', ');
         const kind: GalleryItem['kind'] = a.kind === 'photo' || a.kind === 'document' || a.kind === 'record' ? a.kind
             : sourceId || DOCUMENT_WORDS.test(`${a.name} ${a.note ?? ''}`) ? 'document' : 'photo';
-        const size = waitSize(c, src) ?? dataUrlImageSize(src);
+        const size = waitSize(c, src) ?? imageSize(src);
         out.push({ src, kind, caption, sub, year, wide: !!size && isWide(kind, size.w, size.h) });
     }
     const sorted = out
@@ -2805,17 +2825,35 @@ function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
     return [...couplePhotoItems(c), ...sorted];
 }
 
+/** An image's pixel size: a data URL's header, a pooled image's catalog entry (turned or not: as stored). */
+function imageSize(src: string): { w: number; h: number } | null {
+    const key = poolKeyOf(src);
+    return dataUrlImageSize(key ? POOL_REF + poolKeyParts(key).id : src);
+}
+
+/** Pages of a PDF's bytes as a binary string (its page objects), null when none. */
+function pdfPagesOfBinary(bin: string): number | null {
+    const n = (bin.match(/\/Type\s*\/Page(?![a-zA-Z])/g) ?? []).length;
+    return n > 0 ? n : null;
+}
+
 /** Pages of a PDF data URL (its page objects), null when it cannot be read. */
 function pdfPages(dataUrl: string): number | null {
     const comma = dataUrl.indexOf(',');
     if (comma < 0 || dataUrl.length > 30_000_000) return null;
     try {
-        const bin = atob(dataUrl.slice(comma + 1).replace(/\s+/g, ''));
-        const n = (bin.match(/\/Type\s*\/Page(?![a-zA-Z])/g) ?? []).length;
-        return n > 0 ? n : null;
+        return pdfPagesOfBinary(atob(dataUrl.slice(comma + 1).replace(/\s+/g, '')));
     } catch {
         return null;
     }
+}
+
+/** Pages of a PDF's bytes (a pooled file, PersonPageOptions.pdfPages), as pdfPages reads its data URL. */
+export function pdfPageCount(bytes: Uint8Array): number | null {
+    if (bytes.length > 22_500_000) return null;
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return pdfPagesOfBinary(bin);
 }
 
 function pdfItems(c: Ctx): PdfItem[] {
@@ -2825,7 +2863,8 @@ function pdfItems(c: Ctx): PdfItem[] {
         const title = a.title?.trim();
         const m = YEAR_IN_TEXT.exec(a.date ?? '') ?? YEAR_IN_TEXT.exec(`${title ?? ''} ${a.note ?? ''} ${a.name}`);
         const name = title || stripResearchIds(a.note?.trim() || a.name).text.trim() || a.name;
-        return { name, href, pages: href ? pdfPages(href) : null, year: m ? Number(m[1]) : null };
+        const pages = !href ? null : poolIdOf(href) ? c.opts.pdfPages?.(href) ?? null : pdfPages(href);
+        return { name, href, pages, year: m ? Number(m[1]) : null };
     });
 }
 
@@ -2848,9 +2887,9 @@ function galleryHtml(c: Ctx): string {
             pic = waitTileHtml(c, it.src, 'pp-gal-thumb', 'span');
         } else if (c.app) {
             pic = `<button type="button" class="pp-gal-thumb" data-pp-zoom aria-label="${esc(`${P.zoom}: ${it.caption}`)}">`
-                + `<img class="pp-gal-img" src="${esc(it.src)}" alt="${esc(it.caption)}" loading="lazy"></button>`;
+                + `<img class="pp-gal-img" ${imageAddrAttr(it.src)} alt="${esc(it.caption)}" loading="lazy"></button>`;
         } else {
-            pic = `<span class="pp-gal-thumb"><img class="pp-gal-img" src="${esc(it.src)}" alt="${esc(it.caption)}" loading="lazy"></span>`;
+            pic = `<span class="pp-gal-thumb"><img class="pp-gal-img" ${imageAddrAttr(it.src)} alt="${esc(it.caption)}" loading="lazy"></span>`;
         }
         return `<figure class="pp-gal-item pp-gal-item--${it.kind}${it.wide ? ' pp-gal-item--wide' : ''}">${pic}<figcaption>${galleryCaption(it, P)}</figcaption></figure>`;
     };
@@ -3520,7 +3559,7 @@ export function estimatePersonPageSize(page: PersonPageData, opts: PersonPageOpt
 function attachedImageCount(html: string): number {
     const seen = new Set<string>();
     for (const m of html.matchAll(/class="pp-img pp-(?:fig|gal)-img img-(\d+)"/g)) seen.add(`n${m[1]}`);
-    for (const m of html.matchAll(/<img class="pp-(?:fig|gal)-img" src="([^"]*)"/g)) seen.add(`s${m[1]}`);
+    for (const m of html.matchAll(/<img class="pp-(?:fig|gal)-img" src="([^"]*)"(?: data-pool-ref="([^"]*)")?/g)) seen.add(m[2] ? `r${m[2]}` : `s${m[1]}`);
     return seen.size;
 }
 

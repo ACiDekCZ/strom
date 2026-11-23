@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page, Locator } from '@playwright/test';
 import { createHash } from 'node:crypto';
 
 /**
@@ -102,6 +102,23 @@ async function openPage(page: Page): Promise<void> {
 }
 
 /** No image of the page is a stand-in or broken. */
+/**
+ * The picture an <img> shows, as a data URL of its bytes: a pooled image shows
+ * through an object URL (spec 135), so its content is compared, not its address.
+ */
+async function shownPicture(img: Locator): Promise<string | null> {
+    return img.evaluate(async (el) => {
+        const src = (el as HTMLImageElement).getAttribute('src') ?? '';
+        if (!src.startsWith('blob:')) return src || null;
+        const blob = await (await fetch(src)).blob();
+        return new Promise<string>((resolve) => {
+            const r = new FileReader();
+            r.onload = () => resolve(String(r.result));
+            r.readAsDataURL(blob);
+        });
+    });
+}
+
 async function noBrokenImages(page: Page): Promise<void> {
     const srcs = await page.locator('#person-page-modal img').evaluateAll(els => els.map(e => (e as HTMLImageElement).getAttribute('src') ?? ''));
     for (const s of srcs) expect(s).not.toContain('strom-image');
@@ -120,7 +137,7 @@ test.describe('the person page while photos come after the tree (spec 116 §5)',
         await noBrokenImages(page);
 
         bridge.release();
-        await expect(portrait.locator('img.pp-photo')).toHaveAttribute('src', img.url);
+        await expect.poll(() => shownPicture(portrait.locator('img.pp-photo'))).toBe(img.url);
         await expect(portrait).not.toHaveAttribute('data-img-state', /loading|failed/);
         await expect(portrait.locator('.pp-portrait-zoom')).toHaveCount(1);
     });
@@ -140,7 +157,7 @@ test.describe('the person page while photos come after the tree (spec 116 §5)',
         bridge.fail = false;
         bridge.release();
         await msg.getByRole('button', { name: 'Try again', exact: true }).click();
-        await expect(portrait.locator('img.pp-photo')).toHaveAttribute('src', img.url);
+        await expect.poll(() => shownPicture(portrait.locator('img.pp-photo'))).toBe(img.url);
         await expect(msg).toHaveCount(0);
     });
 });

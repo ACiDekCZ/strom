@@ -40,7 +40,8 @@ import { wireRodTimelines } from '../rod-timeline-wire.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT } from '../image-loads.js';
 import { pageImageWait } from './image-slot.js';
-import { expandedData } from '../image-expand.js';
+import { hasPoolRefs } from '../image-expand.js';
+import { pageSetImageIds, withImagesWhole } from '../page-images.js';
 import { treeWithStandIns, withFamilyPageImages } from './family-pages-images.js';
 
 /**
@@ -362,9 +363,13 @@ export async function buildPagesFile(
     onStep(0, 0, F.step.prepare);
     await idle();
     check();
-    // The file carries the pooled images whole (image-expand.ts).
-    data = await expandedData(data);
-    check();
+    // The file carries the pooled images whole: only the ones its pages can show (page-images.ts), read once
+    // the set (built with the references) names its people and families.
+    if (hasPoolRefs(data)) {
+        const named = buildPageSet(data, spec, opts, { treeName: treeName() });
+        data = await withImagesWhole(data, pageSetImageIds(data, named.personSlug.keys(), named.familySlug.keys()));
+        check();
+    }
     let set = buildPageSet(data, spec, opts, { treeName: treeName() });
     const want = pageSetImages(set).filter(i => (i.kind === 'clip' ? set.options.clips : set.options.photos) === 'small');
     if (want.length) {

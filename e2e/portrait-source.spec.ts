@@ -8,13 +8,30 @@
  * cannot be changed.
  */
 
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page, Locator } from '@playwright/test';
 import { openApp, cardAction, personModal, seedTree } from './helpers.js';
 import { fakeBridge, fakeMaterial, MATERIAL_FEATURES, openResearch, poll, researchGed, UUID, BRIDGE } from './research-bridge.js';
 
 const editor = (page: Page) => page.locator('.pe-overlay');
 const pct = (page: Page) => editor(page).locator('.pe-pct');
 const ppWin = (page: Page) => page.locator('#person-page-modal');
+
+/**
+ * The picture an <img> shows, as a data URL of its bytes: a pooled image shows
+ * through an object URL (spec 135), so its content is compared, not its address.
+ */
+async function shownPicture(img: Locator): Promise<string | null> {
+    return img.evaluate(async (el) => {
+        const src = (el as HTMLImageElement).getAttribute('src') ?? '';
+        if (!src.startsWith('blob:')) return src || null;
+        const blob = await (await fetch(src)).blob();
+        return new Promise<string>((resolve) => {
+            const r = new FileReader();
+            r.onload = () => resolve(String(r.result));
+            r.readAsDataURL(blob);
+        });
+    });
+}
 
 /** A PNG of four coloured quarters with a diagonal, so every crop shows. */
 async function quartersPng(page: Page, w: number, h: number): Promise<Buffer> {
@@ -179,7 +196,7 @@ test.describe('Edit crop later (desktop)', () => {
         expect(s.source).toMatchObject({ attachmentId: 'att_svatba' });
         expect(s.source!.region.w * 900).toBeCloseTo(600 / 1.1, 0);
         // The page redraws with the new portrait.
-        await expect(w.locator('.pp-portrait img')).toHaveAttribute('src', s.photo!);
+        await expect.poll(() => shownPicture(w.locator('.pp-portrait img'))).toBe(s.photo!);
         await toast.getByRole('button', { name: 'Undo' }).click();
         await expect.poll(async () => (await stored(page)).photo).toBe(img.portrait);
         expect((await stored(page)).source!.region.w * 900).toBeCloseTo(600, 0);
@@ -476,7 +493,7 @@ test.describe('The zoom: Portrait | Whole photo', () => {
             const cells = sw(page).getByRole('button');
             await expect(cells).toHaveText(['Portrait', 'Whole photo']);
             await expect(cells.first()).toHaveAttribute('aria-pressed', 'true');
-            await expect(viewerImg(page)).toHaveAttribute('src', img.portrait);
+            await expect.poll(() => shownPicture(viewerImg(page))).toBe(img.portrait);
             // Centred at the bottom, inside the screen.
             const box = (await sw(page).boundingBox())!;
             expect(Math.abs(box.x + box.width / 2 - viewport.width / 2)).toBeLessThan(2);
@@ -484,11 +501,11 @@ test.describe('The zoom: Portrait | Whole photo', () => {
             await cells.nth(1).click();
             await expect(cells.nth(1)).toHaveAttribute('aria-pressed', 'true');
             await expect(cells.first()).toHaveAttribute('aria-pressed', 'false');
-            await expect(viewerImg(page)).toHaveAttribute('src', img.original);
+            await expect.poll(() => shownPicture(viewerImg(page))).toBe(img.original);
             // The viewer is still open (the click did not close it).
             await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
             await cells.first().click();
-            await expect(viewerImg(page)).toHaveAttribute('src', img.portrait);
+            await expect.poll(() => shownPicture(viewerImg(page))).toBe(img.portrait);
             await page.keyboard.press('Escape');
             await expect(page.locator('#attachment-overlay')).not.toHaveClass(/active/);
             await expect(sw(page)).toBeHidden();

@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page, Locator } from '@playwright/test';
 import { createHash } from 'node:crypto';
 
 /**
@@ -124,6 +124,24 @@ async function follow(page: Page, imgs: Img[], o: { phone?: boolean; fail?: bool
 const avatar = (page: Page, name: string) => page.locator(`#tree-canvas .person-card[aria-label^="${name}"] .card-avatar`);
 const photos = (page: Page) => page.evaluate(() => window.Strom.DataManager.getAllPersons().filter(p => !!p.photo).length);
 
+/**
+ * The picture an <img> shows, as a data URL of its bytes: a photo the tree
+ * keeps in its pool shows through an object URL (spec 135), so its content is
+ * compared, not its address.
+ */
+async function shownPicture(img: Locator): Promise<string | null> {
+    return img.evaluate(async (el) => {
+        const src = (el as HTMLImageElement).getAttribute('src') ?? '';
+        if (!src.startsWith('blob:')) return src || null;
+        const blob = await (await fetch(src)).blob();
+        return new Promise<string>((resolve) => {
+            const r = new FileReader();
+            r.onload = () => resolve(String(r.result));
+            r.readAsDataURL(blob);
+        });
+    });
+}
+
 test.describe('"Photos k / n" and the notice of photos not loaded (spec 116 §6, §7)', () => {
     test('photos on their way: the cards wait, the indicator counts (its detail), an edit meanwhile keeps the photo; ✓ and gone', async ({ page }) => {
         const imgs = await makeImages(page);
@@ -167,7 +185,7 @@ test.describe('"Photos k / n" and the notice of photos not loaded (spec 116 §6,
 
         bridge.release();
         await expect(chip).toHaveText(/✓\s*Photos\s*3 \/ 3/);
-        await expect(avatar(page, 'Hostivít').locator('img')).toHaveAttribute('src', imgs[0].url);
+        await expect.poll(() => shownPicture(avatar(page, 'Hostivít').locator('img'))).toBe(imgs[0].url);
         await expect(avatar(page, 'Hostivít')).not.toHaveAttribute('data-img-state', /loading|refresh|failed/);
         expect(await photos(page)).toBe(3);
         expect(await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(x => x.firstName === 'Hostivít')!.birthPlace)).toBe('Lhota');
@@ -205,7 +223,7 @@ test.describe('"Photos k / n" and the notice of photos not loaded (spec 116 §6,
         bridge.release();
         await expect(chip).toHaveText(/✓\s*Photos\s*3 \/ 3/);
         await expect.poll(() => photos(page)).toBe(3);
-        await expect(avatar(page, 'Velislava').locator('img')).toHaveAttribute('src', imgs[2].url);
+        await expect.poll(() => shownPicture(avatar(page, 'Velislava').locator('img'))).toBe(imgs[2].url);
         await expect(chip).toBeHidden({ timeout: 6000 });
         await expect(notice).toHaveCount(0);
     });

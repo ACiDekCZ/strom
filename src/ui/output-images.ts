@@ -22,6 +22,8 @@ import {
 import { activatedElement, isBusy, runBusy } from './busy.js';
 import { failedReasonText, suspendImageLoadChip } from './image-load-chip.js';
 import { showProgressToast, type ProgressToastHandle } from './toast.js';
+import { imageUrl } from '../image-src.js';
+import { POOL_REF, POOL_REF_ATTR } from '../image-ref.js';
 
 export type { AwaitImagesResult } from '../image-loads.js';
 
@@ -131,9 +133,15 @@ export async function imagesReadyForPrint(root: { querySelectorAll(sel: string):
     for (const img of imgs) if (img.loading === 'lazy') img.loading = 'eager';
     let timer: ReturnType<typeof setTimeout> | null = null;
     const limit = new Promise<void>(resolve => { timer = setTimeout(resolve, limitMs); });
-    const all = Promise.all(imgs.map(img => {
+    // A pooled image off screen holds only its placeholder (image-src.ts hydrator): put in before it is decoded.
+    const pooled = Promise.all(Array.from(root.querySelectorAll(`img[${POOL_REF_ATTR}]`) as ArrayLike<Element>).map(async (el) => {
+        const key = typeof el.getAttribute === 'function' ? el.getAttribute(POOL_REF_ATTR) : null;
+        const url = key ? await imageUrl(POOL_REF + key).catch(() => '') : '';
+        if (url && el.getAttribute('src') !== url) el.setAttribute('src', url);
+    }));
+    const all = pooled.then(() => Promise.all(imgs.map(img => {
         try { return img.decode().catch(() => undefined); } catch { return undefined; }
-    })).then(() => undefined);
+    }))).then(() => undefined);
     await Promise.race([all, limit]);
     if (timer) clearTimeout(timer);
 }
