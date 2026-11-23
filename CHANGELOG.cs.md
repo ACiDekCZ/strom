@@ -2,6 +2,13 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.32.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Portrét přes kraj fotky**: v editoru portrétu jde fotku pod rámem posunout i přes její kraj a tam ji přiblížit, takže obličej u kraje fotky může být uprostřed portrétu; střed rámu vždy zůstává na fotce. Část portrétu mimo fotku má neutrální světlou barvu, stejně na kartě, ve vějíři, v knize, v exportu obrázku, v uložených stránkách, v tisku i v GEDCOM. Dřív vyříznuté portréty vypadají jako dosud.
+- **Připojit k… ve sledovaném stromu**: *Připojit k…* se ve sledovaném stromu nabízí všude jako v každém jiném stromu (*Materiály* osoby a řádky příloh, prohlížeč souboru); dialog řekne, že strom je mezitím jen pro čtení, a nabídne *Ukončit sledování*.
+
 ## 3.31.0
 
 *Vydáno 22. listopadu 2026.*

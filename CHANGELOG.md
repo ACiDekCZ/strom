@@ -2,6 +2,13 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md) · [Polski](CHANGELOG.pl.md)
 
+## 3.32.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **A portrait past the photo's edge**: in the portrait editor the photo can be moved under the frame past its edge and zoomed there, so a face close to the edge of the photo can sit in the middle of the portrait; the centre of the frame always stays on the photo. The part of the portrait outside the photo is a neutral light colour, the same on the card, in the fan, the book, image exports, saved pages, print and GEDCOM. Portraits cut before look as they did.
+- **Link to… in a tree followed live**: *Link to…* is offered in a followed tree everywhere as in any other tree (the person's *Materials* and attachment rows, the file viewer); the dialog says that the tree is read-only meanwhile and offers *End following*.
+
 ## 3.31.0
 
 *Released 22 November 2026.*
