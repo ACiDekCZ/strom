@@ -20,9 +20,10 @@ import * as live from '../merge/wizard-steps.js';
 type Steps = typeof live;
 type Choices = Pick<WizardChoices, 'mode' | 'scope' | 'pickPeople' | 'writtenAt'>;
 
-function plan(o: { pending?: boolean; unions?: number; differences?: number } = {}): MergePlan {
+function plan(o: { pending?: boolean; unions?: number; differences?: number; groupPending?: boolean } = {}): MergePlan {
     const items: PlanItem[] = [{ kind: 'person-join', id: 'i1' as PersonId, target: 't1' as PersonId, on: true }];
     if (o.pending) items.push({ kind: 'person-pending', id: 'i2' as PersonId, candidate: 't2' as PersonId, score: 60 });
+    if (o.groupPending) items.push({ kind: 'group-pending', id: 'i3' as PersonId, group: 'singles' });
     return {
         id: 'mp-test', mode: 'add', scope: 'a',
         source: { kind: 'ged', label: 'rodokmen-Jilmovi.ged', persons: 2 },
@@ -104,6 +105,13 @@ describe('stepAvailability while step 4 is not built (STEP_4_PENDING)', () => {
         expect(live.nextStep(3, way)).toBe(5);
         expect(live.previousStep(5, way)).toBe(3);
         expect(live.stepAvailability({ mode: 'add', scope: 'c' }, plan({ pending: true }))[3]).toBe('locked');
+    });
+
+    it('an unlinked group left to decide (§6) locks only what comes after step 3', () => {
+        const way = live.stepAvailability({ mode: 'add', scope: 'a' }, plan({ groupPending: true }));
+        expect(way[3]).toBe('ok');
+        expect(way[5]).toBe('locked');
+        expect(live.nextStep(3, way)).toBe(5);
     });
 
     it('a new tree goes past step 3 unless people are picked (step 5\'s "Choose people…")', () => {

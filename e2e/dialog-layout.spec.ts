@@ -584,3 +584,36 @@ test('import guide step 3: the untick question (5a) and the person picker (5c) f
         await expect(dialog, id).toHaveCount(0);
     }
 });
+
+/**
+ * The import guide's "Link to a person…" (spec 134 §6, 6b) is a picker of
+ * the middle width: × in its header, Cancel before the primary, the focus
+ * kept inside. A file with Kvido (joined with the tree) and a father and son
+ * with no way to the tree; invented people.
+ */
+test('import guide: the dialog Link to a person… (6b) follows its kind', async ({ page }) => {
+    await openApp(page);
+    await importJsonAsNewTree(page, 'e2e/fixtures/modrinovi.json', 'Modřínovi');
+    const file = ['0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Kvido /Modřín/', '1 SEX M', '1 BIRT', '2 DATE 1921', '2 PLAC Křemenná',
+        '0 @I2@ INDI', '1 NAME Radhost /Jilm/', '1 SEX M', '1 BIRT', '2 DATE 1860', '1 FAMS @F1@',
+        '0 @I3@ INDI', '1 NAME Božetěch /Jilm/', '1 SEX M', '1 BIRT', '2 DATE 1890', '1 FAMC @F1@',
+        '0 @F1@ FAM', '1 HUSB @I2@', '1 CHIL @I3@', '0 TRLR'].join('\n');
+    await page.locator('#gedcom-input').setInputFiles({ name: 'rodokmen.ged', mimeType: 'text/plain', buffer: Buffer.from(file, 'utf-8') });
+    const wizard = page.locator('#merge-modal');
+    await mergeCompare(wizard);
+    await wizard.locator('#merge-next').click();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
+    await wizard.locator('#merge-s3-tab-groups').click();
+    await wizard.locator('#merge-s3-groups [data-decide="connect"]').first().click();
+    const dialog = page.locator('#merge-connect-modal');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator(':scope > .modal')).toHaveClass(/\bmodal--md\b/);
+    expect(await dialogRuleProblems(page)).toEqual([]);
+    for (let i = 0; i < 12; i++) {
+        await page.keyboard.press('Tab');
+        expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+    }
+    await dialog.locator('.buttons [data-dismiss]').click();
+    await expect(dialog).toHaveCount(0);
+});

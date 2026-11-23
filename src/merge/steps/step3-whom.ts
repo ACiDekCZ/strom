@@ -19,11 +19,11 @@
 
 import { strings } from '../../strings.js';
 import type { MergeState } from '../types.js';
-import type { PersonId } from '../../types.js';
+import type { PersonId, StromData } from '../../types.js';
 import type { SelectVariant, WizardChoices } from '../plan.js';
 import {
-    connectedNew, connectionTerm, dependentsVia, displayName, leftOutFor, livingNew, newPersons, selectionOf, unlinkedGroups,
-    variantSelection, type GroupDecision, type Generations, type NewConnection, type Selection, type UnlinkedGroup,
+    connectRefusal, connectedNew, connectionTerm, dependentsVia, displayName, familyName, leftOutFor, livingNew, newPersons, selectionOf, unlinkedGroups,
+    variantSelection, type GroupDecision, type Generations, type NewConnection, type NewRel, type Selection, type UnlinkedGroup,
 } from '../plan-select.js';
 import { existingTargetOf } from '../executor.js';
 import type { StepContext } from './context.js';
@@ -70,6 +70,12 @@ interface View {
     preview: string | null;
     previewDrawn: string;
     terms: Map<PersonId, string>;
+    /** Unlinked groups ticked for a decision at once (§6). */
+    gTicked: Set<string>;
+    /** Decided groups whose choice is shown again (Change). */
+    gChanging: Set<string>;
+    /** Individuals unticked in their list here, shown unticked so they can be ticked again (6e). */
+    singlesOff: PersonId[];
 }
 
 const views = new WeakMap<MergeState, View>();
@@ -82,7 +88,7 @@ function viewOf(ctx: StepContext): View {
         v = {
             root: null, ctx, base: null, tab: 'linked', filters: { ...NO_FILTERS }, panel: null, groupBy: 'rod', toggled: new Set(),
             list: null, rows: [], shown: [], groups: [], sel: { ticked: new Set(), standIns: new Set() },
-            preview: null, previewDrawn: '', terms: new Map(),
+            preview: null, previewDrawn: '', terms: new Map(), gTicked: new Set(), gChanging: new Set(), singlesOff: [],
         };
         views.set(ctx.state, v);
     }
@@ -187,7 +193,7 @@ function untick(view: View, ids: readonly PersonId[], what: string, single: Pers
 
 export function renderStep3(host: HTMLElement, ctx: StepContext): void {
     const view = viewOf(ctx);
-    if (!view.root || !host.contains(view.root)) build(host, view);
+    if (!view.root || !host.contains(view.root) || view.base?.tabs !== (ctx.choices.mode === 'add')) build(host, view);
     update(view);
 }
 
@@ -228,6 +234,8 @@ function build(host: HTMLElement, view: View): void {
     view.list?.destroy();
     view.list = null;
     view.base = computeBase(view.ctx);
+    // Nothing linked (6f): the unlinked groups' tab first.
+    if (view.base.tabs && !view.base.people.length) view.tab = 'groups';
     view.previewDrawn = '';
     view.terms.clear();
     const v = view.ctx.choices.variant;
@@ -323,9 +331,12 @@ function update(view: View): void {
     const kind = choices.variant?.kind ?? 'all';
     root.querySelectorAll<HTMLButtonElement>('.merge-s3-variants [data-v]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === kind)));
 
-    // Tabs, the unlinked groups (§6 draws them in full).
+    // Tabs, the unlinked groups (§6): the tab only when there are some (6c).
     if (base.tabs) {
         const groups = unlinkedGroups(state, choices, view.sel);
+        const tabGroups = root.querySelector<HTMLElement>('#merge-s3-tab-groups')!;
+        tabGroups.hidden = groups.length === 0;
+        if (!groups.length && view.tab === 'groups') { view.tab = 'linked'; root.dataset.tab = view.tab; }
         root.querySelectorAll<HTMLButtonElement>('.merge-s3-tabs [role="tab"]').forEach(b => {
             const on = b.dataset.tab === view.tab;
             b.classList.toggle('active', on);
@@ -333,17 +344,17 @@ function update(view: View): void {
             b.tabIndex = on ? 0 : -1;
         });
         root.querySelector('#merge-s3-tab-linked .cnt')!.textContent = base.people.length.toLocaleString();
-        const inGroups = groups.reduce((n, g) => n + g.persons.length, 0);
-        root.querySelector('#merge-s3-tab-groups .cnt')!.textContent = inGroups.toLocaleString();
-        const undecided = choices.groups ? groups.filter(g => !choices.groups![g.key]).length : 0;
+        tabGroups.querySelector('.cnt')!.textContent = groups.length.toLocaleString();
+        const undecided = (plan?.groups ?? []).filter(g => g.decision === null).length;
         const und = root.querySelector<HTMLElement>('.merge-s3-undecided')!;
         und.textContent = undecided ? W.groupsUndecided(undecided) : '';
         und.hidden = !undecided;
         root.querySelector<HTMLElement>('#merge-s3-linked')!.hidden = view.tab !== 'linked';
         const gp = root.querySelector<HTMLElement>('#merge-s3-groups')!;
         gp.hidden = view.tab !== 'groups';
-        gp.innerHTML = `<p class="merge-step-note">${escapeHtml(W.groupsNote)}</p>`
-            + (groups.length ? `<ul class="merge-s3-glist">${groups.map(g => groupRowHtml(g, choices.groups?.[g.key])).join('')}</ul>` : '');
+        const keys = new Set(groups.map(g => g.key));
+        for (const k of [...view.gTicked]) if (!keys.has(k)) view.gTicked.delete(k);
+        gp.innerHTML = groupsHtml(view, groups);
         root.querySelectorAll<HTMLButtonElement>('.merge-s3-groupby [data-by]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.by === view.groupBy)));
     }
 
@@ -381,19 +392,369 @@ function update(view: View): void {
     drawPreview(view);
 }
 
-/**
- * A row of the unlinked groups' tab. Until the tab is drawn in full (§6:
- * link to a person, a separate tree), a group can be added unlinked or left
- * out, so a group sent there from the list never holds the guide up.
- */
-function groupRowHtml(g: UnlinkedGroup, d: GroupDecision | undefined): string {
+// ==================== UNLINKED GROUPS (§6) ====================
+
+type GroupKind = GroupDecision['kind'];
+const DECISIONS: readonly GroupKind[] = ['connect', 'loose', 'own-tree', 'skip'];
+
+function decisionLabel(k: GroupKind): string {
     const W = strings.mergeWizard;
-    const key = escapeHtml(g.key);
-    const opt = (kind: 'loose' | 'skip', label: string): string =>
-        `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" data-gkey="${key}" data-decide="${kind}" aria-checked="${d?.kind === kind}">${escapeHtml(label)}</button>`;
-    return `<li class="merge-s3-grow" data-gkey="${key}"><span class="merge-s3-gname">${escapeHtml(g.title)}</span> <span class="tag merge-s3-gcount">${g.persons.length.toLocaleString()}</span>`
-        + `${g.years ? ` <span class="merge-s3-years">${g.years.from}–${g.years.to}</span>` : ''}`
-        + `<div class="sel-seg merge-s3-gdecide" role="radiogroup" aria-label="${escapeHtml(W.gDecision(g.title))}">${opt('loose', W.gLoose)}${opt('skip', W.gSkip)}</div></li>`;
+    return k === 'connect' ? W.gConnect : k === 'loose' ? W.gLoose : k === 'own-tree' ? W.gOwn : W.gSkip;
+}
+
+function relLabel(rel: NewRel): string {
+    const W = strings.mergeWizard;
+    return rel === 'parent' ? W.relParent : rel === 'child' ? W.relChild : W.relPartner;
+}
+
+/** A person as "Name (1790–1855)", from the import or the tree. */
+function personText(data: StromData, id: PersonId): string {
+    const p = data.persons[id];
+    const name = displayName(p) || '?';
+    const years = p ? yearsText({ born: yearOf(p.birthDate), died: yearOf(p.deathDate) }) : '';
+    return years ? `${name} (${years})` : name;
+}
+
+/** The surnames of a group's people (their family names, "?" left out). */
+function rodCount(source: StromData, persons: readonly PersonId[]): number {
+    const names = new Set<string>();
+    for (const id of persons) {
+        const n = familyName(source, source.persons[id]);
+        if (n) names.add(fold(n));
+    }
+    return names.size;
+}
+
+/** The segment of a group's decisions (or of the ticked groups: `bulk`); the individuals have Add unlinked and Do not add only (6e). */
+function decideSeg(label: string, kinds: readonly GroupKind[], checked: GroupKind | null, attrs: (k: GroupKind) => string): string {
+    return `<div class="sel-seg merge-s3-gdecide" role="radiogroup" aria-label="${escapeHtml(label)}">${kinds.map(k =>
+        `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" aria-checked="${k === checked}" ${attrs(k)}>${escapeHtml(decisionLabel(k))}</button>`).join('')}</div>`;
+}
+
+/** What a decided group becomes, in words. */
+function decisionText(view: View, g: UnlinkedGroup, d: GroupDecision, ownTreeName: string): string {
+    const W = strings.mergeWizard;
+    const { state } = view.ctx;
+    const n = g.persons.length;
+    switch (d.kind) {
+        case 'connect': {
+            const to = d.in === 'tree' ? personText(state.existingData, d.to) : personText(state.incomingData, d.to);
+            return W.gConnectDone(personText(state.incomingData, d.person), relLabel(d.rel), to);
+        }
+        case 'loose': return W.gLooseDone(n);
+        case 'own-tree': return W.gOwnDone(ownTreeName);
+        case 'skip': return W.gSkipDone(n);
+    }
+}
+
+/** The unlinked groups' tab: the lead (or 6f's explanation), the decision for the ticked, a row per group. */
+function groupsHtml(view: View, groups: readonly UnlinkedGroup[]): string {
+    const W = strings.mergeWizard;
+    const { state, choices, plan } = view.ctx;
+    if (!groups.length) return '';
+    const planned = new Map((plan?.groups ?? []).map(g => [g.key, g] as const));
+    const nothingLinked = groups.every(g => g.key === 'all' || g.key.startsWith('all/'));
+    const total = groups.reduce((n, g) => n + g.persons.length, 0);
+    const head = nothingLinked
+        ? `<div class="merge-s3-nolink"><h4 class="merge-s3-nolink-t">${escapeHtml(W.nothingLinkedTitle(choices.targetName))}</h4>
+<p class="merge-s3-glead">${escapeHtml(W.nothingLinked(total))}</p>
+<div class="merge-s3-nolink-btns"><button type="button" class="secondary" data-nl="connect" aria-haspopup="dialog">${escapeHtml(W.gConnect)}</button>`
+            + `<button type="button" class="secondary" data-nl="new">${escapeHtml(W.modeNew)}</button>`
+            + `<button type="button" class="secondary" data-nl="loose">${escapeHtml(W.gLoose)}</button></div></div>`
+        : `<p class="merge-s3-glead">${escapeHtml(W.groupsLead(choices.targetName))}</p>`;
+    const ticked = view.gTicked.size;
+    const bulk = groups.length > 1
+        ? `<div class="merge-s3-gbulk"><span class="merge-s3-gbulk-l">${escapeHtml(W.groupsTicked(ticked))}</span>${decideSeg(W.groupsTicked(ticked), DECISIONS, null,
+            k => `data-bulk="${k}"${!ticked || (k === 'connect' && ticked !== 1) ? ' disabled' : ''}${k === 'connect' ? ' aria-haspopup="dialog"' : ''}`)}</div>`
+        : '';
+    const source = state.incomingData;
+    const rows = groups.map(g => {
+        const key = escapeHtml(g.key);
+        const pg = planned.get(g.key);
+        const given = choices.groups?.[g.key];
+        const decision = pg ? pg.decision : null;
+        const blocked = !!given && !decision;
+        const singles = g.kind === 'singles';
+        const meta = [g.years ? (g.years.from === g.years.to ? `${g.years.from}` : `${g.years.from}–${g.years.to}`) : '', g.places.join(', ')].filter(Boolean).join(' · ');
+        const headRow = `<div class="merge-s3-ghead">`
+            + `<label class="merge-s3-gcheck"><input type="checkbox" data-gtick="${key}"${view.gTicked.has(g.key) ? ' checked' : ''}>`
+            + `<span class="merge-s3-gname" title="${escapeHtml(g.title)}">${escapeHtml(g.title)}</span></label>`
+            + `<span class="merge-s3-gcount">${g.persons.length.toLocaleString()}</span>`
+            + (decision ? '' : `<span class="merge-s3-gtag">${escapeHtml(W.undecided)}</span>`)
+            + (meta ? `<span class="merge-s3-gmeta" title="${escapeHtml(meta)}">${escapeHtml(meta)}</span>` : '')
+            + `</div>`;
+        let who: string;
+        if (singles) {
+            const off = view.singlesOff.filter(id => !view.sel.ticked.has(id) && !g.persons.includes(id));
+            const li = (id: PersonId, on: boolean): string => {
+                const p = source.persons[id];
+                const years = p ? yearsText({ born: yearOf(p.birthDate), died: yearOf(p.deathDate) }) : '';
+                const place = p ? (p.birthPlace || p.deathPlace || '') : '';
+                return `<li><label class="merge-s3-gcheck"><input type="checkbox" data-single="${escapeHtml(id)}"${on ? ' checked' : ''}>`
+                    + `<span class="merge-s3-name">${escapeHtml(displayName(p) || '?')}</span></label>`
+                    + `${years ? `<span class="merge-s3-years">${escapeHtml(years)}</span>` : ''}<span class="merge-s3-gplace">${escapeHtml(place)}</span></li>`;
+            };
+            who = `<p class="merge-s3-gwho">${escapeHtml(W.singles(g.persons.length))}</p>`
+                + `<ul class="merge-s3-gsingles" aria-label="${escapeHtml(g.title)}">${g.persons.map(id => li(id, true)).join('')}${off.map(id => li(id, false)).join('')}</ul>`;
+        } else {
+            const names = g.persons.slice(0, 3).map(id => displayName(source.persons[id]) || '?').join(', ');
+            const more = g.persons.length > 3 ? ` ${W.groupAndMore(g.persons.length - 3)}` : '';
+            const rods = rodCount(source, g.persons);
+            const split = (g.kind === 'family' || g.kind === 'all') && rods >= 2 && g.persons.length >= 10;
+            who = `<p class="merge-s3-gwho"><span class="merge-s3-gnames">${escapeHtml(names + more)}</span>`
+                + `${split ? ` · <span class="merge-s3-grods">${escapeHtml(W.groupRods(rods))}</span>` : ''}`
+                + ` · <button type="button" class="link-button merge-s3-gprev" data-gprev="${key}" aria-haspopup="dialog">${escapeHtml(W.previewBtn)}</button>`
+                + `${split ? ` · <button type="button" class="link-button" data-gsplit="${key}">${escapeHtml(W.splitByRod)}</button>` : ''}</p>`;
+        }
+        const kinds: readonly GroupKind[] = singles ? ['loose', 'skip'] : DECISIONS;
+        const doRow = decision && !view.gChanging.has(g.key)
+            ? `<p class="merge-s3-gresult"><span>${escapeHtml(decisionText(view, g, decision, pg?.ownTreeName ?? ''))}</span> · `
+                + `<button type="button" class="link-button" data-gchange="${key}">${escapeHtml(W.gChange)}</button></p>`
+            : decideSeg(W.gDecision(g.title), kinds, given?.kind ?? null,
+                k => `data-gkey="${key}" data-decide="${k}"${k === 'connect' ? ' aria-haspopup="dialog"' : ''}`)
+                + (blocked ? `<p class="merge-s3-gblocked">${escapeHtml(W.gBlocked)}</p>` : '');
+        return `<li class="merge-s3-grow${decision ? ' is-decided' : ''}" data-gkey="${key}">${headRow}${who}<div class="merge-s3-gdo">${doRow}</div></li>`;
+    }).join('');
+    return `${head}${bulk}<ul class="merge-s3-glist">${rows}</ul>`;
+}
+
+/** Set groups' decisions; the focus back on what was pressed once the tab is drawn again. */
+function decideGroups(view: View, keys: readonly string[], d: GroupDecision, focus: string | null): void {
+    const groups = { ...(view.ctx.choices.groups ?? {}) };
+    for (const k of keys) { groups[k] = d; view.gChanging.delete(k); }
+    view.ctx.update({ groups });
+    if (focus) view.root?.querySelector<HTMLElement>(focus)?.focus();
+}
+
+function groupsClick(view: View, e: Event): void {
+    const t = e.target as HTMLElement;
+    const { state, choices } = view.ctx;
+    const groups = unlinkedGroups(state, choices, view.sel);
+    const byKey = (k: string | undefined): UnlinkedGroup | undefined => groups.find(g => g.key === k);
+    const q = (k: string): string => CSS.escape(k);
+    const decide = t.closest<HTMLButtonElement>('[data-decide]');
+    if (decide) {
+        const g = byKey(decide.dataset.gkey);
+        if (!g) return;
+        const kind = decide.dataset.decide as GroupKind;
+        if (kind === 'connect') { openConnect(view, g, decide); return; }
+        decideGroups(view, [g.key], { kind } as GroupDecision, `[data-gchange="${q(g.key)}"]`);
+        return;
+    }
+    const bulk = t.closest<HTMLButtonElement>('[data-bulk]');
+    if (bulk) {
+        const keys = groups.filter(g => view.gTicked.has(g.key)).map(g => g.key);
+        if (!keys.length) return;
+        const kind = bulk.dataset.bulk as GroupKind;
+        if (kind === 'connect') {
+            const g = byKey(keys[0]);
+            if (g && keys.length === 1) openConnect(view, g, bulk);
+            return;
+        }
+        view.gTicked.clear();
+        decideGroups(view, keys, { kind } as GroupDecision, '.merge-s3-glead');
+        return;
+    }
+    const change = t.closest<HTMLButtonElement>('[data-gchange]');
+    if (change) {
+        const k = change.dataset.gchange!;
+        view.gChanging.add(k);
+        update(view);
+        view.root?.querySelector<HTMLElement>(`[data-gkey="${q(k)}"][data-decide][aria-checked="true"], [data-gkey="${q(k)}"][data-decide]`)?.focus();
+        return;
+    }
+    const prev = t.closest<HTMLButtonElement>('[data-gprev]');
+    if (prev) {
+        const g = byKey(prev.dataset.gprev);
+        if (g) openGroupPreview(view, g);
+        return;
+    }
+    const split = t.closest<HTMLButtonElement>('[data-gsplit]');
+    if (split) {
+        view.ctx.update({ splitGroups: [...new Set([...(choices.splitGroups ?? []), split.dataset.gsplit!])] });
+        view.root?.querySelector<HTMLElement>('.merge-s3-glist [data-gtick]')?.focus();
+        return;
+    }
+    const nl = t.closest<HTMLButtonElement>('[data-nl]');
+    if (nl) {
+        if (nl.dataset.nl === 'connect' && groups[0]) openConnect(view, groups[0], nl);
+        else if (nl.dataset.nl === 'loose') decideGroups(view, groups.map(g => g.key), { kind: 'loose' }, '.merge-s3-glead');
+        // 6f "New tree": the import goes into a new tree with the people ticked here (the tree stays as it is).
+        else if (nl.dataset.nl === 'new') view.ctx.update({ mode: 'new', json: false, pickPeople: true });
+    }
+}
+
+function groupsChange(view: View, e: Event): void {
+    const cb = e.target as HTMLInputElement;
+    if (cb.dataset.gtick !== undefined) {
+        if (cb.checked) view.gTicked.add(cb.dataset.gtick); else view.gTicked.delete(cb.dataset.gtick);
+        update(view);
+        view.root?.querySelector<HTMLElement>(`[data-gtick="${CSS.escape(cb.dataset.gtick)}"]`)?.focus();
+        return;
+    }
+    const id = cb.dataset.single as PersonId | undefined;
+    if (!id) return;
+    if (cb.checked) {
+        view.singlesOff = view.singlesOff.filter(x => x !== id);
+        tick(view, [id]);
+    } else {
+        if (!view.singlesOff.includes(id)) view.singlesOff.push(id);
+        leaveOut(view, [id]);
+    }
+    view.root?.querySelector<HTMLElement>(`[data-single="${CSS.escape(id)}"]`)?.focus();
+}
+
+/** A group in the import (Preview): its people dashed. */
+function openGroupPreview(view: View, g: UnlinkedGroup): void {
+    const W = strings.mergeWizard;
+    const html = `<div class="modal-header"><h2 id="merge-s3-gpreview-t">${escapeHtml(g.title)}</h2>
+  <button type="button" class="close-btn" data-dismiss aria-label="${escapeHtml(strings.buttons.close)}">&times;</button></div>
+<div class="merge-s3-thumb merge-s3-gthumb"></div>
+<p class="merge-s3-preview-cap">${escapeHtml(W.previewCaption)}</p>`;
+    const overlay = openDialog('merge-s3-gpreview', html, 'merge-s3-gpreview-t', 'picker', 'md');
+    overlay.querySelector('[data-dismiss]')!.addEventListener('click', () => closeDialog(overlay));
+    const box = overlay.querySelector<HTMLElement>('.merge-s3-gthumb')!;
+    try {
+        renderTreeThumbnail(box, { data: view.ctx.state.incomingData, focusPersonId: g.persons[0], depthUp: 3, depthDown: 3, labels: true, hits: new Set(g.persons) });
+    } catch {
+        box.innerHTML = `<p class="merge-s3-preview-none">${escapeHtml(W.previewNone)}</p>`;
+    }
+    overlay.querySelector<HTMLElement>('[data-dismiss]')!.focus();
+}
+
+interface ConnectHit { id: PersonId; in: 'tree' | 'import' }
+
+/**
+ * 6b Link to a person…: a person of the group is the parent, child or
+ * partner of a person in the tree, or of one of the import that is added
+ * (linked new, or of a group added); the sentence says the result, a link
+ * that would give a child a third parent is said and cannot be pressed.
+ */
+function openConnect(view: View, g: UnlinkedGroup, opener: HTMLElement): void {
+    const W = strings.mergeWizard;
+    const { state, choices } = view.ctx;
+    const source = state.incomingData;
+    const tree = state.existingData;
+    const given = choices.groups?.[g.key];
+    let from: PersonId = given?.kind === 'connect' && g.persons.includes(given.person) ? given.person : g.persons[0];
+    let rel: NewRel = given?.kind === 'connect' ? given.rel : 'parent';
+    let to: ConnectHit | null = given?.kind === 'connect' ? { id: given.to, in: given.in } : null;
+    // The import's people a group can link to: ticked, not in this group, and not in a group left out or still to decide.
+    const inGroups = new Map<PersonId, string>();
+    for (const x of unlinkedGroups(state, choices, view.sel)) for (const id of x.persons) inGroups.set(id, x.key);
+    const decided = new Map((view.ctx.plan?.groups ?? []).map(x => [x.key, x.decision] as const));
+    const importOk = (id: PersonId): boolean => {
+        if (!view.sel.ticked.has(id)) return false;
+        const k = inGroups.get(id);
+        if (!k) return true;
+        if (k === g.key) return false;
+        const d = decided.get(k);
+        return d?.kind === 'loose' || d?.kind === 'connect';
+    };
+    const treeIds = (Object.keys(tree.persons) as PersonId[]).filter(id => !tree.persons[id]?.isPlaceholder);
+    const importIds = (Object.keys(source.persons) as PersonId[]).filter(importOk);
+    const opt = (id: PersonId): string => `<option value="${escapeHtml(id)}"${id === from ? ' selected' : ''}>${escapeHtml(personText(source, id))}</option>`;
+    const relSeg = (['parent', 'child', 'partner'] as NewRel[]).map(r =>
+        `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" data-rel="${r}" aria-checked="${r === rel}">${escapeHtml(relLabel(r))}</button>`).join('');
+    const html = `<div class="modal-header"><h2 id="merge-connect-t">${escapeHtml(W.connectTitle(g.title))}</h2>
+  <button type="button" class="close-btn" data-dismiss aria-label="${escapeHtml(strings.buttons.close)}">&times;</button></div>
+<div class="merge-connect-f"><label for="merge-connect-from">${escapeHtml(W.connectFrom)}</label>
+<select id="merge-connect-from" class="merge-connect-from">${g.persons.map(opt).join('')}</select></div>
+<div class="merge-connect-f"><span id="merge-connect-is">${escapeHtml(W.connectIs)}</span>
+<div class="sel-seg merge-connect-rel" role="radiogroup" aria-labelledby="merge-connect-is">${relSeg}</div></div>
+<div class="merge-connect-f"><span id="merge-connect-to-l">${escapeHtml(W.connectTo)}</span>
+<input type="search" class="merge-s3-pick-q merge-connect-q" placeholder="${escapeHtml(W.connectSearch(choices.targetName))}" aria-label="${escapeHtml(W.connectSearch(choices.targetName))}" autocomplete="off" spellcheck="false">
+<ul class="merge-s3-pick-list merge-connect-list" role="listbox" aria-labelledby="merge-connect-to-l"></ul></div>
+<p class="merge-s3-pick-sentence merge-connect-sentence" aria-live="polite"></p>
+<div class="buttons">
+  <button type="button" class="secondary" data-dismiss>${escapeHtml(strings.buttons.cancel)}</button>
+  <button type="button" class="primary merge-connect-go"></button>
+</div>`;
+    const overlay = openDialog('merge-connect-modal', html, 'merge-connect-t', 'picker', 'md');
+    returnFocus = opener;
+    const fromSel = overlay.querySelector<HTMLSelectElement>('.merge-connect-from')!;
+    const q = overlay.querySelector<HTMLInputElement>('.merge-connect-q')!;
+    const listEl = overlay.querySelector<HTMLElement>('.merge-connect-list')!;
+    const sentence = overlay.querySelector<HTMLElement>('.merge-connect-sentence')!;
+    const go = overlay.querySelector<HTMLButtonElement>('.merge-connect-go')!;
+    const first = (data: StromData, id: PersonId): string => {
+        const p = data.persons[id];
+        return p?.firstName?.trim() || displayName(p) || '?';
+    };
+    const decision = (): Extract<GroupDecision, { kind: 'connect' }> | null =>
+        to ? { kind: 'connect', person: from, rel, to: to.id, in: to.in } : null;
+    const drawList = (): void => {
+        const want = fold(q.value.trim()).split(/\s+/).filter(Boolean);
+        const hits: ConnectHit[] = [];
+        const scan = (data: StromData, ids: readonly PersonId[], where: ConnectHit['in']): void => {
+            for (const id of ids) {
+                if (hits.length >= 50) return;
+                const p = data.persons[id]!;
+                const hay = fold(`${displayName(p)} ${yearOf(p.birthDate) ?? ''}`);
+                if (want.every(w => hay.includes(w))) hits.push({ id, in: where });
+            }
+        };
+        scan(tree, treeIds, 'tree');
+        scan(source, importIds, 'import');
+        if (to && !hits.some(h => h.id === to!.id && h.in === to!.in)) hits.unshift(to);
+        listEl.innerHTML = hits.length ? hits.map(h => {
+            const data = h.in === 'tree' ? tree : source;
+            const p = data.persons[h.id];
+            const years = p ? yearsText({ born: yearOf(p.birthDate), died: yearOf(p.deathDate) }) : '';
+            const where = h.in === 'tree' ? W.connectInTree : W.connectInImport;
+            const on = !!to && to.id === h.id && to.in === h.in;
+            return `<li role="option" tabindex="-1" data-to="${escapeHtml(h.id)}" data-in="${h.in}" aria-selected="${on}"><span class="merge-s3-name">${escapeHtml(displayName(p) || '?')}</span>`
+                + ` <span class="merge-s3-pick-side">${years ? `${escapeHtml(years)} · ` : ''}${escapeHtml(where)}</span></li>`;
+        }).join('') : `<li class="merge-connect-none">${escapeHtml(W.connectNoHit)}</li>`;
+    };
+    const drawResult = (): void => {
+        const d = decision();
+        go.textContent = W.connectBtn(g.persons.length);
+        if (!d) { sentence.textContent = W.pickNone; go.disabled = true; return; }
+        if (connectRefusal(state, choices, d, view.sel)) { sentence.textContent = W.connectThird; go.disabled = true; return; }
+        const b = first(d.in === 'tree' ? tree : source, d.to);
+        sentence.textContent = W.connectResult(g.persons.length, first(source, d.person), b);
+        go.disabled = false;
+    };
+    const choose = (li: HTMLElement): void => {
+        to = { id: li.dataset.to as PersonId, in: li.dataset.in as ConnectHit['in'] };
+        listEl.querySelectorAll('[role="option"]').forEach(o => o.setAttribute('aria-selected', String(o === li)));
+        drawResult();
+    };
+    fromSel.addEventListener('change', () => { from = fromSel.value as PersonId; drawResult(); });
+    overlay.querySelector('.merge-connect-rel')!.addEventListener('click', e => {
+        const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-rel]');
+        if (!b) return;
+        rel = b.dataset.rel as NewRel;
+        overlay.querySelectorAll('[data-rel]').forEach(x => x.setAttribute('aria-checked', String(x === b)));
+        drawResult();
+    });
+    q.addEventListener('input', drawList);
+    q.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); listEl.querySelector<HTMLElement>('[role="option"]')?.focus(); }
+    });
+    listEl.addEventListener('click', e => {
+        const li = (e.target as HTMLElement).closest<HTMLElement>('[role="option"]');
+        if (li) choose(li);
+    });
+    listEl.addEventListener('keydown', e => {
+        const li = (e.target as HTMLElement).closest<HTMLElement>('[role="option"]');
+        if (!li) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(li); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); (li.nextElementSibling as HTMLElement | null)?.focus(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); ((li.previousElementSibling as HTMLElement | null) ?? q).focus(); }
+    });
+    overlay.querySelectorAll('[data-dismiss]').forEach(b => b.addEventListener('click', () => closeDialog(overlay)));
+    go.addEventListener('click', () => {
+        const d = decision();
+        if (!d || go.disabled) return;
+        returnFocus = null;
+        closeDialog(overlay);
+        decideGroups(view, [g.key], d, `[data-gchange="${CSS.escape(g.key)}"]`);
+    });
+    drawList();
+    drawResult();
+    q.focus();
 }
 
 function rowHtml(view: View, i: number): string {
@@ -465,7 +826,7 @@ function drawPanel(view: View): void {
     } else panel.innerHTML = '';
 }
 
-/** The branch preview: the chosen group (or the first one) in the import, its new people dashed, the others faded. */
+/** The branch preview: the chosen group (or the first one) in the import, its ticked new people dashed, the others faded. */
 function drawPreview(view: View): void {
     const root = view.root!;
     const W = strings.mergeWizard;
@@ -512,13 +873,9 @@ function wire(root: HTMLElement, view: View): void {
         root.querySelector<HTMLElement>('[data-v="linked"] .merge-s3-chip-l')!.textContent = W.vLinked(linkedSteps());
         applyVariant(view.ctx, { kind: 'linked', steps: linkedSteps() });
     });
-    root.querySelector('#merge-s3-groups')?.addEventListener('click', e => {
-        const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-decide]');
-        if (!b) return;
-        const d: GroupDecision = b.dataset.decide === 'skip' ? { kind: 'skip' } : { kind: 'loose' };
-        view.ctx.update({ groups: { ...(view.ctx.choices.groups ?? {}), [b.dataset.gkey!]: d } });
-        root.querySelector<HTMLElement>(`#merge-s3-groups [data-gkey="${CSS.escape(b.dataset.gkey!)}"][data-decide="${d.kind}"]`)?.focus();
-    });
+    const gp = root.querySelector<HTMLElement>('#merge-s3-groups');
+    gp?.addEventListener('click', e => groupsClick(view, e));
+    gp?.addEventListener('change', e => groupsChange(view, e));
     const tabs = root.querySelector<HTMLElement>('.merge-s3-tabs');
     tabs?.addEventListener('click', e => {
         const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-tab]');
@@ -528,6 +885,7 @@ function wire(root: HTMLElement, view: View): void {
     });
     tabs?.addEventListener('keydown', e => {
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        if (root.querySelector<HTMLElement>('#merge-s3-tab-groups')?.hidden) return;
         view.tab = view.tab === 'linked' ? 'groups' : 'linked';
         update(view);
         root.querySelector<HTMLElement>(`.merge-s3-tabs [data-tab="${view.tab}"]`)?.focus();
@@ -632,13 +990,13 @@ function wire(root: HTMLElement, view: View): void {
 
 let returnFocus: HTMLElement | null = null;
 
-function openDialog(id: string, html: string, labelled: string, kind: 'decision' | 'picker'): HTMLElement {
+function openDialog(id: string, html: string, labelled: string, kind: 'decision' | 'picker', size: 'sm' | 'md' = 'sm'): HTMLElement {
     document.getElementById(id)?.remove();
     returnFocus = document.activeElement as HTMLElement | null;
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay merge-s3-dialog';
     overlay.id = id;
-    overlay.innerHTML = `<div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="${labelled}" data-dialog-kind="${kind}">${html}</div>`;
+    overlay.innerHTML = `<div class="modal modal--${size}" role="dialog" aria-modal="true" aria-labelledby="${labelled}" data-dialog-kind="${kind}">${html}</div>`;
     overlay.addEventListener('click', e => { if (e.target === overlay) closeDialog(overlay); });
     document.body.appendChild(overlay);
     overlay.classList.add('active');

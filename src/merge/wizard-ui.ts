@@ -95,6 +95,15 @@ export function freshChoices(src: WizardSource, state: MergeState): WizardChoice
     };
 }
 
+/** Why the guide cannot go on yet: the pairs left to decide, else the unlinked groups left to decide (§6); '' when nothing is. */
+export function pendingWhy(plan: MergePlan): string {
+    const W = strings.mergeWizard;
+    const pairs = plan.items.filter(i => i.kind === 'person-pending').length;
+    if (pairs > 0) return W.nextWhyPairs(pairs);
+    const open = (plan.groups ?? []).filter(g => g.decision === null);
+    return open.length ? W.groupsWhy(open.length, open.reduce((n, g) => n + g.persons.length, 0)) : '';
+}
+
 /** Where the import goes, "{source} → {target}" (the source alone for a new tree): the header's line, the toast of Save for later. */
 export function wizardRoute(choices: Pick<WizardChoices, 'mode' | 'source' | 'targetName'> & { targetTreeId?: WizardChoices['targetTreeId'] }): string {
     // New tree, or no tree that can take the import (every tree blocked): the file alone.
@@ -252,6 +261,12 @@ export class MergeWizard {
         if (this.info()[step].state !== 'ok') return;
         ws.step = step;
         if (step > ws.reached) ws.reached = step;
+        // From step 3 on the unlinked groups are asked about (§6): one left
+        // undecided holds the guide up. Step 2 still counts them as added.
+        if (step === 3 && !ws.choices.groups) {
+            ws.choices = { ...ws.choices, groups: {} };
+            this.rebuild();
+        }
         this.host.moved();
         this.render(true);
     }
@@ -574,8 +589,7 @@ export class MergeWizard {
         if (!ws) return { label: '', enabled: false, why: '' };
         const c = ws.choices;
         const info = this.info();
-        const pending = this.plan ? planCounts(this.plan).pending : 0;
-        const why = pending > 0 ? W.nextWhyPairs(pending) : '';
+        const why = this.plan ? pendingWhy(this.plan) : '';
         // While comparing: the way on is step 2's, not yet (4a).
         if (this.comparing) return { label: W.btnNext(stepName(nextStep(2, this.availability()) ?? 5)), enabled: false, why: '' };
         // A copy of the tree (13b): nothing to write, only Close.

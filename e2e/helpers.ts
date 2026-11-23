@@ -618,13 +618,30 @@ export async function mergeWrite(wizard: Locator): Promise<void> {
 }
 
 /**
- * On through the guide's steps (step 3 Whom to add as it is, the steps
+ * Step 3's unlinked groups still to decide are added unlinked (§6), one by
+ * one in their tab; nothing when there are none.
+ */
+export async function mergeGroupsLoose(wizard: Locator): Promise<void> {
+    const tab = wizard.locator('#merge-s3-tab-groups');
+    if (!await tab.isVisible() || await wizard.locator('.merge-s3-undecided').isHidden()) return;
+    await tab.click();
+    const open = wizard.locator('#merge-s3-groups .merge-s3-grow:not(.is-decided)');
+    for (let n = await open.count(); n > 0; n--) {
+        await open.first().locator('[data-decide="loose"]').click();
+        await expect(open).toHaveCount(n - 1);
+    }
+    await expect(wizard.locator('.merge-s3-undecided')).toBeHidden();
+}
+
+/**
+ * On through the guide's steps (step 3 Whom to add as it is, its unlinked groups added unlinked, the steps
  * passed over skipped) until step 5 What will happen.
  */
 export async function mergeToStep5(wizard: Locator): Promise<void> {
     const current = mergeCurrentStep(wizard);
     for (let i = 0; i < 4 && await current.getAttribute('data-step') !== '5'; i++) {
         const was = await current.getAttribute('data-step');
+        if (was === '3') await mergeGroupsLoose(wizard);
         await wizard.locator('#merge-next').click();
         await expect(current).not.toHaveAttribute('data-step', was ?? '');
     }

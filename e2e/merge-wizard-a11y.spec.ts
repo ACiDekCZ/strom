@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, mergeGroup, mergeRow, mergeTreeInto } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, mergeGroup, mergeRow, mergeTreeInto, mergeGroupsLoose } from './helpers.js';
 import { axDialogsAndMenus, unnamedControls } from './a11y.js';
 
 /**
@@ -66,6 +66,9 @@ test('a page reader finds every control of steps 1, 2, 3 and 5 named, one named 
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
     await expect(wizard.locator('#merge-step-body .merge-s3-list')).toHaveAttribute('role', 'listbox');
     await readerGaps(page, '3');
+    // The unlinked groups (§6) decided in their tab, its controls named too.
+    await mergeGroupsLoose(wizard);
+    await readerGaps(page, '3 (unlinked groups)');
     await wizard.locator('#merge-next').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
     await readerGaps(page, '5');
@@ -126,6 +129,7 @@ test('the whole guide by keys: Tab runs header → steps → body → footer and
     await page.keyboard.press('Enter');
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
     await expect(wizard.locator('#merge-step-body .merge-step-title')).toBeFocused();
+    await mergeGroupsLoose(wizard);
     await wizard.locator('#merge-next').focus();
     await page.keyboard.press('Enter');
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
@@ -174,6 +178,7 @@ test.describe('a phone', () => {
         await next.click();
         await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
         await expect(next).toBeInViewport();
+        await mergeGroupsLoose(wizard);
         await next.click();
         await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
         await expect(next).toBeInViewport();

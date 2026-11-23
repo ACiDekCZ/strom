@@ -35,8 +35,11 @@ export const STEP_4_PENDING = true;
 /** Each step's state and, when skipped, why. A null plan: the comparison has not run yet. */
 export function stepInfo(choices: Pick<WizardChoices, 'mode' | 'scope' | 'pickPeople' | 'writtenAt'>, plan: MergePlan | null): Record<WizardStep, StepInfo> {
     const newTree = choices.mode === 'new';
+    // Pairs left to decide hold up step 3 on; unlinked groups left to decide (§6), only what comes after step 3.
     const pending = plan ? plan.items.some(i => i.kind === 'person-pending') : false;
+    const groupsPending = plan ? plan.items.some(i => i.kind === 'group-pending') : false;
     const ready = !!plan && !pending;
+    const done = ready && !groupsPending;
 
     const step2: StepInfo = newTree ? { state: 'skip', reason: 'newTree' } : { state: plan ? 'ok' : 'locked' };
 
@@ -47,7 +50,7 @@ export function stepInfo(choices: Pick<WizardChoices, 'mode' | 'scope' | 'pickPe
     if (newTree) step4 = { state: 'skip', reason: 'newTree' };
     else if (STEP_4_PENDING) step4 = { state: 'skip', reason: 'mineRule' };
     else if (choices.scope === 'a' && (!plan || plan.conflicts.unions === 0)) step4 = { state: 'skip', reason: 'scopeA' };
-    else step4 = { state: ready ? 'ok' : 'locked' };
+    else step4 = { state: done ? 'ok' : 'locked' };
 
     const step6: StepInfo = choices.mode === 'compare'
         ? { state: 'skip', reason: 'compare' }
@@ -58,7 +61,7 @@ export function stepInfo(choices: Pick<WizardChoices, 'mode' | 'scope' | 'pickPe
         2: step2,
         3: step3,
         4: step4,
-        5: { state: ready ? 'ok' : 'locked' },
+        5: { state: done ? 'ok' : 'locked' },
         6: step6,
     };
 }

@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeDecide, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeToStep5, mergeWriteAndSwitch } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeDecide, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeToStep5, mergeWriteAndSwitch, mergeGroupsLoose } from './helpers.js';
 
 /**
  * The import guide's frame (spec 134 §1): a GEDCOM file merged into the open
@@ -96,6 +96,7 @@ test('Back keeps the decisions; step 5 writes a new tree named after both and th
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
     await expect(wizard.locator('#merge-step-body .merge-s3-count')).toHaveText('2 of 2 new selected');
     await expect(wizard.locator('#merge-next')).toHaveText('Continue: What will happen');
+    await mergeGroupsLoose(wizard);
     await wizard.locator('#merge-next').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
     await expect(wizard.locator('#merge-step-body .merge-step-title')).toHaveText('What will happen');
