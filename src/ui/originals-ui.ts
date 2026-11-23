@@ -36,6 +36,7 @@ import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { unionPhotoCaption } from '../union-photo.js';
+import type { MaterialListSnapshot } from '../material-list.js';
 
 /** Head of the file read for its EXIF orientation. */
 const EXIF_HEAD_BYTES = 256 * 1024;
@@ -64,6 +65,8 @@ export interface OriginalTarget {
     region?: Region;
     note?: string;
     material?: boolean;
+    /** Material for a list of people (spec 137 §6.6): its snapshot at Send. */
+    list?: MaterialListSnapshot;
 }
 
 /** Why only the preview is in the tree (the title of "preview only"). */
@@ -150,6 +153,12 @@ const originalsHeldTold = new Set<string>();
 export function forgetOriginalsHeld(researchId: string): void {
     originalsHeld.delete(researchId);
 }
+
+/**
+ * Lists of people the research has from this page (spec 137 §6.6), by `<research id>:<list ref>`: the snapshot
+ * (its `at`) it took. A file of the same snapshot does not put the list again; a newer one does.
+ */
+const listsPut = new Map<string, string>();
 
 /** The research's id of a file it took or had (`I…`), by its SHA-256, as its bridge answered in this page. */
 const replyIds = new Map<string, string>();
@@ -335,6 +344,7 @@ export const originalsMethods = uiModule({
             ...(target.note ? { note: target.note.slice(0, 500) } : {}),
             // Material sent from the dialog is in no attachment: it goes anyway.
             ...(target.material ? { sendAnyway: true } : {}),
+            ...(target.list ? { list: target.list } : {}),
             addedAt: Date.now(), attempts: 0,
         };
         try {
@@ -784,6 +794,7 @@ export const originalsMethods = uiModule({
             ...(target.region ? { region: regionToStored(target.region, original.orientation) } : {}),
             orientation: original.orientation ?? 1,
             ...(target.note ? { note: target.note.slice(0, 500) } : {}),
+            ...(target.list ? { list: target.list } : {}),
             addedAt: Date.now(), attempts: 0,
         };
         const targets = originalTargets(rec, DataManager.getData());
@@ -957,19 +968,38 @@ export const originalsMethods = uiModule({
                 return 'down';
             }
         }
+        // Material for a list (spec 137 §6.6): the list goes first, once per snapshot.
+        let list = rec.list;
+        if (list) {
+            const put = await this.putMaterialList(base, rec.researchId, list);
+            if (put === 'down') return 'down';
+            // Refused (a list the research cannot take): the file goes as before, with its person alone.
+            if (put === 'refused') list = undefined;
+        }
         const headBefore = await this.researchHeadBeforeWrite(rec.researchId);
         const ctl = typeof AbortController === 'function' ? new AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), Math.max(PUT_MIN_TIMEOUT_MS, rec.bytes / 2000)) : null;
         try {
-            const res = await fetch(withAppVersion(url), {
+            const send = (): Promise<Response> => fetch(withAppVersion(url), {
                 method: 'PUT',
                 mode: 'cors',
                 credentials: 'omit',
                 cache: 'no-store',
-                headers: uploadHeaders(rec, targets),
+                headers: uploadHeaders(rec, targets, list),
                 body: rec.blob,
                 signal: ctl?.signal,
             });
+            let res = await send();
+            // The bridge no longer has the list (`404 media.no-list`): the list again, then the file once more.
+            if (res.status === 404 && list) {
+                const lost = await res.clone().json().catch(() => null) as Record<string, unknown> | null;
+                if (lost?.code === 'media.no-list') {
+                    const again = await this.putMaterialList(base, rec.researchId, list, true);
+                    if (again === 'down') return 'down';
+                    if (again === 'refused') list = undefined;
+                    res = await send();
+                }
+            }
             if (res.ok) {
                 const body = await res.json().catch(() => null) as Record<string, unknown> | null;
                 // The research's new head is this write's own (a file, not the tree): the tree stays in step with it.
@@ -1019,5 +1049,47 @@ export const originalsMethods = uiModule({
         } finally {
             if (timer) clearTimeout(timer);
         }
+    },
+
+    /**
+     * The list of a material's files (spec 137 §6.6): `PUT <token>/lists/<ref>` with its snapshot, once per
+     * snapshot and research in this page (`force`: again, the bridge lost it). 'refused': the research will not
+     * take it (400 / 413 / 403, or a bridge without lists); 'down': not now (no answer, busy, held).
+     */
+    async putMaterialList(base: string, researchId: string, list: MaterialListSnapshot, force = false): Promise<'ok' | 'refused' | 'down'> {
+        const key = `${researchId}:${list.ref}`;
+        if (!force && listsPut.get(key) === list.body.at) return 'ok';
+        const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+        const timer = ctl ? setTimeout(() => ctl.abort(), PUT_MIN_TIMEOUT_MS) : null;
+        try {
+            const res = await fetch(withAppVersion(`${base}/lists/${encodeURIComponent(list.ref)}`), {
+                method: 'PUT',
+                mode: 'cors',
+                credentials: 'omit',
+                cache: 'no-store',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(list.body),
+                signal: ctl?.signal,
+            });
+            if (res.ok) {
+                listsPut.set(key, list.body.at);
+                return 'ok';
+            }
+            if (res.status === 409 || res.status === 503 || res.status === 507 || res.status >= 500) return 'down';
+            console.warn(`Strom Research refused the list ${list.ref} (HTTP ${res.status})`);
+            return 'refused';
+        } catch {
+            return 'down';
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
+    },
+
+    /** The list before the dialog's files, straight to a running research ('down': not running now, the files wait). */
+    async putMaterialListNow(researchId: string, list: MaterialListSnapshot): Promise<'ok' | 'refused' | 'down'> {
+        if (!this.researchBridgeUp(researchId)) return 'down';
+        const bridge = parseLiveBridge(storedResearchBridge(researchId)?.base);
+        if (!bridge) return 'down';
+        return this.putMaterialList(bridge.base, researchId, list);
     },
 });

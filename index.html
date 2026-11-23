@@ -9122,6 +9122,69 @@
         .source-material { margin-right: auto; }
         @media (max-width: 640px) { .material-dialog { max-width: calc(100vw - 16px); } .material-item { grid-template-columns: 32px minmax(0, 1fr) 28px; } .material-size { display: none; } }
         @media (min-width: 641px) and (max-width: 1024px) { .material-dialog { width: 480px; } }
+        /* "Concerns" of the material dialog: the person / the source or a list of people (material-concern-ui.ts, spec 137 §6.3). */
+        .material-concern-wrap { margin: 0 0 14px; }
+        .material-dialog .material-concern-label { display: block; margin: 0 0 6px; font-size: 12px; font-weight: 500; color: var(--text-light); }
+        /* `.modal button` (padding, no border) would win over a single class. */
+        .material-dialog .material-concern {
+            display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; height: 40px; box-sizing: border-box; margin: 0;
+            padding: 0 10px 0 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+            color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+        }
+        .material-dialog .material-concern:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .material-dialog .material-concern[aria-expanded="true"] { border-color: var(--text-light); }
+        .material-concern-icon, .material-concern-opt-icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text-light); }
+        .material-concern-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+        .material-concern-name.is-person { font-family: var(--font-serif); font-size: 15px; }
+        .material-concern-years { flex-shrink: 0; font-size: 12px; color: var(--text-light); }
+        .material-concern-count { flex-shrink: 0; margin-left: auto; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .material-concern-chev { display: inline-flex; flex-shrink: 0; margin-left: auto; color: var(--text-light); }
+        .material-concern-count + .material-concern-chev { margin-left: 0; }
+        .material-concern-menu {
+            position: fixed; z-index: 3; box-sizing: border-box; overflow: auto; overscroll-behavior: contain;
+            background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+        }
+        .material-concern-group { padding: 10px 12px 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-text); }
+        .material-concern-opt {
+            display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 44px;
+            box-sizing: border-box; padding: 6px 12px; cursor: pointer; color: var(--text);
+        }
+        .material-concern-opt[hidden] { display: none; }
+        .material-concern-opt:focus-visible { outline-offset: -2px; }
+        .material-concern-opt-mid { min-width: 0; }
+        .material-concern-opt-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+        .material-concern-opt-name.is-person { font-family: var(--font-serif); font-size: 15px; font-weight: 600; }
+        .material-concern-opt-years { font-family: var(--font-sans, inherit); font-size: 12px; font-weight: 400; color: var(--text-light); }
+        .material-concern-opt-sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 400; color: var(--text-light); }
+        .material-concern-opt-count { font-size: 12px; font-weight: 400; color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .material-concern-find-wrap { position: sticky; top: 0; z-index: 1; padding: 8px 12px; background: var(--card-bg); border-bottom: 1px solid var(--divider); }
+        .material-concern-find { width: 100%; box-sizing: border-box; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; }
+        .material-concern-backdrop { position: fixed; inset: 0; z-index: 2; background: rgba(0,0,0,0.35); }
+        /* A phone (also sideways): the menu is a bottom sheet with a grip, a title and ×. */
+        .material-concern-menu.is-sheet {
+            left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 80vh; max-height: 80dvh;
+            border-radius: var(--r-lg) var(--r-lg) 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        .material-concern-grip { width: 36px; height: 4px; margin: 8px auto 2px; border-radius: 2px; background: var(--border); }
+        .material-concern-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 2px 4px 2px 12px; background: var(--card-bg); }
+        .material-concern-title { flex: 1; min-width: 0; font-family: var(--font-serif); font-size: 18px; font-weight: 600; color: var(--text); }
+        .material-concern-x { width: 44px; height: 44px; flex-shrink: 0; border: 0; background: none; font-size: 24px; line-height: 1; color: var(--text-light); cursor: pointer; }
+        .material-concern-menu.is-sheet .material-concern-find-wrap { top: 48px; }
+        .material-concern-menu.is-sheet .material-concern-opt { min-height: 56px; }
+        @media (max-width: 640px) {
+            .material-dialog .material-concern { height: 44px; font-size: 16px; }
+            .material-concern-find { font-size: 16px; height: 44px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .material-dialog .material-concern { height: 44px; }
+            .material-concern-menu.is-sheet { max-height: 88vh; max-height: 88dvh; left: 50%; right: auto; width: min(560px, 100vw); transform: translateX(-50%); }
+            .material-concern-menu.is-sheet .material-concern-opt { min-height: 48px; }
+        }
+        @media (pointer: coarse) { .material-concern-opt { min-height: 48px; } }
+        @media (hover: hover) {
+            .material-dialog .material-concern:hover { border-color: var(--text-light); }
+            .material-concern-x:hover { color: var(--text); }
+        }
 
         /* A checkbox in the confirm dialog ("Also discard the original waiting to be sent"). */
         .confirm-check { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 4px; font-size: 14px; cursor: pointer; }

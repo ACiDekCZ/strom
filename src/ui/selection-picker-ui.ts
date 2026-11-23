@@ -127,7 +127,7 @@ function personRows(id: PersonId, sub: string): SelectionPickRow[] {
 }
 
 /** The line under a list's name: its kind, and the rule of an automatic one or what a checklist has left. */
-function listSub(list: PersonList): string {
+export function listSub(list: PersonList): string {
     const kind = listKind(list);
     const word = strings.lists.kind[kind];
     if (list.builtin) return word;

@@ -24,7 +24,13 @@ import { formatBytesShort, QueueOutcome, researchKnownAdded, researchRefusalOf, 
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
-import { RESEARCH_BRIDGE_MARKS } from '../research-link.js';
+import { RESEARCH_BRIDGE_MARKS, researchSendsLists, researchSendsSourceLists } from '../research-link.js';
+import { materialListFacts, materialListSnapshot, type MaterialListFacts, type MaterialListSnapshot } from '../material-list.js';
+import { listDisplayName, listKind, ruleLabel } from '../person-lists.js';
+import { shownName } from '../person-name.js';
+import { yearOf } from '../dates.js';
+import { selectionIndex } from './view-selection-ui.js';
+import { closeConcernMenu, concernFieldHtml, concernListRows, concernMenuOpen, openConcernMenu, type ConcernShown } from './material-concern-ui.js';
 
 const DIALOG_ID = 'material-modal';
 /** At most this many files in one go (more: a whole folder belongs to "Add materials"). */
@@ -61,6 +67,37 @@ function esc(text: string): string {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/** Where a name goes bold in a text of the dialog (the texts stay plain; the dialog makes it `<b>`). */
+const NAME_MARK = '\u0000';
+
+/** The situation of the info box for a list (spec 137 §6.4, §7). */
+export interface MaterialListBoxCase {
+    /** What the research does with the files: a task, waiting in Materials, or keeping them (an archive). */
+    mode: 'agent' | 'wait' | 'archive';
+    /** The files go into the tree too: as attachments, or "Also save to the tree" of an archive. */
+    attach: 'none' | 'attach' | 'tree';
+    /** The dialog was opened for a source. */
+    source: boolean;
+    /** An automatic list (above 50 people the research gets its rule). */
+    auto: boolean;
+    facts: MaterialListFacts;
+}
+
+/** The info box's text for a list; `p` stands for the dialog's person (bold in the dialog). */
+export function materialListBoxText(c: MaterialListBoxCase, p: string): string {
+    const m = strings.material;
+    const n = c.facts.count;
+    const w = c.source ? (c.facts.big ? m.whereSourceListBig(n) : m.whereSourceList(n)) : (c.facts.big ? m.whereListBig(n) : m.whereList(n));
+    let text: string;
+    if (c.attach === 'tree') text = m.infoArchiveTreeAt(w, p);
+    else if (c.attach === 'attach') text = c.mode === 'archive' ? m.infoArchiveAttachAt(w, p) : c.mode === 'wait' ? m.infoWaitAttachAt(w, p) : m.infoAgentAttachAt(w, p);
+    else text = c.mode === 'archive' ? m.infoArchiveAt(w) : c.mode === 'wait' ? m.infoWaitAt(w) : m.infoAgentAt(w);
+    const tails = [text];
+    if (c.facts.big) tails.push(c.auto ? m.bigRule : m.bigPersons);
+    if (c.facts.missing > 0) tails.push(m.missingNote(c.facts.missing));
+    return tails.join(' ');
+}
+
 /** "TIFF", "PDF", "JPG" — the type tile's letters. */
 function typeLetters(file: File): string {
     const ext = /\.([^.]+)$/.exec(file.name)?.[1];
@@ -87,8 +124,22 @@ export const materialMethods = uiModule({
         overlay.id = DIALOG_ID;
         overlay.className = 'modal-overlay active';
         overlay.dataset.target = JSON.stringify(target);
+        // "Concerns" starts with the person / the source on every opening (spec 137 §6.3).
+        overlay.dataset.concern = '';
         document.body.appendChild(overlay);
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeMaterialDialog(); });
+        overlay.addEventListener('click', (e) => {
+            if (e.target !== overlay) return;
+            // A click beside the dialog closes the open menu first, the dialog only with the next one.
+            if (closeConcernMenu()) return;
+            this.closeMaterialDialog();
+        });
+        // A press elsewhere in the dialog closes the popover (the field itself toggles it).
+        overlay.addEventListener('pointerdown', (e) => {
+            if (!concernMenuOpen() || e.target === overlay) return;
+            const t = e.target as HTMLElement;
+            if (t.closest('#material-concern-menu, #material-concern-backdrop, #material-concern')) return;
+            closeConcernMenu();
+        }, true);
         this.renderMaterialDialog();
         this.pushDialog(DIALOG_ID);
     },
@@ -98,18 +149,51 @@ export const materialMethods = uiModule({
         try { return raw ? JSON.parse(raw) as MaterialTarget : null; } catch { return null; }
     },
 
+    /**
+     * The list "Concerns" says now (spec 137 §6.3): only when the research takes lists (from a source: lists with
+     * a source) and the tree has some; null = the person / the source alone.
+     */
+    materialConcernList(): { id: string; name: string; ids: PersonId[]; facts: MaterialListFacts } | null {
+        const overlay = document.getElementById(DIALOG_ID);
+        const target = this.materialTarget();
+        const link = this.researchOriginalsLink();
+        const id = overlay?.dataset.concern;
+        if (!overlay || !target || !link || !id || !this.materialConcernOffered()) return null;
+        const list = DataManager.getPersonList(id);
+        if (!list) return null;
+        const ids = DataManager.getPersonListIds(id);
+        if (ids.length === 0) return null;
+        return { id, name: listDisplayName(list), ids, facts: materialListFacts(DataManager.getData(), ids) };
+    },
+
+    /** "Concerns" is offered: lists in the tree, a research that takes them (§6.5: from a source with its own feature). */
+    materialConcernOffered(): boolean {
+        const target = this.materialTarget();
+        const link = this.researchOriginalsLink();
+        if (!target || !link || DataManager.getPersonLists().length === 0) return false;
+        const status = this.researchStatusOf(link.researchId);
+        return 'personId' in target ? researchSendsLists(status) : researchSendsSourceLists(status);
+    },
+
     /** The dialog's state: the files, the note, the box and the main button for the situation. */
     renderMaterialDialog(): void {
         const overlay = document.getElementById(DIALOG_ID);
         const target = this.materialTarget();
         const link = this.researchOriginalsLink();
         if (!overlay || !target || !link) return;
+        // The menu lives in the overlay: it goes with the old content.
+        closeConcernMenu();
         const m = strings.material;
         const data = DataManager.getData();
         const isPerson = 'personId' in target;
-        const subtitle = isPerson
-            ? m.toPerson(personSubtitle(target.personId), '')
-            : m.toSource(data.sources?.[target.sourceId]?.title ?? '');
+        const chosen = this.materialConcernList();
+        const personName = isPerson ? (DataManager.getPerson(target.personId) ? shownName(DataManager.getPerson(target.personId)!) : '?') : '';
+        const sourceTitle = isPerson ? '' : data.sources?.[target.sourceId]?.title ?? '';
+        const subtitle = chosen
+            ? (isPerson ? m.toList(chosen.name, chosen.facts.count) : `${m.toSource(sourceTitle)} · ${m.toList(chosen.name, chosen.facts.count)}`)
+            : isPerson ? m.toPerson(personSubtitle(target.personId), '') : m.toSource(sourceTitle);
+        /** A text of the dialog as HTML: the person's name in bold where the text marks it. */
+        const html = (text: string): string => esc(text).split(NAME_MARK).join(`<b>${esc(personName)}</b>`);
         // An archive, or a research waiting for its agent: it saves as an archive.
         const archive = this.researchAgentlessFor(link.researchId);
         // An archive whose materials the app shows: "Save material", saved also to the tree by default (§2.6).
@@ -117,15 +201,21 @@ export const materialMethods = uiModule({
         const up = this.researchBridgeUp(link.researchId);
         const ready = originalTargets(isPerson ? { personId: target.personId } : { sourceId: target.sourceId }, data).ready;
         const bytes = picked.reduce((sum, f) => sum + f.size, 0);
+        const eligible = picked.filter(alsoTreeEligible).length;
         const cantWait = !up && (SettingsManager.isEncryptionEnabled() || bridgeFailure(null) === 'safari');
         let box: string;
         /** The box with the person's attach box ticked (alsoAttach / alsoTree): the files go into the tree too. */
         let boxAttach: string | null = null;
         let primary: { label: string; act: string };
         const saveLabel = kept && picked.length ? m.saveN(picked.length) : m.saveArchive;
+        // A list the research knows somebody of (else the files go as before, to the person alone, §6.4).
+        const listed = chosen && chosen.facts.known > 0 ? chosen : null;
+        const listCase = (mode: MaterialListBoxCase['mode'], attach: MaterialListBoxCase['attach']): string => listed
+            ? materialListBoxText({ mode, attach, source: !isPerson, auto: listKind(DataManager.getPersonList(listed.id)!) === 'auto', facts: listed.facts }, NAME_MARK)
+            : '';
         if (archive && up && ready) {
-            box = m.infoArchive;
-            boxAttach = kept ? m.infoArchiveTree : m.infoArchiveAttach;
+            box = listed ? listCase('archive', 'none') : m.infoArchive;
+            boxAttach = listed ? listCase('archive', kept ? 'tree' : 'attach') : kept ? m.infoArchiveTree : m.infoArchiveAttach;
             primary = { label: saveLabel, act: 'send' };
         } else if (cantWait) {
             box = m.cantWait(formatBytesShort(bytes));
@@ -141,24 +231,34 @@ export const materialMethods = uiModule({
         } else {
             // Sorted by the agent only when the research's setting says so (spec 130 K1.3).
             const waits = !archive && this.researchIntakeSorting(link.researchId) === 'manual';
-            box = archive ? m.infoArchive : waits ? (isPerson ? m.infoWait : m.infoWaitSource) : isPerson ? m.infoAgent : m.infoAgentSource;
-            boxAttach = archive ? (kept ? m.infoArchiveTree : m.infoArchiveAttach) : waits ? m.infoWaitAttach : m.infoAgentAttach;
+            const mode = archive ? 'archive' : waits ? 'wait' : 'agent';
+            box = listed ? listCase(mode, 'none')
+                : archive ? m.infoArchive : waits ? (isPerson ? m.infoWait : m.infoWaitSource) : isPerson ? m.infoAgent : m.infoAgentSource;
+            boxAttach = listed ? listCase(mode, archive && kept ? 'tree' : 'attach')
+                : archive ? (kept ? m.infoArchiveTree : m.infoArchiveAttach) : waits ? m.infoWaitAttach : m.infoAgentAttach;
             primary = { label: archive ? saveLabel : picked.length ? m.sendN(picked.length) : m.sendFiles, act: 'send' };
         }
         const note = (overlay.querySelector('#material-note') as HTMLTextAreaElement | null)?.value ?? '';
         const attach = (overlay.querySelector('#material-attach') as HTMLInputElement | null)?.checked ?? false;
-        const eligible = picked.filter(alsoTreeEligible).length;
         const attachOn = isPerson && (kept ? alsoTree && eligible > 0 : attach);
+        // A list the research knows nobody of: the files go to the person alone, said so (§6.4).
+        if (chosen && !listed && !cantWait) box = `${box} ${m.missingNote(chosen.facts.missing)}`;
         /** The box's text for the attach box as it is now (only a person's dialog has one). */
         const boxText = (on: boolean): string => isPerson && on && boxAttach ? boxAttach : box;
+        const attachHint = listed ? (kept ? m.alsoTreeListHint(eligible, picked.length, NAME_MARK) : m.alsoAttachListHint(NAME_MARK))
+            : kept ? m.alsoTreeHint(eligible, picked.length) : m.alsoAttachHint;
+        /** "Concerns": the first field, when the research takes lists and the tree has some (not while it cannot wait). */
+        const concernShown: ConcernShown = chosen ? { kind: 'list', name: chosen.name, listKind: listKind(DataManager.getPersonList(chosen.id)!), count: chosen.facts.count }
+            : isPerson ? { kind: 'person', name: personName, years: this.materialPersonYears(target.personId) } : { kind: 'source' };
+        const concernField = this.materialConcernOffered() && !cantWait ? concernFieldHtml(concernShown) : '';
         const attachBox = !isPerson ? '' : kept ? `
                     <label class="confirm-check material-attach${eligible === 0 ? ' is-disabled' : ''}">
                         <input type="checkbox" id="material-attach"${alsoTree && eligible > 0 ? ' checked' : ''}${eligible === 0 ? ' disabled' : ''}>
-                        <span><span class="confirm-check-label">${esc(m.alsoTree)}</span><span class="confirm-check-hint">${esc(m.alsoTreeHint(eligible, picked.length))}</span></span>
+                        <span><span class="confirm-check-label">${esc(m.alsoTree)}</span><span class="confirm-check-hint">${html(attachHint)}</span></span>
                     </label>` : `
                     <label class="confirm-check material-attach">
                         <input type="checkbox" id="material-attach"${attach ? ' checked' : ''}>
-                        <span><span class="confirm-check-label">${esc(m.alsoAttach)}</span><span class="confirm-check-hint">${esc(m.alsoAttachHint)}</span></span>
+                        <span><span class="confirm-check-label">${esc(m.alsoAttach)}</span><span class="confirm-check-hint">${html(attachHint)}</span></span>
                     </label>`;
         overlay.innerHTML = `
             <div class="modal modal--md material-dialog" role="dialog" data-dialog-kind="form" aria-modal="true" aria-labelledby="material-title">
@@ -170,6 +270,7 @@ export const materialMethods = uiModule({
                     <button type="button" class="close-btn" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
                 <div class="modal-content">
+                    ${concernField}
                     <div class="material-drop" tabindex="-1">
                         <button type="button" class="secondary material-pick">${esc(m.pick)}</button>
                         <span class="material-drop-hint">${esc(m.dropHint)}</span>
@@ -188,7 +289,7 @@ export const materialMethods = uiModule({
                     <textarea id="material-note" rows="2" maxlength="${MATERIAL_NOTE_MAX}">${esc(note)}</textarea>
                     <div class="material-note-count">${note.length} / ${MATERIAL_NOTE_MAX}</div>
                     ${attachBox}
-                    <p class="material-box${cantWait ? ' is-warn' : ''}"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span class="material-box-text">${esc(boxText(attachOn))}</span></p>
+                    <p class="material-box${cantWait ? ' is-warn' : ''}"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span class="material-box-text">${html(boxText(attachOn))}</span></p>
                 </div>
                 <div class="buttons">
                     <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.cancel)}</button>
@@ -224,7 +325,26 @@ export const materialMethods = uiModule({
             const box = e.currentTarget as HTMLInputElement;
             if (kept && !box.disabled) alsoTree = box.checked;
             const text = overlay.querySelector('.material-box-text');
-            if (text) text.textContent = boxText(box.checked && !box.disabled);
+            if (text) text.innerHTML = html(boxText(box.checked && !box.disabled));
+        });
+        const field = overlay.querySelector<HTMLButtonElement>('#material-concern');
+        const openMenu = (): void => {
+            if (!field || busy) return;
+            openConcernMenu({
+                overlay, field,
+                first: isPerson ? { kind: 'person', name: personName, years: this.materialPersonYears(target.personId) } : { kind: 'source' },
+                lists: concernListRows(),
+                current: chosen?.id ?? '',
+                onChoose: (id) => {
+                    overlay.dataset.concern = id;
+                    this.renderMaterialDialog();
+                    overlay.querySelector<HTMLButtonElement>('#material-concern')?.focus();
+                },
+            });
+        };
+        field?.addEventListener('click', () => { if (!closeConcernMenu(true)) openMenu(); });
+        field?.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); openMenu(); }
         });
         const noteEl = overlay.querySelector<HTMLTextAreaElement>('#material-note');
         noteEl?.addEventListener('input', () => {
@@ -235,6 +355,29 @@ export const materialMethods = uiModule({
             const act = (e.currentTarget as HTMLElement).dataset.act;
             if (act === 'start') this.researchSyncAction('startResearch');
             else void this.sendMaterial();
+        });
+    },
+
+    /** "1865–1932" of the dialog's person ('' when no year is known). */
+    materialPersonYears(personId: PersonId): string {
+        const p = DataManager.getPerson(personId);
+        const born = yearOf(p?.birthDate);
+        const died = yearOf(p?.deathDate);
+        return born !== null || died !== null ? `${born ?? ''}–${died ?? ''}` : '';
+    },
+
+    /** The snapshot of the chosen list at Send (null: no list, or one the research knows nobody of). */
+    materialListAtSend(): MaterialListSnapshot | null {
+        const chosen = this.materialConcernList();
+        const target = this.materialTarget();
+        if (!chosen || !target) return null;
+        const list = DataManager.getPersonList(chosen.id);
+        if (!list) return null;
+        return materialListSnapshot({
+            list, name: chosen.name, ids: chosen.ids, data: DataManager.getData(),
+            dialogPersonId: 'personId' in target ? target.personId : null,
+            ruleText: list.rule ? ruleLabel(list.rule, selectionIndex().index) : undefined,
+            now: new Date().toISOString(),
         });
     },
 
@@ -264,6 +407,20 @@ export const materialMethods = uiModule({
         if (!overlay || !target || !link || busy || picked.length === 0) return;
         const m = strings.material;
         busy = true;
+        closeConcernMenu();
+        // The list as it is now (spec 137 §6.6): to a running research before the files; waiting files carry it.
+        const list = this.materialListAtSend();
+        const listCount = list ? this.materialConcernList()?.facts.count ?? 0 : 0;
+        if (list) {
+            const go = overlay.querySelector<HTMLButtonElement>('.material-go');
+            if (go) go.disabled = true;
+            if (await this.putMaterialListNow(link.researchId, list) === 'refused') {
+                busy = false;
+                if (go) go.disabled = false;
+                this.showToast(m.listFailed, 8000, { closable: true });
+                return;
+            }
+        }
         const note = (overlay.querySelector('#material-note') as HTMLTextAreaElement | null)?.value.trim().slice(0, MATERIAL_NOTE_MAX) ?? '';
         const attach = 'personId' in target && !!(overlay.querySelector('#material-attach') as HTMLInputElement | null)?.checked;
         const files = [...picked];
@@ -296,7 +453,7 @@ export const materialMethods = uiModule({
             }
             // An archive whose materials are shown: only images and PDFs up to 2 MB go into the tree too.
             if (attach && 'personId' in target && (!kept || alsoTreeEligible(file))) await this.attachMaterialFile(target.personId, file, original);
-            const outcome = await this.queueOriginal(original, file, { ...target, note, material: true });
+            const outcome = await this.queueOriginal(original, file, { ...target, note, material: true, ...(list ? { list } : {}) });
             const replyId = outcome === 'sent' || outcome === 'known' || outcome === 'knownFilled' ? researchReplyId(original.sha256) : null;
             if (replyId) saved.push({ id: replyId, name: file.name, sha: original.sha256, mime: original.mimeType, bytes: file.size, note });
             if (outcome === 'sent') {
@@ -350,10 +507,13 @@ export const materialMethods = uiModule({
                     ? { action: { label: strings.materials.agentSort.sort, ai: RESEARCH_BRIDGE_MARKS['material-sort'] === 'bridgeAgent', run: () => void this.openSortForFiles(ids, 'personId' in target ? DataManager.getPerson(target.personId)?.refn : undefined) },
                         ...('action' in show ? { more: show.action } : {}) }
                     : show;
-                this.showToast(m.sentWaitToast(sent, name, !('personId' in target)) + knownPart, 8000, { closable: true, ...sort });
+                this.showToast((list ? m.sentWaitToastList(sent, list.body.name) : m.sentWaitToast(sent, name, !('personId' in target))) + knownPart, 8000, { closable: true, ...sort });
                 return;
             }
-            this.showToast((archive ? m.savedArchiveToast(sent, name, !('personId' in target)) : m.sentToast(sent, name, !('personId' in target))) + knownPart, 6000, { closable: true, ...show });
+            const text = list
+                ? archive ? m.savedArchiveToastList(sent, list.body.name, listCount) : m.sentToastList(sent, list.body.name, listCount)
+                : archive ? m.savedArchiveToast(sent, name, !('personId' in target)) : m.sentToast(sent, name, !('personId' in target));
+            this.showToast(text + knownPart, 6000, { closable: true, ...show });
         }
     },
 
@@ -395,6 +555,7 @@ export const materialMethods = uiModule({
     },
 
     closeMaterialDialog(): void {
+        closeConcernMenu();
         document.getElementById(DIALOG_ID)?.remove();
         this.dialogStack = this.dialogStack.filter(d => d !== DIALOG_ID);
         picked = [];
