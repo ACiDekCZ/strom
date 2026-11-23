@@ -661,6 +661,26 @@ export function undoPreview(record: MergeRecord, current: StromData, allMerges?:
     return { remove, restore, unjoin, changedSince: kept, dependents: laterOn(record, current, all).map(l => l.merge) };
 }
 
+/**
+ * What undoing merge `record` with `choices` would do, the tree not changed
+ * (the same run as applyUndo, for the undo dialog to say what the write
+ * does, 10b): the items it takes back and what stays. An item of changes
+ * counts only when the undo changes a value of it (a list that keeps only a
+ * kept person's link, as it was, does not).
+ */
+export function undoOutcome(record: MergeRecord, current: StromData, choices: Omit<UndoChoices, 'at'> = {}): { items: Set<string>; kept: ChangedSince[] } {
+    const { data, kept, items } = run(record, current, choices);
+    const units = new Map(unitsOf(record).map(u => [u.id, u]));
+    const changed = (u: Unit): boolean => u.edits.some(e => valueKey(valueIn(current, e)) !== valueKey(valueIn(data, e)));
+    return {
+        items: new Set(items.filter(id => {
+            const u = units.get(id);
+            return !u || !u.edits.length || u.kind === 'data' || changed(u);
+        })),
+        kept,
+    };
+}
+
 /** The unit still has something to take back (a value not as before). */
 function changes(u: Unit, current: StromData): boolean {
     return u.edits.some(e => {

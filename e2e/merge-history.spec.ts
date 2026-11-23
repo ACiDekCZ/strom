@@ -187,13 +187,29 @@ test('An edit since the merge: Stays because it changed since with Keep chosen; 
     await expect(amos.locator('[data-v="undo"]')).toHaveAttribute('aria-checked', 'false');
     const primary = u.locator('[data-act="undo"]');
     await expect(primary).toHaveText('Remove 2 people');
+    // Kept, Amos is only under Stays: Will be removed counts and lists the people the button removes.
+    // The couple Amos & Elvíra goes with Elvíra, as the write does it.
+    const removeGrp = u.locator('.merge-undo-grp[data-group="remove"]');
+    const removed = (): Promise<string[]> => removeGrp.locator('.merge-undo-line span').allTextContents();
+    await expect(removeGrp.locator('.merge-undo-gcount')).toHaveText('2');
+    expect(await removed()).not.toContain('Amos Jilm');
+    expect(await removed()).toEqual(expect.arrayContaining(['Elvíra Jilmová', 'Kasián Jilm', 'Amos Jilm & Elvíra Jilmová']));
     await amos.locator('[data-v="undo"]').click();
     await expect(primary).toHaveText('Remove 3 people');
+    await expect(removeGrp.locator('.merge-undo-gcount')).toHaveText('3');
+    expect(await removed()).toContain('Amos Jilm');
+    // Drawn again, the segment keeps the focus and the row stays under Stays.
+    await expect(amos.locator('[data-v="undo"]')).toBeFocused();
+    await expect(amos.locator('[data-v="undo"]')).toHaveAttribute('aria-checked', 'true');
     await amos.locator('[data-v="keep"]').click();
     await expect(primary).toHaveText('Remove 2 people');
+    await expect(removeGrp.locator('.merge-undo-gcount')).toHaveText('2');
+    expect(await removed()).not.toContain('Amos Jilm');
     await primary.click();
     await expect(u).not.toHaveClass(/active/);
     await expect.poll(() => openPeople(page)).toEqual(['Amos', 'Florentýna', 'Kvido', 'Teofil']);
+    // The couple went with Elvíra, as the dialog said.
+    expect(await page.evaluate(() => Object.values(window.Strom.DataManager.getData().partnerships).length)).toBe(1);
     await expect(page.locator('.toast.show', { hasText: /^Merge undone: 2 people removed, \d+ kept/ })).toBeVisible();
     await expect(h.locator('.merge-hist-row .merge-state-tag')).toHaveText('partly undone');
     // What is left can still be undone: the dialog says what went before.

@@ -24,7 +24,7 @@ import { lastBridgeStatus, onBridgeStatus } from './research-sync-ui.js';
 import { undoResearchStep } from '../merge/undo-plan.js';
 import { HELP_LINKS } from '../help/topics.js';
 import {
-    canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel, undoResearchView,
+    canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel, undoResearchView, undoShown,
     type UndoLine, type UndoModel,
 } from '../merge/undo-view.js';
 
@@ -247,6 +247,8 @@ export const mergeHistoryMethods = uiModule({
         const name = treeName(st.treeId);
         const day = dayText(record.at);
         const picking = !!st.only;
+        // What goes and what stays with the choices made (10b): a kept person is not among what goes.
+        const now = undoShown(model, record, st.data, st.undo);
         const parts: string[] = [];
         parts.push(`<p class="merge-undo-lead">${esc(W.undoLead(record.source.label || '?', day))}</p>`);
         if (block === 'locked') parts.push(`<p class="merge-undo-warn" data-why="locked">${esc(W.lockedUndo(name))}</p>`);
@@ -260,7 +262,7 @@ export const mergeHistoryMethods = uiModule({
             parts.push(`<h3 class="merge-undo-h">${esc(W.uWhat)}</h3>`);
             if (picking) parts.push(`<p class="merge-undo-note">${esc(W.pickLead)}</p>`);
             const group = (key: UndoLine['group'], title: string, count: number, desc: string): void => {
-                const lines = model.lines.filter(l => l.group === key);
+                const lines = now.lines.filter(l => l.group === key);
                 if (!count && !lines.length) return;
                 const shown = picking ? lines : lines.slice(0, UNDO_LINES);
                 const items = shown.map(l => {
@@ -274,12 +276,12 @@ export const mergeHistoryMethods = uiModule({
   <ul class="merge-undo-lines">${items}${more}</ul>
 </details>`);
             };
-            group('remove', W.uRemove, model.people, W.uRemoveDesc(model.couples, model.sources, model.places, model.files));
-            group('restore', W.uRestore, model.restored, W.uRestoreDesc);
-            group('unjoin', W.uUnjoin, model.unjoined, W.uUnjoinDesc);
+            group('remove', W.uRemove, now.people, W.uRemoveDesc(now.couples, now.sources, now.places, now.files));
+            group('restore', W.uRestore, now.restored, W.uRestoreDesc);
+            group('unjoin', W.uUnjoin, now.unjoined, W.uUnjoinDesc);
 
-            if (model.keep.length) {
-                const rows = model.keep.map(k => {
+            if (now.keep.length) {
+                const rows = now.keep.map(k => {
                     const undo = st.undo.has(k.id);
                     const seg = k.canUndo ? `<div class="sel-seg merge-undo-seg" role="radiogroup" aria-label="${esc(k.name)}">
       <button type="button" class="sel-opt" data-sel-form="seg" role="radio" data-keep="${esc(k.id)}" data-v="keep" aria-checked="${!undo}" tabindex="${undo ? -1 : 0}">${esc(W.segKeep)}</button>
@@ -290,12 +292,12 @@ export const mergeHistoryMethods = uiModule({
     ${seg}
   </li>`;
                 }).join('');
-                parts.push(`<section class="merge-undo-keep"><h3 class="merge-undo-h">${esc(W.uKeepHead(model.keep.length))}</h3><ul class="merge-undo-klist">${rows}</ul></section>`);
+                parts.push(`<section class="merge-undo-keep"><h3 class="merge-undo-h">${esc(W.uKeepHead(now.keep.length))}</h3><ul class="merge-undo-klist">${rows}</ul></section>`);
             }
             if (record.backupId) parts.push(`<p class="merge-undo-note merge-undo-vs">${esc(W.vsBackup(day))}</p>`);
         }
         // The research's part (11c): only for a merge already sent there.
-        const res = model.empty ? null : undoResearchView(record, model.people);
+        const res = model.empty ? null : undoResearchView(record, now.people);
         if (res) {
             const how = res.command
                 ? `<div class="merge-undo-cmd-row"><code class="merge-undo-cmd">${esc(res.command)}</code>`
@@ -387,14 +389,15 @@ export const mergeHistoryMethods = uiModule({
         const st = undoState;
         if (!st) return;
         if (undo) st.undo.add(id); else st.undo.delete(id);
+        // What goes changes with the choice (10b): drawn again, its open groups and its scroll kept.
+        const body = document.querySelector<HTMLElement>(`#${UNDO_ID} .merge-undo-body`);
+        const open = new Set([...body?.querySelectorAll<HTMLDetailsElement>('.merge-undo-grp') ?? []].filter(d => d.open).map(d => d.dataset.group));
+        const top = body?.scrollTop ?? 0;
+        this.renderUndoMerge();
+        body?.querySelectorAll<HTMLDetailsElement>('.merge-undo-grp').forEach(d => { if (open.has(d.dataset.group)) d.open = true; });
+        if (body) body.scrollTop = top;
         const row = [...document.querySelectorAll<HTMLElement>(`#${UNDO_ID} .merge-undo-krow`)].find(r => r.dataset.id === id);
-        row?.querySelectorAll<HTMLButtonElement>('button[data-keep]').forEach(b => {
-            const on = (b.dataset.v === 'undo') === undo;
-            b.setAttribute('aria-checked', String(on));
-            b.tabIndex = on ? 0 : -1;
-            if (on) b.focus({ preventScroll: true });
-        });
-        this.updateUndoButton();
+        row?.querySelector<HTMLButtonElement>(`button[data-keep][data-v="${undo ? 'undo' : 'keep'}"]`)?.focus({ preventScroll: true });
     },
 
     /** Choose only some… / Undo everything. */

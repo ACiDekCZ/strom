@@ -318,7 +318,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         planPreviewCap: (name: string) => `Wycinek wokół: ${name} · nowe osoby przerywaną linią`,
         // Krok 6 – Co się stało (§9)
         doneTitle: (t: string) => `Zapisano do drzewa ${t}`,
-        doneTotals: (n: number, j: number, a: number, s: number) => `Sumy się zgadzają: ${numPl(n)} ${plPl(n, 'osoba', 'osoby', 'osób')} w imporcie = ${numPl(j)} połączonych + ${numPl(a)} nowych + ${numPl(s)} niedodanych. Odwołania bez błędów.`,
+        doneTotals: (n: number, j: number, a: number, s: number) => `Sumy się zgadzają: ${numPl(n)} ${plPl(n, 'osoba', 'osoby', 'osób')} w imporcie = ${numPl(j)} ${plPl(j, 'połączona', 'połączone', 'połączonych')} + ${numPl(a)} ${plPl(a, 'nowa', 'nowe', 'nowych')} + ${numPl(s)} ${plPl(s, 'niedodana', 'niedodane', 'niedodanych')}. Odwołania bez błędów.`,
         doneBackup: 'Kopia „Przed scaleniem” jest w Kopiach.',
         showInTree: 'Pokaż w drzewie',
         saveAsList: 'Zapisz jako listę osób',
@@ -329,7 +329,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         noNextCard: 'Sprawdzanie danych jest tutaj (Sprawdź drzewo); karta Co dalej po tym scaleniu już się nie pokaże.',
         subWritten: 'zapisano',
         subDone: 'gotowe',
-        toastAdded: (n: number, t: string) => `Dodano ${nPl(n, 'osoba', 'osoby', 'osób')} do drzewa ${t}`,
+        toastAdded: (n: number, t: string) => `Dodano ${nPl(n, 'osobę', 'osoby', 'osób')} do drzewa ${t}`,
         whatHappened: 'Co się stało',
         // Historia scaleń (§9 9a–9c)
         menuHistory: 'Historia scaleń…',
@@ -383,7 +383,15 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         redo: 'Przywróć scalenie',
         // §11 – cel z badaniami
         resBlock: (t: string) => `Badania ${t}`,
-        resPending: (n: number, l: number) => `${nPl(n, 'nowa osoba', 'nowe osoby', 'nowych osób')} i ${nPl(l, 'powiązanie', 'powiązania', 'powiązań')} na razie zostaje tylko w aplikacji. Do badań trafią jako „Z drzewa (niezweryfikowane)”.`,
+        // A count of zero is left out; the verb agrees with what is left: one subject 1 → singular,
+        // 2–4, 22–24… → plural, 0, 5–21… (genitive) → singular neuter; two subjects → plural.
+        resPending: (n: number, l: number) => {
+            const parts = [n > 0 || l === 0 ? nPl(n, 'nowa osoba', 'nowe osoby', 'nowych osób') : '', l > 0 ? nPl(l, 'powiązanie', 'powiązania', 'powiązań') : ''].filter(Boolean);
+            const one = parts.length === 1 ? (n > 0 || l === 0 ? n : l) : -1;
+            const stay = one < 0 || plPl(one, '', 'few', '') === 'few' ? 'zostają' : 'zostaje';
+            const go = one === 1 ? 'trafi' : 'trafią';
+            return `${parts.join(' i ')} na razie ${stay} tylko w aplikacji. Do badań ${go} jako „Z drzewa (niezweryfikowane)”.`;
+        },
         sendRes: 'Wyślij do badań…',
         keepLocal: 'Na razie zostaw w aplikacji',
         notSent: (n: number) => `niewysłane do badań · ${nPl(n, 'osoba', 'osoby', 'osób')}`,
@@ -397,7 +405,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         resUndoStep: 'W aplikacji cofnięcie nastąpi od razu. W badaniach potrzebny jest jeden krok w terminalu badań:',
         resUndoHelp: 'W aplikacji cofnięcie nastąpi od razu. Jak usunąć osoby w badaniach, opisuje pomoc:',
         resUndoHelpLink: 'Osoba usunięta w aplikacji',
-        resComesBack: (n: number) => `Do tego czasu następna wersja badań przywróci ${nPl(n, 'osobę', 'osoby', 'osób')} – aplikacja zaproponuje wtedy ich usunięcie.`,
+        resComesBack: (n: number) => `Do tego czasu następna wersja badań przywróci ${nPl(n, 'osobę', 'osoby', 'osób')} – aplikacja zaproponuje wtedy ${n === 1 ? 'jej' : 'ich'} usunięcie.`,
         copy: 'Kopiuj',
         copied: 'Skopiowano',
         resAgent: (l: string, eta: string) => `Agent badań pracuje nad linią ${l}: wysłanie poczeka, aż skończy krok${eta ? ` (ok. ${eta})` : ''}. Nic nie przepadnie.`,

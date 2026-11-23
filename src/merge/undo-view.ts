@@ -13,7 +13,7 @@ import { inferBirthUpperBounds, isLivingPerson } from '../privacy.js';
 import { displayName, familyName } from './plan-select.js';
 import { fold, yearsText } from './steps/step3-model.js';
 import type { PlanLine, PlanListGroup } from './steps/step5-plan.js';
-import { relativesOf, undoneItems, undoPreview, undoResearchStep, type ChangedSince, type ChangedWhat, type UndoPreview } from './undo-plan.js';
+import { relativesOf, undoneItems, undoOutcome, undoPreview, undoResearchStep, type ChangedSince, type ChangedWhat, type UndoPreview } from './undo-plan.js';
 
 // ==================== WORDS ====================
 
@@ -326,6 +326,55 @@ export function peopleRemoved(model: UndoModel, undo: ReadonlySet<string>, only:
     const kept = new Set(model.keep.filter(k => !undo.has(k.id) || !k.canUndo).map(k => k.id));
     return model.preview.remove.filter(i => i.kind === 'person' && !data.persons[i.ref as PersonId]?.isPlaceholder
         && (!only || only.has(i.id)) && !kept.has(i.id)).length;
+}
+
+/** What the undo dialog lists and counts with the choices made (10b). */
+export interface UndoShown {
+    /** What goes, comes back or is unjoined with these choices. */
+    lines: UndoLine[];
+    people: number;
+    couples: number;
+    sources: number;
+    places: number;
+    files: number;
+    restored: number;
+    unjoined: number;
+    /** The rows of what stays with these choices, and of what is chosen to be undone anyway. */
+    keep: KeepRow[];
+}
+
+/**
+ * What the undo dialog says with the choices made (Undo of a kept item's
+ * segment, `undo`), as the write does it (undoOutcome): a person kept is not
+ * among what goes, nor what stays with them (a couple with a partner who
+ * stays, a list that keeps their link); chosen to be undone, they are back
+ * there. A row of what stays only while it stays or is chosen (a couple kept
+ * for a partner who goes now goes too). A picture the merge replaced is said
+ * as before: the write takes it back when the backup has it.
+ */
+export function undoShown(model: UndoModel, record: MergeRecord, data: StromData, undo: ReadonlySet<string>): UndoShown {
+    const out = undoOutcome(record, data, { undo: [...undo] });
+    const pictures = new Set(out.kept.filter(c => c.what === 'picture').map(c => c.id));
+    const goes = (id: string): boolean => out.items.has(id) || pictures.has(id);
+    const lines = model.lines.filter(l => {
+        if (l.group !== 'unjoin') return goes(l.id);
+        const pid = l.id.slice(2);
+        return goes(l.id) || [...out.items, ...pictures].some(id => id.startsWith(`f:${pid}|`));
+    });
+    const removed = (kind: string): number => model.preview.remove.filter(i => i.kind === kind && goes(i.id)
+        && (kind !== 'person' || !data.persons[i.ref as PersonId]?.isPlaceholder)).length;
+    const keptIds = new Set(out.kept.map(c => c.id));
+    return {
+        lines,
+        people: removed('person'),
+        couples: removed('partnership'),
+        sources: removed('source'),
+        places: removed('place'),
+        files: removed('media'),
+        restored: lines.filter(l => l.group === 'restore').length,
+        unjoined: lines.filter(l => l.group === 'unjoin').length,
+        keep: model.keep.filter(k => keptIds.has(k.id) || undo.has(k.id)),
+    };
 }
 
 // ==================== THE RESEARCH OF AN UNDO (11c) ====================

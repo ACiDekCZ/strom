@@ -17718,7 +17718,7 @@ const stringsCZ: StringsType = {
         planPreviewCap: (name: string) => `Výřez kolem: ${name} · nové osoby čárkovaně`,
         // Krok 6 – Co se stalo (§9)
         doneTitle: (t: string) => `Zapsáno do stromu ${t}`,
-        doneTotals: (n: number, j: number, a: number, s: number) => `Součty sedí: ${numCs(n)} ${plural('cs', n, 'osoba', 'osoby', 'osob')} importu = ${numCs(j)} spojených + ${numCs(a)} nových + ${numCs(s)} nepřidaných. Odkazy bez chyb.`,
+        doneTotals: (n: number, j: number, a: number, s: number) => `Součty sedí: ${numCs(n)} ${plural('cs', n, 'osoba', 'osoby', 'osob')} importu = ${numCs(j)} ${plural('cs', j, 'spojená', 'spojené', 'spojených')} + ${numCs(a)} ${plural('cs', a, 'nová', 'nové', 'nových')} + ${numCs(s)} ${plural('cs', s, 'nepřidaná', 'nepřidané', 'nepřidaných')}. Odkazy bez chyb.`,
         doneBackup: 'Záloha „Před sloučením“ je v Zálohách.',
         showInTree: 'Ukázat ve stromu',
         saveAsList: 'Uložit jako seznam osob',
@@ -17729,7 +17729,7 @@ const stringsCZ: StringsType = {
         noNextCard: 'Kontrola dat je tady (Zkontrolovat strom), karta Co teď se po tomto sloučení už neukáže.',
         subWritten: 'zapsáno',
         subDone: 'hotovo',
-        toastAdded: (n: number, t: string) => `Přidáno ${nCs(n, 'osoba', 'osoby', 'osob')} do stromu ${t}`,
+        toastAdded: (n: number, t: string) => `${plural('cs', n, 'Přidána', 'Přidány', 'Přidáno')} ${nCs(n, 'osoba', 'osoby', 'osob')} do stromu ${t}`,
         whatHappened: 'Co se stalo',
         // Historie sloučení (§9 9a–9c)
         menuHistory: 'Historie sloučení…',
@@ -17783,7 +17783,15 @@ const stringsCZ: StringsType = {
         redo: 'Vrátit odvolání',
         // §11 – cíl s výzkumem
         resBlock: (t: string) => `Výzkum ${t}`,
-        resPending: (n: number, l: number) => `${nCs(n, 'nová osoba', 'nové osoby', 'nových osob')} a ${nCs(l, 'vazba', 'vazby', 'vazeb')} zatím zůstává jen v aplikaci. Do výzkumu půjdou jako „Z rodokmenu (neověřeno)“.`,
+        // A count of zero is left out; the verb agrees with what is left: one subject 1 → singular,
+        // 2–4 → plural, 0 and 5+ (genitive) → singular neuter; two subjects → plural.
+        resPending: (n: number, l: number) => {
+            const parts = [n > 0 || l === 0 ? nCs(n, 'nová osoba', 'nové osoby', 'nových osob') : '', l > 0 ? nCs(l, 'vazba', 'vazby', 'vazeb') : ''].filter(Boolean);
+            const one = parts.length === 1 ? (n > 0 || l === 0 ? n : l) : -1;
+            const stay = one < 0 || pluralCategory('cs', one) === 'few' ? 'zůstávají' : 'zůstává';
+            const go = one >= 0 && pluralCategory('cs', one) === 'one' ? 'půjde' : 'půjdou';
+            return `${parts.join(' a ')} zatím ${stay} jen v aplikaci. Do výzkumu ${go} jako „Z rodokmenu (neověřeno)“.`;
+        },
         sendRes: 'Poslat do výzkumu…',
         keepLocal: 'Zatím nechat jen v aplikaci',
         notSent: (n: number) => `neodesláno do výzkumu · ${nCs(n, 'osoba', 'osoby', 'osob')}`,
@@ -17797,7 +17805,7 @@ const stringsCZ: StringsType = {
         resUndoStep: 'V aplikaci se odvolání provede hned. Ve výzkumu je potřeba jeden krok v terminálu výzkumu:',
         resUndoHelp: 'V aplikaci se odvolání provede hned. Jak se osoby odeberou ve výzkumu, popisuje nápověda:',
         resUndoHelpLink: 'Osoba odebraná v aplikaci',
-        resComesBack: (n: number) => `Do té doby výzkum při příští verzi vrátí ${nCs(n, 'osobu', 'osoby', 'osob')} zpět – aplikace je pak nabídne k odebrání.`,
+        resComesBack: (n: number) => `Do té doby výzkum při příští verzi vrátí ${nCs(n, 'osobu', 'osoby', 'osob')} zpět – aplikace ${plural('cs', n, 'ji', 'je', 'je')} pak nabídne k odebrání.`,
         copy: 'Kopírovat',
         copied: 'Zkopírováno',
         resAgent: (l: string, eta: string) => `Agent výzkumu právě pracuje na linii ${l}: odeslání počká, až dokončí krok${eta ? ` (asi ${eta})` : ''}. Nic se neztratí.`,
