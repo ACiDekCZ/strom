@@ -23,7 +23,7 @@ import { AuditLogManager } from '../audit-log.js';
 import { strings } from '../strings.js';
 import { contentFingerprint } from '../research-link.js';
 import { sameWithImages } from '../image-equal.js';
-import { getSnapshotJson, keptBackupAtRisk } from '../snapshots.js';
+import { getSnapshotPayload, keptBackupAtRisk } from '../snapshots.js';
 import type { PersonId, StromData, TreeId } from '../types.js';
 import { applyPlan, type MergePlan, type MergeRecord, type PlanTarget, type VerifyIssue } from './plan.js';
 import { deleteBackup } from './executor.js';
@@ -330,10 +330,15 @@ export type UndoWriteResult =
     }
     | { ok: false; reason: 'missing' | 'backup' | 'save'; why: string; detail?: string };
 
-/** The tree's data of the backup "Before merge" of `record`, when its changes hold a picture (null otherwise or when gone). */
+/**
+ * The tree's data of the backup "Before merge" of `record`, when its changes
+ * hold a picture (null otherwise or when gone). Its pictures stay pooled
+ * references, as the tree holds them (spec 135): the undo puts back the
+ * reference, no picture of the backup is read whole.
+ */
 async function pictureBackup(record: MergeRecord): Promise<StromData | null> {
     if (!record.backupId || !(record.edits ?? []).some(e => hasImageToken(e.before))) return null;
-    const json = await getSnapshotJson(record.backupId).catch(() => null);
+    const json = (await getSnapshotPayload(record.backupId, { images: 'refs' }).catch(() => null))?.json;
     if (!json) return null;
     try {
         return JSON.parse(json) as StromData;

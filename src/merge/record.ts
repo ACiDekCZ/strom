@@ -7,6 +7,8 @@
  */
 
 import type { MergeEdit, MergeRecord, Person, PersonId, StromData } from '../types.js';
+import { isPoolRef } from '../image-ref.js';
+import { imageToken } from '../image-meta.js';
 
 // ==================== VALUES ====================
 
@@ -15,20 +17,27 @@ export interface ImageToken { $img: string }
 
 const IMAGE_MIN = 1024;
 
-function imageHash(url: string): string {
-    let h = 0x811c9dc5;
-    for (let i = 0; i < url.length; i += 16) {
-        h ^= url.charCodeAt(i);
-        h = Math.imul(h, 0x01000193) >>> 0;
-    }
-    for (let i = Math.max(0, url.length - 64); i < url.length; i++) {
-        h ^= url.charCodeAt(i);
-        h = Math.imul(h, 0x01000193) >>> 0;
-    }
-    return `${url.length}:${(h >>> 0).toString(36)}`;
+/** What imageToken puts before a picture's length and hash. */
+const TOKEN_HEAD = '\u0000img:';
+
+/**
+ * A picture's length and hash: of its data URL, or, for a pooled image's
+ * reference (the tree in memory holds its saved pictures so, spec 135), of
+ * the data URL the catalog tells — one picture has one token in either form,
+ * and a record written over data URLs reads the same over references.
+ */
+function imageHash(value: string): string {
+    const token = imageToken(value);
+    return token.startsWith(TOKEN_HEAD) ? token.slice(TOKEN_HEAD.length) : token;
 }
 
-const isImage = (v: unknown): v is string => typeof v === 'string' && v.length >= IMAGE_MIN && v.startsWith('data:');
+/**
+ * A picture: a long data URL or a pooled image's reference. A reference is
+ * never kept as it is: outside the places of a picture the load drops it
+ * (validation.ts dropStrayPoolRefs) and the pool's cleanup does not see it.
+ */
+const isImage = (v: unknown): v is string =>
+    typeof v === 'string' && ((v.length >= IMAGE_MIN && v.startsWith('data:')) || isPoolRef(v));
 
 function replacer(_key: string, value: unknown): unknown {
     return isImage(value) ? { $img: imageHash(value) } satisfies ImageToken : value;

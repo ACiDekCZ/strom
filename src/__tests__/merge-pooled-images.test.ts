@@ -48,20 +48,22 @@ vi.mock('../storage.js', () => ({
     },
 }));
 
-import { POOL_REF, withPoolLock, storeImages } from '../media-pool.js';
+import { POOL_REF, withPoolLock, storeImages, collectPoolGarbageLocked, pooledIds, POOL_UNUSED_GRACE_MS } from '../media-pool.js';
 import { clearImageMeta, computeImageMeta, setImageMeta } from '../image-meta.js';
 import { poolIdOf } from '../image-ref.js';
 import { sameImageSync, sameWithImages, imageFinder } from '../image-equal.js';
 import { poolTreeImages } from '../image-intern.js';
-import { memoryImageIds } from '../pool-memory.js';
+import { memoryImageIds, collectPoolRefIds } from '../pool-memory.js';
 import { createMergeState, detectConflicts, rebaseMergeState, updateMatchDecision } from '../merge/matching.js';
 import { executeMerge } from '../merge/executor.js';
 import { buildPlan, type WizardChoices } from '../merge/plan.js';
+import { compactValue, mergeEdits, personPrint, valueKey } from '../merge/record.js';
+import { writePlan, writeUndo } from '../merge/write.js';
 import { fieldText } from '../merge/plan-rules.js';
 import { treeEditCount } from '../merge/resume-change.js';
 import { conflictPhotoHtml } from '../merge/steps/step4-rules.js';
 import { buildChangePacket, summarizeChangePacket, applyPacketOntoData } from '../share-diff.js';
-import { carryOverMedia } from '../research-link.js';
+import { carryOverMedia, contentFingerprint } from '../research-link.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
@@ -269,6 +271,36 @@ describe('a research version over references (research-link.ts carryOverMedia)',
     });
 });
 
+describe('the record of a merge over references (merge/record.ts, spec 134 part C)', () => {
+    it('a picture is one token in either form, never the reference itself', async () => {
+        const [url] = [image(70)];
+        const [ref] = await pool(url);
+        expect(compactValue(ref)).toEqual(compactValue(url));
+        expect(compactValue(ref)).toMatchObject({ $img: expect.stringMatching(/^\d+:/) });
+        expect(valueKey({ photo: ref })).toBe(valueKey({ photo: url }));
+        // An added person's print: the same before and after the picture was saved.
+        expect(personPrint(person(B, { photo: ref }))).toBe(personPrint(person(B, { photo: url })));
+        expect(personPrint(person(B, { photo: ref }))).not.toBe(personPrint(person(B, { photo: image(71) })));
+    });
+
+    it('the edits of a merge name no pooled image (the load would drop it, the cleanup would not see it)', async () => {
+        const urls = [image(72), image(73), image(74), image(75)];
+        const refs = await pool(...urls);
+        const before = couple({ portrait: refs[0], file: refs[1], excerpt: refs[2] });
+        const after = structuredClone(before);
+        after.persons[A].photo = refs[3];
+        after.media!.m1.dataUrl = refs[3];
+        after.sources!.s1.excerpts![0].dataUrl = refs[3];
+        const edits = mergeEdits(before, after);
+        expect(edits.map(e => `${e.in}.${e.key}`).sort()).toEqual(['media.dataUrl', 'persons.photo', 'sources.excerpts']);
+        expect(collectPoolRefIds(edits, new Set())).toEqual(new Set());
+        expect(JSON.stringify(edits)).not.toContain(POOL_REF);
+        expect(edits.find(e => e.key === 'photo')?.before).toEqual(compactValue(urls[0]));
+        // The same pictures saved meanwhile (references against data URLs): no edit.
+        expect(mergeEdits(couple({ portrait: urls[0], file: urls[1], excerpt: urls[2] }), before)).toEqual([]);
+    });
+});
+
 describe('the merge guide pools the import (merge/ui.ts)', () => {
     const T1 = 't1' as TreeId;
     const ui = {
@@ -382,5 +414,59 @@ describe('the merge guide pools the import (merge/ui.ts)', () => {
         } finally {
             window.removeEventListener('strom:merge-session-changed', onChange);
         }
+    });
+
+    it('a merge that replaced a portrait: its stored record names no image, the cleanup keeps the old one by the backup, the undo puts its reference back', async () => {
+        const T2 = 't2' as TreeId;
+        (TreeManager as unknown as { index: { trees: TreeMetadata[] } }).index.trees.push(meta('t2', 'Vranec II'));
+        const [old, fresh, wife] = [image(80), image(81), image(82)];
+        const [rOld] = await pool(old);
+        st('trees').set('t2', { version: 25, persons: { [A]: person(A, { partnerships: [], photo: rOld, photoOriginalName: 'stara.png' }) }, partnerships: {} });
+        // The file: the same man with another portrait, and his wife; pooled as the guide does.
+        const file: StromData = {
+            version: 25,
+            persons: { [A]: person(A, { photo: fresh, photoOriginalName: 'nova.png' }), [B]: person(B, { photo: wife }) },
+            partnerships: { [U]: { id: U, person1Id: A, person2Id: B, childIds: [], status: 'married' } as Partnership },
+        } as StromData;
+        let source: StromData | null = null;
+        await poolTreeImages(file, 'test:file', false, pooled => { source = pooled; return true; });
+        expect(source).not.toBeNull();
+        const incoming = source as unknown as StromData;
+        const target = (await TreeManager.getTreeData(T2))!;
+        expect(target.persons[A].photo).toBe(rOld);
+        const state = createMergeState(target, incoming);
+        for (const m of state.matches) updateMatchDecision(state, m.incomingId, 'confirm');
+        const plan = buildPlan(state, {
+            mode: 'add', targetTreeId: T2, scope: 'c', swapped: false, rules: { all: 'import' },
+            source: { kind: 'json', label: 'vranec.json', persons: 2 }, targetName: 'Vranec II', targetFingerprint: contentFingerprint(target),
+            planId: 'mp-portrait', createdAt: '2026-05-04T10:00:00.000Z',
+        });
+        const written = await writePlan(plan, { target, source: incoming, into: 'tree' });
+        expect(written.ok).toBe(true);
+        await TreeManager.flush();
+        const rFresh = incoming.persons[A].photo!;
+        expect(poolIdOf(rFresh)).toBeTruthy();
+
+        // Stored: the record keeps a token of the old portrait, no reference of it.
+        expect(JSON.stringify(st('trees').get('t2'))).not.toContain(poolIdOf(rOld)!);
+        const stored = (await TreeManager.getTreeData(T2))!;
+        expect(stored.persons[A].photo).toBe(rFresh);
+        const edit = stored.merges![0].edits!.find(e => e.in === 'persons' && e.key === 'photo')!;
+        expect(edit.before).toEqual(compactValue(old));
+
+        // A week and more of cleanups: the old portrait stays, the backup "Before merge" names it.
+        const t0 = Date.now();
+        await withPoolLock(() => collectPoolGarbageLocked(t0));
+        await withPoolLock(() => collectPoolGarbageLocked(t0 + POOL_UNUSED_GRACE_MS + 86_400_000));
+        expect(await pooledIds([poolIdOf(rOld)!])).toEqual(new Set([poolIdOf(rOld)!]));
+
+        // The undo: the old portrait back by its reference (the backup read with references, not whole).
+        const undone = await writeUndo(T2, plan.id, { at: '2026-05-05T10:00:00.000Z' });
+        expect(undone.ok).toBe(true);
+        if (!undone.ok) return;
+        expect(undone.kept).toEqual([]);
+        expect(undone.data.persons[A].photo).toBe(rOld);
+        await TreeManager.flush();
+        expect((await TreeManager.getTreeData(T2))!.persons[A].photo).toBe(rOld);
     });
 });
