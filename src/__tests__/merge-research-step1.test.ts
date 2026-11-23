@@ -68,9 +68,20 @@ describe('step 1 says of the research (11f–11h, K9.5)', () => {
         expect(html).not.toContain('data-s1="swap"');
     });
 
-    it('a new tree from a linked one: it will not be linked (11f)', () => {
+    it('a new tree from a linked one: it will not be linked (11f), said once', () => {
         setLanguage('en');
         expect(researchHtml(env(row('Habrovi', true)), null)).toContain(strings.mergeWizard.resNewTree('Habrovi'));
+        // The New tree's description above already says the new tree will not be linked:
+        // the research's sentence only says where the research stays, in every language.
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            setLanguage(lang);
+            const W = strings.mergeWizard;
+            const shown = `${W.modeNewDesc('Habrovi', 12)} ${W.resNewTree('Habrovi')}`;
+            const notLinked = W.modeNewDesc('Habrovi', 12).split(/(?<=\.) /)[1];
+            expect(shown.split(notLinked).length - 1, lang).toBe(1);
+            expect(W.resNewTree('Habrovi').split(/\. /).length, lang).toBe(1);
+        }
+        setLanguage('en');
     });
 
     it('another linked tree with the same people is named (K9.5), into a tree or as a new one', () => {

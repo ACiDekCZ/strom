@@ -402,7 +402,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         copied: 'Skopiowano',
         resAgent: (l: string, eta: string) => `Agent badań pracuje nad linią ${l}: wysłanie poczeka, aż skończy krok${eta ? ` (ok. ${eta})` : ''}. Nic nie przepadnie.`,
         resOld: (v: string) => `Badania są w starszej wersji (${v}) i nie znają wysyłania po scaleniu: całe drzewo zostanie wysłane jak dotąd, przez „Co zostanie wysłane”.`,
-        resNewTree: (t: string) => `Nowe drzewo nie będzie połączone z badaniami. Badania ${t} zostaną przy drzewie ${t}.`,
+        resNewTree: (t: string) => `Badania ${t} zostaną przy drzewie ${t}.`,
         resSwap: (s: string, t: string) => `Źródło ${s} jest połączone z badaniami, cel ${t} nie. Połączenie nie przejdzie do celu.`,
         resSwapBtn: (t: string, s: string) => `Zamień: dodaj ${t} do ${s}`,
         resTwo: 'Oba drzewa są połączone z badaniami: powiązanie ani numery źródła nie przejdą; osoby źródła są w badaniach celu nowe.',
