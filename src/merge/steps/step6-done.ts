@@ -12,7 +12,7 @@
  */
 
 import { strings, getCurrentLanguage } from '../../strings.js';
-import { formatShortDateTime } from '../../format.js';
+import { formatDateTime } from '../../format.js';
 import type { StepContext } from './context.js';
 import { escapeHtml, glyph } from './context.js';
 import { renderPlanListReadOnly } from './step5-plan.js';
@@ -22,10 +22,10 @@ const EYE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke=
 const UNDO = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
     + '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>';
 
-/** When the merge was written, as the language writes a day and time. */
+/** When the merge was written, as the language writes a day with its year and the time. */
 export function writtenWhen(at: string): string {
     const ts = Date.parse(at);
-    return Number.isFinite(ts) ? formatShortDateTime(ts, getCurrentLanguage()) : '';
+    return Number.isFinite(ts) ? formatDateTime(ts, getCurrentLanguage()) : '';
 }
 
 export function renderStep6(host: HTMLElement, ctx: StepContext): void {

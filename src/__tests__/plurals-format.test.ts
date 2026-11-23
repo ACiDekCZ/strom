@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { plural, pluralCategory, getStringsForLang, setLanguage, joinAnd } from '../strings.js';
-import { formatRelativeDateTime, formatFileSize } from '../format.js';
+import { formatRelativeDateTime, formatDateTime, formatFileSize } from '../format.js';
 
 const COUNTS = [0, 1, 2, 5, 21, 22];
 
@@ -101,6 +101,16 @@ describe('relative backup times', () => {
         expect(formatRelativeDateTime(new Date(2026, 8, 22, 9, 10).getTime(), 'de', now)).toMatch(/^gestern 0?9:10$/);
         expect(formatRelativeDateTime(new Date(2026, 8, 23, 14, 36).getTime(), 'en', now)).toMatch(/^today 2:36\sPM$/);
         expect(formatRelativeDateTime(new Date(2026, 6, 20, 14, 36).getTime(), 'en', now)).toMatch(/^7\/20\/2026 2:36\sPM$/);
+    });
+});
+
+describe('a day with its year and time', () => {
+    it('numeric date with the year, never seconds', () => {
+        const ts = new Date(2026, 10, 22, 15, 41, 59).getTime();
+        expect(formatDateTime(ts, 'cs')).toBe('22. 11. 2026 15:41');
+        expect(formatDateTime(ts, 'de')).toBe('22.11.2026 15:41');
+        expect(formatDateTime(ts, 'en')).toMatch(/^11\/22\/2026 3:41\sPM$/);
+        expect(formatDateTime(ts, 'pl')).toBe('22.11.2026 15:41');
     });
 });
 
