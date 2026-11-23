@@ -131,6 +131,7 @@ import { onImagesInterned } from '../image-intern.js';
 import { registerMemoryImages } from '../pool-memory.js';
 import { completeStatus, statusAskUrl } from '../status-parts.js';
 import { expandedData } from '../image-expand.js';
+import { exportGedcomWithImages, gedcomText, type GedcomWithImages } from '../ged-export-images.js';
 import { looksLikeGedcom } from './file-pick.js';
 import { createSha256 } from '../sha256.js';
 import { localIsoDay } from '../import-origin.js';
@@ -1619,6 +1620,14 @@ export function researchTitlesBase(loaded: StromData, research: StromData, knows
  */
 export function researchGedcom(data: StromData, treeName: string, link: ResearchHeaderInfo, titles: TitlesInGedcom, readings = false, sourceFields = false, citations: ResearchCitationsOut = NO_CITATION_FEATURES, media: ResearchMediaOut = NO_MEDIA_FEATURES): string {
     return exportToGedcom(data, treeName, { research: link, titles, readings, sourceFields, ...citations, ...media }).content;
+}
+
+/**
+ * researchGedcomExport of a tree holding pooled image references: each image
+ * read as the text is written (ged-export-images.ts), the tree never expanded.
+ */
+export function researchGedcomWithImages(data: StromData, treeName: string, link: ResearchHeaderInfo, titles: TitlesInGedcom, readings = false, sourceFields = false, citations: ResearchCitationsOut = NO_CITATION_FEATURES, media: ResearchMediaOut = NO_MEDIA_FEATURES, mediaRef?: GedcomMediaRef): Promise<GedcomWithImages> {
+    return exportGedcomWithImages(data, treeName, { research: link, titles, readings, sourceFields, ...citations, ...media, ...(mediaRef ? { mediaRef } : {}) });
 }
 
 /**
@@ -3147,7 +3156,7 @@ export const researchUiMethods = uiModule({
         const releaseLeave = holdLeave('send', tree.id);
         let res: Response;
         try {
-            res = await postSync(bridge.sync, researchGedcom(await expandedData(data), tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts, deletedSources: deletedSourcesToSend(link) }, researchGedcomTitles(status), researchSendsReadings(status), researchSendsSourceFields(status), researchCitationsOut(status)), 120000);
+            res = await postSync(bridge.sync, gedcomText(await researchGedcomWithImages(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts, deletedSources: deletedSourcesToSend(link) }, researchGedcomTitles(status), researchSendsReadings(status), researchSendsSourceFields(status), researchCitationsOut(status))), 120000);
         } catch (err) {
             releaseLeave();
             console.warn('Sending to the research failed', err);
@@ -3754,7 +3763,7 @@ export const researchUiMethods = uiModule({
             return;
         }
         const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(meta.research).transcripts, deletedSources: deletedSourcesToSend(meta.research) };
-        const blob = new Blob([researchGedcom(await expandedData(data), meta.name, research, researchGedcomTitles(this.researchStatusOf(meta.research.id)), researchSendsReadings(this.researchStatusOf(meta.research.id)), researchSendsSourceFields(this.researchStatusOf(meta.research.id)), researchCitationsOut(this.researchStatusOf(meta.research.id)), researchMediaOut(this.researchStatusOf(meta.research.id)))], { type: 'text/plain;charset=utf-8' });
+        const blob = new Blob((await researchGedcomWithImages(data, meta.name, research, researchGedcomTitles(this.researchStatusOf(meta.research.id)), researchSendsReadings(this.researchStatusOf(meta.research.id)), researchSendsSourceFields(this.researchStatusOf(meta.research.id)), researchCitationsOut(this.researchStatusOf(meta.research.id)), researchMediaOut(this.researchStatusOf(meta.research.id)))).parts, { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;

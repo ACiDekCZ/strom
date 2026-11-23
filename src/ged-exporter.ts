@@ -49,6 +49,9 @@ import { composePage, hasEntryFields } from './source-location.js';
 import { citationMainOf, citationQuality, type CitationHolder } from './citation-quality.js';
 import { citationFact, CitationRef, orderedCitations, recordPagesOf, sourceNumbers } from './citation-order.js';
 import { cleanEmails, emailOfLine } from './person-contact.js';
+import { isPoolRef, poolIdOf } from './image-ref.js';
+import { imageMetaOf } from './image-meta.js';
+import { sameImageSync } from './image-equal.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
 export interface GedcomExportOptions {
@@ -208,6 +211,37 @@ interface ObjeWrite {
 
 /** A line that holds the place of a file until all are written (exportToGedcom's media slots). */
 const MEDIA_SLOT = '\u0000media:';
+
+/**
+ * A line that holds the place of a pooled image's FILE (spec 135): `<slot><level> <reference>`.
+ * The export itself never reads an image; ged-export-images.ts writes each one's FILE in its place,
+ * an image at a time, exactly as `pushWrapped` writes a data URL here.
+ */
+export const FILE_SLOT = '\u0000file:';
+
+/**
+ * The media type part of an image value as the export reads it: a data URL's
+ * text between `data:` and the first `;`, a pooled image's from its stored
+ * head (the catalog, image-meta.ts); '' for a pooled one the catalog does not know.
+ */
+function valueMime(value: string): string {
+    if (!isPoolRef(value)) return value.slice(5, value.indexOf(';'));
+    const head = imageMetaOf(value)?.head ?? '';
+    return head.slice(5, head.indexOf(';'));
+}
+
+/** The lines `level FILE value` (CONC-wrapped), or a pooled image's place for them (FILE_SLOT). */
+function pushFile(lines: string[], level: number, value: string): void {
+    if (poolIdOf(value)) lines.push(`${FILE_SLOT}${level} ${value}`);
+    else pushWrapped(lines, level, 'FILE', value);
+}
+
+/** The text of the lines `level FILE dataUrl` as the export writes them (one line after another, no line break at the end). */
+export function gedcomFileLines(level: number, dataUrl: string): string {
+    const out: string[] = [];
+    pushWrapped(out, level, 'FILE', dataUrl);
+    return out.join('\n');
+}
 
 /**
  * An xref another program gave that this file can use as it is: GEDCOM
@@ -1644,7 +1678,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     const mediaCounts: GedcomMediaCounts = { excerptsRef: 0, excerptsData: 0, filesRef: 0, filesData: 0 };
     /** The hash a file's data go by (GedcomExportOptions.mediaRef), else undefined: its data go. Counted either way. */
     const fileDataRef = (file: string): string | undefined => {
-        if (!file.startsWith('data:')) return undefined;
+        if (!file.startsWith('data:') && !isPoolRef(file)) return undefined;
         const sha = options.mediaRef ? normalizeSha256(options.mediaRef.dataSha(file)) : null;
         if (sha) mediaCounts.filesRef++;
         else mediaCounts.filesData++;
@@ -1652,7 +1686,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     };
     /** FORM of a file: its data URL's type, else the type it names. */
     const objeForm = (m: ObjeWrite): string => {
-        const mime = m.file.startsWith('data:') ? m.file.slice(5, m.file.indexOf(';')) : m.fileMime ?? '';
+        const mime = m.file.startsWith('data:') || isPoolRef(m.file) ? valueMime(m.file) : m.fileMime ?? '';
         return mime.includes('/') ? mime.split('/')[1] : 'jpeg';
     };
     /** NOTE, `_SOUR`, the original's hash, FILE (in place) and the date of an OBJE, at level `l`. */
@@ -1671,7 +1705,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (withFile) {
             const dataRef = fileDataRef(m.file);
             if (dataRef) out.push(`${l} _STROM_DATA ${dataRef}`);
-            else pushWrapped(out, l, 'FILE', m.file);
+            else pushFile(out, l, m.file);
         }
         // The picture's date: back under its OBJE for the program it came from (spec 066 G8), and to a
         // research that keeps it (spec 108 §3).
@@ -1996,7 +2030,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
         for (const att of mediaByPerson.get(personId) ?? []) {
             // The portrait's own record (data v25): written once, as the portrait above.
-            if (person.photo && att.dataUrl === person.photo) continue;
+            if (person.photo && (att.dataUrl === person.photo || (isPoolRef(att.dataUrl) !== isPoolRef(person.photo) && sameImageSync(att.dataUrl, person.photo)))) continue;
             if (att.places.some(p => atOwner(p, q => 'personId' in q && q.personId === personId))) pushMediaSlot(att, 1, 'person');
         }
 
@@ -2479,7 +2513,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // Crops of the entry, embedded like person media (other programs
         // cannot read data URLs — the content options can leave them out).
         for (const exc of members ? members.flatMap(m => m.excerpts ?? []) : source.excerpts ?? []) {
-            const mime = exc.dataUrl.slice(5, exc.dataUrl.indexOf(';'));
+            const mime = valueMime(exc.dataUrl);
             lines.push('1 OBJE');
             lines.push(`2 FORM ${mime.includes('/') ? mime.split('/')[1] : 'jpeg'}`);
             if (exc.caption) pushWrapped(lines, 2, 'TITL', exc.caption);
@@ -2501,7 +2535,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (options.mediaRef?.excerpt({ clip: exc.clip, originalSha: exc.originalSha })) mediaCounts.excerptsRef++;
             else {
                 mediaCounts.excerptsData++;
-                pushWrapped(lines, 2, 'FILE', exc.dataUrl);
+                pushFile(lines, 2, exc.dataUrl);
             }
         }
         // The files of the source (spec 102): one at a person too goes there with this source as its `_SOUR`.
@@ -2569,7 +2603,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 if (m.type) written.push(`2 TYPE ${m.type}`);
                 if (m.title) pushWrapped(written, 1, 'TITL', m.title);
             } else {
-                pushWrapped(written, 1, 'FILE', m.file);
+                pushFile(written, 1, m.file);
                 written.push(`2 FORM ${objeForm(m)}`);
                 if (m.type) written.push(`3 TYPE ${m.type}`);
                 if (m.title) pushWrapped(written, 2, 'TITL', m.title);

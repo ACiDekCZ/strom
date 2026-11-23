@@ -517,6 +517,15 @@ export async function storedTreeForExport(treeId: TreeId): Promise<StromData | n
 }
 
 /**
+ * storedTreeForExport with its pooled images as references: for an output
+ * that reads each image as it writes it (a GEDCOM, ged-export-images.ts).
+ */
+export async function storedTreeWithRefs(treeId: TreeId): Promise<StromData | null> {
+    const stored = await TreeManager.getTreeData(treeId);
+    return stored ? { version: STROM_DATA_VERSION, ...migrateData(stored) } : null;
+}
+
+/**
  * Thrown by a mutation attempted while the local data is locked (see
  * DataManager.isLocked). The UI never offers one; this only guarantees that
  * an overlooked path cannot change the unsaved stand-in tree.

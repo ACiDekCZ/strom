@@ -18,6 +18,8 @@ import { normalizeSha256, sha256Bytes } from './sha256.js';
 import { treeMedia } from './media.js';
 import { withAppVersion } from './research-link.js';
 import type { GedcomMediaRef } from './ged-exporter.js';
+import { isPoolRef, poolIdOf } from './image-ref.js';
+import { imageMetaOf } from './image-meta.js';
 import type { StromData } from './types.js';
 
 /** `/status.features`: the bridge takes a send with pictures by reference. */
@@ -92,14 +94,57 @@ export async function dataUrlSha(url: string): Promise<string | null> {
     return sha;
 }
 
-/** The data URLs of the tree's portraits, couples' photos and attachments (each once). */
-export function treeDataUrls(data: StromData): string[] {
+/** The images of the tree's portraits, couples' photos and attachments: data URLs and pooled images' references (each once). */
+export function treeImageValues(data: StromData): string[] {
     const out = new Set<string>();
-    const add = (v: unknown) => { if (typeof v === 'string' && v.startsWith('data:')) out.add(v); };
+    const add = (v: unknown) => { if (typeof v === 'string' && (v.startsWith('data:') || isPoolRef(v))) out.add(v); };
     for (const p of Object.values(data.persons ?? {})) add(p?.photo);
     for (const u of Object.values(data.partnerships ?? {})) add(u?.photo);
     for (const a of treeMedia(data)) if (!a.originalOnly) add(a.dataUrl);
     return [...out];
+}
+
+/** The data URLs of the tree's portraits, couples' photos and attachments (each once). */
+export function treeDataUrls(data: StromData): string[] {
+    return treeImageValues(data).filter(v => v.startsWith('data:'));
+}
+
+/**
+ * A pooled image's SHA-256 (hex) by the image catalog (image-meta.ts): the
+ * hash of its stored bytes, what dataUrlSha gives its data URL (spec 135).
+ * Not in the catalog, or no hash there: undefined.
+ */
+export function catalogSha(ref: string): string | undefined {
+    const meta = imageMetaOf(ref);
+    return meta && meta.bytes > 0 ? normalizeSha256(meta.sha) ?? undefined : undefined;
+}
+
+/** The hash of a value: a pooled image's by the catalog, a data URL's as hashed before. */
+function knownSha(value: string): string | undefined {
+    return isPoolRef(value) ? catalogSha(value) : cachedDataUrlSha(value);
+}
+
+/**
+ * The hashes of pooled images (by reference): the catalog's; an image the
+ * catalog has no entry for gets one (ensureImageMeta), one whose entry has no
+ * hash is read and hashed alone, as its data URL (nothing of it kept).
+ */
+async function pooledShas(refs: readonly string[], out: Map<string, string>): Promise<void> {
+    if (!refs.length) return;
+    const { ensureImageMeta, loadImageUrls } = await import('./media-pool.js');
+    await ensureImageMeta(refs.map(ref => poolIdOf(ref)!));
+    for (const ref of refs) {
+        const sha = catalogSha(ref);
+        if (sha) {
+            out.set(ref, sha);
+            continue;
+        }
+        if (!imageMetaOf(ref)) continue;
+        const id = poolIdOf(ref)!;
+        const url = (await loadImageUrls([id])).get(id);
+        const bytes = url ? dataUrlBytes(url) : null;
+        if (bytes) out.set(ref, toHex(await sha256Bytes(bytes)));
+    }
 }
 
 /** The originals the excerpts without the research's clip were cut from (each once). */
@@ -216,12 +261,21 @@ export async function prepareMediaRef(args: {
     if (!gate) return undefined;
     const refused = refusedOf.get(args.researchId) ?? new Set<string>();
     if (!gate.known) return mediaRefOf(gate, new Set(), refused, () => undefined);
-    if (args.keepalive) return mediaRefOf(gate, knownOf.get(args.researchId) ?? new Set(), refused, cachedDataUrlSha);
+    if (args.keepalive) return mediaRefOf(gate, knownOf.get(args.researchId) ?? new Set(), refused, knownSha);
     const shaOf = new Map<string, string>();
-    for (const url of treeDataUrls(args.data)) {
-        const sha = await dataUrlSha(url);
-        if (sha) shaOf.set(url, sha);
+    // A pooled image goes by the catalog's hash (spec 135): never expanded nor hashed again here.
+    const refs: string[] = [];
+    for (const value of treeImageValues(args.data)) {
+        if (isPoolRef(value)) {
+            const sha = catalogSha(value);
+            if (sha) shaOf.set(value, sha);
+            else refs.push(value);
+            continue;
+        }
+        const sha = await dataUrlSha(value);
+        if (sha) shaOf.set(value, sha);
     }
+    await pooledShas(refs, shaOf);
     const ask = [...new Set([...shaOf.values(), ...excerptOriginalShas(args.data)])].filter(sha => !refused.has(sha));
     const known = ask.length ? await askMediaKnown(args.base, ask, args.fetchFn ?? fetch) : new Set<string>();
     // Not answered: nothing it would have to hold goes by reference (and nothing of it is kept for leaving the page).

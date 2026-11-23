@@ -25,7 +25,8 @@ import { expandImages, expandedData, expandImageText, hasPoolRefs } from '../ima
 import { POOL_REF, IMAGE_PLACEHOLDER, imageAddrAttr, turnedPoolRef } from '../image-ref.js';
 import { noteOwnImages, clearImageMeta } from '../image-meta.js';
 import { withExifOrientation } from '../excerpts.js';
-import { DataManager, storedTreeForExport } from '../data.js';
+import { DataManager, storedTreeForExport, storedTreeWithRefs } from '../data.js';
+import { exportGedcomWithImages, gedcomText } from '../ged-export-images.js';
 import { TreeManager } from '../tree-manager.js';
 import { AppExporter } from '../export.js';
 import { exportToGedcom } from '../ged-exporter.js';
@@ -309,13 +310,14 @@ describe('no output of a tree holding references names one; its images whole', (
         for (const html of saved) expectWhole(html.replace(/\\\//g, '/'), urls);
     });
 
-    it('a GEDCOM of a stored tree (the file, and the research\'s send built the same way)', async () => {
+    it('a GEDCOM of a stored tree (the file, and the research\'s send built the same way): its images read as it is written (D10b)', async () => {
         const urls = storedWithRefs();
-        const ged = exportToGedcom((await storedTreeForExport(TREE))!, 'Zwirnhofer').content;
+        const ged = gedcomText(await exportGedcomWithImages((await storedTreeWithRefs(TREE))!, 'Zwirnhofer'));
+        expect(ged).toBe(exportToGedcom((await storedTreeForExport(TREE))!, 'Zwirnhofer').content);
         const joined = ged.replace(/\r?\n\d+ CONC /g, '');
         expect(joined).not.toContain('sm:p:');
         expect(joined).toContain(urls[0]);
-        // Without the step the GEDCOM would name the reference (what the research cannot read).
+        // Without the step the GEDCOM would hold slots for the images (what the research cannot read).
         const bare = exportToGedcom(treeWithRefs().data, 'Zwirnhofer').content.replace(/\r?\n\d+ CONC /g, '');
         expect(bare).not.toContain(urls[0]);
     });

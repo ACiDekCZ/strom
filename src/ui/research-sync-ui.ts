@@ -79,11 +79,12 @@ import { holdLeave, takeLeftPending } from './busy-leave.js';
 import { startTreeLoad, currentTreeLoad } from './tree-load-progress.js';
 import { researchWrittenList } from './research-changes-ui.js';
 import {
-    fetchWithTimeout, readStatusPart, readResearchTreeFile, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
+    fetchWithTimeout, readStatusPart, readResearchTreeFile, postSync, onComputer, readTree, researchGedcom, researchGedcomWithImages,
 } from './research-ui.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { browserMediaFingerprint, browserMediaSafe, treeHasAppMedia, archiveHoldsAppMedia } from '../browser-media.js';
-import { expandedData } from '../image-expand.js';
+import { poolRefSnapshot } from '../image-expand.js';
+import { gedcomText } from '../ged-export-images.js';
 
 /** A person's conflicts less those still open that were decided since (`settled`, by id); the same list when none goes. */
 function withoutSettled(list: ResearchConflict[], settled: Set<string> | null): ResearchConflict[] {
@@ -2132,10 +2133,9 @@ export const researchSyncMethods = uiModule({
         // The sources deleted here in edit mode (spec 117 §4): one back in the tree (Undo) forgotten, the rest said deleted.
         if (!again) forgetDeletedSourcesBack(treeId, data);
         const deletedSources = again ? [] : deletedSourcesToSend(TreeManager.getTreeMetadata(treeId)?.research);
-        // The pooled images whole (image-expand.ts); read before this send counts as going, so another
-        // send asked meanwhile is stopped here, not posted beside it.
-        const whole = again ? null : await expandedData(data);
-        if (sendingTree) return;
+        // The tree as it is now, its pooled images as references: each is read as the GEDCOM is written
+        // (ged-export-images.ts), the tree is never expanded whole.
+        const whole = again ? null : poolRefSnapshot(data);
         // The pictures the research holds go by reference (spec 133): never in a send written again (nothing is
         // exported), nor in the one send with every picture's data after a reference it did not find.
         const mediaFeatures = this.researchStatusOf(link.id)?.features;
@@ -2143,12 +2143,14 @@ export const researchSyncMethods = uiModule({
             : await prepareMediaRef({ researchId: link.id, base: bridge.base, features: mediaFeatures, data: whole, keepalive: !!opts.keepalive });
         // Another send started while it was asked: one at a time.
         if (sendingTree) return;
-        const exported = !whole ? null : researchGedcomExport(whole, meta?.name ?? '', {
+        const exported = !whole ? null : await researchGedcomWithImages(whole, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}), ...(deletedSources.length ? { deletedSources } : {}),
         }, titles, researchSendsReadings(this.researchStatusOf(link.id)), researchSendsSourceFields(this.researchStatusOf(link.id)), researchCitationsOut(this.researchStatusOf(link.id)),
         researchMediaOut(this.researchStatusOf(link.id)), mediaRef);
-        const gedcom = exported?.content ?? '';
+        // The images were read before this send counts as going: another send asked meanwhile is stopped here, not posted beside it.
+        if (sendingTree) return;
+        const gedcom = exported ? gedcomText(exported) : '';
         // What went by reference and how big the send is (no names; spec 133 K3.2).
         if (exported && mediaRefGate(mediaFeatures)) {
             console.info('Research send', { chars: gedcom.length, bytes: utf8Length(gedcom), ...exported.media, withData: !!opts.mediaRefRetried });

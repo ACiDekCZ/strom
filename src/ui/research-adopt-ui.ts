@@ -23,7 +23,7 @@ import { noteResearchBridge, patchResearchAutoState, announcedResearchScheme } f
 import { ResearchWriteHeld, writeHeldOfCode } from '../research-write-held.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
-import { exportToGedcom, countFamilies } from '../ged-exporter.js';
+import { countFamilies } from '../ged-exporter.js';
 import { NO_CITATION_FEATURES, researchCitationsOut, type ResearchCitationsOut } from '../citation-gates.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
@@ -47,7 +47,7 @@ import { BUSY_TIMEOUTS, busyToast } from './busy.js';
 import { downloadStep, type TreeDownloadWatch } from './tree-load-progress.js';
 import { safeFileName } from '../filenames.js';
 import type { ProgressToastHandle } from './toast.js';
-import { expandedData } from '../image-expand.js';
+import { exportGedcomWithImages, gedcomText } from '../ged-export-images.js';
 
 const ADOPT_ID = 'research-adopt-modal';
 const ELSEWHERE_ID = 'research-elsewhere-modal';
@@ -635,12 +635,13 @@ export const researchAdoptMethods = uiModule({
         // The step is on screen before the export holds the page a moment.
         await new Promise(resolve => setTimeout(resolve, 0));
         // (A tree the research has not had yet: its citations in the order of K1.1, never the list's own.)
-        const exported = exportToGedcom(choice.images ? await expandedData(data) : stripMedia(data), tree.name, { titles, sourceFields, citationMain: citations.citationMain, ...media });
-        state.content = exported.content;
+        // The images read as the text is written (ged-export-images.ts): the tree is never expanded whole.
+        const exported = await exportGedcomWithImages(choice.images ? data : stripMedia(data), tree.name, { titles, sourceFields, citationMain: citations.citationMain, ...media });
+        state.content = gedcomText(exported);
         phase({ step: 'taking' });
         let reply: { tree: string; head: string | null; ids: AdoptIds | null } | null = null;
         try {
-            const res = await postSync(`${ctx.base}/adopt`, exported.content, ADOPT_POST_MS);
+            const res = await postSync(`${ctx.base}/adopt`, state.content, ADOPT_POST_MS);
             if (res.ok) reply = sanitizeAdoptReply(await res.json());
             // Held until something is settled in the research (sealed elsewhere, files not downloaded, its disk full).
             else if (res.status === 409 || res.status === 507) {

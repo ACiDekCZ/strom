@@ -13,7 +13,7 @@ import type { FollowSwitchFrom } from './research-follow-ui.js';
 import { allMedia } from '../media.js';
 import type { PrivacyMode, ContentOptions } from '../privacy.js';
 import { noteExportAll } from '../research-device.js';
-import { DataManager, auditPersonName, storedTreeForExport } from '../data.js';
+import { DataManager, auditPersonName, storedTreeForExport, storedTreeWithRefs } from '../data.js';
 import { confirmMemoryForImport } from './memory-limit-ui.js';
 import { TreeManager } from '../tree-manager.js';
 import { sanitizeResearchField } from '../research-link.js';
@@ -376,9 +376,10 @@ export const importExportMethods = uiModule({
         // mode to pick the living-privacy level and what content (photos,
         // attachments — embedded as base64) goes into the file.
         this.showExportPasswordDialog(async () => {
-            const { exportToGedcom } = await import('../ged-exporter.js');
+            const { exportGedcomWithImages } = await import('../ged-export-images.js');
             const { applyLivingPrivacy } = await import('../privacy.js');
-            const stored = await storedTreeForExport(treeId);
+            // The images stay in the pool: each is read as the file is written (no expanded copy of the tree).
+            const stored = await storedTreeWithRefs(treeId);
             const metadata = TreeManager.getTreeMetadata(treeId);
             if (!stored) return;
             const data: StromData = scoped ? { version: stored.version, ...extractSubtree(stored, new Set(scoped.ids)) } : stored;
@@ -397,12 +398,12 @@ export const importExportMethods = uiModule({
             const backTo = this.exportGedcomBackTo(data);
             // A research tree's citations in the research's order when it orders them (spec 095); a main citation always marked.
             const { citationFileOrder } = await import('../citation-gates.js');
-            const result = exportToGedcom(filtered, metadata?.name, {
+            const result = await exportGedcomWithImages(filtered, metadata?.name, {
                 content, research, origins: true, confirmations: true, researchNote, backTo, citationFileOrder: citationFileOrder(treeId),
             });
 
             // Download file
-            const blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });
+            const blob = new Blob(result.parts, { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;

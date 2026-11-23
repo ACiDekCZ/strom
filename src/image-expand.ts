@@ -49,6 +49,23 @@ function collectIds(value: unknown, out: Set<string>): void {
     }
 }
 
+/** The pooled images (content ids) the value names, each once. */
+export function poolRefIds(value: unknown): Set<string> {
+    const ids = new Set<string>();
+    collectIds(value, ids);
+    return ids;
+}
+
+/**
+ * The value as it is now, for an output built from it after a wait (spec
+ * 135): with pooled images, a copy (objects and arrays copied, strings
+ * shared, the references kept), so a change of the tree meanwhile does not
+ * reach it — as expandImages' copy taken at its call; without any, the value itself.
+ */
+export function poolRefSnapshot<T>(data: T): T {
+    return withPoolRefsReplaced(data, id => POOL_REF + id);
+}
+
 /** The value names at least one pooled image (exactly as the pool writes a reference). */
 export function hasPoolRefs(value: unknown): boolean {
     if (typeof value === 'string') return value.length === 46 && poolIdOf(value) !== null;
