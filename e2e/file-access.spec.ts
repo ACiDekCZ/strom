@@ -31,7 +31,11 @@ test('mocked handle: save writes JSON, shows the indicator, Ctrl+S re-saves', as
         const handle = {
             name: 'family.json', kind: 'file',
             async createWritable() {
-                return { async write(d: string) { (window as any).__written = d; }, async close() {} };
+                // As the browser's writable: text or a Blob (the file's parts, its images read as it is written).
+                return {
+                    async write(d: string | Blob) { (window as any).__written = typeof d === 'string' ? d : await d.text(); },
+                    async close() {},
+                };
             },
             async getFile() { return new File([(window as any).__written || ''], 'family.json'); },
             async queryPermission() { return 'granted'; },

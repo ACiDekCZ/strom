@@ -280,7 +280,7 @@ describe('no output of a tree holding references names one; its images whole', (
 
     it('the working file (and so the copy of the file)', async () => {
         const urls = storedWithRefs();
-        expectWhole((await DataManager.buildAttachedFile(TREE)).json, urls);
+        expectWhole(await DataManager.buildAttachedFileJson(TREE), urls);
     });
 
     it('the open tree\'s JSON and the view\'s JSON', async () => {
@@ -295,16 +295,17 @@ describe('no output of a tree holding references names one; its images whole', (
 
     it('the saved app: one tree, all trees, a branch', async () => {
         const urls = storedWithRefs();
-        const exporter = AppExporter as unknown as { isBuiltVersion(): boolean; getExportHtml(): string; downloadHtml(html: string, name: string): void };
-        const saved: string[] = [];
+        const exporter = AppExporter as unknown as { isBuiltVersion(): boolean; getExportHtml(): string; downloadHtml(html: string | Blob, name: string): void };
+        const files: (string | Blob)[] = [];
         vi.spyOn(exporter, 'isBuiltVersion').mockReturnValue(true);
         vi.spyOn(exporter, 'getExportHtml').mockReturnValue('<html><head></head><body></body></html>');
-        vi.spyOn(exporter, 'downloadHtml').mockImplementation((html: string) => { saved.push(html); });
+        vi.spyOn(exporter, 'downloadHtml').mockImplementation((html: string | Blob) => { files.push(html); });
         vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never);
         await AppExporter.exportApp(TREE);
         await AppExporter.exportAllAsApp();
         const { data } = treeWithRefs();
         await AppExporter.exportFocusAsApp(data, 'branch.html');
+        const saved = await Promise.all(files.map(f => (typeof f === 'string' ? f : f.text())));
         expect(saved).toHaveLength(3);
         // jsonForScript writes "/" as "\/".
         for (const html of saved) expectWhole(html.replace(/\\\//g, '/'), urls);

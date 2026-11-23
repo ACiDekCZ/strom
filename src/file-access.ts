@@ -75,8 +75,8 @@ export async function pickOpenFile(): Promise<{ handle: FileSystemFileHandleLike
     }
 }
 
-/** Write text into a handle (truncating). */
-export async function saveToHandle(handle: FileSystemFileHandleLike, text: string): Promise<void> {
+/** Write text (or a file's Blob, its parts streamed by the browser) into a handle (truncating). */
+export async function saveToHandle(handle: FileSystemFileHandleLike, text: string | Blob): Promise<void> {
     const writable = await handle.createWritable();
     await writable.write(text);
     await writable.close();

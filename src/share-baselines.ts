@@ -28,7 +28,11 @@ interface StoredBaseline {
  * Returns true when a baseline was written.
  */
 export async function saveBaseline(treeId: string, exportId: string, data: StromData, now: number): Promise<boolean> {
-    const json = JSON.stringify(data);
+    return saveBaselineJson(treeId, exportId, JSON.stringify(data), now);
+}
+
+/** saveBaseline of data already written as JSON (`JSON.stringify(data)`; an export writes it with its images read from the pool). */
+export async function saveBaselineJson(treeId: string, exportId: string, json: string, now: number): Promise<boolean> {
     const rec: StoredBaseline = { exportId, treeId, savedAt: now };
     if (SettingsManager.isEncryptionEnabled()) {
         if (!CryptoSession.isUnlocked()) return false;

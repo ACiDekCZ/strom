@@ -35,7 +35,7 @@ export const fileAccessMethods = uiModule({
     },
 
     /** Build the working-file JSON, refusing when encryption is locked. */
-    async buildFileJsonOrWarn(treeId: TreeId): Promise<{ json: string; data: StromData } | null> {
+    async buildFileJsonOrWarn(treeId: TreeId): Promise<{ body: string | Blob; data: StromData } | null> {
         try {
             return await DataManager.buildAttachedFile(treeId);
         } catch (err) {
@@ -69,7 +69,7 @@ export const fileAccessMethods = uiModule({
             try {
                 const file = await this.buildFileJsonOrWarn(treeId);
                 if (file === null) return false;
-                await saveToHandle(handle, file.json);
+                await saveToHandle(handle, file.body);
                 TreeManager.noteFileCopy([treeId], { [treeId]: file.data });
                 await storeHandle(treeId, handle);
                 return true;
@@ -163,7 +163,7 @@ export const fileAccessMethods = uiModule({
                 const file = await this.buildFileJsonOrWarn(treeId);
                 if (file === null) return;
                 try {
-                    await saveToHandle(handle, file.json);
+                    await saveToHandle(handle, file.body);
                     TreeManager.noteFileCopy([treeId], { [treeId]: file.data });
                     // From the "Where the data is" dialog: it goes once the file is written.
                     if (origin?.closest('#storage-status-modal')) this.closeStorageStatusDialog();

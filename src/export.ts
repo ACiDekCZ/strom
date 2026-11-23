@@ -13,8 +13,9 @@ import { encrypt, EncryptedData } from './crypto.js';
 import { AuditLogManager } from './audit-log.js';
 import { applyLivingPrivacy, applyContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
-import { storedTreeForExport } from './data.js';
-import { expandedData } from './image-expand.js';
+import { storedTreeWithRefs } from './data.js';
+import { expandedData, poolRefSnapshot } from './image-expand.js';
+import { scriptSafeJson, htmlFileWithImages, jsonFileWithImages, countPoolRefs } from './image-stream.js';
 
 /**
  * Clean dynamic UI state from HTML before export: drop 'active' from specific
@@ -154,10 +155,25 @@ if (typeof document !== 'undefined' && document.documentElement) {
  * is still valid JSON, so readers can JSON.parse it unchanged.
  */
 export function jsonForScript(value: unknown): string {
-    return JSON.stringify(value)
-        .replace(/</g, '\\u003c')
-        .replace(/\u2028/g, '\\u2028')
-        .replace(/\u2029/g, '\\u2029');
+    return scriptSafeJson(JSON.stringify(value));
+}
+
+/**
+ * A share baseline of the data a saved app carries (share-baselines.ts),
+ * taken now and saved when the returned function is called — once the file
+ * is written, so the two never hold the images at once (spec 135 D10c: the
+ * export does not expand the tree; the baseline keeps its images whole, as
+ * before, its JSON read from the pool a few images at a time).
+ */
+function exportBaseline(treeId: TreeId, exportId: string, data: StromData): () => void {
+    const kept: StromData | string = countPoolRefs(data) > 0 ? poolRefSnapshot(data) : JSON.stringify(data);
+    return () => {
+        void (async () => {
+            const { saveBaselineJson } = await import('./share-baselines.js');
+            const json = typeof kept === 'string' ? kept : await (await jsonFileWithImages(kept)).blob.text();
+            await saveBaselineJson(treeId, exportId, json, Date.now());
+        })().catch(() => {});
+    };
 }
 
 /**
@@ -228,8 +244,9 @@ class AppExporterClass {
             // Get clean HTML (with inline JavaScript)
             const html = this.getExportHtml();
 
-            // Get data for the specified tree (privacy filter applied to a copy)
-            const rawData = await storedTreeForExport(targetTreeId);
+            // Get data for the specified tree (privacy filter applied to a copy); its pooled images
+            // stay references until the file is written (image-stream.ts).
+            const rawData = await storedTreeWithRefs(targetTreeId);
             if (!rawData) {
                 getUI().showAlert(strings.export.failed, 'error');
                 return;
@@ -244,10 +261,10 @@ class AppExporterClass {
             // Generate export ID
             const exportId = generateExportId();
 
-            // Prepare data for embedding (optionally encrypted)
+            // Prepare data for embedding (optionally encrypted: sealed whole, its images expanded)
             let embedDataContent: StromData | EncryptedData = data;
             if (password) {
-                embedDataContent = await encrypt(JSON.stringify(data), password);
+                embedDataContent = await encrypt(JSON.stringify(await expandedData(data)), password);
             }
 
             // Create envelope with metadata
@@ -265,21 +282,18 @@ class AppExporterClass {
             // Track last export ID in the source tree, and keep a local baseline
             // of exactly what was shared so a change packet can be reconstructed.
             TreeManager.setLastExportId(targetTreeId, exportId);
-            const { saveBaseline } = await import('./share-baselines.js');
-            void saveBaseline(targetTreeId, exportId, data, Date.now()).catch(() => {});
+            const baseline = exportBaseline(targetTreeId, exportId, data);
 
-            // Create embedded data script
-            const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(envelope)};<\/script>`;
-
-            // Insert data before </head>
-            let exportedHtml = injectBeforeHeadEnd(html, dataScript);
+            // The embedded data script inserted before </head>, its images read as the file is written.
+            const file = await htmlFileWithImages(html, envelope, (e) => `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(e)};<\/script>`);
 
             // Get tree name for filename
             const filename = `strom-${safeFileName(treeName, 'family-tree')}.html`;
 
             // Download
-            this.downloadHtml(exportedHtml, filename);
+            this.downloadHtml(file.blob, filename);
             if (privacyMode === 'full') TreeManager.noteFileCopy([targetTreeId], { [targetTreeId]: data });
+            baseline();
         } catch (error) {
             console.error('Export failed:', error);
             getUI().showAlert(strings.export.failed, 'error');
@@ -307,7 +321,7 @@ class AppExporterClass {
             const allTreesData: Record<string, { name: string; data: StromData; isHidden?: boolean }> = {};
 
             for (const tree of trees) {
-                const data = await storedTreeForExport(tree.id);
+                const data = await storedTreeWithRefs(tree.id);
                 if (data) {
                     let treeExport = applyLivingPrivacy(data, privacyMode);
                     treeExport = applyContentOptions(treeExport, content);
@@ -322,7 +336,7 @@ class AppExporterClass {
 
             // Use active tree as the primary embedded data
             const activeTreeId = TreeManager.getActiveTreeId();
-            const rawActiveData = activeTreeId ? await storedTreeForExport(activeTreeId) : null;
+            const rawActiveData = activeTreeId ? await storedTreeWithRefs(activeTreeId) : null;
             let activeData = rawActiveData ? applyLivingPrivacy(rawActiveData, privacyMode) : null;
             if (activeData) activeData = applyContentOptions(activeData, content);
             const activeTreeMeta = activeTreeId ? TreeManager.getTreeMetadata(activeTreeId) : null;
@@ -334,11 +348,12 @@ class AppExporterClass {
             let embedActiveDataContent: StromData | EncryptedData | null = activeData;
             let embedAllTrees: Record<string, { name: string; data: StromData; isHidden?: boolean }> | EncryptedData = allTreesData;
 
+            // Under a password every tree is sealed whole (its images expanded).
             if (password) {
                 if (activeData) {
-                    embedActiveDataContent = await encrypt(JSON.stringify(activeData), password);
+                    embedActiveDataContent = await encrypt(JSON.stringify(await expandedData(activeData)), password);
                 }
-                embedAllTrees = await encrypt(JSON.stringify(allTreesData), password);
+                embedAllTrees = await encrypt(JSON.stringify(await expandedData(allTreesData)), password);
             }
 
             // Create envelope for the active tree
@@ -354,14 +369,13 @@ class AppExporterClass {
                 })() : {})
             } : null;
 
-            // Create embedded data script (with active tree data as envelope)
-            const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(envelope)};window.STROM_ALL_TREES = ${jsonForScript(embedAllTrees)};<\/script>`;
-
-            // Insert data before </head>
-            let exportedHtml = injectBeforeHeadEnd(html, dataScript);
+            // Embedded data script (with active tree data as envelope) inserted before </head>,
+            // the images read as the file is written.
+            const file = await htmlFileWithImages(html, { envelope, embedAllTrees }, (v) =>
+                `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(v.envelope)};window.STROM_ALL_TREES = ${jsonForScript(v.embedAllTrees)};<\/script>`);
 
             // Download with "all-trees" filename
-            this.downloadHtml(exportedHtml, 'strom-all-trees.html');
+            this.downloadHtml(file.blob, 'strom-all-trees.html');
             if (privacyMode === 'full') {
                 TreeManager.noteFileCopy(Object.keys(allTreesData) as TreeId[],
                     Object.fromEntries(Object.entries(allTreesData).map(([id, t]) => [id, t.data])));
@@ -395,12 +409,13 @@ class AppExporterClass {
             // Generate export ID for focused export
             const exportId = generateExportId();
 
-            // Prepare data for embedding (privacy filter, then optional encryption)
-            let filteredData = applyLivingPrivacy(await expandedData(focusedData), privacyMode);
+            // Prepare data for embedding (privacy filter, then optional encryption: sealed whole);
+            // the pooled images stay references until the file is written.
+            let filteredData = applyLivingPrivacy(focusedData, privacyMode);
             filteredData = applyContentOptions(filteredData, content);
             let embedDataContent: StromData | EncryptedData = filteredData;
             if (password) {
-                embedDataContent = await encrypt(JSON.stringify(filteredData), password);
+                embedDataContent = await encrypt(JSON.stringify(await expandedData(filteredData)), password);
             }
 
             // Create envelope with metadata
@@ -419,20 +434,18 @@ class AppExporterClass {
             // export id on the source tree like the full-tree export does, and
             // keep the shared (filtered) branch as a baseline so a "changes
             // only" reply from the recipient can be reconstructed here.
+            let baseline: (() => void) | null = null;
             if (share?.trackTreeId) {
                 TreeManager.setLastExportId(share.trackTreeId, exportId);
-                const { saveBaseline } = await import('./share-baselines.js');
-                void saveBaseline(share.trackTreeId, exportId, filteredData, Date.now()).catch(() => {});
+                baseline = exportBaseline(share.trackTreeId, exportId, filteredData);
             }
 
-            // Create embedded data script with focused data
-            const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(envelope)};<\/script>`;
-
-            // Insert data before </head>
-            const exportedHtml = injectBeforeHeadEnd(html, dataScript);
+            // Embedded data script with focused data inserted before </head>, the images read as the file is written.
+            const file = await htmlFileWithImages(html, envelope, (e) => `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(e)};<\/script>`);
 
             // Download
-            this.downloadHtml(exportedHtml, filename);
+            this.downloadHtml(file.blob, filename);
+            baseline?.();
         } catch (error) {
             console.error('Export focus as app failed:', error);
             getUI().showAlert(strings.export.failed, 'error');
@@ -442,8 +455,8 @@ class AppExporterClass {
     /**
      * Helper to download HTML content as a file
      */
-    private downloadHtml(html: string, filename: string): void {
-        const blob = new Blob([html], { type: 'text/html' });
+    private downloadHtml(html: string | Blob, filename: string): void {
+        const blob = typeof html === 'string' ? new Blob([html], { type: 'text/html' }) : html;
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = filename;

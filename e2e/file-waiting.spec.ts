@@ -134,7 +134,11 @@ test.describe('saving a backup (2g, 9b)', () => {
                 name: 'rodina.json', kind: 'file',
                 async createWritable() {
                     return {
-                        async write(d: string) { await new Promise(r => setTimeout(r, 900)); w.__written = d; },
+                        // As the browser's writable: text or a Blob (the file's parts).
+                        async write(d: string | Blob) {
+                            await new Promise(r => setTimeout(r, 900));
+                            w.__written = typeof d === 'string' ? d : await d.text();
+                        },
                         async close() {},
                     };
                 },

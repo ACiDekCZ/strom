@@ -105,6 +105,7 @@ import { foldName } from './godparents.js';
 import { normalizeSha256 } from './sha256.js';
 import { startupPerson } from './default-person.js';
 import { expandedData } from './image-expand.js';
+import { jsonFileWithImages } from './image-stream.js';
 import { internImages, onImagesInterned, treeImages } from './image-intern.js';
 import { registerMemoryImages } from './pool-memory.js';
 import { sameImageByCatalog } from './image-equal.js';
@@ -5665,10 +5666,10 @@ class DataManagerClass {
     // ==================== EXPORT/IMPORT ====================
 
     async exportJSON(privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<void> {
-        let out = applyLivingPrivacy(await expandedData(this.data), privacyMode);
+        // The pooled images are read as the file is written (image-stream.ts), never the tree expanded.
+        let out = applyLivingPrivacy(this.data, privacyMode);
         out = applyContentOptions(out, content);
-        const dataStr = JSON.stringify(out, null, 2);
-        const blob = new Blob([dataStr], { type: 'application/json' });
+        const { blob } = await jsonFileWithImages(out, { indent: 2 });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = 'family-tree.json';
@@ -5690,28 +5691,34 @@ class DataManagerClass {
      * the same as a full JSON download.
      */
     async buildAttachedFileJson(treeId: TreeId): Promise<string> {
-        return (await this.buildAttachedFile(treeId)).json;
+        const body = (await this.buildAttachedFile(treeId)).body;
+        return typeof body === 'string' ? body : body.text();
     }
 
-    /** buildAttachedFileJson with the data the file carries (its pictures count as copied). */
-    async buildAttachedFile(treeId: TreeId): Promise<{ json: string; data: StromData }> {
-        const data = await storedTreeForExport(treeId);
+    /**
+     * buildAttachedFileJson as the file's body with the data the file carries
+     * (its pictures count as copied; their pooled references kept). Without
+     * encryption a Blob whose images are read as it is written
+     * (image-stream.ts); encrypted, the text sealed whole (images expanded).
+     */
+    async buildAttachedFile(treeId: TreeId): Promise<{ body: string | Blob; data: StromData }> {
+        const data = await storedTreeWithRefs(treeId);
         if (!data) throw new Error('no tree data');
-        const json = JSON.stringify(data, null, 2);
 
         const { SettingsManager } = await import('./settings.js');
         if (SettingsManager.isEncryptionEnabled()) {
             const { CryptoSession } = await import('./crypto.js');
             if (!CryptoSession.isUnlocked()) throw new Error('locked');
-            const encrypted = await CryptoSession.encrypt(json);
-            return { json: JSON.stringify(encrypted, null, 2), data };
+            const encrypted = await CryptoSession.encrypt(JSON.stringify(await expandedData(data), null, 2));
+            return { body: JSON.stringify(encrypted, null, 2), data };
         }
-        return { json, data };
+        return { body: (await jsonFileWithImages(data, { indent: 2 })).blob, data };
     }
 
     /** Download a tree as JSON; returns the file name (null when there is no tree). */
     async exportTreeJSON(treeId: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<string | null> {
-        const rawTreeData = await storedTreeForExport(treeId);
+        // The pooled images stay references until the file is written (image-stream.ts).
+        const rawTreeData = await storedTreeWithRefs(treeId);
         if (!rawTreeData) return null;
 
         const treeData = applyContentOptions(applyLivingPrivacy(rawTreeData, privacyMode), content);
@@ -5732,16 +5739,16 @@ class DataManagerClass {
         const treeName = treeMeta?.name || 'family-tree';
         const safeName = safeFileName(treeName, 'family-tree');
 
-        let dataStr: string;
+        let blob: Blob;
         if (password) {
+            // Sealed whole: the text encrypted at once, its images expanded.
             const { encrypt } = await import('./crypto.js');
-            const encrypted = await encrypt(JSON.stringify(treeData), password);
-            dataStr = JSON.stringify(encrypted, null, 2);
+            const encrypted = await encrypt(JSON.stringify(await expandedData(treeData)), password);
+            blob = new Blob([JSON.stringify(encrypted, null, 2)], { type: 'application/json' });
         } else {
-            dataStr = JSON.stringify(treeData, null, 2);
+            blob = (await jsonFileWithImages(treeData, { indent: 2 })).blob;
         }
 
-        const blob = new Blob([dataStr], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = `${safeName || 'family-tree'}.json`;
@@ -5754,23 +5761,24 @@ class DataManagerClass {
     async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false, fileName = 'family-tree-focus.json'): Promise<void> {
         // Self-consistent slice (glue + cleaned relations + pruned sources),
         // shared with "make a tree from this view".
-        const sliced = await expandedData(extractSubtree(this.data, visiblePersonIds));
+        // The pooled images stay references until the file is written (image-stream.ts).
+        const sliced = extractSubtree(this.data, visiblePersonIds);
         let focusedData: StromData = applyLivingPrivacy({
             version: STROM_DATA_VERSION,
             ...sliced,
         }, privacyMode);
         focusedData = applyContentOptions(focusedData, content);
 
-        let dataStr: string;
+        let blob: Blob;
         if (password) {
+            // Sealed whole: the text encrypted at once, its images expanded.
             const { encrypt } = await import('./crypto.js');
-            const encrypted = await encrypt(JSON.stringify(focusedData), password);
-            dataStr = JSON.stringify(encrypted, null, 2);
+            const encrypted = await encrypt(JSON.stringify(await expandedData(focusedData)), password);
+            blob = new Blob([JSON.stringify(encrypted, null, 2)], { type: 'application/json' });
         } else {
-            dataStr = JSON.stringify(focusedData, null, 2);
+            blob = (await jsonFileWithImages(focusedData, { indent: 2 })).blob;
         }
 
-        const blob = new Blob([dataStr], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = fileName;

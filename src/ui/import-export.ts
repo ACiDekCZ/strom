@@ -89,6 +89,7 @@ import type { PersonList } from '../types.js';
 import { listDisplayName, listKind } from '../person-lists.js';
 import { listKindIcon } from './list-kind-icon.js';
 import { expandedData } from '../image-expand.js';
+import { jsonFileWithImages } from '../image-stream.js';
 
 /** A list the export dialog's list scope offers (spec 084 §12): one with people. */
 interface ExportableList { list: PersonList; count: number }
@@ -1833,7 +1834,8 @@ export const importExportMethods = uiModule({
         const allData: Record<string, BackupTreeEntry> = {};
 
         for (const tree of trees) {
-            const data = await storedTreeForExport(tree.id);
+            // The pooled images stay references until the file is written (image-stream.ts).
+            const data = await storedTreeWithRefs(tree.id);
             if (data) {
                 let treeExport = applyLivingPrivacy(data, privacyMode);
                 treeExport = applyContentOptions(treeExport, content);
@@ -1852,17 +1854,17 @@ export const importExportMethods = uiModule({
             }
         }
 
-        let dataStr: string;
+        let blob: Blob;
         if (password) {
+            // Sealed whole: the text encrypted at once, its images expanded.
             const { encrypt } = await import('../crypto.js');
-            const encrypted = await encrypt(JSON.stringify(allData), password);
-            dataStr = JSON.stringify(encrypted, null, 2);
+            const encrypted = await encrypt(JSON.stringify(await expandedData(allData)), password);
+            blob = new Blob([JSON.stringify(encrypted, null, 2)], { type: 'application/json' });
         } else {
-            dataStr = JSON.stringify(allData, null, 2);
+            blob = (await jsonFileWithImages(allData, { indent: 2 })).blob;
         }
 
         const fileName = 'strom-all-trees.json';
-        const blob = new Blob([dataStr], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = fileName;
