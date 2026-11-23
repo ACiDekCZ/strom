@@ -13,7 +13,8 @@
 
 import { strings, getCurrentLanguage } from '../../strings.js';
 import { formatDateTime } from '../../format.js';
-import type { StepContext } from './context.js';
+import type { MergeRecord } from '../../types.js';
+import type { Step6Env, StepContext } from './context.js';
 import { escapeHtml, glyph } from './context.js';
 import { renderPlanListReadOnly } from './step5-plan.js';
 
@@ -35,17 +36,40 @@ export function renderStep6(host: HTMLElement, ctx: StepContext): void {
         return;
     }
     const W = strings.mergeWizard;
+    renderDone(host, env, list => renderPlanListReadOnly(list, ctx), {
+        title: W.doneTitle(env.treeName),
+        notes: [W.inHistory, ...(env.noNextCard ? [W.noNextCard] : [])],
+    });
+}
+
+/** What the done view says around the record: its title, a state tag (the history's record), the side notes. */
+export interface DoneHead {
+    title: string;
+    /** The record's state as the Merge history tags it (9b); none in the guide. */
+    tag?: { text: string; state: MergeRecord['state'] };
+    notes: readonly string[];
+}
+
+/**
+ * Step 6's body (§9): the head with when, the totals, the actions, the list
+ * (`fillList` draws it into its place) and the side column with the
+ * research's place. The guide's step 6 and the Merge history's record (9b)
+ * draw the same.
+ */
+export function renderDone(host: HTMLElement, env: Step6Env, fillList: (list: HTMLElement) => void, head: DoneHead): void {
+    const W = strings.mergeWizard;
     const r = env.record;
     const c = r.counts;
     const when = writtenWhen(r.at);
     const bt = (act: string, label: string, icon = ''): string =>
         `<button type="button" class="secondary merge-s6-act" data-act="${act}">${icon}<span>${escapeHtml(label)}</span></button>`;
+    const tag = head.tag ? `<span class="merge-state-tag" data-state="${head.tag.state}">${escapeHtml(head.tag.text)}</span>` : '';
     host.innerHTML = `<div class="merge-s6">
   <div class="merge-s6-main">
     <div class="merge-s6-head">
       <span class="merge-s6-ok" aria-hidden="true">${glyph('joined', 16)}</span>
-      <h3 class="merge-step-title" tabindex="-1" data-step-title="6">${escapeHtml(W.doneTitle(env.treeName))}</h3>
-      ${when ? `<span class="merge-s6-at">${escapeHtml(when)}</span>` : ''}
+      <h3 class="merge-step-title" tabindex="-1" data-step-title="6">${escapeHtml(head.title)}</h3>
+      ${when ? `<span class="merge-s6-at">${escapeHtml(when)}</span>` : ''}${tag}
     </div>
     <p class="merge-s6-totals">${escapeHtml(W.doneTotals(c.total, c.joined, c.added, c.skipped))}${r.backupId ? ` ${escapeHtml(W.doneBackup)}` : ''}</p>
     <div class="merge-s6-acts">
@@ -55,11 +79,10 @@ export function renderStep6(host: HTMLElement, ctx: StepContext): void {
   </div>
   <div class="merge-s6-side">
     <div class="merge-s6-research" hidden></div>
-    <p class="merge-s6-note">${escapeHtml(W.inHistory)}</p>
-    ${env.noNextCard ? `<p class="merge-s6-note">${escapeHtml(W.noNextCard)}</p>` : ''}
+    ${head.notes.map(n => `<p class="merge-s6-note">${escapeHtml(n)}</p>`).join('\n    ')}
   </div>
 </div>`;
-    renderPlanListReadOnly(host.querySelector<HTMLElement>('.merge-s6-list')!, ctx);
+    fillList(host.querySelector<HTMLElement>('.merge-s6-list')!);
     host.querySelector('.merge-s6-acts')!.addEventListener('click', e => {
         const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-act]');
         switch (b?.dataset.act) {

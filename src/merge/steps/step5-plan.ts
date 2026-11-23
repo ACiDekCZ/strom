@@ -295,7 +295,8 @@ export function setLines(ctx: StepContext, lines: readonly PlanLine[], on: boole
 // ==================== VIEW ====================
 
 interface View {
-    ctx: StepContext;
+    /** The wizard's state; null for a list read from a merge's record (§9 9b). */
+    ctx: StepContext | null;
     root: HTMLElement | null;
     /** Groups opened or closed against their default. */
     toggled: Set<PlanGroupKey>;
@@ -313,18 +314,22 @@ interface View {
     list: VirtualList | null;
     /** The list alone, read only (step 6, §9): no boxes, no In the tree, no side column. */
     readOnly: boolean;
+    /** The groups when they do not come from the plan (a merge's record, §9 9b). */
+    groupsOf: (() => PlanListGroup[]) | null;
 }
 
 const views = new WeakMap<MergeState, View>();
 /** Step 6's read-only list keeps its own open groups and search. */
 const readViews = new WeakMap<MergeState, View>();
+/** Lists read from a merge's record, by the key their caller gives. */
+const recordViews = new WeakMap<object, View>();
 let current: View | null = null;
 
 function viewOf(ctx: StepContext, readOnly = false): View {
     const map = readOnly ? readViews : views;
     let v = map.get(ctx.state);
     if (!v) {
-        v = { ctx, root: null, toggled: new Set(), all: new Set(), keptShown: false, query: '', focus: null, previewDrawn: '', relations: new Map(), conns: null, groups: [], list: null, readOnly };
+        v = newView(ctx, readOnly);
         map.set(ctx.state, v);
     }
     v.ctx = ctx;
@@ -332,10 +337,15 @@ function viewOf(ctx: StepContext, readOnly = false): View {
     return v;
 }
 
+function newView(ctx: StepContext | null, readOnly: boolean): View {
+    return { ctx, root: null, toggled: new Set(), all: new Set(), keptShown: false, query: '', focus: null, previewDrawn: '', relations: new Map(), conns: null, groups: [], list: null, readOnly, groupsOf: null };
+}
+
 /** Where a new person links ("son of …"), worked out once per drawing. */
 function relationOf(view: View, id: PersonId): string {
     let t = view.relations.get(id);
     if (t !== undefined) return t;
+    if (!view.ctx) return '';
     const { state, choices } = view.ctx;
     if (choices.mode !== 'add') return '';
     view.conns ??= connectedNew(state, choices);
@@ -370,7 +380,25 @@ export function renderStep5(host: HTMLElement, ctx: StepContext): void {
  * and search, without the boxes, In the tree and the side column.
  */
 export function renderPlanListReadOnly(host: HTMLElement, ctx: StepContext): void {
-    const view = viewOf(ctx, true);
+    drawReadOnly(host, viewOf(ctx, true));
+}
+
+/**
+ * A merge's list read from its record (§9 9b, the Merge history's Open the
+ * list): the groups `groupsOf` gives, drawn like step 6's. `key` keeps the
+ * open groups and the search while the same list is shown.
+ */
+export function renderGroupsReadOnly(host: HTMLElement, key: object, groupsOf: () => PlanListGroup[]): void {
+    let view = recordViews.get(key);
+    if (!view) {
+        view = newView(null, true);
+        recordViews.set(key, view);
+    }
+    view.groupsOf = groupsOf;
+    drawReadOnly(host, view);
+}
+
+function drawReadOnly(host: HTMLElement, view: View): void {
     if (!view.root || !host.contains(view.root)) {
         const W = strings.mergeWizard;
         host.innerHTML = `<div class="merge-s5 is-read">
@@ -526,7 +554,7 @@ function moreHtml(text: string, button: string): string {
 }
 
 function update(view: View): void {
-    if (!updateList(view)) return;
+    if (!updateList(view) || view.readOnly) return;
     updateSide(view);
 }
 
@@ -534,13 +562,16 @@ function update(view: View): void {
 function updateList(view: View): boolean {
     const { ctx } = view;
     const W = strings.mergeWizard;
-    const plan = ctx.plan;
-    if (!plan) {
+    const plan = ctx?.plan;
+    if (view.groupsOf) {
+        view.groups = view.groupsOf();
+    } else if (!ctx || !plan) {
         view.list?.refresh(0, () => '');
         return false;
+    } else {
+        view.groups = planList(plan, ctx.state, ctx.choices.offLinks, id => relationOf(view, id));
     }
     const ro = view.readOnly;
-    view.groups = planList(plan, ctx.state, ctx.choices.offLinks, id => relationOf(view, id));
     const q = fold(view.query.trim());
     const rows: string[] = [];
     for (const g of view.groups) {
@@ -580,7 +611,7 @@ function updateList(view: View): boolean {
 /** Where to write, the mode's sentence, the backup and research lines, the preview. */
 function updateSide(view: View): void {
     const root = view.root!;
-    const { ctx } = view;
+    const ctx = view.ctx!;
     const W = strings.mergeWizard;
     const plan = ctx.plan!;
 
@@ -614,8 +645,8 @@ function updateSide(view: View): void {
 function drawPreview(view: View): void {
     const root = view.root!;
     const W = strings.mergeWizard;
-    const plan = view.ctx.plan!;
-    const source = view.ctx.state.incomingData;
+    const plan = view.ctx!.plan!;
+    const source = view.ctx!.state.incomingData;
     const fresh = plan.items.flatMap(i => i.kind === 'person-add' && i.on ? [i.id] : []);
     const joinedFirst = plan.items.flatMap(i => i.kind === 'person-join' && i.on ? [i.id] : [])[0] ?? null;
     const focus = view.focus && source.persons[view.focus] ? view.focus : fresh[0] ?? joinedFirst;
@@ -646,7 +677,8 @@ function findLine(view: View, key: string): PlanLine | undefined {
 }
 
 function chooseInto(view: View, into: 'tree' | 'new'): void {
-    if ((view.ctx.choices.into ?? 'tree') !== into) view.ctx.update({ into });
+    const ctx = view.ctx!;
+    if ((ctx.choices.into ?? 'tree') !== into) ctx.update({ into });
     view.root?.querySelector<HTMLElement>(`.merge-s5-into [data-into="${into}"]`)?.focus();
 }
 
@@ -661,11 +693,11 @@ function wire(root: HTMLElement, view: View): void {
         const t = e.target as HTMLInputElement;
         if (t.matches('.merge-s5-cb')) {
             const line = findLine(view, t.dataset.line ?? '');
-            if (line) setLines(view.ctx, [line], t.checked, line.name);
+            if (line) setLines(view.ctx!, [line], t.checked, line.name);
             else update(view);
         } else if (t.matches('.merge-s5-gcb')) {
             const g = view.groups.find(x => x.key === t.dataset.group);
-            if (g) setLines(view.ctx, [...g.lines, ...g.kept].filter(l => l.can), t.checked, g.title);
+            if (g) setLines(view.ctx!, [...g.lines, ...g.kept].filter(l => l.can), t.checked, g.title);
         }
     });
     root.addEventListener('click', e => {
@@ -695,12 +727,12 @@ function wire(root: HTMLElement, view: View): void {
                 if (pre) pre.hidden = !pre.hidden;
                 el.setAttribute('aria-expanded', String(!!pre && !pre.hidden));
             } else if (act === 'report') {
-                view.ctx.step5?.savePlan();
+                view.ctx?.step5?.savePlan();
             } else {
-                view.ctx.step5?.act(act as WriteAction);
+                view.ctx?.step5?.act(act as WriteAction);
             }
         } else if (el.matches('.merge-s5-save')) {
-            view.ctx.step5?.savePlan();
+            view.ctx?.step5?.savePlan();
         } else if (el.matches('.merge-s5-preview-open')) {
             setSheet(root, true);
         } else if (el.matches('.merge-s5-preview-close')) {
@@ -712,6 +744,6 @@ function wire(root: HTMLElement, view: View): void {
         const k = (e as KeyboardEvent).key;
         if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(k)) return;
         e.preventDefault();
-        chooseInto(view, (view.ctx.choices.into ?? 'tree') === 'tree' ? 'new' : 'tree');
+        chooseInto(view, (view.ctx?.choices.into ?? 'tree') === 'tree' ? 'new' : 'tree');
     });
 }

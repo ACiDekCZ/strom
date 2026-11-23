@@ -317,7 +317,7 @@ function personName(p: Person | undefined): string {
     return p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() : '';
 }
 
-function relativesOf(data: StromData, person: Person): PersonId[] {
+export function relativesOf(data: StromData, person: Person): PersonId[] {
     const out = new Set<PersonId>([...(person.parentIds ?? []), ...(person.childIds ?? [])]);
     for (const uid of person.partnerships ?? []) {
         const u = data.partnerships[uid];

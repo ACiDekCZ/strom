@@ -89,6 +89,14 @@ export function mergeAnalysisLong(a: StromData, b: StromData): boolean {
     return Object.keys(a.persons).length + Object.keys(b.persons).length >= MERGE_ANALYSIS_LONG_AT;
 }
 
+/** A merge shown with its record (step 6, the Merge history's record): its tree, the tree's name, how it was written. */
+export interface ShownMerge {
+    treeId: TreeId;
+    name: string;
+    record: MergeRecord;
+    mode: PlanMode;
+}
+
 /** A merge just written (spec 134 §9): what step 6, its actions and the toast after it need. */
 interface WrittenMerge {
     treeId: TreeId;
@@ -1645,8 +1653,11 @@ class MergerUIClass {
         }
     }
 
-    /** Switch to the tree written into (when another is open) and highlight the people the merge added. */
-    private async showWrittenInTree(w: WrittenMerge): Promise<void> {
+    /**
+     * Switch to the tree written into (when another is open) and highlight
+     * the people the merge added (step 6, the Merge history's record).
+     */
+    async showWrittenInTree(w: ShownMerge): Promise<void> {
         if (DataManager.isViewMode() || DataManager.getCurrentTreeId() !== w.treeId) {
             if (!await DataManager.switchTree(w.treeId)) return;
             getUI().updateTreeSwitcher();
@@ -1706,13 +1717,16 @@ class MergerUIClass {
         this.wizard.showDone(last.plan);
     }
 
-    /** Save as a list of people (spec 084): the people the merge added, named "From {source} {day}". */
-    private async saveWrittenAsList(w: WrittenMerge): Promise<void> {
+    /**
+     * Save as a list of people (spec 084): the people the merge added, named
+     * "From {source} {day}". `host` holds the done button (step 6's by default).
+     */
+    async saveWrittenAsList(w: ShownMerge, host?: ParentNode): Promise<void> {
         const W = strings.mergeWizard;
         const name = W.listName(w.record.source.label || '?', writtenWhen(w.record.at));
         if (!DataManager.isViewMode() && DataManager.getCurrentTreeId() === w.treeId) {
             const list = DataManager.createPersonList({ name, dynamic: false, personIds: [...w.record.added] });
-            if (list) this.listSaved();
+            if (list) this.listSaved(host);
             return;
         }
         // Another tree than the open one: the list goes into its data as stored.
@@ -1727,12 +1741,24 @@ class MergerUIClass {
         data.personLists = [...(data.personLists ?? []), list];
         if (!await TreeManager.saveTreeDataConfirmed(w.treeId, data)) return;
         getUI().showToast(strings.lists.toast.saved(listName), 4000);
-        this.listSaved();
+        this.listSaved(host);
+    }
+
+    /**
+     * Merge `recordId` was undone from step 6 (§10): the guide closes without
+     * its toast, and the toast of an earlier Done no longer reopens it.
+     */
+    closeUndone(recordId: string): void {
+        if (this.lastWritten?.w.record.id === recordId) this.lastWritten = null;
+        if (this.written?.record.id !== recordId) return;
+        this.openedFromTreeManager = false;
+        this.gedcomImport = undefined;
+        this.closeMergeModalInternal();
     }
 
     /** Saved once: the button is done (a second list would only be a copy). */
-    private listSaved(): void {
-        const b = document.querySelector<HTMLButtonElement>('#merge-step-body .merge-s6-act[data-act="list"]');
+    private listSaved(host: ParentNode | null = document.getElementById('merge-step-body')): void {
+        const b = host?.querySelector<HTMLButtonElement>('.merge-s6-act[data-act="list"]');
         if (b) b.disabled = true;
     }
 

@@ -1,19 +1,417 @@
 /**
- * The tree's merges after the write (spec 134 §10): undoing a merge.
+ * The tree's merges after the write (spec 134 §9, §10): the Merge history
+ * (9a), a merge's list read from its record (9b) and undoing a merge
+ * (10a–10f). The words: src/merge/undo-view.ts; the undo itself:
+ * src/merge/undo-plan.ts and writeUndo / writeRestore (src/merge/write.ts).
  * See src/ui/module.ts for the composition pattern.
  */
 
-import type { TreeId } from '../types.js';
+import type { MergeRecord, StromData, TreeId } from '../types.js';
+import { DataManager } from '../data.js';
+import { TreeManager } from '../tree-manager.js';
+import { TreeRenderer } from '../renderer.js';
+import { AuditLogManager } from '../audit-log.js';
+import { strings } from '../strings.js';
 import { uiModule } from './module.js';
+import { MergerUI } from '../merge/index.js';
+import { writeRestore, writeUndo } from '../merge/write.js';
+import { targetBlock } from '../merge/wizard-ui.js';
+import { renderDone, writtenWhen } from '../merge/steps/step6-done.js';
+import { renderGroupsReadOnly } from '../merge/steps/step5-plan.js';
+import type { Step6Env } from '../merge/steps/context.js';
+import {
+    canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel,
+    type UndoLine, type UndoModel,
+} from '../merge/undo-view.js';
+
+const HISTORY_ID = 'merge-history-modal';
+const RECORD_ID = 'merge-record-modal';
+const UNDO_ID = 'merge-undo-modal';
+/** Names listed under a heading of the undo before "and n more" (all of them while choosing). */
+const UNDO_LINES = 40;
+
+function esc(text: string): string {
+    return (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** The tree's data as stored or open (the open tree's newest). */
+async function treeData(treeId: TreeId): Promise<StromData | null> {
+    return DataManager.getDataFor(treeId) ?? await TreeManager.getTreeData(treeId);
+}
+
+function treeName(treeId: TreeId): string {
+    return TreeManager.getTreeMetadata(treeId)?.name ?? '';
+}
+
+/** The Merge history's tree, and its record shown (9b). */
+let historyTree: TreeId | null = null;
+let shownRecord: { treeId: TreeId; record: MergeRecord; key: object } | null = null;
+
+/** The undo dialog's state: what is chosen to go anyway, what is picked (null: all). */
+interface UndoState {
+    treeId: TreeId;
+    recordId: string;
+    record: MergeRecord;
+    data: StromData;
+    model: UndoModel;
+    /** Kept items chosen to be undone anyway (Undo of the segment). */
+    undo: Set<string>;
+    /** Choose only some…: the ticked items; null undoes everything. */
+    only: Set<string> | null;
+    parent?: string;
+    busy: boolean;
+    error: string;
+}
+let undoState: UndoState | null = null;
 
 export const mergeHistoryMethods = uiModule({
+    // ==================== MERGE HISTORY (9a) ====================
+
+    /** The tree's merges, newest first: when, its state, where from, what it brought; Open the list · Undo…. */
+    async showMergeHistory(treeId: TreeId, parentDialogId?: string): Promise<void> {
+        this.closeMobileMenu?.();
+        historyTree = treeId;
+        this.clearDialogStack();
+        if (parentDialogId) {
+            this.pushDialog(parentDialogId);
+            this.closeDialogById(parentDialogId);
+        }
+        this.pushDialog(HISTORY_ID);
+        document.getElementById(HISTORY_ID)?.classList.add('active');
+        await this.renderMergeHistory();
+        document.querySelector<HTMLElement>(`#${HISTORY_ID} .close-btn`)?.focus({ preventScroll: true });
+    },
+
+    async renderMergeHistory(): Promise<void> {
+        const treeId = historyTree;
+        const modal = document.getElementById(HISTORY_ID);
+        if (!treeId || !modal) return;
+        const W = strings.mergeWizard;
+        const data = await treeData(treeId);
+        const records = [...(data?.merges ?? [])].reverse();
+        modal.querySelector('#merge-history-title')!.textContent = W.histTitle(treeName(treeId));
+        const list = modal.querySelector<HTMLElement>('.merge-hist-list')!;
+        list.innerHTML = records.map(r => {
+            const undo = canUndoRecord(r)
+                ? `<span class="merge-hist-sep" aria-hidden="true">·</span><button type="button" class="link-button" data-act="undo">${esc(W.undoEllipsis)}</button>` : '';
+            return `<li class="merge-hist-row" data-id="${esc(r.id)}" data-state="${r.state}">
+  <div class="merge-hist-top"><span class="merge-hist-at">${esc(writtenWhen(r.at))}</span><span class="merge-state-tag" data-state="${r.state}">${esc(stateLabel(r.state))}</span></div>
+  <div class="merge-hist-what" title="${esc(historyLine(r))}">${esc(historyLine(r))}</div>
+  <div class="merge-hist-acts"><button type="button" class="link-button" data-act="open">${esc(W.openList)}</button>${undo}</div>
+</li>`;
+        }).join('');
+        list.onclick = e => {
+            const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-act]');
+            const id = b?.closest<HTMLElement>('.merge-hist-row')?.dataset.id;
+            if (!b || !id) return;
+            if (b.dataset.act === 'open') void this.openMergeRecord(id);
+            else this.showUndoMerge(treeId, id, HISTORY_ID);
+        };
+        const changes = modal.querySelector<HTMLElement>('[data-act="changes"]');
+        if (changes) {
+            const open = !DataManager.isViewMode() && DataManager.getCurrentTreeId() === treeId;
+            changes.hidden = !(open && (AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(treeId)));
+        }
+    },
+
+    closeMergeHistory(): void {
+        document.getElementById(HISTORY_ID)?.classList.remove('active');
+        historyTree = null;
+        if (this.dialogStack[this.dialogStack.length - 1] === HISTORY_ID) this.returnToParentDialog();
+    },
+
+    /** The history's footer: Backups… and Change history… of its tree, Close coming back here. */
+    mergeHistoryFooter(act: 'backups' | 'changes'): void {
+        const treeId = historyTree;
+        if (!treeId) return;
+        if (act === 'backups') void this.showSnapshotsDialog(treeId, HISTORY_ID);
+        else this.showAuditLogDialog(treeId, HISTORY_ID);
+    },
+
+    // ==================== A MERGE'S LIST (9b) ====================
+
+    /**
+     * Open the list: step 6 of the merge again, read only and without the
+     * steps, read from its record and the tree as it is (the import is not
+     * kept). Over the Merge history.
+     */
+    async openMergeRecord(id: string): Promise<void> {
+        const treeId = historyTree;
+        if (!treeId) return;
+        const data = await treeData(treeId);
+        const record = data?.merges?.find(r => r.id === id);
+        const modal = document.getElementById(RECORD_ID);
+        if (!data || !record || !modal) return;
+        const W = strings.mergeWizard;
+        const name = treeName(treeId);
+        const key = shownRecord?.record.id === id ? shownRecord.key : {};
+        shownRecord = { treeId, record, key };
+        const body = modal.querySelector<HTMLElement>('.merge-record-body')!;
+        const shown = { treeId, name, record, mode: record.target.newTree ? 'new' as const : 'add' as const };
+        const env: Step6Env = {
+            record, treeId, treeName: name, intoExisting: canUndoRecord(record), noNextCard: false,
+            showInTree: () => {
+                this.closeMergeRecord();
+                this.closeMergeHistory();
+                void MergerUI.showWrittenInTree(shown);
+            },
+            saveAsList: () => void MergerUI.saveWrittenAsList(shown, body),
+            checkTree: () => void this.showTreeValidationDialog(treeId, RECORD_ID),
+            undoMerge: () => this.showUndoMerge(treeId, record.id, RECORD_ID),
+        };
+        modal.querySelector('#merge-record-title')!.textContent = W.recTitle(dayText(record.at));
+        renderDone(body, env, list => renderGroupsReadOnly(list, key, () => recordGroups(record, data)), {
+            title: W.doneTitle(name),
+            tag: { text: stateLabel(record.state), state: record.state },
+            notes: [historyLine(record)],
+        });
+        if (!modal.classList.contains('active')) {
+            this.clearDialogStack();
+            this.pushDialog(HISTORY_ID);
+            this.closeDialogById(HISTORY_ID);
+            this.pushDialog(RECORD_ID);
+            modal.classList.add('active');
+        }
+        body.querySelector<HTMLElement>('.merge-step-title')?.focus({ preventScroll: true });
+    },
+
+    closeMergeRecord(): void {
+        document.getElementById(RECORD_ID)?.classList.remove('active');
+        shownRecord = null;
+        if (this.dialogStack[this.dialogStack.length - 1] === RECORD_ID) this.returnToParentDialog();
+    },
+
+    /** Save the list…: the record's list as a text file. */
+    saveMergeRecordList(): void {
+        const shown = shownRecord;
+        if (!shown) return;
+        void treeData(shown.treeId).then(data => {
+            if (!data) return;
+            const text = recordText(shown.record, treeName(shown.treeId), recordGroups(shown.record, data));
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+            a.download = `${(shown.record.source.label || 'merge').replace(/\.(ged|gedcom|json)$/i, '')}-${shown.record.at.slice(0, 10)}.txt`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        });
+    },
+
+    // ==================== UNDO (10a–10f) ====================
+
     /**
      * Undo merge `recordId` of tree `treeId` (K8.1–K8.4), over the dialog
-     * `parentDialogId` when given (the guide's last step). Until the undo
-     * dialog is here: the tree's backups, where "Before merge" waits.
+     * `parentDialogId` when given (step 6, the Merge history, a record):
+     * what goes, what comes back, what is kept because it changed since.
      */
     showUndoMerge(treeId: TreeId, recordId: string, parentDialogId?: string): void {
-        void recordId;
-        void this.showSnapshotsDialog(treeId, parentDialogId);
+        void (async () => {
+            const data = await treeData(treeId);
+            const record = data?.merges?.find(r => r.id === recordId);
+            if (!data || !record) {
+                this.showToast(strings.merge.failed, 4000);
+                return;
+            }
+            undoState = {
+                treeId, recordId, record, data, model: undoModel(record, data),
+                undo: new Set(), only: null, ...(parentDialogId ? { parent: parentDialogId } : {}), busy: false, error: '',
+            };
+            this.clearDialogStack();
+            if (parentDialogId) {
+                this.pushDialog(parentDialogId);
+                this.closeDialogById(parentDialogId);
+            }
+            this.pushDialog(UNDO_ID);
+            const modal = document.getElementById(UNDO_ID);
+            modal?.classList.add('active');
+            this.renderUndoMerge();
+            modal?.querySelector<HTMLElement>('.close-btn')?.focus({ preventScroll: true });
+        })();
+    },
+
+    renderUndoMerge(): void {
+        const st = undoState;
+        const modal = document.getElementById(UNDO_ID);
+        if (!st || !modal) return;
+        const W = strings.mergeWizard;
+        const { model, record } = st;
+        const block = targetBlock(st.treeId);
+        const name = treeName(st.treeId);
+        const day = dayText(record.at);
+        const picking = !!st.only;
+        const parts: string[] = [];
+        parts.push(`<p class="merge-undo-lead">${esc(W.undoLead(record.source.label || '?', day))}</p>`);
+        if (block === 'locked') parts.push(`<p class="merge-undo-warn" data-why="locked">${esc(W.lockedUndo(name))}</p>`);
+        else if (block) parts.push(`<p class="merge-undo-warn" data-why="read-only">${esc(W.undoReadOnly(name))}</p>`);
+        if (model.partly) parts.push(`<p class="merge-undo-partly">${esc(model.partly)}</p>`);
+        for (const line of model.builtOn) parts.push(`<p class="merge-undo-warn" data-why="built-on">${esc(line)}</p>`);
+
+        if (model.empty) {
+            parts.push(`<p class="merge-undo-none">${esc(W.undoNothing)}</p>`);
+        } else {
+            parts.push(`<h3 class="merge-undo-h">${esc(W.uWhat)}</h3>`);
+            if (picking) parts.push(`<p class="merge-undo-note">${esc(W.pickLead)}</p>`);
+            const group = (key: UndoLine['group'], title: string, count: number, desc: string): void => {
+                const lines = model.lines.filter(l => l.group === key);
+                if (!count && !lines.length) return;
+                const shown = picking ? lines : lines.slice(0, UNDO_LINES);
+                const items = shown.map(l => {
+                    if (!picking) return `<li class="merge-undo-line"><span>${esc(l.name)}</span></li>`;
+                    const on = st.only!.has(l.id) ? ' checked' : '';
+                    return `<li class="merge-undo-line"><label><input type="checkbox" data-pick="${esc(l.id)}"${on}><span>${esc(l.name)}</span></label></li>`;
+                }).join('');
+                const more = lines.length > shown.length ? `<li class="merge-undo-more">${esc(W.moreItems(lines.length - shown.length))}</li>` : '';
+                parts.push(`<details class="merge-undo-grp" data-group="${key}"${picking ? ' open' : ''}>
+  <summary><span class="merge-undo-gname">${esc(title)}</span><span class="merge-undo-gcount">${count.toLocaleString()}</span><span class="merge-undo-gdesc">${esc(desc)}</span></summary>
+  <ul class="merge-undo-lines">${items}${more}</ul>
+</details>`);
+            };
+            group('remove', W.uRemove, model.people, W.uRemoveDesc(model.couples, model.sources, model.places, model.files));
+            group('restore', W.uRestore, model.restored, W.uRestoreDesc);
+            group('unjoin', W.uUnjoin, model.unjoined, W.uUnjoinDesc);
+
+            if (model.keep.length) {
+                const rows = model.keep.map(k => {
+                    const undo = st.undo.has(k.id);
+                    const seg = k.canUndo ? `<div class="sel-seg merge-undo-seg" role="radiogroup" aria-label="${esc(k.name)}">
+      <button type="button" class="sel-opt" data-sel-form="seg" role="radio" data-keep="${esc(k.id)}" data-v="keep" aria-checked="${!undo}" tabindex="${undo ? -1 : 0}">${esc(W.segKeep)}</button>
+      <button type="button" class="sel-opt" data-sel-form="seg" role="radio" data-keep="${esc(k.id)}" data-v="undo" aria-checked="${undo}" tabindex="${undo ? 0 : -1}">${esc(W.segUndo)}</button>
+    </div>` : '';
+                    return `<li class="merge-undo-krow" data-id="${esc(k.id)}">
+    <div class="merge-undo-ktext"><span class="merge-undo-kname">${esc(k.name)}</span><span class="merge-undo-kwhy${k.warn ? ' is-warn' : ''}">${esc(k.text)}</span></div>
+    ${seg}
+  </li>`;
+                }).join('');
+                parts.push(`<section class="merge-undo-keep"><h3 class="merge-undo-h">${esc(W.uKeepHead(model.keep.length))}</h3><ul class="merge-undo-klist">${rows}</ul></section>`);
+            }
+            if (record.backupId) parts.push(`<p class="merge-undo-note merge-undo-vs">${esc(W.vsBackup(day))}</p>`);
+        }
+        // The research's part (11c) comes here.
+        parts.push('<div class="merge-undo-research" hidden></div>');
+        if (st.error) parts.push(`<p class="merge-undo-err" role="alert">${esc(st.error)}</p>`);
+
+        const body = modal.querySelector<HTMLElement>('.merge-undo-body')!;
+        body.innerHTML = parts.join('\n');
+        body.onclick = e => {
+            const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-keep]');
+            if (b) this.chooseUndoKeep(b.dataset.keep!, b.dataset.v === 'undo');
+        };
+        body.onkeydown = e => {
+            const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-keep]');
+            if (!b || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+            e.preventDefault();
+            this.chooseUndoKeep(b.dataset.keep!, b.dataset.v !== 'undo');
+        };
+        body.onchange = e => {
+            const t = e.target as HTMLInputElement;
+            if (!t.dataset.pick || !st.only) return;
+            if (t.checked) st.only.add(t.dataset.pick); else st.only.delete(t.dataset.pick);
+            this.updateUndoButton();
+        };
+
+        const pick = modal.querySelector<HTMLButtonElement>('[data-act="pick"]')!;
+        pick.hidden = !!block || model.empty;
+        pick.textContent = picking ? W.pickAll : W.pickSome;
+        this.updateUndoButton();
+    },
+
+    /** Keep or Undo of a kept item's segment; focus stays on the chosen cell. */
+    chooseUndoKeep(id: string, undo: boolean): void {
+        const st = undoState;
+        if (!st) return;
+        if (undo) st.undo.add(id); else st.undo.delete(id);
+        const row = [...document.querySelectorAll<HTMLElement>(`#${UNDO_ID} .merge-undo-krow`)].find(r => r.dataset.id === id);
+        row?.querySelectorAll<HTMLButtonElement>('button[data-keep]').forEach(b => {
+            const on = (b.dataset.v === 'undo') === undo;
+            b.setAttribute('aria-checked', String(on));
+            b.tabIndex = on ? 0 : -1;
+            if (on) b.focus({ preventScroll: true });
+        });
+        this.updateUndoButton();
+    },
+
+    /** Choose only some… / Undo everything. */
+    toggleUndoPick(): void {
+        const st = undoState;
+        if (!st) return;
+        st.only = st.only ? null : new Set(st.model.lines.map(l => l.id));
+        this.renderUndoMerge();
+    },
+
+    /** The primary button: Remove {n} people (or Undo the merge), none when the tree cannot be written. */
+    updateUndoButton(): void {
+        const st = undoState;
+        const btn = document.querySelector<HTMLButtonElement>(`#${UNDO_ID} [data-act="undo"]`);
+        if (!st || !btn) return;
+        const W = strings.mergeWizard;
+        const n = peopleRemoved(st.model, st.undo, st.only, st.data);
+        btn.hidden = !!targetBlock(st.treeId) || st.model.empty;
+        btn.textContent = n > 0 ? W.btnUndo(n) : W.undoTitle;
+        btn.disabled = st.busy || (!!st.only && st.only.size === 0);
+    },
+
+    closeUndoMerge(): void {
+        if (undoState?.busy) return;
+        document.getElementById(UNDO_ID)?.classList.remove('active');
+        undoState = null;
+        if (this.dialogStack[this.dialogStack.length - 1] === UNDO_ID) this.returnToParentDialog();
+    },
+
+    /** The undo as chosen (10f): written with its backup, the toast "Merge undone" · Redo the merge. */
+    async confirmUndoMerge(): Promise<void> {
+        const st = undoState;
+        if (!st || st.busy || targetBlock(st.treeId)) return;
+        st.busy = true;
+        st.error = '';
+        this.updateUndoButton();
+        const res = await writeUndo(st.treeId, st.recordId, {
+            undo: [...st.undo], ...(st.only ? { only: [...st.only] } : {}),
+        });
+        st.busy = false;
+        if (!res.ok) {
+            st.error = res.why;
+            this.renderUndoMerge();
+            return;
+        }
+        const { treeId, recordId, parent } = st;
+        const removed = res.items.filter(id => id.startsWith('p:') && !res.before.persons[id.slice(2) as keyof StromData['persons']]?.isPlaceholder).length;
+        const kept = new Set(res.kept.map(k => k.id)).size;
+        // The dialog closes; the guide's step 6 (stale now) closes with it, a history comes back with the new state.
+        document.getElementById(UNDO_ID)?.classList.remove('active');
+        undoState = null;
+        this.clearDialogStack();
+        if (parent === 'merge-modal') MergerUI.closeUndone(recordId);
+        await this.afterMergeUndoWrite(treeId);
+        if (parent === HISTORY_ID || parent === RECORD_ID) {
+            document.getElementById(RECORD_ID)?.classList.remove('active');
+            shownRecord = null;
+            await this.showMergeHistory(treeId);
+        }
+        const W = strings.mergeWizard;
+        const before = res.before;
+        this.showToast(W.undone(removed, kept), 10000, {
+            closable: true,
+            action: {
+                label: W.redo,
+                run: () => {
+                    void writeRestore(treeId, before, recordId).then(async ok => {
+                        if (!ok) {
+                            this.showToast(strings.merge.saveFailed, 5000);
+                            return;
+                        }
+                        await this.afterMergeUndoWrite(treeId);
+                        if (historyTree === treeId) await this.renderMergeHistory();
+                    });
+                },
+            },
+        });
+    },
+
+    /** The open tree drawn again after an undo (or its redo) of a merge. */
+    async afterMergeUndoWrite(treeId: TreeId): Promise<void> {
+        if (DataManager.isViewMode() || DataManager.getCurrentTreeId() !== treeId) return;
+        await TreeRenderer.renderAsync();
+        this.refreshSearch();
+        this.updateTreeSwitcher();
     },
 });
