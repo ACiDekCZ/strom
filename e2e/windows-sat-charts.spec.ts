@@ -364,8 +364,8 @@ test('photos: shown in a satellite; an edit there keeps every photo of the store
     const photos = (p: Page) => p.evaluate(() => Object.fromEntries(window.Strom.DataManager.getAllPersons()
         .filter(x => x.photo).map(x => [x.id, x.photo as string])));
     const before = await photos(page);
-    // Long enough to be kept in the media pool when stored (data: URLs, not pool references, in memory).
-    expect(Object.values(before).some(v => v.startsWith('data:') && v.length >= 1024)).toBe(true);
+    // Kept in the media pool when stored: the tree in memory holds their pool references.
+    expect(Object.values(before).some(v => v.startsWith('\u0000sm:'))).toBe(true);
 
     const sat = await openSatellite(context, treeId, 'family', 'cv32aa', []);
     expect(await photos(sat)).toEqual(before);
