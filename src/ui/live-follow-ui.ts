@@ -17,6 +17,7 @@
  * The switch is remembered per device; ending the live following keeps it.
  */
 
+import { followBlocksTree } from '../live-follow-block.js';
 import { canvasBusy } from './canvas-busy.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -529,12 +530,18 @@ export const liveFollowMethods = uiModule({
     },
 
     /**
-     * Following applies to the open tree now: ◎ on AND a live session of
-     * this very tree. ◎ alone is a device preference kept across trees, so a
-     * copy or an unlinked tree opened with it on is not followed.
+     * Following moves the open tree now, as the screen shows it (spec 134
+     * K2.6, live-follow-block.ts): ◎ on, a live session of this tree and
+     * the agent working on someone. Not ◎ alone, nor ◎ waiting for the agent.
      */
     isLiveFollowActive(): boolean {
-        return followActive();
+        const treeId = DataManager.getCurrentTreeId();
+        if (!treeId || DataManager.isViewMode()) return false;
+        const s = liveSession();
+        return followBlocksTree({
+            on: isOn(), session: s ? { treeId: s.treeId, ended: s.ended } : null,
+            treeId, openTreeId: treeId, working: !!s && followTarget() !== null,
+        });
     },
 
     /**

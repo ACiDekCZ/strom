@@ -6346,7 +6346,8 @@ const stringsEN = {
         // Inputs (§2)
         dropGedSub: 'The import guide opens: first choose what to do with it. Nothing is written until the last step is confirmed.',
         blockLiveTitle: (t: string) => `The tree ${t} cannot be written to now`,
-        blockLive: 'The tree is followed live from the research and is read-only. After following ends the import can be added; it goes to the research only after the choice in the last step.',
+        blockLive: 'The tree is followed live from the research now (◎ Follow the agent in the tree), so it is read-only. With following turned off the import can go into it: a backup is saved before writing, sending to the research is paused and the changes go there only after the choice in the last step.',
+        blockLiveAction: 'Turn off following and merge here',
         blockLocked: (t: string) => `The tree ${t} is locked: it cannot be written to. It can be unlocked in Manage trees.`,
         blockReadOnly: 'The tree is open read-only. The import can be a new tree.',
         blockNewer: (t: string, v: number) => `The tree ${t} is from a newer app version (data version ${v}) and is read-only here: it cannot be the target.`,
@@ -17556,7 +17557,8 @@ const stringsCZ: StringsType = {
         // Inputs (§2)
         dropGedSub: 'Otevře se průvodce importem: nejdřív se vybere, co s ním. Nic se nezapíše, dokud se v posledním kroku nepotvrdí.',
         blockLiveTitle: (t: string) => `Do stromu ${t} teď nejde zapisovat`,
-        blockLive: 'Strom je sledovaný živě z výzkumu a je jen pro čtení. Po ukončení sledování půjde import přidat; do výzkumu se pak pošle až po volbě v posledním kroku.',
+        blockLive: 'Strom se teď sleduje živě z výzkumu (◎ Sledovat agenta ve stromu), proto je jen pro čtení. Po vypnutí sledování do něj import půjde: před zápisem se uloží záloha, posílání do výzkumu se pozastaví a změny se tam pošlou až po volbě v posledním kroku.',
+        blockLiveAction: 'Vypnout sledování a sloučit sem',
         blockLocked: (t: string) => `Strom ${t} je zamčený: nejde do něj zapisovat. Odemknout jde ve Správě stromů.`,
         blockReadOnly: 'Strom je otevřený jen ke čtení. Import jde jako Nový strom.',
         blockNewer: (t: string, v: number) => `Strom ${t} je z novější verze aplikace (datová verze ${v}) a je tu jen ke čtení: nejde být cílem.`,
@@ -28614,7 +28616,8 @@ const stringsDE: StringsType = {
         // Inputs (§2)
         dropGedSub: 'Der Import-Assistent öffnet sich: zuerst wird gewählt, was damit geschieht. Geschrieben wird erst nach der Bestätigung im letzten Schritt.',
         blockLiveTitle: (t: string) => `In den Stammbaum ${t} kann gerade nicht geschrieben werden`,
-        blockLive: 'Der Stammbaum wird live aus der Forschung verfolgt und ist schreibgeschützt. Nach dem Beenden lässt sich der Import hinzufügen; an die Forschung geht er erst nach der Wahl im letzten Schritt.',
+        blockLive: 'Der Stammbaum wird gerade live aus der Forschung verfolgt (◎ Agenten im Stammbaum folgen) und ist daher schreibgeschützt. Ist das Folgen ausgeschaltet, lässt sich der Import hineinschreiben: Vor dem Schreiben wird eine Sicherung gespeichert, das Senden an die Forschung pausiert, und die Änderungen gehen erst nach der Wahl im letzten Schritt dorthin.',
+        blockLiveAction: 'Folgen ausschalten und hierher zusammenführen',
         blockLocked: (t: string) => `Der Stammbaum ${t} ist gesperrt: Schreiben ist nicht möglich. Entsperren unter Stammbäume verwalten.`,
         blockReadOnly: 'Der Stammbaum ist schreibgeschützt geöffnet. Der Import geht als neuer Stammbaum.',
         blockNewer: (t: string, v: number) => `Der Stammbaum ${t} stammt aus einer neueren App-Version (Datenversion ${v}) und ist hier schreibgeschützt: kein Ziel möglich.`,

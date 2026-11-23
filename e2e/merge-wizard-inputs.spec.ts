@@ -200,11 +200,20 @@ test('a tree followed live: step 1 says so, End following frees it', async ({ pa
     // The dialog for every tree blocked: End following.
     const dialog = page.locator('#confirmation-modal');
     await expect(dialog).toHaveClass(/active/);
-    await expect(dialog).toContainText('The tree is followed live from the research and is read-only.');
+    await expect(dialog).toContainText('The tree is followed live from the research now (◎ Follow the agent in the tree), so it is read-only.');
     await dialog.getByRole('button', { name: 'Choose another tree' }).click();
-    // The line in step 1, with its own End following.
+    // The line in step 1 says the way on (backup, sending paused) with its own action.
     const line = wizard.locator('#merge-s1-live');
-    await expect(line).toContainText('The tree is followed live from the research and is read-only.');
+    await expect(line).toContainText('The tree is followed live from the research now (◎ Follow the agent in the tree), so it is read-only.');
+    await expect(line).toContainText('a backup is saved before writing, sending to the research is paused');
+    // The followed tree's tile is no dead end: pressed, the dialog offers the same; Choose another tree keeps it blocked.
+    // aria-disabled (the radio cannot be chosen), yet a press on it is answered.
+    await target(wizard, 'Modřínovi').click({ force: true });
+    await expect(dialog).toHaveClass(/active/);
+    await expect(dialog.getByRole('button', { name: 'Turn off following and merge here' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Choose another tree' }).click();
+    await expect(line).toBeVisible();
+    await expect(line.locator('[data-s1="end-follow"]')).toHaveText('Turn off following and merge here');
     await line.locator('[data-s1="end-follow"]').click();
     await expect(line).toHaveCount(0);
     await expect(target(wizard, 'Modřínovi').locator('input')).toBeChecked();
@@ -229,6 +238,22 @@ test('a copy of a research tree with ◎ on: the import merges into it, it is no
     await expect(wizard.locator('#merge-s1-live')).toHaveCount(0);
     await expect(target(wizard, 'Modřínovi').locator('input')).toBeChecked();
     await expect(wizard.locator('#merge-route')).toHaveText('rodokmen-jilmovi.ged → Modřínovi');
+});
+
+test('a research-linked tree with ◎ stored on but no live session: the import merges into it, nothing says it is followed', async ({ page }) => {
+    await openModrinovi(page);
+    await page.evaluate(() => {
+        window.Strom.TreeManager.setResearchLink(window.Strom.DataManager.getCurrentTreeId()!,
+            { id: '5b0e1c2a-7d4f-4e8a-9c3b-2f6a1d0e9b47', fingerprint: '', syncedAt: new Date().toISOString() } as never);
+        window.Strom.UI.setLiveFollow(true);
+    });
+    await page.locator('#gedcom-input').setInputFiles(GED);
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    await wizard.locator('.merge-s1-modes [data-mode="add"]').click();
+    await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
+    await expect(wizard.locator('#merge-s1-live')).toHaveCount(0);
+    await expect(target(wizard, 'Modřínovi').locator('input')).toBeChecked();
 });
 
 test('a dropped file that is no GEDCOM says so and changes nothing', async ({ page }) => {

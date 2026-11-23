@@ -159,6 +159,8 @@ export interface Step1Env {
     swap(): void;
     /** "End following" of a target followed live from the research (2f): the open tree takes the import again. */
     endFollow(): void;
+    /** The followed tree's own tile pressed: a dialog offers to turn following off and merge there. */
+    endFollowAsk(treeId: TreeId): void;
     /** The chosen target is encrypted and locked: it can be compared only once unlocked (13f). */
     encLocked(): boolean;
     unlock(): void;

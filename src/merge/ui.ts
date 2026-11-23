@@ -731,6 +731,7 @@ class MergerUIClass {
             },
             swap: () => { void this.swap(); },
             endFollow: () => this.endFollow(),
+            endFollowAsk: id => { void this.blockDialog(id).then(ok => { if (ok) this.endFollow(); }); },
             encLocked: () => this.encLocked(),
             unlock: () => { void this.unlockTarget(); },
             example: () => this.example(),
@@ -805,7 +806,7 @@ class MergerUIClass {
         const ui = getUI();
         if (block === 'live') {
             const end = await ui.showConfirm(W.blockLive, W.blockLiveTitle(name),
-                { ok: strings.research.stop, cancel: W.pickOther });
+                { ok: W.blockLiveAction, cancel: W.pickOther });
             if (!end) return false;
             ui.setLiveFollow(false);
             return !targetBlock(treeId);

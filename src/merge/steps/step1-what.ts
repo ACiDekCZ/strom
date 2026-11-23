@@ -90,7 +90,7 @@ function targetsHtml(ctx: StepContext, env: Step1Env): string {
     // A tree followed live from the research (2f): why, and End following, after which it takes the import.
     const liveRow = rows.find(r => r.block === 'live');
     const live = liveRow
-        ? `<p class="merge-s1-warn" id="merge-s1-live"><strong>${escapeHtml(W.blockLiveTitle(liveRow.name))}</strong> <span>${escapeHtml(W.blockLive)}</span> <button type="button" class="link-button" data-s1="end-follow">${escapeHtml(strings.research.stop)}</button></p>` : '';
+        ? `<p class="merge-s1-warn" id="merge-s1-live"><strong>${escapeHtml(W.blockLiveTitle(liveRow.name))}</strong> <span>${escapeHtml(W.blockLive)}</span> <button type="button" class="link-button" data-s1="end-follow">${escapeHtml(W.blockLiveAction)}</button></p>` : '';
     return `<h4 class="merge-s1-h" id="merge-s1-targets-h">${escapeHtml(W.whichTree)}</h4>
         <div class="merge-s1-targets" role="radiogroup" aria-labelledby="merge-s1-targets-h">${items}</div>${live}${research}${locked}`;
 }
@@ -273,6 +273,11 @@ export function renderStep1(host: HTMLElement, ctx: StepContext): void {
         if (mode === modeOf(ctx.choices)) return;
         if (env) env.setMode(mode);
         else if (mode !== 'json') ctx.update({ mode, json: false });
+    }));
+    // The followed tree's tile is no dead end: pressed, it offers to turn following off and merge there.
+    host.querySelectorAll<HTMLElement>('.merge-s1-target[data-block="live"]').forEach(t => t.addEventListener('click', e => {
+        e.preventDefault();
+        if (env && t.dataset.tree) env.endFollowAsk(t.dataset.tree as TreeId);
     }));
     host.querySelectorAll<HTMLInputElement>('input[name="merge-target"]').forEach(i => i.addEventListener('change', () => {
         if (i.checked && env) env.selectTarget(i.value as TreeId);
