@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
-import { openApp, createFirstPerson, cardAction, focusViaSearch, openTreeStructure, mergeCompare, mergeCount, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeSetScope, mergeWrite } from './helpers.js';
+import { openApp, createFirstPerson, cardAction, focusViaSearch, openTreeStructure, mergeCompare, mergeCount, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeSetScope, mergeToStep4, mergeJoinPending, mergePickValue, mergeWrite } from './helpers.js';
 
 /**
  * The tree merge driven end to end through the real UI: tree manager row menu
@@ -236,10 +236,9 @@ test('tree merge runs to completion: filters, confirm, execute — the new tree 
 /**
  * Petr Dvorak and his wife and son in both trees, a second son Jan in the
  * source only (so the merge has something to write, 13b); Petr's birth and
- * death places and the wedding date differ. Step 2's conflict dialogs answer:
- * the imported birthplace, the existing death place, the imported wedding date.
+ * death places and the wedding date differ, which step 2 says against his pair.
  */
-async function answerDvorakConflicts(page: Page): Promise<Locator> {
+async function startDvorakMerge(page: Page): Promise<Locator> {
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');
 
@@ -269,46 +268,12 @@ async function answerDvorakConflicts(page: Page): Promise<Locator> {
     await row(wizard, 'Petr Dvorak');
     const against = wizard.locator('#merge-pair .merge-why-no');
     await expect(against).toContainText('Brno → Olomouc');
-
-    // Person conflict: take the imported birthplace, keep the existing death place.
-    await wizard.locator('#merge-pair .merge-btn-resolve[data-action="resolve"]').click();
-    const dialog = page.locator('#merge-conflict-dialog');
-    await expect(dialog).toHaveClass(/active/);
-    await expect(dialog.locator('.modal-header h2')).toHaveText('Conflicts: Petr Dvorak');
-    await expect(dialog.locator('.conflict-row')).toHaveCount(2);
-    const birthRow = dialog.locator('.conflict-row[data-field="birthPlace"]');
-    const deathRow = dialog.locator('.conflict-row[data-field="deathPlace"]');
-    await expect(birthRow.locator('input[value="keep_existing"]')).toBeChecked();
-    await birthRow.locator('.conflict-option', { hasText: 'Olomouc' }).click();
-    await expect(birthRow.locator('input[value="use_incoming"]')).toBeChecked();
-    await expect(deathRow.locator('input[value="keep_existing"]')).toBeChecked();
-    await dialog.getByRole('button', { name: 'Save' }).click();
-    await expect(dialog).not.toHaveClass(/active/);
-
-    // Union conflict: take the imported wedding date.
-    const unionRow = wizard.locator('#merge-pair .merge-why-union');
-    await expect(unionRow).not.toHaveClass(/is-resolved/);
-    await expect(unionRow).toContainText('1915-06-01 → 1916-06-01');
-    await unionRow.locator('.merge-btn-resolve').click();
-    await expect(dialog).toHaveClass(/active/);
-    await expect(dialog.locator('.modal-header h2')).toContainText('Petr Dvorak');
-    await expect(dialog.locator('.modal-header h2')).toContainText('Anna Dvorakova');
-    await expect(dialog.locator('.conflict-row')).toHaveCount(1);
-    await dialog.locator('.conflict-row[data-field="startDate"] .conflict-option', { hasText: '1916-06-01' }).click();
-    await dialog.getByRole('button', { name: 'Save' }).click();
-    await expect(dialog).not.toHaveClass(/active/);
-    await expect(unionRow).toHaveClass(/is-resolved/);
-
-    // Re-opening the person dialog shows the saved answers.
-    await wizard.locator('#merge-pair .merge-btn-resolve[data-action="resolve"]').click();
-    await expect(dialog.locator('.conflict-row[data-field="birthPlace"] input[value="use_incoming"]')).toBeChecked();
-    await dialog.getByRole('button', { name: 'Cancel' }).click();
-    await expect(dialog).not.toHaveClass(/active/);
+    await expect(wizard.locator('#merge-pair .merge-why-union')).toContainText('1915-06-01 → 1916-06-01');
     return wizard;
 }
 
-test('tree merge conflicts: the dialogs keep the chosen answers; scope a) joins the family once and leaves the tree\'s values as they are', async ({ page }) => {
-    const wizard = await answerDvorakConflicts(page);
+test('tree merge conflicts: scope a) joins the family once and leaves the tree\'s values as they are', async ({ page }) => {
+    const wizard = await startDvorakMerge(page);
     await executeAndSwitch(page, wizard, 'Dvorak Target + Dvorak Source');
 
     // Scope a) (the default): the people of the tree stay as they are, Jan joins their couple.
@@ -322,11 +287,20 @@ test('tree merge conflicts: the dialogs keep the chosen answers; scope a) joins 
     expect(d.unions[0].childIds.sort()).toEqual([d.one('Karel').id, d.one('Jan').id].sort());
 });
 
-// The answers of the conflict dialogs reach the write through step 4 (Who is
-// right), which part A passes over: spec 134 part B.
-test.fixme('tree merge conflicts: the chosen value wins for a person field and for a union field (spec 134 díl B)', async ({ page }) => {
-    const wizard = await answerDvorakConflicts(page);
+test('tree merge conflicts: the value chosen in step 4 wins for a person field and for a union field', async ({ page }) => {
+    const wizard = await startDvorakMerge(page);
     await mergeSetScope(page, 'c');
+    // Step 4: the whole merge keeps the tree's values; Petr's birthplace from the import.
+    await mergeToStep4(wizard);
+    await mergePickValue(wizard, 't_petr', 'birthPlace', 'import');
+    const death = wizard.locator('.merge-s4-row[data-person="t_petr"][data-field="deathPlace"]');
+    await expect(death.locator('.merge-s4-res-v')).toContainText('Brno');
+    // The wedding date: a conflict of the couple, decided on its own.
+    await wizard.locator('#merge-s4-tab-rels').click();
+    const wedding = wizard.locator('.merge-s4-rel[data-rel-kind="marriage"]');
+    await expect(wedding).toHaveCount(1);
+    await wedding.locator('.sel-opt[data-choice="import"]').click();
+    await expect(wizard.locator('.merge-s4-rel[data-rel-kind="marriage"] .sel-opt[data-choice="import"]')).toHaveAttribute('aria-checked', 'true');
     await executeAndSwitch(page, wizard, 'Dvorak Target + Dvorak Source');
 
     const d = await activeData(page);
@@ -340,11 +314,11 @@ test.fixme('tree merge conflicts: the chosen value wins for a person field and f
     expect(d.unions[0].childIds.sort()).toEqual([d.one('Karel').id, d.one('Jan').id].sort());
 });
 
-test('tree merge conflicts carry no emoji: what speaks against the pair and the plain suggestion label', async ({ page }) => {
+test('tree merge conflicts carry no emoji: what speaks against the pair and the rows of step 4', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');
 
-    // Petr's death place: "Brno" here, "Brno, Morava" in the source — the longer one is suggested.
+    // Petr's death place: "Brno" here, "Brno, Morava" in the source.
     await seedTrees(page,
         { name: 'Mark Target', data: treeData([
             { id: 't_petr', firstName: 'Petr', lastName: 'Dvorak', gender: 'male', birthDate: '1890-02-02', deathPlace: 'Brno' },
@@ -359,12 +333,13 @@ test('tree merge conflicts carry no emoji: what speaks against the pair and the 
     await expect(against).toContainText('Brno → Brno, Morava');
     expect(await against.textContent()).not.toMatch(/[\u26A0\uFE0F]/);
 
-    await against.locator('.merge-btn-resolve').click();
-    const dialog = page.locator('#merge-conflict-dialog');
-    await expect(dialog).toHaveClass(/active/);
-    const suggested = dialog.locator('.conflict-row[data-field="deathPlace"] .conflict-suggested');
-    await expect(suggested).toHaveText('suggested — more complete value');
-    expect(await dialog.locator('.modal-content, .modal-body').first().textContent()).not.toMatch(/[\u2726\u2728\u26A0\uFE0F]/);
+    await mergeJoinPending(wizard);
+    await mergeSetScope(page, 'c');
+    await mergeToStep4(wizard);
+    await wizard.locator('#merge-s4-tab-persons').click();
+    const rowOf = wizard.locator('.merge-s4-row[data-field="deathPlace"]');
+    await expect(rowOf.locator('.merge-s4-v[data-pick="import"]')).toHaveText('Brno, Morava');
+    expect(await wizard.locator('.merge-s4').textContent()).not.toMatch(/[\u2726\u2728\u26A0\uFE0F]/);
 });
 
 test('tree merge manual match: an unmatched person is paired by hand and lands on the chosen existing person', async ({ page }) => {

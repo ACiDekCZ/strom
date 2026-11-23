@@ -548,9 +548,14 @@ function footHtml(view: PairView): string {
 }
 
 /** Draw step 2: the groups and the list left, the pair right. */
-/** The import is a copy of the target: everyone joined, the write would change nothing (13b). */
+/**
+ * The import is a copy of the target: everyone joined, the write would change
+ * nothing (13b). In scopes c) and d) a differing detail the rules keep is
+ * still the import's to bring: step 4 decides it, so that is no copy.
+ */
 export function isCopyOfTarget(ctx: Pick<StepContext, 'counts' | 'choices'>): boolean {
-    return ctx.choices.mode !== 'new' && !!ctx.counts && bringsNothingNew(ctx.counts);
+    if (ctx.choices.mode === 'new' || !ctx.counts || !bringsNothingNew(ctx.counts)) return false;
+    return !((ctx.choices.scope === 'c' || ctx.choices.scope === 'd') && ctx.counts.differencesKept > 0);
 }
 
 export function renderStep2(host: HTMLElement, ctx: StepContext): void {

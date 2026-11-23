@@ -600,6 +600,24 @@ export async function mergePair(wizard: Locator, text: string | RegExp, group?: 
     throw new Error(`No pair "${String(text)}" in step 2`);
 }
 
+/**
+ * Every pair of step 2 still to decide (a row with a person of the tree on
+ * its other side, in Maybe the same or The same) joined, one by one: the
+ * pending count ends at 0.
+ */
+export async function mergeJoinPending(wizard: Locator): Promise<void> {
+    for (const g of ['maybe', 'same'] as MergeGroup[]) {
+        await mergeGroup(wizard, g);
+        const open = wizard.locator('#merge-match-list .merge-item[data-fate="pending"]').filter({ has: wizard.page().locator('.merge-item-other') });
+        for (let n = await open.count(); n > 0; n--) {
+            await open.first().click();
+            await wizard.locator('#merge-pair .merge-dec[data-dec="same"]').click();
+            await expect(open).toHaveCount(n - 1);
+        }
+    }
+    await expect(mergeCount(wizard, 'pending')).toHaveText('0');
+}
+
 /** A decision on the pair whose row says `text`: same, new, another person (its dialog opens) or not added. */
 export async function mergeDecide(wizard: Locator, text: string | RegExp, decision: 'same' | 'new' | 'other' | 'skip', group?: MergeGroup): Promise<void> {
     await mergePair(wizard, text, group);
@@ -646,6 +664,33 @@ export async function mergeToStep5(wizard: Locator): Promise<void> {
         await expect(current).not.toHaveAttribute('data-step', was ?? '');
     }
     await expect(current).toHaveAttribute('data-step', '5');
+}
+
+/**
+ * From step 2 or 3 of the guide to step 4 (Who is right), the unlinked
+ * groups of step 3 added unlinked on the way.
+ */
+export async function mergeToStep4(wizard: Locator): Promise<void> {
+    const current = mergeCurrentStep(wizard);
+    for (let i = 0; i < 3 && await current.getAttribute('data-step') !== '4'; i++) {
+        const was = await current.getAttribute('data-step');
+        if (was === '3') await mergeGroupsLoose(wizard);
+        await wizard.locator('#merge-next').click();
+        await expect(current).not.toHaveAttribute('data-step', was ?? '');
+    }
+    await expect(current).toHaveAttribute('data-step', '4');
+}
+
+/**
+ * Step 4 (Who is right), By person: one detail of one person (the tree's
+ * id) taken from the import or kept from the tree by a click on its value.
+ */
+export async function mergePickValue(wizard: Locator, person: string, field: string, pick: 'mine' | 'import'): Promise<void> {
+    const tab = wizard.locator('#merge-s4-tab-persons');
+    if (await tab.getAttribute('aria-selected') !== 'true') await tab.click();
+    const value = wizard.locator(`.merge-s4-row[data-person="${person}"][data-field="${field}"] .merge-s4-v[data-pick="${pick}"]`);
+    await value.click();
+    await expect(value).toHaveAttribute('aria-pressed', 'true');
 }
 
 /**

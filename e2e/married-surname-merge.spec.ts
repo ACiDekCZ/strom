@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, createFirstPerson, mergeCompare, mergeCount, mergePair, mergeSetScope, mergeWriteAndSwitch } from './helpers.js';
+import { openApp, createFirstPerson, mergeCompare, mergeCount, mergePair, mergePickValue, mergeSetScope, mergeToStep4, mergeWriteAndSwitch } from './helpers.js';
 
 /**
  * The surname after marriage brought into an existing tree by merging a
@@ -35,10 +35,9 @@ function oldImport() {
 
 /**
  * The old import in the tree, the MyHeritage file merged in and compared;
- * Eva's different married surname answered in step 2's conflict dialog
- * (the imported Svobodová).
+ * Eva's different married surname shows in what speaks against her pair.
  */
-async function mergeWithEvaAnswered(page: Page): Promise<Locator> {
+async function mergeWithEva(page: Page): Promise<Locator> {
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');
     await page.evaluate((data) => {
@@ -48,32 +47,20 @@ async function mergeWithEvaAnswered(page: Page): Promise<Locator> {
 
     await page.evaluate(() => window.Strom.UI.startGedcomImportPlain());
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-marnm.ged');
-    const result = page.locator('#merge-modal');
-    await expect(result).toBeVisible();
-
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
     await mergeCompare(wizard);
     await expect(mergeCount(wizard, 'joined')).toHaveText('5');
     await expect(mergeCount(wizard, 'added')).toHaveText('0');
 
-    // Eva's pair (joined, score 80+): what speaks against it, and its differences one by one.
+    // Eva's pair (joined, score 80+): what speaks against it.
     await mergePair(wizard, 'Eva', 'same');
     await expect(wizard.locator('#merge-pair .merge-why-no')).toContainText('Married surname: Procházková → Svobodová');
-    await wizard.locator('#merge-pair .merge-btn-resolve[data-action="resolve"]').click();
-    const dialog = page.locator('#merge-conflict-dialog');
-    await expect(dialog).toHaveClass(/active/);
-    const married = dialog.locator('.conflict-row[data-field="marriedSurname"]');
-    await expect(married).toContainText('Married surname');
-    await expect(married.locator('input[value="keep_existing"]')).toBeChecked();
-    await married.locator('.conflict-option', { hasText: 'Svobodová' }).click();
-    await dialog.getByRole('button', { name: 'Save' }).click();
-    await expect(dialog).not.toHaveClass(/active/);
     return wizard;
 }
 
 test('merging a MyHeritage file fills the married surnames, asks about a different one and adds no one', async ({ page }) => {
-    const wizard = await mergeWithEvaAnswered(page);
+    const wizard = await mergeWithEva(page);
     // Scope b): what the tree lacks is filled, a different value stays the tree's.
     await mergeSetScope(page, 'b');
     await mergeWriteAndSwitch(page, wizard);
@@ -91,11 +78,13 @@ test('merging a MyHeritage file fills the married surnames, asks about a differe
     expect(one('Jan').lastName).toBe('Novák');
 });
 
-// The answer of the conflict dialog reaches the write through step 4 (Who is
-// right), which part A passes over: spec 134 part B.
-test.fixme('merging a MyHeritage file: the chosen different married surname wins, the old one kept as a variant (spec 134 díl B)', async ({ page }) => {
-    const wizard = await mergeWithEvaAnswered(page);
+test('merging a MyHeritage file: the different married surname chosen in step 4 wins, the old one kept as a variant', async ({ page }) => {
+    const wizard = await mergeWithEva(page);
     await mergeSetScope(page, 'c');
+    // Step 4 (Who is right): the whole merge keeps the tree's values; Eva's married surname from the import.
+    await mergeToStep4(wizard);
+    await mergePickValue(wizard, 'eva', 'marriedSurname', 'import');
+    await expect(wizard.locator('.merge-s4-row[data-person="eva"][data-field="marriedSurname"] .merge-s4-res-v')).toHaveText('Svobodová');
     await mergeWriteAndSwitch(page, wizard);
     // The merged tree's data, read from the store: the switch loads it asynchronously.
     const persons = await page.evaluate(async () => {

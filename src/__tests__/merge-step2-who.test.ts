@@ -9,7 +9,8 @@
 import { describe, it, expect } from 'vitest';
 import { AUTO_CONFIRM_SCORE } from '../merge/executor.js';
 import { createMergeState, updateMatchDecision } from '../merge/matching.js';
-import { decisionKind, defaultGroup, pairRows } from '../merge/steps/step2-who.js';
+import { decisionKind, defaultGroup, isCopyOfTarget, pairRows } from '../merge/steps/step2-who.js';
+import type { PlanCounts, WizardChoices } from '../merge/plan.js';
 import { mulberry32, sourceTree, targetTree } from './helpers/merge-trees.js';
 
 function stateOf(seed: number) {
@@ -59,5 +60,22 @@ describe('step 2 – the groups of the pairs', () => {
             return;
         }
         throw new Error('no seed gave a pair below the joining score');
+    });
+});
+
+describe('step 2 – a copy of the tree (13b)', () => {
+    const counts = (o: Partial<PlanCounts> = {}): PlanCounts => ({
+        joined: 3, added: 0, skipped: 0, pending: 0, total: 3, fieldChanges: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0, ...o,
+    });
+    const choices = (scope: WizardChoices['scope']): WizardChoices => ({ mode: 'add', scope } as WizardChoices);
+
+    it('is a copy when everyone is joined and nothing would change', () => {
+        expect(isCopyOfTarget({ counts: counts(), choices: choices('c') })).toBe(true);
+        expect(isCopyOfTarget({ counts: counts({ differencesKept: 2 }), choices: choices('a') })).toBe(true);
+    });
+
+    it('is no copy in scopes c) and d) while a differing detail is kept by the rules: step 4 decides it', () => {
+        expect(isCopyOfTarget({ counts: counts({ differencesKept: 1 }), choices: choices('c') })).toBe(false);
+        expect(isCopyOfTarget({ counts: counts({ differencesKept: 1 }), choices: choices('d') })).toBe(false);
     });
 });
