@@ -47,7 +47,7 @@ export interface FakeBridge {
     head: string;
     accepts: unknown;
     inbox: { tree: string; at: string; changes: number; sent: string }[];
-    sends: { intake: string; at: string; state: string; changes: number; tree: string; sent: string; decidedAt?: string; reason?: string; conflicts?: unknown }[];
+    sends: { intake: string; at: string; state: string; changes: number; tree: string; sent: string; decidedAt?: string; input?: string; reason?: string; conflicts?: unknown }[];
     lastIntake: { id: string; at: string } | null;
     syncReply: { status: number; body: unknown };
     treeGed: string;
