@@ -58,7 +58,7 @@ import { personInitials } from '../initials.js';
 import { MergeWizard, targetBlock, targetBlockText, wizardRoute, type CompareRun, type WizardSource } from './wizard-ui.js';
 import type { WizardStep } from './wizard-steps.js';
 import { isRepeatOf, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
-import { newTreeName, writePlanAsNewTree } from './write.js';
+import { newTreeName, writePlan } from './write.js';
 import type { Step1Env, Step2Env, TargetRow, UnionConflictLine } from './steps/context.js';
 import { closeNotTaken, parkGedcomSummary } from './steps/step1-what.js';
 import { noteRecalc } from './steps/step2-who.js';
@@ -1536,6 +1536,19 @@ class MergerUIClass {
         }, { label: strings.merge.analyzing, atOnce: mergeAnalysisLong(state.existingData, state.incomingData) }).then(() => undefined);
     }
 
+    /** What a write that did not happen says (the interim step 5; spec 134 §8 8b–8e). */
+    private writeFailureMessage(result: Exclude<Awaited<ReturnType<typeof writePlan>>, { ok: true }>): string {
+        const t = strings.mergeWizard;
+        if ('need' in result) {
+            if (result.need === 'retention') return t.retentionAsk(new Date(result.date).toLocaleDateString(getCurrentLanguage()));
+            const { when, added, edited } = result.changed;
+            const at = when ? new Date(when).toLocaleString(getCurrentLanguage()) : '?';
+            return `${t.targetChanged(this.mergeState?.wizard?.choices.targetName ?? '', at, `+${added} · ~${edited}`)} ${t.replanned}`;
+        }
+        if (result.reason === 'backup') return `${t.backupFailed} ${result.detail}`;
+        return result.message;
+    }
+
     /** A whole GEDCOM file written as a new tree named after the file, the guide closed (spec 134 §3). */
     private async writeGedcomNewTree(plan: MergePlan, state: MergeState): Promise<void> {
         const importId = this.gedcomImport?.importId;
@@ -1575,17 +1588,18 @@ class MergerUIClass {
             validateTreeData(state.incomingData),
         ];
 
-        // The backup "Before merge" of the target as it is at the write, whatever the way into the merge
-        // (file, tree, view, share, a resumed merge) and the automatic backups setting (spec 134 K0.4, §2).
-        if (plan.target.treeId) await DataManager.snapshotTreeNow(plan.target.treeId, 'pre-merge');
-
         // Nothing created, nothing saved on a failure: the wizard stays open
         // with its answers, the message says what would have gone wrong
-        // (spec 134 K0.2, K0.5).
-        const result = await writePlanAsNewTree(plan, state.existingData, state.incomingData, newTreeName(plan));
+        // (spec 134 K0.2, K0.5). The backup "Before merge" of the target as it
+        // is at the write, whatever the way into the merge (file, tree, view,
+        // share, a resumed merge) and the automatic backups setting (K0.4, §2),
+        // is taken by the write. Into a new tree until step 5 offers Where to write.
+        const result = await writePlan(plan, {
+            target: state.existingData, source: state.incomingData, into: 'new', name: newTreeName(plan),
+        });
         if (!result.ok) {
             state.phase = 'reviewing';
-            await getUI().showAlert(result.message, 'error');
+            await getUI().showAlert(this.writeFailureMessage(result), 'error');
             return;
         }
         if (state.wizard) state.wizard.choices = { ...state.wizard.choices, writtenAt: new Date().toISOString() };

@@ -66,7 +66,7 @@ import { surnameForms, addSurnameGroup, removeSurnameGroup, surnameKey } from '.
 import { buildLineages, cleanLineageOverrides, LineagePatch, type LineageIndex } from './lineage.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections, dismissalKey, surnameRejectionKey } from './quality-dismiss.js';
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
-import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
+import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay, type SnapshotMeta, type SnapshotOptions } from './snapshots.js';
 import { ValidationIssue, stripUnsafeMediaDataUrls, cleanPortraitSources, isSafePhotoDataUrl, translateValidationType } from './validation.js';
 import { isPortraitSourceShape } from './photo.js';
 import { cloneTreeData } from './clone.js';
@@ -1960,21 +1960,41 @@ class DataManagerClass {
     }
 
     /**
-     * A backup of a tree as it is now, the open one or another one read from
-     * storage (the target of a merge, spec 134 K0.4), whatever the automatic
-     * backups setting. Null when the tree cannot be read or the backup written.
+     * The backup "Before merge" of a merge's target at the write (spec 134
+     * K0.4, K6.6): the open tree's data, or another tree's as stored, whatever
+     * the automatic backups setting, `keepFor` kept out of the rotation.
+     * Throws when the tree cannot be read or the backup written (§8 8d).
      */
-    async snapshotTreeNow(treeId: TreeId, reason: 'pre-merge'): Promise<string | null> {
-        if (!this.viewMode && treeId === this.currentTreeId) return this.snapshotNow(reason);
-        try {
-            const data = await TreeManager.getTreeData(treeId);
-            if (!data) return null;
-            const base = TreeManager.backupResearchBase(treeId, TreeManager.researchBaseOf(treeId));
-            return (await createSnapshot(treeId, data, reason, Date.now(), base)).id;
-        } catch (err) {
-            console.warn('The backup could not be written', reason, err);
-            return null;
+    async backupBeforeMerge(treeId: TreeId, opts: SnapshotOptions = {}): Promise<SnapshotMeta> {
+        const open = !this.viewMode && treeId === this.currentTreeId;
+        const data = open ? this.data : await TreeManager.getTreeData(treeId);
+        if (!data) throw new Error('The tree could not be read');
+        const base = open ? this.backupBase() : TreeManager.backupResearchBase(treeId, TreeManager.researchBaseOf(treeId));
+        return createSnapshot(treeId, data, 'pre-merge', Date.now(), base, opts);
+    }
+
+    /**
+     * A merge written into the open tree (spec 134 §8): its data replace the
+     * tree's as one undo step `label` (K8.5), where the work stands here (the
+     * last focus, the default person and view) staying as it is. The caller
+     * has stored the data already; this save writes the same again. False when
+     * tree `treeId` is not the open one or may not be changed now.
+     */
+    adoptMergeResult(treeId: TreeId, data: StromData, label: string): boolean {
+        if (this.currentTreeId !== treeId || this.windowSink || this.isReadOnly() || this.isTreeLocked()) return false;
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
+        const next = data;
+        for (const key of WINDOW_STATE_KEYS) {
+            if (this.data[key] === undefined) delete next[key];
+            else (next as unknown as Record<string, unknown>)[key] = this.data[key];
         }
+        this.imagesReplaced(treeId);
+        this.beginMutation();
+        this.data = next;
+        this.commitMutation(label, true);
+        CrossTree.invalidateCacheForTree(treeId);
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        return true;
     }
 
     /** The research base a backup of the current data keeps (N61-3). */
