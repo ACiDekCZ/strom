@@ -17,7 +17,7 @@ import { noteQueueStartStatus, QUEUE_SCOPE, QUEUE_START_MS, type QueueStartView 
 import { NOW_LIMIT_NOTE, runsSideBySide } from './queue-work-dialog.js';
 import { RUN_ENDED_MS, linesWithRun, liveRuns, orderRuns, runCount, runLinesOn, runStopOn, runsShown, type LiveRun } from '../research-runs.js';
 import { postRunStop } from '../research-runs-write.js';
-import { runEndedText, runName, runWaitText } from '../research-runs-text.js';
+import { runEndedText, runName, runWaitText, runsWaitingText } from '../research-runs-text.js';
 import { busySpinHtml, busyStatusEl } from './busy.js';
 import { canvasBusy } from './canvas-busy.js';
 import type { RowRefusal } from './waiting-row-notes.js';
@@ -1006,13 +1006,10 @@ export const researchOverviewMethods = uiModule({
         // Paused: when it goes on (and why, on hover) says more than the last change.
         const paused = stateCls === 'is-paused' ? s.working.find(w => w.paused) : undefined;
         const resumes = paused ? Date.parse(paused.paused!.until) : NaN;
-        // Two or more runs side by side (spec 126 U10 §3): "3 agents working", under it those waiting for the limit.
+        // Two or more runs side by side (spec 126 U10 §3): "3 agents working", under it those waiting (runsWaitingText).
         const runs = runLinesOn(s.features) && stateCls !== 'is-lost' ? liveRuns(s).filter(r => r.state !== 'ended') : [];
         if (runs.length >= 2) {
-            const waits = runs.filter(r => r.state === 'waiting' && r.wait?.for === 'limit');
-            const ends = waits.map(r => Date.parse(r.wait?.until ?? '')).filter(Number.isFinite);
-            const until = ends.length > 0 ? formatLiveClock(Math.min(...ends), Date.now(), getCurrentLanguage()) : '';
-            const sub = waits.length === 0 ? lastEl ?? '' : until ? L.stateAgentsWaiting(waits.length, until) : L.stateAgentsWaitingNoTime(waits.length);
+            const sub = runsWaitingText(runs) ?? lastEl ?? '';
             cell(L.state, L.stateAgents(runs.length), sub, 'is-working', [lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
         } else if (paused && Number.isFinite(resumes)) {
             // A run waiting for an archive gives up then rather than resumes (spec 127): its own sentence.

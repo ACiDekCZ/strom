@@ -105,6 +105,10 @@ test.describe('a direction\'s own run', () => {
         await expect(meta.locator('.research-direction__in-now')).toHaveText('In Now ›');
         await expect(overview(page).locator('#ov-sec-now [data-run="run-1a07"] .research-overview__run-state'))
             .toHaveText(`waiting for the archive until ${await clockOf(page, until)}`);
+        // The state tile counts it among the agents and says it waits (before: "2 agents working", nothing under it).
+        const tile = overview(page).locator('.research-overview__summary .research-overview__cell').first();
+        await expect(tile.locator('.research-overview__cell-value')).toHaveText('2 agents working');
+        await expect(tile.locator('.research-overview__cell-sub')).toHaveText('1 waiting');
         // It looks waiting, as Now's state does: the warning colour, the dot yellow, never the working primary.
         const color = (l: Locator, prop: 'color' | 'backgroundColor' = 'color') => l.evaluate((e, p) => getComputedStyle(e)[p], prop);
         const token = (l: Locator, name: string) => l.evaluate((e, n) => {
