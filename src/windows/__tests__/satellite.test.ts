@@ -705,7 +705,9 @@ describe('images taken from the main window (1122)', () => {
         const pool = {
             blobs: async (ids: readonly string[]) => { asked.push([...ids]); return new Map(ids.map(i => [i, new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })])); },
             meta: () => ({}),
+            hold: (windowId: string, held: (() => Iterable<string>) | null) => { if (held) holds.set(windowId, held); else holds.delete(windowId); },
         };
+        const holds = new Map<string, () => Iterable<string>>();
         sat.stop();
         sat = new SatelliteClient({ kind: 'overview', treeId: TREE, windowId: SAT, newId: false }, {
             bus: new WindowBus(SAT, hub.channel()),
@@ -723,6 +725,8 @@ describe('images taken from the main window (1122)', () => {
         await settle();
         expect(DataManager.getPerson('p2' as PersonId)!.photo).toBe(ref);
         expect(DataManager.getPerson('p1' as PersonId)!.photo).toBe(photo);
+        // The main window's pool cleanup learns what this window holds (spec 135, D7), asked anew each time.
+        expect([...holds.get(SAT)!()]).toContain(id);
         const blob = await imageBlob(ref);
         expect(blob?.size).toBe(3);
         expect(asked).toEqual([[id]]);

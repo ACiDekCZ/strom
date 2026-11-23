@@ -78,7 +78,7 @@ export type TreeReadResult =
  * before its save landed: `<prefix><tree id>@<window>` — one per window, so
  * another window's save never drops it (N60-1); beta.58–60 wrote `<prefix><tree id>`.
  */
-const RESCUE_PREFIX = 'strom-save-rescue:';
+export const RESCUE_PREFIX = 'strom-save-rescue:';
 /** This window's part of its rescue keys. */
 const RESCUE_WINDOW = uniqueIdSuffix();
 /** Larger states are not rescued: localStorage holds about 5 million characters per origin. */

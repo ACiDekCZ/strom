@@ -20,6 +20,7 @@
 import { findImageSource, restoreImages, findPoolSource, poolRefIds, type ImageLookup, type PoolSource } from './window-images.js';
 import { noteOwnImages, noteImageMeta } from '../image-meta.js';
 import { setPoolBlobSource, releaseImageUrls } from '../image-src.js';
+import { memoryImageIds } from '../pool-memory.js';
 import { DataManager, type WindowEditSink } from '../data.js';
 import type { TreeId } from '../types.js';
 import { WindowBus, answerWhenFocused, FOCUS_WAIT_MS, type MessageOf, type WindowStatus, type EditRefusal, type WindowBounds } from './window-bus.js';
@@ -370,7 +371,10 @@ export class SatelliteClient {
             b.on('taking-over', m => this.emit('taking-over', { windowId: m.windowId || m.from })),
         );
         if (typeof window !== 'undefined') {
-            const bye = () => this.bus.post({ type: 'bye', windowId: this.windowId, bounds: this.bounds() });
+            const bye = () => {
+                this.bus.post({ type: 'bye', windowId: this.windowId, bounds: this.bounds() });
+                try { this.poolSource()?.hold?.(this.windowId, null); } catch { /* the main window went */ }
+            };
             window.addEventListener('pagehide', bye);
             this.unsubscribe.push(() => window.removeEventListener('pagehide', bye));
         }
@@ -643,6 +647,8 @@ export class SatelliteClient {
         noteOwnImages(Object.fromEntries(list.map(id => [id, 0])));
         noteImageMeta(source.meta(list));
         setPoolBlobSource(wanted => source.blobs(wanted));
+        // The main window's pool cleanup keeps what this window holds (spec 135, D7); again after its reload.
+        source.hold?.(this.windowId, () => [...memoryImageIds()]);
     }
 
     private onTree(m: MessageOf<'tree'>): void {

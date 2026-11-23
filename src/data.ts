@@ -105,6 +105,7 @@ import { normalizeSha256 } from './sha256.js';
 import { startupPerson } from './default-person.js';
 import { expandedData } from './image-expand.js';
 import { internImages, onImagesInterned, treeImages } from './image-intern.js';
+import { registerMemoryImages } from './pool-memory.js';
 import { sameImageByCatalog } from './image-equal.js';
 
 /** Extended updates for Partnership */
@@ -1480,11 +1481,11 @@ class DataManagerClass {
      * The pooled images every state of the open tree in this window names
      * (the data, the undo and redo steps, the state a dialog or batch goes
      * back to): their ids, and the tree's. Null: no tree open, or a satellite
-     * (its states are the main window's).
+     * (its states are the main window's) unless `anyWindow`.
      */
-    imageIdsInMemory(): { treeId: TreeId; ids: Set<string> } | null {
+    imageIdsInMemory(anyWindow = false): { treeId: TreeId; ids: Set<string> } | null {
         const treeId = this.currentTreeId;
-        if (!treeId || this.windowSink) return null;
+        if (!treeId || (this.windowSink && !anyWindow)) return null;
         const ids = new Set<string>();
         const add = (d: StromData | null | undefined): void => { if (d) for (const id of treeImages(d).refIds) ids.add(id); };
         add(this.data);
@@ -6416,3 +6417,5 @@ export const DataManager = new DataManagerClass();
 
 // The open tree's states take the references of its images once they are stored (spec 135, D6).
 onImagesInterned((treeId, map) => DataManager.internImages(treeId as TreeId, map));
+// The pool's cleanup keeps what those states name (spec 135, D7; a satellite's are asked by the main window).
+registerMemoryImages(() => DataManager.imageIdsInMemory(true)?.ids ?? []);

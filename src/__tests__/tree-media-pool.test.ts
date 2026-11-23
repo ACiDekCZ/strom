@@ -50,12 +50,23 @@ import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
 import { CryptoSession } from '../crypto.js';
 import { createSnapshot, deleteSnapshotsForTree, getSnapshotJson, totalSnapshotBytes } from '../snapshots.js';
-import { collectPoolGarbage } from '../media-pool.js';
+import { collectPoolGarbage, collectPoolGarbageLocked, withPoolLock, POOL_UNUSED_GRACE_MS, POOL_UNUSED_KEY } from '../media-pool.js';
+import '../pool-memory.js';
 import { expandedData } from '../image-expand.js';
 import { StromData, TreeId, TreeMetadata } from '../types.js';
 import { STROM_DATA_VERSION } from '../version.js';
 
 let encryptionOn = false;
+
+/** A cleanup a week after the marks (an unused image is first only marked, spec 135 D7). */
+function cleanupWeekLater(): Promise<number> {
+    return withPoolLock(() => collectPoolGarbageLocked(Date.now() + POOL_UNUSED_GRACE_MS));
+}
+
+/** The pooled images (the cleanup's marks are no image). */
+function images(): string[] {
+    return [...st('media').keys()].filter(k => k !== POOL_UNUSED_KEY);
+}
 
 /** A JPEG-looking data URL of pseudo-random bytes (seeded, repeatable). */
 function image(seed: number, n = 3000): string {
@@ -179,15 +190,18 @@ describe('stored trees and the image pool', () => {
         expect(st('media').size).toBe(2);
         expect(JSON.parse((await getSnapshotJson(snap.id))!)).toEqual(tree('Anna', imgs));
 
-        // Backup gone: image 2 is unused; image 1 stays (both trees name it).
+        // Backup gone: image 2 is unused (marked, gone a week later); image 1 stays (both trees name it).
         await deleteSnapshotsForTree('t1');
-        expect(st('media').size).toBe(1);
+        expect(images()).toHaveLength(2);
+        await cleanupWeekLater();
+        expect(images()).toHaveLength(1);
         await expectReadsAs('t2', tree('Bea', [image(1)]));
 
         // Deleting the trees frees the pool completely.
         await TreeManager.deleteTree('t1' as TreeId);
         await TreeManager.deleteTree('t2' as TreeId);
         await collectPoolGarbage();
+        await cleanupWeekLater();
         expect(st('media').size).toBe(0);
     });
 
@@ -226,8 +240,9 @@ describe('stored trees and the image pool', () => {
         encryptionOn = false;
         await save('t1', d);
         await collectPoolGarbage();
-        expect([...st('media').keys()].every(id => id.startsWith('p:'))).toBe(true);
-        expect(st('media').size).toBe(1);
+        await cleanupWeekLater();
+        expect(images().every(id => id.startsWith('p:'))).toBe(true);
+        expect(images()).toHaveLength(1);
         await expectReadsAs('t1', d);
     });
 

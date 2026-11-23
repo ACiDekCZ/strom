@@ -123,11 +123,12 @@ import { shownName, shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { bindSectionMenu, keepSectionControlFocus, sectionClickSwallowed, sectionMovedNow } from './live-section-edit-ui.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { bridgeGivesEtag, bridgeGivesImagesByHash, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeAsksAppMedia, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, treeReplyImages, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
-import { addHeldImages, findImageRefs, findNamedFileShas, forgetHeldImages, imagesUrlOf, internHeldImages, refTreeUrl, resolveHeldImageRefs, resolveImageRefs, sha256Hex, type ImageRef, type ImageResolveDeps } from '../research-image-refs.js';
+import { addHeldImages, findImageRefs, findNamedFileShas, forgetHeldImages, heldImageIds, imagesUrlOf, internHeldImages, refTreeUrl, resolveHeldImageRefs, resolveImageRefs, sha256Hex, type ImageRef, type ImageResolveDeps } from '../research-image-refs.js';
 import { imageIdsBySha, imageMetaOf } from '../image-meta.js';
 import { pooledIds } from '../media-pool.js';
 import { POOL_REF, poolIdOf } from '../image-ref.js';
 import { onImagesInterned } from '../image-intern.js';
+import { registerMemoryImages } from '../pool-memory.js';
 import { completeStatus, statusAskUrl } from '../status-parts.js';
 import { expandedData } from '../image-expand.js';
 
@@ -1415,6 +1416,7 @@ async function pooledImagesBySha(shas: readonly string[]): Promise<Map<string, s
 
 // The images held for a research take their references once stored (spec 135, D6).
 onImagesInterned((_treeId, map) => internHeldImages(map));
+registerMemoryImages(heldImageIds);
 
 /** The images coming after a tree stop when another tree opens (wired once). */
 let imageLoadsWired = false;

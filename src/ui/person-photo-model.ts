@@ -13,6 +13,7 @@
 import { imageLoads, type FieldKey } from '../image-loads.js';
 import { imgStateOf, type ImgState } from './image-slot.js';
 import { onImagesInterned } from '../image-intern.js';
+import { registerMemoryImages, poolIdsOf } from '../pool-memory.js';
 
 export interface PhotoModel {
     /** The portrait the dialog holds (a data URL), or none. */
@@ -50,6 +51,8 @@ export function photoInterned(model: PhotoModel, map: ReadonlyMap<string, string
 }
 
 onImagesInterned((_treeId, map) => { if (latest) photoInterned(latest, map); });
+// The pool's cleanup keeps the portrait the dialog holds (spec 135, D7).
+registerMemoryImages(() => poolIdsOf([latest?.value]));
 
 /** A portrait put in the dialog (from the editor), or none (Remove). */
 export function setModelPhoto(model: PhotoModel, value: string | undefined): void {

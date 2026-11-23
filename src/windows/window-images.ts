@@ -13,6 +13,8 @@
  * version) says nothing about it in its hello and gets the images as before.
  */
 
+import { registerMemoryImages } from '../pool-memory.js';
+
 /** Strings this long or longer that start with `data:` go as a reference. */
 export const IMAGE_REF_MIN_LENGTH = 1024;
 
@@ -169,7 +171,41 @@ export interface PoolSource {
     blobs(ids: readonly string[]): Promise<Map<string, Blob | null>>;
     /** The catalog entries of `ids` the main window has (image-meta.ts). */
     meta(ids: readonly string[]): Record<string, unknown>;
+    /**
+     * A satellite's images in memory (its tree, its open edits) for the main
+     * window's pool cleanup (spec 135, D7): `held` gives their content ids,
+     * asked at each cleanup; null: the satellite holds none any more.
+     */
+    hold?(windowId: string, held: (() => Iterable<string>) | null): void;
 }
+
+/** What each satellite holds of the pool (the main window), by its window id. */
+const satelliteHolds = new Map<string, () => Iterable<string>>();
+
+/** A satellite says what it holds (PoolSource.hold), or that it holds nothing any more. */
+export function holdSatelliteImages(windowId: string, held: (() => Iterable<string>) | null): void {
+    if (typeof windowId !== 'string' || !windowId) return;
+    if (typeof held === 'function') satelliteHolds.set(windowId, held);
+    else satelliteHolds.delete(windowId);
+}
+
+/**
+ * The content ids the satellites hold now. A satellite that cannot be asked
+ * (closed without saying so) is forgotten.
+ */
+export function satelliteImageIds(): string[] {
+    const out: string[] = [];
+    for (const [windowId, held] of satelliteHolds) {
+        try {
+            for (const id of held()) if (typeof id === 'string') out.push(String(id));
+        } catch {
+            satelliteHolds.delete(windowId);
+        }
+    }
+    return out;
+}
+
+registerMemoryImages(satelliteImageIds);
 
 /** The main window publishes its pool for the satellites it (or they) opened. */
 export function publishPoolSource(source: PoolSource, target: object | undefined = typeof window !== 'undefined' ? window : undefined): void {
@@ -207,6 +243,9 @@ export function findPoolSource(self: OpenerChain | undefined = typeof window !==
                     },
                     meta: (ids) => {
                         try { return current()?.meta(ids) ?? {}; } catch { return {}; }
+                    },
+                    hold: (windowId, held) => {
+                        try { current()?.hold?.(windowId, held); } catch { /* the main window went: it asks no more */ }
                     },
                 };
             }

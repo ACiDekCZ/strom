@@ -463,7 +463,8 @@ export function reencodeAllSnapshots(): Promise<number> {
                 failed++;
             }
         }
-        await collectPoolGarbageLocked();
+        // The images of the old kind go at once (no plaintext copy left after encryption is switched on).
+        await collectPoolGarbageLocked(Date.now(), { dropKind: encryptionOn ? 'p:' : 'e:' });
         return failed;
     });
 }

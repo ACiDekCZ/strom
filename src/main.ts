@@ -1094,8 +1094,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Cancelling leaves an "Unlock" banner (V3). A plain embedded file is
     // shown right away — the local password is asked for only when the
     // file is saved into local storage (ensureLocalUnlocked).
-    // Pooled images no stored tree or backup names any more (an image removed
-    // from a tree stays in the pool until a cleanup). Off the startup path.
+    // Pooled images nothing names any more (no stored tree, backup or state in
+    // memory): marked, and removed by a cleanup a week later. Off the startup path.
     // Then the image catalog for trees stored before it (one image at a time;
     // encrypted ones once unlocked — again a while after unlocking).
     setTimeout(() => {

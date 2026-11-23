@@ -14,7 +14,7 @@
  * last focus, the default person) raises nothing: no edit is refused for it.
  */
 
-import { publishImageSource, publishPoolSource, WindowImageStore } from './window-images.js';
+import { publishImageSource, publishPoolSource, holdSatelliteImages, WindowImageStore } from './window-images.js';
 import { loadImageBlobs } from '../media-pool.js';
 import { imageMetaFor } from '../image-meta.js';
 import { DataManager } from '../data.js';
@@ -271,8 +271,9 @@ export class WindowRegistry {
         this.images = opts.images ?? new WindowImageStore();
         if (!opts.images) {
             publishImageSource(this.images);
-            // Pooled images' bytes and catalog entries for the satellites (they keep no storage, no key).
-            publishPoolSource({ blobs: ids => loadImageBlobs(ids), meta: ids => imageMetaFor(ids) });
+            // Pooled images' bytes and catalog entries for the satellites (they keep no storage, no key);
+            // what they hold of the pool, for its cleanup.
+            publishPoolSource({ blobs: ids => loadImageBlobs(ids), meta: ids => imageMetaFor(ids), hold: holdSatelliteImages });
         }
     }
 

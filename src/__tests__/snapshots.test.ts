@@ -10,10 +10,21 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StromData } from '../types.js';
 import { CryptoSession } from '../crypto.js';
-import { registerPoolReferences } from '../media-pool.js';
+import { registerPoolReferences, withPoolLock, collectPoolGarbageLocked, POOL_UNUSED_GRACE_MS, POOL_UNUSED_KEY } from '../media-pool.js';
 
-// No stored trees here: they name no images (the cleanup needs every kind).
+// No stored trees and nothing in memory here: they name no images (the cleanup needs every kind).
 registerPoolReferences('trees', async () => []);
+registerPoolReferences('memory', async () => []);
+
+/** A cleanup a week after the marks (an unused image is first only marked, spec 135 D7). */
+function cleanupWeekLater(): Promise<number> {
+    return withPoolLock(() => collectPoolGarbageLocked(Date.now() + POOL_UNUSED_GRACE_MS));
+}
+
+/** The pooled images' ids (the cleanup's marks are no image). */
+function imageKeys(): string[] {
+    return [...media.keys()].filter(k => k !== POOL_UNUSED_KEY);
+}
 
 // In-memory stand-in for the IndexedDB-backed StorageManager, one Map per
 // store (`mem` is the snapshots store, `media` the image pool).
@@ -257,8 +268,12 @@ describe('image pool', () => {
         const b = await createSnapshot(TREE, withImages(['Anna'], [image(1)]), 'manual', 1000 + DAY);
         expect(media.size).toBe(2);
         await deleteSnapshot(a.id);
-        expect([...media.keys()]).toEqual(Object.keys(b.media!));
+        // Unused: only marked; a week later gone.
+        expect(imageKeys()).toHaveLength(2);
+        await cleanupWeekLater();
+        expect(imageKeys()).toEqual(Object.keys(b.media!));
         await deleteSnapshotsForTree(TREE);
+        await cleanupWeekLater();
         expect(media.size).toBe(0);
     });
 
@@ -301,6 +316,22 @@ describe('image pool', () => {
     });
 });
 
+describe('image pool, encryption switched on', () => {
+    beforeEach(() => { mem.clear(); media.clear(); settings.encryption = false; });
+
+    it('the plaintext images go at once, not a week later', async () => {
+        await createSnapshot(TREE, withImages(['Anna'], [image(1), image(2)]), 'manual', 1000);
+        expect(imageKeys().every(id => id.startsWith('p:'))).toBe(true);
+        settings.encryption = true;
+        await CryptoSession.unlock('correct horse');
+        expect(await reencodeAllSnapshots()).toBe(0);
+        expect(imageKeys()).toHaveLength(2);
+        expect(imageKeys().every(id => id.startsWith('e:'))).toBe(true);
+        settings.encryption = false;
+        CryptoSession.lock();
+    });
+});
+
 describe('image pool with encryption', () => {
     beforeEach(async () => {
         mem.clear(); media.clear();
@@ -320,7 +351,8 @@ describe('image pool with encryption', () => {
         expect(await reencodeAllSnapshots()).toBe(0);
         const [after] = await listSnapshots(TREE);
         expect(Object.keys(after.media!).every(id => id.startsWith('p:'))).toBe(true);
-        expect([...media.keys()].sort()).toEqual(Object.keys(after.media!).sort());
+        // The encrypted copies go at once (no week's wait after a switch).
+        expect(imageKeys().sort()).toEqual(Object.keys(after.media!).sort());
         expect(JSON.parse((await getSnapshotJson(meta.id))!)).toEqual(d);
         CryptoSession.lock();
     });

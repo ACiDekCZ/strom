@@ -14,7 +14,8 @@
  * stored encrypted. The prefixes keep the two kinds apart, and switching
  * encryption re-writes everything under the other kind.
  *
- * Cleanup: an image no stored tree and no backup refers to is removed
+ * Cleanup: an image no stored tree, no backup and nothing in memory refers to
+ * is marked, and removed by a cleanup a week later if still unused
  * (collectPoolGarbage). Every change of the pool runs under one lock, shared
  * with the other tabs where the browser has Web Locks: a cleanup must never
  * run between a writer finding an image already stored and that writer's
@@ -598,40 +599,98 @@ export async function unpoolObject<T>(data: T): Promise<{ data: T; missing: numb
 const referenceProviders = new Map<string, () => Promise<Iterable<string>>>();
 
 /**
- * The record kinds that name pooled images. The cleanup runs only when all of
- * them have registered — one missing would make its images look unused.
+ * The record kinds that name pooled images, asked in this order. The cleanup
+ * runs only when all of them have registered — one missing would make its
+ * images look unused. 'memory': what this window (and its satellites) holds
+ * of the open tree beyond its record (pool-memory.ts).
  */
-const REFERENCE_KINDS = ['trees', 'snapshots'] as const;
+const REFERENCE_KINDS = ['trees', 'snapshots', 'memory'] as const;
 
-export function registerPoolReferences(kind: typeof REFERENCE_KINDS[number], provider: () => Promise<Iterable<string>>): void {
+export type PoolReferenceKind = typeof REFERENCE_KINDS[number];
+
+export function registerPoolReferences(kind: PoolReferenceKind, provider: () => Promise<Iterable<string>>): void {
     referenceProviders.set(kind, provider);
 }
 
 /**
- * Remove images nothing refers to. Call under withPoolLock. The keys are read
- * first: an image stored later is not a candidate.
+ * The key in the 'media' store of the cleanup's marks: content id → when the
+ * cleanup first found that image unused (ms). Not a content id, so never an
+ * image (an older version's cleanup removes it as unused: the marks then
+ * start again, which only delays a removal).
  */
-export async function collectPoolGarbageLocked(): Promise<number> {
-    if (REFERENCE_KINDS.some(kind => !referenceProviders.has(kind))) return 0;
-    const keys = await StorageManager.keys('media');
-    if (keys.length === 0) return 0;
-    const used = new Set<string>();
-    for (const provider of referenceProviders.values()) {
-        for (const id of await provider()) used.add(id);
+export const POOL_UNUSED_KEY = 'unused';
+
+/**
+ * How long an image stays unused before the cleanup removes it. Another tab
+ * keeps its own memory (undo steps, an open dialog) that this one cannot see:
+ * an image it still holds is either named again by a save within this time
+ * (which takes the mark away) or that tab's state is long gone.
+ */
+export const POOL_UNUSED_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+const POOL_KEY = /^[pe]:[0-9a-f]+$/;
+
+/** The cleanup's marks as stored (anything else in the record is dropped). */
+async function readUnusedMarks(): Promise<Map<string, number>> {
+    const raw = await StorageManager.get<unknown>('media', POOL_UNUSED_KEY);
+    const out = new Map<string, number>();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+    for (const [id, at] of Object.entries(raw as Record<string, unknown>)) {
+        if (POOL_KEY.test(id) && typeof at === 'number' && Number.isFinite(at)) out.set(id, at);
     }
+    return out;
+}
+
+/** The cleanup's marks (tests, diagnostics): content id → when first found unused. */
+export async function poolUnusedMarks(): Promise<Map<string, number>> {
+    return readUnusedMarks();
+}
+
+/**
+ * Two-phase cleanup. Call under withPoolLock. The keys are read first: an
+ * image stored later is not a candidate. An image no stored tree, backup or
+ * memory names is first only marked (the time, kept in the pool's own store
+ * so every tab sees it); a later cleanup removes it once it has stayed unused
+ * for POOL_UNUSED_GRACE_MS. An image named again loses its mark. Marks of an
+ * older pool (none) are set by the first cleanup: it removes nothing.
+ * `dropKind` (a switch of the encryption, every stored record moved to the
+ * other kind): unused images of the old kind go at once — plaintext images
+ * must not outlive the switch to encryption by a week.
+ * Returns how many images were removed.
+ */
+export async function collectPoolGarbageLocked(now: number = Date.now(), opts: { dropKind?: 'p:' | 'e:' } = {}): Promise<number> {
+    if (REFERENCE_KINDS.some(kind => !referenceProviders.has(kind))) return 0;
+    const keys = (await StorageManager.keys('media')).filter(key => POOL_KEY.test(key));
+    const marks = await readUnusedMarks();
+    if (keys.length === 0 && marks.size === 0) return 0;
+    // Each kind takes its images off the candidates; the costlier ones (memory) are not asked when none is left.
+    const unused = new Set(keys);
+    for (const kind of REFERENCE_KINDS) {
+        if (unused.size === 0) break;
+        for (const id of await referenceProviders.get(kind)!()) unused.delete(id);
+    }
+    const next = new Map<string, number>();
     let removed = 0;
-    for (const key of keys) {
-        if (used.has(key)) continue;
+    for (const key of unused) {
+        const since = opts.dropKind && key.startsWith(opts.dropKind) ? -Infinity : marks.get(key);
+        // A mark from the future (the clock was set back) starts again from now.
+        if (since === undefined || since > now) { next.set(key, now); continue; }
+        if (now - since < POOL_UNUSED_GRACE_MS) { next.set(key, since); continue; }
         await StorageManager.delete('media', key);
         sizeOfStored.delete(key);
         removed++;
+    }
+    const same = next.size === marks.size && [...next].every(([id, at]) => marks.get(id) === at);
+    if (!same) {
+        if (next.size === 0) await StorageManager.delete('media', POOL_UNUSED_KEY);
+        else await StorageManager.set('media', POOL_UNUSED_KEY, Object.fromEntries(next));
     }
     return removed;
 }
 
 /** collectPoolGarbageLocked taking the lock itself. Never throws. */
 export function collectPoolGarbage(): Promise<number> {
-    return withPoolLock(collectPoolGarbageLocked).catch((err) => {
+    return withPoolLock(() => collectPoolGarbageLocked()).catch((err) => {
         console.error('Image pool cleanup failed', err);
         return 0;
     });

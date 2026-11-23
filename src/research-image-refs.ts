@@ -38,7 +38,7 @@ import { base64ToBytes, bytesToBase64, canonicalBase64Bytes } from './base64.js'
 import { rememberImageBytes, forgetImageBytes } from './known-image-bytes.js';
 import { sha256Bytes } from './sha256.js';
 import { imageMetaOf } from './image-meta.js';
-import { isPoolRef } from './image-ref.js';
+import { isPoolRef, poolIdOf } from './image-ref.js';
 
 /** A FILE value that names an image by its hash. */
 export const IMAGE_REF_PREFIX = 'strom-image:';
@@ -665,6 +665,13 @@ export function internHeldImages(map: ReadonlyMap<string, string>): void {
         const ref = map.get(url);
         if (ref !== undefined) held.bySha.set(sha, ref);
     }
+}
+
+/** The pooled images the held images name (spec 135, D7: the pool's cleanup keeps them). */
+export function heldImageIds(): string[] {
+    const out: string[] = [];
+    if (held) for (const url of held.bySha.values()) { const id = poolIdOf(url); if (id) out.push(id); }
+    return out;
 }
 
 /** Images had since for the research whose images are held (images arriving later): held with them. */
