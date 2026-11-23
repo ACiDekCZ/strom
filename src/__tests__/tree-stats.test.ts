@@ -1,7 +1,7 @@
 /**
  * Tree statistics (spec 138): scopes, the frequency table of every topic,
  * sort, search, share and the CSV. Fictional trees only: every name and
- * place below is invented (Ostrožný, Hradil, Kubíček; Mezihoř, Hrabětice, Zálesí).
+ * place below is invented (Ostrožný, Pětioký, Vochomůrka; Mezihoř, Hrabětice, Žabokřiky).
  */
 import { describe, it, expect } from 'vitest';
 import { buildLineages, rodOf } from '../lineage.js';
@@ -43,21 +43,21 @@ function tree(people: Record<string, Spec>, unions: [string, string, string, str
 
 const occ = (note: string): Partial<LifeEvent> => ({ type: 'occupation', note });
 
-/** The Ostrožný family of Mezihoř and the Hradils of Hrabětice. */
+/** The Ostrožný family of Mezihoř and the Pětioký family of Hrabětice. */
 const ostrozni = (): StromData => tree({
     jan: { first: 'Jan', last: 'Ostrožný', sex: 'male', born: '1840-02-10', died: '1904-02-09', bornAt: 'Mezihoř', events: [occ('rolník')] },
-    marie: { first: 'Marie', last: 'Kubíčková', sex: 'female', born: '1845-01-10', bornAt: 'Mezihoř 12', married: 'Ostrožná' },
+    marie: { first: 'Marie', last: 'Vochomůrková', sex: 'female', born: '1845-01-10', bornAt: 'Mezihoř 12', married: 'Ostrožná' },
     jan2: { first: 'jan Karel', last: 'Ostrožný', sex: 'male', born: '1866-05-01', bornAt: 'mezihoř', parents: ['jan', 'marie'], events: [occ('Rolník'), occ('kovář')] },
-    anna: { first: 'Anna', last: 'Ostrožná', sex: 'female', born: '~1868', parents: ['jan', 'marie'], married: 'Hradilová' },
-    josef: { first: 'Josef', last: 'Hradil', sex: 'male', born: '1865-03-03', bornAt: 'Hrabětice' },
-    joh: { first: 'Joh.', last: 'Kubíček', sex: 'male', born: '1871', parents: ['josef', 'anna'] },
-    matej: { first: 'Matej', last: 'Hradil', sex: 'male', born: '1873-08-08', parents: ['josef', 'anna'] },
-    matej2: { first: 'Matěj', last: 'Hradil', sex: 'male', parents: ['josef', 'anna'] },
+    anna: { first: 'Anna', last: 'Ostrožná', sex: 'female', born: '~1868', parents: ['jan', 'marie'], married: 'Pětioká' },
+    josef: { first: 'Josef', last: 'Pětioký', sex: 'male', born: '1865-03-03', bornAt: 'Hrabětice' },
+    joh: { first: 'Joh.', last: 'Vochomůrka', sex: 'male', born: '1871', parents: ['josef', 'anna'] },
+    matej: { first: 'Matej', last: 'Pětioký', sex: 'male', born: '1873-08-08', parents: ['josef', 'anna'] },
+    matej2: { first: 'Matěj', last: 'Pětioký', sex: 'male', parents: ['josef', 'anna'] },
     noname: { first: '', last: '', sex: 'male', born: '1890-01-01' },
-    unknownSex: { first: 'Anna', last: 'Hradilová', sex: 'unknown', born: '1880-04-04' },
+    unknownSex: { first: 'Anna', last: 'Pětioká', sex: 'unknown', born: '1880-04-04' },
     ghost: { first: 'Jan', last: 'Ostrožný', sex: 'male', placeholder: true, born: '1800', bornAt: 'Mezihoř', parents: [] },
     ghostWife: { first: '', last: '', sex: 'female', placeholder: true },
-    jan3: { first: 'Jan', last: 'Kubíček', sex: 'male', born: '1899-09-09' },
+    jan3: { first: 'Jan', last: 'Vochomůrka', sex: 'male', born: '1899-09-09' },
 }, [
     ['u1', 'jan', 'marie', ['jan2', 'anna'], { startDate: '1864-06-01', startPlace: 'Mezihoř' }],
     ['u2', 'josef', 'anna', ['joh', 'matej', 'matej2'], { startDate: '1890', startPlace: 'Hrabětice' }],
@@ -130,7 +130,7 @@ describe('first names (§5)', () => {
     });
 
     it('a hyphenated name is one word', () => {
-        const data = tree({ a: { first: 'Jan-Křtitel Josef', last: 'Hradil', sex: 'male' } }, []);
+        const data = tree({ a: { first: 'Jan-Křtitel Josef', last: 'Pětioký', sex: 'male' } }, []);
         expect(counts(table(data, 'firstNames', { names: 'each' }))).toEqual({ 'Jan-Křtitel': 1, Josef: 1 });
     });
 });
@@ -142,19 +142,19 @@ describe('surnames (§3)', () => {
         expect(o.count).toBe(3);
         expect(o.alt).toBe('Ostrožná');
         expect(o.ids.sort()).toEqual([P('anna'), P('jan'), P('jan2')].sort());
-        expect(row(t, 'Hradil')!.count).toBe(4); // Josef, Matej, Matěj and Anna Hradilová (no sex given)
-        expect(row(t, 'Kubíček')!.count).toBe(3); // Joh., Jan and Marie Kubíčková
+        expect(row(t, 'Pětioký')!.count).toBe(4); // Josef, Matej, Matěj and Anna Pětioká (no sex given)
+        expect(row(t, 'Vochomůrka')!.count).toBe(3); // Joh., Jan and Marie Vochomůrková
         expect(t.none).toEqual([P('noname')]);
     });
 
     it('"women\'s married too": a married woman counts under her birth and her married surname, once per surname', () => {
         const t = table(ostrozni(), 'surnames', { surnames: 'withMarried' });
         expect(row(t, 'Ostrožný')!.count).toBe(4); // + Marie (Ostrožná by marriage)
-        expect(row(t, 'Hradil')!.count).toBe(5);   // + Anna (Hradilová by marriage)
+        expect(row(t, 'Pětioký')!.count).toBe(5);   // + Anna (Pětioká by marriage)
         expect(t.known).toBe(10);
         expect(t.occurrences).toBe(12);
         // Married within the same family: still once.
-        const data = tree({ a: { first: 'Anna', last: 'Hradilová', sex: 'female', married: 'Hradilová' } }, []);
+        const data = tree({ a: { first: 'Anna', last: 'Pětioká', sex: 'female', married: 'Pětioká' } }, []);
         expect(table(data, 'surnames', { surnames: 'withMarried' }).rows[0]!.count).toBe(1);
     });
 });
@@ -173,30 +173,30 @@ describe('places (§6)', () => {
 
     it('a baptism stands in for a missing birth place, a burial for a missing death place', () => {
         const data = tree({
-            a: { first: 'Jan', last: 'Hradil', sex: 'male', events: [{ type: 'baptism', place: 'Zálesí', date: '1800-01-02' }] },
-            b: { first: 'Josef', last: 'Hradil', sex: 'male', events: [{ type: 'burial', place: 'Hrabětice' }] },
+            a: { first: 'Jan', last: 'Pětioký', sex: 'male', events: [{ type: 'baptism', place: 'Žabokřiky', date: '1800-01-02' }] },
+            b: { first: 'Josef', last: 'Pětioký', sex: 'male', events: [{ type: 'burial', place: 'Hrabětice' }] },
         }, []);
-        expect(counts(table(data, 'birthPlaces'))).toEqual({ Zálesí: 1 });
+        expect(counts(table(data, 'birthPlaces'))).toEqual({ Žabokřiky: 1 });
         expect(counts(table(data, 'deathPlaces'))).toEqual({ Hrabětice: 1 });
     });
 
-    /** Hrabětice identified by the research under two spellings, in the district of Zálesí from 1850, in the land of Morava. */
+    /** Hrabětice identified by the research under two spellings, in the district of Žabokřiky from 1850, in the land of Morava. */
     const withRecords = (): StromData => {
         const data = tree({
-            a: { first: 'Jan', last: 'Hradil', sex: 'male', born: '1860', bornAt: 'Hrabětice' },
-            b: { first: 'Josef', last: 'Hradil', sex: 'male', born: '1862', bornAt: 'Hrabetice u Zálesí' },
-            c: { first: 'Jan', last: 'Kubíček', sex: 'male', born: '1840', bornAt: 'Hrabětice' },
-            d: { first: 'Anna', last: 'Kubíčková', sex: 'female', born: '1841', bornAt: 'Mezihoř' },
-            e: { first: 'Marie', last: 'Kubíčková', sex: 'female', born: '1842', bornAt: 'Zálesí' },
+            a: { first: 'Jan', last: 'Pětioký', sex: 'male', born: '1860', bornAt: 'Hrabětice' },
+            b: { first: 'Josef', last: 'Pětioký', sex: 'male', born: '1862', bornAt: 'Hrabetice u Žabokřik' },
+            c: { first: 'Jan', last: 'Vochomůrka', sex: 'male', born: '1840', bornAt: 'Hrabětice' },
+            d: { first: 'Anna', last: 'Vochomůrková', sex: 'female', born: '1841', bornAt: 'Mezihoř' },
+            e: { first: 'Marie', last: 'Vochomůrková', sex: 'female', born: '1842', bornAt: 'Žabokřiky' },
         }, []);
         const rec = (r: Partial<PlaceRecord> & { id: string }): PlaceRecord => ({ names: [], ...r }) as PlaceRecord;
         data.placeRecords = {
-            L1: rec({ id: 'L1', names: [{ name: 'Hrabětice' }, { name: 'Hrabetice u Zálesí', kind: 'form' }], parent: 'L9',
-                jurisdictions: [{ kind: 'district', name: 'okres Zálesí', from: 1850 }] }),
+            L1: rec({ id: 'L1', names: [{ name: 'Hrabětice' }, { name: 'Hrabetice u Žabokřik', kind: 'form' }], parent: 'L9',
+                jurisdictions: [{ kind: 'district', name: 'okres Žabokřiky', from: 1850 }] }),
             L2: rec({ id: 'L2', names: [{ name: 'Mezihoř' }], jurisdictions: [{ kind: 'state', name: 'Čechy' }] }),
             L9: rec({ id: 'L9', names: [{ name: 'Morava' }] }),
         };
-        data.placeRefs = { 'hrabetice': 'L1', 'hrabetice u zalesi': 'L1', 'mezihor': 'L2' };
+        data.placeRefs = { 'hrabetice': 'L1', 'hrabetice u zabokrik': 'L1', 'mezihor': 'L2' };
         return data;
     };
 
@@ -204,7 +204,7 @@ describe('places (§6)', () => {
         const t = table(withRecords(), 'birthPlaces');
         const h = row(t, 'Hrabětice')!;
         expect(h.count).toBe(3);
-        expect(h.forms).toEqual(['Hrabětice', 'Hrabetice u Zálesí']);
+        expect(h.forms).toEqual(['Hrabětice', 'Hrabetice u Žabokřik']);
         expect(t.hasLevels).toBe(true);
     });
 
@@ -212,7 +212,7 @@ describe('places (§6)', () => {
         const data = withRecords();
         const ctx = statsContext(data, { labels: { ...labels, noDistrict: 'bez určeného okresu', noCountry: 'bez určené země' } });
         const t = statsTable(data, all(data), 'birthPlaces', opts({ level: 'district' }), ctx);
-        expect(counts(t)).toEqual({ 'okres Zálesí': 2, 'bez určeného okresu': 3 });
+        expect(counts(t)).toEqual({ 'okres Žabokřiky': 2, 'bez určeného okresu': 3 });
         const sorted = sortRows(t.rows, 'count', 'cs');
         expect(sorted[sorted.length - 1]!.muted).toBe(true);
         expect(sorted[sorted.length - 1]!.ids.sort()).toEqual([P('c'), P('d'), P('e')]);
@@ -256,11 +256,11 @@ const labels = {
 
 describe('ages (§3)', () => {
     const ages = (): StromData => tree({
-        a: { first: 'Jan', last: 'Hradil', sex: 'male', born: '1860-06-01', died: '1925-05-31' },   // 64
-        b: { first: 'Josef', last: 'Hradil', sex: 'male', born: '1860-06-01', died: '1925-06-01' }, // 65
-        c: { first: 'Anna', last: 'Hradilová', sex: 'female', born: '1860', died: '1865-03-01' },   // 4–5 → lower group
-        d: { first: 'Marie', last: 'Hradilová', sex: 'female', born: '1800-01-01', died: '1901-01-01' }, // 101
-        e: { first: 'Jan', last: 'Kubíček', sex: 'male', born: '1900-01-01' },                      // living / no death
+        a: { first: 'Jan', last: 'Pětioký', sex: 'male', born: '1860-06-01', died: '1925-05-31' },   // 64
+        b: { first: 'Josef', last: 'Pětioký', sex: 'male', born: '1860-06-01', died: '1925-06-01' }, // 65
+        c: { first: 'Anna', last: 'Pětioká', sex: 'female', born: '1860', died: '1865-03-01' },   // 4–5 → lower group
+        d: { first: 'Marie', last: 'Pětioká', sex: 'female', born: '1800-01-01', died: '1901-01-01' }, // 101
+        e: { first: 'Jan', last: 'Vochomůrka', sex: 'male', born: '1900-01-01' },                      // living / no death
     }, []);
 
     it('five-year groups by the border, a range across a border in the lower group, 100 and over, the rest Not given', () => {
@@ -305,8 +305,8 @@ describe('couples and births', () => {
 
     it('ten and more children in one group', () => {
         const kids: Record<string, Spec> = {};
-        for (let i = 0; i < 11; i++) kids[`k${i}`] = { first: 'Jan', last: 'Hradil', sex: 'male', parents: ['f', 'm'] };
-        const data = tree({ f: { first: 'Josef', last: 'Hradil', sex: 'male' }, m: { first: 'Anna', last: 'Hradilová', sex: 'female' }, ...kids },
+        for (let i = 0; i < 11; i++) kids[`k${i}`] = { first: 'Jan', last: 'Pětioký', sex: 'male', parents: ['f', 'm'] };
+        const data = tree({ f: { first: 'Josef', last: 'Pětioký', sex: 'male' }, m: { first: 'Anna', last: 'Pětioká', sex: 'female' }, ...kids },
             [['u', 'f', 'm', Object.keys(kids)]]);
         const t = statsTable(data, all(data), 'childrenPerCouple', opts(), statsContext(data, { labels }));
         expect(counts(t)).toEqual({ '10 a více': 1 });
@@ -403,7 +403,7 @@ describe('CSV (§9)', () => {
     });
 
     it('a formula in a value is neutralised; while searching no Not given line', () => {
-        const data = tree({ a: { first: '=SUM(A1)', last: 'Hradil', sex: 'male' }, b: { first: '', last: 'Hradil', sex: 'male' } }, []);
+        const data = tree({ a: { first: '=SUM(A1)', last: 'Pětioký', sex: 'male' }, b: { first: '', last: 'Pětioký', sex: 'male' } }, []);
         const t = table(data, 'firstNames');
         const csv = statsCsv(t, t.rows, { ...texts, searching: true }, 'cs');
         expect(csv).toContain("\r\n'=SUM(A1);1;100,0\r\n");
