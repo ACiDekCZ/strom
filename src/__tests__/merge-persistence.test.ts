@@ -134,6 +134,27 @@ describe('the import guide\'s place (spec 134 §1)', () => {
         expect(back?.wizard).toEqual(state.wizard);
     });
 
+    it('step 3\'s choices (unticked, "?", living, group decisions, split groups) survive the round-trip', async () => {
+        const state = baseState();
+        state.wizard = {
+            step: 3, reached: 3, compared: true,
+            choices: {
+                mode: 'add', targetTreeId: null, scope: 'a', swapped: false, targetName: 'Modřínovi',
+                source: { kind: 'ged', label: 'rodokmen-jilmovi.ged', persons: 9 },
+                targetFingerprint: 'f1', planId: 'plan-1',
+                leftOut: ['s4' as PersonId, 's6' as PersonId], leftOutReason: { s6: 'branch' },
+                placeholders: ['s7' as PersonId], skipLiving: true,
+                groups: {
+                    'g:s20': { kind: 'connect', person: 's20' as PersonId, rel: 'parent', to: 't2' as PersonId, in: 'tree' },
+                    'g:s30': { kind: 'own-tree' }, singles: { kind: 'skip' },
+                },
+                splitGroups: ['all'],
+            },
+        };
+        await saveCurrentMerge(state, 'rodokmen-jilmovi.ged');
+        expect((await getCurrentMerge())?.wizard).toEqual(state.wizard);
+    });
+
     it('a merge saved before the guide resumes without a place', async () => {
         await saveCurrentMerge(baseState(), 'old.json');
         expect((await getCurrentMerge())?.wizard).toBeUndefined();
