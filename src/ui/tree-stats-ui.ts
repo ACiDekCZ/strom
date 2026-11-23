@@ -98,7 +98,7 @@ export interface StatsRowOpen {
     back: StatsWindowState;
 }
 
-/** The event a row click sends until the Table takes it over (`onStatsRowOpen`). */
+/** The event a row click sends; the Table takes it over (`listenForStatsRowOpen`). */
 export const STATS_ROW_OPEN_EVENT = 'strom:stats-row-open';
 
 interface Runtime {
@@ -548,6 +548,7 @@ export const statsWindowMethods = uiModule({
         const data = active ? DataManager.getData() : await TreeManager.getTreeData(treeId as TreeId);
         if (!meta || !data) return;
         this.listenForTreeStatsChanges();
+        this.listenForStatsRowOpen();
         const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
             && !overlayEl()?.contains(document.activeElement) ? document.activeElement : null;
         this.closeTreeStats();
@@ -653,8 +654,8 @@ export const statsWindowMethods = uiModule({
 
     /**
      * A click on a value or on "Not given": the Table shows the row's people
-     * (the Statistics and the overview under them close). Part of the Table
-     * takes the event over (openTableForPersons).
+     * (the Statistics and the overview under them close); the Table takes
+     * the event over (openTableForPersons).
      */
     onStatsRowOpen(req: StatsRowOpen): void {
         this.closeTreeStats();

@@ -11083,6 +11083,15 @@
         .tv-chips.is-tight .tv-chip-edit { flex: 1 1 auto; min-width: 0; }
         .tv-chips.is-tight .tv-chip-x { flex: none; }
         .tv-chip-text { padding: 0 4px 0 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* The Statistics' chip (spec 138 §8): first in the row, Back to Statistics and a separator after it. */
+        .tv-chip--stats .tv-chip-text { max-width: 420px; }
+        .tv-back {
+            flex: none; padding: 0 2px; border: none; background: none; color: var(--primary); font: inherit; font-size: 12.5px;
+            text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap;
+        }
+        .tv-back:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: var(--r-sm); }
+        .tv-statssep { margin-left: 0; }
+        .tv-statsrow { display: none; }
         .tv-chips-clear {
             flex: none; margin-left: auto; padding: 0 2px; border: none; background: none; color: var(--primary);
             font: inherit; font-size: 12.5px; text-decoration: underline; cursor: pointer; white-space: nowrap; order: 1000;
@@ -12239,6 +12248,15 @@
             }
             .tv-bar-row1::after { content: ''; order: 9; flex-basis: 100%; height: 0; }
             .tv-chips { display: none; }
+            /* The Statistics' chip across the width (× 44 px), Back to Statistics under it (spec 138 §8, frame 23). */
+            .tv-statsrow:not([hidden]) {
+                display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px 12px 10px;
+                border-top: 1px solid var(--divider);
+            }
+            .tv-statsrow .tv-chip--stats { align-self: stretch; height: auto; min-height: 44px; padding: 0; }
+            .tv-statsrow .tv-chip-text { flex: 1 1 auto; min-width: 0; max-width: none; padding: 6px 4px 6px 12px; white-space: normal; line-height: 1.3; font-size: 14px; }
+            .tv-statsrow .tv-chip-x { flex: none; width: 44px; align-self: stretch; height: auto; }
+            .tv-statsrow .tv-back { min-height: 44px; font-size: 14px; }
             .tv-ff select, .tv-ff input[type="text"], .tv-ff input[type="number"] { height: 44px; font-size: 16px; }
             .tv-ff-check { min-height: 48px; }
             .tv-ff-values { max-height: none; }
@@ -12284,6 +12302,10 @@
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .tv-bar-row1 { flex-wrap: nowrap; min-height: 50px; padding: 5px 12px; }
             .tv-bar-row1::after { display: none; }
+            /* The Statistics' chip and Back to Statistics side by side: no height to spare (spec 138 §8). */
+            .tv-statsrow:not([hidden]) { flex-direction: row; align-items: center; gap: 8px; padding: 2px 12px 4px; }
+            .tv-statsrow .tv-chip--stats { flex: 0 1 auto; min-width: 0; align-self: auto; }
+            .tv-statsrow .tv-chip-text { white-space: nowrap; }
             .tv-slot-view { flex: 0 1 auto; max-width: 220px; }
             /* The scope's button in the one row, after the view (11c on a phone held sideways). */
             .tv-slot-scope { order: 1; flex: 0 1 auto; max-width: 200px; }
