@@ -855,10 +855,13 @@ export const materialsMethods = uiModule({
         const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
         const refn = researchPersonRef(person?.refn);
         const locked = !!this.currentId && DataManager.isPersonLocked(this.currentId);
+        // Link to… is offered in a tree that follows a research too: its dialog says why it waits (1123).
+        const attachLocked = !!this.currentId && DataManager.isPersonLocked(this.currentId, { exceptFollow: true });
         const actions = materialActions(item, caps, { person: refn, where: 'menu', treeCopy: (i) => !!treePortraitCopy(i) })
             // Nothing to download from an attachment that is only its original; a locked person keeps its files.
             .filter(a => !(a.id === 'download' && (!item.attachment?.dataUrl || item.attachment.originalOnly)))
-            .filter(a => !((a.id === 'removeFromTree' || a.id === 'attach' || a.id === 'makeSource') && (locked || DataManager.isReadOnly())))
+            .filter(a => !((a.id === 'removeFromTree' || a.id === 'makeSource') && (locked || DataManager.isReadOnly())))
+            .filter(a => !(a.id === 'attach' && (attachLocked || DataManager.isReadOnly())))
             // Title and details: where they can change here (spec 102 §2).
             .filter(a => !(a.id === 'edit' && !['on', 'off'].includes(materialDetailsEdit(item, ctx) ?? '')))
             // Use as portrait: a person who can change, and not the portrait's source already (spec 107 §4).

@@ -101,9 +101,10 @@ export const materialUsesMethods = uiModule({
             }
         } else if (!viaSourceOnly) {
             const none = h('p', 'mv-uses-none', m.nowhereYet);
-            // Link to… (spec 102 §4): the tree's file, or material outside the tree while the bridge runs (Q2).
+            // Link to… (spec 102 §4): the tree's file, or material outside the tree while the bridge runs (Q2);
+            // in a tree that follows a research too, its dialog says why it waits (1123).
             const canLink = !DataManager.isReadOnly() && !item.removedId
-                && (att ? DataManager.canEditMedia(att.id) : !!item.file && !!ctx?.caps.assign && !!ctx.caps.bridgeUp && !!ctx.base);
+                && (att ? DataManager.canEditMedia(att.id, { exceptFollow: true }) : !!item.file && !!ctx?.caps.assign && !!ctx.caps.bridgeUp && !!ctx.base);
             if (canLink) {
                 const link = h('button', 'link-button mv-uses-attach', m.attach);
                 link.type = 'button';
