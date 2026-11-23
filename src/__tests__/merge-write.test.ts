@@ -71,7 +71,7 @@ import { executeMerge } from '../merge/executor.js';
 import { createMergeState, updateMatchDecision } from '../merge/matching.js';
 import { buildPlan, type MergePlan, type PlanScope, type WizardChoices } from '../merge/plan.js';
 import { exportPlan } from '../merge/plan-export.js';
-import { backupFailureWhy, writePlan, type WriteResult } from '../merge/write.js';
+import { backupFailureWhy, writePlan, writeRestore, writeUndo, type WriteResult } from '../merge/write.js';
 import { contentFingerprint } from '../research-link.js';
 import {
     createSnapshot, listSnapshots, planRetention, MAX_SNAPSHOTS_PER_TREE, type SnapshotMeta,
@@ -560,5 +560,41 @@ describe('the record of the merge in the tree (§0.3, K7.2)', () => {
         expect(applyLivingPrivacy(stored, 'initials').merges).toBeUndefined();
         expect(applyLivingPrivacy(stored, 'full').merges).toEqual(stored.merges);
         expect(applyContentOptions(stored, { photos: true, attachments: true, notes: false, sources: true }).merges).toBeUndefined();
+    });
+});
+
+describe('the undo of a merge written (K8.4)', () => {
+    it('takes a backup kept for the merge, stores the tree as before, one Undo step; the undo of the undo stores it as merged', async () => {
+        const { plan, target } = await planFor(T1, INCOMING);
+        const written = await writePlan(plan, { target, source: INCOMING, into: 'tree' });
+        expect(written.ok).toBe(true);
+        expect(await storedNames(T1)).toEqual(['Alma', 'Berta', 'Cecilie']);
+        const undone = await writeUndo(T1, plan.id, { at: '2026-05-05T10:00:00.000Z' });
+        expect(undone.ok).toBe(true);
+        if (!undone.ok) return;
+        expect(await storedNames(T1)).toEqual(['Alma', 'Berta']);
+        const stored = (await TreeManager.getTreeData(T1))!;
+        expect(stored.merges?.map(r => [r.id, r.state])).toEqual([[plan.id, 'undone']]);
+        expect(stored.merges?.[0].undone?.[0].at).toBe('2026-05-05T10:00:00.000Z');
+        expect(DataManager.getDataFor(T1)?.merges?.[0].state).toBe('undone');
+        const backups = (await premerge(T1)).filter(b => b.keepFor === plan.id);
+        expect(backups.map(b => b.id)).toContain(undone.backupId);
+        expect(backups).toHaveLength(2);
+        expect(linkOf(T1)).toEqual(RESEARCH);
+
+        expect(await writeRestore(T1, undone.before, plan.id)).toBe(true);
+        expect(await storedNames(T1)).toEqual(['Alma', 'Berta', 'Cecilie']);
+        expect((await TreeManager.getTreeData(T1))!.merges?.[0].state).toBe('valid');
+    });
+
+    it('a backup that cannot be written: nothing is undone', async () => {
+        const { plan, target } = await planFor(T1, INCOMING);
+        expect((await writePlan(plan, { target, source: INCOMING, into: 'tree' })).ok).toBe(true);
+        failing.write = store => store === 'snapshots';
+        const undone = await writeUndo(T1, plan.id);
+        expect(undone.ok).toBe(false);
+        expect(!undone.ok && undone.reason).toBe('backup');
+        expect(await storedNames(T1)).toEqual(['Alma', 'Berta', 'Cecilie']);
+        expect((await writeUndo(T1, 'mp-none')).ok).toBe(false);
     });
 });

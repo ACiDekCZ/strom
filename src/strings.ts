@@ -8346,6 +8346,8 @@ const stringsEN = {
         addedPartner: (person: string, partner: string) => `Added partner: ${person} & ${partner}`,
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Tree merge from "${source}": ${merged} merged, ${added} added`,
+        mergeUndone: (source: string) => `Merge from "${source}" undone`,
+        mergeRestored: (source: string) => `Merge from "${source}" restored`,
         mergeLink: 'the list in the Merge history',
         // Change packet accepted (collaboration)
         appliedChanges: (sender: string) => `Applied changes (${sender})`,
@@ -8436,6 +8438,8 @@ const stringsEN = {
         removeEvent: (name: string) => `removing event of ${name}`,
         restoreBackup: 'restoring backup',
         mergeTrees: 'merging trees',
+        undoMerge: 'undoing a merge',
+        restoreMerge: 'restoring a merge',
         addSource: (title: string) => `source "${title}"`,
         editSource: (title: string) => `editing source "${title}"`,
         splitSources: (n: number) => `splitting the locations of ${nEn(n, 'source', 'sources')}`,
@@ -19441,6 +19445,8 @@ const stringsCZ: StringsType = {
         addedPartner: (person: string, partner: string) => `Přidán partner: ${person} & ${partner}`,
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z „${source}“: ${merged} sloučeno, ${added} přidáno`,
+        mergeUndone: (source: string) => `Odvoláno sloučení z „${source}“`,
+        mergeRestored: (source: string) => `Vráceno sloučení z „${source}“`,
         mergeLink: 'výčet v Historii sloučení',
         appliedChanges: (sender: string) => `Přijaty změny (${sender})`,
         // Split into families
@@ -19530,6 +19536,8 @@ const stringsCZ: StringsType = {
         removeEvent: (name: string) => `odebrání události u ${name}`,
         restoreBackup: 'obnovení zálohy',
         mergeTrees: 'sloučení stromů',
+        undoMerge: 'odvolání sloučení',
+        restoreMerge: 'vrácení sloučení',
         addSource: (title: string) => `pramen „${title}“`,
         editSource: (title: string) => `úprava pramene „${title}“`,
         splitSources: (n: number) => `rozdělení umístění ${n} ${plural('cs', n, 'pramene', 'pramenů', 'pramenů')}`,
@@ -30378,6 +30386,8 @@ const stringsDE: StringsType = {
         addedSibling: (person: string, sibling: string) => `Geschwister hinzugefügt: ${person} + ${sibling}`,
         addedPartner: (person: string, partner: string) => `Partner hinzugefügt: ${person} & ${partner}`,
         treeMerge: (merged: number, added: number, source: string) => `Stammbaum-Zusammenführung aus „${source}“: ${merged} zusammengeführt, ${added} hinzugefügt`,
+        mergeUndone: (source: string) => `Zusammenführung aus „${source}“ zurückgenommen`,
+        mergeRestored: (source: string) => `Zusammenführung aus „${source}“ wiederhergestellt`,
         mergeLink: 'Liste im Verlauf der Zusammenführungen',
         appliedChanges: (sender: string) => `Änderungen übernommen (${sender})`,
         splitFamilies: (trees: number, persons: number) => `In ${nDe(trees, 'Familienstammbaum', 'Familienstammbäume')} aufgeteilt (${nDe(persons, 'Person', 'Personen')})`,
@@ -30463,6 +30473,8 @@ const stringsDE: StringsType = {
         removeEvent: (name: string) => `Ereignis von ${name} entfernen`,
         restoreBackup: 'Sicherung wiederherstellen',
         mergeTrees: 'Stammbäume zusammenführen',
+        undoMerge: 'Zusammenführung zurücknehmen',
+        restoreMerge: 'Zusammenführung wiederherstellen',
         addSource: (title: string) => `Quelle „${title}“`,
         editSource: (title: string) => `Quelle „${title}“ bearbeiten`,
         splitSources: (n: number) => `Aufteilen der Fundstellen von ${nDe(n, 'Quelle', 'Quellen')}`,

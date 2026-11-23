@@ -176,6 +176,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         addedPartner: (person: string, partner: string) => `Dodano partnera: ${person} & ${partner}`,
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Scalenie drzew z „${source}”: scalono ${merged}, dodano ${added}`,
+        mergeUndone: (source: string) => `Cofnięto scalenie z „${source}”`,
+        mergeRestored: (source: string) => `Przywrócono scalenie z „${source}”`,
         mergeLink: 'zestawienie w historii scaleń',
         appliedChanges: (sender: string) => `Przyjęto zmiany (${sender})`,
         // Split into families
@@ -265,6 +267,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         removeEvent: (name: string) => `usunięcie wydarzenia osoby ${name}`,
         restoreBackup: 'przywrócenie kopii zapasowej',
         mergeTrees: 'scalanie drzew',
+        undoMerge: 'cofnięcie scalenia',
+        restoreMerge: 'przywrócenie scalenia',
         addSource: (title: string) => `źródło „${title}”`,
         editSource: (title: string) => `edycja źródła „${title}”`,
         splitSources: (n: number) => `podział lokalizacji ${nPl(n, 'źródła', 'źródeł', 'źródeł')}`,
