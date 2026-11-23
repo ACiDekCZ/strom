@@ -14,6 +14,7 @@
 import { StromData, PersonId, PartnershipId, TreeId } from './types.js';
 import { researchPersonRef, researchFamilyRef, MATERIAL_LINKS_FEATURE } from './research-link.js';
 import { normalizeSha256 } from './sha256.js';
+import type { MaterialListSnapshot } from './material-list.js';
 
 /** The queue never holds more than this… */
 export const ORIGINALS_MAX_BYTES = 2 * 1024 * 1024 * 1024;
@@ -55,6 +56,11 @@ export interface QueuedOriginal {
     attempts: number;
     /** Its attachment was deleted with "keep the original": sent anyway (the research detaches it). */
     sendAnyway?: boolean;
+    /**
+     * Material for a list of people (spec 137 §6.6): the list as it was at Send. It goes before the file
+     * (`PUT lists/<ref>`), the file carries `X-Strom-List-Ref` and the list's `X-Strom-Person`.
+     */
+    list?: MaterialListSnapshot;
 }
 
 export function queueKey(treeId: string, sha256: string): string {
@@ -249,16 +255,21 @@ export function originalTargets(rec: Pick<QueuedOriginal, 'personId' | 'sourceId
  * The headers of `PUT /media/<sha256>` (values percent-encoded where text).
  * Only the ones the research's CORS allows: Name, Person, Source, Region, Note,
  * Task (a file for a waiting task, `accepts.media.task`) and Family (a
- * couple's original, `accepts.media.family`, spec 108; never with a source or task).
+ * couple's original, `accepts.media.family`, spec 108; never with a source or task) and List-Ref (material
+ * for a list, `media.list`, spec 137; beside a source only where `media.list.source` lets the dialog offer it).
  * `targets.region: false` — the research does not take a region.
  */
 export function uploadHeaders(rec: Pick<QueuedOriginal, 'mimeType' | 'name' | 'region' | 'note'>,
-    targets: Pick<OriginalTargets, 'person' | 'source' | 'family'> & { region?: boolean; task?: string }): Record<string, string> {
+    targets: Pick<OriginalTargets, 'person' | 'source' | 'family'> & { region?: boolean; task?: string },
+    list?: Pick<MaterialListSnapshot, 'ref' | 'personHeader'>): Record<string, string> {
     const headers: Record<string, string> = {
         'Content-Type': rec.mimeType || 'application/octet-stream',
         'X-Strom-Name': encodeURIComponent(rec.name || 'file'),
     };
-    if (targets.person) headers['X-Strom-Person'] = targets.person;
+    // Material for a list (spec 137 §6.6): the list's people (up to 50), else the dialog's person.
+    const persons = list?.personHeader || targets.person;
+    if (persons) headers['X-Strom-Person'] = persons;
+    if (list?.ref && !targets.task && !targets.family) headers['X-Strom-List-Ref'] = list.ref;
     if (targets.source) headers['X-Strom-Source'] = targets.source;
     // In the file's stored pixels (regionToStored): the research cuts files as stored.
     if (rec.region && targets.region !== false) headers['X-Strom-Region'] = regionHeader(rec.region);

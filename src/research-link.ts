@@ -1099,6 +1099,24 @@ export const MEDIA_APP_FEATURE = 'media.app';
  */
 export const MATERIAL_LINKS_FEATURE = 'material.links';
 
+/**
+ * `/status.features` (Strom Research 1.37, spec 137 K2.5): material may concern a list of people —
+ * `PUT <token>/lists/<listRef>` with the list's snapshot, then each file with `X-Strom-List-Ref`.
+ */
+export const MEDIA_LIST_FEATURE = 'media.list';
+/** `/status.features` (spec 137 §6.5): `X-Strom-List-Ref` also beside `X-Strom-Source` (material of a source for a list). */
+export const MEDIA_LIST_SOURCE_FEATURE = 'media.list.source';
+
+/** Material may go to this research for a list of people (`media.list`); not known yet: no. Gated by feature, not version. */
+export function researchSendsLists(status: { features: readonly string[] | null } | null | undefined): boolean {
+    return !!status?.features?.includes(MEDIA_LIST_FEATURE);
+}
+
+/** Material of a source may also concern a list (`media.list` and `media.list.source`); not known yet: no. */
+export function researchSendsSourceLists(status: { features: readonly string[] | null } | null | undefined): boolean {
+    return researchSendsLists(status) && !!status?.features?.includes(MEDIA_LIST_SOURCE_FEATURE);
+}
+
 /** The research keeps the app's files from a write (`media.app`); not known: no. */
 export function researchKeepsAppMedia(status: { features: readonly string[] | null } | null | undefined): boolean {
     return !!status?.features?.includes(MEDIA_APP_FEATURE);
