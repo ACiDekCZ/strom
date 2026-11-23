@@ -360,7 +360,7 @@ describe('a send to the research is no edit after the merge (134 V-N3)', () => {
 describe('the research step (K9.3)', () => {
     const rec = (sent?: string): MergeRecord => ({
         id: 'mp-1', at: AT, source: SOURCE, target: { name: 'Modřínovi', newTree: false },
-        counts: { joined: 0, added: 0, skipped: 0, pending: 0, total: 0, fieldChanges: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0 },
+        counts: { joined: 0, added: 0, skipped: 0, pending: 0, total: 0, fieldChanges: 0, fieldFills: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0 },
         state: 'valid', added: [], joined: [], fields: [], partnerships: [], sources: [], places: [], media: [],
         ...(sent !== undefined ? { sentToResearch: sent } : {}),
     });

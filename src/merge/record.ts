@@ -198,7 +198,7 @@ export function sanitizeMergeRecords(value: unknown): MergeRecord[] | undefined 
             target: { name: str(target.name) ? target.name : '', newTree: target.newTree === true },
             counts: {
                 joined: num(c.joined), added: num(c.added), skipped: num(c.skipped), pending: num(c.pending), total: num(c.total),
-                fieldChanges: num(c.fieldChanges), differencesKept: num(c.differencesKept), alongside: num(c.alongside),
+                fieldChanges: num(c.fieldChanges), fieldFills: num(c.fieldFills), differencesKept: num(c.differencesKept), alongside: num(c.alongside),
                 partnerships: num(c.partnerships), links: num(c.links),
             },
             state,

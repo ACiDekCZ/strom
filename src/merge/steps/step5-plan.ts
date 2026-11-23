@@ -38,7 +38,7 @@ import { sourceText } from './step4-rules.js';
 import { VirtualList } from '../virtual-list.js';
 
 /** The groups of the list, in their order. */
-export type PlanGroupKey = 'new' | 'joined' | 'fields' | 'links' | 'sources' | 'places' | 'media' | 'skipped' | 'notTaken';
+export type PlanGroupKey = 'new' | 'joined' | 'fields' | 'fills' | 'links' | 'sources' | 'places' | 'media' | 'skipped' | 'notTaken';
 
 /** One line of the list. */
 export interface PlanLine {
@@ -178,6 +178,10 @@ export function planList(plan: MergePlan, state: MergeState, offLinks: readonly 
     const fieldsOff = byKind('field').filter(i => !i.on && i.after !== i.before).map(i => fieldLine(i, false));
     const keptText = fieldsOff.length ? W.fieldsKept(fieldsOff.length, plan.target.name) : '';
     add('fields', W.gFields, c.fieldChanges + c.alongside, keptText, fieldsOn, fieldsOff, keptText);
+
+    // The other empty details of joined people the write fills (134 S-N1): shown only when there are some.
+    const fills = byKind('fill').map(i => fillLine(tree, i.person, i.field, treeLiving(i.person)));
+    if (fills.length) add('fills', W.gFills, c.fieldFills, fillSummary(fills), fills);
 
     // Couples and links: what the import adds (one left out by a choice of step 4 stays out here), what the tree loses.
     const off = new Set(offLinks);
@@ -353,6 +357,21 @@ function relationOf(view: View, id: PersonId): string {
     t = conn ? relationText(state.incomingData, conn, connectionTerm(state, id, conn)) : '';
     view.relations.set(id, t);
     return t;
+}
+
+/** A line of the filled-in details: the tree's person and the detail's name (`i:` person|detail). */
+export function fillLine(tree: StromData, person: PersonId, field: string, living: boolean): PlanLine {
+    const W = strings.mergeWizard;
+    const name = displayName(tree.persons[person]) || '?';
+    const text = (W.fieldNames as Record<string, string>)[field] ?? field;
+    return { key: `i:${person}|${field}`, on: true, can: false, name, years: personYears(tree.persons[person]), text, living, find: fold(`${name} ${text}`) };
+}
+
+/** The most filled details with their counts (the summary of the filled-in details). */
+export function fillSummary(lines: readonly PlanLine[]): string {
+    const by = new Map<string, number>();
+    for (const l of lines) by.set(l.text, (by.get(l.text) ?? 0) + 1);
+    return [...by].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, n]) => `${t} ${n.toLocaleString()}`).join(' · ');
 }
 
 /** On a phone the list starts with every group closed; elsewhere New is open. */
@@ -538,7 +557,7 @@ function lineHtml(line: PlanLine, group: PlanGroupKey, readOnly = false): string
         ? `<input type="checkbox" class="merge-s5-cb" data-line="${escapeHtml(line.key)}" data-vkey="cb:${escapeHtml(line.key)}"${line.on ? ' checked' : ''} aria-label="${escapeHtml(line.name)}">`
         : `<input type="checkbox" class="merge-s5-cb" disabled${line.on ? ' checked' : ''} aria-label="${escapeHtml(line.name)}">`;
     const mark = group === 'new' ? `<span class="merge-s5-glyph">${glyph('added', 11, 3)}</span>` : '';
-    const serif = line.person || group === 'fields' ? ' is-person' : '';
+    const serif = line.person || group === 'fields' || group === 'fills' ? ' is-person' : '';
     const years = line.years ? `<span class="merge-s5-years">${escapeHtml(line.years)}</span>` : '';
     const living = line.living ? `<span class="merge-s5-tag">${escapeHtml(W.livingTag)}</span>` : '';
     const text = `<span class="merge-s5-text"${line.text ? ` title="${escapeHtml(line.text)}"` : ''}>${escapeHtml(line.text)}</span>`;

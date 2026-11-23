@@ -226,8 +226,14 @@ const RULE_CHOICES: readonly RuleChoice[] = ['mine', 'import', 'both', 'precise'
 /** The differences of the merge (joined persons' details and the details of couples both trees know). */
 export function mergeDifferences(state: MergeState): FieldDifference[] {
     const out: FieldDifference[] = [];
+    // Two of the import joined with one person: the first one's detail is the difference (as in the plan, 134 N4).
+    const seen = new Set<string>();
     for (const [sourceId, treeId] of joinedPairs(state)) {
-        out.push(...personDifferences(state.existingData.persons[treeId], state.incomingData.persons[sourceId]));
+        for (const d of personDifferences(state.existingData.persons[treeId], state.incomingData.persons[sourceId])) {
+            if (seen.has(`${d.person}|${d.field}`)) continue;
+            seen.add(`${d.person}|${d.field}`);
+            out.push(d);
+        }
     }
     for (const c of marriageConflicts(state)) {
         out.push({ person: c.person, source: c.sourcePerson, field: 'marriage', kind: 'marriage',

@@ -707,7 +707,7 @@ export class MergeWizard {
             // Into a new tree (K6.3): a copy of the target with the import.
             const label = !n ? '' : c.mode === 'new' ? W.btnNewTree(n.added)
                 : (c.into ?? 'tree') === 'new' ? W.btnNewTree((this.plan?.target.persons ?? 0) + n.added)
-                : W.btnWrite(n.added, n.fieldChanges);
+                : W.btnWrite(n.added, n.fieldChanges, n.fieldFills);
             const ok = info[5].state === 'ok' && !this.busy;
             return { label, enabled: ok, why: ok ? '' : why };
         }

@@ -279,6 +279,7 @@ export const mergeHistoryMethods = uiModule({
             };
             group('remove', W.uRemove, now.people, W.uRemoveDesc(now.couples, now.sources, now.places, now.files));
             group('restore', W.uRestore, now.restored, W.uRestoreDesc);
+            group('tree', W.uTree, now.tree, W.uTreeDesc);
             group('unjoin', W.uUnjoin, now.unjoined, W.uUnjoinDesc);
 
             if (now.keep.length) {

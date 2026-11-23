@@ -12,7 +12,8 @@ import { yearOf } from '../dates.js';
 import { inferBirthUpperBounds, isLivingPerson } from '../privacy.js';
 import { displayName, familyName } from './plan-select.js';
 import { fold, yearsText } from './steps/step3-model.js';
-import type { PlanLine, PlanListGroup } from './steps/step5-plan.js';
+import { fillLine, fillSummary, type PlanLine, type PlanListGroup } from './steps/step5-plan.js';
+import { FILL_KEYS } from './plan.js';
 import { relativesOf, undoneItems, undoOutcome, undoPreview, undoResearchStep, type ChangedSince, type ChangedWhat, type UndoPreview } from './undo-plan.js';
 
 // ==================== WORDS ====================
@@ -120,6 +121,15 @@ export function recordGroups(record: MergeRecord, data: StromData): PlanListGrou
     });
     add('fields', W.gFields, c.fieldChanges + c.alongside, '', fields);
 
+    // The other empty details of joined people the write filled (134 S-N1): a record of an older version has none.
+    if (c.fieldFills) {
+        const fillKeys = new Set<string>(FILL_KEYS);
+        const targets = new Set(record.joined.map(([t]) => t));
+        const filled = (record.edits ?? []).filter(e => e.in === 'persons' && fillKeys.has(e.key) && targets.has(e.id as PersonId) && data.persons[e.id as PersonId]);
+        const lines = filled.map(e => fillLine(data, e.id as PersonId, e.key, living(e.id as PersonId)));
+        add('fills', W.gFills, c.fieldFills, fillSummary(lines), lines);
+    }
+
     // Couples and links.
     const couples = record.partnerships.filter(id => data.partnerships[id as keyof StromData['partnerships']]).map(id => {
         const name = coupleName(data, data.partnerships[id as keyof StromData['partnerships']], id);
@@ -169,7 +179,8 @@ export function recordText(record: MergeRecord, treeName: string, groups: readon
 /** One thing the undo takes back, named for the dialog. */
 export interface UndoLine {
     id: string;
-    group: 'remove' | 'restore' | 'unjoin';
+    /** `restore`: a detail of a joined person (step 5's detail changes); `tree`: another record of the tree the merge touched. */
+    group: 'remove' | 'restore' | 'tree' | 'unjoin';
     name: string;
     text: string;
 }
@@ -193,8 +204,10 @@ export interface UndoModel {
     sources: number;
     places: number;
     files: number;
-    /** Details back to their value before (records of the tree and the joined people's details). */
+    /** Details of the joined people back to their value before (step 5's detail changes, 134 S-N2). */
     restored: number;
+    /** Other records of the tree back as they were (its couples, people, sources, files the merge touched). */
+    tree: number;
     /** Joined people losing what the merge brought. */
     unjoined: number;
     lines: UndoLine[];
@@ -260,7 +273,7 @@ export function undoModel(record: MergeRecord, data: StromData): UndoModel {
     const fieldCount = preview.unjoin.reduce((n, j) => n + j.fields.length, 0);
     const lines: UndoLine[] = [
         ...preview.remove.filter(i => i.kind !== 'person' || real(i.ref)).map(i => ({ id: i.id, group: 'remove' as const, name: itemName(i.id, data), text: '' })),
-        ...preview.restore.map(i => ({ id: i.id, group: 'restore' as const, name: itemName(i.id, data), text: '' })),
+        ...preview.restore.map(i => ({ id: i.id, group: 'tree' as const, name: itemName(i.id, data), text: '' })),
         ...preview.unjoin.flatMap(j => j.fields.map(f => ({ id: f, group: 'restore' as const, name: itemName(f, data), text: '' }))),
         ...preview.unjoin.map(j => ({ id: j.id, group: 'unjoin' as const, name: itemName(j.id, data), text: '' })),
     ];
@@ -307,7 +320,8 @@ export function undoModel(record: MergeRecord, data: StromData): UndoModel {
         sources: byKind('source'),
         places: byKind('place'),
         files: byKind('media'),
-        restored: preview.restore.length + fieldCount,
+        restored: fieldCount,
+        tree: preview.restore.length,
         unjoined: preview.unjoin.length,
         lines,
         keep,
@@ -338,6 +352,7 @@ export interface UndoShown {
     places: number;
     files: number;
     restored: number;
+    tree: number;
     unjoined: number;
     /** The rows of what stays with these choices, and of what is chosen to be undone anyway. */
     keep: KeepRow[];
@@ -372,6 +387,7 @@ export function undoShown(model: UndoModel, record: MergeRecord, data: StromData
         places: removed('place'),
         files: removed('media'),
         restored: lines.filter(l => l.group === 'restore').length,
+        tree: lines.filter(l => l.group === 'tree').length,
         unjoined: lines.filter(l => l.group === 'unjoin').length,
         keep: model.keep.filter(k => keptIds.has(k.id) || undo.has(k.id)),
     };

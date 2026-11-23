@@ -155,7 +155,7 @@ function fullTree(): Required<StromData> {
             id: 'mp-1', at: '2026-11-20T10:00:00.000Z',
             source: { kind: 'ged', label: 'rodokmen.ged', program: 'Rodokmenář 5', importId: 'I1', persons: 2 },
             target: { name: 'Tree', newTree: false },
-            counts: { joined: 1, added: 1, skipped: 0, pending: 0, total: 2, fieldChanges: 1, differencesKept: 0, alongside: 0, partnerships: 0, links: 1 },
+            counts: { joined: 1, added: 1, skipped: 0, pending: 0, total: 2, fieldChanges: 1, fieldFills: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 1 },
             state: 'partial', added: [BOB], joined: [[ALICE, 'I-1' as PersonId]],
             fields: [{ person: ALICE, field: 'birthPlace', before: '', after: 'Kolín' }],
             partnerships: [], sources: ['s1'], places: ['kolin'], media: [],

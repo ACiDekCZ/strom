@@ -1875,6 +1875,8 @@ export interface PlanCounts {
     total: number;
     /** Details the write changes (field items on, the value differs). */
     fieldChanges: number;
+    /** Other empty details of joined persons the write fills (fill items, 134 S-N1); 0 in a record of an older version. */
+    fieldFills: number;
     /** Differences where the tree's value stays. */
     differencesKept: number;
     /** Differences where the import's value is kept alongside the tree's ("Keep both", K5.3). */

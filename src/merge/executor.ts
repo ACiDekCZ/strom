@@ -254,6 +254,29 @@ export function buildIdMapping(state: MergeState): IdMapping {
 }
 
 /**
+ * The "?" a family record of the file stands beside its one named parent (a
+ * family of one spouse, a second family of one parent) comes with that
+ * family when the named parent is in the merged tree (`named`: an incoming
+ * person as the result holds it, its partnerships the result's) and the tree
+ * does not hold that family record yet (a tree loaded before such families
+ * were kept, spec 066). Never in "update existing only". The one rule for
+ * the write and for the plan's count of couples (134 N4).
+ */
+export function standsInNewFamilyRecord(state: Pick<MergeState, 'existingData' | 'incomingData' | 'updateOnly'>, pid: PersonId, person: Person,
+    named: (incomingId: PersonId) => Pick<Person, 'isPlaceholder' | 'partnerships'> | undefined): boolean {
+    return !state.updateOnly && person.partnerships.some(uid => {
+        const union = state.incomingData.partnerships[uid];
+        if (!union?.originalIds?.length) return false;
+        const other = named(union.person1Id === pid ? union.person2Id : union.person1Id);
+        if (!other || other.isPlaceholder) return false;
+        return !other.partnerships.some(eid => {
+            const known = state.existingData.partnerships[eid];
+            return !!known && sameFileRecord(known, union, state.existingData, state.incomingData);
+        });
+    });
+}
+
+/**
  * The incoming "?" partners (placeholders) of a family of one named parent
  * that the tree already holds, each with the tree's "?" of that family: the
  * same family record of the file (same program, same xref), or — in a tree
@@ -267,7 +290,7 @@ export function buildIdMapping(state: MergeState): IdMapping {
  * it merges under the current decisions; a "?" already paired (matching's
  * family-record stand-ins) is left as it is.
  */
-function standInsOfKnownFamilies(state: MergeState, personMapping: Map<PersonId, PersonId>): Map<PersonId, PersonId> {
+export function standInsOfKnownFamilies(state: Pick<MergeState, 'existingData' | 'incomingData'>, personMapping: ReadonlyMap<PersonId, PersonId>): Map<PersonId, PersonId> {
     const { existingData, incomingData } = state;
     const out = new Map<PersonId, PersonId>();
     const inTree = (incomingId: PersonId): PersonId | undefined => {
@@ -630,22 +653,11 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
             addedCount++;
         }
 
-        // The "?" a family record of the file stands beside its one named
-        // parent (a family of one spouse, a second family of one parent): it
-        // comes with that family when the named parent is in the merged tree
-        // and the tree does not hold that family record yet (a tree loaded
-        // before such families were kept, spec 066).
-        const standsInNewFamilyRecord = (pid: PersonId, person: Person): boolean => !state.updateOnly && person.partnerships.some(uid => {
-            const union = state.incomingData.partnerships[uid];
-            if (!union?.originalIds?.length) return false;
-            const namedId = mapping.persons.get(union.person1Id === pid ? union.person2Id : union.person1Id);
-            const named = namedId ? mergedData.persons[namedId] : undefined;
-            if (!named || named.isPlaceholder) return false;
-            return !named.partnerships.some(eid => {
-                const known = state.existingData.partnerships[eid];
-                return !!known && sameFileRecord(known, union, state.existingData, state.incomingData);
-            });
-        });
+        // An incoming person as the merged tree holds it so far (standsInNewFamilyRecord).
+        const inResult = (id: PersonId): Person | undefined => {
+            const to = mapping.persons.get(id);
+            return to ? mergedData.persons[to] : undefined;
+        };
 
         // Also add placeholders that are referenced
         for (const [incomingId, person] of Object.entries(state.incomingData.persons)) {
@@ -657,7 +669,7 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
                 const isReferenced = toAdd.some(addedId => {
                     const addedPerson = state.incomingData.persons[addedId];
                     return addedPerson?.parentIds.includes(pid);
-                }) || standsInNewFamilyRecord(pid, person);
+                }) || standsInNewFamilyRecord(state, pid, person, inResult);
 
                 if (isReferenced) {
                     const newPerson: Person = {
@@ -1664,6 +1676,9 @@ export function mergePersonData(
     if (existing.gender === 'unknown' && incoming.gender !== 'unknown' && isGender(incoming.gender)) {
         existing.gender = incoming.gender;
     }
+    // An empty name is a gap like the others (the plan's step 5 says it fills it, 134 N4).
+    if (!existing.firstName?.trim() && incoming.firstName?.trim()) existing.firstName = incoming.firstName;
+    if (!existing.lastName?.trim() && incoming.lastName?.trim()) existing.lastName = incoming.lastName;
     if (!existing.birthDate && incoming.birthDate) {
         existing.birthDate = incoming.birthDate;
     }
