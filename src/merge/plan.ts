@@ -8,7 +8,8 @@
  * joined with a person of the tree, added, not added, or still to decide.
  */
 
-import { MergeRecord, PartnershipId, PlanCounts, PlanSource, Person, PersonId, StromData, TreeId } from '../types.js';
+import { ImportRecord, MergeRecord, PartnershipId, PlanCounts, PlanSource, Person, PersonId, StromData, TreeId } from '../types.js';
+import { fileRecordKeys } from './id-match.js';
 import { strings } from '../strings.js';
 import { normalizeName, quickMatch, detectConflicts } from './matching.js';
 import { AUTO_CONFIRM_SCORE, executeMerge, existingTargetOf, detectPartnershipConflicts } from './executor.js';
@@ -1107,17 +1108,54 @@ export function scopeExample(source: StromData, target: StromData, state?: Merge
 
 /**
  * The earlier merge of the same source (§13 13c, K1.5): a record with the
- * same import id or the same fingerprint of the source, not undone; the
- * latest one. Null when this source was not merged before.
+ * same fingerprint of the source (a file's SHA-256), not undone; the latest
+ * one. Null when this source was not merged before. The import id alone says
+ * nothing: every file read names its own import I1.
  */
 export function isRepeatOf(source: PlanSource, merges: readonly MergeRecord[] | undefined): MergeRecord | null {
+    if (!source.fingerprint) return null;
     let found: MergeRecord | null = null;
     for (const r of merges ?? []) {
-        if (r.state === 'undone') continue;
-        const sameId = !!source.importId && r.source.importId === source.importId;
-        const samePrint = !!source.fingerprint && r.source.fingerprint === source.fingerprint;
-        if (!sameId && !samePrint) continue;
+        if (r.state === 'undone' || r.source.fingerprint !== source.fingerprint) continue;
         if (!found || r.at > found.at) found = r;
     }
     return found;
+}
+
+/**
+ * The tree loaded the same file before without a merge's record (K0.7: a
+ * tree made of the file, or merged before the records were kept): its import
+ * record with the file's SHA-256, the latest one; null when none.
+ */
+export function importedBefore(source: PlanSource, target: StromData): ImportRecord | null {
+    if (!source.fingerprint) return null;
+    let found: ImportRecord | null = null;
+    for (const r of target.imports ?? []) {
+        if (r.sha !== source.fingerprint) continue;
+        if (!found || r.at > found.at) found = r;
+    }
+    return found;
+}
+
+/**
+ * How many of the import's people are joined with the earlier merge (the
+ * tree's person that merge added or joined, or with `record` null anyone of
+ * the tree, was the same record of a file the same program wrote, K1.5) and
+ * how many are new. Without such ids on both sides: the earlier merge's
+ * totals stand in for it.
+ */
+export function repeatCounts(source: StromData, target: StromData, record: MergeRecord | null): { joined: number; fresh: number } {
+    const incoming = Object.values(source.persons).filter(p => !p.isPlaceholder);
+    const earlier = record
+        ? [...record.added, ...record.joined.map(([id]) => id)].map(id => target.persons[id]).filter((p): p is Person => !!p)
+        : Object.values(target.persons).filter(p => !p.isPlaceholder);
+    const keys = new Set<string>();
+    for (const p of earlier) for (const k of fileRecordKeys(p, target)) keys.add(k);
+    const withKeys = incoming.map(p => fileRecordKeys(p, source));
+    if (keys.size > 0 && withKeys.some(k => k.size > 0)) {
+        const joined = withKeys.filter(ks => [...ks].some(k => keys.has(k))).length;
+        return { joined, fresh: incoming.length - joined };
+    }
+    const joined = record ? Math.min(incoming.length, record.added.length + record.joined.length) : 0;
+    return { joined, fresh: incoming.length - joined };
 }

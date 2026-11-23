@@ -166,6 +166,17 @@ export function strongIdIndex(persons: readonly Person[], data: StromData): Stro
     };
 }
 
+/** The keys "program + xref" of a record's ids in the files it came from (none for an unknown program). */
+export function fileRecordKeys(holder: { originalIds?: OriginalIds[] }, data: StromData): Set<string> {
+    const imports = new Map((data.imports ?? []).map(r => [r.id, r] as const));
+    const out = new Set<string>();
+    for (const entry of holder.originalIds ?? []) {
+        const program = programKey(imports.get(entry.from));
+        if (program && entry.xref) out.add(`${program}\u0000${entry.xref}`);
+    }
+    return out;
+}
+
 /**
  * The two records were one record (one xref) of files the same program wrote:
  * a family of a file merged again into a tree loaded from it before.
@@ -174,16 +185,7 @@ export function sameFileRecord(
     existing: { originalIds?: OriginalIds[] }, incoming: { originalIds?: OriginalIds[] },
     existingData: StromData, incomingData: StromData,
 ): boolean {
-    const keys = (holder: { originalIds?: OriginalIds[] }, data: StromData): Set<string> => {
-        const imports = new Map((data.imports ?? []).map(r => [r.id, r] as const));
-        const out = new Set<string>();
-        for (const entry of holder.originalIds ?? []) {
-            const program = programKey(imports.get(entry.from));
-            if (program && entry.xref) out.add(`${program}\u0000${entry.xref}`);
-        }
-        return out;
-    };
-    const a = keys(existing, existingData);
+    const a = fileRecordKeys(existing, existingData);
     if (a.size === 0) return false;
-    return [...keys(incoming, incomingData)].some(k => a.has(k));
+    return [...fileRecordKeys(incoming, incomingData)].some(k => a.has(k));
 }

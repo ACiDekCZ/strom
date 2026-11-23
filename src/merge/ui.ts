@@ -51,7 +51,7 @@ import { shownNameOrEmpty } from '../person-name.js';
 import { iconSvg } from '../icons.js';
 import { MergeWizard, targetBlock, targetBlockText, wizardRoute, type CompareRun, type WizardSource } from './wizard-ui.js';
 import type { WizardStep } from './wizard-steps.js';
-import { isRepeatOf, planCounts, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
+import { importedBefore, isRepeatOf, planCounts, repeatCounts, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
 import { newTreeName, writePlan, type TargetChange, type WritePhase } from './write.js';
 import { heldLinks, unsentMerges } from './research-hold.js';
 import { peopleKeys, sharesPeople, SAME_PEOPLE_MIN } from './same-people.js';
@@ -1027,12 +1027,19 @@ class MergerUIClass {
         const state = this.mergeState;
         const ws = state?.wizard;
         if (!state || !ws || !this.targetLoaded) return '';
-        const merges = (state.existingData as StromData & { merges?: readonly MergeRecord[] }).merges;
-        const before = isRepeatOf(ws.choices.source, merges);
-        if (!before) return '';
-        const day = formatRelativeDateTime(Date.parse(before.at), getCurrentLanguage());
-        const joined = Math.min(ws.choices.source.persons, before.added.length + before.joined.length);
-        return strings.mergeWizard.repeat(day, Math.max(0, ws.choices.source.persons - joined), joined);
+        const target = state.existingData as StromData & { merges?: readonly MergeRecord[] };
+        // The merge's record, else the tree's import of the same file (made of it, or merged before records were kept, K0.7).
+        const before = isRepeatOf(ws.choices.source, target.merges);
+        const loaded = before ? null : importedBefore(ws.choices.source, target);
+        if (!before && !loaded) return '';
+        const lang = getCurrentLanguage();
+        // An import record keeps the day alone (no time to say).
+        const [y, m, d] = (loaded?.at ?? '').split('-').map(Number);
+        const day = before ? formatRelativeDateTime(Date.parse(before.at), lang)
+            : y && m && d ? new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'numeric', year: 'numeric' }).format(new Date(y, m - 1, d))
+                : loaded?.at ?? '';
+        const { joined, fresh } = repeatCounts(state.incomingData, target, before);
+        return strings.mergeWizard.repeat(day, fresh, joined);
     }
 
     /** Step 5's "Save the list…" (K6.4): the plan as a .txt to read and a .json, living people protected. */

@@ -586,23 +586,22 @@ describe('isRepeatOf', () => {
         state, added: [], joined: [], fields: [], partnerships: [], sources: [], places: [], media: [],
     });
 
-    it('finds the latest merge of the same source by its import id or fingerprint, not an undone one', () => {
+    it('finds the latest merge of the same source by its fingerprint, not an undone one', () => {
         const merges = [
-            record('m1', '2026-03-01T10:00:00.000Z', { importId: 'imp-jilm' }),
-            record('m2', '2026-04-01T10:00:00.000Z', { importId: 'imp-jilm' }),
-            record('m3', '2026-05-01T10:00:00.000Z', { importId: 'imp-jilm' }, 'undone'),
-            record('m4', '2026-02-01T10:00:00.000Z', { fingerprint: 'sha-dubova' }),
+            record('m1', '2026-03-01T10:00:00.000Z', { importId: 'I1', fingerprint: 'sha-jilm' }),
+            record('m2', '2026-04-01T10:00:00.000Z', { importId: 'I1', fingerprint: 'sha-jilm' }),
+            record('m3', '2026-05-01T10:00:00.000Z', { importId: 'I1', fingerprint: 'sha-jilm' }, 'undone'),
+            record('m4', '2026-02-01T10:00:00.000Z', { importId: 'I1', fingerprint: 'sha-dubova' }),
         ];
-        expect(isRepeatOf({ ...SOURCE, importId: 'imp-jilm' }, merges)?.id).toBe('m2');
+        expect(isRepeatOf({ ...SOURCE, importId: 'I1', fingerprint: 'sha-jilm' }, merges)?.id).toBe('m2');
         expect(isRepeatOf({ ...SOURCE, fingerprint: 'sha-dubova' }, merges)?.id).toBe('m4');
-        expect(isRepeatOf({ ...SOURCE, importId: 'imp-other', fingerprint: 'sha-dubova' }, merges)?.id).toBe('m4');
     });
 
-    it('is null for a source merged never, without ids, or with no merges at all', () => {
-        const merges = [record('m1', '2026-03-01T10:00:00.000Z', { importId: 'imp-jilm' })];
-        expect(isRepeatOf({ ...SOURCE, importId: 'imp-modřín' }, merges)).toBeNull();
-        expect(isRepeatOf(SOURCE, merges)).toBeNull();
-        expect(isRepeatOf({ ...SOURCE, importId: 'imp-jilm' }, undefined)).toBeNull();
-        expect(isRepeatOf({ ...SOURCE, importId: 'imp-jilm' }, [record('m1', '2026-03-01T10:00:00.000Z', { importId: 'imp-jilm' }, 'undone')])).toBeNull();
+    it('is null for a source merged never, without a fingerprint, or with no merges at all; the import id alone is no match (every file\'s is I1)', () => {
+        const merges = [record('m1', '2026-03-01T10:00:00.000Z', { importId: 'I1', fingerprint: 'sha-jilm' })];
+        expect(isRepeatOf({ ...SOURCE, importId: 'I1', fingerprint: 'sha-habr' }, merges)).toBeNull();
+        expect(isRepeatOf({ ...SOURCE, importId: 'I1' }, merges)).toBeNull();
+        expect(isRepeatOf({ ...SOURCE, fingerprint: 'sha-jilm' }, undefined)).toBeNull();
+        expect(isRepeatOf({ ...SOURCE, fingerprint: 'sha-jilm' }, [record('m1', '2026-03-01T10:00:00.000Z', { fingerprint: 'sha-jilm' }, 'undone')])).toBeNull();
     });
 });
