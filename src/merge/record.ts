@@ -207,6 +207,10 @@ export function sanitizeMergeRecords(value: unknown): MergeRecord[] | undefined 
             const prints = Object.fromEntries(Object.entries(v.prints).filter((e): e is [string, string] => str(e[1])));
             if (Object.keys(prints).length) rec.prints = prints;
         }
+        if (isPlain(v.from)) {
+            const from = Object.fromEntries(Object.entries(v.from).filter((e): e is [string, string] => str(e[1]) && !!e[1]));
+            if (Object.keys(from).length) rec.from = from;
+        }
         if (str(v.backupId) && v.backupId) rec.backupId = v.backupId;
         if (str(v.sentToResearch) && v.sentToResearch) rec.sentToResearch = v.sentToResearch;
         if (str(v.sentAt) && v.sentAt) rec.sentAt = v.sentAt;

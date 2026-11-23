@@ -823,7 +823,7 @@ export async function applyPlan(plan: MergePlan, target: StromData, source: Stro
         else ownTrees.push(own.tree);
     }
     if (issues.length) return { ok: false, data: target, record: emptyRecord(plan), trace, issues, ownTrees: [], ...extra };
-    return { ok: true, data, record: recordOf(plan, before, source, data), trace, issues, ownTrees, ...extra };
+    return { ok: true, data, record: recordOf(plan, before, data, trace), trace, issues, ownTrees, ...extra };
 }
 
 /**
@@ -935,9 +935,16 @@ function emptyRecord(plan: MergePlan): MergeRecord {
     };
 }
 
-function recordOf(plan: MergePlan, before: StromData, source: StromData, after: StromData): MergeRecord {
+function recordOf(plan: MergePlan, before: StromData, after: StromData, trace: MergeTrace): MergeRecord {
     const record = emptyRecord(plan);
     record.added = (Object.keys(after.persons) as PersonId[]).filter(id => !before.persons[id]);
+    // The source's id of each added person (a later merge of the same source knows it, K1.5).
+    const added = new Set(record.added);
+    const from: Record<string, string> = {};
+    for (const [sourceId, treeId] of trace.persons) {
+        if (sourceId !== treeId && added.has(treeId)) from[treeId] = sourceId;
+    }
+    if (Object.keys(from).length) record.from = from;
     for (const item of plan.items) {
         if (item.kind === 'person-join' && item.on) record.joined.push([item.target, item.id]);
     }
@@ -964,7 +971,6 @@ function recordOf(plan: MergePlan, before: StromData, source: StromData, after: 
     const edits = mergeEdits(before, after);
     if (edits.length) record.edits = edits;
     if (record.added.length) record.prints = Object.fromEntries(record.added.map(id => [id, personPrint(after.persons[id])]));
-    void source;
     return record;
 }
 

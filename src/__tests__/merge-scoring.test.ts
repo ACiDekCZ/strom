@@ -304,3 +304,32 @@ describe('name conflict keeps the losing spelling as a variant (Fix 2)', () => {
         expect(existing.nameVariants ?? []).not.toContain('Novak');
     });
 });
+
+describe('the reasons of a pair name only what both records give (134 N3)', () => {
+    const reasonsOf = (e: Partial<Person>, i: Partial<Person>, first = 'Radomil', last = 'Hrbolec'): string[] => {
+        const m = findMatches(data(person('e1', 'Radomil', 'Hrbolec', e)), data(person('i1', first, last, i)));
+        expect(m).toHaveLength(1);
+        return m[0].reasons;
+    };
+
+    it('no birth date on one side or on both: "exact name", never "exact name and birth date"', () => {
+        for (const [e, i] of [[{ birthDate: '1902-04-11' }, {}], [{}, { birthDate: '1902-04-11' }], [{}, {}]] as Array<[Partial<Person>, Partial<Person>]>) {
+            const reasons = reasonsOf(e, i);
+            expect(reasons).toContain('exact_name');
+            expect(reasons).not.toContain('exact_name_gender_birthdate');
+            expect(reasons).not.toContain('name_gender_birthyear');
+        }
+    });
+
+    it('the same birth date on both: "exact name and birth date"; the same year alone: "name and birth year"', () => {
+        expect(reasonsOf({ birthDate: '1902-04-11' }, { birthDate: '1902-04-11' })).toEqual(['exact_name_gender_birthdate']);
+        expect(reasonsOf({ birthDate: '1902' }, { birthDate: '1902' })).toEqual(['name_gender_birthyear']);
+        expect(reasonsOf({ birthDate: '1902-04-11' }, { birthDate: '1902' })).toEqual(['name_gender_birthyear']);
+    });
+
+    it('a name alike but not exact with the same birth date is no "exact name"', () => {
+        const reasons = reasonsOf({ birthDate: '1902-04-11' }, { birthDate: '1902-04-11' }, 'Radomyl', 'Hrbolec');
+        expect(reasons).not.toContain('exact_name_gender_birthdate');
+        expect(reasons).not.toContain('exact_name');
+    });
+});

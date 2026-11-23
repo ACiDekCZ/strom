@@ -9,7 +9,7 @@ import { sameImageSync } from '../image-equal.js';
 import { gendersCompatible } from '../model-values.js';
 import { sameSurname, withSurnameRules } from '../surnames.js';
 import { detectPartnershipConflicts, AUTO_CONFIRM_SCORE, incomingAddedAsNew, existingTargetOf } from './executor.js';
-import { idEvidence, sameFileRecord, strongIdIndex, StrongIdIndex } from './id-match.js';
+import { fileRecordKeys, idEvidence, sameFileRecord, strongIdIndex, StrongIdIndex } from './id-match.js';
 import {
     PersonMatch,
     MatchConfidence,
@@ -690,6 +690,10 @@ function* findMatchesSteps(
     const usedExisting = new Set<PersonId>();
     const usedIncoming = new Set<PersonId>();
 
+    // Phase 0: the people an earlier merge of the same source brought or
+    // joined are those people again (K1.5), whatever their details score.
+    matches.push(...matchMergedBefore(existingData, incomingData, usedExisting, usedIncoming));
+
     // Phase 1: Find direct matches (high confidence first)
     const directMatches = yield* findDirectMatches(existingData, incomingData, usedExisting, usedIncoming, progress);
     matches.push(...directMatches);
@@ -809,6 +813,77 @@ function matchFamilyRecordStandIns(
 /**
  * Phase 1: Find direct matches using multiple strategies
  */
+/** A person an earlier merge of the same source brought or joined (Phase 0). */
+const MERGED_BEFORE_SCORE = 100;
+
+/**
+ * Phase 0 (spec 134 K1.5, K0.7): the people an earlier merge of the same
+ * source brought into the tree or joined with its people. The tree's merge
+ * records name the source's id of each (MergeRecord.joined, .from; an added
+ * person without an entry kept its id): the incoming person of that id is
+ * the tree's person again — a name alone, or a pair added as new after
+ * step 2, would otherwise be offered to decide once more, and adding it as
+ * new would duplicate it. A file read again gives its people new ids: there
+ * the record's people pair by the record of the file they came from
+ * (program + xref) when the file is the same (its import's SHA-256 is the
+ * record's fingerprint). Only while both persons are there (an undone merge,
+ * a person removed since: no pair), the sex and the "?" agree; the latest
+ * merge first, each person pairs once.
+ */
+function matchMergedBefore(
+    existingData: StromData,
+    incomingData: StromData,
+    usedExisting: Set<PersonId>,
+    usedIncoming: Set<PersonId>,
+): PersonMatch[] {
+    const records = (existingData.merges ?? []).filter(r => r.state !== 'undone')
+        .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+    if (records.length === 0) return [];
+    const out: PersonMatch[] = [];
+    const pair = (treeId: PersonId, incomingId: PersonId): void => {
+        if (usedExisting.has(treeId) || usedIncoming.has(incomingId)) return;
+        const existing = existingData.persons[treeId];
+        const incoming = incomingData.persons[incomingId];
+        if (!existing || !incoming || !!existing.isPlaceholder !== !!incoming.isPlaceholder) return;
+        if (!gendersCompatible(existing.gender, incoming.gender)) return;
+        out.push({
+            existingId: treeId,
+            incomingId,
+            confidence: scoreToConfidence(MERGED_BEFORE_SCORE),
+            reasons: ['merged_before'],
+            score: MERGED_BEFORE_SCORE,
+            existingPerson: existing,
+            incomingPerson: incoming,
+            conflicts: detectConflicts(existing, incoming),
+        });
+        usedExisting.add(treeId);
+        usedIncoming.add(incomingId);
+    };
+    const shas = new Set((incomingData.imports ?? []).map(r => r.sha).filter((sha): sha is string => !!sha));
+    let incomingKeys: Array<[PersonId, Set<string>]> | null = null;
+    for (const record of records) {
+        for (const [treeId, sourceId] of record.joined) pair(treeId, sourceId);
+        for (const treeId of record.added) pair(treeId, (record.from?.[treeId] ?? treeId) as PersonId);
+        if (!record.source.fingerprint || !shas.has(record.source.fingerprint)) continue;
+        const byKey = new Map<string, PersonId>();
+        for (const treeId of [...record.added, ...record.joined.map(([id]) => id)]) {
+            const person = existingData.persons[treeId];
+            if (!person || usedExisting.has(treeId)) continue;
+            for (const key of fileRecordKeys(person, existingData)) if (!byKey.has(key)) byKey.set(key, treeId);
+        }
+        if (byKey.size === 0) continue;
+        incomingKeys ??= Object.values(incomingData.persons).map(p => [p.id, fileRecordKeys(p, incomingData)]);
+        for (const [incomingId, keys] of incomingKeys) {
+            if (usedIncoming.has(incomingId)) continue;
+            for (const key of keys) {
+                const treeId = byKey.get(key);
+                if (treeId && !usedExisting.has(treeId)) { pair(treeId, incomingId); break; }
+            }
+        }
+    }
+    return out;
+}
+
 function* findDirectMatches(
     existingData: StromData,
     incomingData: StromData,
@@ -1445,10 +1520,13 @@ function calculateMatchScore(
     // Full name similarity for traditional matching
     const fullNameSimilarity = (firstNameSimilarity + lastNameMatch.similarity) / 2;
 
-    // Calculate name score with improved strategies
-    if (fullNameSimilarity >= 0.95) {
+    // Calculate name score with improved strategies. A reason names only
+    // what both records give (134 N3): an exact name is "exact name" until
+    // the birth dates say more below.
+    const exactName = fullNameSimilarity >= 0.95;
+    if (exactName) {
         score += 40;
-        reasons.push('exact_name_gender_birthdate');
+        reasons.push('exact_name');
     } else if (fullNameSimilarity >= 0.85) {
         score += 32;
     } else if (fullNameSimilarity >= 0.7) {
@@ -1497,15 +1575,18 @@ function calculateMatchScore(
         // different people with the same name are vanishingly rare. Promote
         // straight to the high-confidence band (name 40 + date 35 = 75 would
         // otherwise land in 'medium' and demand a manual look every time).
-        if (fullNameSimilarity >= 0.95 && existing.birthDate!.length >= 10) {
+        if (exactName && existing.birthDate!.length >= 10) {
             score = Math.max(score, 85);
         }
-        if (!reasons.includes('exact_name_gender_birthdate')) {
-            reasons.push('exact_name_gender_birthdate');
-        }
+        // Both give the birth date (a year alone: the birth year) — with an
+        // exact name, "exact name and birth date".
+        const fullDate = parseFlexDate(existing.birthDate)?.day !== undefined;
+        if (exactName) reasons[reasons.indexOf('exact_name')] = fullDate ? 'exact_name_gender_birthdate' : 'name_gender_birthyear';
+        else reasons.push('name_gender_birthyear');
     } else if (yearsMatch(existing.birthDate, incoming.birthDate)) {
         score += 22;
-        reasons.push('name_gender_birthyear');
+        if (exactName) reasons[reasons.indexOf('exact_name')] = 'name_gender_birthyear';
+        else reasons.push('name_gender_birthyear');
     } else if (yearsClose(existing.birthDate, incoming.birthDate, 2)) {
         // Birth year within 2 years - could be uncertainty in records
         score += 12;

@@ -6234,6 +6234,7 @@ const stringsEN = {
         // Match reasons (shown in UI)
         matchReasons: {
             exact_name_gender_birthdate: 'Exact name and birth date',
+            exact_name: 'Exact name',
             name_gender_birthyear: 'Name and birth year',
             name_gender_parents: 'Name and matching parents',
             name_similarity_relationships: 'Similar name with family context',
@@ -6248,6 +6249,7 @@ const stringsEN = {
             partner_similarity: 'Similar partner names',
             unknown_name_relative: 'Unknown given name – matched through a relative',
             id: 'Same ID in the file',
+            merged_before: 'Merged before from this source',
             manual: 'Manual match'
         },
 
@@ -17445,6 +17447,7 @@ const stringsCZ: StringsType = {
         // Match reasons (shown in UI)
         matchReasons: {
             exact_name_gender_birthdate: 'Přesné jméno a datum narození',
+            exact_name: 'Přesné jméno',
             name_gender_birthyear: 'Jméno a rok narození',
             name_gender_parents: 'Jméno a shodní rodiče',
             name_similarity_relationships: 'Podobné jméno s rodinným kontextem',
@@ -17459,6 +17462,7 @@ const stringsCZ: StringsType = {
             partner_similarity: 'Podobná jména partnerů',
             unknown_name_relative: 'Neznámé křestní jméno – spárováno přes příbuzného',
             id: 'Stejné ID v souboru',
+            merged_before: 'Už sloučeno dřív z tohoto zdroje',
             manual: 'Ruční přiřazení'
         },
 
@@ -28511,6 +28515,7 @@ const stringsDE: StringsType = {
 
         matchReasons: {
             exact_name_gender_birthdate: 'Exakter Name und Geburtsdatum',
+            exact_name: 'Exakter Name',
             name_gender_birthyear: 'Name und Geburtsjahr',
             name_gender_parents: 'Name und übereinstimmende Eltern',
             name_similarity_relationships: 'Ähnlicher Name mit Familienkontext',
@@ -28525,6 +28530,7 @@ const stringsDE: StringsType = {
             partner_similarity: 'Ähnliche Partnernamen',
             unknown_name_relative: 'Unbekannter Vorname – über eine verwandte Person zugeordnet',
             id: 'Gleiche ID in der Datei',
+            merged_before: 'Schon früher aus dieser Quelle zusammengeführt',
             manual: 'Manueller Abgleich'
         },
 

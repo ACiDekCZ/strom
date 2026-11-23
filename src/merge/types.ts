@@ -22,7 +22,8 @@ export type MatchConfidence = 'high' | 'medium' | 'low';
 
 /** Reason for match */
 export type MatchReason =
-    | 'exact_name_gender_birthdate'   // High: name + gender + date
+    | 'exact_name_gender_birthdate'   // High: name + gender + date (both records give the date)
+    | 'exact_name'                    // The exact name, no birth date or year on both sides
     | 'name_gender_birthyear'         // Medium: name + gender + year
     | 'name_gender_parents'           // Medium: name + gender + parents
     | 'name_similarity_relationships' // Low: similar name + relationships
@@ -37,6 +38,7 @@ export type MatchReason =
     | 'partner_similarity'            // Partners have similar names
     | 'unknown_name_relative'         // Unknown given name, paired through a matched relative
     | 'id'                            // The same id in the loaded files (_UID, _FSFTID…; xref/RIN of one program)
+    | 'merged_before'                 // Brought or joined by an earlier merge of the same source (spec 134 K1.5)
     | 'manual';                       // Manual assignment
 
 /** Person match between existing and incoming data */

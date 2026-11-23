@@ -1918,6 +1918,12 @@ export interface MergeRecord {
     added: PersonId[];
     /** [the tree's id, the source's id] of every joined person. */
     joined: Array<[PersonId, PersonId]>;
+    /**
+     * The source's id of each added person whose id in the tree differs
+     * (tree id → source id; absent: the same id), so that a later merge of the
+     * same source knows the people this one brought (spec 134 K1.5).
+     */
+    from?: Record<string, string>;
     /** Details of joined persons the write changed (ids in the tree), as text. */
     fields: Array<{ person: PersonId; field: string; before: string; after: string }>;
     partnerships: string[];

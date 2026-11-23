@@ -40,6 +40,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         // Match reasons (shown in UI)
         matchReasons: {
             exact_name_gender_birthdate: 'Dokładne imię i nazwisko oraz data urodzenia',
+            exact_name: 'Dokładne imię i nazwisko',
             name_gender_birthyear: 'Imię i nazwisko oraz rok urodzenia',
             name_gender_parents: 'Imię i nazwisko oraz zgodni rodzice',
             name_similarity_relationships: 'Podobne imię i nazwisko w kontekście rodzinnym',
@@ -54,6 +55,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
             partner_similarity: 'Podobne imiona partnerów',
             unknown_name_relative: 'Nieznane imię – dopasowano przez krewnego',
             id: 'Ten sam identyfikator w pliku',
+            merged_before: 'Już wcześniej scalono z tego źródła',
             manual: 'Przypisanie ręczne'
         },
 
