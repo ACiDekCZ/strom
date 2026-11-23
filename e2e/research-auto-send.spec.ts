@@ -109,6 +109,27 @@ test.describe('sending by itself', () => {
         expect(bridge.posts).toHaveLength(1);
     });
 
+    test('two sends asked at the same moment while the window holds the research\'s lock: one POST, the other finds it going', async ({ page }) => {
+        const bridge = await autoTree(page);
+        writesAtOnce(bridge);
+        await editJan(page);
+        // Asked while this window holds the research's lock (as its quiet load after a send does), both go past
+        // the lock, wait on the same question to the bridge and go on in one turn: only one may post.
+        await page.evaluate(async () => {
+            const ui = window.Strom.UI as unknown as {
+                postResearchSend(id: string, o: { auto: boolean }): Promise<void>;
+                researchWindowLock(id: string, ifAvailable: boolean, fn: () => Promise<void>): Promise<boolean>;
+            };
+            const id = window.Strom.TreeManager.getActiveTreeId()!;
+            await ui.researchWindowLock(id, false, async () => {
+                await Promise.all([ui.postResearchSend(id, { auto: true }), ui.postResearchSend(id, { auto: true })]);
+            });
+        });
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        await page.clock.fastForward(QUIET + 1000);
+        expect(bridge.posts).toHaveLength(1);
+    });
+
     test('switching trees and leaving the page send at once', { tag: '@smoke' }, async ({ page }) => {
         const bridge = await autoTree(page);
         writesAtOnce(bridge);

@@ -2131,7 +2131,11 @@ export const researchSyncMethods = uiModule({
         // The sources deleted here in edit mode (spec 117 §4): one back in the tree (Undo) forgotten, the rest said deleted.
         if (!again) forgetDeletedSourcesBack(treeId, data);
         const deletedSources = again ? [] : deletedSourcesToSend(TreeManager.getTreeMetadata(treeId)?.research);
-        const exported = again ? null : researchGedcomExport(await expandedData(data), meta?.name ?? '', {
+        // The pooled images whole (image-expand.ts); read before this send counts as going, so another
+        // send asked meanwhile is stopped here, not posted beside it.
+        const whole = again ? null : await expandedData(data);
+        if (sendingTree) return;
+        const exported = !whole ? null : researchGedcomExport(whole, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}), ...(deletedSources.length ? { deletedSources } : {}),
         }, titles, researchSendsReadings(this.researchStatusOf(link.id)), researchSendsSourceFields(this.researchStatusOf(link.id)), researchCitationsOut(this.researchStatusOf(link.id)),
