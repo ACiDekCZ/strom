@@ -151,3 +151,83 @@ export function findImageSource(self: OpenerChain | undefined = typeof window !=
     }
     return null;
 }
+
+// ---- pooled images (spec 135, D6) ----
+
+/**
+ * The name the main window publishes its image pool under. The tree holds
+ * pooled images as references (`\u0000sm:<id>`); a satellite keeps no
+ * storage and no key of an encrypted pool, so it reads their bytes (and
+ * their catalog entries) through the main window, which reads and decrypts
+ * them.
+ */
+export const POOL_SOURCE_KEY = '__stromWindowPool';
+
+/** The main window's pool as a satellite reads it. */
+export interface PoolSource {
+    /** The images of `ids` as Blobs (null: not in the pool, or not readable now). */
+    blobs(ids: readonly string[]): Promise<Map<string, Blob | null>>;
+    /** The catalog entries of `ids` the main window has (image-meta.ts). */
+    meta(ids: readonly string[]): Record<string, unknown>;
+}
+
+/** The main window publishes its pool for the satellites it (or they) opened. */
+export function publishPoolSource(source: PoolSource, target: object | undefined = typeof window !== 'undefined' ? window : undefined): void {
+    if (!target) return;
+    try {
+        Object.defineProperty(target, POOL_SOURCE_KEY, { value: source, configurable: true });
+    } catch { /* not published: the satellites get the images in the data */ }
+}
+
+/**
+ * The main window's pool as this window can reach it (through the window
+ * that opened it, or the one that opened that), read anew at every call:
+ * after the main window's reload its new page publishes its own. Null when
+ * none can be reached.
+ */
+export function findPoolSource(self: OpenerChain | undefined = typeof window !== 'undefined' ? window : undefined): PoolSource | null {
+    let w: unknown = self?.opener;
+    for (let depth = 0; depth < 8 && w; depth++) {
+        try {
+            const win = w as OpenerChain & { closed?: boolean } & Record<string, unknown>;
+            if (win.closed) return null;
+            if (win[POOL_SOURCE_KEY] && typeof win[POOL_SOURCE_KEY] === 'object') {
+                const current = (): PoolSource | null => {
+                    try {
+                        if (win.closed) return null;
+                        const s = win[POOL_SOURCE_KEY] as PoolSource | undefined;
+                        return s && typeof s.blobs === 'function' ? s : null;
+                    } catch { return null; }
+                };
+                return {
+                    blobs: async (ids) => {
+                        const s = current();
+                        if (!s) return new Map(ids.map(id => [id, null]));
+                        try { return await s.blobs(ids); } catch { return new Map(ids.map(id => [id, null])); }
+                    },
+                    meta: (ids) => {
+                        try { return current()?.meta(ids) ?? {}; } catch { return {}; }
+                    },
+                };
+            }
+            w = win.opener;
+        } catch { return null; }
+    }
+    return null;
+}
+
+/** The ids of every pooled image's reference in `data` (exactly as the pool writes one). */
+export function poolRefIds(data: unknown): Set<string> {
+    const out = new Set<string>();
+    const visit = (value: unknown, depth: number): void => {
+        if (typeof value === 'string') {
+            if (value.length === 46 && /^\u0000sm:[pe]:[0-9a-f]{40}$/.test(value)) out.add(value.slice(4));
+            return;
+        }
+        if (!value || typeof value !== 'object' || depth > 64) return;
+        if (Array.isArray(value)) { for (const v of value) visit(v, depth + 1); return; }
+        for (const v of Object.values(value as Record<string, unknown>)) visit(v, depth + 1);
+    };
+    visit(data, 0);
+    return out;
+}

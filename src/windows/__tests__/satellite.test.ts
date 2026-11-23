@@ -19,6 +19,7 @@ import type { StromData, TreeId, Person, PersonId } from '../../types.js';
 import { WindowBus, createMemoryHub, FOCUS_WAIT_MS, type WindowMessage, type WindowStatus } from '../window-bus.js';
 import { SatelliteClient, followSelectionKey, MAIN_SILENCE_MS } from '../satellite.js';
 import { sendModeKey } from '../follow-mode.js';
+import { imageBlob, setPoolBlobSource } from '../../image-src.js';
 import type { LocksLike } from '../window-role.js';
 
 const TREE = 'sat-tree' as TreeId;
@@ -695,6 +696,40 @@ describe('images taken from the main window (1122)', () => {
         const edit = of('edit')[0];
         expect((JSON.parse(edit.json) as StromData).persons['p1' as PersonId].photo).toBe(photo);
         expect(of('resend')).toEqual([]);
+    });
+
+    it('a pooled image\'s reference (spec 135) stays in the copy, read through the main window\'s pool; an edit sends it back as it is', async () => {
+        const id = 'p:' + 'cd'.repeat(20);
+        const ref = '\u0000sm:' + id;
+        const asked: string[][] = [];
+        const pool = {
+            blobs: async (ids: readonly string[]) => { asked.push([...ids]); return new Map(ids.map(i => [i, new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })])); },
+            meta: () => ({}),
+        };
+        sat.stop();
+        sat = new SatelliteClient({ kind: 'overview', treeId: TREE, windowId: SAT, newId: false }, {
+            bus: new WindowBus(SAT, hub.channel()),
+            storage: { getItem: k => session.get(k) ?? null, setItem: (k, v) => { session.set(k, v); } },
+            locks: noLocks(), closeSelf: () => {}, hasFocus: () => true, bounds: () => undefined,
+            imageSource: () => id2 => known.get(id2),
+            poolSource: () => pool,
+        });
+        sat.start();
+        await settle();
+        main.post({ type: 'status', ...status({ revision: 100 }) });
+        const data = withRef(7, ['p1', 'Bořivoj'], ['p2', 'Ctibor']) as StromData;
+        (data.persons as Record<string, Person>)['p2'].photo = ref;
+        main.post({ type: 'tree', to: SAT, treeId: TREE, name: 'Hrachovcovi', revision: 100, data, imageRefs: true });
+        await settle();
+        expect(DataManager.getPerson('p2' as PersonId)!.photo).toBe(ref);
+        expect(DataManager.getPerson('p1' as PersonId)!.photo).toBe(photo);
+        const blob = await imageBlob(ref);
+        expect(blob?.size).toBe(3);
+        expect(asked).toEqual([[id]]);
+        DataManager.createPerson({ firstName: 'Zdislava', lastName: 'Okurková', gender: 'female' });
+        await settle();
+        expect((JSON.parse(of('edit')[0].json) as StromData).persons['p2' as PersonId].photo).toBe(ref);
+        setPoolBlobSource(null);
     });
 
     it('an image it cannot take: the copy stays, the main window is asked for the whole tree with its images', async () => {

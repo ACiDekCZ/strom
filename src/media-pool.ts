@@ -267,6 +267,94 @@ export async function storeImages(urls: Set<string>, encrypted: boolean, scope: 
     return { ids, media, meta };
 }
 
+/** Images re-stored under the other kind of id per batch (poolImages: one batch in memory at a time). */
+const CONVERT_BATCH_COUNT = 32;
+
+/**
+ * What a writer of tree data stores (spec 135, D6): the data hold new images
+ * as data URLs (`urls`) and pooled ones as references (`refIds`, their ids).
+ * The new ones go into the pool as storeImages puts them; a reference of
+ * the current kind is named as it is (its stored size, its catalog entry);
+ * one of the other kind (`p:` with encryption on, `e:` with it off: the
+ * encryption was switched) is read and stored again under the current kind,
+ * a batch at a time, and `ids` maps its reference (`\u0000sm:<old id>`) to
+ * the new id — stringifyPooled and replacePooled write that. A reference
+ * whose image is not in the pool (or cannot be read now) is named by
+ * nothing: it stays in the data as it is. Call under withPoolLock.
+ */
+export async function poolImages(urls: Set<string>, refIds: ReadonlySet<string>, encrypted: boolean, scope: string): Promise<PooledImages> {
+    const out = await storeImages(urls, encrypted, scope);
+    if (refIds.size === 0) return out;
+    const kind = encrypted ? 'e:' : 'p:';
+    const stored = new Set(await StorageManager.keys('media'));
+    const convert: string[] = [];
+    const named: Record<string, number> = {};
+    for (const id of refIds) {
+        if (!stored.has(id) || out.media[id] !== undefined) continue;
+        if (!id.startsWith(kind)) { convert.push(id); continue; }
+        let size = sizeOfStored.get(id);
+        if (size === undefined) {
+            const record = await StorageManager.get<StoredMedia>('media', id);
+            if (!record) continue;
+            size = storedSize(record);
+            sizeOfStored.set(id, size);
+        }
+        out.media[id] = size;
+        named[id] = size;
+        const meta = imageMetaOf(id);
+        if (meta) out.meta[id] = meta;
+    }
+    noteOwnImages(named);
+    const convertScope = `${scope}\u0000convert`;
+    for (let i = 0; i < convert.length; i += CONVERT_BATCH_COUNT) {
+        const part = convert.slice(i, i + CONVERT_BATCH_COUNT);
+        const urlsById = await loadImageUrls(part);
+        if (urlsById.size === 0) continue;
+        const got = await storeImages(new Set(urlsById.values()), encrypted, convertScope);
+        for (const [id, url] of urlsById) {
+            const next = got.ids.get(url);
+            if (!next) continue;
+            out.ids.set(POOL_REF + id, next);
+            out.media[next] = got.media[next];
+            if (got.meta[next]) out.meta[next] = got.meta[next];
+        }
+    }
+    forgetPoolScope(convertScope);
+    return out;
+}
+
+/**
+ * Catalog entries for pooled images this window has none for (a tree stored
+ * before the catalog, read before its entries were filled): read in batches,
+ * one image of a batch decoded at a time. An image not in the pool, or
+ * encrypted while the session is locked, gets none.
+ */
+export async function ensureImageMeta(ids: Iterable<string>): Promise<void> {
+    const want = [...new Set(ids)].filter(id => !imageMetaOf(id));
+    for (let i = 0; i < want.length; i += URL_BATCH_COUNT) {
+        const part = want.slice(i, i + URL_BATCH_COUNT);
+        const records = await StorageManager.getMany<StoredMedia>('media', part);
+        for (const id of part) {
+            const record = records.get(id);
+            if (!record || (record.encrypted && !CryptoSession.isUnlocked())) continue;
+            try {
+                const url = await decodeMedia(record);
+                if (url) await metaOf(id, url, record.bytes && record.head !== undefined ? new Uint8Array(record.bytes) : undefined);
+            } catch {
+                // Not decodable: no entry (the values fall back as without one).
+            }
+        }
+    }
+}
+
+/** The ids of `ids` the pool holds now (one read of its keys). */
+export async function pooledIds(ids: Iterable<string>): Promise<Set<string>> {
+    const stored = new Set(await StorageManager.keys('media'));
+    const out = new Set<string>();
+    for (const id of ids) if (stored.has(id)) out.add(id);
+    return out;
+}
+
 // ---- the catalog in stored records ----
 
 /**
@@ -321,17 +409,22 @@ export async function pooledImageMeta(id: string): Promise<ImageMeta | null> {
     return metaOf(id, url, record.bytes && record.head !== undefined ? new Uint8Array(record.bytes) : undefined);
 }
 
+/** A string `ids` names: a long data URL, or a reference that moved to another id (poolImages). */
+function pooledKey(value: string, ids: Map<string, string>): boolean {
+    return (value.length >= POOL_MIN_LENGTH || value.charCodeAt(0) === 0) && ids.has(value);
+}
+
 /** JSON of `data` with its pooled images written as references. */
 export function stringifyPooled(data: unknown, ids: Map<string, string>): string {
     if (ids.size === 0) return JSON.stringify(data);
     return JSON.stringify(data, (_key, value) =>
-        typeof value === 'string' && value.length >= POOL_MIN_LENGTH && ids.has(value) ? POOL_REF + ids.get(value) : value);
+        typeof value === 'string' && pooledKey(value, ids) ? POOL_REF + ids.get(value) : value);
 }
 
 /** A copy of `data` (shared strings) with its pooled images as references. */
 export function replacePooled<T>(value: T, ids: Map<string, string>): T {
     if (typeof value === 'string') {
-        return (value.length >= POOL_MIN_LENGTH && ids.has(value) ? POOL_REF + ids.get(value) : value) as T;
+        return (pooledKey(value, ids) ? POOL_REF + ids.get(value) : value) as T;
     }
     if (value === null || typeof value !== 'object') return value;
     if (Array.isArray(value)) return value.map(v => replacePooled(v, ids)) as T;

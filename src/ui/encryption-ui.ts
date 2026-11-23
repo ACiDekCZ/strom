@@ -7,6 +7,7 @@ import { runBusy, isBusy, busyStep } from './busy.js';
 import { imagesToAwait } from '../image-loads.js';
 import { imagesBeforeOutput } from './output-images.js';
 import { holdLeave } from './busy-leave.js';
+import { releaseImageUrls } from '../image-src.js';
 import { allMedia, hasTreeMedia, mediaSourceIds } from '../media.js';
 import { DataManager, auditPersonName, storedTreeForExport } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -212,6 +213,8 @@ export const encryptionUiMethods = uiModule({
             document.getElementById('password-prompt-modal')?.classList.remove('active');
             // Now lock the session
             CryptoSession.lock();
+            // No image read with the key stays at hand.
+            releaseImageUrls();
         }
     },
 

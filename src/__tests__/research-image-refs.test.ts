@@ -15,13 +15,15 @@ import { stripMedia } from '../attachments.js';
 import { researchGedcom } from '../ui/research-ui.js';
 import {
     findImageRefs, imageRefSha, resolveImageFile, imagesUrlOf, refTreeUrl, fetchImagesByHash, resolveImageRefs,
-    forgetHeldImages, heldImageShas, ImagesNotResolved, IMAGE_BATCH, IMAGE_RETRY_MS, sha256Hex,
+    forgetHeldImages, heldImageShas, internHeldImages, ImagesNotResolved, IMAGE_BATCH, IMAGE_RETRY_MS, sha256Hex,
     type ImageFetchDeps, type ImageRef, type ImageResolveDeps,
 } from '../research-image-refs.js';
 import { storedTreeEtag, bridgeGivesImagesByHash, treeReplyImages } from '../research-tree-file.js';
 import type { StromData } from '../types.js';
 import { allMedia } from '../media.js';
 import { migrateData } from '../data.js';
+import { setImageMeta, clearImageMeta } from '../image-meta.js';
+import { POOL_REF } from '../image-ref.js';
 
 /** A small JPEG of `width` × `height`; `salt` makes its bytes (and hash) its own. */
 function jpeg(width: number, height: number, salt: number): Buffer {
@@ -115,6 +117,26 @@ describe('references in the file', () => {
         expect(resolveImageFile(`strom-image:${'ab'.repeat(32)}`, map)).toBe('data:image/jpeg;base64,QUJD');
         expect(resolveImageFile(`strom-image:${'cd'.repeat(32)}`, map)).toBe('');
         expect(resolveImageFile('photos/a.jpg', map)).toBe('photos/a.jpg');
+    });
+
+    it('an image resolved to a pooled image\'s reference is read as that image, its sizes from the image catalog (spec 135)', () => {
+        clearImageMeta();
+        const sizes = new Map([[IMG_A, [400, 100]], [IMG_B, [300, 500]], [IMG_C, [120, 80]]] as const);
+        const refs = new Map<string, string>();
+        for (const [img, [w, h]] of sizes) {
+            const id = `p:${shaOf(img).slice(0, 40)}`;
+            setImageMeta(id, { len: dataUrlOf(img).length, head: 'data:image/jpeg;base64,', bytes: img.length, w, h, token: 't', mtok: 'm', sha: shaOf(img) });
+            refs.set(shaOf(img), POOL_REF + id);
+        }
+        const whole = read(SLIM, ALL_IMAGES);
+        const pooled = read(SLIM, refs);
+        const excerpts = (d: StromData) => Object.values(d.sources ?? {}).flatMap(src => (src.excerpts ?? []).map(e => ({ ...e, id: '' })));
+        const back = new Map([...refs].map(([sha, ref]) => [ref, ALL_IMAGES.get(sha)!]));
+        expect(excerpts(pooled).length).toBe(4);
+        expect(excerpts(pooled).every(e => e.dataUrl.startsWith(POOL_REF))).toBe(true);
+        // The same records as with the images whole (the crop turned a quarter keeps its crossed size).
+        expect(excerpts(pooled).map(e => ({ ...e, dataUrl: back.get(e.dataUrl) }))).toEqual(excerpts(whole));
+        clearImageMeta();
     });
 
     it('addresses: the images beside the tree, the file asked by reference with the rest kept', () => {
@@ -421,6 +443,50 @@ describe('images already held are never asked again', () => {
         const got = await resolveImageRefs({ researchId: UUID, refs: findImageRefs(SLIM), imagesUrl: URL_IMAGES }, resolveDeps(b, [dataUrlOf(IMG_B)]));
         expect(got).toMatchObject({ seeded: 1, fetched: 2 });
         expect(b.asks[0].shas.sort()).toEqual([shaOf(IMG_A), shaOf(IMG_C)].sort());
+    });
+
+    it('images pooled here (the image catalog knows their hash) are taken as references: nothing read, hashed or downloaded (spec 135)', async () => {
+        clearImageMeta();
+        forgetHeldImages();
+        const b = bridge(storeOf([IMG_A, IMG_B, IMG_C]));
+        const refOfImg = (img: Buffer): string => `${POOL_REF}p:${shaOf(img).slice(0, 40)}`;
+        for (const img of [IMG_A, IMG_B, IMG_C]) {
+            setImageMeta(`p:${shaOf(img).slice(0, 40)}`, { len: dataUrlOf(img).length, head: 'data:image/jpeg;base64,', bytes: img.length, token: 't', mtok: 'm', sha: shaOf(img) });
+        }
+        const hashed: string[] = [];
+        let treeRead = false;
+        const deps: ImageResolveDeps = {
+            ...resolveDeps(b, [], hashed),
+            treeImages: async () => { treeRead = true; return []; },
+            pooledBySha: async shas => new Map(shas.map(sh => [sh, `${POOL_REF}p:${sh.slice(0, 40)}`])),
+        };
+        const got = await resolveImageRefs({ researchId: UUID, refs: findImageRefs(SLIM), imagesUrl: URL_IMAGES }, deps);
+        expect(got).toMatchObject({ held: 0, seeded: 3, fetched: 0 });
+        expect(got.images.get(shaOf(IMG_A))).toBe(refOfImg(IMG_A));
+        expect(treeRead).toBe(false);
+        expect(hashed).toEqual([]);
+        expect(b.asks.length).toBe(0);
+        // Held as references, taken again as they are.
+        const again = await resolveImageRefs({ researchId: UUID, refs: findImageRefs(SLIM), imagesUrl: URL_IMAGES }, resolveDeps(b));
+        expect(again).toMatchObject({ held: 3, fetched: 0 });
+        clearImageMeta();
+    });
+
+    it('downloaded images held for a research take their references once stored (spec 135)', async () => {
+        clearImageMeta();
+        forgetHeldImages();
+        const b = bridge(storeOf([IMG_A, IMG_B, IMG_C]));
+        const refOfImg = (img: Buffer): string => `${POOL_REF}p:${shaOf(img).slice(0, 40)}`;
+        const first = await resolveImageRefs({ researchId: UUID, refs: findImageRefs(SLIM), imagesUrl: URL_IMAGES }, resolveDeps(b));
+        expect(first).toMatchObject({ fetched: 3 });
+        for (const img of [IMG_A, IMG_B, IMG_C]) {
+            setImageMeta(`p:${shaOf(img).slice(0, 40)}`, { len: dataUrlOf(img).length, head: 'data:image/jpeg;base64,', bytes: img.length, token: 't', mtok: 'm', sha: shaOf(img) });
+        }
+        internHeldImages(new Map([IMG_A, IMG_B, IMG_C].map(img => [dataUrlOf(img), refOfImg(img)])));
+        const again = await resolveImageRefs({ researchId: UUID, refs: findImageRefs(SLIM), imagesUrl: URL_IMAGES }, resolveDeps(b));
+        expect(again).toMatchObject({ held: 3, fetched: 0 });
+        expect([...again.images.values()].sort()).toEqual([refOfImg(IMG_A), refOfImg(IMG_B), refOfImg(IMG_C)].sort());
+        clearImageMeta();
     });
 
     it('failing keeps nothing new and says so (the caller loads the whole file)', async () => {

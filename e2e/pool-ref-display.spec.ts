@@ -95,10 +95,11 @@ async function treeWithRefs(page: Page): Promise<Record<string, string>> {
 
 /**
  * Every data URL the pool holds (≥ 1 kB) replaced in the tree in memory by
- * its reference, after the tree is stored. Returns data URL → ref.
+ * its reference, after the tree is stored (its save does so since part D6;
+ * any left is replaced here). Returns data URL → ref, for `urls` too.
  */
-async function poolInMemory(page: Page): Promise<Record<string, string>> {
-    return page.evaluate(async () => {
+async function poolInMemory(page: Page, urls: string[] = []): Promise<Record<string, string>> {
+    return page.evaluate(async (urls) => {
         const S = window.Strom;
         await S.TreeManager.flush();
         const refs: Record<string, string> = {};
@@ -106,6 +107,7 @@ async function poolInMemory(page: Page): Promise<Record<string, string>> {
             const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url)));
             return '\u0000sm:p:' + [...d.slice(0, 20)].map(b => b.toString(16).padStart(2, '0')).join('');
         };
+        for (const url of urls) refs[url] = await refOf(url);
         const walk = async (o: unknown): Promise<void> => {
             if (!o || typeof o !== 'object') return;
             const rec = o as Record<string, unknown>;
@@ -120,7 +122,7 @@ async function poolInMemory(page: Page): Promise<Record<string, string>> {
         await walk(S.DataManager.getData());
         S.TreeRenderer.render();
         return refs;
-    });
+    }, urls);
 }
 
 const idOf = (ref: string) => ref.slice(4);
@@ -259,7 +261,7 @@ test.describe('Images from the pool (desktop)', () => {
             window.Strom.UI.toggleAdvancedFields(true);
             window.Strom.DataManager.addAttachment('kasimir' as never, { name: 'zwirnhof-brief.png', mimeType: 'image/png', dataUrl, sizeBytes: 5000 });
         }, scan);
-        const refs = await poolInMemory(page);
+        const refs = await poolInMemory(page, [scan]);
         const ref = refs[scan];
         expect(ref).toBeTruthy();
 
@@ -318,7 +320,7 @@ test.describe('Images from the pool (desktop)', () => {
             dm.citePerson('kasimir' as never, src.id);
             return src.id as string;
         }, crop);
-        const refs = await poolInMemory(page);
+        const refs = await poolInMemory(page, [crop]);
         const ref = refs[crop];
         expect(ref).toBeTruthy();
         await page.evaluate((id) => window.Strom.UI.showSourceViewer(id, null), sourceId);
@@ -342,7 +344,7 @@ test.describe('Images from the pool (desktop)', () => {
         // A portrait large enough to zoom into (a small one stays at 100 %).
         const big = await drawn(page, 6, 900, 600);
         await page.evaluate((photo) => window.Strom.DataManager.updatePerson('walpurga' as never, { photo }), big);
-        const refs = await poolInMemory(page);
+        const refs = await poolInMemory(page, [big]);
         await page.evaluate(() => {
             const ui = window.Strom.UI as unknown as { pushDialog(id: string): void; showEditPersonModal(id: string): void };
             ui.pushDialog('person-modal');

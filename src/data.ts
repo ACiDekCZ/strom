@@ -104,6 +104,8 @@ import { foldName } from './godparents.js';
 import { normalizeSha256 } from './sha256.js';
 import { startupPerson } from './default-person.js';
 import { expandedData } from './image-expand.js';
+import { internImages, onImagesInterned, treeImages } from './image-intern.js';
+import { sameImageByCatalog } from './image-equal.js';
 
 /** Extended updates for Partnership */
 
@@ -1171,10 +1173,10 @@ class DataManagerClass {
     /**
      * Export the newer version data as JSON (for user to import in newer app)
      */
-    exportNewerVersionData(): void {
+    async exportNewerVersionData(): Promise<void> {
         if (!this.pendingNewerVersionData) return;
 
-        const dataStr = JSON.stringify(this.pendingNewerVersionData, null, 2);
+        const dataStr = JSON.stringify(await expandedData(this.pendingNewerVersionData), null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -1451,6 +1453,45 @@ class DataManagerClass {
         if (this.pendingBefore) patch(this.pendingBefore);
         if (this.editSession && this.editSession.treeId === treeId) patch(this.editSession.before);
         return written;
+    }
+
+    /**
+     * Images of tree `treeId` were stored (spec 135, D6; image-intern.ts):
+     * every state of the open tree this window holds takes their references
+     * — the data, the undo and redo steps, the state an open dialog or batch
+     * goes back to. The same picture as before, so no undo step, no save,
+     * no new revision; a reference of another kind (the encryption was
+     * switched) is news to the satellite windows, which get the tree again.
+     */
+    internImages(treeId: TreeId, map: ReadonlyMap<string, string>): void {
+        if (this.currentTreeId !== treeId || this.windowSink) return;
+        const n = internImages(this.data, map);
+        UndoManager.patchTree(treeId, d => { internImages(d, map); });
+        internImages(this.pendingBefore, map);
+        if (this.editSession && this.editSession.treeId === treeId) internImages(this.editSession.before, map);
+        if (n > 0 && [...map.keys()].some(k => k.charCodeAt(0) === 0)) {
+            this.revision++;
+            this.contentRevision++;
+            this.notifySaved();
+        }
+    }
+
+    /**
+     * The pooled images every state of the open tree in this window names
+     * (the data, the undo and redo steps, the state a dialog or batch goes
+     * back to): their ids, and the tree's. Null: no tree open, or a satellite
+     * (its states are the main window's).
+     */
+    imageIdsInMemory(): { treeId: TreeId; ids: Set<string> } | null {
+        const treeId = this.currentTreeId;
+        if (!treeId || this.windowSink) return null;
+        const ids = new Set<string>();
+        const add = (d: StromData | null | undefined): void => { if (d) for (const id of treeImages(d).refIds) ids.add(id); };
+        add(this.data);
+        UndoManager.patchTree(treeId, add);
+        add(this.pendingBefore);
+        if (this.editSession?.treeId === treeId) add(this.editSession.before);
+        return { treeId, ids };
     }
 
     /**
@@ -1980,7 +2021,7 @@ class DataManagerClass {
     async restoreSnapshot(snapshotId: string, base: ResearchBase | null = null): Promise<{ missingImages: number } | null> {
         this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         if (this.isReadOnly() || !this.currentTreeId) return null;
-        const payload = await getSnapshotPayload(snapshotId);
+        const payload = await getSnapshotPayload(snapshotId, { images: 'refs' });
         if (!payload) return null;
         let migrated = migrateData(JSON.parse(payload.json));
         // A backup from before data version 12 of a research tree: the sexes the
@@ -4445,7 +4486,8 @@ class DataManagerClass {
         const sha = file.original?.sha256?.toLowerCase();
         const url = !file.originalOnly && file.dataUrl ? file.dataUrl : '';
         if (!sha && !url) return undefined;
-        return treeMedia(this.data).find(a => (sha ? a.original?.sha256?.toLowerCase() === sha : !a.originalOnly && a.dataUrl === url));
+        // The tree's copy may be a pooled image's reference by now (spec 135): the same picture by the image catalog.
+        return treeMedia(this.data).find(a => (sha ? a.original?.sha256?.toLowerCase() === sha : !a.originalOnly && sameImageByCatalog(a.dataUrl, url)));
     }
 
     /** Put a file at one more place (a person, a fact, an event, a couple, a source that is in the tree). */
@@ -6371,3 +6413,6 @@ class DataManagerClass {
 
 // Export singleton instance
 export const DataManager = new DataManagerClass();
+
+// The open tree's states take the references of its images once they are stored (spec 135, D6).
+onImagesInterned((treeId, map) => DataManager.internImages(treeId as TreeId, map));

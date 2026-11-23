@@ -75,9 +75,10 @@ async function seedZbyhoslav(page: Page, kind: 'source' | 'plain' | 'noPhoto', e
     return img;
 }
 
+// The pictures whole: the tree holds a stored one as its pool reference (spec 135).
 const stored = (page: Page) => page.evaluate(() => {
     const p = window.Strom.DataManager.getAllPersons().find(x => x.firstName === 'Zbyhoslav')!;
-    return { photo: p.photo, source: p.photoSource, attachments: window.Strom.DataManager.personMedia(p.id) };
+    return window.Strom.Images.expandedData({ photo: p.photo, source: p.photoSource, attachments: window.Strom.DataManager.personMedia(p.id) });
 });
 
 async function openDialog(page: Page): Promise<void> {
@@ -397,7 +398,7 @@ test.describe('Use as portrait… in the materials (desktop)', () => {
 
     const janStored = (page: Page, id: string) => page.evaluate((id) => {
         const p = window.Strom.DataManager.getPerson(id as never)!;
-        return { photo: p.photo, source: p.photoSource, names: window.Strom.DataManager.personMedia(p.id).map(a => [a.id, a.name]) };
+        return window.Strom.Images.expandedData({ photo: p.photo, source: p.photoSource, names: window.Strom.DataManager.personMedia(p.id).map(a => [a.id, a.name]) });
     }, id);
 
     test('the person\'s materials: the tag on the source, Use as portrait… in another picture\'s ⋯, waiting for Save', async ({ page }) => {

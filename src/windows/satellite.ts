@@ -17,7 +17,9 @@
  *   heartbeat may be slowed down by the browser).
  */
 
-import { findImageSource, restoreImages, type ImageLookup } from './window-images.js';
+import { findImageSource, restoreImages, findPoolSource, poolRefIds, type ImageLookup, type PoolSource } from './window-images.js';
+import { noteOwnImages, noteImageMeta } from '../image-meta.js';
+import { setPoolBlobSource, releaseImageUrls } from '../image-src.js';
 import { DataManager, type WindowEditSink } from '../data.js';
 import type { TreeId } from '../types.js';
 import { WindowBus, answerWhenFocused, FOCUS_WAIT_MS, type MessageOf, type WindowStatus, type EditRefusal, type WindowBounds } from './window-bus.js';
@@ -129,6 +131,8 @@ export interface SatelliteClientOptions {
     bounds?: () => WindowBounds | undefined;
     /** Where this window takes the tree's images from (default: the main window through `opener`; null: nowhere). */
     imageSource?: () => ImageLookup | null;
+    /** The main window's image pool (window-images.ts findPoolSource; tests pass their own). */
+    poolSource?: () => PoolSource | null;
 }
 
 interface QueuedEdit {
@@ -151,6 +155,7 @@ export class SatelliteClient {
     private readonly hasFocus: () => boolean;
     private readonly bounds: () => WindowBounds | undefined;
     private readonly imageSource: () => ImageLookup | null;
+    private readonly poolSource: () => PoolSource | null;
     /** The main window's images as this window reaches them (null: they come in the data). */
     private images: ImageLookup | null = null;
     private readonly listeners = new Map<keyof SatelliteEvents, Set<(p: unknown) => void>>();
@@ -203,6 +208,7 @@ export class SatelliteClient {
         this.hasFocus = opts.hasFocus ?? (() => typeof document !== 'undefined' && document.hasFocus());
         this.bounds = opts.bounds ?? defaultBounds;
         this.imageSource = opts.imageSource ?? (() => findImageSource());
+        this.poolSource = opts.poolSource ?? (() => findPoolSource());
         this.sentMode = this.sendMode;
     }
 
@@ -577,6 +583,8 @@ export class SatelliteClient {
         this.heldPatch = null;
         this._revision = -1;
         this.data.loadFromWindow(treeId, EMPTY_TREE_JSON);
+        // No image of the locked tree stays readable here either.
+        releaseImageUrls();
         this.emit('data', { treeId, revision: -1, source: 'tree' });
     }
 
@@ -611,10 +619,30 @@ export class SatelliteClient {
      */
     private takeImages(m: { data?: unknown; imageRefs?: true }): boolean {
         if (!m.imageRefs) return true;
-        if (this.images && restoreImages(m.data, this.images)) return true;
+        if (this.images && restoreImages(m.data, this.images)) {
+            this.adoptPoolRefs(m.data);
+            return true;
+        }
         this.images = null;
         this.bus.post({ type: 'resend', windowId: this.windowId });
         return false;
+    }
+
+    /**
+     * The tree holds pooled images as references (spec 135, D6): they are the
+     * main window's own (it sent them), so the load sanitizer here keeps
+     * them; their catalog entries come from the main window, and their bytes
+     * are read through it (it holds the storage and the key).
+     */
+    private adoptPoolRefs(data: unknown): void {
+        const ids = poolRefIds(data);
+        if (ids.size === 0) return;
+        const source = this.poolSource();
+        if (!source) return;
+        const list = [...ids];
+        noteOwnImages(Object.fromEntries(list.map(id => [id, 0])));
+        noteImageMeta(source.meta(list));
+        setPoolBlobSource(wanted => source.blobs(wanted));
     }
 
     private onTree(m: MessageOf<'tree'>): void {

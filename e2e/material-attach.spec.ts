@@ -281,7 +281,8 @@ async function research(page: Page, files: FakeMaterialFile[]): Promise<{ bridge
 const treeRecordOf = (page: Page, sha: string) => page.evaluate((sha) => {
     const att = (Object.values(window.Strom.DataManager.getData().media ?? {}) as { original?: { sha256: string }; places: unknown[]; dataUrl: string; mimeType: string }[])
         .find(a => a.original?.sha256 === sha);
-    return att ? { places: att.places.length, mime: att.mimeType, copy: att.dataUrl.startsWith('data:image/') } : null;
+    // A copy stored with the tree is held as its pool reference (spec 135).
+    return att ? { places: att.places.length, mime: att.mimeType, copy: att.dataUrl.startsWith('data:image/') || att.dataUrl.startsWith('\u0000sm:') } : null;
 }, sha);
 
 test.describe('Link to… beside an archive', () => {

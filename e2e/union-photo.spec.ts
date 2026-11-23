@@ -60,9 +60,10 @@ async function discard(page: Page): Promise<void> {
     await expect(panel(page)).toBeHidden();
 }
 
+// The pictures whole: the tree holds a stored one as its pool reference (spec 135).
 const union = (page: Page) => page.evaluate((pid) => {
     const u = window.Strom.DataManager.getPartnership(pid as never);
-    return { photo: u?.photo ?? null, name: u?.photoOriginalName ?? null };
+    return window.Strom.Images.expandedData({ photo: u?.photo ?? null, name: u?.photoOriginalName ?? null });
 }, PID);
 
 const portraits = (page: Page) => page.evaluate(() => {
@@ -71,7 +72,7 @@ const portraits = (page: Page) => page.evaluate(() => {
         const p = window.Strom.DataManager.getPerson(id as never)!;
         out[id] = { photo: p.photo ?? null, source: p.photoSource ?? null };
     }
-    return out;
+    return window.Strom.Images.expandedData(out);
 });
 
 test.describe('The couple’s photo in the relationships panel (desktop)', () => {

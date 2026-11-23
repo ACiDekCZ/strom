@@ -37,6 +37,8 @@
 import { base64ToBytes, bytesToBase64, canonicalBase64Bytes } from './base64.js';
 import { rememberImageBytes, forgetImageBytes } from './known-image-bytes.js';
 import { sha256Bytes } from './sha256.js';
+import { imageMetaOf } from './image-meta.js';
+import { isPoolRef } from './image-ref.js';
 
 /** A FILE value that names an image by its hash. */
 export const IMAGE_REF_PREFIX = 'strom-image:';
@@ -237,6 +239,39 @@ export interface ImageFetchDeps {
 /** What resolving needs besides: the images and files (data URLs) of the tree stored for a research. */
 export interface ImageResolveDeps extends ImageFetchDeps {
     treeImages(researchId: string): Promise<Iterable<string>>;
+    /**
+     * Images of this browser's pool by the hash of their bytes (the image
+     * catalog, spec 135): sha → the pooled image's reference. Taken as they
+     * are — nothing read, nothing hashed.
+     */
+    pooledBySha?(shas: readonly string[]): Promise<Map<string, string>>;
+}
+
+/**
+ * The data URL head (`data:<type>;base64,`) of an image value: a data URL's
+ * own, a pooled image's from the image catalog ('' when not known).
+ */
+export function imageFileHead(value: string): string {
+    if (value.startsWith('data:')) {
+        const comma = value.indexOf(',');
+        return comma < 0 ? '' : value.slice(0, comma + 1);
+    }
+    return isPoolRef(value) ? imageMetaOf(value)?.head ?? '' : '';
+}
+const headOf = imageFileHead;
+
+/**
+ * A FILE value read as the file itself: a data URL, or a pooled image's
+ * reference an image named by its hash resolved to (spec 135).
+ */
+export function isImageFile(value: string): boolean {
+    return value.startsWith('data:') || isPoolRef(value);
+}
+
+/** The bytes of an image file value: a data URL's decoded size, a pooled image's from the image catalog (0 when not known). */
+export function imageFileBytes(value: string): number {
+    if (isPoolRef(value)) return imageMetaOf(value)?.bytes ?? 0;
+    return Math.round((value.length - value.indexOf(',') - 1) * 0.75);
 }
 
 /** SHA-256 hex of bytes (Web Crypto, or the built-in implementation outside a secure context). */
@@ -548,18 +583,35 @@ export async function resolveImageRefs(
     const want = new Map<string, ImageRef>();
     for (const ref of o.refs) {
         const url = known?.get(ref.sha);
-        if (url && url.startsWith(`data:${ref.mime};base64,`)) images.set(ref.sha, url);
+        if (url && headOf(url) === `data:${ref.mime};base64,`) images.set(ref.sha, url);
         else want.set(ref.sha, ref);
     }
     const files = new Set<string>();
     for (const sha of o.files ?? []) {
         if (images.has(sha)) continue;
         const url = known?.get(sha);
-        if (url && !url.startsWith('data:image/')) images.set(sha, url);
+        const head = url ? headOf(url) : '';
+        if (url && head && !head.startsWith('data:image/')) images.set(sha, url);
         else files.add(sha);
     }
     const fromHeld = images.size;
     let seeded = 0;
+    // Pooled here already (the image catalog knows its hash): its reference, no image read or hashed.
+    if (deps.pooledBySha && (want.size || files.size)) {
+        for (const [sha, ref] of await deps.pooledBySha([...want.keys(), ...files])) {
+            const head = headOf(ref);
+            const wanted = want.get(sha);
+            if (wanted && head === `data:${wanted.mime};base64,`) {
+                images.set(sha, ref);
+                want.delete(sha);
+                seeded++;
+            } else if (files.has(sha) && head && !head.startsWith('data:image/')) {
+                images.set(sha, ref);
+                files.delete(sha);
+                seeded++;
+            }
+        }
+    }
     // A new session (or another research): the stored tree's images, hashed once. Its other files (few: an
     // attachment's PDF) whenever the file names one not held — one added here since comes back by its name.
     const seedImages = !known && want.size > 0;
@@ -601,6 +653,18 @@ export async function resolveImageRefs(
     // A copy: the images that come later join the ones held, never the map handed out.
     if (researchId) held = { researchId, bySha: new Map(images) };
     return { images, held: fromHeld, seeded, fetched };
+}
+
+/**
+ * Images just stored in the pool (spec 135, D6; image-intern.ts): the images
+ * held take their references, so the held map keeps no copy the tree let go.
+ */
+export function internHeldImages(map: ReadonlyMap<string, string>): void {
+    if (!held || map.size === 0) return;
+    for (const [sha, url] of held.bySha) {
+        const ref = map.get(url);
+        if (ref !== undefined) held.bySha.set(sha, ref);
+    }
 }
 
 /** Images had since for the research whose images are held (images arriving later): held with them. */

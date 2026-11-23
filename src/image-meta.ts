@@ -200,6 +200,24 @@ export function imageMetaFor(ids: Iterable<string>): ImageMetaRecord {
     return out;
 }
 
+/**
+ * The pooled images the catalog knows by the SHA-256 of their bytes (the
+ * hash a research's file names an image by): sha → ids (an image may be
+ * pooled under both kinds of id).
+ */
+export function imageIdsBySha(shas: Iterable<string>): Map<string, string[]> {
+    const want = new Set(shas);
+    const out = new Map<string, string[]>();
+    if (want.size === 0) return out;
+    for (const [id, meta] of catalog) {
+        if (!meta.sha || !want.has(meta.sha)) continue;
+        const list = out.get(meta.sha);
+        if (list) list.push(id);
+        else out.set(meta.sha, [id]);
+    }
+    return out;
+}
+
 // ---- this browser's own pooled images ----
 
 /**

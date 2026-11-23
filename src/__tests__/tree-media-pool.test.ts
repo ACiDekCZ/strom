@@ -51,6 +51,7 @@ import { SettingsManager } from '../settings.js';
 import { CryptoSession } from '../crypto.js';
 import { createSnapshot, deleteSnapshotsForTree, getSnapshotJson, totalSnapshotBytes } from '../snapshots.js';
 import { collectPoolGarbage } from '../media-pool.js';
+import { expandedData } from '../image-expand.js';
 import { StromData, TreeId, TreeMetadata } from '../types.js';
 import { STROM_DATA_VERSION } from '../version.js';
 
@@ -104,6 +105,19 @@ async function read(id: string): Promise<StromData> {
     return r.data;
 }
 
+/** No long data URL anywhere in the data (the pooled images are references). */
+function longDataUrls(data: unknown): string[] {
+    return (JSON.stringify(data).match(/"data:[^"]{1000,}"/g) ?? []);
+}
+
+/** Read a pooled tree: its images are references (spec 135 D6); put back whole, the data stored. */
+async function expectReadsAs(id: string, d: StromData): Promise<void> {
+    const got = await read(id);
+    expect(longDataUrls(got)).toEqual([]);
+    expect(JSON.stringify(got)).toContain('\\u0000sm:');
+    expect(await expandedData(got)).toEqual(d);
+}
+
 beforeEach(() => {
     stores.clear();
     encryptionOn = false;
@@ -134,7 +148,7 @@ describe('stored trees and the image pool', () => {
         // The record holds references, not the pictures.
         expect(JSON.stringify(rec).length).toBeLessThan(3000);
         expect(st('media').size).toBe(3);
-        expect(await read('t1')).toEqual(d);
+        await expectReadsAs('t1', d);
     });
 
     it('another save writes only the images the pool does not have yet', async () => {
@@ -168,7 +182,7 @@ describe('stored trees and the image pool', () => {
         // Backup gone: image 2 is unused; image 1 stays (both trees name it).
         await deleteSnapshotsForTree('t1');
         expect(st('media').size).toBe(1);
-        expect(await read('t2')).toEqual(tree('Bea', [image(1)]));
+        await expectReadsAs('t2', tree('Bea', [image(1)]));
 
         // Deleting the trees frees the pool completely.
         await TreeManager.deleteTree('t1' as TreeId);
@@ -198,7 +212,7 @@ describe('stored trees and the image pool', () => {
         expect(everything).not.toContain(image(1).slice(40, 120));
         expect(await TreeManager.isTreeDataEncrypted('t1' as TreeId)).toBe(true);
         expect(await TreeManager.getEncryptedData('t1' as TreeId)).not.toBeNull();
-        expect(await read('t1')).toEqual(d);
+        await expectReadsAs('t1', d);
 
         CryptoSession.lock();
         expect((await TreeManager.readTreeData('t1' as TreeId)).status).toBe('locked');
@@ -214,7 +228,7 @@ describe('stored trees and the image pool', () => {
         await collectPoolGarbage();
         expect([...st('media').keys()].every(id => id.startsWith('p:'))).toBe(true);
         expect(st('media').size).toBe(1);
-        expect(await read('t1')).toEqual(d);
+        await expectReadsAs('t1', d);
     });
 
     it('a pooled tree under another key is rescued with its password', async () => {
@@ -227,7 +241,7 @@ describe('stored trees and the image pool', () => {
         expect((await TreeManager.readTreeData('t1' as TreeId)).status).toBe('undecryptable');
         expect(await TreeManager.recoverTreeWithPassword('t1' as TreeId, 'wrong')).toBe('wrong-password');
         expect(await TreeManager.recoverTreeWithPassword('t1' as TreeId, 'old-password')).toBe('ok');
-        expect(await read('t1')).toEqual(d);
+        await expectReadsAs('t1', d);
     });
 
     it('an old record with the images inline still reads', async () => {

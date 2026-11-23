@@ -18,9 +18,10 @@ import { SettingsManager } from './settings.js';
 import { CryptoSession, EncryptedData } from './crypto.js';
 import type { ImageMetaRecord } from './image-meta.js';
 import {
-    withPoolLock, collectPoolable, storeImages, stringifyPooled, unpoolJson, notePoolSizes, packImageMeta, unpackImageMeta,
+    withPoolLock, poolImages, stringifyPooled, unpoolJson, notePoolSizes, packImageMeta, unpackImageMeta,
     collectPoolGarbageLocked, registerPoolReferences, bytesToBase64, base64ToBytes,
 } from './media-pool.js';
+import { treeImages, settleStoredImages } from './image-intern.js';
 
 /** `other-window`: this window's state when another window (an older app too) saved over its tree. */
 /** `pre-research-load` / `pre-first-send`: before the research's version replaced the tree, before its first send. */
@@ -135,7 +136,9 @@ function dayKey(ms: number): string {
 async function writeSnapshot(data: StromData, meta: SnapshotMeta): Promise<SnapshotMeta> {
     const encrypted = SettingsManager.isEncryptionEnabled() && CryptoSession.isUnlocked();
     for (const m of await allMetas()) notePoolSizes(m.media);
-    const { ids, media, meta: imageMeta } = await storeImages(collectPoolable(data), encrypted, meta.treeId);
+    // New images into the pool, references named as they are (another kind's stored again, image-intern.ts).
+    const images = treeImages(data);
+    const { ids, media, meta: imageMeta } = await poolImages(images.urls, images.refIds, encrypted, meta.treeId);
     const json = stringifyPooled(data, ids);
     const stored: StoredSnapshot = { meta: { ...meta, sizeBytes: 0 } };
     delete stored.meta.media;
@@ -374,10 +377,13 @@ async function readSnapshotText(s: StoredSnapshot): Promise<string | null> {
 }
 
 /**
- * Decode a snapshot back to the tree's JSON (decrypt / gunzip / plain, images
- * put back). `missingImages` counts images the pool no longer had.
+ * Decode a snapshot back to the tree's JSON (decrypt / gunzip / plain).
+ * `images`: 'whole' puts the images back (a file of the backup), 'refs'
+ * keeps them as references for the tree in memory (a restore, spec 135 D6;
+ * image-intern.ts settleStoredImages). `missingImages` counts images the
+ * pool no longer had.
  */
-export async function getSnapshotPayload(id: string): Promise<{ json: string; missingImages: number; research?: SnapshotResearchBase; createdAt?: number } | null> {
+export async function getSnapshotPayload(id: string, o: { images?: 'whole' | 'refs' } = {}): Promise<{ json: string; missingImages: number; research?: SnapshotResearchBase; createdAt?: number } | null> {
     const s = await StorageManager.get<StoredSnapshot>('snapshots', id);
     if (!s) return null;
     const text = await readSnapshotText(s);
@@ -385,7 +391,15 @@ export async function getSnapshotPayload(id: string): Promise<{ json: string; mi
     await unpackImageMeta(s.imageMeta);
     // The images it names are this browser's own: its references pass the load sanitizer (validation.ts).
     notePoolSizes(s.meta?.media);
-    const { json, missing } = await unpoolJson(text);
+    let json: string;
+    let missing: number;
+    if (o.images === 'refs') {
+        const data = JSON.parse(text) as StromData;
+        missing = (await settleStoredImages(data)).missing;
+        json = JSON.stringify(data);
+    } else {
+        ({ json, missing } = await unpoolJson(text));
+    }
     return {
         json, missingImages: missing,
         ...(s.meta?.research ? { research: s.meta.research } : {}),
@@ -439,8 +453,11 @@ export function reencodeAllSnapshots(): Promise<number> {
             try {
                 const text = await readSnapshotText(s);
                 if (text === null) { failed++; continue; }
-                const { json } = await unpoolJson(text);
-                await writeSnapshot(JSON.parse(json) as StromData, s.meta);
+                // Its references stay: writeSnapshot stores their images again under the new kind, a batch at a time.
+                notePoolSizes(s.meta.media);
+                const data = JSON.parse(text) as StromData;
+                await settleStoredImages(data);
+                await writeSnapshot(data, s.meta);
             } catch (err) {
                 console.error('Snapshot re-encoding failed', s.meta.id, err);
                 failed++;

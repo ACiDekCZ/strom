@@ -49,10 +49,12 @@ import { announceTreeSaved, clearTreeStale, isTreeStale } from './tab-sync.js';
 import { cloneTreeDataAsJson, estimateJsonBytes } from './clone.js';
 import { imageLoads, type PendingImageNotes } from './image-loads.js';
 import {
-    withPoolLock, collectPoolable, storeImages, stringifyPooled, replacePooled,
-    unpoolJson, unpoolObject, registerPoolReferences, forgetPoolScope, seedPoolScope, notePoolSizes,
+    withPoolLock, poolImages, stringifyPooled, replacePooled,
+    unpoolJson, registerPoolReferences, forgetPoolScope, notePoolSizes,
     packImageMeta, unpackImageMeta,
 } from './media-pool.js';
+import { treeImages, settleStoredImages, imagesInterned, pooledImageChars } from './image-intern.js';
+import { POOL_REF } from './image-ref.js';
 import type { ImageMetaRecord } from './image-meta.js';
 
 /** People in a tree, without the "?" stand-ins (as the focus bar counts them). */
@@ -945,35 +947,27 @@ class TreeManagerClass {
     /** readTreeData for a tree stored with its images in the pool. */
     private async readPooledTree(id: TreeId, raw: PooledTreeRecord): Promise<TreeReadResult> {
         let data: StromData;
-        let missing: number;
-        let urls: Map<string, string>;
         if (raw.encrypted) {
             if (!CryptoSession.isUnlocked()) {
                 this.unreadableTrees.add(id);
                 return { status: 'locked' };
             }
             try {
-                const text = await CryptoSession.decrypt(raw.encrypted);
-                const out = await unpoolJson(text);
-                data = JSON.parse(out.json) as StromData;
-                missing = out.missing;
-                urls = out.urls;
+                data = JSON.parse(await CryptoSession.decrypt(raw.encrypted)) as StromData;
             } catch (err) {
                 console.error('Failed to decrypt tree data:', id, err);
                 this.unreadableTrees.add(id);
                 return { status: 'undecryptable' };
             }
         } else {
-            const out = await unpoolObject(raw.data as StromData);
-            data = out.data;
-            missing = out.missing;
-            urls = out.urls;
+            data = raw.data as StromData;
         }
-        // The ids and sizes came with the images: the next save need not
-        // hash them or read them back.
-        await seedPoolScope(id, urls, !!raw.encrypted).catch(() => {});
+        // The images stay references (spec 135, D6): the record's sizes and
+        // catalog first — they make the references this browser's own for
+        // the load sanitizer and answer sizes and fingerprints.
         notePoolSizes(raw.media);
         await unpackImageMeta(raw.imageMeta);
+        const { missing } = await settleStoredImages(data);
         // Never expected (the cleanup keeps what a tree names); the rest of
         // the tree still loads, the load sanitiser drops the empty images.
         if (missing > 0) console.error('Tree images missing from the pool:', id, missing);
@@ -1317,8 +1311,8 @@ class TreeManagerClass {
                 return;
             }
             await this.takePreMigrationBackup(id, latest);
-            const images = collectPoolable(latest);
-            if (images.size > 0) {
+            const images = treeImages(latest);
+            if (images.urls.size > 0 || images.refIds.size > 0) {
                 await this.writePooledTree(id, latest, images, pending.base);
             } else if (SettingsManager.isEncryptionEnabled()) {
                 if (!CryptoSession.isUnlocked()) throw new Error('locked');
@@ -1348,12 +1342,12 @@ class TreeManagerClass {
      * references to them. Under the pool lock, so a cleanup cannot remove an
      * image between finding it stored and this record naming it.
      */
-    private writePooledTree(id: TreeId, data: StromData, images: Set<string>, base: ResearchBase | null = null): Promise<void> {
+    private writePooledTree(id: TreeId, data: StromData, images: ReturnType<typeof treeImages>, base: ResearchBase | null = null): Promise<void> {
         return withPoolLock(async () => {
             if (!this.index.trees.some(t => t.id === id)) return;
             const encrypted = SettingsManager.isEncryptionEnabled();
             if (encrypted && !CryptoSession.isUnlocked()) throw new Error('locked');
-            const { ids, media, meta } = await storeImages(images, encrypted, id);
+            const { ids, media, meta } = await poolImages(images.urls, images.refIds, encrypted, id);
             const imageMeta = await packImageMeta(meta, encrypted);
             let record: PooledTreeRecord;
             let sizeBytes: number;
@@ -1363,11 +1357,15 @@ class TreeManagerClass {
                 sizeBytes = JSON.stringify(enc).length + Object.values(media).reduce((a, b) => a + b, 0);
             } else {
                 record = { pooled: 1, data: replacePooled(data, ids), media };
-                sizeBytes = estimateJsonBytes(data);
+                sizeBytes = estimateJsonBytes(data) + pooledImageChars(data);
             }
             if (imageMeta) record.imageMeta = imageMeta;
             await this.writeTreeRecord(id, record, base);
             this.updateMetadata(id, data, sizeBytes);
+            // Named by the record now: the tree's states in memory take the references (image-intern.ts).
+            const interned = new Map<string, string>();
+            for (const [value, poolId] of ids) interned.set(value, POOL_REF + poolId);
+            imagesInterned(id, interned);
         });
     }
 

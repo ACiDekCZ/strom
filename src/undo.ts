@@ -136,6 +136,15 @@ class UndoManagerClass {
         }
     }
 
+    /**
+     * Change in place the data of every state on both stacks, when they are
+     * tree `treeId`'s (a stored image's reference put in, spec 135 D6).
+     */
+    patchTree(treeId: TreeId, fn: (data: StromData) => void): void {
+        if (treeId !== this.activeTreeId) return;
+        for (const s of [...this.undoStack, ...this.redoStack]) fn(s.data);
+    }
+
     /** Test/utility: drop all history for the current tree. */
     clear(): void {
         this.undoStack = [];

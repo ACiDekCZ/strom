@@ -633,6 +633,24 @@ describe('images of the tree to a satellite that reaches this window (1122)', ()
         expect(last(refs.of('patch'))!.imageRefs).toBeUndefined();
     });
 
+    it('a pooled image\'s reference (spec 135): as it is to a window that reaches this one, whole to one that does not', async () => {
+        withStore();
+        const ref = '\u0000sm:p:' + 'ab'.repeat(20);
+        vi.spyOn(StorageManager, 'getMany').mockImplementation(async (_store: string, keys: string[]) =>
+            new Map(keys.map(k => [k, k === 'p:' + 'ab'.repeat(20) ? { text: photo } : null])) as never);
+        const pid = DataManager.getAllPersons()[0].id;
+        (DataManager.getPerson(pid) as Person).photo = ref;
+        DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
+        await settle(PATCH_INTERVAL_MS);
+        const refs = await hello('overview', true);
+        expect(treeOf(refs.of('tree')[0].data).persons[pid].photo).toBe(ref);
+        const plain = await hello('table', false);
+        await settle();
+        expect(treeOf(plain.of('tree')[0].data).persons[pid].photo).toBe(photo);
+        // The tree here keeps the reference.
+        expect(DataManager.getPerson(pid)!.photo).toBe(ref);
+    });
+
     it('a window that could not take an image asks again: the whole tree with its images, and so from now on', async () => {
         withStore();
         const pid = DataManager.getAllPersons()[0].id;

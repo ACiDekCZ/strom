@@ -153,9 +153,10 @@ async function follow(page: Page, imgs: Img[], o: { byHash: boolean; lacks?: str
 
 const card = (page: Page, name: string) => page.locator('#tree-canvas .person-card', { hasText: name });
 /** The excerpts of the source as the tree holds them. */
+// The crops whole: the tree holds a stored one as its pool reference (spec 135).
 const excerpts = (page: Page) => page.evaluate(() => {
     const src = Object.values(window.Strom.DataManager.getData().sources ?? {}).find(s => s.refn === 'S0001');
-    return (src?.excerpts ?? []).map(e => e.dataUrl);
+    return window.Strom.Images.expandedData((src?.excerpts ?? []).map(e => e.dataUrl));
 });
 /**
  * The tree stored (its save to IndexedDB runs after the images show): a reload before it would read the

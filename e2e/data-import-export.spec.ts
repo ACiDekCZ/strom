@@ -275,7 +275,8 @@ test('GEDCOM import: rich summary + bulk media attach by file name', async ({ pa
     await expect(importDialog).toBeHidden();
     const hasPhoto = await page.evaluate(() => {
         const jan = window.Strom.DataManager.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Jan');
-        return !!jan?.photo && jan.photo.startsWith('data:image');
+        // An image stored with the tree is held as its pool reference (spec 135).
+        return !!jan?.photo && (jan.photo.startsWith('data:image') || jan.photo.startsWith('\u0000sm:'));
     });
     expect(hasPhoto).toBe(true);
 });

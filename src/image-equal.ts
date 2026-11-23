@@ -53,6 +53,18 @@ export function sameImageNow(a: string | undefined, b: string | undefined): bool
     return null;
 }
 
+/**
+ * sameImageNow for a synchronous dedup, the catalog's word taken as enough:
+ * a data URL whose length, head and image token match a reference's catalog
+ * entry is that picture; a reference without its entry is another picture
+ * (both are kept, nothing is lost).
+ */
+export function sameImageByCatalog(a: string | undefined, b: string | undefined): boolean {
+    const now = sameImageNow(a, b);
+    if (now !== null) return now;
+    return !!imageMetaOf((poolIdOf(a) ? a : b) as string);
+}
+
 /** The same picture, also when one is a data URL and the other a pooled image's reference (see the file's comment). */
 export async function sameImage(a: string | undefined, b: string | undefined): Promise<boolean> {
     const now = sameImageNow(a, b);

@@ -14,7 +14,9 @@
  * last focus, the default person) raises nothing: no edit is refused for it.
  */
 
-import { publishImageSource, WindowImageStore } from './window-images.js';
+import { publishImageSource, publishPoolSource, WindowImageStore } from './window-images.js';
+import { loadImageBlobs } from '../media-pool.js';
+import { imageMetaFor } from '../image-meta.js';
 import { DataManager } from '../data.js';
 import { expandedData, hasPoolRefs } from '../image-expand.js';
 import { IMAGES_ARRIVED_EVENT } from '../image-loads.js';
@@ -267,7 +269,11 @@ export class WindowRegistry {
         this.openWindowFn = opts.openWindow ?? ((url, name, features) => (typeof window !== 'undefined' ? window.open(url, name, features) : null));
         this.geometry = opts.geometry ?? currentGeometry;
         this.images = opts.images ?? new WindowImageStore();
-        if (!opts.images) publishImageSource(this.images);
+        if (!opts.images) {
+            publishImageSource(this.images);
+            // Pooled images' bytes and catalog entries for the satellites (they keep no storage, no key).
+            publishPoolSource({ blobs: ids => loadImageBlobs(ids), meta: ids => imageMetaFor(ids) });
+        }
     }
 
     /** This main window's id (the `from` of its messages). */
@@ -622,7 +628,9 @@ export class WindowRegistry {
         if (to.some(e => e?.takesData !== true)) {
             return hasPoolRefs(data) ? expandedData(data).then(full => ({ json: JSON.stringify(full) })) : { json: JSON.stringify(data) };
         }
-        return to.every(e => e?.imageRefs === true) ? { data: this.images.replaceImages(data), imageRefs: true } : { data };
+        if (to.every(e => e?.imageRefs === true)) return { data: this.images.replaceImages(data), imageRefs: true };
+        // A window that cannot reach this one (a second tab) reads no pooled image: every image whole for it.
+        return hasPoolRefs(data) ? expandedData(data).then(full => ({ data: full })) : { data };
     }
 
     /** A satellite could not take an image from here: the whole tree with its images, and so from now on. */

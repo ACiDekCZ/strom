@@ -64,9 +64,10 @@ async function choose(page: Page, png: Buffer, name = 'zbyhoslav.png'): Promise<
     await expect(editor(page).locator('.pe-frame')).toBeFocused();
 }
 
+// The pictures whole: the tree holds a stored one as its pool reference (spec 135).
 const stored = (page: Page) => page.evaluate(() => {
     const p = window.Strom.DataManager.getAllPersons().find(x => x.firstName === 'Zbyhoslav')!;
-    return { photo: p.photo, source: p.photoSource, attachments: window.Strom.DataManager.personMedia(p.id) };
+    return window.Strom.Images.expandedData({ photo: p.photo, source: p.photoSource, attachments: window.Strom.DataManager.personMedia(p.id) });
 });
 
 test.describe('portrait editor (desktop)', () => {

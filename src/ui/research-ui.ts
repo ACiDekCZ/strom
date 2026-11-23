@@ -22,6 +22,7 @@
 
 import { batchHeldChange } from '../batch.js';
 import { allMedia } from '../media.js';
+import { cloneTreeDataAsJson } from '../clone.js';
 import { noteOverviewSectionRows } from './overview-columns-ui.js';
 import { waitingAuditMarkEl, waitingAuditShown } from './waiting-task-ui.js';
 import { keepTableViews } from '../table-views-data.js';
@@ -122,7 +123,11 @@ import { shownName, shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { bindSectionMenu, keepSectionControlFocus, sectionClickSwallowed, sectionMovedNow } from './live-section-edit-ui.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { bridgeGivesEtag, bridgeGivesImagesByHash, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeAsksAppMedia, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, treeReplyImages, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
-import { addHeldImages, findImageRefs, findNamedFileShas, forgetHeldImages, imagesUrlOf, refTreeUrl, resolveHeldImageRefs, resolveImageRefs, sha256Hex, type ImageRef, type ImageResolveDeps } from '../research-image-refs.js';
+import { addHeldImages, findImageRefs, findNamedFileShas, forgetHeldImages, imagesUrlOf, internHeldImages, refTreeUrl, resolveHeldImageRefs, resolveImageRefs, sha256Hex, type ImageRef, type ImageResolveDeps } from '../research-image-refs.js';
+import { imageIdsBySha, imageMetaOf } from '../image-meta.js';
+import { pooledIds } from '../media-pool.js';
+import { POOL_REF, poolIdOf } from '../image-ref.js';
+import { onImagesInterned } from '../image-intern.js';
 import { completeStatus, statusAskUrl } from '../status-parts.js';
 import { expandedData } from '../image-expand.js';
 
@@ -1365,8 +1370,9 @@ async function researchTreeImages(researchId: string): Promise<string[]> {
     const meta = TreeManager.findTreeByResearchId(researchId);
     if (!meta || TreeManager.isTreeUnreadable(meta.id)) return [];
     const read = await readTree(meta.id);
-    // Hashed are the images themselves (a pooled one whole, image-expand.ts).
-    const data = read ? await expandedData(read) : null;
+    // Hashed are the images themselves: a pooled one whole (image-expand.ts), unless the image catalog knows
+    // its hash (pooledImagesBySha gave it already).
+    const data = read ? await expandedData(withoutHashedImages(read)) : null;
     const out: string[] = [];
     for (const src of Object.values(data?.sources ?? {})) {
         for (const exc of src.excerpts ?? []) if (exc.dataUrl) out.push(exc.dataUrl);
@@ -1379,6 +1385,37 @@ async function researchTreeImages(researchId: string): Promise<string[]> {
     return out;
 }
 
+/** A copy of tree data (strings shared) without the pooled images whose hash the image catalog has. */
+function withoutHashedImages(data: StromData): StromData {
+    const copy = cloneTreeDataAsJson(data);
+    const known = (v: string | undefined): boolean => !!v && !!poolIdOf(v) && !!imageMetaOf(v)?.sha;
+    for (const p of Object.values(copy.persons ?? {})) if (p && known(p.photo)) delete p.photo;
+    for (const u of Object.values(copy.partnerships ?? {})) if (u && known(u.photo)) delete u.photo;
+    for (const a of allMedia(copy)) if (known(a.dataUrl)) a.dataUrl = '';
+    for (const src of Object.values(copy.sources ?? {})) {
+        for (const exc of src.excerpts ?? []) if (exc && known(exc.dataUrl)) exc.dataUrl = '';
+    }
+    return copy;
+}
+
+/** This browser's pooled images by the hash of their bytes (the image catalog): sha → reference. */
+async function pooledImagesBySha(shas: readonly string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const bySha = imageIdsBySha(shas);
+    if (bySha.size === 0) return out;
+    const kind = SettingsManager.isEncryptionEnabled() ? 'e:' : 'p:';
+    const held = await pooledIds([...bySha.values()].flat());
+    for (const [sha, ids] of bySha) {
+        // One of the current kind first: a save need not store it again.
+        const id = ids.filter(i => held.has(i)).sort((a, b) => Number(b.startsWith(kind)) - Number(a.startsWith(kind)))[0];
+        if (id) out.set(sha, POOL_REF + id);
+    }
+    return out;
+}
+
+// The images held for a research take their references once stored (spec 135, D6).
+onImagesInterned((_treeId, map) => internHeldImages(map));
+
 /** The images coming after a tree stop when another tree opens (wired once). */
 let imageLoadsWired = false;
 
@@ -1389,6 +1426,7 @@ const imageDeps: ImageResolveDeps = {
     sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
     address: url => withAppVersion(url),
     treeImages: researchTreeImages,
+    pooledBySha: pooledImagesBySha,
 };
 
 /**

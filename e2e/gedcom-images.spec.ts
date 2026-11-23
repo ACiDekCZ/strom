@@ -108,7 +108,8 @@ async function readBack(page: Page, first: string, last: string) {
         const p = Object.values(data.persons).find(x => x.firstName === f && x.lastName === l)!;
         const sources = Object.values(data.sources ?? {});
         const src = sources.find(s => (p.sourceIds ?? []).includes(s.id));
-        return {
+        // The pictures whole: the tree holds a stored one as its pool reference (spec 135).
+        return window.Strom.Images.expandedData({
             photo: p.photo ?? null,
             photoName: p.photoOriginalName ?? null,
             // The portrait's own record (data v25): the same picture, apart from the attachments.
@@ -121,7 +122,7 @@ async function readBack(page: Page, first: string, last: string) {
                 title: src.title, reference: src.reference ?? null, transcript: src.transcript ?? null,
                 excerpts: (src.excerpts ?? []).map(e => ({ dataUrl: e.dataUrl, width: e.width, height: e.height })),
             } : null,
-        };
+        });
     }, [first, last] as const);
 }
 

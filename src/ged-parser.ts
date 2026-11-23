@@ -98,7 +98,7 @@ function surnameNoteGroups(noteLines: readonly string[] | null): string[][] {
 import { excerptFromDataUrl } from './excerpts';
 import { unionCitations } from './citation-quality';
 import { cleanSourceEvents } from './citation-order';
-import { imageRefSha, resolveImageFile, type ImageRef } from './research-image-refs';
+import { imageRefSha, resolveImageFile, imageFileHead, isImageFile, imageFileBytes, type ImageRef } from './research-image-refs';
 import { normalizeSha256 } from './sha256';
 import { isConfirmDay, isTranscriptMark } from './source-confirm';
 import { ORIGINAL_ONLY_DATA_URL } from './validation';
@@ -5689,7 +5689,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
     const fileKeysOf = (media: RawMedia): string[] => [
         ...(media.ref ? [`ref:${media.ref}`] : []),
         ...(media.sha ? [`sha:${media.sha.toLowerCase()}`] : []),
-        ...(media.file.startsWith('data:') ? [`url:${media.file}`] : []),
+        ...(isImageFile(media.file) ? [`url:${media.file}`] : []),
     ];
     /**
      * A file of the tree at `place` (with the sources its `_SOUR` names):
@@ -5701,10 +5701,11 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
         const keys = fileKeysOf(media);
         let att = keys.map(k => fileByKey.get(k)).find((a): a is Attachment => !!a);
         const name = (fallback: string): string => media.name?.trim() || media.title || fallback;
-        if (media.file.startsWith('data:')) {
-            if (!SAFE_ATTACHMENT_DATA_URL.test(media.file)) return false;
-            const mimeType = media.file.slice(5, media.file.indexOf(';')) || 'application/octet-stream';
-            const sizeBytes = Math.round((media.file.length - media.file.indexOf(',') - 1) * 0.75);
+        if (isImageFile(media.file)) {
+            const head = imageFileHead(media.file);
+            if (!SAFE_ATTACHMENT_DATA_URL.test(head)) return false;
+            const mimeType = head.slice(5, head.indexOf(';')) || 'application/octet-stream';
+            const sizeBytes = imageFileBytes(media.file);
             if (att?.originalOnly) {
                 // The file itself where its record had only its original.
                 delete att.originalOnly;
@@ -5753,7 +5754,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
         const resolved = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images, options.pendingImages) } : linked;
         // A file the archive names only (its name and hash, spec 108 §5) that this browser holds (the
         // tree's own attachment, found by its hash): the file itself, as the tree had it.
-        const heldFile = resolved.file && !resolved.file.startsWith('data:') && resolved.sha && resolved.stromKind !== 'photo'
+        const heldFile = resolved.file && !isImageFile(resolved.file) && resolved.sha && resolved.stromKind !== 'photo'
             ? options.images?.get(resolved.sha.toLowerCase()) : undefined;
         return heldFile && SAFE_ATTACHMENT_DATA_URL.test(heldFile)
             ? { ...resolved, file: heldFile, title: resolved.title || resolved.file.split(/[\\/]/).pop() || resolved.file } : resolved;
@@ -5825,7 +5826,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
             if (!linked) { skipMedia(); continue; }
             // An image named by its hash: the image itself (or left out).
             const media = imageRefSha(linked.file) ? { ...linked, file: resolveImageFile(linked.file, options.images, options.pendingImages) } : linked;
-            const exc = media.file.startsWith('data:')
+            const exc = isImageFile(media.file)
                 ? excerptFromDataUrl(media.file, { caption: media.title, pageUrl: media.pageUrl, clip: media.clip, originalSha: media.sha, orient: media.orient })
                 : null;
             // Its place on the original: re-linked to the page attachment once persons are in.
@@ -6160,13 +6161,13 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
             if (!linked) { skipMedia(); continue; }
             const media = fileMedia(link)!;
             if (!media.file && linked.file) { skipMedia(); continue; }
-            if (media.file.startsWith('data:')) {
+            if (isImageFile(media.file)) {
                 // Only the formats the app itself stores come in: a portrait
                 // is a raster image, a document an image or a PDF. Anything
                 // else (SVG, HTML, script …) could run when opened, so it is
                 // skipped — and counted, so the summary says so.
                 const wantsPhoto = media.stromKind === 'photo';
-                if (!(wantsPhoto ? SAFE_PHOTO_DATA_URL : SAFE_ATTACHMENT_DATA_URL).test(media.file)) {
+                if (!(wantsPhoto ? SAFE_PHOTO_DATA_URL : SAFE_ATTACHMENT_DATA_URL).test(imageFileHead(media.file))) {
                     skipMedia();
                     continue;
                 }
@@ -6239,11 +6240,11 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
             if (!media?.file) continue;
             const file = imageRefSha(media.file) ? resolveImageFile(media.file, options.images, options.pendingImages) : media.file;
             if (!file) continue;
-            if (file.startsWith('data:')) {
-                if (!SAFE_PHOTO_DATA_URL.test(file)) continue;
+            if (isImageFile(file)) {
+                if (!SAFE_PHOTO_DATA_URL.test(imageFileHead(file))) continue;
                 // Its original by its hash (`_STROM_SHA`, spec 108 K2.4): the research holds it.
                 const original: MediaOriginal | undefined = media.sha ? {
-                    sha256: media.sha, name: media.title || 'photo', mimeType: file.slice(5, file.indexOf(';')) || 'image/jpeg', bytes: 0,
+                    sha256: media.sha, name: media.title || 'photo', mimeType: imageFileHead(file).slice(5, imageFileHead(file).indexOf(';')) || 'image/jpeg', bytes: 0,
                     ...(media.orient ? { orientation: media.orient } : {}),
                 } : undefined;
                 familyPhotos.set(gedFamId, { photo: file, ...(media.title ? { title: media.title } : {}), ...(media.date ? { date: media.date } : {}),
@@ -6270,7 +6271,7 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
             // The family's other files in the app's and the research's own files (`_PRIM N`, spec 102): files
             // of the union, taken once the unions are; another program's stay as written. An image named by
             // its hash (`?images=ref`) is one too: fileMedia resolves it as at a person.
-            if (ownFile && media && (media.file.startsWith('data:') || !!imageRefSha(media.file) || !!media.sha)) {
+            if (ownFile && media && (isImageFile(media.file) || !!imageRefSha(media.file) || !!media.sha)) {
                 laterFiles.push({ media: link, place: () => { const u = famPartnership.get(gedFamId); return u ? { partnershipId: u.id } : null; } });
                 if (link.extra) fam.extras = fam.extras?.filter(e => e !== link.extra);
                 if (link.ref) { fam.keptMedia = fam.keptMedia?.filter(r => r !== link.ref); usedMedia.add(link.ref); }

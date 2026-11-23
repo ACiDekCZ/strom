@@ -57,7 +57,8 @@ const stored = (page: Page, first: string) => page.evaluate((first) => {
     const p = dm.getAllPersons().find(x => x.firstName === first)!;
     const media = (Object.values(dm.getData().media ?? {}) as { id: string; places: { personId?: string }[]; original?: { sha256: string }; removed?: unknown }[])
         .map(a => ({ id: a.id, persons: a.places.map(pl => pl.personId), sha: a.original?.sha256 ?? null }));
-    return { photo: p.photo ?? null, source: (p.photoSource ?? null) as { attachmentId?: string; region?: { x: number; y: number; w: number; h: number } } | null, media };
+    // The picture whole: the tree holds a stored one as its pool reference (spec 135).
+    return window.Strom.Images.expandedData({ photo: p.photo ?? null, source: (p.photoSource ?? null) as { attachmentId?: string; region?: { x: number; y: number; w: number; h: number } } | null, media });
 }, first);
 
 const section = (page: Page) => page.locator('#materials-section');

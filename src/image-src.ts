@@ -30,6 +30,7 @@
 import { loadImageBlobs, dataUrlBlob } from './media-pool.js';
 import { POOL_REF, poolIdOf, isPoolRef, poolKeyOf, poolKeyParts, IMAGE_PLACEHOLDER, POOL_REF_ATTR, imageAddrAttr } from './image-ref.js';
 import { jpegWithOrientation } from './exif-orientation.js';
+import { onImagesInterned } from './image-intern.js';
 
 /** The cache keeps object URLs of at most this many bytes … */
 export const IMAGE_CACHE_MAX_BYTES = 64 * 1024 * 1024;
@@ -141,6 +142,28 @@ function trimSoon(): void {
     });
 }
 
+/** At most this many images just stored are put into the cache from their data URLs (an edit's few, not an import's thousands). */
+const PRIME_MAX = 8;
+
+/**
+ * Images just stored (image-intern.ts): `map` takes each data URL to its
+ * reference. A place drawn again with the reference shows the picture at
+ * once — its object URL made from the data URL at hand — instead of
+ * reading it back (a card would flash empty). Only a few: an import's
+ * thousands are read when shown.
+ */
+export function primeImageUrls(map: ReadonlyMap<string, string>): void {
+    if (map.size > PRIME_MAX || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return;
+    for (const [value, ref] of map) {
+        const id = poolIdOf(ref);
+        if (!id || cache.has(id) || !value.startsWith('data:')) continue;
+        const blob = shown(dataUrlBlob(value));
+        if (blob) remember(id, blob);
+    }
+}
+
+onImagesInterned((_treeId, map) => primeImageUrls(map));
+
 /** Revoke every object URL (a lock of the session, tests). */
 export function releaseImageUrls(): void {
     for (const [id, entry] of [...cache]) revoke(id, entry);
@@ -174,10 +197,23 @@ async function asKeyed(blob: Blob | null, orient: number): Promise<Blob | null> 
     return turned ? new Blob([turned as BlobPart], { type: blob.type }) : blob;
 }
 
+/** Where pooled images are read: this window's pool, or the main window's (a satellite without storage). */
+export type PoolBlobSource = (ids: readonly string[]) => Promise<Map<string, Blob | null>>;
+let blobSource: PoolBlobSource | null = null;
+
+/**
+ * Read pooled images from `source` instead of this window's storage (a
+ * satellite window: the main window reads and decrypts them); null: from
+ * here again.
+ */
+export function setPoolBlobSource(source: PoolBlobSource | null): void {
+    blobSource = source;
+}
+
 /** The Blobs of pool keys, read in one transaction (a turned key's from its image's bytes). */
 async function loadKeyed(keys: readonly string[]): Promise<Map<string, Blob | null>> {
     const parts = keys.map(poolKeyParts);
-    const blobs = await loadImageBlobs([...new Set(parts.map(p => p.id))]);
+    const blobs = await (blobSource ?? loadImageBlobs)([...new Set(parts.map(p => p.id))]);
     const out = new Map<string, Blob | null>();
     for (let i = 0; i < keys.length; i++) {
         out.set(keys[i], await asKeyed(shown(blobs.get(parts[i].id)), parts[i].orient));
