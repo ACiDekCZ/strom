@@ -226,12 +226,15 @@ export async function saveMergeSession(
  * K0.6): the session stays until the merge is written or thrown away, its
  * name as it was. False when the session is gone or the write failed.
  */
-export async function updateMergeSession(id: string, state: MergeState): Promise<boolean> {
+export async function updateMergeSession(id: string, state: MergeState, names?: { targetTreeName?: string; sourceTreeName?: string }): Promise<boolean> {
     try {
         const sessions = await listMergeSessions();
         const session = sessions.find(s => s.id === id);
         if (!session) return false;
         session.savedAt = new Date().toISOString();
+        // The target chosen since (or named wrong by an older version, 134 V-N4): the row says the tree merged into.
+        if (names?.targetTreeName) session.targetTreeName = names.targetTreeName;
+        if (names?.sourceTreeName) session.sourceTreeName = names.sourceTreeName;
         session.stats = calculateStats(state);
         session.state = serializeState(state);
         await StorageManager.set('merge', SESSIONS_KEY, sessions);

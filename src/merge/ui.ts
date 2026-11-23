@@ -242,9 +242,8 @@ class MergerUIClass {
         this.hasUnsavedChanges = false;
         this.openedFromTreeManager = fromTreeManager;
 
-        // Get current (target) tree name
-        const activeTreeId = TreeManager.getActiveTreeId();
-        this.targetTreeName = activeTreeId ? TreeManager.getTreeMetadata(activeTreeId)?.name : undefined;
+        // The target's name: the tree merged into, not the open one (that may be the source, 134 V-N4).
+        this.targetTreeName = targetId ? TreeManager.getTreeMetadata(targetId)?.name : undefined;
 
         // Determine if this is a tree-to-tree merge or file import
         const fromTree = !!sourceTreeIdOrFileName && !!TreeManager.getTreeMetadata(sourceTreeIdOrFileName as TreeId);
@@ -513,7 +512,7 @@ class MergerUIClass {
         const sessionId = this.resumedSessionId;
         let stored: Promise<unknown>;
         if (sessionId) {
-            stored = pooled.then(() => updateMergeSession(sessionId, state));
+            stored = pooled.then(() => updateMergeSession(sessionId, state, this.sessionNames()));
         } else {
             // Generate display name from tree names
             const displayName = this.targetTreeName && this.sourceTreeName
@@ -574,6 +573,11 @@ class MergerUIClass {
         }, AUTO_SAVE_DELAY);
     }
 
+    /** The names a saved merge's row says: the tree merged into and the tree merged (none for a file). */
+    private sessionNames(): { targetTreeName?: string; sourceTreeName?: string } {
+        return { targetTreeName: this.targetTreeName, sourceTreeName: this.sourceTreeName };
+    }
+
     /**
      * Perform auto-save
      */
@@ -583,7 +587,7 @@ class MergerUIClass {
         // After the import's images are in the pool: the session holds their references.
         void this.incomingPooling.then(() => {
             if (this.mergeState !== state) return;
-            if (this.resumedSessionId) void updateMergeSession(this.resumedSessionId, state);
+            if (this.resumedSessionId) void updateMergeSession(this.resumedSessionId, state, this.sessionNames());
             else void saveCurrentMerge(state, this.incomingFileName);
         });
     }
@@ -701,7 +705,7 @@ class MergerUIClass {
             },
             ...(this.initialMode ? { mode: this.initialMode } : {}),
             targetTreeId,
-            targetName: (targetTreeId ? this.targetTreeName || TreeManager.getTreeMetadata(targetTreeId)?.name : undefined)
+            targetName: (targetTreeId ? TreeManager.getTreeMetadata(targetTreeId)?.name || this.targetTreeName : undefined)
                 || strings.treeManager.newTree,
             // Only a tree that owns its research has one: a copy is a tree without research (spec 139 K5.3).
             ...(TreeManager.canSendToResearch(targetTreeId) ? { research: true } : {}),

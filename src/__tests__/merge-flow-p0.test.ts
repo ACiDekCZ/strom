@@ -71,12 +71,12 @@ import { MergerUI } from '../merge/ui.js';
 import { executeMerge } from '../merge/executor.js';
 import { mergeCheckMessage } from '../merge/merge-check.js';
 import { createMergeState, rebaseMergeState, updateMatchDecision } from '../merge/matching.js';
-import { listMergeSessionsInfo, saveMergeSession } from '../merge/persistence.js';
+import { listMergeSessionsInfo, saveMergeSession, updateMergeSession } from '../merge/persistence.js';
 import { listSnapshots } from '../snapshots.js';
 import { contentFingerprint } from '../research-link.js';
 import { mergeUiMethods } from '../ui/merge-ui.js';
 import { strings } from '../strings.js';
-import { freshChoices, type WizardSource } from '../merge/wizard-ui.js';
+import { freshChoices, wizardRoute, type WizardSource } from '../merge/wizard-ui.js';
 import type { MergeState } from '../merge/types.js';
 import type { WriteStatus } from '../merge/steps/context.js';
 import type { PersonId, StromData, TreeId, TreeMetadata } from '../types.js';
@@ -365,6 +365,30 @@ describe('K0.5 · success only after the written tree', () => {
         expect([...st('merge').keys()].some(k => k.startsWith('backup-'))).toBe(false);
         expect(TreeManager.getTrees()).toHaveLength(3);
         expect(storedNames(T1)).toEqual(['Alma', 'Berta']);
+    });
+});
+
+describe('134 V-N4 · a merge started from another tree than its target', () => {
+    it('names the target everywhere (title, Compare, the saved merge), not the open tree', async () => {
+        // The open tree (Family) is the one merged: Cousins is the target.
+        const self = { ...ui, mergeTargetReady: mergeUiMethods.mergeTargetReady };
+        await mergeUiMethods.showMergeTreesDialog.call(self as never, T1);
+        const opened = internals().mergeState!;
+        const m = MergerUI as unknown as { wizardSource(): WizardSource; storeForLater(): Promise<void> };
+        opened.wizard ??= { step: 1, reached: 1, compared: false, choices: freshChoices(m.wizardSource(), opened) };
+        const c = opened.wizard.choices;
+        expect(c.targetTreeId).toBe(T2);
+        expect(c.targetName).toBe('Cousins');
+        expect(wizardRoute(c)).toBe('Family → Cousins');
+        expect(strings.mergeWizard.btnCompare(c.source.persons, c.targetName)).toContain('Cousins');
+        // Saved for later: the row of Manage trees names the tree merged into.
+        await m.storeForLater();
+        const [saved] = await listMergeSessionsInfo();
+        expect(saved).toMatchObject({ targetTreeName: 'Cousins', sourceTreeName: 'Family' });
+        // A merge saved by an older version with the open tree as its target: its next save names the target.
+        const old = await saveMergeSession(opened, 'Family + Family', 'Family', 'Family');
+        expect(await updateMergeSession(old, opened, { targetTreeName: 'Cousins', sourceTreeName: 'Family' })).toBe(true);
+        expect((await listMergeSessionsInfo()).find(x => x.id === old)).toMatchObject({ targetTreeName: 'Cousins' });
     });
 });
 
