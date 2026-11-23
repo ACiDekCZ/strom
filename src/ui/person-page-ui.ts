@@ -46,6 +46,7 @@ import { activatedElement } from './busy.js';
 import { imagesToAwait } from '../image-loads.js';
 import { imagesBeforeOutput, imagesReadyForPrint } from './output-images.js';
 import { expandedData } from '../image-expand.js';
+import { pageImagesToRead, readPageImages, treeWithPageImages, pageImageValue, forgetPageImages } from './person-page-images.js';
 
 export const PERSON_PAGE_ID = 'person-page-modal';
 export const PERSON_PAGE_EXPORT_ID = 'person-page-export-modal';
@@ -355,6 +356,7 @@ export const personPageMethods = uiModule({
         if (imagesHandler) window.removeEventListener(IMAGES_STATE_EVENT, imagesHandler);
         imagesHandler = null;
         imagesFailedShown = -1;
+        forgetPageImages();
         if (resizeHandler) window.removeEventListener('resize', resizeHandler);
         resizeHandler = null;
         this.dialogStack = this.dialogStack.filter(d => d !== PERSON_PAGE_ID);
@@ -402,6 +404,16 @@ export const personPageMethods = uiModule({
             return;
         }
         if (!DataManager.getPerson(entry.personId)) { this.closePersonPage(); return; }
+        // The person's pooled images are read first (the page takes them whole); meanwhile the page stays as it is.
+        const toRead = pageImagesToRead(DataManager.getData(), entry.personId);
+        if (toRead.length) {
+            void readPageImages(toRead).then(() => {
+                if (!overlayEl() || state?.current !== entry) return;
+                this.snapshotPersonPage();
+                this.renderPersonPage();
+            });
+            return;
+        }
         const h2 = overlay.querySelector('#pp-title') as HTMLElement;
         h2.textContent = P.title;
         h2.removeAttribute('title');
@@ -420,7 +432,7 @@ export const personPageMethods = uiModule({
         });
         // The images still on their way are the page's too: their places wait for them (spec 116 §5).
         imagesFailedShown = imageLoads.snapshot().failed;
-        const page = preparePersonPageData(imageLoads.view(data), opts, this.personPageContext(entry.personId));
+        const page = preparePersonPageData(imageLoads.view(treeWithPageImages(data, entry.personId)), opts, this.personPageContext(entry.personId));
         const body = buildPersonPageBody(page, opts);
         pagePlaces = page.places;
         // The contents start with the header's details (the top of the page), counted apart from the four sections.
@@ -795,7 +807,7 @@ export const personPageMethods = uiModule({
             const src = (zoom.querySelector('img') ?? zoom.closest('.pp-fig')?.querySelector('img'))?.getAttribute('src');
             // A portrait cut from a photo of the tree: Portrait | Whole photo (spec 107 §2).
             const person = zoom.classList.contains('pp-portrait') && state ? DataManager.getPerson(state.current.personId) : null;
-            const whole = person && src === person.photo ? portraitWholePhoto(person) : null;
+            const whole = person && src === pageImageValue(person.photo) ? pageImageValue(portraitWholePhoto(person)) : null;
             if (src) openImageViewer(src, () => zoom.focus({ preventScroll: true }), undefined, whole);
             return;
         }
