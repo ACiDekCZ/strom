@@ -42,10 +42,24 @@ async function setup(page: Page, orient: string | null): Promise<string> {
     return jpeg;
 }
 
-const shownSize = (page: Page, selector: string) => page.locator(selector).first().evaluate(async (img: HTMLImageElement) => {
-    await img.decode().catch(() => undefined);
-    return { w: img.naturalWidth, h: img.naturalHeight };
-});
+/** The 1 × 1 GIF a pooled image shows until the hydrator puts its object URL in (image-ref.ts). */
+const PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+/**
+ * The size an <img> shows once its picture is in: the import pools the crop,
+ * so the viewer's <img> carries the placeholder until the hydrator fills it.
+ */
+async function shownSize(page: Page, selector: string): Promise<{ w: number; h: number }> {
+    const img = page.locator(selector).first();
+    await expect.poll(() => img.evaluate((i: HTMLImageElement, placeholder) => {
+        const src = i.getAttribute('src') ?? '';
+        return src !== '' && src !== placeholder;
+    }, PLACEHOLDER), { message: `${selector} filled` }).toBe(true);
+    return img.evaluate(async (i: HTMLImageElement) => {
+        await i.decode().catch(() => undefined);
+        return { w: i.naturalWidth, h: i.naturalHeight };
+    });
+}
 
 const openViewer = (page: Page) => page.evaluate(() => {
     const id = Object.keys(window.Strom.DataManager.getData().sources ?? {})[0];
