@@ -253,3 +253,51 @@ test.describe('on a phone', () => {
         expect(seg!.height).toBeGreaterThanOrEqual(44);
     });
 });
+
+/** Nothing of the page or of the open dialog scrolls sideways. */
+async function noSideways(page: Page, dialog: Locator): Promise<void> {
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const over = await dialog.locator('.modal').evaluate(m => [m, ...m.querySelectorAll('*')]
+        .filter(e => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflowX !== 'visible' && getComputedStyle(e).textOverflow !== 'ellipsis')
+        .map(e => `${e.tagName}.${(e as HTMLElement).className}`));
+    expect(over).toEqual([]);
+}
+
+for (const vp of [
+    { name: 'a phone held upright', viewport: PHONE },
+    { name: 'a tablet', viewport: { width: 1024, height: 768 } },
+    { name: 'a phone held sideways', viewport: { width: 844, height: 390 } },
+]) {
+    test.describe(vp.name, () => {
+        test.use({ viewport: vp.viewport });
+
+        test('step 6, the Merge history, a merge\'s list and the undo: the primary button on the screen, nothing scrolls sideways', async ({ page }) => {
+            const { wizard } = await mergedTree(page, false);
+            await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '6');
+            await expect(wizard.locator('#merge-next')).toBeInViewport();
+            await noSideways(page, wizard);
+            await mergeDone(wizard);
+
+            await page.evaluate(() => window.Strom.UI.showMergeHistory(window.Strom.DataManager.getCurrentTreeId()));
+            const h = history(page);
+            await expect(h).toHaveClass(/active/);
+            await expect(h.locator('.merge-hist-foot [data-dismiss]')).toBeInViewport();
+            await noSideways(page, h);
+
+            await h.locator('.merge-hist-row button[data-act="open"]').click();
+            const rec = page.locator('#merge-record-modal');
+            await expect(rec).toHaveClass(/active/);
+            await expect(rec.locator('.merge-hist-foot [data-dismiss]')).toBeInViewport();
+            await noSideways(page, rec);
+            await rec.locator('.merge-hist-foot [data-dismiss]').click();
+            await expect(rec).not.toHaveClass(/active/);
+
+            await expect(h).toHaveClass(/active/);
+            await h.locator('.merge-hist-row button[data-act="undo"]').click();
+            const u = undoDialog(page);
+            await expect(u).toHaveClass(/active/);
+            await expect(u.locator('[data-act="undo"]')).toBeInViewport();
+            await noSideways(page, u);
+        });
+    });
+}
