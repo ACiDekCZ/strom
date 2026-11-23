@@ -6,8 +6,14 @@
 
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
+- **Bezpečné slučování stromů**: soubor GEDCOM nebo jiný strom se do stromu přidává průvodcem *Sloučení stromů* v šesti krocích: *Co s tím*, *Kdo je kdo* (osoby nalezené v obou stromech, spárované jedna po druhé), *Koho přidat*, *Kdo má pravdu* (pravidla, čí údaje platí; doložené údaje jsou chráněné), *Co se stane* (celý výčet změn, který jde před zápisem uložit) a *Co se stalo*. Před zápisem vznikne záloha; tentýž soubor sloučený znovu přidá jen osoby, které se minule vynechaly.
+- **Historie sloučení a odvolání**: *Historie sloučení…* ukáže sloučení stromu a *Odvolat sloučení…* jedno vezme zpět, celé nebo po částech; co se od té doby změnilo, zůstane, pokud se nevybere jinak. Ve stromu napojeném na výzkum čeká, co sloučení přineslo, v aplikaci až do *Poslat do výzkumu…* (nebo *Zatím nechat jen v aplikaci*); mezitím do výzkumu nic nejde samo.
+- **Velké stromy s fotkami**: obrázky už strom nedrží v paměti, načtou se, až jsou vidět, a exporty je zapisují po jednom, takže velký strom s mnoha fotkami se otevře, exportuje a pracuje s oknem *Přehled výzkumu*, aniž by došla paměť (nainstalovaná aplikace tam už nepadá). Když by paměť přesto nemusela stačit, zeptá se *Paměť nemusí stačit* před exportem nebo importem a umí obrázky ze souboru vynechat.
+- **Menší odesílání do výzkumu**: obrázky, které výzkum už má, jdou odkazem místo celých, takže odeslání stromu s fotkami do výzkumu je mnohonásobně menší (s verzí výzkumu, která to umí).
 - **Portrét přes kraj fotky**: v editoru portrétu jde fotku pod rámem posunout i přes její kraj a tam ji přiblížit, takže obličej u kraje fotky může být uprostřed portrétu; střed rámu vždy zůstává na fotce. Část portrétu mimo fotku má neutrální světlou barvu, stejně na kartě, ve vějíři, v knize, v exportu obrázku, v uložených stránkách, v tisku i v GEDCOM. Dřív vyříznuté portréty vypadají jako dosud.
 - **Připojit k… ve sledovaném stromu**: *Připojit k…* se ve sledovaném stromu nabízí všude jako v každém jiném stromu (*Materiály* osoby a řádky příloh, prohlížeč souboru); dialog řekne, že strom je mezitím jen pro čtení, a nabídne *Ukončit sledování*.
+- **Data**: datová verze 26: kontakt osoby drží e-mailové adresy (*E-mail* v dialogu osoby, čtené z GEDCOM i do něj zapisované, odkaz na stránce osoby) a strom si pamatuje záznam svých sloučení; starší verze aplikace takový strom otevřou jen ke čtení.
+- **Opravy**: číslo snímku se z názvu souboru čte stejně jako ve výzkumu (datum a čas snímku obrazovky není číslo snímku); *Poslat materiál do výzkumu* má *Přidat i jako přílohu do stromu* vedle textu a řekne, zda soubory jdou i do stromu; *Přehled výzkumu* řekne, kolik běhů čeká na archiv, prohlížeč nebo stažení; na telefonu je legenda vějíře nad pruhem výzkumu.
 
 ## 3.31.0
 
