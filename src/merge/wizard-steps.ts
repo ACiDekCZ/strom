@@ -3,10 +3,12 @@
  * worked out from the choices and the plan only, no DOM.
  *
  * Short ways: a new tree goes 1 → (3) → 5 → 6 (steps 2 and 4 skipped);
- * scope a) with no differing couples goes without step 4.
+ * scopes a) and b), where no differing detail of a joined person changes,
+ * go without step 4 unless relations conflict (then step 4 shows only them).
  */
 
 import type { MergePlan, WizardChoices } from './plan.js';
+import { planNeedsStep4 } from './plan-rules.js';
 
 export type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
 export const WIZARD_STEPS: readonly WizardStep[] = [1, 2, 3, 4, 5, 6];
@@ -16,21 +18,20 @@ export type StepState = 'ok' | 'skip' | 'locked';
 
 /**
  * Why a step is skipped, for its second line in the step list:
- * newTree "new tree", scopeA "skipped · scope a)", allNew "all new",
- * mineRule "my tree applies", compare (nothing is written, no step 6).
+ * newTree "new tree", scope "skipped · scope a)" (or b), allNew "all new",
+ * compare (nothing is written, no step 6).
  */
-export type StepSkipReason = 'newTree' | 'scopeA' | 'allNew' | 'mineRule' | 'compare';
+export type StepSkipReason = 'newTree' | 'scope' | 'allNew' | 'compare';
 
 export interface StepInfo {
     state: StepState;
     reason?: StepSkipReason;
 }
 
-/**
- * Step 4 (Who is right) is not built yet: until it exists, it is always
- * skipped ("my tree applies"). Part B turns this off.
- */
-export const STEP_4_PENDING = true;
+/** What step 4 shows for a plan (Only compare shows what adding would decide). */
+export function step4Need(plan: Pick<MergePlan, 'mode' | 'scope' | 'items'>): ReturnType<typeof planNeedsStep4> {
+    return planNeedsStep4(plan.mode === 'compare' ? { ...plan, mode: 'add' } : plan);
+}
 
 /** Each step's state and, when skipped, why. A null plan: the comparison has not run yet. */
 export function stepInfo(choices: Pick<WizardChoices, 'mode' | 'scope' | 'pickPeople' | 'writtenAt'>, plan: MergePlan | null): Record<WizardStep, StepInfo> {
@@ -48,8 +49,7 @@ export function stepInfo(choices: Pick<WizardChoices, 'mode' | 'scope' | 'pickPe
 
     let step4: StepInfo;
     if (newTree) step4 = { state: 'skip', reason: 'newTree' };
-    else if (STEP_4_PENDING) step4 = { state: 'skip', reason: 'mineRule' };
-    else if (choices.scope === 'a' && (!plan || plan.conflicts.unions === 0)) step4 = { state: 'skip', reason: 'scopeA' };
+    else if ((choices.scope === 'a' || choices.scope === 'b') && (!plan || step4Need(plan) === 'skip')) step4 = { state: 'skip', reason: 'scope' };
     else step4 = { state: done ? 'ok' : 'locked' };
 
     const step6: StepInfo = choices.mode === 'compare'

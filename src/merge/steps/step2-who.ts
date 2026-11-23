@@ -496,11 +496,8 @@ function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d
         const why: string[] = [];
         if (reasons.length) why.push(`<p class="merge-why"><b>${escapeHtml(W.whyYes)}</b> ${escapeHtml(reasons.join(', '))}</p>`);
         if (against.length || unions.length) {
-            const resolve = row.match && row.match.existingId === tree.id && row.match.conflicts.length > 0
-                ? ` <button type="button" class="link-button merge-btn-resolve" data-action="resolve">${escapeHtml(strings.merge.resolveConflicts)}</button>` : '';
-            const unionLines = unions.map(u => `<span class="merge-why-union${u.resolved ? ' is-resolved' : ''}" data-union="${escapeHtml(u.id)}">${escapeHtml(u.text)}`
-                + ` <button type="button" class="link-button merge-btn-resolve" data-action="resolve-union">${escapeHtml(strings.merge.resolveConflicts)}</button></span>`).join('');
-            why.push(`<p class="merge-why-no"><b>${escapeHtml(W.whyNo)}</b> ${against.map(escapeHtml).join('; ')}${resolve}${unionLines}</p>`);
+            const unionLines = unions.map(u => `<span class="merge-why-union" data-union="${escapeHtml(u.id)}">${escapeHtml(u.text)}</span>`).join('');
+            why.push(`<p class="merge-why-no"><b>${escapeHtml(W.whyNo)}</b> ${against.map(escapeHtml).join('; ')}${unionLines}</p>`);
         }
         if (why.length) parts.push(`<div class="merge-whys">${why.join('')}</div>`);
     }
@@ -756,11 +753,6 @@ function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
         if (!action || !id || !env) return;
         if (action === 'compare') env.compare(id, (t.closest<HTMLElement>('[data-tree]')?.dataset.tree as PersonId | undefined));
         else if (action === 'preview') env.preview(id);
-        else if (action === 'resolve') env.resolve(id);
-        else if (action === 'resolve-union') {
-            const u = t.closest<HTMLElement>('[data-union]')?.dataset.union;
-            if (u) env.resolveUnion(u as Partnership['id']);
-        }
     });
     pane?.addEventListener('change', e => {
         const radio = (e.target as HTMLElement).closest<HTMLInputElement>('input[name="merge-cand"]');

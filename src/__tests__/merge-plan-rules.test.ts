@@ -250,7 +250,7 @@ describe('conflicts of relations (K5.5)', () => {
 
         let plan = buildPlan(st(), choices({ scope: 'b' }));
         expect(relation(plan, 'parents')).toMatchObject({ choice: 'mine' });
-        expect(planNeedsStep4(plan)).toBe('full');
+        expect(planNeedsStep4(plan)).toBe('relations-only');
         let after = await written(plan, t.data, s.data);
         expect(parentsOf(after, 't3')).toEqual(['t1', 't2']);
         expect(Object.values(after.persons).some(p => p.firstName === 'Radhost')).toBe(true);

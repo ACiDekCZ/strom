@@ -447,12 +447,13 @@ export function isUnionProtected(union: Partnership | undefined): boolean {
 // ==================== STEP 4 OR NOT ====================
 
 /**
- * What step 4 shows for a plan: nothing (a new tree, scope a) without
- * conflicts of relations), only the conflicts of relations (scope a) with
- * some), or the whole step (scopes b, c, d).
+ * What step 4 shows for a plan: nothing (a new tree; scopes a) and b), where
+ * no differing detail of a joined person changes, without conflicts of
+ * relations), only the conflicts of relations (scopes a) and b) with some),
+ * or the whole step (scopes c, d).
  */
 export function planNeedsStep4(plan: { mode: string; scope: string; items: ReadonlyArray<{ kind: string }> }): 'skip' | 'relations-only' | 'full' {
     if (plan.mode !== 'add') return 'skip';
-    if (plan.scope !== 'a') return 'full';
+    if (plan.scope !== 'a' && plan.scope !== 'b') return 'full';
     return plan.items.some(i => i.kind === 'relation') ? 'relations-only' : 'skip';
 }

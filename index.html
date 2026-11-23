@@ -15119,7 +15119,6 @@
 
         /* Sub-dialogs that appear above merge-modal */
         #merge-manual-dialog,
-        #merge-conflict-dialog,
         #merge-close-confirm,
         #merge-not-taken-modal,
         .merge-s3-dialog {
@@ -18348,13 +18347,14 @@
         @media (max-width: 1099px) {
             .merge-step:not(.active) > .merge-step-sub { display: none; }
         }
-        .merge-step.is-done { cursor: pointer; }
+        .merge-step.is-done, button.merge-step.is-skipped { cursor: pointer; }
         .merge-step.is-done .merge-step-ok { display: inline-flex; color: var(--primary); }
         .merge-step.is-skipped .merge-step-name,
         .merge-step.is-future .merge-step-name { color: var(--text-faint); }
         @media (hover: hover) {
             .merge-progress .merge-step.sel-tab:not(.is-done):not(.active):hover { box-shadow: none; }
-            .merge-progress .merge-step.is-done:hover .merge-step-name { color: var(--text); }
+            .merge-progress .merge-step.is-done:hover .merge-step-name,
+            .merge-progress button.merge-step.is-skipped:hover .merge-step-name { color: var(--text); }
         }
         /* The phone's short form ("Step 2 of 6 · Who is who" and six bars): shown only up to 640 px. */
         .merge-progress-short {
@@ -18567,7 +18567,6 @@
         .merge-ok svg { vertical-align: -1px; }
         .merge-whys p { margin: 0 0 4px; font-size: 12.5px; }
         .merge-why-union { display: block; }
-        .merge-why-union.is-resolved { color: var(--text-light); }
         .merge-whys .link-button { padding: 0; min-height: 0; font-size: 12.5px; }
         .merge-decide { display: flex; flex-wrap: wrap; gap: 6px; }
         .merge-decide .merge-dec {
@@ -18896,6 +18895,131 @@
         @media (hover: hover) {
             .merge-s3-list > .merge-s3-row:hover, .merge-s3-pick-list > li:hover, .modal label.merge-s3-tile:hover, .merge-s3-gsingles > li:hover { background: var(--hover-bg); }
         }
+        /* ==================== Step 4 – Who is right (§7, 7a–7e) ==================== */
+        .merge-s4 { display: flex; flex-direction: column; gap: 10px; }
+        .merge-s4-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+        .merge-s4-h { font-size: 13px; font-weight: 600; }
+        .merge-s4-order, .merge-s4-note { margin: 0; color: var(--text-light); font-size: 12.5px; }
+        .merge-s4-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+        .modal .merge-s4 button.merge-s4-tile {
+            display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; margin: 0;
+            padding: 8px 10px; text-align: left; font: inherit; color: var(--text);
+        }
+        .merge-s4-tile-t { font-size: 13px; font-weight: 600; }
+        .merge-s4-tile-n { font-size: 11.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .merge-s4-tile-ex { font-size: 11.5px; color: var(--text-faint); overflow-wrap: anywhere; }
+        .merge-s4-prot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; font-size: 12.5px; color: var(--text-light); }
+        .merge-s4-research {
+            padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-tag);
+            font-size: 11px; line-height: 1.5; color: var(--text-light); white-space: nowrap;
+        }
+        .modal .merge-s4 .link-button { min-height: 0; padding: 0; font-size: 12.5px; }
+        .merge-s4-bar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 6px 12px; border-bottom: 1px solid var(--border); }
+        .merge-s4-tabs { display: flex; overflow-x: auto; scrollbar-width: none; }
+        .merge-s4-tabs .merge-tab { flex: 0 0 auto; padding: 8px 12px; border: 0; background: transparent; font-size: 13px; cursor: pointer; }
+        .merge-s4-tabs .cnt { color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .modal .merge-s4 input.merge-s4-search {
+            width: 200px; max-width: 100%; box-sizing: border-box; margin: 0 0 6px; padding: 5px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 13px;
+        }
+        .merge-s4-panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .merge-s4-kinds { border: 1px solid var(--border); border-radius: var(--r-md); }
+        .merge-s4-krow { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 2px 12px; border-bottom: 1px solid var(--divider); font-size: 13px; }
+        .merge-s4-krow:last-child { border-bottom: 0; }
+        .merge-s4-kname { flex: 0 0 110px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-s4-kcount, .merge-s4-tag {
+            flex: none; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-tag);
+            color: var(--text-light); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; white-space: nowrap;
+        }
+        .merge-s4-from { flex: 1 1 auto; min-width: 0; text-align: right; color: var(--text-faint); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s4-from.is-own { color: var(--text); font-weight: 600; }
+        .modal .merge-s4 select.merge-s4-select {
+            flex: none; width: 220px; height: 26px; min-height: 26px; margin: 0; padding: 0 6px;
+            border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px;
+        }
+        .merge-s4-phead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; font-size: 12.5px; }
+        .merge-s4-pcount { color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .merge-s4 .sel-seg { display: inline-flex; flex-wrap: wrap; }
+        .modal .merge-s4 .sel-seg > .sel-opt { padding: 3px 10px; font-size: 12.5px; }
+        .merge-s4-person { padding: 8px 0 10px; border-bottom: 1px solid var(--divider); }
+        .merge-s4-grid { display: grid; grid-template-columns: 110px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr); column-gap: 10px; }
+        .merge-s4-row { display: contents; }
+        .merge-s4-row > * { padding: 3px 0; font-size: 13px; min-width: 0; }
+        .merge-s4-hrow > span { color: var(--text-light); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-s4-hrow > .merge-s4-pname { color: var(--text); font-size: 14px; }
+        .merge-s4-pname { font-family: var(--font-serif); font-size: 14.5px; }
+        .merge-s4-ptitle { display: none; margin: 0; font-weight: 400; }
+        .merge-s4-k { color: var(--text-light); }
+        .modal .merge-s4 button.merge-s4-v {
+            display: block; width: 100%; min-height: 0; margin: 0; padding: 3px 6px; border: 1px solid transparent; border-radius: var(--r-sm);
+            background: transparent; color: var(--text); font: inherit; font-size: 13px; text-align: left; overflow-wrap: anywhere; cursor: pointer;
+        }
+        .modal .merge-s4 button.merge-s4-v[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-soft); }
+        .merge-s4-res { display: flex; flex-direction: column; gap: 1px; }
+        .merge-s4-res-v { overflow-wrap: anywhere; }
+        .merge-s4-res-from { color: var(--text-faint); font-size: 11.5px; }
+        .merge-s4-res-from.is-walk { color: var(--warning-text); }
+        .merge-s4-pwhole { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; font-size: 12.5px; }
+        .merge-s4-pwhole-l { color: var(--text-light); }
+        .merge-s4 .conflict-photo { max-width: 48px; max-height: 48px; }
+        .merge-s4 .conflict-photo.img-slot-pic { width: 48px; height: 48px; }
+        .merge-s4-rels { display: flex; flex-direction: column; gap: 0; }
+        .merge-s4-rels-h { margin: 0 0 4px; }
+        .merge-s4-rel { display: flex; flex-direction: column; gap: 4px; padding: 8px 0 10px; border-bottom: 1px solid var(--divider); }
+        .merge-s4-rel:last-child { border-bottom: 0; }
+        .merge-s4-rel-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+        .merge-s4-loop { color: var(--error-text); font-size: 12px; }
+        .merge-s4-rel-sides { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2px 14px; font-size: 13px; }
+        .merge-s4-side { color: var(--text-light); }
+        .merge-s4-skip-t { margin: 0; font-size: 14px; font-weight: 600; }
+        .merge-s4-diffs { margin: 0; padding-left: 18px; font-size: 12.5px; max-height: 50vh; overflow-y: auto; }
+        .merge-s4-diffs .tnum { font-variant-numeric: tabular-nums; }
+        #merge-s4-prot .modal.modal--sm { width: 480px; max-width: min(480px, 94vw); }
+        .merge-s4-prot-text { margin: 0 0 8px; font-size: 13.5px; line-height: 1.45; }
+        #merge-s4-prot .merge-s4-note { margin-bottom: 12px; }
+        @media (pointer: coarse) {
+            .modal .merge-s4 .link-button, .modal .merge-s4 .sel-seg > .sel-opt, .modal .merge-s4 button.merge-s4-v { min-height: 44px; }
+            .modal .merge-s4 select.merge-s4-select { height: 44px; }
+            .merge-s4-krow { min-height: 44px; }
+        }
+        /* A tablet: the tiles three and two, the kind's own rule under its name. */
+        @media (max-width: 1024px) {
+            .merge-s4-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .merge-s4-grid { grid-template-columns: 90px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); }
+        }
+        /* A phone (7a/7b): the tiles one under another (the default on top), the tabs as a segment, each person a card. */
+        @media (max-width: 640px) {
+            .merge-s4-tiles { grid-template-columns: minmax(0, 1fr); }
+            .merge-s4-bar { border-bottom: 0; }
+            .merge-s4-tabs { width: 100%; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+            .merge-s4-tabs .merge-tab { flex: 1 1 0; min-width: 0; padding: 8px 4px; font-size: 12.5px; white-space: normal; text-align: center; }
+            .merge-s4-tabs .merge-tab + .merge-tab { border-left: 1px solid var(--border); }
+            .modal .merge-s4 input.merge-s4-search { width: 100%; }
+            .merge-s4-krow { flex-wrap: wrap; row-gap: 2px; padding: 6px 12px; }
+            .merge-s4-kname { flex: 1 1 auto; }
+            .merge-s4-from { flex-basis: 100%; order: 5; text-align: left; white-space: normal; }
+            .modal .merge-s4 select.merge-s4-select { width: 100%; order: 6; }
+            .merge-s4-person { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-md); }
+            .merge-s4-grid { display: block; }
+            .merge-s4-hrow { display: none; }
+            .merge-s4-ptitle { display: block; margin-bottom: 4px; }
+            .merge-s4-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 8px; padding: 6px 0; border-top: 1px solid var(--divider); }
+            .merge-s4-row > .merge-s4-k { grid-column: 1 / -1; padding: 0; font-size: 12px; }
+            .merge-s4-row > .merge-s4-res { grid-column: 1 / -1; }
+            .modal .merge-s4 button.merge-s4-v::before { content: attr(data-col); display: block; color: var(--text-faint); font-size: 11px; }
+            .merge-s4-rel-sides { grid-template-columns: minmax(0, 1fr); }
+            .merge-s4 .sel-seg { width: 100%; }
+            .merge-s4 .sel-seg > .sel-opt { flex: 1 1 auto; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-s4-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+            .merge-s4-tile-ex { display: none; }
+            .merge-s4-tabs .merge-tab { padding: 6px 8px; font-size: 12px; }
+        }
+        @media (hover: hover) {
+            .modal .merge-s4 button.merge-s4-v:hover { border-color: var(--border); }
+            .merge-s4-krow:hover { background: var(--hover-bg); }
+        }
         .merge-stat.skipped .merge-stat-label { color: var(--text-faint); }
         .merge-stat.skipped .merge-stat-value { color: var(--text-faint); }
         .merge-empty {
@@ -19041,61 +19165,6 @@
             .person-merge-shared-check { min-height: 44px; }
         }
         /* person-merge conflict UI is tokenized — no dark overrides needed. */
-        .merge-conflict-content {
-            /* Scrolls with the modal body (unified skeleton). */
-        }
-        .conflict-row {
-            padding: 12px 0;
-            border-bottom: 1px solid var(--divider);
-        }
-        .conflict-row:last-child {
-            border-bottom: none;
-        }
-        .conflict-label {
-            font-weight: 500;
-            margin-bottom: 8px;
-        }
-        .conflict-options {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        /* The chosen side reads as a selected card, not just a radio dot: a .sel-opt tile (src/ui/sel-css.ts). */
-        .conflict-option {
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-            padding: 8px 12px;
-            cursor: pointer;
-        }
-        .conflict-option input[type="radio"] {
-            width: auto;
-            margin: 0;
-            accent-color: var(--primary, #4a7c59);
-        }
-        .conflict-value { font-weight: 500; }
-        .conflict-badge.existing { background: var(--info-soft); color: var(--text); }
-        .conflict-badge.incoming { background: var(--primary-soft); color: var(--primary-dark); }
-        .conflict-suggested {
-            background: rgba(74, 124, 89, 0.12);
-            border-radius: 8px;
-            padding: 2px 7px;
-        }
-        .conflict-value {
-            flex: 1;
-        }
-        .conflict-suggested {
-            font-size: 10.5px;
-            color: var(--primary);
-            white-space: nowrap;
-        }
-        .conflict-badge {
-            font-size: 10px;
-            padding: 2px 6px;
-            background: var(--surface-2);
-            border-radius: 6px;
-        }
         .validation-content {
             max-height: 300px;
             overflow-y: auto;
@@ -36616,21 +36685,6 @@
     </div>
 
     <!-- Conflict Resolution Dialog -->
-    <div class="modal-overlay" id="merge-conflict-dialog">
-        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
-            <div class="modal-header">
-                <h2 data-i18n="merge.conflicts">Conflicts</h2>
-                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.MergerUI.closeConflictDialog()">&times;</button>
-            </div>
-            <div id="merge-conflict-content" class="merge-conflict-content">
-                <!-- Conflict rows rendered here -->
-            </div>
-            <div class="buttons">
-                <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeConflictDialog()" data-i18n="buttons.cancel">Cancel</button>
-                <button class="primary" onclick="window.Strom.MergerUI.saveConflictResolutions()" data-i18n="buttons.save">Save</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Merge Close Confirmation Dialog -->
     <div class="modal-overlay" id="merge-close-confirm" onclick="if(event.target===this) window.Strom.MergerUI.handleCloseCancel()">

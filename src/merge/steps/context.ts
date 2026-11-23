@@ -34,7 +34,6 @@ export type PairDecision = 'confirm' | 'reject' | 'skip' | { type: 'manual_match
 export interface UnionConflictLine {
     id: PartnershipId;
     text: string;
-    resolved: boolean;
 }
 
 /** Step 2 of the guide: the decisions on the pairs and what opens from them (§4). */
@@ -44,11 +43,8 @@ export interface Step2Env {
     decideMany(incomingIds: readonly PersonId[], decision: 'reject' | 'skip'): void;
     /** "Another person…": the tree's person picked by hand (#merge-manual-dialog). */
     other(incomingId: PersonId): void;
-    /** The differences of a joined pair, one by one (the conflict dialog, until step 4). */
-    resolve(incomingId: PersonId): void;
     /** The couples of the person both trees know that differ. */
     unionConflicts(incomingId: PersonId): UnionConflictLine[];
-    resolveUnion(id: PartnershipId): void;
     /** The pair side by side in both trees, or the import's person in its tree. */
     compare(incomingId: PersonId, treeId?: PersonId): void;
     preview(incomingId: PersonId): void;

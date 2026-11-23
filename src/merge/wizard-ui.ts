@@ -258,7 +258,9 @@ export class MergeWizard {
     go(step: WizardStep): void {
         const ws = this.ws;
         if (!ws || this.busy) return;
-        if (this.info()[step].state !== 'ok') return;
+        const at = this.info()[step];
+        // A step 4 skipped by the scope still opens to say why (7e).
+        if (at.state !== 'ok' && !(at.reason === 'scope' && this.plan)) return;
         ws.step = step;
         if (step > ws.reached) ws.reached = step;
         // From step 3 on the unlinked groups are asked about (§6): one left
@@ -406,9 +408,8 @@ export class MergeWizard {
         if (info.state === 'skip') {
             switch (info.reason) {
                 case 'newTree': return { text: W.subNewTree };
-                case 'scopeA': return { text: W.subSkippedScope };
+                case 'scope': return { text: W.subSkippedScope(ws.choices.scope) };
                 case 'allNew': return { text: W.subAllNew };
-                case 'mineRule': return { text: W.subMineRule };
                 default: return { text: '' };
             }
         }
@@ -422,6 +423,10 @@ export class MergeWizard {
             if (pending > 0) return { text: W.subPending(pending), warn: true };
         }
         if (step === 3 && info.state === 'ok') return { text: variantSub(this.host.state() ?? null, ws.choices) };
+        if (step === 4 && this.plan) {
+            const rel = this.plan.items.filter(i => i.kind === 'relation').length;
+            if (rel > 0) return { text: W.subRelConf(rel), warn: true };
+        }
         return { text: '' };
     }
 
@@ -447,8 +452,11 @@ export class MergeWizard {
                 + `<span class="sel-l" data-label="${escapeHtml(name)}">${escapeHtml(name)}</span></span>`;
             // The whole name and second line as a tooltip: a narrow window cuts them (§13).
             const title = escapeHtml(sub.text ? `${name} · ${sub.text}` : name);
-            if (done) {
-                items.push(`<button type="button" class="merge-step sel-tab is-done" data-sel-dir="down" data-step="${s}" title="${title}">${label}${subHtml}</button>`);
+            // A step 4 skipped by the scope opens to say why (7e).
+            const opens = skipped && !current && info[s].reason === 'scope' && !!this.plan && !this.comparing;
+            if (done || opens) {
+                const cls = done ? 'is-done' : 'is-skipped';
+                items.push(`<button type="button" class="merge-step sel-tab ${cls}" data-sel-dir="down" data-step="${s}" title="${title}">${label}${subHtml}</button>`);
             } else {
                 const cls = current ? ' active' : skipped ? ' is-skipped' : ' is-future';
                 items.push(`<span class="merge-step sel-tab${cls}" data-sel-dir="down" data-step="${s}" title="${title}"${current ? ' aria-current="step"' : ''}>${label}${subHtml}</span>`);
