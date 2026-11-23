@@ -63,7 +63,9 @@ vi.mock('../merge/executor.js', async (importOriginal) => {
 });
 
 import { TreeManager } from '../tree-manager.js';
-import { DataManager } from '../data.js';
+import { DataManager, migrateData, storedTreeForExport } from '../data.js';
+import { validateJsonImport } from '../merge/validation.js';
+import { applyContentOptions, applyLivingPrivacy } from '../privacy.js';
 import { SettingsManager } from '../settings.js';
 import { executeMerge } from '../merge/executor.js';
 import { createMergeState, updateMatchDecision } from '../merge/matching.js';
@@ -496,5 +498,67 @@ describe('exportPlan (K6.4, 13e)', () => {
         const { txt } = exportPlan(plan, { source: SOURCE, target: TARGET, year: 2026 });
         expect(txt).toContain(`${strings.mergeWizard.gSkipped} (1)`);
         expect(txt).toContain('- Dora Fictus (1850–1920)');
+    });
+});
+
+describe('the record of the merge in the tree (§0.3, K7.2)', () => {
+    const INCOMING2 = tree([['k1', 'Berta', '1903'], ['k2', 'Dorota', '1932']]);
+
+    it('a write into the tree stores its record with the tree in the same write, the backup named', async () => {
+        const { plan, target } = await planFor(T1, INCOMING);
+        const result = await writePlan(plan, { target, source: INCOMING, into: 'tree' });
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        const stored = (await TreeManager.getTreeData(T1))!;
+        expect(stored.merges).toHaveLength(1);
+        const rec = stored.merges![0];
+        expect(rec.id).toBe(plan.id);
+        expect(rec.state).toBe('valid');
+        expect(rec.target).toEqual({ name: 'Modřínovi', newTree: false });
+        expect(rec.backupId).toBe(result.backupId);
+        expect(rec.added.map(id => stored.persons[id]?.firstName)).toEqual(['Cecilie']);
+        expect(rec.joined).toEqual([['e1', 'i1']]);
+        expect(rec.prints && Object.keys(rec.prints)).toEqual(rec.added);
+        // The open tree holds it too (the undo step of the write is the whole result).
+        expect(DataManager.getDataFor(T1)?.merges?.map(r => r.id)).toEqual([plan.id]);
+    });
+
+    it('a second merge is checked against the tree with the first one\'s record and adds its own after it', async () => {
+        const first = await planFor(T1, INCOMING);
+        expect((await writePlan(first.plan, { target: first.target, source: INCOMING, into: 'tree' })).ok).toBe(true);
+        const second = await planFor(T1, INCOMING2, { planId: 'mp-second', createdAt: '2026-05-05T10:00:00.000Z' });
+        const result = await writePlan(second.plan, { target: second.target, source: INCOMING2, into: 'tree' });
+        expect(result.ok).toBe(true);
+        expect((await TreeManager.getTreeData(T1))!.merges!.map(r => r.id)).toEqual([`mp-${T1}`, 'mp-second']);
+    });
+
+    it('a write into a new tree: the new tree has the record (new tree, its name), the target none', async () => {
+        const { plan, target } = await planFor(T1, INCOMING);
+        const result = await writePlan(plan, { target, source: INCOMING, into: 'new', name: 'Modřínovi a Jilmovi' });
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        const made = (await TreeManager.getTreeData(result.treeId))!;
+        expect(made.merges?.map(r => r.target)).toEqual([{ name: 'Modřínovi a Jilmovi', newTree: true }]);
+        expect((await TreeManager.getTreeData(T1))!.merges).toBeUndefined();
+    });
+
+    it('survives a load, a JSON export and its import; a tree of v25 without it loads without one; a privacy export leaves it out', async () => {
+        const { plan, target } = await planFor(T1, INCOMING);
+        expect((await writePlan(plan, { target, source: INCOMING, into: 'tree' })).ok).toBe(true);
+        const stored = (await TreeManager.getTreeData(T1))!;
+        const exported = await storedTreeForExport(T1);
+        expect(exported?.merges).toEqual(stored.merges);
+        const imported = validateJsonImport(JSON.stringify(exported));
+        expect(imported.valid).toBe(true);
+        expect(imported.data?.merges).toEqual(stored.merges);
+        // A tree of v25: no history, and a merge into it adds the first record.
+        const old = migrateData({ ...structuredClone(TARGET), version: 25 });
+        expect('merges' in old).toBe(false);
+        // A crafted record is dropped, a good one stays.
+        const mixed = migrateData({ ...structuredClone(TARGET), merges: [{ id: 3 }, 'x', stored.merges![0]] });
+        expect(mixed.merges).toEqual(stored.merges);
+        expect(applyLivingPrivacy(stored, 'initials').merges).toBeUndefined();
+        expect(applyLivingPrivacy(stored, 'full').merges).toEqual(stored.merges);
+        expect(applyContentOptions(stored, { photos: true, attachments: true, notes: false, sources: true }).merges).toBeUndefined();
     });
 });

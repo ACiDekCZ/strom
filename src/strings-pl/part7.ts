@@ -176,6 +176,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         addedPartner: (person: string, partner: string) => `Dodano partnera: ${person} & ${partner}`,
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Scalenie drzew z „${source}”: scalono ${merged}, dodano ${added}`,
+        mergeLink: 'zestawienie w historii scaleń',
         appliedChanges: (sender: string) => `Przyjęto zmiany (${sender})`,
         // Split into families
         splitFamilies: (trees: number, persons: number) => `Podzielono na ${nPl(trees, 'drzewo rodzinne', 'drzewa rodzinne', 'drzew rodzinnych')} (${nPl(persons, 'osoba', 'osoby', 'osób')})`,

@@ -177,8 +177,10 @@
  *   import wrote of them into a residence's or the person's note; a residence
  *   left with nothing goes, src/person-contact.ts moveContactsIntoPeople).
  *   An older app (v25) would drop the contact on a re-save, so the bump makes
- *   it warn first. The tree-merge history (StromData.merges) joins this
- *   version later.
+ *   it warn first. Also the history of merges into the tree
+ *   (StromData.merges, spec 134 §0.3): what each merge brought and what was
+ *   undone of it, for the Merge history and the undo. Additive: a tree of
+ *   v25 has none (absent = none), nothing is made when it is read.
  */
 export const STROM_DATA_VERSION = 26;
 

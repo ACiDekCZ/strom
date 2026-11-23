@@ -244,6 +244,13 @@ export async function writePlan(plan: MergePlan, opts: WriteOptions): Promise<Wr
         applied.record.backupId = backupId;
     }
 
+    // The record goes into the tree's history in the same write (§0.3, K7.2): the tree itself,
+    // a new tree (a copy of the target + the import, or the import alone) and each separate tree.
+    const newName = into === 'tree' && targetId ? plan.target.name : opts.name ?? newTreeName(plan);
+    if (into !== 'tree' || !targetId) applied.record.target = { name: newName, newTree: true };
+    data.merges = [...(data.merges ?? []), applied.record];
+    for (const own of applied.ownTrees) own.data.merges = [...(own.data.merges ?? []), own.record];
+
     // 4. The trees stored: the separate ones first (taken back when the main write fails).
     const persons = applied.record.counts.added + applied.record.counts.joined;
     progress('persons', 0, persons);
@@ -272,7 +279,7 @@ export async function writePlan(plan: MergePlan, opts: WriteOptions): Promise<Wr
         // The open tree shows the result, one step back with Undo (K8.5).
         if (!DataManager.adoptMergeResult(targetId, data, strings.undo.mergeTrees)) TreeManager.noteUserChange(targetId);
     } else {
-        name = opts.name ?? newTreeName(plan);
+        name = newName;
         const id = await storeNewTree(name, data);
         if (!id) {
             await undoOwn();
@@ -285,7 +292,7 @@ export async function writePlan(plan: MergePlan, opts: WriteOptions): Promise<Wr
     // 5. The log, and the working backups go only now that the writes have landed (K0.5).
     const counts = applied.record.counts;
     if (plan.mode !== 'new') {
-        AuditLogManager.log(treeId, 'data.import', strings.auditLog.treeMerge(counts.joined, counts.added, plan.source.label || '?'));
+        AuditLogManager.log(treeId, 'data.import', `${strings.auditLog.treeMerge(counts.joined, counts.added, plan.source.label || '?')} · ${strings.auditLog.mergeLink}`);
     }
     if (applied.backupKey) await deleteBackup(applied.backupKey);
     for (const own of applied.ownTrees) if (own.backupKey) await deleteBackup(own.backupKey);

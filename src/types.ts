@@ -1843,6 +1843,93 @@ export interface PlaceRecord {
     needs?: string;
 }
 
+// ==================== MERGE HISTORY (spec 134 §0.3) ====================
+
+/** Where a merge's people came from (spec 134 §0.2): the plan's source, kept in the merge's record. */
+export interface PlanSource {
+    kind: 'ged' | 'json' | 'tree' | 'view' | 'share';
+    /** File name or tree name ("rodokmen-Jilmovi.ged", "Jilmovi – zkouška"). */
+    label: string;
+    program?: string;
+    fileDate?: string;
+    /** The source's import record id (GEDCOM), when it has one. */
+    importId?: string;
+    /** A fingerprint of the source (the file's SHA-256, or contentFingerprint of a tree), for a repeated merge (§13, K1.5). */
+    fingerprint?: string;
+    treeId?: TreeId;
+    /** Persons of the source, its "?" stand-ins aside (buildPlan counts them). */
+    persons: number;
+}
+
+export interface PlanCounts {
+    joined: number;
+    added: number;
+    skipped: number;
+    pending: number;
+    /** Persons of the source ("?" aside): joined + added + skipped + pending. */
+    total: number;
+    /** Details the write changes (field items on, the value differs). */
+    fieldChanges: number;
+    /** Differences where the tree's value stays. */
+    differencesKept: number;
+    /** Differences where the import's value is kept alongside the tree's ("Keep both", K5.3). */
+    alongside: number;
+    partnerships: number;
+    links: number;
+}
+
+/**
+ * One change a merge made to a record the tree already had, for its undo
+ * (src/merge/undo-plan.ts): key `key` of record `id` of collection `in`
+ * ('persons', 'partnerships', 'sources', 'media', 'places', …; '' = a key of
+ * the tree's data itself), its value before and after the merge (absent =
+ * none). `key` '' = the whole record (one the merge removed, or a value that
+ * is not an object). Values as JSON; a picture's data URL is never kept, only
+ * a token of it (src/merge/record.ts), so a picture the merge replaced comes
+ * back from the backup "Before merge".
+ */
+export interface MergeEdit {
+    in: string;
+    id: string;
+    key: string;
+    before?: unknown;
+    after?: unknown;
+}
+
+/**
+ * The record of a merge (spec 134 §0.3, data version 26): what one merge
+ * brought into the tree, kept in StromData.merges (the Merge history, the
+ * undo). Travels with the tree's data: a backup and a JSON export keep it,
+ * a GEDCOM export does not write it.
+ */
+export interface MergeRecord {
+    id: string;
+    at: string;
+    source: PlanSource;
+    target: { name: string; newTree: boolean };
+    counts: PlanCounts;
+    state: 'valid' | 'partial' | 'undone';
+    /** Ids in the tree of every person the merge added ("?" included). */
+    added: PersonId[];
+    /** [the tree's id, the source's id] of every joined person. */
+    joined: Array<[PersonId, PersonId]>;
+    /** Details of joined persons the write changed (ids in the tree), as text. */
+    fields: Array<{ person: PersonId; field: string; before: string; after: string }>;
+    partnerships: string[];
+    sources: string[];
+    places: string[];
+    media: string[];
+    /** Every change to a record the tree already had, for the undo (absent: none). */
+    edits?: MergeEdit[];
+    /** A print of each added person as the merge left it (src/merge/record.ts personPrint), to tell a later change. */
+    prints?: Record<string, string>;
+    backupId?: string;
+    /** The research's input (I…) of the send that took the merge there (spec 134 §11). */
+    sentToResearch?: string;
+    /** The undos so far: when, and the items undone (src/merge/undo-plan.ts item ids). */
+    undone?: Array<{ at: string; items: string[] }>;
+}
+
 export interface StromData {
     /** Data format version for migration support */
     version?: number;
@@ -1952,6 +2039,13 @@ export interface StromData {
      * oldest first. People, facts, links and sources name them by id.
      */
     imports?: ImportRecord[];
+
+    /**
+     * The merges into this tree (data version 26, spec 134 §0.3), oldest
+     * first: what each brought, for the Merge history and the undo. Absent
+     * or empty = none.
+     */
+    merges?: MergeRecord[];
 
     // Last focused state (used when defaultPersonId === LAST_FOCUSED)
     lastFocusPersonId?: PersonId;

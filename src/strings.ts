@@ -8346,6 +8346,7 @@ const stringsEN = {
         addedPartner: (person: string, partner: string) => `Added partner: ${person} & ${partner}`,
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Tree merge from "${source}": ${merged} merged, ${added} added`,
+        mergeLink: 'the list in the Merge history',
         // Change packet accepted (collaboration)
         appliedChanges: (sender: string) => `Applied changes (${sender})`,
         // Split into families
@@ -19440,6 +19441,7 @@ const stringsCZ: StringsType = {
         addedPartner: (person: string, partner: string) => `Přidán partner: ${person} & ${partner}`,
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z „${source}“: ${merged} sloučeno, ${added} přidáno`,
+        mergeLink: 'výčet v Historii sloučení',
         appliedChanges: (sender: string) => `Přijaty změny (${sender})`,
         // Split into families
         splitFamilies: (trees: number, persons: number) => `Rozděleno na ${nCs(trees, 'rodinný strom', 'rodinné stromy', 'rodinných stromů')} (${nCs(persons, 'osoba', 'osoby', 'osob')})`,
@@ -30376,6 +30378,7 @@ const stringsDE: StringsType = {
         addedSibling: (person: string, sibling: string) => `Geschwister hinzugefügt: ${person} + ${sibling}`,
         addedPartner: (person: string, partner: string) => `Partner hinzugefügt: ${person} & ${partner}`,
         treeMerge: (merged: number, added: number, source: string) => `Stammbaum-Zusammenführung aus „${source}“: ${merged} zusammengeführt, ${added} hinzugefügt`,
+        mergeLink: 'Liste im Verlauf der Zusammenführungen',
         appliedChanges: (sender: string) => `Änderungen übernommen (${sender})`,
         splitFamilies: (trees: number, persons: number) => `In ${nDe(trees, 'Familienstammbaum', 'Familienstammbäume')} aufgeteilt (${nDe(persons, 'Person', 'Personen')})`,
         repairedIssue: (desc: string) => `Automatische Reparatur: ${desc}`,
