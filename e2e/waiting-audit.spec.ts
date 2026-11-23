@@ -1,5 +1,5 @@
 import { test, expect, Page, Route } from '@playwright/test';
-import { BRIDGE, FakeBridge, fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
+import { BRIDGE, FakeBridge, fakeBridge, handedOff, openResearch, poll, researchGed } from './research-bridge.js';
 
 /**
  * A task's finding in Awaiting action (spec 109 K1.4, K1.6): a research that
@@ -143,7 +143,12 @@ async function recordLaunches(page: Page): Promise<void> {
     await page.evaluate(() => {
         const launched: string[] = [];
         (window as unknown as { __launched: string[] }).__launched = launched;
-        window.Strom.UI.handOverResearchLink = (url: string) => { launched.push(url); };
+        const ui = window.Strom.UI as unknown as { __handoffs?: string[] };
+        ui.__handoffs = [];
+        window.Strom.UI.handOverResearchLink = (url: string, handoff?: string | null) => {
+            launched.push(url);
+            if (handoff) ui.__handoffs!.push(handoff);
+        };
     });
 }
 const launched = (page: Page) => page.evaluate(() => (window as unknown as { __launched: string[] }).__launched);
@@ -178,7 +183,7 @@ async function findingOf412(page: Page): Promise<void> {
 
 test.describe('a task\'s finding in Awaiting action', () => {
     test('the row in an archive\'s group, under "No book" and in the flat list; the mark at the title; Discuss only in the row', async ({ page }) => {
-        await researchTree(page);
+        const { bridge } = await researchTree(page);
         await recordLaunches(page);
         await openOverview(page);
 
@@ -195,6 +200,12 @@ test.describe('a task\'s finding in Awaiting action', () => {
         await expect(chat).toHaveAccessibleDescription('The agent gets the finding and proposes a fix');
         await chat.click();
         expect((await launched(page)).at(-1)).toMatch(/^strom-research:\/\/task\?tree=[^&]+&task=T0412&do=chat$/);
+        // The research takes the link (its handoff in /status): the button comes to rest. Its working state follows
+        // the redraws (Book, the flat list below), so the rows read further down wait for its end, not for a time.
+        bridge.features = [...FEATURES, 'handoffs'];
+        bridge.handoffs = await handedOff(page);
+        expect(bridge.handoffs).toHaveLength(1);
+        await expect(chat).not.toHaveAttribute('data-busy', /^(lock|busy|done)$/, { timeout: 10_000 });
         // No red, no green: the warm tint.
         const look = await row.evaluate(el => {
             const probe = document.createElement('span');

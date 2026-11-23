@@ -192,6 +192,12 @@ test.describe('The portrait picker with a mouse (1440)', () => {
 
     test('the research stopped: the picker says its photos wait for it in one sentence, nothing in the header', async ({ page }) => {
         const bridge = await setup(page);
+        // The research's list of files kept in the page first (it comes after the bridge's answer, by itself):
+        // a bridge stopped before it came would leave no research photo to speak of.
+        const josef = await personId(page, 'Josef');
+        await expect.poll(() => page.evaluate((id) => (window.Strom.UI as unknown as {
+            portraitPickerModel(id: string): { shown: unknown[] };
+        }).portraitPickerModel(id).shown.length, josef)).toBeGreaterThan(0);
         bridge.down = true;
         await poll(page);
         await editModal(page, 'Josef');

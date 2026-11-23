@@ -149,13 +149,26 @@ test.describe('the map\'s scope switch', () => {
         const page = await ctx.newPage();
         const pop = await mapWithList(page, LONG);
         await pop.locator('li.sp-selpick-row[data-sec="lists"]', { hasText: LONG }).locator('button').click();
-        // The part is measured once it shows the list's name (the boundingBox does not wait for it).
         await expect(page.locator('#map-scope-sel .map-scope-name')).toContainText(LONG);
-        const part = (await page.locator('#map-scope-sel').boundingBox())!;
-        const name = (await page.locator('#map-scope-sel .map-scope-name').boundingBox())!;
-        expect(part.height).toBeGreaterThanOrEqual(43.5);
-        expect(Math.abs((name.y + name.height / 2) - (part.y + part.height / 2))).toBeLessThanOrEqual(2);
-        expect(await page.locator('#map-scope-sel .map-scope-name').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+        // The part and its name measured together, until the switch drawn anew after the choice has settled
+        // (a part being redrawn has no box): one reading of both, not two boxes taken at different moments.
+        const measure = () => page.evaluate(() => {
+            const part = document.getElementById('map-scope-sel');
+            const name = part?.querySelector<HTMLElement>('.map-scope-name');
+            if (!part || !name) return null;
+            const p = part.getBoundingClientRect();
+            const n = name.getBoundingClientRect();
+            if (!p.height || !n.height) return null;
+            return {
+                height: Math.round(p.height * 10) / 10,
+                offCentre: Math.round(Math.abs((n.top + n.height / 2) - (p.top + p.height / 2)) * 10) / 10,
+                spill: name.scrollWidth - name.clientWidth,
+            };
+        });
+        await expect.poll(async () => {
+            const m = await measure();
+            return m && m.height >= 43.5 && m.offCentre <= 2 && m.spill <= 0 ? 'ok' : JSON.stringify(m);
+        }).toBe('ok');
         await ctx.close();
     });
 
