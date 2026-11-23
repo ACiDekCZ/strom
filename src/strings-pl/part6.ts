@@ -424,6 +424,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         protectedLine: (n: number) => `Chronione przed regułą zbiorczą: ${numPl(n)} ${plPl(n, 'dana', 'dane', 'danych')} – zmiana tylko pojedynczo.`,
         protResearch: 'Z badań',
         protKinds: { proven: 'udokumentowane', human: 'potwierdzone', research: 'z badań' } as Record<'proven' | 'human' | 'research', string>,
+        protMarked: (k: string) => `w drzewie oznaczone jako „${k}”`,
         s4Show: 'Pokaż',
         byKind: 'Według rodzaju danej',
         byPerson: 'Według osób',

@@ -496,7 +496,7 @@ function openProtected(ctx: StepContext, d: FieldDifference, use: () => void, ke
     const tree = state.existingData.persons[d.person];
     const v = valueText(d.field, d.before);
     const w = valueText(d.field, d.after);
-    const src = (tree?.sourceIds ?? []).map(id => state.existingData.sources?.[id]?.title).find(Boolean) ?? W.protKinds[d.protection!];
+    const src = (tree?.sourceIds ?? []).map(id => state.existingData.sources?.[id]?.title).find(Boolean) ?? W.protMarked(W.protKinds[d.protection!]);
     const html = `<div class="modal-header"><h2 id="merge-s4-prot-t">${escapeHtml(W.protTitle)}</h2></div>`
         + `<p class="merge-s4-prot-text">${escapeHtml(W.protText(nameOf(tree), fieldLabel(d.field), v, src, w))} ${protectionMark(d.protection!)}</p>`
         + `<p class="merge-s4-note">${escapeHtml(W.protAfter)}</p>`
