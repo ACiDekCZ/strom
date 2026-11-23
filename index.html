@@ -19020,6 +19020,117 @@
             .modal .merge-s4 button.merge-s4-v:hover { border-color: var(--border); }
             .merge-s4-krow:hover { background: var(--hover-bg); }
         }
+        /*
+         * Step 5 – What will happen (spec 134 §8): the list by groups at the left (only what is
+         * ticked happens), Where to write, the preview (below 1100 px behind "Preview", as a
+         * sheet), the backup line and Save the list… at the right (360 px).
+         */
+        .merge-step-body[data-step="5"] { display: flex; flex-direction: column; overflow: hidden; }
+        .merge-s5 { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; }
+        .merge-s5-main { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+        .merge-s5-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; }
+        .merge-s5-sub { color: var(--text-light); font-size: 12.5px; white-space: nowrap; }
+        .modal .merge-s5 input.merge-s5-search, .modal .merge-s5 input.merge-s5-search[type="search"] {
+            width: 200px; max-width: 100%; box-sizing: border-box; padding: 5px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 13px;
+        }
+        .merge-s5-list {
+            flex: 1 1 auto; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0;
+            border: 1px solid var(--border); border-radius: var(--r-md);
+        }
+        .merge-s5-list > li {
+            box-sizing: border-box; min-height: 32px; display: flex; align-items: center; gap: 8px;
+            padding: 3px 10px; border-bottom: 1px solid var(--divider); font-size: 13px; min-width: 0;
+        }
+        .merge-s5-list > li:last-child { border-bottom: 0; }
+        .merge-s5-list > .merge-s5-gh { background: var(--surface-2); }
+        .merge-s5-list > .merge-s5-row, .merge-s5-list > .merge-s5-more { padding-left: 40px; }
+        .merge-s5-more { color: var(--text-light); font-size: 12.5px; }
+        .modal .merge-s5 .link-button { min-height: 0; padding: 0; font-size: 12.5px; }
+        .modal .merge-s5 input.merge-s5-cb, .modal .merge-s5 input.merge-s5-gcb { flex: none; width: auto; margin: 0; }
+        .merge-s5-cb-none { flex: none; width: 13px; }
+        .modal .merge-s5 button.merge-s5-caret, .merge-s5 span.merge-s5-caret {
+            flex: none; width: 18px; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--text-light); cursor: pointer;
+        }
+        .merge-s5-caret > span { display: inline-block; transition: transform .12s; }
+        .merge-s5-gh.is-open .merge-s5-caret > span { transform: rotate(90deg); }
+        .merge-s5-gname { flex: none; font-weight: 600; white-space: nowrap; }
+        .merge-s5-gcount, .merge-s5-tag {
+            flex: none; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-tag);
+            background: var(--surface); color: var(--text-light); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; white-space: nowrap;
+        }
+        .merge-s5-gsum, .merge-s5-text {
+            flex: 1 1 auto; min-width: 0; color: var(--text-light); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .merge-s5-glyph { flex: none; display: inline-flex; color: var(--accent); }
+        .merge-s5-name { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s5-name.is-person { font-family: var(--font-serif); font-size: 14px; }
+        .merge-s5-years { flex: none; color: var(--text-light); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .merge-s5-row.is-off .merge-s5-name { color: var(--text-faint); }
+        .modal .merge-s5 .merge-s5-in { flex: none; white-space: nowrap; }
+        .merge-s5-side { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .merge-s5-side > * { flex: none; }
+        .merge-s5-h { margin: 0; font-size: 13px; font-weight: 600; }
+        .merge-s5-where { display: flex; flex-direction: column; gap: 6px; }
+        .merge-s5-where[hidden], .merge-s5-note[hidden] { display: none; }
+        .sel-seg.merge-s5-into { display: flex; }
+        .modal .merge-s5-into > .sel-opt { flex: 1 1 0; min-width: 0; padding: 5px 10px; font-size: 12.5px; white-space: normal; text-align: center; }
+        .merge-s5-note { margin: 0; color: var(--text-light); font-size: 12px; line-height: 1.4; }
+        .merge-s5-backup { font-size: 11px; }
+        .modal .merge-s5 .merge-s5-save { align-self: flex-start; }
+        .modal .merge-s5 .merge-s5-preview-open { display: none; }
+        .merge-s5-preview { display: flex; flex-direction: column; gap: 6px; }
+        .merge-s5-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .modal .merge-s5 .merge-s5-preview-close { display: none; }
+        .merge-s5-thumb { height: 252px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); overflow: hidden; }
+        .merge-s5-preview-cap { font-size: 11.5px; }
+        .merge-s5-none { margin: 0; padding: 16px; color: var(--text-light); font-size: 12.5px; }
+        @media (max-width: 1099px) {
+            .merge-s5 { grid-template-columns: minmax(0, 1fr) 280px; }
+            .merge-s5-preview { display: none; }
+            .modal .merge-s5 .merge-s5-preview-open { display: inline-flex; align-self: flex-start; align-items: center; min-height: 28px; padding: 2px 12px; font-size: 12.5px; }
+            .merge-s5.is-sheet .merge-s5-preview {
+                display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; max-height: 80%;
+                padding: 10px 14px 14px; background: var(--surface); border-top: 1px solid var(--border);
+                border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--shadow-lg);
+            }
+            .modal .merge-s5.is-sheet .merge-s5-preview-close {
+                display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px;
+                border: 0; background: transparent; font-size: 20px; color: var(--text-light);
+            }
+            .merge-s5.is-sheet .merge-s5-thumb { height: min(56vh, 420px); }
+        }
+        @media (pointer: coarse) {
+            .merge-s5-list > li { min-height: 44px; }
+            .modal .merge-s5 .link-button, .modal .merge-s5 button.merge-s5-caret { min-height: 44px; }
+            .modal .merge-s5 button.merge-s5-caret { width: 32px; }
+            .modal .merge-s5-into > .sel-opt { min-height: 44px; }
+        }
+        /* A phone (14d): Where to write on top, the groups closed; the step scrolls as a whole, a row wraps what it links to under the name. */
+        @media (max-width: 640px) {
+            .merge-step-body[data-step="5"] { display: block; overflow-y: auto; }
+            .merge-s5 { display: flex; flex-direction: column; gap: 12px; }
+            .merge-s5-side { display: contents; }
+            .merge-s5-where { order: -1; }
+            .merge-s5-head { flex-wrap: wrap; }
+            .modal .merge-s5 input.merge-s5-search, .modal .merge-s5 input.merge-s5-search[type="search"] { width: 100%; }
+            .merge-s5-list { flex: none; max-height: 62vh; }
+            .merge-s5-list > li { flex-wrap: wrap; row-gap: 0; }
+            .merge-s5-list > .merge-s5-row, .merge-s5-list > .merge-s5-more { padding-left: 12px; }
+            .merge-s5-row .merge-s5-text { order: 5; flex-basis: 100%; padding-left: 21px; }
+            .merge-s5-gh .merge-s5-gsum { display: none; }
+            .modal .merge-s5 .merge-s5-preview-open { min-height: 44px; }
+        }
+        /* A phone held sideways: the step scrolls as a whole, the list keeps a view of its own. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-step-body[data-step="5"] { display: block; overflow-y: auto; }
+            .merge-s5 { grid-template-columns: minmax(0, 1fr) 240px; }
+            .merge-s5-list { flex: none; max-height: 70vh; }
+            .merge-s5.is-sheet .merge-s5-thumb { height: 60vh; }
+        }
+        @media (hover: hover) {
+            .merge-s5-list > .merge-s5-row:hover { background: var(--hover-bg); }
+        }
         .merge-stat.skipped .merge-stat-label { color: var(--text-faint); }
         .merge-stat.skipped .merge-stat-value { color: var(--text-faint); }
         .merge-empty {

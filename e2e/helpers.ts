@@ -626,11 +626,17 @@ export async function mergeDecide(wizard: Locator, text: string | RegExp, decisi
 
 /**
  * On to step 5 (What will happen; step 3 as it is, step 4 passed over)
- * and press its primary button: the plan is written into a new tree
- * "{target} + {source}" without asking its name.
+ * and press its primary button. Where to write: a new tree "{target} +
+ * {source}" without asking its name (default), or the tree itself.
  */
-export async function mergeWrite(wizard: Locator): Promise<void> {
+export async function mergeWrite(wizard: Locator, into: 'tree' | 'new' = 'new'): Promise<void> {
     await mergeToStep5(wizard);
+    // Where to write (K6.3), shown when the import goes to a tree.
+    const seg = wizard.locator(`.merge-s5-into [data-into="${into}"]`);
+    if (await seg.isVisible()) {
+        await seg.click();
+        await expect(seg).toHaveAttribute('aria-checked', 'true');
+    }
     await expect(wizard.locator('#merge-next')).toBeEnabled();
     await wizard.locator('#merge-next').click();
 }

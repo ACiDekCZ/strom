@@ -100,9 +100,13 @@ test('Back keeps the decisions; step 5 writes a new tree named after both and th
     await wizard.locator('#merge-next').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
     await expect(wizard.locator('#merge-step-body .merge-step-title')).toHaveText('What will happen');
+    // Into the tree itself by default; into a new tree says the tree stays as it is (K6.3).
+    await expect(wizard.locator('.merge-s5-into [data-into="tree"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(wizard.locator('#merge-next')).toHaveText('Add 2 people, change 0 details');
+    await wizard.locator('.merge-s5-into [data-into="new"]').click();
     await expect(wizard.locator('#merge-step-body')).toContainText('Modřínovi stays unchanged');
     await expect(wizard.locator('#merge-step-body')).toContainText('“Modřínovi + rodokmen-jilmovi”');
-    await expect(wizard.locator('#merge-next')).toHaveText('Add 2 people, change 0 details');
+    await expect(wizard.locator('#merge-next')).toHaveText('Create a tree with 5 people');
 
     // Back to step 3 and step 2: the decision is still there.
     await wizard.locator('#merge-back').click();
@@ -151,7 +155,7 @@ test('Save for later keeps the decision and the step; the merge goes on from Man
     await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
 });
 
-test('Only compare: the same steps, step 5 says Done and nothing is written', async ({ page }) => {
+test('Only compare: the same steps, step 5 saves the list and nothing is written', async ({ page }) => {
     const wizard = await openGuide(page);
     const treesBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
     await mergeSetMode(wizard, 'compare');
@@ -159,9 +163,12 @@ test('Only compare: the same steps, step 5 says Done and nothing is written', as
     await mergeCompare(wizard);
     await mergeToStep5(wizard);
     await expect(wizard.locator('#merge-counts')).toContainText('Nothing has been written yet.');
-    await expect(wizard.locator('#merge-next')).toHaveText('Done');
+    await expect(wizard.locator('#merge-next')).toHaveText('Save the list…');
+    const files: string[] = [];
+    page.on('download', d => files.push(d.suggestedFilename()));
     await wizard.locator('#merge-next').click();
     await expect(wizard).toBeHidden();
+    await expect.poll(() => files.sort()).toEqual(['rodokmen-jilmovi-plan.json', 'rodokmen-jilmovi-plan.txt']);
 
     expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().length)).toBe(treesBefore);
     expect(await peopleOf(page, 'Modřínovi')).toEqual(['Florentýna', 'Kvido', 'Teofil']);
