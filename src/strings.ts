@@ -25289,7 +25289,7 @@ const stringsDE: StringsType = {
         alsoTreeListHint: (k: number, n: number, p: string) => `Bilder und PDFs bis 2 MB (${k} von ${n}), nur bei ${p}. Das Original bleibt im Archiv.`,
         listFailed: 'Die Liste ließ sich nicht an die Forschung senden; die Dateien bleiben im Dialog.',
         sentToastList: (n: number, name: string, c: number) => `An die Forschung gesendet: ${nDe(n, 'Datei', 'Dateien')} zur Liste „${name}“ (${nDe(c, 'Person', 'Personen')}). Die Forschung erstellt daraus eine Aufgabe.`,
-        sentWaitToastList: (n: number, name: string) => `An die Forschung gesendet (Liste „${name}“): ${nDe(n, 'Datei', 'Dateien')}. ${n === 1 ? 'Sie wartet' : 'Sie warten'} unsortiert unter Materialien.`,
+        sentWaitToastList: (n: number, name: string) => `An die Forschung gesendet (Liste „${name}“): ${nDe(n, 'Datei', 'Dateien')}, unsortiert unter Materialien.`,
         savedArchiveToastList: (n: number, name: string, c: number) => `Im Strom-Archiv gespeichert: ${nDe(n, 'Datei', 'Dateien')} zur Liste „${name}“ (${nDe(c, 'Person', 'Personen')}).`,
     },
 

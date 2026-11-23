@@ -164,7 +164,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         bigBatch: 'Cały folder? Dodaj materiały…',
         rejectedTypes: (n: number) => `Badanie nie przyjmie ${nPl(n,'pliku','plików','plików')} (programy, klucze, archiwa inne niż ZIP).`,
         sentToast: (n: number, p: string, source?: boolean) => `Wysłano do badania: ${nPl(n,'plik','pliki','plików')} ${source ? `dla źródła „${p}”` : `dla osoby ${p}`}. Badanie utworzy z nich zadanie.`,
-        sentWaitToast: (n: number, p: string, source?: boolean) => `Wysłano do badania: ${nPl(n,'plik','pliki','plików')} ${source ? `dla źródła „${p}”` : `dla osoby ${p}`}. ${n === 1 ? 'Czeka nieposortowany w Materiałach.' : 'Czekają nieposortowane w Materiałach.'}`,
+        sentWaitToast: (n: number, p: string, source?: boolean) => `Wysłano do badania: ${nPl(n,'plik','pliki','plików')} ${source ? `dla źródła „${p}”` : `dla osoby ${p}`}. ${n === 1 ? 'Czeka w Materiałach nieuporządkowany.' : 'Czekają w Materiałach nieuporządkowane.'}`,
         savedArchiveToast: (n: number, p: string, source?: boolean) => `Zapisano w Archiwum Strom: ${nPl(n,'plik','pliki','plików')} ${source ? `dla źródła „${p}”` : `dla osoby ${p}`}.`,
         queuedToast: (n: number) => `${nPl(n,'plik czeka','pliki czekają','plików czeka')} w tej przeglądarce; ${plPl(n,'zostanie wysłany','zostaną wysłane','zostaną wysłane')}, gdy badanie będzie działać.`,
         noIdToast: (n: number) => `${nPl(n,'plik zostanie wysłany','pliki zostaną wysłane','plików zostanie wysłanych')}, gdy badanie pozna osobę.`,
@@ -211,7 +211,7 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         alsoTreeListHint: (k: number, n: number, p: string) => `Obrazy i pliki PDF do 2 MB (${k} z ${n}), tylko przy osobie ${p}. Oryginał pozostaje w archiwum.`,
         listFailed: 'Nie udało się wysłać listy do badania; pliki zostały w oknie.',
         sentToastList: (n: number, name: string, c: number) => `Wysłano do badania: ${nPl(n, 'plik', 'pliki', 'plików')} do listy „${name}” (${nPl(c, 'osoba', 'osoby', 'osób')}). Badanie utworzy z nich zadanie.`,
-        sentWaitToastList: (n: number, name: string) => `Wysłano do badania (lista „${name}”): ${nPl(n, 'plik', 'pliki', 'plików')}. ${n === 1 ? 'Czeka nieposortowany w Materiałach.' : 'Czekają nieposortowane w Materiałach.'}`,
+        sentWaitToastList: (n: number, name: string) => `Wysłano do badania (lista „${name}”): ${nPl(n, 'plik', 'pliki', 'plików')}. ${n === 1 ? 'Czeka w Materiałach nieuporządkowany.' : 'Czekają w Materiałach nieuporządkowane.'}`,
         savedArchiveToastList: (n: number, name: string, c: number) => `Zapisano w Archiwum Strom: ${nPl(n, 'plik', 'pliki', 'plików')} do listy „${name}” (${nPl(c, 'osoba', 'osoby', 'osób')}).`,
     },
 
