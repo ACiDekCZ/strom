@@ -20,8 +20,9 @@ test('empty state offers a demo tree that loads with a focus, a hint, the Regist
     await expect.poll(() => page.evaluate(() => document.body.dataset.cardDensity)).toBe('register');
     await expect(card(page, 'Johan').locator('.card-line--label')).not.toHaveCount(0);
     // Portraits, the register page and its crops are drawn on load, not shipped.
-    const media = await page.evaluate(() => {
-        const d = window.Strom.DataManager.getData();
+    // Read with the pooled images whole (the tree in memory holds references).
+    const media = await page.evaluate(async () => {
+        const d = await window.Strom.Images.expandedData(window.Strom.DataManager.getData());
         const persons = Object.values(d.persons);
         return {
             photos: persons.filter(p => p.photo?.startsWith('data:image/jpeg')).length,

@@ -61,7 +61,7 @@ test.describe('a research crop turned by its original\'s orientation', () => {
         expect(await shownSize(page, '#source-viewer-modal img[data-excerpt-index]')).toEqual({ w: 100, h: 400 });
         const kept = await page.evaluate(() => {
             const src = Object.values(window.Strom.DataManager.getData().sources ?? {})[0] as { excerpts: { dataUrl: string; orient?: number }[] };
-            return src.excerpts[0];
+            return window.Strom.Images.expandedData(src.excerpts[0]);
         });
         expect(kept.dataUrl).toBe(jpeg);
         expect(kept.orient).toBe(6);

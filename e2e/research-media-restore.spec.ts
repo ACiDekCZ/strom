@@ -151,12 +151,12 @@ const missed = (page: Page) => page.evaluate(() => (JSON.parse(localStorage.getI
 
 const card = (page: Page, name: string) => page.locator(`#tree-canvas .person-card[aria-label^="${name} "]`);
 
-/** The tree's files as it holds them. */
+/** The tree's files as it holds them, their pooled images whole (the tree in memory holds references). */
 const media = (page: Page) => page.evaluate(() => {
     const data = window.Strom.DataManager.getData();
     const man = Object.values(data.persons).find(p => p.refn === 'P0001');
     const couple = Object.values(data.partnerships)[0];
-    return {
+    return window.Strom.Images.expandedData({
         portrait: man?.photo ?? null,
         portraitDate: man?.photoDate ?? null,
         couple: couple?.photo ?? null,
@@ -168,7 +168,7 @@ const media = (page: Page) => page.evaluate(() => {
             originalOnly: !!a.originalOnly, sha: a.original?.sha256 ?? null,
             };
         }),
-    };
+    });
 });
 
 test.describe('the tree\'s own files restored from a research that keeps them (media.app)', () => {
@@ -252,8 +252,8 @@ test.describe('the tree\'s own files restored from a research that keeps them (m
         const letter = imgs[3];
         const bridge = await follow(page, imgs, ['ged.stale', 'ged.etag', 'ged.imagesByHash', 'media.app'], { shared: true });
         expect(bridge.trees[0]).toMatchObject({ images: 'ref', media: 'app', status: 200 });
-        const letterPlaces = () => page.evaluate(() => {
-            const data = window.Strom.DataManager.getData();
+        const letterPlaces = () => page.evaluate(async () => {
+            const data = await window.Strom.Images.expandedData(window.Strom.DataManager.getData());
             const file = Object.values(data.media ?? {}).find(a => a.title === 'Dopis z Lhoty');
             return file ? { dataUrl: file.dataUrl, places: file.places.map(pl => 'personId' in pl ? 'person' : 'partnershipId' in pl ? 'couple' : 'source').sort() } : null;
         });

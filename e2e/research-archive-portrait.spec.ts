@@ -131,7 +131,7 @@ const images = (page: Page) => page.evaluate(() => {
             attachments: window.Strom.DataManager.personMedia(p.id).map(a => ({ id: a.id, name: a.name, dataUrl: a.dataUrl })) };
     };
     const unions = Object.values(d.partnerships).map((u: any) => ({ id: u.id, photo: u.photo ?? null, name: u.photoOriginalName ?? null, date: u.photoDate ?? null }));
-    return { jan: person('Jan'), josef: person('Josef'), anna: person('Anna'), unions };
+    return window.Strom.Images.expandedData({ jan: person('Jan'), josef: person('Josef'), anna: person('Anna'), unions });
 });
 
 const birthPlace = (page: Page) => page.evaluate(() =>

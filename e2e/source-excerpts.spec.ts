@@ -202,7 +202,7 @@ test.describe('the excerpt block in the editor', () => {
         await expect(editor(page).locator('#input-source-title')).toHaveValue('Křest');
 
         await editor(page).getByRole('button', { name: 'Save' }).click();
-        const exc = await page.evaluate(() => Object.values(window.Strom.DataManager.getData().sources as Record<string, any>)[0].excerpts[0]);
+        const exc = await page.evaluate(() => window.Strom.Images.expandedData(Object.values(window.Strom.DataManager.getData().sources as Record<string, any>)[0].excerpts[0]));
         expect(exc.dataUrl.startsWith('data:image/jpeg')).toBe(true);
         expect(exc.width).toBe(1200);
         expect(exc.height).toBe(200);
@@ -221,7 +221,7 @@ test.describe('the excerpt block in the editor', () => {
         await expect(cropper(page)).toHaveCount(0);
         await expect(editor(page).locator('.excerpt-item')).toHaveCount(1);
         await editor(page).getByRole('button', { name: 'Save' }).click();
-        const exc = await page.evaluate(() => Object.values(window.Strom.DataManager.getData().sources as Record<string, any>)[0].excerpts[0]);
+        const exc = await page.evaluate(() => window.Strom.Images.expandedData(Object.values(window.Strom.DataManager.getData().sources as Record<string, any>)[0].excerpts[0]));
         expect(exc.dataUrl.startsWith('data:image/jpeg')).toBe(true);
         expect(Math.max(exc.width, exc.height)).toBeLessThanOrEqual(1200);
         expect(exc.fromAttachmentId).toBeUndefined();
@@ -494,7 +494,7 @@ test.describe('a research update', () => {
         await check.uncheck();
         await dlg.getByRole('button', { name: 'Update' }).click();
         await expect(page.locator('.toast')).toContainText('Research version loaded.');
-        const src = await page.evaluate(() => Object.values(window.Strom.DataManager.getData().sources as Record<string, any>)[0]);
+        const src = await page.evaluate(() => window.Strom.Images.expandedData(Object.values(window.Strom.DataManager.getData().sources as Record<string, any>)[0]));
         expect(src.title).toBe('Křest Josefa');
         // No new images came in; the excerpt the tree had stays.
         expect(src.excerpts).toHaveLength(1);

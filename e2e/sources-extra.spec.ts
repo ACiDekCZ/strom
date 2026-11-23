@@ -61,7 +61,8 @@ async function pngBuffer(page: Page, width: number, height: number): Promise<Buf
     return Buffer.from(b64, 'base64');
 }
 
-const getData = (page: Page) => page.evaluate(() => window.Strom.DataManager.getData() as unknown as {
+/** The tree's data with the pooled images whole (the tree in memory holds references). */
+const getData = (page: Page) => page.evaluate(() => window.Strom.Images.expandedData(window.Strom.DataManager.getData()) as unknown as {
     persons: Record<string, any>; partnerships: Record<string, any>; sources?: Record<string, any>; media?: Record<string, any>;
 });
 /** A person's files (data v24): the records of `media` with a place of theirs, in their order. */
@@ -703,12 +704,17 @@ test.describe('attachments beyond one image', () => {
         expect(att.mimeType).toBe('application/pdf');
         expect(att.dataUrl.startsWith('data:application/pdf;base64,')).toBe(true);
 
-        // The new tab gets a blob URL typed as a PDF (no real tab is opened here).
+        // The new tab gets a blob URL typed as a PDF (no real tab is opened here). A pooled PDF's tab opens
+        // on the click, empty, and is sent to the PDF once it is read.
         await page.evaluate(() => {
-            (window as any).__opened = [];
-            window.open = ((url: string) => { (window as any).__opened.push(url); return null; }) as typeof window.open;
+            const opened: string[] = (window as any).__opened = [];
+            window.open = ((url: string) => {
+                if (url) { opened.push(url); return null; }
+                return { closed: false, close() { /* not closed here */ }, location: { set href(u: string) { opened.push(u); } } };
+            }) as unknown as typeof window.open;
         });
         await list.locator('.attachment-thumb').click();
+        await expect.poll(() => page.evaluate(() => ((window as any).__opened as string[]).length)).toBeGreaterThan(0);
         const opened = await page.evaluate(async () => {
             const urls = (window as any).__opened as string[];
             const blob = urls.length ? await (await fetch(urls[0])).blob() : null;

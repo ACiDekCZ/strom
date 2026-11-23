@@ -107,7 +107,7 @@ async function follow(page: Page, imgs: Img[]): Promise<{ release(): void }> {
 
 /** The id of the person by first name, and the person's portrait now. */
 const idOf = (page: Page, firstName: string) => page.evaluate(n => window.Strom.DataManager.getAllPersons().find(p => p.firstName === n)!.id as string, firstName);
-const photoOf = (page: Page, id: string) => page.evaluate(i => window.Strom.DataManager.getPerson(i as never)?.photo ?? null, id);
+const photoOf = (page: Page, id: string) => page.evaluate(i => window.Strom.Images.expandedData(window.Strom.DataManager.getPerson(i as never)?.photo ?? null), id);
 
 test.describe('the person dialog while photos come after the tree (spec 116 §4)', () => {
     test('the portrait shows as on its way, comes into the open dialog, the typed name stays', async ({ page }) => {

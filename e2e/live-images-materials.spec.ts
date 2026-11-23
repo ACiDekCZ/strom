@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page, Locator } from '@playwright/test';
 import { createHash } from 'node:crypto';
 
 /**
@@ -100,6 +100,22 @@ async function openWindow(page: Page): Promise<void> {
     await expect(page.locator('#materials-modal')).toBeVisible();
 }
 
+/**
+ * The image an element shows, as a data URL: its own address when that is one,
+ * or the pooled image its `data-pool-ref` names once its address shows it (the
+ * tree keeps its images in the pool and the page shows them through object URLs).
+ */
+async function shownImage(img: Locator): Promise<string | null> {
+    return img.evaluate(async (el) => {
+        const e = el as HTMLImageElement;
+        const src = e.getAttribute('src') ?? '';
+        if (src.startsWith('data:')) return src;
+        const ref = e.getAttribute('data-pool-ref');
+        if (!ref || !src.startsWith('blob:') || !e.complete || e.naturalWidth === 0) return null;
+        return window.Strom.Images.expandedData(`\u0000sm:${ref}`);
+    });
+}
+
 /** No image of the place is a stand-in. */
 async function noStandIns(page: Page, root: string): Promise<void> {
     const srcs = await page.locator(`${root} img`).evaluateAll(els => els.map(e => (e as HTMLImageElement).getAttribute('src') ?? ''));
@@ -117,7 +133,7 @@ test.describe('the tree\'s files while photos come after the tree (spec 116 §5)
         await noStandIns(page, '#materials-modal');
 
         bridge.release();
-        await expect(page.locator('#materials-modal .mw-thumb img').first()).toHaveAttribute('src', img.url);
+        await expect.poll(() => shownImage(page.locator('#materials-modal .mw-thumb img').first())).toBe(img.url);
         await expect(page.locator('#materials-modal .mw-thumb[data-img-state]')).toHaveCount(0);
     });
 

@@ -719,7 +719,7 @@ test.describe('Start research with this tree (G3)', () => {
         const persons = Object.values(window.Strom.DataManager.getData().persons) as any[];
         const by = (n: string) => persons.find(p => p.firstName === n);
         const petr = by('Petr');
-        return { karel: by('Karel')?.photo ?? null, petr: petr ? window.Strom.DataManager.personMedia(petr.id).map(a => a.id) : [] };
+        return window.Strom.Images.expandedData({ karel: by('Karel')?.photo ?? null, petr: petr ? window.Strom.DataManager.personMedia(petr.id).map(a => a.id) : [] });
     });
 
     test('adopted tree: "load the new version" without edits keeps the photos and attachments', async ({ page }) => {
@@ -757,8 +757,8 @@ test.describe('Start research with this tree (G3)', () => {
         await expect(page.locator('.toast')).toContainText('Research version loaded.');
         await expect(card(page, 'Marie')).toBeVisible();
         expect(await media(page)).toEqual({ karel: img, petr: [att] });
-        expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[])
-            .find(p => p.firstName === 'Petr').photo)).toBe(other);
+        expect(await page.evaluate(() => window.Strom.Images.expandedData((Object.values(window.Strom.DataManager.getData().persons) as any[])
+            .find(p => p.firstName === 'Petr').photo))).toBe(other);
     });
 
     test('the research dropped a person with a photo: never silently, a dialog warns', async ({ page }) => {
@@ -910,9 +910,9 @@ test.describe('Start research with this tree (G3)', () => {
                 await dialog.locator('#research-adopt-confirm').click();
                 await expect.poll(() => calls.posted.length).toBe(1);
                 expect(calls.posted[0]).toContain('1 NAME Marie /Safárová/');
-                const kept = await page.evaluate(() => {
+                const kept = await page.evaluate(async () => {
                     const m = Object.values(window.Strom.DataManager.getData().persons).find(p => p.firstName === 'Marie');
-                    return { photo: (m?.photo ?? '').length, research: !!window.Strom.TreeManager.getActiveTreeMetadata()?.research };
+                    return { photo: (await window.Strom.Images.expandedData(m?.photo ?? '')).length, research: !!window.Strom.TreeManager.getActiveTreeMetadata()?.research };
                 });
                 expect(kept).toEqual({ photo: photo.length, research: true });
                 // The copy in Safari is said, and that it can go once all is right here.

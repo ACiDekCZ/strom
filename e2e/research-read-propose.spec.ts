@@ -220,8 +220,8 @@ test.describe('Read a document: suggest for the tree', () => {
         // By hand: the changes wait for Send.
         await expect(d.locator('.read-w-sent')).toContainText('wait for “Send changes”');
 
-        const state = await page.evaluate(() => {
-            const data = window.Strom.DataManager.getData();
+        const state = await page.evaluate(async () => {
+            const data = await window.Strom.Images.expandedData(window.Strom.DataManager.getData());
             const src = Object.values(data.sources ?? {}).find((s: any) => s.reading) as any;
             const ps = Object.values(data.persons) as any[];
             const marie = ps.find(p => p.firstName === 'Marie');

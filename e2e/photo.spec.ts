@@ -60,9 +60,9 @@ test('photo: the editor turns the image for real, and the turned photo survives 
     await modal.getByRole('button', { name: 'Save' }).click();
     await expect(modal).toBeHidden();
     // The turned photo persisted, its source saying so.
-    const stored = await page.evaluate(() => {
+    const stored = await page.evaluate(async () => {
         const p = window.Strom.DataManager.getAllPersons()[0];
-        return { photo: p.photo, turns: p.photoSource?.quarterTurns };
+        return { photo: await window.Strom.Images.expandedData(p.photo), turns: p.photoSource?.quarterTurns };
     });
     expect(stored.photo).toBe(turned);
     expect(stored.turns).toBe(1);
