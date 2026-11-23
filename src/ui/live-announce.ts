@@ -6,7 +6,7 @@
  */
 
 import type { PersonId, StromData } from '../types.js';
-import type { LiveDiff } from '../live-diff.js';
+import { realPeople, type LiveDiff } from '../live-diff.js';
 import { strings } from '../strings.js';
 import { shownNameFull } from '../person-name.js';
 
@@ -27,13 +27,14 @@ export function liveAnnouncement(diff: LiveDiff, previous: StromData, data: Stro
         return names.length > NAMES_SAID ? `${said} ${L.srMore(names.length - NAMES_SAID)}` : said;
     };
     const parts: string[] = [];
-    const added = diff.added.map(id => nameIn(data, id));
+    // People only: a "?" stand-in with a new id is nobody come or gone (134 V-N6).
+    const added = realPeople(diff.added, data).map(id => nameIn(data, id));
     if (added.length === 1) parts.push(L.srAdded(added[0]));
     else if (added.length > 1) parts.push(L.srAddedMany(added.length, listed(added)));
-    const changed = [...diff.changed.keys()];
+    const changed = realPeople(diff.changed.keys(), data);
     if (changed.length === 1) parts.push(L.srChanged(nameIn(data, changed[0])));
     else if (changed.length > 1) parts.push(L.srChangedMany(changed.length));
-    const removed = diff.removed.map(id => nameIn(previous, id));
+    const removed = realPeople(diff.removed, previous).map(id => nameIn(previous, id));
     removed.slice(0, NAMES_SAID).forEach(n => parts.push(L.srRemoved(n)));
     if (removed.length > NAMES_SAID) parts.push(L.srMore(removed.length - NAMES_SAID));
     const merged = [...diff.merged];

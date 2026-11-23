@@ -128,6 +128,21 @@ export function diffLive(oldData: StromData, newData: StromData): LiveDiff {
     return { added, removed, changed, merged, moved: [] };
 }
 
+/**
+ * The people of `ids` in `data` a person sees as people (134 V-N6): a "?"
+ * stand-in is none. A load can give a stand-in a new id (stabilizeIds keeps
+ * it only by numbered people around it, one way), so it reads as added or
+ * removed though nobody came or went; it is never announced as a person.
+ */
+export function realPeople(ids: Iterable<PersonId>, data: StromData): PersonId[] {
+    const out: PersonId[] = [];
+    for (const id of ids) {
+        const p = data.persons[id];
+        if (p && !p.isPlaceholder) out.push(id);
+    }
+    return out;
+}
+
 /** How many people the change touches (added, removed, merged, changed): over a limit the scene is skipped. */
 export function liveChangeCount(diff: LiveDiff): number {
     return diff.added.length + diff.removed.length + diff.merged.size + diff.changed.size;

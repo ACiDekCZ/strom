@@ -102,7 +102,7 @@ import { BulkFamily, bulkAddedKeys, bulkBroughtInByParent, bulkKeysShown, bulkNe
 import { partnerIdsShownInPlace, selectSubgraph } from './layout/pipeline/1-select-subgraph.js';
 import { measureUnionOrderPills, applyUnionOrderGlyphLift, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, bubbleBox, touchBubbleBox, touchBubbleBounds, touchBubbleSide, bubbleOpensBelow, BUBBLE_WINDOW_MARGIN, BUBBLE_LOW_WINDOW_NAMES, BUBBLE_LOW_WINDOW_HEIGHT, bubbleNameCounts, bubbleNamesToFit } from './union-order-measure.js';
 import { prepareBubble, showBubble, hideBubble, closeOpenBubble, openBubble, openBubbleOwner } from './bubble-layer.js';
-import { LiveDiff, diffLive, liveChangeCount } from './live-diff.js';
+import { LiveDiff, diffLive, liveChangeCount, realPeople } from './live-diff.js';
 import { playLiveScene } from './live-scene.js';
 import { LIVE, edgeNotchSpot, EdgeSide, liveMotionOn, cardTrailOpacity } from './live-transition.js';
 import { getLiveMotion } from './live-follow-prefs.js';
@@ -1228,7 +1228,8 @@ class TreeRendererClass {
             }
         }
         if (live.quiet) return;
-        this.showLiveEdges(diff.added, colorOf);
+        // A notch for a person come, not for a "?" stand-in given a new id (134 V-N6).
+        this.showLiveEdges(realPeople(diff.added, data), colorOf);
         announceLive(diff, live.previous, data);
     }
 

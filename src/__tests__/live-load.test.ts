@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StromData, PersonId, Person, Partnership, PartnershipId } from '../types.js';
-import { diffLive, changedFields, looksMerged, liveChangeCount, normalizeSurname } from '../live-diff.js';
+import { diffLive, changedFields, looksMerged, liveChangeCount, normalizeSurname, realPeople } from '../live-diff.js';
 import {
     LIVE, liveTime, liveMotionOn, childLightPath, polylineLength, pulseDash, lightFits, newCardDelays, edgeNotchSpot,
     cardTrailOpacity, simplifyPolyline, polylinePath,
@@ -260,5 +260,45 @@ describe('a person without a number keeps their id over a load (stabilizeIds)', 
         expect(diff.added).toEqual([]);
         expect(diff.removed).toEqual([]);
         expect(Object.keys(after.persons).sort()).toEqual(Object.keys(before.persons).sort());
+    });
+});
+
+describe('a "?" stand-in given a new id by a load is nobody come or gone (134 V-N6)', () => {
+    // Dalimil, just merged in, has no number of the research yet; his wife is not known (a "?").
+    const GED = [
+        '0 HEAD', '1 CHAR UTF-8',
+        '0 @P0003@ INDI', '1 NAME Ctirad /Hlohovec/', '1 SEX M', '1 REFN P0003', '1 FAMS @F0000@',
+        '0 @X1@ INDI', '1 NAME Dalimil /Hlohovec/', '1 SEX M', '1 FAMC @F0000@', '1 FAMS @F0001@',
+        '0 @X2@ INDI', '1 NAME //', '1 SEX F', '1 FAMS @F0001@',
+        '0 @F0000@ FAM', '1 HUSB @P0003@', '1 CHIL @X1@',
+        '0 @F0001@ FAM', '1 HUSB @X1@', '1 WIFE @X2@',
+        '0 TRLR',
+    ].join('\n');
+    const importGed = (ged: string): StromData => convertToStrom(parseGedcom(ged)).data;
+
+    it('the load gives the "?" a new id (no numbered person beside it), the screen reader and the edge say nothing', () => {
+        const before = importGed(GED);
+        const after = stabilizeIds(importGed(GED), before);
+        const standIn = (d: StromData) => Object.values(d.persons).find(p => p.isPlaceholder)!;
+        expect(standIn(before)).toBeTruthy();
+        // Dalimil keeps his id by his numbered father; the "?" beside only him cannot be told, so it is new.
+        const dalimil = Object.values(before.persons).find(p => p.firstName === 'Dalimil')!;
+        expect(after.persons[dalimil.id]).toBeTruthy();
+        expect(standIn(after).id).not.toBe(standIn(before).id);
+        const diff = diffLive(before, after);
+        expect(diff.added).toEqual([standIn(after).id]);
+        expect(diff.removed).toEqual([standIn(before).id]);
+        // Nobody came or went: no "Person added: ?" nor "Person removed: ?", no notch at the edge.
+        expect(liveAnnouncement(diff, before, after)).toBe('');
+        expect(realPeople(diff.added, after)).toEqual([]);
+        expect(realPeople(diff.removed, before)).toEqual([]);
+    });
+
+    it('a real person come with the "?" is still said', () => {
+        const before = importGed(GED);
+        const after = stabilizeIds(importGed(GED.replace('0 TRLR', ['0 @X3@ INDI', '1 NAME Kvido /Hlohovec/', '1 SEX M', '1 FAMC @F0001@', '0 TRLR'].join('\n'))), before);
+        const text = liveAnnouncement(diffLive(before, after), before, after);
+        expect(text).toContain('Person added: Kvido Hlohovec');
+        expect(text).not.toContain('?');
     });
 });
