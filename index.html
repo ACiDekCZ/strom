@@ -9094,6 +9094,9 @@
         .confirm-check input { margin-top: 3px; flex-shrink: 0; }
         .confirm-check-label { display: block; color: var(--text); }
         .confirm-check-hint { display: block; margin-top: 2px; font-size: 12px; color: var(--text-light); line-height: 1.4; }
+        /* `.modal label { display: block }` used to win in the material dialog, putting the box on a line
+           of its own above its text: the longer selector keeps the box beside it. */
+        .material-dialog label.confirm-check { display: flex; margin: 8px 0 4px; font-size: 14px; font-weight: 400; color: var(--text); }
 
         /* "Couldn't connect to the research": the reason, the way to allow it (research-ui.ts). */
         .research-connect-failed { width: 480px; max-width: calc(100vw - 32px); }

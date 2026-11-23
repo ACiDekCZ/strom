@@ -119,10 +119,13 @@ export const materialMethods = uiModule({
         const bytes = picked.reduce((sum, f) => sum + f.size, 0);
         const cantWait = !up && (SettingsManager.isEncryptionEnabled() || bridgeFailure(null) === 'safari');
         let box: string;
+        /** The box with the person's attach box ticked (alsoAttach / alsoTree): the files go into the tree too. */
+        let boxAttach: string | null = null;
         let primary: { label: string; act: string };
         const saveLabel = kept && picked.length ? m.saveN(picked.length) : m.saveArchive;
         if (archive && up && ready) {
             box = m.infoArchive;
+            boxAttach = kept ? m.infoArchiveTree : m.infoArchiveAttach;
             primary = { label: saveLabel, act: 'send' };
         } else if (cantWait) {
             box = m.cantWait(formatBytesShort(bytes));
@@ -139,11 +142,15 @@ export const materialMethods = uiModule({
             // Sorted by the agent only when the research's setting says so (spec 130 K1.3).
             const waits = !archive && this.researchIntakeSorting(link.researchId) === 'manual';
             box = archive ? m.infoArchive : waits ? (isPerson ? m.infoWait : m.infoWaitSource) : isPerson ? m.infoAgent : m.infoAgentSource;
+            boxAttach = archive ? (kept ? m.infoArchiveTree : m.infoArchiveAttach) : waits ? m.infoWaitAttach : m.infoAgentAttach;
             primary = { label: archive ? saveLabel : picked.length ? m.sendN(picked.length) : m.sendFiles, act: 'send' };
         }
         const note = (overlay.querySelector('#material-note') as HTMLTextAreaElement | null)?.value ?? '';
         const attach = (overlay.querySelector('#material-attach') as HTMLInputElement | null)?.checked ?? false;
         const eligible = picked.filter(alsoTreeEligible).length;
+        const attachOn = isPerson && (kept ? alsoTree && eligible > 0 : attach);
+        /** The box's text for the attach box as it is now (only a person's dialog has one). */
+        const boxText = (on: boolean): string => isPerson && on && boxAttach ? boxAttach : box;
         const attachBox = !isPerson ? '' : kept ? `
                     <label class="confirm-check material-attach${eligible === 0 ? ' is-disabled' : ''}">
                         <input type="checkbox" id="material-attach"${alsoTree && eligible > 0 ? ' checked' : ''}${eligible === 0 ? ' disabled' : ''}>
@@ -181,7 +188,7 @@ export const materialMethods = uiModule({
                     <textarea id="material-note" rows="2" maxlength="${MATERIAL_NOTE_MAX}">${esc(note)}</textarea>
                     <div class="material-note-count">${note.length} / ${MATERIAL_NOTE_MAX}</div>
                     ${attachBox}
-                    <p class="material-box${cantWait ? ' is-warn' : ''}"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(box)}</span></p>
+                    <p class="material-box${cantWait ? ' is-warn' : ''}"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span class="material-box-text">${esc(boxText(attachOn))}</span></p>
                 </div>
                 <div class="buttons">
                     <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.cancel)}</button>
@@ -212,8 +219,12 @@ export const materialMethods = uiModule({
             this.renderMaterialDialog();
         }));
         // Unticking holds for this save only (the next opening is ticked again).
+        // The box says at once whether the files go into the tree too.
         overlay.querySelector<HTMLInputElement>('#material-attach')?.addEventListener('change', (e) => {
-            if (kept && !(e.currentTarget as HTMLInputElement).disabled) alsoTree = (e.currentTarget as HTMLInputElement).checked;
+            const box = e.currentTarget as HTMLInputElement;
+            if (kept && !box.disabled) alsoTree = box.checked;
+            const text = overlay.querySelector('.material-box-text');
+            if (text) text.textContent = boxText(box.checked && !box.disabled);
         });
         const noteEl = overlay.querySelector<HTMLTextAreaElement>('#material-note');
         noteEl?.addEventListener('input', () => {
