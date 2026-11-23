@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, createFirstPerson, mergeCompare, mergeCount, mergeCurrentStep, mergeJoinPending, mergePickValue, mergeSetScope, mergeToStep4, mergeWriteAndSwitch } from './helpers.js';
+import { openApp, createFirstPerson, mergeCompare, mergeCount, mergeCurrentStep, mergeJoinPending, mergePickValue, mergeSetScope, mergeToStep4, mergeWriteAndSwitch, reloadApp } from './helpers.js';
 import { unnamedControls } from './a11y.js';
 
 /**
@@ -166,8 +166,16 @@ test('step 4: the rule tiles, a kind\'s rule, By person with where each result c
     // 7d: Ctiboh's other parents from the import; the loop can only be kept.
     await wizard.locator('#merge-s4-tab-rels').click();
     const parents = wizard.locator('.merge-s4-rel[data-rel-kind="parents"]').filter({ hasText: 'Ctiboh' });
-    await expect(parents).toContainText('Budivoj Modřín + Libuna Modřínová');
-    await expect(parents).toContainText('Radhost Jilm + Mstislava Jilmová');
+    // Each side with the years, the import's persons new to the tree marked so (N1 of part B's check):
+    // parents of the same names stay told apart.
+    await expect(parents).toContainText('Budivoj Modřín (* 1880) + Libuna Modřínová (* 1885)');
+    await expect(parents).toContainText('Radhost Jilm (* 1870, new) + Mstislava Jilmová (* 1872, new)');
+    // The choice keeps its own width (7d), not the row's (N2).
+    const widths = await parents.evaluate(el => ({
+        row: el.getBoundingClientRect().width,
+        seg: el.querySelector('.sel-seg')!.getBoundingClientRect().width,
+    }));
+    expect(widths.seg).toBeLessThan(widths.row * 0.75);
     await parents.getByRole('radio', { name: 'From the import' }).click();
     await expect(wizard.locator('.merge-s4-rel[data-rel-kind="parents"]').filter({ hasText: 'Ctiboh' }).getByRole('radio', { name: 'From the import' })).toHaveAttribute('aria-checked', 'true');
     const loop = wizard.locator('.merge-s4-rel[data-rel-kind="loop"]');
@@ -204,6 +212,66 @@ test('step 4 by a click on a value: the chosen value wins over the rule, a secon
     await expect(wizard.locator('.merge-s4-person')).toHaveCount(0);
     await wizard.locator('.merge-s4-phead').getByRole('radio', { name: 'All', exact: true }).click();
     await expect(row(wizard, 'zby', 'birthPlace').locator('.merge-s4-res-v')).toHaveText('stays Křemenná');
+});
+
+/** The rules of step 4 of the merge left open, as the browser stores it (null: none yet). */
+const savedRules = (page: Page): Promise<unknown> => page.evaluate(() => new Promise<unknown>(resolve => {
+    const open = indexedDB.open('strom-db');
+    open.onerror = () => resolve(null);
+    open.onsuccess = () => {
+        const db = open.result;
+        const get = db.transaction('merge').objectStore('merge').get('current');
+        get.onsuccess = () => { resolve(get.result?.state?.wizard?.choices?.rules ?? null); db.close(); };
+        get.onerror = () => { resolve(null); db.close(); };
+    };
+}));
+
+/** Step 4 as it was left: The import wins, Birth → More precise, Zbyhněv's birthplace kept from the tree by a click. */
+async function rulesAreBack(wizard: Locator): Promise<void> {
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '4');
+    await expect(tile(wizard, 'import')).toHaveAttribute('aria-checked', 'true');
+    await expect(wizard.locator('.merge-s4-krow[data-kind="birth"] select')).toHaveValue('precise');
+    await expect(wizard.locator('.merge-s4-krow[data-kind="birth"] .merge-s4-from')).toHaveText('own rule');
+    await wizard.locator('#merge-s4-tab-persons').click();
+    await expect(row(wizard, 'zby', 'birthPlace').locator('.merge-s4-res-v')).toHaveText('stays Křemenná');
+    await expect(row(wizard, 'zby', 'birthPlace').locator('.merge-s4-res-from')).toHaveText('chosen for this value');
+    await expect(row(wizard, 'koj', 'birthPlace').locator('.merge-s4-res-v')).toHaveText('Mechová');
+}
+
+test('step 4\'s choices survive a reload (13g) and Save for later (13j): the rule, a kind\'s rule and a value chosen by a click are back', async ({ page }) => {
+    const wizard = await compared(page, modrinTree(), jilmGed());
+    await mergeJoinPending(wizard);
+    await mergeSetScope(page, 'c');
+    await mergeToStep4(wizard);
+    await tile(wizard, 'import').click();
+    await wizard.locator('.merge-s4-krow[data-kind="birth"] select').selectOption('precise');
+    await mergePickValue(wizard, 'zby', 'birthPlace', 'mine');
+    await expect(row(wizard, 'zby', 'birthPlace').locator('.merge-s4-res-from')).toHaveText('chosen for this value');
+    await expect.poll(() => savedRules(page), { timeout: 10_000 }).toEqual({
+        all: 'import', kind: { birth: 'precise' }, value: { 'zby|birthPlace': 'mine' },
+    });
+
+    // The page gone in the middle: the merge offered again, step 4 as it was.
+    await reloadApp(page);
+    const pending = page.locator('#pending-merge-modal');
+    await expect(pending).toHaveClass(/active/);
+    await expect(pending.locator('.pending-merge-meta')).toContainText('Step 4 of 6');
+    await pending.locator('.btn-resume').click();
+    await expect(wizard).toBeVisible();
+    await rulesAreBack(wizard);
+
+    // Save for later, the page loaded anew, Manage trees brings it back as it was.
+    await wizard.locator('#merge-save-later').click();
+    await expect(wizard).toBeHidden();
+    // Stored (IndexedDB) before the page loads anew.
+    await expect.poll(() => page.evaluate(async () =>
+        (await window.Strom.MergerUI.getPendingMergeInfo()).saved.length)).toBe(1);
+    await reloadApp(page);
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    await expect(page.locator('#tree-manager-modal')).toBeVisible();
+    await page.locator('#tree-manager-modal .tree-manager-item.pending-merge .tree-open-btn').click();
+    await expect(wizard).toBeVisible();
+    await rulesAreBack(wizard);
 });
 
 test('scope a) without conflicts of relations skips step 4 and says why; the differences can be read', async ({ page }) => {

@@ -257,6 +257,15 @@ export const treeManagementMethods = uiModule({
         if (nameEl) {
             nameEl.textContent = activeTree?.name || '…';
         }
+        // A merge not sent to the tree's research yet, quietly beside the switcher (spec 134 11b).
+        this.listenForMergeHold();
+        const holdEl = document.getElementById('tree-switcher-hold');
+        if (holdEl) {
+            holdEl.textContent = this.treeHoldText(activeTree);
+            // Shortened with an ellipsis when the toolbar is tight: the whole text on hover.
+            holdEl.title = holdEl.textContent;
+            holdEl.hidden = !holdEl.textContent;
+        }
 
         if (!dropdown) return;
 
@@ -274,8 +283,9 @@ export const treeManagementMethods = uiModule({
                 <div class="tree-switcher-item sel-opt ${isActive ? 'active' : ''}" data-sel-form="row" role="menuitem" tabindex="0" data-tree-id="${tree.id}"
                      ${title ? `title="${this.escapeHtml(title)}"` : ''} onclick="window.Strom.UI.switchToTree('${tree.id}')">
                     <span class="tree-item-check">${isActive ? iconSvg('check') : ''}</span>
-                    <span class="tree-item-name">${this.escapeHtml(tree.name)}</span>
+                    <span class="tree-item-name" title="${this.escapeHtml(title ? `${tree.name}\n${title}` : tree.name)}">${this.escapeHtml(tree.name)}</span>
                     ${this.treeSwitcherKindHtml(tree)}
+                    ${this.treeHoldText(tree) ? `<span class="tree-item-hold">${this.escapeHtml(this.treeHoldText(tree))}</span>` : ''}
                     ${this.treeSwitcherMarksHtml(tree)}
                 </div>
             `;
@@ -776,10 +786,10 @@ export const treeManagementMethods = uiModule({
         this.presentMenuSheet(strings.treeManager.switcherTitle, [
             { rows: trees.map(tree => {
                 const marks = this.treeSheetMarks(tree);
-                const kind = this.treeKindLabel(tree);
+                const sub = [this.treeKindLabel(tree), this.treeHoldText(tree)].filter(Boolean).join(' \u00b7 ');
                 return {
                     label: tree.name,
-                    ...(kind ? { sub: kind } : {}),
+                    ...(sub ? { sub } : {}),
                     active: tree.id === activeId,
                     treeId: tree.id,
                     extra: marks?.extra,
@@ -991,7 +1001,7 @@ export const treeManagementMethods = uiModule({
             html += `
                 <div class="tree-manager-item sel-opt ${isActive ? 'active' : ''} ${tree.isHidden ? 'hidden-tree' : ''}" data-sel-form="row" data-tree-id="${tree.id}">
                     <div class="tree-manager-item-header">
-                        <span class="tree-manager-item-name clickable" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${this.escapeHtml(tree.name)}</span>
+                        <span class="tree-manager-item-name clickable" title="${this.escapeHtml(tree.name)}" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${this.escapeHtml(tree.name)}</span>
                         ${badges}
                         ${treeSizeFormatted ? `<span class="tree-manager-item-size">${treeSizeFormatted}</span>` : ''}
                     </div>
@@ -999,6 +1009,7 @@ export const treeManagementMethods = uiModule({
                         ${s.persons(tree.personCount)} • ${s.families(familyCount)}
                         ${defaultPersonDisplay ? ` • ${this.escapeHtml(defaultPersonDisplay)}` : ''}
                     </div>
+                    ${this.treeManagerHoldHtml(tree)}
                     ${tree.research?.id && !tree.research.copy ? this.researchLiveSlotHtml(tree.id) : ''}
                     <div class="tree-manager-item-actions">
                         <button class="tree-open-btn" data-tree-id="${tree.id}" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>

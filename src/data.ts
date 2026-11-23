@@ -50,6 +50,7 @@ import {
 import { generatePersonId, generateLifeEventId, generateSourceId, generateParticipantId, generateAttachmentId, generatePartnershipId } from './ids.js';
 import { partnershipParticipants, LAST_FOCUSED, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, oppositeGender, isPrimaryName, mergedPrimaryName, isEmbeddedEnvelope } from './model-values.js';
 import { STROM_DATA_VERSION } from './version.js';
+import { sanitizeMergeRecords } from './merge/record.js';
 import { moveContactsIntoPeople, cleanEmails } from './person-contact.js';
 import { convertLegacyCensusEvents, isCoupleEventType } from './events.js';
 import { sanitizeGedcomDates } from './gedcom-date-form.js';
@@ -476,6 +477,9 @@ export function migrateData(data: unknown): StromData {
     // v16: the facts confirmed by hand and the research's re-verification of
     // facts (src/verify.ts); only valid entries of existing facts.
     cleanFactVerify(result);
+    // v26 (spec 134 §0.3): the merges into the tree, only well-formed records.
+    const merges = sanitizeMergeRecords(d.merges);
+    if (merges) result.merges = merges;
 
     // Preserve default person settings if present
     if (d.defaultPersonId !== undefined) {

@@ -28,6 +28,10 @@ describe('"What next" card: rows', () => {
         expect(importNextRows({ findings: 3, families: 2, research: 'have', verify: false }))
             .toEqual([{ kind: 'check', findings: 3 }, { kind: 'split', families: 2 }, { kind: 'research', state: 'have', verify: false }]);
     });
+    it('after the merge guide (a new tree) without the data check: its last step had it (spec 134 §9)', () => {
+        expect(importNextRows({ findings: 3, families: 2, research: 'none', verify: false, check: false }).map(r => r.kind))
+            .toEqual(['split', 'research']);
+    });
     it('the fact check (065) only for a linked tree whose bridge offers it', () => {
         expect(importNextRows({ findings: 0, families: 0, research: 'have', verify: true })[1]).toMatchObject({ verify: false });
         expect(importNextRows({ findings: 0, families: 0, research: 'linked', verify: true })[1]).toMatchObject({ verify: true });

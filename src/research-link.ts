@@ -3136,6 +3136,8 @@ export function sanitizeBatches(value: unknown): LiveBatch[] | null {
 export interface ResearchSendRecord {
     /** The mark the `/sync` reply gave it. */
     intake: string;
+    /** The research's input written from it (`I0412`, what `strom sync undo` takes); absent = not said. */
+    input?: string;
     at: string;
     state: 'pending' | 'written' | 'discarded' | 'replaced' | 'nothing' | 'undone' | 'failed';
     changes: number | null;
@@ -3206,6 +3208,7 @@ export function sanitizeSends(value: unknown, codes = false): ResearchSendRecord
             conflictPersons: conflictPersons(r.conflicts),
             ...(conflictIds(r.conflicts).length ? { conflictIds: conflictIds(r.conflicts) } : {}),
             // Written again since: `resent: true` (1.12.0-rc.21), or `again` (the mark of that send).
+            ...(typeof r.input === 'string' && /^I\d+$/.test(r.input) ? { input: r.input } : {}),
             ...(r.resent === true || r.again === true ? { again: 'yes' } : headerToken(r.again) ? { again: headerToken(r.again)! } : {}),
             ...(codes && (r.state === 'written' || r.state === 'nothing') ? sendNotWritten(r) : {}),
             ...(r.state === 'written' ? sendMedia(r) : {}),

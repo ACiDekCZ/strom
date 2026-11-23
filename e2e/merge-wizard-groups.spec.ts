@@ -84,11 +84,9 @@ const stat = (wizard: Locator, kind: string): Locator => wizard.locator(`#merge-
 /** Write into a new tree "Modřínovi + rodokmen-jilmovi" (step 5) and switch to it. */
 async function writeAndSwitch(page: Page, wizard: Locator): Promise<void> {
     await mergeWrite(wizard);
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '6');
+    await wizard.locator('.merge-s6-act[data-act="show"]').click();
     await expect(wizard).toBeHidden();
-    const confirm = page.locator('#confirmation-modal.active');
-    await expect(confirm).toContainText('Switch to the new tree?');
-    await confirm.locator('#confirm-ok-btn').click();
-    await expect(confirm).toBeHidden();
     await expect.poll(() => page.evaluate(() => {
         const S = window.Strom.TreeManager;
         return S.getTrees().find((t: { id: string }) => t.id === S.getActiveTreeId())?.name;

@@ -809,6 +809,9 @@
             /* A huge factor here, not a small one on the switcher: once the search is at its minimum,
                a switcher factor below 1 would absorb only that fraction of the rest (the toolbar overflows). */
             .toolbar .search-container { flex-shrink: 100000; }
+            /* A merge not sent to the research (134 11b) gives way next, before the tree's name
+               (de with a research cut the name to "Fíško…" while the state kept its 240 px). */
+            .toolbar .tree-switcher-hold { flex-shrink: 1000; }
         }
         /* Ghost pill (ZADANI §4): transparent fill, hairline border, --text.
            Scoped under .toolbar so it outranks the generic
@@ -908,6 +911,30 @@
         .tree-item-kind {
             flex: none; font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 7px; border-radius: var(--r-tag);
             background: var(--surface-2); color: var(--text-light); border: 1px solid var(--border); white-space: nowrap;
+        }
+        /* A merge not sent to the research yet (spec 134 11b): quiet, beside the switcher on a desktop,
+           its row's second line in the list (phone and tablet: the row wraps). */
+        .tree-switcher-hold {
+            flex: 0 1 auto; min-width: 0; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-size: 12px; color: var(--text-light);
+        }
+        .tree-switcher-hold[hidden] { display: none; }
+        .tree-item-hold { flex: 0 1 auto; min-width: 0; font-size: 12px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tree-switcher-item:has(.tree-item-hold) .tree-item-badges { margin-left: auto; }
+        @media (max-width: 1024px) {
+            .toolbar .tree-switcher-hold { display: none; }
+            .tree-switcher-item:has(.tree-item-hold) { flex-wrap: wrap; row-gap: 2px; }
+            /* The name shortens on the first line instead of pushing the research mark onto the state's line. */
+            .tree-switcher-item:has(.tree-item-hold) .tree-item-name { flex: 1 1 0; }
+            .tree-switcher-item .tree-item-hold { order: 5; flex-basis: 100%; padding-left: 24px; white-space: normal; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .toolbar .tree-switcher-hold { display: none; }
+        }
+        .tree-manager-item-hold { font-size: 12.5px; color: var(--text-light); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+        .tree-manager-item-hold .link-button { font-size: inherit; }
+        @media (pointer: coarse) {
+            .tree-manager-item-hold .link-button { min-height: 44px; }
         }
         .tree-switcher-blocked {
             padding: 10px 14px; border-top: 1px solid var(--divider);
@@ -18265,6 +18292,10 @@
         .merge-s1-arrow { color: var(--text-light); }
         .merge-s1-swap { margin-left: auto; flex: none; white-space: nowrap; }
         .merge-s1-swap[aria-disabled="true"] { opacity: .55; cursor: default; }
+        /* A linked source into a target without a research (11g): the sentence in the text colour, Swap under it. */
+        .merge-s1-res .merge-s1-note { color: var(--text); }
+        .merge-s1-res-swap { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; max-width: 100%; font-size: 12px; text-align: left; }
+        .merge-s1-res-swap > svg { flex: none; }
         .merge-not-taken-note { font-size: 13px; color: var(--text-light); margin: 0 0 8px; }
         .merge-not-taken-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; font-size: 13px; }
         .merge-not-taken-list > li {
@@ -18296,9 +18327,11 @@
             .merge-s1-scopes.is-more > .merge-s1-more { display: none; }
             .merge-s1-tname { max-width: 140px; }
             .merge-s1-route { flex-wrap: wrap; }
+            .merge-s1-res-swap { white-space: normal; }
         }
         @media (pointer: coarse) {
             .merge-s1-target { min-height: 44px; }
+            .merge-s1-res-swap { min-height: 44px; }
         }
         @media (hover: hover) {
             .merge-s1-sumline:hover { background: var(--surface-2); }
@@ -18983,6 +19016,8 @@
         .merge-s4-rel-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
         .merge-s4-loop { color: var(--error-text); font-size: 12px; }
         .merge-s4-rel-sides { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2px 14px; font-size: 13px; }
+        /* The choice keeps its own width (7d); a phone stretches it (below). */
+        .merge-s4-rel > .sel-seg { align-self: flex-start; max-width: 100%; }
         .merge-s4-side { color: var(--text-light); }
         .merge-s4-skip-t { margin: 0; font-size: 14px; font-weight: 600; }
         .merge-s4-diffs { margin: 0; padding-left: 18px; font-size: 12.5px; max-height: 50vh; overflow-y: auto; }
@@ -19172,6 +19207,174 @@
         }
         @media (hover: hover) {
             .merge-s5-list > .merge-s5-row:hover { background: var(--hover-bg); }
+        }
+        /*
+         * Step 6 – What happened (spec 134 §9): the check mark with when, the totals, the actions and
+         * step 5's list read only (its search kept) at the left; the research's block and where the
+         * merge stays at the right (340 px). A phone: everything under each other, the actions 2 × 2,
+         * the list's groups closed, the step scrolling as a whole.
+         */
+        .merge-step-body[data-step="6"] { display: flex; flex-direction: column; overflow: hidden; }
+        .merge-s6 { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; }
+        .merge-s6-main { min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+        .merge-s6-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+        .merge-s6-head .merge-step-title { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+        .merge-s6-ok { flex: none; display: inline-flex; color: var(--primary); }
+        .merge-s6-at { color: var(--text-light); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .merge-s6-totals { margin: 0; color: var(--text-light); font-size: 13px; line-height: 1.45; }
+        .merge-s6-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+        .modal .merge-s6 .merge-s6-act { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 3px 12px; font-size: 13px; }
+        .merge-s6-act > svg { flex: none; }
+        .merge-s6-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+        .merge-s5.is-read { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+        .merge-s5.is-read .merge-s5-head { justify-content: flex-end; }
+        .merge-s5.is-read .merge-s5-list > .merge-s5-row, .merge-s5.is-read .merge-s5-list > .merge-s5-more { padding-left: 32px; }
+        .merge-s6-side { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .merge-s6-research[hidden] { display: none; }
+        .merge-s6-research .merge-s6-acts, .merge-s6-research .row-f { flex-wrap: wrap; }
+        /* The research's block (spec 134 §11): a quiet box, its text muted, its two buttons wrap. */
+        .merge-s6-research { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-md); }
+        .merge-s6-rhead { margin: 0; font-size: 13px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+        .merge-s6-rtext { margin: 0; color: var(--text-light); font-size: 12.5px; line-height: 1.45; }
+        .merge-s6-racts { display: flex; flex-wrap: wrap; gap: 8px; }
+        .modal .merge-s6 .merge-s6-ract { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 3px 12px; font-size: 13px; white-space: normal; text-align: left; }
+        .merge-s6-note { margin: 0; color: var(--text-light); font-size: 12px; line-height: 1.45; }
+        @media (max-width: 1024px) {
+            .merge-s6 { grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; }
+        }
+        @media (pointer: coarse) {
+            .modal .merge-s6 .merge-s6-act, .modal .merge-s6 .merge-s6-ract { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .merge-step-body[data-step="6"] { display: block; overflow-y: auto; }
+            .merge-s6 { display: flex; flex-direction: column; gap: 12px; }
+            .merge-s6-main { display: contents; }
+            .merge-s6-side { display: contents; }
+            .merge-s6-head { order: 1; }
+            .merge-s6-totals { order: 2; }
+            .merge-s6-acts { order: 3; display: grid; grid-template-columns: 1fr 1fr; }
+            .modal .merge-s6 .merge-s6-act { min-height: 44px; padding: 4px 8px; white-space: normal; text-align: center; }
+            /* Under the confirmation (its head and totals), before the actions. */
+            .merge-s6-research { order: 2; }
+            .merge-s6-racts { display: grid; grid-template-columns: 1fr; }
+            .modal .merge-s6 .merge-s6-ract { min-height: 44px; justify-content: center; text-align: center; }
+            .merge-s6-list { order: 5; }
+            .merge-s6-note { order: 6; }
+            .modal .merge-s6 input.merge-s5-search, .modal .merge-s6 input.merge-s5-search[type="search"] { width: 100%; }
+            .merge-s6 .merge-s5-list { flex: none; max-height: 62vh; }
+        }
+        /* A phone held sideways: the step scrolls as a whole, the list keeps a view of its own. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-step-body[data-step="6"] { display: block; overflow-y: auto; }
+            .merge-s6 { grid-template-columns: minmax(0, 1fr) 220px; }
+            .merge-s6 .merge-s5-list { flex: none; max-height: 70vh; }
+        }
+        /*
+         * The tree's merges (spec 134 §9, §10). The state tag: stands on the primary's soft ground, partly
+         * undone on the warning's, undone in a thin frame. Merge history (9a): one row per merge, newest
+         * first. A merge's list (9b): step 6's body in a dialog of its own. Undo (10a–10f): what goes,
+         * what comes back, what is kept (a Keep | Undo segment per row), the footer's Choose only some….
+         * A phone: the dialogs full screen, the groups closed, the segment 44 px high.
+         */
+        .merge-state-tag { flex: none; display: inline-flex; align-items: center; padding: 1px 7px; border-radius: var(--r-tag); font-size: 11.5px; line-height: 1.5; white-space: nowrap; background: var(--primary-soft); color: var(--text); }
+        .merge-state-tag[data-state="partial"] { background: var(--warning-soft); }
+        .merge-state-tag[data-state="undone"] { background: transparent; color: var(--text-light); box-shadow: inset 0 0 0 1px var(--border); }
+        #merge-history-modal .modal.modal--lg { width: 880px; max-width: min(880px, 94vw); }
+        .merge-hist-lead { margin: 0 0 12px; color: var(--text-light); font-size: 13px; line-height: 1.45; }
+        .merge-hist-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; max-height: min(60vh, 560px); }
+        .merge-hist-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "top acts" "what acts"; gap: 2px 16px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+        .merge-hist-row:last-child { border-bottom: 0; }
+        .merge-hist-top { grid-area: top; display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .merge-hist-at { font-variant-numeric: tabular-nums; font-size: 13.5px; }
+        .merge-hist-what { grid-area: what; min-width: 0; color: var(--text-light); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-hist-acts { grid-area: acts; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+        .merge-hist-sep { color: var(--text-faint); }
+        .merge-hist-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .merge-hist-foot .merge-hist-gap { flex: 1 1 auto; }
+        .merge-hist-foot [hidden] { display: none; }
+        .merge-record-body { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; overflow: hidden; }
+        #merge-record-modal .modal { display: flex; flex-direction: column; }
+        @media (min-width: 641px) { #merge-record-modal .modal.modal--lg.merge-modal { height: min(680px, 88vh); max-height: min(680px, 88vh); } }
+        #merge-undo-modal .modal.modal--md { width: 680px; max-width: min(680px, 94vw); }
+        .merge-undo-body { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: min(64vh, 620px); }
+        .merge-undo-body p { margin: 0; line-height: 1.45; }
+        .merge-undo-lead { font-size: 14px; }
+        .merge-undo-warn { color: var(--warning-text); font-size: 13px; }
+        .merge-undo-partly, .merge-undo-note, .merge-undo-none { color: var(--text-light); font-size: 12.5px; }
+        .merge-undo-err { color: var(--error-text); font-size: 13px; }
+        .merge-undo-h { margin: 4px 0 0; font-size: 13px; font-weight: 600; }
+        .merge-undo-grp { border-bottom: 1px solid var(--border); }
+        .merge-undo-grp > summary { display: flex; align-items: baseline; gap: 8px; padding: 6px 2px; cursor: pointer; min-width: 0; }
+        .merge-undo-gname { flex: none; font-weight: 600; font-size: 13px; }
+        .merge-undo-gcount { flex: none; font-variant-numeric: tabular-nums; font-size: 13px; }
+        .merge-undo-gdesc { min-width: 0; color: var(--text-light); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-undo-lines { list-style: none; margin: 0 0 8px; padding: 0 0 0 18px; columns: 2 220px; column-gap: 16px; }
+        .merge-undo-line, .merge-undo-more { font-size: 13px; padding: 2px 0; break-inside: avoid; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-undo-line label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+        .merge-undo-more { color: var(--text-light); }
+        .merge-undo-klist { list-style: none; margin: 0; padding: 0; }
+        .merge-undo-krow { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+        .merge-undo-krow:last-child { border-bottom: 0; }
+        .merge-undo-ktext { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+        .merge-undo-kname { font-family: var(--font-serif); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-undo-kwhy { color: var(--text-light); font-size: 12px; }
+        .merge-undo-kwhy.is-warn { color: var(--warning-text); }
+        .sel-seg.merge-undo-seg { flex: none; display: flex; }
+        .modal .merge-undo-seg > .sel-opt { min-width: 84px; padding: 4px 10px; font-size: 12.5px; }
+        /* The research of a merge already sent there (11c): what it takes, its step in a code line with Copy. */
+        .merge-undo-research { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 13px; }
+        .merge-undo-cmd-row { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+        .merge-undo-cmd {
+            flex: 1 1 220px; min-width: 0; display: block; padding: 8px 12px; border-radius: var(--r-md);
+            background: var(--code-bg); color: var(--code-text); border: 1px solid var(--code-border);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5;
+            word-break: break-all; user-select: all; -webkit-user-select: all;
+        }
+        .modal .merge-undo-copy { flex: none; min-width: 96px; }
+        .modal .merge-undo-copy.copied { background: var(--primary-soft); color: var(--primary-dark); border-color: transparent; }
+        .merge-undo-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .merge-undo-foot .merge-hist-gap { flex: 1 1 auto; }
+        .merge-undo-foot [hidden] { display: none; }
+        @media (pointer: coarse) {
+            .modal .merge-undo-seg > .sel-opt { min-height: 44px; }
+            .merge-undo-grp > summary { min-height: 44px; align-items: center; }
+            .modal .merge-undo-copy, .merge-undo-help { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            #merge-history-modal .modal.modal--lg, #merge-undo-modal .modal.modal--md, #merge-record-modal .modal.modal--lg { width: 100vw; max-width: 100vw; min-width: 0; height: 100dvh; max-height: 100dvh; border-radius: 0; display: flex; flex-direction: column; }
+            .merge-hist-list, .merge-undo-body { max-height: none; flex: 1 1 auto; min-height: 0; }
+            .merge-hist-row { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "what" "acts"; }
+            .merge-hist-what { white-space: normal; }
+            .merge-hist-acts .link-button { min-height: 44px; }
+            .merge-undo-krow { flex-direction: column; align-items: stretch; gap: 6px; }
+            .sel-seg.merge-undo-seg > .sel-opt { flex: 1 1 0; min-height: 44px; }
+            .merge-undo-lines { columns: 1; }
+            /* The group's words under its name and count: beside a long name (de) they were squeezed into a narrow column. */
+            .merge-undo-grp > summary { flex-wrap: wrap; row-gap: 2px; }
+            .merge-undo-gdesc { white-space: normal; flex-basis: 100%; }
+            .merge-undo-cmd-row { flex-direction: column; }
+            .modal .merge-undo-copy { width: 100%; }
+            .merge-record-body { display: block; overflow-y: auto; }
+            .merge-record-body .merge-s6 { display: flex; flex-direction: column; gap: 12px; }
+            .merge-record-body .merge-s6-main, .merge-record-body .merge-s6-side { display: contents; }
+            .merge-record-body .merge-s6-head { order: 1; }
+            .merge-record-body .merge-s6-totals { order: 2; }
+            .merge-record-body .merge-s6-acts { order: 3; display: grid; grid-template-columns: 1fr 1fr; }
+            .modal .merge-record-body .merge-s6-act { min-height: 44px; padding: 4px 8px; white-space: normal; text-align: center; }
+            .merge-record-body .merge-s6-list { order: 5; }
+            .merge-record-body .merge-s6-note { order: 6; }
+            .merge-record-body .merge-s5-list { flex: none; max-height: 62vh; }
+        }
+        /* A phone held sideways: the dialogs use the height they have, the record scrolls as a whole. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-hist-list, .merge-undo-body { max-height: 58vh; }
+            .merge-record-body { display: block; overflow-y: auto; }
+            .merge-record-body .merge-s6 { grid-template-columns: minmax(0, 1fr) 220px; }
+            .merge-record-body .merge-s5-list { flex: none; max-height: 70vh; }
+        }
+        @media (hover: hover) {
+            .merge-hist-row:hover { background: var(--hover-bg); }
+            .merge-undo-grp > summary:hover { background: var(--hover-bg); }
         }
         .merge-stat.skipped .merge-stat-label { color: var(--text-faint); }
         .merge-stat.skipped .merge-stat-value { color: var(--text-faint); }
@@ -28277,6 +28480,8 @@
             }
             .tree-manager-item:not(.pending-merge) > .tree-manager-item-header { grid-column: 1 / -1; margin-bottom: 2px; }
             .tree-manager-item:not(.pending-merge) > .tree-manager-item-actions { margin-top: 0; flex-wrap: nowrap; align-items: center; }
+            /* A merge not sent (134 11b) on its own line under the counts and Open: in the buttons' column it squeezed the counts word by word. */
+            .tree-manager-item:not(.pending-merge) > .tree-manager-item-hold { grid-column: 1 / -1; order: 1; margin-top: 2px; }
             /* Switching (2f): Open, Cancel and ⋯ under the row's counts, so the counts keep their width. */
             .tree-manager-item:not(.pending-merge):has(.tree-switch-cancel) > .tree-manager-item-actions { grid-column: 1 / -1; margin-top: 6px; }
             .tree-manager-item .tree-manager-item-actions button.tree-open-btn { height: 40px; }
@@ -34320,6 +34525,8 @@
                 <!-- Tree list rendered dynamically -->
             </div>
         </div>
+        <!-- A merge not sent to the open tree's research yet (spec 134 11b; desktop: the list says it elsewhere) -->
+        <span id="tree-switcher-hold" class="tree-switcher-hold" hidden></span>
 
         <div class="search-container">
             <div class="search-row">
@@ -36810,6 +37017,57 @@
             <div class="buttons">
                 <button type="button" class="link-button" onclick="window.Strom.MergerUI.saveNotTaken()" data-i18n="mergeWizard.saveList">Save list…</button>
                 <button type="button" class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeNotTaken()" data-i18n="buttons.close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Merge history (spec 134 §9 9a) -->
+    <div class="modal-overlay" id="merge-history-modal" onclick="if(event.target===this) window.Strom.UI.closeMergeHistory()">
+        <div class="modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="merge-history-title">
+            <div class="modal-header">
+                <h2 id="merge-history-title"></h2>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeMergeHistory()">&times;</button>
+            </div>
+            <p class="merge-hist-lead" data-i18n="mergeWizard.histLead"></p>
+            <ul class="merge-hist-list"></ul>
+            <div class="buttons merge-hist-foot">
+                <button type="button" class="link-button" data-act="backups" onclick="window.Strom.UI.mergeHistoryFooter('backups')" data-i18n="mergeWizard.histBackups"></button>
+                <button type="button" class="link-button" data-act="changes" onclick="window.Strom.UI.mergeHistoryFooter('changes')" data-i18n="mergeWizard.histChanges" hidden></button>
+                <span class="merge-hist-gap"></span>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeMergeHistory()" data-i18n="buttons.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- A merge's list from its record (spec 134 §9 9b): step 6 read only -->
+    <div class="modal-overlay" id="merge-record-modal" onclick="if(event.target===this) window.Strom.UI.closeMergeRecord()">
+        <div class="modal modal--lg merge-modal" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="merge-record-title">
+            <div class="modal-header">
+                <h2 id="merge-record-title"></h2>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeMergeRecord()">&times;</button>
+            </div>
+            <div class="merge-record-body"></div>
+            <div class="buttons merge-hist-foot">
+                <button type="button" class="link-button" onclick="window.Strom.UI.saveMergeRecordList()" data-i18n="mergeWizard.savePlan"></button>
+                <span class="merge-hist-gap"></span>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeMergeRecord()" data-i18n="buttons.close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Undo a merge (spec 134 §10) -->
+    <div class="modal-overlay" id="merge-undo-modal" onclick="if(event.target===this) window.Strom.UI.closeUndoMerge()">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true" aria-labelledby="merge-undo-title">
+            <div class="modal-header">
+                <h2 id="merge-undo-title" data-i18n="mergeWizard.undoTitle"></h2>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeUndoMerge()">&times;</button>
+            </div>
+            <div class="merge-undo-body"></div>
+            <div class="buttons merge-undo-foot">
+                <button type="button" class="link-button" data-act="pick" onclick="window.Strom.UI.toggleUndoPick()"></button>
+                <span class="merge-hist-gap"></span>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeUndoMerge()" data-i18n="buttons.cancel"></button>
+                <button type="button" class="primary" data-act="undo" onclick="window.Strom.UI.confirmUndoMerge()"></button>
             </div>
         </div>
     </div>

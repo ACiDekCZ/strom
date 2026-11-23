@@ -23,11 +23,14 @@ import { AuditLogManager } from '../audit-log.js';
 import { strings } from '../strings.js';
 import { contentFingerprint } from '../research-link.js';
 import { sameWithImages } from '../image-equal.js';
-import { keptBackupAtRisk } from '../snapshots.js';
+import { getSnapshotJson, keptBackupAtRisk } from '../snapshots.js';
 import type { PersonId, StromData, TreeId } from '../types.js';
 import { applyPlan, type MergePlan, type MergeRecord, type PlanTarget, type VerifyIssue } from './plan.js';
 import { deleteBackup } from './executor.js';
 import { mergeCheckMessage, type MergeCheckProblem } from './merge-check.js';
+import { hasImageToken } from './record.js';
+import { applyUndo, type ChangedSince, type UndoChoices } from './undo-plan.js';
+import { syncMergeHold } from './research-hold.js';
 
 /** Where the plan goes: the target tree itself, or a new tree (a copy of the target + the import). */
 export type WriteInto = 'tree' | 'new';
@@ -245,6 +248,13 @@ export async function writePlan(plan: MergePlan, opts: WriteOptions): Promise<Wr
         applied.record.backupId = backupId;
     }
 
+    // The record goes into the tree's history in the same write (§0.3, K7.2): the tree itself,
+    // a new tree (a copy of the target + the import, or the import alone) and each separate tree.
+    const newName = into === 'tree' && targetId ? plan.target.name : opts.name ?? newTreeName(plan);
+    if (into !== 'tree' || !targetId) applied.record.target = { name: newName, newTree: true };
+    data.merges = [...(data.merges ?? []), applied.record];
+    for (const own of applied.ownTrees) own.data.merges = [...(own.data.merges ?? []), own.record];
+
     // 4. The trees stored: the separate ones first (taken back when the main write fails).
     const persons = applied.record.counts.added + applied.record.counts.joined;
     progress('persons', 0, persons);
@@ -270,10 +280,13 @@ export async function writePlan(plan: MergePlan, opts: WriteOptions): Promise<Wr
             await undoOwn();
             return { ok: false, reason: 'save', message: strings.merge.saveFailed };
         }
+        // A tree with a research: what the merge brought waits for a send by hand (K9.2), set
+        // before the tree shows the result so that nothing goes by itself meanwhile.
+        syncMergeHold(targetId, data);
         // The open tree shows the result, one step back with Undo (K8.5).
         if (!DataManager.adoptMergeResult(targetId, data, strings.undo.mergeTrees)) TreeManager.noteUserChange(targetId);
     } else {
-        name = opts.name ?? newTreeName(plan);
+        name = newName;
         const id = await storeNewTree(name, data);
         if (!id) {
             await undoOwn();
@@ -286,7 +299,7 @@ export async function writePlan(plan: MergePlan, opts: WriteOptions): Promise<Wr
     // 5. The log, and the working backups go only now that the writes have landed (K0.5).
     const counts = applied.record.counts;
     if (plan.mode !== 'new') {
-        AuditLogManager.log(treeId, 'data.import', strings.auditLog.treeMerge(counts.joined, counts.added, plan.source.label || '?'));
+        AuditLogManager.log(treeId, 'data.import', `${strings.auditLog.treeMerge(counts.joined, counts.added, plan.source.label || '?')} · ${strings.auditLog.mergeLink}`);
     }
     if (applied.backupKey) await deleteBackup(applied.backupKey);
     for (const own of applied.ownTrees) if (own.backupKey) await deleteBackup(own.backupKey);
@@ -298,4 +311,75 @@ export async function writePlan(plan: MergePlan, opts: WriteOptions): Promise<Wr
         ...(applied.importMap ? { importMap: applied.importMap } : {}),
         ...(applied.sharedJoined ? { sharedJoined: applied.sharedJoined } : {}),
     };
+}
+
+// ==================== THE UNDO OF A MERGE (K8) ====================
+
+export type UndoWriteResult =
+    | {
+        ok: true;
+        /** The tree as stored now. */
+        data: StromData;
+        /** The tree before the undo (writeRestore takes it back, K8.4). */
+        before: StromData;
+        record: MergeRecord;
+        kept: ChangedSince[];
+        items: string[];
+        /** The backup taken before the undo. */
+        backupId: string;
+    }
+    | { ok: false; reason: 'missing' | 'backup' | 'save'; why: string; detail?: string };
+
+/** The tree's data of the backup "Before merge" of `record`, when its changes hold a picture (null otherwise or when gone). */
+async function pictureBackup(record: MergeRecord): Promise<StromData | null> {
+    if (!record.backupId || !(record.edits ?? []).some(e => hasImageToken(e.before))) return null;
+    const json = await getSnapshotJson(record.backupId).catch(() => null);
+    if (!json) return null;
+    try {
+        return JSON.parse(json) as StromData;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Undo merge `recordId` of tree `treeId` (K8.1–K8.4) as `choices` say
+ * (undo-plan.ts applyUndo): a backup first, kept for the merge (the undo is
+ * itself undone from it, K8.4), the pictures the merge replaced from its
+ * backup "Before merge", then the tree stored and, when open, one Undo step.
+ */
+export async function writeUndo(treeId: TreeId, recordId: string, choices: Omit<UndoChoices, 'backup'> = {}): Promise<UndoWriteResult> {
+    const before = await currentTarget(treeId);
+    const record = before?.merges?.find(r => r.id === recordId);
+    if (!before || !record) return { ok: false, reason: 'missing', why: strings.merge.failed };
+    let backupId: string;
+    try {
+        backupId = (await DataManager.backupBeforeMerge(treeId, { keepFor: record.id })).id;
+    } catch (err) {
+        return { ok: false, reason: 'backup', why: await backupFailureWhy(err), detail: errorText(err) };
+    }
+    const res = applyUndo(record, before, { ...choices, backup: await pictureBackup(record) });
+    if (!await TreeManager.saveTreeDataConfirmed(treeId, res.data, { quiet: true })) {
+        return { ok: false, reason: 'save', why: strings.merge.saveFailed };
+    }
+    // Undone before it was sent: the research gets nothing of it.
+    syncMergeHold(treeId, res.data);
+    if (!DataManager.adoptMergeResult(treeId, res.data, strings.undo.undoMerge)) TreeManager.noteUserChange(treeId);
+    AuditLogManager.log(treeId, 'data.import', `${strings.auditLog.mergeUndone(record.source.label || '?')} · ${strings.auditLog.mergeLink}`);
+    return { ok: true, data: res.data, before: structuredClone(before), record: res.record, kept: res.kept, items: res.items, backupId };
+}
+
+/**
+ * The undo of an undo (K8.4, undo-plan.ts redo): tree `treeId` back as it
+ * was before it (`before`, from writeUndo or the backup it took). False when
+ * the write did not land.
+ */
+export async function writeRestore(treeId: TreeId, before: StromData, recordId: string): Promise<boolean> {
+    const data = structuredClone(before);
+    if (!await TreeManager.saveTreeDataConfirmed(treeId, data, { quiet: true })) return false;
+    syncMergeHold(treeId, data);
+    if (!DataManager.adoptMergeResult(treeId, data, strings.undo.restoreMerge)) TreeManager.noteUserChange(treeId);
+    const record = data.merges?.find(r => r.id === recordId);
+    AuditLogManager.log(treeId, 'data.import', strings.auditLog.mergeRestored(record?.source.label || '?'));
+    return true;
 }

@@ -30,8 +30,10 @@ export type HelpTopic = keyof typeof HELP_TOPICS;
 
 /**
  * Help links without a "?" mark, each its number (checked with HELP_TOPICS):
- * the "What next" card after an import, link "A tree from another program" (import-next-ui.ts).
+ * the "What next" card after an import, link "A tree from another program" (import-next-ui.ts);
+ * the undo of a merge sent to the research, link "A person removed in the app".
  */
 export const HELP_LINKS = {
     importNext: 'S6',
+    mergeUndoResearch: 'S2.6', // the undo of a merge already sent to the research (merge-history-ui.ts, 11c)
 } as const;

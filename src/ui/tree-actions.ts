@@ -184,6 +184,8 @@ export const treeActionsMethods = uiModule({
             + (treeData?.defaultView === 'last' ? ` \u00b7 ${s.defaultViewLastSummary}` : '');
         const auditOffered = isActive && (AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(id));
         const editable = !readOnly;
+        // Merge history… (spec 134 §9): a tree with a merge in its record; a locked tree too (it says why no undo).
+        const merged = !!(DataManager.getDataFor(id) ?? treeData)?.merges?.length;
 
         const groups: TreeActionGroup[] = [
             { key: 'overview', rows: [
@@ -194,6 +196,7 @@ export const treeActionsMethods = uiModule({
                     run: () => void this.showTreeOverview(id, { section: 'quality', scroll: true, parent }),
                 },
                 ...(editable ? [{ key: 'snapshots', label: strings.snapshots.menu, editOnly: true, run: () => void this.showSnapshotsDialog(id, parent) }] : []),
+                ...(merged ? [{ key: 'mergeHistory', label: strings.mergeWizard.menuHistory, run: () => void this.showMergeHistory(id, parent) }] : []),
                 ...(auditOffered ? [{ key: 'audit', label: strings.auditLog.viewLog, run: () => this.showAuditLogDialog(id, parent) }] : []),
             ] },
             { key: 'outputs', rows: by.export

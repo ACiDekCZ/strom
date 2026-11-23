@@ -18,7 +18,7 @@ import { buildPlan, planCounts, type MergePlan, type PlanCounts, type PlanMode, 
 import { stepInfo, nextStep, previousStep, WIZARD_STEPS, type StepInfo, type WizardStep } from './wizard-steps.js';
 import { strings, countText } from '../strings.js';
 import { announceText } from '../ui/live-announce.js';
-import { escapeHtml, glyph, stepName, type GlyphKind, type Step1Env, type Step2Env, type StepContext, type TargetBlock, type WriteAction, type WriteStatus } from './steps/context.js';
+import { escapeHtml, glyph, stepName, type GlyphKind, type Step1Env, type Step2Env, type Step6Env, type StepContext, type TargetBlock, type WriteAction, type WriteStatus } from './steps/context.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { getUI } from '../ui-ref.js';
@@ -29,7 +29,7 @@ import { busySpinHtml } from '../ui/busy.js';
 import { renderStep3, variantSub } from './steps/step3-whom.js';
 import { renderStep4 } from './steps/step4-rules.js';
 import { renderStep5, showWriteStatus } from './steps/step5-plan.js';
-import { renderStep6 } from './steps/step6-done.js';
+import { renderStep6, writtenWhen } from './steps/step6-done.js';
 
 export type { WizardStep } from './wizard-steps.js';
 
@@ -67,6 +67,10 @@ export interface WizardHost {
     step1?(): Step1Env;
     /** Step 5's Save the list… (K6.4): the plan as .txt and .json. */
     savePlan?(plan: MergePlan): void;
+    /** Step 6 (§9): the written merge and its actions; null before a write. */
+    step6?(): Step6Env | null;
+    /** Step 6's Done (Esc, ×): the guide closes after the write. */
+    finishDone?(): void;
 }
 
 /** A running comparison (K3.5): its progress in work units, and the signal that stops it. */
@@ -271,7 +275,8 @@ export class MergeWizard {
     /** Go to a step that can be entered (skipped and locked ones cannot). */
     go(step: WizardStep): void {
         const ws = this.ws;
-        if (!ws || this.busy) return;
+        // Written: the steps before cannot be opened any more (§9).
+        if (!ws || this.busy || this.written) return;
         const at = this.info()[step];
         // A step 4 skipped by the scope still opens to say why (7e).
         if (at.state !== 'ok' && !(at.reason === 'scope' && this.plan)) return;
@@ -293,6 +298,10 @@ export class MergeWizard {
         const ws = this.ws;
         if (!ws || this.busy) return;
         const step = ws.step;
+        if (this.written) {
+            this.host.finishDone?.();
+            return;
+        }
         if (step === 1) {
             const c = ws.choices;
             // An import with nobody in it: only Close (13a).
@@ -352,7 +361,28 @@ export class MergeWizard {
         if (to) this.go(to);
     }
 
-    /** The import is a copy of the target (13b): the write would change nothing. */
+    /** The plan is written: the guide stands on step 6 (§9), nothing before it opens again. */
+    get written(): boolean {
+        const ws = this.ws;
+        return !!ws && !!ws.choices.writtenAt && ws.step === 6;
+    }
+
+    /**
+     * The write landed: step 6 (§9), the steps before locked. Nothing is
+     * saved for later any more. `plan`: the plan as written, for the step
+     * opened again (What happened).
+     */
+    showDone(plan?: MergePlan): void {
+        const ws = this.ws;
+        if (!ws) return;
+        if (plan) this.plan = plan;
+        this.busy = false;
+        ws.step = 6;
+        ws.reached = 6;
+        this.writeStatus = null;
+        this.render(true);
+    }
+
     /** Step 5's write (§8): the button off while it runs, its state above the list. */
     private async writeNow(retention?: 'keep-both' | 'drop-oldest'): Promise<void> {
         const plan = this.plan;
@@ -393,7 +423,7 @@ export class MergeWizard {
 
     back(): void {
         const ws = this.ws;
-        if (!ws) return;
+        if (!ws || this.written) return;
         if (this.comparing) {
             this.stopCompare();
             return;
@@ -448,6 +478,7 @@ export class MergeWizard {
     private stepSub(step: WizardStep, info: StepInfo): { text: string; warn?: boolean } {
         const W = strings.mergeWizard;
         const ws = this.ws!;
+        if (ws.choices.writtenAt && ws.step === 6 && (step === 5 || step === 6)) return { text: step === 5 ? W.subWritten : W.subDone };
         if (info.state === 'skip') {
             switch (info.reason) {
                 case 'newTree': return { text: W.subNewTree };
@@ -497,11 +528,11 @@ export class MergeWizard {
             const title = escapeHtml(sub.text ? `${name} · ${sub.text}` : name);
             // A step 4 skipped by the scope opens to say why (7e).
             const opens = skipped && !current && info[s].reason === 'scope' && !!this.plan && !this.comparing;
-            if (done || opens) {
+            if ((done || opens) && !this.written) {
                 const cls = done ? 'is-done' : 'is-skipped';
                 items.push(`<button type="button" class="merge-step sel-tab ${cls}" data-sel-dir="down" data-step="${s}" title="${title}">${label}${subHtml}</button>`);
             } else {
-                const cls = current ? ' active' : skipped ? ' is-skipped' : ' is-future';
+                const cls = current ? ' active' : done ? ' is-done' : skipped ? ' is-skipped' : ' is-future';
                 items.push(`<span class="merge-step sel-tab${cls}" data-sel-dir="down" data-step="${s}" title="${title}"${current ? ' aria-current="step"' : ''}>${label}${subHtml}</span>`);
             }
             bars.push(`<span class="merge-bar${current ? ' is-current' : done ? ' is-done' : ''}"></span>`);
@@ -538,7 +569,8 @@ export class MergeWizard {
             return;
         }
         const n = planCounts(this.plan);
-        const note = ws.step === 5 && c.mode !== 'compare' ? W.writeOnlyHere : W.nothingYet;
+        const note = this.written ? W.writtenAt(writtenWhen(c.writtenAt!))
+            : ws.step === 5 && c.mode !== 'compare' ? W.writeOnlyHere : W.nothingYet;
         const chip = (kind: GlyphKind, cls: string, label: string, v: number): string =>
             `<div class="merge-stat ${cls}" data-count="${kind}"><span class="merge-stat-label"><span class="merge-stat-glyph">${glyph(kind)}</span>${escapeHtml(label)}</span>`
             + `<span class="merge-stat-value">${countText(v)}</span></div>`;
@@ -570,6 +602,7 @@ export class MergeWizard {
                 status: this.writeStatus,
                 act: action => this.writeAction(action),
             },
+            ...(this.written && this.host.step6?.() ? { step6: this.host.step6()! } : {}),
         };
     }
 
@@ -646,6 +679,8 @@ export class MergeWizard {
         const c = ws.choices;
         const info = this.info();
         const why = this.plan ? pendingWhy(this.plan) : '';
+        // Written (§9): Done closes the guide.
+        if (this.written) return { label: W.done, enabled: true, why: '' };
         // While comparing: the way on is step 2's, not yet (4a).
         if (this.comparing) return { label: W.btnNext(stepName(nextStep(2, this.availability()) ?? 5)), enabled: false, why: '' };
         // A copy of the tree (13b): nothing to write, only Close.
@@ -698,8 +733,8 @@ export class MergeWizard {
         }
         if (back) {
             back.textContent = W.back;
-            // While comparing, Back stops the comparison (step 1 again).
-            back.hidden = !this.comparing && !previousStep(ws.step, this.availability());
+            // While comparing, Back stops the comparison (step 1 again). Written: no way back (§9).
+            back.hidden = this.written || !this.comparing && !previousStep(ws.step, this.availability());
             back.disabled = this.busy && !this.comparing;
         }
         // Step 1 before the comparison has nothing to save: Cancel stands
@@ -709,7 +744,8 @@ export class MergeWizard {
         // An empty import has only Close (13a).
         if (cancel) cancel.hidden = !nothingYet || ws.choices.source.persons === 0;
         if (later) {
-            later.textContent = strings.merge.closeSave;
+            // Written (§9): the link saves the list of what happened (Save the list…), nothing waits for later.
+            later.textContent = this.written ? W.savePlan : strings.merge.closeSave;
             later.hidden = nothingYet;
             later.disabled = this.busy;
         }

@@ -231,6 +231,8 @@ export function applyContentOptions(data: StromData, content: boolean | ContentO
     } else if (!opts.attachments) out = stripAttachments(out);
     if (!opts.notes) out = stripNotes(out);
     if (!opts.sources) out = stripSources(out);
+    // The merge history keeps the values a merge changed (notes, sources among them): not without them.
+    if (!opts.notes || !opts.sources) delete out.merges;
     // A fact left out takes its stored import value with it.
     for (const person of Object.values(out.persons)) forgetHiddenImports(person, false);
     for (const ps of Object.values(out.partnerships)) forgetHiddenImports(ps, false);
@@ -428,6 +430,8 @@ export function applyLivingPrivacy(
 ): StromData {
     const copy = structuredClone(data);
     if (mode === 'full') return copy;
+    // The merge history keeps the details a merge changed, of the living too: never under a privacy mode.
+    delete copy.merges;
 
     // The source catalog may hold sensitive references (e.g. registers of the
     // living), so it is never exported under a privacy mode. Drop every citation

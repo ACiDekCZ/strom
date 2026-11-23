@@ -1938,6 +1938,7 @@ class TreeManagerClass {
             if (prev?.sentSources && link.sentSources === undefined) kept.sentSources = prev.sentSources;
             if (prev?.sendMode && link.sendMode === undefined) kept.sendMode = prev.sendMode;
             if (prev?.previewDue && link.previewDue === undefined) kept.previewDue = true;
+            if (prev?.mergeHold && link.mergeHold === undefined) kept.mergeHold = prev.mergeHold;
             // A new tie sends by hand until the user chooses otherwise (a tie from before 3.9 keeps "by itself");
             // a new tie to an archive (or a research waiting for its agent: `agentless`) by itself.
             if (!prev && link.sendMode === undefined) kept.sendMode = newTieSendMode(link.mode === 'archive' || !!opts.agentless);

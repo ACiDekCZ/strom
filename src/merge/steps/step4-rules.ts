@@ -21,7 +21,8 @@ import {
 import { step4Need } from '../wizard-steps.js';
 import type { PartnershipStatus, Person, PersonId } from '../../types.js';
 import { shownName } from '../../person-name.js';
-import { formatFlexDate } from '../../dates.js';
+import { formatFlexDate, yearOf } from '../../dates.js';
+import { yearsText } from './step3-model.js';
 import { reliabilityHtml } from '../../ui/fact-status.js';
 import { isGender } from '../../model-values.js';
 import { pendingImageOf } from '../../research-image-refs.js';
@@ -366,7 +367,16 @@ function relSide(ctx: StepContext, c: RelConflict, side: 'mine' | 'theirs'): str
             return `${strings.merge.partnershipFields[f.field]}: ${shown || '—'}`;
         }).join(', ');
     }
-    const names = side === 'mine' ? c.mine.map(tree) : c.theirs.map(src);
+    // Each person with the years, an import's person new to the tree marked so:
+    // two sides with the same names stay told apart (a third parent of the same name).
+    const withYears = (p: Person | undefined, isNew: boolean): string => {
+        const years = p ? yearsText({ born: yearOf(p.birthDate), died: yearOf(p.deathDate) }) : '';
+        const extra = [years, isNew ? W.pickNew : ''].filter(Boolean).join(', ');
+        return extra ? `${nameOf(p)} (${extra})` : nameOf(p);
+    };
+    const names = side === 'mine'
+        ? c.mine.map(id => withYears(state.existingData.persons[id], false))
+        : c.theirs.map((id, i) => withYears(state.incomingData.persons[id], c.theirsAt[i] === null));
     return names.join(c.kind === 'partner' ? ', ' : ' + ') || '—';
 }
 

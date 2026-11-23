@@ -42,6 +42,8 @@ interface ImportNextPending {
     path: ImportNextPath;
     added?: number;
     updated?: number;
+    /** No data check row: the merge guide's last step offered it (spec 134 §9). */
+    noCheck?: boolean;
 }
 
 type CardMode = 'card' | 'sheet' | 'side';
@@ -112,7 +114,7 @@ export const importNextMethods = uiModule({
      * False: nothing to show (Strom's own GEDCOM, no record) — the caller asks
      * what it asked before.
      */
-    offerImportNextCard(treeId: TreeId, opts: { importId?: string; path?: ImportNextPath; added?: number; updated?: number }): boolean {
+    offerImportNextCard(treeId: TreeId, opts: { importId?: string; path?: ImportNextPath; added?: number; updated?: number; noCheck?: boolean }): boolean {
         const data = DataManager.getCurrentTreeId() === treeId ? DataManager.getData() : null;
         // A merge's new tree is not open yet: its record is checked when it opens.
         if (data && !importNextDue(data, opts.importId)) return false;
@@ -121,6 +123,7 @@ export const importNextMethods = uiModule({
             treeId, importId: opts.importId, path: opts.path ?? 'new',
             ...(opts.added !== undefined ? { added: opts.added } : {}),
             ...(opts.updated !== undefined ? { updated: opts.updated } : {}),
+            ...(opts.noCheck ? { noCheck: true } : {}),
         };
         placesUsed = false;
         if (!switchListener) {
@@ -200,6 +203,7 @@ export const importNextMethods = uiModule({
             families,
             research,
             verify: importNextVerifyAvailable(researchId ? this.researchStatusOf(researchId)?.features : null),
+            ...(p.noCheck ? { check: false } : {}),
         });
 
         const mode = modeNow();

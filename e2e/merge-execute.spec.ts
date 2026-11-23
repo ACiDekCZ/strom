@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
-import { openApp, createFirstPerson, cardAction, focusViaSearch, openTreeStructure, mergeCompare, mergeCount, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeSetScope, mergeToStep4, mergeJoinPending, mergePickValue, mergeWrite } from './helpers.js';
+import { openApp, createFirstPerson, cardAction, focusViaSearch, openTreeStructure, mergeCompare, mergeCount, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeSetScope, mergeToStep4, mergeJoinPending, mergePickValue, mergeWrite, mergeCurrentStep } from './helpers.js';
 
 /**
  * The tree merge driven end to end through the real UI: tree manager row menu
@@ -84,19 +84,19 @@ const confirmModal = (page: Page) => page.locator('#confirmation-modal.active');
 
 /**
  * Go on to step 5 and write: the new tree is named "{target} + {source}"
- * without a question (`newName`), then accept the "switch to the new tree?"
- * offer. Resolves once the merged tree is the active one.
+ * without a question (`newName`), then step 6's Show in the tree opens it.
+ * Resolves once the merged tree is the active one.
  */
 async function executeAndSwitch(page: Page, wizard: Locator, newName: string): Promise<string> {
     await mergeWrite(wizard);
     // No question about the new tree's name any more.
     await expect(page.locator('#confirmation-modal.active.dialog-prompt')).toHaveCount(0);
 
+    // Step 6 What happened; Show in the tree opens the new tree.
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '6');
+    await wizard.locator('.merge-s6-act[data-act="show"]').click();
     await expect(wizard).toBeHidden();
-    await expect(page.locator('#confirm-title')).toHaveText('Merge complete');
-    await expect(confirmModal(page)).toContainText('Switch to the new tree?');
-    await confirmModal(page).locator('#confirm-ok-btn').click();
-    await expect(confirmModal(page)).toBeHidden();
+    await expect(confirmModal(page)).toHaveCount(0);
     await expect(page.locator('#tree-manager-modal')).toBeHidden();
 
     const newId = await page.evaluate((name) =>

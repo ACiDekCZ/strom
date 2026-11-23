@@ -45,8 +45,17 @@ export function formatRelativeDateTime(ts: number, lang: Language, now: number =
     const diffDays = Math.round((startOfDay(now) - startOfDay(ts)) / DAY_MS);
     if (diffDays === 0) return `${relativeDay(0, lang)} ${time}`;
     if (diffDays === 1) return `${relativeDay(-1, lang)} ${time}`;
+    return formatDateTime(ts, lang);
+}
+
+/**
+ * A day with its year and the time, in the language's own numeric date:
+ * "22. 11. 2026 15:41" (cs), "22.11.2026 15:41" (de), "11/22/2026 3:41 PM"
+ * (en). No seconds.
+ */
+export function formatDateTime(ts: number, lang: Language): string {
     const date = new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'numeric', year: 'numeric' }).format(ts);
-    return `${date} ${time}`;
+    return `${date} ${timeOfDay(ts, lang)}`;
 }
 
 /** Sizes below this are not worth showing next to a backup or a tree. */

@@ -9,7 +9,7 @@ import { TreeRenderer } from '../renderer.js';
 import { getUI } from '../ui-ref.js';
 import { ZoomPan } from '../zoom.js';
 import { TreePreview, TreeCompare } from '../tree-preview.js';
-import { PersonId, PartnershipId, Person, StromData, TreeId, PartnershipStatus } from '../types.js';
+import { PersonId, PartnershipId, Person, StromData, TreeId, PartnershipStatus, type PersonList } from '../types.js';
 import { contentFingerprint } from '../research-link.js';
 import { strings } from '../strings.js';
 import { runHeavy, activatedElement } from '../ui/busy.js';
@@ -51,13 +51,18 @@ import { shownNameOrEmpty } from '../person-name.js';
 import { iconSvg } from '../icons.js';
 import { MergeWizard, targetBlock, targetBlockText, wizardRoute, type CompareRun, type WizardSource } from './wizard-ui.js';
 import type { WizardStep } from './wizard-steps.js';
-import { isRepeatOf, planCounts, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
+import { importedBefore, isRepeatOf, planCounts, repeatCounts, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
 import { newTreeName, writePlan, type TargetChange, type WritePhase } from './write.js';
+import { heldLinks, unsentMerges } from './research-hold.js';
+import { peopleKeys, sharesPeople, SAME_PEOPLE_MIN } from './same-people.js';
 import { exportPlan } from './plan-export.js';
-import type { Step1Env, Step2Env, TargetRow, UnionConflictLine, WriteStatus } from './steps/context.js';
+import type { Step1Env, Step2Env, Step6Env, TargetRow, UnionConflictLine, WriteStatus } from './steps/context.js';
 import { closeNotTaken, parkGedcomSummary } from './steps/step1-what.js';
 import { closeStep3Overlay } from './steps/step3-whom.js';
 import { closeStep5Overlay } from './steps/step5-plan.js';
+import { writtenWhen } from './steps/step6-done.js';
+import { newPersonListId, personListsOf, suggestListName } from '../person-lists-data.js';
+import { listDisplayName } from '../person-lists.js';
 import { closeStep2Overlay, noteRecalc } from './steps/step2-who.js';
 import { notTakenText } from './wizard-text.js';
 import { listSnapshots } from '../snapshots.js';
@@ -89,6 +94,34 @@ export function mergeAnalysisLong(a: StromData, b: StromData): boolean {
     return Object.keys(a.persons).length + Object.keys(b.persons).length >= MERGE_ANALYSIS_LONG_AT;
 }
 
+/** A merge shown with its record (step 6, the Merge history's record): its tree, the tree's name, how it was written. */
+export interface ShownMerge {
+    treeId: TreeId;
+    name: string;
+    record: MergeRecord;
+    mode: PlanMode;
+}
+
+/** A merge just written (spec 134 §9): what step 6, its actions and the toast after it need. */
+interface WrittenMerge {
+    treeId: TreeId;
+    /** The tree written into, or the new tree's name. */
+    name: string;
+    record: MergeRecord;
+    mode: PlanMode;
+    /** Written into a new tree (New tree, or Into a new tree of K6.3). */
+    newTree: boolean;
+    /** A GEDCOM file; `importId` its import record in the written tree. */
+    gedcom: boolean;
+    importId?: string;
+    /** The guide started in Manage trees: Done goes back there. */
+    fromTreeManager: boolean;
+    /** The toast after Done was shown (not again when What happened opens the step once more). */
+    toasted?: boolean;
+    /** Keep in the app for now (§11): step 6's research block folded. */
+    keptLocal?: boolean;
+}
+
 class MergerUIClass {
     private mergeState: MergeState | null = null;
     /** The import's new images going into the pool (poolIncoming); what reads the import whole waits for it. */
@@ -118,6 +151,12 @@ class MergerUIClass {
     private initialTarget: TreeId | null = null;
     /** What the import is, for the guide's fresh choices (spec 134 §1). */
     private sourceInfo: Pick<PlanSource, 'kind' | 'fingerprint' | 'treeId'> = { kind: 'json' };
+    /** The merge just written: the guide stands on step 6 until Done (§9). */
+    private written: WrittenMerge | null = null;
+    /** The last merge written and closed, with its state: the toast's What happened opens its step 6 again. */
+    private lastWritten: { w: WrittenMerge; state: MergeState; plan: MergePlan } | null = null;
+    /** The toast of the last Done ("{n} added…" · Undo · What happened): it goes when its merge is undone. */
+    private writtenToast: { recordId: string; close: () => void } | null = null;
 
     /** The import guide's frame: steps, counts, footer (spec 134 §1). */
     private readonly wizard = new MergeWizard({
@@ -134,6 +173,8 @@ class MergerUIClass {
         downloadJson: () => this.downloadJson(),
         step1: () => this.step1Env(),
         savePlan: plan => this.savePlan(plan),
+        step6: () => this.step6Env(),
+        finishDone: () => void this.finishDone(),
     });
 
     /** Step 1: the target whose data is the merge state's `existingData` (null: none loaded). */
@@ -144,6 +185,8 @@ class MergerUIClass {
     private gedcomLive = false;
     /** Step 1: the scope's example, for the target and comparison it was found over. */
     private exampleCache: { key: string; value: ScopeExample | null } | null = null;
+    /** K9.5: the import's people keys and, per tree linked to a research, whether it has them (null: being read). */
+    private samePeopleCache: { key: string; keys: Set<string>; trees: Map<TreeId, boolean | null> } | null = null;
 
     // ==================== INITIALIZATION ====================
 
@@ -167,6 +210,9 @@ class MergerUIClass {
 
         // Create merge state: nobody compared yet, step 1's Compare matches
         // the import with the chosen target (spec 134 §3).
+        // Another merge: the toast's What happened no longer opens the last one.
+        this.lastWritten = null;
+        this.written = null;
         this.mergeState = createMergeState(existingData, incomingData, { match: false });
         this.mergeState.phase = 'reviewing';
         this.resumedState = false;
@@ -232,6 +278,9 @@ class MergerUIClass {
      * Resume merge from saved state
      */
     resumeMerge(state: MergeState, fileName?: string, targetTreeName?: string, sourceTreeName?: string): void {
+        // Another merge: the toast's What happened no longer opens the last one.
+        this.lastWritten = null;
+        this.written = null;
         this.mergeState = state;
         this.resumedState = true;
         this.gedcomImport = undefined;
@@ -491,6 +540,12 @@ class MergerUIClass {
      * Save current merge for later (direct action from button)
      */
     saveForLater(): void {
+        // Written (step 6): the footer's link saves the list of what happened (Save the list…).
+        if (this.written) {
+            const plan = this.wizard.currentPlan;
+            if (plan) this.savePlan(plan);
+            return;
+        }
         const stored = this.storeForLater();
         this.closeMergeModalInternal();
         this.announceSessionChange(stored);
@@ -641,6 +696,7 @@ class MergerUIClass {
                 persons: Object.values(state.incomingData.persons).filter(p => !p.isPlaceholder).length,
                 ...(this.sourceInfo.fingerprint ? { fingerprint: this.sourceInfo.fingerprint } : {}),
                 ...(this.sourceInfo.treeId ? { treeId: this.sourceInfo.treeId } : {}),
+                ...(this.sourceInfo.kind === 'tree' && this.sourceInfo.treeId && TreeManager.getTreeMetadata(this.sourceInfo.treeId)?.research ? { research: true as const } : {}),
                 ...(this.gedcomImport?.importId ? { importId: this.gedcomImport.importId } : {}),
             },
             ...(this.initialMode ? { mode: this.initialMode } : {}),
@@ -679,6 +735,7 @@ class MergerUIClass {
             unlock: () => { void this.unlockTarget(); },
             example: () => this.example(),
             repeat: () => this.repeatLine(),
+            samePeople: () => this.samePeopleTree(),
             saveNotTaken: () => this.saveNotTaken(),
         };
     }
@@ -866,6 +923,7 @@ class MergerUIClass {
         const meta = TreeManager.getTreeMetadata(id);
         if (!state || !ws || !meta || targetBlock(id)) return;
         const { targetResearch: _r, targetFingerprint: _f, ...rest } = ws.choices;
+        const { research: _sr, ...oldSource } = ws.choices.source;
         ws.choices = { ...rest, targetTreeId: id, targetName: meta.name, ...(meta.research ? { targetResearch: true } : {}) };
         ws.compared = false;
         ws.reached = 1;
@@ -905,12 +963,17 @@ class MergerUIClass {
         next.phase = 'reviewing';
         next.target = { treeId: sourceId, fingerprint };
         const { targetResearch: _r, targetFingerprint: _f, ...rest } = ws.choices;
+        const { research: _sr, ...oldSource } = ws.choices.source;
         next.wizard = {
             ...ws, step: 1, reached: 1, compared: false,
             choices: {
                 ...rest,
                 swapped: !ws.choices.swapped,
-                source: { ...ws.choices.source, label: sourceName, treeId: targetId, persons: Object.values(incoming.persons).filter(p => !p.isPlaceholder).length },
+                source: {
+                    ...oldSource, label: sourceName, treeId: targetId,
+                    persons: Object.values(incoming.persons).filter(p => !p.isPlaceholder).length,
+                    ...(TreeManager.getTreeMetadata(targetId)?.research ? { research: true as const } : {}),
+                },
                 targetTreeId: sourceId,
                 targetName,
                 targetFingerprint: fingerprint,
@@ -973,17 +1036,66 @@ class MergerUIClass {
         return this.exampleCache.value;
     }
 
+    /**
+     * Another tree linked to a research that holds the import's people
+     * (K9.5, same-people.ts): its name, the source and the target aside.
+     * The other trees are read once in the background; one that has them
+     * draws step 1 again.
+     */
+    private samePeopleTree(): string | null {
+        const state = this.mergeState;
+        const ws = state?.wizard;
+        if (!state || !ws) return null;
+        const c = ws.choices;
+        const source = this.sourceInfo.kind === 'tree' ? this.sourceInfo.treeId : undefined;
+        const target = c.mode !== 'new' && !c.json ? c.targetTreeId : null;
+        let linked: Array<{ id: TreeId; name: string }>;
+        try {
+            linked = TreeManager.getTrees().filter(t => t.research && t.id !== source && t.id !== target);
+        } catch {
+            return null;
+        }
+        if (!linked.length) return null;
+        const key = `${source ?? this.incomingFileName ?? ''}|${Object.keys(state.incomingData.persons).length}`;
+        if (this.samePeopleCache?.key !== key) {
+            this.samePeopleCache = { key, keys: peopleKeys(state.incomingData), trees: new Map() };
+        }
+        const cache = this.samePeopleCache;
+        if (cache.keys.size < SAME_PEOPLE_MIN) return null;
+        for (const t of linked) {
+            const known = cache.trees.get(t.id);
+            if (known) return t.name;
+            if (known !== undefined) continue;
+            cache.trees.set(t.id, null);
+            const openId = DataManager.isViewMode() ? null : DataManager.getCurrentTreeId();
+            const read = t.id === openId ? Promise.resolve(DataManager.getData()) : TreeManager.getTreeData(t.id);
+            void read.then(data => {
+                const has = !!data && sharesPeople(cache.keys, data);
+                cache.trees.set(t.id, has);
+                if (has && this.samePeopleCache === cache && this.mergeState?.wizard?.step === 1) this.wizard.refresh({ body: true });
+            }).catch(() => { cache.trees.set(t.id, false); });
+        }
+        return null;
+    }
+
     /** The same import merged into the target before (13c); '' when not. */
     private repeatLine(): string {
         const state = this.mergeState;
         const ws = state?.wizard;
         if (!state || !ws || !this.targetLoaded) return '';
-        const merges = (state.existingData as StromData & { merges?: readonly MergeRecord[] }).merges;
-        const before = isRepeatOf(ws.choices.source, merges);
-        if (!before) return '';
-        const day = formatRelativeDateTime(Date.parse(before.at), getCurrentLanguage());
-        const joined = Math.min(ws.choices.source.persons, before.added.length + before.joined.length);
-        return strings.mergeWizard.repeat(day, Math.max(0, ws.choices.source.persons - joined), joined);
+        const target = state.existingData as StromData & { merges?: readonly MergeRecord[] };
+        // The merge's record, else the tree's import of the same file (made of it, or merged before records were kept, K0.7).
+        const before = isRepeatOf(ws.choices.source, target.merges);
+        const loaded = before ? null : importedBefore(ws.choices.source, target);
+        if (!before && !loaded) return '';
+        const lang = getCurrentLanguage();
+        // An import record keeps the day alone (no time to say).
+        const [y, m, d] = (loaded?.at ?? '').split('-').map(Number);
+        const day = before ? formatRelativeDateTime(Date.parse(before.at), lang)
+            : y && m && d ? new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'numeric', year: 'numeric' }).format(new Date(y, m - 1, d))
+                : loaded?.at ?? '';
+        const { joined, fresh } = repeatCounts(state.incomingData, target, before);
+        return strings.mergeWizard.repeat(day, fresh, joined);
     }
 
     /** Step 5's "Save the list…" (K6.4): the plan as a .txt to read and a .json, living people protected. */
@@ -1103,6 +1215,11 @@ class MergerUIClass {
      * Close the merge modal (public - checks for unsaved changes)
      */
     closeMergeModal(): void {
+        // Written (step 6): × and Esc are Done (§9), nothing to save for later.
+        if (this.written) {
+            void this.finishDone();
+            return;
+        }
         if (this.hasUnsavedChanges) {
             this.showCloseConfirmation();
         } else {
@@ -1128,6 +1245,7 @@ class MergerUIClass {
         const shouldReturnToTreeManager = this.openedFromTreeManager;
 
         this.mergeState = null;
+        this.written = null;
         this.hasUnsavedChanges = false;
         this.incomingFileName = undefined;
         this.targetTreeName = undefined;
@@ -1551,13 +1669,6 @@ class MergerUIClass {
 
         state.phase = 'executing';
 
-        // Snapshot the issues that already exist in BOTH inputs, so we can tell
-        // afterwards whether the merge itself INTRODUCED anything new.
-        const preIssues = [
-            validateTreeData(state.existingData),
-            validateTreeData(state.incomingData),
-        ];
-
         // Nothing created, nothing saved on a failure: the wizard stays open
         // with its answers, the message says what would have gone wrong
         // (spec 134 K0.2, K0.5). The backup "Before merge" of the target as it
@@ -1582,155 +1693,248 @@ class MergerUIClass {
             this.wizard.setWriteStatus(this.writeFailureStatus(result));
             return;
         }
-        if (state.wizard) state.wizard.choices = { ...state.wizard.choices, writtenAt: new Date().toISOString() };
-        const newTreeId = result.treeId;
-        const counts = result.record.counts;
-
-        // Did the merge itself introduce new error/warning issues (beyond
-        // what the two inputs already carried)? Compared by issue type.
-        const newIssueCount = this.countNewMergeIssues(preIssues, validateTreeData(result.data));
+        if (state.wizard) state.wizard.choices = { ...state.wizard.choices, writtenAt: result.record.at || new Date().toISOString() };
 
         // A resumed saved merge is done: its session goes.
         if (this.resumedSessionId) await deleteMergeSession(this.resumedSessionId);
         this.resumedSessionId = undefined;
-
-        // Mark as no unsaved changes to prevent close confirmation
+        // Written: nothing is left to save for later or to ask about on closing.
         this.hasUnsavedChanges = false;
-
-        // Close merge modal first
-        const modal = document.getElementById('merge-modal');
-        modal?.classList.remove('active');
-        this.wizard.close();
-        this.endGedcom();
-        this.removeEscapeHandler();
         this.clearAutoSave();
         void clearCurrentMerge();
-
-        // What the import brought, for the steps after it.
-        const gedcomImport = this.gedcomImport;
-        this.gedcomImport = undefined;
-        if (gedcomImport) {
-            const importId = gedcomImport.importId ? result.importMap?.get(gedcomImport.importId) : undefined;
-            void getUI().afterImport(newTreeId, {
-                gedcom: true, path: 'merge', ...(importId ? { importId } : {}),
-                added: counts.added, updated: counts.joined,
-            });
-        }
-
-        // Reset state
-        this.mergeState = null;
-        this.incomingFileName = undefined;
-        this.targetTreeName = undefined;
-        this.sourceTreeName = undefined;
-        this.openedFromTreeManager = false;
-
-        // Show success message and offer to switch to new tree
-        const stats = strings.merge.stats(counts.joined, counts.added)
-            + (counts.skipped > 0 ? `\n${strings.merge.skippedCount(counts.skipped)}` : '')
-            + ((result.sharedJoined ?? 0) > 0 ? `\n${strings.merge.sharedJoined(result.sharedJoined!)}` : '');
-
-        // Dispatch event to update tree list
         window.dispatchEvent(new CustomEvent('strom:merge-session-changed'));
 
-        if (result.into === 'tree') {
-            await this.afterWriteIntoTree(newTreeId, result.name, stats, newIssueCount);
+        // What the import brought, for the card after Done (a new tree from another program).
+        const gedcomImport = this.gedcomImport;
+        const importId = gedcomImport?.importId ? result.importMap?.get(gedcomImport.importId) : undefined;
+        this.written = {
+            treeId: result.treeId, name: result.name, record: result.record, mode: plan.mode,
+            newTree: result.into !== 'tree', gedcom: !!gedcomImport, ...(importId ? { importId } : {}),
+            fromTreeManager: this.openedFromTreeManager,
+        };
+
+        // The open tree written into shows the result at once under the guide (one step of Undo).
+        if (result.into === 'tree' && !DataManager.isViewMode() && DataManager.getCurrentTreeId() === result.treeId) {
+            await TreeRenderer.renderAsync();
+            getUI().refreshSearch();
+            getUI().updateTreeSwitcher();
+        }
+        if (this.mergeState !== state) return;
+        // Step 6 (§9): what happened, until Done.
+        this.wizard.showDone();
+    }
+
+    /** Step 6 (§9): the written merge and its actions. */
+    private step6Env(): Step6Env | null {
+        const w = this.written;
+        if (!w) return null;
+        return {
+            record: w.record, treeId: w.treeId, treeName: w.name, intoExisting: !w.newTree,
+            noNextCard: !w.newTree && w.gedcom,
+            showInTree: () => void this.finishDone({ show: true }),
+            saveAsList: () => void this.saveWrittenAsList(w),
+            checkTree: () => void getUI().showTreeValidationDialog(w.treeId, 'merge-modal'),
+            undoMerge: () => getUI().showUndoMerge(w.treeId, w.record.id, 'merge-modal'),
+            research: this.step6Research(w),
+        };
+    }
+
+    /**
+     * Step 6's research block (§11): a tree with a research whose merge waits
+     * for a send (K9.2). An agent at work, an older research said (11d, 11e).
+     */
+    private step6Research(w: WrittenMerge): Step6Env['research'] {
+        if (w.newTree) return undefined;
+        const link = TreeManager.getTreeMetadata(w.treeId)?.research;
+        const hold = link && !link.copy ? link.mergeHold : undefined;
+        if (!link || !hold) return undefined;
+        const data = DataManager.getDataFor(w.treeId);
+        const pending = data ? unsentMerges(data, link) : [w.record];
+        if (!pending.some(r => r.id === w.record.id)) return undefined;
+        const status = getUI().researchStatusOf(link.id);
+        const worker = status?.working?.find(x => !x.paused);
+        const line = worker ? worker.research || worker.person || worker.branch || '' : '';
+        return {
+            persons: hold.persons, links: heldLinks(pending), kept: !!w.keptLocal,
+            agent: line || null,
+            old: status && !status.accepts ? status.version || '?' : null,
+            send: () => void this.sendWrittenToResearch(w),
+            keepLocal: () => {
+                w.keptLocal = true;
+                this.wizard.refresh({ body: true });
+            },
+        };
+    }
+
+    /**
+     * Send to the research… of step 6 (§11, 11a): the guide closes on the
+     * tree, then today's "What will be sent" with the merge's words (Keep in
+     * the app for now · Send to the research); a send that lands takes the
+     * hold away (research-hold.ts). An older research: the whole tree as
+     * today (11e).
+     */
+    private async sendWrittenToResearch(w: WrittenMerge): Promise<void> {
+        await this.finishDone({ show: true });
+        await getUI().sendMergeToResearch(w.treeId);
+    }
+
+    /**
+     * Done (Esc, ×) of step 6, or Show in the tree: the guide closes. A
+     * tree that was there: the toast "{n} added to the tree {t} · Undo ·
+     * What happened" (10g, K8.5). A new tree: Manage trees shows it (Show
+     * in the tree opens it), the "What next" card of a file from another
+     * program follows without its data check (the step had it).
+     */
+    private async finishDone(opts: { show?: boolean } = {}): Promise<void> {
+        const w = this.written;
+        const state = this.mergeState;
+        const plan = this.wizard.currentPlan;
+        if (!w || !state || !plan) return;
+        // Manage trees comes back only for a new tree (it shows there) or when the guide started there.
+        const backToManager = !opts.show && (w.newTree || w.fromTreeManager);
+        this.openedFromTreeManager = false;
+        this.gedcomImport = undefined;
+        this.written = null;
+        this.closeMergeModalInternal();
+        // What happened (the toast) opens this step again.
+        this.lastWritten = { w, state, plan };
+
+        if (opts.show) await this.showWrittenInTree(w);
+        else if (backToManager) getUI().showTreeManagerDialog();
+
+        if (w.newTree) {
+            if (w.gedcom && w.importId) {
+                void getUI().afterImport(w.treeId, {
+                    gedcom: true, path: 'merge', importId: w.importId, noCheck: true,
+                    added: w.record.counts.added, updated: w.record.counts.joined,
+                });
+            }
             return;
         }
+        if (!w.toasted) {
+            w.toasted = true;
+            this.toastWritten(w);
+        }
+    }
 
-        // Show tree manager with new tree visible
-        getUI().showTreeManagerDialog();
-
-        // Push tree manager to dialog stack so ESC returns to it
-        getUI().pushDialog('tree-manager-modal');
-
-        // Show confirmation dialog to switch to new tree
-        const shouldSwitch = await getUI().showConfirm(
-            `${strings.merge.complete}\n${stats}\n\n${strings.merge.switchToNewTree}`,
-            strings.merge.complete
-        );
-
-        if (shouldSwitch) {
-            // Switch to new tree and close tree manager
-            await DataManager.switchTree(newTreeId);
+    /**
+     * Switch to the tree written into (when another is open) and highlight
+     * the people the merge added (step 6, the Merge history's record).
+     */
+    async showWrittenInTree(w: ShownMerge): Promise<void> {
+        if (DataManager.isViewMode() || DataManager.getCurrentTreeId() !== w.treeId) {
+            if (!await DataManager.switchTree(w.treeId)) return;
             getUI().updateTreeSwitcher();
             TreeRenderer.restoreFromSession();
             await TreeRenderer.renderAsync();
             getUI().refreshSearch();
-            // Center view on focused person
             ZoomPan.centerOnFocusWithContext();
             window.dispatchEvent(new CustomEvent('strom:tree-switched'));
             getUI().closeTreeManagerDialog();
         }
-        // If user cancels (ESC), stay in tree manager
+        // An import alone as a new tree: everyone in it is new, nothing to pick out.
+        if (w.mode === 'new') return;
+        const data = DataManager.getData();
+        const ids = w.record.added.filter(id => data.persons[id] && !data.persons[id].isPlaceholder);
+        if (!ids.length) return;
+        getUI().highlightGroup({
+            kind: 'merged', title: n => strings.mergeWizard.toastAdded(n, w.name),
+            personIds: ids, recount: null, cite: false,
+        });
+        // The first person added centred at once (as Next ›): the people added often stand outside the view.
+        getUI().evidenceNext();
+    }
 
-        // If the merge introduced new issues, offer to open validation on
-        // the merged tree so the user can review (and fix) them right away.
-        // A file from another program: its "What next" card carries the data check.
-        if (newIssueCount > 0 && !getUI().importNextPendingFor(newTreeId)) {
-            const openValidation = await getUI().showConfirm(
-                strings.merge.newIssues(newIssueCount),
-                strings.merge.newIssuesTitle
-            );
-            if (openValidation) {
-                await getUI().showTreeValidationDialog(newTreeId);
-            }
-        }
+    /** "{n} added to the tree {t}" · Undo (while the write is Undo's last step) · What happened. */
+    private toastWritten(w: WrittenMerge): void {
+        const W = strings.mergeWizard;
+        const toast = getUI().showToast(W.toastAdded(w.record.counts.added, w.name), 10000, {
+            closable: true,
+            ...(this.undoableWrite(w) ? { action: { label: strings.undo.undo, run: () => this.undoWritten(w) } } : {}),
+            more: { label: W.whatHappened, run: () => this.reopenWritten(w) },
+        });
+        this.writtenToast = { recordId: w.record.id, close: () => toast.close() };
+    }
+
+    /** The write is the open tree's last step of Undo: one Undo takes it back whole (K8.5). */
+    private undoableWrite(w: WrittenMerge): boolean {
+        if (DataManager.isViewMode() || DataManager.getCurrentTreeId() !== w.treeId) return false;
+        if (DataManager.lastUndoDescription() !== strings.undo.mergeTrees) return false;
+        const merges = DataManager.getData().merges ?? [];
+        return merges[merges.length - 1]?.id === w.record.id;
+    }
+
+    /** The toast's Undo: the one step of Undo while it is still the write's, else the merge's undo. */
+    private undoWritten(w: WrittenMerge): void {
+        if (this.undoableWrite(w)) getUI().performUndo();
+        else getUI().showUndoMerge(w.treeId, w.record.id);
+    }
+
+    /** The toast's What happened: step 6 of the merge again (nothing is written). */
+    private reopenWritten(w: WrittenMerge): void {
+        const last = this.lastWritten;
+        if (!last || last.w !== w || this.mergeState) return;
+        this.mergeState = last.state;
+        this.written = w;
+        this.hasUnsavedChanges = false;
+        this.openedFromTreeManager = false;
+        this.lastWritten = null;
+        document.getElementById('merge-modal')?.classList.add('active');
+        this.setupEscapeHandler();
+        this.wizard.showDone(last.plan);
     }
 
     /**
-     * After a write into the tree itself (K6.3): the open tree shows the
-     * result at once (one step of Undo); another tree is offered to open.
+     * Save as a list of people (spec 084): the people the merge added, named
+     * "From {source} {day}". `host` holds the done button (step 6's by default).
      */
-    private async afterWriteIntoTree(treeId: TreeId, name: string, stats: string, newIssueCount: number): Promise<void> {
+    async saveWrittenAsList(w: ShownMerge, host?: ParentNode): Promise<void> {
         const W = strings.mergeWizard;
-        const open = !DataManager.isViewMode() && DataManager.getCurrentTreeId() === treeId;
-        if (open) {
-            await TreeRenderer.renderAsync();
-            getUI().refreshSearch();
-            getUI().updateTreeSwitcher();
-            await getUI().showAlert(`${W.mergedInto(name)}\n${stats}`, 'info', strings.merge.complete);
-        } else if (await getUI().showConfirm(`${W.mergedInto(name)}\n${stats}\n\n${W.openTarget(name)}`, strings.merge.complete)) {
-            await DataManager.switchTree(treeId);
-            getUI().updateTreeSwitcher();
-            TreeRenderer.restoreFromSession();
-            await TreeRenderer.renderAsync();
-            getUI().refreshSearch();
-            ZoomPan.centerOnFocusWithContext();
-            window.dispatchEvent(new CustomEvent('strom:tree-switched'));
+        const name = W.listName(w.record.source.label || '?', writtenWhen(w.record.at));
+        if (!DataManager.isViewMode() && DataManager.getCurrentTreeId() === w.treeId) {
+            const list = DataManager.createPersonList({ name, dynamic: false, personIds: [...w.record.added] });
+            if (list) this.listSaved(host);
+            return;
         }
-        if (newIssueCount > 0 && await getUI().showConfirm(strings.merge.newIssues(newIssueCount), strings.merge.newIssuesTitle)) {
-            await getUI().showTreeValidationDialog(treeId);
+        // Another tree than the open one: the list goes into its data as stored.
+        const data = await TreeManager.getTreeData(w.treeId);
+        if (!data) return;
+        const lists = personListsOf(data);
+        const listName = suggestListName(lists, name, undefined, listDisplayName);
+        const list: PersonList = {
+            id: newPersonListId(lists), name: listName, dynamic: false, sort: 'manual', updated: new Date().toISOString(),
+            personIds: [...new Set(w.record.added)].filter(id => !!data.persons[id] && !data.persons[id].isPlaceholder),
+        };
+        data.personLists = [...(data.personLists ?? []), list];
+        if (!await TreeManager.saveTreeDataConfirmed(w.treeId, data)) return;
+        getUI().showToast(strings.lists.toast.saved(listName), 4000);
+        this.listSaved(host);
+    }
+
+    /**
+     * Merge `recordId` was undone (§10): the guide on its step 6 closes
+     * without its toast, and the toast of an earlier Done goes (its Undo and
+     * What happened would speak of a merge no longer there).
+     */
+    closeUndone(recordId: string): void {
+        if (this.lastWritten?.w.record.id === recordId) this.lastWritten = null;
+        if (this.writtenToast?.recordId === recordId) {
+            this.writtenToast.close();
+            this.writtenToast = null;
         }
+        if (this.written?.record.id !== recordId) return;
+        this.openedFromTreeManager = false;
+        this.gedcomImport = undefined;
+        this.closeMergeModalInternal();
+    }
+
+    /** Saved once: the button is done (a second list would only be a copy). */
+    private listSaved(host: ParentNode | null = document.getElementById('merge-step-body')): void {
+        const b = host?.querySelector<HTMLButtonElement>('.merge-s6-act[data-act="list"]');
+        if (b) b.disabled = true;
     }
 
     // ==================== HELPERS ====================
-
-    /**
-     * How many error/warning issues the RESULT has beyond what the inputs
-     * already had, counted per issue type (a merge that inherits an existing
-     * error is not "new"; a merge that manufactures one is). Info-level issues
-     * are ignored — they are hints, not defects, and merging naturally shuffles
-     * them (e.g. possible-duplicate suggestions).
-     */
-    private countNewMergeIssues(pre: ValidationResult[], post: ValidationResult): number {
-        const countByType = (results: ValidationResult[]): Map<string, number> => {
-            const m = new Map<string, number>();
-            for (const r of results) {
-                for (const issue of r.issues) {
-                    if (issue.severity === 'info') continue;
-                    m.set(issue.type, (m.get(issue.type) ?? 0) + 1);
-                }
-            }
-            return m;
-        };
-        const before = countByType(pre);
-        const after = countByType([post]);
-        let added = 0;
-        for (const [type, count] of after) {
-            added += Math.max(0, count - (before.get(type) ?? 0));
-        }
-        return added;
-    }
 
     private escapeHtml(text: string): string {
         // Must also escape quotes: callers interpolate into HTML attributes.

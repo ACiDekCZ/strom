@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeToStep5, mergeWrite, reloadApp } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeDone, mergeToStep5, mergeWrite, reloadApp } from './helpers.js';
 
 /**
  * Step 5 of the import guide, What will happen (spec 134 §8): the whole plan
@@ -95,10 +95,8 @@ test('Write into Modřínovi: the open tree gets the new people at once, its res
     await expect(wizard.locator('.merge-s5-backup')).toContainText('Before merge');
     await expect(wizard.locator('.merge-s5-research')).toBeVisible();
     await mergeWrite(wizard, 'tree');
-    await expect(wizard).toBeHidden();
-    await expect(page.locator('#confirm-title')).toHaveText('Merge complete');
-    await expect(page.locator('#confirm-message')).toContainText('Written into the tree Modřínovi.');
-    await page.locator('#confirmation-modal.active #confirm-ok-btn').click();
+    await expect(wizard.locator('[data-step-title="6"]')).toHaveText('Written into the tree Modřínovi');
+    await mergeDone(wizard);
 
     // No new tree; Modřínovi itself has the import's people, its own all kept.
     expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().length)).toBe(trees);
@@ -147,9 +145,7 @@ test('8d: the backup "Before merge" fails, so nothing is written; its state says
         IDBObjectStore.prototype.put = w.__put!;
     });
     await status.locator('[data-act="retry"]').click();
-    await expect(wizard).toBeHidden();
-    await expect(page.locator('#confirm-title')).toHaveText('Merge complete');
-    await page.locator('#confirmation-modal.active #confirm-ok-btn').click();
+    await mergeDone(wizard);
     expect(await peopleOf(page, 'Modřínovi')).toEqual(['Amos', 'Elvíra', 'Florentýna', 'Kasián', 'Kvido', 'Teofil']);
 });
 
@@ -168,8 +164,7 @@ test('8c: the tree changed since the comparison: nothing is written blindly, the
 
     // Written over the tree as it is now: its new person kept.
     await wizard.locator('#merge-next').click();
-    await expect(wizard).toBeHidden();
-    await page.locator('#confirmation-modal.active #confirm-ok-btn').click();
+    await mergeDone(wizard);
     expect(await peopleOf(page, 'Modřínovi')).toEqual(['Amos', 'Elvíra', 'Florentýna', 'Kasián', 'Kvido', 'Lukrecie', 'Teofil']);
 });
 

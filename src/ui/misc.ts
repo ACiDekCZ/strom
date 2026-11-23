@@ -70,6 +70,7 @@ import { FAN_STYLES } from '../fan-colors.js';
 import { syncControlBlock } from './minimap.js';
 import { addLender, cancelWaiting, removeLender, watchToasts, whenFree } from '../toast-slot.js';
 import { defaultFocusKey, focusDefaultPerson, isDefaultFocusContext, updateDefaultFocusButtons } from './default-focus.js';
+import { syncMergeHold } from '../merge/research-hold.js';
 
 
 
@@ -2017,6 +2018,7 @@ export const miscMethods = uiModule({
         }
         const result = DataManager.undo();
         if (!result) return;
+        syncMergeHold(DataManager.getCurrentTreeId()!, DataManager.getData());   // a merge undone or back (spec 134 §11)
         void TreeRenderer.renderAsync();
         // Undo can add/remove/rename people — the picker's cached list too.
         this.refreshSearch();
@@ -2037,6 +2039,7 @@ export const miscMethods = uiModule({
         }
         const result = DataManager.redo();
         if (!result) return;
+        syncMergeHold(DataManager.getCurrentTreeId()!, DataManager.getData());   // a merge undone or back (spec 134 §11)
         void TreeRenderer.renderAsync();
         this.refreshSearch();
         this.refreshUndoRedoToolbar();  // R3

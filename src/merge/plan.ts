@@ -8,7 +8,8 @@
  * joined with a person of the tree, added, not added, or still to decide.
  */
 
-import { PartnershipId, Person, PersonId, StromData, TreeId } from '../types.js';
+import { ImportRecord, MergeRecord, PartnershipId, PlanCounts, PlanSource, Person, PersonId, StromData, TreeId } from '../types.js';
+import { fileRecordKeys } from './id-match.js';
 import { strings } from '../strings.js';
 import { normalizeName, quickMatch, detectConflicts } from './matching.js';
 import { AUTO_CONFIRM_SCORE, executeMerge, existingTargetOf, detectPartnershipConflicts } from './executor.js';
@@ -21,6 +22,8 @@ import { imageFinder } from '../image-equal.js';
 import { imageMetaOf, headMime } from '../image-meta.js';
 import { dataUrlByteSize } from '../photo.js';
 import { contentFingerprint } from '../research-link.js';
+import { withoutResearchMarks } from './research-marks.js';
+import { mergeEdits, personPrint } from './record.js';
 import type { GedcomDroppedTag } from '../ged-parser.js';
 import {
     GroupDecision, NewRel, SelectVariant, UnlinkedGroup, baseFates, connectRefusal, linkPersons, livingNew, selectionOf, sourceWithStandIns, unlinkedGroups,
@@ -50,20 +53,7 @@ export type FieldKind = 'name' | 'birth' | 'death' | 'places' | 'events' | 'note
 /** A kind of line of the source the tree does not take over (K1.6). */
 export type DroppedTag = GedcomDroppedTag;
 
-export interface PlanSource {
-    kind: 'ged' | 'json' | 'tree' | 'view' | 'share';
-    /** File name or tree name ("rodokmen-Jilmovi.ged", "Jilmovi – zkouška"). */
-    label: string;
-    program?: string;
-    fileDate?: string;
-    /** The source's import record id (GEDCOM), when it has one. */
-    importId?: string;
-    /** A fingerprint of the source (the file's SHA-256, or contentFingerprint of a tree), for a repeated merge (§13, K1.5). */
-    fingerprint?: string;
-    treeId?: TreeId;
-    /** Persons of the source, its "?" stand-ins aside (buildPlan counts them). */
-    persons: number;
-}
+export type { PlanSource, PlanCounts, MergeRecord, MergeEdit } from '../types.js';
 
 export interface PlanTarget {
     /** Null for a new tree. */
@@ -162,45 +152,7 @@ export interface MergePlan {
     groups?: PlanGroup[];
 }
 
-export interface PlanCounts {
-    joined: number;
-    added: number;
-    skipped: number;
-    pending: number;
-    /** Persons of the source ("?" aside): joined + added + skipped + pending. */
-    total: number;
-    /** Details the write changes (field items on, the value differs). */
-    fieldChanges: number;
-    /** Differences where the tree's value stays. */
-    differencesKept: number;
-    /** Differences where the import's value is kept alongside the tree's ("Keep both", K5.3). */
-    alongside: number;
-    partnerships: number;
-    links: number;
-}
 
-/** The record of a merge (§0.3). Built by applyPlan; not stored yet (part C, data version 26). */
-export interface MergeRecord {
-    id: string;
-    at: string;
-    source: PlanSource;
-    target: { name: string; newTree: boolean };
-    counts: PlanCounts;
-    state: 'valid' | 'partial' | 'undone';
-    /** Ids in the tree of every person the merge added ("?" included). */
-    added: PersonId[];
-    /** [the tree's id, the source's id] of every joined person. */
-    joined: Array<[PersonId, PersonId]>;
-    /** Details of joined persons the write changed (ids in the tree). */
-    fields: Array<{ person: PersonId; field: string; before: string; after: string }>;
-    partnerships: string[];
-    sources: string[];
-    places: string[];
-    media: string[];
-    backupId?: string;
-    sentToResearch?: string;
-    undone?: Array<{ at: string; items: string[] }>;
-}
 
 /**
  * The wizard's choices (§3): the one state of its options, enough to build
@@ -818,14 +770,18 @@ export async function applyPlan(plan: MergePlan, target: StromData, source: Stro
     if (plan.mode === 'compare') throw new Error('A comparison plan is not written');
     const before = plan.mode === 'new' ? EMPTY_TREE() : target;
     const allIn = planTakesAll(plan);
+    // A source linked to a research: its research's marks stay with it (11g/11h).
+    if (plan.source.research) source = withoutResearchMarks(source);
     const original = source;
     source = sourceWithStandIns(source, planStandIns(plan));
     let data: StromData;
     let trace: MergeTrace;
     let extra: Pick<ApplyResult, 'backupKey' | 'importMap' | 'sharedJoined'> = {};
     if (plan.mode === 'new' && allIn) {
-        // A new tree of the whole source, as the import made it so far.
+        // A new tree of the whole source, as the import made it so far
+        // (the source's own merges aside: the new tree's history starts here).
         data = structuredClone(source);
+        delete data.merges;
         const same = <K extends string>(keys: K[]): Map<K, K> => new Map(keys.map(k => [k, k]));
         trace = {
             persons: same(Object.keys(source.persons) as PersonId[]),
@@ -999,6 +955,12 @@ function recordOf(plan: MergePlan, before: StromData, source: StromData, after: 
     record.places = Object.keys(after.places ?? {}).filter(k => !before.places?.[k]);
     const had = new Set(allMedia(before).map(m => m.id));
     record.media = allMedia(after).map(m => m.id).filter(id => !had.has(id));
+    // For the undo (undo-plan.ts): every change to a record the tree had, and how each added person was left.
+    // A new tree from the source alone had nothing before: its undo is the tree itself.
+    if (plan.mode === 'new') return record;
+    const edits = mergeEdits(before, after);
+    if (edits.length) record.edits = edits;
+    if (record.added.length) record.prints = Object.fromEntries(record.added.map(id => [id, personPrint(after.persons[id])]));
     void source;
     return record;
 }
@@ -1151,17 +1113,54 @@ export function scopeExample(source: StromData, target: StromData, state?: Merge
 
 /**
  * The earlier merge of the same source (§13 13c, K1.5): a record with the
- * same import id or the same fingerprint of the source, not undone; the
- * latest one. Null when this source was not merged before.
+ * same fingerprint of the source (a file's SHA-256), not undone; the latest
+ * one. Null when this source was not merged before. The import id alone says
+ * nothing: every file read names its own import I1.
  */
 export function isRepeatOf(source: PlanSource, merges: readonly MergeRecord[] | undefined): MergeRecord | null {
+    if (!source.fingerprint) return null;
     let found: MergeRecord | null = null;
     for (const r of merges ?? []) {
-        if (r.state === 'undone') continue;
-        const sameId = !!source.importId && r.source.importId === source.importId;
-        const samePrint = !!source.fingerprint && r.source.fingerprint === source.fingerprint;
-        if (!sameId && !samePrint) continue;
+        if (r.state === 'undone' || r.source.fingerprint !== source.fingerprint) continue;
         if (!found || r.at > found.at) found = r;
     }
     return found;
+}
+
+/**
+ * The tree loaded the same file before without a merge's record (K0.7: a
+ * tree made of the file, or merged before the records were kept): its import
+ * record with the file's SHA-256, the latest one; null when none.
+ */
+export function importedBefore(source: PlanSource, target: StromData): ImportRecord | null {
+    if (!source.fingerprint) return null;
+    let found: ImportRecord | null = null;
+    for (const r of target.imports ?? []) {
+        if (r.sha !== source.fingerprint) continue;
+        if (!found || r.at > found.at) found = r;
+    }
+    return found;
+}
+
+/**
+ * How many of the import's people are joined with the earlier merge (the
+ * tree's person that merge added or joined, or with `record` null anyone of
+ * the tree, was the same record of a file the same program wrote, K1.5) and
+ * how many are new. Without such ids on both sides: the earlier merge's
+ * totals stand in for it.
+ */
+export function repeatCounts(source: StromData, target: StromData, record: MergeRecord | null): { joined: number; fresh: number } {
+    const incoming = Object.values(source.persons).filter(p => !p.isPlaceholder);
+    const earlier = record
+        ? [...record.added, ...record.joined.map(([id]) => id)].map(id => target.persons[id]).filter((p): p is Person => !!p)
+        : Object.values(target.persons).filter(p => !p.isPlaceholder);
+    const keys = new Set<string>();
+    for (const p of earlier) for (const k of fileRecordKeys(p, target)) keys.add(k);
+    const withKeys = incoming.map(p => fileRecordKeys(p, source));
+    if (keys.size > 0 && withKeys.some(k => k.size > 0)) {
+        const joined = withKeys.filter(ks => [...ks].some(k => keys.has(k))).length;
+        return { joined, fresh: incoming.length - joined };
+    }
+    const joined = record ? Math.min(incoming.length, record.added.length + record.joined.length) : 0;
+    return { joined, fresh: incoming.length - joined };
 }

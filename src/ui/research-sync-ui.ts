@@ -85,6 +85,7 @@ import { shownNameOrEmpty } from '../person-name.js';
 import { browserMediaFingerprint, browserMediaSafe, treeHasAppMedia, archiveHoldsAppMedia } from '../browser-media.js';
 import { poolRefSnapshot } from '../image-expand.js';
 import { gedcomText } from '../ged-export-images.js';
+import { settleMergeHold } from '../merge/research-hold.js';
 
 /** A person's conflicts less those still open that were decided since (`settled`, by id); the same list when none goes. */
 function withoutSettled(list: ResearchConflict[], settled: Set<string> | null): ResearchConflict[] {
@@ -994,8 +995,9 @@ export const researchSyncMethods = uiModule({
 
     /** The tree's changes go by themselves (a research that tells what it has, not Safari). */
     researchAutoOn(link: ResearchLink | undefined): boolean {
-        // (Out of "only load" with changes waiting: the first send goes by hand, through "What will be sent".)
-        return !!link && researchSendMode(link) === 'auto' && !link.previewDue && this.researchSyncCapable(link.id) && !safariBrowser();
+        // (Out of "only load" with changes waiting: the first send goes by hand, through "What will be sent";
+        // a merge not sent yet waits for a send by hand too, spec 134 K9.2.)
+        return !!link && researchSendMode(link) === 'auto' && !link.previewDue && !link.mergeHold && this.researchSyncCapable(link.id) && !safariBrowser();
     },
 
     /** The bridge answered within FRESH_MS. */
@@ -2238,6 +2240,8 @@ export const researchSyncMethods = uiModule({
         if (res.ok && reply.ok && declaresMedia) patchResearchAutoState(treeId, { appMediaSent: link.id });
         // The first send out of "only load" went (through the preview): sending by itself may go on.
         if (res.ok && reply.ok && link.previewDue) TreeManager.patchResearchLink(treeId, { previewDue: undefined });
+        // A merge waiting for a send went with it (spec 134 §11): marked sent, sending by itself goes on.
+        if (res.ok && reply.ok && !again) await settleMergeHold(treeId, data, reply.intake);
         // Busy (503): not a refusal — it goes again at the next look.
         if (res.status === 503) {
             if (opts.auto) autoDue.add(treeId);
