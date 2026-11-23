@@ -19044,15 +19044,19 @@
             width: 200px; max-width: 100%; box-sizing: border-box; padding: 5px 10px;
             border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 13px;
         }
+        /* Only the rows near the view are drawn (§13h, Show all on thousands of lines): --s5-row is their one height. */
         .merge-s5-list {
+            --s5-row: 32px;
             flex: 1 1 auto; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0;
             border: 1px solid var(--border); border-radius: var(--r-md);
         }
         .merge-s5-list > li {
-            box-sizing: border-box; min-height: 32px; display: flex; align-items: center; gap: 8px;
-            padding: 3px 10px; border-bottom: 1px solid var(--divider); font-size: 13px; min-width: 0;
+            box-sizing: border-box; height: var(--s5-row); overflow: hidden; display: flex; align-items: center; gap: 8px;
+            padding: 0 10px; border-bottom: 1px solid var(--divider); font-size: 13px; min-width: 0;
         }
-        .merge-s5-list > li:last-child { border-bottom: 0; }
+        .merge-s5-list > li.vlist-pad { padding: 0; border: 0; }
+        .merge-s5-list > li:nth-last-child(2):not(.vlist-pad) { border-bottom: 0; }
+        .merge-s5-more-t { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .merge-s5-list > .merge-s5-gh { background: var(--surface-2); }
         .merge-s5-list > .merge-s5-row, .merge-s5-list > .merge-s5-more { padding-left: 40px; }
         .merge-s5-more { color: var(--text-light); font-size: 12.5px; }
@@ -19125,7 +19129,7 @@
             .merge-s5.is-sheet .merge-s5-thumb { height: min(56vh, 420px); }
         }
         @media (pointer: coarse) {
-            .merge-s5-list > li { min-height: 44px; }
+            .merge-s5-list { --s5-row: 44px; }
             .modal .merge-s5 .link-button, .modal .merge-s5 button.merge-s5-caret { min-height: 44px; }
             .modal .merge-s5 button.merge-s5-caret { width: 32px; }
             .modal .merge-s5-into > .sel-opt { min-height: 44px; }
@@ -19140,9 +19144,12 @@
             .merge-s5-head { flex-wrap: wrap; }
             .modal .merge-s5 input.merge-s5-search, .modal .merge-s5 input.merge-s5-search[type="search"] { width: 100%; }
             .merge-s5-list { flex: none; max-height: 62vh; }
-            .merge-s5-list > li { flex-wrap: wrap; row-gap: 0; }
+            .merge-s5-list { --s5-row: 52px; }
+            .merge-s5-list > li { flex-wrap: wrap; align-content: center; row-gap: 0; }
             .merge-s5-list > .merge-s5-row, .merge-s5-list > .merge-s5-more { padding-left: 12px; }
+            .merge-s5-row .merge-s5-name { flex: 1 1 0; }
             .merge-s5-row .merge-s5-text { order: 5; flex-basis: 100%; padding-left: 21px; }
+            .modal .merge-s5 .merge-s5-list .link-button { min-height: 32px; }
             .merge-s5-gh .merge-s5-gsum { display: none; }
             .modal .merge-s5 .merge-s5-preview-open { min-height: 44px; }
         }

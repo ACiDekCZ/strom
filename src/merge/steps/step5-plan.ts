@@ -35,6 +35,7 @@ import { isCopyOfTarget } from './step2-who.js';
 import { fold, relationText, triState, yearsText } from './step3-model.js';
 import { tickPeople, untickPeople } from './step3-whom.js';
 import { sourceText } from './step4-rules.js';
+import { VirtualList } from '../virtual-list.js';
 
 /** The groups of the list, in their order. */
 export type PlanGroupKey = 'new' | 'joined' | 'fields' | 'links' | 'sources' | 'places' | 'media' | 'skipped' | 'notTaken';
@@ -308,6 +309,8 @@ interface View {
     relations: Map<PersonId, string>;
     conns: Map<PersonId, NewConnection> | null;
     groups: PlanListGroup[];
+    /** The list's drawn part (§13h: Show all on thousands of lines draws only the rows near the view). */
+    list: VirtualList | null;
 }
 
 const views = new WeakMap<MergeState, View>();
@@ -316,7 +319,7 @@ let current: View | null = null;
 function viewOf(ctx: StepContext): View {
     let v = views.get(ctx.state);
     if (!v) {
-        v = { ctx, root: null, toggled: new Set(), all: new Set(), keptShown: false, query: '', focus: null, previewDrawn: '', relations: new Map(), conns: null, groups: [] };
+        v = { ctx, root: null, toggled: new Set(), all: new Set(), keptShown: false, query: '', focus: null, previewDrawn: '', relations: new Map(), conns: null, groups: [], list: null };
         views.set(ctx.state, v);
     }
     v.ctx = ctx;
@@ -457,13 +460,24 @@ function build(host: HTMLElement, view: View): void {
   </div>
 </div>`;
     view.root = host.querySelector<HTMLElement>('.merge-s5')!;
+    view.list?.destroy();
+    const list = view.root.querySelector<HTMLElement>('.merge-s5-list')!;
+    view.list = new VirtualList(list, list, () => rowHeight(list), () => '', () => {
+        list.querySelectorAll<HTMLInputElement>('input[data-mixed]').forEach(cb => { cb.indeterminate = true; });
+    });
     wire(view.root, view);
+}
+
+/** The rows' one height from the stylesheet (taller to touch, and on a phone, where a row has two lines). */
+function rowHeight(list: HTMLElement): number {
+    const h = parseFloat(getComputedStyle(list).getPropertyValue('--s5-row'));
+    return Number.isFinite(h) && h > 0 ? h : 32;
 }
 
 function lineHtml(line: PlanLine, group: PlanGroupKey): string {
     const W = strings.mergeWizard;
     const box = line.can
-        ? `<input type="checkbox" class="merge-s5-cb" data-line="${escapeHtml(line.key)}"${line.on ? ' checked' : ''} aria-label="${escapeHtml(line.name)}">`
+        ? `<input type="checkbox" class="merge-s5-cb" data-line="${escapeHtml(line.key)}" data-vkey="cb:${escapeHtml(line.key)}"${line.on ? ' checked' : ''} aria-label="${escapeHtml(line.name)}">`
         : `<input type="checkbox" class="merge-s5-cb" disabled${line.on ? ' checked' : ''} aria-label="${escapeHtml(line.name)}">`;
     const mark = group === 'new' ? `<span class="merge-s5-glyph">${glyph('added', 11, 3)}</span>` : '';
     const serif = line.person || group === 'fields' ? ' is-person' : '';
@@ -471,9 +485,14 @@ function lineHtml(line: PlanLine, group: PlanGroupKey): string {
     const living = line.living ? `<span class="merge-s5-tag">${escapeHtml(W.livingTag)}</span>` : '';
     const text = `<span class="merge-s5-text"${line.text ? ` title="${escapeHtml(line.text)}"` : ''}>${escapeHtml(line.text)}</span>`;
     const inTree = line.person && (group === 'new' || group === 'joined')
-        ? `<button type="button" class="link-button merge-s5-in" data-in="${escapeHtml(line.person)}">${escapeHtml(W.inTree)}</button>` : '';
+        ? `<button type="button" class="link-button merge-s5-in" data-in="${escapeHtml(line.person)}" data-vkey="in:${escapeHtml(line.key)}">${escapeHtml(W.inTree)}</button>` : '';
     return `<li class="merge-s5-row${line.on ? '' : ' is-off'}" data-key="${escapeHtml(line.key)}">`
         + `${box}${mark}<span class="merge-s5-name${serif}">${escapeHtml(line.name)}</span>${years}${living}${text}${inTree}</li>`;
+}
+
+/** "and 2 995 more · Show all": the sentence shortens (whole as its title), the button stays. */
+function moreHtml(text: string, button: string): string {
+    return `<li class="merge-s5-more"><span class="merge-s5-more-t" title="${escapeHtml(text)}">${escapeHtml(text)} ·</span>${button}</li>`;
 }
 
 function update(view: View): void {
@@ -481,9 +500,8 @@ function update(view: View): void {
     const { ctx } = view;
     const W = strings.mergeWizard;
     const plan = ctx.plan;
-    const list = root.querySelector<HTMLElement>('.merge-s5-list')!;
     if (!plan) {
-        list.innerHTML = '';
+        view.list?.refresh(0, () => '');
         return;
     }
     view.groups = planList(plan, ctx.state, ctx.choices.offLinks, id => relationOf(view, id));
@@ -497,10 +515,10 @@ function update(view: View): void {
         const can = [...g.lines, ...g.kept].filter(l => l.can);
         const tri = can.length ? triState(can.map(l => l.key as PersonId), new Set(can.filter(l => l.on).map(l => l.key as PersonId))) : null;
         const box = tri
-            ? `<input type="checkbox" class="merge-s5-gcb" data-group="${g.key}"${tri === 'all' ? ' checked' : ''}${tri === 'some' ? ' data-mixed' : ''} aria-label="${escapeHtml(g.title)}">`
+            ? `<input type="checkbox" class="merge-s5-gcb" data-group="${g.key}" data-vkey="g:${g.key}"${tri === 'all' ? ' checked' : ''}${tri === 'some' ? ' data-mixed' : ''} aria-label="${escapeHtml(g.title)}">`
             : '<span class="merge-s5-cb-none" aria-hidden="true"></span>';
         const caret = g.lines.length || g.kept.length
-            ? `<button type="button" class="merge-s5-caret" data-toggle="${g.key}" aria-expanded="${open}" aria-label="${escapeHtml(g.title)}"><span aria-hidden="true">›</span></button>`
+            ? `<button type="button" class="merge-s5-caret" data-toggle="${g.key}" data-vkey="t:${g.key}" aria-expanded="${open}" aria-label="${escapeHtml(g.title)}"><span aria-hidden="true">›</span></button>`
             : '<span class="merge-s5-caret" aria-hidden="true"></span>';
         rows.push(`<li class="merge-s5-gh${open ? ' is-open' : ''}" data-group="${g.key}">${box}${caret}`
             + `<span class="merge-s5-gname">${escapeHtml(g.title)}</span><span class="merge-s5-gcount">${g.count.toLocaleString()}</span>`
@@ -510,16 +528,16 @@ function update(view: View): void {
         const shown = showAll ? lines : lines.slice(0, FIRST_LINES);
         for (const l of shown) rows.push(lineHtml(l, g.key));
         if (!showAll) {
-            rows.push(`<li class="merge-s5-more">${escapeHtml(W.moreItems(lines.length - shown.length))} · `
-                + `<button type="button" class="link-button" data-all="${g.key}">${escapeHtml(W.showAll)}</button></li>`);
+            rows.push(moreHtml(W.moreItems(lines.length - shown.length),
+                `<button type="button" class="link-button" data-all="${g.key}" data-vkey="a:${g.key}">${escapeHtml(W.showAll)}</button>`));
         }
         if (g.kept.length) {
             if (view.keptShown || q) for (const l of kept) rows.push(lineHtml(l, g.key));
-            else rows.push(`<li class="merge-s5-more">${escapeHtml(g.keptText)} · <button type="button" class="link-button" data-kept="1">${escapeHtml(W.showKept)}</button></li>`);
+            else rows.push(moreHtml(g.keptText, `<button type="button" class="link-button" data-kept="1" data-vkey="k:${g.key}">${escapeHtml(W.showKept)}</button>`));
         }
     }
-    list.innerHTML = rows.join('');
-    list.querySelectorAll<HTMLInputElement>('input[data-mixed]').forEach(cb => { cb.indeterminate = true; });
+    // Show all (and a search) can list thousands of lines: only the rows near the view are drawn.
+    view.list?.refresh(rows.length, i => rows[i]);
 
     // Where to write: only an import added to a tree.
     const adding = plan.mode === 'add';

@@ -216,3 +216,47 @@ test('a reload in step 5 (13g) and Save for later there (13j): the merge comes b
     await expect(wizard.locator('#merge-next')).toHaveText('Add 2 people, change 0 details');
     expect(await peopleOf(page, 'Modřínovi')).toEqual(['Florentýna', 'Kvido', 'Teofil']);
 });
+
+/** Kvido Modřín (joined) and 3 000 new children of his: a GEDCOM made here. */
+function thousandsGed(): string {
+    const lines = ['0 HEAD', '1 SOUR FICTIVE', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Kvido /Modřín/', '1 SEX M', '1 BIRT', '2 DATE 1921', '2 PLAC Křemenná', '1 FAMS @F1@'];
+    const names = ['Budivoj', 'Hostivít', 'Velemír', 'Zbyhněv', 'Bonifác'];
+    for (let i = 0; i < 3000; i++) {
+        lines.push(`0 @K${i}@ INDI`, `1 NAME ${names[i % names.length]} /Modřín/`, '1 SEX M', '1 BIRT', `2 DATE ${1940 + (i % 40)}`,
+            '1 DEAT', `2 DATE ${1990 + (i % 30)}`, '1 FAMC @F1@');
+    }
+    lines.push('0 @F1@ FAM', '1 HUSB @I1@');
+    for (let i = 0; i < 3000; i++) lines.push(`1 CHIL @K${i}@`);
+    lines.push('0 TRLR');
+    return lines.join('\n') + '\n';
+}
+
+test('3 000 new people (13h): Show all draws at most 100 rows of the list, scrolled to the end the groups after New', async ({ page }) => {
+    await openApp(page);
+    await importJsonAsNewTree(page, 'e2e/fixtures/modrinovi.json', 'Modřínovi');
+    await page.locator('#gedcom-input').setInputFiles({ name: 'rodokmen-jilmovi.ged', mimeType: 'text/plain', buffer: Buffer.from(thousandsGed(), 'utf-8') });
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    await mergeCompare(wizard);
+    await expect(mergeCount(wizard, 'joined')).toHaveText('1');
+    // A pair left to decide (a new child like the tree's own one) goes as new.
+    const rest = wizard.getByRole('button', { name: /^Add as new \(\d+\)$/ });
+    if (await rest.count()) await rest.click();
+    await mergeToStep5(wizard);
+    await expect(group(wizard, 'new').locator('.merge-s5-gcount')).toHaveText('3,000');
+    const list = wizard.locator('.merge-s5-list');
+    await list.locator('[data-all="new"]').click();
+    const rows = list.locator('.merge-s5-row');
+    await expect(rows.first()).toBeVisible();
+    expect(await rows.count()).toBeLessThanOrEqual(100);
+    // The scroll bar keeps the whole list's length; the groups after New are not drawn yet.
+    expect(await list.evaluate(el => el.scrollHeight)).toBeGreaterThan(3000 * 30);
+    await expect(group(wizard, 'joined')).toHaveCount(0);
+    await list.evaluate(el => { el.scrollTop = el.scrollHeight; });
+    await expect(group(wizard, 'joined')).toBeVisible();
+    expect(await rows.count()).toBeLessThanOrEqual(100);
+    // A row drawn on the way still ticks: unticking one takes it out of the plan.
+    await rows.last().locator('input.merge-s5-cb').click();
+    await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
+});
