@@ -92,12 +92,14 @@ export async function expandImages<T>(data: T, o: ExpandOptions = {}): Promise<E
     collectIds(data, ids);
     if (ids.size === 0) return { data, missing: 0 };
     const slots: Slot[] = [];
-    const copy = copyWithSlots(data, slots) as T;
+    // A reference given alone has no holder: it gets a box of its own.
+    const box = typeof data === 'string' ? [data] : null;
+    const copy = copyWithSlots(box ?? data, slots);
     const urls = await loadImageUrls([...ids], o.decrypt);
     for (const s of slots) (s.at as Record<string | number, unknown>)[s.key] = urls.get(s.id) ?? '';
     let missing = 0;
     for (const id of ids) if (!urls.has(id)) missing++;
-    return { data: copy, missing };
+    return { data: (box ? (copy as unknown[])[0] : copy) as T, missing };
 }
 
 /**

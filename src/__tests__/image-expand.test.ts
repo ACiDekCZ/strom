@@ -153,6 +153,13 @@ describe('expandImages', () => {
         expect(out.photo).toBe(a.url);
     });
 
+    it('a reference given alone: its image (a test reads one photo or one element\'s pooled image)', async () => {
+        const a = pooled(9);
+        expect(await expandImages(a.ref)).toEqual({ data: a.url, missing: 0 });
+        expect(await expandedData(a.ref + ' x')).toBe(a.ref + ' x');
+        expect(await expandedData(POOL_REF + 'p:' + 'dd'.repeat(20))).toBe('');
+    });
+
     it('an image missing from the pool: empty text (the sanitizer drops it), counted once', async () => {
         const a = pooled(6);
         const gone = POOL_REF + 'p:' + 'ee'.repeat(20);
