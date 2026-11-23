@@ -1,5 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { openApp, createFirstPerson, mergeCompare, mergeCount, mergeCurrentStep, mergeJoinPending, mergePickValue, mergeSetScope, mergeToStep4, mergeWriteAndSwitch } from './helpers.js';
+import { unnamedControls } from './a11y.js';
 
 /**
  * Step 4 of the import guide, Who is right (spec 134 §7, 7a–7e): the rule
@@ -236,4 +237,40 @@ test('scope a) without conflicts of relations skips step 4 and says why; the dif
     // On from here goes to step 5.
     await wizard.locator('#merge-next').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
+});
+
+test('step 4 on a phone: every control named for a page reader, the primary button on the screen, the protected detail\'s dialog keeps the focus and Esc closes only it', async ({ page }) => {
+    const wizard = await compared(page, modrinTree(), jilmGed());
+    await mergeJoinPending(wizard);
+    await mergeSetScope(page, 'c');
+    await mergeToStep4(wizard);
+    // The pairs joined at the desk's width; step 4 on a phone held upright.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const next = wizard.locator('#merge-next');
+    const unnamed = async (where: string): Promise<void> => {
+        expect.soft((await unnamedControls(page)).map(u => `[${u.role}] "${u.name}" ${u.html}`), where).toEqual([]);
+    };
+    await expect(next).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await unnamed('by kind');
+    await wizard.locator('#merge-s4-tab-persons').click();
+    await expect(next).toBeInViewport();
+    await unnamed('by person');
+    await wizard.locator('#merge-s4-tab-rels').click();
+    await expect(next).toBeInViewport();
+    await unnamed('relations');
+
+    await wizard.locator('#merge-s4-tab-persons').click();
+    await row(wizard, 'vel', 'birthPlace').locator('.merge-s4-v[data-pick="import"]').click();
+    const dialog = page.locator('#merge-s4-prot');
+    await expect(dialog).toBeVisible();
+    for (let i = 0; i < 8; i++) {
+        await page.keyboard.press('Tab');
+        expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(wizard).toBeVisible();
+    // Nothing chosen: the tree's documented value stays.
+    await expect(row(wizard, 'vel', 'birthPlace').locator('.merge-s4-res-v')).toHaveText('stays Křemenná');
 });

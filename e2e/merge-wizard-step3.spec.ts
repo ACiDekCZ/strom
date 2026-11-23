@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, reloadApp } from './helpers.js';
 
 /**
  * Step 3 of the import guide, Whom to add (spec 134 §5, K4.1–K4.5): the
@@ -129,6 +129,49 @@ test('unticking a person others link through asks first: their names, Leave out 
     await expect(count(wizard)).toHaveText('9 of 9 new selected');
     await expect(row(wizard, 'Libuna').locator('input')).toBeChecked();
     await sumIsWhole(wizard, 10);
+
+    // Esc closes the question and leaves out nobody; the guide stays open.
+    await row(wizard, 'Zbyhněv').locator('input[type="checkbox"]').click();
+    await expect(dialog.getByRole('dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(wizard).toBeVisible();
+    await expect(row(wizard, 'Zbyhněv').locator('input')).toBeChecked();
+    await expect(count(wizard)).toHaveText('9 of 9 new selected');
+});
+
+test('a reload in step 3 (13g): the merge is offered again, the tree unchanged, and the people left out stay left out', async ({ page }) => {
+    const wizard = await toStep3(page, familyGed());
+    const tree = (): Promise<string> => page.evaluate(async () => {
+        const TM = window.Strom.TreeManager;
+        return JSON.stringify((await TM.getTreeData(TM.getActiveTreeId()!))!.persons);
+    });
+    const before = await tree();
+    await row(wizard, 'Hostivít').locator('input[type="checkbox"]').click();
+    await expect(count(wizard)).toHaveText('8 of 9 new selected');
+    // The guide saves itself after a choice (the merge left open, read as the browser stores it).
+    await expect.poll(() => page.evaluate(() => new Promise<number>(resolve => {
+        const open = indexedDB.open('strom-db');
+        open.onerror = () => resolve(-1);
+        open.onsuccess = () => {
+            const db = open.result;
+            const get = db.transaction('merge').objectStore('merge').get('current');
+            get.onsuccess = () => { resolve(get.result?.state?.wizard?.choices?.leftOut?.length ?? 0); db.close(); };
+            get.onerror = () => { resolve(-1); db.close(); };
+        };
+    })), { timeout: 10_000 }).toBe(1);
+
+    await reloadApp(page);
+    const pending = page.locator('#pending-merge-modal');
+    await expect(pending).toHaveClass(/active/);
+    await expect(pending.locator('.pending-merge-message')).toHaveText('Last time the merge did not finish. The tree Modřínovi and the file are unchanged.');
+    await expect(pending.locator('.pending-merge-meta')).toContainText('Step 3 of 6');
+    expect(await tree()).toBe(before);
+    await pending.locator('.btn-resume').click();
+    await expect(wizard).toBeVisible();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
+    await expect(count(wizard)).toHaveText('8 of 9 new selected');
+    await expect(row(wizard, 'Hostivít').locator('input')).not.toBeChecked();
 });
 
 test('Leave out living (1) takes the living one out; Ancestors of… selects the 3 ancestors; By hand ticks nobody, Select all everybody', async ({ page }) => {
