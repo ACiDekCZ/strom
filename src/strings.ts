@@ -6455,6 +6455,12 @@ const stringsEN = {
         encLocked: (t: string) => `The tree ${t} is encrypted and locked.`,
         savedLater: (s: string, i: number) => `Saved for later · ${s} · step ${i} · in Manage trees under Unfinished merges`,
         crashed: (t: string) => `Last time the merge did not finish. The tree ${t} and the file are unchanged.`,
+        /** Unlinked groups (§6): a group's name, and the separate tree it can become. */
+        groupFamily: (s: string, place: string) => place ? `${s} (${place})` : s,
+        groupWithChildren: (name: string) => `${name} and children`,
+        groupSingles: 'Individuals',
+        groupAll: 'The whole import',
+        ownTreeName: (t: string, g: string) => `${t} – ${g}`,
     },
 
     // Person merge (duplicate resolution)
@@ -17322,6 +17328,12 @@ const stringsCZ: StringsType = {
         encLocked: (t: string) => `Strom ${t} je šifrovaný a zamčený.`,
         savedLater: (s: string, i: number) => `Uloženo na později · ${s} · krok ${i} · ve Správě stromů v Nedokončených sloučeních`,
         crashed: (t: string) => `Minule se sloučení nedokončilo. Strom ${t} i soubor jsou beze změny.`,
+        /** Unlinked groups (§6): a group's name, and the separate tree it can become. */
+        groupFamily: (s: string, place: string) => place ? `${s} (${place})` : s,
+        groupWithChildren: (name: string) => `${name} a děti`,
+        groupSingles: 'Jednotlivci',
+        groupAll: 'Celý import',
+        ownTreeName: (t: string, g: string) => `${t} – ${g}`,
     },
 
     // Person merge (duplicate resolution)
@@ -28030,6 +28042,12 @@ const stringsDE: StringsType = {
         encLocked: (t: string) => `Der Stammbaum ${t} ist verschlüsselt und gesperrt.`,
         savedLater: (s: string, i: number) => `Für später gespeichert · ${s} · Schritt ${i} · unter Stammbäume verwalten bei Unvollendete Zusammenführungen`,
         crashed: (t: string) => `Beim letzten Mal wurde die Zusammenführung nicht beendet. Stammbaum ${t} und Datei sind unverändert.`,
+        /** Unlinked groups (§6): a group's name, and the separate tree it can become. */
+        groupFamily: (s: string, place: string) => place ? `${s} (${place})` : s,
+        groupWithChildren: (name: string) => `${name} und Kinder`,
+        groupSingles: 'Einzelpersonen',
+        groupAll: 'Der ganze Import',
+        ownTreeName: (t: string, g: string) => `${t} – ${g}`,
     },
 
     // Person merge (duplicate resolution)

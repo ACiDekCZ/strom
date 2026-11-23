@@ -271,6 +271,12 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         encLocked: (t: string) => `Drzewo ${t} jest zaszyfrowane i zablokowane.`,
         savedLater: (s: string, i: number) => `Zapisano na później · ${s} · krok ${i} · w Zarządzaniu drzewami w Niedokończonych scaleniach`,
         crashed: (t: string) => `Ostatnio scalenie się nie zakończyło. Drzewo ${t} i plik są bez zmian.`,
+        /** Unlinked groups (§6): a group's name, and the separate tree it can become. */
+        groupFamily: (s: string, place: string) => place ? `${s} (${place})` : s,
+        groupWithChildren: (name: string) => `${name} i dzieci`,
+        groupSingles: 'Pojedyncze osoby',
+        groupAll: 'Cały import',
+        ownTreeName: (t: string, g: string) => `${t} – ${g}`,
     },
 
     // Person merge (duplicate resolution)
