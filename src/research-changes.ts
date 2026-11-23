@@ -568,6 +568,20 @@ export function diffOther(base: StromData | null, current: StromData): OtherChan
     return { sources, couples, ...(places ? { places } : {}), ...(surnameVariants ? { surnameVariants } : {}), ...(lineage ? { lineage } : {}) };
 }
 
+/**
+ * The numbers of "What will be sent" (134 V-N5): its sections' heads and the
+ * lead after a merge count the same rows. `added`: the people new for the
+ * research (a "?" stand-in is none, it has no row); `changed`: the other
+ * people's rows (a new partner, child or parent, a detail, a deletion);
+ * `couples`: the couples' own rows (a new couple is told at its partners).
+ */
+export interface SendCounts { persons: number; added: number; changed: number; sources: number; couples: number }
+
+export function sendCounts(list: readonly PersonChange[], other: OtherChanges | null): SendCounts {
+    const added = list.filter(ch => ch.kinds.includes('added')).length;
+    return { persons: list.length, added, changed: list.length - added, sources: other?.sources.length ?? 0, couples: other?.couples.length ?? 0 };
+}
+
 /** Rows beyond the people (the places and the surname variants are one row each). */
 export function otherRowCount(o: OtherChanges | null): number {
     if (!o) return 0;

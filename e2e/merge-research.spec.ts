@@ -75,6 +75,10 @@ test('a merge into a tree with a research is not sent by itself; the tree says "
     await row.locator('.tree-manager-hold-send').click();
     await expect(panel(page)).toBeVisible();
     await expect(panel(page)).toContainText('From a family tree (unverified)');
+    // The lead counts the rows of the list below it (V-N5): Bedřich, the one row; a link is no row of its own.
+    await expect(panel(page).locator('.research-changes-row[data-kind="person"]')).toHaveCount(1);
+    await expect(panel(page)).toContainText(/: 1 new person\. The details go/);
+    await expect(panel(page)).not.toContainText(/\blinks?\b/);
     await panel(page).locator('[data-act="send"]').click();
     await expect.poll(() => bridge.posts.length).toBe(1);
     // The new person goes as from a family tree: the file's mark on him and his facts (K9.4);

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { diffByPerson, diffOther, baseCopy, markOlderCopy, otherRowCount, previewInexact, previewNothing, OtherChanges } from '../research-changes.js';
+import { diffByPerson, diffOther, baseCopy, markOlderCopy, otherRowCount, previewInexact, previewNothing, OtherChanges, sendCounts } from '../research-changes.js';
 import { researchAutoState } from '../research-device.js';
 import { getStringsForLang } from '../strings.js';
 import { normalizeSingleParents } from '../single-parent.js';
@@ -275,5 +275,47 @@ describe('what a written send did not write, as kept', () => {
         const items = researchAutoState('t1').notWritten!.items;
         expect(items[0]).toEqual({ person: 'I0007', fact: 'BIRT', why: 'kept', name: 'Karel Dvořák', family: 'F0003' });
         expect(items[1]).toEqual({ person: 'I0008', fact: '', why: 'pick' });
+    });
+});
+
+describe('the numbers of What will be sent after a merge (134 V-N5)', () => {
+    it('the lead and the sections count the same rows: a "?" is no new person, a new couple is told at its partners', () => {
+        const base = baseCopy(tree());
+        const cur = copyOf(tree());
+        const u = (id: string, a: string, b: string, kids: string[]) =>
+            ({ id: id as PartnershipId, person1Id: P(a), person2Id: P(b), childIds: kids.map(P), status: 'married' });
+        // A merge brought: Kvido, a child of the couple; Zbyhněv, a child of Petr and a "?" stand-in; Dalimil, Eva's husband.
+        cur.persons[P('p5')] = person('p5', 'Kvido', { parentIds: [P('p1'), P('p2')] });
+        cur.persons[P('p1')].childIds.push(P('p5'));
+        cur.persons[P('p2')].childIds.push(P('p5'));
+        cur.partnerships['u1' as PartnershipId].childIds.push(P('p5'));
+        cur.persons[P('p6')] = person('p6', '?', { lastName: '', gender: 'female', isPlaceholder: true, partnerships: ['u2' as PartnershipId], childIds: [P('p7')] });
+        cur.persons[P('p7')] = person('p7', 'Zbyhněv', { parentIds: [P('p3'), P('p6')] });
+        cur.persons[P('p3')].partnerships = ['u2' as PartnershipId];
+        cur.persons[P('p3')].childIds = [P('p7')];
+        cur.partnerships['u2' as PartnershipId] = u('u2', 'p3', 'p6', ['p7']) as never;
+        cur.persons[P('p8')] = person('p8', 'Dalimil', { partnerships: ['u3' as PartnershipId] });
+        cur.persons[P('p4')].partnerships = ['u3' as PartnershipId];
+        cur.partnerships['u3' as PartnershipId] = u('u3', 'p8', 'p4', []) as never;
+
+        const list = diffByPerson(base, cur);
+        const other = diffOther(base, cur);
+        const c = sendCounts(list, other);
+        // Three new people (not the "?"); Eva, a person of the research, married Dalimil: a row of her own.
+        // A new child is told at the child (its parents' rows say nothing). One couple's own row: Petr and the "?".
+        expect(c.added).toBe(3);
+        expect(list.filter(ch => ch.kinds.includes('added')).map(ch => ch.personId).sort()).toEqual(['p5', 'p7', 'p8']);
+        expect(list.filter(ch => !ch.kinds.includes('added')).map(ch => ch.personId)).toEqual(['p4']);
+        expect(c.persons).toBe(list.length);
+        expect(c.changed).toBe(1);
+        expect(c.couples).toBe(other!.couples.length);
+        expect(c.couples).toBe(1);
+        // The lead says these numbers, the heads of the list the same.
+        const W = getStringsForLang('en').mergeWizard;
+        const ch = getStringsForLang('en').changes;
+        expect(W.resSendLeadList('Dvořákovi', c.added, c.changed, c.couples, c.sources))
+            .toContain('Dvořákovi: 3 new people, 1 other person changed, 1 couple.');
+        expect(ch.sectionPersons(c.persons)).toBe(`People · ${c.added + c.changed}`);
+        expect(ch.sectionCouples(c.couples)).toBe('Couples · 1');
     });
 });

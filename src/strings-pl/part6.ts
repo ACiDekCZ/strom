@@ -402,6 +402,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         sendShort: 'Wyślij…',
         resStep5: (t: string) => `${t} ma badania: po zapisie nic nie zostanie wysłane samo; wysłanie wybiera się w ostatnim kroku.`,
         resSendLead: (t: string, n: number, l: number, s: number) => `Do badań ${t}: ${nPl(n, 'nowa osoba', 'nowe osoby', 'nowych osób')}, ${nPl(l, 'powiązanie', 'powiązania', 'powiązań')}, ${nPl(s, 'źródło', 'źródła', 'źródeł')}. Dane trafią jako „Z drzewa (niezweryfikowane)”, nigdy jako udokumentowane.`,
+        resSendLeadList: (t: string, a: number, c: number, k: number, s: number) => `Do badań ${t}: ${[nPl(a, 'nowa osoba', 'nowe osoby', 'nowych osób'), c ? nPl(c, 'inna zmieniona osoba', 'inne zmienione osoby', 'innych zmienionych osób') : '', k ? nPl(k, 'para', 'pary', 'par') : '', s ? nPl(s, 'źródło', 'źródła', 'źródeł') : ''].filter(Boolean).join(', ')}. Dane trafią jako „Z drzewa (niezweryfikowane)”, nigdy jako udokumentowane.`,
         resSendNote: 'Osoby badań zachowają numery, stan danych i cytaty. Badania dostaną zmiany przez most; agent nie jest uruchamiany.',
         resSendGo: 'Wyślij do badań',
         resSent: (d: string) => `Scalenie wysłano do badań ${d}, więc badania mają już jego osoby. Cofnięcie w aplikacji nie usunie ich stamtąd.`,

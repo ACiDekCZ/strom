@@ -23,6 +23,7 @@ import { MERGE_HOLD_EVENT, noteResearchSends, resolveSentInput, settleMergeHold,
 import { lastBridgeStatus, onBridgeStatus } from './research-sync-ui.js';
 import { HELP_LINKS } from '../help/topics.js';
 import { bindResearchUndoStep, researchUndoStep, researchUndoStepHtml, type ResearchUndoStep } from './research-undo-step.js';
+import type { SendCounts } from '../research-changes.js';
 import {
     canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel, undoResearchView, undoShown,
     type UndoLine, type UndoModel,
@@ -482,7 +483,10 @@ export const mergeHistoryMethods = uiModule({
             confirm: true, inexact: list === null,
             ...(pending.length ? {
                 merge: {
-                    lead: W.resSendLead(treeName(treeId), sum(r => r.counts.added), sum(r => r.counts.links), sum(r => r.sources.length)),
+                    // The list's numbers (134 V-N5); without an exact list, what the merges brought.
+                    lead: (c: SendCounts | null) => c
+                        ? W.resSendLeadList(treeName(treeId), c.added, c.changed, c.couples, c.sources)
+                        : W.resSendLead(treeName(treeId), sum(r => r.counts.added), sum(r => r.counts.links), sum(r => r.sources.length)),
                     note: W.resSendNote, keep: W.keepLocal, go: W.resSendGo,
                 },
             } : {}),
