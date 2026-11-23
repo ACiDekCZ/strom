@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, card, mergeCreateNewTree } from './helpers.js';
 
 /**
  * Cause, age as recorded and house at an event (person dialog, event editor,
@@ -39,8 +39,7 @@ async function setup(page: Page, width = 1440): Promise<void> {
     await page.setViewportSize({ width, height: 900 });
     await openApp(page);
     await dropFile(page, ged());
-    await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
-    await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+    await mergeCreateNewTree(page, page.locator('#merge-modal'));
     await expect(card(page, 'Jan')).toBeVisible();
 }
 

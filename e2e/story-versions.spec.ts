@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, card, mergeCreateNewTree } from './helpers.js';
 
 /**
  * A new version of an approved story (Strom Research _STORY > _DRAFT): the
@@ -280,8 +280,7 @@ test.describe('a story\'s new version', () => {
         // The same family, exported as a plain GEDCOM (no research tree behind it).
         const plain = researchGed().split('\n').filter(l => !/^1 (SOUR STROM_RESEARCH|_STROM_)/.test(l)).join('\n');
         await dropFile(page, plain);
-        await page.getByRole('button', { name: /Import as a new tree/ }).click();
-        await page.getByRole('button', { name: 'Import', exact: true }).click();
+        await mergeCreateNewTree(page, page.locator('#merge-modal'));
         await expect(card(page, 'Marie')).toBeVisible();
         expect(await page.evaluate(() => window.Strom.UI.activeResearchId())).toBeNull();
         const marie = await personId(page, 'P0002');

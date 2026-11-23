@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, seedSetting, cardBoxesMatchLayout } from './helpers.js';
+import { openApp, card, seedSetting, cardBoxesMatchLayout, mergeCreateNewTree } from './helpers.js';
 
 /**
  * The "Custom" card's height "by content" (U02 V3, the default): every card is
@@ -60,8 +60,7 @@ async function setup(page: Page, width = 1440): Promise<void> {
     await seedSetting(page, 'cardFields', { on: PRE_AGE_ON });
     await openApp(page);
     await dropFile(page, ged());
-    await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
-    await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+    await mergeCreateNewTree(page, page.locator('#merge-modal'));
     await expect(card(page, 'Ota')).toBeVisible();
     await page.evaluate(() => {
         const anna = window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Anna')!;

@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, seedSetting, cardBoxesMatchLayout } from './helpers.js';
+import { openApp, card, seedSetting, cardBoxesMatchLayout, mergeCreateNewTree } from './helpers.js';
 
 /**
  * The "Custom" card is as wide as the view's longest text (T04, T12): one
@@ -66,8 +66,7 @@ async function setupGed(page: Page, content: string, shown: string, width = 1440
     await seedSetting(page, 'cardFields', { on: PRE_AGE_ON, ...fields });
     await openApp(page);
     await dropFile(page, content);
-    await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
-    await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+    await mergeCreateNewTree(page, page.locator('#merge-modal'));
     await expect(card(page, shown)).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.body.dataset.cardDensity)).toBe('custom');
     // Measured in the card fonts: once they are in, the boxes match the layout.

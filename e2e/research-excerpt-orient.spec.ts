@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, card, mergeCreateNewTree } from './helpers.js';
 
 /**
  * A crop Strom Research sends back lies as its original is stored; its
@@ -37,8 +37,7 @@ async function setup(page: Page, orient: string | null): Promise<string> {
         return dt;
     }, ged);
     for (const type of ['dragenter', 'dragover', 'drop']) await page.dispatchEvent('#tree-container', type, { dataTransfer });
-    await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
-    await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+    await mergeCreateNewTree(page, page.locator('#merge-modal'));
     await expect(card(page, 'Anna')).toBeVisible();
     return jpeg;
 }
