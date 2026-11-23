@@ -6,7 +6,6 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
     | 'viewLinks' | 'researchEdge'> = {
     merge: {
         analyzing: 'Analizowanie osób…',
-        skippedCount: (n: number) => `pominięto: ${n}`,
         manualMatch: 'Przypisz do istniejącej',
         reanalyze: 'Analizuj ponownie',
         // "Only update existing" mode (Primitive 1)
@@ -14,14 +13,9 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         mergeViewSourceLabel: 'Bieżący widok',
         mergeViewEmpty: 'Nie ma czego scalać – bieżący widok jest pusty.',
         mergeViewNoTarget: 'Nie ma innego drzewa, z którym można scalić.',
-        complete: 'Scalanie zakończone',
         failed: 'Scalanie nie powiodło się',
-        switchToNewTree: 'Przełączyć na nowe drzewo?',
-        stats: (merged: number, added: number) =>
-            `Scalono: ${nPl(merged, 'osoba', 'osoby', 'osób')}, dodano: ${nPl(added, 'nowa osoba', 'nowe osoby', 'nowych osób')}`,
         sharedOnce: 'Raz – obie osoby w nim są.',
         sharedAttach: (n: number) => `Dołącz do wspólnego wydarzenia (${nPl(n, 'osoba', 'osoby', 'osób')}) – własna kopia jest zgodna`,
-        sharedJoined: (n: number) => `Wspólne wydarzenia: ${n} połączono`,
         noItems: 'Brak pozycji do wyświetlenia',
         selectExisting: '-- Wybierz istniejącą osobę --',
         selectExistingError: 'Wymagany jest wybór osoby',
@@ -105,9 +99,6 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         preValidationWarning: (existing: number, incoming: number) =>
             `Istniejące drzewo ma ${nPl(existing, 'problem', 'problemy', 'problemów')}, przychodzące ${incoming} – scalenie przeniesie je dalej.`,
         preValidationHint: 'Można je najpierw naprawić przez walidację.',
-        newIssuesTitle: 'Scalenie wprowadziło nowe problemy',
-        newIssues: (n: number) =>
-            `Scalenie wprowadziło ${nPl(n, 'nowy problem', 'nowe problemy', 'nowych problemów')} – otworzyć walidację?`,
 
         // Manual match dialog
         incomingPerson: 'Osoba przychodząca:',
@@ -327,8 +318,21 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         relDrop: 'z drzewa odpada (krok 4)',
         relKept: 'zostaje jak w drzewie (krok 4)',
         planPreviewCap: (name: string) => `Wycinek wokół: ${name} · nowe osoby przerywaną linią`,
-        mergedInto: (t: string) => `Zapisano do drzewa ${t}.`,
-        openTarget: (t: string) => `Otworzyć drzewo ${t}?`,
+        // Krok 6 – Co się stało (§9)
+        doneTitle: (t: string) => `Zapisano do drzewa ${t}`,
+        doneTotals: (n: number, j: number, a: number, s: number) => `Sumy się zgadzają: ${numPl(n)} ${plPl(n, 'osoba', 'osoby', 'osób')} w imporcie = ${numPl(j)} połączonych + ${numPl(a)} nowych + ${numPl(s)} niedodanych. Odwołania bez błędów.`,
+        doneBackup: 'Kopia „Przed scaleniem” jest w Kopiach.',
+        showInTree: 'Pokaż w drzewie',
+        saveAsList: 'Zapisz jako listę osób',
+        checkTree: 'Sprawdź drzewo',
+        undoMerge: 'Cofnij scalenie…',
+        listName: (src: string, d: string) => `Z ${src} ${d}`,
+        inHistory: 'Scalenie jest w historii scaleń drzewa; zestawienie można otworzyć, a scalenie cofnąć także później.',
+        noNextCard: 'Sprawdzanie danych jest tutaj (Sprawdź drzewo); karta Co dalej po tym scaleniu już się nie pokaże.',
+        subWritten: 'zapisano',
+        subDone: 'gotowe',
+        toastAdded: (n: number, t: string) => `Dodano ${nPl(n, 'osoba', 'osoby', 'osób')} do drzewa ${t}`,
+        whatHappened: 'Co się stało',
         // Krok 3 – Kogo dodać (§5)
         vAll: 'Wszyscy nowi',
         vLinked: (n: number) => `Tylko połączeni, do ${nPl(n, 'kroku', 'kroków', 'kroków')}`,

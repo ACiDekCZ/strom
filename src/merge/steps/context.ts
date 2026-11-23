@@ -6,7 +6,7 @@
 
 import type { MergeState } from '../types.js';
 import type { MergePlan, PlanCounts, ScopeExample, WizardChoices } from '../plan.js';
-import type { PartnershipId, PersonId, TreeId } from '../../types.js';
+import type { MergeRecord, PartnershipId, PersonId, TreeId } from '../../types.js';
 import type { GedcomDroppedTag } from '../../ged-parser.js';
 import type { WizardStep } from '../wizard-steps.js';
 import { strings } from '../../strings.js';
@@ -27,6 +27,25 @@ export interface StepContext {
     step1?: Step1Env;
     /** What step 5 does beyond the choices (§8). */
     step5?: Step5Env;
+    /** What step 6 says and does once the write landed (§9). */
+    step6?: Step6Env;
+}
+
+/** Step 6 of the guide: the written merge and its actions (§9). */
+export interface Step6Env {
+    /** The merge's record as the write stored it in the tree. */
+    readonly record: MergeRecord;
+    readonly treeId: TreeId;
+    /** The tree written into (or the new tree's name). */
+    readonly treeName: string;
+    /** Written into a tree that was there: the merge can be undone from here. */
+    readonly intoExisting: boolean;
+    /** A file from another program went into a tree that was there: the What next card does not follow, say so. */
+    readonly noNextCard: boolean;
+    showInTree(): void;
+    saveAsList(): void;
+    checkTree(): void;
+    undoMerge(): void;
 }
 
 /** Step 5 of the guide: Save the list… (K6.4), the plan as .txt and .json; where the write stands (§8). */

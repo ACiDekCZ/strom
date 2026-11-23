@@ -19173,6 +19173,58 @@
         @media (hover: hover) {
             .merge-s5-list > .merge-s5-row:hover { background: var(--hover-bg); }
         }
+        /*
+         * Step 6 – What happened (spec 134 §9): the check mark with when, the totals, the actions and
+         * step 5's list read only (its search kept) at the left; the research's block and where the
+         * merge stays at the right (340 px). A phone: everything under each other, the actions 2 × 2,
+         * the list's groups closed, the step scrolling as a whole.
+         */
+        .merge-step-body[data-step="6"] { display: flex; flex-direction: column; overflow: hidden; }
+        .merge-s6 { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; }
+        .merge-s6-main { min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+        .merge-s6-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+        .merge-s6-head .merge-step-title { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+        .merge-s6-ok { flex: none; display: inline-flex; color: var(--primary); }
+        .merge-s6-at { color: var(--text-light); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .merge-s6-totals { margin: 0; color: var(--text-light); font-size: 13px; line-height: 1.45; }
+        .merge-s6-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+        .modal .merge-s6 .merge-s6-act { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 3px 12px; font-size: 13px; }
+        .merge-s6-act > svg { flex: none; }
+        .merge-s6-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+        .merge-s5.is-read { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+        .merge-s5.is-read .merge-s5-head { justify-content: flex-end; }
+        .merge-s5.is-read .merge-s5-list > .merge-s5-row, .merge-s5.is-read .merge-s5-list > .merge-s5-more { padding-left: 32px; }
+        .merge-s6-side { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .merge-s6-research[hidden] { display: none; }
+        .merge-s6-research .merge-s6-acts, .merge-s6-research .row-f { flex-wrap: wrap; }
+        .merge-s6-note { margin: 0; color: var(--text-light); font-size: 12px; line-height: 1.45; }
+        @media (max-width: 1024px) {
+            .merge-s6 { grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; }
+        }
+        @media (pointer: coarse) {
+            .modal .merge-s6 .merge-s6-act { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .merge-step-body[data-step="6"] { display: block; overflow-y: auto; }
+            .merge-s6 { display: flex; flex-direction: column; gap: 12px; }
+            .merge-s6-main { display: contents; }
+            .merge-s6-side { display: contents; }
+            .merge-s6-head { order: 1; }
+            .merge-s6-totals { order: 2; }
+            .merge-s6-acts { order: 3; display: grid; grid-template-columns: 1fr 1fr; }
+            .modal .merge-s6 .merge-s6-act { min-height: 44px; padding: 4px 8px; white-space: normal; text-align: center; }
+            .merge-s6-research { order: 4; }
+            .merge-s6-list { order: 5; }
+            .merge-s6-note { order: 6; }
+            .modal .merge-s6 input.merge-s5-search, .modal .merge-s6 input.merge-s5-search[type="search"] { width: 100%; }
+            .merge-s6 .merge-s5-list { flex: none; max-height: 62vh; }
+        }
+        /* A phone held sideways: the step scrolls as a whole, the list keeps a view of its own. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-step-body[data-step="6"] { display: block; overflow-y: auto; }
+            .merge-s6 { grid-template-columns: minmax(0, 1fr) 220px; }
+            .merge-s6 .merge-s5-list { flex: none; max-height: 70vh; }
+        }
         .merge-stat.skipped .merge-stat-label { color: var(--text-faint); }
         .merge-stat.skipped .merge-stat-value { color: var(--text-faint); }
         .merge-empty {

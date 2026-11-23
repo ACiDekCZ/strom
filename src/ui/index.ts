@@ -73,6 +73,7 @@ import { relationshipsPanelMethods } from './relationships-panel.js';
 import { searchMethods } from './search.js';
 import { importExportMethods, type AfterImportOptions } from './import-export.js';
 import { mergeUiMethods } from './merge-ui.js';
+import { mergeHistoryMethods } from './merge-history-ui.js';
 import { encryptionUiMethods } from './encryption-ui.js';
 import { treeStatsMethods } from './tree-stats.js';
 import { treeManagementMethods } from './tree-management.js';
@@ -723,6 +724,10 @@ Object.assign(UIClass.prototype, importExportMethods);
 type MergeUiMethods = typeof mergeUiMethods;
 export interface UIClass extends MergeUiMethods {}
 Object.assign(UIClass.prototype, mergeUiMethods);
+
+type MergeHistoryMethods = typeof mergeHistoryMethods;
+export interface UIClass extends MergeHistoryMethods {}
+Object.assign(UIClass.prototype, mergeHistoryMethods);
 
 type EncryptionUiMethods = typeof encryptionUiMethods;
 export interface UIClass extends EncryptionUiMethods {}

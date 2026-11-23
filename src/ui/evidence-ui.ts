@@ -37,7 +37,7 @@ import { overviewChanged } from '../windows/overview-window.js';
 
 /** A highlighted group of people: what it is, who, and where Next › stands. */
 interface Highlight {
-    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction' | 'direction-found' | 'ancestorGap' | 'selection';
+    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction' | 'direction-found' | 'ancestorGap' | 'selection' | 'merged';
     label: string;
     ids: PersonId[];
     index: number;

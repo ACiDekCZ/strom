@@ -183,6 +183,18 @@ function started(): MergeState {
     return state;
 }
 
+/** What `read` says at the moment step 6 is shown (the write's success said). */
+function successSeen<T>(read: () => T): () => T | undefined {
+    const wizard = (MergerUI as unknown as { wizard: { showDone(...a: unknown[]): void } }).wizard;
+    const original = wizard.showDone.bind(wizard);
+    let seen: T | undefined;
+    vi.spyOn(wizard, 'showDone').mockImplementationOnce((...a: unknown[]) => {
+        seen = read();
+        original(...a);
+    });
+    return () => seen;
+}
+
 /**
  * The guide's step 5 pressed: its comparison done, the plan of the answers
  * written into the target itself (Where to write, preselected) or a new tree
@@ -307,42 +319,49 @@ describe('K0.5 · success only after the written tree', () => {
 
         expect(ui.alerts).toEqual([]);
         expect(writeStatus()).toEqual({ kind: 'failed', message: strings.merge.saveFailed });
-        expect(ui.confirms.some(m => m.includes(strings.merge.complete))).toBe(false);
+        expect(ui.confirms).toEqual([]);
+        expect(state.wizard?.step).toBe(5);
         expect(TreeManager.getTrees().map(t => t.id)).toEqual([T1, T2]);
         expect([...st('merge').keys()].some(k => k.startsWith('backup-'))).toBe(true);
         expect(internals().mergeState).toBe(state);
         expect(state.phase).toBe('reviewing');
     });
 
-    it('a write into the tree that lands: the tree is stored before success is said, the working backup goes', async () => {
-        started();
-        let storedAtSuccess: string[] = [];
-        ui.showAlert.mockImplementationOnce(async (m: string) => {
-            ui.alerts.push(m);
-            storedAtSuccess = storedNames(T1);
-        });
+    it('a write into the tree that lands: the tree is stored before step 6 says it, the working backup goes', async () => {
+        const state = started();
+        const storedAtSuccess = successSeen(() => storedNames(T1));
         await writePlan();
 
-        expect(ui.alerts).toEqual([expect.stringContaining(strings.mergeWizard.mergedInto('Family'))]);
-        expect(storedAtSuccess).toEqual(['Alma', 'Berta', 'Cecilie']);
+        expect(ui.alerts).toEqual([]);
+        expect(storedAtSuccess()).toEqual(['Alma', 'Berta', 'Cecilie']);
+        expect(state.wizard?.step).toBe(6);
+        expect(state.wizard?.choices.writtenAt).toBeTruthy();
         expect([...st('merge').keys()].some(k => k.startsWith('backup-'))).toBe(false);
         expect(TreeManager.getTrees()).toHaveLength(2);
-        expect(internals().mergeState).toBeNull();
+        // Step 6 stands until Done; Done closes it with the toast (10g), no "What next" card.
+        expect(internals().mergeState).toBe(state);
+        MergerUI.closeMergeModal();
+        await vi.waitFor(() => expect(internals().mergeState).toBeNull());
+        expect(ui.showToast).toHaveBeenCalledWith(strings.mergeWizard.toastAdded(1, 'Family'), expect.any(Number), expect.anything());
+        expect(ui.afterImport).not.toHaveBeenCalled();
     });
 
-    it('a new tree that lands: the tree is stored before success is said, the working backup goes', async () => {
-        started();
-        let storedAtSuccess = false;
-        ui.showConfirm.mockImplementationOnce(async (m: string) => {
-            ui.confirms.push(m);
+    it('a new tree that lands: the tree is stored before step 6 says it, the working backup goes', async () => {
+        const state = started();
+        const storedAtSuccess = successSeen(() => {
             const id = TreeManager.getTrees().find(t => t.name === 'Family + cousins')?.id;
-            storedAtSuccess = !!id && st('trees').has(id);
-            return false;
+            return !!id && st('trees').has(id);
         });
         await writePlan('new');
 
         expect(ui.alerts).toEqual([]);
-        expect(storedAtSuccess).toBe(true);
+        expect(ui.confirms).toEqual([]);
+        expect(storedAtSuccess()).toBe(true);
+        expect(state.wizard?.step).toBe(6);
+        // Done: Manage trees shows the new tree, nothing asked.
+        MergerUI.closeMergeModal();
+        await vi.waitFor(() => expect(ui.showTreeManagerDialog).toHaveBeenCalled());
+        expect(ui.confirms).toEqual([]);
         expect([...st('merge').keys()].some(k => k.startsWith('backup-'))).toBe(false);
         expect(TreeManager.getTrees()).toHaveLength(3);
         expect(storedNames(T1)).toEqual(['Alma', 'Berta']);

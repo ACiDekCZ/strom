@@ -6178,7 +6178,6 @@ const stringsEN = {
     // Merge import
     merge: {
         analyzing: 'Analyzing people…',
-        skippedCount: (n: number) => `${n} skipped`,
         manualMatch: 'Match to existing',
         reanalyze: 'Re-analyze',
         // "Update existing only" mode (Primitive 1)
@@ -6186,17 +6185,12 @@ const stringsEN = {
         mergeViewSourceLabel: 'Current view',
         mergeViewEmpty: 'Nothing to merge — the current view is empty.',
         mergeViewNoTarget: 'No other tree to merge into.',
-        complete: 'Merge complete',
         failed: 'Merge failed',
-        switchToNewTree: 'Switch to the new tree?',
-        stats: (merged: number, added: number) =>
-            `${merged} merged, ${nEn(added, 'new person', 'new people')} added`,
         /** A shared event both merged records are in (spec 085 §7). */
         sharedOnce: 'Once – both are in it.',
         /** A shared event one record is in while the other has the same event of its own. */
         sharedAttach: (n: number) => `Attach to the shared event (${nEn(n, 'person', 'people')}) – the own copy matches`,
         /** The tree merge's summary: shared events found in both trees and joined. */
-        sharedJoined: (n: number) => `Shared events: ${n} joined`,
         noItems: 'No items to display',
         selectExisting: '-- Select existing person --',
         selectExistingError: 'Please select a person',
@@ -6280,9 +6274,6 @@ const stringsEN = {
         preValidationWarning: (existing: number, incoming: number) =>
             `Existing tree has ${existing} issue${existing === 1 ? '' : 's'}, incoming ${incoming} — merging will carry them over.`,
         preValidationHint: 'They can be fixed first via validation.',
-        newIssuesTitle: 'Merge introduced new issues',
-        newIssues: (n: number) =>
-            `Merge introduced ${n} new issue${n === 1 ? '' : 's'} — open validation?`,
 
         // Manual match dialog
         incomingPerson: 'Incoming person:',
@@ -6512,8 +6503,21 @@ const stringsEN = {
         relDrop: 'of the tree goes (step 4)',
         relKept: 'kept as in the tree (step 4)',
         planPreviewCap: (name: string) => `Around ${name} · new people dashed`,
-        mergedInto: (t: string) => `Written into the tree ${t}.`,
-        openTarget: (t: string) => `Open the tree ${t}?`,
+        // Step 6 – What happened (§9)
+        doneTitle: (t: string) => `Written into the tree ${t}`,
+        doneTotals: (n: number, j: number, a: number, s: number) => `The totals match: ${numEn(n)} ${plural('en', n, 'person', 'people')} in the import = ${numEn(j)} joined + ${numEn(a)} new + ${numEn(s)} not added. No broken links.`,
+        doneBackup: 'The backup “Before merge” is in Backups.',
+        showInTree: 'Show in the tree',
+        saveAsList: 'Save as a list of people',
+        checkTree: 'Check the tree',
+        undoMerge: 'Undo the merge…',
+        listName: (src: string, d: string) => `From ${src} ${d}`,
+        inHistory: 'The merge is in the tree’s merge history; the list can be opened and the merge undone later too.',
+        noNextCard: 'The data check is here (Check the tree); the What next card does not show after this merge.',
+        subWritten: 'written',
+        subDone: 'done',
+        toastAdded: (n: number, t: string) => `${nEn(n, 'person', 'people')} added to the tree ${t}`,
+        whatHappened: 'What happened',
         // Step 3 – Whom to add (§5)
         vAll: 'All new',
         vLinked: (n: number) => `Only linked, within ${nEn(n, 'step', 'steps')}`,
@@ -17297,7 +17301,6 @@ const stringsCZ: StringsType = {
     // Merge import
     merge: {
         analyzing: 'Analyzují se osoby…',
-        skippedCount: (n: number) => `${n} přeskočeno`,
         manualMatch: 'Přiřadit k existující',
         reanalyze: 'Znovu analyzovat',
         // Režim „jen doplnit existující“ (Primitive 1)
@@ -17305,14 +17308,9 @@ const stringsCZ: StringsType = {
         mergeViewSourceLabel: 'Aktuální pohled',
         mergeViewEmpty: 'Není co sloučit — aktuální pohled je prázdný.',
         mergeViewNoTarget: 'Není jiný strom, do kterého sloučit.',
-        complete: 'Sloučení dokončeno',
         failed: 'Sloučení selhalo',
-        switchToNewTree: 'Přepnout na nový strom?',
-        stats: (merged: number, added: number) =>
-            `Sloučeno: ${nCs(merged, 'osoba', 'osoby', 'osob')}, přidáno: ${nCs(added, 'nová osoba', 'nové osoby', 'nových osob')}`,
         sharedOnce: 'Jednou – je u obou.',
         sharedAttach: (n: number) => `Připojit ke společné události (${nCs(n, 'osoba', 'osoby', 'osob')}) – vlastní kopie se shoduje`,
-        sharedJoined: (n: number) => `Sdílené události: ${n} spojeno`,
         noItems: 'Žádné položky k zobrazení',
         selectExisting: '-- Vybrat existující osobu --',
         selectExistingError: 'Je potřeba vybrat osobu',
@@ -17396,9 +17394,6 @@ const stringsCZ: StringsType = {
         preValidationWarning: (existing: number, incoming: number) =>
             `Stávající strom má ${existing} ${plural('cs', existing, 'problém', 'problémy', 'problémů')}, příchozí ${incoming} — sloučením se přenesou dál.`,
         preValidationHint: 'Je možné je nejdřív opravit přes validaci.',
-        newIssuesTitle: 'Sloučení přineslo nové problémy',
-        newIssues: (n: number) =>
-            `Sloučení přineslo ${n} ${plural('cs', n, 'nový problém', 'nové problémy', 'nových problémů')} — otevřít validaci?`,
 
         // Manual match dialog
         incomingPerson: 'Příchozí osoba:',
@@ -17625,8 +17620,21 @@ const stringsCZ: StringsType = {
         relDrop: 'ze stromu odpadne (krok 4)',
         relKept: 'zůstane podle stromu (krok 4)',
         planPreviewCap: (name: string) => `Výřez kolem: ${name} · nové osoby čárkovaně`,
-        mergedInto: (t: string) => `Zapsáno do stromu ${t}.`,
-        openTarget: (t: string) => `Otevřít strom ${t}?`,
+        // Krok 6 – Co se stalo (§9)
+        doneTitle: (t: string) => `Zapsáno do stromu ${t}`,
+        doneTotals: (n: number, j: number, a: number, s: number) => `Součty sedí: ${numCs(n)} ${plural('cs', n, 'osoba', 'osoby', 'osob')} importu = ${numCs(j)} spojených + ${numCs(a)} nových + ${numCs(s)} nepřidaných. Odkazy bez chyb.`,
+        doneBackup: 'Záloha „Před sloučením“ je v Zálohách.',
+        showInTree: 'Ukázat ve stromu',
+        saveAsList: 'Uložit jako seznam osob',
+        checkTree: 'Zkontrolovat strom',
+        undoMerge: 'Odvolat sloučení…',
+        listName: (src: string, d: string) => `Z ${src} ${d}`,
+        inHistory: 'Sloučení je v Historii sloučení stromu; výčet jde otevřít a sloučení odvolat i později.',
+        noNextCard: 'Kontrola dat je tady (Zkontrolovat strom), karta Co teď se po tomto sloučení už neukáže.',
+        subWritten: 'zapsáno',
+        subDone: 'hotovo',
+        toastAdded: (n: number, t: string) => `Přidáno ${nCs(n, 'osoba', 'osoby', 'osob')} do stromu ${t}`,
+        whatHappened: 'Co se stalo',
         // Krok 3 – Koho přidat (§5)
         vAll: 'Všichni noví',
         vLinked: (n: number) => `Jen napojení, do ${nCs(n, 'kroku', 'kroků', 'kroků')}`,
@@ -28265,20 +28273,14 @@ const stringsDE: StringsType = {
     // Merge import
     merge: {
         analyzing: 'Personen werden analysiert…',
-        skippedCount: (n: number) => `${n} übersprungen`,
         manualMatch: 'Mit Vorhandener abgleichen',
         reanalyze: 'Neu analysieren',
         mergeViewSourceLabel: 'Aktuelle Ansicht',
         mergeViewEmpty: 'Nichts zusammenzuführen — die aktuelle Ansicht ist leer.',
         mergeViewNoTarget: 'Kein anderer Stammbaum zum Zusammenführen.',
-        complete: 'Zusammenführen abgeschlossen',
         failed: 'Zusammenführen fehlgeschlagen',
-        switchToNewTree: 'Zum neuen Stammbaum wechseln?',
-        stats: (merged: number, added: number) =>
-            `${nDe(merged, 'Person', 'Personen')} zusammengeführt, ${nDe(added, 'neue Person', 'neue Personen')} hinzugefügt`,
         sharedOnce: 'Einmal – beide sind dabei.',
         sharedAttach: (n: number) => `Dem gemeinsamen Ereignis anschließen (${nDe(n, 'Person', 'Personen')}) – die eigene Kopie stimmt überein`,
-        sharedJoined: (n: number) => `Gemeinsame Ereignisse: ${n} zusammengeführt`,
         noItems: 'Keine Einträge zum Anzeigen',
         selectExisting: '-- Vorhandene Person auswählen --',
         selectExistingError: 'Bitte eine Person wählen',
@@ -28355,9 +28357,6 @@ const stringsDE: StringsType = {
         preValidationWarning: (existing: number, incoming: number) =>
             `Der vorhandene Stammbaum hat ${existing} ${existing === 1 ? 'Problem' : 'Probleme'}, der neue ${incoming} — beim Zusammenführen werden sie übernommen.`,
         preValidationHint: 'Diese lassen sich zuerst über die Prüfung beheben.',
-        newIssuesTitle: 'Zusammenführen hat neue Probleme verursacht',
-        newIssues: (n: number) =>
-            `Zusammenführen hat ${n} ${n === 1 ? 'neues Problem' : 'neue Probleme'} verursacht — Prüfung öffnen?`,
 
         incomingPerson: 'Neue Person:',
 
@@ -28579,8 +28578,21 @@ const stringsDE: StringsType = {
         relDrop: 'aus dem Stammbaum entfällt (Schritt 4)',
         relKept: 'bleibt wie im Stammbaum (Schritt 4)',
         planPreviewCap: (name: string) => `Ausschnitt um: ${name} · neue Personen gestrichelt`,
-        mergedInto: (t: string) => `In den Stammbaum ${t} geschrieben.`,
-        openTarget: (t: string) => `Stammbaum ${t} öffnen?`,
+        // Schritt 6 – Was passiert ist (§9)
+        doneTitle: (t: string) => `In den Stammbaum ${t} geschrieben`,
+        doneTotals: (n: number, j: number, a: number, s: number) => `Die Summen stimmen: ${numDe(n)} ${plural('de', n, 'Person', 'Personen')} im Import = ${numDe(j)} verbunden + ${numDe(a)} neu + ${numDe(s)} nicht übernommen. Keine fehlerhaften Verweise.`,
+        doneBackup: 'Die Sicherung „Vor dem Zusammenführen“ ist unter Sicherungen.',
+        showInTree: 'Im Stammbaum zeigen',
+        saveAsList: 'Als Personenliste speichern',
+        checkTree: 'Stammbaum prüfen',
+        undoMerge: 'Zusammenführung zurücknehmen…',
+        listName: (src: string, d: string) => `Aus ${src} ${d}`,
+        inHistory: 'Die Zusammenführung steht im Verlauf der Zusammenführungen; die Liste lässt sich später öffnen und die Zusammenführung zurücknehmen.',
+        noNextCard: 'Die Datenprüfung ist hier (Stammbaum prüfen); die Karte Wie weiter erscheint nach dieser Zusammenführung nicht mehr.',
+        subWritten: 'geschrieben',
+        subDone: 'fertig',
+        toastAdded: (n: number, t: string) => `${nDe(n, 'Person', 'Personen')} zum Stammbaum ${t} hinzugefügt`,
+        whatHappened: 'Was passiert ist',
         // Schritt 3 – Wen hinzufügen (§5)
         vAll: 'Alle neuen',
         vLinked: (n: number) => `Nur verbundene, bis ${nDe(n, 'Schritt', 'Schritte')}`,
