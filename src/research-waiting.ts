@@ -752,6 +752,9 @@ const DATED = [
     /(?<!\p{Nd})(?:19|20)[0-9]{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01])(?!\p{Nd})/u,
 ];
 
+/** Four digits that look like a year (1500–2099): of a name with other numbers too, not taken by rule 5 when which images is not known. */
+const YEAR = /^(?:1[5-9]|20)[0-9]{2}$/u;
+
 /** The image numbers of files' names, and the files whose name gives two images asked for (not guessed). */
 export interface ImageNamesRead {
     numbers: (number | null)[];
@@ -772,7 +775,8 @@ export interface ImageNamesRead {
  *   4. the one zero-padded counter of three digits at least among other
  *      numbers ("…_00141_sign-4411.jpg");
  *   5. the last number before the extension — an image asked for, or any when
- *      which ones is not known.
+ *      which ones is not known but one that looks like a year (YEAR: "33 1784"
+ *      is not guessed).
  * A name with a date (a screenshot's "2026-11-04 10.07") only by 1 and 4;
  * digits of another script are not read. A number outside 1–999999: none.
  */
@@ -813,8 +817,12 @@ export function readImageNumbers(names: readonly string[], want?: readonly numbe
         // 4. A counter of three digits at least (a date's "04", a time's "07" are no counter).
         const padded = groups.filter(g => g.length > 2 && g.startsWith('0'));
         if (padded.length === 1) numbers[i] = Number(padded[0]);
-        // 5. The last number before the extension, never of a date.
-        else if (!dated && asked(Number(groups[groups.length - 1]))) numbers[i] = Number(groups[groups.length - 1]);
+        // 5. The last number before the extension, never of a date; which images not known,
+        // never one that looks like a year among other numbers ("33 1784", "kniha_33_1784").
+        else {
+            const last = groups[groups.length - 1];
+            if (!dated && asked(Number(last)) && (known || !YEAR.test(last))) numbers[i] = Number(last);
+        }
     });
     return { numbers: numbers.map(v => v === undefined ? null : imageNumber(v)), ambiguous };
 }

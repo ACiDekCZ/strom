@@ -243,6 +243,29 @@ describe('files given their numbers (§3)', () => {
         expect(readImageNumbers(['0012_0236.jpg'], [12, 236])).toEqual({ numbers: [null], ambiguous: [{ index: 0, numbers: [12, 236] }] });
     });
 
+    it('a year after the image number is not taken for it when which images is not known (the research\'s YEAR)', () => {
+        // Before: "kniha 33 1784.jpg" without the images asked for read as image 1784.
+        const table: [string, number[] | undefined, number | null][] = [
+            ['kniha 33 1784.jpg', undefined, null],
+            ['33 1784.jpg', undefined, null],
+            ['kniha_33_1784.jpg', undefined, null],
+            ['Lhota_33_1850.jpg', undefined, null],
+            ['scan 7 1850.png', undefined, null],
+            ['1784 33.jpg', undefined, 33],
+            ['Lhota 1784-1830 33.jpg', undefined, 33],
+            ['kniha 33 1784.jpg', [1784], 1784],
+            ['kniha 33 1784.jpg', [33], 33],
+            ['33 1784.jpg', [33], 33],
+            ['Lhota_33_1850.jpg', [33], 33],
+            ['scan 7 1850.png', [1850], 1850],
+            ['kniha 33 1499.jpg', undefined, 1499],
+            ['kniha 33 2100.jpg', undefined, 2100],
+        ];
+        for (const [name, want, n] of table) expect(imageNumberOfName(name, want), `${name} (want ${want ?? '—'})`).toBe(n);
+        // Read together, the number that changes from file to file still wins.
+        expect(readImageNumbers(['33 1784.jpg', '34 1784.jpg']).numbers).toEqual([33, 34]);
+    });
+
     it('a screenshot sent for a task goes by order, not as the image of its time', () => {
         // Before: "2026-11-04 10.07.jpg" read as image 7.
         const r = assignImages([f('2026-11-04 10.07.jpg')], [7], []);
