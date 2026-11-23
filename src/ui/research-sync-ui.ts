@@ -2000,7 +2000,7 @@ export const researchSyncMethods = uiModule({
         // Only the research's owner writes to it: never a copy, a second tree of the same research, nor the
         // sample tree (a tie it got before 3.29 included; spec 139 K5.1).
         if (!TreeManager.canSendToResearch(treeId)) {
-            console.warn('Not sending a tree that does not own its research', treeId);
+            console.warn(meta?.demo ? 'Not sending the sample tree to a research' : 'Not sending a tree that does not own its research', treeId);
             return;
         }
         const s = strings.sync;
