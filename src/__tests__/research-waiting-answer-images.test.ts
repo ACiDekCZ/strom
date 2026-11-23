@@ -11,7 +11,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { LiveWaiting, sanitizeAccepts, sanitizeWaiting, sanitizeWaitingInbox, researchLinkMark } from '../research-link.js';
 import {
-    IMAGES_ORDER, WaitActionView, assignImages, imageNumberOfName, imageRanges, imageSlotOptions, imagesArrived, imagesState, inboxNumbers,
+    IMAGES_ORDER, WaitActionView, assignImages, imageNumberOfName, readImageNumbers, imageRanges, imageSlotOptions, imagesArrived, imagesState, inboxNumbers,
     parseImageRanges, splitWaitingActions, taskImageProblem, waitingActions, waitingGroupMissing, waitingTaskActions,
 } from '../research-waiting.js';
 import {
@@ -192,6 +192,64 @@ describe('files given their numbers (§3)', () => {
         expect(imageNumberOfName('scan.jpg')).toBeNull();
         expect(imageNumberOfName('Snímek 20261104.png')).toBeNull();
         expect(imageNumberOfName('0000.jpg')).toBeNull();
+    });
+
+    // The research's table (core/inboxwait.ts readNumbers, 1123): the app reads a name as the research does.
+    it('the number of the name by the research\'s rules: a screenshot\'s date and time is never one', () => {
+        const table: [string, number[] | undefined, number | null][] = [
+            ['236.jpg', [236], 236],
+            ['__0236.jpg', [236], 236],
+            ['0236.jpg', [236], 236],
+            ['IMG_0236.jpg', [236], 236],
+            ['snímek 236.jpg', [236], 236],
+            ['snímek 236.jpg'.normalize('NFD'), [236], 236],
+            ['236 (1).jpg', [236], 236],
+            ['CZ-SOA_1784_0236.jpg', [236], 236],
+            ['fond12_kniha3_236.jpg', [236], 236],
+            ['0012_0236.jpg', [236], 236],
+            // which images not known: the last number before the extension
+            ['fond12_kniha3_236.jpg', undefined, 236],
+            ['0012_0236.jpg', undefined, 236],
+            ['Lhota 1850 33.jpg', undefined, 33],
+            // the portal pads to three digits only
+            ['Lhota_11__025.jpg', [25], 25],
+            ['Lhota_11__125.jpg', [125], 125],
+            ['Lhota_11__1025.jpg', [1025], 1025],
+            ['Lhota_11__125.jpg', undefined, 125],
+            // the last number only when it is an image asked for
+            ['Lhota 1850 33.jpg', [40], null],
+            // a screenshot's date and time: never, whatever is asked for
+            ['2026-11-04 10.07.jpg', [7], null],
+            ['2026-11-04 10.07.jpg', [11], null],
+            ['2026-11-04 10.07.jpg', undefined, null],
+            ['Snímek obrazovky 2026-11-04 v 10.07.23.png'.normalize('NFD'), [23], null],
+            ['Screenshot 17.11.2026 10-21.png', [21], null],
+            ['Screenshot_20261117-102147.png', [102147], null],
+            // digits of another script: not read as a number
+            ['٢٣٦.jpg', [236], null],
+            ['Снимок 236.jpg', [236], 236],
+        ];
+        for (const [name, want, n] of table) expect(imageNumberOfName(name, want), `${name} (want ${want ?? '—'})`).toBe(n);
+        for (const ext of ['.jpg', '.jpeg', '.JPG', '.JPEG', '.PNG', '.png', '.tif', '.TIFF']) {
+            expect(imageNumberOfName(`__0236${ext}`, [236])).toBe(236);
+            expect(imageNumberOfName(`Lhota_11__125${ext}`, [125])).toBe(125);
+        }
+    });
+
+    it('names read together: the number that changes from file to file; two images asked for in one name not guessed', () => {
+        expect(readImageNumbers(['Lhota_11__025.jpg', 'Lhota_11__026.jpg', 'Lhota_11__125.jpg', 'Lhota_11__1025.jpg']).numbers).toEqual([25, 26, 125, 1025]);
+        expect(readImageNumbers(['Lhota 1850 33.jpg', 'Lhota 1851 34.jpg']).numbers).toEqual([33, 34]);
+        expect(readImageNumbers(['a_7_10.jpg', 'a_8_11.jpg'], [40]).numbers).toEqual([null, null]);
+        expect(readImageNumbers(['0012_0236.jpg'], [12, 236])).toEqual({ numbers: [null], ambiguous: [{ index: 0, numbers: [12, 236] }] });
+    });
+
+    it('a screenshot sent for a task goes by order, not as the image of its time', () => {
+        // Before: "2026-11-04 10.07.jpg" read as image 7.
+        const r = assignImages([f('2026-11-04 10.07.jpg')], [7], []);
+        expect(r.files.map(a => [a.nameNum, a.num, a.how, a.unwanted])).toEqual([[null, 7, 'order', false]]);
+        const two = assignImages([f('2026-11-04 10.07.jpg'), f('2026-11-04 10.09.jpg')], [7, 11, 12], []);
+        expect(two.files.map(a => [a.nameNum, a.num, a.how])).toEqual([[null, null, null], [null, null, null]]);
+        expect(two.needAssign).toBe(2);
     });
 
     it('by name when asked for and free; the rest in order only when the counts match', () => {
