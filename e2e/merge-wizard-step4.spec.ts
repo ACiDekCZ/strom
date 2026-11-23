@@ -166,8 +166,16 @@ test('step 4: the rule tiles, a kind\'s rule, By person with where each result c
     // 7d: Ctiboh's other parents from the import; the loop can only be kept.
     await wizard.locator('#merge-s4-tab-rels').click();
     const parents = wizard.locator('.merge-s4-rel[data-rel-kind="parents"]').filter({ hasText: 'Ctiboh' });
-    await expect(parents).toContainText('Budivoj Modřín + Libuna Modřínová');
-    await expect(parents).toContainText('Radhost Jilm + Mstislava Jilmová');
+    // Each side with the years, the import's persons new to the tree marked so (N1 of part B's check):
+    // parents of the same names stay told apart.
+    await expect(parents).toContainText('Budivoj Modřín (* 1880) + Libuna Modřínová (* 1885)');
+    await expect(parents).toContainText('Radhost Jilm (* 1870, new) + Mstislava Jilmová (* 1872, new)');
+    // The choice keeps its own width (7d), not the row's (N2).
+    const widths = await parents.evaluate(el => ({
+        row: el.getBoundingClientRect().width,
+        seg: el.querySelector('.sel-seg')!.getBoundingClientRect().width,
+    }));
+    expect(widths.seg).toBeLessThan(widths.row * 0.75);
     await parents.getByRole('radio', { name: 'From the import' }).click();
     await expect(wizard.locator('.merge-s4-rel[data-rel-kind="parents"]').filter({ hasText: 'Ctiboh' }).getByRole('radio', { name: 'From the import' })).toHaveAttribute('aria-checked', 'true');
     const loop = wizard.locator('.merge-s4-rel[data-rel-kind="loop"]');

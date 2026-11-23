@@ -18981,6 +18981,8 @@
         .merge-s4-rel-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
         .merge-s4-loop { color: var(--error-text); font-size: 12px; }
         .merge-s4-rel-sides { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2px 14px; font-size: 13px; }
+        /* The choice keeps its own width (7d); a phone stretches it (below). */
+        .merge-s4-rel > .sel-seg { align-self: flex-start; max-width: 100%; }
         .merge-s4-side { color: var(--text-light); }
         .merge-s4-skip-t { margin: 0; font-size: 14px; font-weight: 600; }
         .merge-s4-diffs { margin: 0; padding-left: 18px; font-size: 12.5px; max-height: 50vh; overflow-y: auto; }
