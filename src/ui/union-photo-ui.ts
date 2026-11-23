@@ -10,6 +10,7 @@
  * writes at once as one undo step with its own toast and Undo.
  */
 
+import { wireImageDownload } from './image-file.js';
 import { DataManager } from '../data.js';
 import { PartnershipId, Person, PersonId } from '../types.js';
 import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
@@ -246,8 +247,7 @@ export const unionPhotoMethods = uiModule({
                 const foot = h('div', 'mv-foot');
                 const actions = h('div', 'mv-actions');
                 const a = h('a', 'mv-act', strings.materials.download);
-                a.href = photo;
-                a.download = fresh?.photoOriginalName || 'photo.jpg';
+                wireImageDownload(a, photo, fresh?.photoOriginalName || 'photo.jpg');
                 a.dataset.action = 'download';
                 actions.appendChild(a);
                 if (!opts.readOnly && fresh?.photo === photo && portraitPartners(pid).length) {

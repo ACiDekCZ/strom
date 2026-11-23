@@ -11,6 +11,7 @@
  * today's file picker straight away.
  */
 
+import { imgSrcAttr } from '../image-src.js';
 import { DataManager } from '../data.js';
 import { PersonId, Person, PortraitCrop } from '../types.js';
 import { strings } from '../strings.js';
@@ -107,7 +108,7 @@ function tileHtml(c: PortraitCandidate, v: PortraitPickerView, first: boolean): 
     } else if (failed) {
         img = `<span class="portrait-pick-img is-failed">${tileFailedHtml(TILE_PX)}${tag}</span>`;
     } else if (c.image) {
-        img = `<span class="portrait-pick-img"><img src="${esc(c.image)}" alt="">${tag}${over}</span>`;
+        img = `<span class="portrait-pick-img"><img ${imgSrcAttr(c.image)} alt="">${tag}${over}</span>`;
     } else {
         const ready = c.sha ? v.thumbs?.urlOf(c.sha, px) : null;
         const veil = !ready && c.sha && v.thumbs?.isWaiting(c.sha, px) ? ' data-img-state="loading"' : '';

@@ -6,6 +6,8 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { imgSrcAttr } from '../image-src.js';
+import { openPdfValue } from './image-file.js';
 import { researchActionLabel, researchMarkFlags } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { DataManager } from '../data.js';
@@ -20,7 +22,7 @@ import { canEditPortrait } from './portrait-actions-ui.js';
 import { ORIGINAL_ONLY_DATA_URL } from '../validation.js';
 import {
     compressImageAttachment, readFileAsDataUrl, personMedia,
-    MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES, pdfBlobFromDataUrl,
+    MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES,
 } from '../attachments.js';
 import { uiModule } from './module.js';
 import { openImageViewer, ViewerOriginal } from './image-viewer.js';
@@ -150,7 +152,7 @@ export const attachmentsMethods = uiModule({
                         </div>
                     </div>`;
                 const thumb = isImage(att)
-                    ? `<span class="attachment-thumb" data-attachment-id="${esc(att.id)}"><img src="${esc(att.dataUrl)}" alt=""></span>`
+                    ? `<span class="attachment-thumb" data-attachment-id="${esc(att.id)}"><img ${imgSrcAttr(att.dataUrl)} alt=""></span>`
                     : `<span class="attachment-thumb" title="PDF" data-attachment-id="${esc(att.id)}">${iconSvg('file', { size: 18 })}</span>`;
                 // The note: a field on a phone's row; elsewhere its text (the Attachment dialog changes it).
                 const noteField = locked
@@ -364,16 +366,9 @@ export const attachmentsMethods = uiModule({
             const mode = this.fullQualityMode(sha, att.original?.mimeType ?? '', att.original?.bytes ?? 0);
             openImageViewer(att.dataUrl, undefined, mode === 'app' && sha ? this.viewerOriginal(sha) : undefined);
         } else {
-            // Only a PDF is ever opened, and always as application/pdf.
-            const blob = pdfBlobFromDataUrl(att.dataUrl, att.mimeType);
-            if (!blob) {
-                this.showAlert(strings.attachments.unsupportedType, 'warning');
-                return;
-            }
-            const url = URL.createObjectURL(blob);
-            window.open(url, '_blank');
-            // The tab keeps its own reference; revoke shortly after.
-            setTimeout(() => URL.revokeObjectURL(url), 60_000);
+            // Only a PDF is ever opened, and always as application/pdf (the tab keeps its own reference; revoked shortly after).
+            const unsupported = () => this.showAlert(strings.attachments.unsupportedType, 'warning');
+            if (!openPdfValue(att.dataUrl, att.mimeType, unsupported, 60_000)) unsupported();
         }
     },
 

@@ -30,7 +30,9 @@ import {
 } from '../materials.js';
 import { iconSvg } from '../icons.js';
 import { detailsKeys, materialDetailsEdit, materialDetailsFields, materialDetailsOf } from './material-details-ui.js';
-import { attachmentResizeState, pdfBlobFromDataUrl } from '../attachments.js';
+import { attachmentResizeState } from '../attachments.js';
+import { isPoolRef } from '../image-ref.js';
+import { openPdfValue, wireImageDownload } from './image-file.js';
 import { formatBytesShort } from './originals-ui.js';
 import { openViewerList, closeImageViewer, viewerListOpen, viewerListIndex, redrawViewerList, relayoutViewer, goViewerList, ViewerSlots } from './image-viewer.js';
 import { MaterialOpenCtx, MaterialsContext, appendBreakable, materialItemSha, materialTileLetters, treeAttachmentsKey } from './materials-ui.js';
@@ -192,13 +194,9 @@ export function attachmentPdf(item: MaterialItem): { dataUrl: string; mimeType: 
     return att && !att.originalOnly && att.dataUrl && !isPendingImageUrl(att.dataUrl) && att.mimeType === 'application/pdf' ? { dataUrl: att.dataUrl, mimeType: att.mimeType } : null;
 }
 
+/** Open the tree's PDF (a data URL, or a pooled one read as a Blob) in a new tab; false: not a PDF to open. */
 export function openPdfBlob(pdf: { dataUrl: string; mimeType: string }): boolean {
-    const blob = pdfBlobFromDataUrl(pdf.dataUrl, pdf.mimeType);
-    if (!blob) return false;
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), PDF_URL_LIFETIME_MS);
-    return true;
+    return openPdfValue(pdf.dataUrl, pdf.mimeType, undefined, PDF_URL_LIFETIME_MS);
 }
 
 function releaseUrls(state: ViewerState | null): void {
@@ -830,21 +828,25 @@ export const materialViewerMethods = uiModule({
         };
         const download = (href: string, file: string) => {
             const a = h('a', 'mv-act', m.download);
+            a.dataset.action = 'download';
+            // The tree's own copy: a data URL as the link, a pooled one saved from its bytes on the click.
+            if (href.startsWith('data:') || isPoolRef(href)) {
+                wireImageDownload(a, href, file);
+                actions.appendChild(a);
+                return;
+            }
             a.href = href;
             a.download = file;
-            a.dataset.action = 'download';
-            if (!href.startsWith('data:')) {
-                a.target = '_blank';
-                a.rel = 'noopener';
-                // Another origin: the link alone would only open it (it stays for a middle click or a copy).
-                a.addEventListener('click', (e) => {
-                    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-                    e.preventDefault();
-                    if (a.getAttribute('aria-busy') === 'true') return;
-                    a.setAttribute('aria-busy', 'true');
-                    void downloadFromBridge(href, file).finally(() => a.removeAttribute('aria-busy'));
-                });
-            }
+            a.target = '_blank';
+            a.rel = 'noopener';
+            // Another origin: the link alone would only open it (it stays for a middle click or a copy).
+            a.addEventListener('click', (e) => {
+                if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+                e.preventDefault();
+                if (a.getAttribute('aria-busy') === 'true') return;
+                a.setAttribute('aria-busy', 'true');
+                void downloadFromBridge(href, file).finally(() => a.removeAttribute('aria-busy'));
+            });
             actions.appendChild(a);
         };
         // Link to… (spec 102 §4): the tree's file in the tree; material outside it needs the bridge (Q2).

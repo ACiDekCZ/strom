@@ -22,6 +22,8 @@ import { strings } from '../strings.js';
 import { EXCERPT_MAX_SIDE, EXCERPT_QUALITY } from '../excerpts.js';
 import { ATTACHMENT_MAX_SIDE, ATTACHMENT_QUALITY } from '../attachments.js';
 import { dataUrlByteSize } from '../photo.js';
+import { isPoolRef } from '../image-ref.js';
+import { imageBlob } from '../image-src.js';
 
 /** A rectangle in fractions of the image (0–1 from the top left). */
 export interface CropRegion { x: number; y: number; w: number; h: number }
@@ -59,9 +61,16 @@ export const WORK_MAX_SIDE = 4000;
 const MIN_FRAME_W = 40;
 const MIN_FRAME_H = 20;
 
-/** Decode a Blob or data URL into an upright bitmap (EXIF orientation applied). */
+/**
+ * Decode a Blob, a data URL or a pooled image's reference (its bytes read
+ * from the pool) into an upright bitmap (EXIF orientation applied). Rejects
+ * when there is nothing to decode (a pooled image the pool does not give).
+ */
 export async function decodeImage(source: Blob | string): Promise<ImageBitmap> {
-    const blob = typeof source === 'string' ? await (await fetch(source)).blob() : source;
+    const blob = typeof source !== 'string' ? source
+        : isPoolRef(source) ? await imageBlob(source)
+        : await (await fetch(source)).blob();
+    if (!blob) throw new Error('Image not available');
     return createImageBitmap(blob, { imageOrientation: 'from-image' });
 }
 

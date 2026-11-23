@@ -31,6 +31,39 @@ export function looksLikePoolRef(value: unknown): value is string {
     return typeof value === 'string' && value.charCodeAt(0) === 0 && value.startsWith(POOL_REF);
 }
 
+/**
+ * An address to show a pooled image by, never stored in the tree: its
+ * reference, or its reference turned by an EXIF orientation (`@o2`…`@o8`, a
+ * research crop lying as its original is stored; excerpts.ts
+ * excerptImageUrl). The pool key is what the resolver and the hydrator read:
+ * the pool id, with `@oN` when turned.
+ */
+const KEY = /^\u0000sm:([pe]:[0-9a-f]{40}(?:@o[2-8])?)$/;
+
+/** The pool key an address names (pool id, or pool id + `@oN`), or null for any other value. */
+export function poolKeyOf(value: unknown): string | null {
+    if (typeof value !== 'string' || (value.length !== 46 && value.length !== 49) || !value.startsWith(POOL_REF)) return null;
+    const m = KEY.exec(value);
+    return m ? m[1] : null;
+}
+
+/** A pool key's image id and the EXIF orientation it is shown turned by (0: as stored). */
+export function poolKeyParts(key: string): { id: string; orient: number } {
+    const at = key.indexOf('@o');
+    return at < 0 ? { id: key, orient: 0 } : { id: key.slice(0, at), orient: Number(key.slice(at + 2)) };
+}
+
+/**
+ * The address to show a pooled image by turned by an EXIF orientation (2–8);
+ * the reference itself for any other orientation. Only for showing: the tree
+ * keeps the reference and the orientation apart.
+ */
+export function turnedPoolRef(ref: string, orientation: number | undefined): string {
+    const id = poolIdOf(ref);
+    if (!id || !orientation || orientation < 2 || orientation > 8 || !Number.isInteger(orientation)) return ref;
+    return `${POOL_REF}${id}@o${orientation}`;
+}
+
 /** The value is an image as tree data holds one: a data URL or a pooled image's reference. */
 export function isImageValue(value: unknown): value is string {
     return typeof value === 'string' && (value.startsWith('data:') || isPoolRef(value));
@@ -50,10 +83,11 @@ function escAttr(text: string): string {
  * The address attribute of an image built as HTML or SVG text, without
  * starting anything (image-src.ts imgSrcAttr starts the hydrator too):
  * `<attr>="…"` for a data URL or any other address, for a reference the
- * placeholder and `data-pool-ref="<id>"`.
+ * placeholder and `data-pool-ref="<key>"` (its pool key: the id, turned ones
+ * with `@oN`).
  */
 export function imageAddrAttr(value: string, attr: 'src' | 'href' = 'src'): string {
-    const id = poolIdOf(value);
+    const id = poolKeyOf(value);
     if (!id) return `${attr}="${escAttr(value)}"`;
     return `${attr}="${IMAGE_PLACEHOLDER}" ${POOL_REF_ATTR}="${id}"`;
 }

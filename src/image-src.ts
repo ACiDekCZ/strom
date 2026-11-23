@@ -21,10 +21,15 @@
  * text write imgSrcAttr(value): a reference becomes a transparent placeholder
  * with `data-pool-ref`, and the hydrator (startImageHydrator) puts the image
  * in while the element is on screen and lets it go when it is not.
+ *
+ * Besides a reference, every function here takes a turned one (image-ref.ts
+ * turnedPoolRef: a research crop shown upright): the pooled JPEG's bytes with
+ * the EXIF orientation written in, cached under its own key (`<id>@oN`).
  */
 
 import { loadImageBlobs, dataUrlBlob } from './media-pool.js';
-import { POOL_REF, poolIdOf, isPoolRef, IMAGE_PLACEHOLDER, POOL_REF_ATTR, imageAddrAttr } from './image-ref.js';
+import { POOL_REF, poolIdOf, isPoolRef, poolKeyOf, poolKeyParts, IMAGE_PLACEHOLDER, POOL_REF_ATTR, imageAddrAttr } from './image-ref.js';
+import { jpegWithOrientation } from './exif-orientation.js';
 
 /** The cache keeps object URLs of at most this many bytes … */
 export const IMAGE_CACHE_MAX_BYTES = 64 * 1024 * 1024;
@@ -51,7 +56,8 @@ function shown(blob: Blob | null | undefined): Blob | null {
     return blob && isShownImageType(blob.type) ? blob : null;
 }
 
-const ID = /^[pe]:[0-9a-f]+$/;
+/** A pool key as `data-pool-ref` carries it: the id, a turned image's with `@oN`. */
+const ID = /^[pe]:[0-9a-f]+(?:@o[2-8])?$/;
 
 /** A reference's pool id, and whether a value is one (image-ref.ts: exactly as the pool writes them). */
 export { poolIdOf, isPoolRef };
@@ -60,7 +66,7 @@ export { poolIdOf, isPoolRef };
 
 interface Entry { url: string; size: number }
 
-/** Pool id → object URL; Map order = least recently used first. */
+/** Pool key (id, or id@oN) → object URL; Map order = least recently used first. */
 const cache = new Map<string, Entry>();
 let cacheBytes = 0;
 const limits = { bytes: IMAGE_CACHE_MAX_BYTES, count: IMAGE_CACHE_MAX_COUNT };
@@ -157,15 +163,37 @@ export function imageCacheStats(): { count: number; bytes: number } {
 const inflight = new Map<string, Promise<string>>();
 let queue: Map<string, { resolve: (url: string) => void; reject: (err: unknown) => void }> | null = null;
 
+/**
+ * A pooled image's Blob as shown under its key: turned by the key's EXIF
+ * orientation when it is a JPEG (as excerpts.ts withExifOrientation does to a
+ * data URL), else as it is.
+ */
+async function asKeyed(blob: Blob | null, orient: number): Promise<Blob | null> {
+    if (!blob || !orient || !/^image\/jpeg$/i.test(blob.type.trim())) return blob;
+    const turned = jpegWithOrientation(new Uint8Array(await blob.arrayBuffer()), orient);
+    return turned ? new Blob([turned as BlobPart], { type: blob.type }) : blob;
+}
+
+/** The Blobs of pool keys, read in one transaction (a turned key's from its image's bytes). */
+async function loadKeyed(keys: readonly string[]): Promise<Map<string, Blob | null>> {
+    const parts = keys.map(poolKeyParts);
+    const blobs = await loadImageBlobs([...new Set(parts.map(p => p.id))]);
+    const out = new Map<string, Blob | null>();
+    for (let i = 0; i < keys.length; i++) {
+        out.set(keys[i], await asKeyed(shown(blobs.get(parts[i].id)), parts[i].orient));
+    }
+    return out;
+}
+
 function flushQueue(): void {
     const batch = queue;
     queue = null;
     if (!batch) return;
     const ids = [...batch.keys()];
-    loadImageBlobs(ids).then((blobs) => {
+    loadKeyed(ids).then((blobs) => {
         for (const id of ids) {
             inflight.delete(id);
-            const blob = shown(blobs.get(id));
+            const blob = blobs.get(id) ?? null;
             batch.get(id)!.resolve(blob ? remember(id, blob) : '');
         }
     }, (err) => {
@@ -196,7 +224,7 @@ function readPooled(id: string): Promise<string> {
  * other value as it is.
  */
 export function imageUrl(value: string): Promise<string> {
-    const id = poolIdOf(value);
+    const id = poolKeyOf(value);
     if (!id) return Promise.resolve(value);
     const entry = touch(id);
     if (entry) return Promise.resolve(entry.url);
@@ -205,7 +233,7 @@ export function imageUrl(value: string): Promise<string> {
 
 /** imageUrl without waiting: '' for a reference whose image is not at hand. */
 export function imageUrlNow(value: string): string {
-    const id = poolIdOf(value);
+    const id = poolKeyOf(value);
     if (!id) return value;
     return touch(id)?.url ?? '';
 }
@@ -215,9 +243,9 @@ export function imageUrlNow(value: string): string {
  * pooled image, a pooled one of a type not shown, not a data URL).
  */
 export async function imageBlob(value: string): Promise<Blob | null> {
-    const id = poolIdOf(value);
-    if (!id) return dataUrlBlob(value);
-    return shown((await loadImageBlobs([id])).get(id));
+    const key = poolKeyOf(value);
+    if (!key) return dataUrlBlob(value);
+    return (await loadKeyed([key])).get(key) ?? null;
 }
 
 // ---- HTML text ----
@@ -229,7 +257,7 @@ export async function imageBlob(value: string): Promise<Blob | null> {
  * screen (starting it when there is a document).
  */
 export function imgSrcAttr(value: string): string {
-    if (poolIdOf(value) && typeof document !== 'undefined') startImageHydrator(document);
+    if (poolKeyOf(value) && typeof document !== 'undefined') startImageHydrator(document);
     return imageAddrAttr(value);
 }
 
@@ -242,7 +270,7 @@ export function imgSrcAttr(value: string): string {
  */
 export function setImageSource(el: Element, value: string): void {
     const attr = addressAttr(el);
-    const id = poolIdOf(value);
+    const id = poolKeyOf(value);
     if (!id) {
         if (el.hasAttribute(POOL_REF_ATTR)) el.removeAttribute(POOL_REF_ATTR);
         el.setAttribute(attr, value);
@@ -257,7 +285,7 @@ export function setImageSource(el: Element, value: string): void {
 /** Whether an element shows `value` already (a reference: by its id, whatever object URL it has now). */
 export function showsImage(el: Element | null | undefined, value: string): boolean {
     if (!el) return false;
-    const id = poolIdOf(value);
+    const id = poolKeyOf(value);
     if (id) return el.getAttribute(POOL_REF_ATTR) === id;
     return !el.hasAttribute(POOL_REF_ATTR) && el.getAttribute(addressAttr(el)) === value;
 }

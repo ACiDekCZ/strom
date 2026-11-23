@@ -20,7 +20,7 @@
 import { strings } from '../strings.js';
 import { iconSvg } from '../icons.js';
 import { busySpinHtml } from './busy.js';
-import { poolIdOf } from '../image-ref.js';
+import { poolKeyOf } from '../image-ref.js';
 import { imageBlob } from '../image-src.js';
 import {
     ZoomView, ZoomBox, fitView, clampView, zoomAt, panBy, zoomPercent, isFitted, scaleLimits, ZOOM_STEP,
@@ -323,7 +323,7 @@ function mediaBar(): HTMLElement | null { return el('image-viewer-media'); }
 
 // ==================== POOLED IMAGES ====================
 
-/** Pool id → the object URL the viewer made for it (revoked by releaseHeld). */
+/** Pool key (a turned crop's with its orientation) → the object URL the viewer made for it (revoked by releaseHeld). */
 const heldUrls = new Map<string, string>();
 /** Bumped by releaseHeld: a read still running when the viewer moved on makes no URL. */
 let heldEpoch = 0;
@@ -343,7 +343,7 @@ function releaseHeld(): void {
  * the pool gives none).
  */
 function viewerSrc(value: string): string | Promise<string> {
-    const id = poolIdOf(value);
+    const id = poolKeyOf(value);
     if (!id) return value;
     const have = heldUrls.get(id);
     if (have) return have;

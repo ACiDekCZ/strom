@@ -64,10 +64,28 @@ export async function compressPhoto(file: File): Promise<string> {
  * Rotate a square photo data URL by a multiple of 90°. The stored portrait is
  * already a square JPEG, so rotation keeps it square. `quarterTurns` is
  * clockwise (1 = 90° right, -1 = 90° left). Browser-only (canvas + Image).
+ * Takes a pooled image's reference too (its bytes read from the pool); the
+ * result is a new data URL either way.
  */
 export function rotatePhotoDataUrl(dataUrl: string, quarterTurns: number): Promise<string> {
+    const turns = ((quarterTurns % 4) + 4) % 4;
+    if (turns === 0 || !isPoolRef(dataUrl)) return rotatePhotoAt(dataUrl, dataUrl, turns);
+    // A pooled image: its bytes read from the pool, shown from an object URL of its own while drawn.
+    return import('./image-src.js').then(async ({ imageBlob }) => {
+        const blob = await imageBlob(dataUrl);
+        if (!blob) throw new Error('Image load failed');
+        const url = URL.createObjectURL(blob);
+        try {
+            return await rotatePhotoAt(dataUrl, url, turns);
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    });
+}
+
+/** rotatePhotoDataUrl with the image loaded from `src` (the value itself, or an object URL of a pooled one's bytes). */
+function rotatePhotoAt(dataUrl: string, src: string, turns: number): Promise<string> {
     return new Promise((resolve, reject) => {
-        const turns = ((quarterTurns % 4) + 4) % 4;
         if (turns === 0) { resolve(dataUrl); return; }
         const img = new Image();
         img.onload = () => {
@@ -86,7 +104,7 @@ export function rotatePhotoDataUrl(dataUrl: string, quarterTurns: number): Promi
             }
         };
         img.onerror = () => reject(new Error('Image load failed'));
-        img.src = dataUrl;
+        img.src = src;
     });
 }
 

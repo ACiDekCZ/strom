@@ -13,6 +13,7 @@
  * a person set (title, date, kind) stays unless the proposal is used on purpose.
  */
 
+import { setImageSource } from '../image-src.js';
 import { DataManager } from '../data.js';
 import { allMedia } from '../media.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -231,7 +232,7 @@ export function previewEl(mc: Pick<MaterialsContext, 'treeId' | 'base' | 'caps'>
     const show = (src: string): void => {
         const img = h('img');
         img.alt = '';
-        img.src = src;
+        setImageSource(img, src);
         box.replaceChildren(img);
     };
     const att = item?.attachment;

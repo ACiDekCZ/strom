@@ -15,6 +15,8 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { imgSrcAttr } from '../image-src.js';
+import { saveImageValue } from './image-file.js';
 import { researchActionLabel, researchMarkFlags } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
@@ -633,7 +635,7 @@ export const materialsMethods = uiModule({
             : lazy && queue.isBroken(sha!, THUMB_PX)
                 ? waitingTileHtml('failed', { tag: 'span', cls: 'material-thumb', px: 48 })
                 : imgPreview
-                    ? `<span class="material-thumb"><img src="${esc(att.dataUrl)}" alt=""></span>`
+                    ? `<span class="material-thumb"><img ${imgSrcAttr(att.dataUrl)} alt=""></span>`
                     : `<span class="material-thumb"${lazy ? ` data-sha="${esc(sha)}"` : ''}${lazy && queue.isWaiting(sha!, THUMB_PX) ? ' data-img-state="loading"' : ''}>${letters}</span>`;
         // The attachment the person's portrait is cut from (spec 107 §4).
         const owner = this.currentId ? DataManager.getPerson(this.currentId) : null;
@@ -941,12 +943,7 @@ export const materialsMethods = uiModule({
             case 'download': {
                 const att = item.attachment;
                 if (!att?.dataUrl || att.originalOnly) break;
-                const a = document.createElement('a');
-                a.href = att.dataUrl;
-                a.download = att.name;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
+                void saveImageValue(att.dataUrl, att.name);
                 break;
             }
             case 'useAsPortrait': if (this.currentId) void this.useMaterialAsPortrait(this.currentId, item); break;

@@ -8,6 +8,9 @@ import { SourceExcerpt } from './types.js';
 import { generateExcerptId } from './ids.js';
 import { dataUrlByteSize } from './photo.js';
 import { isSafeExcerptDataUrl } from './validation.js';
+import { isPoolRef, turnedPoolRef } from './image-ref.js';
+import { pooledImageSize } from './image-meta.js';
+import { jpegWithOrientation } from './exif-orientation.js';
 
 /** Longest side of an excerpt the app produces, in pixels. */
 export const EXCERPT_MAX_SIDE = 1200;
@@ -32,9 +35,14 @@ function headBytes(dataUrl: string, maxBytes: number): Uint8Array {
 
 /**
  * Pixel size of a PNG or JPEG data URL, read from its header without decoding
- * the image. Returns null for other formats or a header it cannot find.
+ * the image; for a pooled image's reference, the size the image catalog knows.
+ * Returns null for other formats or a header it cannot find.
  */
 export function imageSizeFromDataUrl(dataUrl: string): { width: number; height: number } | null {
+    if (isPoolRef(dataUrl)) {
+        const size = pooledImageSize(dataUrl);
+        return size && size.w && size.h ? { width: size.w, height: size.h } : null;
+    }
     if (/^data:image\/png;/i.test(dataUrl)) {
         const b = headBytes(dataUrl, 32);
         if (b.length < 24 || b[0] !== 0x89 || b[1] !== 0x50) return null;
@@ -112,28 +120,26 @@ export function withExifOrientation(dataUrl: string, orientation: number): strin
     const comma = dataUrl.indexOf(',');
     let bin: string;
     try { bin = atob(dataUrl.slice(comma + 1)); } catch { return dataUrl; }
-    if (bin.charCodeAt(0) !== 0xFF || bin.charCodeAt(1) !== 0xD8) return dataUrl;
-    // After SOI and a JFIF APP0 when there is one; an APP1 there already wins.
-    let at = 2;
-    if (bin.charCodeAt(2) === 0xFF && bin.charCodeAt(3) === 0xE0) at = 4 + (bin.charCodeAt(4) << 8 | bin.charCodeAt(5));
-    if (bin.charCodeAt(at) === 0xFF && bin.charCodeAt(at + 1) === 0xE1) return dataUrl;
-    // APP1: "Exif\0\0", a big-endian TIFF header and one IFD with the Orientation tag.
-    const app1 = [
-        0xFF, 0xE1, 0x00, 0x22,
-        0x45, 0x78, 0x69, 0x66, 0x00, 0x00,
-        0x4D, 0x4D, 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08,
-        0x00, 0x01,
-        0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, orientation, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-    ];
-    return `${dataUrl.slice(0, comma + 1)}${btoa(bin.slice(0, at) + String.fromCharCode(...app1) + bin.slice(at))}`;
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const turned = jpegWithOrientation(bytes, orientation);
+    if (!turned) return dataUrl;
+    let out = '';
+    for (let i = 0; i < turned.length; i += 0x8000) out += String.fromCharCode(...turned.subarray(i, i + 0x8000));
+    return `${dataUrl.slice(0, comma + 1)}${btoa(out)}`;
 }
 
 /** Turned crops already built, by orientation and image (a crop renders in many places). */
 const turnedCache = new Map<string, string>();
 
-/** The URL to show an excerpt by: upright when it is a research crop lying as stored. */
+/**
+ * The URL to show an excerpt by: upright when it is a research crop lying as
+ * stored. A pooled image's reference gives an address of the pool's (the
+ * reference, turned ones with their orientation: image-ref.ts turnedPoolRef),
+ * which the places show through image-src.ts and the viewer.
+ */
 export function excerptImageUrl(exc: Pick<SourceExcerpt, 'dataUrl' | 'orient'>): string {
+    if (isPoolRef(exc.dataUrl)) return turnedPoolRef(exc.dataUrl, exc.orient);
     if (!exc.orient || exc.orient < 2) return exc.dataUrl;
     const key = `${exc.orient}:${exc.dataUrl.length}:${exc.dataUrl.slice(-48)}`;
     let url = turnedCache.get(key);

@@ -10,6 +10,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { imgSrcAttr, setImageSource } from '../image-src.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark, researchSourceRef } from '../research-link.js';
 import { rememberDeletedSource, sourceRetractEditMode, sourceRetractOffered } from '../source-retract.js';
@@ -141,7 +142,7 @@ export function waitingExcerptHtml(w: WaitingExcerpt, cls: string): string {
 export function sourceThumbHtml(src: Source, kind: 'chip' | 'row' | 'picker'): string {
     // Excerpts of the file first, then those loaded from the research.
     const first = shownExcerpts(DataManager.getCurrentTreeId(), src)[0];
-    if (first && kind === 'chip') return `<img class="source-${kind}-thumb" src="${esc(excerptImageUrl(first))}" alt="">`;
+    if (first && kind === 'chip') return `<img class="source-${kind}-thumb" ${imgSrcAttr(excerptImageUrl(first))} alt="">`;
     // Lists: the image comes when the row scrolls into view (hydrateThumbs).
     // Putting every excerpt into the markup parsed and escaped ~100 MB of
     // text for a catalog of a few hundred scans.
@@ -183,7 +184,7 @@ export function hydrateThumbs(container: HTMLElement): void {
         const src = DataManager.getData().sources?.[img.dataset.thumbSource ?? ''];
         const first = src ? shownExcerpts(DataManager.getCurrentTreeId(), src)[0] : undefined;
         const url = first ? excerptImageUrl(first) : undefined;
-        if (url) img.src = url;
+        if (url) setImageSource(img, url);
         img.removeAttribute('data-thumb-source');
     };
     if (typeof IntersectionObserver === 'undefined') {
@@ -699,7 +700,7 @@ export const sourcesMethods = uiModule({
             const again = this.readSourceExcerptHtml(src, excerpts, i);
             chunks.push(`
                 <figure class="viewer-excerpt${loaded ? ' is-from-research' : ''}">
-                    <img src="${esc(excerptImageUrl(exc))}" alt="${esc(alt)}" data-excerpt-index="${i}">
+                    <img ${imgSrcAttr(excerptImageUrl(exc))} alt="${esc(alt)}" data-excerpt-index="${i}">
                     <button type="button" class="viewer-zoom" data-excerpt-index="${i}" aria-label="${esc(s.viewerZoom)}">⤢</button>
                     ${loaded ? this.researchExcerptExtrasHtml(exc, src) : exc.caption ? `<figcaption>${esc(exc.caption)}</figcaption>` : ''}
                 </figure>${this.excerptFromHtml(exc)}${again ? `<div class="viewer-excerpt-links">${full}${again}</div>` : full}`);
@@ -1239,7 +1240,7 @@ export const sourcesMethods = uiModule({
             const canCrop = !!d.original || this.attachmentForExcerpt(d.excerpt) !== null;
             return `
                 <div class="excerpt-item" data-index="${i}">
-                    <img class="excerpt-img" src="${esc(excerptImageUrl(d.excerpt))}" alt="${esc(d.excerpt.caption || s.excerptLabel)}" data-action="zoom">
+                    <img class="excerpt-img" ${imgSrcAttr(excerptImageUrl(d.excerpt))} alt="${esc(d.excerpt.caption || s.excerptLabel)}" data-action="zoom">
                     <div class="excerpt-bar">
                         <input type="text" class="excerpt-caption" value="${esc(d.excerpt.caption ?? '')}"
                             placeholder="${esc(s.excerptCaption)}" aria-label="${esc(s.excerptCaption)}" data-action="caption">
@@ -1489,7 +1490,7 @@ export const sourcesMethods = uiModule({
         grid.setAttribute('role', 'group');
         grid.setAttribute('aria-label', strings.sources.excerptPickPage);
         grid.innerHTML = pages.map((p, i) =>
-            `<button type="button" data-page="${i}" title="${esc(p.title?.trim() || p.name)}" aria-label="${esc(p.title?.trim() || p.name)}"><img src="${esc(p.dataUrl)}" alt=""></button>`).join('');
+            `<button type="button" data-page="${i}" title="${esc(p.title?.trim() || p.name)}" aria-label="${esc(p.title?.trim() || p.name)}"><img ${imgSrcAttr(p.dataUrl)} alt=""></button>`).join('');
         (anchor.closest('.excerpt-empty, .excerpt-item') ?? document.getElementById('source-excerpts'))?.appendChild(grid);
         grid.querySelectorAll<HTMLElement>('[data-page]').forEach(btn => {
             btn.addEventListener('click', () => {

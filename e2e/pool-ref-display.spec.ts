@@ -8,8 +8,10 @@ import { openApp, seedTree, card } from './helpers.js';
  * an object URL of its bytes, while on screen — and lets it go off screen or
  * when the place closes. Part D3: the cards and their tooltips, the
  * relationships panel's couple's photo and its viewer, the table's Photo
- * column and the fan's portraits. Further places (the person page, the
- * materials, the excerpts) add their own test to this file.
+ * column and the fan's portraits. Part D4: the materials (the person's
+ * attachments, the materials window, its viewer and Download), a source's
+ * excerpt (a research crop turned by its orientation) and the portrait
+ * editor fed from a pooled photo. Further places add their own test here.
  *
  * The tree is stored with data URLs (the pool then holds its images), then
  * its photos are replaced in memory by their references, as a tree read
@@ -87,6 +89,36 @@ async function treeWithRefs(page: Page): Promise<Record<string, string>> {
         S.TreeRenderer.render();
         return refs;
     }, { photos, union: UNION });
+}
+
+/**
+ * Every data URL the pool holds (≥ 1 kB) replaced in the tree in memory by
+ * its reference, after the tree is stored. Returns data URL → ref.
+ */
+async function poolInMemory(page: Page): Promise<Record<string, string>> {
+    return page.evaluate(async () => {
+        const S = window.Strom;
+        await S.TreeManager.flush();
+        const refs: Record<string, string> = {};
+        const refOf = async (url: string): Promise<string> => {
+            const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url)));
+            return '\u0000sm:p:' + [...d.slice(0, 20)].map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+        const walk = async (o: unknown): Promise<void> => {
+            if (!o || typeof o !== 'object') return;
+            const rec = o as Record<string, unknown>;
+            for (const k of Object.keys(rec)) {
+                const v = rec[k];
+                if (typeof v === 'string' && v.startsWith('data:') && v.length >= 1024) {
+                    refs[v] ??= await refOf(v);
+                    rec[k] = refs[v];
+                } else await walk(v);
+            }
+        };
+        await walk(S.DataManager.getData());
+        S.TreeRenderer.render();
+        return refs;
+    });
 }
 
 const idOf = (ref: string) => ref.slice(4);
@@ -216,5 +248,117 @@ test.describe('Images from the pool (desktop)', () => {
         // The tree's cards are gone: their URLs too, but those the fan shows (the same pictures).
         const fanUrls = await images.evaluateAll(els => els.map(e => e.getAttribute('href')));
         expect(fanUrls.includes(cardUrl) || !(await alive(page, cardUrl))).toBe(true);
+    });
+
+    test('the materials: the person\'s attachment and the window\'s tile show the pooled file; the viewer shows it and Download saves its bytes', async ({ page }) => {
+        await treeWithRefs(page);
+        const scan = await drawn(page, 5, 300, 200);
+        await page.evaluate((dataUrl) => {
+            window.Strom.UI.toggleAdvancedFields(true);
+            window.Strom.DataManager.addAttachment('kasimir' as never, { name: 'zwirnhof-brief.png', mimeType: 'image/png', dataUrl, sizeBytes: 5000 });
+        }, scan);
+        const refs = await poolInMemory(page);
+        const ref = refs[scan];
+        expect(ref).toBeTruthy();
+
+        // The person's attachments in the edit dialog.
+        await page.evaluate(() => {
+            const ui = window.Strom.UI as unknown as { pushDialog(id: string): void; showEditPersonModal(id: string): void };
+            ui.pushDialog('person-modal');
+            ui.showEditPersonModal('kasimir');
+        });
+        const thumb = '#person-modal #attachments-list .attachment-row img';
+        await expect(page.locator(thumb).first()).toHaveAttribute('data-pool-ref', idOf(ref));
+        // Below the dialog's fold: put in once scrolled to.
+        await page.locator(thumb).first().scrollIntoViewIfNeeded();
+        await expectShown(page, thumb);
+        // The portrait above it as well.
+        await expect(page.locator('#person-modal #photo-preview img')).toHaveAttribute('data-pool-ref', /^p:[0-9a-f]{40}$/);
+        await page.locator('#person-modal #photo-preview img').scrollIntoViewIfNeeded();
+        await expectShown(page, '#person-modal #photo-preview img');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#person-modal')).toBeHidden();
+
+        // The materials window's tile, then the viewer.
+        await page.evaluate(() => window.Strom.UI.openMaterials());
+        const tile = page.locator('#materials-modal .mw-canvas .mw-tile', { hasText: 'zwirnhof-brief' });
+        await expect(tile.locator('img')).toHaveAttribute('data-pool-ref', idOf(ref));
+        await expectShown(page, '#materials-modal .mw-canvas .mw-tile img[data-pool-ref]');
+        await tile.click();
+        await expect(page.locator('#attachment-overlay')).toHaveClass(/active/);
+        await expectShown(page, '#attachment-overlay-img');
+        expect(await page.locator('#attachment-overlay-img').evaluate(i => (i as HTMLImageElement).naturalWidth)).toBe(300);
+
+        // Download: the pool's bytes, under the file's name.
+        const download = page.waitForEvent('download');
+        await page.locator('#image-viewer-panel .mv-act[data-action="download"]').click();
+        const saved = await download;
+        expect(saved.suggestedFilename()).toBe('zwirnhof-brief.png');
+        expect(saved.url()).toMatch(/^blob:/);
+        const fs = await import('node:fs/promises');
+        const bytes = await fs.readFile((await saved.path())!);
+        expect(bytes.toString('base64')).toBe(scan.split(',')[1]);
+        expect(page.context().pages()).toHaveLength(1);
+    });
+
+    test('a source\'s excerpt held as a reference: a research crop shows upright in the source viewer', async ({ page }) => {
+        await treeWithRefs(page);
+        const crop = await page.evaluate(() => {
+            const c = document.createElement('canvas');
+            c.width = 400; c.height = 100;
+            const g = c.getContext('2d')!;
+            for (let i = 0; i < 40; i++) { g.fillStyle = `hsl(${i * 37 % 360} 50% 50%)`; g.fillRect(i * 10, (i * 13) % 60, 10, 40); }
+            return c.toDataURL('image/jpeg', 0.92);
+        });
+        const sourceId = await page.evaluate((dataUrl) => {
+            const dm = window.Strom.DataManager;
+            const src = dm.addSource({ title: 'Taufbuch Zwirnhof', excerpts: [{ id: 'e1', dataUrl, width: 400, height: 100, sizeBytes: 3000, orient: 6 }] } as never)!;
+            dm.citePerson('kasimir' as never, src.id);
+            return src.id as string;
+        }, crop);
+        const refs = await poolInMemory(page);
+        const ref = refs[crop];
+        expect(ref).toBeTruthy();
+        await page.evaluate((id) => window.Strom.UI.showSourceViewer(id, null), sourceId);
+        const img = '#source-viewer-modal img[data-excerpt-index]';
+        await expect(page.locator(img).first()).toHaveAttribute('data-pool-ref', `${idOf(ref)}@o6`);
+        await expectShown(page, img);
+        expect(await page.locator(img).first().evaluate(async (i: HTMLImageElement) => {
+            await i.decode().catch(() => undefined);
+            return { w: i.naturalWidth, h: i.naturalHeight };
+        })).toEqual({ w: 100, h: 400 });
+        // The tree keeps the reference as it was, the orientation beside it.
+        const kept = await page.evaluate((id) => {
+            const e = window.Strom.DataManager.getData().sources![id].excerpts![0];
+            return { dataUrl: e.dataUrl, orient: e.orient };
+        }, sourceId);
+        expect(kept).toEqual({ dataUrl: ref, orient: 6 });
+    });
+
+    test('the portrait editor opens over a pooled portrait; its result is a new picture', async ({ page }) => {
+        await treeWithRefs(page);
+        // A portrait large enough to zoom into (a small one stays at 100 %).
+        const big = await drawn(page, 6, 900, 600);
+        await page.evaluate((photo) => window.Strom.DataManager.updatePerson('walpurga' as never, { photo }), big);
+        const refs = await poolInMemory(page);
+        await page.evaluate(() => {
+            const ui = window.Strom.UI as unknown as { pushDialog(id: string): void; showEditPersonModal(id: string): void };
+            ui.pushDialog('person-modal');
+            ui.showEditPersonModal('walpurga');
+        });
+        await expectShown(page, '#person-modal #photo-preview img');
+        await page.locator('#person-modal #photo-recrop-btn').click();
+        const editor = page.locator('.pe-overlay');
+        await expect(editor).toBeVisible();
+        await expect(editor.locator('.pe-note-original')).toBeVisible();
+        await expect(editor.locator('.pe-frame')).toBeFocused();
+        await page.keyboard.press('+');
+        await expect(editor.locator('.pe-pct')).toHaveText('110 %');
+        await editor.getByRole('button', { name: 'Done' }).click();
+        await expect(editor).toHaveCount(0);
+        const preview = await page.locator('#person-modal #photo-preview img').getAttribute('src');
+        expect(preview).toMatch(/^data:image\//);
+        // Nothing written before Save: the tree still holds the reference.
+        expect(await page.evaluate(() => window.Strom.DataManager.getData().persons['walpurga' as never].photo)).toBe(refs[big]);
     });
 });

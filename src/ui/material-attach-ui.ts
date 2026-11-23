@@ -12,6 +12,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { setImageSource } from '../image-src.js';
 import { isPendingImageUrl } from '../research-image-refs.js';
 import { DataManager, LIVE_FOLLOW_EVENT } from '../data.js';
 import { Attachment, MediaPlace, PartnershipId, Person, PersonId, Source } from '../types.js';
@@ -163,7 +164,7 @@ export const materialAttachMethods = uiModule({
             if (att?.dataUrl && att.mimeType.startsWith('image/') && !att.originalOnly && !isPendingImageUrl(att.dataUrl)) {
                 const img = h('img', 'mdlg-attach-thumb');
                 img.alt = '';
-                img.src = att.dataUrl;
+                setImageSource(img, att.dataUrl);
                 dialog.box.querySelector('.mdlg-head')!.prepend(img);
                 dialog.box.querySelector('.mdlg-head')!.classList.add('has-thumb');
             }

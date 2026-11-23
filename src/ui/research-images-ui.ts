@@ -8,6 +8,7 @@
  * never as an edit of the tree. See src/ui/module.ts for the composition pattern.
  */
 
+import { setImageSource } from '../image-src.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { Source, SourceExcerpt, StromData, TreeId } from '../types.js';
@@ -482,7 +483,7 @@ export const researchImagesMethods = uiModule({
                 const img = document.createElement('img');
                 img.className = 'source-row-thumb';
                 img.alt = '';
-                img.src = first.dataUrl;
+                setImageSource(img, first.dataUrl);
                 icon.replaceWith(img);
                 row.querySelector('.source-held-tag')?.remove();
             } else if (src && icon?.classList.contains('source-row-thumb')) {

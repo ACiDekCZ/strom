@@ -17,6 +17,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { imgSrcAttr } from '../image-src.js';
 import { DataManager } from '../data.js';
 import { Attachment, MediaPlace, PartnershipId, Person, PersonId, Source, SourceExcerpt } from '../types.js';
 import { strings } from '../strings.js';
@@ -185,7 +186,7 @@ function fileTitle(rec: Pick<Attachment, 'title' | 'name'>): string {
 }
 
 function thumbHtml(rec: Omit<Attachment, 'id' | 'places'>, cls: string): string {
-    if (isImage(rec)) return `<span class="${cls}"><img src="${esc(rec.dataUrl)}" alt=""></span>`;
+    if (isImage(rec)) return `<span class="${cls}"><img ${imgSrcAttr(rec.dataUrl)} alt=""></span>`;
     const letters = materialTileLetters({ mime: rec.original?.mimeType ?? rec.mimeType, title: rec.name, name: rec.name } as MaterialItem);
     return `<span class="${cls}"><span class="material-row-tile">${esc(letters)}</span></span>`;
 }

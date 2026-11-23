@@ -17,6 +17,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { imgSrcAttr } from '../image-src.js';
 import { MENU_LOAD_LIMIT_MS, startMenuLoad, type MenuLoad } from './menu-load.js';
 import { allMedia, treeMedia, mediaPersonIds } from '../media.js';
 import { materialPersonLabel, mediaUsesIndex } from '../media-uses.js';
@@ -1118,7 +1119,7 @@ export const materialsWindowMethods = uiModule({
         const waits = waitingTileHtml(materialImageWait(item), { tag: 'span', cls, px, content: letters, extra: marks });
         if (waits) return waits;
         if (att && !att.originalOnly && att.mimeType.startsWith('image/') && att.dataUrl) {
-            return `<span class="${cls} has-thumb"><img src="${esc(att.dataUrl)}" alt="" loading="lazy">${marks}</span>`;
+            return `<span class="${cls} has-thumb"><img ${imgSrcAttr(att.dataUrl)} alt="" loading="lazy">${marks}</span>`;
         }
         const sha = materialItemSha(item);
         const lazy = !!sha && item.origin !== 'tree' && ['image', 'pdf'].includes(materialType(item.mime, item.name));

@@ -11,6 +11,7 @@
  * what they read with when it is not the default (`read.with`, spec 059).
  */
 
+import { imgSrcAttr } from '../image-src.js';
 import { tileFailedHtml, TILE_NOTE_MIN_PX } from './image-slot.js';
 import { researchActionLabel, researchBridgeAgentLabel } from './research-open-mark.js';
 import { barHtml } from './prog-bar.js';
@@ -1309,7 +1310,7 @@ export const readDocumentMethods = uiModule({
         const what = [again.excerpt ? capitalized(t.sourceExcerpt(again.excerpt)) : '', again.title].filter(Boolean).join(' · ');
         return `
                 <div class="read-source-preview">
-                    ${again.thumb ? `<img class="read-source-thumb" src="${esc(again.thumb)}" alt="">` : ''}
+                    ${again.thumb ? `<img class="read-source-thumb" ${imgSrcAttr(again.thumb)} alt="">` : ''}
                     <div class="read-source-preview-text">
                         <span class="read-source-what">${esc(what)}</span>
                         <p class="read-source-gloss"><strong>${esc(t.sourceLead)}</strong> ${esc(t.sourceRest)}</p>

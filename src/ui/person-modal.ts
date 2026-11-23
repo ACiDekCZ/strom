@@ -3,6 +3,7 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
+import { imgSrcAttr } from '../image-src.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { readFormFields, writeFormFields, type PersonDraft } from '../windows/window-drafts.js';
 import { placeKey } from '../places.js';
@@ -614,7 +615,7 @@ export const personModalMethods = uiModule({
         const last = (document.getElementById('input-lastname') as HTMLInputElement | null)?.value.trim() || '';
         const photo = this.photoModel.value;
         if (photo) {
-            avatar.innerHTML = `<img src="${this.escapeHtml(photo)}" alt="">`;
+            avatar.innerHTML = `<img ${imgSrcAttr(photo)} alt="">`;
         } else {
             const initials = personInitials(first, last);
             avatar.innerHTML = `<span class="pm-avatar-initials">${this.escapeHtml(initials || '?')}</span>`;
@@ -1375,7 +1376,7 @@ export const personModalMethods = uiModule({
                     const value = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value.trim() || '';
                     return personInitials(value('input-firstname'), value('input-lastname')) || '?';
                 };
-                preview.innerHTML = dataUrl ? `<img src="${this.escapeHtml(dataUrl)}" alt="">`
+                preview.innerHTML = dataUrl ? `<img ${imgSrcAttr(dataUrl)} alt="">`
                     : state === 'loading' || state === 'failed' ? `<span class="pm-avatar-initials">${this.escapeHtml(initials())}</span>` : '';
                 // A kept older photo whose newer one did not come shows as it is (the sentence says it).
                 setImgState(preview, state === 'failed' && dataUrl ? 'none' : state === 'loaded' ? 'none' : state);

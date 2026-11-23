@@ -16,6 +16,7 @@
  * K1.5's identity) are src/portrait-editor-model.ts.
  */
 
+import { imgSrcAttr, setImageSource } from '../image-src.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PortraitCrop } from '../types.js';
 import {
@@ -408,7 +409,7 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
         keepLabel.hidden = !keep;
         avCanvas.hidden = keep;
         avCurrent.hidden = !keep;
-        if (keep) avCurrent.src = input.steps[index].current ?? '';
+        if (keep) setImageSource(avCurrent, input.steps[index].current ?? '');
         // The small-photo note follows the zoom.
         const smallNote = notes.querySelector<HTMLElement>('.pe-note-small');
         if (smallNote) smallNote.hidden = squareOnly || keep || !isSmallPortrait(portraitCropFromView(v, W, H), W, H);
@@ -488,7 +489,7 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
             choice.innerHTML = `
                 <div class="pe-choice-title">${esc(P.hasPortrait(shownName(step.person)))}</div>
                 <div class="pe-tiles" role="radiogroup" aria-label="${esc(P.hasPortrait(shownName(step.person)))}">
-                    ${tile(true, P.keep, P.keepSub, `<img class="pe-thumb" src="${esc(step.current ?? '')}" alt="">`)}
+                    ${tile(true, P.keep, P.keepSub, `<img class="pe-thumb" ${imgSrcAttr(step.current ?? '')} alt="">`)}
                     ${tile(false, P.replace, P.replaceSub, `<canvas class="pe-thumb pe-live-canvas" width="72" height="72"></canvas>`)}
                 </div>`;
             choice.querySelectorAll<HTMLButtonElement>('.pe-tile').forEach(b => b.addEventListener('click', () => {
@@ -506,7 +507,7 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
         if (!couple && step.current) {
             parts.push(`<div class="pe-note pe-note-replace"><span>${esc(P.replaceNote)}</span>
                 <div class="pe-pair">
-                    <figure><img class="pe-thumb44" src="${esc(step.current)}" alt=""><figcaption>${esc(P.current)}</figcaption></figure>
+                    <figure><img class="pe-thumb44" ${imgSrcAttr(step.current)} alt=""><figcaption>${esc(P.current)}</figcaption></figure>
                     <span class="pe-arrow" aria-hidden="true">→</span>
                     <figure><canvas class="pe-thumb44 pe-live-canvas" width="88" height="88"></canvas><figcaption>${esc(P.newOne)}</figcaption></figure>
                 </div></div>`);
