@@ -46,6 +46,8 @@ describe('a research waiting for its agent is shown as an archive', () => {
         vi.spyOn(DataManager, 'isViewMode').mockReturnValue(false);
         vi.spyOn(DataManager, 'getCurrentTreeId').mockReturnValue(TREE);
         vi.spyOn(TreeManager, 'getTreeMetadata').mockImplementation(() => tree);
+        // The tree owns its research (the one tree that writes to it).
+        vi.spyOn(TreeManager, 'canSendToResearch').mockImplementation(id => id === TREE);
     });
 
     afterEach(() => {

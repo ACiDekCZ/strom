@@ -98,6 +98,8 @@ describe('N40: changes per person after a send the research took nothing from', 
         vi.spyOn(dm, 'getCurrentTreeId').mockReturnValue(TREE);
         vi.spyOn(dm, 'getData').mockImplementation(() => data);
         vi.spyOn(tm, 'getTreeMetadata').mockImplementation(() => ({ id: TREE, research: link } as unknown as TreeMetadata));
+        // The tree owns its research (the one tree that writes to it).
+        vi.spyOn(tm, 'canSendToResearch').mockImplementation(id => id === TREE);
     }
 
     it('the copy of the written send stays the research\'s version: the edit is listed, after a reopen and another edit too', async () => {

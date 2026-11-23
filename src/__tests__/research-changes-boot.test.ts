@@ -46,6 +46,8 @@ describe('the changes per person asked before the startup tree is in', () => {
         vi.spyOn(DataManager, 'getCurrentTreeId').mockReturnValue(TREE);
         vi.spyOn(DataManager, 'getData').mockImplementation(() => data);
         vi.spyOn(TreeManager, 'getTreeMetadata').mockImplementation(() => ({ id: TREE, research: link } as unknown as TreeMetadata));
+        // The tree owns its research (the one tree that writes to it).
+        vi.spyOn(TreeManager, 'canSendToResearch').mockImplementation(id => id === TREE);
         vi.stubGlobal('localStorage', { getItem: () => link.fingerprint, setItem: () => {}, removeItem: () => {} });
     });
 
