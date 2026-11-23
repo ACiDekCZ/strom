@@ -437,12 +437,10 @@ class MergerUIClass {
      * Handle close confirmation: save for later
      */
     handleCloseSave(): void {
-        this.storeForLater();
+        const stored = this.storeForLater();
         this.hideCloseConfirmation();
         this.closeMergeModalInternal();
-
-        // Refresh tree manager if open
-        window.dispatchEvent(new CustomEvent('strom:merge-session-changed'));
+        this.announceSessionChange(stored);
     }
 
     /**
@@ -455,37 +453,47 @@ class MergerUIClass {
     /**
      * Store the open merge as a saved session (a resumed one in its own place)
      * and say where it waits (13j): "Saved for later · {source → target} ·
-     * step {i} · in Manage trees under Unfinished merges".
+     * step {i} · in Manage trees under Unfinished merges". Resolves once the
+     * session is stored (or its write failed).
      */
-    private storeForLater(): void {
+    private storeForLater(): Promise<void> {
         const state = this.mergeState;
-        if (!state) return;
+        if (!state) return Promise.resolve();
         // Saved once the import's images are pooled: the session names them by reference.
         const pooled = this.incomingPooling;
         const sessionId = this.resumedSessionId;
+        let stored: Promise<unknown>;
         if (sessionId) {
-            void pooled.then(() => updateMergeSession(sessionId, state));
+            stored = pooled.then(() => updateMergeSession(sessionId, state));
         } else {
             // Generate display name from tree names
             const displayName = this.targetTreeName && this.sourceTreeName
                 ? `${this.targetTreeName} + ${this.sourceTreeName}`
                 : this.incomingFileName || 'Merge';
             const { targetTreeName, sourceTreeName } = this;
-            void pooled.then(() => saveMergeSession(state, displayName, targetTreeName, sourceTreeName));
+            stored = pooled.then(() => saveMergeSession(state, displayName, targetTreeName, sourceTreeName));
         }
         const ws = state.wizard;
         getUI().showToast(ws ? strings.mergeWizard.savedLater(wizardRoute(ws.choices), ws.step) : strings.merge.closeSave, 6000);
+        return stored.then(() => undefined, () => undefined);
+    }
+
+    /**
+     * Tell an open Manage trees that the saved merges changed, once the
+     * session is stored: the save waits for the import's images to be pooled,
+     * so a list read at once would not have it yet.
+     */
+    private announceSessionChange(stored: Promise<void>): void {
+        void stored.then(() => window.dispatchEvent(new CustomEvent('strom:merge-session-changed')));
     }
 
     /**
      * Save current merge for later (direct action from button)
      */
     saveForLater(): void {
-        this.storeForLater();
+        const stored = this.storeForLater();
         this.closeMergeModalInternal();
-
-        // Refresh tree manager if open
-        window.dispatchEvent(new CustomEvent('strom:merge-session-changed'));
+        this.announceSessionChange(stored);
     }
 
     // ==================== AUTO-SAVE ====================

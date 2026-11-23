@@ -361,4 +361,26 @@ describe('the merge guide pools the import (merge/ui.ts)', () => {
         expect(data.persons[A].photo).toBe(rx);
         expect(Object.values(data.persons).find(p => p.firstName === 'Ilmara')?.photo).toBe(ry);
     });
+    it('Save for later tells Manage trees of the session only once it is stored (it waits for the import\'s images)', async () => {
+        st('trees').set('t1', { version: 25, persons: { [A]: person(A, { partnerships: [] }) }, partnerships: {} });
+        expect(await DataManager.switchTree(T1)).toBe(true);
+        const file: StromData = {
+            version: 25,
+            persons: { [A]: person(A, { photo: image(60) }), [B]: person(B, { photo: image(61) }) },
+            partnerships: { [U]: { id: U, person1Id: A, person2Id: B, childIds: [], status: 'married' } as Partnership },
+        } as StromData;
+        MergerUI.startMerge(file, 'vranec.json');
+        // What an open Manage trees would list when told of the change.
+        const listed: number[] = [];
+        const onChange = (): void => { listed.push(((st('merge').get('sessions') as unknown[] | undefined) ?? []).length); };
+        window.addEventListener('strom:merge-session-changed', onChange);
+        try {
+            MergerUI.saveForLater();
+            await internals().incomingPooling;
+            await vi.waitFor(() => expect(listed.length).toBeGreaterThan(0));
+            expect(listed).toEqual([1]);
+        } finally {
+            window.removeEventListener('strom:merge-session-changed', onChange);
+        }
+    });
 });
