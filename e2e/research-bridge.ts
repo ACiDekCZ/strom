@@ -50,6 +50,8 @@ export interface FakeBridge {
     sends: { intake: string; at: string; state: string; changes: number; tree: string; sent: string; decidedAt?: string; reason?: string; conflicts?: unknown }[];
     lastIntake: { id: string; at: string } | null;
     syncReply: { status: number; body: unknown };
+    /** Answers to the next sends, first first (each taken once), before `syncReply` (e.g. one refusal, then the usual). */
+    syncReplies?: { status: number; body: unknown }[];
     treeGed: string;
     down: boolean;
     links: string[];
@@ -2513,6 +2515,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             const sent = /1 _STROM_SENT (\S+)/.exec(body)?.[1] ?? '';
             const appTree = /1 _STROM_APP_TREE (\S+)/.exec(body)?.[1] ?? UUID;
             const intake = `R${Date.now()}-${b.posts.length}`;
+            const once = b.syncReplies?.shift();
+            if (once) return json(once.status, once.body);
             const reply = b.syncReply.body as { inbox?: boolean; pending?: boolean; head?: string };
             if (b.syncReply.status === 200 && reply.inbox === false && !reply.pending && b.onWrite) {
                 // Written at once: the research has a new version, the reply names its commit.
