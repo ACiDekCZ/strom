@@ -18,6 +18,7 @@ import { checkMergeResult, MergeCheckProblem } from './merge-check.js';
 import { FieldConflict, MergeRelations, MergeState, MergeTrace, PartnershipConflictField, PersonMatch } from './types.js';
 import { addPersonMedia, allMedia } from '../media.js';
 import { contentFingerprint } from '../research-link.js';
+import { withoutResearchMarks } from './research-marks.js';
 import { mergeEdits, personPrint } from './record.js';
 import type { GedcomDroppedTag } from '../ged-parser.js';
 import {
@@ -764,6 +765,8 @@ export async function applyPlan(plan: MergePlan, target: StromData, source: Stro
     if (plan.mode === 'compare') throw new Error('A comparison plan is not written');
     const before = plan.mode === 'new' ? EMPTY_TREE() : target;
     const allIn = planTakesAll(plan);
+    // A source linked to a research: its research's marks stay with it (11g/11h).
+    if (plan.source.research) source = withoutResearchMarks(source);
     const original = source;
     source = sourceWithStandIns(source, planStandIns(plan));
     let data: StromData;
