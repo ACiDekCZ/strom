@@ -14,6 +14,7 @@ import { displayName, familyName } from './plan-select.js';
 import { fold, yearsText } from './steps/step3-model.js';
 import { fillLine, fillSummary, type PlanLine, type PlanListGroup } from './steps/step5-plan.js';
 import { FILL_KEYS } from './plan.js';
+import { afterText } from './plan-rules.js';
 import { relativesOf, undoneItems, undoOutcome, undoPreview, undoResearchStep, type ChangedSince, type ChangedWhat, type UndoPreview } from './undo-plan.js';
 
 // ==================== WORDS ====================
@@ -116,7 +117,7 @@ export function recordGroups(record: MergeRecord, data: StromData): PlanListGrou
     // Detail changes, before → after (a living person's values not shown).
     const fieldName = (f: string): string => (W.fieldNames as Record<string, string>)[f] ?? f;
     const fields = record.fields.map(f => {
-        const value = living(f.person) ? fieldName(f.field) : `${fieldName(f.field)}: ${f.before || '—'} → ${f.after || '—'}`;
+        const value = living(f.person) ? fieldName(f.field) : `${fieldName(f.field)}: ${f.before || '—'} → ${afterText(f.field, f.before, f.after) || '—'}`;
         return personLine(`f:${f.person}|${f.field}`, f.person, value);
     });
     add('fields', W.gFields, c.fieldChanges + c.alongside, '', fields);

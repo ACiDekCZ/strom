@@ -23,8 +23,8 @@ import type { PersonId, StromData } from '../../types.js';
 import { yearOf } from '../../dates.js';
 import { inferBirthUpperBounds, isLivingPerson } from '../../privacy.js';
 import { renderTreeThumbnail } from '../../tree-preview.js';
-import { planCounts, type MergePlan, type PlanItem, type PlanRules, type RuleChoice, type SkipReason } from '../plan.js';
-import { fieldKind, ruleFor } from '../plan-rules.js';
+import { changesValue, planCounts, type MergePlan, type PlanItem, type PlanRules, type RuleChoice, type SkipReason } from '../plan.js';
+import { afterText, fieldKind, ruleFor } from '../plan-rules.js';
 import { connectedNew, connectionTerm, displayName, familyName, type NewConnection } from '../plan-select.js';
 import { newTreeName } from '../write.js';
 import type { StepContext, WriteAction, WriteStatus } from './context.js';
@@ -165,17 +165,17 @@ export function planList(plan: MergePlan, state: MergeState, offLinks: readonly 
         const hide = treeLiving(i.person);
         const gap = i.kind === 'field' && i.before === '' && i.field !== 'notes';
         const from = gap && i.rule.level !== 'value' ? W.gapFill : sourceText(i.rule, fieldKind(i.field));
-        const value = i.kind === 'field' ? `${i.before || '—'} → ${i.after || '—'}` : `+ ${i.value}`;
+        const value = i.kind === 'field' ? `${i.before || '—'} → ${afterText(i.field, i.before, i.after) || '—'}` : `+ ${i.value}`;
         const text = hide ? `${fieldName(i.field)} · ${from}` : `${fieldName(i.field)}: ${value} · ${from}`;
         // A protected value is changed in step 4 only.
         const can = !(i.kind === 'field' && i.protected);
         return { key: `f:${i.person}|${i.field}`, on, can, name, years: personYears(tree.persons[i.person]), text, living: hide, find: fold(`${name} ${text}`) };
     };
     const fieldsOn = [
-        ...byKind('field').filter(i => i.on && i.after !== i.before).map(i => fieldLine(i, true)),
+        ...byKind('field').filter(i => i.on && changesValue(i)).map(i => fieldLine(i, true)),
         ...byKind('field-both').filter(i => i.on).map(i => fieldLine(i, true)),
     ];
-    const fieldsOff = byKind('field').filter(i => !i.on && i.after !== i.before).map(i => fieldLine(i, false));
+    const fieldsOff = byKind('field').filter(i => !i.on && changesValue(i)).map(i => fieldLine(i, false));
     const keptText = fieldsOff.length ? W.fieldsKept(fieldsOff.length, plan.target.name) : '';
     add('fields', W.gFields, c.fieldChanges + c.alongside, keptText, fieldsOn, fieldsOff, keptText);
 

@@ -6405,6 +6405,8 @@ const stringsEN = {
             events: 'Events', sourceIds: 'Sources', birthSourceIds: 'Sources of the birth', deathSourceIds: 'Sources of the death',
             refn: 'Reference number', question: 'Open question', story: 'Story',
         },
+        /** Another photo whose name and size are the same as the one it replaces ("photo (3222) → …"). */
+        otherPhoto: 'another photo of the same name and size',
         fromTo: 'From → to',
         swap: 'Swap',
         notTaken: (list: string) => `The tree will not take over: ${list}.`,
@@ -17637,6 +17639,8 @@ const stringsCZ: StringsType = {
             events: 'Události', sourceIds: 'Prameny', birthSourceIds: 'Prameny narození', deathSourceIds: 'Prameny úmrtí',
             refn: 'Referenční číslo', question: 'Otevřená otázka', story: 'Vyprávění',
         },
+        /** Another photo whose name and size are the same as the one it replaces ("photo (3222) → …"). */
+        otherPhoto: 'jiná fotka se stejným názvem a velikostí',
         fromTo: 'Odkud → kam',
         swap: 'Prohodit',
         notTaken: (list: string) => `Strom nepřevezme: ${list}.`,
@@ -28716,6 +28720,8 @@ const stringsDE: StringsType = {
             events: 'Ereignisse', sourceIds: 'Quellen', birthSourceIds: 'Quellen der Geburt', deathSourceIds: 'Quellen des Todes',
             refn: 'Referenznummer', question: 'Offene Frage', story: 'Erzählung',
         },
+        /** Another photo whose name and size are the same as the one it replaces ("photo (3222) → …"). */
+        otherPhoto: 'ein anderes Foto mit gleichem Namen und gleicher Größe',
         fromTo: 'Von → nach',
         swap: 'Tauschen',
         notTaken: (list: string) => `Nicht übernommen wird: ${list}.`,

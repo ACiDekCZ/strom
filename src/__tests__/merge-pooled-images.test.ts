@@ -56,15 +56,19 @@ import { poolTreeImages } from '../image-intern.js';
 import { memoryImageIds, collectPoolRefIds } from '../pool-memory.js';
 import { createMergeState, detectConflicts, rebaseMergeState, updateMatchDecision } from '../merge/matching.js';
 import { executeMerge } from '../merge/executor.js';
-import { applyPlan, buildPlan, type WizardChoices } from '../merge/plan.js';
+import { applyPlan, buildPlan, planCounts, type WizardChoices } from '../merge/plan.js';
 import { compactValue, mergeEdits, personPrint, valueKey } from '../merge/record.js';
 import { writePlan, writeUndo } from '../merge/write.js';
 import { fieldText } from '../merge/plan-rules.js';
+import { planList } from '../merge/steps/step5-plan.js';
+import { recordGroups } from '../merge/undo-view.js';
+import { exportPlan } from '../merge/plan-export.js';
 import { treeEditCount } from '../merge/resume-change.js';
 import { conflictPhotoHtml } from '../merge/steps/step4-rules.js';
 import { buildChangePacket, summarizeChangePacket, applyPacketOntoData } from '../share-diff.js';
 import { carryOverMedia, contentFingerprint } from '../research-link.js';
 import { TreeManager } from '../tree-manager.js';
+import { strings } from '../strings.js';
 import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { setUIGetter } from '../ui-ref.js';
@@ -300,6 +304,33 @@ describe('a portrait told by its content, not its name and length (merge/plan.ts
         // The tree's portrait as the file's data URL: nothing to do.
         const same = await photoPlan(rMine, mine);
         expect(photoItems(same.plan)).toEqual([]);
+    });
+
+    it('another portrait of the same name and size reads as such in step 5, the history, the undo and the saved list, not "photo (n) → photo (n)"', async () => {
+        const [mine, other] = [image(92), image(93)];
+        const { plan, tree, file } = await photoPlan(mine, other);
+        const was = fieldText(tree.persons[A], 'photo');
+        expect(fieldText(file.persons[A], 'photo')).toBe(was);
+        const same = `${was} → ${was}`;
+        const told = `${was} → ${strings.mergeWizard.otherPhoto}`;
+        const state = createMergeState(tree, file);
+        const step5 = planList(plan, state).flatMap(g => g.lines).map(l => l.text).filter(t => t.includes(was));
+        expect(step5).toHaveLength(1);
+        expect(step5[0]).toContain(told);
+        expect(step5[0]).not.toContain(same);
+        const applied = await applyPlan(plan, tree, file);
+        expect(applied.ok).toBe(true);
+        if (!applied.ok) return;
+        // One change counted alike in step 5 and in the record (134 N4: one count).
+        expect(planCounts(plan).fieldChanges).toBe(1);
+        expect(applied.record.counts.fieldChanges).toBe(1);
+        expect(applied.record.fields.filter(f => f.field === 'photo')).toHaveLength(1);
+        const undo = recordGroups(applied.record, applied.data).find(g => g.key === 'fields')!.lines.map(l => l.text);
+        expect(undo.join('\n')).toContain(told);
+        expect(undo.join('\n')).not.toContain(same);
+        const { txt } = exportPlan(plan, { source: file, target: tree, year: 2026 });
+        expect(txt).toContain(told);
+        expect(txt).not.toContain(same);
     });
 });
 

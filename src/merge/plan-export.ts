@@ -10,7 +10,8 @@
 import { strings } from '../strings.js';
 import { inferBirthUpperBounds, isLivingPerson, type PrivacyMode } from '../privacy.js';
 import type { Person, PersonId, StromData } from '../types.js';
-import { planCounts, type MergePlan, type PlanItem } from './plan.js';
+import { changesValue, planCounts, type MergePlan, type PlanItem } from './plan.js';
+import { afterText } from './plan-rules.js';
 
 export interface PlanExportContext {
     /** The import's data (names of its people, sources, places, files). */
@@ -71,9 +72,9 @@ export function exportPlan(plan: MergePlan, ctx: PlanExportContext): { txt: stri
 
     group(t.gNew, on('person-add').map(i => `+ ${src.name(i.id)}`));
     group(t.gJoined, on('person-join').filter(i => !i.standIn).map(i => `= ${src.name(i.id)} · ${t.joinedWith(tree.name(i.target))}`));
-    group(t.gFields, on('field').filter(i => i.before !== i.after).map(i => tree.living(i.person)
+    group(t.gFields, on('field').filter(changesValue).map(i => tree.living(i.person)
         ? `~ ${tree.name(i.person)}: ${label(i.field)}`
-        : `~ ${tree.name(i.person)}: ${label(i.field)}: ${i.before || '—'} → ${i.after || '—'}`));
+        : `~ ${tree.name(i.person)}: ${label(i.field)}: ${i.before || '—'} → ${afterText(i.field, i.before, i.after) || '—'}`));
     group(t.gLinks, [
         ...on('partnership-add').map(i => {
             const u = ctx.source.partnerships[i.id as keyof StromData['partnerships']];

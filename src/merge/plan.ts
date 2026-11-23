@@ -691,6 +691,15 @@ function keptByValue(rule: RuleSource): boolean {
 
 // ==================== COUNTS ====================
 
+/**
+ * A detail item that changes the value: another portrait of the same name
+ * and size too (its plan text is the same, fieldItems keeps it only when the
+ * content differs).
+ */
+export function changesValue(item: { field: string; before: string; after: string }): boolean {
+    return item.after !== item.before || item.field === 'photo';
+}
+
 /** The counts of a plan (the one source of numbers of the wizard). */
 export function planCounts(plan: MergePlan): PlanCounts {
     const c: PlanCounts = { joined: 0, added: 0, skipped: 0, pending: 0, total: plan.source.persons, fieldChanges: 0, fieldFills: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0 };
@@ -702,8 +711,8 @@ export function planCounts(plan: MergePlan): PlanCounts {
             case 'person-pending': case 'group-pending': c.pending++; break;
             case 'connect': if (item.rel === 'partner') c.partnerships++; else c.links++; break;
             case 'field':
-                if (item.on && item.after !== item.before) c.fieldChanges++;
-                else if (!item.on && item.before !== '' && item.after !== item.before) c.differencesKept++;
+                if (item.on && changesValue(item)) c.fieldChanges++;
+                else if (!item.on && item.before !== '' && changesValue(item)) c.differencesKept++;
                 break;
             case 'field-both': if (item.on) c.alongside++; break;
             case 'fill': c.fieldFills++; break;

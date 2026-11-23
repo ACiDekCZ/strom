@@ -8,6 +8,7 @@
 
 import { Partnership, PartnershipId, Person, PersonId, StromData } from '../types.js';
 import { imageMetaOf } from '../image-meta.js';
+import { strings } from '../strings.js';
 import { isPoolRef } from '../image-ref.js';
 import { detectConflicts, suggestResolution } from './matching.js';
 import { detectPartnershipConflicts, existingTargetOf, incomingAddedAsNew } from './executor.js';
@@ -41,6 +42,14 @@ export function fieldKind(field: string): FieldKind {
 /** The length of an image's data URL: a pooled image's from its catalog entry (the same in either form). */
 function imageTextLength(value: string): number {
     return isPoolRef(value) ? imageMetaOf(value)?.len ?? value.length : value.length;
+}
+
+/**
+ * The plan text of a value written over `before`: another photo of the same
+ * name and size reads as such, not as "photo (3222) → photo (3222)".
+ */
+export function afterText(field: string, before: string, after: string): string {
+    return field === 'photo' && !!before && before === after ? strings.mergeWizard.otherPhoto : after;
 }
 
 /** A detail as plan text: a photo by its name and size (never the data URL), an unknown sex as nothing. */

@@ -15,7 +15,7 @@ import { escapeHtml, stepHeading } from './context.js';
 import type { MergeState } from '../types.js';
 import type { FieldKind, MergePlan, PlanRules, RuleChoice, RuleSource } from '../plan.js';
 import {
-    FIELD_KINDS, mergeDifferences, relationConflicts, resolveField, ruleCounts,
+    FIELD_KINDS, afterText, mergeDifferences, relationConflicts, resolveField, ruleCounts,
     type EndOf, type FieldDifference, type Protection, type RelChoice, type RelConflict, type RuleExample,
 } from '../plan-rules.js';
 import { step4Need } from '../wizard-steps.js';
@@ -112,7 +112,7 @@ function exampleText(state: MergeState, ex: RuleExample | null): string {
     const p = nameOf(state.existingData.persons[ex.person]);
     const f = fieldLabel(ex.field);
     const a = valueText(ex.field, ex.before);
-    const b = valueText(ex.field, ex.after);
+    const b = valueText(ex.field, afterText(ex.field, ex.before, ex.after));
     if (ex.result === 'import') return W.exChange(p, f, a, b);
     if (ex.result === 'both') return W.exSide(p, f, b);
     if (ex.result === 'walk') return '';
@@ -206,7 +206,7 @@ function skippedHtml(ctx: StepContext, v: View): string {
     const diffs = mergeDifferences(ctx.state);
     const list = v.diffsOpen ? `<ul class="merge-s4-diffs">${diffs.map(d =>
         `<li><span class="merge-s4-pname">${escapeHtml(nameOf(ctx.state.existingData.persons[d.person]))}</span>, ${escapeHtml(fieldLabel(d.field))}: `
-        + `<span class="tnum">${escapeHtml(valueText(d.field, d.before))} → ${escapeHtml(valueText(d.field, d.after))}</span></li>`).join('')}</ul>` : '';
+        + `<span class="tnum">${escapeHtml(valueText(d.field, d.before))} → ${escapeHtml(valueText(d.field, afterText(d.field, d.before, d.after)))}</span></li>`).join('')}</ul>` : '';
     return stepHeading(4)
         + `<div class="merge-s4 is-skipped"><h4 class="merge-s4-skip-t">${escapeHtml(W.s4SkippedTitle)}</h4>`
         + `<p class="merge-s4-note">${escapeHtml(W.step4Skipped(scopeLabel(ctx.plan!), diffs.length))}`
@@ -508,7 +508,7 @@ function openProtected(ctx: StepContext, d: FieldDifference, use: () => void, ke
     const { state } = ctx;
     const tree = state.existingData.persons[d.person];
     const v = valueText(d.field, d.before);
-    const w = valueText(d.field, d.after);
+    const w = valueText(d.field, afterText(d.field, d.before, d.after));
     const src = (tree?.sourceIds ?? []).map(id => state.existingData.sources?.[id]?.title).find(Boolean) ?? W.protMarked(W.protKinds[d.protection!]);
     const html = `<div class="modal-header"><h2 id="merge-s4-prot-t">${escapeHtml(W.protTitle)}</h2></div>`
         + `<p class="merge-s4-prot-text">${escapeHtml(W.protText(nameOf(tree), fieldLabel(d.field), v, src, w))} ${protectionMark(d.protection!)}</p>`

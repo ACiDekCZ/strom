@@ -199,6 +199,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
             events: 'Wydarzenia', sourceIds: 'Źródła', birthSourceIds: 'Źródła urodzenia', deathSourceIds: 'Źródła zgonu',
             refn: 'Numer referencyjny', question: 'Otwarte pytanie', story: 'Opowieść',
         },
+        otherPhoto: 'inne zdjęcie o tej samej nazwie i rozmiarze',
         fromTo: 'Skąd → dokąd',
         swap: 'Zamień',
         notTaken: (list: string) => `Drzewo nie przejmie: ${list}.`,
