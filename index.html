@@ -14158,8 +14158,9 @@
             .fan-toolbar .fan-stepper .depth-stepper-btn { width: 40px; height: 36px; }
             .fan-legend { display: none; }
             .fan-legend-chip { display: inline-flex; }
-            /* Back / forward stand above the chip (spec 082 K1.2), not the chip above them; on the research's strip as before. */
-            body.focus-nav-shown:has(> #live-panel.phone-strip:not([hidden])) .fan-legend-chip { bottom: 68px; }
+            /* Back / forward stand above the chip (spec 082 K1.2), not the chip above them; with the research's
+               strip the chip stands 8px above the strip (as the tree's pills, --live-strip-h) and they above the chip (1123). */
+            body:has(> #live-panel.phone-strip:not([hidden])):not(:has(#evidence-pill)):not(:has(#live-follow-pill)) .fan-legend-chip { bottom: calc(12px + var(--live-strip-h, 0px)); }
             /* A column at the right edge: the pills of the tree end 80px from it. */
             .fan-zoom-controls { flex-direction: column; right: 12px; }
             /* The pills of the tree take the bottom: the chip goes to the top right. */
@@ -27609,6 +27610,8 @@
             body.tree-legend-shown:is([data-view-mode="family"], [data-view-mode="descendants"]):has(> .evidence-pill ~ .live-follow-pill) { --nav-lift: max(0px, calc(var(--tree-legend-h, 0px) - 112px)); }
             body[data-view-mode="fan"]:not(:has(#evidence-pill)):not(:has(#live-follow-pill)) { --nav-lift: 52px; }
             body:has(> #live-panel.phone-strip:not([hidden])) { --nav-lift: 0px; }
+            /* The fan's chip on the strip (no pill): back / forward stand above it, as without the strip. */
+            body[data-view-mode="fan"]:has(> #live-panel.phone-strip:not([hidden])):not(:has(#evidence-pill)):not(:has(#live-follow-pill)) { --nav-lift: 52px; }
         }
         /* Held sideways the tree's pill stands at the top, centred: the fan's chip keeps the bottom left
            with back / forward above it, as without the pill (a family line's name in the chip, spec 114 §6,
