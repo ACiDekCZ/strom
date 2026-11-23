@@ -17,7 +17,7 @@
  */
 
 import { strings } from '../../strings.js';
-import type { MergeState, PersonMatch, MatchDecision } from '../types.js';
+import type { MergeState, PersonMatch, MatchDecision, MatchReason } from '../types.js';
 import type { Partnership, Person, PersonId, StromData } from '../../types.js';
 import { AUTO_CONFIRM_SCORE, existingTargetOf } from '../executor.js';
 import { candidatesFor, timeConflict, type MatchCandidateInfo } from '../matching.js';
@@ -669,19 +669,40 @@ function recalcHtml(state: MergeState, view: PairView): string {
         + `<button type="button" class="link-button merge-recalc-show" aria-pressed="${view.onlyRecalc}">${escapeHtml(view.onlyRecalc ? W.showAll : W.recalcShow)}</button></p>`;
 }
 
-/** The pairs no one decided yet (the ones "to decide"). */
-function openIds(d: Drawn): PersonId[] {
-    return d.rows.filter(r => d.fates.get(r.id) === 'pending').map(r => r.id);
+/** Why yes of a pair that shares its parents (one of them) or a partner with the tree's person. */
+const FAMILY_REASONS: ReadonlySet<MatchReason> = new Set<MatchReason>(['name_gender_parents', 'child_of_matched', 'sibling_of_matched', 'partner_of_matched', 'partner_similarity']);
+
+/**
+ * The undecided pairs (`fates` pending) the rest decides at once, and the ones
+ * with the same parents or partner as the tree's person: added as new they
+ * would double a family (a third parent, a second spouse of one name), so
+ * they are decided one by one (134 N2) and Continue waits for them.
+ */
+export function restSplit(rows: readonly PairRow[], fates: ReadonlyMap<PersonId, PersonFate>): { bulk: PersonId[]; oneByOne: PersonId[] } {
+    const bulk: PersonId[] = [];
+    const oneByOne: PersonId[] = [];
+    for (const r of rows) {
+        if (fates.get(r.id) !== 'pending') continue;
+        (r.match?.reasons.some(x => FAMILY_REASONS.has(x)) ? oneByOne : bulk).push(r.id);
+    }
+    return { bulk, oneByOne };
 }
 
-/** "Remaining N undecided: Add as new · Do not add" (K3.4) under the pair. */
+/**
+ * "Remaining N undecided: Add as new · Do not add" (K3.4) under the pair, N
+ * without the pairs of one family; a sentence says how many are decided one by one.
+ */
 function restHtml(d: Drawn): string {
     const W = strings.mergeWizard;
-    const n = openIds(d).length;
-    if (n === 0) return '';
+    const { bulk, oneByOne } = restSplit(d.rows, d.fates);
+    const n = bulk.length;
+    if (n === 0 && oneByOne.length === 0) return '';
+    const one = oneByOne.length ? `<span class="merge-rest-one">${escapeHtml(W.restOneByOne(oneByOne.length))}</span>` : '';
+    if (n === 0) return `<div class="merge-rest" id="merge-rest">${one}</div>`;
     return `<div class="merge-rest" id="merge-rest"><span class="merge-rest-label">${escapeHtml(W.restLabel(n))}</span>`
         + `<button type="button" class="secondary" data-rest="reject">${escapeHtml(W.restAdd(n))}</button>`
         + `<button type="button" class="secondary" data-rest="skip">${escapeHtml(W.restSkip(n))}</button>`
+        + one
         + `<span class="merge-rest-warn">${escapeHtml(W.restAddWarn)}</span></div>`;
 }
 
@@ -902,7 +923,7 @@ function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
         if (!rest || !env) return false;
         const d = drawData(ctx, view);
         view.showCopy = true;
-        env.decideMany(openIds(d), rest.dataset.rest as 'reject' | 'skip');
+        env.decideMany(restSplit(d.rows, d.fates).bulk, rest.dataset.rest as 'reject' | 'skip');
         return true;
     };
     host.querySelector<HTMLElement>('#merge-s2-side')?.addEventListener('click', e => { restClick(e.target as HTMLElement); });

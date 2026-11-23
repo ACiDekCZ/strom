@@ -231,6 +231,9 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         restAdd: (n: number) => `Dodaj jako nowe (${n})`,
         restSkip: (n: number) => `Nie dodawaj (${n})`,
         restAddWarn: 'Dodanie jako nowe może zdublować osoby, które już są w drzewie.',
+        restOneByOne: (n: number) => n === 1
+            ? '1 parę z tymi samymi rodzicami lub partnerem trzeba rozstrzygnąć osobno.'
+            : `${numPl(n)} ${plPl(n, 'parę', 'pary', 'par')} z tymi samymi rodzicami lub partnerem trzeba rozstrzygnąć pojedynczo.`,
         unjoinSel: 'Cofnij połączenie wybranych',
         notFirstTime: 'nie proponowany jako pierwszy: inny okres',
         noName: 'bez imienia',

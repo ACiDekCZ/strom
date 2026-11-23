@@ -18714,6 +18714,8 @@
             color: var(--text-light);
         }
         .merge-rest-warn { flex-basis: 100%; font-size: 11.5px; color: var(--text-faint); }
+        /* The pairs of one family the rest leaves out (134 N2): a line of its own, read before the warning. */
+        .merge-rest-one { flex-basis: 100%; font-size: 12.5px; color: var(--text); }
         /* A recalculation after a decision (K3.3): a quiet line with Show. */
         .merge-recalc { margin: 0; font-size: 12.5px; color: var(--text-light); }
         .merge-recalc .link-button { padding: 0; min-height: 0; font-size: 12.5px; }
@@ -18797,7 +18799,8 @@
         .pair .ln { display: block; }
         .pair .merge-records-more { padding: 0; min-height: 0; font-size: 12px; }
         .merge-s2.is-wide .merge-s2-side .merge-rest { flex-direction: column; align-items: stretch; gap: 6px; }
-        .merge-s2.is-wide .merge-s2-side .merge-rest-warn { flex-basis: auto; }
+        .merge-s2.is-wide .merge-s2-side .merge-rest-warn,
+        .merge-s2.is-wide .merge-s2-side .merge-rest-one { flex-basis: auto; }
         @media (min-width: 1800px) {
             .merge-s2.is-wide:not(.is-folded) { grid-template-columns: 320px minmax(0, 1fr); }
         }

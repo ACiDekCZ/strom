@@ -6440,6 +6440,10 @@ const stringsEN = {
         restAdd: (n: number) => `Add as new (${n})`,
         restSkip: (n: number) => `Do not add (${n})`,
         restAddWarn: 'Adding as new can duplicate people already in the tree.',
+        /** The undecided pairs of one family (the same parents or partner) the rest leaves out (134 N2). */
+        restOneByOne: (n: number) => n === 1
+            ? '1 pair with the same parents or partner needs deciding on its own.'
+            : `${numEn(n)} pairs with the same parents or partner need deciding one by one.`,
         unjoinSel: 'Undo the joins of the selected',
         notFirstTime: 'not offered first: another period',
         noName: 'no name',
@@ -17683,6 +17687,9 @@ const stringsCZ: StringsType = {
         restAdd: (n: number) => `Přidat jako nové (${n})`,
         restSkip: (n: number) => `Nepřidávat (${n})`,
         restAddWarn: 'Přidat jako nové může zdvojit osoby, které už ve stromu jsou.',
+        restOneByOne: (n: number) => n === 1
+            ? '1 dvojici se stejnými rodiči nebo partnerem je potřeba rozhodnout zvlášť.'
+            : `${numCs(n)} ${plural('cs', n, 'dvojici', 'dvojice', 'dvojic')} se stejnými rodiči nebo partnerem je potřeba rozhodnout jednotlivě.`,
         unjoinSel: 'Zrušit spojení vybraných',
         notFirstTime: 'nenabízí se jako první: jiná doba',
         noName: 'bez jména',
@@ -28770,6 +28777,9 @@ const stringsDE: StringsType = {
         restAdd: (n: number) => `Als neu hinzufügen (${n})`,
         restSkip: (n: number) => `Nicht übernehmen (${n})`,
         restAddWarn: 'Als neu hinzufügen kann Personen verdoppeln, die schon im Stammbaum sind.',
+        restOneByOne: (n: number) => n === 1
+            ? '1 Paar mit denselben Eltern oder demselben Partner ist für sich zu entscheiden.'
+            : `${numDe(n)} Paare mit denselben Eltern oder demselben Partner sind einzeln zu entscheiden.`,
         unjoinSel: 'Verbindung der Ausgewählten aufheben',
         notFirstTime: 'nicht zuerst angeboten: andere Zeit',
         noName: 'ohne Namen',

@@ -187,26 +187,45 @@ test.describe('step 2: decisions (K3.3, K3.4)', () => {
         await expect(stats).not.toContainText('conflict');
     });
 
-    test('Continue is locked while pairs are left and says why; the rest Do not add decides them all and the counts add up', async ({ page }) => {
+    test('Continue is locked while pairs are left and says why; the rest Do not add leaves the pairs of one family to decide one by one (134 N2)', async ({ page }) => {
         await openApp(page);
-        const wizard = await openGuide(page, modrinovi(false), modrinoviFile(false));
+        // Vojmír Modřín (1930 in the tree, no date in the file) has no family in either: only offered, decided with the rest.
+        const tree = modrinovi(false);
+        tree.persons['m_vojmir' as never] = person('m_vojmir', 'Vojmír', 'Modřín', 'male', { birthDate: '1930' } as Partial<P>);
+        const file = modrinoviFile(false);
+        file.persons['i_vojmir' as never] = person('i_vojmir', 'Vojmír', 'Modřín', 'male');
+        const wizard = await openGuide(page, tree, file);
         await mergeCompare(wizard);
-        // Florentýna and Teofil without dates are only offered: two pairs to decide.
-        await expect(mergeCount(wizard, 'pending')).toHaveText('2');
+        // Florentýna, Teofil and Vojmír without dates are only offered: three pairs to decide.
+        await expect(mergeCount(wizard, 'pending')).toHaveText('3');
         await expect(wizard.locator('#merge-next')).toBeDisabled();
         await expect(wizard.locator('#merge-next')).toContainText('Whom to add');
-        await expect(wizard.locator('#merge-next-why')).toHaveText('2 pairs left to decide');
+        await expect(wizard.locator('#merge-next-why')).toHaveText('3 pairs left to decide');
 
-        // At the list's foot (a wider window, dotaz 10): "Remaining 2 undecided: Add as new (2) · Do not add (2)".
+        // At the list's foot (a wider window, dotaz 10): the rest without Florentýna (her partner is the tree's)
+        // and Teofil (his parents are the tree's): "Remaining 1 undecided: Add as new (1) · Do not add (1)".
         await mergeGroup(wizard, 'maybe');
         const rest = wizard.locator('#merge-rest');
-        await expect(rest).toContainText('Remaining 2 undecided');
+        await expect(rest).toContainText('Remaining 1 undecided');
+        await expect(rest.locator('[data-rest="reject"]')).toHaveText('Add as new (1)');
+        await expect(rest.locator('.merge-rest-one')).toHaveText('2 pairs with the same parents or partner need deciding one by one.');
         await rest.locator('[data-rest="skip"]').click();
+        await expect(mergeCount(wizard, 'pending')).toHaveText('2');
+        await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
+        await expect(mergeRow(wizard, 'Vojmír')).toHaveAttribute('data-fate', 'skipped');
+        // Only the sentence is left; Continue waits for the two pairs.
+        await expect(rest.locator('[data-rest]')).toHaveCount(0);
+        await expect(rest.locator('.merge-rest-one')).toHaveText('2 pairs with the same parents or partner need deciding one by one.');
+        await expect(wizard.locator('#merge-next')).toBeDisabled();
+        await expect(wizard.locator('#merge-next-why')).toHaveText('2 pairs left to decide');
+
+        await mergeDecide(wizard, /Teofil/, 'skip', 'maybe');
+        await mergeDecide(wizard, /Florentýna/, 'same', 'maybe');
         await expect(mergeCount(wizard, 'pending')).toHaveText('0');
+        await expect(mergeCount(wizard, 'joined')).toHaveText('2');
         await expect(mergeCount(wizard, 'skipped')).toHaveText('2');
-        await expect(mergeCount(wizard, 'joined')).toHaveText('1');
         const counts = (await wizard.locator('#merge-counts .merge-stat .merge-stat-value').allTextContents()).map(Number);
-        expect(counts.reduce((a, b) => a + b, 0)).toBe(3);
+        expect(counts.reduce((a, b) => a + b, 0)).toBe(4);
         await expect(wizard.locator('#merge-rest')).toHaveCount(0);
         await expect(wizard.locator('#merge-next')).toBeEnabled();
         await expect(wizard.locator('#merge-next-why')).toHaveText('');
