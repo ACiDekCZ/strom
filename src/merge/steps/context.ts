@@ -50,8 +50,8 @@ export type WriteStatus =
     | { kind: 'bad'; message: string; detail: string }
     /** 8c: the target changed meanwhile; the plan was built again. */
     | { kind: 'changed'; text: string }
-    /** 8d: the backup could not be made (`detail`: why). */
-    | { kind: 'backupFailed'; detail: string }
+    /** 8d: the backup could not be made (`why` in words, `detail` the browser's message, for the title). */
+    | { kind: 'backupFailed'; why: string; detail: string }
     /** A tree's write did not land (nothing left behind). */
     | { kind: 'failed'; message: string }
     /** 8e: the rotation would delete the backup of the merge of `date`. */

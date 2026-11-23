@@ -69,7 +69,7 @@ import { executeMerge } from '../merge/executor.js';
 import { createMergeState, updateMatchDecision } from '../merge/matching.js';
 import { buildPlan, type MergePlan, type PlanScope, type WizardChoices } from '../merge/plan.js';
 import { exportPlan } from '../merge/plan-export.js';
-import { writePlan, type WriteResult } from '../merge/write.js';
+import { backupFailureWhy, writePlan, type WriteResult } from '../merge/write.js';
 import { contentFingerprint } from '../research-link.js';
 import {
     createSnapshot, listSnapshots, planRetention, MAX_SNAPSHOTS_PER_TREE, type SnapshotMeta,
@@ -213,10 +213,26 @@ describe('the backup "Before merge" (K0.4)', () => {
         const { plan, target } = await planFor(T1, INCOMING);
         failing.write = store => store === 'snapshots';
         const result = await writePlan(plan, { target, source: INCOMING, into: 'tree' });
-        expect(result).toMatchObject({ ok: false, reason: 'backup' });
+        expect(result).toMatchObject({ ok: false, reason: 'backup', why: 'The browser storage is almost full.', detail: 'QuotaExceededError' });
         expect(await storedNames(T1)).toEqual(['Alma', 'Berta']);
         expect(Object.keys(DataManager.getData().persons)).toHaveLength(2);
         expect([...st('merge').keys()].filter(k => k.startsWith('backup-'))).toEqual([]);
+    });
+
+    it('8d says why in words: a full storage with the room the browser estimates, else a general sentence', async () => {
+        const MB = 1024 * 1024;
+        const quota = new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        vi.stubGlobal('navigator', { storage: { estimate: async () => ({ quota: 100 * MB, usage: 97.5 * MB }) } });
+        try {
+            expect(await backupFailureWhy(quota)).toBe('The browser storage is almost full (2 MB left).');
+            // A quota error wrapped by the storage layer is read through its cause.
+            expect(await backupFailureWhy(Object.assign(new Error('save failed'), { cause: quota }))).toBe('The browser storage is almost full (2 MB left).');
+            expect(await backupFailureWhy(new Error('IndexedDB transaction aborted'))).toBe('The browser did not accept the backup.');
+            vi.stubGlobal('navigator', {});
+            expect(await backupFailureWhy(quota)).toBe('The browser storage is almost full.');
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 });
 

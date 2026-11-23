@@ -397,7 +397,7 @@ function statusHtml(st: WriteStatus, ctx: StepContext): string {
         case 'changed':
             return `<p class="merge-s5-st-warn">${escapeHtml(st.text)} ${escapeHtml(W.replanned)}</p>`;
         case 'backupFailed':
-            return `<p class="merge-s5-st-err"><b>${escapeHtml(W.backupFailed)}</b> ${escapeHtml(st.detail)}</p>`
+            return `<p class="merge-s5-st-err"><b>${escapeHtml(W.backupFailed)}</b> <span class="merge-s5-st-why"${st.detail ? ` title="${escapeHtml(st.detail)}"` : ''}>${escapeHtml(st.why)}</span></p>`
                 + acts(bt('backups', W.freeSpaceBackups), bt('save-tree', W.saveTreeFile(ctx.plan?.target.name ?? ctx.choices.targetName)), bt('retry', W.tryAgain));
         case 'failed':
             return `<p class="merge-s5-st-err"><b>${escapeHtml(st.message)}</b></p>` + acts(bt('retry', W.tryAgain));

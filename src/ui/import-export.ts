@@ -667,7 +667,10 @@ export const importExportMethods = uiModule({
         const placeholdersEl = document.getElementById('gedcom-stat-placeholders');
         const unsupportedEl = document.getElementById('gedcom-stat-unsupported');
 
-        if (personsEl) personsEl.textContent = String(this.gedcomResult.stats.totalPersons);
+        // The people without the "?" stand-ins, counted as the import guide counts them
+        // (its sentence and its plan): the stand-ins have their own tile.
+        const people = Object.values(this.gedcomResult.data.persons).filter(p => !p.isPlaceholder).length;
+        if (personsEl) personsEl.textContent = String(people);
         if (partnershipsEl) partnershipsEl.textContent = String(this.gedcomResult.stats.totalPartnerships);
         if (placeholdersEl) placeholdersEl.textContent = String(this.gedcomResult.stats.placeholderPersons);
         if (unsupportedEl) unsupportedEl.textContent = String(this.gedcomResult.stats.unsupportedTags);

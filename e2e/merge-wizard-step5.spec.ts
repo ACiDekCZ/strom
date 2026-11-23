@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeToStep5, mergeWrite } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeToStep5, mergeWrite, reloadApp } from './helpers.js';
 
 /**
  * Step 5 of the import guide, What will happen (spec 134 §8): the whole plan
@@ -116,8 +116,9 @@ test('Write into Modřínovi: the open tree gets the new people at once, its res
 test('8d: the backup "Before merge" fails, so nothing is written; its state says why and what can be done, Try again writes', async ({ page }) => {
     const wizard = await openGuide(page);
     await mergeToStep5(wizard);
-    // The browser's storage refuses the backup (a full disk).
+    // The browser's storage refuses the backup (a full disk), 2.5 MB left by its estimate.
     await page.evaluate(() => {
+        Object.defineProperty(navigator.storage, 'estimate', { configurable: true, value: async () => ({ quota: 100 * 1024 * 1024, usage: 97.5 * 1024 * 1024 }) });
         const w = window as unknown as { __put?: typeof IDBObjectStore.prototype.put };
         w.__put = IDBObjectStore.prototype.put;
         IDBObjectStore.prototype.put = function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
@@ -129,6 +130,11 @@ test('8d: the backup "Before merge" fails, so nothing is written; its state says
     const status = wizard.locator('.merge-s5-status');
     await expect(status).toHaveAttribute('data-state', 'backupFailed');
     await expect(status.locator('.merge-s5-st-err')).toContainText('The backup failed, so nothing was written.');
+    // Why in words; the browser's own message only as the title.
+    const why = status.locator('.merge-s5-st-why');
+    await expect(why).toHaveText('The browser storage is almost full (2 MB left).');
+    await expect(why).toHaveAttribute('title', /quota/);
+    await expect(status).not.toContainText('quota');
     await expect(status.locator('.merge-s5-act')).toHaveText(['Free up space: Backups…', 'Save the tree Modřínovi to a file…', 'Try again']);
     await expect(wizard).toBeVisible();
     await expect(wizard.locator('#merge-next')).toBeEnabled();
@@ -165,4 +171,48 @@ test('8c: the tree changed since the comparison: nothing is written blindly, the
     await expect(wizard).toBeHidden();
     await page.locator('#confirmation-modal.active #confirm-ok-btn').click();
     expect(await peopleOf(page, 'Modřínovi')).toEqual(['Amos', 'Elvíra', 'Florentýna', 'Kasián', 'Kvido', 'Lukrecie', 'Teofil']);
+});
+
+/** How many people the merge left open (as the browser stores it) leaves out. */
+const savedLeftOut = (page: Page): Promise<number> => page.evaluate(() => new Promise<number>(resolve => {
+    const open = indexedDB.open('strom-db');
+    open.onerror = () => resolve(-1);
+    open.onsuccess = () => {
+        const db = open.result;
+        const get = db.transaction('merge').objectStore('merge').get('current');
+        get.onsuccess = () => { resolve(get.result?.state?.wizard?.choices?.leftOut?.length ?? 0); db.close(); };
+        get.onerror = () => { resolve(-1); db.close(); };
+    };
+}));
+
+test('a reload in step 5 (13g) and Save for later there (13j): the merge comes back on step 5 with a person unticked, the tree unchanged', async ({ page }) => {
+    const wizard = await openGuide(page);
+    await mergeToStep5(wizard);
+    await row(wizard, 'Kasián').locator('input.merge-s5-cb').click();
+    await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
+    await expect.poll(() => savedLeftOut(page), { timeout: 10_000 }).toBe(1);
+
+    await reloadApp(page);
+    const pending = page.locator('#pending-merge-modal');
+    await expect(pending).toHaveClass(/active/);
+    await expect(pending.locator('.pending-merge-message')).toHaveText('Last time the merge did not finish. The tree Modřínovi and the file are unchanged.');
+    await expect(pending.locator('.pending-merge-meta')).toContainText('Step 5 of 6');
+    expect(await peopleOf(page, 'Modřínovi')).toEqual(['Florentýna', 'Kvido', 'Teofil']);
+    await pending.locator('.btn-resume').click();
+    await expect(wizard).toBeVisible();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
+    await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
+    await expect(wizard.locator('#merge-next')).toHaveText('Add 2 people, change 0 details');
+
+    // Save for later on step 5: the toast says the step, Manage trees brings it back as it was.
+    await wizard.locator('#merge-save-later').click();
+    await expect(wizard).toBeHidden();
+    await expect(page.locator('.toast')).toHaveText('Saved for later · rodokmen-jilmovi.ged → Modřínovi · step 5 · in Manage trees under Unfinished merges');
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    await page.locator('#tree-manager-modal .tree-manager-item.pending-merge .tree-open-btn').click();
+    await expect(wizard).toBeVisible();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
+    await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
+    await expect(wizard.locator('#merge-next')).toHaveText('Add 2 people, change 0 details');
+    expect(await peopleOf(page, 'Modřínovi')).toEqual(['Florentýna', 'Kvido', 'Teofil']);
 });

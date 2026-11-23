@@ -59,6 +59,8 @@ interface View {
     tab: 'linked' | 'groups';
     filters: S3Filters;
     panel: FilterPanel | null;
+    /** A phone: the filters, grouping and bulk choices shown under Filters ▾. */
+    tools: boolean;
     groupBy: S3GroupBy;
     /** Groups opened or closed against their default. */
     toggled: Set<string>;
@@ -86,7 +88,7 @@ function viewOf(ctx: StepContext): View {
     let v = views.get(ctx.state);
     if (!v) {
         v = {
-            root: null, ctx, base: null, tab: 'linked', filters: { ...NO_FILTERS }, panel: null, groupBy: 'rod', toggled: new Set(),
+            root: null, ctx, base: null, tab: 'linked', filters: { ...NO_FILTERS }, panel: null, tools: false, groupBy: 'rod', toggled: new Set(),
             list: null, rows: [], shown: [], groups: [], sel: { ticked: new Set(), standIns: new Set() },
             preview: null, previewDrawn: '', terms: new Map(), gTicked: new Set(), gChanging: new Set(), singlesOff: [],
         };
@@ -272,8 +274,11 @@ function build(host: HTMLElement, view: View): void {
   </div>` : ''}
   <div class="merge-s3-panel" id="merge-s3-linked"${tabs ? ' role="tabpanel" aria-labelledby="merge-s3-tab-linked"' : ''}>
     <div class="merge-s3-tools">
-      <input type="search" class="merge-s3-search" placeholder="${escapeHtml(W.s3Search)}" aria-label="${escapeHtml(W.s3Search)}" autocomplete="off" spellcheck="false">
-      <div class="merge-s3-filters">
+      <div class="merge-s3-find">
+        <input type="search" class="merge-s3-search" placeholder="${escapeHtml(W.s3Search)}" aria-label="${escapeHtml(W.s3Search)}" autocomplete="off" spellcheck="false">
+        <button type="button" class="sel-opt merge-s3-chip merge-s3-more" data-sel-form="chip" aria-expanded="false" aria-controls="merge-s3-filters"><span class="merge-s3-chip-l"></span><span class="merge-s3-caret-d" aria-hidden="true">▾</span></button>
+      </div>
+      <div class="merge-s3-filters" id="merge-s3-filters">
         ${chip('data-f="surname" aria-expanded="false"', W.fSurname, true)}
         ${chip('data-f="years" aria-expanded="false"', W.fYears, true)}
         ${chip('data-f="place" aria-expanded="false"', W.fPlace, true)}
@@ -384,6 +389,11 @@ function update(view: View): void {
         if (b.dataset.f) b.setAttribute('aria-expanded', String(view.panel === k));
     });
     drawPanel(view);
+    // A phone: Filters ▾ says how many filters are on while they are folded away.
+    const more = root.querySelector<HTMLButtonElement>('.merge-s3-more')!;
+    more.querySelector('.merge-s3-chip-l')!.textContent = W.s3Tools(Object.values(fOn).filter(Boolean).length);
+    more.setAttribute('aria-expanded', String(view.tools));
+    root.classList.toggle('is-tools', view.tools);
 
     // Leave out the living, the count.
     const living = livingNew(state, choices).length;
@@ -904,6 +914,7 @@ function wire(root: HTMLElement, view: View): void {
         update(view);
         root.querySelector<HTMLElement>(`.merge-s3-tabs [data-tab="${view.tab}"]`)?.focus();
     });
+    root.querySelector('.merge-s3-more')!.addEventListener('click', () => { view.tools = !view.tools; update(view); });
     const search = root.querySelector<HTMLInputElement>('.merge-s3-search')!;
     search.addEventListener('input', () => { view.filters.query = search.value; update(view); });
     root.querySelector('.merge-s3-filters')!.addEventListener('click', e => {

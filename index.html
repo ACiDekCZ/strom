@@ -18448,6 +18448,9 @@
             gap: 16px;
         }
         .merge-s2-side { display: flex; flex-direction: column; min-height: 0; gap: 8px; }
+        /* Only the list gives way to a short column: the tabs (an overflow-x row, so a flex
+           item of no minimum height) were squeezed to a few pixels in the phone's sheet. */
+        .merge-s2-side > :not(.merge-match-list) { flex-shrink: 0; }
         .merge-s2-pane { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
         /* The pane scrolls; its parts keep their height (a list of candidates is never squeezed to its border). */
         .merge-s2-pane > * { flex-shrink: 0; }
@@ -18582,10 +18585,12 @@
         .merge-s2 button.secondary { padding: 6px 12px; font-size: 13px; }
         .merge-cand-import { margin: 0; font-size: 13px; }
         .merge-cands { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
-        .merge-cand { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--divider); cursor: pointer; font-size: 13px; }
+        /* A candidate is a label: the longer selector beats `.modal label { display: block }`,
+           so the radio, the name and the reason wrap as a flex row. */
+        .merge-cand { align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--divider); cursor: pointer; }
+        .modal label.merge-cand { display: flex; flex-wrap: wrap; margin: 0; font-size: 13px; }
         .merge-cand:last-child { border-bottom: 0; }
         .merge-cand-why { flex-basis: 100%; padding-left: 24px; font-size: 11.5px; color: var(--text-light); }
-        .merge-cand { flex-wrap: wrap; }
         .merge-rest {
             display: flex;
             flex-wrap: wrap;
@@ -18703,6 +18708,8 @@
         .merge-s3-undecided { color: var(--warning-text); font-size: 12px; }
         .merge-s3-undecided[hidden] { display: none; }
         .merge-s3-tools { display: flex; flex-direction: column; gap: 8px; }
+        .merge-s3-find { display: flex; align-items: center; gap: 8px; }
+        .modal .merge-s3 button.merge-s3-more { display: none; flex: 0 0 auto; }
         .merge-s3-search {
             width: 100%; max-width: 360px; box-sizing: border-box; padding: 6px 10px;
             border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 13px;
@@ -18860,7 +18867,10 @@
         @media (max-width: 640px) {
             .merge-step-body[data-step="3"] { display: block; overflow-y: auto; }
             .merge-s3-scroll { height: 62vh; min-height: 240px; }
-            .merge-s3-search { max-width: none; }
+            .merge-s3-search { max-width: none; flex: 1 1 auto; min-width: 0; min-height: 44px; }
+            /* The tools fold under Filters ▾ (B4b): on 390 they took the screen and the list started below the fold. */
+            .modal .merge-s3 button.merge-s3-more { display: inline-flex; min-height: 44px; }
+            .merge-s3:not(.is-tools) :is(.merge-s3-filters, .merge-s3-fpanel, .merge-s3-groupby, .merge-s3-living, .merge-s3-all) { display: none; }
             .merge-s3-list { --s3-row: 52px; }
             .merge-s3-list > .merge-s3-row { flex-wrap: wrap; align-content: center; row-gap: 0; padding-left: 12px; }
             .merge-s3-list > .merge-s3-row .merge-s3-rel { order: 5; flex-basis: 100%; max-width: none; margin-left: 26px; text-align: left; }

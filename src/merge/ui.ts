@@ -1392,7 +1392,7 @@ class MergerUIClass {
     /** A failed write's state above step 5's list (spec 134 §8 8b, 8d, 8e); 8c is `replan`'s. */
     private writeFailureStatus(result: Exclude<Awaited<ReturnType<typeof writePlan>>, { ok: true } | { need: 'replan' }>): WriteStatus {
         if ('need' in result) return { kind: 'retention', date: new Date(result.date).toLocaleDateString(getCurrentLanguage()) };
-        if (result.reason === 'backup') return { kind: 'backupFailed', detail: result.detail };
+        if (result.reason === 'backup') return { kind: 'backupFailed', why: result.why, detail: result.detail };
         if (result.reason === 'save') return { kind: 'failed', message: result.message };
         // The plan's own findings lead with "The totals do not match": said once, in bold.
         const message = result.message.startsWith(strings.mergeWizard.badTotals)

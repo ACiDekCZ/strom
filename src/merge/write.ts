@@ -72,8 +72,8 @@ export type WriteResult =
     }
     /** 8b: the check before saving failed; `message` says what would have gone wrong. */
     | { ok: false; reason: 'verify'; issues: VerifyIssue[]; message: string }
-    /** 8d: the backup could not be made (quota, a locked or unreadable tree). */
-    | { ok: false; reason: 'backup'; detail: string }
+    /** 8d: the backup could not be made (quota, a locked or unreadable tree): `why` in words, `detail` the browser's own message. */
+    | { ok: false; reason: 'backup'; why: string; detail: string }
     /** A tree's write did not land (nothing is left behind). */
     | { ok: false; reason: 'save'; message: string }
     /** 8c: the target changed since the comparison; nothing written, the plan is to be built again. */
@@ -113,6 +113,35 @@ export function writeIssuesMessage(issues: readonly VerifyIssue[]): string {
 }
 
 /** The target's data as they are now: the open tree's, else as stored. Null when it cannot be read. */
+function errorText(err: unknown): string {
+    return err instanceof Error || err instanceof DOMException ? err.message : String(err);
+}
+
+/** The storage was full: the error says so, itself or through its cause. */
+function isQuotaError(err: unknown): boolean {
+    for (let e: unknown = err, i = 0; e && i < 4; e = (e as { cause?: unknown }).cause, i++) {
+        const name = (e as { name?: unknown }).name;
+        if (name === 'QuotaExceededError' || /quota/i.test(errorText(e))) return true;
+    }
+    return false;
+}
+
+/**
+ * 8d: why the backup failed, in a sentence of the app's language: a full
+ * storage with the room left (the browser's estimate), else a general one.
+ * The browser's own message stays for the title.
+ */
+export async function backupFailureWhy(err: unknown): Promise<string> {
+    const W = strings.mergeWizard;
+    if (!isQuotaError(err)) return W.backupWhyOther;
+    let freeMb: number | null = null;
+    try {
+        const est = await (navigator as { storage?: { estimate?: () => Promise<{ usage?: number; quota?: number }> } }).storage?.estimate?.();
+        if (est?.quota && est.usage !== undefined) freeMb = Math.max(0, Math.floor((est.quota - est.usage) / (1024 * 1024)));
+    } catch { /* unknown: the sentence without the number */ }
+    return W.storageFull(freeMb);
+}
+
 async function currentTarget(treeId: TreeId): Promise<StromData | null> {
     return DataManager.getDataFor(treeId) ?? await TreeManager.getTreeData(treeId).catch(() => null);
 }
@@ -173,7 +202,7 @@ export async function writePlan(plan: MergePlan, opts: WriteOptions): Promise<Wr
     let target = opts.target;
     if (targetId && into === 'tree') {
         const now = await currentTarget(targetId);
-        if (!now) return { ok: false, reason: 'backup', detail: strings.merge.failed };
+        if (!now) return { ok: false, reason: 'backup', why: strings.merge.failed, detail: '' };
         const changed = verifyTargetUnchanged(plan.target, now, opts.target);
         if (changed) return { ok: false, need: 'replan', changed };
         // What the comparison did not read (settings of the tree, its research link) as it is now.
@@ -209,7 +238,7 @@ export async function writePlan(plan: MergePlan, opts: WriteOptions): Promise<Wr
             backupId = meta.id;
         } catch (err) {
             if (applied.backupKey) await deleteBackup(applied.backupKey).catch(() => {});
-            return { ok: false, reason: 'backup', detail: err instanceof Error ? err.message : String(err) };
+            return { ok: false, reason: 'backup', why: await backupFailureWhy(err), detail: errorText(err) };
         }
         progress('backup', 1, 1);
         applied.record.backupId = backupId;

@@ -250,6 +250,18 @@ async function mergeTrees(page: Page, sourceName: string, targetName: string): P
     return wizard;
 }
 
+test('a file with a nameless "?" ancestor: the people tile and the sentence above it give the same number', async ({ page }) => {
+    await openModrinovi(page);
+    const wizard = await readGed(page, gedFile('jilmovi-otaznik.ged', [
+        ['0 @I1@ INDI', '1 NAME Amos /Jilm/', '1 SEX M', '1 BIRT', '2 DATE 1925', '1 FAMC @F1@'],
+        ['0 @I2@ INDI', '1 NAME Ludiše /Jilmová/', '1 SEX F', '1 BIRT', '2 DATE 1928', '1 FAMC @F1@'],
+        ['0 @I3@ INDI', '1 NAME //', '1 SEX M', '1 FAMS @F1@'],
+        ['0 @F1@ FAM', '1 HUSB @I3@', '1 CHIL @I1@', '1 CHIL @I2@'],
+    ]));
+    await expect(wizard.locator('#gedcom-stat-persons')).toHaveText('2');
+    await expect(wizard.locator('#merge-next')).toHaveText('Compare 2 people with the tree Modřínovi');
+});
+
 test('Swap of two trees: the source and the target change places and the counts follow', async ({ page }) => {
     await openModrinovi(page);
     await seedTrees(page, [{ name: 'Jilmovi', data: JILMOVI }]);

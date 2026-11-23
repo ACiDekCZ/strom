@@ -242,6 +242,8 @@ test.describe('step 2: decisions (K3.3, K3.4)', () => {
         await expect(pane.locator('.merge-pair-sub')).toContainText('2 candidates');
         const cands = pane.locator('.merge-cand');
         await expect(cands).toHaveCount(2);
+        // A candidate row is a flex row (radio, name, reason), not a block label.
+        await expect(cands.first()).toHaveCSS('display', 'flex');
         await expect(cands.first().locator('input')).toBeChecked();
         await expect(pane.locator('.pair')).toContainText('1950');
         // The other candidate: the pair shows the Teofil of 1953 of Mechová.
