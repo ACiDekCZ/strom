@@ -1,12 +1,13 @@
 /**
  * The merge wizard's way to a written tree (spec 134, story 0):
  * - K0.2 a failed check before saving creates and saves nothing, the wizard
- *   stays open with its answers and says what would have gone wrong;
+ *   stays open with its answers and its step 5 says what would have gone wrong;
  * - K0.4 the backup "Before merge" of the target comes from every way into
  *   the wizard, also with the tree's automatic backups off, and only once;
  * - K0.5 success (and the end of the working backup and the saved merge)
- *   only after the new tree's write has landed; a failed write leaves no
- *   tree behind and says so;
+ *   only after the write has landed, into the tree itself (Where to write,
+ *   preselected) or a new tree; a failed write leaves the tree as it was and
+ *   no tree behind, and step 5 says so;
  * - K0.6 a resumed saved merge keeps its session until the merge is written
  *   or thrown away, and notices a target that changed since the matching.
  *
@@ -77,6 +78,7 @@ import { mergeUiMethods } from '../ui/merge-ui.js';
 import { strings } from '../strings.js';
 import { freshChoices, type WizardSource } from '../merge/wizard-ui.js';
 import type { MergeState } from '../merge/types.js';
+import type { WriteStatus } from '../merge/steps/context.js';
 import type { PersonId, StromData, TreeId, TreeMetadata } from '../types.js';
 
 const T1 = 't1' as TreeId;
@@ -123,6 +125,9 @@ const ui = {
     showConfirm: vi.fn(async (m: string) => { ui.confirms.push(m); return ui.confirmAnswer; }),
     showToast: vi.fn(),
     showTreeManagerDialog: vi.fn(),
+    showTreeValidationDialog: vi.fn(async () => {}),
+    refreshSearch: vi.fn(),
+    updateTreeSwitcher: vi.fn(),
     closeTreeManagerDialog: vi.fn(),
     pushDialog: vi.fn(),
     afterImport: vi.fn(async () => {}),
@@ -138,6 +143,9 @@ beforeEach(async () => {
     ui.alerts.length = 0;
     ui.confirms.length = 0;
     ui.confirmAnswer = false;
+    // A once-answer a failed test left unused must not answer the next test's question.
+    ui.showAlert.mockReset();
+    ui.showConfirm.mockReset();
     vi.spyOn(SettingsManager, 'isEncryptionEnabled').mockReturnValue(false);
     vi.spyOn(SettingsManager, 'isAuditLogEnabled').mockReturnValue(false);
     vi.stubGlobal('window', new EventTarget());
@@ -177,9 +185,10 @@ function started(): MergeState {
 
 /**
  * The guide's step 5 pressed: its comparison done, the plan of the answers
- * written (a new tree "{target} + {source}", no name asked).
+ * written into the target itself (Where to write, preselected) or a new tree
+ * "{target} + {source}" (no name asked).
  */
-async function writePlan(): Promise<void> {
+async function writePlan(into: 'tree' | 'new' = 'tree'): Promise<void> {
     const m = MergerUI as unknown as {
         wizard: { rebuild(): void; next(): Promise<void> };
         wizardSource(): WizardSource;
@@ -187,8 +196,19 @@ async function writePlan(): Promise<void> {
     const state = internals().mergeState!;
     state.wizard ??= { step: 1, reached: 1, compared: false, choices: freshChoices(m.wizardSource(), state) };
     Object.assign(state.wizard, { step: 5, reached: 5, compared: true });
+    state.wizard.choices = { ...state.wizard.choices, into };
     m.wizard.rebuild();
     await m.wizard.next();
+}
+
+/** What step 5 says above its list about the write (8a–8f). */
+function writeStatus(): WriteStatus | null {
+    return (MergerUI as unknown as { wizard: { writeStatus: WriteStatus | null } }).wizard.writeStatus;
+}
+
+/** The first names of a tree as stored. */
+function storedNames(id: TreeId): string[] {
+    return Object.values((st('trees').get(id) as StromData).persons).map(p => p.firstName).sort();
 }
 
 async function preMergeSnapshots(id: TreeId): Promise<number> {
@@ -207,7 +227,10 @@ describe('K0.2 · a failed check before saving', () => {
         await writePlan();
 
         expect(TreeManager.getTrees().map(t => t.id)).toEqual([T1, T2]);
-        expect(ui.alerts).toEqual([mergeCheckMessage([{ kind: 'personLost', count: 2 }])]);
+        expect(storedNames(T1)).toEqual(['Alma', 'Berta']);
+        expect(await preMergeSnapshots(T1)).toBe(0);
+        expect(ui.alerts).toEqual([]);
+        expect(writeStatus()).toMatchObject({ kind: 'bad', message: mergeCheckMessage([{ kind: 'personLost', count: 2 }]) });
         expect(internals().mergeState).toBe(state);
         expect(state.phase).toBe('reviewing');
         expect(state.decisions.get('i2' as PersonId)).toEqual({ type: 'reject' });
@@ -256,17 +279,34 @@ describe('K0.4 · the backup "Before merge"', () => {
 });
 
 describe('K0.5 · success only after the written tree', () => {
-    it('a failed write: no success, no tree left behind, the working backup and the merge stay', async () => {
+    it('a failed write into the tree: no success, the tree as it was, the working backup and the merge stay', async () => {
         const state = started();
-        // Every tree written from now on fails (the browser's storage is full).
-        failing.write = (store, key) => store === 'trees' && key.startsWith('tree_');
+        // The tree's write fails (the browser's storage is full).
+        failing.write = (store, key) => store === 'trees' && key === T1;
         // The app-wide "saving failed" toast would contradict the merge's own message (P0 N2).
         const saveFailed = vi.fn();
         window.addEventListener('strom:save-failed', saveFailed);
         await writePlan();
         expect(saveFailed).not.toHaveBeenCalled();
 
-        expect(ui.alerts).toEqual([strings.merge.saveFailed]);
+        expect(ui.alerts).toEqual([]);
+        expect(writeStatus()).toEqual({ kind: 'failed', message: strings.merge.saveFailed });
+        expect(TreeManager.getTrees().map(t => t.id)).toEqual([T1, T2]);
+        expect(storedNames(T1)).toEqual(['Alma', 'Berta']);
+        expect(Object.values(DataManager.getData().persons).map(p => p.firstName).sort()).toEqual(['Alma', 'Berta']);
+        expect([...st('merge').keys()].some(k => k.startsWith('backup-'))).toBe(true);
+        expect(internals().mergeState).toBe(state);
+        expect(state.phase).toBe('reviewing');
+    });
+
+    it('a failed write of a new tree: no success, no tree left behind, the working backup and the merge stay', async () => {
+        const state = started();
+        // Every tree written from now on fails (the browser's storage is full).
+        failing.write = (store, key) => store === 'trees' && key.startsWith('tree_');
+        await writePlan('new');
+
+        expect(ui.alerts).toEqual([]);
+        expect(writeStatus()).toEqual({ kind: 'failed', message: strings.merge.saveFailed });
         expect(ui.confirms.some(m => m.includes(strings.merge.complete))).toBe(false);
         expect(TreeManager.getTrees().map(t => t.id)).toEqual([T1, T2]);
         expect([...st('merge').keys()].some(k => k.startsWith('backup-'))).toBe(true);
@@ -274,7 +314,23 @@ describe('K0.5 · success only after the written tree', () => {
         expect(state.phase).toBe('reviewing');
     });
 
-    it('a write that lands: the tree is stored before success is said, the working backup goes', async () => {
+    it('a write into the tree that lands: the tree is stored before success is said, the working backup goes', async () => {
+        started();
+        let storedAtSuccess: string[] = [];
+        ui.showAlert.mockImplementationOnce(async (m: string) => {
+            ui.alerts.push(m);
+            storedAtSuccess = storedNames(T1);
+        });
+        await writePlan();
+
+        expect(ui.alerts).toEqual([expect.stringContaining(strings.mergeWizard.mergedInto('Family'))]);
+        expect(storedAtSuccess).toEqual(['Alma', 'Berta', 'Cecilie']);
+        expect([...st('merge').keys()].some(k => k.startsWith('backup-'))).toBe(false);
+        expect(TreeManager.getTrees()).toHaveLength(2);
+        expect(internals().mergeState).toBeNull();
+    });
+
+    it('a new tree that lands: the tree is stored before success is said, the working backup goes', async () => {
         started();
         let storedAtSuccess = false;
         ui.showConfirm.mockImplementationOnce(async (m: string) => {
@@ -283,12 +339,13 @@ describe('K0.5 · success only after the written tree', () => {
             storedAtSuccess = !!id && st('trees').has(id);
             return false;
         });
-        await writePlan();
+        await writePlan('new');
 
         expect(ui.alerts).toEqual([]);
         expect(storedAtSuccess).toBe(true);
         expect([...st('merge').keys()].some(k => k.startsWith('backup-'))).toBe(false);
         expect(TreeManager.getTrees()).toHaveLength(3);
+        expect(storedNames(T1)).toEqual(['Alma', 'Berta']);
     });
 });
 
