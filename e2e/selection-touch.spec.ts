@@ -105,6 +105,21 @@ function phone(name: string, device: (typeof devices)[string]): void {
             expect((await scope.boundingBox())!.height).toBeGreaterThanOrEqual(44);
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         });
+
+        test('in German the selection\'s name keeps its room: Next person is its arrow alone, its name kept (1123)', async ({ page }) => {
+            await setup(page);
+            await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+            await chooseLong(page);
+            const next = pill(page).getByRole('button', { name: 'Nächste Person ›', exact: true });
+            await expect(next).toBeVisible();
+            const nb = (await next.boundingBox())!;
+            expect(nb.width).toBeGreaterThanOrEqual(44);
+            expect(nb.width).toBeLessThanOrEqual(48);
+            // "Liste „Brandvold-…" readable, not "List…" (the words of Next person took 122 px of the pill).
+            const text = pill(page).locator('.evidence-pill-pick-text');
+            expect((await text.boundingBox())!.width).toBeGreaterThanOrEqual(100);
+            await noOverflow(page);
+        });
     });
 }
 

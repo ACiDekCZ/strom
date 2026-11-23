@@ -25989,6 +25989,12 @@
             .evidence-pill--sel .evidence-pill-hide-t {
                 position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
             }
+            /* Next person its arrow alone, a 44 px target (its words stay its accessible name): in de its words
+               took 122 of the pill's 294 px and left the selection's name "List…" (1123). */
+            .evidence-pill--sel .evidence-pill-next-t {
+                position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+            }
+            .evidence-pill--sel .evidence-pill-next { position: relative; min-width: 44px; padding: 0; justify-content: center; font-size: 18px; }
         }
         /* Wider than a phone the selection's pill is as wide as its content up to its max-width: placed at 50 % it
            would shrink to half the screen and cut a long name with its count while room is left (§12). */
