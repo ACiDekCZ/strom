@@ -200,6 +200,8 @@ export function sanitizeMergeRecords(value: unknown): MergeRecord[] | undefined 
         }
         if (str(v.backupId) && v.backupId) rec.backupId = v.backupId;
         if (str(v.sentToResearch) && v.sentToResearch) rec.sentToResearch = v.sentToResearch;
+        if (str(v.sentAt) && v.sentAt) rec.sentAt = v.sentAt;
+        if (str(v.sentIntake) && v.sentIntake) rec.sentIntake = v.sentIntake;
         if (Array.isArray(v.undone)) {
             const undone = v.undone.filter((u): u is { at: string; items: string[] } => isPlain(u) && str(u.at) && Array.isArray(u.items))
                 .map(u => ({ at: u.at, items: strs(u.items) }));

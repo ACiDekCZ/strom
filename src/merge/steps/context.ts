@@ -46,6 +46,23 @@ export interface Step6Env {
     saveAsList(): void;
     checkTree(): void;
     undoMerge(): void;
+    /** A tree with a research and the merge not sent there yet (§11): the block "Research {t}". */
+    readonly research?: Step6Research;
+}
+
+/** Step 6's block of the research (§11, 11a/11d/11e): what stays in the app, Send… or Keep. */
+export interface Step6Research {
+    /** People and links of the merges not sent yet. */
+    readonly persons: number;
+    readonly links: number;
+    /** Keep in the app for now was chosen: the block is folded to its state. */
+    readonly kept: boolean;
+    /** An agent works on this direction now ("G0002"; '' when it does not say which): sending waits (11d). */
+    readonly agent: string | null;
+    /** The research is older, without sending after a merge: its version (11e). */
+    readonly old: string | null;
+    send(): void;
+    keepLocal(): void;
 }
 
 /** Step 5 of the guide: Save the list… (K6.4), the plan as .txt and .json; where the write stands (§8). */

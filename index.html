@@ -909,6 +909,28 @@
             flex: none; font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 7px; border-radius: var(--r-tag);
             background: var(--surface-2); color: var(--text-light); border: 1px solid var(--border); white-space: nowrap;
         }
+        /* A merge not sent to the research yet (spec 134 11b): quiet, beside the switcher on a desktop,
+           its row's second line in the list (phone and tablet: the row wraps). */
+        .tree-switcher-hold {
+            flex: 0 1 auto; min-width: 0; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-size: 12px; color: var(--text-light);
+        }
+        .tree-switcher-hold[hidden] { display: none; }
+        .tree-item-hold { flex: 0 1 auto; min-width: 0; font-size: 12px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tree-switcher-item:has(.tree-item-hold) .tree-item-badges { margin-left: auto; }
+        @media (max-width: 1024px) {
+            .toolbar .tree-switcher-hold { display: none; }
+            .tree-switcher-item:has(.tree-item-hold) { flex-wrap: wrap; row-gap: 2px; }
+            .tree-switcher-item .tree-item-hold { order: 5; flex-basis: 100%; padding-left: 24px; white-space: normal; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .toolbar .tree-switcher-hold { display: none; }
+        }
+        .tree-manager-item-hold { font-size: 12.5px; color: var(--text-light); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+        .tree-manager-item-hold .link-button { font-size: inherit; }
+        @media (pointer: coarse) {
+            .tree-manager-item-hold .link-button { min-height: 44px; }
+        }
         .tree-switcher-blocked {
             padding: 10px 14px; border-top: 1px solid var(--divider);
             font-size: 12.5px; line-height: 1.45; color: var(--text-light);
@@ -19197,12 +19219,18 @@
         .merge-s6-side { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
         .merge-s6-research[hidden] { display: none; }
         .merge-s6-research .merge-s6-acts, .merge-s6-research .row-f { flex-wrap: wrap; }
+        /* The research's block (spec 134 §11): a quiet box, its text muted, its two buttons wrap. */
+        .merge-s6-research { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-md); }
+        .merge-s6-rhead { margin: 0; font-size: 13px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+        .merge-s6-rtext { margin: 0; color: var(--text-light); font-size: 12.5px; line-height: 1.45; }
+        .merge-s6-racts { display: flex; flex-wrap: wrap; gap: 8px; }
+        .modal .merge-s6 .merge-s6-ract { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 3px 12px; font-size: 13px; white-space: normal; text-align: left; }
         .merge-s6-note { margin: 0; color: var(--text-light); font-size: 12px; line-height: 1.45; }
         @media (max-width: 1024px) {
             .merge-s6 { grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; }
         }
         @media (pointer: coarse) {
-            .modal .merge-s6 .merge-s6-act { min-height: 44px; }
+            .modal .merge-s6 .merge-s6-act, .modal .merge-s6 .merge-s6-ract { min-height: 44px; }
         }
         @media (max-width: 640px) {
             .merge-step-body[data-step="6"] { display: block; overflow-y: auto; }
@@ -19213,7 +19241,10 @@
             .merge-s6-totals { order: 2; }
             .merge-s6-acts { order: 3; display: grid; grid-template-columns: 1fr 1fr; }
             .modal .merge-s6 .merge-s6-act { min-height: 44px; padding: 4px 8px; white-space: normal; text-align: center; }
-            .merge-s6-research { order: 4; }
+            /* Under the confirmation (its head and totals), before the actions. */
+            .merge-s6-research { order: 2; }
+            .merge-s6-racts { display: grid; grid-template-columns: 1fr; }
+            .modal .merge-s6 .merge-s6-ract { min-height: 44px; justify-content: center; text-align: center; }
             .merge-s6-list { order: 5; }
             .merge-s6-note { order: 6; }
             .modal .merge-s6 input.merge-s5-search, .modal .merge-s6 input.merge-s5-search[type="search"] { width: 100%; }
@@ -34464,6 +34495,8 @@
                 <!-- Tree list rendered dynamically -->
             </div>
         </div>
+        <!-- A merge not sent to the open tree's research yet (spec 134 11b; desktop: the list says it elsewhere) -->
+        <span id="tree-switcher-hold" class="tree-switcher-hold" hidden></span>
 
         <div class="search-container">
             <div class="search-row">

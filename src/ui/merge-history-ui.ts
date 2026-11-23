@@ -6,7 +6,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
-import type { MergeRecord, StromData, TreeId } from '../types.js';
+import type { MergeRecord, StromData, TreeId, TreeMetadata } from '../types.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -19,6 +19,8 @@ import { targetBlock } from '../merge/wizard-ui.js';
 import { renderDone, writtenWhen } from '../merge/steps/step6-done.js';
 import { renderGroupsReadOnly } from '../merge/steps/step5-plan.js';
 import type { Step6Env } from '../merge/steps/context.js';
+import { MERGE_HOLD_EVENT, noteResearchSends, settleMergeHold, treeHold, unsentMerges } from '../merge/research-hold.js';
+import { onBridgeStatus } from './research-sync-ui.js';
 import {
     canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel,
     type UndoLine, type UndoModel,
@@ -64,6 +66,8 @@ interface UndoState {
     error: string;
 }
 let undoState: UndoState | null = null;
+/** The listeners of the research after a merge are in (listenForMergeHold). */
+let holdListening = false;
 
 export const mergeHistoryMethods = uiModule({
     // ==================== MERGE HISTORY (9a) ====================
@@ -407,6 +411,77 @@ export const mergeHistoryMethods = uiModule({
                 },
             },
         });
+    },
+
+    // ==================== THE RESEARCH AFTER A MERGE (§11) ====================
+
+    /**
+     * Send a merge waiting in the app to the research (step 6, Manage trees'
+     * Send…; 11a): on the tree (switched to when another is open), today's
+     * "What will be sent" with the merge's words. An older research: the
+     * whole tree as today, through its terminal (11e).
+     */
+    async sendMergeToResearch(treeId: TreeId): Promise<void> {
+        if (DataManager.isViewMode()) return;
+        if (DataManager.getCurrentTreeId() !== treeId) {
+            await this.switchToTree(treeId, { follow: false });
+            if (DataManager.getCurrentTreeId() !== treeId) return;
+        }
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!link || link.copy) return;
+        if (!this.researchSyncCapable(link.id)) {
+            const goes = this.researchLinkAvailable('send');
+            await this.researchSendTree(treeId);
+            if (goes) await settleMergeHold(treeId, DataManager.getData(), undefined);
+            return;
+        }
+        const pending = unsentMerges(DataManager.getData(), link);
+        const W = strings.mergeWizard;
+        const sum = (f: (r: MergeRecord) => number): number => pending.reduce((n, r) => n + f(r), 0);
+        const list = await this.researchChangesReady();
+        if (DataManager.getCurrentTreeId() !== treeId) return;
+        this.showResearchChanges('send', {
+            confirm: true, inexact: list === null,
+            ...(pending.length ? {
+                merge: {
+                    lead: W.resSendLead(treeName(treeId), sum(r => r.counts.added), sum(r => r.counts.links), sum(r => r.sources.length)),
+                    note: W.resSendNote, keep: W.keepLocal, go: W.resSendGo,
+                },
+            } : {}),
+        });
+    },
+
+    /** A tree waiting for a send after a merge (11b): "not sent to the research · {n people}" ('' for none). */
+    treeHoldText(tree: TreeMetadata | null | undefined): string {
+        const hold = treeHold(tree);
+        return hold ? strings.mergeWizard.notSent(hold.persons) : '';
+    },
+
+    /** Manage trees' row of a tree waiting for a send after a merge (11b): "not sent: merge of {d}" · Send…. */
+    treeManagerHoldHtml(tree: TreeMetadata): string {
+        const hold = treeHold(tree);
+        if (!hold || DataManager.isViewMode()) return '';
+        const W = strings.mergeWizard;
+        return `<div class="tree-manager-item-hold"><span>${esc(W.notSentMerge(dayText(hold.at)))}</span>`
+            + ` <button type="button" class="link-button tree-manager-hold-send" onclick="window.Strom.UI.sendMergeFromManager('${esc(tree.id)}')">${esc(W.sendShort)}</button></div>`;
+    },
+
+    /** Send… of Manage trees: the dialog closes, the tree opens with "What will be sent". */
+    sendMergeFromManager(treeId: TreeId): void {
+        this.closeTreeManagerDialog();
+        void this.sendMergeToResearch(treeId);
+    },
+
+    /** Once: the switcher follows a hold that comes or goes; the research's sends name the input of a merge sent. */
+    listenForMergeHold(): void {
+        if (holdListening || typeof window === 'undefined') return;
+        holdListening = true;
+        window.addEventListener(MERGE_HOLD_EVENT, () => {
+            this.updateTreeSwitcher();
+            const manager = document.getElementById('tree-manager-modal');
+            if (manager?.classList.contains('active')) void this.updateTreeManagerList();
+        });
+        onBridgeStatus((id, status) => noteResearchSends(id, status.sends));
     },
 
     /** The open tree drawn again after an undo (or its redo) of a merge. */

@@ -372,6 +372,14 @@ function nwSourceRef(n: NotWrittenItem): string {
  */
 type RestoreOffer = 'now' | 'later' | '';
 
+/** "What will be sent" right after a merge (spec 134 11a): its lead and note, the two buttons' words. */
+export interface MergeSendWords {
+    lead: string;
+    note: string;
+    keep: string;
+    go: string;
+}
+
 function restoreTail(ref: string, title: string, restore: RestoreOffer): string {
     return restore === 'now' && ref
         ? `<button type="button" class="link-button research-changes-restore" data-restore-source="${esc(ref)}" data-title="${esc(title)}">${esc(strings.changes.restoreSource)}</button>`
@@ -827,7 +835,7 @@ export const researchChangesMethods = uiModule({
     // ==================== THE PANEL ====================
 
     /** Open "What will be sent" / "What was written" under the toolbar's button (or the ⋯ button). */
-    showResearchChanges(mode: 'send' | 'written', opts: { confirm?: boolean; inexact?: boolean } = {}, waited = false): void {
+    showResearchChanges(mode: 'send' | 'written', opts: { confirm?: boolean; inexact?: boolean; merge?: MergeSendWords } = {}, waited = false): void {
         this.closeActionsMenu();
         this.closeResearchChanges();
         const ctx = this.researchSyncLink();
@@ -1015,10 +1023,18 @@ export const researchChangesMethods = uiModule({
                 ? `<button type="button" class="secondary btn-sm" data-act="close">${esc(strings.buttons.close)}</button>`
                 : auto && !opts.confirm
                 ? `<button type="button" class="research-sync-link" data-act="send">${esc(s.sendNow)}</button>`
+                : opts.merge
+                // After a merge (spec 134 11a): keep it in the app for now, or send it.
+                ? `<button type="button" class="secondary btn-sm" data-act="close">${esc(opts.merge.keep)}</button>`
+                    + `<button type="button" class="primary btn-sm" data-act="send">${esc(opts.merge.go)}</button>`
                 : (opts.confirm && !ctx.link.previewDue
                     ? `<label class="research-changes-skip"><input type="checkbox" id="research-changes-skip"> ${esc(c.skipPreview)}</label>` : '')
                     + `<button type="button" class="secondary btn-sm" data-act="close">${esc(strings.buttons.close)}</button>`
                     + `<button type="button" class="primary btn-sm" data-act="send">${esc(s.barSend)}</button>`;
+            if (opts.merge && !nothing) {
+                footPair = true;
+                sub = opts.merge.lead;
+            }
         }
         // About to send to a research without `media.app`: a person with only files is tagged "app only" (as a source is).
         const writes = mode === 'send' ? this.researchMediaWritesOf(ctx.treeId) : null;
@@ -1118,6 +1134,7 @@ export const researchChangesMethods = uiModule({
             <div class="research-changes-head">
                 <div class="research-changes-title">${esc(title)}</div>
                 <div class="research-changes-sub">${esc(sub)}</div>
+                ${mode === 'send' && opts.merge ? `<div class="research-changes-sub research-changes-merge-note">${esc(opts.merge.note)}</div>` : ''}
             </div>
             <div class="research-changes-body">${bodyHtml}</div>
             ${foot ? `<div class="research-changes-foot${footPair ? ' is-pair' : ''}">${foot}</div>` : ''}`;

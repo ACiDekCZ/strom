@@ -257,6 +257,13 @@ export const treeManagementMethods = uiModule({
         if (nameEl) {
             nameEl.textContent = activeTree?.name || '…';
         }
+        // A merge not sent to the tree's research yet, quietly beside the switcher (spec 134 11b).
+        this.listenForMergeHold();
+        const holdEl = document.getElementById('tree-switcher-hold');
+        if (holdEl) {
+            holdEl.textContent = this.treeHoldText(activeTree);
+            holdEl.hidden = !holdEl.textContent;
+        }
 
         if (!dropdown) return;
 
@@ -276,6 +283,7 @@ export const treeManagementMethods = uiModule({
                     <span class="tree-item-check">${isActive ? iconSvg('check') : ''}</span>
                     <span class="tree-item-name">${this.escapeHtml(tree.name)}</span>
                     ${this.treeSwitcherKindHtml(tree)}
+                    ${this.treeHoldText(tree) ? `<span class="tree-item-hold">${this.escapeHtml(this.treeHoldText(tree))}</span>` : ''}
                     ${this.treeSwitcherMarksHtml(tree)}
                 </div>
             `;
@@ -776,10 +784,10 @@ export const treeManagementMethods = uiModule({
         this.presentMenuSheet(strings.treeManager.switcherTitle, [
             { rows: trees.map(tree => {
                 const marks = this.treeSheetMarks(tree);
-                const kind = this.treeKindLabel(tree);
+                const sub = [this.treeKindLabel(tree), this.treeHoldText(tree)].filter(Boolean).join(' \u00b7 ');
                 return {
                     label: tree.name,
-                    ...(kind ? { sub: kind } : {}),
+                    ...(sub ? { sub } : {}),
                     active: tree.id === activeId,
                     treeId: tree.id,
                     extra: marks?.extra,
@@ -999,6 +1007,7 @@ export const treeManagementMethods = uiModule({
                         ${s.persons(tree.personCount)} • ${s.families(familyCount)}
                         ${defaultPersonDisplay ? ` • ${this.escapeHtml(defaultPersonDisplay)}` : ''}
                     </div>
+                    ${this.treeManagerHoldHtml(tree)}
                     ${tree.research?.id && !tree.research.copy ? this.researchLiveSlotHtml(tree.id) : ''}
                     <div class="tree-manager-item-actions">
                         <button class="tree-open-btn" data-tree-id="${tree.id}" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>

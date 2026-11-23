@@ -14,9 +14,11 @@
 import { strings, getCurrentLanguage } from '../../strings.js';
 import { formatDateTime } from '../../format.js';
 import type { MergeRecord } from '../../types.js';
-import type { Step6Env, StepContext } from './context.js';
+import type { Step6Env, Step6Research, StepContext } from './context.js';
 import { escapeHtml, glyph } from './context.js';
 import { renderPlanListReadOnly } from './step5-plan.js';
+import { researchLinkMark } from '../../research-link.js';
+import { researchActionLabel } from '../../ui/research-open-mark.js';
 
 const EYE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
     + '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -83,6 +85,7 @@ export function renderDone(host: HTMLElement, env: Step6Env, fillList: (list: HT
   </div>
 </div>`;
     fillList(host.querySelector<HTMLElement>('.merge-s6-list')!);
+    renderResearch(host.querySelector<HTMLElement>('.merge-s6-research')!, env);
     host.querySelector('.merge-s6-acts')!.addEventListener('click', e => {
         const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-act]');
         switch (b?.dataset.act) {
@@ -92,4 +95,38 @@ export function renderDone(host: HTMLElement, env: Step6Env, fillList: (list: HT
             case 'undo': env.undoMerge(); break;
         }
     });
+}
+
+/**
+ * The block "Research {t}" (§11): what the merge left in the app, Send to
+ * the research… (What will be sent, 11a) and Keep in the app for now; an
+ * agent at work (11d) or an older research (11e) said under it. Kept: the
+ * block folds to the state the tree keeps saying. No mark on either action
+ * (11i: in the app or through the bridge, no agent, no terminal), except
+ * Send to an older research: its terminal takes the tree.
+ */
+function renderResearch(box: HTMLElement, env: Step6Env): void {
+    const res: Step6Research | undefined = env.research;
+    box.hidden = !res;
+    if (!res) {
+        box.innerHTML = '';
+        return;
+    }
+    const W = strings.mergeWizard;
+    const note = res.old !== null ? W.resOld(res.old) : res.agent !== null ? W.resAgent(res.agent, '') : '';
+    // An older research takes the tree through its terminal (the research's send link): its mark then.
+    const sendLabel = res.old !== null ? researchActionLabel(W.sendRes, researchLinkMark('send')) : escapeHtml(W.sendRes);
+    const send = `<button type="button" class="secondary merge-s6-ract" data-ract="send">${sendLabel}</button>`;
+    box.classList.toggle('is-kept', res.kept);
+    box.innerHTML = `<h4 class="merge-s6-rhead">${escapeHtml(W.resBlock(env.treeName))}</h4>`
+        + (res.kept
+            ? `<p class="merge-s6-rtext">${escapeHtml(W.notSent(res.persons))}</p><div class="merge-s6-racts">${send}</div>`
+            : `<p class="merge-s6-rtext">${escapeHtml(W.resPending(res.persons, res.links))}</p>`
+                + (note ? `<p class="merge-s6-rtext merge-s6-rnote">${escapeHtml(note)}</p>` : '')
+                + `<div class="merge-s6-racts">${send}<button type="button" class="secondary merge-s6-ract" data-ract="keep">${escapeHtml(W.keepLocal)}</button></div>`);
+    box.onclick = e => {
+        const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-ract]');
+        if (b?.dataset.ract === 'send') res.send();
+        else if (b?.dataset.ract === 'keep') res.keepLocal();
+    };
 }

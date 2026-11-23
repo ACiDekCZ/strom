@@ -53,6 +53,7 @@ import { MergeWizard, targetBlock, targetBlockText, wizardRoute, type CompareRun
 import type { WizardStep } from './wizard-steps.js';
 import { isRepeatOf, planCounts, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
 import { newTreeName, writePlan, type TargetChange, type WritePhase } from './write.js';
+import { heldLinks, unsentMerges } from './research-hold.js';
 import { exportPlan } from './plan-export.js';
 import type { Step1Env, Step2Env, Step6Env, TargetRow, UnionConflictLine, WriteStatus } from './steps/context.js';
 import { closeNotTaken, parkGedcomSummary } from './steps/step1-what.js';
@@ -113,6 +114,8 @@ interface WrittenMerge {
     fromTreeManager: boolean;
     /** The toast after Done was shown (not again when What happened opens the step once more). */
     toasted?: boolean;
+    /** Keep in the app for now (§11): step 6's research block folded. */
+    keptLocal?: boolean;
 }
 
 class MergerUIClass {
@@ -1613,7 +1616,47 @@ class MergerUIClass {
             saveAsList: () => void this.saveWrittenAsList(w),
             checkTree: () => void getUI().showTreeValidationDialog(w.treeId, 'merge-modal'),
             undoMerge: () => getUI().showUndoMerge(w.treeId, w.record.id, 'merge-modal'),
+            research: this.step6Research(w),
         };
+    }
+
+    /**
+     * Step 6's research block (§11): a tree with a research whose merge waits
+     * for a send (K9.2). An agent at work, an older research said (11d, 11e).
+     */
+    private step6Research(w: WrittenMerge): Step6Env['research'] {
+        if (w.newTree) return undefined;
+        const link = TreeManager.getTreeMetadata(w.treeId)?.research;
+        const hold = link && !link.copy ? link.mergeHold : undefined;
+        if (!link || !hold) return undefined;
+        const data = DataManager.getDataFor(w.treeId);
+        const pending = data ? unsentMerges(data, link) : [w.record];
+        if (!pending.some(r => r.id === w.record.id)) return undefined;
+        const status = getUI().researchStatusOf(link.id);
+        const worker = status?.working?.find(x => !x.paused);
+        const line = worker ? worker.research || worker.person || worker.branch || '' : '';
+        return {
+            persons: hold.persons, links: heldLinks(pending), kept: !!w.keptLocal,
+            agent: line || null,
+            old: status && !status.accepts ? status.version || '?' : null,
+            send: () => void this.sendWrittenToResearch(w),
+            keepLocal: () => {
+                w.keptLocal = true;
+                this.wizard.refresh({ body: true });
+            },
+        };
+    }
+
+    /**
+     * Send to the research… of step 6 (§11, 11a): the guide closes on the
+     * tree, then today's "What will be sent" with the merge's words (Keep in
+     * the app for now · Send to the research); a send that lands takes the
+     * hold away (research-hold.ts). An older research: the whole tree as
+     * today (11e).
+     */
+    private async sendWrittenToResearch(w: WrittenMerge): Promise<void> {
+        await this.finishDone({ show: true });
+        await getUI().sendMergeToResearch(w.treeId);
     }
 
     /**

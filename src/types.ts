@@ -1926,6 +1926,9 @@ export interface MergeRecord {
     backupId?: string;
     /** The research's input (I…) of the send that took the merge there (spec 134 §11). */
     sentToResearch?: string;
+    /** When the merge went to the research (ISO), and the mark of that send (`intake`), to read its input from the research's sends. */
+    sentAt?: string;
+    sentIntake?: string;
     /** The undos so far: when, and the items undone (src/merge/undo-plan.ts item ids). */
     undone?: Array<{ at: string; items: string[] }>;
 }
@@ -2546,6 +2549,14 @@ export interface ResearchLink {
      * Survives updates from the research.
      */
     previewDue?: true;
+    /**
+     * A merge written into the tree is not in the research yet (spec 134
+     * §11, K9.2): nothing goes by itself until it is sent ("Send to the
+     * research…") or undone. `mergeId`: the newest such merge's record,
+     * `at`: when the first of them was written, `persons`: the people they
+     * added. Survives updates from the research.
+     */
+    mergeHold?: { mergeId: string; at: string; persons: number };
     /**
      * Send original files to the research (the tree keeps a preview); false
      * turns it off for this tree. Missing = on. Survives updates from the research.

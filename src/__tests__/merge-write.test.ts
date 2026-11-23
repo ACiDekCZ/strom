@@ -73,6 +73,8 @@ import { buildPlan, type MergePlan, type PlanScope, type WizardChoices } from '.
 import { exportPlan } from '../merge/plan-export.js';
 import { backupFailureWhy, writePlan, writeRestore, writeUndo, type WriteResult } from '../merge/write.js';
 import { contentFingerprint } from '../research-link.js';
+import { noteResearchSends, settleMergeHold, syncMergeHold } from '../merge/research-hold.js';
+import { researchSyncMethods } from '../ui/research-sync-ui.js';
 import {
     createSnapshot, listSnapshots, planRetention, MAX_SNAPSHOTS_PER_TREE, type SnapshotMeta,
 } from '../snapshots.js';
@@ -459,7 +461,10 @@ describe(`into the tree on random invented pairs`, () => {
             for (const s of Object.keys(target.sources ?? {})) if (!after.sources?.[s]) errors.push(`source ${s}`);
             for (const m of Object.keys(target.media ?? {})) if (!after.media?.[m]) errors.push(`file ${m}`);
             if (after.researchAsOf !== target.researchAsOf) errors.push('research detail');
-            if (JSON.stringify(linkOf(id)) !== JSON.stringify(link)) errors.push('research link');
+            // The link as it was, the merge held back from sending by itself (K9.2).
+            const { mergeHold, ...linkAfter } = linkOf(id) ?? {} as NonNullable<ReturnType<typeof linkOf>>;
+            if (JSON.stringify(linkAfter) !== JSON.stringify(link)) errors.push('research link');
+            if (mergeHold?.mergeId !== plan.id) errors.push('merge hold');
             if (Object.keys(after.persons).length !== Object.keys(result.data.persons).length) errors.push('stored ≠ result');
             if (id === T1 && contentFingerprint(DataManager.getData()) !== contentFingerprint(after)) errors.push('open tree ≠ stored');
             if ((await premerge(id)).length !== 1) errors.push('backups');
@@ -596,5 +601,93 @@ describe('the undo of a merge written (K8.4)', () => {
         expect(!undone.ok && undone.reason).toBe('backup');
         expect(await storedNames(T1)).toEqual(['Alma', 'Berta', 'Cecilie']);
         expect((await writeUndo(T1, 'mp-none')).ok).toBe(false);
+    });
+});
+
+describe('a merge into a tree with a research waits for a send by hand (§11, K9.2)', () => {
+    /** researchAutoOn of the research sync, over a research that takes the tree's changes (sync capable). */
+    const autoOn = (id: TreeId): boolean => {
+        const ui = { ...researchSyncMethods, researchSyncCapable: () => true } as unknown as typeof researchSyncMethods;
+        return ui.researchAutoOn(linkOf(id));
+    };
+    const byItself = (id: TreeId): void => TreeManager.patchResearchLink(id, { sendMode: 'auto' });
+
+    it('the write holds the tree in the same write: nothing goes by itself, kept over an update from the research', async () => {
+        byItself(T1);
+        expect(autoOn(T1)).toBe(true);
+        const { plan, target } = await planFor(T1, INCOMING);
+        const written = await writePlan(plan, { target, source: INCOMING, into: 'tree' });
+        expect(written.ok).toBe(true);
+        // The hold's day is the merge's (the record's write time, not when the plan was made).
+        const recordAt = DataManager.getDataFor(T1)?.merges?.find(r => r.id === plan.id)?.at;
+        expect(recordAt).toBeTruthy();
+        expect(linkOf(T1)?.mergeHold).toEqual({ mergeId: plan.id, at: recordAt, persons: 1 });
+        expect(autoOn(T1)).toBe(false);
+        // A new version of the research ties the tree again: the hold stays.
+        TreeManager.setResearchLink(T1, { ...RESEARCH, fingerprint: 'fp-newer' });
+        expect(linkOf(T1)?.mergeHold?.mergeId).toBe(plan.id);
+        expect(autoOn(T1)).toBe(false);
+    });
+
+    it('a tree without a research, and a merge into a new tree: no hold', async () => {
+        TreeManager.setResearchLink(T1, undefined);
+        const { plan, target } = await planFor(T1, INCOMING);
+        expect((await writePlan(plan, { target, source: INCOMING, into: 'tree' })).ok).toBe(true);
+        expect(TreeManager.getTreeMetadata(T1)?.research).toBeUndefined();
+        resetTreeManager([meta('t1', 'Modřínovi'), meta('t2', 'Jilmovi')]);
+        st('trees').set('t1', structuredClone(TARGET));
+        await DataManager.switchTree(T1);
+        const again = await planFor(T1, INCOMING, { planId: 'mp-new' });
+        const res = await writePlan(again.plan, { target: again.target, source: INCOMING, into: 'new' });
+        expect(res.ok).toBe(true);
+        expect(linkOf(T1)?.mergeHold).toBeUndefined();
+        expect(res.ok && TreeManager.getTreeMetadata(res.treeId)?.research).toBeUndefined();
+    });
+
+    it('undone before the send: the hold goes (the research gets nothing); its redo holds again', async () => {
+        byItself(T1);
+        const { plan, target } = await planFor(T1, INCOMING);
+        expect((await writePlan(plan, { target, source: INCOMING, into: 'tree' })).ok).toBe(true);
+        const undone = await writeUndo(T1, plan.id);
+        expect(undone.ok).toBe(true);
+        expect(linkOf(T1)?.mergeHold).toBeUndefined();
+        expect(autoOn(T1)).toBe(true);
+        if (!undone.ok) return;
+        expect(await writeRestore(T1, undone.before, plan.id)).toBe(true);
+        expect(linkOf(T1)?.mergeHold?.mergeId).toBe(plan.id);
+    });
+
+    it('Ctrl+Z of the merge: the hold follows the data (syncMergeHold)', async () => {
+        const { plan, target } = await planFor(T1, INCOMING);
+        expect((await writePlan(plan, { target, source: INCOMING, into: 'tree' })).ok).toBe(true);
+        expect(DataManager.undo()).not.toBeNull();
+        syncMergeHold(T1, DataManager.getData());
+        expect(linkOf(T1)?.mergeHold).toBeUndefined();
+        expect(DataManager.redo()).not.toBeNull();
+        syncMergeHold(T1, DataManager.getData());
+        expect(linkOf(T1)?.mergeHold?.mergeId).toBe(plan.id);
+    });
+
+    it('a send that lands: the merge marked sent, the hold gone; the research\'s sends name its input for the undo', async () => {
+        byItself(T1);
+        const { plan, target } = await planFor(T1, INCOMING);
+        expect((await writePlan(plan, { target, source: INCOMING, into: 'tree' })).ok).toBe(true);
+        await settleMergeHold(T1, DataManager.getData(), 'R2026112316020000-ab12');
+        expect(linkOf(T1)?.mergeHold).toBeUndefined();
+        expect(autoOn(T1)).toBe(true);
+        const record = () => DataManager.getData().merges!.find(r => r.id === plan.id)!;
+        expect(record().sentIntake).toBe('R2026112316020000-ab12');
+        expect(record().sentAt).toBeTruthy();
+        expect(record().sentToResearch).toBeUndefined();
+        noteResearchSends(RESEARCH.id, [{
+            intake: 'R2026112316020000-ab12', input: 'I0412', at: '2026-11-23T16:02:00.000Z', state: 'written', changes: 3, tries: null,
+            tree: T1, sent: '', decidedAt: '', reason: '', conflicts: null, conflictPersons: [],
+        }]);
+        expect(record().sentToResearch).toBe('I0412');
+        await TreeManager.flush();
+        expect((await TreeManager.getTreeData(T1))!.merges![0].sentToResearch).toBe('I0412');
+        // Sent: an undo later does not hold the tree again.
+        expect((await writeUndo(T1, plan.id)).ok).toBe(true);
+        expect(linkOf(T1)?.mergeHold).toBeUndefined();
     });
 });

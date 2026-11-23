@@ -29,6 +29,7 @@ import { deleteBackup } from './executor.js';
 import { mergeCheckMessage, type MergeCheckProblem } from './merge-check.js';
 import { hasImageToken } from './record.js';
 import { applyUndo, type ChangedSince, type UndoChoices } from './undo-plan.js';
+import { syncMergeHold } from './research-hold.js';
 
 /** Where the plan goes: the target tree itself, or a new tree (a copy of the target + the import). */
 export type WriteInto = 'tree' | 'new';
@@ -278,6 +279,9 @@ export async function writePlan(plan: MergePlan, opts: WriteOptions): Promise<Wr
             await undoOwn();
             return { ok: false, reason: 'save', message: strings.merge.saveFailed };
         }
+        // A tree with a research: what the merge brought waits for a send by hand (K9.2), set
+        // before the tree shows the result so that nothing goes by itself meanwhile.
+        syncMergeHold(targetId, data);
         // The open tree shows the result, one step back with Undo (K8.5).
         if (!DataManager.adoptMergeResult(targetId, data, strings.undo.mergeTrees)) TreeManager.noteUserChange(targetId);
     } else {
@@ -357,6 +361,8 @@ export async function writeUndo(treeId: TreeId, recordId: string, choices: Omit<
     if (!await TreeManager.saveTreeDataConfirmed(treeId, res.data, { quiet: true })) {
         return { ok: false, reason: 'save', why: strings.merge.saveFailed };
     }
+    // Undone before it was sent: the research gets nothing of it.
+    syncMergeHold(treeId, res.data);
     if (!DataManager.adoptMergeResult(treeId, res.data, strings.undo.undoMerge)) TreeManager.noteUserChange(treeId);
     AuditLogManager.log(treeId, 'data.import', `${strings.auditLog.mergeUndone(record.source.label || '?')} · ${strings.auditLog.mergeLink}`);
     return { ok: true, data: res.data, before: structuredClone(before), record: res.record, kept: res.kept, items: res.items, backupId };
@@ -370,6 +376,7 @@ export async function writeUndo(treeId: TreeId, recordId: string, choices: Omit<
 export async function writeRestore(treeId: TreeId, before: StromData, recordId: string): Promise<boolean> {
     const data = structuredClone(before);
     if (!await TreeManager.saveTreeDataConfirmed(treeId, data, { quiet: true })) return false;
+    syncMergeHold(treeId, data);
     if (!DataManager.adoptMergeResult(treeId, data, strings.undo.restoreMerge)) TreeManager.noteUserChange(treeId);
     const record = data.merges?.find(r => r.id === recordId);
     AuditLogManager.log(treeId, 'data.import', strings.auditLog.mergeRestored(record?.source.label || '?'));
