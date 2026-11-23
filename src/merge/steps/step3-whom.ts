@@ -158,6 +158,7 @@ function leaveOut(view: View, ids: readonly PersonId[], branch: readonly PersonI
 function leftOutToast(view: View, n: number, what: string, before: Snapshot): void {
     const W = strings.mergeWizard;
     getUI().showToast(W.leftOut(n, what), 8000, {
+        kind: 'merge-guide',
         action: { label: W.undo, run: () => view.ctx.update({ ...before }) },
         clearOf: '#merge-modal .merge-actions',
     });
@@ -471,7 +472,9 @@ function drawPreview(view: View): void {
     const box = root.querySelector<HTMLElement>('.merge-s3-thumb')!;
     const title = root.querySelector<HTMLElement>('.merge-s3-preview-t')!;
     const g = view.groups.find(x => x.key === view.preview) ?? view.groups[0];
-    const key = g ? `${g.key}|${g.ids.length}|${g.viaSource ?? ''}` : '';
+    // Only the ticked are dashed: a branch left out goes faded with the others.
+    const hits = g ? g.ids.filter(id => view.sel.ticked.has(id)) : [];
+    const key = g ? `${g.key}|${g.ids.length}|${hits.length}|${g.viaSource ?? ''}` : '';
     if (key === view.previewDrawn) return;
     view.previewDrawn = key;
     if (!g) {
@@ -482,7 +485,7 @@ function drawPreview(view: View): void {
     title.textContent = g.title;
     try {
         renderTreeThumbnail(box, {
-            data: view.ctx.state.incomingData, focusPersonId: g.viaSource ?? g.ids[0], depthUp: 3, depthDown: 3, labels: true, hits: new Set(g.ids),
+            data: view.ctx.state.incomingData, focusPersonId: g.viaSource ?? g.ids[0], depthUp: 3, depthDown: 3, labels: true, hits: new Set(hits),
         });
     } catch {
         box.innerHTML = `<p class="merge-s3-preview-none">${escapeHtml(W.previewNone)}</p>`;
