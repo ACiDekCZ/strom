@@ -109,6 +109,30 @@ describe('timeConflict', () => {
         const dead = s3.person('k', 'Hostivít', 'Jilm', { birthDate: '1820', deathDate: '1849' });
         expect(timeConflict(tHostivít, dead, stateOf(t3.data, s3.data))).toEqual({ reason: 'deathBeforeChild' });
     });
+
+    it('not when both records say the same: a parent who died before the child in each file is the same person, offered first', () => {
+        // Both files carry the same slip (a death of 1660, a child of 1682): it says nothing against the pair.
+        const t = tree('t');
+        const tRadim = t.person('r', 'Radim', 'Modřín', { birthDate: '1657-08-08', deathDate: '1660-05-20', birthPlace: 'Křemenná' });
+        t.couple(tRadim, t.person('w', 'Ludmila', 'Modřínová', { gender: 'female', birthDate: '1659' }),
+            [t.person('c', 'Blanka', 'Modřínová', { gender: 'female', birthDate: '1682' })]);
+        // A namesake of the same years with nothing more.
+        t.person('n', 'Radim', 'Modřín', { birthDate: '1657' });
+        const s = tree('i');
+        const inRadim = s.person('r', 'Radim', 'Modřín', { birthDate: '1657-08-08', deathDate: '1660-05-20', birthPlace: 'Křemenná' });
+        s.couple(inRadim, s.person('w', 'Ludmila', 'Modřínová', { gender: 'female', birthDate: '1659' }),
+            [s.person('c', 'Blanka', 'Modřínová', { gender: 'female', birthDate: '1682' })]);
+        const state = stateOf(t.data, s.data);
+        expect(timeConflict(tRadim, inRadim, state)).toBeNull();
+        expect(candidatesFor(inRadim.id, state)[0]).toMatchObject({ existingId: 'tr', timeConflict: null });
+        // The same child joined in the tree under him: the tree says so itself.
+        const s2 = tree('i');
+        const inRadim2 = s2.person('r', 'Radim', 'Modřín', { birthDate: '1657-08-08', birthPlace: 'Křemenná' });
+        s2.couple(inRadim2, s2.person('w', 'Ludmila', 'Modřínová', { gender: 'female', birthDate: '1659' }),
+            [s2.person('c', 'Blanka', 'Modřínová', { gender: 'female', birthDate: '1682' })]);
+        expect(timeConflict(tRadim, inRadim2, stateOf(t.data, s2.data, [['ic', 'tc']]))).toBeNull();
+        expect(timeConflict(tRadim, inRadim2, stateOf(t.data, s2.data, [['ic', 'tn']]))).toEqual({ reason: 'deathBeforeChild' });
+    });
 });
 
 describe('candidatesFor', () => {

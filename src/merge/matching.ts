@@ -2417,7 +2417,8 @@ function generationOffset(data: StromData, from: PersonId, to: PersonId, maxStep
  * Whether the tree's person `existing` cannot be the import's `incoming` by
  * time (spec 134 K3.3): more than a generation apart (by the relatives the
  * import's person has that are already joined, or by birth years more than
- * 50 years apart), or one of them died before a child of the other was born.
+ * 50 years apart), or one of them died before a child of the other was born
+ * while the other's own record has that parent alive then.
  * Null when nothing speaks against it.
  */
 export function timeConflict(existing: Person, incoming: Person, state: MergeState): TimeConflict | null {
@@ -2438,17 +2439,26 @@ export function timeConflict(existing: Person, incoming: Person, state: MergeSta
     }
     const born = [birthOrBaptismYear(existing), birthOrBaptismYear(incoming)];
     if (born[0] !== null && born[1] !== null && Math.abs(born[0] - born[1]) > GENERATION_GAP_YEARS) return { reason: 'generation' };
-    // Died before a child was born (a father up to a year before).
-    const diedBeforeChild = (person: Person, children: readonly PersonId[], data: StromData): boolean => {
+    // Died before a child of the other was born (a father up to a year
+    // before). Only a contradiction between the two counts: when the
+    // child's own parent died as early in its own file (or the tree already
+    // has that child under this person), the records agree with each other.
+    const late = (died: number | null, born: number | null): boolean => died !== null && born !== null && born > died + 1;
+    const diedBeforeChild = (person: Person, other: Person, data: StromData, skip: (child: PersonId) => boolean): boolean => {
         const died = yearOf(person.deathDate);
         if (died === null) return false;
-        return children.some(id => {
+        const otherDied = yearOf(other.deathDate);
+        return other.childIds.some(id => {
             const child = data.persons[id];
             const childBorn = child ? birthOrBaptismYear(child) : null;
-            return childBorn !== null && childBorn > died + 1;
+            return late(died, childBorn) && !late(otherDied, childBorn) && !skip(id);
         });
     };
-    if (diedBeforeChild(existing, incoming.childIds, file) || diedBeforeChild(incoming, existing.childIds, tree)) {
+    const knownChild = (id: PersonId): boolean => {
+        const at = existingTargetOf(state, id);
+        return !!at && existing.childIds.includes(at);
+    };
+    if (diedBeforeChild(existing, incoming, file, knownChild) || diedBeforeChild(incoming, existing, tree, () => false)) {
         return { reason: 'deathBeforeChild' };
     }
     return null;
