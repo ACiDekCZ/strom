@@ -9,6 +9,7 @@
 import type { MergeEdit, MergeRecord, Person, PersonId, StromData } from '../types.js';
 import { isPoolRef } from '../image-ref.js';
 import { imageToken } from '../image-meta.js';
+import { RESEARCH_REFN_TYPE } from '../research-link.js';
 
 // ==================== VALUES ====================
 
@@ -83,11 +84,20 @@ const PRINT_SKIP = new Set([
     'nameStatus', 'marriedNameStatus', 'birthStatus', 'deathStatus',
 ]);
 
+/**
+ * The research's own number of a person (REFN with its type), written by a
+ * send's answer (applySyncIds) onto the people it added: no edit of the
+ * user's. A number of another program (a GEDCOM's REFN) stays in the print.
+ */
+const RESEARCH_NUMBER = new Set(['refn', 'refnType']);
+
 /** A short print of a person's own details as they are (what a later edit changes). */
 export function personPrint(person: Person): string {
     const own: Record<string, unknown> = {};
+    const researchNumber = person.refnType === RESEARCH_REFN_TYPE;
     for (const key of Object.keys(person).sort()) {
-        if (!PRINT_SKIP.has(key)) own[key] = (person as unknown as Record<string, unknown>)[key];
+        if (PRINT_SKIP.has(key) || (researchNumber && RESEARCH_NUMBER.has(key))) continue;
+        own[key] = (person as unknown as Record<string, unknown>)[key];
     }
     const text = JSON.stringify(own, replacer);
     return `${fnv(text, 0x811c9dc5)}${fnv(text, 0x01000193)}`;

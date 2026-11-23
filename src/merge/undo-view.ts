@@ -380,16 +380,17 @@ export function undoShown(model: UndoModel, record: MergeRecord, data: StromData
 // ==================== THE RESEARCH OF AN UNDO (11c) ====================
 
 /**
- * What the undo dialog says of the research (spec 134 11c, K9.3): nothing
- * for a merge not sent there (the undo stays in the app, the research gets
- * nothing of it); for one sent, when it went, the research's step that
- * removes its people (`strom sync undo I…`, null when the send's input is
- * not known: the help says how) and what the research's next version
- * brings back until then (`people`: the people the undo removes).
+ * What the undo dialog says of the research (spec 134 11c, K9.3; 134 V-N3):
+ * nothing for a merge not sent there (the undo stays in the app, the
+ * research gets nothing of it); for one sent, that the research has its
+ * people since then, the research's step that removes them (`strom sync
+ * undo <input>`: `input` the send's input there, null while not known — the
+ * step then says "I…", research-undo-step.ts) and what the research's next
+ * version brings back until then (`people`: the people the undo removes).
  */
 export interface UndoResearchView {
     sent: string;
-    command: string | null;
+    input: string | null;
     step: string;
     comesBack: string;
 }
@@ -400,8 +401,8 @@ export function undoResearchView(record: MergeRecord, people: number): UndoResea
     const command = undoResearchStep(record)?.command ?? null;
     return {
         sent: W.resSent(dayText(record.sentAt ?? record.at)),
-        command,
-        step: command ? W.resUndoStep : W.resUndoHelp,
+        input: command ? record.sentToResearch!.trim() : null,
+        step: W.resUndoStep,
         comesBack: people > 0 ? W.resComesBack(people) : '',
     };
 }

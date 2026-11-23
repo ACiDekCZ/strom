@@ -289,20 +289,20 @@ describe('the research in the undo dialog (11c, K9.3)', () => {
     it('sent with a known input: when it went, the step in the research\'s terminal and what comes back until then', async () => {
         const { record } = await richMerge();
         const v = undoResearchView({ ...record, sentAt: LATER, sentIntake: 'R0007', sentToResearch: 'I0412' }, 143)!;
-        expect(v.sent).toBe(`The merge is already in the research (sent ${dayText(LATER)}). The research does not delete people by itself.`);
-        expect(v.command).toBe('strom sync undo I0412');
+        expect(v.sent).toBe(`The merge was sent to the research on ${dayText(LATER)}, so the research has its people. An undo in the app does not remove them there.`);
+        expect(v.input).toBe('I0412');
         expect(v.step).toBe('In the app the undo happens at once. In the research one step in the research’s terminal is needed:');
         expect(v.comesBack).toBe('Until then the research’s next version brings 143 people back – the app then offers to remove them.');
     });
 
-    it('sent without a known input: no command, the help says how; no one to remove, nothing comes back', async () => {
+    it('sent without a known input: the same step (its command says I…); no one to remove, nothing comes back', async () => {
         const { record } = await richMerge();
         const v = undoResearchView({ ...record, sentAt: LATER, sentIntake: 'R0007' }, 0)!;
-        expect(v.command).toBeNull();
-        expect(v.step).toBe('In the app the undo happens at once. How the people are removed in the research is in the help:');
+        expect(v.input).toBeNull();
+        expect(v.step).toBe('In the app the undo happens at once. In the research one step in the research’s terminal is needed:');
         expect(v.comesBack).toBe('');
-        // An input that is not one (not I + digits) gives no command either.
-        expect(undoResearchView({ ...record, sentAt: LATER, sentToResearch: 'R0007; rm -rf' }, 1)!.command).toBeNull();
+        // An input that is not one (not I + digits) is not known either.
+        expect(undoResearchView({ ...record, sentAt: LATER, sentToResearch: 'R0007; rm -rf' }, 1)!.input).toBeNull();
     });
 
     it('in Czech', async () => {
@@ -310,7 +310,7 @@ describe('the research in the undo dialog (11c, K9.3)', () => {
         setLanguage('cs');
         try {
             const v = undoResearchView({ ...record, sentAt: '2026-11-22T14:41:00.000Z', sentToResearch: 'I0412' }, 1)!;
-            expect(v.sent).toBe('Sloučení už je ve výzkumu (odesláno 22. 11. 2026). Výzkum osoby sám nesmaže.');
+            expect(v.sent).toBe('Sloučení bylo 22. 11. 2026 odesláno do výzkumu, takže výzkum jeho osoby už má. Odvolání v aplikaci je odtamtud neodebere.');
             expect(v.comesBack).toBe('Do té doby výzkum při příští verzi vrátí 1 osobu zpět – aplikace ji pak nabídne k odebrání.');
         } finally {
             setLanguage('en');

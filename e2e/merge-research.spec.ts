@@ -90,8 +90,16 @@ test('a merge into a tree with a research is not sent by itself; the tree says "
     await expect(hold(page)).toBeHidden();
 });
 
-test('Send to the research… of step 6 closes the guide and sends the merge; its undo then says the research\'s command with the send\'s input', async ({ page }) => {
+test('Send to the research… of step 6 closes the guide and sends the merge; its undo then says the research\'s command with the send\'s input and removes the person the send numbered (V-N3)', async ({ page }) => {
     const { wizard, bridge } = await writtenIntoResearchTree(page);
+    // The research writes the send at once and numbers the person it added (its answer's ids, by the file's xref).
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 2, applied: 2, input: 'I0042' } };
+    bridge.onWrite = (posted) => ({ head: 'b7b7b7b7b7b7', ged: posted });
+    bridge.replyExtra = (posted) => {
+        const rec = posted.split('\n0 ').find(r => r.includes('1 NAME Bedřich /Fíšek/'));
+        const xref = rec ? /^(@[^@]+@) INDI/.exec(rec)?.[1] : undefined;
+        return xref ? { ids: { persons: { [xref]: 'P0077' }, sources: {} } } : {};
+    };
     await research(wizard).locator('[data-ract="send"]').click();
     await expect(panel(page)).toBeVisible();
     await panel(page).locator('[data-act="send"]').click();
@@ -100,6 +108,7 @@ test('Send to the research… of step 6 closes the guide and sends the merge; it
 
     // The guide closed on the tree for the send.
     await expect(wizard).toBeHidden();
+    await expect.poll(() => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(p => p.firstName === 'Bedřich')?.refn)).toBe('P0077');
 
     // The research names the send's input in its sends: the undo says its command.
     bridge.sends[0].input = 'I0042';
@@ -111,6 +120,14 @@ test('Send to the research… of step 6 closes the guide and sends the merge; it
     const undo = page.locator('#merge-undo-modal');
     await expect(undo).toHaveClass(/active/);
     await expect(undo.locator('.merge-undo-research .merge-undo-cmd')).toHaveText('strom sync undo I0042');
+    await expect(undo.locator('.merge-undo-research')).toContainText('so the research has its people');
+    // The step is the research terminal's: its mark beside the words.
+    await expect(undo.locator('.merge-undo-research .research-undo-lead .research-open-mark')).toBeVisible();
+    // The number the send gave him is no edit: he goes, nothing is kept as changed since.
+    await expect(undo.locator('.merge-undo-keep')).toHaveCount(0);
+    await undo.locator('[data-act="undo"]').click();
+    await expect(undo).not.toHaveClass(/active/);
+    await expect.poll(() => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).some(p => p.firstName === 'Bedřich'))).toBe(false);
 });
 
 test('a tree without a research: no step of the guide says a word about a research', async ({ page }) => {

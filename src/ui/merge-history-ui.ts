@@ -21,8 +21,8 @@ import { renderGroupsReadOnly } from '../merge/steps/step5-plan.js';
 import type { Step6Env } from '../merge/steps/context.js';
 import { MERGE_HOLD_EVENT, noteResearchSends, resolveSentInput, settleMergeHold, treeHold, unsentMerges } from '../merge/research-hold.js';
 import { lastBridgeStatus, onBridgeStatus } from './research-sync-ui.js';
-import { undoResearchStep } from '../merge/undo-plan.js';
 import { HELP_LINKS } from '../help/topics.js';
+import { bindResearchUndoStep, researchUndoStep, researchUndoStepHtml, type ResearchUndoStep } from './research-undo-step.js';
 import {
     canUndoRecord, dayText, historyLine, peopleRemoved, recordGroups, recordText, stateLabel, undoModel, undoResearchView, undoShown,
     type UndoLine, type UndoModel,
@@ -297,16 +297,17 @@ export const mergeHistoryMethods = uiModule({
             if (record.backupId) parts.push(`<p class="merge-undo-note merge-undo-vs">${esc(W.vsBackup(day))}</p>`);
         }
         // The research's part (11c): only for a merge already sent there.
+        // Its step is the research terminal's (134 V-N3): the command with the send's input, "I…" while not known.
         const res = model.empty ? null : undoResearchView(record, now.people);
+        let step: ResearchUndoStep | null = null;
         if (res) {
-            const how = res.command
-                ? `<div class="merge-undo-cmd-row"><code class="merge-undo-cmd">${esc(res.command)}</code>`
-                    + `<button type="button" class="secondary btn-sm merge-undo-copy" data-act="copy-undo">${esc(W.copy)}</button></div>`
-                : `<p><button type="button" class="link-button merge-undo-help" data-act="undo-help">${esc(W.resUndoHelpLink)}</button></p>`;
+            const researchId = TreeManager.getTreeMetadata(st.treeId)?.research?.id ?? '';
+            step = researchUndoStep(researchId, res.input, !!researchId && this.researchLinkAvailable('sync-undo'));
+            const help = res.input ? '' : `<p><button type="button" class="link-button merge-undo-help" data-act="undo-help">${esc(W.resUndoHelpLink)}</button></p>`;
             parts.push(`<section class="merge-undo-research">
-  <p>${esc(res.sent)}</p>
-  <p>${esc(res.step)}</p>
-  ${how}
+  <p class="merge-undo-sent">${esc(res.sent)}</p>
+  ${researchUndoStepHtml(step, { lead: res.step, cmdClass: 'merge-undo-cmd' })}
+  ${help}
   ${res.comesBack ? `<p class="merge-undo-note">${esc(res.comesBack)}</p>` : ''}
 </section>`);
         }
@@ -319,8 +320,7 @@ export const mergeHistoryMethods = uiModule({
             const b = t.closest<HTMLButtonElement>('button[data-keep]');
             if (b) this.chooseUndoKeep(b.dataset.keep!, b.dataset.v === 'undo');
             const act = t.closest<HTMLButtonElement>('button[data-act]');
-            if (act?.dataset.act === 'copy-undo') void this.copyUndoResearchStep(act);
-            else if (act?.dataset.act === 'undo-help') this.showHelp(HELP_LINKS.mergeUndoResearch, act);
+            if (act?.dataset.act === 'undo-help') this.showHelp(HELP_LINKS.mergeUndoResearch, act);
         };
         body.onkeydown = e => {
             const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-keep]');
@@ -335,42 +335,16 @@ export const mergeHistoryMethods = uiModule({
             this.updateUndoButton();
         };
 
+        const section = body.querySelector<HTMLElement>('.merge-undo-research');
+        if (step && section) bindResearchUndoStep(section, step, url => void this.launchResearchLink(url), () => this.showToast(strings.install.copyManual, 6000));
+
         // The input of a send not named yet: the research's sends may name it now (redrawn when they do).
-        if (res && !res.command && record.sentIntake) void this.resolveUndoResearchInput(st);
+        if (res && !res.input && record.sentIntake) void this.resolveUndoResearchInput(st);
 
         const pick = modal.querySelector<HTMLButtonElement>('[data-act="pick"]')!;
         pick.hidden = !!block || model.empty;
         pick.textContent = picking ? W.pickAll : W.pickSome;
         this.updateUndoButton();
-    },
-
-    /** Copy of the research's undo step (11c): the command to the clipboard, the button says Copied. */
-    async copyUndoResearchStep(btn: HTMLButtonElement): Promise<void> {
-        const st = undoState;
-        const command = st && undoResearchStep(st.record)?.command;
-        if (!command) return;
-        const W = strings.mergeWizard;
-        try {
-            await navigator.clipboard.writeText(command);
-        } catch {
-            // Not allowed here: the line is selected for copying by hand.
-            const code = btn.parentElement?.querySelector('code');
-            const sel = window.getSelection();
-            if (code && sel) {
-                sel.removeAllRanges();
-                const range = document.createRange();
-                range.selectNodeContents(code);
-                sel.addRange(range);
-            }
-            return;
-        }
-        btn.textContent = W.copied;
-        btn.classList.add('copied');
-        setTimeout(() => {
-            if (!btn.isConnected) return;
-            btn.textContent = W.copy;
-            btn.classList.remove('copied');
-        }, 2000);
     },
 
     /** The send's input read from the research's last sends (11c); the dialog redrawn when it is named now. */

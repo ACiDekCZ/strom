@@ -11,9 +11,9 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeId } from '../types.js';
-import { researchLinkMark, researchSchemeUrl } from '../research-link.js';
-import { announcedResearchScheme } from '../research-device.js';
-import { researchActionLabel, researchOpenMark } from './research-open-mark.js';
+import { researchLinkMark } from '../research-link.js';
+import { researchActionLabel } from './research-open-mark.js';
+import { bindResearchUndoStep, researchUndoStep, researchUndoStepHtml } from './research-undo-step.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { uiModule } from './module.js';
 
@@ -57,22 +57,13 @@ export const researchDetachedMethods = uiModule({
         const intake = mark.link.sent?.intake;
         const input = sent && intake
             ? this.researchStatusOf(mark.link.id)?.sends?.find(s => s.intake === intake)?.input ?? null : null;
-        const command = `strom sync undo ${input ?? 'I…'}`;
-        const undoUrl = input && this.researchLinkAvailable('sync-undo')
-            ? researchSchemeUrl('sync-undo', { tree: mark.link.id, intake: input }, announcedResearchScheme()) : null;
+        const step = researchUndoStep(mark.link.id, input, this.researchLinkAvailable('sync-undo'));
         let sentHtml = '';
         if (sent) {
             const day = dayOf(sent.at);
             sentHtml = sent.state === 'pending'
                 ? `<p class="research-detached-sent">${esc(r.detachedSent(day))} ${esc(r.detachedPending)}</p>`
-                // The step is the research terminal's: its mark beside it (decorative; the words say it).
-                : `<p class="research-detached-sent">${esc(r.detachedSent(day))} ${esc(r.detachedUndoStep)}${researchOpenMark({ size: 12, sr: false })}</p>
-                    <div class="install-line-row research-detached-step">
-                        <code class="install-line research-detached-cmd" tabindex="0">${esc(command)}</code>
-                        <button type="button" class="install-copy" data-act="copy">${esc(strings.install.copy)}</button>
-                    </div>
-                    ${input ? '' : `<p class="research-detached-note">${esc(r.detachedUndoInput)}</p>`}
-                    ${undoUrl ? `<p><button type="button" class="link-button" data-act="undo">${researchActionLabel(r.detachedUndo, researchLinkMark('sync-undo'), { size: 12 })}</button></p>` : ''}`;
+                : researchUndoStepHtml(step, { lead: `${r.detachedSent(day)} ${r.detachedUndoStep}`, leadClass: 'research-detached-sent', cmdClass: 'research-detached-cmd' });
         }
         const canStart = this.researchAdoptAvailable(tree);
         const overlay = document.createElement('div');
@@ -103,19 +94,7 @@ export const researchDetachedMethods = uiModule({
             close();
             this.treeActionStartResearch(treeId);
         });
-        overlay.querySelector('[data-act="undo"]')?.addEventListener('click', () => {
-            if (undoUrl) this.launchResearchLink(undoUrl);
-        });
-        const copy = overlay.querySelector<HTMLButtonElement>('[data-act="copy"]');
-        copy?.addEventListener('click', async () => {
-            try {
-                await navigator.clipboard.writeText(command);
-                copy.textContent = strings.install.copied;
-                copy.classList.add('copied');
-            } catch {
-                this.showToast(strings.install.copyManual, 6000);
-            }
-        });
+        bindResearchUndoStep(overlay, step, url => void this.launchResearchLink(url), () => this.showToast(strings.install.copyManual, 6000));
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
         overlay.querySelector<HTMLElement>('.buttons .primary, [data-dismiss]')?.focus();
     },

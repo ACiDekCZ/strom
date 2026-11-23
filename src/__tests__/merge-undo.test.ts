@@ -11,7 +11,7 @@ import { createMergeState, updateMatchDecision } from '../merge/matching.js';
 import { applyPlan, buildPlan, MergeRecord, PlanScope, PlanSource, WizardChoices } from '../merge/plan.js';
 import { applyUndo, redo, undoItems, undoPreview, undoResearchStep } from '../merge/undo-plan.js';
 import { danglingReferences } from '../merge/merge-check.js';
-import { contentFingerprint } from '../research-link.js';
+import { applySyncIds, contentFingerprint } from '../research-link.js';
 import { StorageManager } from '../storage.js';
 import { Partnership, PartnershipId, Person, PersonId, StromData } from '../types.js';
 import { mulberry32, randomDecisions, sourceTree, targetTree } from './helpers/merge-trees.js';
@@ -321,6 +321,39 @@ describe('a picture the merge replaced (§0.3: the record keeps no pictures)', (
         const other = structuredClone(target);
         other.persons['e1' as PersonId].photo = big('D');
         expect(applyUndo(record, after, { at: UNDO_AT, backup: other }).kept.map(k => k.what)).toEqual(['picture']);
+    });
+});
+
+describe('a send to the research is no edit after the merge (134 V-N3)', () => {
+    it('the numbers a send gives the people it added: the undo removes them, nothing kept as edited', async () => {
+        const { target, after, record } = await richMerge(1);
+        // The send's answer: every person and source of the sent file gets the research's number (applySyncIds).
+        const persons = new Map(Object.keys(after.persons).map((id, i) => [id, `@I${i + 1}@`]));
+        const sources = new Map(Object.keys(after.sources ?? {}).map((id, i) => [id, `@S${i + 1}@`]));
+        const ids = {
+            persons: Object.fromEntries([...persons.values()].map((x, i) => [x, `P${9000 + i}`])),
+            sources: Object.fromEntries([...sources.values()].map((x, i) => [x, `S${9000 + i}`])),
+        };
+        const { data: sent, changed } = applySyncIds(after, { persons, sources }, ids);
+        expect(changed).toBeGreaterThan(0);
+        for (const id of record.added) expect(sent.persons[id as PersonId].refn).toMatch(/^P\d+$/);
+
+        const pre = undoPreview(record, sent);
+        expect(pre.changedSince).toEqual([]);
+        const res = applyUndo(record, sent, { at: UNDO_AT });
+        expect(res.kept).toEqual([]);
+        expect(res.record.state).toBe('undone');
+        for (const id of record.added) expect(res.data.persons[id as PersonId]).toBeUndefined();
+        // The people the tree had keep the numbers the send gave them (the research's link is not touched).
+        for (const id of Object.keys(target.persons)) expect(res.data.persons[id as PersonId]?.refn).toBe(sent.persons[id as PersonId].refn);
+    });
+
+    it('a number of another program (a GEDCOM REFN) changed since is an edit', async () => {
+        const { after, record } = await richMerge(1);
+        const now = structuredClone(after);
+        const pid = record.added.find(id => !now.persons[id as PersonId].isPlaceholder)! as PersonId;
+        now.persons[pid].refn = 'R-17';
+        expect(undoPreview(record, now).changedSince.filter(c => c.id === `p:${pid}`).map(c => c.what)).toContain('edited');
     });
 });
 
