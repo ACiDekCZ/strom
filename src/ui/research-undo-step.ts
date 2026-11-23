@@ -12,7 +12,7 @@
 import { strings } from '../strings.js';
 import { researchIntakeRef, researchLinkMark, researchSchemeUrl } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
-import { researchActionLabel, researchOpenMark } from './research-open-mark.js';
+import { researchActionLabel, researchActionMark } from './research-open-mark.js';
 
 export interface ResearchUndoStep {
     /** The send's input in the research (I0042), null when not known here. */
@@ -46,8 +46,8 @@ function esc(text: string): string {
  */
 export function researchUndoStepHtml(step: ResearchUndoStep, o: { lead: string; cmdClass?: string; leadClass?: string }): string {
     const r = strings.research;
-    // The step is the research terminal's: its mark beside it (decorative; the words say it).
-    return `<p class="research-undo-lead${o.leadClass ? ` ${o.leadClass}` : ''}">${esc(o.lead)}${researchOpenMark({ size: 12, sr: false })}</p>
+    // The step is the research terminal's: the mark of its link's group beside it (decorative; the words say it).
+    return `<p class="research-undo-lead${o.leadClass ? ` ${o.leadClass}` : ''}">${esc(o.lead)}${researchActionMark(researchLinkMark('sync-undo'), { size: 12, sr: false })}</p>
         <div class="install-line-row research-undo-row">
             <code class="install-line research-undo-cmd${o.cmdClass ? ` ${o.cmdClass}` : ''}" tabindex="0">${esc(step.command)}</code>
             <button type="button" class="install-copy" data-act="undo-copy">${esc(strings.install.copy)}</button>
