@@ -181,7 +181,7 @@ test.describe('step 2: decisions (K3.3, K3.4)', () => {
         // Florentýna and Teofil without dates are only offered: two pairs to decide.
         await expect(mergeCount(wizard, 'pending')).toHaveText('2');
         await expect(wizard.locator('#merge-next')).toBeDisabled();
-        await expect(wizard.locator('#merge-next')).toContainText('What will happen');
+        await expect(wizard.locator('#merge-next')).toContainText('Whom to add');
         await expect(wizard.locator('#merge-next-why')).toHaveText('2 pairs left to decide');
 
         // Under the pair: "Remaining 2 undecided: Add as new (2) · Do not add (2)".

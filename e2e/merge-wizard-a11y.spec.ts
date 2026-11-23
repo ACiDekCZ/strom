@@ -44,7 +44,7 @@ function focusPart(page: Page): Promise<string> {
     });
 }
 
-test('a page reader finds every control of steps 1, 2 and 5 named, one named dialog, and the pairs as a listbox of options', async ({ page }) => {
+test('a page reader finds every control of steps 1, 2, 3 and 5 named, one named dialog, and the pairs as a listbox of options', async ({ page }) => {
     const wizard = await openGuide(page);
     await expect(wizard.locator('#merge-counts')).toHaveAttribute('role', 'status');
     await expect(wizard.locator('#merge-progress')).toHaveAttribute('aria-label', /.+/);
@@ -62,6 +62,10 @@ test('a page reader finds every control of steps 1, 2 and 5 named, one named dia
     }
     await readerGaps(page, '2 (New)');
 
+    await wizard.locator('#merge-next').click();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
+    await expect(wizard.locator('#merge-step-body .merge-s3-list')).toHaveAttribute('role', 'listbox');
+    await readerGaps(page, '3');
     await wizard.locator('#merge-next').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
     await readerGaps(page, '5');
@@ -117,7 +121,11 @@ test('the whole guide by keys: Tab runs header → steps → body → footer and
     await page.keyboard.press('x');
     await expect(wizard.locator('#merge-counts [data-count="skipped"] .merge-stat-value')).toHaveText('1');
 
-    // On to step 5 by Enter; Back by keys; the finished step 2 is a button Enter goes back to.
+    // On to step 3 and step 5 by Enter; Back by keys; the finished step 2 is a button Enter goes back to.
+    await wizard.locator('#merge-next').focus();
+    await page.keyboard.press('Enter');
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
+    await expect(wizard.locator('#merge-step-body .merge-step-title')).toBeFocused();
     await wizard.locator('#merge-next').focus();
     await page.keyboard.press('Enter');
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
@@ -157,11 +165,14 @@ test.describe('a tablet', () => {
 
 test.describe('a phone', () => {
     test.use({ viewport: { width: 390, height: 844 } });
-    test('the primary button is on the screen in steps 1, 2 and 5', async ({ page }) => {
+    test('the primary button is on the screen in steps 1, 2, 3 and 5', async ({ page }) => {
         const wizard = await openGuide(page);
         const next = wizard.locator('#merge-next');
         await expect(next).toBeInViewport();
         await mergeCompare(wizard);
+        await expect(next).toBeInViewport();
+        await next.click();
+        await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
         await expect(next).toBeInViewport();
         await next.click();
         await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');

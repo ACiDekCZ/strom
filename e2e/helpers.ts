@@ -607,18 +607,28 @@ export async function mergeDecide(wizard: Locator, text: string | RegExp, decisi
 }
 
 /**
- * On to step 5 (What will happen; steps 3 and 4 are passed over in part A)
+ * On to step 5 (What will happen; step 3 as it is, step 4 passed over)
  * and press its primary button: the plan is written into a new tree
  * "{target} + {source}" without asking its name.
  */
 export async function mergeWrite(wizard: Locator): Promise<void> {
-    const current = mergeCurrentStep(wizard);
-    if (await current.getAttribute('data-step') !== '5') {
-        await wizard.locator('#merge-next').click();
-        await expect(current).toHaveAttribute('data-step', '5');
-    }
+    await mergeToStep5(wizard);
     await expect(wizard.locator('#merge-next')).toBeEnabled();
     await wizard.locator('#merge-next').click();
+}
+
+/**
+ * On through the guide's steps (step 3 Whom to add as it is, the steps
+ * passed over skipped) until step 5 What will happen.
+ */
+export async function mergeToStep5(wizard: Locator): Promise<void> {
+    const current = mergeCurrentStep(wizard);
+    for (let i = 0; i < 4 && await current.getAttribute('data-step') !== '5'; i++) {
+        const was = await current.getAttribute('data-step');
+        await wizard.locator('#merge-next').click();
+        await expect(current).not.toHaveAttribute('data-step', was ?? '');
+    }
+    await expect(current).toHaveAttribute('data-step', '5');
 }
 
 /**

@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeDecide, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeWriteAndSwitch } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeDecide, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeToStep5, mergeWriteAndSwitch } from './helpers.js';
 
 /**
  * The import guide's frame (spec 134 §1): a GEDCOM file merged into the open
@@ -90,7 +90,11 @@ test('Back keeps the decisions; step 5 writes a new tree named after both and th
     await expect(mergeCount(wizard, 'added')).toHaveText('2');
     await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
     await expect(wizard.locator('#merge-next-why')).toBeHidden();
-    // Steps 3 and 4 are passed over: the button goes on to What will happen.
+    // On to Whom to add (all new ticked), then past step 4 to What will happen.
+    await expect(wizard.locator('#merge-next')).toHaveText('Continue: Whom to add');
+    await wizard.locator('#merge-next').click();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
+    await expect(wizard.locator('#merge-step-body .merge-s3-count')).toHaveText('2 of 2 new selected');
     await expect(wizard.locator('#merge-next')).toHaveText('Continue: What will happen');
     await wizard.locator('#merge-next').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
@@ -99,7 +103,9 @@ test('Back keeps the decisions; step 5 writes a new tree named after both and th
     await expect(wizard.locator('#merge-step-body')).toContainText('“Modřínovi + rodokmen-jilmovi”');
     await expect(wizard.locator('#merge-next')).toHaveText('Add 2 people, change 0 details');
 
-    // Back to step 2: the decision is still there.
+    // Back to step 3 and step 2: the decision is still there.
+    await wizard.locator('#merge-back').click();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
     await wizard.locator('#merge-back').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
     await expect(await kasian(wizard)).toHaveAttribute('data-fate', 'skipped');
@@ -150,8 +156,7 @@ test('Only compare: the same steps, step 5 says Done and nothing is written', as
     await mergeSetMode(wizard, 'compare');
     await expect(wizard.locator('#merge-title')).toHaveText('Comparison (nothing is written)');
     await mergeCompare(wizard);
-    await wizard.locator('#merge-next').click();
-    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
+    await mergeToStep5(wizard);
     await expect(wizard.locator('#merge-counts')).toContainText('Nothing has been written yet.');
     await expect(wizard.locator('#merge-next')).toHaveText('Done');
     await wizard.locator('#merge-next').click();
