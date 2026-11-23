@@ -29141,7 +29141,7 @@ const stringsDE: StringsType = {
         optBurial: 'sonst Begräbnis',
         count: (n: number, total: number) => `${n} von ${total} Angaben an. Eine fehlende Angabe entfällt.`,
         allOn: 'Alle einschalten',
-        lookTitle: 'Aussehen der Karte',
+        lookTitle: 'Darstellung der Karte',
         style: 'Zeilenstil',
         styleMarks: 'Symbole',
         styleLabels: 'Beschriftung',
