@@ -56,7 +56,7 @@ import { poolTreeImages } from '../image-intern.js';
 import { memoryImageIds, collectPoolRefIds } from '../pool-memory.js';
 import { createMergeState, detectConflicts, rebaseMergeState, updateMatchDecision } from '../merge/matching.js';
 import { executeMerge } from '../merge/executor.js';
-import { buildPlan, type WizardChoices } from '../merge/plan.js';
+import { applyPlan, buildPlan, type WizardChoices } from '../merge/plan.js';
 import { compactValue, mergeEdits, personPrint, valueKey } from '../merge/record.js';
 import { writePlan, writeUndo } from '../merge/write.js';
 import { fieldText } from '../merge/plan-rules.js';
@@ -268,6 +268,38 @@ describe('a research version over references (research-link.ts carryOverMedia)',
         const out = carryOverMedia(next, previous).data;
         expect(Object.keys(out.media ?? {})).toEqual(['m7']);
         expect(out.sources!.s1.excerpts!.map(e => e.id)).toEqual(['e7']);
+    });
+});
+
+describe('a portrait told by its content, not its name and length (merge/plan.ts)', () => {
+    async function photoPlan(treePhoto: string, filePhoto: string) {
+        const tree: StromData = { version: 25, persons: { [A]: person(A, { partnerships: [], photo: treePhoto }) }, partnerships: {} } as StromData;
+        const file: StromData = { version: 25, persons: { [A]: person(A, { partnerships: [], photo: filePhoto }) }, partnerships: {} } as StromData;
+        const state = createMergeState(tree, file);
+        for (const m of state.matches) updateMatchDecision(state, m.incomingId, 'confirm');
+        const plan = buildPlan(state, {
+            mode: 'add', targetTreeId: 't1' as TreeId, scope: 'c', swapped: false, rules: { all: 'import' },
+            source: { kind: 'json', label: 'vranec.json', persons: 1 }, targetName: 'Vranec', targetFingerprint: contentFingerprint(tree),
+            planId: 'mp-photo', createdAt: '2026-05-04T10:00:00.000Z',
+        });
+        return { plan, tree, file };
+    }
+    const photoItems = (plan: { items: Array<{ kind: string; field?: string }> }) => plan.items.filter(i => i.field === 'photo');
+
+    it('another portrait of the same length and no name is a difference the write takes; the same one in another form is none', async () => {
+        const [mine, other] = [image(90), image(91)];
+        expect(mine.length).toBe(other.length);
+        const [rMine] = await pool(mine);
+        const { plan, tree, file } = await photoPlan(rMine, other);
+        expect(photoItems(plan)).toEqual([expect.objectContaining({ kind: 'field', field: 'photo', on: true })]);
+        const applied = await applyPlan(plan, tree, file);
+        expect(applied.ok).toBe(true);
+        if (!applied.ok) return;
+        expect(applied.data.persons[A].photo).toBe(other);
+        expect(applied.record.fields.map(f => f.field)).toContain('photo');
+        // The tree's portrait as the file's data URL: nothing to do.
+        const same = await photoPlan(rMine, mine);
+        expect(photoItems(same.plan)).toEqual([]);
     });
 });
 

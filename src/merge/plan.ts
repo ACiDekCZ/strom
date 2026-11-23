@@ -18,7 +18,7 @@ import { mergeNoteText } from './notes.js';
 import { checkMergeResult, MergeCheckProblem } from './merge-check.js';
 import { FieldConflict, MergeRelations, MergeState, MergeTrace, PartnershipConflictField, PersonMatch } from './types.js';
 import { addPersonMedia, allMedia } from '../media.js';
-import { imageFinder } from '../image-equal.js';
+import { imageFinder, sameImageSync } from '../image-equal.js';
 import { imageMetaOf, headMime } from '../image-meta.js';
 import { dataUrlByteSize } from '../photo.js';
 import { contentFingerprint } from '../research-link.js';
@@ -546,7 +546,8 @@ function fieldItems(existing: Person, incoming: Person, scope: PlanScope, rules:
             out.push({ kind: 'field', person: existing.id, field, before, after, rule, on: !keptByValue(rule), protected: false });
             continue;
         }
-        if (!after || after === before) continue;
+        // Two portraits of one name and length are told by their content (detectConflicts, sameImageSync).
+        if (!after || (after === before && !(field === 'photo' && differing.has(field)))) continue;
         const rule = ruleFor(rules, existing.id, field);
         if (!before) {
             // A gap the import fills (unless unticked in step 5).
@@ -947,7 +948,9 @@ function recordOf(plan: MergePlan, before: StromData, source: StromData, after: 
         for (const [field] of PERSON_FIELDS) {
             const was = fieldText(before.persons[treeId], field);
             const now = fieldText(after.persons[treeId], field);
-            if (was !== now) record.fields.push({ person: treeId, field, before: was, after: now });
+            const changed = was !== now
+                || (field === 'photo' && !sameImageSync(before.persons[treeId]?.photo, after.persons[treeId]?.photo));
+            if (changed) record.fields.push({ person: treeId, field, before: was, after: now });
         }
     }
     record.partnerships = Object.keys(after.partnerships).filter(id => !(id in before.partnerships));
