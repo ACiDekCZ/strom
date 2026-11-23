@@ -23,7 +23,7 @@ import {
     panPortraitView, zoomPortraitView, straightenPortraitView, turnPortraitView, mirrorPortraitView,
     portraitViewMatrix, portraitOutputMatrix, portraitZoomRange, defaultPortraitView, portraitCropFromView,
     portraitPageMatrix, invertMatrix, applyMatrix, portraitScale, portraitPageSize,
-    PORTRAIT_MAX_ANGLE, PORTRAIT_ANGLE_STEP,
+    PORTRAIT_MAX_ANGLE, PORTRAIT_ANGLE_STEP, PORTRAIT_EMPTY_FILL,
 } from '../photo.js';
 import { ATTACHMENT_MAX_SIDE, ATTACHMENT_QUALITY } from '../attachments.js';
 import { decodeImage, renderRotated, cropToJpeg, WORK_MAX_SIDE, createEditorOverlay, bindEditorKeys } from './crop-editor.js';
@@ -318,11 +318,14 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
         const ctx = target.getContext('2d');
         if (!ctx) return;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        // JPEG has no alpha: a transparent PNG is saved on white (§10).
-        ctx.fillStyle = '#fff';
+        // The frame off the photo's edge: the neutral fill (as Done bakes it).
+        ctx.fillStyle = PORTRAIT_EMPTY_FILL;
         ctx.fillRect(0, 0, target.width, target.height);
         ctx.imageSmoothingQuality = 'high';
         ctx.setTransform(...portraitViewMatrix(v, W, H, target.width));
+        // JPEG has no alpha: a transparent PNG is saved on white (§10).
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, W, H);
         ctx.drawImage(src, 0, 0, W, H);
         ctx.setTransform(1, 0, 0, 1, 0, 0);
     };
@@ -333,6 +336,10 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
         const dpr = window.devicePixelRatio || 1;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // The frame's square off the photo's edge shows what the portrait
+        // will hold there (the neutral fill); the stage around it stays.
+        ctx.fillStyle = PORTRAIT_EMPTY_FILL;
+        ctx.fillRect((geo.cx - geo.side / 2) * dpr, (geo.cy - geo.side / 2) * dpr, geo.side * dpr, geo.side * dpr);
         const m = stageMatrix(view());
         ctx.setTransform(m[0] * dpr, m[1] * dpr, m[2] * dpr, m[3] * dpr, m[4] * dpr, m[5] * dpr);
         ctx.fillStyle = '#fff';
@@ -726,10 +733,14 @@ export async function openPortraitEditor(input: PortraitEditorInput): Promise<Po
                         c.height = PHOTO_SIZE;
                         const ctx = c.getContext('2d');
                         if (!ctx) throw new Error('Canvas 2D context unavailable');
-                        ctx.fillStyle = '#fff';
+                        // The frame off the photo's edge: the neutral fill;
+                        // the photo itself on white (JPEG has no alpha, §10).
+                        ctx.fillStyle = PORTRAIT_EMPTY_FILL;
                         ctx.fillRect(0, 0, PHOTO_SIZE, PHOTO_SIZE);
                         ctx.imageSmoothingQuality = 'high';
                         ctx.setTransform(...portraitOutputMatrix(crop, W, H, PHOTO_SIZE));
+                        ctx.fillStyle = '#fff';
+                        ctx.fillRect(0, 0, W, H);
                         ctx.drawImage(bitmap, 0, 0);
                         photo = c.toDataURL('image/jpeg', PHOTO_QUALITY);
                     }

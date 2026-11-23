@@ -287,3 +287,14 @@ describe('cards of details with the view\'s photo (spec 096 §3)', () => {
         }
     });
 });
+
+describe('a portrait whose frame reaches past its photo\'s edge (1123)', () => {
+    it('the image draws the finished portrait (Person.photo) as it is; the crop is not read', () => {
+        const draw = (p: Person) => buildTreeSvg(makeData(p), layout({ a: { x: 0, y: 0 } }), {
+            config: DEFAULT_LAYOUT_CONFIG, cardDensity: 'normal', measureCardTexts: measure,
+        });
+        const past = draw(person('a', { photo: PHOTO, photoSource: { attachmentId: 'x', region: { x: -0.3, y: -0.2, w: 0.75, h: 1 } } }));
+        expect(past).toContain(PHOTO);
+        expect(past).toBe(draw(person('a', { photo: PHOTO })));
+    });
+});

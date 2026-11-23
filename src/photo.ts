@@ -187,6 +187,12 @@ export function portraitSourceExists(data: StromData, person: Person): boolean {
 // the editor (src/ui/crop-editor.ts, portrait mode) keeps a PortraitView
 // while the photo is moved and turns it into a PortraitCrop on Done.
 
+/**
+ * What a portrait shows where its frame reaches past the photo's edge: the
+ * light theme's --avatar-bg (an empty portrait on the card). A fixed colour,
+ * as JPEG has no alpha: the same in both themes, in print and in exports.
+ */
+export const PORTRAIT_EMPTY_FILL = '#f0e9da';
 /** Highest zoom (800 %) of a portrait's frame over its cover scale. */
 export const PORTRAIT_MAX_ZOOM = 8;
 /** The frame never covers fewer original pixels than this (at most 2× the real resolution of PHOTO_SIZE). */
@@ -323,9 +329,10 @@ export function portraitViewFromCrop(crop: PortraitCrop, width: number, height: 
 
 /**
  * A view brought inside its limits: quarter turns 0–3, the angle within ±45°
- * in steps of 0.5, the zoom within portraitZoomRange (at least
- * minZoomForAngle, so no corner is empty), and the centre so that the turned
- * frame stays on the page (the photo is moved only within itself).
+ * in steps of 0.5, the zoom within portraitZoomRange, and the frame's centre
+ * on the page (0…width, 0…height). The frame itself may reach past the
+ * page's edge (a face close to the photo's edge can still be centred); what
+ * it covers off the page is PORTRAIT_EMPTY_FILL in the portrait.
  */
 export function clampPortraitView(view: PortraitView, width: number, height: number): PortraitView {
     const quarterTurns = toQuarterTurns(view.quarterTurns);
@@ -334,10 +341,7 @@ export function clampPortraitView(view: PortraitView, width: number, height: num
     const page = portraitPageSize(width, height, quarterTurns);
     const range = portraitZoomRange(width, height, angle);
     const zoom = Math.max(range.min, Math.min(range.max, Number.isFinite(view.zoom) ? view.zoom : 1));
-    const side = Math.min(page.width, page.height) / zoom;
-    // Half the turned frame's bounding box: the centre keeps that far from each edge.
-    const reach = (side / 2) * minZoomForAngle(angle);
-    const fit = (v: number, size: number): number => size <= 2 * reach ? size / 2 : Math.max(reach, Math.min(size - reach, Number.isFinite(v) ? v : size / 2));
+    const fit = (v: number, size: number): number => Math.max(0, Math.min(size, Number.isFinite(v) ? v : size / 2));
     return { cx: fit(view.cx, page.width), cy: fit(view.cy, page.height), zoom, quarterTurns, angle, mirror: view.mirror === true };
 }
 
@@ -418,7 +422,7 @@ export function straightenPortraitView(view: PortraitView, angle: number, width:
 
 /**
  * The view turned by a quarter turn (`1` clockwise, `-1` back): the page
- * point under the frame's centre stays under it (as far as the edge lets it),
+ * point under the frame's centre stays under it,
  * the zoom goes back to the smallest that covers the frame.
  */
 export function turnPortraitView(view: PortraitView, delta: 1 | -1, width: number, height: number): PortraitView {
@@ -499,7 +503,23 @@ export function invertMatrix(m: AffineMatrix): AffineMatrix | null {
     return [a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])];
 }
 
-/** Whether a value is a well-formed PortraitSource (exactly one origin, a region inside 0–1, a sane angle); no lookup. */
+/**
+ * Whether a value is a portrait's region (fractions of the page): finite,
+ * its sides above 0 and at most the page's (zoom ≥ 100 %), its centre on the
+ * page. The frame itself may reach past the page's edge (clampPortraitView).
+ */
+export function isPortraitRegionShape(v: unknown): v is PortraitCrop['region'] {
+    if (!v || typeof v !== 'object') return false;
+    const { x, y, w, h } = v as Record<string, unknown>;
+    if (![x, y, w, h].every(n => typeof n === 'number' && Number.isFinite(n))) return false;
+    const [nx, ny, nw, nh] = [x, y, w, h] as number[];
+    const eps = 1e-6;
+    if (!(nw > 0 && nh > 0 && nw <= 1.0001 && nh <= 1.0001)) return false;
+    const mx = nx + nw / 2, my = ny + nh / 2;
+    return mx >= -eps && mx <= 1 + eps && my >= -eps && my <= 1 + eps;
+}
+
+/** Whether a value is a well-formed PortraitSource (exactly one origin, a region with its centre on the page, a sane angle); no lookup. */
 export function isPortraitSourceShape(v: unknown): v is PortraitSource {
     if (!v || typeof v !== 'object') return false;
     const s = v as Record<string, unknown>;
@@ -508,12 +528,7 @@ export function isPortraitSourceShape(v: unknown): v is PortraitSource {
     if (hasAtt === hasUnion) return false;
     if ('attachmentId' in s && !hasAtt) return false;
     if ('partnershipId' in s && !hasUnion) return false;
-    const r = s.region as Record<string, unknown> | undefined;
-    if (!r || typeof r !== 'object') return false;
-    const { x, y, w, h } = r;
-    if (![x, y, w, h].every(n => typeof n === 'number' && Number.isFinite(n))) return false;
-    const [nx, ny, nw, nh] = [x, y, w, h] as number[];
-    if (!(nx >= 0 && ny >= 0 && nw > 0 && nh > 0 && nx + nw <= 1.0001 && ny + nh <= 1.0001)) return false;
+    if (!isPortraitRegionShape(s.region)) return false;
     if (s.quarterTurns !== undefined && s.quarterTurns !== 1 && s.quarterTurns !== 2 && s.quarterTurns !== 3) return false;
     if (s.angle !== undefined && !(typeof s.angle === 'number' && Number.isFinite(s.angle) && Math.abs(s.angle) <= PORTRAIT_MAX_ANGLE)) return false;
     if (s.mirror !== undefined && s.mirror !== true) return false;

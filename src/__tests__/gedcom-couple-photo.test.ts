@@ -129,6 +129,22 @@ describe('a couple’s photo: Strom → GEDCOM → Strom', () => {
         expect(wife.photo).toBe(PORTRAIT_JPEG);
         expect(wife.photoSource).toBeUndefined();
     });
+    it('a portrait whose frame reaches past the photo\'s edge goes out as the finished portrait, no region, and comes back', () => {
+        const data = treeWithCouplePhoto();
+        const wife = byName(data, 'Zvonimíra');
+        wife.photoOriginalName = 'zvonimira.jpg';
+        wife.photoSource = { partnershipId: onlyCouple(data).id, region: { x: -0.125, y: 0.4, w: 0.3, h: 0.45 } };
+        const ged = exportToGedcom(data).content;
+        const lines = ged.split(/\r?\n/);
+        const kind = lines.indexOf('2 _STROM_KIND photo');
+        expect(kind).toBeGreaterThan(0);
+        expect(ged).not.toMatch(/CROP|photoSource|region|-0\.125|0\.45/);
+        const back = load(ged);
+        expect(back.stats.droppedTagSummary).toBe('');
+        const again = byName(migrateData(back.data), 'Zvonimíra');
+        expect(again.photo).toBe(PORTRAIT_JPEG);
+        expect(again.photoSource).toBeUndefined();
+    });
 });
 
 // ---------- another program's family pictures ----------

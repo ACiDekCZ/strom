@@ -933,7 +933,8 @@ export function stripUnsafeMediaDataUrls(data: StromData): number {
 /**
  * The original of each portrait (Person.photoSource, spec 107) brought in
  * line on load; one that breaks a rule goes, the portrait stays:
- * - exactly one of attachmentId / partnershipId, a valid region, quarter
+ * - exactly one of attachmentId / partnershipId, a valid region (its
+ *   centre on the image; the frame may reach past the edge), quarter
  *   turns 1–3, an angle within ±45° and mirror only as true;
  * - the attachment is the person's own (not one held as an original only),
  *   the union is one of the person's and has a photo;
@@ -956,7 +957,7 @@ export function cleanPortraitSources(data: StromData): number {
 export function portraitSourceHolds(data: StromData, person: Person): boolean {
     const src = person.photoSource as unknown;
     let image: string | undefined;
-    if (person.photo && isPortraitSourceShape(src) && isValidRegion(src.region)) {
+    if (person.photo && isPortraitSourceShape(src)) {
         if (src.attachmentId) {
             const att = personMediaById(data, person.id, src.attachmentId);
             if (att && !isOriginalOnlyAttachment(att) && SAFE_IMAGE_DATA_URL.test(att.dataUrl)) image = att.dataUrl;
@@ -969,7 +970,7 @@ export function portraitSourceHolds(data: StromData, person: Person): boolean {
     return !!image && (!size || isPortraitRegionSquare((src as PortraitSource).region, size.w, size.h, (src as PortraitSource).quarterTurns));
 }
 
-/** A crop region in fractions of the image: inside 0–1 with a positive size. */
+/** An excerpt's crop region in fractions of the image: inside 0–1 with a positive size (a portrait's: isPortraitRegionShape). */
 function isValidRegion(r: unknown): boolean {
     if (!r || typeof r !== 'object') return false;
     const { x, y, w, h } = r as Record<string, unknown>;
