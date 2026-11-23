@@ -5839,6 +5839,30 @@ const stringsEN = {
         resultCount: (n: number) => nEn(n, 'person', 'people'),
     },
 
+    // Search scope (spec 137 K1): the whole tree, a person's direct line, the people in view.
+    // {p} is the name in bold with the birth year, already HTML; the titles take plain text.
+    searchScope: {
+        group: 'Search scope',
+        tree: 'Whole tree',
+        line: 'Direct line',
+        view: 'In view',
+        treeTitle: 'Search the whole tree',
+        lineTitle: (p: string) => `Only ${p} and their ancestors and descendants`,
+        viewTitle: (n: number) => `Only the people the view shows now (${n})`,
+        lineRef: (p: string) => `Direct line: ${p} · with ancestors and descendants`,
+        lineRefMain: (p: string) => `Direct line: ${p}, the tree's main person · with ancestors and descendants`,
+        viewRef: (v: string, n: number) => `In view: ${v} · ${nEn(n, 'person', 'people')}`,
+        tableView: 'Table, filtered',
+        altKeys: '(Alt+←/→)',
+        emptyLine: (n: number) => `Nobody in the direct line. ${nEn(n, 'match', 'matches')} in the whole tree.`,
+        emptyView: (n: number) => `Nobody in view. ${nEn(n, 'match', 'matches')} in the whole tree.`,
+        searchWhole: 'Search the whole tree',
+        footLine: 'direct line only',
+        footView: 'in view only',
+        sheetLine: (p: string) => `Searching the direct line only: ${p}.`,
+        sheetView: (v: string) => `Searching only what the view shows: ${v}.`,
+    },
+
     // Links into the app from outside (the macOS widget): ?person= / ?show=waiting (spec 019 U4)
     deepLink: {
         personNotFound: 'The linked person is not in this tree.',
@@ -17057,6 +17081,30 @@ const stringsCZ: StringsType = {
         resultCount: (n: number) => nCs(n, 'osoba', 'osoby', 'osob'),
     },
 
+    // Search scope (spec 137 K1): the whole tree, a person's direct line, the people in view.
+    // {p} is the name in bold with the birth year, already HTML; the titles take plain text.
+    searchScope: {
+        group: 'Rozsah hledání',
+        tree: 'Celý strom',
+        line: 'Přímá linie',
+        view: 'V pohledu',
+        treeTitle: 'Hledat v celém stromu',
+        lineTitle: (p: string) => `Jen osoba ${p}, její předci a potomci`,
+        viewTitle: (n: number) => `Jen osoby, které pohled právě ukazuje (${n})`,
+        lineRef: (p: string) => `Přímá linie: ${p} · s předky a potomky`,
+        lineRefMain: (p: string) => `Přímá linie: ${p}, hlavní osoba stromu · s předky a potomky`,
+        viewRef: (v: string, n: number) => `V pohledu: ${v} · ${nCs(n, 'osoba', 'osoby', 'osob')}`,
+        tableView: 'Tabulka po filtru',
+        altKeys: '(Alt+←/→)',
+        emptyLine: (n: number) => `V přímé linii nikdo. V celém stromu ${nCs(n, 'shoda', 'shody', 'shod')}.`,
+        emptyView: (n: number) => `V pohledu nikdo. V celém stromu ${nCs(n, 'shoda', 'shody', 'shod')}.`,
+        searchWhole: 'Hledat v celém stromu',
+        footLine: 'jen přímá linie',
+        footView: 'jen v pohledu',
+        sheetLine: (p: string) => `Hledá se jen v přímé linii: ${p}.`,
+        sheetView: (v: string) => `Hledá se jen v pohledu: ${v}.`,
+    },
+
     // Odkazy do aplikace zvenku (widget macOS): ?person= / ?show=waiting (spec 019 U4)
     deepLink: {
         personNotFound: 'Odkazovaná osoba v tomto stromu není.',
@@ -28137,6 +28185,30 @@ const stringsDE: StringsType = {
         cancel: 'Abbrechen',
         clear: 'Suche löschen',
         resultCount: (n: number) => nDe(n, 'Person', 'Personen'),
+    },
+
+    // Search scope (spec 137 K1): the whole tree, a person's direct line, the people in view.
+    // {p} is the name in bold with the birth year, already HTML; the titles take plain text.
+    searchScope: {
+        group: 'Suchbereich',
+        tree: 'Ganzer Stammbaum',
+        line: 'Direkte Linie',
+        view: 'In der Ansicht',
+        treeTitle: 'Im ganzen Stammbaum suchen',
+        lineTitle: (p: string) => `Nur ${p} mit Vorfahren und Nachkommen`,
+        viewTitle: (n: number) => `Nur die Personen, die die Ansicht gerade zeigt (${n})`,
+        lineRef: (p: string) => `Direkte Linie: ${p} · mit Vorfahren und Nachkommen`,
+        lineRefMain: (p: string) => `Direkte Linie: ${p}, Hauptperson des Stammbaums · mit Vorfahren und Nachkommen`,
+        viewRef: (v: string, n: number) => `In der Ansicht: ${v} · ${nDe(n, 'Person', 'Personen')}`,
+        tableView: 'Tabelle, gefiltert',
+        altKeys: '(Alt+←/→)',
+        emptyLine: (n: number) => `In der direkten Linie niemand. Im ganzen Stammbaum ${nDe(n, 'Treffer', 'Treffer')}.`,
+        emptyView: (n: number) => `In der Ansicht niemand. Im ganzen Stammbaum ${nDe(n, 'Treffer', 'Treffer')}.`,
+        searchWhole: 'Im ganzen Stammbaum suchen',
+        footLine: 'nur direkte Linie',
+        footView: 'nur in der Ansicht',
+        sheetLine: (p: string) => `Gesucht wird nur in der direkten Linie: ${p}.`,
+        sheetView: (v: string) => `Gesucht wird nur in der Ansicht: ${v}.`,
     },
 
     // Links von außen in die App (macOS-Widget): ?person= / ?show=waiting (spec 019 U4)
