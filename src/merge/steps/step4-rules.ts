@@ -339,8 +339,8 @@ function personHtml(ctx: StepContext, p: PersonRow, rules: PlanRules): string {
     const seg = ([['', W.byRules], ['mine', W.rMine], ['import', W.rImport], ['both', W.rBoth]] as const).map(([c, label]) =>
         `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" aria-checked="${(own ?? '') === c}" data-prule="${c}" data-fk="pr-${escapeHtml(p.person)}-${c || 'rules'}">${escapeHtml(label)}</button>`).join('');
     return `<section class="merge-s4-person" data-person="${escapeHtml(p.person)}" aria-label="${escapeHtml(name)}">`
-        + `<div class="merge-s4-grid"><div class="merge-s4-row merge-s4-hrow" aria-hidden="true"><span class="merge-s4-pname">${escapeHtml(name)}</span>`
-        + `<span>${escapeHtml(target)}</span><span>${escapeHtml(W.colImport)}</span><span>${escapeHtml(W.resultFrom)}</span></div>`
+        + `<div class="merge-s4-grid"><div class="merge-s4-row merge-s4-hrow" aria-hidden="true"><span class="merge-s4-pname" title="${escapeHtml(name)}">${escapeHtml(name)}</span>`
+        + `<span title="${escapeHtml(target)}">${escapeHtml(target)}</span><span>${escapeHtml(W.colImport)}</span><span>${escapeHtml(W.resultFrom)}</span></div>`
         + `<h4 class="merge-s4-pname merge-s4-ptitle">${escapeHtml(name)}</h4>${rows}</div>`
         + `<div class="merge-s4-pwhole"><span class="merge-s4-pwhole-l">${escapeHtml(W.personWhole(name))}</span>`
         + `<div class="sel-seg" role="radiogroup" aria-label="${escapeHtml(W.personWhole(name))}">${seg}</div></div></section>`;

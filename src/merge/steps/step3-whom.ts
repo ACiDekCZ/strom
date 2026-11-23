@@ -808,10 +808,10 @@ function rowHtml(view: View, i: number): string {
     const id = escapeHtml(p.id);
     return `<li class="merge-s3-row${on ? ' is-on' : ''}${disabled ? ' is-disabled' : ''}" role="option" aria-selected="${on}" data-id="${id}">`
         + `<label class="merge-s3-check"><input type="checkbox" data-vkey="p:${id}" data-id="${id}"${on ? ' checked' : ''}${disabled ? ' disabled' : ''}>`
-        + `<span class="merge-s3-name">${escapeHtml(p.name)}</span></label>`
+        + `<span class="merge-s3-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span></label>`
         + `<span class="merge-s3-years">${escapeHtml(yearsText(p))}</span>`
         + (p.living ? `<span class="tag merge-s3-living-tag">${escapeHtml(W.livingTag)}</span>` : '')
-        + `<span class="merge-s3-rel">${escapeHtml(relationOf(view, p))}</span>`
+        + `<span class="merge-s3-rel" title="${escapeHtml(relationOf(view, p))}">${escapeHtml(relationOf(view, p))}</span>`
         + '</li>';
 }
 

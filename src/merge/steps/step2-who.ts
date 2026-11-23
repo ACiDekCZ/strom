@@ -558,6 +558,14 @@ export function isCopyOfTarget(ctx: Pick<StepContext, 'counts' | 'choices'>): bo
     return !((ctx.choices.scope === 'c' || ctx.choices.scope === 'd') && ctx.counts.differencesKept > 0);
 }
 
+/** Close step 2's sheet of pairs (a phone; Esc), as its × does; true when it was open. */
+export function closeStep2Overlay(): boolean {
+    const close = document.querySelector<HTMLButtonElement>('#merge-modal .merge-s2.is-list .merge-s2-sheet-close');
+    if (!close || close.getClientRects().length === 0) return false;
+    close.click();
+    return true;
+}
+
 export function renderStep2(host: HTMLElement, ctx: StepContext): void {
     const view = viewOf(ctx.state);
     // A copy of the tree (13b): one sentence, the comparison behind a link.

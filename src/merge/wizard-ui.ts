@@ -423,6 +423,8 @@ export class MergeWizard {
         const validation = document.getElementById('merge-validation-banner');
         if (validation) validation.hidden = ws.step !== 1;
         if (focus) {
+            // A new step starts at its top (on a phone the step scrolls as a whole and kept the last step's scroll).
+            for (let el = document.getElementById('merge-step-body'); el && el.id !== 'merge-modal'; el = el.parentElement) el.scrollTop = 0;
             document.getElementById('merge-step-body')?.querySelector<HTMLElement>('.merge-step-title')?.focus({ preventScroll: true });
             const counts = this.plan ? countsWords(planCounts(this.plan)) : '';
             announceText(strings.mergeWizard.announceStep(ws.step, stepName(ws.step), counts));

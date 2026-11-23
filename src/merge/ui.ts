@@ -58,7 +58,7 @@ import type { Step1Env, Step2Env, TargetRow, UnionConflictLine, WriteStatus } fr
 import { closeNotTaken, parkGedcomSummary } from './steps/step1-what.js';
 import { closeStep3Overlay } from './steps/step3-whom.js';
 import { closeStep5Overlay } from './steps/step5-plan.js';
-import { noteRecalc } from './steps/step2-who.js';
+import { closeStep2Overlay, noteRecalc } from './steps/step2-who.js';
 import { notTakenText } from './wizard-text.js';
 import { listSnapshots } from '../snapshots.js';
 import { formatRelativeDateTime } from '../format.js';
@@ -346,6 +346,8 @@ class MergerUIClass {
     private handleEscapePress(): void {
         // Step 1's list of what is not taken over sits above the guide.
         if (closeNotTaken()) return;
+        // Step 2's sheet of pairs (a phone).
+        if (closeStep2Overlay()) return;
         // Step 3's dialogs (5a, 5c) and its branch preview sheet.
         if (closeStep3Overlay()) return;
         // Step 5's preview sheet.

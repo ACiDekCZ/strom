@@ -57,6 +57,11 @@ test.describe('a phone held upright', () => {
         // The tabs were squeezed to a few pixels by the long list below them.
         expect((await tabs.boundingBox())!.height).toBeGreaterThanOrEqual(32);
         await expect(wizard.locator('#merge-match-list [role="option"]').first()).toBeInViewport();
+        // Esc closes the sheet (as its × does), not the guide.
+        await page.keyboard.press('Escape');
+        await expect(wizard.locator('#merge-match-list')).toBeHidden();
+        await expect(page.locator('#merge-close-confirm')).not.toHaveClass(/active/);
+        await expect(wizard.locator('.merge-pair-open')).toBeFocused();
     });
 
     test('step 3: the filters fold under Filters ▾, the list starts on the first screen, the preview is a sheet, the primary button on the screen', async ({ page }) => {
@@ -64,8 +69,12 @@ test.describe('a phone held upright', () => {
         // A pair left to decide (a child like the tree's own one) goes as new.
         const rest = wizard.getByRole('button', { name: /^Add as new \(\d+\)$/ });
         if (await rest.count()) await rest.click();
+        // Step 2 scrolled down to its decisions: step 3 still starts at its top.
+        await wizard.locator('.merge-decide').scrollIntoViewIfNeeded();
+        await expect(wizard.locator('#merge-step-body .merge-step-title')).not.toBeInViewport();
         await wizard.locator('#merge-next').click();
         await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
+        await expect(wizard.locator('#merge-step-body .merge-step-title')).toBeInViewport();
         const next = wizard.locator('#merge-next');
         await expect(next).toBeInViewport();
 

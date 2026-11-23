@@ -487,7 +487,7 @@ function lineHtml(line: PlanLine, group: PlanGroupKey): string {
     const inTree = line.person && (group === 'new' || group === 'joined')
         ? `<button type="button" class="link-button merge-s5-in" data-in="${escapeHtml(line.person)}" data-vkey="in:${escapeHtml(line.key)}">${escapeHtml(W.inTree)}</button>` : '';
     return `<li class="merge-s5-row${line.on ? '' : ' is-off'}" data-key="${escapeHtml(line.key)}">`
-        + `${box}${mark}<span class="merge-s5-name${serif}">${escapeHtml(line.name)}</span>${years}${living}${text}${inTree}</li>`;
+        + `${box}${mark}<span class="merge-s5-name${serif}" title="${escapeHtml(line.name)}">${escapeHtml(line.name)}</span>${years}${living}${text}${inTree}</li>`;
 }
 
 /** "and 2 995 more · Show all": the sentence shortens (whole as its title), the button stays. */
