@@ -32,10 +32,11 @@ const payload = (url: string): string => url.slice(url.indexOf(',') + 1);
 const joined = (body: string): string => body.replace(/\n\d+ CONC /g, '');
 
 async function jan(page: Page): Promise<{ id: string; photo: string | null; media: { dataUrl: string; name: string; note: string | null }[] }> {
+    // The tree in memory holds its pictures as references to the image pool: read them back whole.
     return page.evaluate(() => {
         const dm = window.Strom.DataManager;
         const p = dm.getAllPersons().find(x => x.firstName === 'Jan')!;
-        return { id: p.id, photo: p.photo ?? null, media: dm.personMedia(p.id).map(a => ({ dataUrl: a.dataUrl, name: a.name, note: a.note ?? null })) };
+        return window.Strom.Images.expandedData({ id: p.id as string, photo: p.photo ?? null, media: dm.personMedia(p.id).map(a => ({ dataUrl: a.dataUrl, name: a.name, note: a.note ?? null })) });
     });
 }
 
