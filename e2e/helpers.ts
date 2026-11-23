@@ -759,6 +759,11 @@ export async function mergeCreateNewTree(page: Page, wizard: Locator, name?: str
     await wizard.locator('#merge-next').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
     await wizard.locator('#merge-next').click();
+    // A whole GEDCOM file closes the guide at once; any other import ends on
+    // step 6, where Show in the tree opens the new tree.
+    const shown = wizard.locator('.merge-s6-act[data-act="show"]');
+    await expect.poll(async () => await wizard.isHidden() || await shown.isVisible()).toBe(true);
+    if (await wizard.isVisible()) await shown.click();
     await expect(wizard).toBeHidden();
     const id = await page.evaluate((before) =>
         window.Strom.TreeManager.getTrees().find((t: { id: string }) => !before.includes(t.id))?.id, before);
@@ -788,15 +793,26 @@ export async function importGedcomAsNewTree(page: Page, file: string,
 }
 
 /**
- * Write (`mergeWrite`) and accept "Switch to the new tree?" after "Merge
- * complete": resolves with the new tree's id and name once it is the active tree.
+ * After the write: step 6 What happened (spec 134 §9) with its Done; resolves
+ * once the guide is closed by Done.
+ */
+export async function mergeDone(wizard: Locator): Promise<void> {
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '6');
+    await expect(wizard.locator('#merge-next')).toBeEnabled();
+    await wizard.locator('#merge-next').click();
+    await expect(wizard).toBeHidden();
+}
+
+/**
+ * Write (`mergeWrite`) into a new tree and open it with step 6's Show in
+ * the tree: resolves with the new tree's id and name once it is the active tree.
  */
 export async function mergeWriteAndSwitch(page: Page, wizard: Locator): Promise<{ id: string; name: string }> {
     const before: string[] = await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { id: string }) => t.id));
     await mergeWrite(wizard);
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '6');
+    await wizard.locator('.merge-s6-act[data-act="show"]').click();
     await expect(wizard).toBeHidden();
-    await expect(page.locator('#confirm-title')).toHaveText('Merge complete');
-    await page.locator('#confirmation-modal.active #confirm-ok-btn').click();
     const tree = await page.evaluate((before) =>
         window.Strom.TreeManager.getTrees().find((t: { id: string }) => !before.includes(t.id)) as { id: string; name: string } | undefined, before);
     expect(tree, 'a new tree').toBeTruthy();
