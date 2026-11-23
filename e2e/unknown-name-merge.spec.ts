@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { openApp, createFirstPerson, mergeCompare, mergeCount, mergePair, mergeRow, mergeWriteAndSwitch } from './helpers.js';
+import { openApp, createFirstPerson, mergeCompare, mergeCount, mergePair, mergeRow } from './helpers.js';
 
 /**
  * A person of unknown given name in a merge (spec 010, K1.2): MyHeritage
  * writes a wife known only by her surname as "1 NAME /Nováková/". Merging
  * such a file into a tree that already holds her pairs her through her matched
  * husband — as a match for review, never confirmed by itself — and nobody is
- * added twice once it is confirmed.
+ * added twice once it is confirmed: the file then holds only the tree's
+ * people and the guide writes nothing (13b).
  */
 
 type P = {
@@ -67,7 +68,16 @@ test('a wife of unknown given name pairs through her matched husband, for review
     await expect(mergeCount(wizard, 'pending')).toHaveText('0');
     await expect(mergeCount(wizard, 'added')).toHaveText('0');
 
-    await mergeWriteAndSwitch(page, wizard);
+    // Her join decided the last pair: the list stays where it was worked in.
+    await expect(mergeRow(wizard, 'Nováková')).toHaveCount(1);
+
+    // Everyone joined, nothing new in scope a): a sentence over the list says so, the primary only closes.
+    const treesBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
+    await expect(wizard.locator('.merge-s2-copy-note')).toHaveText(/^All 3 people are already in the tree .+ and bring nothing new\.$/);
+    await expect(wizard.locator('#merge-next')).toHaveText('Close');
+    await wizard.locator('#merge-next').click();
+    await expect(wizard).toBeHidden();
+    expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().length)).toBe(treesBefore);
     const persons = await page.evaluate(async () => {
         const TM = window.Strom.TreeManager;
         return Object.values((await TM.getTreeData(TM.getActiveTreeId()!))!.persons);

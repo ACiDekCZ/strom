@@ -62,7 +62,11 @@ interface PairView {
     /** A phone: the pair's column shown (§14, 14b), and the list open as a sheet. */
     side: 'tree' | 'import';
     listOpen: boolean;
-    /** A copy of the tree (13b): the comparison shown on Show the comparison. */
+    /**
+     * A copy of the tree (13b): the comparison shown on Show the comparison.
+     * Also set by any decision made in the list: the sentence stands only
+     * right after the comparison, never in place of the list being worked in.
+     */
     showCopy: boolean;
 }
 
@@ -570,7 +574,12 @@ export function renderStep2(host: HTMLElement, ctx: StepContext): void {
     if (oldList) view.scrollTop = oldList.scrollTop;
     const d = drawData(ctx, view);
     const W = strings.mergeWizard;
+    // A copy of the tree with its list shown (Show the comparison, or the last
+    // decision made it one): the sentence says why the primary only closes.
+    const copyNote = isCopyOfTarget(ctx)
+        ? `<p class="merge-step-note merge-s2-copy-note">${escapeHtml(W.sameAsTarget(ctx.counts!.total, ctx.choices.targetName))}</p>` : '';
     host.innerHTML = stepHeading(2).replace('class="merge-step-title"', 'class="merge-step-title merge-s2-title"')
+        + copyNote
         + `<div class="merge-s2${view.listOpen ? ' is-list' : ''}">`
         + `<div class="merge-s2-side" id="merge-s2-side">`
         + `<div class="merge-s2-sheet-head"><span class="merge-pair-title">${escapeHtml(W.pairOf(d.row ? d.shown.indexOf(d.row) + 1 : 0, d.shown.length))}</span>`
@@ -621,6 +630,7 @@ function decide(ctx: StepContext, kind: DecKind): void {
     const row = selectedRow(ctx);
     if (!env || !row || !decisionsOf(row).includes(kind)) return;
     const view = viewOf(ctx.state);
+    view.showCopy = true;
     if (kind === 'other') {
         env.other(row.id);
         return;
@@ -696,6 +706,7 @@ function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
         if (!env || view.checked.size === 0) return;
         const ids = [...view.checked];
         view.checked.clear();
+        view.showCopy = true;
         env.decideMany(ids, 'reject');
     });
     host.querySelector<HTMLButtonElement>('.merge-reanalyze')?.addEventListener('click', () => env?.reanalyze());
@@ -736,6 +747,7 @@ function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
         const rest = t.closest<HTMLElement>('[data-rest]');
         if (rest && env) {
             const d = drawData(ctx, view);
+            view.showCopy = true;
             env.decideMany(openIds(d), rest.dataset.rest as 'reject' | 'skip');
             return;
         }

@@ -351,6 +351,33 @@ describe('bringsNothingNew (13b)', () => {
     });
 });
 
+describe('applyPlan: a new child of a couple both trees know', () => {
+    it('hangs under that couple in every scope, the couple left as it is in a)', async () => {
+        const t = tree();
+        const tHer = t.person('t2', 'Dobroslava', 'Modřínová', { gender: 'female', birthDate: '1852-05-05' });
+        t.couple(t.person('t1', 'Velemír', 'Modřín', { birthDate: '1850-03-12' }), tHer, [t.person('t3', 'Kojata', 'Modřín', { birthDate: '1878-01-01' })]);
+        t.data.partnerships['u-t1-t2' as PartnershipId].startDate = '1875';
+        const s = tree();
+        const sHer = s.person('s2', 'Dobroslava', 'Modřínová', { gender: 'female', birthDate: '1852-05-05' });
+        s.couple(s.person('s1', 'Velemír', 'Modřín', { birthDate: '1850-03-12' }), sHer,
+            [s.person('s3', 'Kojata', 'Modřín', { birthDate: '1878-01-01' }), s.person('s4', 'Radhost', 'Modřín', { birthDate: '1880-02-02' })]);
+        s.data.partnerships['u-s1-s2' as PartnershipId].startDate = '1876';
+        for (const scope of ['a', 'b', 'c'] as const) {
+            const state = createMergeState(t.data, s.data);
+            const plan = buildPlan(state, choices({ scope }));
+            expect(planCounts(plan)).toMatchObject({ joined: 3, added: 1, pending: 0 });
+            const result = await applyPlan(plan, t.data, s.data);
+            expect(result.ok).toBe(true);
+            const unions = Object.values(result.data.partnerships);
+            expect(unions).toHaveLength(1);
+            const kid = Object.values(result.data.persons).find(p => p.firstName === 'Radhost')!;
+            expect({ scope, kids: [...unions[0].childIds].sort() }).toEqual({ scope, kids: ['t3', kid.id].sort() });
+            expect(kid.parentIds.sort()).toEqual(['t1', 't2']);
+            if (scope === 'a') expect(unions[0].startDate).toBe('1875');
+        }
+    });
+});
+
 describe('isRepeatOf', () => {
     const record = (id: string, at: string, source: Partial<PlanSource>, state: MergeRecord['state'] = 'valid'): MergeRecord => ({
         id, at, source: { ...SOURCE, ...source }, target: { name: 'Modřínovi', newTree: false },

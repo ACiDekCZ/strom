@@ -234,9 +234,10 @@ test('tree merge runs to completion: filters, confirm, execute — the new tree 
 });
 
 /**
- * Petr Dvorak and his wife and son in both trees; Petr's birth and death
- * places and the wedding date differ. Step 2's conflict dialogs answer: the
- * imported birthplace, the existing death place, the imported wedding date.
+ * Petr Dvorak and his wife and son in both trees, a second son Jan in the
+ * source only (so the merge has something to write, 13b); Petr's birth and
+ * death places and the wedding date differ. Step 2's conflict dialogs answer:
+ * the imported birthplace, the existing death place, the imported wedding date.
  */
 async function answerDvorakConflicts(page: Page): Promise<Locator> {
     await openApp(page);
@@ -254,15 +255,16 @@ async function answerDvorakConflicts(page: Page): Promise<Locator> {
         {
             name: 'Dvorak Source',
             data: treeData([
-                { id: 's_petr', firstName: 'Petr', lastName: 'Dvorak', gender: 'male', birthDate: '1890-02-02', birthPlace: 'Olomouc', deathPlace: 'Zlin', partnerships: ['s_u'], childIds: ['s_karel'] },
-                { id: 's_anna', firstName: 'Anna', lastName: 'Dvorakova', gender: 'female', birthDate: '1895-07-07', partnerships: ['s_u'], childIds: ['s_karel'] },
+                { id: 's_petr', firstName: 'Petr', lastName: 'Dvorak', gender: 'male', birthDate: '1890-02-02', birthPlace: 'Olomouc', deathPlace: 'Zlin', partnerships: ['s_u'], childIds: ['s_karel', 's_jan'] },
+                { id: 's_anna', firstName: 'Anna', lastName: 'Dvorakova', gender: 'female', birthDate: '1895-07-07', partnerships: ['s_u'], childIds: ['s_karel', 's_jan'] },
                 { id: 's_karel', firstName: 'Karel', lastName: 'Dvorak', gender: 'male', birthDate: '1920-04-04', parentIds: ['s_petr', 's_anna'] },
-            ], [{ id: 's_u', person1Id: 's_petr', person2Id: 's_anna', status: 'married', startDate: '1916-06-01', childIds: ['s_karel'] }]),
+                { id: 's_jan', firstName: 'Jan', lastName: 'Dvorak', gender: 'male', birthDate: '1923-09-09', parentIds: ['s_petr', 's_anna'] },
+            ], [{ id: 's_u', person1Id: 's_petr', person2Id: 's_anna', status: 'married', startDate: '1916-06-01', childIds: ['s_karel', 's_jan'] }]),
         });
 
     const wizard = await startMergeFromManager(page, 'Dvorak Source', 'Dvorak Target');
     await expect(mergeCount(wizard, 'joined')).toHaveText('3');
-    await expect(mergeCount(wizard, 'added')).toHaveText('0');
+    await expect(mergeCount(wizard, 'added')).toHaveText('1');
     // Petr's pair: his details and his couple speak against it.
     await row(wizard, 'Petr Dvorak');
     const against = wizard.locator('#merge-pair .merge-why-no');
@@ -309,15 +311,15 @@ test('tree merge conflicts: the dialogs keep the chosen answers; scope a) joins 
     const wizard = await answerDvorakConflicts(page);
     await executeAndSwitch(page, wizard, 'Dvorak Target + Dvorak Source');
 
-    // Scope a) (the default): the people of the tree stay as they are.
+    // Scope a) (the default): the people of the tree stay as they are, Jan joins their couple.
     const d = await activeData(page);
-    expect(d.persons).toHaveLength(3);
+    expect(d.persons).toHaveLength(4);
     const petr = d.one('Petr');
     expect(petr.birthPlace).toBe('Brno');
     expect(petr.deathPlace).toBe('Brno');
     expect(d.unions).toHaveLength(1);
     expect(d.unions[0].startDate).toBe('1915-06-01');
-    expect(d.unions[0].childIds).toEqual([d.one('Karel').id]);
+    expect(d.unions[0].childIds.sort()).toEqual([d.one('Karel').id, d.one('Jan').id].sort());
 });
 
 // The answers of the conflict dialogs reach the write through step 4 (Who is
@@ -328,14 +330,14 @@ test.fixme('tree merge conflicts: the chosen value wins for a person field and f
     await executeAndSwitch(page, wizard, 'Dvorak Target + Dvorak Source');
 
     const d = await activeData(page);
-    expect(d.persons).toHaveLength(3);
+    expect(d.persons).toHaveLength(4);
     const petr = d.one('Petr');
     expect(petr.birthPlace).toBe('Olomouc');   // chosen: imported
     expect(petr.deathPlace).toBe('Brno');      // chosen: existing
     expect(d.unions).toHaveLength(1);
     expect(d.unions[0].startDate).toBe('1916-06-01'); // chosen: imported
     expect(d.unions[0].startPlace).toBe('Brno');      // one-sided value kept
-    expect(d.unions[0].childIds).toEqual([d.one('Karel').id]);
+    expect(d.unions[0].childIds.sort()).toEqual([d.one('Karel').id, d.one('Jan').id].sort());
 });
 
 test('tree merge conflicts carry no emoji: what speaks against the pair and the plain suggestion label', async ({ page }) => {

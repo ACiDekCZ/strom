@@ -718,8 +718,10 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
 
             if (existingPartnership) {
                 unionTarget.set(pshipId, existingPartnership.id);
-                // Merge partnership data (none of it when the tree's details stay as they are)
+                // Merge partnership data (none of it when the tree's details stay
+                // as they are, the couple's children from the import all the same)
                 if (takeDetails) mergePartnershipData(existingPartnership, partnership, mapping.persons, state.incomingData.persons);
+                else joinUnionChildren(existingPartnership, partnership, mapping.persons);
                 const wins = takeDetails ? partnershipWins.get(pshipId) : undefined;
                 if (wins && wins.existingId === existingPartnership.id) {
                     for (const field of wins.fields) {
@@ -1892,6 +1894,18 @@ function findExistingPartnership(
  * partnership conflict dialog (detectPartnershipConflicts) is applied by
  * executeMerge afterwards.
  */
+/**
+ * A child the incoming tree gives a couple both trees know belongs under it,
+ * whatever the scope: the child is a person of the import, not a detail of the
+ * couple (enforceRelationshipSymmetry later keeps only children that list both).
+ */
+function joinUnionChildren(existing: Partnership, incoming: Partnership, personIdMap?: Map<PersonId, PersonId>): void {
+    for (const cid of incoming.childIds) {
+        const mapped = personIdMap ? personIdMap.get(cid) : cid;
+        if (mapped && !existing.childIds.includes(mapped)) existing.childIds.push(mapped);
+    }
+}
+
 export function mergePartnershipData(
     existing: Partnership,
     incoming: Partnership,
@@ -1940,13 +1954,7 @@ export function mergePartnershipData(
         existing.status = incoming.status;
     }
 
-    // Children: a child the incoming tree gives this couple belongs under it
-    // (enforceRelationshipSymmetry later keeps only children that list both).
-    const remapId = (id: PersonId): PersonId | undefined => personIdMap ? personIdMap.get(id) : id;
-    for (const cid of incoming.childIds) {
-        const mapped = remapId(cid);
-        if (mapped && !existing.childIds.includes(mapped)) existing.childIds.push(mapped);
-    }
+    joinUnionChildren(existing, incoming, personIdMap);
 
     // Wedding witnesses: union, one entry per person (or written name) and role.
     if (incoming.participants && incoming.participants.length > 0) {

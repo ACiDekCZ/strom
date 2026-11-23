@@ -544,8 +544,25 @@ export function mergeRow(wizard: Locator, text: string | RegExp): Locator {
     return wizard.locator('#merge-match-list .merge-item').filter({ hasText: text });
 }
 
-/** On a phone (and a phone held sideways) step 2's list is a sheet over the pair: opened by "Pair i of n ▾". */
+/**
+ * An import that is a copy of its tree (13b: everyone joined, the write would
+ * change nothing in the chosen scope) shows a sentence in step 2 instead of
+ * the list: Show the comparison brings the list.
+ */
+export async function mergeShowCopy(wizard: Locator): Promise<void> {
+    const show = wizard.locator('.merge-s2-show-copy');
+    if (!await show.isVisible()) return;
+    await show.click();
+    await expect(wizard.locator('#merge-match-list')).toBeAttached();
+}
+
+/**
+ * Step 2's list of pairs: past the sentence of a copy of the tree (13b), and on
+ * a phone (and a phone held sideways), where the list is a sheet over the
+ * pair, opened by "Pair i of n ▾".
+ */
 export async function mergeOpenList(wizard: Locator): Promise<void> {
+    await mergeShowCopy(wizard);
     if (await wizard.locator('#merge-match-list').isVisible()) return;
     const open = wizard.locator('.merge-pair-open');
     await open.click();

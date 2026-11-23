@@ -187,6 +187,7 @@ test('an import that is a copy of its tree: after the comparison one sentence sa
 
     await note.getByRole('button', { name: 'Show the comparison' }).click();
     await expect(wizard.locator('#merge-match-list [role="option"]')).toHaveCount(3);
+    await expect(wizard.locator('.merge-s2-copy-note')).toHaveText('All 3 people are already in the tree Modřínovi kopie and bring nothing new.');
     await expect(wizard.locator('#merge-next')).toHaveText('Close');
 
     await wizard.locator('#merge-next').click();
