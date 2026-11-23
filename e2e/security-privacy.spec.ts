@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import {
     openApp, createFirstPerson, card, cardAction, importJsonAsNewTree, focusViaSearch,
-    mergeCompare, mergeCreateNewTree, mergePair, mergeTreeInto } from './helpers.js';
+    mergeCompare, mergeCreateNewTree, mergePair, mergeShowCopy, mergeTreeInto } from './helpers.js';
 
 /**
  * Security & privacy regressions (review 2026-09-22, K1–K4): markup in data
@@ -229,6 +229,9 @@ test('XSS: the tree-merge compare preview of a foreign file renders names as tex
     });
     const wizard = await mergeTreeInto(page, aId!, bId!);
     await mergeCompare(wizard);
+    // The same file twice is a copy of the tree (13b): the pairs stand behind Show the comparison.
+    await expect(wizard.locator('.merge-s2-copy')).toBeVisible();
+    await mergeShowCopy(wizard);
     await expect(wizard.locator('#merge-match-list .merge-item').first()).toBeVisible();
     await mergePair(wizard, `Ada${IMG}`);
     await expect(wizard.locator('img[src="x"], svg[onload]')).toHaveCount(0);

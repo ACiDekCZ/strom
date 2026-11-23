@@ -9,7 +9,7 @@
  * its painted frame), so the button stays working until the test lets it go.
  */
 import { test, expect, type Page, type Locator } from '@playwright/test';
-import { openApp, openTreeStructure, mergeTreeInto } from './helpers.js';
+import { openApp, openTreeStructure, mergeTreeInto, mergeShowCopy } from './helpers.js';
 
 function mk(id: string, first: string, last: string, gender: string, birth: string,
     partnerships: string[], parentIds: string[], childIds: string[]) {
@@ -161,6 +161,8 @@ for (const wide of [false, true]) {
             // Re-analyze stands in step 2's list of pairs: the guide compares first.
             await wizard.locator('#merge-next').click();
             await expect(wizard.locator('#merge-progress [aria-current="step"]')).toHaveAttribute('data-step', '2', { timeout: 30_000 });
+            // The import is a copy of the tree (13b): its list stands behind Show the comparison.
+            await mergeShowCopy(wizard);
             const again = wizard.getByRole('button', { name: 'Neu analysieren' });
             const footer = wizard.locator('.merge-actions');
             const footerHeight = (await footer.boundingBox())!.height;

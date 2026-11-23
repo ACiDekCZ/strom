@@ -142,8 +142,8 @@ test.describe('the comparison of a large tree (K3.5)', () => {
         const bar = comparing.locator('[role="progressbar"]');
         await expect.poll(async () => Number(await bar.getAttribute('aria-valuenow')), { timeout: 60_000 }).toBeGreaterThan(0);
         const first = Number(await bar.getAttribute('aria-valuenow'));
-        await expect(comparing.locator('.merge-comparing-of')).toContainText('Křemenná');
-        await expect(comparing.locator('.merge-comparing-of')).toContainText('10');
+        // "i of n people of the tree Křemenná": n is the tree's named people, near 10 000.
+        await expect(comparing.locator('.merge-comparing-of')).toHaveText(/^\d+ of (9 ?9\d\d|10 ?000) people of the tree Křemenná/);
 
         // The window answers meanwhile: a click on the step list's step 1 is taken (it has the focus).
         const stepOne = wizard.locator('#merge-progress button.merge-step[data-step="1"]');

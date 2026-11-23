@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { pathToFileURL } from 'url';
 import { writeFileSync } from 'fs';
-import { openApp, createFirstPerson, card, addRelation, mergeCompare } from './helpers.js';
+import { openApp, createFirstPerson, card, addRelation, mergeCompare, mergeGroup } from './helpers.js';
 
 /**
  * Change packets ("send only changes"): the sender shares a whole tree; the
@@ -152,7 +152,8 @@ test('change packet preview: Review in detail opens the merge wizard', async ({ 
     await expect(merge).toBeVisible();
     // The guide's comparison: step 2 lists the uncle's addition.
     await mergeCompare(merge);
-    await expect(merge).toContainText('Strycek');
+    await mergeGroup(merge, 'new');
+    await expect(merge.locator('#merge-match-list')).toContainText('Strycek');
 });
 
 test('a change packet with no matching tree shows a clear message', async ({ page }, testInfo) => {
