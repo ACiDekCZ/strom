@@ -262,6 +262,8 @@ export const treeManagementMethods = uiModule({
         const holdEl = document.getElementById('tree-switcher-hold');
         if (holdEl) {
             holdEl.textContent = this.treeHoldText(activeTree);
+            // Shortened with an ellipsis when the toolbar is tight: the whole text on hover.
+            holdEl.title = holdEl.textContent;
             holdEl.hidden = !holdEl.textContent;
         }
 
@@ -281,7 +283,7 @@ export const treeManagementMethods = uiModule({
                 <div class="tree-switcher-item sel-opt ${isActive ? 'active' : ''}" data-sel-form="row" role="menuitem" tabindex="0" data-tree-id="${tree.id}"
                      ${title ? `title="${this.escapeHtml(title)}"` : ''} onclick="window.Strom.UI.switchToTree('${tree.id}')">
                     <span class="tree-item-check">${isActive ? iconSvg('check') : ''}</span>
-                    <span class="tree-item-name">${this.escapeHtml(tree.name)}</span>
+                    <span class="tree-item-name" title="${this.escapeHtml(title ? `${tree.name}\n${title}` : tree.name)}">${this.escapeHtml(tree.name)}</span>
                     ${this.treeSwitcherKindHtml(tree)}
                     ${this.treeHoldText(tree) ? `<span class="tree-item-hold">${this.escapeHtml(this.treeHoldText(tree))}</span>` : ''}
                     ${this.treeSwitcherMarksHtml(tree)}
@@ -999,7 +1001,7 @@ export const treeManagementMethods = uiModule({
             html += `
                 <div class="tree-manager-item sel-opt ${isActive ? 'active' : ''} ${tree.isHidden ? 'hidden-tree' : ''}" data-sel-form="row" data-tree-id="${tree.id}">
                     <div class="tree-manager-item-header">
-                        <span class="tree-manager-item-name clickable" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${this.escapeHtml(tree.name)}</span>
+                        <span class="tree-manager-item-name clickable" title="${this.escapeHtml(tree.name)}" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${this.escapeHtml(tree.name)}</span>
                         ${badges}
                         ${treeSizeFormatted ? `<span class="tree-manager-item-size">${treeSizeFormatted}</span>` : ''}
                     </div>
