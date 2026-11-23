@@ -594,7 +594,8 @@ export const statsWindowMethods = uiModule({
         this.computeTreeStats();
         const topic = q(`.stv-topic[data-topic="${r.win.topic}"]`);
         const phone = q('.stv-topics')?.getClientRects().length === 0;
-        (phone ? q('.stv-close') : topic)?.focus({ preventScroll: true });
+        // A phone has no topics' column: the focus starts on its Topic button (the × stays a tab away).
+        (phone ? q('.stv-pbtn[data-stv="topic-sheet"]') : topic)?.focus({ preventScroll: true });
     },
 
     /** The open tree's Statistics. */

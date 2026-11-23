@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { openApp, createFirstPerson, openTreeActions, openTreeStructure } from './helpers.js';
 
 /** The flyout "Tree: {name} ›" of a one-person tree (menu 1020 §3.1), Change structure folded. */
-const DESKTOP_TREE_KEYS = ['overview', 'overview-quality', 'snapshots', 'researchInfo',
+const DESKTOP_TREE_KEYS = ['overview', 'stats', 'overview-quality', 'snapshots', 'researchInfo',
     'rename', 'defaultPerson', 'startup', 'lifeline', 'places', 'surnames', 'structure',
     'visibility', 'lock', 'delete', 'manageTrees'];
 
@@ -483,7 +483,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.isLocked)).toBe(true);
         await openTreeActions(page);
         await expect.poll(() => submenu.locator('[role^="menuitem"]:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action)))
-            .toEqual(['overview', 'overview-quality', ...(await submenu.locator('[data-action="audit"]').count() ? ['audit'] : []), 'lock', 'manageTrees']);
+            .toEqual(['overview', 'stats', 'overview-quality', ...(await submenu.locator('[data-action="audit"]').count() ? ['audit'] : []), 'lock', 'manageTrees']);
         await expect(submenu.locator('[data-action="lock"]')).toHaveText('Unlock tree');
         await submenu.locator('[data-action="lock"]').click();
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.isLocked)).toBeFalsy();
@@ -834,8 +834,8 @@ test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => 
         await expect(menu.locator('.tree-row-menu-group:visible')).toHaveText(['Research', 'Tree settings']);
         const keys = await menu.locator('.tree-row-menu-item:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
         expect(keys[0]).toBe('overview');
-        expect(keys[1]).toBe('overview-quality');
-        expect(keys).not.toContain('stats');
+        expect(keys[1]).toBe('stats');
+        expect(keys[2]).toBe('overview-quality');
         expect(keys).not.toContain('health');
         expect(keys).toContain('places');
         expect(keys).toContain('surnames');

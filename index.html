@@ -4183,6 +4183,20 @@
         .bottom-sheet-more .bottom-sheet-pair:has(#sheet-help) .bottom-sheet-item {
             flex: 1 1 auto; width: auto; min-width: auto; padding: 4px;
         }
+        /* View: Fan | Map | Timeline | Statistics (spec 138 §10.1): each tile as wide as its name allows,
+           none narrower than its longest word (a word never breaks inside a tile on a 360px phone). */
+        @media not all and (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .bottom-sheet-more .bottom-sheet-pair:has(> .bottom-sheet-pair-label) { gap: 6px; }
+            .bottom-sheet-more .bottom-sheet-pair:has(> .bottom-sheet-pair-label) > .bottom-sheet-item {
+                flex: 1 1 auto; width: auto; min-width: auto; padding: 0 6px;
+            }
+        }
+        /* A 360px phone in German or Polish: the four names need every pixel. */
+        @media (max-width: 400px) {
+            .bottom-sheet-more .bottom-sheet-pair:has(> .bottom-sheet-pair-label) { gap: 4px; }
+            .bottom-sheet-more .bottom-sheet-pair:has(> .bottom-sheet-pair-label) > .bottom-sheet-item { padding: 0 4px; }
+            .bottom-sheet-more .bottom-sheet-pair:has(> .bottom-sheet-pair-label) > .bottom-sheet-pair-label { padding: 0 2px 0 6px; }
+        }
         .bottom-sheet-pair-label { flex: none; font-size: 13px; color: var(--text-light); padding: 0 4px 0 8px; }
         /* Shortcut chips only with a mouse (a touch screen has no keyboard to hint at). */
         .bottom-sheet .menu-kbd { display: none; margin-left: 0; }
