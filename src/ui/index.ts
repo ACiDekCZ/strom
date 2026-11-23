@@ -124,6 +124,7 @@ import { mapScopeMethods } from './map-scope-ui.js';
 import { scopeSegMethods } from './scope-seg-ui.js';
 import { timelineScopeMethods } from './timeline-scope-ui.js';
 import { treeOverviewMethods } from './tree-overview.js';
+import { statsWindowMethods } from './tree-stats-ui.js';
 import { personListsMethods } from './person-lists-ui.js';
 import { personListNewMethods } from './person-list-new-ui.js';
 import { personListAddMethods } from './person-list-add.js';
@@ -970,6 +971,9 @@ Object.assign(UIClass.prototype, timelineScopeMethods);
 type TreeOverviewMethods = typeof treeOverviewMethods;
 export interface UIClass extends TreeOverviewMethods {}
 Object.assign(UIClass.prototype, treeOverviewMethods);
+type StatsWindowMethods = typeof statsWindowMethods;
+export interface UIClass extends StatsWindowMethods {}
+Object.assign(UIClass.prototype, statsWindowMethods);
 type PersonListsMethods = typeof personListsMethods;
 export interface UIClass extends PersonListsMethods {}
 Object.assign(UIClass.prototype, personListsMethods);
