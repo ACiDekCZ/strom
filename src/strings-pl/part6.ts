@@ -277,6 +277,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         groupSingles: 'Pojedyncze osoby',
         groupAll: 'Cały import',
         ownTreeName: (t: string, g: string) => `${t} – ${g}`,
+        importSays: (v: string) => `Import podaje: ${v}`,
     },
 
     // Person merge (duplicate resolution)

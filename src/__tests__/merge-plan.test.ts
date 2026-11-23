@@ -13,6 +13,7 @@ import { createMergeState } from '../merge/matching.js';
 import {
     applyPlan, bringsNothingNew, buildPlan, isRepeatOf, planCounts, planFates, planFingerprint, scopeExample, verifyResult,
     GroupDecision, MergePlan, MergeRecord, NewRel, PersonFate, PlanScope, PlanSource, WizardChoices,
+    FIELD_KINDS, PlanRules, RelChoice, RuleChoice, mergeDifferences, relationConflicts, ruleCounts,
 } from '../merge/plan.js';
 import { newPersons, unlinkedGroups } from '../merge/plan-select.js';
 import { MergeState } from '../merge/types.js';
@@ -329,6 +330,100 @@ describe(`step 3 on random pairs of invented trees (${RUNS} seeds)`, () => {
     }, 120_000);
 });
 
+/** Random rules of step 4 (K5.1): a whole-merge rule, some kinds, persons and values of their own. */
+function randomRules(state: MergeState, rnd: () => number): PlanRules {
+    const pick = <T>(list: readonly T[]): T => list[Math.floor(rnd() * list.length)];
+    const choicesAll: readonly RuleChoice[] = ['mine', 'import', 'both', 'precise', 'each'];
+    const rules: PlanRules = { all: pick(choicesAll) };
+    for (const k of FIELD_KINDS) if (rnd() < 0.25) (rules.kind ??= {})[k] = pick(choicesAll);
+    for (const d of mergeDifferences(state)) {
+        if (rnd() < 0.1) (rules.person ??= {})[d.person] = pick(choicesAll);
+        if (rnd() < 0.15) (rules.value ??= {})[`${d.person}|${d.field}`] = pick(['mine', 'import', 'both'] as const);
+    }
+    return rules;
+}
+
+/**
+ * Random rules and choices of relations on a random pair (§7): the sums stay
+ * whole, the check before saving finds nothing, and of the tree only what a
+ * choice "From the import" replaces is gone.
+ */
+async function applyRules(seed: number): Promise<string[]> {
+    const { rnd, target, source, state } = pairOf(seed);
+    randomDecisions(state, rnd);
+    delete state.updateOnly;
+    const scope = SCOPES[seed % 4];
+    const rules = randomRules(state, rnd);
+    const first = buildPlan(state, choices({ scope, rules }));
+    const relations: Record<string, RelChoice> = {};
+    for (const i of first.items) {
+        if (i.kind !== 'relation' || i.rel === 'loop') continue;
+        const options: readonly RelChoice[] = i.rel === 'partner' || i.rel === 'marriage' ? ['mine', 'import', 'both'] : ['mine', 'import'];
+        if (rnd() < 0.7) relations[i.key] = options[Math.floor(rnd() * options.length)];
+    }
+    const w = choices({ scope, rules, relations });
+    const plan = buildPlan(state, w);
+    const errors = checkPlan(plan, state, w);
+    if (errors.length) return errors;
+    for (const i of plan.items) {
+        if (i.kind === 'relation' && i.rel !== 'loop' && relations[i.key] && i.choice !== relations[i.key]) errors.push(`relation ${i.key}: ${i.choice}, chosen ${relations[i.key]}`);
+        if (i.kind === 'relation' && i.rel === 'loop' && i.choice !== 'mine') errors.push(`loop ${i.key} ${i.choice}`);
+        if (i.kind === 'field' && i.on && i.protected && i.rule.level !== 'value') errors.push(`protected ${i.person}.${i.field} overwritten by ${i.rule.level}`);
+    }
+    const loops = new Set(plan.items.flatMap(i => i.kind === 'relation' && i.rel === 'loop' ? [i.key.slice('loop|'.length)] : []));
+    for (const i of plan.items) if (i.kind === 'link-add' && loops.has(i.id)) errors.push(`loop link ${i.id} in the plan`);
+    // The tiles' counts are the plan's: the current rule's changes, values alongside and kept values of persons.
+    if (scope === 'c' || scope === 'd') {
+        const rc = ruleCounts(state, rules);
+        const personDiffs = rc.differences - rc.byKind.marriage.differences;
+        const items = plan.items.filter(i => (i.kind === 'field' && i.before !== '' && i.after !== i.before && i.field !== 'notes') || i.kind === 'field-both');
+        if (items.length !== personDiffs) errors.push(`differences ${items.length}, ruleCounts ${personDiffs}`);
+    }
+    if (errors.length) return errors;
+
+    const result = await applyPlan(plan, target, source);
+    if (!result.ok) return [`not saved: ${JSON.stringify(result.issues).slice(0, 300)}`];
+    const again = verifyResult(plan, target, source, result.data, result.trace);
+    if (again.length) errors.push(`verify ${JSON.stringify(again)}`);
+    const after = result.data;
+    const droppedUnions = new Set(plan.items.flatMap(i => i.kind === 'partnership-drop' ? [i.id] : []));
+    const droppedLinks = new Set(plan.items.flatMap(i => i.kind === 'link-drop' ? [`${i.child}<${i.parent}`] : []));
+    for (const id of Object.keys(target.persons)) if (!after.persons[id as PersonId]) errors.push(`tree person ${id} gone`);
+    for (const id of Object.keys(target.partnerships)) {
+        const gone = !after.partnerships[id as PartnershipId];
+        if (gone !== droppedUnions.has(id as PartnershipId)) errors.push(`tree couple ${id} ${gone ? 'gone' : 'kept though replaced'}`);
+    }
+    const afterLinks = new Set(links(after));
+    for (const l of links(target)) {
+        if (!afterLinks.has(l) && !droppedLinks.has(l)) errors.push(`tree link ${l} gone`);
+        if (afterLinks.has(l) && droppedLinks.has(l)) errors.push(`tree link ${l} kept though replaced`);
+    }
+    const gone = dangling(after);
+    if (gone.length) errors.push(`dangling ${gone.slice(0, 3).join(', ')}`);
+    // "Keep both" and a kept value never overwrite the tree's.
+    for (const i of plan.items) {
+        const was = detail(target.persons[i.kind === 'field' || i.kind === 'field-both' ? i.person : ('' as PersonId)], i.kind === 'field' || i.kind === 'field-both' ? i.field : '');
+        if (i.kind === 'field-both' && detail(after.persons[i.person], i.field) !== was) errors.push(`both overwrote ${i.person}.${i.field}`);
+        if (i.kind === 'field' && !i.on && i.before !== '' && i.field !== 'notes' && detail(after.persons[i.person], i.field) !== was) errors.push(`kept ${i.person}.${i.field} overwritten`);
+    }
+    return errors;
+}
+
+describe(`rules and conflicts of relations on random pairs of invented trees (${RUNS} seeds)`, () => {
+    it('random rules and choices: the sums stay whole, the check passes, of the tree only what a choice replaces is gone', async () => {
+        const failures: string[] = [];
+        let relationsSeen = 0;
+        for (let seed = 1; seed <= RUNS; seed++) {
+            const errors = await applyRules(seed);
+            if (errors.length) failures.push(`seed ${seed} scope ${SCOPES[seed % 4]}: ${errors.slice(0, 4).join('; ')}`);
+            const { state } = pairOf(seed);
+            relationsSeen += relationConflicts(state).length;
+        }
+        expect(failures.join('\n')).toBe('');
+        expect(relationsSeen).toBeGreaterThan(0);
+    }, 120_000);
+});
+
 describe('edge sources', () => {
     it('an empty source: nothing to count, the tree stays as it is', async () => {
         const { target } = pairOf(3);
@@ -487,7 +582,7 @@ describe('applyPlan: a new child of a couple both trees know', () => {
 describe('isRepeatOf', () => {
     const record = (id: string, at: string, source: Partial<PlanSource>, state: MergeRecord['state'] = 'valid'): MergeRecord => ({
         id, at, source: { ...SOURCE, ...source }, target: { name: 'Modřínovi', newTree: false },
-        counts: { joined: 0, added: 0, skipped: 0, pending: 0, total: 0, fieldChanges: 0, differencesKept: 0, partnerships: 0, links: 0 },
+        counts: { joined: 0, added: 0, skipped: 0, pending: 0, total: 0, fieldChanges: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0 },
         state, added: [], joined: [], fields: [], partnerships: [], sources: [], places: [], media: [],
     });
 

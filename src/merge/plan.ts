@@ -8,21 +8,30 @@
  * joined with a person of the tree, added, not added, or still to decide.
  */
 
-import { Person, PersonId, StromData, TreeId } from '../types.js';
+import { PartnershipId, Person, PersonId, StromData, TreeId } from '../types.js';
 import { strings } from '../strings.js';
 import { normalizeName, quickMatch, detectConflicts } from './matching.js';
 import { AUTO_CONFIRM_SCORE, executeMerge, existingTargetOf, detectPartnershipConflicts } from './executor.js';
+import { generateAttachmentId, generateLifeEventId } from '../ids.js';
 import { mergeNoteText } from './notes.js';
 import { checkMergeResult, MergeCheckProblem } from './merge-check.js';
-import { FieldConflict, MergeState, MergeTrace, PersonMatch } from './types.js';
-import { allMedia } from '../media.js';
+import { FieldConflict, MergeRelations, MergeState, MergeTrace, PartnershipConflictField, PersonMatch } from './types.js';
+import { addPersonMedia, allMedia } from '../media.js';
 import { contentFingerprint } from '../research-link.js';
 import type { GedcomDroppedTag } from '../ged-parser.js';
 import {
     GroupDecision, NewRel, UnlinkedGroup, baseFates, connectRefusal, linkPersons, livingNew, selectionOf, sourceWithStandIns, unlinkedGroups,
 } from './plan-select.js';
 
+import {
+    PERSON_FIELDS, EndOf, RelChoice, RelKind, fieldText, isUnionProtected, personDifferences, relationChoice, relationConflicts, resolveField, ruleFor,
+} from './plan-rules.js';
+
 export type { GroupDecision, NewRel, UnlinkedGroup } from './plan-select.js';
+export type { FieldDifference, FieldResult, Protection, RelChoice, RelConflict, RelKind, RuleCounts, RuleExample, RuleTile } from './plan-rules.js';
+export {
+    FIELD_KINDS, fieldKind, isProtected, isRefinement, mergeDifferences, planNeedsStep4, protectionOf, relationConflicts, resolveField, ruleCounts,
+} from './plan-rules.js';
 
 // ==================== TYPES (§0.2) ====================
 
@@ -84,7 +93,19 @@ export type PlanItem =
     | { kind: 'person-pending'; id: PersonId; candidate: PersonId; score: number }
     | { kind: 'field'; person: PersonId; field: string; before: string; after: string; rule: RuleSource; on: boolean; protected: boolean }
     | { kind: 'field-both'; person: PersonId; field: string; value: string; rule: RuleSource; on: boolean }
+    /**
+     * A couple (the import's id) or a parent link (`${child}<${parent}`, the
+     * import's ids) the write brings; `on: false`: a conflict of relations
+     * kept the tree's (K5.5), not written. A link that would make a loop is
+     * never in the plan.
+     */
     | { kind: 'partnership-add' | 'link-add'; id: string; on: boolean }
+    /** A conflict of relations and the choice that holds for it (K5.5). */
+    | { kind: 'relation'; key: string; rel: RelKind; choice: RelChoice; union?: PartnershipId }
+    /** A couple of the tree the import's partner replaces ("From the import" of a second partner; the tree's id). */
+    | { kind: 'partnership-drop'; id: PartnershipId }
+    /** A parent link of the tree the import's parents replace ("From the import" of other parents; the tree's ids). */
+    | { kind: 'link-drop'; child: PersonId; parent: PersonId }
     | { kind: 'source' | 'place' | 'media'; id: string; joinedWith?: string; on: boolean }
     /** A new person in an unlinked group nobody decided yet (§6; to decide, not added). */
     | { kind: 'group-pending'; id: PersonId; group: string }
@@ -146,6 +167,8 @@ export interface PlanCounts {
     fieldChanges: number;
     /** Differences where the tree's value stays. */
     differencesKept: number;
+    /** Differences where the import's value is kept alongside the tree's ("Keep both", K5.3). */
+    alongside: number;
     partnerships: number;
     links: number;
 }
@@ -194,6 +217,8 @@ export interface WizardChoices {
     targetFingerprint?: string;
     /** Who is right (step 4); default everywhere 'mine'. */
     rules?: PlanRules;
+    /** The conflicts of relations decided one by one (K5.5), by RelConflict.key; absent: "Keep mine". */
+    relations?: Readonly<Record<string, RelChoice>>;
     /** Source persons left out in step 3 (part B). */
     leftOut?: readonly PersonId[];
     /** Why a left out person is out when not by hand: 'branch' = with an unticked person whose branch went too (K4.3). */
@@ -226,49 +251,6 @@ export interface VerifyIssue {
     kind: MergeCheckProblem['kind'] | 'planAddedMissing' | 'planSkippedPresent' | 'planLinkMissing' | 'planStandInMissing';
     count: number;
     examples: string[];
-}
-
-// ==================== FIELDS ====================
-
-/** Details of a person the plan names, and their kind. */
-const PERSON_FIELDS: ReadonlyArray<[keyof Person & string, FieldKind]> = [
-    ['firstName', 'name'], ['lastName', 'name'], ['marriedSurname', 'name'], ['titleBefore', 'name'], ['titleAfter', 'name'],
-    ['gender', 'sex'],
-    ['birthDate', 'birth'], ['birthPlace', 'places'], ['birthAddress', 'birth'], ['birthAge', 'birth'],
-    ['deathDate', 'death'], ['deathPlace', 'places'], ['deathAddress', 'death'], ['deathAge', 'death'], ['deathCause', 'death'],
-    ['notes', 'notes'], ['photo', 'photos'],
-];
-const FIELD_KIND = new Map(PERSON_FIELDS);
-
-/** The kind of a person's detail (step 4 "by kind"). */
-export function fieldKind(field: string): FieldKind {
-    return FIELD_KIND.get(field as keyof Person & string) ?? 'events';
-}
-
-/** A detail as plan text: a photo by its name and size (never the data URL), an unknown sex as nothing. */
-function fieldText(person: Person | undefined, field: string): string {
-    if (!person) return '';
-    if (field === 'photo') return person.photo ? `${person.photoOriginalName ?? 'photo'} (${person.photo.length})` : '';
-    if (field === 'gender') return person.gender === 'unknown' ? '' : person.gender ?? '';
-    const v = (person as unknown as Record<string, unknown>)[field];
-    return typeof v === 'string' ? v : v === undefined || v === null ? '' : String(v);
-}
-
-function ruleFor(rules: PlanRules, person: PersonId, field: string): RuleSource {
-    const v = rules.value?.[`${person}|${field}`];
-    if (v) return { level: 'value', choice: v };
-    const p = rules.person?.[person];
-    if (p) return { level: 'person', choice: p };
-    const k = rules.kind?.[fieldKind(field)];
-    if (k) return { level: 'kind', choice: k };
-    return { level: 'all', choice: rules.all };
-}
-
-/** Whether a rule writes the import's value of a difference ('both' and 'each' are part B; until then they keep the tree's). */
-function ruleTakesImport(rule: RuleSource, before: string, after: string): boolean {
-    if (rule.choice === 'import') return true;
-    if (rule.choice === 'precise') return after.length > before.length && after.startsWith(before.slice(0, 4));
-    return false;
 }
 
 const DEFAULT_RULES: PlanRules = { all: 'mine' };
@@ -396,6 +378,10 @@ export function buildPlan(state: MergeState, w: WizardChoices): MergePlan {
         if (f) return f;
         return source.persons[id]?.isPlaceholder ? 'new' : undefined;
     };
+    // The conflicts of relations (K5.5), each by its choice: what is not written, what of the tree is replaced.
+    const rel = newTree ? { left: new Set<string>(), loops: new Set<string>(), items: [] as PlanItem[] }
+        : relationEffects(state, w, rules, endOf as EndOf);
+    items.push(...rel.items);
     for (const u of Object.values(source.partnerships)) {
         const a = endOf(u.person1Id);
         const b = endOf(u.person2Id);
@@ -408,7 +394,7 @@ export function buildPlan(state: MergeState, w: WizardChoices): MergePlan {
             });
             if (known) continue;
         }
-        items.push({ kind: 'partnership-add', id: u.id, on: true });
+        items.push({ kind: 'partnership-add', id: u.id, on: !rel.left.has(u.id) });
     }
     for (const child of Object.values(source.persons)) {
         const c = fate.get(child.id);
@@ -417,7 +403,9 @@ export function buildPlan(state: MergeState, w: WizardChoices): MergePlan {
             const par = fate.get(parentId);
             if (!par) continue;
             if (c !== 'new' && par !== 'new' && tree.persons[c]?.parentIds.includes(par)) continue;
-            items.push({ kind: 'link-add', id: `${child.id}<${parentId}`, on: true });
+            const key = `${child.id}<${parentId}`;
+            if (rel.loops.has(key)) continue;
+            items.push({ kind: 'link-add', id: key, on: !rel.left.has(key) });
         }
     }
     // Sources come along whole (the same one joins the tree's, K1.7); places by name; files at persons that come along.
@@ -460,6 +448,50 @@ export function buildPlan(state: MergeState, w: WizardChoices): MergePlan {
         conflicts: { differences, unions: newTree ? 0 : detectPartnershipConflicts(state).length },
         ...(planGroups ? { groups: planGroups } : {}),
     };
+}
+
+/**
+ * The conflicts of relations of the plan (K5.5) and what each choice does:
+ * the plan's `relation` items, the drops of the tree's couples and links an
+ * import's version replaces, the import's couples and links "Keep mine"
+ * leaves out (`left`: a couple's id or a link's `${child}<${parent}`), and
+ * the links that would make a loop (never in the plan). A couple's details
+ * (`marriage`) only where joined persons' details may change (c, d).
+ */
+function relationEffects(state: MergeState, w: WizardChoices, rules: PlanRules, ends: EndOf): { left: Set<string>; loops: Set<string>; items: PlanItem[] } {
+    const tree = state.existingData;
+    const source = state.incomingData;
+    const left = new Set<string>();
+    const loops = new Set<string>();
+    const items: PlanItem[] = [];
+    const parentsOf = (id: PersonId): PersonId[] => source.persons[id]?.parentIds ?? [];
+    for (const c of relationConflicts(state, ends, w.scope === 'c' || w.scope === 'd')) {
+        const choice = relationChoice(c, w.relations, rules, c.union ? isUnionProtected(tree.partnerships[c.union.tree]) : false);
+        items.push({ kind: 'relation', key: c.key, rel: c.kind, choice, ...(c.union ? { union: c.union.tree } : {}) });
+        if (c.kind === 'loop') { loops.add(`${c.sourcePerson}<${c.theirs[0]}`); continue; }
+        if (c.kind === 'parents' || c.kind === 'third-parent') {
+            const theirs = new Set(c.theirsAt.filter((id): id is PersonId => !!id));
+            if (choice === 'import') {
+                for (const p of c.mine) if (!theirs.has(p)) items.push({ kind: 'link-drop', child: c.person, parent: p });
+            } else {
+                // The import's parents the tree does not have stay out.
+                for (const par of parentsOf(c.sourcePerson)) {
+                    const e = ends(par);
+                    if (e && (e === 'new' || !c.mine.includes(e))) left.add(`${c.sourcePerson}<${par}`);
+                }
+            }
+        } else if (c.kind === 'partner') {
+            const union = c.key.slice('partner|'.length);
+            if (choice === 'mine') left.add(union);
+            else if (choice === 'import') {
+                for (const uid of tree.persons[c.person]?.partnerships ?? []) {
+                    const u = tree.partnerships[uid];
+                    if (u && c.mine.includes(u.person1Id === c.person ? u.person2Id : u.person1Id)) items.push({ kind: 'partnership-drop', id: u.id });
+                }
+            }
+        }
+    }
+    return { left, loops, items };
 }
 
 /** Parents, children and partners of the import's persons (each person's neighbours). */
@@ -522,11 +554,16 @@ function groupDecisions(
     return out;
 }
 
-/** The detail items of a joined person by the scope. */
+/**
+ * The detail items of a joined person by the scope: a gap the import fills;
+ * in c) and d) each difference by its rule (K5.1–K5.4): the import's value
+ * written (`on`), the tree's kept (`on: false`, a protected one held by a
+ * bulk rule), or the import's kept alongside (`field-both`, K5.3).
+ */
 function fieldItems(existing: Person, incoming: Person, scope: PlanScope, rules: PlanRules): PlanItem[] {
     if (scope === 'a') return [];
     const out: PlanItem[] = [];
-    const differing = new Set(detectConflicts(existing, incoming).map(c => c.field as string));
+    const differing = new Map(personDifferences(existing, incoming).map(d => [d.field, d] as const));
     for (const [field] of PERSON_FIELDS) {
         const before = fieldText(existing, field);
         let after = fieldText(incoming, field);
@@ -544,7 +581,10 @@ function fieldItems(existing: Person, incoming: Person, scope: PlanScope, rules:
             // A gap the import fills.
             out.push({ kind: 'field', person: existing.id, field, before, after, rule, on: true, protected: false });
         } else if (scope !== 'b' && differing.has(field)) {
-            out.push({ kind: 'field', person: existing.id, field, before, after, rule, on: ruleTakesImport(rule, before, after), protected: false });
+            const d = differing.get(field)!;
+            const { result, source } = resolveField(d, rules);
+            if (result === 'both') out.push({ kind: 'field-both', person: existing.id, field, value: after, rule: source, on: true });
+            else out.push({ kind: 'field', person: existing.id, field, before, after, rule: source, on: result === 'import', protected: !!d.protection });
         }
     }
     return out;
@@ -554,7 +594,7 @@ function fieldItems(existing: Person, incoming: Person, scope: PlanScope, rules:
 
 /** The counts of a plan (the one source of numbers of the wizard). */
 export function planCounts(plan: MergePlan): PlanCounts {
-    const c: PlanCounts = { joined: 0, added: 0, skipped: 0, pending: 0, total: plan.source.persons, fieldChanges: 0, differencesKept: 0, partnerships: 0, links: 0 };
+    const c: PlanCounts = { joined: 0, added: 0, skipped: 0, pending: 0, total: plan.source.persons, fieldChanges: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0 };
     for (const item of plan.items) {
         switch (item.kind) {
             case 'person-join': if (!item.standIn) { if (item.on) c.joined++; else c.skipped++; } break;
@@ -566,6 +606,7 @@ export function planCounts(plan: MergePlan): PlanCounts {
                 if (item.on && item.after !== item.before) c.fieldChanges++;
                 else if (!item.on && item.before !== '' && item.after !== item.before) c.differencesKept++;
                 break;
+            case 'field-both': if (item.on) c.alongside++; break;
             case 'partnership-add': if (item.on) c.partnerships++; break;
             case 'link-add': if (item.on) c.links++; break;
         }
@@ -668,6 +709,21 @@ function stateOfPlan(plan: MergePlan, target: StromData, source: StromData): Mer
     }
     // A person kept as a "?" is one in `source` (sourceWithStandIns) and comes as a person of its own.
     const unmatchedIncoming = [...namedPersons(source).map(p => p.id).filter(id => !joined.has(id)), ...planStandIns(plan)];
+    // The conflicts of relations (K5.5): what is left out, what of the tree is replaced, a couple's details from the import.
+    const relations: MergeRelations = {};
+    const partnershipResolutions = new Map<PartnershipId, Partial<Record<PartnershipConflictField, 'keep_existing' | 'use_incoming'>>>();
+    for (const item of plan.items) {
+        if (item.kind === 'partnership-add' && !item.on) (relations.leftUnions ??= []).push(item.id as PartnershipId);
+        else if (item.kind === 'link-add' && !item.on) (relations.leftLinks ??= []).push(item.id);
+        // A link that would make a loop is never written, not even through the couple it comes with.
+        else if (item.kind === 'relation' && item.rel === 'loop') (relations.leftLinks ??= []).push(item.key.slice('loop|'.length));
+        else if (item.kind === 'partnership-drop') (relations.dropUnions ??= []).push(item.id);
+        else if (item.kind === 'link-drop') (relations.dropLinks ??= []).push(`${item.child}<${item.parent}`);
+        else if (item.kind === 'relation' && item.rel === 'marriage' && item.choice === 'import') {
+            const all: Partial<Record<PartnershipConflictField, 'use_incoming'>> = { status: 'use_incoming', startDate: 'use_incoming', startPlace: 'use_incoming', endDate: 'use_incoming' };
+            partnershipResolutions.set(item.key.slice('marriage|'.length) as PartnershipId, all);
+        }
+    }
     return {
         existingData: existing,
         incomingData: source,
@@ -676,7 +732,8 @@ function stateOfPlan(plan: MergePlan, target: StromData, source: StromData): Mer
         unmatchedIncoming,
         decisions,
         conflictResolutions: new Map(),
-        partnershipResolutions: new Map(),
+        partnershipResolutions,
+        ...(Object.keys(relations).length ? { relations } : {}),
         phase: 'executing',
         updateOnly: plan.mode !== 'new' && plan.scope === 'd',
         ...(plan.mode !== 'new' && plan.scope === 'a' ? { joinedDetails: 'none' as const } : {}),
@@ -759,6 +816,8 @@ export async function applyPlan(plan: MergePlan, target: StromData, source: Stro
         }
         data = result.mergedData;
         trace = result.trace;
+        // "Keep both" (K5.3): the import's values alongside the tree's.
+        keepAlongside(plan, data, source);
         // The groups linked to a person (§6): each link the plan names.
         for (const item of plan.items) {
             if (item.kind !== 'connect') continue;
@@ -782,6 +841,69 @@ export async function applyPlan(plan: MergePlan, target: StromData, source: Stro
     }
     if (issues.length) return { ok: false, data: target, record: emptyRecord(plan), trace, issues, ownTrees: [], ...extra };
     return { ok: true, data, record: recordOf(plan, before, source, data), trace, issues, ownTrees, ...extra };
+}
+
+/** A line of a note once: added after the note's text, never twice. */
+function addNoteLine(note: string | undefined, line: string): string {
+    const text = note?.trim() ?? '';
+    if (text.split('\n').some(l => l.trim() === line)) return note ?? '';
+    return text ? `${text}\n\n${line}` : line;
+}
+
+/**
+ * "Keep both" (K5.3) at the result: nothing of the tree's is overwritten
+ * and the import's value is kept beside it — another spelling of a name
+ * among the name's variants, another birth or death as an event of an
+ * alternative record, another photo among the person's files, any other
+ * detail as the line "The import says: …" of the note; a couple's other
+ * details likewise as a line of its note.
+ */
+function keepAlongside(plan: MergePlan, data: StromData, source: StromData): void {
+    const t = strings.mergeWizard;
+    const label = (field: string): string => (t.fieldNames as Record<string, string>)[field] ?? field;
+    const sourceOf = new Map<PersonId, PersonId>();
+    for (const i of plan.items) if (i.kind === 'person-join' && !i.standIn) sourceOf.set(i.target, i.id);
+    const events = new Map<string, import('../types.js').LifeEvent>();
+    for (const item of plan.items) {
+        if (item.kind === 'relation' && item.rel === 'marriage' && item.choice === 'both') {
+            const src = source.partnerships[item.key.slice('marriage|'.length) as PartnershipId];
+            const into = item.union ? data.partnerships[item.union] : undefined;
+            if (!src || !into) continue;
+            const said = (['startDate', 'startPlace', 'endDate'] as const).map(f => src[f]).filter((v): v is string => !!v && v !== '');
+            if (src.status && src.status !== into.status) said.unshift(src.status);
+            if (said.length) into.note = addNoteLine(into.note, t.importSays(said.join(', ')));
+            continue;
+        }
+        if (item.kind !== 'field-both' || !item.on) continue;
+        const person = data.persons[item.person];
+        const incoming = source.persons[sourceOf.get(item.person) ?? ('' as PersonId)];
+        if (!person || !incoming) continue;
+        const field = item.field;
+        if (field === 'firstName' || field === 'lastName' || field === 'marriedSurname') {
+            const key = item.value.trim().toLowerCase();
+            const have = [person.firstName, person.lastName, person.marriedSurname ?? '', ...(person.nameVariants ?? [])].map(v => v.trim().toLowerCase());
+            if (key && !have.includes(key)) (person.nameVariants ??= []).push(item.value.trim());
+        } else if (field === 'birthDate' || field === 'birthPlace' || field === 'deathDate' || field === 'deathPlace') {
+            const fact = field.startsWith('birth') ? 'birth' : 'death';
+            const k = `${person.id}|${fact}`;
+            let ev = events.get(k);
+            if (!ev) {
+                ev = { id: generateLifeEventId(), type: 'custom', customLabel: fact === 'birth' ? strings.gedcomNotes.altBirth : strings.gedcomNotes.altDeath };
+                (person.events ??= []).push(ev);
+                events.set(k, ev);
+            }
+            if (field.endsWith('Date')) ev.date = item.value; else ev.place = item.value;
+        } else if (field === 'photo' && incoming.photo) {
+            const mime = /^data:([^;,]+)/.exec(incoming.photo)?.[1] ?? 'image/jpeg';
+            addPersonMedia(data, person.id, {
+                id: generateAttachmentId(), name: incoming.photoOriginalName ?? 'photo', mimeType: mime, dataUrl: incoming.photo,
+                sizeBytes: Math.round(incoming.photo.length * 0.75), kind: 'photo', ...(incoming.photoDate ? { date: incoming.photoDate } : {}),
+            });
+        } else {
+            const value = field === 'gender' && (item.value === 'male' || item.value === 'female') ? strings.gender[item.value] : item.value;
+            person.notes = addNoteLine(person.notes, t.importSays(`${label(field)} ${value}`));
+        }
+    }
 }
 
 /** An own-tree group written as a new tree: the group's persons alone, as a new tree from the import takes them. */

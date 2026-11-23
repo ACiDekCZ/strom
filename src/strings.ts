@@ -6461,6 +6461,8 @@ const stringsEN = {
         groupSingles: 'Individuals',
         groupAll: 'The whole import',
         ownTreeName: (t: string, g: string) => `${t} – ${g}`,
+        /** A value of the import kept alongside the tree's ("Keep both", step 4): a line of the note. */
+        importSays: (v: string) => `The import says: ${v}`,
     },
 
     // Person merge (duplicate resolution)
@@ -17334,6 +17336,7 @@ const stringsCZ: StringsType = {
         groupSingles: 'Jednotlivci',
         groupAll: 'Celý import',
         ownTreeName: (t: string, g: string) => `${t} – ${g}`,
+        importSays: (v: string) => `Import uvádí: ${v}`,
     },
 
     // Person merge (duplicate resolution)
@@ -28048,6 +28051,7 @@ const stringsDE: StringsType = {
         groupSingles: 'Einzelpersonen',
         groupAll: 'Der ganze Import',
         ownTreeName: (t: string, g: string) => `${t} – ${g}`,
+        importSays: (v: string) => `Der Import nennt: ${v}`,
     },
 
     // Person merge (duplicate resolution)

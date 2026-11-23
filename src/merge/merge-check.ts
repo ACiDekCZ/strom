@@ -180,12 +180,14 @@ export function checkMergeResult(state: MergeState, result: { mergedData: StromD
         return undefined;
     };
     const lostUnions: string[] = [];
+    const relations = state.relations;
     for (const union of Object.values(incomingData.partnerships)) {
         const t = tallies.unions;
         t.source++;
         const a = inResult(union.person1Id);
         const b = inResult(union.person2Id);
-        if (!a || !b || a === b) { t.left++; continue; }
+        // A couple a conflict of relations kept out (spec 134 K5.5) is left by a rule.
+        if (!a || !b || a === b || relations?.leftUnions?.includes(union.id)) { t.left++; continue; }
         const found = coupleIn(a, b);
         if (found) {
             if (existingData.partnerships[found]) t.merged++;
@@ -207,6 +209,7 @@ export function checkMergeResult(state: MergeState, result: { mergedData: StromD
         const p = inResult(parentId);
         if (!c || !p || c === p) { t.left++; continue; }
         const parents = merged.persons[c].parentIds;
+        if (!parents.includes(p) && relations?.leftLinks?.includes(`${childId}<${parentId}`)) { t.left++; continue; }
         if (parents.includes(p)) {
             if (hadLink(c, p)) t.merged++;
             else t.added++;
@@ -269,9 +272,11 @@ export function checkMergeResult(state: MergeState, result: { mergedData: StromD
 
     // Everything of the tree is still there.
     report('targetPersonLost', Object.values(existingData.persons).filter(p => !merged.persons[p.id]).map(p => personLabel(p, p.id)));
-    report('targetUnionLost', Object.keys(existingData.partnerships).filter(id => !merged.partnerships[id as PartnershipId]));
+    // What a conflict of relations replaced with the import's (K5.5) is gone on purpose.
+    report('targetUnionLost', Object.keys(existingData.partnerships)
+        .filter(id => !merged.partnerships[id as PartnershipId] && !relations?.dropUnions?.includes(id as PartnershipId)));
     report('targetLinkLost', parentLinks(existingData)
-        .filter(([c, p]) => !merged.persons[c]?.parentIds?.includes(p))
+        .filter(([c, p]) => !merged.persons[c]?.parentIds?.includes(p) && !relations?.dropLinks?.includes(`${c}<${p}`))
         .map(([c, p]) => `${personLabel(existingData.persons[c], c)} ← ${personLabel(existingData.persons[p], p)}`));
     report('targetSourceLost', Object.keys(existingData.sources ?? {}).filter(id => !mergedSources[id]));
     const mergedMediaIds = new Set(mergedMedia.map(m => m.id));

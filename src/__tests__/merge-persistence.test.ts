@@ -155,6 +155,25 @@ describe('the import guide\'s place (spec 134 §1)', () => {
         expect((await getCurrentMerge())?.wizard).toEqual(state.wizard);
     });
 
+    it('step 4\'s rules and choices of relations survive "Save for later" (K5.1, K5.5)', async () => {
+        const state = baseState();
+        state.wizard = {
+            step: 4, reached: 4, compared: true,
+            choices: {
+                mode: 'add', targetTreeId: null, scope: 'c', swapped: false, targetName: 'Modřínovi',
+                source: { kind: 'ged', label: 'rodokmen-jilmovi.ged', persons: 9 },
+                targetFingerprint: 'f1', planId: 'plan-1',
+                rules: {
+                    all: 'precise', kind: { name: 'both', marriage: 'import' }, person: { t3: 'mine' },
+                    value: { 't1|birthDate': 'import', 't2|photo': 'both' },
+                },
+                relations: { 'parents|s3': 'import', 'partner|su4': 'both', 'marriage|su1': 'mine' },
+            },
+        };
+        await saveCurrentMerge(state, 'rodokmen-jilmovi.ged');
+        expect((await getCurrentMerge())?.wizard).toEqual(state.wizard);
+    });
+
     it('a merge saved before the guide resumes without a place', async () => {
         await saveCurrentMerge(baseState(), 'old.json');
         expect((await getCurrentMerge())?.wizard).toBeUndefined();

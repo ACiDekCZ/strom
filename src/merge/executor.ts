@@ -712,6 +712,8 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
 
             if (!person1Id || !person2Id) continue;
             if (!mergedData.persons[person1Id] || !mergedData.persons[person2Id]) continue;
+            // A couple a conflict of relations kept the tree's version without (spec 134 K5.5).
+            if (state.relations?.leftUnions?.includes(pshipId)) continue;
 
             // Check if partnership already exists between these persons
             const existingPartnership = findExistingPartnership(mergedData, person1Id, person2Id);
@@ -793,11 +795,25 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
         // Own godparent / witness events of the incoming tree point at the merged couples and events.
         resolveIncomingRoleAt(mergedData, state.incomingData, unionTarget);
 
+        // What of the tree the import's version replaces (spec 134 K5.5),
+        // before the import's links find their place.
+        if (state.relations) dropTreeRelations(mergedData, state.relations);
+
         // Update parent-child relationships for merged persons
         updateRelationships(mergedData, state, mapping);
         // A merged child's link to a parent that came along, when the union
         // it came through stayed out (the other parent skipped or left).
         carryLoneParentLinks(mergedData, state, mapping.persons);
+        // The import's parent links a conflict of relations kept out (K5.5).
+        for (const key of state.relations?.leftLinks ?? []) {
+            const [c, p] = key.split('<') as [PersonId, PersonId];
+            const child = mergedData.persons[mapping.persons.get(c) ?? ('' as PersonId)];
+            const parentId = mapping.persons.get(p);
+            if (!child || !parentId || state.existingData.persons[child.id]?.parentIds.includes(parentId)) continue;
+            child.parentIds = child.parentIds.filter(id => id !== parentId);
+            const parent = mergedData.persons[parentId];
+            if (parent) parent.childIds = parent.childIds.filter(id => id !== child.id);
+        }
 
         // Guarantee childIds/parentIds are symmetric and partnership children
         // agree with parentIds — no dangling or one-sided links survive.
@@ -2058,6 +2074,49 @@ function enforceRelationshipSymmetry(data: StromData): void {
                 && child.parentIds.includes(partnership.person2Id);
         });
         partnership.childIds = [...new Set(kept)];
+    }
+}
+
+/**
+ * Remove what of the tree a conflict of relations replaces with the
+ * import's (spec 134 K5.5 "From the import"): parent links (the child's
+ * couples with that parent no longer list it) and couples (their persons,
+ * children and links stay; the couple's files stay with its two persons,
+ * portraits cut from its photo lose the link).
+ */
+function dropTreeRelations(data: StromData, relations: NonNullable<MergeState['relations']>): void {
+    for (const key of relations.dropLinks ?? []) {
+        const [childId, parentId] = key.split('<') as [PersonId, PersonId];
+        const child = data.persons[childId];
+        const parent = data.persons[parentId];
+        if (!child) continue;
+        child.parentIds = child.parentIds.filter(id => id !== parentId);
+        if (child.parentRelTypes?.[parentId]) {
+            delete child.parentRelTypes[parentId];
+            if (!Object.keys(child.parentRelTypes).length) delete child.parentRelTypes;
+        }
+        if (parent) parent.childIds = parent.childIds.filter(id => id !== childId);
+        for (const u of Object.values(data.partnerships)) {
+            if ((u.person1Id === parentId || u.person2Id === parentId) && u.childIds.includes(childId)) u.childIds = u.childIds.filter(id => id !== childId);
+        }
+    }
+    for (const id of relations.dropUnions ?? []) {
+        const u = data.partnerships[id];
+        if (!u) continue;
+        for (const pid of [u.person1Id, u.person2Id]) {
+            const p = data.persons[pid];
+            if (p) p.partnerships = p.partnerships.filter(x => x !== id);
+            if (p?.photoSource?.partnershipId === id) delete p.photoSource;
+        }
+        for (const att of Object.values(data.media ?? {})) {
+            if (!att.places?.some(pl => 'partnershipId' in pl && pl.partnershipId === id)) continue;
+            const kept = att.places.filter(pl => !('partnershipId' in pl && pl.partnershipId === id));
+            for (const pid of [u.person1Id, u.person2Id]) {
+                if (data.persons[pid] && !kept.some(pl => 'personId' in pl && pl.personId === pid && !('fact' in pl && pl.fact) && !('eventId' in pl && pl.eventId))) kept.push({ personId: pid });
+            }
+            att.places = kept;
+        }
+        delete data.partnerships[id];
     }
 }
 

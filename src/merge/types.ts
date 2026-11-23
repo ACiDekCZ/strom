@@ -148,6 +148,12 @@ export interface MergeState {
      */
     joinedDetails?: 'none' | 'empty';
     /**
+     * What the conflicts of relations decided (spec 134 K5.5), when the
+     * import guide's plan has any. Absent: every couple and parent link of
+     * the import comes as before.
+     */
+    relations?: MergeRelations;
+    /**
      * The tree the merge goes into and the fingerprint of its data when the
      * matching ran (contentFingerprint). A resumed merge compares it with the
      * tree as it is now (spec 134 K0.6). Optional: older sessions lack it.
@@ -158,6 +164,22 @@ export interface MergeState {
      * merge so a resumed one opens at its step. Optional: older sessions lack it.
      */
     wizard?: MergeWizardState;
+}
+
+/**
+ * The write's part of the conflicts of relations (spec 134 K5.5): what of
+ * the import is not written ("Keep mine") and what of the tree the import's
+ * version replaces ("From the import").
+ */
+export interface MergeRelations {
+    /** Couples of the import not written (the import's ids). */
+    leftUnions?: PartnershipId[];
+    /** Parent links of the import not written: `${child}<${parent}`, the import's ids. */
+    leftLinks?: string[];
+    /** Couples of the tree removed (the tree's ids); their files stay with the two persons. */
+    dropUnions?: PartnershipId[];
+    /** Parent links of the tree removed: `${child}<${parent}`, the tree's ids. */
+    dropLinks?: string[];
 }
 
 /** Where the import guide stands: its step, the furthest step reached, its choices. */
