@@ -1102,6 +1102,11 @@ class TreeManagerClass {
     /** Rescue keys of closed windows this one stored at start, per tree, until that write lands. */
     private restoredRescues = new Map<TreeId, string>();
 
+    /** A state of the tree handed to the queue has not landed yet. */
+    hasUnsettledSave(id: TreeId): boolean {
+        return this.unsettledSaves.has(id);
+    }
+
     /** A write landed: when it carried the newest state, nothing of the tree waits any more. */
     private settle(id: TreeId, written: { data: StromData; base: ResearchBase | null }): void {
         if (this.unsettledSaves.get(id) !== written) return;

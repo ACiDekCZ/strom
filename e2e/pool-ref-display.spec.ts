@@ -396,4 +396,19 @@ test.describe('Images from the pool (desktop)', () => {
         // The tree in memory keeps its references.
         expect(await page.evaluate(() => window.Strom.DataManager.getData().persons['leopoldine' as never].photo)).toBe(refs.leopoldine);
     });
+
+    test('the family pages in the window show the pooled portraits of the page shown (D8)', async ({ page }) => {
+        const refs = await treeWithRefs(page);
+        const photos = await page.evaluate(async (r) => window.Strom.Images.expandedData(r), { kasimir: refs.kasimir, walpurga: refs.walpurga });
+        await page.evaluate(() => (window.Strom.UI as unknown as { openFamilyPagesExact(s: unknown): void }).openFamilyPagesExact({ kind: 'descendants', person: 'kasimir' }));
+        const body = page.locator('#person-page-overlay .pp-body, .pp-body').first();
+        await body.locator('[data-sp-open="family:u_kasimir_walpurga"]').first().click();
+        const portraits = body.locator('img.sp-portrait');
+        await expect(portraits).toHaveCount(2);
+        expect((await portraits.evaluateAll(els => els.map(e => e.getAttribute('src')))).sort()).toEqual([photos.kasimir, photos.walpurga].sort());
+        await expect.poll(() => portraits.evaluateAll(els => els.every(e => (e as HTMLImageElement).complete && (e as HTMLImageElement).naturalWidth === 120))).toBe(true);
+        expect(await body.evaluate(b => b.innerHTML.includes('STROMPOOL'))).toBe(false);
+        // The tree in memory keeps its references.
+        expect(await page.evaluate(() => window.Strom.DataManager.getData().persons['kasimir' as never].photo)).toBe(refs.kasimir);
+    });
 });

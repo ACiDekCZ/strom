@@ -47,6 +47,7 @@ import { imagesToAwait } from '../image-loads.js';
 import { imagesBeforeOutput, imagesReadyForPrint } from './output-images.js';
 import { expandedData } from '../image-expand.js';
 import { pageImagesToRead, readPageImages, treeWithPageImages, pageImageValue, forgetPageImages } from './person-page-images.js';
+import { forgetFamilyPageImages } from './family-pages-images.js';
 
 export const PERSON_PAGE_ID = 'person-page-modal';
 export const PERSON_PAGE_EXPORT_ID = 'person-page-export-modal';
@@ -357,6 +358,7 @@ export const personPageMethods = uiModule({
         imagesHandler = null;
         imagesFailedShown = -1;
         forgetPageImages();
+        forgetFamilyPageImages();
         if (resizeHandler) window.removeEventListener('resize', resizeHandler);
         resizeHandler = null;
         this.dialogStack = this.dialogStack.filter(d => d !== PERSON_PAGE_ID);
@@ -399,8 +401,7 @@ export const personPageMethods = uiModule({
             pagePlaces = [];
             syncShareButton();
             this.closePersonPageMenu(false);
-            this.renderFamilyPagesEntry(overlay, entry.set);
-            (overlay.querySelector('.pp-body') as HTMLElement).scrollTop = entry.scrollTop;
+            this.renderFamilyPagesEntry(overlay, entry.set, entry.scrollTop);
             return;
         }
         if (!DataManager.getPerson(entry.personId)) { this.closePersonPage(); return; }

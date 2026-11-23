@@ -34,6 +34,7 @@ import { collectPoolGarbage } from './media-pool.js';
 import { backfillImageMeta } from './image-meta-backfill.js';
 import { imageCacheStats, setImageCacheLimits, releaseImageUrls } from './image-src.js';
 import { expandedData } from './image-expand.js';
+import { satellitesHolding } from './windows/window-images.js';
 import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
@@ -80,6 +81,8 @@ declare global {
                 releaseImageUrls: typeof releaseImageUrls;
                 /** Tree data (or any part) with every pooled image whole: what tests compare with the images they put in. */
                 expandedData: typeof expandedData;
+                /** The satellites that tell the main window which pooled images they hold (spec 135). */
+                satellitesHolding: typeof satellitesHolding;
             };
             /** The main window's registry of its satellite windows (spec 079; absent in other windows). */
             Windows?: WindowRegistry;
@@ -657,7 +660,7 @@ function initShell(): DebugOptions {
         TreePreview,
         TreeCompare,
         // The pooled images' object URLs (image-src.ts): their count and bounds.
-        Images: { imageCacheStats, setImageCacheLimits, releaseImageUrls, expandedData },
+        Images: { imageCacheStats, setImageCacheLimits, releaseImageUrls, expandedData, satellitesHolding },
     };
 
     // Parse debug options from URL

@@ -7,16 +7,17 @@
  * the list follows hello, bye and closed windows; the selection does not loop.
  */
 
-import { IMAGE_REF_PREFIX, restoreImages, WindowImageStore } from '../window-images.js';
+import { noteImageMeta } from '../../image-meta.js';
+import { imagesInterned } from '../../image-intern.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataManager } from '../../data.js';
 import { TreeManager } from '../../tree-manager.js';
 import { AuditLogManager } from '../../audit-log.js';
 import { UndoManager } from '../../undo.js';
-import { type StromData, type TreeId, type Person } from '../../types.js';
+import { type StromData, type TreeId, type Person, type PersonId } from '../../types.js';
 import { LAST_FOCUSED } from '../../model-values.js';
 import { WindowBus, createMemoryHub, type WindowMessage } from '../window-bus.js';
-import { WindowRegistry, dataManagerHost, PATCH_INTERVAL_MS } from '../window-registry.js';
+import { WindowRegistry, dataManagerHost, PATCH_INTERVAL_MS, IMAGES_SETTLE_MAX_MS } from '../window-registry.js';
 import { IMAGES_ARRIVED_EVENT } from '../../image-loads.js';
 import { StorageManager } from '../../storage.js';
 
@@ -570,102 +571,169 @@ describe('images that came after the tree (spec 116, I6)', () => {
     });
 });
 
-describe('images of the tree to a satellite that reaches this window (1122)', () => {
+describe('pooled images to the satellites (spec 135, D8)', () => {
     const photo = 'data:image/jpeg;base64,' + 'Q'.repeat(4000);
-    const bigImages = (text: string) => text.match(/data:image[^"]{1000,}/g) ?? [];
+    const plainId = 'p:' + 'ab'.repeat(20);
+    const lockedId = 'e:' + 'ef'.repeat(20);
+    const meta = { len: photo.length, head: 'data:image/jpeg;base64,', bytes: 3000, w: 10, h: 20, token: 'img:t', mtok: 'm' };
 
-    function withStore(): WindowImageStore {
-        registry.stop();
-        const images = new WindowImageStore();
-        registry = new WindowRegistry({
-            bus: new WindowBus('main-refs', hub.channel()),
-            host: dataManagerHost({ treeName: () => treeName, treeExists: () => true, focusSelf: () => {}, hasFocus: () => true }),
-            openWindow: () => fakeWindow() as unknown as Window,
-            geometry: () => null,
-            images,
-        });
-        registry.start();
-        return images;
+    function withPool(): ReturnType<typeof vi.spyOn> {
+        noteImageMeta({ [plainId]: meta });
+        return vi.spyOn(StorageManager, 'getMany').mockImplementation(async (_store: string, keys: string[]) =>
+            new Map(keys.map(k => [k, k === plainId || k === lockedId ? { text: photo } : null])) as never);
     }
 
-    async function hello(kind: 'overview' | 'table', imageRefs: boolean) {
+    function setRef(id: string): PersonId {
+        const pid = DataManager.getAllPersons()[0].id;
+        (DataManager.getPerson(pid) as Person).photo = '\u0000sm:' + id;
+        return pid;
+    }
+
+    async function hello(kind: 'overview' | 'table', poolRefs: boolean) {
         const id = registry.openSatellite(kind)!;
         const sat = listener(hub, id);
-        sat.bus.post({ type: 'hello', takesData: true, windowId: id, kind, treeId: TREE, ...(imageRefs ? { imageRefs: true as const } : {}) });
+        sat.bus.post({ type: 'hello', takesData: true, windowId: id, kind, treeId: TREE, ...(poolRefs ? { poolRefs: true as const } : {}) });
         await settle();
         return { id, ...sat };
     }
 
-    it('the tree and every patch carry references, not the images; they stand for this window\'s own strings', async () => {
-        const images = withStore();
+    it('the tree and every patch carry the references as they are (an encrypted pool\'s too), with their catalog entries', async () => {
+        const getMany = withPool();
+        const pid = setRef(plainId);
+        const other = DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
+        (DataManager.getPerson(other.id) as Person).photo = '\u0000sm:' + lockedId;
+        await settle(PATCH_INTERVAL_MS);
+        const a = await hello('overview', true);
+        const b = await hello('table', true);
+        const tree = a.of('tree')[0];
+        expect(treeOf(tree.data).persons[pid].photo).toBe('\u0000sm:' + plainId);
+        expect(treeOf(tree.data).persons[other.id].photo).toBe('\u0000sm:' + lockedId);
+        expect(tree.imageMeta).toEqual({ [plainId]: meta });
+        expect(treeOf(b.of('tree')[0].data).persons[pid].photo).toBe('\u0000sm:' + plainId);
+        DataManager.createPerson({ firstName: 'Ludmila', lastName: 'Okurková', gender: 'female' });
+        await settle(PATCH_INTERVAL_MS);
+        const patch = last(a.of('patch'))!;
+        expect(treeOf(patch.data).persons[pid].photo).toBe('\u0000sm:' + plainId);
+        expect(patch.imageMeta).toEqual({ [plainId]: meta });
+        expect(patch.images).toBeUndefined();
+        expect(JSON.stringify(patch)).not.toContain('QQQQ');
+        // Nothing read from the pool for them.
+        expect(getMany).not.toHaveBeenCalled();
+    });
+
+    it('a window that reads no references (a 3.32 beta before the pool) gets every image whole, and so do all while it is open', async () => {
+        withPool();
+        const pid = setRef(plainId);
+        DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
+        await settle(PATCH_INTERVAL_MS);
+        const reads = await hello('overview', true);
+        const plain = await hello('table', false);
+        await vi.waitFor(() => expect(plain.of('tree')).toHaveLength(1));
+        expect(treeOf(plain.of('tree')[0].data).persons[pid].photo).toBe(photo);
+        DataManager.createPerson({ firstName: 'Ludmila', lastName: 'Okurková', gender: 'female' });
+        await settle(PATCH_INTERVAL_MS);
+        await vi.waitFor(() => expect(reads.of('patch').length).toBeGreaterThan(0));
+        expect(treeOf(last(reads.of('patch'))!.data).persons[pid].photo).toBe(photo);
+        // The tree here keeps the reference.
+        expect(DataManager.getPerson(pid)!.photo).toBe('\u0000sm:' + plainId);
+    });
+
+    it('a window that does not reach this one\'s pool asks for images: their Blobs, read here (also an encrypted pool\'s)', async () => {
+        vi.spyOn(StorageManager, 'getMany').mockImplementation(async (_store: string, keys: string[]) =>
+            new Map(keys.map(k => [k, k === plainId ? { head: 'data:image/png;base64,', bytes: new Uint8Array([1, 2, 3, 4]).buffer } : null])) as never);
+        const sat = await hello('overview', true);
+        sat.bus.post({ type: 'images-req', windowId: sat.id, reqId: 'r1', ids: [plainId, lockedId, 'not-an-id'] });
+        await settle();
+        await vi.waitFor(() => expect(sat.of('images')).toHaveLength(1));
+        const answer = sat.of('images')[0];
+        expect(answer).toMatchObject({ to: sat.id, reqId: 'r1' });
+        expect(Object.keys(answer.blobs).sort()).toEqual([plainId, lockedId].sort());
+        expect(answer.blobs[plainId]?.size).toBe(4);
+        expect(answer.blobs[lockedId]).toBeNull();
+    });
+
+    it('a new image (not in the pool yet) goes whole; while a save under way pools it the patch waits for its reference, at most a while', async () => {
+        let settling = false;
+        registry.stop();
+        registry = new WindowRegistry({
+            bus: new WindowBus('main-settle', hub.channel()),
+            host: dataManagerHost({ treeName: () => treeName, treeExists: () => true, focusSelf: () => {}, hasFocus: () => true, imagesSettling: () => settling }),
+            openWindow: () => fakeWindow() as unknown as Window,
+            geometry: () => null,
+        });
+        registry.start();
+        const sat = await hello('overview', true);
+        const pid = DataManager.getAllPersons()[0].id;
+        settling = true;
+        DataManager.updatePerson(pid, { photo });
+        await settle(PATCH_INTERVAL_MS * 3);
+        expect(sat.of('patch')).toHaveLength(0);
+        // The save put it into the pool: the tree holds its reference now.
+        withPool();
+        (DataManager.getPerson(pid) as Person).photo = '\u0000sm:' + plainId;
+        settling = false;
+        await settle(PATCH_INTERVAL_MS);
+        expect(sat.of('patch')).toHaveLength(1);
+        expect(treeOf(sat.of('patch')[0].data).persons[pid].photo).toBe('\u0000sm:' + plainId);
+        // A save that does not settle: the image goes whole after IMAGES_SETTLE_MAX_MS.
+        settling = true;
+        DataManager.updatePerson(pid, { photo });
+        await settle(IMAGES_SETTLE_MAX_MS - PATCH_INTERVAL_MS);
+        expect(sat.of('patch')).toHaveLength(1);
+        await settle(PATCH_INTERVAL_MS * 2);
+        expect(sat.of('patch')).toHaveLength(2);
+        expect(treeOf(sat.of('patch')[1].data).persons[pid].photo).toBe(photo);
+    });
+
+    it('new images sent whole and pooled afterwards: the same revision once more, with their references', async () => {
+        const sat = await hello('overview', true);
         const pid = DataManager.getAllPersons()[0].id;
         DataManager.updatePerson(pid, { photo });
         await settle(PATCH_INTERVAL_MS);
+        const sent = last(sat.of('patch'))!;
+        expect(treeOf(sent.data).persons[pid].photo).toBe(photo);
+        // The save pools it (image-intern.ts): the tree in memory holds its reference.
+        withPool();
+        imagesInterned(TREE, new Map([[photo, '\u0000sm:' + plainId]]));
+        await settle(PATCH_INTERVAL_MS);
+        const again = last(sat.of('patch'))!;
+        expect(again).not.toBe(sent);
+        expect(again).toMatchObject({ revision: sent.revision, images: true });
+        expect(treeOf(again.data).persons[pid].photo).toBe('\u0000sm:' + plainId);
+        // A change after it: a plain patch of the next revision.
+        DataManager.createPerson({ firstName: 'Ludmila', lastName: 'Okurková', gender: 'female' });
+        await settle(PATCH_INTERVAL_MS);
+        expect(last(sat.of('patch'))!.revision).toBeGreaterThan(sent.revision);
+        expect(last(sat.of('patch'))!.images).toBeUndefined();
+    });
+
+    it('an edit of a satellite with a new image: the patch held back for the save carries the reference, marked for the window that holds that revision', async () => {
+        let settling = false;
+        registry.stop();
+        registry = new WindowRegistry({
+            bus: new WindowBus('main-settle2', hub.channel()),
+            host: dataManagerHost({ treeName: () => treeName, treeExists: () => true, focusSelf: () => {}, hasFocus: () => true, imagesSettling: () => settling }),
+            openWindow: () => fakeWindow() as unknown as Window,
+            geometry: () => null,
+        });
+        registry.start();
         const sat = await hello('overview', true);
-        const tree = sat.of('tree')[0];
-        expect(tree.imageRefs).toBe(true);
-        expect(bigImages(JSON.stringify(tree))).toEqual([]);
-        const copy = treeOf(tree.data);
-        expect(restoreImages(copy, id => images.get(id))).toBe(true);
-        expect(copy.persons[pid].photo).toBe(photo);
-        // A change of the tree: the patch again without the image, the same reference.
-        DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
+        const pid = DataManager.getAllPersons()[0].id;
+        const copy = structuredClone(DataManager.getData());
+        copy.persons[pid].photo = photo;
+        settling = true;
+        sat.bus.post({ type: 'edit', windowId: sat.id, editId: 'e1', treeId: TREE, baseRevision: registry.revision, json: JSON.stringify(copy), label: 'Photo' });
+        await settle(PATCH_INTERVAL_MS * 2);
+        const result = sat.of('edit-result')[0];
+        expect(result).toMatchObject({ ok: true });
+        expect(sat.of('patch')).toHaveLength(0);
+        withPool();
+        settling = false;
+        imagesInterned(TREE, new Map([[photo, '\u0000sm:' + plainId]]));
         await settle(PATCH_INTERVAL_MS);
         const patch = last(sat.of('patch'))!;
-        expect(patch.imageRefs).toBe(true);
-        expect(bigImages(JSON.stringify(patch))).toEqual([]);
-        expect(treeOf(patch.data).persons[pid].photo).toBe(IMAGE_REF_PREFIX + '1');
-        expect(images.get(1)).toBe(DataManager.getPerson(pid)!.photo);
-    });
-
-    it('a window that does not reach it (a second tab, an older version) gets the images; one message for all then carries them', async () => {
-        withStore();
-        const pid = DataManager.getAllPersons()[0].id;
-        DataManager.updatePerson(pid, { photo });
-        await settle(PATCH_INTERVAL_MS);
-        const refs = await hello('overview', true);
-        const plain = await hello('table', false);
-        expect(treeOf(plain.of('tree')[0].data).persons[pid].photo).toBe(photo);
-        expect(plain.of('tree')[0].imageRefs).toBeUndefined();
-        DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
-        await settle(PATCH_INTERVAL_MS);
-        expect(treeOf(last(refs.of('patch'))!.data).persons[pid].photo).toBe(photo);
-        expect(last(refs.of('patch'))!.imageRefs).toBeUndefined();
-    });
-
-    it('a pooled image\'s reference (spec 135): as it is to a window that reaches this one, whole to one that does not', async () => {
-        withStore();
-        const ref = '\u0000sm:p:' + 'ab'.repeat(20);
-        vi.spyOn(StorageManager, 'getMany').mockImplementation(async (_store: string, keys: string[]) =>
-            new Map(keys.map(k => [k, k === 'p:' + 'ab'.repeat(20) ? { text: photo } : null])) as never);
-        const pid = DataManager.getAllPersons()[0].id;
-        (DataManager.getPerson(pid) as Person).photo = ref;
-        DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
-        await settle(PATCH_INTERVAL_MS);
-        const refs = await hello('overview', true);
-        expect(treeOf(refs.of('tree')[0].data).persons[pid].photo).toBe(ref);
-        const plain = await hello('table', false);
-        await settle();
-        expect(treeOf(plain.of('tree')[0].data).persons[pid].photo).toBe(photo);
-        // The tree here keeps the reference.
-        expect(DataManager.getPerson(pid)!.photo).toBe(ref);
-    });
-
-    it('a window that could not take an image asks again: the whole tree with its images, and so from now on', async () => {
-        withStore();
-        const pid = DataManager.getAllPersons()[0].id;
-        DataManager.updatePerson(pid, { photo });
-        await settle(PATCH_INTERVAL_MS);
-        const sat = await hello('overview', true);
-        sat.bus.post({ type: 'resend', windowId: sat.id });
-        await settle();
-        const again = last(sat.of('tree'))!;
-        expect(sat.of('tree')).toHaveLength(2);
-        expect(again.imageRefs).toBeUndefined();
-        expect(treeOf(again.data).persons[pid].photo).toBe(photo);
-        DataManager.createPerson({ firstName: 'Kunhuta', lastName: 'Okurková', gender: 'female' });
-        await settle(PATCH_INTERVAL_MS);
-        expect(treeOf(last(sat.of('patch'))!.data).persons[pid].photo).toBe(photo);
+        expect(patch).toMatchObject({ revision: result.revision, images: true });
+        expect(treeOf(patch.data).persons[pid].photo).toBe('\u0000sm:' + plainId);
     });
 });
 

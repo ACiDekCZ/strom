@@ -91,3 +91,30 @@ export function imageAddrAttr(value: string, attr: 'src' | 'href' = 'src'): stri
     if (!id) return `${attr}="${escAttr(value)}"`;
     return `${attr}="${IMAGE_PLACEHOLDER}" ${POOL_REF_ATTR}="${id}"`;
 }
+
+/**
+ * A stand-in data URL of a pooled image, for a builder that takes an image
+ * only as a data URL (the family pages in the app's window): it passes as an
+ * image of its type and carries the image's id (and the orientation it is
+ * shown by), so the built text gets the image put in afterwards
+ * (ui/family-pages-images.ts). Never stored, never an output.
+ */
+const STAND_IN = /^data:[a-z0-9.+/-]+;base64,STROMPOOL([pe])([0-9a-f]{40})(?:O([2-8]))?A*$/;
+
+/** The stand-ins in a built text (HTML, CSS): the whole data URL, the kind, the id's hex digits, the orientation. */
+export const STAND_IN_IN_TEXT = /data:[a-z0-9.+/-]+;base64,STROMPOOL([pe])([0-9a-f]{40})(?:O([2-8]))?A*/g;
+
+export function poolStandIn(id: string, mime: string, orientation = 0): string {
+    const m = /^([pe]):([0-9a-f]{40})$/.exec(id);
+    if (!m) return '';
+    let body = `STROMPOOL${m[1]}${m[2]}${orientation >= 2 && orientation <= 8 ? `O${Math.round(orientation)}` : ''}`;
+    while (body.length % 4) body += 'A';
+    return `data:${/^[a-z0-9.+/-]+$/i.test(mime) ? mime.toLowerCase() : 'image/jpeg'};base64,${body}`;
+}
+
+/** The pooled image a stand-in names (and its orientation), or null for any other value. */
+export function standInOf(value: unknown): { id: string; orient: number } | null {
+    if (typeof value !== 'string' || value.length > 120 || !value.startsWith('data:')) return null;
+    const m = STAND_IN.exec(value);
+    return m ? { id: `${m[1]}:${m[2]}`, orient: m[3] ? Number(m[3]) : 0 } : null;
+}

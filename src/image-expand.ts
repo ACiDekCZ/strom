@@ -100,6 +100,19 @@ export async function expandImages<T>(data: T, o: ExpandOptions = {}): Promise<E
     return { data: copy, missing };
 }
 
+/**
+ * A copy of `data` (objects copied, strings shared) with every pooled image's
+ * reference replaced at once by `fn(id, holder)` (`holder`: the copied object
+ * or array it stands in); `data` itself when it names none.
+ */
+export function withPoolRefsReplaced<T>(data: T, fn: (id: string, holder: Record<string, unknown> | unknown[]) => string): T {
+    if (!hasPoolRefs(data)) return data;
+    const slots: Slot[] = [];
+    const copy = copyWithSlots(data, slots) as T;
+    for (const s of slots) (s.at as Record<string | number, unknown>)[s.key] = fn(s.id, s.at);
+    return copy;
+}
+
 /** expandImages for a caller that needs only the data. */
 export async function expandedData<T>(data: T, o: ExpandOptions = {}): Promise<T> {
     return (await expandImages(data, o)).data;

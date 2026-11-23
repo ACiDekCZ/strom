@@ -15,6 +15,9 @@ import { strings } from '../strings.js';
 import { WindowBus } from './window-bus.js';
 import { WindowRegistry, dataManagerHost } from './window-registry.js';
 import { SatelliteClient } from './satellite.js';
+import { holdTabLock, otherAppWindows } from '../tab-lock.js';
+import { registerPoolAloneCheck } from '../media-pool.js';
+import { satellitesHolding } from './window-images.js';
 import { MAIN_WINDOW_NAME, newWindowId, satelliteViewMode, satelliteWindowName, tryBecomeMain, type SatelliteParams } from './window-role.js';
 import { becomeMain, writeBecomeMainMark, type BecomeMainMark } from './become-main.js';
 import { recordReloadPoint } from '../resume-view.js';
@@ -101,8 +104,12 @@ export function openLinksFromOtherWindows(): void {
 /** The main window: its name (other windows find it by it) and the registry of satellites. */
 export function startMainWindow(): WindowRegistry {
     try { window.name = MAIN_WINDOW_NAME; } catch { /* not settable */ }
+    const windowId = newWindowId();
+    // The pool's cleanup removes an unused image at once only when no other window of the app runs (spec 135).
+    holdTabLock(windowId);
+    registerPoolAloneCheck(async () => !(await otherAppWindows(satellitesHolding())));
     registry = new WindowRegistry({
-        bus: new WindowBus(newWindowId()),
+        bus: new WindowBus(windowId),
         host: dataManagerHost({
             // As the app's own Undo: the drawing, the toolbar and the toast follow.
             undo: () => UI.performUndo(),
@@ -318,6 +325,8 @@ export function startSatelliteClient(params: SatelliteParams): SatelliteClient {
             history.replaceState(null, '', url.toString());
         } catch { /* the address stays */ }
     }
+    // Its memory holds pooled images the main window's pool cleanup must know of (spec 135).
+    holdTabLock(params.windowId);
     return new SatelliteClient(params);
 }
 

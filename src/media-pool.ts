@@ -613,6 +613,17 @@ export function registerPoolReferences(kind: PoolReferenceKind, provider: () => 
 }
 
 /**
+ * Tells whether this window is the only one of the app that holds the pool's
+ * images in memory (the main window registers it: tab-lock.ts). None
+ * registered, or not sure: other windows are taken to be there.
+ */
+let aloneCheck: (() => Promise<boolean>) | null = null;
+
+export function registerPoolAloneCheck(check: (() => Promise<boolean>) | null): void {
+    aloneCheck = check;
+}
+
+/**
  * The key in the 'media' store of the cleanup's marks: content id → when the
  * cleanup first found that image unused (ms). Not a content id, so never an
  * image (an older version's cleanup removes it as unused: the marks then
@@ -653,6 +664,8 @@ export async function poolUnusedMarks(): Promise<Map<string, number>> {
  * so every tab sees it); a later cleanup removes it once it has stayed unused
  * for POOL_UNUSED_GRACE_MS. An image named again loses its mark. Marks of an
  * older pool (none) are set by the first cleanup: it removes nothing.
+ * When no other window of the app runs (registerPoolAloneCheck), every
+ * memory that could hold an image was asked: an unused image goes at once.
  * `dropKind` (a switch of the encryption, every stored record moved to the
  * other kind): unused images of the old kind go at once — plaintext images
  * must not outlive the switch to encryption by a week.
@@ -669,10 +682,15 @@ export async function collectPoolGarbageLocked(now: number = Date.now(), opts: {
         if (unused.size === 0) break;
         for (const id of await referenceProviders.get(kind)!()) unused.delete(id);
     }
+    // Asked after the memory: a window that starts meanwhile holds only what its stored trees name.
+    let alone = false;
+    if (unused.size > 0 && aloneCheck) {
+        try { alone = await aloneCheck(); } catch { alone = false; }
+    }
     const next = new Map<string, number>();
     let removed = 0;
     for (const key of unused) {
-        const since = opts.dropKind && key.startsWith(opts.dropKind) ? -Infinity : marks.get(key);
+        const since = alone || (opts.dropKind && key.startsWith(opts.dropKind)) ? -Infinity : marks.get(key);
         // A mark from the future (the clock was set back) starts again from now.
         if (since === undefined || since > now) { next.set(key, now); continue; }
         if (now - since < POOL_UNUSED_GRACE_MS) { next.set(key, since); continue; }

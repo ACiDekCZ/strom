@@ -14,11 +14,12 @@
  * last focus, the default person) raises nothing: no edit is refused for it.
  */
 
-import { publishImageSource, publishPoolSource, holdSatelliteImages, WindowImageStore } from './window-images.js';
+import { publishPoolSource, holdSatelliteImages } from './window-images.js';
 import { loadImageBlobs } from '../media-pool.js';
 import { imageMetaFor } from '../image-meta.js';
 import { DataManager } from '../data.js';
-import { expandedData, hasPoolRefs } from '../image-expand.js';
+import { expandedData } from '../image-expand.js';
+import { treeImages, onImagesInterned } from '../image-intern.js';
 import { IMAGES_ARRIVED_EVENT } from '../image-loads.js';
 import { TreeManager } from '../tree-manager.js';
 import type { TreeId } from '../types.js';
@@ -60,6 +61,13 @@ export interface MainWindowHost {
     focus?(): { personId: string; depthUp: number; depthDown: number } | null;
     /** This window follows the research agent now (spec 097 §4, not paused): the status says it (spec 110 §4). */
     followingAgent?(): boolean;
+    /**
+     * The open tree holds new images (data URLs) that a save under way puts
+     * into the pool, after which the tree holds their references (spec 135).
+     */
+    imagesSettling?(): boolean;
+    /** Subscribe to the open tree's new images becoming pool references after a save (spec 135); returns the unsubscribe. */
+    onImagesInterned?(cb: () => void): () => void;
 }
 
 /** The main window as DataManager and TreeManager have it. */
@@ -89,6 +97,11 @@ export function dataManagerHost(overrides: Partial<MainWindowHost> = {}): MainWi
         focusSelf: () => { if (typeof window !== 'undefined') window.focus(); },
         hasFocus: () => typeof document !== 'undefined' && document.hasFocus(),
         focus: () => null,
+        imagesSettling: () => {
+            const id = DataManager.getCurrentTreeId();
+            return !!id && TreeManager.hasUnsettledSave(id) && treeImages(DataManager.getData()).urls.size > 0;
+        },
+        onImagesInterned: (cb) => onImagesInterned((treeId) => { if (treeId === DataManager.getCurrentTreeId()) cb(); }),
         ...overrides,
     };
 }
@@ -107,8 +120,8 @@ export interface WindowEntry {
     bounds?: WindowBounds;
     /** Its own following of the agent as it last said (spec 097; null: none, no live session). */
     agent?: AgentFollow | null;
-    /** It takes the tree's images from this window (window-images.ts): they go as references. */
-    imageRefs?: boolean;
+    /** It reads the tree's pooled images from their references (spec 135): they go as they are. */
+    poolRefs?: boolean;
     /** It takes the tree as `data` (an older window, 3.31 and before, only as one JSON string). */
     takesData?: boolean;
 }
@@ -193,12 +206,17 @@ export interface WindowRegistryOptions {
     /** window.open (a test passes its own). */
     openWindow?: (url: string, name: string, features: string) => Window | null;
     geometry?: () => ScreenGeometry | null;
-    /** Where the satellites find this window's images (default: published on `window`). */
-    images?: WindowImageStore;
 }
 
 /** Patches go out at most this often (a burst of changes, e.g. Undo ×10, makes one). */
 export const PATCH_INTERVAL_MS = 500;
+/**
+ * New images of the tree wait at most this long for the save that puts them
+ * into the pool before the satellites get them whole (spec 135).
+ */
+export const IMAGES_SETTLE_MAX_MS = 10_000;
+/** The most images one `images-req` gets (a satellite asks in batches of what it shows). */
+export const IMAGES_PER_REQUEST = 256;
 /** The status is sent at least this often (the satellites tell a closed main window by its silence). */
 export const HEARTBEAT_MS = 1000;
 
@@ -208,7 +226,7 @@ export interface SelectMeta {
     seq: number | null;
 }
 /** The tree as one message carries it (WindowRegistry.outgoing). */
-type Outgoing = { data: unknown; imageRefs?: true } | { json: string };
+type Outgoing = { data: unknown; imageMeta?: Record<string, unknown> } | { json: string };
 
 /** The message of the tree once its form is had (at once, or after an older window's images are read). */
 function withOutgoing(out: Outgoing | Promise<Outgoing>, make: (o: Outgoing) => WindowMessageBody): WindowMessageBody | Promise<WindowMessageBody> {
@@ -259,7 +277,15 @@ export class WindowRegistry {
     private lastSelection: string | null = null;
     private applyingRemoteSelection = false;
     private started = false;
-    private readonly images: WindowImageStore;
+    /** Since when new images held the broadcast back (imagesSettling); null: not now. */
+    private settlingSince: number | null = null;
+    /**
+     * The revision whose new images (data URLs) became pool references after
+     * its save (null: none since the last broadcast): a satellite that holds
+     * that revision (it sent the edit, or got the images whole) takes it once
+     * more, as a patch with `images`.
+     */
+    private imagesInternedAt: number | null = null;
     /** Messages behind a tree still being made whole for an older window (outgoing): sent in their order. */
     private sendQueue: Promise<void> | null = null;
 
@@ -268,13 +294,8 @@ export class WindowRegistry {
         this.host = opts.host ?? dataManagerHost();
         this.openWindowFn = opts.openWindow ?? ((url, name, features) => (typeof window !== 'undefined' ? window.open(url, name, features) : null));
         this.geometry = opts.geometry ?? currentGeometry;
-        this.images = opts.images ?? new WindowImageStore();
-        if (!opts.images) {
-            publishImageSource(this.images);
-            // Pooled images' bytes and catalog entries for the satellites (they keep no storage, no key);
-            // what they hold of the pool, for its cleanup.
-            publishPoolSource({ blobs: ids => loadImageBlobs(ids), meta: ids => imageMetaFor(ids), hold: holdSatelliteImages });
-        }
+        // Pooled images' bytes for the satellites (they keep no storage, no key); what they hold of the pool, for its cleanup.
+        publishPoolSource({ blobs: ids => loadImageBlobs(ids), hold: holdSatelliteImages });
     }
 
     /** This main window's id (the `from` of its messages). */
@@ -290,7 +311,7 @@ export class WindowRegistry {
         const b = this.bus;
         this.unsubscribe.push(
             b.on('hello', m => this.onHello(m)),
-            b.on('resend', m => this.onResend(m.windowId || m.from)),
+            b.on('images-req', m => this.onImagesRequest(m)),
             b.on('edit', m => this.onEdit(m)),
             b.on('undo', () => { this.host.undo(); this.sync(); }),
             b.on('redo', () => { this.host.redo(); this.sync(); }),
@@ -307,6 +328,11 @@ export class WindowRegistry {
             b.on('show-on-map', m => this.showOnMapHandler?.(m.ref, m.treeId)),
             b.on('agent-state-req', m => this.agentStateAsked(m.windowId || m.from)),
             this.host.onSaved(() => this.sync()),
+            this.host.onImagesInterned?.(() => {
+                this.checkRevision();
+                this.imagesInternedAt = this.rev;
+                if (this.anyConnected()) this.scheduleBroadcast();
+            }) ?? (() => {}),
         );
         if (typeof window !== 'undefined') {
             const sync = () => this.sync();
@@ -577,11 +603,27 @@ export class WindowRegistry {
             this.postStatus(false);
             return;
         }
-        // One message for all: images as references only when every window takes them from here.
+        // New images a save under way puts into the pool: the satellites get the tree once it holds their
+        // references (the save makes it change again), not every image whole meanwhile — at most a while.
+        if (this.host.imagesSettling?.()) {
+            const now = Date.now();
+            this.settlingSince ??= now;
+            if (now - this.settlingSince < IMAGES_SETTLE_MAX_MS) {
+                this.lastSent = prev;
+                this.broadcastTimer = setTimeout(() => { this.broadcastTimer = null; this.broadcast(); }, PATCH_INTERVAL_MS);
+                this.postStatus(false);
+                return;
+            }
+        }
+        this.settlingSince = null;
+        // One message for all: the pooled images' references as they are when every window reads them.
         const out = this.outgoing([...this.entries.values()].filter(e => e.connected));
         const revision = this.rev;
+        // Its new images are references now: a satellite that holds this revision takes it once more.
+        const images = this.imagesInternedAt === revision;
+        this.imagesInternedAt = null;
         if (prev && prev.treeId === treeId && prev.withData) {
-            this.send(withOutgoing(out, o => ({ type: 'patch', treeId, revision, ...o })));
+            this.send(withOutgoing(out, o => ({ type: 'patch', treeId, revision, ...o, ...(images ? { images: true as const } : {}) })));
         } else {
             const replaces = prev?.treeId && prev.treeId !== treeId ? { treeId: prev.treeId, exists: this.host.treeExists(prev.treeId) } : undefined;
             const name = this.host.treeName(treeId);
@@ -621,25 +663,38 @@ export class WindowRegistry {
         this.sendQueue = queue;
     }
 
-    /** The open tree to send: as data, its images as references when all receivers take them from here. */
+    /**
+     * The open tree to send. Its pooled images go as the references it holds,
+     * with their catalog entries, when every receiver reads them from here
+     * (spec 135); new images not in the pool yet go as they are (data URLs).
+     * Otherwise every image whole (image-expand.ts; the data taken now, the
+     * images read after): as data, or as one JSON string while a window of
+     * 3.31 or before is open (it takes only that).
+     */
     private outgoing(to: (WindowEntry | undefined)[]): Outgoing | Promise<Outgoing> {
         const data = this.host.storedData();
-        // A window of an older version takes only one JSON string (as long as one is open), with every image
-        // whole: it reads no pooled image's reference (image-expand.ts; taken now, the images read after).
+        const images = data && typeof data === 'object' ? treeImages(data as Parameters<typeof treeImages>[0]) : { urls: new Set<string>(), refIds: new Set<string>() };
+        const ids = images.refIds;
         if (to.some(e => e?.takesData !== true)) {
-            return hasPoolRefs(data) ? expandedData(data).then(full => ({ json: JSON.stringify(full) })) : { json: JSON.stringify(data) };
+            return ids.size > 0 ? expandedData(data).then(full => ({ json: JSON.stringify(full) })) : { json: JSON.stringify(data) };
         }
-        if (to.every(e => e?.imageRefs === true)) return { data: this.images.replaceImages(data), imageRefs: true };
-        // A window that cannot reach this one (a second tab) reads no pooled image: every image whole for it.
-        return hasPoolRefs(data) ? expandedData(data).then(full => ({ data: full })) : { data };
+        if (ids.size === 0) return { data };
+        if (to.every(e => e?.poolRefs === true)) return { data, imageMeta: imageMetaFor(ids) };
+        return expandedData(data).then(full => ({ data: full }));
     }
 
-    /** A satellite could not take an image from here: the whole tree with its images, and so from now on. */
-    private onResend(id: string): void {
-        const entry = this.entries.get(id);
-        if (!entry) return;
-        entry.imageRefs = false;
-        this.sendTreeTo(id);
+    /**
+     * A satellite that does not reach this window's pool through `opener`
+     * asks for images by their content ids (spec 135): their Blobs (this
+     * window reads and decrypts them), at most IMAGES_PER_REQUEST.
+     */
+    private onImagesRequest(m: MessageOf<'images-req'>): void {
+        const to = m.windowId || m.from;
+        if (typeof m.reqId !== 'string' || !Array.isArray(m.ids)) return;
+        const ids = m.ids.filter((id): id is string => typeof id === 'string' && /^[pe]:[0-9a-f]{40}$/.test(id)).slice(0, IMAGES_PER_REQUEST);
+        void loadImageBlobs(ids).catch(() => new Map<string, Blob | null>()).then((blobs) => {
+            this.send({ type: 'images', to, reqId: m.reqId, blobs: Object.fromEntries(ids.map(id => [id, blobs.get(id) ?? null])) });
+        });
     }
 
     /** The person in the centre here, with the tree (a satellite without a state of its own starts there). */
@@ -723,7 +778,7 @@ export class WindowRegistry {
         entry.treeId = m.treeId;
         entry.connected = true;
         entry.agent = parseAgentFollow(m.agent);
-        entry.imageRefs = m.imageRefs === true;
+        entry.poolRefs = m.poolRefs === true;
         entry.takesData = m.takesData === true;
         if (m.state !== undefined) entry.state = m.state;
         this.entries.set(id, entry);

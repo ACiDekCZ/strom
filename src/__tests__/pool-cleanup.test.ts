@@ -55,13 +55,14 @@ import { TreeManager, RESCUE_PREFIX } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { listSnapshots } from '../snapshots.js';
-import { collectPoolGarbage, poolUnusedMarks, POOL_UNUSED_GRACE_MS, POOL_UNUSED_KEY } from '../media-pool.js';
+import { collectPoolGarbage, poolUnusedMarks, registerPoolAloneCheck, POOL_UNUSED_GRACE_MS, POOL_UNUSED_KEY } from '../media-pool.js';
+import { holdTabLock, otherAppWindows, resetTabLocksForTest, TAB_LOCK_PREFIX, type TabLocks } from '../tab-lock.js';
 import { expandedData } from '../image-expand.js';
 import { POOL_REF, poolIdOf } from '../image-ref.js';
 import { clearImageMeta } from '../image-meta.js';
 import { UndoManager } from '../undo.js';
 import { openPhotoModel } from '../ui/person-photo-model.js';
-import { holdSatelliteImages } from '../windows/window-images.js';
+import { holdSatelliteImages, satellitesHolding } from '../windows/window-images.js';
 import { StromData, TreeId, TreeMetadata, PersonId } from '../types.js';
 import { STROM_DATA_VERSION } from '../version.js';
 
@@ -158,6 +159,8 @@ afterEach(async () => {
     await TreeManager.flush();
     UndoManager.setActiveTree(null);
     holdSatelliteImages('sat-1', null);
+    registerPoolAloneCheck(null);
+    resetTabLocksForTest();
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -320,5 +323,60 @@ describe('what memory holds is kept, however long', () => {
         await collectPoolGarbage();
         at(15);
         expect(await collectPoolGarbage()).toBe(2);
+    });
+});
+
+/** Web Locks of one browser: the names held, by any window. */
+function browserLocks(): TabLocks & { held: Set<string> } {
+    const held = new Set<string>();
+    return {
+        held,
+        request: (name, cb) => { held.add(name); return cb({}); },
+        query: async () => ({ held: [...held].map(name => ({ name })), pending: [] }),
+    };
+}
+
+describe('the cleanup knows the other windows of the app (spec 135, D8)', () => {
+    it('no other window runs (only this one and the satellites it asks): an unused image goes at once', async () => {
+        const locks = browserLocks();
+        holdTabLock('main-a', locks);
+        locks.held.add(TAB_LOCK_PREFIX + 'sat-1');
+        locks.held.add('strom-media-pool');
+        holdSatelliteImages('sat-1', () => []);
+        registerPoolAloneCheck(async () => !(await otherAppWindows(satellitesHolding(), locks)));
+        const id = await pooledUnused(image(21));
+        expect(await collectPoolGarbage()).toBe(1);
+        expect(images()).not.toContain(id);
+        expect(st('media').has(POOL_UNUSED_KEY)).toBe(false);
+    });
+
+    it('an image a satellite that tells it holds is kept also then', async () => {
+        const locks = browserLocks();
+        holdTabLock('main-a', locks);
+        registerPoolAloneCheck(async () => !(await otherAppWindows(satellitesHolding(), locks)));
+        const id = await pooledUnused(image(22));
+        holdSatelliteImages('sat-1', () => [id]);
+        expect(await collectPoolGarbage()).toBe(0);
+        expect(images()).toEqual([id]);
+    });
+
+    it('another tab, or a window that cannot tell what it holds: two phases, as before', async () => {
+        const locks = browserLocks();
+        holdTabLock('main-a', locks);
+        locks.held.add(TAB_LOCK_PREFIX + 'other-tab');
+        registerPoolAloneCheck(async () => !(await otherAppWindows(satellitesHolding(), locks)));
+        const id = await pooledUnused(image(23));
+        expect(await collectPoolGarbage()).toBe(0);
+        expect(await poolUnusedMarks()).toEqual(new Map([[id, START]]));
+        // The tab closed: the image marked before goes at once.
+        locks.held.delete(TAB_LOCK_PREFIX + 'other-tab');
+        expect(await collectPoolGarbage()).toBe(1);
+    });
+
+    it('without Web Locks, or a query that fails: another window is taken to be there', async () => {
+        expect(await otherAppWindows([], null)).toBe(true);
+        expect(await otherAppWindows([], { request: async () => undefined })).toBe(true);
+        expect(await otherAppWindows([], { request: async () => undefined, query: async () => { throw new Error('denied'); } })).toBe(true);
+        expect(await otherAppWindows([], { request: async () => undefined, query: async () => ({ held: [{ name: 'strom-main' }] }) })).toBe(false);
     });
 });

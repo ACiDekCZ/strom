@@ -10,7 +10,7 @@ import { StromData, PortraitCrop, PortraitSource, Person } from './types.js';
 import { deleteMedia, personMediaById } from './media.js';
 import { pendingImageOf } from './research-image-refs.js';
 import { dataUrlTextByteSize, dataUrlTextImageSize } from './data-url-size.js';
-import { isPoolRef } from './image-ref.js';
+import { isPoolRef, standInOf, POOL_REF } from './image-ref.js';
 import { pooledImageByteSize, pooledImageSize } from './image-meta.js';
 
 /** Target avatar size in device-independent pixels. */
@@ -113,7 +113,9 @@ function rotatePhotoAt(dataUrl: string, src: string, turns: number): Promise<str
  * image's reference, the same value from the image catalog (image-meta.ts).
  */
 export function dataUrlByteSize(dataUrl: string): number {
-    return isPoolRef(dataUrl) ? pooledImageByteSize(dataUrl) : dataUrlTextByteSize(dataUrl);
+    if (isPoolRef(dataUrl)) return pooledImageByteSize(dataUrl);
+    const standIn = standInOf(dataUrl);
+    return standIn ? pooledImageByteSize(POOL_REF + standIn.id) : dataUrlTextByteSize(dataUrl);
 }
 
 /** Total bytes of all photos in a tree: the persons' portraits and the couples' photos (spec 107). */
@@ -547,6 +549,9 @@ export function isPortraitSourceShape(v: unknown): v is PortraitSource {
  * catalog (image-meta.ts).
  */
 export function dataUrlImageSize(url: string): { w: number; h: number } | null {
-    return isPoolRef(url) ? pooledImageSize(url) : dataUrlTextImageSize(url);
+    if (isPoolRef(url)) return pooledImageSize(url);
+    // A pooled image's stand-in (image-ref.ts poolStandIn) is as large as its image.
+    const standIn = standInOf(url);
+    return standIn ? pooledImageSize(POOL_REF + standIn.id) : dataUrlTextImageSize(url);
 }
 
