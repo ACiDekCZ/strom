@@ -520,20 +520,25 @@ test.describe('section choices: expanded, collapsed, hidden (spec 044)', () => {
     });
 });
 
-/** A long press as a finger makes it: pointerdown, held, pointerup, then the click the release makes. */
+/**
+ * A long press as a finger makes it: pointerdown, held, pointerup, then the click the release makes. The hold is the
+ * page's own timer, so the release keeps its place against the page's 500 ms of a long press in the order the page
+ * runs its timers (650 ms after it, 120 ms before it), however late a loaded page runs them; all on the one heading
+ * pressed (a redraw meanwhile does not move the finger).
+ */
 async function longPress(page: Page, target: Locator, ms = 650): Promise<void> {
-    // The panel redraws now and then: wait for a heading in view.
-    let box = await target.boundingBox();
-    for (let i = 0; !box && i < 20; i++) {
-        await page.waitForTimeout(50);
-        box = await target.boundingBox();
-    }
-    if (!box) throw new Error('no box to press');
-    const at = { clientX: box.x + 20, clientY: box.y + box.height / 2, pointerType: 'touch', button: 0, isPrimary: true, bubbles: true };
-    await target.dispatchEvent('pointerdown', at);
-    await page.waitForTimeout(ms);
-    await target.dispatchEvent('pointerup', at);
-    await target.dispatchEvent('click', { clientX: at.clientX, clientY: at.clientY });
+    // The panel redraws now and then: a heading in view.
+    await expect(target).toBeVisible();
+    await target.evaluate((el, ms) => new Promise<void>(resolve => {
+        const r = el.getBoundingClientRect();
+        const at = { clientX: r.x + 20, clientY: r.y + r.height / 2, pointerType: 'touch', button: 0, isPrimary: true, bubbles: true, cancelable: true, composed: true };
+        el.dispatchEvent(new PointerEvent('pointerdown', at));
+        setTimeout(() => {
+            el.dispatchEvent(new PointerEvent('pointerup', at));
+            el.dispatchEvent(new MouseEvent('click', { clientX: at.clientX, clientY: at.clientY, bubbles: true, cancelable: true, composed: true }));
+            resolve();
+        }, ms);
+    }), ms);
 }
 
 /** Nothing scrolls sideways: the window, and each open layer of Customize panel. */

@@ -43,8 +43,15 @@ function writes(bridge: FakeBridge, body: Record<string, unknown>, ged: (head: s
     };
 }
 
-/** Sent by hand (not awaited: a question it asks holds the send until answered). */
-const send = (page: Page) => { void page.evaluate(() => window.Strom.UI.researchSendNow()); };
+/**
+ * Sent by hand (not awaited: a question it asks holds the send until answered); awaited where a test ends on it.
+ * A send still finishing when a test ends is not an error of the test; any other failure of it still is.
+ */
+const send = (page: Page): Promise<unknown> => {
+    const sending = page.evaluate(() => window.Strom.UI.researchSendNow());
+    sending.catch((e: unknown) => { if (!/Test ended|has been closed/.test(String(e))) throw e; });
+    return sending;
+};
 const dialog = (page: Page) => page.locator('#confirmation-modal');
 const deleteJan = (page: Page) => page.evaluate(() => {
     const dm = window.Strom.DataManager;
@@ -71,7 +78,8 @@ test.describe('removed by an earlier send of another window', () => {
         await editJan(page, 'Kolín');
         send(page);
         await expect.poll(() => bridge.posts.length).toBe(1);
-        await expect(page.locator('.toast')).toContainText('Written 0, not written 1.');
+        // The send's own toast (another one may stand beside it).
+        await expect(page.locator('.toast', { hasText: 'Written 0, not written 1.' })).toBeVisible();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'notWritten');
         await expect(block(page).getByRole('menuitem', { name: "Load the research's version" })).toBeVisible();
@@ -210,13 +218,15 @@ test.describe('whether a person comes back or goes (PERSON)', () => {
         const bridge = await archiveTree(page, { links: ['send', 'open', 'live', 'app', 'setup'] });
         writes(bridge, { conflicts: [BACK] });
         await editJan(page, 'Kolín');
-        send(page);
+        const sent = send(page);
         const d = dialog(page);
         await expect(d).toContainText('From the app: edited in the app since');
         await expect(d).toContainText('Decided in a terminal on the computer with the research: strom → What waits.');
         await expect(d.locator('[data-choice]')).toHaveCount(0);
         await expect(page.locator('#confirm-cancel-btn')).toHaveText('Close');
         await page.locator('#confirm-cancel-btn').click();
+        // The send ends with the question closed (the test does not end in the middle of it).
+        await sent;
         expect(await links(page)).toEqual([]);
     });
 
