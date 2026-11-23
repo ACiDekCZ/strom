@@ -28641,6 +28641,10 @@
             .tree-manager-item:not(.pending-merge) > .tree-manager-item-hold { grid-column: 1 / -1; order: 1; margin-top: 2px; }
             /* Switching (2f): Open, Cancel and ⋯ under the row's counts, so the counts keep their width. */
             .tree-manager-item:not(.pending-merge):has(.tree-switch-cancel) > .tree-manager-item-actions { grid-column: 1 / -1; margin-top: 6px; }
+            /* An unfinished merge: its counts ("N to decide • n/m reviewed", 134 S-P2) on a line of their own under the name and date, so the name is not squeezed to a few letters. */
+            .tree-manager-item.pending-merge > .tree-manager-item-header { flex-wrap: wrap; row-gap: 2px; }
+            .tree-manager-item.pending-merge .tree-manager-item-name { flex: 1 1 0; }
+            .tree-manager-item.pending-merge .tree-manager-item-stats { order: 1; flex-basis: 100%; padding-left: 18px; font-size: 13px; }
             .tree-manager-item .tree-manager-item-actions button.tree-open-btn { height: 40px; }
             .tree-manager-item.active .tree-open-btn { display: none !important; }
             .tree-manager-item.active .tree-opened-label {
