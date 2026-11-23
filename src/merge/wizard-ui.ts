@@ -520,12 +520,13 @@ export class MergeWizard {
         for (const s of WIZARD_STEPS) {
             const name = `${s} ${stepName(s)}`;
             const sub = this.comparing && s === 2 ? { text: W.comparingSub } : this.stepSub(s, info[s]);
-            const subHtml = `<span class="merge-step-sub${sub.warn ? ' is-warn' : ''}">${sub.text ? escapeHtml(sub.text) : '&nbsp;'}</span>`;
+            const subHtml = `<span class="merge-step-sub${sub.warn ? ' is-warn' : ''}${sub.text ? '' : ' is-empty'}">${sub.text ? escapeHtml(sub.text) : '&nbsp;'}</span>`;
             const current = s === at;
             const done = !current && (s === 1 && !!this.comparing || info[s].state === 'ok' && s <= ws.reached);
             const skipped = info[s].state === 'skip';
+            // The number and the name apart: a narrow window keeps only the number of the other steps (4j).
             const label = `<span class="merge-step-name">${done ? `<span class="merge-step-ok" aria-hidden="true">${glyph('joined', 11)}</span>` : ''}`
-                + `<span class="sel-l" data-label="${escapeHtml(name)}">${escapeHtml(name)}</span></span>`;
+                + `<span class="sel-l" data-label="${escapeHtml(name)}"><span class="merge-step-no">${s}</span><span class="merge-step-nm"> ${escapeHtml(stepName(s))}</span></span></span>`;
             // The whole name and second line as a tooltip: a narrow window cuts them (§13).
             const title = escapeHtml(sub.text ? `${name} · ${sub.text}` : name);
             // A step 4 skipped by the scope opens to say why (7e).
@@ -561,21 +562,27 @@ export class MergeWizard {
         const W = strings.mergeWizard;
         const c = ws.choices;
         const state = this.host.state()!;
+        const chip = (kind: GlyphKind, cls: string, label: string, v: number | null): string =>
+            `<div class="merge-stat ${cls}" data-count="${kind}"><span class="merge-stat-label"><span class="merge-stat-glyph">${glyph(kind)}</span>${escapeHtml(label)}</span>`
+            + `<span class="merge-stat-value">${v === null ? '–' : countText(v)}</span></div>`;
+        // The sum after the counts in the bar of a wider window ("= 187", 4j); the phone's line says it in words.
+        const sum = (v: number): string => `<div class="merge-stat-sum"><span class="merge-stat-total">= <b>${countText(v)}</b></span></div>`;
         if (!this.plan) {
             const treePersons = Object.values(state.existingData.persons).filter(p => !p.isPlaceholder).length;
             const parts = [W.cntImport(c.source.persons)];
             if (c.mode !== 'new' && c.targetTreeId) parts.push(W.cntTree(c.targetName, treePersons), W.cntAfterCompare);
             box.className = 'merge-stats is-pre';
-            box.innerHTML = `<span class="merge-stats-pre">${escapeHtml(parts.join(' · '))}</span>`
+            // Before the comparison the bar's counts are "–" (4j); the phone keeps its sentence.
+            box.innerHTML = chip('joined', 'highlight', W.cntJoined, null) + chip('added', 'new', W.cntNew, null)
+                + chip('skipped', 'skipped', W.cntSkipped, null) + chip('pending', 'is-zero', W.cntPending, null) + sum(c.source.persons)
+                + `<span class="merge-stats-pre">${escapeHtml(parts.join(' · '))}</span>`
                 + `<span class="merge-stats-note">${escapeHtml(W.nothingYet)}</span>`;
+            this.renderFootNote(W.nothingYet);
             return;
         }
         const n = planCounts(this.plan);
         const note = this.written ? W.writtenAt(writtenWhen(c.writtenAt!))
             : ws.step === 5 && c.mode !== 'compare' ? W.writeOnlyHere : W.nothingYet;
-        const chip = (kind: GlyphKind, cls: string, label: string, v: number): string =>
-            `<div class="merge-stat ${cls}" data-count="${kind}"><span class="merge-stat-label"><span class="merge-stat-glyph">${glyph(kind)}</span>${escapeHtml(label)}</span>`
-            + `<span class="merge-stat-value">${countText(v)}</span></div>`;
         const line = [`${W.cntJoined} ${countText(n.joined)}`, `${W.cntNew} ${countText(n.added)}`,
             `${W.cntSkipped} ${countText(n.skipped)}`, `${W.cntPending} ${countText(n.pending)}`, `= ${countText(n.total)}`].join(' · ');
         box.className = 'merge-stats';
@@ -583,8 +590,15 @@ export class MergeWizard {
             + chip('added', 'new', W.cntNew, n.added)
             + chip('skipped', 'skipped', W.cntSkipped, n.skipped)
             + chip('pending', n.pending > 0 ? 'warning' : 'is-zero', W.cntPending, n.pending)
-            + `<div class="merge-stat-sum"><span class="merge-stat-total">${escapeHtml(W.cntTotal(n.total))}</span><span class="merge-stats-note">${escapeHtml(note)}</span></div>`
+            + sum(n.total)
             + `<div class="merge-stats--line"><span>${escapeHtml(line)}</span><span class="merge-stats-note">${escapeHtml(note)}</span></div>`;
+        this.renderFootNote(note);
+    }
+
+    /** "Nothing has been written yet." left in the footer of a wider window (4f); the phone says it under its counts. */
+    private renderFootNote(text: string): void {
+        const el = document.getElementById('merge-foot-note');
+        if (el) el.textContent = text;
     }
 
     private context(): StepContext {

@@ -7314,6 +7314,17 @@
            step so the footer does not jump; full screen on a phone (below). */
         @media (min-width: 641px) { .modal.modal--lg.merge-modal { width: 94vw; max-width: 94vw; height: min(760px, 88vh); max-height: min(760px, 88vh); } }
         @media (min-width: 1100px) { .modal.modal--lg.merge-modal { width: 960px; max-width: 960px; } }
+        /* The guide itself takes most of a wider window (dotaz 10, 4f): 94vw below 1100 px, then up to
+           1440 × 980; a phone either way up keeps its full screen (§14). */
+        @media (min-width: 1025px), (min-width: 641px) and (min-height: 501px) {
+            #merge-modal .modal.modal--lg.merge-modal { width: 94vw; max-width: 94vw; height: calc(100vh - 32px); max-height: calc(100vh - 32px); }
+        }
+        @media (min-width: 1100px) {
+            #merge-modal .modal.modal--lg.merge-modal {
+                width: min(1440px, 92vw); max-width: min(1440px, 92vw);
+                height: min(980px, calc(100vh - 48px)); max-height: min(980px, calc(100vh - 48px));
+            }
+        }
         @media (max-width: 640px) {
             .modal.modal--sm, .modal.modal--md, .modal.modal--lg { width: 100%; max-width: 100vw; }
         }
@@ -18476,6 +18487,65 @@
         .merge-stats--line {
             display: none;
         }
+        /* The steps and the counts: one bar on a wider window (below); on a phone they stand as before. */
+        .merge-topbar { display: contents; }
+        .merge-foot-note { display: none; }
+        /*
+         * A wider window, not a phone either way up (dotaz 10, 4f/4j): the header one thin row, the steps and
+         * the counts one bar of one line (the current step with its state after its name, the counts as words
+         * "Joined 33 · New 142 · … = 187"), "Nothing has been written yet." left in the footer. Step 2's heading
+         * is the bar's: kept for a reader and the focus, not shown.
+         */
+        @media (min-width: 1025px), (min-width: 641px) and (min-height: 501px) {
+            #merge-modal .modal-header { padding: 10px 16px 8px 20px; }
+            #merge-modal .merge-head { flex-direction: row; align-items: baseline; gap: 12px; }
+            #merge-modal .merge-head h2 { flex: none; font-size: 17px; }
+            #merge-modal .merge-src { flex: 0 1 auto; min-width: 0; }
+            .merge-topbar {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                min-width: 0;
+                flex-shrink: 0;
+                padding: 0 16px 0 10px;
+                border-bottom: 1px solid var(--border);
+            }
+            .merge-topbar .merge-progress { flex: 0 1 auto; min-width: 0; border-bottom: 0; }
+            .merge-topbar .merge-step-list { min-width: 0; }
+            .merge-topbar .merge-step { flex: 0 1 auto; flex-direction: row; align-items: center; gap: 5px; height: 38px; padding: 0 8px; }
+            .merge-topbar .merge-step.active { flex-shrink: 0; }
+            .merge-topbar .merge-step-sub { display: none; }
+            .merge-topbar .merge-step.active > .merge-step-sub:not(.is-empty) {
+                display: inline; max-width: none; overflow: visible; font-size: 11.5px; font-weight: 500; color: var(--text-light);
+            }
+            .merge-topbar .merge-step.active > .merge-step-sub:not(.is-empty)::before { content: "· "; }
+            .merge-topbar .merge-step.active > .merge-step-sub.is-warn { color: var(--warning-text); }
+            .merge-topbar .merge-stats {
+                margin-left: auto; flex: none; flex-wrap: nowrap; align-items: baseline; gap: 4px 12px;
+                font-size: 12.5px; color: var(--text-light); white-space: nowrap;
+            }
+            .merge-topbar .merge-stat {
+                flex: none; flex-direction: row; align-items: baseline; gap: 4px;
+                padding: 0; border: 0; border-radius: 0; background: none;
+            }
+            .merge-topbar .merge-stat-glyph { display: none; }
+            .merge-topbar .merge-stat-label, .merge-topbar .merge-stat.skipped .merge-stat-label { font-size: 12.5px; color: var(--text-light); }
+            .merge-topbar .merge-stat-value, .merge-topbar .merge-stat.skipped .merge-stat-value { font-size: 12.5px; font-weight: 600; color: var(--text); }
+            .merge-topbar .merge-stat.warning .merge-stat-label, .merge-topbar .merge-stat.warning .merge-stat-value { color: var(--warning-text); }
+            .merge-topbar .merge-stat-sum { flex: none; display: block; font-size: 12.5px; color: var(--text-light); }
+            .merge-topbar .merge-stat-total b { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+            .merge-topbar .merge-stats-pre, .merge-topbar .merge-stats-note { display: none; }
+            .merge-foot-note { display: inline; font-size: 12px; color: var(--text-light); white-space: nowrap; }
+            #merge-step-body .merge-step-title[data-step-title="2"] {
+                position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+                overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+            }
+        }
+        /* Below 1100 px the other steps say only their number (4j); the whole name stays in their title. */
+        @media (min-width: 1025px) and (max-width: 1099px), (min-width: 641px) and (max-width: 1099px) and (min-height: 501px) {
+            .merge-topbar .merge-step:not(.active) .merge-step-nm { display: none; }
+            .merge-topbar .merge-step:not(.active) .sel-l::after { content: none; }
+        }
 
         /* Step 2 – Who is who (spec 134 §4): the list left (its own scroll), the pair right. */
         .merge-step-body[data-step="2"] { display: flex; flex-direction: column; overflow: hidden; }
@@ -28965,6 +29035,7 @@
             .merge-step:not(.active) { display: none; }
             .merge-step { flex: 0 0 auto; flex-direction: row; align-items: baseline; gap: 8px; padding: 4px 0; }
             .merge-stat:not([data-count="pending"]), .merge-stat-sum { display: none; }
+            .merge-stats.is-pre .merge-stat { display: none; }
             .merge-stat { flex: 0 0 auto; padding: 3px 8px; flex-direction: row; align-items: baseline; gap: 6px; }
             .merge-stat-value { font-size: 14px; }
             .merge-modal .buttons.merge-actions {
@@ -37006,11 +37077,14 @@
                 </div>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.MergerUI.closeMergeModal()">&times;</button>
             </div>
-            <nav id="merge-progress" class="merge-progress" aria-label="Steps of the import" data-i18n-aria-label="mergeWizard.stepsNav"></nav>
-            <div id="merge-counts" class="merge-stats" role="status" aria-live="polite"></div>
+            <div class="merge-topbar">
+                <nav id="merge-progress" class="merge-progress" aria-label="Steps of the import" data-i18n-aria-label="mergeWizard.stepsNav"></nav>
+                <div id="merge-counts" class="merge-stats" role="status" aria-live="polite"></div>
+            </div>
             <div id="merge-validation-banner" class="merge-validation-banner"></div>
             <div id="merge-step-body" class="merge-step-body"></div>
             <div class="buttons merge-actions">
+                <span id="merge-foot-note" class="merge-foot-note"></span>
                 <button type="button" class="link-button" id="merge-save-later" onclick="window.Strom.MergerUI.saveForLater()" data-i18n="merge.closeSave">Save for later</button>
                 <span id="merge-next-why" class="merge-next-why" hidden></span>
                 <button type="button" class="secondary" id="merge-back" onclick="window.Strom.MergerUI.wizardBack()" data-i18n="mergeWizard.back" hidden>Back</button>

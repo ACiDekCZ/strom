@@ -83,13 +83,14 @@ test('tree merge wizard matches a shared person and merges without duplicates', 
     await expect(wizard.locator('#merge-match-list .merge-item').first()).toBeVisible();
     await mergePair(wizard, 'Jan');
 
-    // Round 11: the count chips are paper chips whose meaning rides on an
-    // inline SVG glyph, not an emoji. All four chips (joined, new, not added,
-    // to decide) carry an <svg> glyph, and no label leaks a ✓/⚠/⊘/＋ character.
-    await expect(wizard.locator('.merge-stat.highlight .merge-stat-glyph svg')).toBeVisible();
-    await expect(wizard.locator('.merge-stat.new .merge-stat-glyph svg')).toBeVisible();
-    await expect(wizard.locator('.merge-stat.skipped .merge-stat-glyph svg')).toBeVisible();
-    await expect(wizard.locator('.merge-stat[data-count="pending"] .merge-stat-glyph svg')).toBeVisible();
+    // Round 11: the count chips' meaning rides on an inline SVG glyph, not an
+    // emoji. All four chips (joined, new, not added, to decide) carry an <svg>
+    // glyph (a wider window's one bar shows the counts as words, dotaz 10, so
+    // the glyph is the phone's), and no label leaks a ✓/⚠/⊘/＋ character.
+    await expect(wizard.locator('.merge-stat.highlight .merge-stat-glyph svg')).toBeAttached();
+    await expect(wizard.locator('.merge-stat.new .merge-stat-glyph svg')).toBeAttached();
+    await expect(wizard.locator('.merge-stat.skipped .merge-stat-glyph svg')).toBeAttached();
+    await expect(wizard.locator('.merge-stat[data-count="pending"] .merge-stat-glyph svg')).toBeAttached();
     const statLabels = (await wizard.locator('.merge-stat-label').allInnerTexts()).join('');
     expect(statLabels).not.toMatch(/[\u2713\u26A0\u2298\uFF0B\uFE0E\uFE0F]/);
 

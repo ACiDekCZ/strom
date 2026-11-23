@@ -157,8 +157,13 @@ test.describe('a tablet', () => {
         const wizard = await openGuide(page);
         await mergeCompare(wizard);
         const subs = wizard.locator('#merge-progress .merge-step-sub');
-        await expect(wizard.locator('#merge-progress .merge-step.active .merge-step-sub')).toBeVisible();
-        await expect(subs.filter({ visible: true })).toHaveCount(1);
+        // One bar (dotaz 10): the current step says its state beside its name when it has one; no other step does.
+        const active = wizard.locator('#merge-progress .merge-step.active .merge-step-sub');
+        const said = ((await active.textContent()) ?? '').trim() !== '';
+        if (said) await expect(active).toBeVisible();
+        else await expect(active).toBeHidden();
+        await expect(subs.filter({ visible: true })).toHaveCount(said ? 1 : 0);
+        await expect(wizard.locator('#merge-progress .merge-step:not(.active) .merge-step-sub').filter({ visible: true })).toHaveCount(0);
         await expect(wizard.locator('#merge-progress .merge-step[data-step="1"]')).toHaveAttribute('title', /^1 What to do · Add · a\)$/);
         await expect(wizard.locator('#merge-progress .merge-step[data-step="4"]')).toHaveAttribute('title', /^4 Who is right · /);
         // Nothing of the step list is wider than its place.
