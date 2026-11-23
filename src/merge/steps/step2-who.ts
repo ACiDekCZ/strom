@@ -568,7 +568,7 @@ function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d
     const groupName = view.group === 'maybe' ? W.grpMaybe : view.group === 'same' ? W.grpSame : W.grpNew;
     const parts: string[] = [];
     if (view.group === 'same') parts.push(`<p class="merge-s2-note">${escapeHtml(W.sameNote)}</p>`);
-    if (!row) return parts.join('') + recalcHtml(state, view) + restHtml(d);
+    if (!row) return parts.join('') + recalcHtml(state, view) + restHtml(state, d);
     const pair = pairShown(state, view, row);
     if (!pair) return parts.join('');
     const { inc, cands, chosen, tree } = pair;
@@ -590,7 +590,7 @@ function paneHtml(ctx: StepContext, env: Step2Env | undefined, view: PairView, d
     parts.push(whysHtml(state, env, row, pair));
     parts.push(decideHtml(state, row, W.pairOf(index, d.shown.length)));
     parts.push(recalcHtml(state, view));
-    parts.push(restHtml(d));
+    parts.push(restHtml(state, d));
     return parts.join('');
 }
 
@@ -669,21 +669,60 @@ function recalcHtml(state: MergeState, view: PairView): string {
         + `<button type="button" class="link-button merge-recalc-show" aria-pressed="${view.onlyRecalc}">${escapeHtml(view.onlyRecalc ? W.showAll : W.recalcShow)}</button></p>`;
 }
 
-/** Why yes of a pair that shares its parents (one of them) or a partner with the tree's person. */
-const FAMILY_REASONS: ReadonlySet<MatchReason> = new Set<MatchReason>(['name_gender_parents', 'child_of_matched', 'sibling_of_matched', 'partner_of_matched', 'partner_similarity']);
+/** Why yes of a pair that shares its parents (one of them), a child or a partner with the tree's person. */
+const FAMILY_REASONS: ReadonlySet<MatchReason> = new Set<MatchReason>(['name_gender_parents', 'child_of_matched', 'parent_of_matched', 'sibling_of_matched', 'partner_of_matched', 'partner_similarity']);
+
+/** The ids of a person's parents, children or partners in one data set. */
+function relativeIds(p: Person, data: StromData, rel: 'parents' | 'children' | 'partners'): PersonId[] {
+    if (rel === 'parents') return p.parentIds;
+    if (rel === 'children') return p.childIds;
+    const ids: PersonId[] = [];
+    for (const uid of p.partnerships) {
+        const u = data.partnerships[uid];
+        if (u) ids.push(u.person1Id === p.id ? u.person2Id : u.person1Id);
+    }
+    return ids;
+}
+
+/**
+ * The file's person of a row and the tree's person it stands against share a
+ * family: a parent, child or partner of the one is paired with the same
+ * relative of the other, whatever the reasons of the pair say (a parent with
+ * nothing but the exact name is still the joined child's parent).
+ */
+function sharesFamily(state: MergeState, row: PairRow, byIncoming: ReadonlyMap<PersonId, PersonId>): boolean {
+    const treeId = treePersonOf(state, row);
+    const p = state.incomingData.persons[row.id];
+    const t = treeId ? state.existingData.persons[treeId] : undefined;
+    if (!p || !t) return false;
+    for (const rel of ['parents', 'children', 'partners'] as const) {
+        const treeRelatives = new Set(relativeIds(t, state.existingData, rel));
+        if (relativeIds(p, state.incomingData, rel).some(r => {
+            const paired = byIncoming.get(r);
+            return !!paired && treeRelatives.has(paired);
+        })) return true;
+    }
+    return false;
+}
 
 /**
  * The undecided pairs (`fates` pending) the rest decides at once, and the ones
- * with the same parents or partner as the tree's person: added as new they
- * would double a family (a third parent, a second spouse of one name), so
+ * with the same parents, child or partner as the tree's person: added as new
+ * they would double a family (a third parent, a second spouse of one name), so
  * they are decided one by one (134 N2) and Continue waits for them.
  */
-export function restSplit(rows: readonly PairRow[], fates: ReadonlyMap<PersonId, PersonFate>): { bulk: PersonId[]; oneByOne: PersonId[] } {
+export function restSplit(state: MergeState, rows: readonly PairRow[], fates: ReadonlyMap<PersonId, PersonFate>): { bulk: PersonId[]; oneByOne: PersonId[] } {
+    const byIncoming = new Map<PersonId, PersonId>();
+    for (const r of rows) {
+        const t = treePersonOf(state, r);
+        if (t) byIncoming.set(r.id, t);
+    }
     const bulk: PersonId[] = [];
     const oneByOne: PersonId[] = [];
     for (const r of rows) {
         if (fates.get(r.id) !== 'pending') continue;
-        (r.match?.reasons.some(x => FAMILY_REASONS.has(x)) ? oneByOne : bulk).push(r.id);
+        const family = r.match?.reasons.some(x => FAMILY_REASONS.has(x)) || sharesFamily(state, r, byIncoming);
+        (family ? oneByOne : bulk).push(r.id);
     }
     return { bulk, oneByOne };
 }
@@ -692,9 +731,9 @@ export function restSplit(rows: readonly PairRow[], fates: ReadonlyMap<PersonId,
  * "Remaining N undecided: Add as new · Do not add" (K3.4) under the pair, N
  * without the pairs of one family; a sentence says how many are decided one by one.
  */
-function restHtml(d: Drawn): string {
+function restHtml(state: MergeState, d: Drawn): string {
     const W = strings.mergeWizard;
-    const { bulk, oneByOne } = restSplit(d.rows, d.fates);
+    const { bulk, oneByOne } = restSplit(state, d.rows, d.fates);
     const n = bulk.length;
     if (n === 0 && oneByOne.length === 0) return '';
     const one = oneByOne.length ? `<span class="merge-rest-one">${escapeHtml(W.restOneByOne(oneByOne.length))}</span>` : '';
@@ -774,7 +813,7 @@ export function renderStep2(host: HTMLElement, ctx: StepContext): void {
         + tabsHtml(view, d.rows)
         + `<div class="merge-s2-search"><input type="search" class="merge-s2-q" value="${escapeHtml(view.query)}" placeholder="${escapeHtml(W.searchName)}" aria-label="${escapeHtml(W.searchName)}"></div>`
         + `<div class="merge-match-list" id="merge-match-list" role="listbox" aria-label="${escapeHtml(W.grpMaybe)}">${listHtml(ctx, view, d)}</div>`
-        + (wide ? restHtml(d) : '')
+        + (wide ? restHtml(ctx.state, d) : '')
         + footHtml(view) + '</div>'
         + `<div class="merge-s2-pane" id="merge-pair">${wide ? widePaneHtml(ctx, ctx.step2, view, d) : paneHtml(ctx, ctx.step2, view, d)}</div>`
         + '</div>';
@@ -923,7 +962,7 @@ function wire(host: HTMLElement, ctx: StepContext, view: PairView): void {
         if (!rest || !env) return false;
         const d = drawData(ctx, view);
         view.showCopy = true;
-        env.decideMany(restSplit(d.rows, d.fates).bulk, rest.dataset.rest as 'reject' | 'skip');
+        env.decideMany(restSplit(ctx.state, d.rows, d.fates).bulk, rest.dataset.rest as 'reject' | 'skip');
         return true;
     };
     host.querySelector<HTMLElement>('#merge-s2-side')?.addEventListener('click', e => { restClick(e.target as HTMLElement); });

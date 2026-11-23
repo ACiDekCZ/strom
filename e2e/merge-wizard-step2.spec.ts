@@ -208,14 +208,14 @@ test.describe('step 2: decisions (K3.3, K3.4)', () => {
         const rest = wizard.locator('#merge-rest');
         await expect(rest).toContainText('Remaining 1 undecided');
         await expect(rest.locator('[data-rest="reject"]')).toHaveText('Add as new (1)');
-        await expect(rest.locator('.merge-rest-one')).toHaveText('2 pairs with the same parents or partner need deciding one by one.');
+        await expect(rest.locator('.merge-rest-one')).toHaveText('2 pairs with the same parents, child or partner need deciding one by one.');
         await rest.locator('[data-rest="skip"]').click();
         await expect(mergeCount(wizard, 'pending')).toHaveText('2');
         await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
         await expect(mergeRow(wizard, 'Vojmír')).toHaveAttribute('data-fate', 'skipped');
         // Only the sentence is left; Continue waits for the two pairs.
         await expect(rest.locator('[data-rest]')).toHaveCount(0);
-        await expect(rest.locator('.merge-rest-one')).toHaveText('2 pairs with the same parents or partner need deciding one by one.');
+        await expect(rest.locator('.merge-rest-one')).toHaveText('2 pairs with the same parents, child or partner need deciding one by one.');
         await expect(wizard.locator('#merge-next')).toBeDisabled();
         await expect(wizard.locator('#merge-next-why')).toHaveText('2 pairs left to decide');
 

@@ -1,6 +1,6 @@
 /**
  * The undecided rest of step 2 decided at once (K3.4, 134 N2): a pair with
- * the same parents or partner as the tree's person is left out of
+ * the same parents, partner or child as the tree's person is left out of
  * "Add as new" / "Do not add" (as new it would double a family), the
  * buttons count the rest without it, and Continue stays locked until those
  * pairs are decided one by one. The family Modřín is invented.
@@ -54,11 +54,11 @@ function file(): StromData {
 }
 
 describe('the undecided rest leaves out the pairs of one family (134 N2)', () => {
-    it('Add as new / Do not add take only the pairs without the same parents or partner', () => {
+    it('Add as new / Do not add take only the pairs without the same parents, child or partner', () => {
         const state = createMergeState(tree(), file());
         const plan = buildPlan(state, choices());
         expect(planCounts(plan).pending).toBe(3);
-        const { bulk, oneByOne } = restSplit(pairRows(state), planFates(plan));
+        const { bulk, oneByOne } = restSplit(state, pairRows(state), planFates(plan));
         // Florentýna's partner and Teofil's parents are the tree's: decided one by one.
         expect(bulk).toEqual(['i_vojmir']);
         expect([...oneByOne].sort()).toEqual(['i_flor', 'i_teofil']);
@@ -66,17 +66,42 @@ describe('the undecided rest leaves out the pairs of one family (134 N2)', () =>
 
     it('after the rest is decided, the pairs of one family are still "to decide" and Continue waits for them', () => {
         const state = createMergeState(tree(), file());
-        const rest = restSplit(pairRows(state), planFates(buildPlan(state, choices())));
+        const rest = restSplit(state, pairRows(state), planFates(buildPlan(state, choices())));
         for (const id of rest.bulk) updateMatchDecision(state, id, 'reject');
         let plan = buildPlan(state, choices());
         expect(planCounts(plan).pending).toBe(rest.oneByOne.length);
         expect(stepAvailability(choices(), plan)[3]).toBe('locked');
         // The rest now offers nothing at once, only the sentence.
-        expect(restSplit(pairRows(state), planFates(plan)).bulk).toEqual([]);
+        expect(restSplit(state, pairRows(state), planFates(plan)).bulk).toEqual([]);
         for (const id of rest.oneByOne) updateMatchDecision(state, id, 'confirm');
         plan = buildPlan(state, choices());
         expect(planCounts(plan).pending).toBe(0);
         expect(stepAvailability(choices(), plan)[3]).toBe('ok');
+    });
+
+    it('a pair that is the parent of a joined person is decided one by one too (a third parent otherwise)', () => {
+        // The tree: Hostivít 1925 and his son Svatoboj 1955. The file: Svatoboj 1955 (the same) and
+        // Hostivít without a date, offered only as the parent of the joined son.
+        const t = {
+            persons: {
+                t_host: person('t_host', 'Hostivít', 'Modřín', 'male', { birthDate: '1925', childIds: ['t_svat' as PersonId] }),
+                t_svat: person('t_svat', 'Svatoboj', 'Modřín', 'male', { birthDate: '1955', parentIds: ['t_host' as PersonId] }),
+            },
+            partnerships: {},
+        } as StromData;
+        const f = {
+            persons: {
+                i_host: person('i_host', 'Hostivít', 'Modřín', 'male', { childIds: ['i_svat' as PersonId] }),
+                i_svat: person('i_svat', 'Svatoboj', 'Modřín', 'male', { birthDate: '1955', parentIds: ['i_host' as PersonId] }),
+                i_bojmir: person('i_bojmir', 'Bojmír', 'Modřín', 'male'),
+            },
+            partnerships: {},
+        } as StromData;
+        const state = createMergeState(t, f);
+        const rows = pairRows(state);
+        const { bulk, oneByOne } = restSplit(state, rows, planFates(buildPlan(state, choices())));
+        expect(oneByOne).toContain('i_host');
+        expect(bulk).not.toContain('i_host');
     });
 
     it('says how many pairs are decided one by one, in every language', () => {
