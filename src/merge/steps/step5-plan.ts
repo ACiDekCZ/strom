@@ -637,7 +637,7 @@ function updateSide(view: View): void {
     root.querySelector<HTMLElement>('.merge-s5-backup')!.hidden = !(adding && into === 'tree');
     const research = root.querySelector<HTMLElement>('.merge-s5-research')!;
     research.hidden = !(adding && into === 'tree' && plan.target.research);
-    research.textContent = research.hidden ? '' : W.researchKept(plan.target.name);
+    research.textContent = research.hidden ? '' : W.resStep5(plan.target.name);
     drawPreview(view);
 }
 

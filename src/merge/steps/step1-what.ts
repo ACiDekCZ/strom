@@ -84,7 +84,7 @@ function targetsHtml(ctx: StepContext, env: Step1Env): string {
             + `<span class="merge-s1-tline">${escapeHtml(line)}</span></label>`;
     }).join('');
     const target = rows.find(r => r.treeId === chosen && !r.block);
-    const research = target?.research ? `<p class="merge-s1-note">${escapeHtml(W.researchKept(target.name))}</p>` : '';
+    const research = researchHtml(env, target ?? null);
     const locked = target && env.encLocked()
         ? `<p class="merge-s1-warn" id="merge-s1-enc"><span>${escapeHtml(W.encLocked(target.name))}</span> <button type="button" class="link-button" data-s1="unlock">${escapeHtml(strings.storageSafety.unlock)}</button></p>` : '';
     // A tree followed live from the research (2f): why, and End following, after which it takes the import.
@@ -93,6 +93,38 @@ function targetsHtml(ctx: StepContext, env: Step1Env): string {
         ? `<p class="merge-s1-warn" id="merge-s1-live"><strong>${escapeHtml(W.blockLiveTitle(liveRow.name))}</strong> <span>${escapeHtml(W.blockLive)}</span> <button type="button" class="link-button" data-s1="end-follow">${escapeHtml(strings.research.stop)}</button></p>` : '';
     return `<h4 class="merge-s1-h" id="merge-s1-targets-h">${escapeHtml(W.whichTree)}</h4>
         <div class="merge-s1-targets" role="radiogroup" aria-labelledby="merge-s1-targets-h">${items}</div>${live}${research}${locked}`;
+}
+
+const SWAP_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h12l-3-3"/><path d="M17 17H5l3 3"/></svg>';
+
+/**
+ * What step 1 says of the research (§11, 11f–11h, K9.5, K9.6) – nothing at
+ * all when no tree of the merge is linked to one. Into a tree (`target`):
+ * the target's research stays (researchKept); a linked source and a target
+ * without one: the link does not carry over, with Swap (11g); both linked:
+ * the source's link and numbers do not carry over (11h). A new tree
+ * (`target` null): it will not be linked (11f). Either way another linked
+ * tree with the import's people is named (K9.5).
+ */
+export function researchHtml(env: Step1Env, target: TargetRow | null): string {
+    const W = strings.mergeWizard;
+    const source = env.sourceTree();
+    const note = (text: string, id: string): string => `<p class="merge-s1-note" id="${id}">${escapeHtml(text)}</p>`;
+    let html = '';
+    if (target) {
+        if (target.research) html += note(W.researchKept(target.name), 'merge-s1-res-kept');
+        if (source?.research && target.research) html += note(W.resTwo, 'merge-s1-res-two');
+        if (source?.research && !target.research) {
+            const swap = env.swapBlocked() ? ''
+                : `<button type="button" class="secondary merge-s1-res-swap" data-s1="swap">${SWAP_ICON} ${escapeHtml(W.resSwapBtn(target.name, source.name))}</button>`;
+            html += `<div class="merge-s1-res" id="merge-s1-res-swap"><p class="merge-s1-note">${escapeHtml(W.resSwap(source.name, target.name))}</p>${swap}</div>`;
+        }
+    } else if (source?.research) {
+        html += note(W.resNewTree(source.name), 'merge-s1-res-new');
+    }
+    const same = env.samePeople();
+    if (same) html += note(W.resSamePeople(same), 'merge-s1-res-same');
+    return html;
 }
 
 function scopeHtml(ctx: StepContext, env: Step1Env | undefined): string {
@@ -155,6 +187,7 @@ function whatHtml(ctx: StepContext, env: Step1Env | undefined, json: boolean): s
             <div class="sel-seg merge-s1-modes" role="radiogroup" aria-label="${escapeHtml(W.whatToDo)}">${seg}</div>
             <p class="merge-s1-desc">${escapeHtml(desc)}</p>
             ${env && into ? targetsHtml(ctx, env) : ''}
+            ${env && mode === 'new' ? researchHtml(env, null) : ''}
             ${repeat ? `<p class="merge-s1-note">${escapeHtml(repeat)}</p>` : ''}
             ${into ? scopeHtml(ctx, env) : ''}
         </section>`;

@@ -1857,6 +1857,8 @@ export interface PlanSource {
     /** A fingerprint of the source (the file's SHA-256, or contentFingerprint of a tree), for a repeated merge (§13, K1.5). */
     fingerprint?: string;
     treeId?: TreeId;
+    /** The source is a tree linked to a research: its link and numbers do not carry over (spec 134 11g/11h, merge/research-marks.ts). */
+    research?: true;
     /** Persons of the source, its "?" stand-ins aside (buildPlan counts them). */
     persons: number;
 }

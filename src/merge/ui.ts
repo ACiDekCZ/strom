@@ -54,6 +54,7 @@ import type { WizardStep } from './wizard-steps.js';
 import { isRepeatOf, planCounts, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
 import { newTreeName, writePlan, type TargetChange, type WritePhase } from './write.js';
 import { heldLinks, unsentMerges } from './research-hold.js';
+import { peopleKeys, sharesPeople, SAME_PEOPLE_MIN } from './same-people.js';
 import { exportPlan } from './plan-export.js';
 import type { Step1Env, Step2Env, Step6Env, TargetRow, UnionConflictLine, WriteStatus } from './steps/context.js';
 import { closeNotTaken, parkGedcomSummary } from './steps/step1-what.js';
@@ -179,6 +180,8 @@ class MergerUIClass {
     private gedcomLive = false;
     /** Step 1: the scope's example, for the target and comparison it was found over. */
     private exampleCache: { key: string; value: ScopeExample | null } | null = null;
+    /** K9.5: the import's people keys and, per tree linked to a research, whether it has them (null: being read). */
+    private samePeopleCache: { key: string; keys: Set<string>; trees: Map<TreeId, boolean | null> } | null = null;
 
     // ==================== INITIALIZATION ====================
 
@@ -638,6 +641,7 @@ class MergerUIClass {
                 persons: Object.values(state.incomingData.persons).filter(p => !p.isPlaceholder).length,
                 ...(this.sourceInfo.fingerprint ? { fingerprint: this.sourceInfo.fingerprint } : {}),
                 ...(this.sourceInfo.treeId ? { treeId: this.sourceInfo.treeId } : {}),
+                ...(this.sourceInfo.kind === 'tree' && this.sourceInfo.treeId && TreeManager.getTreeMetadata(this.sourceInfo.treeId)?.research ? { research: true as const } : {}),
                 ...(this.gedcomImport?.importId ? { importId: this.gedcomImport.importId } : {}),
             },
             ...(this.initialMode ? { mode: this.initialMode } : {}),
@@ -676,6 +680,7 @@ class MergerUIClass {
             unlock: () => { void this.unlockTarget(); },
             example: () => this.example(),
             repeat: () => this.repeatLine(),
+            samePeople: () => this.samePeopleTree(),
             saveNotTaken: () => this.saveNotTaken(),
         };
     }
@@ -863,6 +868,7 @@ class MergerUIClass {
         const meta = TreeManager.getTreeMetadata(id);
         if (!state || !ws || !meta || targetBlock(id)) return;
         const { targetResearch: _r, targetFingerprint: _f, ...rest } = ws.choices;
+        const { research: _sr, ...oldSource } = ws.choices.source;
         ws.choices = { ...rest, targetTreeId: id, targetName: meta.name, ...(meta.research ? { targetResearch: true } : {}) };
         ws.compared = false;
         ws.reached = 1;
@@ -902,12 +908,17 @@ class MergerUIClass {
         next.phase = 'reviewing';
         next.target = { treeId: sourceId, fingerprint };
         const { targetResearch: _r, targetFingerprint: _f, ...rest } = ws.choices;
+        const { research: _sr, ...oldSource } = ws.choices.source;
         next.wizard = {
             ...ws, step: 1, reached: 1, compared: false,
             choices: {
                 ...rest,
                 swapped: !ws.choices.swapped,
-                source: { ...ws.choices.source, label: sourceName, treeId: targetId, persons: Object.values(incoming.persons).filter(p => !p.isPlaceholder).length },
+                source: {
+                    ...oldSource, label: sourceName, treeId: targetId,
+                    persons: Object.values(incoming.persons).filter(p => !p.isPlaceholder).length,
+                    ...(TreeManager.getTreeMetadata(targetId)?.research ? { research: true as const } : {}),
+                },
                 targetTreeId: sourceId,
                 targetName,
                 targetFingerprint: fingerprint,
@@ -967,6 +978,48 @@ class MergerUIClass {
             this.exampleCache = { key, value: scopeExample(state.incomingData, state.existingData, ws.compared ? state : undefined) };
         }
         return this.exampleCache.value;
+    }
+
+    /**
+     * Another tree linked to a research that holds the import's people
+     * (K9.5, same-people.ts): its name, the source and the target aside.
+     * The other trees are read once in the background; one that has them
+     * draws step 1 again.
+     */
+    private samePeopleTree(): string | null {
+        const state = this.mergeState;
+        const ws = state?.wizard;
+        if (!state || !ws) return null;
+        const c = ws.choices;
+        const source = this.sourceInfo.kind === 'tree' ? this.sourceInfo.treeId : undefined;
+        const target = c.mode !== 'new' && !c.json ? c.targetTreeId : null;
+        let linked: Array<{ id: TreeId; name: string }>;
+        try {
+            linked = TreeManager.getTrees().filter(t => t.research && t.id !== source && t.id !== target);
+        } catch {
+            return null;
+        }
+        if (!linked.length) return null;
+        const key = `${source ?? this.incomingFileName ?? ''}|${Object.keys(state.incomingData.persons).length}`;
+        if (this.samePeopleCache?.key !== key) {
+            this.samePeopleCache = { key, keys: peopleKeys(state.incomingData), trees: new Map() };
+        }
+        const cache = this.samePeopleCache;
+        if (cache.keys.size < SAME_PEOPLE_MIN) return null;
+        for (const t of linked) {
+            const known = cache.trees.get(t.id);
+            if (known) return t.name;
+            if (known !== undefined) continue;
+            cache.trees.set(t.id, null);
+            const openId = DataManager.isViewMode() ? null : DataManager.getCurrentTreeId();
+            const read = t.id === openId ? Promise.resolve(DataManager.getData()) : TreeManager.getTreeData(t.id);
+            void read.then(data => {
+                const has = !!data && sharesPeople(cache.keys, data);
+                cache.trees.set(t.id, has);
+                if (has && this.samePeopleCache === cache && this.mergeState?.wizard?.step === 1) this.wizard.refresh({ body: true });
+            }).catch(() => { cache.trees.set(t.id, false); });
+        }
+        return null;
     }
 
     /** The same import merged into the target before (13c); '' when not. */

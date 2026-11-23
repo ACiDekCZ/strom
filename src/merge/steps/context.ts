@@ -166,6 +166,8 @@ export interface Step1Env {
     example(): ScopeExample | null;
     /** The same source merged before (13c): the sentence, '' when not. */
     repeat(): string;
+    /** Another tree linked to a research with the import's people (K9.5): its name, null when none (or not read yet). */
+    samePeople(): string | null;
     /** "Save list…": the lines not taken over as a .txt file. */
     saveNotTaken(): void;
 }

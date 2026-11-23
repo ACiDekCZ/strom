@@ -18285,6 +18285,10 @@
         .merge-s1-arrow { color: var(--text-light); }
         .merge-s1-swap { margin-left: auto; flex: none; white-space: nowrap; }
         .merge-s1-swap[aria-disabled="true"] { opacity: .55; cursor: default; }
+        /* A linked source into a target without a research (11g): the sentence in the text colour, Swap under it. */
+        .merge-s1-res .merge-s1-note { color: var(--text); }
+        .merge-s1-res-swap { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; max-width: 100%; font-size: 12px; text-align: left; }
+        .merge-s1-res-swap > svg { flex: none; }
         .merge-not-taken-note { font-size: 13px; color: var(--text-light); margin: 0 0 8px; }
         .merge-not-taken-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; font-size: 13px; }
         .merge-not-taken-list > li {
@@ -18316,9 +18320,11 @@
             .merge-s1-scopes.is-more > .merge-s1-more { display: none; }
             .merge-s1-tname { max-width: 140px; }
             .merge-s1-route { flex-wrap: wrap; }
+            .merge-s1-res-swap { white-space: normal; }
         }
         @media (pointer: coarse) {
             .merge-s1-target { min-height: 44px; }
+            .merge-s1-res-swap { min-height: 44px; }
         }
         @media (hover: hover) {
             .merge-s1-sumline:hover { background: var(--surface-2); }
