@@ -188,9 +188,9 @@ test('a tree followed live: step 1 says so, End following frees it', async ({ pa
     await openModrinovi(page);
     // Following stood in for: the research is not running in this test.
     await page.evaluate(() => {
-        const UI = window.Strom.UI as unknown as { isLiveFollowOn: () => boolean; setLiveFollow: (on: boolean) => void };
+        const UI = window.Strom.UI as unknown as { isLiveFollowActive: () => boolean; setLiveFollow: (on: boolean) => void };
         let on = true;
-        UI.isLiveFollowOn = () => on;
+        UI.isLiveFollowActive = () => on;
         UI.setLiveFollow = (v: boolean) => { on = v; };
     });
     await page.locator('#gedcom-input').setInputFiles(GED);
@@ -207,6 +207,26 @@ test('a tree followed live: step 1 says so, End following frees it', async ({ pa
     await expect(line).toContainText('The tree is followed live from the research and is read-only.');
     await line.locator('[data-s1="end-follow"]').click();
     await expect(line).toHaveCount(0);
+    await expect(target(wizard, 'Modřínovi').locator('input')).toBeChecked();
+    await expect(wizard.locator('#merge-route')).toHaveText('rodokmen-jilmovi.ged → Modřínovi');
+});
+
+test('a copy of a research tree with ◎ on: the import merges into it, it is not followed', async ({ page }) => {
+    await openModrinovi(page);
+    // The research tree's copy (Duplicate keeps its link as a copy) open, ◎ left on from the research tree:
+    // no live session of this tree, so following does not apply and the tree can take the import.
+    await page.evaluate(() => {
+        window.Strom.TreeManager.setResearchLink(window.Strom.DataManager.getCurrentTreeId()!,
+            { id: '5b0e1c2a-7d4f-4e8a-9c3b-2f6a1d0e9b47', fingerprint: '', syncedAt: new Date().toISOString(), copy: true } as never);
+        window.Strom.UI.setLiveFollow(true);
+    });
+    expect(await page.evaluate(() => window.Strom.UI.isLiveFollowOn())).toBe(true);
+    await page.locator('#gedcom-input').setInputFiles(GED);
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    await wizard.locator('.merge-s1-modes [data-mode="add"]').click();
+    await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
+    await expect(wizard.locator('#merge-s1-live')).toHaveCount(0);
     await expect(target(wizard, 'Modřínovi').locator('input')).toBeChecked();
     await expect(wizard.locator('#merge-route')).toHaveText('rodokmen-jilmovi.ged → Modřínovi');
 });

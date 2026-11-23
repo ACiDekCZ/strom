@@ -529,6 +529,15 @@ export const liveFollowMethods = uiModule({
     },
 
     /**
+     * Following applies to the open tree now: ◎ on AND a live session of
+     * this very tree. ◎ alone is a device preference kept across trees, so a
+     * copy or an unlinked tree opened with it on is not followed.
+     */
+    isLiveFollowActive(): boolean {
+        return followActive();
+    },
+
+    /**
      * The agent is followed in this window (spec 097): the main window's ◎
      * with a live session on this tree, or this satellite attached to it or
      * paused (its own state; detached does not follow). "Focus on the

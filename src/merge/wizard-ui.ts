@@ -153,7 +153,9 @@ export function targetBlock(treeId: TreeId): TargetBlock | null {
     const open = !DataManager.isViewMode() && DataManager.getCurrentTreeId() === treeId;
     if (open) {
         let live = false;
-        try { live = getUI().isLiveFollowOn(); } catch { /* no UI (unit tests) */ }
+        // Only following that applies to this tree blocks it: ◎ is a device
+        // preference and stays on when a copy or an unlinked tree is opened.
+        try { live = getUI().isLiveFollowActive(); } catch { /* no UI (unit tests) */ }
         if (live) return 'live';
         if (DataManager.isReadOnly()) return 'readOnly';
     }
