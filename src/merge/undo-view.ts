@@ -131,6 +131,9 @@ export function recordGroups(record: MergeRecord, data: StromData): PlanListGrou
         add('fills', W.gFills, c.fieldFills, fillSummary(lines), lines);
     }
 
+    // Sources joined with the tree's (134 S-N3): only their number is kept; a record of an older version has none.
+    if (c.sourcesJoined) add('sourcesJoined', W.gSourcesJoined, c.sourcesJoined, W.sourcesJoinedSum(c.sourcesJoined), []);
+
     // Couples and links.
     const couples = record.partnerships.filter(id => data.partnerships[id as keyof StromData['partnerships']]).map(id => {
         const name = coupleName(data, data.partnerships[id as keyof StromData['partnerships']], id);

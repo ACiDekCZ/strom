@@ -38,7 +38,7 @@ import { sourceText } from './step4-rules.js';
 import { VirtualList } from '../virtual-list.js';
 
 /** The groups of the list, in their order. */
-export type PlanGroupKey = 'new' | 'joined' | 'fields' | 'fills' | 'links' | 'sources' | 'places' | 'media' | 'skipped' | 'notTaken';
+export type PlanGroupKey = 'new' | 'joined' | 'fields' | 'fills' | 'sourcesJoined' | 'links' | 'sources' | 'places' | 'media' | 'skipped' | 'notTaken';
 
 /** One line of the list. */
 export interface PlanLine {
@@ -183,6 +183,15 @@ export function planList(plan: MergePlan, state: MergeState, offLinks: readonly 
     const fills = byKind('fill').map(i => fillLine(tree, i.person, i.field, treeLiving(i.person)));
     if (fills.length) add('fills', W.gFills, c.fieldFills, fillSummary(fills), fills);
 
+    // Sources of the import joined with the tree's same source (134 S-N3): written once; shown only when there are some.
+    const sourceTitle = (data: StromData, id: string): string => data.sources?.[id]?.title || id;
+    const sourcesJoined = byKind('source').filter(i => i.on && i.joinedWith).map(i => {
+        const name = sourceTitle(source, i.id);
+        const text = W.joinedWith(sourceTitle(tree, i.joinedWith!));
+        return { key: `r:source:${i.id}`, on: true, can: false, name, years: '', text, find: fold(`${name} ${text}`) } satisfies PlanLine;
+    });
+    if (c.sourcesJoined) add('sourcesJoined', W.gSourcesJoined, c.sourcesJoined, W.sourcesJoinedSum(c.sourcesJoined), sourcesJoined);
+
     // Couples and links: what the import adds (one left out by a choice of step 4 stays out here), what the tree loses.
     const off = new Set(offLinks);
     const links: PlanLine[] = [];
@@ -215,7 +224,8 @@ export function planList(plan: MergePlan, state: MergeState, offLinks: readonly 
 
     // Sources, places, photos and files: they come with the people (joined with the tree's where the same).
     const records = (kind: 'source' | 'place' | 'media', key: PlanGroupKey, title: string, own: (id: string) => string, theirs: (id: string) => string): void => {
-        const items = plan.items.filter((i): i is Extract<PlanItem, { kind: 'source' | 'place' | 'media' }> => i.kind === kind && i.on);
+        // The joined sources have their group above.
+        const items = plan.items.filter((i): i is Extract<PlanItem, { kind: 'source' | 'place' | 'media' }> => i.kind === kind && i.on && !(kind === 'source' && i.joinedWith));
         // Without photos the group is left out (13d).
         if (kind === 'media' && !items.length) return;
         const joinedN = items.filter(i => i.joinedWith).length;
@@ -225,7 +235,7 @@ export function planList(plan: MergePlan, state: MergeState, offLinks: readonly 
             return { key: `r:${kind}:${i.id}`, on: true, can: false, name, years: '', text, find: fold(`${name} ${text}`) };
         }));
     };
-    records('source', 'sources', W.gSources, id => source.sources?.[id]?.title || id, id => tree.sources?.[id]?.title || id);
+    records('source', 'sources', W.gSources, id => sourceTitle(source, id), id => sourceTitle(tree, id));
     records('place', 'places', W.gPlaces, id => id, id => id);
     records('media', 'media', W.gMedia, id => source.media?.[id]?.name || id, id => tree.media?.[id]?.name || id);
 

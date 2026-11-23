@@ -12,7 +12,7 @@ import { ImportRecord, MergeRecord, PartnershipId, PlanCounts, PlanSource, Perso
 import { fileRecordKeys } from './id-match.js';
 import { strings } from '../strings.js';
 import { normalizeName, quickMatch, detectConflicts } from './matching.js';
-import { AUTO_CONFIRM_SCORE, executeMerge, existingTargetOf, detectPartnershipConflicts, mergePersonData, standInsOfKnownFamilies, standsInNewFamilyRecord } from './executor.js';
+import { AUTO_CONFIRM_SCORE, executeMerge, existingTargetOf, sourceJoins, detectPartnershipConflicts, mergePersonData, standInsOfKnownFamilies, standsInNewFamilyRecord } from './executor.js';
 import { generateAttachmentId, generateLifeEventId } from '../ids.js';
 import { mergeNoteText } from './notes.js';
 import { checkMergeResult, MergeCheckProblem } from './merge-check.js';
@@ -400,14 +400,14 @@ export function buildPlan(state: MergeState, w: WizardChoices): MergePlan {
             items.push({ kind: 'link-add', id: key, on: !rel.left.has(key) && !off.has(key) });
         }
     }
-    // Sources come along whole (the same one joins the tree's, K1.7); places by name; files at persons that come along.
-    const titleKey = (t: string | undefined): string => normalizeName(t ?? '');
-    const treeSourceByTitle = new Map<string, string>();
-    for (const s of Object.values(tree.sources ?? {})) if (s.title) treeSourceByTitle.set(titleKey(s.title), s.id);
+    // Sources come along whole (the same one joins the tree's, K1.7: the write's own rule, 134 S-N3);
+    // places by name; files at persons that come along.
+    const joins = newTree ? new Map<string, string>() : sourceJoins(tree.sources, w.source.research
+        ? withoutResearchMarks({ persons: {}, partnerships: {}, sources: source.sources }).sources : source.sources);
     /** Each source of the import as the tree cites it after the write: the tree's same source, else one of its own. */
     const sourceEnds = new Map<string, string>();
     for (const s of Object.values(source.sources ?? {})) {
-        const same = !newTree ? (tree.sources?.[s.id] && titleKey(tree.sources[s.id].title) === titleKey(s.title) ? s.id : treeSourceByTitle.get(titleKey(s.title))) : undefined;
+        const same = joins.get(s.id);
         items.push(same ? { kind: 'source', id: s.id, joinedWith: same, on: true } : { kind: 'source', id: s.id, on: true });
         sourceEnds.set(s.id, same ?? `\u0000${s.id}`);
     }
@@ -712,7 +712,7 @@ export function changesValue(item: { field: string; before: string; after: strin
 
 /** The counts of a plan (the one source of numbers of the wizard). */
 export function planCounts(plan: MergePlan): PlanCounts {
-    const c: PlanCounts = { joined: 0, added: 0, skipped: 0, pending: 0, total: plan.source.persons, fieldChanges: 0, fieldFills: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0 };
+    const c: PlanCounts = { joined: 0, added: 0, skipped: 0, pending: 0, total: plan.source.persons, fieldChanges: 0, fieldFills: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0, sourcesJoined: 0 };
     for (const item of plan.items) {
         switch (item.kind) {
             case 'person-join': if (!item.standIn) { if (item.on) c.joined++; else c.skipped++; } break;
@@ -728,6 +728,7 @@ export function planCounts(plan: MergePlan): PlanCounts {
             case 'fill': c.fieldFills++; break;
             case 'partnership-add': if (item.on) c.partnerships++; break;
             case 'link-add': if (item.on) c.links++; break;
+            case 'source': if (item.on && item.joinedWith) c.sourcesJoined++; break;
         }
     }
     return c;

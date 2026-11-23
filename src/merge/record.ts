@@ -199,7 +199,7 @@ export function sanitizeMergeRecords(value: unknown): MergeRecord[] | undefined 
             counts: {
                 joined: num(c.joined), added: num(c.added), skipped: num(c.skipped), pending: num(c.pending), total: num(c.total),
                 fieldChanges: num(c.fieldChanges), fieldFills: num(c.fieldFills), differencesKept: num(c.differencesKept), alongside: num(c.alongside),
-                partnerships: num(c.partnerships), links: num(c.links),
+                partnerships: num(c.partnerships), links: num(c.links), sourcesJoined: num(c.sourcesJoined),
             },
             state,
             added: strs(v.added) as PersonId[],

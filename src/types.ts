@@ -1883,6 +1883,8 @@ export interface PlanCounts {
     alongside: number;
     partnerships: number;
     links: number;
+    /** Sources of the import joined with a source the tree already has (not added again, 134 S-N3); 0 in a record of an older version. */
+    sourcesJoined: number;
 }
 
 /**

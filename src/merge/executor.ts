@@ -1316,33 +1316,39 @@ function withOwnSourceIds(state: MergeState): { state: MergeState; renamedSource
 }
 
 /**
- * Add the incoming source catalog to the merged tree. A source whose title,
- * repository and reference match one the tree already has is NOT added; the
- * returned map sends its id to the kept one. Same id = the same source (the
- * two trees share an ancestry, see withOwnSourceIds): it joins the tree's.
+ * Which sources of the import join a source the tree already has (the
+ * import's id → the tree's): the same research number, the same citation (a
+ * twin), or the same title, repository and place (not two citations of one
+ * file record at another QUAY). Same id = the same source when
+ * sameSourceUnderOneId says so (the two trees share an ancestry); another
+ * source under the tree's id comes as one of its own (withOwnSourceIds).
+ * Only the tree's sources are candidates: two sources of the import stay two,
+ * as the import has them (134 S-N3: folding them into each other lost one
+ * whenever the bigger tree was the source, not when it was the target).
+ * Step 5 says these joins (buildPlan) and the write makes them.
  */
-function mergeSourceCatalogs(
-    mergedData: StromData,
-    incoming: Record<string, Source> | undefined,
-    incomingImports: readonly ImportRecord[] | undefined,
-): Map<string, string> {
-    const remap = new Map<string, string>();
-    if (!incoming || Object.keys(incoming).length === 0) return remap;
-    const catalog = (mergedData.sources ??= {});
+export function sourceJoins(tree: Readonly<Record<string, Source>> | undefined, incoming: Readonly<Record<string, Source>> | undefined): Map<string, string> {
+    const joins = new Map<string, string>();
+    if (!incoming || Object.keys(incoming).length === 0) return joins;
+    const catalog = tree ?? {};
     const byKey = new Map<string, string>();
     const byCitation = new Map<string, string>();
     // An external record id (research "S0042") is the strongest identity:
     // same refn = same entry, even when its title was edited since.
     const byRefn = new Map<string, string>();
-    const index = (src: Source, id: string): void => {
+    for (const src of Object.values(catalog)) {
         const key = sourceKey(src);
-        if (key && !byKey.has(key)) byKey.set(key, id);
+        if (key && !byKey.has(key)) byKey.set(key, src.id);
         const cite = citationKey(src);
-        if (cite && !byCitation.has(cite)) byCitation.set(cite, id);
-        if (src.refn && !byRefn.has(src.refn)) byRefn.set(src.refn, id);
-    };
-    for (const src of Object.values(catalog)) index(src, src.id);
+        if (cite && !byCitation.has(cite)) byCitation.set(cite, src.id);
+        if (src.refn && !byRefn.has(src.refn)) byRefn.set(src.refn, src.id);
+    }
     for (const [id, src] of Object.entries(incoming)) {
+        const own = catalog[id];
+        if (own && sameSourceUnderOneId(own, src)) {
+            joins.set(id, id);
+            continue;
+        }
         const key = sourceKey(src);
         const cite = citationKey(src);
         const twin = cite ? byCitation.get(cite) : undefined;
@@ -1356,20 +1362,41 @@ function mergeSourceCatalogs(
         const otherCitation = !twin && !!keptByTitle && !!src.originalIds?.length && !!keptByTitle.originalIds?.length
             && src.quality !== undefined && keptByTitle.quality !== undefined && src.quality !== keptByTitle.quality;
         const kept = (src.refn ? byRefn.get(src.refn) : undefined) ?? twin ?? (otherCitation ? undefined : byTitle);
-        if (kept && kept !== id && !catalog[id]) {
+        if (kept && kept !== id) joins.set(id, kept);
+    }
+    return joins;
+}
+
+/**
+ * Add the incoming source catalog to the merged tree (still the tree's own
+ * catalog): a source sourceJoins joins with the tree's is NOT added, the
+ * returned map sends its id to the kept one; the same source under the same
+ * id fills in what the tree's lacks.
+ */
+function mergeSourceCatalogs(
+    mergedData: StromData,
+    incoming: Record<string, Source> | undefined,
+    incomingImports: readonly ImportRecord[] | undefined,
+): Map<string, string> {
+    const remap = new Map<string, string>();
+    if (!incoming || Object.keys(incoming).length === 0) return remap;
+    const catalog = (mergedData.sources ??= {});
+    const joins = sourceJoins(catalog, incoming);
+    for (const [id, src] of Object.entries(incoming)) {
+        const kept = joins.get(id);
+        if (kept && kept !== id) {
             remap.set(id, kept);
             takeCitationQuality(catalog[kept], src, mergedData, incomingImports);
             absorbSourceDetails(catalog[kept], src);
             continue;
         }
-        if (catalog[id]) {
+        if (kept === id) {
             // The same source under the same id (withOwnSourceIds renamed any
             // other): it fills in what the tree's lacks, never replaces it.
             absorbSourceDetails(catalog[id], src);
             continue;
         }
         catalog[id] = structuredClone(src);
-        index(src, id);
     }
     return remap;
 }

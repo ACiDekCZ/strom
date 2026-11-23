@@ -582,7 +582,7 @@ describe('applyPlan: a new child of a couple both trees know', () => {
 describe('isRepeatOf', () => {
     const record = (id: string, at: string, source: Partial<PlanSource>, state: MergeRecord['state'] = 'valid'): MergeRecord => ({
         id, at, source: { ...SOURCE, ...source }, target: { name: 'Modřínovi', newTree: false },
-        counts: { joined: 0, added: 0, skipped: 0, pending: 0, total: 0, fieldChanges: 0, fieldFills: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0 },
+        counts: { joined: 0, added: 0, skipped: 0, pending: 0, total: 0, fieldChanges: 0, fieldFills: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0, sourcesJoined: 0 },
         state, added: [], joined: [], fields: [], partnerships: [], sources: [], places: [], media: [],
     });
 

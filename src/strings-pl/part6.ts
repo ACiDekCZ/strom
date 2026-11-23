@@ -279,6 +279,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         gJoined: 'Połączeni',
         gFields: 'Zmiany danych',
         gFills: 'Uzupełnione dane',
+        gSourcesJoined: 'Połączone źródła',
+        sourcesJoinedSum: (n: number) => `${numPl(n)} ${plPl(n, 'źródło połączone z istniejącym', 'źródła połączone z istniejącymi', 'źródeł połączonych z istniejącymi')}`,
         gLinks: 'Pary i powiązania',
         gSources: 'Źródła',
         gPlaces: 'Miejsca',

@@ -6494,6 +6494,9 @@ const stringsEN = {
         gFields: 'Detail changes',
         /** Other empty details of the tree's joined people the write fills (e-mails, events, sources…). */
         gFills: 'Filled-in details',
+        /** Sources of the import the write joins with a source the tree already has (134 S-N3). */
+        gSourcesJoined: 'Joined sources',
+        sourcesJoinedSum: (n: number) => `${numEn(n)} ${plural('en', n, 'source joined with an existing one', 'sources joined with existing ones')}`,
         gLinks: 'Couples and links',
         gSources: 'Sources',
         gPlaces: 'Places',
@@ -17731,6 +17734,8 @@ const stringsCZ: StringsType = {
         gJoined: 'Spojení',
         gFields: 'Změny údajů',
         gFills: 'Doplněné údaje',
+        gSourcesJoined: 'Spojené prameny',
+        sourcesJoinedSum: (n: number) => `${numCs(n)} ${plural('cs', n, 'pramen spojen se stávajícím', 'prameny spojeny se stávajícími', 'pramenů spojeno se stávajícími')}`,
         gLinks: 'Páry a vazby',
         gSources: 'Prameny',
         gPlaces: 'Místa',
@@ -28814,6 +28819,8 @@ const stringsDE: StringsType = {
         gJoined: 'Verbunden',
         gFields: 'Geänderte Angaben',
         gFills: 'Ergänzte Angaben',
+        gSourcesJoined: 'Verbundene Quellen',
+        sourcesJoinedSum: (n: number) => `${numDe(n)} ${plural('de', n, 'Quelle mit einer vorhandenen verbunden', 'Quellen mit vorhandenen verbunden')}`,
         gLinks: 'Paare und Verbindungen',
         gSources: 'Quellen',
         gPlaces: 'Orte',

@@ -65,7 +65,7 @@ describe('step 2 – the groups of the pairs', () => {
 
 describe('step 2 – a copy of the tree (13b)', () => {
     const counts = (o: Partial<PlanCounts> = {}): PlanCounts => ({
-        joined: 3, added: 0, skipped: 0, pending: 0, total: 3, fieldChanges: 0, fieldFills: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0, ...o,
+        joined: 3, added: 0, skipped: 0, pending: 0, total: 3, fieldChanges: 0, fieldFills: 0, differencesKept: 0, alongside: 0, partnerships: 0, links: 0, sourcesJoined: 0, ...o,
     });
     const choices = (scope: WizardChoices['scope']): WizardChoices => ({ mode: 'add', scope } as WizardChoices);
 
