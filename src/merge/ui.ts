@@ -53,9 +53,11 @@ import { MergeWizard, targetBlock, targetBlockText, wizardRoute, type CompareRun
 import type { WizardStep } from './wizard-steps.js';
 import { isRepeatOf, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
 import { newTreeName, writePlan } from './write.js';
+import { exportPlan } from './plan-export.js';
 import type { Step1Env, Step2Env, TargetRow, UnionConflictLine } from './steps/context.js';
 import { closeNotTaken, parkGedcomSummary } from './steps/step1-what.js';
 import { closeStep3Overlay } from './steps/step3-whom.js';
+import { closeStep5Overlay } from './steps/step5-plan.js';
 import { noteRecalc } from './steps/step2-who.js';
 import { notTakenText } from './wizard-text.js';
 import { listSnapshots } from '../snapshots.js';
@@ -124,6 +126,7 @@ class MergerUIClass {
         compare: run => this.compare(run),
         downloadJson: () => this.downloadJson(),
         step1: () => this.step1Env(),
+        savePlan: plan => this.savePlan(plan),
     });
 
     /** Step 1: the target whose data is the merge state's `existingData` (null: none loaded). */
@@ -342,6 +345,8 @@ class MergerUIClass {
         if (closeNotTaken()) return;
         // Step 3's dialogs (5a, 5c) and its branch preview sheet.
         if (closeStep3Overlay()) return;
+        // Step 5's preview sheet.
+        if (closeStep5Overlay()) return;
         // A tree preview / comparison opened from the wizard sits above it:
         // close that first. This capture handler stops the key, so the central
         // cascade (misc.ts) that closes them elsewhere never sees it.
@@ -920,6 +925,23 @@ class MergerUIClass {
         return strings.mergeWizard.repeat(day, Math.max(0, ws.choices.source.persons - joined), joined);
     }
 
+    /** Step 5's "Save the list…" (K6.4): the plan as a .txt to read and a .json, living people protected. */
+    savePlan(plan: MergePlan): void {
+        const state = this.mergeState;
+        if (!state) return;
+        const { txt, json } = exportPlan(plan, { source: state.incomingData, target: state.existingData });
+        const base = `${(state.wizard?.choices.source.label ?? '').replace(/\.(ged|gedcom|json)$/i, '') || 'import'}-plan`;
+        const save = (text: string, ext: string, type: string): void => {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([text], { type }));
+            a.download = `${base}.${ext}`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        };
+        save(txt, 'txt', 'text/plain;charset=utf-8');
+        save(json, 'json', 'application/json');
+    }
+
     /** "Save list…": every kind of line not taken over, as a .txt file. */
     saveNotTaken(): void {
         const dropped = this.notTaken();
@@ -1421,9 +1443,10 @@ class MergerUIClass {
         // (spec 134 K0.2, K0.5). The backup "Before merge" of the target as it
         // is at the write, whatever the way into the merge (file, tree, view,
         // share, a resumed merge) and the automatic backups setting (K0.4, §2),
-        // is taken by the write. Into a new tree until step 5 offers Where to write.
+        // is taken by the write. Into the tree itself or a new tree (Where to write, K6.3).
+        const into = plan.mode === 'add' && (state.wizard?.choices.into ?? 'tree') === 'tree' ? 'tree' : 'new';
         const result = await writePlan(plan, {
-            target: state.existingData, source: state.incomingData, into: 'new', name: newTreeName(plan),
+            target: state.existingData, source: state.incomingData, into, ...(into === 'new' ? { name: newTreeName(plan) } : {}),
         });
         if (!result.ok) {
             state.phase = 'reviewing';
@@ -1480,6 +1503,11 @@ class MergerUIClass {
         // Dispatch event to update tree list
         window.dispatchEvent(new CustomEvent('strom:merge-session-changed'));
 
+        if (result.into === 'tree') {
+            await this.afterWriteIntoTree(newTreeId, result.name, stats, newIssueCount);
+            return;
+        }
+
         // Show tree manager with new tree visible
         getUI().showTreeManagerDialog();
 
@@ -1517,6 +1545,32 @@ class MergerUIClass {
             if (openValidation) {
                 await getUI().showTreeValidationDialog(newTreeId);
             }
+        }
+    }
+
+    /**
+     * After a write into the tree itself (K6.3): the open tree shows the
+     * result at once (one step of Undo); another tree is offered to open.
+     */
+    private async afterWriteIntoTree(treeId: TreeId, name: string, stats: string, newIssueCount: number): Promise<void> {
+        const W = strings.mergeWizard;
+        const open = !DataManager.isViewMode() && DataManager.getCurrentTreeId() === treeId;
+        if (open) {
+            await TreeRenderer.renderAsync();
+            getUI().refreshSearch();
+            getUI().updateTreeSwitcher();
+            await getUI().showAlert(`${W.mergedInto(name)}\n${stats}`, 'info', strings.merge.complete);
+        } else if (await getUI().showConfirm(`${W.mergedInto(name)}\n${stats}\n\n${W.openTarget(name)}`, strings.merge.complete)) {
+            await DataManager.switchTree(treeId);
+            getUI().updateTreeSwitcher();
+            TreeRenderer.restoreFromSession();
+            await TreeRenderer.renderAsync();
+            getUI().refreshSearch();
+            ZoomPan.centerOnFocusWithContext();
+            window.dispatchEvent(new CustomEvent('strom:tree-switched'));
+        }
+        if (newIssueCount > 0 && await getUI().showConfirm(strings.merge.newIssues(newIssueCount), strings.merge.newIssuesTitle)) {
+            await getUI().showTreeValidationDialog(treeId);
         }
     }
 

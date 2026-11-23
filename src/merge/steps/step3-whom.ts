@@ -127,7 +127,7 @@ export function applyVariant(ctx: StepContext, v: SelectVariant): void {
 
 interface Snapshot {
     leftOut: readonly PersonId[];
-    leftOutReason: Readonly<Record<string, 'branch'>>;
+    leftOutReason: Readonly<Record<string, 'branch' | 'step5'>>;
     placeholders: readonly PersonId[];
     groups: WizardChoices['groups'];
 }
@@ -137,7 +137,7 @@ function snapshot(c: WizardChoices): Snapshot {
 }
 
 /** Tick people again (out of the left out and the "?"). */
-function tick(view: View, ids: readonly PersonId[]): void {
+function tick(view: Pick<View, 'ctx'>, ids: readonly PersonId[]): void {
     const c = view.ctx.choices;
     const on = new Set(ids);
     const reason = { ...(c.leftOutReason ?? {}) };
@@ -149,19 +149,19 @@ function tick(view: View, ids: readonly PersonId[]): void {
     });
 }
 
-/** Leave people out; `branch`: those who go with them. */
-function leaveOut(view: View, ids: readonly PersonId[], branch: readonly PersonId[] = [], extra: Partial<WizardChoices> = {}): void {
+/** Leave people out; `branch`: those who go with them; `why`: unticked in step 5 (else by hand in step 3). */
+function leaveOut(view: Pick<View, 'ctx'>, ids: readonly PersonId[], branch: readonly PersonId[] = [], extra: Partial<WizardChoices> = {}, why?: 'step5'): void {
     const c = view.ctx.choices;
     const out = new Set(c.leftOut ?? []);
     const reason = { ...(c.leftOutReason ?? {}) };
-    for (const id of ids) { out.add(id); delete reason[id]; }
+    for (const id of ids) { out.add(id); if (why) reason[id] = why; else delete reason[id]; }
     for (const id of branch) { out.add(id); reason[id] = 'branch'; }
     const gone = new Set([...ids, ...branch]);
     view.ctx.update({ leftOut: [...out], leftOutReason: reason, placeholders: (c.placeholders ?? []).filter(id => !gone.has(id)), ...extra });
 }
 
 /** The toast after leaving people out (5b), with Undo. */
-function leftOutToast(view: View, n: number, what: string, before: Snapshot): void {
+function leftOutToast(view: Pick<View, 'ctx'>, n: number, what: string, before: Snapshot): void {
     const W = strings.mergeWizard;
     getUI().showToast(W.leftOut(n, what), 8000, {
         kind: 'merge-guide',
@@ -174,7 +174,7 @@ function leftOutToast(view: View, n: number, what: string, before: Snapshot): vo
  * Untick people (a person or a group's ticked ones). When others lose
  * their only way to the tree, ask first (5a); else they are left out at once.
  */
-function untick(view: View, ids: readonly PersonId[], what: string, single: PersonId | null): void {
+function untick(view: Pick<View, 'ctx'>, ids: readonly PersonId[], what: string, single: PersonId | null, why?: 'step5'): void {
     const { state, choices } = view.ctx;
     const sel = selectionOf(state, choices);
     const off = ids.filter(id => sel.ticked.has(id) || sel.standIns.has(id));
@@ -182,11 +182,25 @@ function untick(view: View, ids: readonly PersonId[], what: string, single: Pers
     const deps = choices.mode === 'add' ? dependentsVia(state, choices, off, sel) : [];
     if (!deps.length) {
         const before = snapshot(choices);
-        leaveOut(view, off);
+        leaveOut(view, off, [], {}, why);
         if (off.length > 1) leftOutToast(view, off.length, what, before);
         return;
     }
-    openUnlink(view, off, deps, what, single);
+    openUnlink(view, off, deps, what, single, why);
+}
+
+/**
+ * Untick new people from the list of step 5 (§8): out of the plan as
+ * "unticked (step 5)"; when others link to the tree only through them, the
+ * same question as in step 3 (K4.3).
+ */
+export function untickPeople(ctx: StepContext, ids: readonly PersonId[], what: string, single: PersonId | null): void {
+    untick({ ctx }, ids, what, single, 'step5');
+}
+
+/** Tick people again from the list of step 5. */
+export function tickPeople(ctx: StepContext, ids: readonly PersonId[]): void {
+    tick({ ctx }, ids);
 }
 
 // ==================== RENDER ====================
@@ -1013,7 +1027,7 @@ function closeDialog(overlay: HTMLElement): void {
 }
 
 /** 5a: others link to the tree only through the unticked: leave them out too, keep them unlinked, keep, or keep as "?". */
-function openUnlink(view: View, off: readonly PersonId[], deps: readonly PersonId[], what: string, single: PersonId | null): void {
+function openUnlink(view: Pick<View, 'ctx'>, off: readonly PersonId[], deps: readonly PersonId[], what: string, single: PersonId | null, why?: 'step5'): void {
     const W = strings.mergeWizard;
     const { state } = view.ctx;
     const names = deps.map(id => nameOf(state, id));
@@ -1058,11 +1072,11 @@ ${single ? tile('q', W.unlinkQ, W.unlinkQDesc(what)) : ''}
         closeDialog(overlay);
         if (c === 'keep') return;
         if (c === 'all') {
-            leaveOut(view, off, deps);
+            leaveOut(view, off, deps, {}, why);
             leftOutToast(view, off.length + deps.length, what, before);
         } else if (c === 'loose') {
             // The unlinked groups are asked about from now on (§6).
-            leaveOut(view, off, [], { groups: ch.groups ?? {} });
+            leaveOut(view, off, [], { groups: ch.groups ?? {} }, why);
             leftOutToast(view, off.length, what, before);
         } else {
             const on = new Set(off);

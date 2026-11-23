@@ -25,6 +25,13 @@ export interface StepContext {
     step2?: Step2Env;
     /** What step 1 reads and does beyond the choices (§3). */
     step1?: Step1Env;
+    /** What step 5 does beyond the choices (§8). */
+    step5?: Step5Env;
+}
+
+/** Step 5 of the guide: Save the list… (K6.4), the plan as .txt and .json. */
+export interface Step5Env {
+    savePlan(): void;
 }
 
 /** A decision of step 2: same, new, not added, another person of the tree; null = undecided again. */

@@ -116,7 +116,10 @@ export type PlanItem =
      * person is written as a "?" with its links and nothing else (K4.3 "Keep
      * as ?"); still not added, not counted among the persons.
      */
-    | { kind: 'skip'; id: PersonId; reason: 'step2' | 'step3' | 'group' | 'living' | 'branch' | 'scope'; standIn?: boolean };
+    | { kind: 'skip'; id: PersonId; reason: SkipReason; standIn?: boolean };
+
+/** Why a person is not added: step 2, step 3 (by hand, a group, living, with a branch), unticked in step 5, scope d). */
+export type SkipReason = 'step2' | 'step3' | 'step5' | 'group' | 'living' | 'branch' | 'scope';
 
 /** An unlinked group as the plan decided it (§6). */
 export interface PlanGroup {
@@ -223,8 +226,12 @@ export interface WizardChoices {
     variant?: SelectVariant;
     /** Source persons left out in step 3 (part B). */
     leftOut?: readonly PersonId[];
-    /** Why a left out person is out when not by hand: 'branch' = with an unticked person whose branch went too (K4.3). */
-    leftOutReason?: Readonly<Record<string, 'branch'>>;
+    /**
+     * Why a left out person is out when not by hand in step 3: 'branch' = with
+     * an unticked person whose branch went too (K4.3); 'step5' = unticked in
+     * the list of step 5.
+     */
+    leftOutReason?: Readonly<Record<string, 'branch' | 'step5'>>;
     /** New persons kept as a "?" (K4.3 "Keep as ?"): their links stay, nothing of their own comes. */
     placeholders?: readonly PersonId[];
     /** "Leave out living" (K4.5): the new persons the privacy rules treat as living are not added. */
@@ -246,6 +253,10 @@ export interface WizardChoices {
     writtenAt?: string;
     /** A new tree with people picked in step 3 ("Choose people…" of step 5). */
     pickPeople?: boolean;
+    /** Where step 5 writes an import added to a tree (K6.3): the tree itself (default) or a new tree. */
+    into?: 'tree' | 'new';
+    /** Couples (the import's id) and parent links (`${child}<${parent}`) unticked in step 5: not written. */
+    offLinks?: readonly string[];
 }
 
 /** A problem the check before saving found (merge-check kinds, plus the plan's own). */
@@ -345,7 +356,7 @@ export function buildPlan(state: MergeState, w: WizardChoices): MergePlan {
     const standIns: PersonId[] = [];
     for (const id of fresh) {
         if (sel.standIns.has(id)) { standIns.push(id); continue; }
-        if (leftOut.has(id)) { items.push({ kind: 'skip', id, reason: w.leftOutReason?.[id] === 'branch' ? 'branch' : 'step3' }); continue; }
+        if (leftOut.has(id)) { items.push({ kind: 'skip', id, reason: w.leftOutReason?.[id] ?? 'step3' }); continue; }
         if (living?.has(id)) { items.push({ kind: 'skip', id, reason: 'living' }); continue; }
         const g = groupOf.get(id);
         const d = g ? decided.get(g.key) ?? null : undefined;
@@ -384,6 +395,7 @@ export function buildPlan(state: MergeState, w: WizardChoices): MergePlan {
     const rel = newTree ? { left: new Set<string>(), loops: new Set<string>(), items: [] as PlanItem[] }
         : relationEffects(state, w, rules, endOf as EndOf);
     items.push(...rel.items);
+    const off = new Set(w.offLinks ?? []);
     for (const u of Object.values(source.partnerships)) {
         const a = endOf(u.person1Id);
         const b = endOf(u.person2Id);
@@ -396,7 +408,7 @@ export function buildPlan(state: MergeState, w: WizardChoices): MergePlan {
             });
             if (known) continue;
         }
-        items.push({ kind: 'partnership-add', id: u.id, on: !rel.left.has(u.id) });
+        items.push({ kind: 'partnership-add', id: u.id, on: !rel.left.has(u.id) && !off.has(u.id) });
     }
     for (const child of Object.values(source.persons)) {
         const c = fate.get(child.id);
@@ -407,7 +419,7 @@ export function buildPlan(state: MergeState, w: WizardChoices): MergePlan {
             if (c !== 'new' && par !== 'new' && tree.persons[c]?.parentIds.includes(par)) continue;
             const key = `${child.id}<${parentId}`;
             if (rel.loops.has(key)) continue;
-            items.push({ kind: 'link-add', id: key, on: !rel.left.has(key) });
+            items.push({ kind: 'link-add', id: key, on: !rel.left.has(key) && !off.has(key) });
         }
     }
     // Sources come along whole (the same one joins the tree's, K1.7); places by name; files at persons that come along.
@@ -574,14 +586,15 @@ function fieldItems(existing: Person, incoming: Person, scope: PlanScope, rules:
             if (before && scope === 'b') continue;
             after = mergeNoteText(existing.notes, incoming.notes) ?? '';
             if (after === before) continue;
-            out.push({ kind: 'field', person: existing.id, field, before, after, rule: ruleFor(rules, existing.id, field), on: true, protected: false });
+            const rule = ruleFor(rules, existing.id, field);
+            out.push({ kind: 'field', person: existing.id, field, before, after, rule, on: !keptByValue(rule), protected: false });
             continue;
         }
         if (!after || after === before) continue;
         const rule = ruleFor(rules, existing.id, field);
         if (!before) {
-            // A gap the import fills.
-            out.push({ kind: 'field', person: existing.id, field, before, after, rule, on: true, protected: false });
+            // A gap the import fills (unless unticked in step 5).
+            out.push({ kind: 'field', person: existing.id, field, before, after, rule, on: !keptByValue(rule), protected: false });
         } else if (scope !== 'b' && differing.has(field)) {
             const d = differing.get(field)!;
             const { result, source } = resolveField(d, rules);
@@ -590,6 +603,11 @@ function fieldItems(existing: Person, incoming: Person, scope: PlanScope, rules:
         }
     }
     return out;
+}
+
+/** A gap or a note kept as the tree has it by a choice of the value itself (unticked in step 5). */
+function keptByValue(rule: RuleSource): boolean {
+    return rule.level === 'value' && rule.choice === 'mine';
 }
 
 // ==================== COUNTS ====================
@@ -818,6 +836,8 @@ export async function applyPlan(plan: MergePlan, target: StromData, source: Stro
         }
         data = result.mergedData;
         trace = result.trace;
+        // A gap or a note unticked in step 5 stays as the tree has it.
+        keepTreeValues(plan, data, target);
         // "Keep both" (K5.3): the import's values alongside the tree's.
         keepAlongside(plan, data, source);
         // The groups linked to a person (§6): each link the plan names.
@@ -843,6 +863,25 @@ export async function applyPlan(plan: MergePlan, target: StromData, source: Stro
     }
     if (issues.length) return { ok: false, data: target, record: emptyRecord(plan), trace, issues, ownTrees: [], ...extra };
     return { ok: true, data, record: recordOf(plan, before, source, data), trace, issues, ownTrees, ...extra };
+}
+
+/**
+ * The details the plan does not write (an unticked gap or note of step 5)
+ * as the tree has them: the write fills a person's gaps and joins the notes
+ * on its own, so what it filled against the plan is put back.
+ */
+function keepTreeValues(plan: MergePlan, data: StromData, target: StromData): void {
+    for (const item of plan.items) {
+        if (item.kind !== 'field' || item.on || (item.before !== '' && item.field !== 'notes')) continue;
+        const person = data.persons[item.person] as unknown as Record<string, unknown> | undefined;
+        const was = target.persons[item.person] as unknown as Record<string, unknown> | undefined;
+        if (!person || !was) continue;
+        const keys = item.field === 'photo' ? ['photo', 'photoOriginalName', 'photoDate'] : [item.field];
+        for (const key of keys) {
+            if (was[key] === undefined) delete person[key];
+            else person[key] = was[key];
+        }
+    }
 }
 
 /** A line of a note once: added after the note's text, never twice. */

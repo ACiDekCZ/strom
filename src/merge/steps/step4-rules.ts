@@ -85,7 +85,7 @@ function valueText(field: string, v: string): string {
 }
 
 /** Where a result comes from ("whole merge: My tree wins", "Places: The import wins", …). */
-function sourceText(s: RuleSource, kind: FieldKind): string {
+export function sourceText(s: RuleSource, kind: FieldKind): string {
     const W = strings.mergeWizard;
     switch (s.level) {
         case 'value': return W.fromValue;

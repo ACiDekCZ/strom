@@ -58,6 +58,8 @@ export interface WizardHost {
     downloadJson(): void;
     /** What step 1 reads and does beyond the choices. */
     step1?(): Step1Env;
+    /** Step 5's Save the list… (K6.4): the plan as .txt and .json. */
+    savePlan?(plan: MergePlan): void;
 }
 
 /** A running comparison (K3.5): its progress in work units, and the signal that stops it. */
@@ -325,6 +327,8 @@ export class MergeWizard {
         }
         if (step === 5) {
             if (ws.choices.mode === 'compare') {
+                // Only compare: the button saves the list, then the guide closes (nothing written).
+                if (this.plan) this.host.savePlan?.(this.plan);
                 this.host.finishCompare();
                 return;
             }
@@ -522,6 +526,7 @@ export class MergeWizard {
             update: change => this.update(change),
             ...(this.host.step2 ? { step2: this.host.step2() } : {}),
             ...(this.host.step1 ? { step1: this.host.step1() } : {}),
+            step5: { savePlan: () => { if (this.plan) this.host.savePlan?.(this.plan); } },
         };
     }
 
@@ -604,8 +609,11 @@ export class MergeWizard {
         if (this.isCopy() && ws.step >= 2 && ws.step <= 5) return { label: strings.buttons.close, enabled: true, why: '' };
         if (ws.step === 5) {
             const n = this.plan ? planCounts(this.plan) : null;
-            if (c.mode === 'compare') return { label: W.done, enabled: true, why: '' };
-            const label = !n ? '' : c.mode === 'new' ? W.btnNewTree(n.added) : W.btnWrite(n.added, n.fieldChanges);
+            if (c.mode === 'compare') return { label: W.savePlan, enabled: true, why: '' };
+            // Into a new tree (K6.3): a copy of the target with the import.
+            const label = !n ? '' : c.mode === 'new' ? W.btnNewTree(n.added)
+                : (c.into ?? 'tree') === 'new' ? W.btnNewTree((this.plan?.target.persons ?? 0) + n.added)
+                : W.btnWrite(n.added, n.fieldChanges);
             const ok = info[5].state === 'ok' && !this.busy;
             return { label, enabled: ok, why: ok ? '' : why };
         }
