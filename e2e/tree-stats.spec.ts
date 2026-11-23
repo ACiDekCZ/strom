@@ -5,7 +5,10 @@
  * line, a list, a birth period and their combination), Export CSV, the empty
  * and busy states, a tree that is not open, a row's click (the event the
  * Table takes over) and the look in German at 1440, 1024 and 390 px wide,
- * light and dark, with a long tree name. Invented names only (Ostrožný,
+ * light and dark, with a long tree name. Then the ways in and out: Actions ›
+ * Tree, the overview's In detail, the phone's More sheet, a value's people
+ * in the Table with the chip "Statistics: …", Back to Statistics, the
+ * chip's × and Save as list of people. Invented names only (Ostrožný,
  * Pětioký, Vochomůrka; Mezihoř, Hrabětice, Žabokřiky).
  */
 
@@ -13,7 +16,7 @@ import { test, expect, Page, Locator } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { openApp } from './helpers';
+import { openApp, openTreeActions } from './helpers';
 
 type P = Record<string, unknown>;
 
@@ -468,5 +471,265 @@ test.describe('Statistics window: the look', () => {
                 }
             });
         }
+    }
+});
+
+/** The overview with one section open; waits for its "In detail" link. */
+async function overviewLink(page: Page, treeId: string, section: string, sel: string): Promise<Locator> {
+    await page.evaluate(({ id, section }) => window.Strom.UI.showTreeOverview(id, { section: section as never }), { id: treeId, section });
+    const link = page.locator(`#tree-overview-modal .tov-sec[data-section="${section}"] ${sel}`);
+    await expect(link).toBeVisible();
+    return link;
+}
+
+const tv = (page: Page, sel: string): Locator => page.locator(`#table-container ${sel}`);
+const statsChip = (page: Page): Locator => tv(page, '.tv-chip--stats');
+
+/** A value's row of the window, by its value. */
+const valueRow = (win: Locator, v: string): Locator => win.locator('.stv-vbody .stv-row').filter({ has: win.page().locator('.stv-val', { hasText: new RegExp(`^${v}\\b`) }) });
+
+test.describe('Statistics: menus, In detail and the Table (spec 138 §2, §8, §10.1)', () => {
+    test('Actions › Tree and In detail of the overview open the Statistics on the right topic, sex and scope', async ({ page }) => {
+        const treeId = await setup(page);
+        const sub = await openTreeActions(page);
+        const item = sub.locator('[data-action="stats"]');
+        await expect(item).toHaveText('Statistics');
+        // Right after the overview's row.
+        await expect(sub.locator('[data-action="overview"] + [data-action="stats"]')).toHaveCount(1);
+        await item.click();
+        let win = page.locator('#tree-stats-modal .modal.stv');
+        await expect(win.locator('.stv-table')).toBeVisible();
+        await expect(topic(win, 'firstNames')).toHaveAttribute('aria-current', 'true');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#tree-stats-modal')).toHaveCount(0);
+
+        // Women's names: the Statistics over the overview, the overview stays under them.
+        const women = await overviewLink(page, treeId, 'time', '.tov-stats-more[data-topic="firstNames"][data-sex="female"]');
+        await expect(women).toHaveText('In detail');
+        await expect(women).toHaveAttribute('aria-label', /Most common female names/);
+        await women.click();
+        win = page.locator('#tree-stats-modal .modal.stv');
+        await expect(win.locator('.stv-table')).toBeVisible();
+        await expect(topic(win, 'firstNames')).toHaveAttribute('aria-current', 'true');
+        await expect(opt(win, 'sex', 'female')).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(() => values(win)).toEqual(['Marie=2', 'Anna=1']);
+        await expect(page.locator('#tree-overview-modal')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#tree-stats-modal')).toHaveCount(0);
+        await expect(page.locator('#tree-overview-modal')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
+
+        // A family line's detail: the line as the scope.
+        await page.evaluate((id) => window.Strom.UI.showTreeOverview(id, { section: 'rods' }), treeId);
+        const rods = page.locator('#tree-overview-modal .tov-sec[data-section="rods"]');
+        await expect(rods).toHaveAttribute('data-ready', 'true');
+        // The one big line is open already (its detail under the section's head).
+        const more = rods.locator('.tov-rod.is-open .tov-rod-actions .tov-stats-more');
+        await expect(more).toHaveAttribute('aria-label', 'In detail: Ostrožný');
+        await more.click();
+        await expect(win.locator('.stv-table')).toBeVisible();
+        await expect(win.locator('.stv-scope-btn')).toHaveText(/Ostrožný line/);
+
+        // A row's click closes the Statistics and the overview: the Table with the chip of the line.
+        await valueRow(win, 'Jan').click();
+        await expect(page.locator('#tree-stats-modal')).toHaveCount(0);
+        await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
+        await expect(statsChip(page).locator('.tv-chip-text')).toHaveText(/^Statistics: first name Jan · Ostrožný line$/);
+    });
+
+    test('a value’s people in the Table: the chip, “N of M people”, Back to Statistics as they were, × drops the chip', async ({ page }) => {
+        await setup(page);
+        let win = await openStats(page);
+        // A state to come back to: every name, a search, sorted by name.
+        await opt(win, 'names', 'each').click();
+        await win.locator('.stv-search').fill('ja');
+        await win.locator('.stv-sortbox .sel-opt[data-sort="name"]').click();
+        await expect.poll(() => values(win)).toEqual(['Jan=3']);
+        await valueRow(win, 'Jan').click();
+        await expect(page.locator('#tree-stats-modal')).toHaveCount(0);
+
+        await expect(tv(page, '.tv-grid')).toBeVisible();
+        await expect(page.getByRole('radio', { name: /^People, / })).toHaveAttribute('aria-checked', 'true');
+        await expect(statsChip(page).locator('.tv-chip-text')).toHaveText('Statistics: first name Jan');
+        await expect(tv(page, '.tv-status-count')).toHaveText(/^3 of \d+ people$/);
+        const keys = await tv(page, '.tv-body .tv-row[data-key^="p:"]').evaluateAll(rows => rows.map(r => (r as HTMLElement).dataset.key).sort());
+        expect(keys).toEqual(['p:jan', 'p:jan2', 'p:jan3']);
+        // First in the chips' row, Back to Statistics beside it, Clear filters at the end.
+        await expect(tv(page, '.tv-back')).toHaveText('Back to Statistics');
+        await expect(tv(page, '.tv-chips-clear')).toBeVisible();
+
+        await tv(page, '.tv-back').click();
+        win = page.locator('#tree-stats-modal .modal.stv');
+        await expect(win.locator('.stv-table')).toBeVisible();
+        await expect(topic(win, 'firstNames')).toHaveAttribute('aria-current', 'true');
+        await expect(opt(win, 'names', 'each')).toHaveAttribute('aria-pressed', 'true');
+        await expect(win.locator('.stv-search')).toHaveValue('ja');
+        await expect(win.locator('.stv-sortbox .sel-opt[data-sort="name"]')).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(() => values(win)).toEqual(['Jan=3']);
+        // Closed without a click: the Table keeps the chip.
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#tree-stats-modal')).toHaveCount(0);
+        await expect(statsChip(page)).toBeVisible();
+
+        // The chip is the window's own: not in the views' state.
+        const stored = await page.evaluate(() => JSON.stringify(Object.entries(localStorage).filter(([k]) => /table/i.test(k))));
+        expect(stored).not.toContain('"chip":"stats"');
+
+        await statsChip(page).locator('.tv-chip-x').click();
+        await expect(statsChip(page)).toHaveCount(0);
+        await expect(tv(page, '.tv-back')).toHaveCount(0);
+        await expect(tv(page, '.tv-status-count')).toHaveText(/^(\d+) of \1 people$/);
+    });
+
+    test('Save as list of people saves exactly the chip’s people as a fixed list named after it', async ({ page }) => {
+        await setup(page);
+        const win = await openStats(page);
+        await valueRow(win, 'Josef').click();
+        await expect(tv(page, '.tv-status-count')).toHaveText(/^3 of \d+ people$/);
+        await tv(page, '.tv-more-menu-btn').click();
+        // No "Save as the list's rule": a value's people are no rule.
+        await expect(page.locator('.tv-menu .tv-menu-label').last()).toHaveText('Save as list of people…');
+        await page.locator('.tv-menu .tv-menu-item', { hasText: 'Save as list of people…' }).click();
+        const save = page.locator('#person-list-save');
+        await expect(save).toContainText('3 people are saved in the table’s order.');
+        await expect(save.locator('#pln-name')).toHaveValue('first name Josef');
+        await expect(save.locator('.pln-switch[aria-checked="true"]')).toHaveCount(0);
+        const before = await page.evaluate(() => (window.Strom.DataManager.getData().personLists ?? []).length);
+        await save.locator('[data-act="create"]').click();
+        await expect(save).toHaveCount(0);
+        const list = await page.evaluate(() => (window.Strom.DataManager.getData().personLists ?? []).at(-1));
+        expect(await page.evaluate(() => (window.Strom.DataManager.getData().personLists ?? []).length)).toBe(before + 1);
+        expect(list?.name).toBe('first name Josef');
+        expect(list?.dynamic).toBe(false);
+        expect(list?.rule?.kind).not.toBe('tableFilter');
+        expect([...(list?.personIds ?? [])].sort()).toEqual(['josef', 'josef2', 'josef3']);
+    });
+});
+
+test.describe('Statistics on a phone: the More sheet and the Table (spec 138 §8, §10.1)', () => {
+    for (const [w, h] of [[390, 844], [844, 390]] as const) {
+        test(`${w}×${h}, dark: the View row's Statistics tile, the Topic button focused, the chip's row in the Table`, async ({ page }) => {
+            await setup(page, w, h);
+            await page.evaluate(() => window.Strom.SettingsManager.setTheme('dark'));
+            await page.locator('#bb-view-more').click();
+            const sheet = page.locator('.bottom-sheet-menu');
+            const tile = sheet.locator('.bottom-sheet-pair[aria-label="View"] #sheet-stats');
+            await expect(tile).toHaveText('Statistics');
+            expect((await tile.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            // The sheet holds it without scrolling sideways.
+            expect(await sheet.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+            await page.screenshot({ path: join(SHOTS, `c-vice-${w}x${h}-dark.png`) });
+            await tile.click();
+            const win = page.locator('#tree-stats-modal .modal.stv');
+            await expect(win.locator('.stv-table')).toBeVisible();
+            await expect(win.locator('.stv-pbtn[data-stv="topic-sheet"]')).toBeFocused();
+
+            await valueRow(win, 'Jan').click();
+            await expect(page.locator('#tree-stats-modal')).toHaveCount(0);
+            const row = tv(page, '.tv-statsrow');
+            await expect(row).toBeVisible();
+            await expect(row.locator('.tv-chip-text')).toHaveText('Statistics: first name Jan');
+            await expect(tv(page, '.tv-status-count')).toHaveText(/^3 of \d+ people$/);
+            for (const sel of ['.tv-chip-x', '.tv-back']) {
+                const box = (await row.locator(sel).boundingBox())!;
+                expect(box.height).toBeGreaterThanOrEqual(44);
+                expect(box.x + box.width).toBeLessThanOrEqual(w + 1);
+            }
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+            await page.screenshot({ path: join(SHOTS, `c-tabulka-${w}x${h}-dark.png`) });
+
+            // Back to Statistics, then × drops the row.
+            await row.locator('.tv-back').click();
+            await expect(win.locator('.stv-table')).toBeVisible();
+            await page.keyboard.press('Escape');
+            await expect(page.locator('#tree-stats-modal')).toHaveCount(0);
+            await row.locator('.tv-chip-x').click();
+            await expect(row).toBeHidden();
+        });
+    }
+});
+
+test.describe('Statistics: the look of the overview’s In detail and the Table’s chip', () => {
+    for (const theme of ['light', 'dark'] as const) {
+        for (const [w, h] of [[1440, 900], [1024, 768], [390, 844]] as const) {
+            test(`German, ${w}×${h}, ${theme}: nothing overflows`, async ({ page }) => {
+                const treeId = await setup(page, w, h, 'Ostrožní a Pětiocí z Mezihoře');
+                await page.evaluate(t => {
+                    window.Strom.UI.setLanguage('de' as never);
+                    window.Strom.SettingsManager.setTheme(t);
+                }, theme);
+                await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+                const link = await overviewLink(page, treeId, 'time', '.tov-stats-more[data-topic="firstNames"][data-sex="male"]');
+                await link.scrollIntoViewIfNeeded();
+                const heads = await page.locator('#tree-overview-modal .tov-chart-head').evaluateAll(els => els.map(el => {
+                    const r = el.getBoundingClientRect();
+                    const kids = [...el.children].map(k => k.getBoundingClientRect());
+                    return kids.every(k => k.left >= r.left - 1 && k.right <= r.right + 1) && el.scrollWidth <= el.clientWidth + 1;
+                }));
+                expect(heads.length).toBeGreaterThan(0);
+                expect(heads.every(Boolean)).toBe(true);
+                // 44 px on a touch screen only (pointer: coarse).
+                const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+                if (coarse) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+                await page.screenshot({ path: join(SHOTS, `c-uebersicht-de-${w}x${h}-${theme}.png`) });
+                await link.click();
+                const win = page.locator('#tree-stats-modal .modal.stv');
+                await expect(win.locator('.stv-table')).toBeVisible();
+                await valueRow(win, 'Jan').click();
+                await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
+                const chip = w <= 640 ? tv(page, '.tv-statsrow') : tv(page, '.tv-chips');
+                await expect(chip.locator('.tv-chip--stats')).toBeVisible();
+                await expect(chip.locator('.tv-back')).toHaveText('Zurück zur Statistik');
+                const problems = await chip.evaluate(el => {
+                    const out: string[] = [];
+                    const box = el.getBoundingClientRect();
+                    for (const k of el.querySelectorAll<HTMLElement>('.tv-chip--stats, .tv-back, .tv-chip-x')) {
+                        const r = k.getBoundingClientRect();
+                        if (r.width === 0) continue;
+                        if (r.left < box.left - 1 || r.right > box.right + 1) out.push(`${k.className} sticks out`);
+                    }
+                    const a = el.querySelector('.tv-chip--stats')!.getBoundingClientRect();
+                    const b = el.querySelector('.tv-back')!.getBoundingClientRect();
+                    const ow = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+                    const oh = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+                    if (ow > 1 && oh > 1) out.push('the chip overlaps Back');
+                    if (document.documentElement.scrollWidth > window.innerWidth + 1) out.push('page scrolls sideways');
+                    return out;
+                });
+                expect(problems).toEqual([]);
+                await page.screenshot({ path: join(SHOTS, `c-tabelle-de-${w}x${h}-${theme}.png`) });
+            });
+        }
+    }
+});
+
+test.describe('Statistics: the View tiles of the More sheet on a narrow phone', () => {
+    for (const lang of ['de', 'pl', 'cs'] as const) {
+        test(`${lang}, 360×640: four tiles in one row, no word broken inside a tile`, async ({ page }) => {
+            await setup(page, 360, 640);
+            await page.evaluate(l => window.Strom.UI.setLanguage(l as never), lang);
+            await page.locator('#bb-view-more').click();
+            const tiles = page.locator('.bottom-sheet-menu .bottom-sheet-pair:has(#sheet-stats) > .bottom-sheet-item');
+            await expect(tiles).toHaveCount(4);
+            const boxes = await tiles.evaluateAll(els => els.map(el => {
+                const r = el.getBoundingClientRect();
+                // A word broken inside a tile makes a line narrower than the longest word: compare with the text's own width.
+                const range = document.createRange();
+                range.selectNodeContents(el);
+                const words = (el.textContent ?? '').trim().split(/\s+/);
+                const probe = document.createElement('span');
+                probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
+                el.appendChild(probe);
+                const widest = Math.max(...words.map(w => { probe.textContent = w; return probe.getBoundingClientRect().width; }));
+                probe.remove();
+                return { top: Math.round(r.top), right: r.right, fits: widest <= r.width + 0.5 };
+            }));
+            expect(new Set(boxes.map(b => b.top)).size).toBe(1);
+            expect(boxes.every(b => b.fits)).toBe(true);
+            const pair = (await page.locator('.bottom-sheet-menu .bottom-sheet-pair:has(#sheet-stats)').boundingBox())!;
+            expect(Math.max(...boxes.map(b => b.right))).toBeLessThanOrEqual(pair.x + pair.width + 0.5);
+            await page.screenshot({ path: join(SHOTS, `c-vice-${lang}-360x640.png`) });
+        });
     }
 });
