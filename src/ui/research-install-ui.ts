@@ -37,6 +37,7 @@ import { STROM_DATA_VERSION } from '../version.js';
 import { TreeRenderer } from '../renderer.js';
 import { uiModule } from './module.js';
 import { activatedElement, busyLocal } from './busy.js';
+import { expandedData } from '../image-expand.js';
 
 /** The dialog keeps the info dialog's id: one research dialog at a time, closed by the shared Escape handling. */
 export const INSTALL_DIALOG_ID = 'research-info-modal';
@@ -445,7 +446,7 @@ export const researchInstallMethods = uiModule({
             persons: Object.values(data.persons).filter(p => p && !p.isPlaceholder).length,
             at: new Date().toISOString(),
             ...(appCopy ? { app: appCopy } : {}),
-        }, { ...data, version: STROM_DATA_VERSION }, treeId ? viewLinksPayload(treeId) : null);
+        }, { ...await expandedData(data), version: STROM_DATA_VERSION }, treeId ? viewLinksPayload(treeId) : null);
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
         a.download = file;

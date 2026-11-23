@@ -124,6 +124,7 @@ import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
 import { bridgeGivesEtag, bridgeGivesImagesByHash, bridgeGivesStale, staleTreeUrl, storedTreeEtag, treeAsksAppMedia, treeFamilyPartners, treeFileState, treeReplyEtag, treeReplyHeads, treeReplyImages, TREE_GED_TIMEOUT_MS, type TreeReplyHeads } from '../research-tree-file.js';
 import { addHeldImages, findImageRefs, findNamedFileShas, forgetHeldImages, imagesUrlOf, refTreeUrl, resolveHeldImageRefs, resolveImageRefs, sha256Hex, type ImageRef, type ImageResolveDeps } from '../research-image-refs.js';
 import { completeStatus, statusAskUrl } from '../status-parts.js';
+import { expandedData } from '../image-expand.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -1363,7 +1364,9 @@ export interface FetchedTree extends TreeReplyHeads {
 async function researchTreeImages(researchId: string): Promise<string[]> {
     const meta = TreeManager.findTreeByResearchId(researchId);
     if (!meta || TreeManager.isTreeUnreadable(meta.id)) return [];
-    const data = await readTree(meta.id);
+    const read = await readTree(meta.id);
+    // Hashed are the images themselves (a pooled one whole, image-expand.ts).
+    const data = read ? await expandedData(read) : null;
     const out: string[] = [];
     for (const src of Object.values(data?.sources ?? {})) {
         for (const exc of src.excerpts ?? []) if (exc.dataUrl) out.push(exc.dataUrl);
@@ -3043,7 +3046,7 @@ export const researchUiMethods = uiModule({
         const releaseLeave = holdLeave('send', tree.id);
         let res: Response;
         try {
-            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts, deletedSources: deletedSourcesToSend(link) }, researchGedcomTitles(status), researchSendsReadings(status), researchSendsSourceFields(status), researchCitationsOut(status)), 120000);
+            res = await postSync(bridge.sync, researchGedcom(await expandedData(data), tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts, deletedSources: deletedSourcesToSend(link) }, researchGedcomTitles(status), researchSendsReadings(status), researchSendsSourceFields(status), researchCitationsOut(status)), 120000);
         } catch (err) {
             releaseLeave();
             console.warn('Sending to the research failed', err);
@@ -3650,7 +3653,7 @@ export const researchUiMethods = uiModule({
             return;
         }
         const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(meta.research).transcripts, deletedSources: deletedSourcesToSend(meta.research) };
-        const blob = new Blob([researchGedcom(data, meta.name, research, researchGedcomTitles(this.researchStatusOf(meta.research.id)), researchSendsReadings(this.researchStatusOf(meta.research.id)), researchSendsSourceFields(this.researchStatusOf(meta.research.id)), researchCitationsOut(this.researchStatusOf(meta.research.id)), researchMediaOut(this.researchStatusOf(meta.research.id)))], { type: 'text/plain;charset=utf-8' });
+        const blob = new Blob([researchGedcom(await expandedData(data), meta.name, research, researchGedcomTitles(this.researchStatusOf(meta.research.id)), researchSendsReadings(this.researchStatusOf(meta.research.id)), researchSendsSourceFields(this.researchStatusOf(meta.research.id)), researchCitationsOut(this.researchStatusOf(meta.research.id)), researchMediaOut(this.researchStatusOf(meta.research.id)))], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;

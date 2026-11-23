@@ -22,6 +22,7 @@ import { uiModule } from './module.js';
 import { activatedElement, busyLocal, busyToast, runHeavy } from './busy.js';
 import { imagesToAwait } from '../image-loads.js';
 import { imagesBeforeOutput } from './output-images.js';
+import { expandedData } from '../image-expand.js';
 import { holdLeave } from './busy-leave.js';
 import { autoGrowAll } from './autogrow.js';
 import { safeFileName } from '../filenames.js';
@@ -210,7 +211,7 @@ export const shareUiMethods = uiModule({
                 envelope.senderName || strings.share.unknownSender);
             // Keep the received data as a baseline so B can later send only changes.
             const { saveBaseline } = await import('../share-baselines.js');
-            void saveBaseline(treeId, envelope.exportId, DataManager.getData(), Date.now()).catch(() => {});
+            void expandedData(DataManager.getData()).then(data => saveBaseline(treeId, envelope.exportId, data, Date.now())).catch(() => {});
             try { localStorage.removeItem(COLLAB_HIDE_KEY(treeId)); } catch { /* ignore */ }
         }
         this.updateCollabBar();
@@ -263,7 +264,7 @@ export const shareUiMethods = uiModule({
 
         const { buildChangePacket, isEmptyPacket } = await import('../share-diff.js');
         const treeName = meta?.name;
-        const packet = buildChangePacket(base, DataManager.getData(), { baseExportId: baseId, senderName, ...(senderMessage ? { senderMessage } : {}), ...(treeName ? { treeName } : {}) });
+        const packet = buildChangePacket(base, await expandedData(DataManager.getData()), { baseExportId: baseId, senderName, ...(senderMessage ? { senderMessage } : {}), ...(treeName ? { treeName } : {}) });
         if (isEmptyPacket(packet)) { this.showToast(strings.shareDiff.noChanges); return; }
 
         const safe = safeFileName(treeName, 'strom');

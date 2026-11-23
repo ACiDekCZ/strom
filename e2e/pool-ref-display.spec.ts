@@ -1,4 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { openApp, seedTree, card } from './helpers.js';
 
 /**
@@ -360,5 +362,36 @@ test.describe('Images from the pool (desktop)', () => {
         expect(preview).toMatch(/^data:image\//);
         // Nothing written before Save: the tree still holds the reference.
         expect(await page.evaluate(() => window.Strom.DataManager.getData().persons['walpurga' as never].photo)).toBe(refs[big]);
+    });
+
+    test('the fan poster and a saved person page carry the pooled pictures whole (D5a)', async ({ page }) => {
+        const refs = await treeWithRefs(page);
+        /** The references of the data URLs in a file (the pool's id is SHA-256 of the data URL). */
+        const refsIn = (text: string): string[] => [...new Set(text.match(/data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/=]+/g) ?? [])]
+            .map(url => '\u0000sm:p:' + createHash('sha256').update(url).digest('hex').slice(0, 40));
+        await page.evaluate(() => {
+            window.Strom.TreeRenderer.setFanPortraits(true);
+            window.Strom.UI.setDisplayViewMode('fan');
+        });
+        await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();
+        const [poster] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => window.Strom.UI.exportPosterSvg())]);
+        const svg = readFileSync(await poster.path(), 'utf-8');
+        expect(svg).not.toContain('data-pool-ref');
+        expect(svg).not.toContain('\u0000');
+        expect(refsIn(svg)).toEqual(expect.arrayContaining(['kasimir', 'walpurga', 'leopoldine'].map(id => refs[id])));
+
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('tree'));
+        await card(page, 'Leopoldine').click();
+        await page.locator('.context-menu .context-menu-header--page').click();
+        await page.locator('#person-page-modal .pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        await expect(dlg).toBeVisible();
+        const [saved] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await saved.path(), 'utf-8');
+        expect(html).not.toContain('data-pool-ref');
+        expect(html).not.toContain('\u0000sm:');
+        expect(refsIn(html)).toContain(refs.leopoldine);
+        // The tree in memory keeps its references.
+        expect(await page.evaluate(() => window.Strom.DataManager.getData().persons['leopoldine' as never].photo)).toBe(refs.leopoldine);
     });
 });

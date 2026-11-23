@@ -4,7 +4,9 @@
  * builder's structural output.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { StorageManager } from '../storage.js';
+import { expandImageText } from '../image-expand.js';
 import {
     buildFanModel, buildFanSvg, buildFanPosterSvg, fanPosterGeometry, FanModel, FOCUS_R, RING_W, ancestorRingRadii,
 } from '../fan-chart.js';
@@ -861,6 +863,28 @@ describe('portraits (spec 118 §6)', () => {
         expect(images(svg)).toBe(7);
         expect((svg.match(new RegExp(`<image href="data:image/gif;base64,[^"]+" data-pool-ref="${id}" x="-?[0-9.]+" y="-?[0-9.]+"`, 'g')) ?? []).length).toBe(7);
         expect(svg).not.toContain('\u0000');
+    });
+
+    it('the poster (file, print, preview) takes the pooled images whole: no placeholder, the pool\'s data URL (spec 135 D5a)', async () => {
+        const id = 'p:' + 'ab'.repeat(20);
+        const bytes = new Uint8Array(1200).map((_, i) => (i * 11) & 0xFF);
+        const url = 'data:image/jpeg;base64,' + Buffer.from(bytes).toString('base64');
+        const getMany = vi.spyOn(StorageManager, 'getMany').mockImplementation(async (_s: string, keys: string[]) =>
+            new Map(keys.map(k => [k, k === id ? { head: 'data:image/jpeg;base64,', bytes: bytes.slice().buffer } : null])) as never);
+        try {
+            const d = withPhotos(3);
+            for (const p of Object.values(d.persons)) p.photo = '\u0000sm:' + id;
+            const m = buildFanModel(d, 'a1' as PersonId, { generations: 3, shape: 'half' })!;
+            const svg = buildFanSvg(m, { ...svgOpts, uid: 'pp', measure: estimate, ppu: 2, portrait: (p: Person) => photoOf(p) });
+            const { data: out, missing } = await expandImageText(svg);
+            expect(missing).toBe(0);
+            expect(out).not.toContain('data-pool-ref');
+            expect(out).not.toContain('data:image/gif');
+            expect((out.match(new RegExp(`<image href="${url.replace(/[+/]/g, c => '\\' + c)}" x="-?[0-9.]+"`, 'g')) ?? []).length).toBe(7);
+            expect(getMany).toHaveBeenCalledTimes(1);
+        } finally {
+            getMany.mockRestore();
+        }
     });
 
     it('two-way: the centre and the ancestors only, never the descendants', () => {

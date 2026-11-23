@@ -87,6 +87,7 @@ import { viewLinksPayload } from '../view-links.js';
 import type { PersonList } from '../types.js';
 import { listDisplayName, listKind } from '../person-lists.js';
 import { listKindIcon } from './list-kind-icon.js';
+import { expandedData } from '../image-expand.js';
 
 /** A list the export dialog's list scope offers (spec 084 §12): one with people. */
 interface ExportableList { list: PersonList; count: number }
@@ -995,10 +996,11 @@ export const importExportMethods = uiModule({
         return this.gedcomImportImages === false ? stripMedia(data) : data;
     },
 
-    downloadGedcomAsJson(): void {
+    async downloadGedcomAsJson(): Promise<void> {
         if (!this.gedcomResult) return;
 
-        const dataStr = JSON.stringify(this.gedcomDataForImport(), null, 2);
+        // The file carries any pooled image whole (image-expand.ts).
+        const dataStr = JSON.stringify(await expandedData(this.gedcomDataForImport()), null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);

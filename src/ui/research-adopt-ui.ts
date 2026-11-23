@@ -47,6 +47,7 @@ import { BUSY_TIMEOUTS, busyToast } from './busy.js';
 import { downloadStep, type TreeDownloadWatch } from './tree-load-progress.js';
 import { safeFileName } from '../filenames.js';
 import type { ProgressToastHandle } from './toast.js';
+import { expandedData } from '../image-expand.js';
 
 const ADOPT_ID = 'research-adopt-modal';
 const ELSEWHERE_ID = 'research-elsewhere-modal';
@@ -634,7 +635,7 @@ export const researchAdoptMethods = uiModule({
         // The step is on screen before the export holds the page a moment.
         await new Promise(resolve => setTimeout(resolve, 0));
         // (A tree the research has not had yet: its citations in the order of K1.1, never the list's own.)
-        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name, { titles, sourceFields, citationMain: citations.citationMain, ...media });
+        const exported = exportToGedcom(choice.images ? await expandedData(data) : stripMedia(data), tree.name, { titles, sourceFields, citationMain: citations.citationMain, ...media });
         state.content = exported.content;
         phase({ step: 'taking' });
         let reply: { tree: string; head: string | null; ids: AdoptIds | null } | null = null;

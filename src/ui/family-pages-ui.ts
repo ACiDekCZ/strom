@@ -40,6 +40,7 @@ import { wireRodTimelines } from '../rod-timeline-wire.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT } from '../image-loads.js';
 import { pageImageWait } from './image-slot.js';
+import { expandedData } from '../image-expand.js';
 
 /**
  * A page of a set in the window: the set by its selection, the page by its
@@ -355,6 +356,9 @@ export async function buildPagesFile(
     };
     onStep(0, 0, F.step.prepare);
     await idle();
+    check();
+    // The file carries the pooled images whole (image-expand.ts).
+    data = await expandedData(data);
     check();
     let set = buildPageSet(data, spec, opts, { treeName: treeName() });
     const want = pageSetImages(set).filter(i => (i.kind === 'clip' ? set.options.clips : set.options.photos) === 'small');

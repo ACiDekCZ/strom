@@ -187,7 +187,7 @@ async function metaOf(id: string, url: string, bytes?: Uint8Array): Promise<Imag
     return meta;
 }
 
-type Decrypt = (enc: EncryptedData) => Promise<string>;
+export type Decrypt = (enc: EncryptedData) => Promise<string>;
 
 async function decodeMedia(record: StoredMedia, decrypt?: Decrypt): Promise<string> {
     if (record.encrypted) {
@@ -410,6 +410,34 @@ async function loadImages(ids: Set<string>, decrypt?: Decrypt): Promise<Map<stri
     const urls = new Map<string, string>();
     for (const [id, record] of records) {
         if (record) urls.set(id, await decodeMedia(record, decrypt));
+    }
+    return urls;
+}
+
+/** Images read back per transaction by loadImageUrls (an output's whole tree is read in parts). */
+const URL_BATCH_COUNT = 64;
+
+/**
+ * Pooled images as data URLs, read in batches of one transaction each
+ * (image-expand.ts). An id missing from the pool, one whose record cannot be
+ * decoded, or an encrypted one while the session is locked is left out.
+ * `decrypt`: decrypts an encrypted record instead of the session.
+ */
+export async function loadImageUrls(ids: readonly string[], decrypt?: Decrypt): Promise<Map<string, string>> {
+    const urls = new Map<string, string>();
+    for (let i = 0; i < ids.length; i += URL_BATCH_COUNT) {
+        const part = ids.slice(i, i + URL_BATCH_COUNT);
+        const records = await StorageManager.getMany<StoredMedia>('media', part);
+        for (const id of part) {
+            const record = records.get(id);
+            if (!record) continue;
+            try {
+                const url = await decodeMedia(record, decrypt);
+                if (url) urls.set(id, url);
+            } catch {
+                // Locked or not decodable: missing.
+            }
+        }
     }
     return urls;
 }

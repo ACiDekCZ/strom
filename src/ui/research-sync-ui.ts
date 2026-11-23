@@ -82,6 +82,7 @@ import {
 } from './research-ui.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { browserMediaFingerprint, browserMediaSafe, treeHasAppMedia, archiveHoldsAppMedia } from '../browser-media.js';
+import { expandedData } from '../image-expand.js';
 
 /** A person's conflicts less those still open that were decided since (`settled`, by id); the same list when none goes. */
 function withoutSettled(list: ResearchConflict[], settled: Set<string> | null): ResearchConflict[] {
@@ -2130,7 +2131,7 @@ export const researchSyncMethods = uiModule({
         // The sources deleted here in edit mode (spec 117 §4): one back in the tree (Undo) forgotten, the rest said deleted.
         if (!again) forgetDeletedSourcesBack(treeId, data);
         const deletedSources = again ? [] : deletedSourcesToSend(TreeManager.getTreeMetadata(treeId)?.research);
-        const exported = again ? null : researchGedcomExport(data, meta?.name ?? '', {
+        const exported = again ? null : researchGedcomExport(await expandedData(data), meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}), ...(deletedSources.length ? { deletedSources } : {}),
         }, titles, researchSendsReadings(this.researchStatusOf(link.id)), researchSendsSourceFields(this.researchStatusOf(link.id)), researchCitationsOut(this.researchStatusOf(link.id)),

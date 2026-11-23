@@ -45,6 +45,7 @@ import { HISTORY_CHANGED_EVENT } from './history-ui.js';
 import { activatedElement } from './busy.js';
 import { imagesToAwait } from '../image-loads.js';
 import { imagesBeforeOutput, imagesReadyForPrint } from './output-images.js';
+import { expandedData } from '../image-expand.js';
 
 export const PERSON_PAGE_ID = 'person-page-modal';
 export const PERSON_PAGE_EXPORT_ID = 'person-page-export-modal';
@@ -1144,18 +1145,20 @@ export const personPageMethods = uiModule({
     /** "Save as HTML" / "Share…" once the tree's photos came (spec 116 §8): the file is built with them. */
     async personPageExportAfterImages(share: boolean): Promise<void> {
         if (await imagesBeforeOutput(strings.photos.out.personPage) === 'cancelled' || !state) return;
-        this.showPersonPageExport(share);
+        // The file carries the pooled images whole (image-expand.ts).
+        const data = await expandedData(DataManager.getData());
+        if (!state) return;
+        this.showPersonPageExport(share, data);
     },
 
     // ── "Save as HTML" (§5.1, §5.5, §6.1) ──
 
-    showPersonPageExport(share: boolean): void {
+    showPersonPageExport(share: boolean, data: StromData = DataManager.getData()): void {
         if (!state) return;
         this.closePersonPageExport();
         const personId = state.current.personId;
         const P = strings.personPage;
         const X = P.export;
-        const data = DataManager.getData();
         // Attachment images over 1600 px go into the file reduced (§3.5); the tree keeps the originals.
         let shrunk = new Map<string, string>();
         const fileData = (): StromData => withShrunkAttachments(data, personId, shrunk);
@@ -1325,7 +1328,7 @@ export const personPageMethods = uiModule({
                 setTimeout(() => URL.revokeObjectURL(url), 1000);
                 this.showToast(X.saved(out.name), 4000, { kind: 'person-page' });
             } catch {
-                this.showToast(X.error, 8000, { kind: 'person-page', action: { label: X.retry, run: () => this.showPersonPageExport(false) } });
+                this.showToast(X.error, 8000, { kind: 'person-page', action: { label: X.retry, run: () => this.showPersonPageExport(false, data) } });
             }
         };
         const shareFile = async (): Promise<void> => {
@@ -1339,7 +1342,7 @@ export const personPageMethods = uiModule({
                 await navigator.share({ files: [file], title: out.title });
             } catch (err) {
                 if ((err as { name?: string } | null)?.name === 'AbortError') return;
-                this.showToast(X.error, 8000, { kind: 'person-page', action: { label: X.retry, run: () => this.showPersonPageExport(true) } });
+                this.showToast(X.error, 8000, { kind: 'person-page', action: { label: X.retry, run: () => this.showPersonPageExport(true, data) } });
             }
         };
 

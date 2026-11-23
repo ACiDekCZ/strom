@@ -35,6 +35,7 @@ import { appFontFaceCss, POSTER_SERIF_FACES, POSTER_LINE_FACES } from '../poster
 import { shownNameOrEmpty } from '../person-name.js';
 import { unionOrderBadges } from '../marriage-order.js';
 import { measureUnionOrderPill } from '../union-order-measure.js';
+import { expandImageText } from '../image-expand.js';
 
 /** The face of the marriage-order pill's text (index.html .union-order-pill). */
 const PILL_FACE = { family: 'Instrument Sans', weight: 600 };
@@ -432,6 +433,16 @@ function buildCurrentPoster(look?: FanLook): PosterBuild | null {
     return geom ? { svg, ...geom } : null;
 }
 
+/**
+ * The poster as a file, a print or the preview takes it: its pooled images
+ * whole (image-expand.ts) — an SVG in an <img> or a file reads no image from
+ * the pool. Only the images the poster shows are read.
+ */
+async function buildPosterOutput(look?: FanLook): Promise<PosterBuild | null> {
+    const poster = buildCurrentPoster(look);
+    return poster ? { ...poster, svg: (await expandImageText(poster.svg)).data } : null;
+}
+
 function downloadBlob(content: string, type: string, filename: string): void {
     const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
@@ -462,11 +473,11 @@ function dropPreview(): void {
 }
 
 /** The preview: the very poster the output builds (the same function and look), made small. */
-function drawPreview(): void {
+async function drawPreview(): Promise<void> {
     previewTimer = null;
     const seq = ++previewSeq;
     if (!document.getElementById('poster-modal')?.classList.contains('active') || TreeRenderer.getViewMode() !== 'fan') return;
-    const poster = buildCurrentPoster(posterLook.look());
+    const poster = await buildPosterOutput(posterLook.look());
     if (seq !== previewSeq) return;
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = poster ? URL.createObjectURL(new Blob([poster.svg], { type: 'image/svg+xml' })) : null;
@@ -479,7 +490,7 @@ function drawPreview(): void {
 
 function schedulePreview(delay = 150): void {
     if (previewTimer) clearTimeout(previewTimer);
-    previewTimer = setTimeout(drawPreview, delay);
+    previewTimer = setTimeout(() => { void drawPreview(); }, delay);
 }
 
 /** The dialog's choices, its note and "As on screen", and the phone's folded row, as the poster's look stands. */
@@ -637,8 +648,8 @@ export const exportImageMethods = uiModule({
         // The tree's photos still on their way: the file waits for them (spec 116 §8).
         const el = activatedElement();
         if (await imagesBeforeOutput(strings.photos.out.svg, { el }) === 'cancelled') return;
-        await posterBusy(() => {
-            const poster = buildCurrentPoster(posterLook.look());
+        await posterBusy(async () => {
+            const poster = await buildPosterOutput(posterLook.look());
             if (!poster) {
                 this.showAlert(strings.poster.empty, 'warning');
                 return;
@@ -653,7 +664,7 @@ export const exportImageMethods = uiModule({
         const el = activatedElement();
         if (await imagesBeforeOutput(strings.photos.out.png, { el }) === 'cancelled') return;
         await posterBusy(async () => {
-            const poster = buildCurrentPoster(posterLook.look());
+            const poster = await buildPosterOutput(posterLook.look());
             if (!poster) {
                 this.showAlert(strings.poster.empty, 'warning');
                 return;
@@ -728,7 +739,7 @@ export const exportImageMethods = uiModule({
     async printPosterPdf(): Promise<void> {
         // The tree's photos still on their way: the print waits for them, its row says so (spec 116 §8, 8a).
         if (await imagesBeforeOutput(strings.photos.out.poster) === 'cancelled') return;
-        const poster = buildCurrentPoster(posterLook.look());
+        const poster = await buildPosterOutput(posterLook.look());
         if (!poster) {
             this.showAlert(strings.poster.empty, 'warning');
             return;

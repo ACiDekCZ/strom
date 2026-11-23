@@ -54,6 +54,7 @@ import { readRecent } from './tree-overview.js';
 import { uiModule } from './module.js';
 import { activatedElement, BUSY_MIN_MS, BUSY_SHOW_MS, busySpinHtml, nextPaint } from './busy.js';
 import { imagesBeforeOutput } from './output-images.js';
+import { expandedData } from '../image-expand.js';
 import { showProgressToast, type ProgressToastHandle } from './toast.js';
 import type { HistoryPayload, PersonHistoryEnv } from '../history.js';
 import { imageLoads } from '../image-loads.js';
@@ -1527,8 +1528,8 @@ export const bookUiMethods = uiModule({
     },
 
     /** The book's HTML for these options: for the window, or for a saved file. */
-    familyBookHtml(options: BookOptions, forSave: boolean): string {
-        return buildFamilyBook(DataManager.getData(), options, this.familyBookEnv(options, forSave));
+    familyBookHtml(options: BookOptions, forSave: boolean, data: StromData = DataManager.getData()): string {
+        return buildFamilyBook(data, options, this.familyBookEnv(options, forSave));
     },
 
     /** What the book is built with besides the data and the options (window or saved file). */
@@ -1584,7 +1585,10 @@ export const bookUiMethods = uiModule({
             if (go === 'cancelled' || win.closed) throw new BookBuildStopped();
             const k0 = doc.querySelector('.bp-k');
             if (k0) k0.textContent = '';
-            const html = await buildFamilyBookAsync(DataManager.getData(), options, this.familyBookEnv(options, false), async ({ k, n }) => {
+            // Its pooled images whole (image-expand.ts): the book's window and its print are a document of their own.
+            const bookData = await expandedData(DataManager.getData());
+            if (cancelled || win.closed) throw new BookBuildStopped();
+            const html = await buildFamilyBookAsync(bookData, options, this.familyBookEnv(options, false), async ({ k, n }) => {
                 if (cancelled || win.closed) throw new BookBuildStopped();
                 const k$ = doc.querySelector('.bp-k');
                 if (k$) k$.textContent = W.chapterK(k, n);
@@ -1714,9 +1718,12 @@ export const bookUiMethods = uiModule({
                 if (painted) return;
                 painted = true;
                 // The tree's photos still on their way: the file waits for them (spec 116 §8), the button stays "Saving…".
-                void imagesBeforeOutput(strings.photos.out.book, { el: null }).then((go) => {
-                    try { if (go !== 'cancelled' && !win.closed) this.saveOrShareBook(win, options, act, title()); } finally { rest(); }
-                }, rest);
+                // The file carries the pooled images whole (image-expand.ts).
+                void imagesBeforeOutput(strings.photos.out.book, { el: null })
+                    .then(async (go) => go === 'cancelled' || win.closed ? null : expandedData(DataManager.getData()))
+                    .then((data) => {
+                        try { if (data && !win.closed) this.saveOrShareBook(win, options, act, title(), data); } finally { rest(); }
+                    }, rest);
             };
             try { win.requestAnimationFrame(() => win.setTimeout(run, 0)); } catch { /* closed */ }
             setTimeout(run, 100);
@@ -1724,10 +1731,10 @@ export const bookUiMethods = uiModule({
     },
 
     /** Save as HTML / Share from the book's window: the book built for a file. */
-    saveOrShareBook(win: Window, options: BookOptions, act: string | null, bookTitle: string): void {
+    saveOrShareBook(win: Window, options: BookOptions, act: string | null, bookTitle: string, data: StromData = DataManager.getData()): void {
         const doc = win.document;
         try {
-            const html = this.familyBookHtml(options, true);
+            const html = this.familyBookHtml(options, true, data);
             const name = bookFileName(bookTitle);
             if (act === 'save') {
                 const W = win as Window & typeof globalThis;

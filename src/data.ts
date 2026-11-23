@@ -103,6 +103,7 @@ import { buildPersonNameIndex, type ParticipantRef, type PersonNameIndex } from 
 import { foldName } from './godparents.js';
 import { normalizeSha256 } from './sha256.js';
 import { startupPerson } from './default-person.js';
+import { expandedData } from './image-expand.js';
 
 /** Extended updates for Partnership */
 
@@ -503,7 +504,8 @@ export function migrateData(data: unknown): StromData {
  */
 export async function storedTreeForExport(treeId: TreeId): Promise<StromData | null> {
     const stored = await TreeManager.getTreeData(treeId);
-    return stored ? { version: STROM_DATA_VERSION, ...migrateData(stored) } : null;
+    // Every output of a stored tree carries its pooled images whole (image-expand.ts).
+    return stored ? expandedData({ version: STROM_DATA_VERSION, ...migrateData(stored) }) : null;
 }
 
 /**
@@ -5559,8 +5561,8 @@ class DataManagerClass {
 
     // ==================== EXPORT/IMPORT ====================
 
-    exportJSON(privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): void {
-        let out = applyLivingPrivacy(this.data, privacyMode);
+    async exportJSON(privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<void> {
+        let out = applyLivingPrivacy(await expandedData(this.data), privacyMode);
         out = applyContentOptions(out, content);
         const dataStr = JSON.stringify(out, null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
@@ -5649,7 +5651,7 @@ class DataManagerClass {
     async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false, fileName = 'family-tree-focus.json'): Promise<void> {
         // Self-consistent slice (glue + cleaned relations + pruned sources),
         // shared with "make a tree from this view".
-        const sliced = extractSubtree(this.data, visiblePersonIds);
+        const sliced = await expandedData(extractSubtree(this.data, visiblePersonIds));
         let focusedData: StromData = applyLivingPrivacy({
             version: STROM_DATA_VERSION,
             ...sliced,

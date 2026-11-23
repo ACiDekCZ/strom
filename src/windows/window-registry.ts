@@ -16,10 +16,11 @@
 
 import { publishImageSource, WindowImageStore } from './window-images.js';
 import { DataManager } from '../data.js';
+import { expandedData, hasPoolRefs } from '../image-expand.js';
 import { IMAGES_ARRIVED_EVENT } from '../image-loads.js';
 import { TreeManager } from '../tree-manager.js';
 import type { TreeId } from '../types.js';
-import { WindowBus, answerWhenFocused, FOCUS_WAIT_MS, type MessageOf, type WindowBounds, type WindowStatus, type EditRefusal } from './window-bus.js';
+import { WindowBus, answerWhenFocused, FOCUS_WAIT_MS, type MessageOf, type WindowMessageBody, type WindowBounds, type WindowStatus, type EditRefusal } from './window-bus.js';
 import { newWindowId, satelliteUrl, satelliteWindowName, type SatelliteKind } from './window-role.js';
 import { parseAgentFollow, type AgentFollow } from './agent-follow-state.js';
 
@@ -204,6 +205,14 @@ export interface SelectMeta {
     intent: 'mark' | 'focus';
     seq: number | null;
 }
+/** The tree as one message carries it (WindowRegistry.outgoing). */
+type Outgoing = { data: unknown; imageRefs?: true } | { json: string };
+
+/** The message of the tree once its form is had (at once, or after an older window's images are read). */
+function withOutgoing(out: Outgoing | Promise<Outgoing>, make: (o: Outgoing) => WindowMessageBody): WindowMessageBody | Promise<WindowMessageBody> {
+    return out instanceof Promise ? out.then(make) : make(out);
+}
+
 type SelectHandler = (personId: string | null, origin: string, meta: SelectMeta) => void;
 type LinkHandler = (link: { search?: string; files?: unknown[] }, from: string) => void;
 /** Runs a research action; what it returns (or its promise resolves to) goes back to an action sent with `reqId`. */
@@ -249,6 +258,8 @@ export class WindowRegistry {
     private applyingRemoteSelection = false;
     private started = false;
     private readonly images: WindowImageStore;
+    /** Messages behind a tree still being made whole for an older window (outgoing): sent in their order. */
+    private sendQueue: Promise<void> | null = null;
 
     constructor(opts: WindowRegistryOptions) {
         this.bus = opts.bus;
@@ -292,7 +303,7 @@ export class WindowRegistry {
         );
         if (typeof window !== 'undefined') {
             const sync = () => this.sync();
-            const bye = () => this.bus.post({ type: 'main-bye' });
+            const bye = () => this.send({ type: 'main-bye' });
             const rodColors = (e: Event) => this.postFanRodColors((e as CustomEvent<Array<[string, string]>>).detail);
             window.addEventListener('strom:fan-rod-colors', rodColors);
             window.addEventListener('strom:data-changed', sync);
@@ -383,7 +394,7 @@ export class WindowRegistry {
         }
         try { entry.win?.focus(); } catch { /* a closed window */ }
         const answered = this.waitFocused(id);
-        this.bus.post({ type: 'focus-req', to: id });
+        this.send({ type: 'focus-req', to: id });
         return answered;
     }
 
@@ -394,7 +405,7 @@ export class WindowRegistry {
         if (entry.win && !entry.win.closed) {
             try { entry.win.close(); } catch { /* gone already */ }
         } else {
-            this.bus.post({ type: 'close', to: id });
+            this.send({ type: 'close', to: id });
         }
         this.entries.delete(id);
         this.emitChange();
@@ -411,7 +422,7 @@ export class WindowRegistry {
     announceSelection(personId: string | null): void {
         if (this.applyingRemoteSelection || personId === this.lastSelection) return;
         this.lastSelection = personId;
-        this.bus.post({ type: 'select', personId, treeId: this.host.treeId(), origin: this.bus.id });
+        this.send({ type: 'select', personId, treeId: this.host.treeId(), origin: this.bus.id });
     }
 
     /** A person selected in another window (the main view highlights it). Returns the unsubscribe. */
@@ -472,12 +483,12 @@ export class WindowRegistry {
         if (!to) this.fanRodColors = Array.isArray(memory) && memory.length ? memory : null;
         const mem = to ? memory : this.fanRodColors;
         const treeId = this.host.treeId();
-        this.bus.post(to ? { type: 'fan-rod-colors', to, treeId, memory: mem ?? [] } : { type: 'fan-rod-colors', treeId, memory: mem ?? [] });
+        this.send(to ? { type: 'fan-rod-colors', to, treeId, memory: mem ?? [] } : { type: 'fan-rod-colors', treeId, memory: mem ?? [] });
     }
 
     /** The research's state for an overview window (K3). */
     postResearchState(state: unknown): void {
-        this.bus.post({ type: 'research-state', state });
+        this.send({ type: 'research-state', state });
     }
 
     /**
@@ -485,7 +496,7 @@ export class WindowRegistry {
      * or to one (`to`: after its hello or its ask).
      */
     postAgentState(state: unknown, to?: string): void {
-        this.bus.post(to ? { type: 'agent-state', to, state } : { type: 'agent-state', state });
+        this.send(to ? { type: 'agent-state', to, state } : { type: 'agent-state', state });
     }
 
     /** The revision of the agent's state sent last: the status carries it (a window that missed one asks). */
@@ -561,11 +572,14 @@ export class WindowRegistry {
         }
         // One message for all: images as references only when every window takes them from here.
         const out = this.outgoing([...this.entries.values()].filter(e => e.connected));
+        const revision = this.rev;
         if (prev && prev.treeId === treeId && prev.withData) {
-            this.bus.post({ type: 'patch', treeId, revision: this.rev, ...out });
+            this.send(withOutgoing(out, o => ({ type: 'patch', treeId, revision, ...o })));
         } else {
             const replaces = prev?.treeId && prev.treeId !== treeId ? { treeId: prev.treeId, exists: this.host.treeExists(prev.treeId) } : undefined;
-            this.bus.post({ type: 'tree', treeId, name: this.host.treeName(treeId), revision: this.rev, ...out, ...(replaces ? { replaces } : {}), ...this.focusField() });
+            const name = this.host.treeName(treeId);
+            const focus = this.focusField();
+            this.send(withOutgoing(out, o => ({ type: 'tree', treeId, name, revision, ...o, ...(replaces ? { replaces } : {}), ...focus })));
         }
         this.postStatus(false);
     }
@@ -580,15 +594,34 @@ export class WindowRegistry {
     private sendTreeTo(to: string): void {
         const treeId = this.host.treeId();
         if (!treeId || this.host.locked()) return;   // the status says why
-        this.bus.post({ type: 'tree', to, treeId, name: this.host.treeName(treeId), revision: this.rev, ...this.outgoing([this.entries.get(to)]), ...this.focusField() });
+        const name = this.host.treeName(treeId);
+        const revision = this.rev;
+        const focus = this.focusField();
+        this.send(withOutgoing(this.outgoing([this.entries.get(to)]), o => ({ type: 'tree', to, treeId, name, revision, ...o, ...focus })));
         if (!this.lastSent) this.lastSent = { treeId, withData: true };
     }
 
+    /** A message to the other windows, after the ones still waiting (send): at once when none waits. */
+    private send(message: WindowMessageBody | Promise<WindowMessageBody>): void {
+        if (!this.sendQueue && !(message instanceof Promise)) {
+            this.bus.post(message);
+            return;
+        }
+        const queue: Promise<void> = (this.sendQueue ?? Promise.resolve())
+            .then(() => message)
+            .then(m => { this.bus.post(m); }, err => { console.error('window message not sent', err); })
+            .finally(() => { if (this.sendQueue === queue) this.sendQueue = null; });
+        this.sendQueue = queue;
+    }
+
     /** The open tree to send: as data, its images as references when all receivers take them from here. */
-    private outgoing(to: (WindowEntry | undefined)[]): { data: unknown; imageRefs?: true } | { json: string } {
+    private outgoing(to: (WindowEntry | undefined)[]): Outgoing | Promise<Outgoing> {
         const data = this.host.storedData();
-        // A window of an older version takes only one JSON string (as long as one is open).
-        if (to.some(e => e?.takesData !== true)) return { json: JSON.stringify(data) };
+        // A window of an older version takes only one JSON string (as long as one is open), with every image
+        // whole: it reads no pooled image's reference (image-expand.ts; taken now, the images read after).
+        if (to.some(e => e?.takesData !== true)) {
+            return hasPoolRefs(data) ? expandedData(data).then(full => ({ json: JSON.stringify(full) })) : { json: JSON.stringify(data) };
+        }
         return to.every(e => e?.imageRefs === true) ? { data: this.images.replaceImages(data), imageRefs: true } : { data };
     }
 
@@ -648,7 +681,7 @@ export class WindowRegistry {
         const json = JSON.stringify(s);
         if (!force && json === this.lastStatusJson) return;
         this.lastStatusJson = json;
-        this.bus.post({ type: 'status', ...s });
+        this.send({ type: 'status', ...s });
     }
 
     private tick(): void {
@@ -687,7 +720,7 @@ export class WindowRegistry {
         this.entries.set(id, entry);
         if (!entry.initSent) {
             entry.initSent = true;
-            if (entry.initial !== undefined) this.bus.post({ type: 'init', to: id, kind: entry.kind, state: entry.initial });
+            if (entry.initial !== undefined) this.send({ type: 'init', to: id, kind: entry.kind, state: entry.initial });
         }
         this.checkRevision();
         this.sendTreeTo(id);
@@ -702,7 +735,7 @@ export class WindowRegistry {
     private onEdit(m: MessageOf<'edit'>): void {
         this.checkRevision();
         const refuse = (reason: EditRefusal) => {
-            this.bus.post({ type: 'edit-result', to: m.from, editId: m.editId, ok: false, revision: this.rev, reason });
+            this.send({ type: 'edit-result', to: m.from, editId: m.editId, ok: false, revision: this.rev, reason });
             this.sendTreeTo(m.from);
             this.postStatus(true);
         };
@@ -714,7 +747,7 @@ export class WindowRegistry {
         if (m.baseRevision !== this.rev) return refuse('revision');
         if (!this.host.applyEdit(m.json, m.label, listsOnly)) return refuse('invalid');
         this.checkRevision();
-        this.bus.post({ type: 'edit-result', to: m.from, editId: m.editId, ok: true, revision: this.rev });
+        this.send({ type: 'edit-result', to: m.from, editId: m.editId, ok: true, revision: this.rev });
         this.postStatus(false);
     }
 
@@ -787,7 +820,7 @@ export class WindowRegistry {
         if (this.researchMenuProvider && (!m.treeId || m.treeId === this.host.treeId())) {
             try { items = this.researchMenuProvider(m.personId); } catch (err) { console.error('research menu failed', err); }
         }
-        this.bus.post({ type: 'research-menu', to: m.from, reqId: m.reqId, items });
+        this.send({ type: 'research-menu', to: m.from, reqId: m.reqId, items });
     }
 
     private onResearchAction(a: HeldAction): void {
@@ -806,11 +839,11 @@ export class WindowRegistry {
         if (!reqId) return;
         const answer = (value: unknown) => {
             try {
-                this.bus.post({ type: 'research-action-result', to: a.from, reqId, result: value ?? null });
+                this.send({ type: 'research-action-result', to: a.from, reqId, result: value ?? null });
             } catch (err) {
                 // An outcome a structured clone does not take: the window hears "no outcome".
                 console.error('research action result not sent', err);
-                this.bus.post({ type: 'research-action-result', to: a.from, reqId, result: null });
+                this.send({ type: 'research-action-result', to: a.from, reqId, result: null });
             }
         };
         Promise.resolve(result).then(answer, (err) => { console.error('research action failed', err); answer(null); });

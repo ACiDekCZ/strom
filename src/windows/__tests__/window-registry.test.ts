@@ -18,6 +18,7 @@ import { LAST_FOCUSED } from '../../model-values.js';
 import { WindowBus, createMemoryHub, type WindowMessage } from '../window-bus.js';
 import { WindowRegistry, dataManagerHost, PATCH_INTERVAL_MS } from '../window-registry.js';
 import { IMAGES_ARRIVED_EVENT } from '../../image-loads.js';
+import { StorageManager } from '../../storage.js';
 
 const last = <T>(xs: T[]): T | undefined => xs[xs.length - 1];
 
@@ -674,5 +675,31 @@ describe('a satellite of an older version (3.31 and before) among the windows (1
         DataManager.createPerson({ firstName: 'Ludmila', lastName: 'Okurková', gender: 'female' });
         await settle(PATCH_INTERVAL_MS);
         expect(treeOf(last(fresh.of('patch'))!.data).persons[pid].photo).toBe(photo);
+    });
+
+    it('a pooled image in the tree reaches it whole, read from the pool; the messages after the tree keep their order (135)', async () => {
+        const pid = DataManager.getAllPersons()[0].id;
+        const bytes = new Uint8Array(3000).map((_, i) => (i * 13) & 0xFF);
+        const head = 'data:image/jpeg;base64,';
+        const photo = head + Buffer.from(bytes).toString('base64');
+        const poolId = 'p:' + 'c4'.repeat(20);
+        const getMany = vi.spyOn(StorageManager, 'getMany').mockImplementation(async (_store: string, keys: string[]) =>
+            new Map(keys.map(k => [k, k === poolId ? { head, bytes: bytes.slice().buffer } : null])) as never);
+        // In memory as a tree read from storage holds it once images stay in the pool (135 D6).
+        (DataManager as unknown as { data: StromData }).data.persons[pid].photo = '\u0000sm:' + poolId;
+        const id = registry.openSatellite('overview')!;
+        const old = listener(hub, id);
+        old.bus.post({ type: 'hello', windowId: id, kind: 'overview', treeId: TREE });
+        await settle();
+        await vi.waitFor(() => expect(old.of('tree')).toHaveLength(1));
+        const tree = old.of('tree')[0] as unknown as { json?: string };
+        expect(tree.json).not.toContain('sm:p:');
+        expect((JSON.parse(tree.json!) as StromData).persons[pid].photo).toBe(photo);
+        expect(getMany).toHaveBeenCalled();
+        // The status the registry sent after the tree comes after it.
+        const order = old.got.filter(m => m.type === 'tree' || m.type === 'status').map(m => m.type);
+        expect(order.indexOf('tree')).toBeLessThan(order.lastIndexOf('status'));
+        // The tree in memory keeps its reference.
+        expect(DataManager.getData().persons[pid].photo).toBe('\u0000sm:' + poolId);
     });
 });

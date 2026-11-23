@@ -14,6 +14,7 @@ import { AuditLogManager } from './audit-log.js';
 import { applyLivingPrivacy, applyContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
 import { storedTreeForExport } from './data.js';
+import { expandedData } from './image-expand.js';
 
 /**
  * Clean dynamic UI state from HTML before export: drop 'active' from specific
@@ -394,7 +395,7 @@ class AppExporterClass {
             const exportId = generateExportId();
 
             // Prepare data for embedding (privacy filter, then optional encryption)
-            let filteredData = applyLivingPrivacy(focusedData, privacyMode);
+            let filteredData = applyLivingPrivacy(await expandedData(focusedData), privacyMode);
             filteredData = applyContentOptions(filteredData, content);
             let embedDataContent: StromData | EncryptedData = filteredData;
             if (password) {
