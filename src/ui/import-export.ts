@@ -61,6 +61,8 @@ export interface AfterImportOptions {
     importId?: string;
     added?: number;
     updated?: number;
+    /** The "What next" card without its data check row (the merge guide's last step has it, spec 134 §9). */
+    noCheck?: boolean;
 }
 import {
     validateJsonImport,

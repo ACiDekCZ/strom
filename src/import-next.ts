@@ -66,11 +66,13 @@ export interface ImportNextRowsInput {
     research: ImportNextResearch;
     /** The bridge offers the bulk verification (importNextVerifyAvailable). */
     verify: boolean;
+    /** The data check's row (default true); false after the merge guide, whose last step has the check (spec 134 §9). */
+    check?: boolean;
 }
 
-/** The card's rows, top down: the data check (always), the split (2+ families), the research. */
+/** The card's rows, top down: the data check (unless `check: false`), the split (2+ families), the research. */
 export function importNextRows(input: ImportNextRowsInput): ImportNextRow[] {
-    const rows: ImportNextRow[] = [{ kind: 'check', findings: Math.max(0, input.findings) }];
+    const rows: ImportNextRow[] = input.check === false ? [] : [{ kind: 'check', findings: Math.max(0, input.findings) }];
     if (input.families >= 2) rows.push({ kind: 'split', families: input.families });
     rows.push({ kind: 'research', state: input.research, verify: input.research === 'linked' && input.verify });
     return rows;
