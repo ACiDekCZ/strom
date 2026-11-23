@@ -2253,3 +2253,38 @@ test.describe('Back and Forward beside the legends while following (1122 E)', ()
         }
     });
 });
+
+test.describe('the fan legend chip beside the research strip on a phone (1123)', () => {
+    /** The chip against the research's strip and Back / Forward: the pairs that overlap. */
+    const chipClashes = (page: Page) => page.evaluate(() => {
+        const shown = (el: Element | null): DOMRect | null => {
+            if (!el) return null;
+            const r = el.getBoundingClientRect();
+            const s = getComputedStyle(el);
+            return r.width && r.height && s.display !== 'none' && s.visibility !== 'hidden' ? r : null;
+        };
+        const chip = shown(document.getElementById('fan-legend-chip'));
+        if (!chip) return ['no chip'];
+        const out: string[] = [];
+        for (const id of ['live-panel', 'focus-back-btn', 'focus-forward-btn']) {
+            const b = shown(document.getElementById(id));
+            if (b && chip.left < b.right && b.left < chip.right && chip.top < b.bottom && b.top < chip.bottom) out.push(`chip × ${id}`);
+        }
+        return out;
+    });
+
+    test('at 390 without a pill the chip stands above the strip and Back / Forward above the chip', async ({ page }) => {
+        const bridge = await follow(page, { size: { width: 390, height: 844 }, idle: 60_000, on: true, quick: true });
+        await expect(page.locator('#live-panel.phone-strip')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.setLiveFollowView('fan'));
+        await expect(page.locator('#fan-chart .fan-svg')).toBeVisible();
+        await page.evaluate(() => window.Strom.TreeRenderer.setFanColorMode('rod'));
+        await expect(page.locator('#evidence-pill, #live-follow-pill')).toHaveCount(0);
+        await expect.poll(() => chipClashes(page), { message: 'no back / forward' }).toEqual([]);
+        for (const p of ['P0001', 'P0012']) { bridge.person = p; await nextStatus(bridge); }
+        await page.evaluate(() => window.Strom.TreeRenderer.goBack());
+        await expect(page.locator('#focus-back-btn')).toBeVisible();
+        await expect(page.locator('#evidence-pill, #live-follow-pill')).toHaveCount(0);
+        await expect.poll(() => chipClashes(page), { message: 'with back / forward' }).toEqual([]);
+    });
+});

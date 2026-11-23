@@ -545,6 +545,17 @@ export type LineRunOffer =
     | { kind: 'offer'; n: number }
     | { kind: 'held'; why: string; limit: boolean; n: number };
 
+/**
+ * The arc beside a worked direction's name: spinning while its agent works; still, in the warning colour, while the
+ * direction's own run waits (an archive, the limit), as its state line says.
+ */
+function workingArc(s: LiveSession, d: LiveDirection): HTMLElement {
+    const waits = runLinesOn(s.features) && lineRunOf(liveRuns(s), d.id)?.state === 'waiting';
+    const arc = el('span', waits ? 'agent-mark is-wait' : 'agent-mark agent-mark--spin');
+    arc.setAttribute('aria-hidden', 'true');
+    return arc;
+}
+
 /** The sentence of a held direction's run (null: the action is not drawn). */
 function lineRunWhy(block: LineRunBlock, runs: readonly LiveRun[]): string | null {
     const L = strings.live;
@@ -888,11 +899,7 @@ export const researchDirectionsMethods = uiModule({
         const head = el('button', 'research-direction__head');
         head.type = 'button';
         head.appendChild(el('span', 'research-direction__name', d.name));
-        if (d.working) {
-            const arc = el('span', 'agent-mark agent-mark--spin');
-            arc.setAttribute('aria-hidden', 'true');
-            head.appendChild(arc);
-        }
+        if (d.working) head.appendChild(workingArc(s, d));
         if (paused) head.appendChild(el('span', 'research-direction__chip', L.dirPausedChip(d.since ? shortDate(d.since) : '')));
         if (view.phoneOnly) {
             head.onclick = () => this.showDirectionInTree(d, mode);
@@ -1705,11 +1712,7 @@ export const researchDirectionsMethods = uiModule({
         head.type = 'button';
         const name = el('span', 'research-direction__name', d.name);
         head.appendChild(name);
-        if (d.working && d.state === 'active') {
-            const arc = el('span', 'agent-mark agent-mark--spin');
-            arc.setAttribute('aria-hidden', 'true');
-            head.appendChild(arc);
-        }
+        if (d.working && d.state === 'active') head.appendChild(workingArc(s, d));
         if (d.state !== 'active') head.appendChild(el('span', 'research-direction__chip', d.state === 'paused' ? L.dirPaused : L.dirDone));
         if (phone) {
             // Phone: a tap shows the direction's people in the tree.

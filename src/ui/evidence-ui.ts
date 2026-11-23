@@ -412,7 +412,20 @@ export const evidenceUiMethods = uiModule({
             const next = document.createElement('button');
             next.type = 'button';
             next.className = 'evidence-pill-next';
-            next.textContent = s.next;
+            // Its words and its arrow apart: a phone's selection pill shows the arrow alone (its name stays
+            // "Next person ›"), so the selection's name keeps the room (1123).
+            const arrow = /\s*›$/.exec(s.next);
+            if (arrow) {
+                const words = document.createElement('span');
+                words.className = 'evidence-pill-next-t';
+                words.textContent = s.next.slice(0, arrow.index);
+                const mark = document.createElement('span');
+                mark.className = 'evidence-pill-next-a';
+                mark.textContent = arrow[0];
+                next.append(words, mark);
+            } else {
+                next.textContent = s.next;
+            }
             // An empty selection (§12): nobody to go to.
             next.disabled = evidence.ids.length === 0;
             next.onclick = () => this.evidenceNext();

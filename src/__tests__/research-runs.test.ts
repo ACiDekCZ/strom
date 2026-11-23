@@ -18,7 +18,7 @@ import { postRunLimit, postRunStop, runLimitRaise } from '../research-runs-write
 import { createDirection, previewDirection, undoGather } from '../research-directions-write.js';
 import { setLanguage, strings } from '../strings.js';
 import { pausedReasonText } from '../ui/research-ui.js';
-import { lineRunWaitLine, runEndedText } from '../research-runs-text.js';
+import { lineRunWaitLine, runEndedText, runsWaitingText } from '../research-runs-text.js';
 
 const TREE = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
 const FEATURES = ['run.lines', 'run.agents', 'run.stop', 'run.limit', 'directions.move', 'queue.page', 'offLine.branches'];
@@ -433,6 +433,30 @@ describe('the texts of the runs in Now (§3, §4)', () => {
         setLanguage('en');
         expect([1, 3].map(n => strings.live.nowAgents(n))).toEqual(['Now · 1 agent', 'Now · 3 agents']);
         expect([1, 3].map(n => strings.live.stateAgents(n))).toEqual(['1 agent working', '3 agents working']);
+    });
+
+    it('says under the state tile how many runs wait, an archive\'s wait too (runsWaitingText)', () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(2026, 10, 23, 11, 0));
+        try {
+            const working = { state: 'working' as const };
+            const limit = (h: number) => ({ state: 'waiting' as const, wait: { for: 'limit' as const, until: new Date(2026, 10, 23, h, 0).toISOString() } });
+            const archive = { state: 'waiting' as const, wait: { for: 'archive' as const, until: new Date(2026, 10, 23, 12, 15).toISOString() } };
+            expect(runsWaitingText([working, working])).toBeNull();
+            // Before: a run waiting for the archive left "2 agents working" with nothing under it.
+            expect(runsWaitingText([working, archive])).toBe('1 waiting');
+            expect(runsWaitingText([working, archive, limit(14)])).toBe('2 waiting');
+            expect(runsWaitingText([working, limit(15), limit(14)])).toMatch(/^2 waiting for the limit until 0?2:00\sPM$/);
+            expect(runsWaitingText([working, { state: 'waiting', wait: { for: 'limit' } }])).toBe('1 waiting for the limit');
+            setLanguage('cs');
+            expect([1, 2, 5].map(k => strings.live.stateAgentsWaitingAny(k))).toEqual(['1 čeká', '2 čekají', '5 čeká']);
+            setLanguage('de');
+            expect([1, 2].map(k => strings.live.stateAgentsWaitingAny(k))).toEqual(['1 wartet', '2 warten']);
+            setLanguage('pl');
+            expect([1, 2, 5].map(k => strings.live.stateAgentsWaitingAny(k))).toEqual(['1 czeka', '2 czekają', '5 czeka']);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('says why a run ended only for the limit and an error (runEndedText)', () => {

@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Locator, Page } from '@playwright/test';
 import { UUID, directionRow, launchedLinks, openOverview, overview } from './live-directions-bridge';
 import { RUNS, RUN_AGENTS_MANY, RUN_DIRECTIONS, RUN_FEATURES, RUN_WORKING, followRuns } from './live-runs-bridge';
 
@@ -105,8 +105,35 @@ test.describe('a direction\'s own run', () => {
         await expect(meta.locator('.research-direction__in-now')).toHaveText('In Now ›');
         await expect(overview(page).locator('#ov-sec-now [data-run="run-1a07"] .research-overview__run-state'))
             .toHaveText(`waiting for the archive until ${await clockOf(page, until)}`);
+        // The state tile counts it among the agents and says it waits (before: "2 agents working", nothing under it).
+        const tile = overview(page).locator('.research-overview__summary .research-overview__cell').first();
+        await expect(tile.locator('.research-overview__cell-value')).toHaveText('2 agents working');
+        await expect(tile.locator('.research-overview__cell-sub')).toHaveText('1 waiting');
+        // It looks waiting, as Now's state does: the warning colour, the dot yellow, never the working primary.
+        const color = (l: Locator, prop: 'color' | 'backgroundColor' = 'color') => l.evaluate((e, p) => getComputedStyle(e)[p], prop);
+        const token = (l: Locator, name: string) => l.evaluate((e, n) => {
+            const probe = e.appendChild(document.createElement('i'));
+            probe.style.color = getComputedStyle(e).getPropertyValue(n).trim();
+            const c = getComputedStyle(probe).color;
+            probe.remove();
+            return c;
+        }, name);
+        // The arc beside the name stands still in the warning colour; a run at work spins it.
+        const arc = directionRow(page, 'G0001').locator('.research-direction__head .agent-mark');
+        await expect(arc).toHaveClass(/is-wait/);
+        await expect(arc).not.toHaveClass(/agent-mark--spin/);
+        expect(await arc.evaluate(e => getComputedStyle(e).borderTopColor)).toBe(await token(arc, '--warning'));
+        const runMeta = meta.locator('.research-direction__run-meta');
+        // Polled: a status redraws the row meanwhile.
+        await expect.poll(async () => await color(runMeta) === await token(runMeta, '--warning-text')).toBe(true);
         await unfold(page, 'G0001');
-        await expect(runBox(page, 'G0001').locator('.research-direction__run-state')).toHaveText(wait);
+        const state = runBox(page, 'G0001').locator('.research-direction__run-state');
+        await expect(state).toHaveText(wait);
+        await expect(state).toHaveClass(/is-wait/);
+        await expect.poll(async () => await color(state) === await token(state, '--warning-text')).toBe(true);
+        const dot = state.locator('.research-direction__run-dot');
+        await expect.poll(async () => await color(dot, 'backgroundColor') === await token(state, '--warning')).toBe(true);
+        expect(await color(dot, 'backgroundColor')).not.toBe(await token(state, '--primary'));
     });
 
     test('held, never hidden: paused, nothing in its queue, the most runs at once (with Settings ›)', async ({ page }) => {

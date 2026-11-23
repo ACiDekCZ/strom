@@ -717,13 +717,119 @@ export function taskImageProblem(file: { name: string; size?: number }, maxBytes
     return (file.size ?? 0) > maxBytes ? 'size' : null;
 }
 
-/** The image number a file's name says: its last group of digits ("DA_4-12_0058.tif" → 58), or null. */
-export function imageNumberOfName(name: string): number | null {
-    const base = name.replace(/\.[A-Za-z0-9]{1,8}$/, '');
-    const groups = base.match(/\d+/g);
-    if (!groups) return null;
-    const last = groups[groups.length - 1];
-    return last.length <= 6 ? imageNumber(Number(last)) : null;
+/**
+ * What a file manager adds to the name of a copy at its end (the research's
+ * `copyless`): Finder's " 2", " copy", " copy 2" (" kopie", " Kopie", " kopia"
+ * in its languages), Explorer's " - Copy", " - Copy (2)", " – kopie" and a
+ * browser's " (1)". A word of a copy; a number in parentheses only when a
+ * number is left before it; a bare " 2" … " 9" only after a name that is a
+ * number alone, or a number and a zoomed-in part's letter ("33a 2.jpg").
+ */
+const COPY_WORD = /(?:\s*[-–—]\s*|\s+)(?:copy|kopie|kopia|kopija|copia|copie|копия|копія)(?:\s+\p{Nd}+|\s*\(\p{Nd}+\))?$/iu;
+const COPY_PAREN = /\s*\(\p{Nd}+\)$/u;
+const COPY_BARE = /^(\p{Nd}+\p{L}?)\s+[2-9]$/u;
+
+/** A file's name without its folder, its extension and a copy's suffix (COPY_WORD), NFC. */
+function nameStem(name: string): string {
+    const base = name.slice(Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\')) + 1);
+    const dot = base.lastIndexOf('.');
+    let stem = (dot > 0 ? base.slice(0, dot) : base).normalize('NFC').trim();
+    const word = stem.replace(COPY_WORD, '');
+    if (word !== stem && /\p{Nd}/u.test(word)) return word.trim();
+    const paren = stem.replace(COPY_PAREN, '');
+    if (paren !== stem && /\p{Nd}/u.test(paren)) stem = paren.trim();
+    const bare = COPY_BARE.exec(stem);
+    return bare ? bare[1] : stem;
+}
+
+/**
+ * A date in a name (a screenshot's, a camera's: "2026-11-04 10.07",
+ * "4.11.2026", "IMG_20261104_100723"): its numbers are never an image's.
+ */
+const DATED = [
+    /(?<!\p{Nd})(?:19|20)[0-9]{2}([-._ ])(?:0?[1-9]|1[0-2])\1(?:0?[1-9]|[12][0-9]|3[01])(?!\p{Nd})/u,
+    /(?<!\p{Nd})(?:0?[1-9]|[12][0-9]|3[01])([-._ ])(?:0?[1-9]|1[0-2])\1(?:19|20)[0-9]{2}(?!\p{Nd})/u,
+    /(?<!\p{Nd})(?:19|20)[0-9]{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01])(?!\p{Nd})/u,
+];
+
+/** Four digits that look like a year (1500–2099): of a name with other numbers too, not taken by rule 5 when which images is not known. */
+const YEAR = /^(?:1[5-9]|20)[0-9]{2}$/u;
+
+/** The image numbers of files' names, and the files whose name gives two images asked for (not guessed). */
+export interface ImageNamesRead {
+    numbers: (number | null)[];
+    ambiguous: { index: number; numbers: number[] }[];
+}
+
+/**
+ * The image number each file's name gives, by the research's rules (its
+ * `readNumbers`, so the app sends the number the research would read of the
+ * same name), the first rule that gives one:
+ *   1. one group of digits ("33", "IMG_0057", "snímek 8", "__0236");
+ *   2. of several groups, the one number that is an image asked for (`want`):
+ *      "CZ-SOA_1784_0236", "fond12_kniha3_236" — two asked for in one name
+ *      ("0012_0236" of a task waiting for 12 and 236) are not guessed;
+ *   3. the place of the group that changes from file to file of those given
+ *      (all with as many groups; of images asked for, each one of them):
+ *      "Lhota_11__025", "Lhota_11__125";
+ *   4. the one zero-padded counter of three digits at least among other
+ *      numbers ("…_00141_sign-4411.jpg");
+ *   5. the last number before the extension — an image asked for, or any when
+ *      which ones is not known but one that looks like a year (YEAR: "33 1784"
+ *      is not guessed).
+ * A name with a date (a screenshot's "2026-11-04 10.07") only by 1 and 4;
+ * digits of another script are not read. A number outside 1–999999: none.
+ */
+export function readImageNumbers(names: readonly string[], want?: readonly number[] | null): ImageNamesRead {
+    const wanted = new Set(want ?? []);
+    const known = wanted.size > 0;
+    const asked = (n: number): boolean => !known || wanted.has(n);
+    const read = names.map(name => {
+        const stem = nameStem(name);
+        const groups = stem.match(/\p{Nd}+/gu) ?? [];
+        return { groups: groups.every(g => /^[0-9]+$/.test(g)) ? groups : [], dated: DATED.some(d => d.test(stem)) };
+    });
+    const ambiguous: ImageNamesRead['ambiguous'] = [];
+    const unsure = new Set<number>();
+    const numbers: (number | undefined)[] = read.map(({ groups, dated }, i) => {
+        if (groups.length === 1) return Number(groups[0]);
+        if (groups.length < 2 || dated || !known) return undefined;
+        const hits = [...new Set(groups.map(Number).filter(n => wanted.has(n)))];
+        if (hits.length === 1) return hits[0];
+        if (hits.length > 1) {
+            ambiguous.push({ index: i, numbers: hits.sort((a, b) => a - b) });
+            unsure.add(i);
+        }
+        return undefined;
+    });
+    // 3. The group that changes from file to file.
+    const many = read.map((_, i) => i).filter(i => read[i].groups.length > 1 && !read[i].dated);
+    const n = many.length ? read[many[0]].groups.length : 0;
+    if (many.length > 1 && many.every(i => read[i].groups.length === n)) {
+        const varying = [...Array(n).keys()].filter(k => new Set(many.map(i => Number(read[i].groups[k]))).size > 1);
+        const k = varying[varying.length - 1];
+        if (k !== undefined && many.every(i => asked(Number(read[i].groups[k])))) {
+            for (const i of many) if (numbers[i] === undefined && !unsure.has(i)) numbers[i] = Number(read[i].groups[k]);
+        }
+    }
+    read.forEach(({ groups, dated }, i) => {
+        if (numbers[i] !== undefined || unsure.has(i) || groups.length < 2) return;
+        // 4. A counter of three digits at least (a date's "04", a time's "07" are no counter).
+        const padded = groups.filter(g => g.length > 2 && g.startsWith('0'));
+        if (padded.length === 1) numbers[i] = Number(padded[0]);
+        // 5. The last number before the extension, never of a date; which images not known,
+        // never one that looks like a year among other numbers ("33 1784", "kniha_33_1784").
+        else {
+            const last = groups[groups.length - 1];
+            if (!dated && asked(Number(last)) && (known || !YEAR.test(last))) numbers[i] = Number(last);
+        }
+    });
+    return { numbers: numbers.map(v => v === undefined ? null : imageNumber(v)), ambiguous };
+}
+
+/** The image number one file's name says (readImageNumbers), or null. */
+export function imageNumberOfName(name: string, want?: readonly number[] | null): number | null {
+    return readImageNumbers([name], want).numbers[0];
 }
 
 /**
@@ -780,9 +886,11 @@ export function assignImages(files: readonly { name: string; size?: number }[], 
     opts: { chosen?: readonly (number | null | undefined)[]; maxBytes?: number; next?: number } = {}): ImagesAssigned {
     const wanted = want ? new Set(want) : null;
     const saved = new Set(have);
+    // The names read together, as the research reads a folder's files (a number that changes from file to file).
+    const named = readImageNumbers(files.map(f => f.name), want).numbers;
     const out: ImageAssignment[] = files.map((f, index) => {
         const problem = opts.maxBytes !== undefined ? taskImageProblem(f, opts.maxBytes) : TASK_IMAGE_EXT.includes(fileExt(f.name)) ? null : 'format';
-        const nameNum = imageNumberOfName(f.name);
+        const nameNum = named[index];
         return {
             index, num: null, how: null, nameNum, unwanted: !!wanted && nameNum !== null && !wanted.has(nameNum), replace: 'no',
             ...(problem ? { problem } : {}),

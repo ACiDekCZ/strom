@@ -19,6 +19,21 @@ function clock(iso: string | undefined): string {
     return Number.isFinite(ts) ? formatLiveClock(ts, Date.now(), getCurrentLanguage()) : '';
 }
 
+/**
+ * Under the state tile's "3 agents working" (spec 126 U10 §3): how many of the runs wait — "1 waiting for the limit
+ * until 14:00" when all of them wait for the limit, else "2 waiting" (an archive, the browser, a download count too:
+ * before, a run waiting for the archive was counted as working with nothing said); null when none waits.
+ */
+export function runsWaitingText(runs: readonly Pick<LiveRun, 'state' | 'wait'>[]): string | null {
+    const L = strings.live;
+    const waits = runs.filter(r => r.state === 'waiting');
+    if (waits.length === 0) return null;
+    if (waits.some(r => r.wait?.for !== 'limit')) return L.stateAgentsWaitingAny(waits.length);
+    const ends = waits.map(r => Date.parse(r.wait?.until ?? '')).filter(Number.isFinite);
+    const until = ends.length > 0 ? formatLiveClock(Math.min(...ends), Date.now(), getCurrentLanguage()) : '';
+    return until ? L.stateAgentsWaiting(waits.length, until) : L.stateAgentsWaitingNoTime(waits.length);
+}
+
 /** What a waiting run waits for, until when ("waiting for the subscription limit until 14:00"). */
 export function runWaitText(run: Pick<LiveRun, 'wait'>): string {
     const L = strings.live;

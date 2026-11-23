@@ -293,6 +293,17 @@ test.describe('Add material… (Strom archive)', () => {
         await expect(box).toBeChecked();
         await expect(dialog.locator('.material-attach')).toContainText('Also save to the tree');
         await expect(dialog.locator('.material-attach')).toContainText('(1 of 1)');
+        // Ticked, the note under it says the file goes into the tree too; unticked, nothing does.
+        await expect(dialog.locator('.material-box')).toContainText('Images and PDFs up to 2 MB are also saved to the tree with the person. All the files are stored in the Strom archive with the person.');
+        await box.uncheck();
+        await expect(dialog.locator('.material-box')).toContainText('Nothing is added to the tree. The files are stored in the Strom archive with the person.');
+        await box.check();
+        // The box sits on the label's line, left of it.
+        const c = (await box.boundingBox())!;
+        const t = (await dialog.locator('.material-attach .confirm-check-label').boundingBox())!;
+        expect(c.x + c.width).toBeLessThanOrEqual(t.x);
+        expect(c.y).toBeLessThan(t.y + t.height);
+        expect(c.y + c.height).toBeGreaterThan(t.y);
         const asked = material.asks.length;
         await dialog.getByRole('button', { name: 'Save 1 file' }).click();
         await expect(dialog).toHaveCount(0);

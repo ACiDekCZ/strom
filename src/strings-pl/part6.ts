@@ -1714,6 +1714,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         stateAgents: (n: number) => plPl(n, 'Pracuje 1 agent', `Pracują ${n} agenci`, `Pracuje ${n} agentów`),
         stateAgentsWaiting: (k: number, t: string) => `${k} ${plPl(k, 'czeka', 'czekają', 'czeka')} na limit do ${t}`,
         stateAgentsWaitingNoTime: (k: number) => `${k} ${plPl(k, 'czeka', 'czekają', 'czeka')} na limit`,
+        stateAgentsWaitingAny: (k: number) => `${k} ${plPl(k, 'czeka', 'czekają', 'czeka')}`,
         runWhole: 'Cała kolejka',
         runStateWorking: 'pracuje',
         runStateLimit: (t: string) => `czeka na limit subskrypcji do ${t}`,

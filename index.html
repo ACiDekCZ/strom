@@ -9125,6 +9125,9 @@
         .confirm-check input { margin-top: 3px; flex-shrink: 0; }
         .confirm-check-label { display: block; color: var(--text); }
         .confirm-check-hint { display: block; margin-top: 2px; font-size: 12px; color: var(--text-light); line-height: 1.4; }
+        /* `.modal label { display: block }` used to win in the material dialog, putting the box on a line
+           of its own above its text: the longer selector keeps the box beside it. */
+        .material-dialog label.confirm-check { display: flex; margin: 8px 0 4px; font-size: 14px; font-weight: 400; color: var(--text); }
 
         /* "Couldn't connect to the research": the reason, the way to allow it (research-ui.ts). */
         .research-connect-failed { width: 480px; max-width: calc(100vw - 32px); }
@@ -14189,8 +14192,9 @@
             .fan-toolbar .fan-stepper .depth-stepper-btn { width: 40px; height: 36px; }
             .fan-legend { display: none; }
             .fan-legend-chip { display: inline-flex; }
-            /* Back / forward stand above the chip (spec 082 K1.2), not the chip above them; on the research's strip as before. */
-            body.focus-nav-shown:has(> #live-panel.phone-strip:not([hidden])) .fan-legend-chip { bottom: 68px; }
+            /* Back / forward stand above the chip (spec 082 K1.2), not the chip above them; with the research's
+               strip the chip stands 8px above the strip (as the tree's pills, --live-strip-h) and they above the chip (1123). */
+            body:has(> #live-panel.phone-strip:not([hidden])):not(:has(#evidence-pill)):not(:has(#live-follow-pill)) .fan-legend-chip { bottom: calc(12px + var(--live-strip-h, 0px)); }
             /* A column at the right edge: the pills of the tree end 80px from it. */
             .fan-zoom-controls { flex-direction: column; right: 12px; }
             /* The pills of the tree take the bottom: the chip goes to the top right. */
@@ -25627,6 +25631,15 @@
         .research-direction__run-state > strong { font-weight: 600; color: var(--primary); }
         .research-direction__run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); align-self: center; flex: none; }
         .research-direction__run-meta { color: var(--text); }
+        /* A run that waits (an archive, the limit) looks as Now's waiting state, not as one at work: its text in the
+           warning colour, the dot warning yellow instead of the working primary. */
+        .research-direction__run-meta.is-wait, .research-direction__run-state.is-wait { color: var(--warning-text); }
+        .research-direction__run-state.is-wait .research-direction__run-dot { background: var(--warning); }
+        /* Its one text stays beside the dot and wraps under itself, as the working state's parts do. */
+        .research-direction__run-state.is-wait > span:not(.research-direction__run-dot) { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+        .research-direction__head .agent-mark.is-wait {
+            border-color: color-mix(in srgb, var(--warning) 25%, transparent); border-top-color: var(--warning); border-right-color: var(--warning);
+        }
         .research-direction__meta .research-direction__in-now { font-size: inherit; }
         @media (pointer: coarse) {
             .research-direction__run-why .link-button, .research-direction__in-now { min-height: 44px; }
@@ -26777,6 +26790,12 @@
             .evidence-pill--sel .evidence-pill-hide-t {
                 position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
             }
+            /* Next person its arrow alone, a 44 px target (its words stay its accessible name): in de its words
+               took 122 of the pill's 294 px and left the selection's name "List…" (1123). */
+            .evidence-pill--sel .evidence-pill-next-t {
+                position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+            }
+            .evidence-pill--sel .evidence-pill-next { position: relative; min-width: 44px; padding: 0; justify-content: center; font-size: 18px; }
         }
         /* Wider than a phone the selection's pill is as wide as its content up to its max-width: placed at 50 % it
            would shrink to half the screen and cut a long name with its count while room is left (§12). */
@@ -28403,6 +28422,8 @@
             body.tree-legend-shown:is([data-view-mode="family"], [data-view-mode="descendants"]):has(> .evidence-pill ~ .live-follow-pill) { --nav-lift: max(0px, calc(var(--tree-legend-h, 0px) - 112px)); }
             body[data-view-mode="fan"]:not(:has(#evidence-pill)):not(:has(#live-follow-pill)) { --nav-lift: 52px; }
             body:has(> #live-panel.phone-strip:not([hidden])) { --nav-lift: 0px; }
+            /* The fan's chip on the strip (no pill): back / forward stand above it, as without the strip. */
+            body[data-view-mode="fan"]:has(> #live-panel.phone-strip:not([hidden])):not(:has(#evidence-pill)):not(:has(#live-follow-pill)) { --nav-lift: 52px; }
         }
         /* Held sideways the tree's pill stands at the top, centred: the fan's chip keeps the bottom left
            with back / forward above it, as without the pill (a family line's name in the chip, spec 114 §6,
