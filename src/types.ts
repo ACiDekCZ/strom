@@ -205,8 +205,11 @@ export interface LifeEvent {
  */
 export interface PortraitCrop {
     /**
-     * The frame (a square in pixels) in fractions 0–1 of the image after the
+     * The frame (a square in pixels) in fractions of the image after the
      * mirror and the quarter turns, from the top left: w × width = h × height.
+     * w, h ≤ 1; the frame may reach past the image's edge (x < 0, x + w > 1…)
+     * as long as its centre lies on the image — the part off the image is
+     * PORTRAIT_EMPTY_FILL in the portrait.
      */
     region: { x: number; y: number; w: number; h: number };
     /** Clockwise turn in quarter turns (none = upright). */

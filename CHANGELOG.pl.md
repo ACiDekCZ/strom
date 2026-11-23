@@ -4,6 +4,13 @@
 
 Lista zmian po polsku zaczyna się od wersji 3.21.0; starsze wersje są opisane [po angielsku](CHANGELOG.md).
 
+## 3.32.0
+
+*Ta wersja jest w przygotowaniu; ta sekcja rośnie z każdą wersją testową.*
+
+- **Portret poza krawędzią zdjęcia**: w edytorze portretu zdjęcie można przesunąć pod ramką także poza jego krawędź i tam powiększyć, więc twarz przy krawędzi zdjęcia może znaleźć się na środku portretu; środek ramki zawsze pozostaje na zdjęciu. Część portretu poza zdjęciem ma neutralny jasny kolor, tak samo na karcie, w wachlarzu, w książce, w eksporcie obrazu, w zapisanych stronach, w druku i w GEDCOM. Wcześniej wycięte portrety wyglądają jak dotąd.
+- **Połącz z… w śledzonym drzewie**: *Połącz z…* jest w śledzonym drzewie dostępne wszędzie jak w każdym innym drzewie (*Materiały* osoby i wiersze załączników, przeglądarka pliku); okno mówi, że drzewo jest w tym czasie tylko do odczytu, i proponuje *Zakończ śledzenie*.
+
 ## 3.31.0
 
 *Wydano 22 listopada 2026.*

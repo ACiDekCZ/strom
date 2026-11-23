@@ -2,6 +2,13 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch · [Polski](CHANGELOG.pl.md)
 
+## 3.32.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Porträt über den Fotorand hinaus**: Im Porträteditor lässt sich das Foto unter dem Rahmen auch über seinen Rand hinaus verschieben und dort vergrößern, sodass ein Gesicht am Rand des Fotos in die Mitte des Porträts rücken kann; die Mitte des Rahmens bleibt immer auf dem Foto. Der Teil des Porträts außerhalb des Fotos hat eine neutrale helle Farbe, gleich auf der Karte, im Fächer, im Buch, im Bildexport, in gespeicherten Seiten, im Druck und in GEDCOM. Früher zugeschnittene Porträts sehen aus wie bisher.
+- **Verknüpfen mit… in einem verfolgten Stammbaum**: *Verknüpfen mit…* wird in einem live verfolgten Stammbaum überall angeboten wie in jedem anderen (*Materialien* der Person und Anhangzeilen, Dateibetrachter); der Dialog sagt, dass der Stammbaum währenddessen schreibgeschützt ist, und bietet *Verfolgung beenden* an.
+
 ## 3.31.0
 
 *Veröffentlicht am 22. November 2026.*

@@ -520,6 +520,104 @@ test.describe('Link to… never ends without a word (1122 F)', () => {
     });
 });
 
+// ==================== A TREE FOLLOWED LIVE: LINK TO… OFFERED AS ANYWHERE (1123) ====================
+
+/** Jan's file of the tree in a followed tree (put there for a moment without following; invented). */
+async function janTreeFile(page: Page, name: string): Promise<string> {
+    return page.evaluate(({ px, name }) => {
+        const dm = window.Strom.DataManager;
+        const followed = dm.getLiveTreeId();
+        const jan = (Object.values(dm.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!.id;
+        dm.setLiveTree(null);
+        const id = dm.addAttachment(jan as never, { name, mimeType: 'image/png', dataUrl: px, sizeBytes: 70 } as never)!.id as string;
+        dm.setLiveTree(followed);
+        return id;
+    }, { px: PX, name });
+}
+
+async function janModal(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const jan = (Object.values(window.Strom.DataManager.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!.id;
+        const ui = window.Strom.UI as unknown as { pushDialog(id: string): void; showEditPersonModal(id: string): void };
+        ui.pushDialog('person-modal');
+        ui.showEditPersonModal(jan);
+    });
+    await expect(page.locator('#person-modal')).toBeVisible();
+}
+
+const sectionRow = (page: Page, text: string) => page.locator('#materials-section .material-row:not(.is-skeleton)', { hasText: text });
+const itemMenu = (page: Page) => page.locator('#materials-item-menu');
+
+test.describe('Link to… in a tree followed live, as in any tree (1123)', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('the person\'s Materials ⋯ offers it for a file of the tree; the dialog says the tree is read-only, End following, then it links', async ({ page }) => {
+        const material = fakeMaterial({ files: [], batches: [], people: { ...PEOPLE, P0004: 'Kordula Fíšková' } });
+        await followLive(page, material);
+        const id = await janTreeFile(page, 'pohlednice.png');
+        await expect.poll(() => page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(true);
+        await janModal(page);
+        await sectionRow(page, 'pohlednice.png').locator('.material-more').click();
+        await expect(itemMenu(page)).toBeVisible();
+        await expect(itemMenu(page).locator('[data-action="attach"]')).toHaveText('Link to…');
+        // Only Link to… comes back: the other writes of the tree stay hidden while it is followed.
+        await expect(itemMenu(page).locator('[data-action="removeFromTree"], [data-action="makeSource"]')).toHaveCount(0);
+        await itemMenu(page).locator('[data-action="attach"]').click();
+        await expect(dialog(page).locator('.mdlg-sub')).toHaveText('pohlednice.png · in the tree');
+        const followed = dialog(page).locator('.mdlg-attach-followed');
+        await expect(followed).toContainText('The tree is followed live and is read-only.');
+        await dialog(page).locator('.ppm-row', { hasText: 'Anna Svobodová' }).click();
+        await expect(go(page)).toBeDisabled();
+        await followed.getByRole('button', { name: 'End following' }).click();
+        await expect.poll(() => page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(false);
+        await expect(followed).toBeHidden();
+        await expect(go(page)).toBeEnabled();
+        await go(page).click();
+        await expect(dialog(page)).toHaveCount(0);
+        await expect(pill(page).locator('.undo-toast-msg')).toHaveText('Linked to Anna Svobodová.');
+        expect(await placesOf(page, id)).toHaveLength(2);
+    });
+
+    test('the viewer of a file of the tree offers it (P too), not Create a source… nor Remove from the tree…', async ({ page }) => {
+        const material = fakeMaterial({ files: [], batches: [], people: { ...PEOPLE, P0004: 'Kordula Fíšková' } });
+        await followLive(page, material);
+        await janTreeFile(page, 'pohlednice.png');
+        await view(page, 'pohlednice.png');
+        await expect(act(page, 'attach')).toHaveText('Link to…');
+        await expect(act(page, 'makeSource')).toHaveCount(0);
+        await expect(act(page, 'removeFromTree')).toHaveCount(0);
+        await page.keyboard.press('p');
+        await expect(dialog(page).locator('.mdlg-attach-followed')).toBeVisible();
+        await expect(dialog(page).locator('.mdlg-attach-followed').getByRole('button', { name: 'End following' })).toBeVisible();
+    });
+
+    test('a locked person still hides it; without following the menu is as before', async ({ page }) => {
+        const material = fakeMaterial({ files: [], batches: [], people: { ...PEOPLE, P0004: 'Kordula Fíšková' } });
+        await followLive(page, material);
+        await janTreeFile(page, 'pohlednice.png');
+        await page.evaluate(() => {
+            const jan = (Object.values(window.Strom.DataManager.getData().persons) as { firstName: string; isLocked?: boolean }[]).find(p => p.firstName === 'Jan')!;
+            jan.isLocked = true;
+        });
+        await janModal(page);
+        await sectionRow(page, 'pohlednice.png').locator('.material-more').click();
+        await expect(itemMenu(page)).toBeVisible();
+        await expect(itemMenu(page).locator('[data-action="attach"]')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(itemMenu(page)).toHaveCount(0);
+        // Unlocked and not followed: Link to… and Remove from the tree…, as always.
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const jan = (Object.values(dm.getData().persons) as { firstName: string; isLocked?: boolean }[]).find(p => p.firstName === 'Jan')!;
+            jan.isLocked = false;
+            dm.setLiveTree(null);
+        });
+        await sectionRow(page, 'pohlednice.png').locator('.material-more').click();
+        await expect(itemMenu(page).locator('[data-action="attach"]')).toHaveText('Link to…');
+        await expect(itemMenu(page).locator('[data-action="removeFromTree"]')).toBeVisible();
+    });
+});
+
 test.describe('The selection in a tree without an archive (spec 102 §8, O1)', () => {
     test.use({ viewport: DESKTOP });
 

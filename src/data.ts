@@ -174,6 +174,15 @@ export interface WindowEditSink {
     sessionEnded(): void;
 }
 
+/**
+ * Options of the lock checks (isTreeLocked, isPersonLocked, canEditMedia).
+ * `exceptFollow`: following a live research is not counted — for Link to…,
+ * offered in a followed tree as in any other (its dialog says why it waits).
+ */
+export interface LockCheck {
+    exceptFollow?: boolean;
+}
+
 /** Import action types for view mode */
 export type ViewModeImportAction = 'new' | 'update' | 'copy';
 
@@ -792,21 +801,25 @@ class DataManagerClass {
     // ==================== VIEW MODE ====================
 
     /**
-     * Check if a person is locked (either individually or via tree lock)
+     * Check if a person is locked (either individually or via tree lock).
+     * `exceptFollow`: as if the tree did not follow a live research (1123).
      */
-    isPersonLocked(personId: PersonId): boolean {
+    isPersonLocked(personId: PersonId, opts: LockCheck = {}): boolean {
         if (this.isLocked()) return true;
         const person = this.data.persons[personId];
         if (person?.isLocked) return true;
-        return this.isTreeLocked();
+        return this.isTreeLocked(opts);
     }
 
     /**
-     * Check if the active tree is locked
+     * Check if the active tree is locked. `exceptFollow`: following a live
+     * research is left out (1123: Link to… is offered in a followed tree, its
+     * dialog says the tree is read-only and offers End following); every other
+     * reason still counts.
      */
-    isTreeLocked(): boolean {
+    isTreeLocked(opts: LockCheck = {}): boolean {
         if (this.windowSink?.readOnly()) return true;
-        if (this.liveTreeId !== null && this.liveTreeId === this.currentTreeId) return true;
+        if (!opts.exceptFollow && this.isLiveFollowing()) return true;
         if (this.isNewerData()) return true;
         const meta = TreeManager.getActiveTreeMetadata();
         return meta?.isLocked === true;
@@ -4419,9 +4432,9 @@ class DataManagerClass {
     }
 
     /** Every person a file is with may be changed (a file of no person: the tree). */
-    private mediaEditable(att: Attachment): boolean {
-        if (this.isTreeLocked()) return false;
-        return att.places.every(p => { const pid = placePersonId(p); return !pid || !this.isPersonLocked(pid); });
+    private mediaEditable(att: Attachment, opts: LockCheck = {}): boolean {
+        if (this.isTreeLocked(opts)) return false;
+        return att.places.every(p => { const pid = placePersonId(p); return !pid || !this.isPersonLocked(pid, opts); });
     }
 
     /** Change a file's detail as one undo step. */
@@ -4458,10 +4471,14 @@ class DataManagerClass {
         });
     }
 
-    /** The file's title, kind, date and note may be changed here (not read-only, every person of it unlocked). */
-    canEditMedia(id: string): boolean {
+    /**
+     * The file's title, kind, date and note may be changed here (not read-only,
+     * every person of it unlocked). `exceptFollow`: as if the tree did not
+     * follow a live research — Link to… is offered then (1123).
+     */
+    canEditMedia(id: string, opts: LockCheck = {}): boolean {
         const att = findMedia(this.data, id);
-        return !!att && !this.isReadOnly() && this.mediaEditable(att);
+        return !!att && !this.isReadOnly() && this.mediaEditable(att, opts);
     }
 
     /**

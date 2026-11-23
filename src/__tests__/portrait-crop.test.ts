@@ -12,7 +12,8 @@ import {
     panPortraitView, zoomPortraitView, straightenPortraitView, turnPortraitView, mirrorPortraitView,
     portraitViewMatrix, portraitOutputMatrix, invertMatrix, applyMatrix, isPortraitRegionSquare,
     isPortraitSourceShape, isDefaultPortraitCrop, portraitSourcePixels, dropDanglingPortraitSources,
-    computeCoverCrop, PortraitView, stripPhotos, totalPhotoBytes, dataUrlByteSize,
+    computeCoverCrop, PortraitView, stripPhotos, totalPhotoBytes, dataUrlByteSize, isPortraitRegionShape,
+    PORTRAIT_EMPTY_FILL,
 } from '../photo.js';
 import { countImages } from '../attachments.js';
 import { addPersonMedia, personMedia } from '../media.js';
@@ -42,6 +43,13 @@ function cornersInside(view: PortraitView, w: number, h: number): boolean {
         const p = sourcePoint(view, w, h, u, v);
         return p.x >= -eps && p.y >= -eps && p.x <= w + eps && p.y <= h + eps;
     });
+}
+
+/** Whether the frame's centre lands on the original. */
+function centreInside(view: PortraitView, w: number, h: number): boolean {
+    const eps = 1e-6 * Math.max(w, h);
+    const p = sourcePoint(view, w, h, OUT / 2, OUT / 2);
+    return p.x >= -eps && p.y >= -eps && p.x <= w + eps && p.y <= h + eps;
 }
 
 const close = (a: { x: number; y: number }, b: { x: number; y: number }, digits = 6): void => {
@@ -89,7 +97,7 @@ describe('portrait crop math', () => {
         expect(r.max).toBe(r.min);
     });
 
-    it('clamping keeps every corner on the photo at any turn, angle and mirror', () => {
+    it('clamping keeps the frame\'s centre on the photo at any turn, angle and mirror', () => {
         const sizes: [number, number][] = [[400, 300], [300, 1200], [150, 150], [5000, 4000]];
         for (const [w, h] of sizes) {
             for (const quarterTurns of [0, 1, 2, 3] as const) {
@@ -98,7 +106,7 @@ describe('portrait crop math', () => {
                         // Too far out and too wide on purpose.
                         const view = clampPortraitView({ cx: -1000, cy: 99999, zoom: 0.2, quarterTurns, angle, mirror }, w, h);
                         expect(view.zoom).toBeGreaterThanOrEqual(minZoomForAngle(angle) - 1e-12);
-                        expect(cornersInside(view, w, h)).toBe(true);
+                        expect(centreInside(view, w, h)).toBe(true);
                     }
                 }
             }
@@ -132,7 +140,9 @@ describe('portrait crop math', () => {
         const c = clampPortraitCrop(src, 400, 400);
         expect(c.attachmentId).toBe('a1');
         expect(c.angle).toBe(45);
-        expect(c.region.x + c.region.w).toBeLessThanOrEqual(1 + 1e-6);
+        // The frame may reach past the edge, its centre stays on the photo.
+        expect(c.region.x + c.region.w / 2).toBeCloseTo(1, 6);
+        expect(c.region.y + c.region.h / 2).toBeCloseTo(1, 6);
     });
 
     it('four quarter turns come back; the point under the frame stays under it', () => {
@@ -172,9 +182,10 @@ describe('portrait crop math', () => {
         const under = sourcePoint(view, w, h, 100, 100);
         const moved = panPortraitView(view, 30, -15, OUT, w, h);
         close(sourcePoint(moved, w, h, 130, 85), under, 4);
-        // At the edge it stops: a long drag keeps the corners on the photo.
+        // A long drag stops with the frame's centre on the photo's edge.
         const far = panPortraitView(view, -99999, 0, OUT, w, h);
-        expect(cornersInside(far, w, h)).toBe(true);
+        expect(centreInside(far, w, h)).toBe(true);
+        expect(cornersInside(far, w, h)).toBe(false);
     });
 
     it('zooming about the pointer keeps the point under it', () => {
@@ -269,7 +280,7 @@ describe('portrait source on load', () => {
         const bad: PortraitSource[] = [
             { attachmentId: 'att1', partnershipId: U, region: square },          // both origins
             { region: square },                                                  // none
-            { attachmentId: 'att1', region: { x: 0.5, y: 0, w: 0.75, h: 1 } },   // outside the image
+            { attachmentId: 'att1', region: { x: 0.7, y: 0, w: 0.75, h: 1 } },   // its centre off the image
             { attachmentId: 'att1', region: { x: 0, y: 0, w: 0.5, h: 1 } },      // not a square
             { attachmentId: 'att1', region: square, angle: 46 },                 // beyond 45°
             { attachmentId: 'gone', region: square },                            // no such attachment
@@ -582,6 +593,13 @@ describe('merging a tree with portraits and a couple photo', () => {
         expect(he.photo).toBe(PORTRAIT);
         expect(he.photoSource).toEqual({ attachmentId: 'att-in', region: square, angle: 5 });
     });
+    it('a portrait whose frame reaches past its photo\'s edge keeps that source', async () => {
+        const incoming = incomingTree();
+        const past = { x: -0.3, y: 0, w: 0.75, h: 1 };
+        named(incoming, 'Zorbin').photoSource = { attachmentId: 'att-in', region: past };
+        const he = named((await executeMerge(createMergeState(importGed(), incoming))).mergedData, 'Zorbin');
+        expect(he.photoSource?.region).toEqual(past);
+    });
 });
 
 // ── An update from the research ──
@@ -646,5 +664,120 @@ describe('an update from the research keeps the app\'s portrait sources and coup
         next.persons[B].partnerships = [];
         // The attachment of A comes along; the couple's photo has no couple to go to.
         expect(carryOverMedia(next, previous).lost).toBe(1);
+    });
+});
+
+// ── A frame past the photo's edge (1123) ──
+
+describe('a frame past the photo\'s edge', () => {
+    const w = 900, h = 600;
+    /** A view of the 900 × 600 photo, upright: zoom 2 is a frame of 300 page px. */
+    const at = (cx: number, cy: number, zoom = 2): PortraitView => ({ cx, cy, zoom, quarterTurns: 0, angle: 0, mirror: false });
+    /** 400 × 300 (tree()): the 300 px square, 120 px of it off the left edge. */
+    const past = { x: -0.3, y: 0, w: 0.75, h: 1 };
+
+    it('the photo moves under the frame past its edge; the frame\'s centre on the edge is the stop', () => {
+        // A frame of 300 px on screen at zoom 2: one screen pixel is one page pixel.
+        // Before, the frame stopped with its side on the edge (centre 150 px in).
+        const v = panPortraitView(at(200, 300), 100, 0, 300, w, h);
+        expect(v.cx).toBeCloseTo(100, 9);
+        const crop = portraitCropFromView(v, w, h);
+        expect(crop.region.x).toBeCloseTo(-50 / 900, 6);
+        expect(crop.region.w).toBeCloseTo(300 / 900, 6);
+        // Further on, the centre stops on the edge: half the frame off the photo.
+        const far = panPortraitView(v, 5000, 5000, 300, w, h);
+        expect(far).toMatchObject({ cx: 0, cy: 0, zoom: 2 });
+        const r = portraitCropFromView(far, w, h).region;
+        expect(r.x).toBeCloseTo(-150 / 900, 6);
+        expect(r.y).toBeCloseTo(-0.25, 6);
+        expect(panPortraitView(v, -99999, -99999, 300, w, h)).toMatchObject({ cx: 900, cy: 600 });
+    });
+
+    it('zooming without a pointer keeps the frame\'s centre, also at the edge; the range is as before', () => {
+        const v = at(20, 580, 1.5);
+        const zin = zoomPortraitView(v, 4, w, h);
+        expect(zin).toMatchObject({ cx: 20, cy: 580, zoom: 4 });
+        // Out to 100 %: the frame reaches past two edges, its centre has not moved.
+        const zout = zoomPortraitView(zin, 1, w, h);
+        expect(zout).toMatchObject({ cx: 20, cy: 580, zoom: 1 });
+        expect(portraitCropFromView(zout, w, h).region.x).toBeLessThan(0);
+        expect(zoomPortraitView(v, 99, w, h).zoom).toBe(portraitZoomRange(w, h, 0).max);
+        expect(zoomPortraitView(v, 0.1, w, h).zoom).toBe(1);
+    });
+
+    it('zooming about the pointer keeps the point under it past the edge, the centre held on the photo', () => {
+        const v = at(100, 300, 2);
+        const under = sourcePoint(v, w, h, OUT / 2 - 100, OUT / 2);
+        const z = zoomPortraitView(v, 4, w, h, { x: -100, y: 0, framePx: OUT });
+        close(sourcePoint(z, w, h, OUT / 2 - 100, OUT / 2), under, 4);
+        expect(portraitCropFromView(z, w, h).region.x).toBeLessThan(0);
+        // Out about a point right of the centre: the centre would leave the photo; it stops on the edge.
+        expect(zoomPortraitView(at(30, 300, 2), 1, w, h, { x: 120, y: 0, framePx: OUT }).cx).toBe(0);
+    });
+
+    it('the guard: the frame\'s centre never leaves the photo (also on a turned page)', () => {
+        expect(clampPortraitView(at(-50, 700), w, h)).toMatchObject({ cx: 0, cy: 600 });
+        // Turned once, the page is 600 × 900.
+        expect(clampPortraitView({ ...at(950, -1), quarterTurns: 1 }, w, h)).toMatchObject({ cx: 600, cy: 0 });
+        expect(centreInside(clampPortraitView({ ...at(-9, 9999), angle: 30 }, w, h), w, h)).toBe(true);
+    });
+
+    it('a crop past the edge and its view convert both ways; one inside the photo is kept as it was', () => {
+        const crop = { region: { x: -0.1, y: 0.6, w: 1 / 3, h: 0.5 } };
+        const back = portraitCropFromView(portraitViewFromCrop(crop, w, h), w, h);
+        expect(back.region.x).toBeCloseTo(-0.1, 6);
+        expect(back.region.y).toBeCloseTo(0.6, 6);
+        expect(back.region.y + back.region.h).toBeGreaterThan(1);
+        expect(clampPortraitCrop({ attachmentId: 'a', ...crop }, w, h)).toEqual({ attachmentId: 'a', ...back });
+        // An older crop inside the photo, also one at the old limit when straightened: unchanged.
+        const inside = { region: { x: 0.2, y: 0.1, w: 0.4, h: 0.6 } };
+        expect(clampPortraitCrop(inside, w, h)).toEqual(inside);
+        const limit = portraitCropFromView({ ...at(150 * minZoomForAngle(10), 300), angle: 10 }, w, h);
+        expect(cornersInside(portraitViewFromCrop(limit, w, h), w, h)).toBe(true);
+        expect(clampPortraitCrop(limit, w, h)).toEqual(limit);
+    });
+
+    it('the shape of a region: past the edge yes; its centre off the photo, a side over the whole, nothing: no', () => {
+        expect(isPortraitRegionShape({ x: -0.5, y: -0.5, w: 1, h: 1 })).toBe(true);
+        expect(isPortraitSourceShape({ attachmentId: 'a', region: { x: -0.2, y: 0.7, w: 0.4, h: 0.6 } })).toBe(true);
+        expect(isPortraitSourceShape({ partnershipId: 'u', region: { x: 0.8, y: -0.3, w: 0.4, h: 0.6 } })).toBe(true);
+        expect(isPortraitSourceShape({ attachmentId: 'a', region: { x: -0.21, y: 0, w: 0.4, h: 0.6 } })).toBe(false);
+        expect(isPortraitSourceShape({ attachmentId: 'a', region: { x: 0.5, y: 0.71, w: 0.4, h: 0.6 } })).toBe(false);
+        expect(isPortraitSourceShape({ attachmentId: 'a', region: { x: 0, y: 0, w: 1.01, h: 0.5 } })).toBe(false);
+        expect(isPortraitSourceShape({ attachmentId: 'a', region: { x: 0, y: 0, w: 0, h: 0.5 } })).toBe(false);
+        expect(isPortraitSourceShape({ attachmentId: 'a', region: { x: Number.NaN, y: 0, w: 0.5, h: 0.5 } })).toBe(false);
+    });
+
+    it('the neutral fill is the light card\'s empty portrait colour', () => {
+        expect(PORTRAIT_EMPTY_FILL).toBe('#f0e9da');
+    });
+
+    it('a source past the edge holds on load (attachment and couple photo), also after a JSON round trip', () => {
+        const d = tree({ attachmentId: 'att1', region: past, angle: 3 });
+        expect(cleanPortraitSources(d)).toBe(0);
+        expect(d.persons[A].photoSource).toEqual({ attachmentId: 'att1', region: past, angle: 3 });
+        expect(cleanPortraitSources(tree({ partnershipId: U, region: { x: 0.5, y: -0.4, w: 0.75, h: 1 } }))).toBe(0);
+        const loaded = migrateData(JSON.parse(JSON.stringify(tree({ attachmentId: 'att1', region: past }))));
+        expect(loaded.persons[A].photoSource).toEqual({ attachmentId: 'att1', region: past });
+    });
+
+    it('updatePerson saves it', () => {
+        load(tree());
+        DataManager.updatePerson(A, { photo: PORTRAIT, photoSource: { attachmentId: 'att1', region: past } });
+        expect(DataManager.getPerson(A)?.photoSource).toEqual({ attachmentId: 'att1', region: past });
+    });
+
+    it('an update from the research (a followed tree) carries it, and the tree loads with it', () => {
+        const previous = tree({ attachmentId: 'att1', region: past });
+        previous.persons[B].photo = PORTRAIT;
+        previous.persons[B].photoSource = { partnershipId: U, region: { x: 0.5, y: -0.4, w: 0.75, h: 1 } };
+        const next = structuredClone(previous);
+        for (const p of Object.values(next.persons)) { delete p.photo; delete p.photoSource; }
+        delete next.media;
+        for (const u of Object.values(next.partnerships)) { delete u.photo; delete u.photoOriginalName; delete u.photoDate; }
+        const { data } = carryOverMedia(next, previous);
+        const loaded = migrateData(JSON.parse(JSON.stringify(data)));
+        expect(loaded.persons[A].photoSource).toEqual({ attachmentId: 'att1', region: past });
+        expect(loaded.persons[B].photoSource).toEqual({ partnershipId: U, region: { x: 0.5, y: -0.4, w: 0.75, h: 1 } });
     });
 });

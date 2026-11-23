@@ -189,6 +189,62 @@ test.describe('portrait editor (desktop)', () => {
         expect(s.source).toMatchObject({ quarterTurns: 3, angle: -5, mirror: true });
     });
 
+    test('the photo moves under the frame past its edge (mouse and arrows); the card\'s portrait is neutral off the photo', async ({ page }) => {
+        await page.clock.setFixedTime(new Date('2026-11-23T10:00:00'));
+        await openForZbyhoslav(page);
+        await choose(page, await quartersPng(page, 900, 600));
+        const frame = editor(page).locator('.pe-frame');
+        const box = (await frame.boundingBox())!;
+        const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+        // Dragged far right: the frame goes past the photo's left edge until its centre is on it.
+        await page.mouse.move(cx, cy);
+        await page.mouse.down();
+        await page.mouse.move(cx + box.width * 3, cy, { steps: 6 });
+        await page.mouse.up();
+        // At 100 % the frame covers the photo's height: before, ↓ could not move it at all.
+        await frame.focus();
+        for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowDown');
+        /** A pixel of a canvas or an image, as [r, g, b]. */
+        const pixel = (sel: string, x: number, y: number) => page.evaluate(([sel, x, y]) => {
+            const el = document.querySelector(sel as string) as HTMLCanvasElement | HTMLImageElement;
+            const c = document.createElement('canvas');
+            const w = el instanceof HTMLCanvasElement ? el.width : el.naturalWidth;
+            const h = el instanceof HTMLCanvasElement ? el.height : el.naturalHeight;
+            c.width = w; c.height = h;
+            const ctx = c.getContext('2d')!;
+            ctx.drawImage(el, 0, 0);
+            return Array.from(ctx.getImageData(Math.round((x as number) * w), Math.round((y as number) * h), 1, 1).data.slice(0, 3));
+        }, [sel, x, y] as const);
+        const NEUTRAL = [0xf0, 0xe9, 0xda];
+        const near = (got: number[], want: number[]) => got.every((v, i) => Math.abs(v - want[i]) <= 12);
+        // The card preview in the editor: off the photo (left, top) the neutral fill, not black or the stage.
+        await expect.poll(async () => near(await pixel('.pe-overlay .pe-av', 0.03, 0.5), NEUTRAL)).toBe(true);
+        await expect.poll(async () => near(await pixel('.pe-overlay .pe-av', 0.5, 0.03), NEUTRAL)).toBe(true);
+        await editor(page).getByRole('button', { name: 'Done' }).click();
+        await expect(editor(page)).toHaveCount(0);
+        await personModal(page).getByRole('button', { name: 'Save' }).click();
+        await expect(personModal(page)).toBeHidden();
+        const s = await stored(page);
+        // The frame's centre on the left edge (cx 0), 180 px of 600 above the top (3 × 10 % of the frame).
+        expect(s.source!.region.x).toBeCloseTo(-300 / 900, 4);
+        expect(s.source!.region.w).toBeCloseTo(600 / 900, 4);
+        expect(s.source!.region.y).toBeCloseTo(-0.3, 4);
+        // The card shows the portrait: off the photo neutral, on it the photo (red quarter).
+        const img = page.locator('#tree-canvas .person-card[aria-label^="Zbyhoslav"] .card-avatar img');
+        await expect(img).toHaveAttribute('src', /^(data:image\/jpeg|blob:)/);
+        await expect.poll(() => img.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth)).toBeGreaterThan(0);
+        const sel = '#tree-canvas .person-card[aria-label^="Zbyhoslav"] .card-avatar img';
+        expect(near(await pixel(sel, 0.03, 0.5), NEUTRAL)).toBe(true);
+        expect(near(await pixel(sel, 0.5, 0.03), NEUTRAL)).toBe(true);
+        expect(near(await pixel(sel, 0.75, 0.75), [0xc0, 0x39, 0x2b])).toBe(true);
+        // The portrait the card, the image export and the saved HTML show is this one.
+        const shown = await page.evaluate(async (u) => {
+            const r = await fetch(u); const b = await r.blob();
+            return new Promise<string>(res => { const f = new FileReader(); f.onload = () => res(f.result as string); f.readAsDataURL(b); });
+        }, (await img.getAttribute('src'))!);
+        expect(shown).toBe(s.photo);
+    });
+
     test('the sliders are the app\'s green in the light and the dark theme, never the system blue', async ({ page }) => {
         await openForZbyhoslav(page);
         await choose(page, await quartersPng(page, 900, 600));

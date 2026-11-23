@@ -852,11 +852,13 @@ export const materialViewerMethods = uiModule({
         // Link to… (spec 102 §4): the tree's file in the tree; material outside it needs the bridge (Q2).
         const inTree = !!item.attachment?.places?.length;
         // A family tree file (spec 117 §5): Delete permanently… is its only action.
-        const canAttach = item.tree ? false : inTree ? DataManager.canEditMedia(item.attachment!.id) : inArchive && !!ctx?.caps.assign && !item.removedId && !DataManager.isReadOnly();
+        const canAttach = item.tree ? false : inTree ? DataManager.canEditMedia(item.attachment!.id, { exceptFollow: true }) : inArchive && !!ctx?.caps.assign && !item.removedId && !DataManager.isReadOnly();
+        // Create a source from this file…: as Link to…, but not while the tree follows a research (Link to… waits in its dialog, 1123).
+        const canMakeSource = item.tree ? false : inTree ? DataManager.canEditMedia(item.attachment!.id) : canAttach;
         // The person the materials were opened for (their card, the window filtered to them) is chosen at the start (1121).
         if (canAttach) action(m.attach, () => this.openAttachDialog([item], { personId: st.ctx.personId ?? this.materialContextPerson() }), { primary: true, write: !inTree, id: 'attach' });
         // Create a source from this file… (spec 102 §5): the second action, the same conditions as Link to….
-        if (canAttach && this.canEditSources()) action(m.makeSource, () => void this.makeSourceFromMaterial(item, { personId: this.materialContextPerson() }), { write: !inTree, id: 'makeSource' });
+        if (canMakeSource && this.canEditSources()) action(m.makeSource, () => void this.makeSourceFromMaterial(item, { personId: this.materialContextPerson() }), { write: !inTree, id: 'makeSource' });
         if (inArchive && !item.tree) {
             if (item.removedId && item.hidden) {
                 // Taken out of the tree: back with its places (the tree's own write).
