@@ -24829,6 +24829,15 @@
         .research-direction__run-state > strong { font-weight: 600; color: var(--primary); }
         .research-direction__run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); align-self: center; flex: none; }
         .research-direction__run-meta { color: var(--text); }
+        /* A run that waits (an archive, the limit) looks as Now's waiting state, not as one at work: its text in the
+           warning colour, the dot warning yellow instead of the working primary. */
+        .research-direction__run-meta.is-wait, .research-direction__run-state.is-wait { color: var(--warning-text); }
+        .research-direction__run-state.is-wait .research-direction__run-dot { background: var(--warning); }
+        /* Its one text stays beside the dot and wraps under itself, as the working state's parts do. */
+        .research-direction__run-state.is-wait > span:not(.research-direction__run-dot) { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+        .research-direction__head .agent-mark.is-wait {
+            border-color: color-mix(in srgb, var(--warning) 25%, transparent); border-top-color: var(--warning); border-right-color: var(--warning);
+        }
         .research-direction__meta .research-direction__in-now { font-size: inherit; }
         @media (pointer: coarse) {
             .research-direction__run-why .link-button, .research-direction__in-now { min-height: 44px; }
