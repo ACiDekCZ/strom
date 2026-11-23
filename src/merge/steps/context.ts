@@ -29,10 +29,35 @@ export interface StepContext {
     step5?: Step5Env;
 }
 
-/** Step 5 of the guide: Save the list… (K6.4), the plan as .txt and .json. */
+/** Step 5 of the guide: Save the list… (K6.4), the plan as .txt and .json; where the write stands (§8). */
 export interface Step5Env {
     savePlan(): void;
+    /** Where the write stands (8a–8f), null before a write or after a choice changed. */
+    readonly status: WriteStatus | null;
+    /** A button of a state: Back to Whom to add, Backups…, Save the tree to a file…, Try again, the rotation's answer. */
+    act(action: WriteAction): void;
 }
+
+/** Where the write of step 5 stands (spec 134 §8 8a–8f), said above the list. */
+export type WriteStatus =
+    /** 8a: the totals and links are checked (`p` people, `l` links, `s` sources). */
+    | { kind: 'checking'; p: number; l: number; s: number }
+    /** 8f, before the people: the backup "Before merge" of tree `t` is made. */
+    | { kind: 'backup'; t: string }
+    /** 8f: written into tree `t`, `a` of `n` people. */
+    | { kind: 'writing'; t: string; a: number; n: number }
+    /** 8b: the check before saving failed; `message` says what, `detail` the findings. */
+    | { kind: 'bad'; message: string; detail: string }
+    /** 8c: the target changed meanwhile; the plan was built again. */
+    | { kind: 'changed'; text: string }
+    /** 8d: the backup could not be made (`detail`: why). */
+    | { kind: 'backupFailed'; detail: string }
+    /** A tree's write did not land (nothing left behind). */
+    | { kind: 'failed'; message: string }
+    /** 8e: the rotation would delete the backup of the merge of `date`. */
+    | { kind: 'retention'; date: string };
+
+export type WriteAction = 'whom' | 'backups' | 'save-tree' | 'retry' | 'keep-both' | 'drop-oldest';
 
 /** A decision of step 2: same, new, not added, another person of the tree; null = undecided again. */
 export type PairDecision = 'confirm' | 'reject' | 'skip' | { type: 'manual_match'; targetId: PersonId };

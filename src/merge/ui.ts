@@ -51,10 +51,10 @@ import { shownNameOrEmpty } from '../person-name.js';
 import { iconSvg } from '../icons.js';
 import { MergeWizard, targetBlock, targetBlockText, wizardRoute, type CompareRun, type WizardSource } from './wizard-ui.js';
 import type { WizardStep } from './wizard-steps.js';
-import { isRepeatOf, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
-import { newTreeName, writePlan } from './write.js';
+import { isRepeatOf, planCounts, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
+import { newTreeName, writePlan, type TargetChange, type WritePhase } from './write.js';
 import { exportPlan } from './plan-export.js';
-import type { Step1Env, Step2Env, TargetRow, UnionConflictLine } from './steps/context.js';
+import type { Step1Env, Step2Env, TargetRow, UnionConflictLine, WriteStatus } from './steps/context.js';
 import { closeNotTaken, parkGedcomSummary } from './steps/step1-what.js';
 import { closeStep3Overlay } from './steps/step3-whom.js';
 import { closeStep5Overlay } from './steps/step5-plan.js';
@@ -121,7 +121,9 @@ class MergerUIClass {
         moved: () => { if (this.hasUnsavedChanges) this.scheduleAutoSave(); },
         saveForLater: () => this.saveForLater(),
         finishCompare: () => this.closeMergeModalInternal(),
-        write: plan => this.write(plan),
+        write: (plan, opts) => this.write(plan, opts),
+        openBackups: () => this.openTargetDialog('backups'),
+        saveTargetFile: () => this.openTargetDialog('export'),
         step2: () => this.step2Env(),
         compare: run => this.compare(run),
         downloadJson: () => this.downloadJson(),
@@ -318,7 +320,8 @@ class MergerUIClass {
         this.removeEscapeHandler();
 
         this.escapeHandler = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
+            // A dialog opened from the guide (Backups…, Export) stands in its place: Esc is its.
+            if (e.key === 'Escape' && document.getElementById('merge-modal')?.classList.contains('active')) {
                 e.preventDefault();
                 e.stopPropagation();
                 this.handleEscapePress();
@@ -1386,17 +1389,73 @@ class MergerUIClass {
         }, { label: strings.merge.analyzing, atOnce: mergeAnalysisLong(state.existingData, state.incomingData) }).then(() => undefined);
     }
 
-    /** What a write that did not happen says (the interim step 5; spec 134 §8 8b–8e). */
-    private writeFailureMessage(result: Exclude<Awaited<ReturnType<typeof writePlan>>, { ok: true }>): string {
-        const t = strings.mergeWizard;
-        if ('need' in result) {
-            if (result.need === 'retention') return t.retentionAsk(new Date(result.date).toLocaleDateString(getCurrentLanguage()));
-            const { when, added, edited } = result.changed;
-            const at = when ? new Date(when).toLocaleString(getCurrentLanguage()) : '?';
-            return `${t.targetChanged(this.mergeState?.wizard?.choices.targetName ?? '', at, `+${added} · ~${edited}`)} ${t.replanned}`;
+    /** A failed write's state above step 5's list (spec 134 §8 8b, 8d, 8e); 8c is `replan`'s. */
+    private writeFailureStatus(result: Exclude<Awaited<ReturnType<typeof writePlan>>, { ok: true } | { need: 'replan' }>): WriteStatus {
+        if ('need' in result) return { kind: 'retention', date: new Date(result.date).toLocaleDateString(getCurrentLanguage()) };
+        if (result.reason === 'backup') return { kind: 'backupFailed', detail: result.detail };
+        if (result.reason === 'save') return { kind: 'failed', message: result.message };
+        // The plan's own findings lead with "The totals do not match": said once, in bold.
+        const message = result.message.startsWith(strings.mergeWizard.badTotals)
+            ? result.message.slice(strings.mergeWizard.badTotals.length).trim() : result.message;
+        const detail = result.issues.map(i => JSON.stringify(i)).join('\n');
+        return { kind: 'bad', message, detail };
+    }
+
+    /** How the target changed meanwhile, in words: "2 new people, 1 edited person" (8c). */
+    private changeText(changed: TargetChange): string {
+        const W = strings.mergeWizard;
+        const parts = [
+            ...(changed.added ? [W.changedAdded(changed.added)] : []),
+            ...(changed.edited ? [W.changedEdited(changed.edited)] : []),
+        ];
+        const at = changed.when ? new Date(changed.when).toLocaleString(getCurrentLanguage(), { dateStyle: 'short', timeStyle: 'short' }) : '?';
+        return W.targetChanged(this.mergeState?.wizard?.choices.targetName ?? '', at, parts.length ? parts.join(', ') : W.changedOther);
+    }
+
+    /**
+     * The target changed since the comparison (8c, K6.5): its data as they are
+     * now become the merge's, the people matched again (the decisions kept),
+     * the plan and the button recalculated. Nothing is written.
+     */
+    private async replan(changed: TargetChange): Promise<void> {
+        const state = this.mergeState;
+        const id = state?.target?.treeId ?? state?.wizard?.choices.targetTreeId;
+        if (!state || !id) return;
+        const now = DataManager.getDataFor(id) ?? await TreeManager.getTreeData(id).catch(() => null);
+        if (!now || this.mergeState !== state) return;
+        const fingerprint = contentFingerprint(now);
+        state.existingData = now;
+        state.target = { treeId: id, fingerprint };
+        if (state.wizard) state.wizard.choices = { ...state.wizard.choices, targetFingerprint: fingerprint };
+        const found = await findMatchesAsync(now, state.incomingData);
+        if (this.mergeState !== state) return;
+        reanalyzeMatches(state, found);
+        this.exampleCache = null;
+        this.markUnsavedChanges();
+        this.wizard.refresh({ body: true });
+        this.wizard.setWriteStatus({ kind: 'changed', text: this.changeText(changed) });
+    }
+
+    /** 8d: Backups… or Export of the target over the guide; Esc comes back to it. */
+    private openTargetDialog(which: 'backups' | 'export'): void {
+        const id = this.mergeState?.target?.treeId ?? this.mergeState?.wizard?.choices.targetTreeId;
+        if (!id) return;
+        if (which === 'backups') void getUI().showSnapshotsDialog(id, 'merge-modal');
+        else getUI().showExportDialog(id, 'merge-modal');
+    }
+
+    /** Where the write stands (8a check, 8f backup and people), above step 5's list. */
+    private writeProgress(plan: MergePlan, name: string, phase: WritePhase, a: number, n: number): void {
+        if (phase === 'done') return;
+        if (phase === 'check') {
+            const c = planCounts(plan);
+            const sources = Object.keys(this.mergeState?.incomingData.sources ?? {}).length;
+            this.wizard.setWriteStatus({ kind: 'checking', p: c.total, l: c.partnerships + c.links, s: sources });
+        } else if (phase === 'backup') {
+            this.wizard.setWriteStatus({ kind: 'backup', t: plan.target.name });
+        } else {
+            this.wizard.setWriteStatus({ kind: 'writing', t: name, a, n });
         }
-        if (result.reason === 'backup') return `${t.backupFailed} ${result.detail}`;
-        return result.message;
     }
 
     /** A whole GEDCOM file written as a new tree named after the file, the guide closed (spec 134 §3). */
@@ -1418,7 +1477,7 @@ class MergerUIClass {
      * way). On a failure nothing is saved and the guide stays open; after the
      * write, today's ending: Manage trees and the offer to switch.
      */
-    private async write(plan: MergePlan): Promise<void> {
+    private async write(plan: MergePlan, opts: { retention?: 'keep-both' | 'drop-oldest' } = {}): Promise<void> {
         const state = this.mergeState;
         if (!state) return;
 
@@ -1445,12 +1504,21 @@ class MergerUIClass {
         // share, a resumed merge) and the automatic backups setting (K0.4, §2),
         // is taken by the write. Into the tree itself or a new tree (Where to write, K6.3).
         const into = plan.mode === 'add' && (state.wizard?.choices.into ?? 'tree') === 'tree' ? 'tree' : 'new';
+        const name = into === 'tree' ? plan.target.name : newTreeName(plan);
         const result = await writePlan(plan, {
-            target: state.existingData, source: state.incomingData, into, ...(into === 'new' ? { name: newTreeName(plan) } : {}),
+            target: state.existingData, source: state.incomingData, into, ...(into === 'new' ? { name } : {}),
+            ...(opts.retention ? { retention: opts.retention } : {}),
+            onProgress: (phase, a, n) => this.writeProgress(plan, name, phase, a, n),
         });
         if (!result.ok) {
             state.phase = 'reviewing';
-            await getUI().showAlert(this.writeFailureMessage(result), 'error');
+            if (this.mergeState !== state) return;
+            if ('need' in result && result.need === 'replan') {
+                this.wizard.setWriteStatus(null);
+                await this.replan(result.changed);
+                return;
+            }
+            this.wizard.setWriteStatus(this.writeFailureStatus(result));
             return;
         }
         if (state.wizard) state.wizard.choices = { ...state.wizard.choices, writtenAt: new Date().toISOString() };

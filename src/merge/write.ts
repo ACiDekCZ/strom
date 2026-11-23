@@ -125,6 +125,12 @@ async function currentTarget(treeId: TreeId): Promise<StromData | null> {
 export function verifyTargetUnchanged(target: PlanTarget, now: StromData, before: StromData): TargetChange | null {
     if (!target.treeId || !target.fingerprint) return null;
     if (contentFingerprint(now) === target.fingerprint) return null;
+    const when = TreeManager.getTrees().find(t => t.id === target.treeId)?.lastModifiedAt ?? '';
+    // The open tree edited in place is the data the comparison read: only its count tells what came.
+    if (now === before) {
+        const persons = Object.values(now.persons).filter(p => !p.isPlaceholder).length;
+        return { when, added: Math.max(0, persons - target.persons), edited: 0 };
+    }
     let added = 0;
     let edited = 0;
     for (const p of Object.values(now.persons)) {
@@ -134,7 +140,6 @@ export function verifyTargetUnchanged(target: PlanTarget, now: StromData, before
         else if (JSON.stringify(was) !== JSON.stringify(p)) edited++;
     }
     for (const p of Object.values(before.persons)) if (!p.isPlaceholder && !now.persons[p.id as PersonId]) edited++;
-    const when = TreeManager.getTrees().find(t => t.id === target.treeId)?.lastModifiedAt ?? '';
     return { when, added, edited };
 }
 

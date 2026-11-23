@@ -19085,6 +19085,20 @@
         .merge-s5-thumb { height: 252px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); overflow: hidden; }
         .merge-s5-preview-cap { font-size: 11.5px; }
         .merge-s5-none { margin: 0; padding: 16px; color: var(--text-light); font-size: 12.5px; }
+        /* The write's states (8a–8f) above the list, no frame: the line, its buttons, the bar. */
+        .merge-s5-status { flex: none; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.4; }
+        .merge-s5-status[hidden] { display: none; }
+        .merge-s5-status p { margin: 0; }
+        .merge-s5-st-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .merge-s5-st-line > span:last-child { min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+        .merge-s5-st-err { color: var(--error-text); overflow-wrap: anywhere; }
+        .merge-s5-st-warn { color: var(--warning-text); overflow-wrap: anywhere; }
+        .merge-s5-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+        .modal .merge-s5 .merge-s5-act { min-height: 28px; padding: 2px 12px; font-size: 12.5px; }
+        .merge-s5-bar { max-width: 420px; }
+        .merge-s5-err-detail { margin: 0; max-height: 160px; overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: var(--r-sm);
+            background: var(--surface); font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .merge-s5-err-detail[hidden] { display: none; }
         @media (max-width: 1099px) {
             .merge-s5 { grid-template-columns: minmax(0, 1fr) 280px; }
             .merge-s5-preview { display: none; }
@@ -19105,6 +19119,7 @@
             .modal .merge-s5 .link-button, .modal .merge-s5 button.merge-s5-caret { min-height: 44px; }
             .modal .merge-s5 button.merge-s5-caret { width: 32px; }
             .modal .merge-s5-into > .sel-opt { min-height: 44px; }
+            .modal .merge-s5 .merge-s5-act { min-height: 44px; }
         }
         /* A phone (14d): Where to write on top, the groups closed; the step scrolls as a whole, a row wraps what it links to under the name. */
         @media (max-width: 640px) {

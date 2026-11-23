@@ -18,7 +18,7 @@ import { buildPlan, planCounts, type MergePlan, type PlanCounts, type PlanMode, 
 import { stepInfo, nextStep, previousStep, WIZARD_STEPS, type StepInfo, type WizardStep } from './wizard-steps.js';
 import { strings, countText } from '../strings.js';
 import { announceText } from '../ui/live-announce.js';
-import { escapeHtml, glyph, stepName, type GlyphKind, type Step1Env, type Step2Env, type StepContext, type TargetBlock } from './steps/context.js';
+import { escapeHtml, glyph, stepName, type GlyphKind, type Step1Env, type Step2Env, type StepContext, type TargetBlock, type WriteAction, type WriteStatus } from './steps/context.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { getUI } from '../ui-ref.js';
@@ -28,7 +28,7 @@ import { barHtml, setBarShare } from '../ui/prog-bar.js';
 import { busySpinHtml } from '../ui/busy.js';
 import { renderStep3, variantSub } from './steps/step3-whom.js';
 import { renderStep4 } from './steps/step4-rules.js';
-import { renderStep5 } from './steps/step5-plan.js';
+import { renderStep5, showWriteStatus } from './steps/step5-plan.js';
 import { renderStep6 } from './steps/step6-done.js';
 
 export type { WizardStep } from './wizard-steps.js';
@@ -44,8 +44,15 @@ export interface WizardHost {
     saveForLater(): void;
     /** Leave the comparison (Only compare): nothing is written. */
     finishCompare(): void;
-    /** Write the plan (step 5); resolves when the write ended either way. */
-    write(plan: MergePlan): Promise<void>;
+    /**
+     * Write the plan (step 5); resolves when the write ended either way, its
+     * state said through `setWriteStatus`. `retention` answers 8e.
+     */
+    write(plan: MergePlan, opts?: { retention?: 'keep-both' | 'drop-oldest' }): Promise<void>;
+    /** 8d: Backups… of the target, the guide waiting under it. */
+    openBackups?(): void;
+    /** 8d: Save the tree to a file… (the target as JSON). */
+    saveTargetFile?(): void;
     /** What step 2 does beyond the choices. */
     step2?(): Step2Env;
     /**
@@ -165,6 +172,8 @@ export function targetBlockText(block: TargetBlock, treeId: TreeId): string {
 export class MergeWizard {
     private plan: MergePlan | null = null;
     private busy = false;
+    /** Where the write of step 5 stands (§8 8a–8f), null when no state is said. */
+    private writeStatus: WriteStatus | null = null;
     /** The comparison running from step 1 (K3.5): shown as step 2's progress, stopped by Stop or Back. */
     private comparing: { ctrl: AbortController; started: number; share: number; treePersons: number } | null = null;
 
@@ -205,6 +214,7 @@ export class MergeWizard {
     close(): void {
         this.plan = null;
         this.busy = false;
+        this.writeStatus = null;
         this.stopCompare();
     }
 
@@ -252,6 +262,8 @@ export class MergeWizard {
         const ws = this.ws;
         if (!ws) return;
         if (change) ws.choices = { ...ws.choices, ...change };
+        // A choice changed: a state of an earlier write no longer says the truth.
+        if (!this.busy) this.writeStatus = null;
         this.host.changed();
         this.refresh({ body: true });
     }
@@ -265,6 +277,7 @@ export class MergeWizard {
         if (at.state !== 'ok' && !(at.reason === 'scope' && this.plan)) return;
         ws.step = step;
         if (step > ws.reached) ws.reached = step;
+        this.writeStatus = null;
         // From step 3 on the unlinked groups are asked about (§6): one left
         // undecided holds the guide up. Step 2 still counts them as added.
         if (step === 3 && !ws.choices.groups) {
@@ -332,16 +345,7 @@ export class MergeWizard {
                 this.host.finishCompare();
                 return;
             }
-            const plan = this.plan;
-            if (!plan || this.info()[5].state !== 'ok') return;
-            this.busy = true;
-            this.renderFooter();
-            try {
-                await this.host.write(plan);
-            } finally {
-                this.busy = false;
-                if (this.host.state()) this.renderFooter();
-            }
+            await this.writeNow();
             return;
         }
         const to = nextStep(step, this.availability());
@@ -349,6 +353,39 @@ export class MergeWizard {
     }
 
     /** The import is a copy of the target (13b): the write would change nothing. */
+    /** Step 5's write (§8): the button off while it runs, its state above the list. */
+    private async writeNow(retention?: 'keep-both' | 'drop-oldest'): Promise<void> {
+        const plan = this.plan;
+        if (!plan || this.busy || this.info()[5].state !== 'ok') return;
+        this.busy = true;
+        this.writeStatus = null;
+        this.renderFooter();
+        try {
+            await this.host.write(plan, retention ? { retention } : {});
+        } finally {
+            this.busy = false;
+            if (this.host.state()) this.renderFooter();
+        }
+    }
+
+    /** Where the write stands (8a–8f): said above step 5's list, the footer again. */
+    setWriteStatus(status: WriteStatus | null): void {
+        this.writeStatus = status;
+        if (typeof document === 'undefined' || this.ws?.step !== 5) return;
+        showWriteStatus(status, this.context());
+    }
+
+    /** A button of a write's state (§8 8b, 8d, 8e). */
+    private writeAction(action: WriteAction): void {
+        switch (action) {
+            case 'whom': this.go(3); break;
+            case 'backups': this.host.openBackups?.(); break;
+            case 'save-tree': this.host.saveTargetFile?.(); break;
+            case 'retry': void this.writeNow(); break;
+            case 'keep-both': case 'drop-oldest': void this.writeNow(action); break;
+        }
+    }
+
     private isCopy(): boolean {
         const ws = this.ws;
         return !!ws && !!this.plan && ws.compared && isCopyOfTarget({ choices: ws.choices, counts: planCounts(this.plan) });
@@ -526,7 +563,11 @@ export class MergeWizard {
             update: change => this.update(change),
             ...(this.host.step2 ? { step2: this.host.step2() } : {}),
             ...(this.host.step1 ? { step1: this.host.step1() } : {}),
-            step5: { savePlan: () => { if (this.plan) this.host.savePlan?.(this.plan); } },
+            step5: {
+                savePlan: () => { if (this.plan) this.host.savePlan?.(this.plan); },
+                status: this.writeStatus,
+                act: action => this.writeAction(action),
+            },
         };
     }
 

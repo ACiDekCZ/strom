@@ -302,6 +302,15 @@ describe('the target changed since the comparison (K6.5, 8c)', () => {
         expect((await storedNames(T1)).sort()).toEqual(['Alma', 'Berta', 'Dora']);
     });
 
+    it('the open tree edited in place, the very data the comparison read: the new people counted from the plan', async () => {
+        const { plan, target } = await planFor(T1, INCOMING);
+        DataManager.createPerson({ firstName: 'Dora', lastName: 'Fictus', gender: 'female' } as never);
+        expect(target).toBe(DataManager.getDataFor(T1));
+        const result = await writePlan(plan, { target, source: INCOMING, into: 'tree' });
+        expect(result).toMatchObject({ ok: false, need: 'replan', changed: { added: 1, edited: 0 } });
+        expect(await premerge(T1)).toHaveLength(0);
+    });
+
     it('a tree not open, changed by another window: likewise', async () => {
         const { plan, target } = await planFor(T2, INCOMING);
         const stored = structuredClone(TARGET);

@@ -112,3 +112,57 @@ test('Write into Modřínovi: the open tree gets the new people at once, its res
     // The write is one step of Undo.
     expect(await page.evaluate(() => window.Strom.DataManager.canUndo())).toBe(true);
 });
+
+test('8d: the backup "Before merge" fails, so nothing is written; its state says why and what can be done, Try again writes', async ({ page }) => {
+    const wizard = await openGuide(page);
+    await mergeToStep5(wizard);
+    // The browser's storage refuses the backup (a full disk).
+    await page.evaluate(() => {
+        const w = window as unknown as { __put?: typeof IDBObjectStore.prototype.put };
+        w.__put = IDBObjectStore.prototype.put;
+        IDBObjectStore.prototype.put = function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
+            if (this.name === 'snapshots') throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+            return w.__put!.apply(this, args);
+        };
+    });
+    await mergeWrite(wizard, 'tree');
+    const status = wizard.locator('.merge-s5-status');
+    await expect(status).toHaveAttribute('data-state', 'backupFailed');
+    await expect(status.locator('.merge-s5-st-err')).toContainText('The backup failed, so nothing was written.');
+    await expect(status.locator('.merge-s5-act')).toHaveText(['Free up space: Backups…', 'Save the tree Modřínovi to a file…', 'Try again']);
+    await expect(wizard).toBeVisible();
+    await expect(wizard.locator('#merge-next')).toBeEnabled();
+    // Nothing of the import in the tree.
+    expect(await peopleOf(page, 'Modřínovi')).toEqual(['Florentýna', 'Kvido', 'Teofil']);
+
+    // Room again: Try again writes.
+    await page.evaluate(() => {
+        const w = window as unknown as { __put?: typeof IDBObjectStore.prototype.put };
+        IDBObjectStore.prototype.put = w.__put!;
+    });
+    await status.locator('[data-act="retry"]').click();
+    await expect(wizard).toBeHidden();
+    await expect(page.locator('#confirm-title')).toHaveText('Merge complete');
+    await page.locator('#confirmation-modal.active #confirm-ok-btn').click();
+    expect(await peopleOf(page, 'Modřínovi')).toEqual(['Amos', 'Elvíra', 'Florentýna', 'Kasián', 'Kvido', 'Teofil']);
+});
+
+test('8c: the tree changed since the comparison: nothing is written blindly, the list is recalculated and the next press writes', async ({ page }) => {
+    const wizard = await openGuide(page);
+    await mergeToStep5(wizard);
+    // Another window adds a person to Modřínovi meanwhile.
+    await page.evaluate(() => { window.Strom.DataManager.createPerson({ firstName: 'Lukrecie', lastName: 'Modřínová', gender: 'female' }); });
+    await mergeWrite(wizard, 'tree');
+    const status = wizard.locator('.merge-s5-status');
+    await expect(status).toHaveAttribute('data-state', 'changed');
+    await expect(status).toContainText(/The tree Modřínovi has changed meanwhile \(.+\): 1 new person\. The list has been recalculated\. Nothing was written blindly\./);
+    await expect(wizard).toBeVisible();
+    await expect.poll(() => peopleOf(page, 'Modřínovi')).toEqual(['Florentýna', 'Kvido', 'Lukrecie', 'Teofil']);
+    await expect(wizard.locator('#merge-next')).toHaveText('Add 3 people, change 0 details');
+
+    // Written over the tree as it is now: its new person kept.
+    await wizard.locator('#merge-next').click();
+    await expect(wizard).toBeHidden();
+    await page.locator('#confirmation-modal.active #confirm-ok-btn').click();
+    expect(await peopleOf(page, 'Modřínovi')).toEqual(['Amos', 'Elvíra', 'Florentýna', 'Kasián', 'Kvido', 'Lukrecie', 'Teofil']);
+});

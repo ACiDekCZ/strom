@@ -27,7 +27,9 @@ import { planCounts, type MergePlan, type PlanItem, type PlanRules, type RuleCho
 import { fieldKind, ruleFor } from '../plan-rules.js';
 import { connectedNew, connectionTerm, displayName, familyName, type NewConnection } from '../plan-select.js';
 import { newTreeName } from '../write.js';
-import type { StepContext } from './context.js';
+import type { StepContext, WriteAction, WriteStatus } from './context.js';
+import { barHtml } from '../../ui/prog-bar.js';
+import { busySpinHtml } from '../../ui/busy.js';
 import { escapeHtml, glyph, stepHeading } from './context.js';
 import { isCopyOfTarget } from './step2-who.js';
 import { fold, relationText, triState, yearsText } from './step3-model.js';
@@ -352,6 +354,57 @@ export function renderStep5(host: HTMLElement, ctx: StepContext): void {
     view.relations.clear();
     view.conns = null;
     update(view);
+    showWriteStatus(ctx.step5?.status ?? null, ctx);
+}
+
+/**
+ * Where the write stands (§8 8a–8f), said above the list with no frame:
+ * the check and the write with their progress, or why nothing was written
+ * and what can be done. Null hides it.
+ */
+export function showWriteStatus(status: WriteStatus | null, ctx: StepContext): void {
+    const view = views.get(ctx.state);
+    const box = view?.root?.isConnected ? view.root.querySelector<HTMLElement>('.merge-s5-status') : null;
+    if (!box) return;
+    box.hidden = !status;
+    box.dataset.state = status?.kind ?? '';
+    box.innerHTML = status ? statusHtml(status, ctx) : '';
+    box.setAttribute('aria-busy', String(!!status && ['checking', 'backup', 'writing'].includes(status.kind)));
+}
+
+function statusHtml(st: WriteStatus, ctx: StepContext): string {
+    const W = strings.mergeWizard;
+    const bt = (act: string, label: string): string =>
+        `<button type="button" class="secondary merge-s5-act" data-act="${act}">${escapeHtml(label)}</button>`;
+    const acts = (...b: string[]): string => `<div class="merge-s5-acts">${b.join('')}</div>`;
+    const spin = (text: string): string =>
+        `<p class="merge-s5-st-line">${busySpinHtml(14)}<span>${escapeHtml(text)}</span></p>`;
+    const safe = `<p class="merge-s5-note">${escapeHtml(W.writingSafe)}</p>`;
+    switch (st.kind) {
+        case 'checking':
+            return spin(W.checking(st.p, st.l, st.s));
+        case 'backup':
+            return spin(W.backingUp(st.t)) + barHtml(null, { cls: 'merge-s5-bar' }) + safe;
+        case 'writing':
+            return spin(W.writing(st.t, st.a, st.n))
+                + barHtml(st.n ? st.a / st.n : 0, { cls: 'merge-s5-bar', attrs: `role="progressbar" aria-valuemin="0" aria-valuemax="${st.n}" aria-valuenow="${st.a}"` })
+                + safe;
+        case 'bad':
+            return `<p class="merge-s5-st-err"><b>${escapeHtml(W.badTotals)}</b> ${escapeHtml(st.message)}</p>`
+                + acts(`<button type="button" class="secondary merge-s5-act" data-act="show-error" aria-expanded="false">${escapeHtml(W.showError)}</button>`,
+                    bt('report', W.saveForReport), bt('whom', W.backToWhom))
+                + `<pre class="merge-s5-err-detail" hidden>${escapeHtml(st.detail)}</pre>`;
+        case 'changed':
+            return `<p class="merge-s5-st-warn">${escapeHtml(st.text)} ${escapeHtml(W.replanned)}</p>`;
+        case 'backupFailed':
+            return `<p class="merge-s5-st-err"><b>${escapeHtml(W.backupFailed)}</b> ${escapeHtml(st.detail)}</p>`
+                + acts(bt('backups', W.freeSpaceBackups), bt('save-tree', W.saveTreeFile(ctx.plan?.target.name ?? ctx.choices.targetName)), bt('retry', W.tryAgain));
+        case 'failed':
+            return `<p class="merge-s5-st-err"><b>${escapeHtml(st.message)}</b></p>` + acts(bt('retry', W.tryAgain));
+        case 'retention':
+            return `<p class="merge-s5-st-warn"><b>${escapeHtml(W.retentionAsk(st.date))}</b></p>`
+                + acts(bt('keep-both', W.keepBoth), bt('drop-oldest', W.dropOldest));
+    }
 }
 
 /** Close the preview sheet of step 5 (Esc); true when it was open. */
@@ -375,6 +428,7 @@ function build(host: HTMLElement, view: View): void {
     host.innerHTML = `${stepHeading(5, W.planTitle)}
 <div class="merge-s5">
   <div class="merge-s5-main">
+    <div class="merge-s5-status" role="status" aria-live="polite" hidden></div>
     <div class="merge-s5-head">
       <span class="merge-s5-sub">${escapeHtml(W.planOnlyTicked)}</span>
       <input type="search" class="merge-s5-search" placeholder="${escapeHtml(W.planSearch)}" aria-label="${escapeHtml(W.planSearch)}" autocomplete="off" spellcheck="false">
@@ -571,6 +625,17 @@ function wire(root: HTMLElement, view: View): void {
             if (window.innerWidth < PREVIEW_SIDE_FROM) setSheet(root, true);
         } else if (el.dataset.into) {
             chooseInto(view, el.dataset.into as 'tree' | 'new');
+        } else if (el.matches('.merge-s5-act')) {
+            const act = el.dataset.act ?? '';
+            if (act === 'show-error') {
+                const pre = root.querySelector<HTMLElement>('.merge-s5-err-detail');
+                if (pre) pre.hidden = !pre.hidden;
+                el.setAttribute('aria-expanded', String(!!pre && !pre.hidden));
+            } else if (act === 'report') {
+                view.ctx.step5?.savePlan();
+            } else {
+                view.ctx.step5?.act(act as WriteAction);
+            }
         } else if (el.matches('.merge-s5-save')) {
             view.ctx.step5?.savePlan();
         } else if (el.matches('.merge-s5-preview-open')) {
