@@ -20,14 +20,14 @@ import { addPersonMedia, allMedia } from '../media.js';
 import { contentFingerprint } from '../research-link.js';
 import type { GedcomDroppedTag } from '../ged-parser.js';
 import {
-    GroupDecision, NewRel, UnlinkedGroup, baseFates, connectRefusal, linkPersons, livingNew, selectionOf, sourceWithStandIns, unlinkedGroups,
+    GroupDecision, NewRel, SelectVariant, UnlinkedGroup, baseFates, connectRefusal, linkPersons, livingNew, selectionOf, sourceWithStandIns, unlinkedGroups,
 } from './plan-select.js';
 
 import {
     PERSON_FIELDS, EndOf, RelChoice, RelKind, fieldText, isUnionProtected, personDifferences, relationChoice, relationConflicts, resolveField, ruleFor,
 } from './plan-rules.js';
 
-export type { GroupDecision, NewRel, UnlinkedGroup } from './plan-select.js';
+export type { GroupDecision, NewRel, SelectVariant, UnlinkedGroup } from './plan-select.js';
 export type { FieldDifference, FieldResult, Protection, RelChoice, RelConflict, RelKind, RuleCounts, RuleExample, RuleTile } from './plan-rules.js';
 export {
     FIELD_KINDS, fieldKind, isProtected, isRefinement, mergeDifferences, planNeedsStep4, protectionOf, relationConflicts, resolveField, ruleCounts,
@@ -219,6 +219,8 @@ export interface WizardChoices {
     rules?: PlanRules;
     /** The conflicts of relations decided one by one (K5.5), by RelConflict.key; absent: "Keep mine". */
     relations?: Readonly<Record<string, RelChoice>>;
+    /** The variant of step 3 that ticked the new persons last (absent: All new); the ticks may since be changed by hand. */
+    variant?: SelectVariant;
     /** Source persons left out in step 3 (part B). */
     leftOut?: readonly PersonId[];
     /** Why a left out person is out when not by hand: 'branch' = with an unticked person whose branch went too (K4.3). */

@@ -455,13 +455,15 @@ function bySurname(source: StromData, persons: readonly PersonId[]): Array<[stri
     return [...out.values()].sort((a, b) => b.ids.length - a.ids.length).map(e => [e.name, e.ids]);
 }
 
-function familyName(source: StromData, p: Person | undefined): string {
+/** A person's surname as a family's name (its masculine form where the rules give one); '' for none or "?". */
+export function familyName(source: StromData, p: Person | undefined): string {
     const last = p?.lastName?.trim() ?? '';
     if (!last || last === '?') return '';
     return masculineFormIn(last, source) ?? last;
 }
 
-function displayName(p: Person | undefined): string {
+/** First name and surname as the import writes them, without "?". */
+export function displayName(p: Person | undefined): string {
     return p ? [p.firstName, p.lastName].filter(n => n && n !== '?').join(' ').trim() : '';
 }
 

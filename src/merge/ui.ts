@@ -61,6 +61,7 @@ import { isRepeatOf, planTakesAll, scopeExample, type MergePlan, type MergeRecor
 import { newTreeName, writePlan } from './write.js';
 import type { Step1Env, Step2Env, TargetRow, UnionConflictLine } from './steps/context.js';
 import { closeNotTaken, parkGedcomSummary } from './steps/step1-what.js';
+import { closeStep3Overlay } from './steps/step3-whom.js';
 import { noteRecalc } from './steps/step2-who.js';
 import { notTakenText } from './wizard-text.js';
 import { listSnapshots } from '../snapshots.js';
@@ -345,6 +346,8 @@ class MergerUIClass {
     private handleEscapePress(): void {
         // Step 1's list of what is not taken over sits above the guide.
         if (closeNotTaken()) return;
+        // Step 3's dialogs (5a, 5c) and its branch preview sheet.
+        if (closeStep3Overlay()) return;
         // A tree preview / comparison opened from the wizard sits above it:
         // close that first. This capture handler stops the key, so the central
         // cascade (misc.ts) that closes them elsewhere never sees it.

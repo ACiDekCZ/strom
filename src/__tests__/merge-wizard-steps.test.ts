@@ -2,9 +2,10 @@
  * Which steps of the import and merge guide can be entered (spec 134 §1):
  * a new tree skips steps 2 and 4, scope a) without differing couples skips
  * step 4, a differing couple brings it back; an undecided pair locks the
- * steps after step 2. Steps 3 and 4 are skipped while they are not built
- * (STEPS_3_4_PENDING); the rules for when they are built are checked on a
- * copy of the module with the switch off.
+ * steps after step 2. Step 4 is skipped while it is not built
+ * (STEP_4_PENDING); the rules for when it is built are checked on a copy of
+ * the module with the switch off. Step 3 is built: a new tree goes past it
+ * unless people are picked.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -31,14 +32,14 @@ function plan(o: { pending?: boolean; unions?: number; differences?: number } = 
     };
 }
 
-/** The module with steps 3 and 4 built (its switch off), loaded from a copy. */
+/** The module with step 4 built (its switch off), loaded from a copy. */
 async function withStepsBuilt(): Promise<Steps> {
     const file = fileURLToPath(new URL('../merge/wizard-steps.ts', import.meta.url));
     const text = readFileSync(file, 'utf8');
-    expect(text).toContain('export const STEPS_3_4_PENDING = true;');
+    expect(text).toContain('export const STEP_4_PENDING = true;');
     const dir = mkdtempSync(join(tmpdir(), 'strom-wizard-steps-'));
     const copy = join(dir, 'wizard-steps-built.ts');
-    writeFileSync(copy, text.replace('export const STEPS_3_4_PENDING = true;', 'export const STEPS_3_4_PENDING = false;'));
+    writeFileSync(copy, text.replace('export const STEP_4_PENDING = true;', 'export const STEP_4_PENDING = false;'));
     try {
         return await import(/* @vite-ignore */ copy) as Steps;
     } finally {
@@ -46,7 +47,7 @@ async function withStepsBuilt(): Promise<Steps> {
     }
 }
 
-/** What holds whether steps 3 and 4 are built or not. */
+/** What holds whether step 4 is built or not. */
 function commonRules(steps: Steps): void {
     const { stepAvailability, stepInfo, nextStep, previousStep } = steps;
     const add: Choices = { mode: 'add', scope: 'c' };
@@ -81,33 +82,43 @@ function commonRules(steps: Steps): void {
     expect(previousStep(1, compare)).toBeNull();
 }
 
-describe('stepAvailability while steps 3 and 4 are not built (STEPS_3_4_PENDING)', () => {
+describe('stepAvailability while step 4 is not built (STEP_4_PENDING)', () => {
     it('is on now', () => {
-        expect(live.STEPS_3_4_PENDING).toBe(true);
+        expect(live.STEP_4_PENDING).toBe(true);
     });
 
     it('keeps the rules every way shares', () => {
         commonRules(live);
     });
 
-    it('skips step 3 as "all new" and step 4 as "my tree applies" on every scope', () => {
+    it('opens step 3 after step 2 and skips step 4 as "my tree applies" on every scope', () => {
         for (const scope of ['a', 'b', 'c', 'd'] as const) {
             for (const p of [plan(), plan({ unions: 2, differences: 3 })]) {
                 const info = live.stepInfo({ mode: 'add', scope }, p);
-                expect(info[3]).toEqual({ state: 'skip', reason: 'allNew' });
+                expect(info[3]).toEqual({ state: 'ok' });
                 expect(info[4]).toEqual({ state: 'skip', reason: 'mineRule' });
             }
         }
         const way = live.stepAvailability({ mode: 'add', scope: 'c' }, plan());
-        expect(live.nextStep(2, way)).toBe(5);
-        expect(live.previousStep(5, way)).toBe(2);
+        expect(live.nextStep(2, way)).toBe(3);
+        expect(live.nextStep(3, way)).toBe(5);
+        expect(live.previousStep(5, way)).toBe(3);
+        expect(live.stepAvailability({ mode: 'add', scope: 'c' }, plan({ pending: true }))[3]).toBe('locked');
+    });
+
+    it('a new tree goes past step 3 unless people are picked (step 5\'s "Choose people…")', () => {
+        expect(live.stepInfo({ mode: 'new', scope: 'a' }, plan())[3]).toEqual({ state: 'skip', reason: 'allNew' });
+        const picked = live.stepAvailability({ mode: 'new', scope: 'a', pickPeople: true }, plan());
+        expect(picked[3]).toBe('ok');
+        expect(live.nextStep(1, picked)).toBe(3);
+        expect(live.nextStep(3, picked)).toBe(5);
     });
 });
 
 describe('stepAvailability with steps 3 and 4 built', () => {
     it('keeps the rules every way shares', async () => {
         const built = await withStepsBuilt();
-        expect(built.STEPS_3_4_PENDING).toBe(false);
+        expect(built.STEP_4_PENDING).toBe(false);
         commonRules(built);
     });
 

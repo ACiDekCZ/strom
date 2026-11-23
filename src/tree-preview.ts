@@ -10,6 +10,7 @@ import { extractSubtree } from './subtree.js';
 import { bestRenderFocus } from './split-families.js';
 import { strings } from './strings.js';
 import { shownName, shownNameParts } from './person-name.js';
+import { yearOf } from './dates.js';
 
 /** Escape text for HTML content and attribute values (titles and names come from foreign files). */
 function esc(text: string): string {
@@ -1259,9 +1260,30 @@ export const TreeCompare = new TreeCompareClass();
  * to the tree's aspect. Strokes are non-scaling so a portrait deep-ancestry line
  * and a wide focus family read at the same weight.
  */
+/** A name part shortened to fit a thumbnail card. */
+function thumbLabel(text: string | undefined, max: number): string {
+    const t = (text ?? '').trim();
+    if (!t || t === '?') return '';
+    return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+}
+
+/** "1875–1940" (or one end) of a thumbnail card. */
+function thumbYears(p: { birthDate?: string; deathDate?: string }): string {
+    const b = yearOf(p.birthDate);
+    const d = yearOf(p.deathDate);
+    if (b === null && d === null) return '';
+    return `${b ?? ''}–${d ?? ''}`;
+}
+
 export function renderTreeThumbnail(
     container: HTMLElement,
-    options: { data: StromData; focusPersonId: PersonId; depthUp?: number; depthDown?: number; wholeTree?: boolean }
+    options: {
+        data: StromData; focusPersonId: PersonId; depthUp?: number; depthDown?: number; wholeTree?: boolean;
+        /** Names and years on the cards (a branch preview read on its own, not a miniature). */
+        labels?: boolean;
+        /** Cards marked as the hits (dashed); the other cards dimmed. */
+        hits?: ReadonlySet<PersonId>;
+    }
 ): void {
     const depthUp = options.depthUp ?? 2;
     const depthDown = options.depthDown ?? 2;
@@ -1324,9 +1346,22 @@ export function renderTreeThumbnail(
         rect.setAttribute('width', String(config.cardWidth));
         rect.setAttribute('height', String(config.cardHeight));
         rect.setAttribute('rx', '7');
+        const mark = options.hits ? (options.hits.has(personId) ? ' evidence-hit' : ' evidence-dim') : '';
         rect.setAttribute('class', 'tree-thumb-card ' + (person.isPlaceholder ? 'placeholder' : person.gender)
-            + (personId === options.focusPersonId ? ' focused' : ''));
+            + (personId === options.focusPersonId ? ' focused' : '') + mark);
         svg.appendChild(rect);
+        if (options.labels && !person.isPlaceholder) {
+            const lines = [thumbLabel(person.firstName, 15), thumbLabel(person.lastName, 15), thumbYears(person)];
+            lines.forEach((line, i) => {
+                if (!line) return;
+                const t = document.createElementNS(svgNs, 'text');
+                t.setAttribute('x', String(pos.x + config.cardWidth / 2));
+                t.setAttribute('y', String(pos.y + 16 + i * 14));
+                t.setAttribute('class', 'tree-thumb-text' + (i === 2 ? ' years' : '') + mark);
+                t.textContent = line;
+                svg.appendChild(t);
+            });
+        }
     }
 
     container.appendChild(svg);

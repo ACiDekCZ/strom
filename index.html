@@ -15119,7 +15119,8 @@
         #merge-manual-dialog,
         #merge-conflict-dialog,
         #merge-close-confirm,
-        #merge-not-taken-modal {
+        #merge-not-taken-modal,
+        .merge-s3-dialog {
             z-index: 400;  /* Above merge-modal (300), below confirmation (500) */
         }
 
@@ -18672,6 +18673,168 @@
         }
         @media (hover: hover) {
             .merge-item:hover, .merge-cand:hover { background: var(--hover-bg); }
+        }
+        /*
+         * Step 3 – Whom to add (spec 134 §5): the variants, the tabs, the tools, the list by groups
+         * (only the rows in view are drawn, §13h; --s3-row is their one height) and the branch preview
+         * at the right (360 px; below 1100 px behind "Preview", as a sheet).
+         */
+        .merge-step-body[data-step="3"] { display: flex; flex-direction: column; overflow: hidden; }
+        .merge-s3 { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+        .merge-s3-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+        .merge-s3-panel[hidden] { display: none; }
+        .merge-s3-variants, .merge-s3-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+        .modal .merge-s3 button.merge-s3-chip {
+            display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 3px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 12.5px; white-space: nowrap;
+        }
+        .merge-s3-caret-d { font-size: 10px; color: var(--text-light); }
+        .merge-s3-linked { display: inline-flex; align-items: center; gap: 4px; }
+        /* The modal's own field rule (full width, 10px 12px) would make these as large as a form field. */
+        .modal .merge-s3 .merge-s3-steps, .modal .merge-s3 .merge-s3-fpanel select, .modal .merge-s3 .merge-s3-fpanel input {
+            width: auto; min-height: 28px; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--r-sm);
+            background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px;
+        }
+        .modal .merge-s3 .merge-s3-fpanel input[type="number"] { width: 84px; font-variant-numeric: tabular-nums; }
+        .merge-s3-tabs { display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+        .merge-s3-tabs .merge-tab { flex: 0 0 auto; padding: 8px 12px; border: 0; background: transparent; font-size: 13px; cursor: pointer; }
+        .merge-s3-tabs .cnt { color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .merge-s3-undecided { color: var(--warning-text); font-size: 12px; }
+        .merge-s3-undecided[hidden] { display: none; }
+        .merge-s3-tools { display: flex; flex-direction: column; gap: 8px; }
+        .merge-s3-search {
+            width: 100%; max-width: 360px; box-sizing: border-box; padding: 6px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 13px;
+        }
+        .merge-s3-fpanel { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 12.5px; color: var(--text-light); }
+        .merge-s3-fpanel[hidden] { display: none; }
+        .modal .merge-s3-fpanel label { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+        .merge-s3-fpanel .link-button, .merge-s3-all .link-button { padding: 0; font-size: 12.5px; }
+        .merge-s3-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 12.5px; }
+        .merge-s3-groupby { display: inline-flex; align-items: center; gap: 6px; }
+        .merge-s3-groupby-l { color: var(--text-light); }
+        .merge-s3-groupby .sel-seg, .merge-s3-gen .sel-seg { display: inline-flex; }
+        .modal .merge-s3-groupby .sel-opt, .modal .merge-s3-gen .sel-opt { padding: 3px 10px; font-size: 12.5px; }
+        .modal .merge-s3 label.merge-s3-living { display: inline-flex; align-items: center; gap: 6px; margin: 0; cursor: pointer; }
+        .modal .merge-s3 label.merge-s3-living[hidden] { display: none; }
+        .merge-s3-count { margin-left: auto; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .merge-s3-all { display: inline-flex; gap: 12px; }
+        .modal .merge-s3 .merge-s3-preview-open { display: none; }
+        .merge-s3-main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; }
+        .merge-s3-scroll { min-height: 0; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-md); }
+        .merge-s3-list { --s3-row: 32px; list-style: none; margin: 0; padding: 0; }
+        .merge-s3-list > li.vlist-pad { padding: 0; border: 0; }
+        .merge-s3-list > .merge-s3-row, .merge-s3-list > .merge-s3-gh {
+            box-sizing: border-box; height: var(--s3-row); display: flex; align-items: center; gap: 8px;
+            padding: 0 10px; border-bottom: 1px solid var(--divider); font-size: 13px; overflow: hidden;
+        }
+        .merge-s3-list > .merge-s3-row { padding-left: 34px; }
+        .merge-s3-list > .merge-s3-gh { background: var(--surface-2); }
+        .modal .merge-s3 button.merge-s3-caret {
+            flex: none; width: 18px; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--text-light); cursor: pointer;
+        }
+        .merge-s3-caret > span { display: inline-block; transition: transform .12s; }
+        .merge-s3-gh.is-open .merge-s3-caret > span { transform: rotate(90deg); }
+        .modal .merge-s3 label.merge-s3-check { display: inline-flex; align-items: center; gap: 8px; min-width: 0; margin: 0; cursor: pointer; }
+        .merge-s3-name { font-family: var(--font-serif); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s3-gname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s3-years { flex: none; color: var(--text-light); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .merge-s3-gcount, .merge-s3-living-tag {
+            flex: none; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-tag);
+            background: var(--surface); color: var(--text-light); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; white-space: nowrap;
+        }
+        .merge-s3-gvia { flex: 1 1 auto; min-width: 0; color: var(--text-light); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .modal .merge-s3 .merge-s3-gprev { flex: none; min-height: 0; padding: 0; font-size: 12px; }
+        .merge-s3-rel {
+            margin-left: auto; max-width: 220px; color: var(--text-light); font-size: 12px; text-align: right;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .merge-s3-row.is-disabled .merge-s3-name { color: var(--text-faint); }
+        .merge-s3-empty { margin: 0; padding: 24px; text-align: center; color: var(--text-light); font-size: 13px; }
+        .merge-s3-empty[hidden] { display: none; }
+        .merge-s3-preview { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+        .merge-s3-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .merge-s3-preview-t { margin: 0; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .modal .merge-s3 .merge-s3-preview-close { display: none; }
+        .merge-s3-thumb { height: 262px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); overflow: hidden; }
+        .merge-s3-preview-cap { margin: 0; font-size: 11.5px; color: var(--text-light); }
+        .merge-s3-preview-none { margin: 0; padding: 16px; color: var(--text-light); font-size: 12.5px; }
+        /* The branch preview's cards: the new people dashed in --accent, the others faded (the group highlight's look). */
+        .tree-thumb-card.evidence-hit { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 4 3; }
+        .tree-thumb-card.evidence-dim, .tree-thumb-text.evidence-dim { opacity: 0.45; }
+        .tree-thumb-text { fill: var(--text); font-family: var(--font-serif); font-size: 11px; text-anchor: middle; }
+        .tree-thumb-text.years { fill: var(--text-light); font-family: inherit; font-size: 10px; font-variant-numeric: tabular-nums; }
+        .merge-s3-groups { overflow-y: auto; }
+        .merge-s3-glist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--r-md); }
+        .merge-s3-glist > li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--divider); font-size: 13px; }
+        .merge-s3-glist > li:last-child { border-bottom: 0; }
+        .merge-s3-glist > li { flex-wrap: wrap; }
+        .merge-s3-gdecide { margin-left: auto; }
+        /* 5a (500 px) and 5c (520 px). */
+        .merge-s3-dialog .modal.modal--sm { width: 500px; max-width: min(500px, 94vw); }
+        #merge-s3-pick .modal.modal--sm { width: 520px; max-width: min(520px, 94vw); }
+        .merge-s3-unlink-text { margin: 0 0 8px; font-size: 13.5px; line-height: 1.45; }
+        .merge-s3-unlink-names { max-height: 140px; overflow-y: auto; margin: 0 0 10px; padding-left: 18px; font-family: var(--font-serif); font-size: 13px; }
+        .merge-s3-unlink-names[hidden] { display: none; }
+        .merge-s3-tiles { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+        .modal label.merge-s3-tile { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 8px 10px; border: 1px solid var(--border); cursor: pointer; }
+        .merge-s3-tile > input { margin-top: 3px; }
+        .merge-s3-tile-x { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .merge-s3-tile-t { font-size: 13.5px; font-weight: 600; }
+        .merge-s3-tile-d { font-size: 12.5px; color: var(--text-light); }
+        .merge-s3-pick-q {
+            width: 100%; box-sizing: border-box; padding: 6px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 13px;
+        }
+        .merge-s3-pick-list { list-style: none; margin: 8px 0; padding: 0; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-md); }
+        .merge-s3-pick-list > li { padding: 6px 10px; border-bottom: 1px solid var(--divider); font-size: 13px; cursor: pointer; }
+        .merge-s3-pick-list > li:last-child { border-bottom: 0; }
+        .merge-s3-pick-side { color: var(--text-light); font-size: 12px; }
+        .merge-s3-gen { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 6px 0; font-size: 13px; }
+        .merge-s3-pick-sentence { min-height: 2.8em; margin: 8px 0 12px; font-size: 13px; line-height: 1.4; }
+        @media (max-width: 1099px) {
+            .merge-s3-main { grid-template-columns: minmax(0, 1fr); }
+            .merge-s3-preview { display: none; }
+            .modal .merge-s3 .merge-s3-preview-open { display: inline-flex; align-items: center; min-height: 28px; padding: 2px 12px; font-size: 12.5px; }
+            .merge-s3.is-sheet .merge-s3-preview {
+                display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; max-height: 80%;
+                padding: 10px 14px 14px; background: var(--surface); border-top: 1px solid var(--border);
+                border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--shadow-lg);
+            }
+            .modal .merge-s3.is-sheet .merge-s3-preview-close {
+                display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px;
+                border: 0; background: transparent; font-size: 20px; color: var(--text-light);
+            }
+            .merge-s3.is-sheet .merge-s3-thumb { height: min(56vh, 420px); }
+        }
+        @media (pointer: coarse) {
+            .merge-s3-list { --s3-row: 44px; }
+            .modal .merge-s3 .merge-s3-gprev, .merge-s3-all .link-button { min-height: 44px; }
+            .merge-s3-pick-list > li { min-height: 44px; display: flex; align-items: center; flex-wrap: wrap; gap: 0 4px; }
+            .modal label.merge-s3-tile { min-height: 44px; }
+        }
+        /* A phone (14c): the step scrolls as a whole, the list keeps its own scroll; a row is name and years over where it links. */
+        @media (max-width: 640px) {
+            .merge-step-body[data-step="3"] { display: block; overflow-y: auto; }
+            .merge-s3-scroll { height: 62vh; min-height: 240px; }
+            .merge-s3-search { max-width: none; }
+            .merge-s3-list { --s3-row: 52px; }
+            .merge-s3-list > .merge-s3-row { flex-wrap: wrap; align-content: center; row-gap: 0; padding-left: 12px; }
+            .merge-s3-list > .merge-s3-row .merge-s3-rel { order: 5; flex-basis: 100%; max-width: none; margin-left: 26px; text-align: left; }
+            .merge-s3-gvia { display: none; }
+            .merge-s3-list > .merge-s3-gh .merge-s3-gcount { margin-right: auto; }
+            .merge-s3-count { margin-left: 0; flex-basis: 100%; }
+            .modal .merge-s3 .merge-s3-preview-open { min-height: 44px; }
+        }
+        /* A phone held sideways: the step scrolls as a whole, the list keeps a view of its own. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-step-body[data-step="3"] { display: block; overflow-y: auto; }
+            .merge-s3-scroll { height: 70vh; min-height: 180px; }
+            .merge-s3-tabs .merge-tab { padding: 6px 8px; font-size: 12px; }
+            .merge-s3.is-sheet .merge-s3-thumb { height: 60vh; }
+        }
+        @media (hover: hover) {
+            .merge-s3-list > .merge-s3-row:hover, .merge-s3-pick-list > li:hover, .modal label.merge-s3-tile:hover { background: var(--hover-bg); }
         }
         .merge-stat.skipped .merge-stat-label { color: var(--text-faint); }
         .merge-stat.skipped .merge-stat-value { color: var(--text-faint); }

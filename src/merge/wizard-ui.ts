@@ -26,7 +26,7 @@ import { renderStep1, parkGedcomSummary } from './steps/step1-what.js';
 import { isCopyOfTarget, renderStep2 } from './steps/step2-who.js';
 import { barHtml, setBarShare } from '../ui/prog-bar.js';
 import { busySpinHtml } from '../ui/busy.js';
-import { renderStep3 } from './steps/step3-whom.js';
+import { renderStep3, variantSub } from './steps/step3-whom.js';
 import { renderStep4 } from './steps/step4-rules.js';
 import { renderStep5 } from './steps/step5-plan.js';
 import { renderStep6 } from './steps/step6-done.js';
@@ -406,6 +406,7 @@ export class MergeWizard {
             const pending = planCounts(this.plan).pending;
             if (pending > 0) return { text: W.subPending(pending), warn: true };
         }
+        if (step === 3 && info.state === 'ok') return { text: variantSub(this.host.state() ?? null, ws.choices) };
         return { text: '' };
     }
 

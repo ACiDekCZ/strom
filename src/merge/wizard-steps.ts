@@ -27,11 +27,10 @@ export interface StepInfo {
 }
 
 /**
- * Steps 3 (Whom to add) and 4 (Who is right) are not built yet (parts B and
- * C): until steps 3/4 exist, they are always skipped (3 "all new", 4 "my tree
- * applies"). Part B turns this off.
+ * Step 4 (Who is right) is not built yet: until it exists, it is always
+ * skipped ("my tree applies"). Part B turns this off.
  */
-export const STEPS_3_4_PENDING = true;
+export const STEP_4_PENDING = true;
 
 /** Each step's state and, when skipped, why. A null plan: the comparison has not run yet. */
 export function stepInfo(choices: Pick<WizardChoices, 'mode' | 'scope' | 'pickPeople' | 'writtenAt'>, plan: MergePlan | null): Record<WizardStep, StepInfo> {
@@ -41,14 +40,12 @@ export function stepInfo(choices: Pick<WizardChoices, 'mode' | 'scope' | 'pickPe
 
     const step2: StepInfo = newTree ? { state: 'skip', reason: 'newTree' } : { state: plan ? 'ok' : 'locked' };
 
-    let step3: StepInfo;
-    if (STEPS_3_4_PENDING) step3 = { state: 'skip', reason: 'allNew' };
-    else if (newTree && !choices.pickPeople) step3 = { state: 'skip', reason: 'allNew' };
-    else step3 = { state: ready ? 'ok' : 'locked' };
+    // A new tree goes past step 3 with everybody ("all new") unless people are picked (step 5's "Choose people…").
+    const step3: StepInfo = newTree && !choices.pickPeople ? { state: 'skip', reason: 'allNew' } : { state: ready ? 'ok' : 'locked' };
 
     let step4: StepInfo;
     if (newTree) step4 = { state: 'skip', reason: 'newTree' };
-    else if (STEPS_3_4_PENDING) step4 = { state: 'skip', reason: 'mineRule' };
+    else if (STEP_4_PENDING) step4 = { state: 'skip', reason: 'mineRule' };
     else if (choices.scope === 'a' && (!plan || plan.conflicts.unions === 0)) step4 = { state: 'skip', reason: 'scopeA' };
     else step4 = { state: ready ? 'ok' : 'locked' };
 
