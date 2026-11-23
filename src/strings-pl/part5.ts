@@ -930,7 +930,6 @@ export const plPart5: Pick<StringsType, 'danger' | 'emptyStates' | 'relationship
         remarriageNoDate: (married: string) => `Rozwód, ponowny ślub ${married}`,
         association: (name: string, label: string) => `Relacja: ${name} (${label})`,
         assoRoles: { CHIL: 'dziecko', FATH: 'ojciec', FRIEND: 'przyjaciel', HUSB: 'mąż', MOTH: 'matka', MULTIPLE: 'kilka ról', NGHBR: 'sąsiad', PARENT: 'rodzic', SPOU: 'małżonek', WIFE: 'żona' } as Record<string, string>,
-        email: (value: string) => `E-mail: ${value}`,
         adoptedChild: 'dziecko adoptowane',
         fosterChild: 'dziecko w rodzinie zastępczej',
         child: 'dziecko',

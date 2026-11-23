@@ -1,0 +1,23 @@
+{
+  "version": 26,
+  "persons": {
+    "m_kvido": {
+      "id": "m_kvido", "firstName": "Kvido", "lastName": "Modřín", "gender": "male",
+      "birthDate": "1921", "birthPlace": "Křemenná", "isPlaceholder": false,
+      "partnerships": ["m_u1"], "parentIds": [], "childIds": ["m_teofil"]
+    },
+    "m_florentyna": {
+      "id": "m_florentyna", "firstName": "Florentýna", "lastName": "Modřínová", "gender": "female",
+      "birthDate": "1924", "birthPlace": "Křemenná", "isPlaceholder": false,
+      "partnerships": ["m_u1"], "parentIds": [], "childIds": ["m_teofil"]
+    },
+    "m_teofil": {
+      "id": "m_teofil", "firstName": "Teofil", "lastName": "Modřín", "gender": "male",
+      "birthDate": "1950", "birthPlace": "Křemenná", "isPlaceholder": false,
+      "partnerships": [], "parentIds": ["m_kvido", "m_florentyna"], "childIds": []
+    }
+  },
+  "partnerships": {
+    "m_u1": { "id": "m_u1", "person1Id": "m_kvido", "person2Id": "m_florentyna", "childIds": ["m_teofil"], "status": "married" }
+  }
+}

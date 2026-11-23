@@ -185,7 +185,8 @@ export const importNextMethods = uiModule({
 
         // As the two questions did: the data check and the families, computed now.
         const check = validateTreeData(data);
-        const families = findComponents(data).filter(c => c.count >= 2).length;
+        // After a merge into a tree the guide asked about the unlinked groups itself (§6): no question about families here.
+        const families = p.path === 'merge' ? 0 : findComponents(data).filter(c => c.count >= 2).length;
         const meta = TreeManager.getTreeMetadata(p.treeId);
         const computer = onComputer();
         const research = importNextResearchState({

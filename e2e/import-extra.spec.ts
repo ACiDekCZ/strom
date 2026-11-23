@@ -1,12 +1,12 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'fs';
-import { openApp, createFirstPerson, addRelation, card, waitForPersist } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card, waitForPersist, mergeCompare, mergeCount, mergeCurrentStep, mergeDecide, mergePair, mergeRow, mergeSetMode, mergeWrite } from './helpers.js';
 
 /**
  * Import paths beyond the plain JSON file: an exported HTML app (plain and
  * password-protected) through the tree manager's "From HTML file", a
  * password-protected "Export all" backup through "From JSON", and the GEDCOM
- * result dialog's "Save as JSON" and "Merge with existing" choices.
+ * import guide's "Save as JSON" and "Add to a tree" choices.
  */
 
 const FILE_PASSWORD = 'birch-file-77';
@@ -199,20 +199,21 @@ function writeFamilyGedcom(testInfo: TestInfo): string {
     return p;
 }
 
-test('GEDCOM result: "Save as JSON" downloads the converted tree and adds no tree', async ({ page }, testInfo) => {
+test('GEDCOM import guide: "Save as JSON" downloads the converted tree and adds no tree', async ({ page }, testInfo) => {
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');
     await waitForPersist(page, 'Seed');
 
     await page.locator('#gedcom-input').setInputFiles(writeFamilyGedcom(testInfo));
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     await expect(result.locator('#gedcom-stat-persons')).toHaveText('3');
     await expect(result.locator('#gedcom-stat-partnerships')).toHaveText('1');
 
+    await mergeSetMode(result, 'json');
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        result.locator('#gedcom-save-json-btn').click(),
+        result.locator('#merge-next').click(),
     ]);
     expect(download.suggestedFilename()).toBe('family-tree.json');
     await expect(result).toBeHidden();
@@ -230,42 +231,40 @@ test('GEDCOM result: "Save as JSON" downloads the converted tree and adds no tre
     expect(trees[0].names).toEqual(['Seed']);
 });
 
-test('GEDCOM result: "Merge with existing" matches the shared person and adds the rest', async ({ page }, testInfo) => {
+test('GEDCOM import guide: "Add to a tree" matches the shared person and adds the rest', async ({ page }, testInfo) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1950' });
     await waitForPersist(page, 'Jan');
     const originalId: string = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
 
     await page.locator('#gedcom-input').setInputFiles(writeFamilyGedcom(testInfo));
-    const result = page.locator('#gedcom-result-modal');
-    await expect(result).toBeVisible();
-    await result.locator('#gedcom-merge-btn').click();
-    await expect(result).toBeHidden();
-
-    // The merge wizard pairs the file's Jan with mine and offers Eva + Karel as new.
+    // The import guide's comparison pairs the file's Jan with mine and offers Eva + Karel as new.
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
-    await expect(wizard.locator('#merge-stat-matches')).toHaveText('1');
-    await expect(wizard.locator('#merge-stat-new')).toHaveText('2');
-    await expect(wizard.locator('#merge-match-list')).toContainText('Jan');
+    await expect(wizard.locator('.merge-s1-modes [data-mode="add"]')).toHaveAttribute('aria-checked', 'true');
+    await mergeCompare(wizard);
+    await expect(mergeCount(wizard, 'added')).toHaveText('2');
+    await mergePair(wizard, 'Jan', 'maybe');
 
     // Name + birth year alone (score below 80) is only offered for review:
-    // confirmed by hand, so the run raises no "undecided" gate; the result
-    // goes to a new tree named in the prompt.
-    const janRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Jan' });
-    await expect(janRow).toHaveClass(/pending/);
-    await janRow.locator('.merge-btn-confirm').click();
-    await expect(janRow).toHaveClass(/confirmed/);
-    await wizard.getByRole('button', { name: 'Execute merge' }).click();
-    const confirm = page.locator('#confirmation-modal');
-    await expect(confirm).toBeVisible();
-    await expect(confirm.locator('#prompt-input')).toHaveValue(/merged|\+/i);
-    await confirm.locator('#prompt-input').fill('Merged with GEDCOM');
-    await confirm.locator('#confirm-ok-btn').click();
+    // left to decide, the write waits for it (no "undecided" question at the end).
+    const janRow = mergeRow(wizard, 'Jan');
+    await expect(janRow).toHaveAttribute('data-fate', 'pending');
+    await expect(mergeCount(wizard, 'pending')).toHaveText('1');
+    await expect(wizard.locator('#merge-next')).toBeDisabled();
+    await mergeDecide(wizard, 'Jan', 'same', 'maybe');
+    await expect(janRow).toHaveAttribute('data-fate', 'joined');
+    await expect(mergeCount(wizard, 'joined')).toHaveText('1');
+    await expect(mergeCount(wizard, 'pending')).toHaveText('0');
+    await expect(mergeCount(wizard, 'added')).toHaveText('2');
+    // The result goes to a new tree "{my tree} + {file}", no name asked.
+    await mergeWrite(wizard);
+    await expect(page.locator('#confirmation-modal.active.dialog-prompt')).toHaveCount(0);
 
     await expect.poll(async () => (await treeSummaries(page)).length).toBe(2);
     const trees = await treeSummaries(page);
-    const merged = trees.find(t => t.name === 'Merged with GEDCOM')!;
+    const merged = trees.find(t => t.id !== originalId)!;
+    expect(merged.name).toMatch(/ \+ /);
     // Jan appears once (matched), Eva and Karel were added.
     expect(merged.names).toEqual(['Eva', 'Jan', 'Karel']);
     // My original tree is unchanged.
@@ -286,7 +285,7 @@ test('GEDCOM result: people of unknown sex are said to be imported, on a line of
     const p = testInfo.outputPath('unknown-sex.ged');
     writeFileSync(p, ged);
     await page.locator('#gedcom-input').setInputFiles(p);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     const lines = result.locator('#gedcom-stat-detail .gedcom-stat-line');
     await expect(lines).toHaveText([/^“Unsupported” counts the parts of the file/, 'Skipped records: _TODO ×1', '2 people of unknown sex imported']);
@@ -295,14 +294,14 @@ test('GEDCOM result: people of unknown sex are said to be imported, on a line of
     expect(b!.y).toBeGreaterThanOrEqual(a!.y + a!.height - 1);
 
     // Polish: the count agrees with its word, and nothing says "skipped" on that line.
-    await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
+    await result.locator('.modal-header .close-btn').click();
     await page.evaluate(() => window.Strom.UI.setLanguage('pl'));
     await page.locator('#gedcom-input').setInputFiles([]);
     await page.locator('#gedcom-input').setInputFiles(p);
     await expect(result).toBeVisible();
     await expect(lines.nth(2)).toHaveText('Wczytano 2 osoby o nieznanej płci');
     await page.evaluate(() => window.Strom.UI.setLanguage('cs'));
-    await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
+    await result.locator('.modal-header .close-btn').click();
     await page.locator('#gedcom-input').setInputFiles([]);
     await page.locator('#gedcom-input').setInputFiles(p);
     await expect(result).toBeVisible();
@@ -323,7 +322,7 @@ test('GEDCOM result: a GEDCOM 7 file\'s ids and stamps are not unsupported, and 
     const p = testInfo.outputPath('gedcom7.ged');
     writeFileSync(p, ged);
     await page.locator('#gedcom-input').setInputFiles(p);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     // Only the status the app does not know is unsupported; UID, CREA and EXID are bookkeeping.
     await expect(result.locator('#gedcom-stat-unsupported')).toHaveText('1');
@@ -335,7 +334,7 @@ test('GEDCOM result: a GEDCOM 7 file\'s ids and stamps are not unsupported, and 
     ]);
 
     // Polish, the language of the question that asked for it.
-    await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
+    await result.locator('.modal-header .close-btn').click();
     await page.evaluate(() => window.Strom.UI.setLanguage('pl'));
     await page.locator('#gedcom-input').setInputFiles([]);
     await page.locator('#gedcom-input').setInputFiles(p);
@@ -358,7 +357,7 @@ test('GEDCOM result: another program\'s own tags are kept for the way back, deep
     const p = testInfo.outputPath('myheritage-tags.ged');
     writeFileSync(p, ged);
     await page.locator('#gedcom-input').setInputFiles(p);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     await expect(result.locator('#gedcom-stat-unsupported')).toHaveText('1');
     const lines = result.locator('#gedcom-stat-detail .gedcom-stat-line');
@@ -376,7 +375,7 @@ test('GEDCOM result: another program\'s own tags are kept for the way back, deep
     await expect(result.locator('#gedcom-media-text')).toHaveText(/references 1 external media file\b/);
 
     // Czech: the count agrees with its word.
-    await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
+    await result.locator('.modal-header .close-btn').click();
     await page.evaluate(() => window.Strom.UI.setLanguage('cs'));
     await page.locator('#gedcom-input').setInputFiles([]);
     await page.locator('#gedcom-input').setInputFiles(p);
@@ -396,7 +395,7 @@ test('GEDCOM result: a family\'s picture outside the file is counted among the c
     const p = testInfo.outputPath('family-photo.ged');
     writeFileSync(p, ged);
     await page.locator('#gedcom-input').setInputFiles(p);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     await expect(result.locator('#gedcom-media-text')).toHaveText(/^The file references 2 external media files: 1 on people, 1 on couples \(/);
     // The couple's photo comes from the picked file (a small JPEG drawn in the page).
@@ -418,7 +417,7 @@ test('GEDCOM result: a file with nothing unsupported has no sentence about it', 
     const p = testInfo.outputPath('clean.ged');
     writeFileSync(p, ['0 HEAD', '1 GEDC', '2 VERS 7.0', '0 @I1@ INDI', '1 UID 1', '1 NAME Jan /Olcha/', '1 SEX M', '0 TRLR', ''].join('\n'));
     await page.locator('#gedcom-input').setInputFiles(p);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     await expect(result.locator('#gedcom-stat-unsupported')).toHaveText('0');
     await expect(result.locator('#gedcom-stat-detail .gedcom-stat-line')).toHaveText(['Everything in the file was imported.']);
@@ -432,7 +431,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 
         for (const lang of ['cs', 'en', 'de']) {
             await page.evaluate((l) => window.Strom.UI.setLanguage(l), lang);
             await page.locator('#gedcom-input').setInputFiles(ged);
-            const result = page.locator('#gedcom-result-modal');
+            const result = page.locator('#merge-modal');
             await expect(result).toBeVisible();
             // Show the tiles a plain file leaves out too: all of them must fit at once.
             const clipped = await result.evaluate((modal) => {
@@ -448,14 +447,14 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 
                 });
             });
             expect(clipped, `${lang}: clipped tile labels`).toEqual([]);
-            await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
+            await result.locator('.modal-header .close-btn').click();
             await expect(result).toBeHidden();
             await page.locator('#gedcom-input').setInputFiles([]);
         }
     });
 }
 
-test('GEDCOM › Merge with existing: a large file says "Analyzing people…" at the choice before the matching (C57, waiting buttons §8)', async ({ page }, testInfo) => {
+test('GEDCOM › Compare: a large file is compared from step 1\'s Compare, its progress in step 2 (C57, spec 134 K3.5)', async ({ page }, testInfo) => {
     test.setTimeout(90_000);
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1950' });
@@ -466,19 +465,9 @@ test('GEDCOM › Merge with existing: a large file says "Analyzing people…" at
     const file = testInfo.outputPath('large.ged');
     writeFileSync(file, lines.join('\n'));
     await page.locator('#gedcom-input').setInputFiles(file);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    const btn = result.locator('#gedcom-merge-btn');
-    await btn.evaluate((b) => {
-        const w = window as unknown as { __said: string[] };
-        w.__said = [];
-        new MutationObserver(() => {
-            if (b.getAttribute('aria-busy') === 'true') w.__said.push(b.textContent ?? '');
-        }).observe(b, { attributes: true, childList: true, subtree: true, characterData: true });
-    });
-    await btn.click();
-    await expect(page.locator('#merge-modal')).toBeVisible({ timeout: 60_000 });
-    await expect(result).toBeHidden();
-    const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
-    expect(said.some(t => t.includes('Analyzing people…'))).toBe(true);
+    // The button no longer waits itself: step 2 shows the comparison's progress (its own tests).
+    await result.locator('#merge-next').click();
+    await expect(mergeCurrentStep(result)).toHaveAttribute('data-step', '2', { timeout: 60_000 });
 });

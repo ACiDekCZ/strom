@@ -170,8 +170,17 @@
  *   writes such a record at its person once, as the portrait. The version
  *   marks a tree moved over, so a record taken out later is not made again;
  *   an older app (v24) warns first, as for every bump.
+ * v26 (2026-11, spec 134): a person's contact (Person.emails). A GEDCOM RESI
+ *   that carries only a contact (`2 EMAIL`, MyHeritage) is the person's
+ *   e-mail, not a residence, and `1 EMAIL` under the person is too; a tree
+ *   of v25 and older has its e-mails moved over at every load (the lines an
+ *   import wrote of them into a residence's or the person's note; a residence
+ *   left with nothing goes, src/person-contact.ts moveContactsIntoPeople).
+ *   An older app (v25) would drop the contact on a re-save, so the bump makes
+ *   it warn first. The tree-merge history (StromData.merges) joins this
+ *   version later.
  */
-export const STROM_DATA_VERSION = 25;
+export const STROM_DATA_VERSION = 26;
 
 /**
  * Current app version, shown in the About dialog and stamped into exports.

@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, addRelation, card, focusViaSearch, cardAction } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card, focusViaSearch, cardAction, mergeCreateNewTree } from './helpers.js';
 
 /**
  * A child with one known parent, made either way in the app: "Add child"
@@ -109,13 +109,9 @@ test.describe('a child with one known parent', () => {
         expect(text).not.toContain('1 NAME //');
         expect(text.split(/\r?\n/).filter(l => / INDI$/.test(l))).toHaveLength(5);
         await page.locator('#gedcom-input').setInputFiles(await download.path());
-        const result = page.locator('#gedcom-result-modal');
+        const result = page.locator('#merge-modal');
         await expect(result).toBeVisible();
-        await result.locator('#gedcom-new-tree-btn').click();
-        const dialog = page.locator('#import-tree-modal');
-        await dialog.locator('#import-tree-name').fill('Back from GEDCOM');
-        await dialog.getByRole('button', { name: 'Import' }).click();
-        await expect(dialog).toBeHidden();
+        await mergeCreateNewTree(page, result, 'Back from GEDCOM');
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.name)).toBe('Back from GEDCOM');
         expect(await shape()).toEqual(before);
         // Drawn as Ole's children (the tree opens on him).

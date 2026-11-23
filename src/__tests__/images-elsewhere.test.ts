@@ -7,7 +7,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { smallPortraitHtml, pageImageWait } from '../ui/image-slot.js';
 import { changePicHtml } from '../ui/research-changes-ui.js';
-import { conflictPhotoHtml } from '../merge/ui.js';
+import { conflictPhotoHtml } from '../merge/steps/step4-rules.js';
 import { slideshowPhotoHtml } from '../ui/slideshow.js';
 import {
     preparePersonPageData, buildPersonPageBody, buildPersonPageDocument, PERSON_PAGE_ALL_GROUPS,

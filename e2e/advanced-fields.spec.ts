@@ -7,7 +7,7 @@ import { openApp, createFirstPerson, cardAction, personModal, addRelation } from
  * wall of fields is its own kind of unusable.
  */
 const ADVANCED = ['#person-sources-section', '#attachments-section', '#refn-group',
-    '#name-variants-group', '#question-group'];
+    '#name-variants-group', '#question-group', '#emails-group'];
 
 test('a plain person form does not open with an archive of fields', async ({ page }) => {
     await openApp(page);

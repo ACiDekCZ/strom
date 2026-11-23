@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, card, mergeCreateNewTree } from './helpers.js';
 import { NEW_HEAD, links, dropFile } from './research-bridge.js';
 import {
     ARCHIVE_ACCEPTS, KEEP_200, TAKE_200, Reply, conflictOf, setupConflict, openKnows, openEdit, editJosef, janBirth, cardOf, side, tag, panel, choice,
@@ -488,7 +488,6 @@ async function setupPlain(page: Page): Promise<void> {
         '0 @I3@ INDI', '1 NAME Jan /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '1 FAMC @F1@',
         '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@', '0 TRLR',
     ].join('\n'));
-    await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
-    await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+    await mergeCreateNewTree(page, page.locator('#merge-modal'));
     await expect(card(page, 'Jan')).toBeVisible();
 }

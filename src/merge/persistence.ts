@@ -7,6 +7,8 @@ import { PersonId, PartnershipId, StromData } from '../types.js';
 import {
     MergeState,
     MergePhase,
+    MergeTarget,
+    MergeWizardState,
     PersonMatch,
     FieldConflict,
     MatchDecision,
@@ -37,6 +39,10 @@ export interface SerializableMergeState {
     phase: MergePhase;
     /** "Update existing only" mode (Primitive 1). Optional: old sessions lack it. */
     updateOnly?: boolean;
+    /** The target tree and its data's fingerprint at the matching (spec 134 K0.6). Optional: old sessions lack it. */
+    target?: MergeTarget;
+    /** The guide's step, reached step, comparison done and choices (spec 134 §1). Optional: old sessions lack it. */
+    wizard?: MergeWizardState;
 }
 
 /** Saved merge session metadata */
@@ -70,11 +76,26 @@ function serializeState(state: MergeState): SerializableMergeState {
         conflictResolutions: Array.from(state.conflictResolutions.entries()),
         partnershipResolutions: Array.from(state.partnershipResolutions?.entries() ?? []),
         phase: state.phase,
-        updateOnly: state.updateOnly
+        updateOnly: state.updateOnly,
+        ...(state.target ? { target: state.target } : {}),
+        ...(state.wizard ? { wizard: structuredClone(state.wizard) } : {})
     };
 }
 
 function deserializeState(serialized: SerializableMergeState): MergeState {
+    // A session saved before suggestions stopped being the default holds them
+    // as resolutions: on a person nobody answered for, a suggested
+    // "use the import" goes back to keeping the existing value (spec 134 K0.3).
+    const answered = new Set(serialized.conflictResolutions.map(([id]) => id));
+    for (const match of serialized.matches) {
+        if (answered.has(match.incomingId)) continue;
+        for (const conflict of match.conflicts) {
+            if (conflict.suggestedReason && conflict.resolution === 'use_incoming') {
+                conflict.suggested ??= 'use_incoming';
+                conflict.resolution = 'keep_existing';
+            }
+        }
+    }
     return {
         existingData: serialized.existingData,
         incomingData: serialized.incomingData,
@@ -86,7 +107,9 @@ function deserializeState(serialized: SerializableMergeState): MergeState {
         partnershipResolutions: new Map(serialized.partnershipResolutions ?? []),
         phase: serialized.phase,
         // Old saved sessions predate the flag → default to normal mode.
-        updateOnly: serialized.updateOnly ?? false
+        updateOnly: serialized.updateOnly ?? false,
+        ...(serialized.target ? { target: serialized.target } : {}),
+        ...(serialized.wizard ? { wizard: serialized.wizard } : {})
     };
 }
 
@@ -195,6 +218,27 @@ export async function saveMergeSession(
     } catch (error) {
         console.error('Failed to save merge session:', error);
         throw error;
+    }
+}
+
+/**
+ * Store the state of a resumed saved merge under its own session (spec 134
+ * K0.6): the session stays until the merge is written or thrown away, its
+ * name as it was. False when the session is gone or the write failed.
+ */
+export async function updateMergeSession(id: string, state: MergeState): Promise<boolean> {
+    try {
+        const sessions = await listMergeSessions();
+        const session = sessions.find(s => s.id === id);
+        if (!session) return false;
+        session.savedAt = new Date().toISOString();
+        session.stats = calculateStats(state);
+        session.state = serializeState(state);
+        await StorageManager.set('merge', SESSIONS_KEY, sessions);
+        return true;
+    } catch (error) {
+        console.error('Failed to update merge session:', error);
+        return false;
     }
 }
 

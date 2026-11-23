@@ -2091,6 +2091,8 @@
         @media (hover: hover) { #about-modal .about-share:hover { background: var(--hover-bg); } }
         /* What Share Strom did (the address copied, or the address itself): over the About dialog. */
         .toast[data-kind="about-share"] { z-index: 250; }
+        /* Step 3 of the import guide left people out (5b): over the guide (300), its Undo reachable; below the guide's dialogs (400). */
+        .toast[data-kind="merge-guide"] { z-index: 350; }
         /* An output's wait for the photos (spec 116 §8): above the dialog it was asked from (the poster's 300, the
            export's 500), its Cancel and its three actions reachable. */
         .toast[data-output-wait] { z-index: 550; }
@@ -4299,7 +4301,6 @@
         }
         /* Card nav pills are theme-aware by token (var(--surface)/--border/
            --accent/--text-light) — no dark-mode overrides needed. */
-        /* .merge-trees-option / .merge-trees-warning are tokenized — no dark override needed. */
 
         .stat-item {
             text-align: center;
@@ -7282,9 +7283,10 @@
         .modal.modal--sm { width: 440px; max-width: min(440px, 94vw); }
         .modal.modal--md { width: 560px; max-width: min(560px, 94vw); }
         .modal.modal--lg { width: 720px; max-width: min(720px, 94vw); }
-        /* The merge wizard: its footer's four buttons in one row in German too, Re-analyze holding its working words
-           "Wird analysiert…" from the start (§1.2). */
-        @media (min-width: 641px) { .modal.modal--lg.merge-modal { width: 760px; max-width: min(760px, 94vw); } }
+        /* The import guide (spec 134 §1): 94vw on a tablet, 960 px from a 1100 px window, one height for every
+           step so the footer does not jump; full screen on a phone (below). */
+        @media (min-width: 641px) { .modal.modal--lg.merge-modal { width: 94vw; max-width: 94vw; height: min(760px, 88vh); max-height: min(760px, 88vh); } }
+        @media (min-width: 1100px) { .modal.modal--lg.merge-modal { width: 960px; max-width: 960px; } }
         @media (max-width: 640px) {
             .modal.modal--sm, .modal.modal--md, .modal.modal--lg { width: 100%; max-width: 100vw; }
         }
@@ -15119,8 +15121,9 @@
 
         /* Sub-dialogs that appear above merge-modal */
         #merge-manual-dialog,
-        #merge-conflict-dialog,
-        #merge-close-confirm {
+        #merge-close-confirm,
+        #merge-not-taken-modal,
+        .merge-s3-dialog {
             z-index: 400;  /* Above merge-modal (300), below confirmation (500) */
         }
 
@@ -18171,28 +18174,235 @@
 
         /* ==================== MERGE MODAL ==================== */
         .merge-modal {
-            max-width: 700px;
-            max-height: 85vh;
             display: flex;
             flex-direction: column;
         }
-        .merge-stats {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-        /* Paper chips: a soft --surface pill with a hairline border. Meaning is
-           carried by the coloured SVG glyph in the label, not the box fill. */
-        .merge-stat {
-            flex: 1;
+        .merge-head {
             display: flex;
             flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+        .merge-head h2 {
+            font-family: var(--font-serif);
+        }
+        .merge-src {
+            font-size: 12.5px;
+            color: var(--text-light);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        /* One window, no scroll of its own: the step's body scrolls under the steps and the counts. */
+        .merge-modal .modal-content {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            gap: 12px;
+        }
+        .merge-step-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+        }
+        .merge-step-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin: 0 0 8px;
+            outline: none;
+        }
+        .merge-step-note {
+            font-size: 13px;
+            color: var(--text-light);
+            line-height: 1.45;
+            margin: 0 0 8px;
+        }
+        /* ---- Import guide, step 1: what the import holds | what to do with it (spec 134 §3) ---- */
+        .merge-step1 { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; align-items: start; }
+        .merge-s1-src, .merge-s1-what { min-width: 0; }
+        .merge-s1-h { font-size: 12px; font-weight: 600; color: var(--text-light); margin: 12px 0 6px; }
+        .merge-s1-srcbody > .merge-s1-h:first-child { margin-top: 0; }
+        .merge-s1-sumline { display: none; }
+        .merge-s1-file { display: flex; flex-direction: column; gap: 2px; margin: 0 0 10px; min-width: 0; }
+        .merge-s1-name, .merge-s1-end b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-s1-meta { font-size: 12px; color: var(--text-light); }
+        .merge-s1-src .gedcom-stats { margin: 0 0 8px; }
+        .merge-not-taken { margin: 8px 0; font-size: 12px; color: var(--text-light); line-height: 1.45; }
+        .merge-not-taken-line { margin: 0 0 2px; overflow-wrap: anywhere; }
+        .merge-not-taken-links { display: flex; gap: 12px; flex-wrap: wrap; }
+        .merge-s1-desc { font-size: 13px; color: var(--text-light); line-height: 1.45; margin: 6px 0 4px; }
+        /* The cells keep one line while they fit; a long language (de) wraps a cell's words instead of cutting the last cell. */
+        .merge-s1-modes.sel-seg { display: inline-flex; max-width: 100%; overflow: hidden; }
+        .merge-s1-modes > .sel-opt { flex: 0 1 auto; min-width: 0; padding: 5px 12px; font-size: 13px; line-height: 1.2; text-align: center; hyphens: auto; overflow-wrap: break-word; cursor: pointer; }
+        .merge-s1-targets, .merge-s1-scopes { display: flex; flex-direction: column; gap: 4px; }
+        /* The tiles are <label>s: ".modal label" (display: block, a bottom margin) must not win. */
+        .modal label.merge-s1-target {
+            display: grid; grid-template-columns: auto auto auto minmax(0, 1fr); align-items: center; gap: 8px;
+            margin: 0; padding: 4px 12px; cursor: pointer; box-sizing: border-box;
+        }
+        .merge-s1-target { min-height: 32px; }
+        .merge-s1-target > input, .merge-s1-scope > input { margin: 0; }
+        .merge-s1-tname { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+        .merge-s1-tline { font-size: 12px; color: var(--text-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s1-target:not(.is-blocked) .merge-s1-lock { display: none; }
+        .merge-s1-lock { display: inline-flex; color: var(--text-light); }
+        .merge-s1-target.is-blocked { cursor: default; opacity: .7; }
+        /* A blocked tree's line says why: whole, wrapped, never cut. */
+        .merge-s1-target.is-blocked .merge-s1-tline { white-space: normal; }
+        .modal label.merge-s1-scope { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; margin: 0; padding: 5px 12px; cursor: pointer; }
+        .merge-s1-scope-text { display: flex; flex-direction: column; min-width: 0; }
+        .merge-s1-scope-title { color: var(--text); font-size: 13px; }
+        .merge-s1-scope-desc { font-size: 12px; color: var(--text-light); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s1-scope-desc.is-example { font-style: italic; }
+        .merge-s1-more { display: none; align-self: flex-start; }
+        .merge-s1-note { font-size: 12px; color: var(--text-light); line-height: 1.45; margin: 6px 0 0; }
+        .merge-s1-warn { font-size: 12px; color: var(--warning-text); line-height: 1.45; margin: 6px 0 0; }
+        .merge-s1-empty { font-size: 13px; line-height: 1.45; margin: 0; }
+        .merge-s1-fromto { margin: 0 0 10px; }
+        .merge-s1-fromto > .merge-s1-h { display: block; margin-top: 0; }
+        .merge-s1-route { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .merge-s1-end { display: flex; flex-direction: column; min-width: 0; flex: 0 1 auto; }
+        .merge-s1-arrow { color: var(--text-light); }
+        .merge-s1-swap { margin-left: auto; flex: none; white-space: nowrap; }
+        .merge-s1-swap[aria-disabled="true"] { opacity: .55; cursor: default; }
+        .merge-not-taken-note { font-size: 13px; color: var(--text-light); margin: 0 0 8px; }
+        .merge-not-taken-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; font-size: 13px; }
+        .merge-not-taken-list > li {
+            display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 4px 10px; align-items: baseline;
+            padding: 5px 0; border-bottom: 1px solid var(--border);
+        }
+        .merge-not-taken-count { color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .merge-not-taken-text { color: var(--text-light); overflow-wrap: anywhere; }
+        /* A tablet: the left column narrower. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .merge-step1 { grid-template-columns: 280px minmax(0, 1fr); gap: 16px; }
+        }
+        /* A phone (and a phone held sideways): the columns stacked, the summary one line a tap opens,
+           c) and d) behind "More options" unless one of them is chosen (§14a). */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-step1 { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+            .merge-s1-sumline {
+                display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 6px 12px; text-align: left;
+                border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+            }
+            .merge-s1-sumtext { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .merge-s1-src.is-open .merge-s1-chev { transform: rotate(180deg); }
+            .merge-s1-src:not(.is-open) .merge-s1-srcbody { display: none; }
+            .merge-s1-src.is-open .merge-s1-srcbody { margin-top: 8px; }
+            .merge-s1-modes.sel-seg { display: flex; width: 100%; }
+            .merge-s1-modes > .sel-opt { flex: 1 1 auto; min-width: 0; padding: 5px 4px; white-space: normal; text-align: center; }
+            .merge-s1-more { display: inline-block; }
+            .merge-s1-scopes:not(.is-more) > .merge-s1-scope:is([data-scope="c"], [data-scope="d"]) { display: none; }
+            .merge-s1-scopes.is-more > .merge-s1-more { display: none; }
+            .merge-s1-tname { max-width: 140px; }
+            .merge-s1-route { flex-wrap: wrap; }
+        }
+        @media (pointer: coarse) {
+            .merge-s1-target { min-height: 44px; }
+        }
+        @media (hover: hover) {
+            .merge-s1-sumline:hover { background: var(--surface-2); }
+        }
+
+        /* The steps: .sel-tab (src/ui/sel-css.ts), the current one carries the line; a finished one is a button
+           with its ✓, a skipped or a later one plain text. Each has its second line (.merge-step-sub). */
+        .merge-progress {
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--divider);
+        }
+        .merge-step-list {
+            display: flex;
+        }
+        .merge-step {
+            flex: 1 1 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1px;
+            padding: 9px 10px 8px;
+            border: 0;
+            background: transparent;
+            font: inherit;
+            text-align: left;
+            cursor: default;
+        }
+        .merge-step-name {
+            display: inline-flex;
             align-items: center;
             gap: 4px;
+            font-size: 12.5px;
+            white-space: nowrap;
+        }
+        .merge-step-sub {
+            font-size: 11px;
+            color: var(--text-faint);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+        .merge-step-name { max-width: 100%; }
+        .merge-step-name > .sel-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .merge-step-sub.is-warn { color: var(--warning-text); }
+        /* Under 1100 px only the current step keeps its second line (§13, 14j); the whole text stays in the step's title. */
+        @media (max-width: 1099px) {
+            .merge-step:not(.active) > .merge-step-sub { display: none; }
+        }
+        .merge-step.is-done, button.merge-step.is-skipped { cursor: pointer; }
+        .merge-step.is-done .merge-step-ok { display: inline-flex; color: var(--primary); }
+        .merge-step.is-skipped .merge-step-name,
+        .merge-step.is-future .merge-step-name { color: var(--text-faint); }
+        @media (hover: hover) {
+            .merge-progress .merge-step.sel-tab:not(.is-done):not(.active):hover { box-shadow: none; }
+            .merge-progress .merge-step.is-done:hover .merge-step-name,
+            .merge-progress button.merge-step.is-skipped:hover .merge-step-name { color: var(--text); }
+        }
+        /* The phone's short form ("Step 2 of 6 · Who is who" and six bars): shown only up to 640 px. */
+        .merge-progress-short {
+            display: none;
+        }
+        .merge-bars {
+            display: flex;
+            gap: 4px;
+        }
+        .merge-bar {
+            flex: 1 1 0;
+            height: 3px;
+            border-radius: var(--r-pill);
+            background: var(--divider);
+        }
+        .merge-bar.is-done { background: var(--line-color); }
+        .merge-bar.is-current { background: var(--text); }
+
+        /* The counts: four chips from the plan and their sum; numbers keep their width. */
+        .merge-stats {
+            display: flex;
+            align-items: stretch;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .merge-stats.is-pre {
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 4px 12px;
+            font-size: 13px;
+            color: var(--text-light);
+        }
+        .merge-stats-note {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+        .merge-stat {
+            flex: 1 1 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: var(--r-md);
-            padding: 8px 6px;
+            padding: 6px 10px;
         }
         .merge-stat-label {
             display: flex;
@@ -18200,262 +18410,771 @@
             gap: 4px;
             font-size: 11px;
             color: var(--text-light);
+            white-space: nowrap;
         }
         .merge-stat-glyph { display: inline-flex; align-items: center; }
-        .merge-stat.highlight .merge-stat-glyph { color: var(--primary); }
-        .merge-stat.warning .merge-stat-glyph { color: var(--warning); }
+        .merge-stat.highlight .merge-stat-glyph,
         .merge-stat.new .merge-stat-glyph { color: var(--primary); }
-        .merge-stat.skipped .merge-stat-glyph { color: var(--text-faint); }
+        .merge-stat.warning .merge-stat-glyph { color: var(--warning-text); }
+        .merge-stat.skipped .merge-stat-glyph,
+        .merge-stat.is-zero .merge-stat-glyph { color: var(--text-faint); }
         .merge-stat-value {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 600;
+            font-variant-numeric: tabular-nums;
         }
-        .merge-stat.highlight .merge-stat-value {
-            color: var(--primary);
-        }
-        .merge-stat.warning .merge-stat-value {
-            color: var(--warning);
-        }
-        .merge-stat.new .merge-stat-value {
-            color: var(--primary);
-        }
-        /* The filter tabs are .sel-tab (src/ui/sel-css.ts: the line at the foot
-           of the chosen one) on the bar's hairline; only the layout here. */
-        .merge-tabs {
+        .merge-stat.warning .merge-stat-value { color: var(--warning-text); }
+        .merge-stat-sum {
+            flex: 1.4 1 0;
+            min-width: 0;
             display: flex;
-            gap: 4px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-            border-bottom: 1px solid var(--border);
+            flex-direction: column;
+            justify-content: center;
+            gap: 2px;
+            font-size: 12px;
+            color: var(--text-light);
         }
-        .merge-tab {
-            padding: 8px 12px;
+        .merge-stat-total { color: var(--text); font-variant-numeric: tabular-nums; }
+        /* The phone's one line of counts (shown only up to 640 px). */
+        .merge-stats--line {
+            display: none;
+        }
+
+        /* Step 2 – Who is who (spec 134 §4): the list left (its own scroll), the pair right. */
+        .merge-step-body[data-step="2"] { display: flex; flex-direction: column; overflow: hidden; }
+        .merge-s2 {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: 300px minmax(0, 1fr);
+            gap: 16px;
+        }
+        .merge-s2-side { display: flex; flex-direction: column; min-height: 0; gap: 8px; }
+        /* Only the list gives way to a short column: the tabs (an overflow-x row, so a flex
+           item of no minimum height) were squeezed to a few pixels in the phone's sheet. */
+        .merge-s2-side > :not(.merge-match-list) { flex-shrink: 0; }
+        .merge-s2-pane { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
+        /* The pane scrolls; its parts keep their height (a list of candidates is never squeezed to its border). */
+        .merge-s2-pane > * { flex-shrink: 0; }
+        /* The groups are .sel-tab (src/ui/sel-css.ts) on the bar's hairline; only the layout here. */
+        /* A narrow column (a long language, a phone held sideways) scrolls the groups, never overlaps them. */
+        .merge-tabs { display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+        /* Two classes: above the window's own button padding (.modal button). */
+        .merge-tabs .merge-tab {
+            flex: 1 0 auto;
+            padding: 8px 5px;
             border: 0;
             background: transparent;
-            font-size: 12px;
+            font-size: 12.5px;
             cursor: pointer;
-            transition: color 0.15s;
         }
+        .sel-tab { white-space: nowrap; }
         /* The count keeps one weight, so a tab does not widen when chosen. */
         .tab-count {
             display: inline-block;
             padding: 0 6px;
             margin-left: 4px;
-            background: rgba(0,0,0,0.1);
-            border-radius: 10px;
+            background: var(--surface-2);
+            border-radius: var(--r-pill);
             font-size: 10px;
             font-weight: 600;
+            font-variant-numeric: tabular-nums;
         }
-        /* Justified inner-scroll exception: the merge match list scrolls on its
-           own so the filter tabs and stats above it stay visible. The modal body
-           itself does not scroll (see .merge-modal .modal-content below), so
-           there is still only one scrollbar per dialog. */
+        .merge-s2-q {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 13px;
+        }
         .merge-match-list {
             flex: 1 1 auto;
-            min-height: 140px;
+            min-height: 0;
             overflow-y: auto;
-            margin-bottom: 16px;
             border: 1px solid var(--border);
-            border-radius: 8px;
-        }
-        .merge-modal .modal-content {
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            border-radius: var(--r-md);
         }
         .merge-item {
-            padding: 12px 14px;
-            border-bottom: 1px solid var(--divider);
-            cursor: pointer;
-            transition: background 0.15s;
-        }
-        .merge-item:last-child {
-            border-bottom: none;
-        }
-        @media (hover: hover) { .merge-item:hover {
-            background: var(--hover-bg);
-        } }
-        .merge-item.confirmed {
-            background: var(--primary-soft);
-        }
-        .merge-item.rejected {
-            background: var(--danger-soft);
-            opacity: 0.7;
-        }
-        .merge-item.pending {
-            background: var(--warning-soft);
-            border-left: 3px solid var(--warning);
-        }
-        .merge-item-header {
             display: flex;
             align-items: center;
             gap: 8px;
-            flex-wrap: wrap;
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--divider);
+            cursor: pointer;
         }
+        .merge-item:last-child { border-bottom: 0; }
+        .merge-item-pick { display: inline-flex; flex: none; }
         .merge-item-status {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
+            flex: none;
+            width: 16px;
+            display: inline-flex;
             justify-content: center;
+            font-weight: 700;
             font-size: 12px;
-            background: var(--surface-2);
-            flex-shrink: 0;
+            color: var(--text-faint);
         }
-        .merge-item-status.confirmed {
-            background: var(--primary);
-            color: var(--on-primary);
-        }
-        .merge-item-status.rejected {
-            background: var(--danger);
-            color: var(--on-primary);
-        }
-        .merge-item-status.new {
-            background: var(--primary);
-            color: var(--on-primary);
-        }
-        .merge-item-status.pending {
-            background: var(--warning);
-            color: var(--on-primary);
-        }
-        .merge-item-names {
-            flex: 1;
-            font-size: 14px;
-            min-width: 0;
-        }
+        .merge-item-status[data-fate="joined"] { color: var(--primary); }
+        .merge-item-status[data-fate="pending"] { color: var(--warning); }
+        .merge-item-names { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+        .merge-item-name, .merge-item-other { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-item-name .merge-pn { font-size: 13.5px; }
+        .merge-item-year, .merge-item-other { font-size: 11.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         .merge-item-score {
-            font-size: 11px;
-            font-weight: 600;
-            padding: 2px 9px;
+            flex: none;
+            padding: 0 6px;
             border-radius: var(--r-tag);
             background: var(--surface-2);
-            white-space: nowrap;
-        }
-        .merge-item-score.confidence-high {
-            background: color-mix(in srgb, var(--primary) 18%, var(--surface));
-            color: var(--primary-dark);
-        }
-        .merge-item-score.confidence-medium {
-            background: var(--warning-soft);
-            color: var(--text);
-        }
-        .merge-item-score.confidence-low {
-            background: var(--danger-soft);
-            color: var(--danger);
-        }
-        .merge-item-reasons {
-            font-size: 11px;
             color: var(--text-light);
-            margin: 4px 0 4px 24px;
-            font-style: italic;
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
         }
-        .merge-item-badge {
-            font-size: 10px;
-            padding: 2px 8px;
-            border-radius: var(--r-tag);
+        .merge-pn { font-family: var(--font-serif); }
+        .merge-mut { color: var(--text-light); font-size: 12px; }
+        .merge-s2-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+        .merge-s2-foot .merge-reanalyze { margin-left: auto; }
+        .merge-s2-note { margin: 0; font-size: 12.5px; color: var(--text-light); }
+        .merge-pair-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 13px; }
+        .merge-pair-title { font-weight: 600; }
+        .merge-cand-sp { flex: 1 1 auto; }
+        .merge-keys { font-size: 11.5px; color: var(--text-light); }
+        .kbd {
+            display: inline-block;
+            min-width: 18px;
+            padding: 0 4px;
+            border: 1px solid var(--border);
+            border-bottom-width: 2px;
+            border-radius: var(--r-sm);
+            font-size: 11px;
+            line-height: 16px;
+            text-align: center;
+            color: var(--text-light);
+            background: var(--surface);
+            font-variant-numeric: tabular-nums;
         }
-        .merge-item-badge.new {
-            background: var(--info-soft);
-            color: var(--primary);
+        .pair {
+            flex: none;
+            display: grid;
+            grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr);
+            border: 1px solid var(--border);
+            border-radius: var(--r-lg);
+            overflow: hidden;
+            background: var(--surface);
         }
-        /* The merge's warning mark: a stroked triangle (no emoji) in the warning text colour. */
-        .conflict-indicator {
+        .pair.is-one { grid-template-columns: 96px minmax(0, 1fr); }
+        .pair > div { padding: 5px 10px; border-bottom: 1px solid var(--divider); min-width: 0; font-size: 12.5px; overflow-wrap: anywhere; }
+        .pair > .k, .pair > .hd { color: var(--text-light); font-size: 12px; background: var(--surface-2); }
+        .pair > .x { background: var(--warning-soft); }
+        .pair .merge-pn { font-size: 17px; }
+        .pair .merge-ok, .merge-cand .merge-ok { color: var(--primary); }
+        .merge-ok svg { vertical-align: -1px; }
+        .merge-whys p { margin: 0 0 4px; font-size: 12.5px; }
+        .merge-why-union { display: block; }
+        .merge-whys .link-button { padding: 0; min-height: 0; font-size: 12.5px; }
+        .merge-decide { display: flex; flex-wrap: wrap; gap: 6px; }
+        .merge-decide .merge-dec {
             display: inline-flex;
             align-items: center;
-            flex: none;
-            color: var(--warning-text);
+            gap: 6px;
+            padding: 6px 12px;
+            font-size: 13px;
+            border: 1px solid var(--border);
+            background: var(--surface);
         }
-        .merge-warning-mark { flex: none; color: var(--warning-text); vertical-align: -2px; }
-        .merge-validation-banner-msg .merge-warning-mark { margin-right: 6px; }
-        .merge-item-conflicts {
+        .merge-decide .merge-dec[aria-checked="true"] { border-color: var(--sel-border); }
+        .merge-s2 button.secondary { padding: 6px 12px; font-size: 13px; }
+        .merge-cand-import { margin: 0; font-size: 13px; }
+        .merge-cands { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+        /* A candidate is a label: the longer selector beats `.modal label { display: block }`,
+           so the radio, the name and the reason wrap as a flex row. */
+        .merge-cand { align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--divider); cursor: pointer; }
+        .modal label.merge-cand { display: flex; flex-wrap: wrap; margin: 0; font-size: 13px; }
+        .merge-cand:last-child { border-bottom: 0; }
+        .merge-cand-why { flex-basis: 100%; padding-left: 24px; font-size: 11.5px; color: var(--text-light); }
+        .merge-rest {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 8px;
-            font-size: 11px;
-        }
-        .conflict-field {
-            padding: 2px 8px;
-            background: var(--warning-soft);
-            border-radius: 6px;
-            color: var(--text);
-        }
-        .merge-item-actions {
-            display: flex;
-            gap: 6px;
-            margin-top: 10px;
-        }
-        .merge-item-actions button {
-            padding: 5px 10px;
-            font-size: 11px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: var(--surface);
-            color: var(--text);
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-        @media (hover: hover) { .merge-item-actions button:hover {
-            border-color: var(--primary);
-        } }
-        .merge-btn-confirm.active {
-            background: var(--primary);
-            border-color: var(--primary);
-            color: var(--on-primary);
-        }
-        .merge-btn-reject.active {
-            background: var(--danger);
-            border-color: var(--danger);
-            color: var(--on-primary);
-        }
-        .merge-btn-skip.active {
-            background: var(--text-faint);
-            border-color: var(--text-faint);
-            color: var(--surface);
-        }
-        .merge-item.skipped {
-            background: var(--surface-2);
-            opacity: 0.6;
-        }
-        .merge-item-status.skipped {
-            background: var(--text-faint);
-            color: var(--surface);
-        }
-        .merge-item-badge.skipped {
-            background: var(--surface-2);
+            align-items: center;
+            gap: 6px 10px;
+            padding-top: 8px;
+            border-top: 1px solid var(--divider);
+            font-size: 13px;
             color: var(--text-light);
+        }
+        .merge-rest-warn { flex-basis: 100%; font-size: 11.5px; color: var(--text-faint); }
+        /* A recalculation after a decision (K3.3): a quiet line with Show. */
+        .merge-recalc { margin: 0; font-size: 12.5px; color: var(--text-light); }
+        .merge-recalc .link-button { padding: 0; min-height: 0; font-size: 12.5px; }
+        /* The phone's ways into the pair (14b): the list as a sheet, one column at a time; hidden elsewhere. */
+        /* Two classes for the seg: above .sel-seg (src/ui/sel-css.ts, injected later). */
+        .merge-pair-open, .merge-s2-pane .merge-pair-seg, .merge-s2-sheet-head { display: none; }
+        /* The comparison runs (4a, K3.5): the step's body is its progress with Stop. */
+        .merge-comparing { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 40px 60px; }
+        .merge-comparing-head { display: flex; align-items: center; gap: 8px; }
+        .merge-comparing-t { font-size: 15px; font-weight: 600; color: var(--text); }
+        .merge-comparing .merge-comparing-bar { width: min(520px, 100%); }
+        .merge-comparing p { margin: 0; font-size: 13px; color: var(--text-light); }
+        .merge-comparing-of { font-variant-numeric: tabular-nums; }
+        @media (max-width: 1024px) {
+            .merge-comparing { padding: 24px 20px; }
+            .merge-s2 { grid-template-columns: 260px minmax(0, 1fr); gap: 12px; }
+            .pair { grid-template-columns: 80px minmax(0, 1fr) minmax(0, 1fr); }
+            .pair.is-one { grid-template-columns: 80px minmax(0, 1fr); }
+        }
+        /*
+         * A phone (14b) and a phone held sideways (14f): the pair takes the step; "Pair 7 of 17 ▾" opens the
+         * list as a sheet from the bottom (a chosen row closes it). Upright the pair shows one column at a time
+         * ({tree} / Import); sideways both side by side. The decisions are 44 px high.
+         */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-step-body[data-step="2"] { display: block; overflow-y: auto; }
+            .merge-s2 { display: block; }
+            .merge-s2-side { display: none; }
+            .merge-s2.is-list .merge-s2-side {
+                display: flex;
+                position: fixed;
+                left: 0; right: 0; bottom: 0;
+                z-index: 5;
+                max-height: 80%;
+                padding: 10px 14px 14px;
+                background: var(--surface);
+                border-top: 1px solid var(--border);
+                border-radius: var(--r-lg) var(--r-lg) 0 0;
+                box-shadow: var(--shadow-lg);
+            }
+            .merge-s2-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+            .merge-s2-sheet-close { min-width: 44px; min-height: 44px; border: 0; background: transparent; font-size: 20px; color: var(--text-light); }
+            .merge-pair-title { display: none; }
+            .merge-s2-sheet-head .merge-pair-title { display: inline; }
+            .merge-pair-open {
+                display: inline-flex; align-items: center; gap: 4px;
+                min-height: 44px; padding: 0 4px; border: 0; background: transparent;
+                font-weight: 600; font-size: 14px; color: var(--text);
+            }
+            .merge-s2-pane { overflow: visible; }
+            .merge-keys, .merge-dec .kbd { display: none; }
+            .merge-decide .merge-dec { min-height: 44px; justify-content: center; }
+            .merge-rest button, .merge-s2-foot button { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .merge-s2-pane .merge-pair-seg { display: inline-flex; margin-left: auto; }
+            .merge-pair-seg > .sel-opt { min-height: 44px; padding: 0 12px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .merge-pair-sub { flex-basis: 100%; order: 5; }
+            .merge-pair-dot { display: none; }
+            .pair { grid-template-columns: 72px minmax(0, 1fr); }
+            .pair.show-tree > .c2, .pair.show-import > .c1 { display: none; }
+            .pair > div { padding: 4px 6px; font-size: 12px; }
+            .pair .merge-pn { font-size: 15px; }
+            .merge-decide .merge-dec { flex: 1 1 calc(50% - 6px); }
+            .merge-comparing { padding: 16px 14px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-tabs .merge-tab { padding: 6px 4px; font-size: 11.5px; }
+            .merge-decide .merge-dec { padding: 0 12px; }
+            .merge-comparing { padding: 12px 20px; gap: 8px; }
+        }
+        @media (pointer: coarse) {
+            .merge-item, .merge-cand { min-height: 44px; }
+            .merge-keys, .merge-dec .kbd { display: none; }
+        }
+        @media (hover: hover) {
+            .merge-item:hover, .merge-cand:hover { background: var(--hover-bg); }
+        }
+        /*
+         * Step 3 – Whom to add (spec 134 §5): the variants, the tabs, the tools, the list by groups
+         * (only the rows in view are drawn, §13h; --s3-row is their one height) and the branch preview
+         * at the right (360 px; below 1100 px behind "Preview", as a sheet).
+         */
+        .merge-step-body[data-step="3"] { display: flex; flex-direction: column; overflow: hidden; }
+        .merge-s3 { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+        .merge-s3-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+        .merge-s3-panel[hidden] { display: none; }
+        .merge-s3-variants, .merge-s3-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+        .modal .merge-s3 button.merge-s3-chip {
+            display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 3px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 12.5px; white-space: nowrap;
+        }
+        .merge-s3-caret-d { font-size: 10px; color: var(--text-light); }
+        .merge-s3-linked { display: inline-flex; align-items: center; gap: 4px; }
+        /* The modal's own field rule (full width, 10px 12px) would make these as large as a form field. */
+        .modal .merge-s3 .merge-s3-steps, .modal .merge-s3 .merge-s3-fpanel select, .modal .merge-s3 .merge-s3-fpanel input {
+            width: auto; min-height: 28px; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--r-sm);
+            background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px;
+        }
+        .modal .merge-s3 .merge-s3-fpanel input[type="number"] { width: 84px; font-variant-numeric: tabular-nums; }
+        .merge-s3-tabs { flex: none; display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+        .merge-s3-tabs .merge-tab { flex: 0 0 auto; padding: 8px 12px; border: 0; background: transparent; font-size: 13px; cursor: pointer; }
+        .merge-s3-tabs .cnt { color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .merge-s3-undecided { color: var(--warning-text); font-size: 12px; }
+        .merge-s3-undecided[hidden] { display: none; }
+        .merge-s3-tools { display: flex; flex-direction: column; gap: 8px; }
+        .merge-s3-find { display: flex; align-items: center; gap: 8px; }
+        .modal .merge-s3 button.merge-s3-more { display: none; flex: 0 0 auto; }
+        /* Longer selectors than the window's own input rule (which made the field 40 px tall in 14 px). */
+        .modal .merge-s3 input.merge-s3-search[type="search"] {
+            width: 100%; max-width: 360px; box-sizing: border-box; padding: 6px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 13px;
+        }
+        .merge-s3-fpanel { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 12.5px; color: var(--text-light); }
+        .merge-s3-fpanel[hidden] { display: none; }
+        .modal .merge-s3-fpanel label { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+        .merge-s3-fpanel .link-button, .merge-s3-all .link-button { padding: 0; font-size: 12.5px; }
+        .merge-s3-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 12.5px; }
+        .merge-s3-groupby { display: inline-flex; align-items: center; gap: 6px; }
+        .merge-s3-groupby-l { color: var(--text-light); }
+        .merge-s3-groupby .sel-seg, .merge-s3-gen .sel-seg { display: inline-flex; }
+        .modal .merge-s3-groupby .sel-opt, .modal .merge-s3-gen .sel-opt { padding: 3px 10px; font-size: 12.5px; }
+        .modal .merge-s3 label.merge-s3-living { display: inline-flex; align-items: center; gap: 6px; margin: 0; cursor: pointer; }
+        .modal .merge-s3 label.merge-s3-living[hidden] { display: none; }
+        .merge-s3-count { margin-left: auto; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .merge-s3-all { display: inline-flex; gap: 12px; }
+        .modal .merge-s3 .merge-s3-preview-open { display: none; }
+        .merge-s3-main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; }
+        .merge-s3-scroll { min-height: 0; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-md); }
+        .merge-s3-list { --s3-row: 32px; list-style: none; margin: 0; padding: 0; }
+        .merge-s3-list > li.vlist-pad { padding: 0; border: 0; }
+        .merge-s3-list > .merge-s3-row, .merge-s3-list > .merge-s3-gh {
+            box-sizing: border-box; height: var(--s3-row); display: flex; align-items: center; gap: 8px;
+            padding: 0 10px; border-bottom: 1px solid var(--divider); font-size: 13px; overflow: hidden;
+        }
+        .merge-s3-list > .merge-s3-row { padding-left: 34px; }
+        .merge-s3-list > .merge-s3-gh { background: var(--surface-2); }
+        .modal .merge-s3 button.merge-s3-caret {
+            flex: none; width: 18px; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--text-light); cursor: pointer;
+        }
+        .merge-s3-caret > span { display: inline-block; transition: transform .12s; }
+        .merge-s3-gh.is-open .merge-s3-caret > span { transform: rotate(90deg); }
+        .modal .merge-s3 label.merge-s3-check { display: inline-flex; align-items: center; gap: 8px; min-width: 0; margin: 0; cursor: pointer; }
+        .merge-s3-name { font-family: var(--font-serif); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s3-gname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s3-years { flex: none; color: var(--text-light); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .merge-s3-gcount, .merge-s3-living-tag {
+            flex: none; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-tag);
+            background: var(--surface); color: var(--text-light); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; white-space: nowrap;
+        }
+        .merge-s3-gvia { flex: 1 1 auto; min-width: 0; color: var(--text-light); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .modal .merge-s3 .merge-s3-gprev { flex: none; min-height: 0; padding: 0; font-size: 12px; }
+        .merge-s3-rel {
+            margin-left: auto; max-width: 220px; color: var(--text-light); font-size: 12px; text-align: right;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .merge-s3-row.is-disabled .merge-s3-name { color: var(--text-faint); }
+        .merge-s3-empty { margin: 0; padding: 24px; text-align: center; color: var(--text-light); font-size: 13px; }
+        .merge-s3-empty[hidden] { display: none; }
+        .merge-s3-preview { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+        .merge-s3-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .merge-s3-preview-t { margin: 0; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .modal .merge-s3 .merge-s3-preview-close { display: none; }
+        .merge-s3-thumb { height: 262px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); overflow: hidden; }
+        .merge-s3-preview-cap { margin: 0; font-size: 11.5px; color: var(--text-light); }
+        .merge-s3-preview-none { margin: 0; padding: 16px; color: var(--text-light); font-size: 12.5px; }
+        /* The branch preview's cards: the new people dashed in --accent, the others faded (the group highlight's look). */
+        .tree-thumb-card.evidence-hit { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 4 3; }
+        .tree-thumb-card.evidence-dim, .tree-thumb-text.evidence-dim { opacity: 0.45; }
+        .tree-thumb-text { fill: var(--text); font-family: var(--font-serif); font-size: 11px; text-anchor: middle; }
+        .tree-thumb-text.years { fill: var(--text-light); font-family: inherit; font-size: 10px; font-variant-numeric: tabular-nums; }
+        .merge-s3-groups { overflow-y: auto; }
+        .merge-s3-glist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--r-md); }
+        .merge-s3-glist > li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--divider); font-size: 13px; }
+        .merge-s3-glist > li:last-child { border-bottom: 0; }
+        /* The unlinked groups (§6): the lead, the decision for the ticked, a group per row (head, who, its decision or result). */
+        .merge-s3-glead { margin: 0 0 8px; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .merge-s3-gbulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
+        .merge-s3-gbulk-l { font-size: 12.5px; color: var(--text-light); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .merge-s3-gdecide { flex-wrap: wrap; max-width: 100%; }
+        .merge-s3-gdecide > .sel-opt { padding: 4px 10px; font-size: 12.5px; white-space: nowrap; }
+        .merge-s3-glist > li.merge-s3-grow { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 12px; }
+        .merge-s3-ghead { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .modal .merge-s3 label.merge-s3-gcheck { display: inline-flex; align-items: center; gap: 8px; min-width: 0; margin: 0; cursor: pointer; }
+        .merge-s3-gtag {
+            flex: none; padding: 0 6px; border-radius: var(--r-tag); background: var(--warning-soft); color: var(--warning-text);
+            font-size: 11px; line-height: 1.5; white-space: nowrap;
+        }
+        .merge-s3-gmeta { min-width: 0; color: var(--text-light); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s3-gwho, .merge-s3-gresult { margin: 0; padding-left: 24px; font-size: 12px; color: var(--text-light); line-height: 1.5; }
+        .merge-s3-gnames { font-family: var(--font-serif); font-size: 13px; color: var(--text); }
+        .merge-s3-gresult > span { color: var(--text); }
+        .modal .merge-s3 .merge-s3-groups .link-button { min-height: 0; padding: 0; font-size: 12px; }
+        .merge-s3-gdo { padding-left: 24px; }
+        .merge-s3-gdo > .merge-s3-gresult { padding-left: 0; }
+        .merge-s3-gblocked { margin: 4px 0 0; font-size: 12px; color: var(--warning-text); }
+        .merge-s3-gsingles { list-style: none; margin: 0 0 0 24px; padding: 0; max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-md); }
+        .merge-s3-gsingles > li { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 10px; border-bottom: 1px solid var(--divider); font-size: 13px; }
+        .merge-s3-gsingles > li:last-child { border-bottom: 0; }
+        .merge-s3-gplace { margin-left: auto; min-width: 0; color: var(--text-light); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s3-nolink { margin: 0 0 12px; }
+        .merge-s3-nolink-t { margin: 0 0 4px; font-size: 15px; }
+        .merge-s3-nolink-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+        /* 6b Link to a person… (560 px) and a group's preview. */
+        #merge-connect-modal .modal.modal--md { width: 560px; max-width: min(560px, 94vw); }
+        #merge-s3-gpreview .modal.modal--md { width: 640px; max-width: min(640px, 94vw); }
+        .merge-s3-gthumb { height: 360px; }
+        .merge-connect-f { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 10px; }
+        .merge-connect-f > label, .merge-connect-f > span { margin: 0; color: var(--text-light); font-size: 12.5px; }
+        .merge-connect-f > .merge-s3-pick-q, .merge-connect-f > .merge-connect-list, .merge-connect-from { align-self: stretch; }
+        .merge-connect-from {
+            padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--surface); color: var(--text); font-family: var(--font-serif); font-size: 13.5px;
+        }
+        .merge-connect-list { margin-bottom: 0; }
+        .merge-connect-list > li[aria-selected="true"] { box-shadow: inset 0 0 0 1px var(--accent); font-weight: 600; }
+        .merge-connect-none { padding: 6px 10px; color: var(--text-light); font-size: 13px; }
+        /* 5a (500 px) and 5c (520 px). */
+        .merge-s3-dialog .modal.modal--sm { width: 500px; max-width: min(500px, 94vw); }
+        #merge-s3-pick .modal.modal--sm { width: 520px; max-width: min(520px, 94vw); }
+        .merge-s3-unlink-text { margin: 0 0 8px; font-size: 13.5px; line-height: 1.45; }
+        .merge-s3-unlink-names { max-height: 140px; overflow-y: auto; margin: 0 0 10px; padding-left: 18px; font-family: var(--font-serif); font-size: 13px; }
+        .merge-s3-unlink-names[hidden] { display: none; }
+        .merge-s3-tiles { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+        .modal label.merge-s3-tile { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 8px 10px; border: 1px solid var(--border); cursor: pointer; }
+        .merge-s3-tile > input { margin-top: 3px; }
+        .merge-s3-tile-x { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .merge-s3-tile-t { font-size: 13.5px; font-weight: 600; }
+        .merge-s3-tile-d { font-size: 12.5px; color: var(--text-light); }
+        .merge-s3-pick-q {
+            width: 100%; box-sizing: border-box; padding: 6px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 13px;
+        }
+        .merge-s3-pick-list { list-style: none; margin: 8px 0; padding: 0; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-md); }
+        .merge-s3-pick-list > li { padding: 6px 10px; border-bottom: 1px solid var(--divider); font-size: 13px; cursor: pointer; }
+        .merge-s3-pick-list > li:last-child { border-bottom: 0; }
+        .merge-s3-pick-side { color: var(--text-light); font-size: 12px; }
+        .merge-s3-gen { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 6px 0; font-size: 13px; }
+        .merge-s3-pick-sentence { min-height: 2.8em; margin: 8px 0 12px; font-size: 13px; line-height: 1.4; }
+        @media (max-width: 1099px) {
+            .merge-s3-main { grid-template-columns: minmax(0, 1fr); }
+            .merge-s3-preview { display: none; }
+            .modal .merge-s3 .merge-s3-preview-open { display: inline-flex; align-items: center; min-height: 28px; padding: 2px 12px; font-size: 12.5px; }
+            .merge-s3.is-sheet .merge-s3-preview {
+                display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; max-height: 80%;
+                padding: 10px 14px 14px; background: var(--surface); border-top: 1px solid var(--border);
+                border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--shadow-lg);
+            }
+            .modal .merge-s3.is-sheet .merge-s3-preview-close {
+                display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px;
+                border: 0; background: transparent; font-size: 20px; color: var(--text-light);
+            }
+            .merge-s3.is-sheet .merge-s3-thumb { height: min(56vh, 420px); }
+        }
+        @media (pointer: coarse) {
+            .merge-s3-list { --s3-row: 44px; }
+            .modal .merge-s3 .merge-s3-gprev, .merge-s3-all .link-button { min-height: 44px; }
+            .merge-s3-pick-list > li { min-height: 44px; display: flex; align-items: center; flex-wrap: wrap; gap: 0 4px; }
+            .modal label.merge-s3-tile { min-height: 44px; }
+            .merge-s3-gsingles > li, .merge-s3-gdecide > .sel-opt, .merge-connect-rel > .sel-opt { min-height: 44px; }
+            .modal .merge-s3 .merge-s3-groups .link-button { min-height: 44px; }
+        }
+        /* A phone (14c): the step scrolls as a whole, the list keeps its own scroll; a row is name and years over where it links. */
+        @media (max-width: 640px) {
+            .merge-step-body[data-step="3"] { display: block; overflow-y: auto; }
+            .merge-s3-scroll { height: 62vh; min-height: 240px; }
+            .modal .merge-s3 input.merge-s3-search[type="search"] { max-width: none; flex: 1 1 auto; min-width: 0; min-height: 44px; }
+            /* The tools fold under Filters ▾ (B4b): on 390 they took the screen and the list started below the fold. */
+            .modal .merge-s3 button.merge-s3-more { display: inline-flex; min-height: 44px; }
+            .merge-s3:not(.is-tools) :is(.merge-s3-filters, .merge-s3-fpanel, .merge-s3-groupby, .merge-s3-living, .merge-s3-all) { display: none; }
+            .merge-s3-list { --s3-row: 52px; }
+            .merge-s3-list > .merge-s3-row { flex-wrap: wrap; align-content: center; row-gap: 0; padding-left: 12px; }
+            .merge-s3-list > .merge-s3-row .merge-s3-rel { order: 5; flex-basis: 100%; max-width: none; margin-left: 26px; text-align: left; }
+            .merge-s3-gvia { display: none; }
+            .merge-s3-list > .merge-s3-gh .merge-s3-gcount { margin-right: auto; }
+            .merge-s3-count { margin-left: 0; flex-basis: 100%; }
+            .modal .merge-s3 .merge-s3-preview-open { min-height: 44px; }
+            /* §6 on a phone: the groups one under another, the decisions two by two, Link to a person… over the whole screen. */
+            .merge-s3-ghead { flex-wrap: wrap; row-gap: 2px; }
+            .merge-s3-gmeta { flex-basis: 100%; white-space: normal; }
+            .sel-seg.merge-s3-gdecide { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+            .merge-s3-gdecide > .sel-opt { white-space: normal; text-align: center; }
+            .sel-seg.merge-s3-gdecide > .sel-opt:first-child, .sel-seg.merge-s3-gdecide > .sel-opt:last-child { border-radius: 0; }
+            .merge-s3-gbulk-l { flex-basis: 100%; }
+            .merge-s3-gwho, .merge-s3-gdo { padding-left: 0; }
+            .merge-s3-gsingles { margin-left: 0; }
+            .merge-s3-glist > li.merge-s3-grow { padding: 10px; }
+            #merge-connect-modal .modal.modal--md, #merge-s3-gpreview .modal.modal--md {
+                width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; overflow-y: auto;
+            }
+            .merge-s3-gthumb { height: 60vh; }
+        }
+        /* A phone held sideways: the step scrolls as a whole, the list keeps a view of its own. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-step-body[data-step="3"] { display: block; overflow-y: auto; }
+            .merge-s3-scroll { height: 70vh; min-height: 180px; }
+            .merge-s3-tabs .merge-tab { padding: 6px 8px; font-size: 12px; }
+            .merge-s3.is-sheet .merge-s3-thumb { height: 60vh; }
+            #merge-connect-modal .modal.modal--md { height: 100dvh; max-height: 100dvh; border-radius: 0; overflow-y: auto; }
+            .merge-s3-gthumb { height: 60vh; }
+        }
+        @media (hover: hover) {
+            .merge-s3-list > .merge-s3-row:hover, .merge-s3-pick-list > li:hover, .modal label.merge-s3-tile:hover, .merge-s3-gsingles > li:hover { background: var(--hover-bg); }
+        }
+        /* ==================== Step 4 – Who is right (§7, 7a–7e) ==================== */
+        .merge-s4 { display: flex; flex-direction: column; gap: 10px; }
+        .merge-s4-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+        .merge-s4-h { font-size: 13px; font-weight: 600; }
+        .merge-s4-order, .merge-s4-note { margin: 0; color: var(--text-light); font-size: 12.5px; }
+        .merge-s4-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+        .modal .merge-s4 button.merge-s4-tile {
+            display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; margin: 0;
+            padding: 8px 10px; text-align: left; font: inherit; color: var(--text);
+        }
+        .merge-s4-tile-t { font-size: 13px; font-weight: 600; }
+        .merge-s4-tile-n { font-size: 11.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .merge-s4-tile-ex { font-size: 11.5px; color: var(--text-faint); overflow-wrap: anywhere; }
+        .merge-s4-prot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; font-size: 12.5px; color: var(--text-light); }
+        .merge-s4-research {
+            padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-tag);
+            font-size: 11px; line-height: 1.5; color: var(--text-light); white-space: nowrap;
+        }
+        .modal .merge-s4 .link-button { min-height: 0; padding: 0; font-size: 12.5px; }
+        .merge-s4-bar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 6px 12px; border-bottom: 1px solid var(--border); }
+        .merge-s4-tabs { display: flex; overflow-x: auto; scrollbar-width: none; }
+        .merge-s4-tabs .merge-tab { flex: 0 0 auto; padding: 8px 12px; border: 0; background: transparent; font-size: 13px; cursor: pointer; }
+        .merge-s4-tabs .cnt { color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .modal .merge-s4 input.merge-s4-search {
+            width: 200px; max-width: 100%; box-sizing: border-box; margin: 0 0 6px; padding: 5px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 13px;
+        }
+        .merge-s4-panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .merge-s4-kinds { border: 1px solid var(--border); border-radius: var(--r-md); }
+        .merge-s4-krow { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 2px 12px; border-bottom: 1px solid var(--divider); font-size: 13px; }
+        .merge-s4-krow:last-child { border-bottom: 0; }
+        .merge-s4-kname { flex: 0 0 110px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-s4-kcount, .merge-s4-tag {
+            flex: none; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-tag);
+            color: var(--text-light); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; white-space: nowrap;
+        }
+        .merge-s4-from { flex: 1 1 auto; min-width: 0; text-align: right; color: var(--text-faint); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s4-from.is-own { color: var(--text); font-weight: 600; }
+        .modal .merge-s4 select.merge-s4-select {
+            flex: none; width: 220px; height: 26px; min-height: 26px; margin: 0; padding: 0 24px 0 6px; text-overflow: ellipsis;
+            border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px;
+        }
+        .merge-s4-phead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; font-size: 12.5px; }
+        .merge-s4-pcount { color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .merge-s4 .sel-seg { display: inline-flex; flex-wrap: wrap; }
+        .modal .merge-s4 .sel-seg > .sel-opt { padding: 3px 10px; font-size: 12.5px; }
+        .merge-s4-person { padding: 8px 0 10px; border-bottom: 1px solid var(--divider); }
+        .merge-s4-grid { display: grid; grid-template-columns: 110px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr); column-gap: 10px; }
+        .merge-s4-row { display: contents; }
+        .merge-s4-row > * { padding: 3px 0; font-size: 13px; min-width: 0; }
+        .merge-s4-hrow > span { color: var(--text-light); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-s4-hrow > .merge-s4-pname { color: var(--text); font-size: 14px; }
+        .merge-s4-pname { font-family: var(--font-serif); font-size: 14.5px; }
+        .merge-s4-ptitle { display: none; margin: 0; font-weight: 400; }
+        .merge-s4-k { color: var(--text-light); }
+        .modal .merge-s4 button.merge-s4-v {
+            display: block; width: 100%; min-height: 0; margin: 0; padding: 3px 6px; border: 1px solid transparent; border-radius: var(--r-sm);
+            background: transparent; color: var(--text); font: inherit; font-size: 13px; text-align: left; overflow-wrap: anywhere; cursor: pointer;
+        }
+        .modal .merge-s4 button.merge-s4-v[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-soft); }
+        .merge-s4-res { display: flex; flex-direction: column; gap: 1px; }
+        .merge-s4-res-v { overflow-wrap: anywhere; }
+        .merge-s4-res-from { color: var(--text-faint); font-size: 11.5px; }
+        .merge-s4-res-from.is-walk { color: var(--warning-text); }
+        .merge-s4-pwhole { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; font-size: 12.5px; }
+        .merge-s4-pwhole-l { color: var(--text-light); }
+        .merge-s4 .conflict-photo { max-width: 48px; max-height: 48px; }
+        .merge-s4 .conflict-photo.img-slot-pic { width: 48px; height: 48px; }
+        .merge-s4-rels { display: flex; flex-direction: column; gap: 0; }
+        .merge-s4-rels-h { margin: 0 0 4px; }
+        .merge-s4-rel { display: flex; flex-direction: column; gap: 4px; padding: 8px 0 10px; border-bottom: 1px solid var(--divider); }
+        .merge-s4-rel:last-child { border-bottom: 0; }
+        .merge-s4-rel-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+        .merge-s4-loop { color: var(--error-text); font-size: 12px; }
+        .merge-s4-rel-sides { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2px 14px; font-size: 13px; }
+        .merge-s4-side { color: var(--text-light); }
+        .merge-s4-skip-t { margin: 0; font-size: 14px; font-weight: 600; }
+        .merge-s4-diffs { margin: 0; padding-left: 18px; font-size: 12.5px; max-height: 50vh; overflow-y: auto; }
+        .merge-s4-diffs .tnum { font-variant-numeric: tabular-nums; }
+        #merge-s4-prot .modal.modal--sm { width: 480px; max-width: min(480px, 94vw); }
+        .merge-s4-prot-text { margin: 0 0 8px; font-size: 13.5px; line-height: 1.45; }
+        #merge-s4-prot .merge-s4-note { margin-bottom: 12px; }
+        @media (pointer: coarse) {
+            .modal .merge-s4 .link-button, .modal .merge-s4 .sel-seg > .sel-opt, .modal .merge-s4 button.merge-s4-v { min-height: 44px; }
+            .modal .merge-s4 select.merge-s4-select { height: 44px; }
+            .merge-s4-krow { min-height: 44px; }
+        }
+        /* A tablet: the tiles three and two, the kind's own rule under its name. */
+        @media (max-width: 1024px) {
+            .merge-s4-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .merge-s4-grid { grid-template-columns: 90px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); }
+        }
+        /* A phone (7a/7b): the tiles one under another (the default on top), the tabs as a segment, each person a card. */
+        @media (max-width: 640px) {
+            .merge-s4-tiles { grid-template-columns: minmax(0, 1fr); }
+            .merge-s4-bar { border-bottom: 0; }
+            .merge-s4-tabs { width: 100%; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+            .merge-s4-tabs .merge-tab { flex: 1 1 0; min-width: 0; padding: 8px 4px; font-size: 12.5px; white-space: normal; text-align: center; }
+            .merge-s4-tabs .merge-tab + .merge-tab { border-left: 1px solid var(--border); }
+            .modal .merge-s4 input.merge-s4-search { width: 100%; }
+            .merge-s4-krow { flex-wrap: wrap; row-gap: 2px; padding: 6px 12px; }
+            .merge-s4-kname { flex: 1 1 auto; }
+            .merge-s4-from { flex-basis: 100%; order: 5; text-align: left; white-space: normal; }
+            .modal .merge-s4 select.merge-s4-select { width: 100%; order: 6; }
+            .merge-s4-person { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-md); }
+            .merge-s4-grid { display: block; }
+            .merge-s4-row.merge-s4-hrow { display: none; }
+            .merge-s4-ptitle { display: block; margin-bottom: 4px; }
+            .merge-s4-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 8px; padding: 6px 0; border-top: 1px solid var(--divider); }
+            .merge-s4-row > .merge-s4-k { grid-column: 1 / -1; padding: 0; font-size: 12px; }
+            .merge-s4-row > .merge-s4-res { grid-column: 1 / -1; }
+            .modal .merge-s4 button.merge-s4-v::before { content: attr(data-col); display: block; color: var(--text-faint); font-size: 11px; }
+            .merge-s4-rel-sides { grid-template-columns: minmax(0, 1fr); }
+            .merge-s4 .sel-seg { width: 100%; }
+            .merge-s4 .sel-seg > .sel-opt { flex: 1 1 auto; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-s4-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+            .merge-s4-tile-ex { display: none; }
+            .merge-s4-tabs .merge-tab { padding: 6px 8px; font-size: 12px; }
+        }
+        @media (hover: hover) {
+            .modal .merge-s4 button.merge-s4-v:hover { border-color: var(--border); }
+            .merge-s4-krow:hover { background: var(--hover-bg); }
+        }
+        /*
+         * Step 5 – What will happen (spec 134 §8): the list by groups at the left (only what is
+         * ticked happens), Where to write, the preview (below 1100 px behind "Preview", as a
+         * sheet), the backup line and Save the list… at the right (360 px).
+         */
+        .merge-step-body[data-step="5"] { display: flex; flex-direction: column; overflow: hidden; }
+        .merge-s5 { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; }
+        .merge-s5-main { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+        .merge-s5-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; }
+        .merge-s5-sub { color: var(--text-light); font-size: 12.5px; white-space: nowrap; }
+        .modal .merge-s5 input.merge-s5-search, .modal .merge-s5 input.merge-s5-search[type="search"] {
+            width: 200px; max-width: 100%; box-sizing: border-box; padding: 5px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font-size: 13px;
+        }
+        /* Only the rows near the view are drawn (§13h, Show all on thousands of lines): --s5-row is their one height. */
+        .merge-s5-list {
+            --s5-row: 32px;
+            flex: 1 1 auto; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0;
+            border: 1px solid var(--border); border-radius: var(--r-md);
+        }
+        .merge-s5-list > li {
+            box-sizing: border-box; height: var(--s5-row); overflow: hidden; display: flex; align-items: center; gap: 8px;
+            padding: 0 10px; border-bottom: 1px solid var(--divider); font-size: 13px; min-width: 0;
+        }
+        .merge-s5-list > li.vlist-pad { padding: 0; border: 0; }
+        .merge-s5-list > li:nth-last-child(2):not(.vlist-pad) { border-bottom: 0; }
+        .merge-s5-more-t { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s5-list > .merge-s5-gh { background: var(--surface-2); }
+        .merge-s5-list > .merge-s5-row, .merge-s5-list > .merge-s5-more { padding-left: 40px; }
+        .merge-s5-more { color: var(--text-light); font-size: 12.5px; }
+        .modal .merge-s5 .link-button { min-height: 0; padding: 0; font-size: 12.5px; }
+        .modal .merge-s5 input.merge-s5-cb, .modal .merge-s5 input.merge-s5-gcb { flex: none; width: auto; margin: 0; }
+        .merge-s5-cb-none { flex: none; width: 13px; }
+        .modal .merge-s5 button.merge-s5-caret, .merge-s5 span.merge-s5-caret {
+            flex: none; width: 18px; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--text-light); cursor: pointer;
+        }
+        .merge-s5-caret > span { display: inline-block; transition: transform .12s; }
+        .merge-s5-gh.is-open .merge-s5-caret > span { transform: rotate(90deg); }
+        .merge-s5-gname { flex: none; font-weight: 600; white-space: nowrap; }
+        .merge-s5-gcount, .merge-s5-tag {
+            flex: none; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-tag);
+            background: var(--surface); color: var(--text-light); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; white-space: nowrap;
+        }
+        /* What a line links to takes the room left, so the name keeps its width and the link text shortens first. */
+        .merge-s5-text { flex-basis: 0; }
+        .merge-s5-gsum, .merge-s5-text {
+            flex-grow: 1; flex-shrink: 1; min-width: 0; color: var(--text-light); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .merge-s5-glyph { flex: none; display: inline-flex; color: var(--accent); }
+        .merge-s5-name { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .merge-s5-name.is-person { font-family: var(--font-serif); font-size: 14px; }
+        .merge-s5-years { flex: none; color: var(--text-light); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .merge-s5-row.is-off .merge-s5-name { color: var(--text-faint); }
+        .modal .merge-s5 .merge-s5-in { flex: none; white-space: nowrap; }
+        .merge-s5-side { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .merge-s5-side > * { flex: none; }
+        .merge-s5-h { margin: 0; font-size: 13px; font-weight: 600; }
+        .merge-s5-where { display: flex; flex-direction: column; gap: 6px; }
+        .merge-s5-where[hidden], .merge-s5-note[hidden] { display: none; }
+        .sel-seg.merge-s5-into { display: flex; }
+        .modal .merge-s5-into > .sel-opt { flex: 1 1 0; min-width: 0; padding: 5px 10px; font-size: 12.5px; white-space: normal; text-align: center; }
+        .merge-s5-note { margin: 0; color: var(--text-light); font-size: 12px; line-height: 1.4; }
+        .merge-s5-backup { font-size: 11px; }
+        .modal .merge-s5 .merge-s5-save { align-self: flex-start; }
+        .modal .merge-s5 .merge-s5-preview-open { display: none; }
+        .merge-s5-preview { display: flex; flex-direction: column; gap: 6px; }
+        .merge-s5-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .modal .merge-s5 .merge-s5-preview-close { display: none; }
+        .merge-s5-thumb { height: 252px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); overflow: hidden; }
+        .merge-s5-preview-cap { font-size: 11.5px; }
+        /* Beside the list the preview gives way first, so the backup and research lines and Save the list stay in view. */
+        @media (min-width: 1100px) {
+            .merge-s5-side > .merge-s5-preview { flex: 0 1 auto; min-height: 0; }
+            .merge-s5-side > .merge-s5-preview > .merge-s5-thumb { flex: 0 1 252px; height: auto; min-height: 140px; }
+        }
+        .merge-s5-none { margin: 0; padding: 16px; color: var(--text-light); font-size: 12.5px; }
+        /* The write's states (8a–8f) above the list, no frame: the line, its buttons, the bar. */
+        .merge-s5-status { flex: none; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.4; }
+        .merge-s5-status[hidden] { display: none; }
+        .merge-s5-status p { margin: 0; }
+        .merge-s5-st-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .merge-s5-st-line > span:last-child { min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+        .merge-s5-st-err { color: var(--error-text); overflow-wrap: anywhere; }
+        .merge-s5-st-warn { color: var(--warning-text); overflow-wrap: anywhere; }
+        .merge-s5-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+        .modal .merge-s5 .merge-s5-act { min-height: 28px; padding: 2px 12px; font-size: 12.5px; }
+        .merge-s5-bar { max-width: 420px; }
+        .merge-s5-err-detail { margin: 0; max-height: 160px; overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: var(--r-sm);
+            background: var(--surface); font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .merge-s5-err-detail[hidden] { display: none; }
+        @media (max-width: 1099px) {
+            .merge-s5 { grid-template-columns: minmax(0, 1fr) 280px; }
+            .merge-s5-preview { display: none; }
+            .modal .merge-s5 .merge-s5-preview-open { display: inline-flex; align-self: flex-start; align-items: center; min-height: 28px; padding: 2px 12px; font-size: 12.5px; }
+            .merge-s5.is-sheet .merge-s5-preview {
+                display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; max-height: 80%;
+                padding: 10px 14px 14px; background: var(--surface); border-top: 1px solid var(--border);
+                border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--shadow-lg);
+            }
+            .modal .merge-s5.is-sheet .merge-s5-preview-close {
+                display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px;
+                border: 0; background: transparent; font-size: 20px; color: var(--text-light);
+            }
+            .merge-s5.is-sheet .merge-s5-thumb { height: min(56vh, 420px); }
+        }
+        @media (pointer: coarse) {
+            .merge-s5-list { --s5-row: 44px; }
+            .modal .merge-s5 .link-button, .modal .merge-s5 button.merge-s5-caret { min-height: 44px; }
+            .modal .merge-s5 button.merge-s5-caret { width: 32px; }
+            .modal .merge-s5-into > .sel-opt { min-height: 44px; }
+            .modal .merge-s5 .merge-s5-act { min-height: 44px; }
+        }
+        /* A phone (14d): Where to write on top, the groups closed; the step scrolls as a whole, a row wraps what it links to under the name. */
+        @media (max-width: 640px) {
+            .merge-step-body[data-step="5"] { display: block; overflow-y: auto; }
+            .merge-s5 { display: flex; flex-direction: column; gap: 12px; }
+            .merge-s5-side { display: contents; }
+            .merge-s5-where { order: -1; }
+            .merge-s5-head { flex-wrap: wrap; }
+            .modal .merge-s5 input.merge-s5-search, .modal .merge-s5 input.merge-s5-search[type="search"] { width: 100%; }
+            .merge-s5-list { flex: none; max-height: 62vh; }
+            .merge-s5-list { --s5-row: 52px; }
+            .merge-s5-list > li { flex-wrap: wrap; align-content: center; row-gap: 0; }
+            .merge-s5-list > .merge-s5-row, .merge-s5-list > .merge-s5-more { padding-left: 12px; }
+            .merge-s5-row .merge-s5-name { flex: 1 1 0; }
+            .merge-s5-row .merge-s5-text { order: 5; flex-basis: 100%; padding-left: 21px; }
+            .modal .merge-s5 .merge-s5-list .link-button { min-height: 32px; }
+            .merge-s5-gh .merge-s5-gsum { display: none; }
+            .modal .merge-s5 .merge-s5-preview-open { min-height: 44px; }
+        }
+        /* A phone held sideways: the step scrolls as a whole, the list keeps a view of its own. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .merge-step-body[data-step="5"] { display: block; overflow-y: auto; }
+            .merge-s5 { grid-template-columns: minmax(0, 1fr) 240px; }
+            .merge-s5-list { flex: none; max-height: 70vh; }
+            .merge-s5.is-sheet .merge-s5-thumb { height: 60vh; }
+        }
+        @media (hover: hover) {
+            .merge-s5-list > .merge-s5-row:hover { background: var(--hover-bg); }
         }
         .merge-stat.skipped .merge-stat-label { color: var(--text-faint); }
         .merge-stat.skipped .merge-stat-value { color: var(--text-faint); }
-        /* "Update existing only" toggle */
-        .merge-update-only {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            padding: 8px 12px;
-            margin: 0 0 10px;
-            background: var(--surface-2);
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        .merge-update-only input {
-            margin-top: 2px;
-            flex-shrink: 0;
-        }
-        .merge-update-only-text {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-        .merge-update-only-label {
-            font-weight: 600;
-        }
-        .merge-update-only-hint {
-            font-size: 11px;
-            color: var(--text-light);
-        }
         .merge-empty {
             padding: 40px;
             text-align: center;
@@ -18463,6 +19182,13 @@
         }
         .merge-actions {
             justify-content: flex-end;
+        }
+        .merge-actions #merge-save-later,
+        .merge-actions #merge-cancel { margin-right: auto; }
+        .merge-actions [hidden] { display: none; }
+        .merge-next-why {
+            font-size: 12px;
+            color: var(--text-light);
         }
         .merge-manual-person {
             padding: 10px 12px;
@@ -18592,61 +19318,6 @@
             .person-merge-shared-check { min-height: 44px; }
         }
         /* person-merge conflict UI is tokenized — no dark overrides needed. */
-        .merge-conflict-content {
-            /* Scrolls with the modal body (unified skeleton). */
-        }
-        .conflict-row {
-            padding: 12px 0;
-            border-bottom: 1px solid var(--divider);
-        }
-        .conflict-row:last-child {
-            border-bottom: none;
-        }
-        .conflict-label {
-            font-weight: 500;
-            margin-bottom: 8px;
-        }
-        .conflict-options {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        /* The chosen side reads as a selected card, not just a radio dot: a .sel-opt tile (src/ui/sel-css.ts). */
-        .conflict-option {
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-            padding: 8px 12px;
-            cursor: pointer;
-        }
-        .conflict-option input[type="radio"] {
-            width: auto;
-            margin: 0;
-            accent-color: var(--primary, #4a7c59);
-        }
-        .conflict-value { font-weight: 500; }
-        .conflict-badge.existing { background: var(--info-soft); color: var(--text); }
-        .conflict-badge.incoming { background: var(--primary-soft); color: var(--primary-dark); }
-        .conflict-suggested {
-            background: rgba(74, 124, 89, 0.12);
-            border-radius: 8px;
-            padding: 2px 7px;
-        }
-        .conflict-value {
-            flex: 1;
-        }
-        .conflict-suggested {
-            font-size: 10.5px;
-            color: var(--primary);
-            white-space: nowrap;
-        }
-        .conflict-badge {
-            font-size: 10px;
-            padding: 2px 6px;
-            background: var(--surface-2);
-            border-radius: 6px;
-        }
         .validation-content {
             max-height: 300px;
             overflow-y: auto;
@@ -18675,25 +19346,17 @@
             font-size: 13px;
         }
 
-        /* Merge wizard header */
-        .merge-wizard-explanation {
-            font-size: 13px;
-            color: var(--text-light);
-            margin-bottom: 12px;
-            line-height: 1.4;
-        }
+        /* Errors already in a tree: one plain line on step 1 (no box), shown only when there are some. */
         .merge-validation-banner {
-            font-size: 13px;
+            display: none;
+            font-size: 12.5px;
             line-height: 1.4;
-            margin-bottom: 12px;
-            padding: 8px 12px;
-            border-radius: 8px;
-            background: var(--warning-soft);
-            border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
-            color: var(--text);
+            color: var(--warning-text);
+            flex-shrink: 0;
         }
+        .merge-validation-banner.has-issues:not([hidden]) { display: block; }
         .merge-validation-banner-hint {
-            opacity: 0.85;
+            color: var(--text-light);
         }
         .conflict-photo {
             max-width: 72px;
@@ -18705,23 +19368,6 @@
         /* The open tree's portrait on its way or not come (spec 116 §5): the initials in a 72 px square. */
         .conflict-photo.img-slot-pic { width: 72px; height: 72px; }
         .conflict-photo .avatar-initials { font-size: 20px; }
-        .merge-progress {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-        }
-        /* The steps are .sel-tab (src/ui/sel-css.ts): the current one carries the
-           line, a finished one its ✓ in the text; they are not buttons, so no hover. */
-        .merge-step {
-            padding: 6px 12px;
-            font-size: 12px;
-            cursor: default;
-            transition: color 0.2s;
-        }
-        .merge-step.complete::before { content: '✓ '; }
-        @media (hover: hover) { .merge-progress > .merge-step.sel-tab:not(.active):hover { box-shadow: none; color: var(--text-light); } }
-
         /* Merge close confirmation */
         .merge-close-message {
             font-size: 14px;
@@ -18732,16 +19378,6 @@
             flex-wrap: wrap;
             gap: 8px;
         }
-
-        /* Merge resolve button */
-        .merge-btn-resolve {
-            background: var(--warning-soft) !important;
-            border-color: var(--warning) !important;
-            color: var(--text) !important;
-        }
-        @media (hover: hover) { .merge-btn-resolve:hover {
-            background: color-mix(in srgb, var(--warning) 22%, var(--warning-soft)) !important;
-        } }
 
         /* ==================== TREE MANAGER ==================== */
         .tree-manager-modal {
@@ -19530,51 +20166,6 @@
             #tree-validation-content :is(.vq-samejoin-review, .vq-samejoin-join, .vq-samejoin-later, .vq-samejoin-back) { min-height: 44px; }
         }
 
-        /* Merge trees dialog */
-        .merge-trees-description {
-            font-size: 14px;
-            color: var(--text);
-            margin-bottom: 16px;
-        }
-        .merge-trees-options {
-            margin-bottom: 16px;
-        }
-        /* A choice is a .sel-opt tile (src/ui/sel-css.ts): the chosen one framed 2 px; its 1 px edge, the padding keeps the size. */
-        .merge-trees-option {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 13px;
-            cursor: pointer;
-            margin-bottom: 8px;
-        }
-        .merge-trees-option input[type="radio"] {
-            width: auto;
-            margin: 0;
-        }
-        .merge-trees-option-info {
-            flex: 1;
-        }
-        .merge-trees-option-name {
-            font-weight: 500;
-        }
-        .merge-trees-option-stats {
-            font-size: 12px;
-            color: var(--text-light);
-        }
-        .merge-trees-warning {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 12px;
-            background: var(--surface-2);
-            border-left: 3px solid var(--warning);
-            border-radius: 6px;
-            font-size: 13px;
-            color: var(--text-light);
-            margin-bottom: 16px;
-        }
-
         /* Default person dialog */
         .modal-description {
             font-size: 13px;
@@ -20058,6 +20649,8 @@
             overflow-wrap: anywhere;
         }
         .toast button { overflow-wrap: normal; }
+        /* A toast whose action concerns the open dialog (a file dropped over it): over the dialog, placed above its footer. */
+        .toast[data-kind="over-dialog"] { z-index: 210; }
         .toast.show {
             transform: translateX(-50%) translateY(0);
             opacity: 1;
@@ -27368,6 +27961,11 @@
             color: var(--text-light);
             margin-top: 4px;
         }
+        .pending-merge-changed {
+            font-size: 12px;
+            color: var(--warning-text);
+            margin-top: 4px;
+        }
         .pending-merge-actions {
             display: flex;
             gap: 8px;
@@ -28071,89 +28669,57 @@
                 max-height: 50vh;
             }
 
-            /* Merge modal on mobile */
-            .merge-modal {
-                max-width: 95vw;
+            /* The import guide on a phone (spec 134 §14): full screen, the short step list (a tap opens
+               the whole list), the counts in one line, the footer stacked with the primary on top. */
+            .modal.modal--lg.merge-modal {
+                width: 100vw;
+                max-width: 100vw;
+                height: 100dvh;
+                max-height: 100dvh;
+                border-radius: 0;
             }
-            .merge-modal .modal-header {
-                padding: 8px 10px;
-            }
-            .merge-modal .modal-header h2 {
-                font-size: 14px;
-            }
-            .merge-wizard-explanation {
-                font-size: 10px;
-                margin-bottom: 4px;
-                line-height: 1.2;
-                color: var(--text-light);
-            }
-            .merge-progress {
-                gap: 3px;
-                margin-bottom: 4px;
-            }
-            .merge-progress .merge-step {
-                font-size: 8px;
-                padding: 2px 5px;
-            }
-            .merge-stats {
-                gap: 4px;
-                padding: 4px 6px;
-                margin-bottom: 4px;
-            }
-            .merge-stat {
-                gap: 1px;
-            }
-            .merge-stat-value {
+            .merge-modal .modal-content { padding: 10px 16px; gap: 10px; }
+            .merge-progress { border-bottom: 0; }
+            .merge-progress-short {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                width: 100%;
+                padding: 4px 0;
+                border: 0;
+                background: transparent;
+                font: inherit;
                 font-size: 13px;
+                text-align: left;
+                color: var(--text);
+                cursor: pointer;
             }
-            .merge-stat-label {
-                font-size: 8px;
+            .merge-step-list { display: none; }
+            .merge-progress.is-open .merge-step-list {
+                display: flex;
+                flex-direction: column;
+                margin-top: 6px;
+                border-top: 1px solid var(--divider);
             }
-            .merge-tabs {
+            .merge-progress.is-open .merge-step { padding: 8px 0; }
+            .merge-stat, .merge-stat-sum { display: none; }
+            .merge-stats--line {
+                display: flex;
+                flex-direction: column;
                 gap: 2px;
-                margin-bottom: 4px;
-            }
-            .merge-tab {
-                padding: 3px 4px;
-                font-size: 8px;
-            }
-            .tab-count {
-                font-size: 7px;
-                padding: 0 2px;
-                margin-left: 1px;
-            }
-            .merge-match-list {
-                margin-bottom: 0;
+                font-size: 13px;
+                font-variant-numeric: tabular-nums;
             }
             .merge-modal .buttons.merge-actions {
-                padding: 10px;
+                flex-direction: column-reverse;
+                align-items: stretch;
+                gap: 8px;
+                padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
             }
-            .merge-item {
-                padding: 8px 10px;
-            }
-            .merge-item-header {
-                font-size: 12px;
-            }
-            .merge-item-actions {
-                flex-wrap: wrap;
-                gap: 4px;
-                margin-top: 6px;
-            }
-            .merge-item-actions button {
-                padding: 4px 8px;
-                font-size: 10px;
-            }
-            .merge-actions {
-                flex-wrap: wrap;
-                gap: 6px;
-                margin-top: 8px;
-            }
-            .merge-actions button {
-                flex: 1 1 auto;
-                min-width: 45%;
-                font-size: 11px;
-                padding: 8px 10px;
-            }
+            .merge-actions #merge-save-later,
+            .merge-actions #merge-cancel { margin-right: 0; }
+            .merge-actions button { width: 100%; }
+            .merge-next-why { text-align: center; }
             .merge-close-buttons {
                 flex-direction: column;
                 gap: 6px;
@@ -28164,43 +28730,25 @@
             }
         }
 
-        /* Landscape mobile: hide less important elements */
+        /* A phone held sideways (§14f): only the current step in the step list, of the counts only "To decide",
+           the footer in one row. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .merge-wizard-explanation {
-                display: none;
+            .modal.modal--lg.merge-modal {
+                width: 100vw;
+                max-width: 100vw;
+                height: 100dvh;
+                max-height: 100dvh;
+                border-radius: 0;
             }
-            .merge-progress {
-                display: none;
-            }
-            .merge-stats {
-                padding: 3px 6px;
-                margin-bottom: 3px;
-            }
-            .merge-stat-value {
-                font-size: 12px;
-            }
-            .merge-stat-label {
-                font-size: 7px;
-            }
-            .merge-tabs {
-                margin-bottom: 3px;
-            }
-            .merge-modal {
-                max-height: 95vh;
-            }
-            .merge-modal .modal-header {
-                padding: 6px 8px;
-            }
-            .merge-modal .modal-header h2 {
-                font-size: 13px;
-            }
+            .merge-modal .modal-header { padding: 6px 16px; }
+            .merge-modal .modal-content { padding: 6px 16px; gap: 6px; }
+            .merge-step:not(.active) { display: none; }
+            .merge-step { flex: 0 0 auto; flex-direction: row; align-items: baseline; gap: 8px; padding: 4px 0; }
+            .merge-stat:not([data-count="pending"]), .merge-stat-sum { display: none; }
+            .merge-stat { flex: 0 0 auto; padding: 3px 8px; flex-direction: row; align-items: baseline; gap: 6px; }
+            .merge-stat-value { font-size: 14px; }
             .merge-modal .buttons.merge-actions {
-                padding: 6px 8px;
-                gap: 4px;
-            }
-            .merge-actions button {
-                padding: 6px 8px;
-                font-size: 10px;
+                padding: 6px 16px calc(6px + env(safe-area-inset-bottom));
             }
         }
 
@@ -34612,6 +35160,10 @@
                         <label for="input-notes" data-i18n="labels.notes"></label>
                         <textarea id="input-notes" rows="3" autocomplete="off"></textarea>
                     </div>
+                    <div class="form-group" id="emails-group">
+                        <label for="input-emails" data-i18n="labels.emails"></label>
+                        <input type="text" id="input-emails" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" data-i18n-placeholder="placeholders.emails">
+                    </div>
                     <div class="form-group">
                         <label data-i18n="labels.photo"></label>
                         <div class="photo-editor">
@@ -36111,90 +36663,76 @@
                 <h2 data-i18n="gedcom.resultTitle"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeGedcomResultDialog()">&times;</button>
             </div>
-            <div class="gedcom-stats">
-                <div class="stat-item">
-                    <div class="number" id="gedcom-stat-persons">0</div>
-                    <div class="label" data-i18n="gedcom.persons"></div>
+            <!-- What the file holds: shown here for "Insert into tree", moved into step 1 of the import guide otherwise (spec 134 §3). -->
+            <div id="gedcom-summary-home">
+            <div id="gedcom-summary" class="gedcom-summary">
+                <div class="gedcom-stats">
+                    <div class="stat-item">
+                        <div class="number" id="gedcom-stat-persons">0</div>
+                        <div class="label" data-i18n="gedcom.persons"></div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number" id="gedcom-stat-partnerships">0</div>
+                        <div class="label" data-i18n="gedcom.partnerships"></div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number" id="gedcom-stat-placeholders">0</div>
+                        <div class="label" data-i18n="gedcom.placeholders"></div>
+                    </div>
+                    <div class="stat-item" id="gedcom-stat-photos-item">
+                        <div class="number" id="gedcom-stat-photos">0</div>
+                        <div class="label" data-i18n="gedcom.photos"></div>
+                    </div>
+                    <div class="stat-item" id="gedcom-stat-documents-item">
+                        <div class="number" id="gedcom-stat-documents">0</div>
+                        <div class="label" data-i18n="gedcom.documents"></div>
+                    </div>
+                    <div class="stat-item" id="gedcom-stat-excerpts-item">
+                        <div class="number" id="gedcom-stat-excerpts">0</div>
+                        <div class="label" data-i18n="gedcom.excerpts"></div>
+                    </div>
+                    <div class="stat-item" id="gedcom-stat-sources-item">
+                        <div class="number" id="gedcom-stat-sources">0</div>
+                        <div class="label" data-i18n="gedcom.sources"></div>
+                    </div>
+                    <div class="stat-item" id="gedcom-stat-events-item">
+                        <div class="number" id="gedcom-stat-events">0</div>
+                        <div class="label" data-i18n="gedcom.events"></div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="number skipped" id="gedcom-stat-unsupported">0</div>
+                        <div class="label" data-i18n="gedcom.unsupported"></div>
+                    </div>
                 </div>
-                <div class="stat-item">
-                    <div class="number" id="gedcom-stat-partnerships">0</div>
-                    <div class="label" data-i18n="gedcom.partnerships"></div>
+                <p id="gedcom-stat-detail" class="gedcom-stat-detail" style="display:none;"></p>
+                <!-- Text encoding of a file that does not state it plainly (ANSI, no CHAR …): a sample of names and a switch. -->
+                <div id="gedcom-encoding-row" class="gedcom-encoding-row" style="display:none;">
+                    <div class="gedcom-encoding-head">
+                        <label for="gedcom-encoding-select" data-i18n="gedcom.encodingLabel"></label>
+                        <select id="gedcom-encoding-select" onchange="window.Strom.UI.setGedcomEncoding(this.value)"></select>
+                    </div>
+                    <p class="gedcom-encoding-sample"><span class="gedcom-encoding-sample-label" data-i18n="gedcom.encodingSample"></span> <span id="gedcom-encoding-names"></span></p>
+                    <p id="gedcom-encoding-how" class="field-hint"></p>
                 </div>
-                <div class="stat-item">
-                    <div class="number" id="gedcom-stat-placeholders">0</div>
-                    <div class="label" data-i18n="gedcom.placeholders"></div>
+                <!-- Leave images out of this import (text of sources always stays). -->
+                <div id="gedcom-images-row" class="import-images-row" style="display:none;">
+                    <label class="import-images-check">
+                        <input type="checkbox" id="gedcom-import-images" onchange="window.Strom.UI.setGedcomImportImages(this.checked)">
+                        <span data-i18n="importImages.label"></span>
+                        <span id="gedcom-images-size" class="import-images-size"></span>
+                    </label>
+                    <p class="field-hint" data-i18n="importImages.hint"></p>
                 </div>
-                <div class="stat-item" id="gedcom-stat-photos-item">
-                    <div class="number" id="gedcom-stat-photos">0</div>
-                    <div class="label" data-i18n="gedcom.photos"></div>
-                </div>
-                <div class="stat-item" id="gedcom-stat-documents-item">
-                    <div class="number" id="gedcom-stat-documents">0</div>
-                    <div class="label" data-i18n="gedcom.documents"></div>
-                </div>
-                <div class="stat-item" id="gedcom-stat-excerpts-item">
-                    <div class="number" id="gedcom-stat-excerpts">0</div>
-                    <div class="label" data-i18n="gedcom.excerpts"></div>
-                </div>
-                <div class="stat-item" id="gedcom-stat-sources-item">
-                    <div class="number" id="gedcom-stat-sources">0</div>
-                    <div class="label" data-i18n="gedcom.sources"></div>
-                </div>
-                <div class="stat-item" id="gedcom-stat-events-item">
-                    <div class="number" id="gedcom-stat-events">0</div>
-                    <div class="label" data-i18n="gedcom.events"></div>
-                </div>
-                <div class="stat-item">
-                    <div class="number skipped" id="gedcom-stat-unsupported">0</div>
-                    <div class="label" data-i18n="gedcom.unsupported"></div>
+                <div id="gedcom-media-row" class="gedcom-media-row" style="display:none;">
+                    <span id="gedcom-media-text"></span>
+                    <button type="button" id="gedcom-media-download" onclick="window.Strom.UI.downloadGedcomMedia()" data-i18n="gedcom.downloadMedia" style="display:none;"></button>
+                    <button type="button" class="secondary" onclick="window.Strom.UI.pickGedcomMedia()" data-i18n="gedcom.attachMedia"></button>
+                    <input type="file" id="gedcom-media-input" multiple accept="image/*,.pdf" style="display:none;"
+                        onchange="window.Strom.UI.attachGedcomMedia(this.files)">
                 </div>
             </div>
-            <p id="gedcom-stat-detail" class="gedcom-stat-detail" style="display:none;"></p>
-            <!-- Text encoding of a file that does not state it plainly (ANSI, no CHAR …): a sample of names and a switch. -->
-            <div id="gedcom-encoding-row" class="gedcom-encoding-row" style="display:none;">
-                <div class="gedcom-encoding-head">
-                    <label for="gedcom-encoding-select" data-i18n="gedcom.encodingLabel"></label>
-                    <select id="gedcom-encoding-select" onchange="window.Strom.UI.setGedcomEncoding(this.value)"></select>
-                </div>
-                <p class="gedcom-encoding-sample"><span class="gedcom-encoding-sample-label" data-i18n="gedcom.encodingSample"></span> <span id="gedcom-encoding-names"></span></p>
-                <p id="gedcom-encoding-how" class="field-hint"></p>
-            </div>
-            <!-- Leave images out of this import (text of sources always stays). -->
-            <div id="gedcom-images-row" class="import-images-row" style="display:none;">
-                <label class="import-images-check">
-                    <input type="checkbox" id="gedcom-import-images" onchange="window.Strom.UI.setGedcomImportImages(this.checked)">
-                    <span data-i18n="importImages.label"></span>
-                    <span id="gedcom-images-size" class="import-images-size"></span>
-                </label>
-                <p class="field-hint" data-i18n="importImages.hint"></p>
-            </div>
-            <div id="gedcom-media-row" class="gedcom-media-row" style="display:none;">
-                <span id="gedcom-media-text"></span>
-                <button type="button" id="gedcom-media-download" onclick="window.Strom.UI.downloadGedcomMedia()" data-i18n="gedcom.downloadMedia" style="display:none;"></button>
-                <button type="button" class="secondary" onclick="window.Strom.UI.pickGedcomMedia()" data-i18n="gedcom.attachMedia"></button>
-                <input type="file" id="gedcom-media-input" multiple accept="image/*,.pdf" style="display:none;"
-                    onchange="window.Strom.UI.attachGedcomMedia(this.files)">
             </div>
             <div class="menu-options" id="gedcom-options">
-                <!-- Normal options (hidden when importing to current tree) -->
-                <button id="gedcom-new-tree-btn" class="menu-option" onclick="window.Strom.UI.importGedcomAsNewTree()">
-                    <span class="option-text">
-                        <span class="option-title" data-i18n="gedcom.importAsNew"></span>
-                        <span class="option-desc" data-i18n="gedcom.importAsNewDesc"></span>
-                    </span>
-                </button>
-                <button id="gedcom-merge-btn" class="menu-option" onclick="window.Strom.UI.mergeGedcomWithExisting()">
-                    <span class="option-text">
-                        <span class="option-title" data-i18n="gedcom.mergeExisting"></span>
-                        <span class="option-desc" data-i18n="gedcom.mergeExistingDesc"></span>
-                    </span>
-                </button>
-                <button id="gedcom-save-json-btn" class="menu-option" onclick="window.Strom.UI.downloadGedcomAsJson()">
-                    <span class="option-text">
-                        <span class="option-title" data-i18n="gedcom.saveAsJson"></span>
-                        <span class="option-desc" data-i18n="gedcom.saveAsJsonDesc"></span>
-                    </span>
-                </button>
                 <!-- Insert to current tree option (shown only when importing to current tree) -->
                 <button id="gedcom-insert-btn" class="menu-option" style="display: none;" onclick="window.Strom.UI.importGedcomAsNewTree()">
                     <span class="option-text">
@@ -36238,77 +36776,40 @@
 
     <!-- Merge Import Modal -->
     <div class="modal-overlay" id="merge-modal">
-        <div class="modal merge-modal modal--lg" role="dialog" data-dialog-kind="form" aria-modal="true">
+        <div class="modal merge-modal modal--lg" role="dialog" data-dialog-kind="form" aria-modal="true" aria-labelledby="merge-title">
             <div class="modal-header">
-                <h2 data-i18n="merge.wizardTitle">Merge data</h2>
+                <div class="merge-head">
+                    <h2 id="merge-title" data-i18n="mergeWizard.titleImport">Import a family tree</h2>
+                    <span id="merge-route" class="merge-src"></span>
+                </div>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.MergerUI.closeMergeModal()">&times;</button>
             </div>
-            <p id="merge-wizard-explanation" class="merge-wizard-explanation" data-i18n="merge.wizardExplanation"></p>
-            <div id="merge-validation-banner" class="merge-validation-banner" style="display:none"></div>
-            <div class="merge-progress">
-                <span id="merge-step-review" class="merge-step sel-tab active" data-sel-dir="down"><span class="sel-l" data-i18n="merge.stepReview">1. Review matches</span></span>
-                <span id="merge-step-resolve" class="merge-step sel-tab" data-sel-dir="down"><span class="sel-l" data-i18n="merge.stepResolve">2. Resolve conflicts</span></span>
-                <span id="merge-step-execute" class="merge-step sel-tab" data-sel-dir="down"><span class="sel-l" data-i18n="merge.stepExecute">3. Execute merge</span></span>
-            </div>
-            <div class="merge-stats">
-                <div class="merge-stat">
-                    <span class="merge-stat-label" data-i18n="merge.importCount">Import</span>
-                    <span class="merge-stat-value" id="merge-stat-import">0</span>
-                </div>
-                <div class="merge-stat">
-                    <span class="merge-stat-label" data-i18n="merge.existingCount">Existing</span>
-                    <span class="merge-stat-value" id="merge-stat-existing">0</span>
-                </div>
-                <div class="merge-stat highlight">
-                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span data-i18n="merge.statsMatches">Matches</span></span>
-                    <span class="merge-stat-value" id="merge-stat-matches">0</span>
-                </div>
-                <div class="merge-stat warning">
-                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v9"/><path d="M12 18h.01"/></svg></span><span data-i18n="merge.statsConflicts">Conflicts</span></span>
-                    <span class="merge-stat-value" id="merge-stat-conflicts">0</span>
-                </div>
-                <div class="merge-stat new">
-                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span><span data-i18n="merge.statsNew">New</span></span>
-                    <span class="merge-stat-value" id="merge-stat-new">0</span>
-                </div>
-                <div class="merge-stat skipped" id="merge-stat-skipped-card" style="display:none;">
-                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M6.5 6.5l11 11"/></svg></span><span data-i18n="merge.statsSkipped">Skipped</span></span>
-                    <span class="merge-stat-value" id="merge-stat-skipped">0</span>
-                </div>
-            </div>
-            <label class="merge-update-only" id="merge-update-only-row">
-                <input type="checkbox" id="merge-update-only-toggle" onchange="window.Strom.MergerUI.toggleUpdateOnly(this.checked)">
-                <span class="merge-update-only-text">
-                    <span class="merge-update-only-label" data-i18n="merge.updateOnlyLabel">Only update existing people (don't add new)</span>
-                    <span class="merge-update-only-hint" data-i18n="merge.updateOnlyHint">Enrich matched people from the import, but add no new people.</span>
-                </span>
-            </label>
-            <div class="merge-tabs">
-                <button class="merge-tab sel-tab active" data-sel-dir="down" data-filter="all" onclick="window.Strom.MergerUI.setFilter('all')"><span class="sel-l" data-i18n="merge.tabAll">All</span></button>
-                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="high" onclick="window.Strom.MergerUI.setFilter('high')">
-                    <span class="sel-l" data-i18n="merge.highConfidence">High</span> <span class="tab-count" id="tab-count-high">0</span>
-                </button>
-                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="medium" onclick="window.Strom.MergerUI.setFilter('medium')">
-                    <span class="sel-l" data-i18n="merge.mediumConfidence">Medium</span> <span class="tab-count" id="tab-count-medium">0</span>
-                </button>
-                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="low" onclick="window.Strom.MergerUI.setFilter('low')">
-                    <span class="sel-l" data-i18n="merge.lowConfidence">Low</span> <span class="tab-count" id="tab-count-low">0</span>
-                </button>
-                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="unmatched" onclick="window.Strom.MergerUI.setFilter('unmatched')">
-                    <span class="sel-l" data-i18n="merge.statsNew">New</span> <span class="tab-count" id="tab-count-unmatched">0</span>
-                </button>
-                <button class="merge-tab sel-tab" data-sel-dir="down" data-filter="conflicts" onclick="window.Strom.MergerUI.setFilter('conflicts')">
-                    <span class="sel-l" data-i18n="merge.conflicts">Conflicts</span> <span class="tab-count" id="tab-count-conflicts">0</span>
-                </button>
-            </div>
-            <div class="merge-match-list" id="merge-match-list">
-                <!-- Match items rendered here -->
-            </div>
+            <nav id="merge-progress" class="merge-progress" aria-label="Steps of the import" data-i18n-aria-label="mergeWizard.stepsNav"></nav>
+            <div id="merge-counts" class="merge-stats" role="status" aria-live="polite"></div>
+            <div id="merge-validation-banner" class="merge-validation-banner"></div>
+            <div id="merge-step-body" class="merge-step-body"></div>
             <div class="buttons merge-actions">
-                <button class="secondary" onclick="window.Strom.MergerUI.saveForLater()" data-i18n="merge.closeSave">Save for later</button>
-                <button class="secondary" onclick="window.Strom.MergerUI.reanalyze()" data-i18n="merge.reanalyze" data-i18n-busy="busy.analyzing">Re-analyze</button>
-                <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeMergeModal()" data-i18n="buttons.cancel">Cancel</button>
-                <button class="primary" onclick="window.Strom.MergerUI.executeMerge()" data-i18n="merge.execute">Execute merge</button>
+                <button type="button" class="link-button" id="merge-save-later" onclick="window.Strom.MergerUI.saveForLater()" data-i18n="merge.closeSave">Save for later</button>
+                <span id="merge-next-why" class="merge-next-why" hidden></span>
+                <button type="button" class="secondary" id="merge-back" onclick="window.Strom.MergerUI.wizardBack()" data-i18n="mergeWizard.back" hidden>Back</button>
+                <button type="button" class="secondary" id="merge-cancel" data-dismiss onclick="window.Strom.MergerUI.closeMergeModal()" data-i18n="buttons.cancel">Cancel</button>
+                <button type="button" class="primary" id="merge-next" onclick="window.Strom.MergerUI.wizardNext()"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 1 of the import guide: every kind of line of the file the tree does not take over (spec 134 §3). -->
+    <div class="modal-overlay" id="merge-not-taken-modal" onclick="if(event.target===this) window.Strom.MergerUI.closeNotTaken()">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="merge-not-taken-title">
+            <div class="modal-header">
+                <h2 id="merge-not-taken-title" data-i18n="mergeWizard.notTakenTitle">Not taken over</h2>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.MergerUI.closeNotTaken()">&times;</button>
+            </div>
+            <p class="merge-not-taken-note" data-i18n="mergeWizard.notTakenNote"></p>
+            <ul id="merge-not-taken-list" class="merge-not-taken-list"></ul>
+            <div class="buttons">
+                <button type="button" class="link-button" onclick="window.Strom.MergerUI.saveNotTaken()" data-i18n="mergeWizard.saveList">Save list…</button>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeNotTaken()" data-i18n="buttons.close">Close</button>
             </div>
         </div>
     </div>
@@ -36331,27 +36832,12 @@
             <div class="buttons">
                 <button id="merge-manual-preview-btn" class="secondary merge-btn-preview-wide" onclick="window.Strom.MergerUI.previewManualMatch()" data-i18n-title="treePreview.preview" data-i18n-aria-label="treePreview.preview" data-i18n="treePreview.preview">Preview</button>
                 <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeManualMatchDialog()" data-i18n="buttons.cancel">Cancel</button>
-                <button class="primary" onclick="window.Strom.MergerUI.confirmManualMatch()" data-i18n="buttons.save">Save</button>
+                <button class="primary" onclick="window.Strom.MergerUI.confirmManualMatch()" data-i18n="mergeWizard.joinThis">Join with this person</button>
             </div>
         </div>
     </div>
 
     <!-- Conflict Resolution Dialog -->
-    <div class="modal-overlay" id="merge-conflict-dialog">
-        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
-            <div class="modal-header">
-                <h2 data-i18n="merge.conflicts">Conflicts</h2>
-                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.MergerUI.closeConflictDialog()">&times;</button>
-            </div>
-            <div id="merge-conflict-content" class="merge-conflict-content">
-                <!-- Conflict rows rendered here -->
-            </div>
-            <div class="buttons">
-                <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeConflictDialog()" data-i18n="buttons.cancel">Cancel</button>
-                <button class="primary" onclick="window.Strom.MergerUI.saveConflictResolutions()" data-i18n="buttons.save">Save</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Merge Close Confirmation Dialog -->
     <div class="modal-overlay" id="merge-close-confirm" onclick="if(event.target===this) window.Strom.MergerUI.handleCloseCancel()">
@@ -36651,24 +37137,6 @@
             <div class="buttons">
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeDefaultPersonDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.UI.confirmDefaultPerson()" data-i18n="buttons.save">Save</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Merge Trees Dialog -->
-    <div class="modal-overlay" id="merge-trees-modal">
-        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
-            <div class="modal-header">
-                <h2 data-i18n="treeManager.mergeIntoTitle">Merge into another tree</h2>
-                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeMergeTreesDialog()">&times;</button>
-            </div>
-            <p id="merge-trees-description" class="merge-trees-description"></p>
-            <div id="merge-trees-options" class="merge-trees-options">
-                <!-- Target tree options rendered here -->
-            </div>
-            <div class="buttons">
-                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeMergeTreesDialog()" data-i18n="buttons.cancel">Cancel</button>
-                <button class="primary" id="merge-trees-btn" onclick="window.Strom.UI.startTreeMerge()" data-i18n="treeManager.startMerge" data-i18n-busy="busy.analyzing">Start merge</button>
             </div>
         </div>
     </div>

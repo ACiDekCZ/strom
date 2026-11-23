@@ -221,6 +221,7 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 @media (pointer: coarse) { .pp-basis-src a { display: inline-flex; align-items: center; min-height: 44px; } }
 .pp-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--text-faint); margin-left: 4px; white-space: nowrap; }
 .pp .pp-notes-text { margin-top: 8px; font-size: 15px; white-space: pre-line; overflow-wrap: anywhere; }
+.pp .pp-contact { margin-top: 8px; font-size: 15px; overflow-wrap: anywhere; }
 .pp-toggles { display: flex; flex-wrap: wrap; gap: 8px; }
 .pp-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 12px; border: 1.5px solid var(--border); border-radius: var(--sel-r, 4px); background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; white-space: nowrap; cursor: pointer; }
 .pp-toggle::before { content: ''; width: 14px; height: 14px; border: 1.5px solid var(--border); border-radius: 3px; background: var(--surface); }

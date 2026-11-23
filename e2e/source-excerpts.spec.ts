@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, cardAction, personModal } from './helpers.js';
+import { openApp, createFirstPerson, cardAction, personModal, mergeCreateNewTree } from './helpers.js';
 
 /**
  * Register entries on sources: excerpt thumbnails on citation chips, the
@@ -434,19 +434,18 @@ test.describe('leaving images out of an import', () => {
         '0 TRLR',
     ].join('\n');
 
-    test('GEDCOM result: excerpts tile, checkbox with size; unchecked → text only', async ({ page }) => {
+    test('GEDCOM import guide: excerpts tile, checkbox with size; unchecked → text only', async ({ page }) => {
         await openApp(page);
         const jpeg = await jpegDataUrl(page, 200, 40);
         await page.evaluate((text) => window.Strom.UI.openGedcomText(text), excerptGed(jpeg));
-        const dlg = page.locator('#gedcom-result-modal');
+        const dlg = page.locator('#merge-modal');
         await expect(dlg).toBeVisible();
         await expect(dlg.locator('#gedcom-stat-excerpts')).toHaveText('1');
         await expect(dlg.locator('#gedcom-images-row')).toBeVisible();
         await expect(dlg.locator('#gedcom-images-size')).toContainText('MB');
         await dlg.locator('#gedcom-import-images').uncheck();
         await expect(dlg.locator('#gedcom-stat-excerpts-item')).toHaveClass(/muted/);
-        await dlg.locator('#gedcom-new-tree-btn').click();
-        await page.locator('#import-tree-modal').getByRole('button', { name: /Import/ }).last().click();
+        await mergeCreateNewTree(page, dlg);
         const src = await page.evaluate(() => Object.values(window.Strom.DataManager.getData().sources as Record<string, any>)[0]);
         expect(src.excerpts).toBeUndefined();
         expect(src.transcript).toBe('Jan, syn Josefa');
@@ -458,7 +457,7 @@ test.describe('leaving images out of an import', () => {
         await openApp(page);
         await page.evaluate(() => window.Strom.UI.openGedcomText(
             '0 HEAD\n1 CHAR UTF-8\n0 @I1@ INDI\n1 NAME Karel /Bez/\n1 SEX M\n0 TRLR'));
-        await expect(page.locator('#gedcom-result-modal')).toBeVisible();
+        await expect(page.locator('#merge-modal')).toBeVisible();
         await expect(page.locator('#gedcom-images-row')).toBeHidden();
     });
 });

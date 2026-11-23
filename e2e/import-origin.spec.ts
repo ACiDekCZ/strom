@@ -1,6 +1,6 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { writeFileSync } from 'fs';
-import { openApp, createFirstPerson, waitForPersist, cardAction, personModal } from './helpers.js';
+import { openApp, createFirstPerson, waitForPersist, cardAction, personModal, importGedcomAsNewTree } from './helpers.js';
 
 /**
  * The origin of facts from a GEDCOM another program wrote (spec 066): the
@@ -52,11 +52,7 @@ async function closeNextCard(page: Page): Promise<void> {
 
 test('the import is a record of the tree, its facts are marked, and an edit ends a fact\'s mark', async ({ page }, testInfo) => {
     await openApp(page);
-    await page.locator('#gedcom-input').setInputFiles(writeGedcom(testInfo));
-    await page.locator('#gedcom-result-modal #gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await importDialog.locator('#import-tree-name').fill('Habrcetl');
-    await importDialog.getByRole('button', { name: 'Import' }).click();
+    await importGedcomAsNewTree(page, writeGedcom(testInfo));
     await closeNextCard(page);
 
     let tree = await storedTree(page);

@@ -50,6 +50,7 @@ import {
 import { generatePersonId, generateLifeEventId, generateSourceId, generateParticipantId, generateAttachmentId, generatePartnershipId } from './ids.js';
 import { partnershipParticipants, LAST_FOCUSED, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, oppositeGender, isPrimaryName, mergedPrimaryName, isEmbeddedEnvelope } from './model-values.js';
 import { STROM_DATA_VERSION } from './version.js';
+import { moveContactsIntoPeople, cleanEmails } from './person-contact.js';
 import { convertLegacyCensusEvents, isCoupleEventType } from './events.js';
 import { sanitizeGedcomDates } from './gedcom-date-form.js';
 import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
@@ -65,7 +66,7 @@ import { surnameForms, addSurnameGroup, removeSurnameGroup, surnameKey } from '.
 import { buildLineages, cleanLineageOverrides, LineagePatch, type LineageIndex } from './lineage.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections, dismissalKey, surnameRejectionKey } from './quality-dismiss.js';
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
-import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
+import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay, type SnapshotMeta, type SnapshotOptions } from './snapshots.js';
 import { ValidationIssue, stripUnsafeMediaDataUrls, cleanPortraitSources, dropStrayPoolRefs, isSafePhotoDataUrl, translateValidationType } from './validation.js';
 import { isPortraitSourceShape } from './photo.js';
 import { cloneTreeData, cloneTreeDataAsJson } from './clone.js';
@@ -401,6 +402,10 @@ export function migrateData(data: unknown): StromData {
     if (typeof d.version === 'number' && d.version < 25) givePortraitsRecords(result, typeof d.researchAsOf === 'string');
     // v23 (spec 107): only portrait sources whose original is still there.
     cleanPortraitSources(result);
+    // v26 (spec 134 K0.10): the e-mails kept as residences or lines of a note
+    // are the people's contact. Every load: a research version may bring
+    // such a residence back, and the move changes nothing the second time.
+    moveContactsIntoPeople(result);
 
     // Preserve place coordinates. This object is rebuilt field by field, so
     // anything not named here is dropped on EVERY load — tree switch, app
@@ -1097,12 +1102,12 @@ class DataManagerClass {
             }
 
             case 'update': {
-                // Update existing tree — a backup of what it held first (as any import over a tree).
+                // Update existing tree — a backup of what it held first (as any import over a tree),
+                // whatever the automatic backups setting (spec 134 K0.4).
                 if (existingTree) {
-                    if (TreeManager.isAutoBackupEnabled(existingTree.id)) {
-                        const before = await TreeManager.getTreeData(existingTree.id);
-                        if (before) await createSnapshot(existingTree.id, before, 'pre-import', Date.now());
-                    }
+                    const before = await TreeManager.getTreeData(existingTree.id);
+                    if (before) await createSnapshot(existingTree.id, before, 'pre-import', Date.now(),
+                        TreeManager.backupResearchBase(existingTree.id, TreeManager.researchBaseOf(existingTree.id)));
                     TreeManager.updateTreeFromImport(existingTree.id, data);
                     this.currentTreeId = existingTree.id;
                     TreeManager.setActiveTree(existingTree.id);
@@ -1995,17 +2000,56 @@ class DataManagerClass {
     async snapshotNow(reason: SnapshotReason): Promise<string | null> {
         if (this.viewMode || !this.currentTreeId) return null;
         // Around the research a backup is taken whatever the setting: the app never trusts the research blindly.
-        const always = reason === 'manual' || reason === 'pre-research-load' || reason === 'pre-first-send';
+        // Before a merge or an import too (spec 134 K0.4): "Before merge" and "Before import" are promised whatever the setting.
+        const always = reason === 'manual' || reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge' || reason === 'pre-import';
         if (!always && !TreeManager.isAutoBackupEnabled(this.currentTreeId)) return null;
-        if (reason === 'pre-research-load' || reason === 'pre-first-send') {
+        if (reason === 'pre-research-load' || reason === 'pre-first-send' || reason === 'pre-merge' || reason === 'pre-import') {
             try {
                 return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now(), this.backupBase())).id;
             } catch (err) {
-                console.warn('The backup before the research could not be written', err);
+                console.warn('The backup could not be written', reason, err);
                 return null;
             }
         }
         return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now(), this.backupBase())).id;
+    }
+
+    /**
+     * The backup "Before merge" of a merge's target at the write (spec 134
+     * K0.4, K6.6): the open tree's data, or another tree's as stored, whatever
+     * the automatic backups setting, `keepFor` kept out of the rotation.
+     * Throws when the tree cannot be read or the backup written (§8 8d).
+     */
+    async backupBeforeMerge(treeId: TreeId, opts: SnapshotOptions = {}): Promise<SnapshotMeta> {
+        const open = !this.viewMode && treeId === this.currentTreeId;
+        const data = open ? this.data : await TreeManager.getTreeData(treeId);
+        if (!data) throw new Error('The tree could not be read');
+        const base = open ? this.backupBase() : TreeManager.backupResearchBase(treeId, TreeManager.researchBaseOf(treeId));
+        return createSnapshot(treeId, data, 'pre-merge', Date.now(), base, opts);
+    }
+
+    /**
+     * A merge written into the open tree (spec 134 §8): its data replace the
+     * tree's as one undo step `label` (K8.5), where the work stands here (the
+     * last focus, the default person and view) staying as it is. The caller
+     * has stored the data already; this save writes the same again. False when
+     * tree `treeId` is not the open one or may not be changed now.
+     */
+    adoptMergeResult(treeId: TreeId, data: StromData, label: string): boolean {
+        if (this.currentTreeId !== treeId || this.windowSink || this.isReadOnly() || this.isTreeLocked()) return false;
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
+        const next = data;
+        for (const key of WINDOW_STATE_KEYS) {
+            if (this.data[key] === undefined) delete next[key];
+            else (next as unknown as Record<string, unknown>)[key] = this.data[key];
+        }
+        this.imagesReplaced(treeId);
+        this.beginMutation();
+        this.data = next;
+        this.commitMutation(label, true);
+        CrossTree.invalidateCacheForTree(treeId);
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        return true;
     }
 
     /** The research base a backup of the current data keeps (N61-3). */
@@ -3112,6 +3156,13 @@ class DataManagerClass {
             person.refn = updates.refn || undefined;
         }
         if (updates.question !== undefined) person.question = updates.question || undefined;
+        // The contact (spec 134 K0.10): the addresses as typed, each once; none = no contact.
+        if (updates.emails !== undefined) {
+            const emails = cleanEmails(updates.emails);
+            const was = person.emails ?? [];
+            if ((emails ?? []).join('\n') !== was.join('\n')) diff(strings.labels.emails, was.join(', '), (emails ?? []).join(', '));
+            person.emails = emails;
+        }
         // Empty list means none — do not keep an empty array around.
         if (updates.nameVariants !== undefined) {
             const kept = updates.nameVariants.map(v => v.trim()).filter(Boolean);

@@ -366,6 +366,8 @@ function stripDetails(person: Person): void {
     // …and the one the editor suggested from the husband's surname.
     delete person.dismissedMarriedSuggestion;
     delete person.question;
+    // The contact of a living person is theirs to give (spec 134 K0.10).
+    delete person.emails;
     delete person.refn;
     delete person.refnType;
     // What the research knows about them (conflicts, hypotheses, searches).

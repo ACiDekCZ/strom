@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { openApp, createFirstPerson } from './helpers.js';
+import { openApp, createFirstPerson, mergeCompare, mergeCount, mergePair, mergeRow } from './helpers.js';
 
 /**
  * A person of unknown given name in a merge (spec 010, K1.2): MyHeritage
  * writes a wife known only by her surname as "1 NAME /Nováková/". Merging
  * such a file into a tree that already holds her pairs her through her matched
  * husband — as a match for review, never confirmed by itself — and nobody is
- * added twice once it is confirmed.
+ * added twice once it is confirmed: the file then holds only the tree's
+ * people and the guide writes nothing (13b).
  */
 
 type P = {
@@ -39,35 +40,44 @@ test('a wife of unknown given name pairs through her matched husband, for review
 
     await page.evaluate(() => window.Strom.UI.startGedcomImportPlain());
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-unknown-name.ged');
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    await result.locator('#gedcom-merge-btn').click();
 
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
-    await expect(wizard.locator('#merge-stat-matches')).toHaveText('3');
-    await expect(wizard.locator('#merge-stat-new')).toHaveText('0');
+    await mergeCompare(wizard);
+    await expect(mergeCount(wizard, 'joined')).toHaveText('2');
+    // The offered wife is left to decide: nobody is added, and the write waits for her.
+    await expect(mergeCount(wizard, 'pending')).toHaveText('1');
+    await expect(mergeCount(wizard, 'added')).toHaveText('0');
+    await expect(wizard.locator('#merge-next')).toBeDisabled();
+    await expect(wizard.locator('#merge-next-why')).toHaveText('1 pair left to decide');
 
-    const wifeRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Nováková' });
-    await expect(wifeRow).toHaveCount(1);
-    await expect(wifeRow).toHaveClass(/pending/);
-    await expect(wifeRow.locator('.merge-item-score')).toContainText('Medium');
-    await expect(wifeRow.locator('.merge-item-reasons')).toContainText('Unknown given name – matched through a relative');
-    await expect(wizard.locator('#merge-match-list .merge-item.confirmed')).toHaveCount(2);
+    // Her pair stands among Maybe the same (score below 80), "? Nováková" with no given name.
+    const wifeRow = await mergePair(wizard, 'Nováková', 'maybe');
+    await expect(mergeRow(wizard, 'Nováková')).toHaveCount(1);
+    await expect(wifeRow).toHaveAttribute('data-fate', 'pending');
+    const score = Number((await wifeRow.locator('.merge-item-score').textContent())?.replace(/\D/g, ''));
+    expect(score).toBeLessThan(80);
+    await expect(wizard.locator('#merge-pair .merge-why')).toContainText('Unknown given name – matched through a relative');
+    await expect(wizard.locator('#merge-pair .pair')).toContainText('no name');
 
-    await wifeRow.locator('.merge-btn-confirm').click();
-    await expect(wizard.locator('#merge-match-list .merge-item.confirmed')).toHaveCount(3);
+    await wizard.locator('#merge-pair .merge-dec[data-dec="same"]').click();
+    await expect(wifeRow).toHaveAttribute('data-fate', 'joined');
+    await expect(mergeCount(wizard, 'joined')).toHaveText('3');
+    await expect(mergeCount(wizard, 'pending')).toHaveText('0');
+    await expect(mergeCount(wizard, 'added')).toHaveText('0');
 
-    await wizard.locator('.merge-actions .primary').click();
-    const prompt = page.locator('#confirmation-modal.active.dialog-prompt');
-    await expect(prompt).toBeVisible();
-    await prompt.locator('#prompt-input').fill('Merged');
-    await prompt.locator('#confirm-ok-btn').click();
-    await expect(page.locator('#confirm-title')).toHaveText('Merge complete');
-    await page.locator('#confirmation-modal.active #confirm-ok-btn').click();
-    await expect.poll(() => page.evaluate(() =>
-        window.Strom.TreeManager.getTrees().find((t: { name: string }) => t.name === 'Merged')?.id
-        === window.Strom.TreeManager.getActiveTreeId())).toBe(true);
+    // Her join decided the last pair: the list stays where it was worked in.
+    await expect(mergeRow(wizard, 'Nováková')).toHaveCount(1);
+
+    // Everyone joined, nothing new in scope a): a sentence over the list says so, the primary only closes.
+    const treesBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
+    await expect(wizard.locator('.merge-s2-copy-note')).toHaveText(/^All 3 people are already in the tree .+ and bring nothing new\.$/);
+    await expect(wizard.locator('#merge-next')).toHaveText('Close');
+    await wizard.locator('#merge-next').click();
+    await expect(wizard).toBeHidden();
+    expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().length)).toBe(treesBefore);
     const persons = await page.evaluate(async () => {
         const TM = window.Strom.TreeManager;
         return Object.values((await TM.getTreeData(TM.getActiveTreeId()!))!.persons);

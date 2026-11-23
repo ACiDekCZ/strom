@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, createFirstPerson, addRelation, card } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card, importJsonAsNewTree, mergeCompare, mergeCurrentStep } from './helpers.js';
 
 /**
  * Dialogs whose header is a bare <h2> — the confirm box, the event editor,
@@ -546,3 +546,74 @@ for (const width of [1440, 1024, 390]) {
         expect(counted, 'the sheet counts showed in some format').toBeGreaterThan(0);
     });
 }
+
+/**
+ * The import guide's step 3 builds its dialogs per open (spec 134 §5): the
+ * question when a person others link through is unticked (5a, a decision:
+ * no ×, Cancel before the primary) and the choice of a person for
+ * "Ancestors of…" (5c, a picker), both the small width. A file with Kvido
+ * (joined with the tree), his father and grandfather; invented people.
+ */
+test('import guide step 3: the untick question (5a) and the person picker (5c) follow their kinds', async ({ page }) => {
+    await openApp(page);
+    await importJsonAsNewTree(page, 'e2e/fixtures/modrinovi.json', 'Modřínovi');
+    const file = ['0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Kvido /Modřín/', '1 SEX M', '1 BIRT', '2 DATE 1921', '2 PLAC Křemenná', '1 FAMC @F1@',
+        '0 @I2@ INDI', '1 NAME Budivoj /Modřín/', '1 SEX M', '1 BIRT', '2 DATE 1890', '1 FAMS @F1@', '1 FAMC @F2@',
+        '0 @I3@ INDI', '1 NAME Bonifác /Modřín/', '1 SEX M', '1 BIRT', '2 DATE 1860', '1 FAMS @F2@',
+        '0 @F1@ FAM', '1 HUSB @I2@', '1 CHIL @I1@', '0 @F2@ FAM', '1 HUSB @I3@', '1 CHIL @I2@', '0 TRLR'].join('\n');
+    await page.locator('#gedcom-input').setInputFiles({ name: 'rodokmen.ged', mimeType: 'text/plain', buffer: Buffer.from(file, 'utf-8') });
+    const wizard = page.locator('#merge-modal');
+    await mergeCompare(wizard);
+    await wizard.locator('#merge-next').click();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
+
+    await wizard.locator('.merge-s3-row').filter({ has: page.locator('.merge-s3-name', { hasText: 'Budivoj' }) }).locator('input[type="checkbox"]').click();
+    for (const [id, close] of [['merge-s3-unlink', '[data-dismiss]'], ['merge-s3-pick', '.buttons [data-dismiss]']] as const) {
+        if (id === 'merge-s3-pick') await wizard.locator('.merge-s3-variants [data-v="ancestors"]').click();
+        const dialog = page.locator(`#${id}`);
+        await expect(dialog, id).toBeVisible();
+        await expect(dialog.locator(':scope > .modal'), id).toHaveClass(/\bmodal--sm\b/);
+        expect(await dialogRuleProblems(page), id).toEqual([]);
+        // Focus is inside the dialog, and Tab keeps it there.
+        for (let i = 0; i < 12; i++) {
+            await page.keyboard.press('Tab');
+            expect(await dialog.evaluate(el => el.contains(document.activeElement)), id).toBe(true);
+        }
+        await dialog.locator(close).click();
+        await expect(dialog, id).toHaveCount(0);
+    }
+});
+
+/**
+ * The import guide's "Link to a person…" (spec 134 §6, 6b) is a picker of
+ * the middle width: × in its header, Cancel before the primary, the focus
+ * kept inside. A file with Kvido (joined with the tree) and a father and son
+ * with no way to the tree; invented people.
+ */
+test('import guide: the dialog Link to a person… (6b) follows its kind', async ({ page }) => {
+    await openApp(page);
+    await importJsonAsNewTree(page, 'e2e/fixtures/modrinovi.json', 'Modřínovi');
+    const file = ['0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Kvido /Modřín/', '1 SEX M', '1 BIRT', '2 DATE 1921', '2 PLAC Křemenná',
+        '0 @I2@ INDI', '1 NAME Radhost /Jilm/', '1 SEX M', '1 BIRT', '2 DATE 1860', '1 FAMS @F1@',
+        '0 @I3@ INDI', '1 NAME Božetěch /Jilm/', '1 SEX M', '1 BIRT', '2 DATE 1890', '1 FAMC @F1@',
+        '0 @F1@ FAM', '1 HUSB @I2@', '1 CHIL @I3@', '0 TRLR'].join('\n');
+    await page.locator('#gedcom-input').setInputFiles({ name: 'rodokmen.ged', mimeType: 'text/plain', buffer: Buffer.from(file, 'utf-8') });
+    const wizard = page.locator('#merge-modal');
+    await mergeCompare(wizard);
+    await wizard.locator('#merge-next').click();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
+    await wizard.locator('#merge-s3-tab-groups').click();
+    await wizard.locator('#merge-s3-groups [data-decide="connect"]').first().click();
+    const dialog = page.locator('#merge-connect-modal');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator(':scope > .modal')).toHaveClass(/\bmodal--md\b/);
+    expect(await dialogRuleProblems(page)).toEqual([]);
+    for (let i = 0; i < 12; i++) {
+        await page.keyboard.press('Tab');
+        expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+    }
+    await dialog.locator('.buttons [data-dismiss]').click();
+    await expect(dialog).toHaveCount(0);
+});

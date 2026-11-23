@@ -467,7 +467,7 @@ test.describe('actions menu "Tree:" submenu', () => {
             await expect(page.locator('.toast', { hasText: 'This tree has no places filled in yet.' })).toBeVisible();
         });
         await run('surnames', modal('surnames-modal'));
-        await run('mergeInto', modal('merge-trees-modal'));
+        await run('mergeInto', modal('merge-modal'));
         await run('duplicate', modal('duplicate-tree-modal'));
         await run('split', modal('split-modal'));
         await run('manageTrees', modal('tree-manager-modal'));

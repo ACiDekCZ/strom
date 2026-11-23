@@ -81,3 +81,101 @@ describe('merge session persistence — updateOnly flag', () => {
         expect(resumed!.updateOnly).toBe(false);
     });
 });
+
+describe('merge session persistence — suggestions are not resolutions (spec 134 K0.3)', () => {
+    function legacyWithSuggestion(answered: boolean) {
+        const existing = { id: 'e1', firstName: 'Jan', lastName: 'Novák', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], birthDate: '1880' };
+        const incoming = { ...existing, id: 'i1', birthDate: '1880-05-15' };
+        // Saved before suggestions stopped being the default: the suggested
+        // side sits in `resolution`.
+        const conflicts = [{ field: 'birthDate', existingValue: '1880', incomingValue: '1880-05-15', resolution: 'use_incoming', suggestedReason: 'more_precise_date' }];
+        return {
+            id: 'current', savedAt: new Date().toISOString(), incomingFileName: 'legacy.json',
+            stats: { total: 1, reviewed: 0, resolved: 0, conflicts: 1 },
+            state: {
+                existingData: { persons: { e1: existing }, partnerships: {} },
+                incomingData: { persons: { i1: incoming }, partnerships: {} },
+                matches: [{ existingId: 'e1', incomingId: 'i1', confidence: 'high', reasons: [], score: 95, existingPerson: existing, incomingPerson: incoming, conflicts }],
+                unmatchedExisting: [], unmatchedIncoming: [], decisions: [],
+                conflictResolutions: answered ? [['i1', structuredClone(conflicts)]] : [],
+                phase: 'reviewing',
+            },
+        };
+    }
+
+    it('an unanswered suggestion of an old session resumes as keep-existing with the hint', async () => {
+        await StorageManager.set('merge', 'current', legacyWithSuggestion(false));
+        const resumed = await getCurrentMerge();
+        const c = resumed!.matches[0].conflicts[0];
+        expect(c.resolution).toBe('keep_existing');
+        expect(c.suggested).toBe('use_incoming');
+    });
+
+    it('a choice a person made in the old session stays', async () => {
+        await StorageManager.set('merge', 'current', legacyWithSuggestion(true));
+        const resumed = await getCurrentMerge();
+        expect(resumed!.matches[0].conflicts[0].resolution).toBe('use_incoming');
+    });
+});
+
+describe('the import guide\'s place (spec 134 §1)', () => {
+    it('step, reached step, comparison and choices survive a save/resume round-trip', async () => {
+        const state = baseState();
+        state.wizard = {
+            step: 2, reached: 2, compared: true,
+            choices: {
+                mode: 'add', targetTreeId: null, scope: 'a', swapped: false, targetName: 'Modřínovi',
+                source: { kind: 'ged', label: 'rodokmen-jilmovi.ged', persons: 3, fingerprint: 'abc' },
+                targetFingerprint: 'f1', planId: 'plan-1',
+            },
+        };
+        await saveCurrentMerge(state, 'rodokmen-jilmovi.ged');
+        const back = await getCurrentMerge();
+        expect(back?.wizard).toEqual(state.wizard);
+    });
+
+    it('step 3\'s choices (unticked, "?", living, group decisions, split groups) survive the round-trip', async () => {
+        const state = baseState();
+        state.wizard = {
+            step: 3, reached: 3, compared: true,
+            choices: {
+                mode: 'add', targetTreeId: null, scope: 'a', swapped: false, targetName: 'Modřínovi',
+                source: { kind: 'ged', label: 'rodokmen-jilmovi.ged', persons: 9 },
+                targetFingerprint: 'f1', planId: 'plan-1',
+                leftOut: ['s4' as PersonId, 's6' as PersonId], leftOutReason: { s6: 'branch' },
+                placeholders: ['s7' as PersonId], skipLiving: true,
+                groups: {
+                    'g:s20': { kind: 'connect', person: 's20' as PersonId, rel: 'parent', to: 't2' as PersonId, in: 'tree' },
+                    'g:s30': { kind: 'own-tree' }, singles: { kind: 'skip' },
+                },
+                splitGroups: ['all'],
+            },
+        };
+        await saveCurrentMerge(state, 'rodokmen-jilmovi.ged');
+        expect((await getCurrentMerge())?.wizard).toEqual(state.wizard);
+    });
+
+    it('step 4\'s rules and choices of relations survive "Save for later" (K5.1, K5.5)', async () => {
+        const state = baseState();
+        state.wizard = {
+            step: 4, reached: 4, compared: true,
+            choices: {
+                mode: 'add', targetTreeId: null, scope: 'c', swapped: false, targetName: 'Modřínovi',
+                source: { kind: 'ged', label: 'rodokmen-jilmovi.ged', persons: 9 },
+                targetFingerprint: 'f1', planId: 'plan-1',
+                rules: {
+                    all: 'precise', kind: { name: 'both', marriage: 'import' }, person: { t3: 'mine' },
+                    value: { 't1|birthDate': 'import', 't2|photo': 'both' },
+                },
+                relations: { 'parents|s3': 'import', 'partner|su4': 'both', 'marriage|su1': 'mine' },
+            },
+        };
+        await saveCurrentMerge(state, 'rodokmen-jilmovi.ged');
+        expect((await getCurrentMerge())?.wizard).toEqual(state.wizard);
+    });
+
+    it('a merge saved before the guide resumes without a place', async () => {
+        await saveCurrentMerge(baseState(), 'old.json');
+        expect((await getCurrentMerge())?.wizard).toBeUndefined();
+    });
+});

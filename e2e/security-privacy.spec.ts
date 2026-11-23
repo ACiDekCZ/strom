@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import {
     openApp, createFirstPerson, card, cardAction, importJsonAsNewTree, focusViaSearch,
-} from './helpers.js';
+    mergeCompare, mergeCreateNewTree, mergePair, mergeShowCopy, mergeTreeInto } from './helpers.js';
 
 /**
  * Security & privacy regressions (review 2026-09-22, K1–K4): markup in data
@@ -227,22 +227,19 @@ test('XSS: the tree-merge compare preview of a foreign file renders names as tex
         const trees = window.Strom.TreeManager.getTrees() as { id: string; name: string }[];
         return [trees.find((t) => t.name === 'Evil A')?.id, trees.find((t) => t.name === 'Evil B')?.id];
     });
-    await page.evaluate((id) => window.Strom.UI.showMergeTreesDialog(id), aId);
-    const pick = page.locator('#merge-trees-modal');
-    await expect(pick).toBeVisible();
-    await page.evaluate((id) => window.Strom.UI.selectMergeTarget(id), bId);
-    await pick.locator('#merge-trees-btn').click();
-
-    const wizard = page.locator('#merge-modal');
-    await expect(wizard).toBeVisible();
+    const wizard = await mergeTreeInto(page, aId!, bId!);
+    await mergeCompare(wizard);
+    // The same file twice is a copy of the tree (13b): the pairs stand behind Show the comparison.
+    await expect(wizard.locator('.merge-s2-copy')).toBeVisible();
+    await mergeShowCopy(wizard);
     await expect(wizard.locator('#merge-match-list .merge-item').first()).toBeVisible();
-    await expect(wizard.locator('#merge-match-list')).toContainText(`Ada${IMG}`);
+    await mergePair(wizard, `Ada${IMG}`);
     await expect(wizard.locator('img[src="x"], svg[onload]')).toHaveCount(0);
     await expectNoXss(page, fired);
 
     // Open the side-by-side compare preview for Ada's match.
-    const adaItem = wizard.locator('#merge-match-list .merge-item', { hasText: 'Ada' }).first();
-    await adaItem.locator('.merge-btn-preview[data-action="compare"]').click();
+    await mergePair(wizard, 'Ada');
+    await wizard.locator('#merge-pair .merge-btn-preview[data-action="compare"]').click();
     const compare = page.locator('.tree-compare-overlay');
     await expect(compare).toBeVisible();
     await expect(compare).toContainText('Ada<img');
@@ -277,15 +274,11 @@ test('XSS: markup in GEDCOM names and places stays text', async ({ page }, testI
     writeFileSync(gedPath, ged);
 
     await page.locator('#gedcom-input').setInputFiles(gedPath);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     await expect(page.locator('#gedcom-stat-persons')).toHaveText('2');
     await expect(result.locator('img[src="x"], svg[onload]')).toHaveCount(0);
-    await result.locator('#gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await expect(importDialog).toBeVisible();
-    await importDialog.getByRole('button', { name: 'Import' }).click();
-    await expect(importDialog).toBeHidden();
+    await mergeCreateNewTree(page, result);
 
     await expect(card(page, 'Gil')).toBeVisible();
     await expect(card(page, 'Gil').locator('.name-text')).toContainText('<img');

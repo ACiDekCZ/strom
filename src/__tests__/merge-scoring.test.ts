@@ -202,11 +202,16 @@ describe('conflict suggestions (suggestResolution + detectConflicts)', () => {
         expect(g!.suggestedReason).toBeUndefined();
     });
 
-    it('a suggested resolution is what the merge applies by default', () => {
+    it('a suggestion is only a hint: the merge keeps the existing value until a person chooses', () => {
         const existing = person('e1', 'Jan', 'Novák', { birthDate: '1880' });
         const incoming = person('i1', 'Jan', 'Novák', { birthDate: '1880-05-15' });
         const conflicts = detectConflicts(existing, incoming);
-        expect(conflicts[0].resolution).toBe('use_incoming');
+        expect(conflicts[0].resolution).toBe('keep_existing');
+        expect(conflicts[0].suggested).toBe('use_incoming');
+        expect(conflicts[0].suggestedReason).toBe('more_precise_date');
+        mergePersonData(existing, incoming, conflicts);
+        expect(existing.birthDate).toBe('1880');
+        conflicts[0].resolution = 'use_incoming';
         mergePersonData(existing, incoming, conflicts);
         expect(existing.birthDate).toBe('1880-05-15');
     });

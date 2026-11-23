@@ -141,30 +141,30 @@ test('a band name lies over a connector line with a halo, beneath the cards: the
     // label) and still beneath every card.
     await page.setViewportSize({ width: 390, height: 844 });
     await openApp(page);
-    await createFirstPerson(page, 'Ludmila', 'Habrova', { gender: 'female' });
+    await createFirstPerson(page, 'Lumíra', 'Kapradinova', { gender: 'female' });
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
-        const ludmila = dm.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Ludmila')!;
+        const ludmila = dm.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Lumíra')!;
         const add = (firstName: string, lastName: string, gender: 'male' | 'female', birthDate: string) =>
             dm.createPerson({ firstName, lastName, gender, birthDate });
-        const hubert = add('Hubert', 'Habr', 'male', '1850');
-        const helena = add('Helena', 'Habrova', 'female', '1852');
+        const hubert = add('Hubomír', 'Kapradin', 'male', '1850');
+        const helena = add('Heliodora', 'Kapradinova', 'female', '1852');
         const top = dm.createPartnership(hubert.id, helena.id);
         dm.addParentChild(hubert.id, ludmila.id, top.id);
         dm.addParentChild(helena.id, ludmila.id, top.id);
-        const petr = add('Petr', 'Buk', 'male', '1878');
+        const petr = add('Petr', 'Šiškovec', 'male', '1878');
         const marriage = dm.createPartnership(petr.id, ludmila.id);
         for (const [first, gender, born] of [['Pavel', 'male', '1902'], ['Pavla', 'female', '1905']] as const) {
-            const kid = add(first, 'Buk', gender, born);
+            const kid = add(first, 'Šiškovec', gender, born);
             dm.addParentChild(petr.id, kid.id, marriage.id);
             dm.addParentChild(ludmila.id, kid.id, marriage.id);
         }
-        const sabina = add('Sabina', 'Habrova', 'female', '1899');
+        const sabina = add('Sabinka', 'Kapradinova', 'female', '1899');
         dm.addParentChild(ludmila.id, sabina.id);
         dm.ensureSingleParentFamilies();
         window.Strom.TreeRenderer.setFocus(sabina.id);
     });
-    await expect(card(page, 'Sabina')).toBeVisible();
+    await expect(card(page, 'Sabinka')).toBeVisible();
     await expect(card(page, 'Pavla')).toBeVisible();
     await page.evaluate(() => window.Strom.ZoomPan.fitToScreen());
     // The names brighten again once the view stops moving (150 ms after the jump).
@@ -177,13 +177,13 @@ test('a band name lies over a connector line with a halo, beneath the cards: the
             const r = el.getBoundingClientRect();
             return r.left + r.width / 2;
         };
-        const a = centreX('Ludmila'), b = centreX('Sabina');
+        const a = centreX('Lumíra'), b = centreX('Sabinka');
         const lo = Math.min(a, b), hi = Math.max(a, b);
-        // The sideways stretch of the line to Sabina.
+        // The sideways stretch of the line to Sabinka.
         const seg = Array.from(document.querySelectorAll('#tree-lines line:not(.gen-guide-line)'))
             .map(l => l.getBoundingClientRect())
             .find(r => r.height < 1 && Math.abs(r.left - lo) < 2 && Math.abs(r.right - hi) < 2);
-        if (!seg) return { error: 'no sideways line between Ludmila and Sabina' };
+        if (!seg) return { error: 'no sideways line between Lumíra and Sabinka' };
         // The band name lying on it.
         const label = Array.from(document.querySelectorAll('#gen-labels .gen-label'))
             .filter(el => (el as HTMLElement).style.display !== 'none')

@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, seedSetting, cardBoxesMatchLayout } from './helpers.js';
+import { openApp, card, seedSetting, cardBoxesMatchLayout, mergeCreateNewTree } from './helpers.js';
 
 /**
  * The "Custom" card's labels style, the years under the name, a long name in
@@ -47,8 +47,7 @@ async function setup(page: Page, fields: Record<string, unknown> | null, width =
     if (fields) await seedSetting(page, 'cardFields', fields);
     await openApp(page);
     await dropFile(page, ged(childName));
-    await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
-    await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+    await mergeCreateNewTree(page, page.locator('#merge-modal'));
     await expect(card(page, (childName ?? 'Anna').split(' ')[0])).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.body.dataset.cardDensity)).toBe('custom');
     await page.evaluate(() => document.fonts.ready);
@@ -438,8 +437,7 @@ test.describe('"+1" after the marriage\'s place (U02)', () => {
             await seedSetting(page, 'cardFields', { style, on: ['birth', 'marriage'], place: ['birth', 'marriage'], lines: 2 });
             await openApp(page);
             await dropFile(page, twice());
-            await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
-            await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+            await mergeCreateNewTree(page, page.locator('#merge-modal'));
             await expect(card(page, 'Jan')).toBeVisible();
             await page.evaluate(() => {
                 const jan = window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!;

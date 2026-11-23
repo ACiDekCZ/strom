@@ -55,6 +55,7 @@ import { sourceTranslation } from './source-translation.js';
 import { sourcePlaceLine } from './source-location.js';
 import { SharedWithLine, sharedIndexOf, sharedWithLine, sharedWithLineHtml } from './shared-with-line.js';
 import { type DerivedParticipation, derivedParticipations, derivedRoleLabel, derivedRoleWord, derivedEventWord } from './derived-participations.js';
+import { cleanEmails } from './person-contact.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
 
@@ -2045,10 +2046,20 @@ function storyHtml(c: Ctx): string {
 
 function notesHtml(c: Ctx): string {
     const notes = c.person.notes?.trim();
-    if (!notes) return '';
-    const stripped = stripResearchIds(notes);
-    stripped.ids.forEach(id => c.ids.add(id));
-    return section('notes', c.P.sec.notes, `<p class="pp-notes-text">${esc(stripped.text)}</p>`);
+    // The person's contact (spec 134 K0.10): in the app's window only, never in a page a file carries.
+    const emails = c.app ? cleanEmails(c.person.emails) ?? [] : [];
+    if (!notes && emails.length === 0) return '';
+    let body = '';
+    if (notes) {
+        const stripped = stripResearchIds(notes);
+        stripped.ids.forEach(id => c.ids.add(id));
+        body += `<p class="pp-notes-text">${esc(stripped.text)}</p>`;
+    }
+    if (emails.length > 0) {
+        const links = emails.map(e => `<a href="${esc(`mailto:${encodeURIComponent(e).replace(/%40/g, '@')}`)}">${esc(e)}</a>`);
+        body += `<p class="pp-contact">${esc(c.S.labels.emails)}: ${links.join(', ')}</p>`;
+    }
+    return section('notes', c.P.sec.notes, body);
 }
 
 // ── Timeline ──

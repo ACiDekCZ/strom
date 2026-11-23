@@ -515,3 +515,291 @@ export async function setFollowMode(page: Page, mode: 'switch' | 'mark' | 'off')
     await page.locator(`.sat-follow-menu [role="menuitemradio"][data-mode="${mode}"]`).click();
     await expect(page.locator('.sat-follow')).toHaveAttribute('data-mode', mode);
 }
+
+// ---------------------------------------------------------------------------
+// The import guide (spec 134): steps, counts and the write of part A.
+
+/** The step the import guide stands on (its `aria-current` item in the step list). */
+export function mergeCurrentStep(wizard: Locator): Locator {
+    return wizard.locator('#merge-progress [aria-current="step"]');
+}
+
+/** One of the guide's four counts (joined, added = new, skipped = not added, pending = to decide). */
+export function mergeCount(wizard: Locator, kind: 'joined' | 'added' | 'skipped' | 'pending'): Locator {
+    return wizard.locator(`#merge-counts [data-count="${kind}"] .merge-stat-value`);
+}
+
+/** Step 1 → the primary button compares: the guide stands on step 2 with the list of pairs. */
+export async function mergeCompare(wizard: Locator): Promise<void> {
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+    await wizard.locator('#merge-next').click();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
+}
+
+/** Step 2's groups: Maybe the same, The same (score 80+), New. */
+export type MergeGroup = 'maybe' | 'same' | 'new';
+
+/** A row of step 2's list (the shown group only). */
+export function mergeRow(wizard: Locator, text: string | RegExp): Locator {
+    return wizard.locator('#merge-match-list .merge-item').filter({ hasText: text });
+}
+
+/**
+ * An import that is a copy of its tree (13b: everyone joined, the write would
+ * change nothing in the chosen scope) shows a sentence in step 2 instead of
+ * the list: Show the comparison brings the list.
+ */
+export async function mergeShowCopy(wizard: Locator): Promise<void> {
+    const show = wizard.locator('.merge-s2-show-copy');
+    if (!await show.isVisible()) return;
+    await show.click();
+    await expect(wizard.locator('#merge-match-list')).toBeAttached();
+}
+
+/**
+ * Step 2's list of pairs: past the sentence of a copy of the tree (13b), and on
+ * a phone (and a phone held sideways), where the list is a sheet over the
+ * pair, opened by "Pair i of n ▾".
+ */
+export async function mergeOpenList(wizard: Locator): Promise<void> {
+    await mergeShowCopy(wizard);
+    if (await wizard.locator('#merge-match-list').isVisible()) return;
+    const open = wizard.locator('.merge-pair-open');
+    await open.click();
+    await expect(open).toHaveAttribute('aria-expanded', 'true');
+    await expect(wizard.locator('#merge-match-list')).toBeVisible();
+}
+
+/** Show a group of step 2 (its tab). */
+export async function mergeGroup(wizard: Locator, group: MergeGroup): Promise<void> {
+    await mergeOpenList(wizard);
+    const tab = wizard.locator(`.merge-tab[data-group="${group}"]`);
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+}
+
+/**
+ * Choose the pair (or new person) whose row says `text` in step 2, in
+ * whichever group it stands (`group` to look in one only): the pair shows on
+ * the right. Returns the chosen row.
+ */
+export async function mergePair(wizard: Locator, text: string | RegExp, group?: MergeGroup): Promise<Locator> {
+    const groups: MergeGroup[] = group ? [group] : ['maybe', 'same', 'new'];
+    await mergeOpenList(wizard);
+    for (const g of groups) {
+        const tab = wizard.locator(`.merge-tab[data-group="${g}"]`);
+        if (await tab.getAttribute('aria-selected') !== 'true') await mergeGroup(wizard, g);
+        const row = mergeRow(wizard, text);
+        if (await row.count() > 0) {
+            await row.first().click();
+            await expect(mergeRow(wizard, text).first()).toHaveAttribute('aria-selected', 'true');
+            await expect(wizard.locator('#merge-pair')).toBeVisible();
+            return mergeRow(wizard, text).first();
+        }
+    }
+    throw new Error(`No pair "${String(text)}" in step 2`);
+}
+
+/**
+ * Every pair of step 2 still to decide (a row with a person of the tree on
+ * its other side, in Maybe the same or The same) joined, one by one: the
+ * pending count ends at 0.
+ */
+export async function mergeJoinPending(wizard: Locator): Promise<void> {
+    for (const g of ['maybe', 'same'] as MergeGroup[]) {
+        await mergeGroup(wizard, g);
+        const open = wizard.locator('#merge-match-list .merge-item[data-fate="pending"]').filter({ has: wizard.page().locator('.merge-item-other') });
+        for (let n = await open.count(); n > 0; n--) {
+            await open.first().click();
+            await wizard.locator('#merge-pair .merge-dec[data-dec="same"]').click();
+            await expect(open).toHaveCount(n - 1);
+        }
+    }
+    await expect(mergeCount(wizard, 'pending')).toHaveText('0');
+}
+
+/** A decision on the pair whose row says `text`: same, new, another person (its dialog opens) or not added. */
+export async function mergeDecide(wizard: Locator, text: string | RegExp, decision: 'same' | 'new' | 'other' | 'skip', group?: MergeGroup): Promise<void> {
+    await mergePair(wizard, text, group);
+    await wizard.locator(`#merge-pair .merge-dec[data-dec="${decision}"]`).click();
+}
+
+/**
+ * On to step 5 (What will happen; step 3 as it is, step 4 passed over)
+ * and press its primary button. Where to write: a new tree "{target} +
+ * {source}" without asking its name (default), or the tree itself.
+ */
+export async function mergeWrite(wizard: Locator, into: 'tree' | 'new' = 'new'): Promise<void> {
+    await mergeToStep5(wizard);
+    // Where to write (K6.3), shown when the import goes to a tree.
+    const seg = wizard.locator(`.merge-s5-into [data-into="${into}"]`);
+    if (await seg.isVisible()) {
+        await seg.click();
+        await expect(seg).toHaveAttribute('aria-checked', 'true');
+    }
+    await expect(wizard.locator('#merge-next')).toBeEnabled();
+    await wizard.locator('#merge-next').click();
+}
+
+/**
+ * Step 3's unlinked groups still to decide are added unlinked (§6), one by
+ * one in their tab; nothing when there are none.
+ */
+export async function mergeGroupsLoose(wizard: Locator): Promise<void> {
+    const tab = wizard.locator('#merge-s3-tab-groups');
+    if (!await tab.isVisible() || await wizard.locator('.merge-s3-undecided').isHidden()) return;
+    await tab.click();
+    const open = wizard.locator('#merge-s3-groups .merge-s3-grow:not(.is-decided)');
+    for (let n = await open.count(); n > 0; n--) {
+        await open.first().locator('[data-decide="loose"]').click();
+        await expect(open).toHaveCount(n - 1);
+    }
+    await expect(wizard.locator('.merge-s3-undecided')).toBeHidden();
+}
+
+/**
+ * On through the guide's steps (step 3 Whom to add as it is, its unlinked groups added unlinked, the steps
+ * passed over skipped) until step 5 What will happen.
+ */
+export async function mergeToStep5(wizard: Locator): Promise<void> {
+    const current = mergeCurrentStep(wizard);
+    for (let i = 0; i < 4 && await current.getAttribute('data-step') !== '5'; i++) {
+        const was = await current.getAttribute('data-step');
+        if (was === '3') await mergeGroupsLoose(wizard);
+        await wizard.locator('#merge-next').click();
+        await expect(current).not.toHaveAttribute('data-step', was ?? '');
+    }
+    await expect(current).toHaveAttribute('data-step', '5');
+}
+
+/**
+ * From step 2 or 3 of the guide to step 4 (Who is right), the unlinked
+ * groups of step 3 added unlinked on the way.
+ */
+export async function mergeToStep4(wizard: Locator): Promise<void> {
+    const current = mergeCurrentStep(wizard);
+    for (let i = 0; i < 3 && await current.getAttribute('data-step') !== '4'; i++) {
+        const was = await current.getAttribute('data-step');
+        if (was === '3') await mergeGroupsLoose(wizard);
+        await wizard.locator('#merge-next').click();
+        await expect(current).not.toHaveAttribute('data-step', was ?? '');
+    }
+    await expect(current).toHaveAttribute('data-step', '4');
+}
+
+/**
+ * Step 4 (Who is right), By person: one detail of one person (the tree's
+ * id) taken from the import or kept from the tree by a click on its value.
+ */
+export async function mergePickValue(wizard: Locator, person: string, field: string, pick: 'mine' | 'import'): Promise<void> {
+    const tab = wizard.locator('#merge-s4-tab-persons');
+    if (await tab.getAttribute('aria-selected') !== 'true') await tab.click();
+    const value = wizard.locator(`.merge-s4-row[data-person="${person}"][data-field="${field}"] .merge-s4-v[data-pick="${pick}"]`);
+    await value.click();
+    await expect(value).toHaveAttribute('aria-pressed', 'true');
+}
+
+/**
+ * Choose the guide's scope in step 1 (a: only add new people, b: also fill
+ * what the tree lacks, c: also the differences, d: only update existing
+ * people, §3): from a later step through step 1 and back to that step.
+ */
+export async function mergeSetScope(page: Page, scope: 'a' | 'b' | 'c' | 'd'): Promise<void> {
+    const wizard = page.locator('#merge-modal');
+    const current = mergeCurrentStep(wizard);
+    const was = await current.getAttribute('data-step');
+    if (was !== '1') {
+        await wizard.locator('#merge-progress button.merge-step[data-step="1"]').click();
+        await expect(current).toHaveAttribute('data-step', '1');
+    }
+    const more = wizard.locator('.merge-s1-more');
+    if (await more.isVisible() && (scope === 'c' || scope === 'd')) await more.click();
+    await wizard.locator(`.merge-s1-scope[data-scope="${scope}"]`).click();
+    await expect(wizard.locator(`.merge-s1-scope[data-scope="${scope}"] input`)).toBeChecked();
+    if (was && was !== '1') {
+        await wizard.locator(`#merge-progress button.merge-step[data-step="${was}"]`).click();
+        await expect(current).toHaveAttribute('data-step', was);
+    }
+}
+
+/** Choose the guide's mode in step 1: New tree, Add to a tree, Only compare or Save as JSON (§3). */
+export async function mergeSetMode(wizard: Locator, mode: 'new' | 'add' | 'compare' | 'json'): Promise<void> {
+    const option = wizard.locator(`.merge-s1-modes [data-mode="${mode}"]`);
+    await option.click();
+    await expect(option).toHaveAttribute('aria-checked', 'true');
+}
+
+/**
+ * Manage trees → ⋯ → Merge into another tree… (spec 134 §2, 2c): the guide
+ * with the tree `sourceId` as the import, Add to a tree and the tree
+ * `targetId` chosen in step 1. Resolves with the guide on step 1.
+ */
+export async function mergeTreeInto(page: Page, sourceId: string, targetId: string): Promise<Locator> {
+    await page.evaluate((id) => window.Strom.UI.showMergeTreesDialog(id), sourceId);
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+    await mergeSetMode(wizard, 'add');
+    const tile = wizard.locator(`.merge-s1-target[data-tree="${targetId}"]`);
+    await tile.click();
+    await expect(tile.locator('input')).toBeChecked();
+    return wizard;
+}
+
+/**
+ * The guide on step 1 makes the import a new tree (spec 134 §3): New tree,
+ * on to step 5, its primary creates the tree (named after the file; `name`
+ * renames it afterwards). Resolves once the guide is closed and the new tree
+ * is the open one.
+ */
+export async function mergeCreateNewTree(page: Page, wizard: Locator, name?: string): Promise<string> {
+    const before: string[] = await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { id: string }) => t.id));
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+    await mergeSetMode(wizard, 'new');
+    await wizard.locator('#merge-next').click();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
+    await wizard.locator('#merge-next').click();
+    await expect(wizard).toBeHidden();
+    const id = await page.evaluate((before) =>
+        window.Strom.TreeManager.getTrees().find((t: { id: string }) => !before.includes(t.id))?.id, before);
+    expect(id, 'a new tree').toBeTruthy();
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(id);
+    if (name) {
+        await page.evaluate(({ id, name }) => {
+            window.Strom.TreeManager.renameTree(id as never, name);
+            window.Strom.UI.updateTreeSwitcher();
+        }, { id: id!, name });
+    }
+    return id!;
+}
+
+/**
+ * A GEDCOM file imported as a new tree through the import guide: the file
+ * read, then `mergeCreateNewTree`. `inStep1` runs on step 1 first (the
+ * file's summary is there: images, media, encoding).
+ */
+export async function importGedcomAsNewTree(page: Page, file: string,
+    opts: { name?: string; inStep1?: (wizard: Locator) => Promise<void> } = {}): Promise<string> {
+    await page.locator('#gedcom-input').setInputFiles(file);
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    if (opts.inStep1) await opts.inStep1(wizard);
+    return mergeCreateNewTree(page, wizard, opts.name);
+}
+
+/**
+ * Write (`mergeWrite`) and accept "Switch to the new tree?" after "Merge
+ * complete": resolves with the new tree's id and name once it is the active tree.
+ */
+export async function mergeWriteAndSwitch(page: Page, wizard: Locator): Promise<{ id: string; name: string }> {
+    const before: string[] = await page.evaluate(() => window.Strom.TreeManager.getTrees().map((t: { id: string }) => t.id));
+    await mergeWrite(wizard);
+    await expect(wizard).toBeHidden();
+    await expect(page.locator('#confirm-title')).toHaveText('Merge complete');
+    await page.locator('#confirmation-modal.active #confirm-ok-btn').click();
+    const tree = await page.evaluate((before) =>
+        window.Strom.TreeManager.getTrees().find((t: { id: string }) => !before.includes(t.id)) as { id: string; name: string } | undefined, before);
+    expect(tree, 'a new tree').toBeTruthy();
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(tree!.id);
+    return { id: tree!.id, name: tree!.name };
+}

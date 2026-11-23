@@ -263,6 +263,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         editEvent: (name: string) => `edycja wydarzenia osoby ${name}`,
         removeEvent: (name: string) => `usunięcie wydarzenia osoby ${name}`,
         restoreBackup: 'przywrócenie kopii zapasowej',
+        mergeTrees: 'scalanie drzew',
         addSource: (title: string) => `źródło „${title}”`,
         editSource: (title: string) => `edycja źródła „${title}”`,
         splitSources: (n: number) => `podział lokalizacji ${nPl(n, 'źródła', 'źródeł', 'źródeł')}`,

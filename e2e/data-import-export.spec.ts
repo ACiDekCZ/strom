@@ -2,8 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'fs';
 import {
     openApp, createFirstPerson, card, cardAction, addRelation, fillPerson,
-    exportTreeJson, importJsonAsNewTree, openTreeActions, openTreeStructure,
-} from './helpers.js';
+    exportTreeJson, importJsonAsNewTree, openTreeActions, openTreeStructure, mergeCreateNewTree } from './helpers.js';
 
 /** Build a small couple-with-child tree: Jan + Marie, child Petr. */
 async function buildFamily(page: Page): Promise<void> {
@@ -103,15 +102,10 @@ test('GEDCOM export and re-import through the UI preserves names and relations',
 
     // Import it back as a new tree.
     await page.locator('#gedcom-input').setInputFiles(gedPath);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     await expect(page.locator('#gedcom-stat-persons')).toHaveText('3');
-    await result.locator('#gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await expect(importDialog).toBeVisible();
-    await importDialog.locator('#import-tree-name').fill('From GEDCOM');
-    await importDialog.getByRole('button', { name: 'Import' }).click();
-    await expect(importDialog).toBeHidden();
+    await mergeCreateNewTree(page, result, 'From GEDCOM');
 
     await expect(card(page, 'Jan')).toBeVisible();
     await expect(card(page, 'Marie')).toBeVisible();
@@ -167,7 +161,7 @@ test('garbage GEDCOM import does not crash the app', async ({ page }) => {
     // Not a GEDCOM at all: said by a toast (no element carried it), never an
     // empty tree made of it; the app stays alive and the tree is untouched.
     await expect(page.locator('.toast:not(.toast--progress)')).toContainText('The file cannot be read');
-    await expect(page.locator('#gedcom-result-modal')).toBeHidden();
+    await expect(page.locator('#merge-modal')).toBeHidden();
     await expect(card(page, 'Jan')).toBeVisible();
     expect(await personCount(page)).toBe(1);
 });
@@ -251,7 +245,7 @@ test('GEDCOM import: rich summary + bulk media attach by file name', async ({ pa
     await createFirstPerson(page, 'Seed', 'Person');
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/media-refs.ged');
 
-    const dialog = page.locator('#gedcom-result-modal');
+    const dialog = page.locator('#merge-modal');
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('#gedcom-stat-persons')).toHaveText('2');
     // External media offer is visible and names the count.
@@ -268,11 +262,7 @@ test('GEDCOM import: rich summary + bulk media attach by file name', async ({ pa
     await expect(dialog.locator('#gedcom-stat-photos')).toHaveText('1');
 
     // Import as new tree: the photo really lands on Jan.
-    await dialog.locator('#gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await expect(importDialog).toBeVisible();
-    await importDialog.getByRole('button', { name: 'Import' }).click();
-    await expect(importDialog).toBeHidden();
+    await mergeCreateNewTree(page, dialog);
     const hasPhoto = await page.evaluate(() => {
         const jan = window.Strom.DataManager.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Jan');
         // An image stored with the tree is held as its pool reference (spec 135).
@@ -289,7 +279,7 @@ test('GEDCOM import: photos referenced by URL download directly (MyHeritage)', a
         route.fulfill({ path: 'e2e/fixtures/avatar.png', contentType: 'image/png' }));
 
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-style.ged');
-    const dialog = page.locator('#gedcom-result-modal');
+    const dialog = page.locator('#merge-modal');
     await expect(dialog).toBeVisible();
 
     const downloadBtn = dialog.locator('#gedcom-media-download');
@@ -308,7 +298,7 @@ test('GEDCOM import: photos by URL that cannot be downloaded say so, with their 
     await page.route('https://cdn.mh-test.example/**', route => route.fulfill({ status: 403, body: '' }));
 
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-style.ged');
-    const dialog = page.locator('#gedcom-result-modal');
+    const dialog = page.locator('#merge-modal');
     await expect(dialog).toBeVisible();
     // An earlier change's "Undo" pill on the screen (the seed person's): it must not ride in this message.
     await page.evaluate(() => (window as unknown as { Strom: { UI: { showUndoToast(d: string): void } } }).Strom.UI.showUndoToast('Seed Person added'));
@@ -325,7 +315,7 @@ test('GEDCOM import: photos by URL that cannot be downloaded say so, with their 
     await expect(btn).toBeEnabled();
 });
 
-test('plain GEDCOM import clears stale manager intent; new-tree opens naming dialog', async ({ page }) => {
+test('plain GEDCOM import clears stale manager intent: the guide offers the open tree', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Emil', 'Fisek');
     await page.route('https://cdn.mh-test.example/**', route =>
@@ -337,15 +327,14 @@ test('plain GEDCOM import clears stale manager intent; new-tree opens naming dia
     // Plain path: the main "Import GEDCOM" entry clears that stale intent.
     await page.evaluate(() => window.Strom.UI.startGedcomImportPlain());
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-style.ged');
-    const dialog = page.locator('#gedcom-result-modal');
+    const dialog = page.locator('#merge-modal');
     await expect(dialog).toBeVisible();
     await dialog.locator('#gedcom-media-download').click();
     await expect(page.locator('.toast')).toContainText('1');
 
-    await dialog.locator('#gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await expect(importDialog).toBeVisible();
-    await expect(dialog).toBeHidden();
+    // The guide made it a new tree, not into the open tree (that intent was cleared).
+    await expect(dialog.locator('.merge-s1-modes [data-mode="add"]')).toHaveAttribute('aria-checked', 'true');
+    await mergeCreateNewTree(page, dialog);
 });
 
 test('make a tree from the current view creates a separate tree of the shown people', async ({ page }) => {

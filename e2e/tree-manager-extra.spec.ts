@@ -189,12 +189,12 @@ test('⋯ → Tree: Duplicate / Rename / Tree overview / Merge into / Hide act o
     await expect(overview.locator('.tov-title')).toHaveText('Tree overview: Dvorak');
     await page.evaluate(() => window.Strom.UI.closeTreeOverview());
 
-    // Merge into another tree: the active tree is the source, the others are targets.
+    // Merge into another tree: the import guide with the active tree as the import, the others as targets.
     await treeSubmenu(page, 'Merge into another tree');
-    const mergeDialog = page.locator('#merge-trees-modal');
+    const mergeDialog = page.locator('#merge-modal');
     await expect(mergeDialog).toBeVisible();
-    await expect(mergeDialog.locator('#merge-trees-options')).toContainText('Second (copy)');
-    await expect(mergeDialog.locator('#merge-trees-options')).not.toContainText('Dvorak');
+    await expect(mergeDialog.locator('.merge-s1-targets')).toContainText('Second (copy)');
+    await expect(mergeDialog.locator('.merge-s1-targets')).not.toContainText('Dvorak');
     await page.keyboard.press('Escape');
     await expect(mergeDialog).toBeHidden();
 

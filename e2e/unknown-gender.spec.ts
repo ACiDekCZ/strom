@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'fs';
-import { openApp, seedSetting, personModal, card, cardAction } from './helpers.js';
+import { openApp, seedSetting, personModal, card, cardAction, mergeCreateNewTree } from './helpers.js';
 
 /**
  * U01: a sex the records do not give. The person dialog offers Male | Female
@@ -141,13 +141,9 @@ test('GEDCOM: SEX U imports as Unknown (no guess from the role) and exports as S
     const { writeFileSync } = await import('fs');
     writeFileSync(path, ged);
     await page.locator('#gedcom-input').setInputFiles(path);
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    await result.locator('#gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await expect(importDialog).toBeVisible();
-    await importDialog.getByRole('button', { name: 'Import' }).click();
-    await expect(importDialog).toBeHidden();
+    await mergeCreateNewTree(page, result);
     await expect(card(page, 'Alex')).toHaveClass(/\bunknown\b/);
     // The woman stands right, the person of unknown sex on the free side (left).
     const x = (name: string) => card(page, name).evaluate(el => el.getBoundingClientRect().left);

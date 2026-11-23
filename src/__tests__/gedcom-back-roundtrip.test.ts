@@ -200,22 +200,28 @@ describe('"Back to MyHeritage" gives back what the file brought', () => {
         expect(ged).not.toContain('BF3A1B2C3D4E5F60718293A4B5C6D7EE');
     });
 
-    it('GIVN/SURN come from the name as it is now; e-mail only while its line is in the note', () => {
+    it('GIVN/SURN come from the name as it is now; e-mail only while it is the person\'s contact', () => {
         const data = migrateData(load(MYHERITAGE).data);
         const h = byName(data, 'Hromoslav');
         h.firstName = 'Hromislav';
-        const resi = h.events!.find(e => e.type === 'residence')!;
-        resi.note = undefined;
+        // A RESI of an e-mail alone is the contact, no residence (spec 134 K0.10).
+        expect(h.events?.some(e => e.type === 'residence')).toBeFalsy();
+        expect(h.emails).toEqual(['hromoslav@example.org']);
+        delete h.emails;
         const rec = record(backTo(data), '@I500001@');
         expect(rec).toEqual(expect.arrayContaining(['1 NAME Hromislav /Ozubec/', '2 GIVN Hromislav', '2 SURN Ozubec']));
         expect(rec.some(l => l.includes('EMAIL'))).toBe(false);
     });
 
-    it('another export (Strom’s own file, the research) writes the e-mail as the note line and no GIVN/SURN of its own', () => {
+    it('Strom’s own file writes the contact as RESI / EMAIL; the research gets it only when it keeps contacts', () => {
         const data = migrateData(load(MYHERITAGE).data);
-        const ged = exportToGedcom(data, 'Ozubec', { research: { id: 'r-test' }, origins: true }).content;
-        expect(ged).not.toContain('2 EMAIL');
-        expect(ged).toMatch(/2 NOTE .*hromoslav@@example\.org/);
+        const own = exportToGedcom(data, 'Ozubec').content;
+        expect(own).toContain('1 RESI\n2 EMAIL hromoslav@@example.org\n');
+        expect(own).not.toMatch(/NOTE .*hromoslav@/);
+        const research = exportToGedcom(data, 'Ozubec', { research: { id: 'r-test' }, origins: true }).content;
+        expect(research).not.toContain('hromoslav@');
+        const keeps = exportToGedcom(data, 'Ozubec', { research: { id: 'r-test' }, contacts: true }).content;
+        expect(keeps).toContain('1 RESI\n2 EMAIL hromoslav@@example.org\n');
     });
 });
 
@@ -405,11 +411,17 @@ describe('"Back to MyHeritage": one source record cited at many pages (N-A)', ()
 describe('a tree loaded before e-mail and couples without MARR were kept, merged with the same file again (P-c)', () => {
     it('takes them: "Back to MyHeritage" gives the e-mail and no empty MARR', async () => {
         vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never);
-        const existing = migrateData(load(MYHERITAGE).data);
-        for (const p of Object.values(existing.persons)) for (const ev of p.events ?? []) delete ev.gedcomEmails;
-        for (const ps of Object.values(existing.partnerships)) delete ps.marriageUnrecorded;
+        const loaded = migrateData(load(MYHERITAGE).data);
+        // As an older app kept it: a residence with the e-mail as a line of its note, no record of the EMAIL.
+        const h = byName(loaded, 'Hromoslav');
+        delete h.emails;
+        h.events = [...(h.events ?? []), { id: 'ev_old', type: 'residence', note: 'E-mail: hromoslav@example.org' }];
+        for (const ps of Object.values(loaded.partnerships)) delete ps.marriageUnrecorded;
+        // The load makes the line the contact again (spec 134 K0.10): the e-mail goes back.
+        const existing = migrateData(loaded);
+        expect(byName(existing, 'Hromoslav').events?.some(e => e.id === 'ev_old')).toBeFalsy();
         const before = counts(backTo(existing));
-        expect([before.EMAIL, before.MARR]).toEqual([0, 3]);
+        expect([before.EMAIL, before.MARR]).toEqual([1, 3]);
         const incoming = migrateData(load(MYHERITAGE, { at: '2026-11-09', file: 'family.ged', encoding: 'utf-8' }).data);
         const merged = (await executeMerge(createMergeState(existing, incoming))).mergedData;
         expect(counts(backTo(merged))).toEqual(counts(MYHERITAGE));
@@ -510,12 +522,11 @@ describe('links to media records in a file of another program (1 OBJE @O1@): a p
 describe('an e-mail written right under the person (1 EMAIL, not GEDCOM 5.5.1)', () => {
     const file = MYHERITAGE.replace('1 SEX F\n', '1 SEX F\n1 EMAIL libuna@@example.org\n');
 
-    it('goes into the person\'s note as a labelled line, not counted as left out', () => {
+    it('is the person\'s contact, not a line of the note, not counted as left out', () => {
         const r = load(file);
         expect(r.stats.droppedTagSummary ?? '').not.toContain('EMAIL');
-        const women = Object.values(r.data.persons).filter(p => (p.notes ?? '').includes('E-mail: '));
-        expect(women).toHaveLength(1);
-        expect(women[0].notes!.split('\n')).toContain('E-mail: libuna@example.org');
+        expect(Object.values(r.data.persons).some(p => (p.notes ?? '').includes('E-mail: '))).toBe(false);
+        expect(byName(r.data, 'Libuna').emails).toEqual(['libuna@example.org']);
         // The e-mail under RESI is carried over, never counted.
         expect(load(MYHERITAGE).stats.droppedTagSummary ?? '').not.toContain('EMAIL');
     });

@@ -1,6 +1,6 @@
 import { test, expect, TestInfo } from '@playwright/test';
 import { writeFileSync } from 'fs';
-import { openApp, card } from './helpers.js';
+import { openApp, card, mergeCreateNewTree } from './helpers.js';
 
 /**
  * A woman with two partners (GitHub issue #6), the GEDCOM as the research
@@ -31,13 +31,9 @@ function writeIssueGedcom(testInfo: TestInfo): string {
 test('a child of a woman with two partners: the line leaves the middle between both parents (issue #6)', async ({ page }, testInfo) => {
     await openApp(page);
     await page.locator('#gedcom-input').setInputFiles(writeIssueGedcom(testInfo));
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
-    await result.locator('#gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await expect(importDialog).toBeVisible();
-    await importDialog.getByRole('button', { name: 'Import' }).click();
-    await expect(importDialog).toBeHidden();
+    await mergeCreateNewTree(page, result);
 
     await page.evaluate(async () => {
         const berit = window.Strom.DataManager.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Berit')!;

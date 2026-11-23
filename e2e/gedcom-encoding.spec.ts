@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { join } from 'path';
-import { openApp, createFirstPerson, waitForPersist } from './helpers.js';
+import { openApp, createFirstPerson, waitForPersist, mergeCreateNewTree } from './helpers.js';
 
 /**
  * GEDCOM files from Czech and Polish Windows programs ("1 CHAR ANSI" in
@@ -17,7 +17,7 @@ test('ANSI file in Windows-1250: right names, sample, and another encoding re-re
     await waitForPersist(page, 'Seed');
 
     await page.locator('#gedcom-input').setInputFiles(fixture('ansi-czech.ged'));
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     const row = result.locator('#gedcom-encoding-row');
     await expect(row).toBeVisible();
@@ -35,10 +35,7 @@ test('ANSI file in Windows-1250: right names, sample, and another encoding re-re
     // Back to Central Europe and into a new tree: the stored names are right.
     await select.selectOption('windows-1250');
     await expect(row.locator('#gedcom-encoding-names')).toContainText('Řehoř Kučera');
-    await result.locator('#gedcom-new-tree-btn').click();
-    const confirm = page.locator('#import-tree-modal');
-    await expect(confirm).toBeVisible();
-    await confirm.locator('button.primary').first().click();
+    await mergeCreateNewTree(page, result);
     await expect.poll(() => page.evaluate(async () => {
         const out: string[] = [];
         for (const t of window.Strom.TreeManager.getTrees()) {
@@ -54,7 +51,7 @@ test('ANSI file in Windows-1250: right names, sample, and another encoding re-re
 test('a UTF-8 file has no encoding row', async ({ page }) => {
     await openApp(page);
     await page.locator('#gedcom-input').setInputFiles(fixture('ansi-utf8-czech.ged'));
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible();
     await expect(result.locator('#gedcom-stat-persons')).toHaveText('5');
     await expect(result.locator('#gedcom-encoding-row')).toBeHidden();
@@ -75,7 +72,7 @@ function largeAnsiGed(n: number): Buffer {
 test('another encoding of a large file is read again in parts: the choice locked, the people found under it (C53, §8)', async ({ page }) => {
     await openApp(page);
     await page.locator('#gedcom-input').setInputFiles({ name: 'pernikari.ged', mimeType: 'text/plain', buffer: largeAnsiGed(80000) });
-    const result = page.locator('#gedcom-result-modal');
+    const result = page.locator('#merge-modal');
     await expect(result).toBeVisible({ timeout: 30_000 });
     const select = result.locator('#gedcom-encoding-select');
     await expect(select).toBeVisible();
@@ -86,11 +83,11 @@ test('another encoding of a large file is read again in parts: the choice locked
         const sel = document.getElementById('gedcom-encoding-select')!;
         new MutationObserver(() => {
             if (sel.getAttribute('aria-busy') === 'true') w.__enc.busy = true;
-            for (const el of document.querySelectorAll('#gedcom-result-modal .busy-step')) {
+            for (const el of document.querySelectorAll('#merge-modal .busy-step')) {
                 const t = el.textContent ?? '';
                 if (t && !w.__enc.steps.includes(t)) w.__enc.steps.push(t);
             }
-        }).observe(document.getElementById('gedcom-result-modal')!, { subtree: true, childList: true, characterData: true, attributes: true });
+        }).observe(document.getElementById('merge-modal')!, { subtree: true, childList: true, characterData: true, attributes: true });
         const tick = (): void => { w.__enc.frames++; requestAnimationFrame(tick); };
         requestAnimationFrame(tick);
     });

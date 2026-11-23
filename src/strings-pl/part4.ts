@@ -53,6 +53,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         photoRecrop: 'Edytuj kadr',
         maidenName: 'Nazwisko rodowe',
         refn: 'Numer referencyjny',
+        emails: 'E-mail',
         question: 'Otwarte pytanie',
         // Partnership dates - used based on status
         startDateMarried: 'Data ślubu',
@@ -93,6 +94,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         lastName: 'Nazwisko',
         maidenName: 'Nazwisko z urodzenia',
         refn: 'np. karton archiwalny 12 lub id z innego programu',
+        emails: 'np. imie@example.org, kolejne oddzielone przecinkami',
         question: 'np. czy ktoś wie, kiedy się urodziła?',
         flexDateShort: 'np. 1880',
         flexDate: '15.5.1880 · 5.1880 · 1880 · ok. 1880'
@@ -899,6 +901,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         sumScans: (n: number) => nPl(n, 'skan', 'skany', 'skanów'),
         sumPhoto: 'zdjęcie',
         sumNote: 'notatka',
+        sumEmail: 'e-mail',
         sumNone: 'puste',
     },
 

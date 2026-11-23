@@ -1,6 +1,6 @@
 import { test, expect, Page, TestInfo } from '@playwright/test';
 import { writeFileSync } from 'fs';
-import { openApp, card } from './helpers.js';
+import { openApp, card, importGedcomAsNewTree } from './helpers.js';
 
 /**
  * The reliability pill at the wedding and the divorce in the relationships
@@ -30,11 +30,7 @@ function ged(testInfo: TestInfo, research: boolean): string {
 }
 
 async function importFromProgram(page: Page, testInfo: TestInfo): Promise<void> {
-    await page.locator('#gedcom-input').setInputFiles(ged(testInfo, false));
-    await page.locator('#gedcom-result-modal #gedcom-new-tree-btn').click();
-    const importDialog = page.locator('#import-tree-modal');
-    await importDialog.locator('#import-tree-name').fill('Kvapilík');
-    await importDialog.getByRole('button', { name: 'Import' }).click();
+    await importGedcomAsNewTree(page, ged(testInfo, false));
     const next = page.locator('#import-next-card');
     await expect(next).toBeVisible();
     await next.locator('.import-next-close').click();

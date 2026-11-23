@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, seedSetting, openTreeActions } from './helpers.js';
+import { openApp, card, seedSetting, openTreeActions, mergeCreateNewTree } from './helpers.js';
 
 /**
  * The person card's life timeline after the 3.10 tester round: a divorce as
@@ -35,8 +35,7 @@ async function dropFile(page: Page, content: string): Promise<void> {
 
 async function importTree(page: Page): Promise<void> {
     await dropFile(page, ged());
-    await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
-    await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+    await mergeCreateNewTree(page, page.locator('#merge-modal'));
     await expect(card(page, 'Jan')).toBeVisible();
 }
 
@@ -360,8 +359,7 @@ async function setupMany(page: Page, width: number, height: number): Promise<voi
     await page.setViewportSize({ width, height });
     await openApp(page);
     await dropFile(page, manyPlacesGed());
-    await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
-    await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+    await mergeCreateNewTree(page, page.locator('#merge-modal'));
     await expect(card(page, 'Jan')).toBeVisible();
 }
 

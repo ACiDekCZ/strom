@@ -4,6 +4,7 @@
  */
 
 import { earlierAddedAt } from '../person-lists-data.js';
+import { addEmails, noteWithoutEmailLines } from '../person-contact.js';
 import { rewriteStorySources } from '../story-sources.js';
 import { remapCitations, unionCitations } from '../citation-quality.js';
 import {
@@ -25,7 +26,7 @@ import {
     ImportRecord,
     PortraitSource,
 } from '../types.js';
-import { generateLifeEventId, generatePersonId, generatePartnershipId } from '../ids.js';
+import { generateLifeEventId, generatePersonId, generatePartnershipId, generateSourceId } from '../ids.js';
 import { partnershipParticipants, PERSON_CITATION_FIELDS, PARTNERSHIP_CITATION_FIELDS, isGender, gendersCompatible, mergedPrimaryName } from '../model-values.js';
 import { allMedia, findMedia, personMedia, putMedia, samePlace } from '../media.js';
 import { dropDanglingPortraitSources } from '../photo.js';
@@ -42,13 +43,15 @@ import {
     IdMapping,
     FieldConflict,
     PartnershipConflict,
-    PartnershipConflictField
+    PartnershipConflictField,
+    MergeTrace
 } from './types.js';
 import { StorageManager } from '../storage.js';
 import { mergeNoteText } from './notes.js';
 import { censusTypeText, isLegacyCensus } from '../events.js';
 import { sourcePlaceKey } from '../source-location.js';
 import { sameFileRecord } from './id-match.js';
+import { checkMergeResult, isAncestorOrSelf } from './merge-check.js';
 import { MARRIAGE_EVENT_ID, allShareCopies, joinSameShareCopies, shareIdMaker, tidyShares, treeShareIds } from '../shared-events.js';
 
 // ==================== BACKUP ====================
@@ -110,6 +113,30 @@ export function existingTargetOf(state: MergeState, incomingId: PersonId): Perso
     const match = state.matches.find(m => m.incomingId === incomingId);
     if (match && isEffectivelyConfirmed(state, match)) return match.existingId;
     return undefined;
+}
+
+/**
+ * The incoming persons the merge adds as NEW persons under the current
+ * decisions, each once: a match the person rejected or left undecided below
+ * AUTO_CONFIRM_SCORE (the dialog promises "a separate person" for those), and
+ * every person without a match — except one skipped or merged by hand. In
+ * "update existing only" mode nothing is added. The one rule for both the
+ * executor and the "will add" count.
+ */
+export function incomingAddedAsNew(state: MergeState): PersonId[] {
+    if (state.updateOnly) return [];
+    const out = new Set<PersonId>();
+    const added = (id: PersonId): boolean => {
+        const type = state.decisions.get(id)?.type;
+        return type !== 'skip' && type !== 'manual_match';
+    };
+    for (const match of state.matches) {
+        if (!isEffectivelyConfirmed(state, match) && added(match.incomingId)) out.add(match.incomingId);
+    }
+    for (const id of state.unmatchedIncoming) {
+        if (added(id)) out.add(id);
+    }
+    return [...out];
 }
 
 const PARTNERSHIP_CONFLICT_FIELDS: readonly PartnershipConflictField[] = ['status', 'startDate', 'startPlace', 'endDate'];
@@ -380,8 +407,12 @@ const BLANK_UNION_FIELDS = new Set(['id', 'person1Id', 'person2Id', 'childIds', 
 /**
  * Execute the merge operation
  */
-export async function executeMerge(state: MergeState): Promise<MergeResult> {
+export async function executeMerge(givenState: MergeState): Promise<MergeResult> {
     try {
+        // A source of the import under an id the tree uses for another source
+        // comes as a source of its own (spec 134 K0.3): the tree's is never replaced.
+        const { state, renamedSources } = withOwnSourceIds(givenState);
+
         // Create backup
         const backupKey = await createMergeBackup(state.existingData);
 
@@ -422,6 +453,8 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 }
                 continue;
             }
+            // The tree's own source (the same one under the same id) keeps its marks.
+            if (state.existingData.sources?.[id]) continue;
             const src = mergedData.sources?.[id];
             if (src?.importId) src.importId = importMap.get(src.importId) ?? src.importId;
             if (src) remapSourceImports(src, importMap);
@@ -474,6 +507,14 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 
         // When this merge brings people into the tree (spec 084 §8).
         const mergedAt = new Date().toISOString();
+        /** A merged person of the tree takes the import's details (see MergeState.joinedDetails). */
+        const takeDetails = state.joinedDetails !== 'none';
+        const detailOptions = { notesOnlyWhenEmpty: state.joinedDetails === 'empty' };
+        const joinDetails = (existingPerson: Person, incoming: Person, conflicts: FieldConflict[]): void => {
+            if (!takeDetails) return;
+            const asked = state.joinedDetails === 'empty' ? conflicts.map(c => ({ ...c, resolution: 'keep_existing' as const })) : conflicts;
+            mergePersonData(existingPerson, shared(incoming), asked, mapping.persons, state.incomingData.persons, detailOptions);
+        };
         /** Incoming persons whose data came into the tree (merged or added): their files come along. */
         const carriedPersons = new Set<PersonId>();
         // Process confirmed matches - merge person data
@@ -484,23 +525,39 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 const existingPerson = mergedData.persons[match.existingId];
                 if (existingPerson) {
                     // Merge data according to conflict resolutions
-                    mergePersonData(existingPerson, shared(match.incomingPerson), match.conflicts, mapping.persons, state.incomingData.persons);
+                    joinDetails(existingPerson, match.incomingPerson, match.conflicts);
                     carriedPersons.add(match.incomingId);
                     carryMergedImports(existingPerson, state.existingData.persons[match.existingId], match.incomingPerson, importMap);
-                    keepEarlierAddedAt(existingPerson, match.incomingPerson);
+                    if (takeDetails) keepEarlierAddedAt(existingPerson, match.incomingPerson);
                     mergedCount++;
                 }
             } else if (decision?.type === 'manual_match') {
                 const existingPerson = mergedData.persons[decision.targetId];
                 if (existingPerson) {
-                    mergePersonData(existingPerson, shared(match.incomingPerson), match.conflicts, mapping.persons, state.incomingData.persons);
+                    joinDetails(existingPerson, match.incomingPerson, match.conflicts);
                     carriedPersons.add(match.incomingId);
                     carryMergedImports(existingPerson, state.existingData.persons[decision.targetId], match.incomingPerson, importMap);
-                    keepEarlierAddedAt(existingPerson, match.incomingPerson);
+                    if (takeDetails) keepEarlierAddedAt(existingPerson, match.incomingPerson);
                     mergedCount++;
                 }
             }
             // Rejected matches are added as new persons below
+        }
+        // A person merged by hand without an offered match (buildIdMapping
+        // already sends its links to the chosen person): its data and files
+        // come along like a match's. Without a conflict asked about, only
+        // what the tree lacks is filled in.
+        for (const incomingId of state.unmatchedIncoming) {
+            const decision = state.decisions.get(incomingId);
+            if (decision?.type !== 'manual_match') continue;
+            const existingPerson = mergedData.persons[decision.targetId];
+            const incoming = state.incomingData.persons[incomingId];
+            if (!existingPerson || !incoming) continue;
+            joinDetails(existingPerson, incoming, state.conflictResolutions.get(incomingId) ?? []);
+            carriedPersons.add(incomingId);
+            carryMergedImports(existingPerson, state.existingData.persons[decision.targetId], incoming, importMap);
+            if (takeDetails) keepEarlierAddedAt(existingPerson, incoming);
+            mergedCount++;
         }
         // A "?" of a family the tree already has (standInsOfKnownFamilies) is
         // the tree's "?": it takes what the file says of it (its ids).
@@ -510,14 +567,12 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             const existingId = mapping.persons.get(incomingId)!;
             const existingPerson = mergedData.persons[existingId];
             if (!existingPerson?.isPlaceholder) continue;
-            mergePersonData(existingPerson, shared(incoming), [], mapping.persons, state.incomingData.persons);
+            joinDetails(existingPerson, incoming, []);
             carriedPersons.add(incomingId);
             carryMergedImports(existingPerson, state.existingData.persons[existingId], incoming, importMap);
         }
 
-        // Which incoming persons get added as NEW persons.
-        //
-        // Two independent gates decide this:
+        // Which incoming persons get added as NEW persons (incomingAddedAsNew):
         //  - updateOnly (Primitive 1): the whole-import toggle. When on, nothing
         //    is added — only matched persons are enriched. The placeholder block
         //    and the partnership loop below key off `toAdd`/added persons, so an
@@ -526,19 +581,9 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         //    enforceRelationshipSymmetry to sweep up).
         //  - per-match skip (Primitive 2): "don't bring this person at all".
         //    A skipped incoming person is neither merged nor added, regardless of
-        //    updateOnly. rejected still means "import as a NEW separate person".
-        const toAdd: PersonId[] = state.updateOnly ? [] : [
-            ...state.matches
-                .filter(m => {
-                    const decision = state.decisions.get(m.incomingId);
-                    return decision?.type === 'reject';
-                })
-                .map(m => m.incomingId),
-            ...state.unmatchedIncoming.filter(id => {
-                const decision = state.decisions.get(id);
-                return decision?.type !== 'manual_match' && decision?.type !== 'skip';
-            })
-        ];
+        //    updateOnly. A rejected match, and an undecided one below the
+        //    auto-confirm score, is imported as a NEW separate person.
+        const toAdd: PersonId[] = incomingAddedAsNew(state);
 
         for (const incomingId of toAdd) {
             const incoming = state.incomingData.persons[incomingId] && shared(state.incomingData.persons[incomingId]);
@@ -638,6 +683,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                     }
                     adoptIncomingMarks(newPerson, mapping.persons, importMap);
                     mergedData.persons[newId] = newPerson;
+                    carriedPersons.add(pid);
                 }
             }
         }
@@ -666,15 +712,19 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 
             if (!person1Id || !person2Id) continue;
             if (!mergedData.persons[person1Id] || !mergedData.persons[person2Id]) continue;
+            // A couple a conflict of relations kept the tree's version without (spec 134 K5.5).
+            if (state.relations?.leftUnions?.includes(pshipId)) continue;
 
             // Check if partnership already exists between these persons
             const existingPartnership = findExistingPartnership(mergedData, person1Id, person2Id);
 
             if (existingPartnership) {
                 unionTarget.set(pshipId, existingPartnership.id);
-                // Merge partnership data
-                mergePartnershipData(existingPartnership, partnership, mapping.persons, state.incomingData.persons);
-                const wins = partnershipWins.get(pshipId);
+                // Merge partnership data (none of it when the tree's details stay
+                // as they are, the couple's children from the import all the same)
+                if (takeDetails) mergePartnershipData(existingPartnership, partnership, mapping.persons, state.incomingData.persons);
+                else joinUnionChildren(existingPartnership, partnership, mapping.persons);
+                const wins = takeDetails ? partnershipWins.get(pshipId) : undefined;
                 if (wins && wins.existingId === existingPartnership.id) {
                     for (const field of wins.fields) {
                         if (field === 'status') existingPartnership.status = partnership.status;
@@ -682,7 +732,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                     }
                 }
                 carryMergedImports(existingPartnership, state.existingData.partnerships[existingPartnership.id], partnership, importMap);
-                takeUnrecordedMarriage(existingPartnership, state.existingData.partnerships[existingPartnership.id], partnership,
+                if (takeDetails) takeUnrecordedMarriage(existingPartnership, state.existingData.partnerships[existingPartnership.id], partnership,
                     state.existingData.imports, state.incomingData.imports);
             } else {
                 // Create new partnership with remapped IDs. Cloned wholesale so
@@ -728,6 +778,15 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             }
         }
 
+        // A person new to the tree lists only the couples that came along: a
+        // couple whose other partner was skipped or left out is not there, and
+        // its id would point at nothing (spec 134 K0.2). The tree's own
+        // persons are not touched.
+        for (const person of Object.values(mergedData.persons)) {
+            if (state.existingData.persons[person.id]) continue;
+            person.partnerships = person.partnerships.filter(id => !!mergedData.partnerships[id]);
+        }
+
         // The incoming tree's files at the persons, couples and sources that came along (data v24).
         carryIncomingMedia(mergedData, state.incomingData, mapping.persons, carriedPersons, unionTarget, sourceRemap);
         // The original of each portrait that came from the incoming tree (spec 107).
@@ -736,8 +795,25 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         // Own godparent / witness events of the incoming tree point at the merged couples and events.
         resolveIncomingRoleAt(mergedData, state.incomingData, unionTarget);
 
+        // What of the tree the import's version replaces (spec 134 K5.5),
+        // before the import's links find their place.
+        if (state.relations) dropTreeRelations(mergedData, state.relations);
+
         // Update parent-child relationships for merged persons
         updateRelationships(mergedData, state, mapping);
+        // A merged child's link to a parent that came along, when the union
+        // it came through stayed out (the other parent skipped or left).
+        carryLoneParentLinks(mergedData, state, mapping.persons);
+        // The import's parent links a conflict of relations kept out (K5.5).
+        for (const key of state.relations?.leftLinks ?? []) {
+            const [c, p] = key.split('<') as [PersonId, PersonId];
+            const child = mergedData.persons[mapping.persons.get(c) ?? ('' as PersonId)];
+            const parentId = mapping.persons.get(p);
+            if (!child || !parentId || state.existingData.persons[child.id]?.parentIds.includes(parentId)) continue;
+            child.parentIds = child.parentIds.filter(id => id !== parentId);
+            const parent = mergedData.persons[parentId];
+            if (parent) parent.childIds = parent.childIds.filter(id => id !== child.id);
+        }
 
         // Guarantee childIds/parentIds are symmetric and partnership children
         // agree with parentIds — no dangling or one-sided links survive.
@@ -786,9 +862,30 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             console.warn('Merge validation warnings:', validationErrors);
         }
 
+        // The check before saving (spec 134 K0.2): nothing of either tree is
+        // lost and no reference points at nothing. When it fails nothing is
+        // saved and the problems say why.
+        // Sources by the ids the merge used and, for a renamed one, by its id in the given import.
+        const sourceTrace = new Map(sourceRemap);
+        for (const [was, now] of renamedSources) sourceTrace.set(was, sourceRemap.get(now) ?? now);
+        const trace: MergeTrace = { persons: mapping.persons, partnerships: unionTarget, sources: sourceTrace };
+        const check = checkMergeResult(state, { mergedData, trace });
+        if (!check.ok) {
+            console.warn('Merge check failed:', check.problems);
+            return {
+                success: false,
+                mergedData: state.existingData,
+                stats: { merged: 0, added: 0, skipped: 0, partnerships: 0 },
+                errors: check.problems.map(p => `${p.kind}: ${p.count}`),
+                check,
+            };
+        }
+
         return {
             success: true,
             mergedData,
+            trace,
+            check,
             stats: {
                 merged: mergedCount,
                 added: addedCount,
@@ -804,7 +901,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         console.error('Merge execution failed:', error);
         return {
             success: false,
-            mergedData: state.existingData,
+            mergedData: givenState.existingData,
             stats: { merged: 0, added: 0, skipped: 0, partnerships: 0 },
             errors: [String(error)]
         };
@@ -1082,6 +1179,24 @@ function lineValueTwin(byContent: ReadonlyMap<string, LifeEvent>, event: LifeEve
 }
 
 /**
+ * The tree's event an incoming one with the e-mails its file wrote under it
+ * (LifeEvent.gedcomEmails, data v26: the person's contact, no note line) is
+ * when an older app loaded the file: the same event whose note has a line
+ * "E-mail: x@y" of each of them besides the incoming note, and no record of
+ * the e-mails of its own.
+ */
+function emailTwin(events: readonly LifeEvent[], event: LifeEvent): LifeEvent | undefined {
+    const emails = event.gedcomEmails;
+    if (!emails?.length) return undefined;
+    const key = eventKey(event);
+    return events.find(e => {
+        if (e.type !== event.type || e.gedcomEmails?.length || !e.note) return false;
+        const rest = noteWithoutEmailLines(e.note, emails);
+        return rest !== null && eventKey({ ...e, note: rest }) === key;
+    });
+}
+
+/**
  * The other families the incoming file recorded a person in as a child
  * (Person.alsoChildOf) follow the person into the merged tree, naming the
  * union each family became there; a link to a family that did not come
@@ -1143,10 +1258,54 @@ function sameAttachment(a: Attachment, b: Attachment): boolean {
 }
 
 /**
+ * Whether an incoming source under the id of a tree's source is that source:
+ * the same research number, the same citation, or the same title, repository
+ * and place (not two citations of one file record at another QUAY).
+ */
+function sameSourceUnderOneId(kept: Source, incoming: Source): boolean {
+    if (JSON.stringify(kept) === JSON.stringify(incoming)) return true;
+    if (kept.refn || incoming.refn) return !!kept.refn && kept.refn === incoming.refn;
+    const cite = citationKey(incoming);
+    if (cite && cite === citationKey(kept)) return true;
+    const key = sourceKey(incoming);
+    if (!key || key !== sourceKey(kept)) return false;
+    const otherCitation = !!incoming.originalIds?.length && !!kept.originalIds?.length
+        && incoming.quality !== undefined && kept.quality !== undefined && incoming.quality !== kept.quality;
+    return !otherCitation;
+}
+
+/**
+ * The merge's view of its input with every incoming source that shares an id
+ * with another source of the tree under a new id, its citations, files and
+ * stories in the incoming tree following it. The given state is not changed;
+ * without such a source it is returned as it is.
+ */
+function withOwnSourceIds(state: MergeState): { state: MergeState; renamedSources: Map<string, string> } {
+    const existing = state.existingData.sources ?? {};
+    const renamed = new Map<string, string>();
+    for (const [id, src] of Object.entries(state.incomingData.sources ?? {})) {
+        const kept = existing[id];
+        if (kept && !sameSourceUnderOneId(kept, src)) renamed.set(id, generateSourceId());
+    }
+    if (renamed.size === 0) return { state, renamedSources: renamed };
+    const incomingData = structuredClone(state.incomingData);
+    const before = incomingData.sources!;
+    const sources: Record<string, Source> = {};
+    for (const [id, src] of Object.entries(before)) {
+        const to = renamed.get(id) ?? id;
+        sources[to] = to === id ? src : { ...src, id: to };
+    }
+    incomingData.sources = sources;
+    remapSourceReferences(incomingData, renamed, before);
+    const matches = state.matches.map(m => ({ ...m, incomingPerson: incomingData.persons[m.incomingId] ?? m.incomingPerson }));
+    return { state: { ...state, incomingData, matches }, renamedSources: renamed };
+}
+
+/**
  * Add the incoming source catalog to the merged tree. A source whose title,
  * repository and reference match one the tree already has is NOT added; the
- * returned map sends its id to the kept one. Same id = same source (the two
- * trees share an ancestry) — the incoming copy replaces it as before.
+ * returned map sends its id to the kept one. Same id = the same source (the
+ * two trees share an ancestry, see withOwnSourceIds): it joins the tree's.
  */
 function mergeSourceCatalogs(
     mergedData: StromData,
@@ -1187,6 +1346,12 @@ function mergeSourceCatalogs(
             remap.set(id, kept);
             takeCitationQuality(catalog[kept], src, mergedData, incomingImports);
             absorbSourceDetails(catalog[kept], src);
+            continue;
+        }
+        if (catalog[id]) {
+            // The same source under the same id (withOwnSourceIds renamed any
+            // other): it fills in what the tree's lacks, never replaces it.
+            absorbSourceDetails(catalog[id], src);
             continue;
         }
         catalog[id] = structuredClone(src);
@@ -1488,7 +1653,8 @@ export function mergePersonData(
     incoming: Person,
     conflicts: FieldConflict[],
     personIdMap?: Map<PersonId, PersonId>,
-    incomingPersons?: Record<PersonId, Person>
+    incomingPersons?: Record<PersonId, Person>,
+    options: { notesOnlyWhenEmpty?: boolean } = {}
 ): void {
     const marriedBefore = existing.marriedSurname;
     // Merge non-conflicting data (fill in missing values). An unknown sex is
@@ -1541,6 +1707,9 @@ export function mergePersonData(
 
     // Open question / reference number / death-status: fill when missing.
     if (!existing.question && incoming.question) existing.question = incoming.question;
+    // The contact (spec 134 K0.10): the incoming addresses join the existing
+    // ones, each once ("Only empty details": only when the person has none).
+    if (incoming.emails?.length && !(options.notesOnlyWhenEmpty && existing.emails?.length)) addEmails(existing, incoming.emails);
     if (!existing.refn && incoming.refn) {
         existing.refn = incoming.refn;
         if (incoming.refnType) existing.refnType = incoming.refnType;
@@ -1552,7 +1721,8 @@ export function mergePersonData(
     // Notes: keep both. Genealogy notes are cheap to store and expensive to
     // re-research, so the incoming note's parts the existing one does not
     // already say are appended (mergeNoteText) — never the same text twice.
-    const notes = mergeNoteText(existing.notes, incoming.notes);
+    // ("Only empty details": a note only when the person has none.)
+    const notes = options.notesOnlyWhenEmpty && existing.notes?.trim() ? existing.notes : mergeNoteText(existing.notes, incoming.notes);
     if (notes !== existing.notes) existing.notes = notes;
 
     // Apply conflict resolutions
@@ -1638,6 +1808,15 @@ export function mergePersonData(
                 valued.note = event.note;
                 valued.gedcomValue = event.gedcomValue;
                 byContent.set(eventKey(valued), valued);
+            }
+            // A tree loaded before the file's e-mails were the person's contact: its event with
+            // the e-mails as lines of the note is this one, and its lines go (the contact has them).
+            const mailed = !byContent.has(eventKey(event)) ? emailTwin(existing.events, event) : undefined;
+            if (mailed) {
+                byContent.delete(eventKey(mailed));
+                if (event.note) mailed.note = event.note; else delete mailed.note;
+                mailed.gedcomEmails = [...event.gedcomEmails!];
+                byContent.set(eventKey(mailed), mailed);
             }
             const twin = byContent.get(eventKey(event));
             if (twin) {
@@ -1731,6 +1910,18 @@ function findExistingPartnership(
  * partnership conflict dialog (detectPartnershipConflicts) is applied by
  * executeMerge afterwards.
  */
+/**
+ * A child the incoming tree gives a couple both trees know belongs under it,
+ * whatever the scope: the child is a person of the import, not a detail of the
+ * couple (enforceRelationshipSymmetry later keeps only children that list both).
+ */
+function joinUnionChildren(existing: Partnership, incoming: Partnership, personIdMap?: Map<PersonId, PersonId>): void {
+    for (const cid of incoming.childIds) {
+        const mapped = personIdMap ? personIdMap.get(cid) : cid;
+        if (mapped && !existing.childIds.includes(mapped)) existing.childIds.push(mapped);
+    }
+}
+
 export function mergePartnershipData(
     existing: Partnership,
     incoming: Partnership,
@@ -1779,13 +1970,7 @@ export function mergePartnershipData(
         existing.status = incoming.status;
     }
 
-    // Children: a child the incoming tree gives this couple belongs under it
-    // (enforceRelationshipSymmetry later keeps only children that list both).
-    const remapId = (id: PersonId): PersonId | undefined => personIdMap ? personIdMap.get(id) : id;
-    for (const cid of incoming.childIds) {
-        const mapped = remapId(cid);
-        if (mapped && !existing.childIds.includes(mapped)) existing.childIds.push(mapped);
-    }
+    joinUnionChildren(existing, incoming, personIdMap);
 
     // Wedding witnesses: union, one entry per person (or written name) and role.
     if (incoming.participants && incoming.participants.length > 0) {
@@ -1867,8 +2052,16 @@ function enforceRelationshipSymmetry(data: StromData): void {
             list.push(person.id);
         }
     }
+    // The order a person's children already had stays (a hand reorder, a
+    // file's CHIL order); a child new to the person comes after them. Taking
+    // the derived list as it is would reorder every parent's children by the
+    // order the persons are stored in (spec 134 K0.8).
     for (const person of Object.values(persons)) {
-        person.childIds = childrenOf.get(person.id) ?? [];
+        const derived = childrenOf.get(person.id) ?? [];
+        const valid = new Set(derived);
+        const kept = [...new Set(person.childIds.filter(cid => valid.has(cid)))];
+        const keptSet = new Set(kept);
+        person.childIds = [...kept, ...derived.filter(cid => !keptSet.has(cid))];
     }
 
     // A partnership may only list children that acknowledge BOTH partners as
@@ -1881,6 +2074,78 @@ function enforceRelationshipSymmetry(data: StromData): void {
                 && child.parentIds.includes(partnership.person2Id);
         });
         partnership.childIds = [...new Set(kept)];
+    }
+}
+
+/**
+ * Remove what of the tree a conflict of relations replaces with the
+ * import's (spec 134 K5.5 "From the import"): parent links (the child's
+ * couples with that parent no longer list it) and couples (their persons,
+ * children and links stay; the couple's files stay with its two persons,
+ * portraits cut from its photo lose the link).
+ */
+function dropTreeRelations(data: StromData, relations: NonNullable<MergeState['relations']>): void {
+    for (const key of relations.dropLinks ?? []) {
+        const [childId, parentId] = key.split('<') as [PersonId, PersonId];
+        const child = data.persons[childId];
+        const parent = data.persons[parentId];
+        if (!child) continue;
+        child.parentIds = child.parentIds.filter(id => id !== parentId);
+        if (child.parentRelTypes?.[parentId]) {
+            delete child.parentRelTypes[parentId];
+            if (!Object.keys(child.parentRelTypes).length) delete child.parentRelTypes;
+        }
+        if (parent) parent.childIds = parent.childIds.filter(id => id !== childId);
+        for (const u of Object.values(data.partnerships)) {
+            if ((u.person1Id === parentId || u.person2Id === parentId) && u.childIds.includes(childId)) u.childIds = u.childIds.filter(id => id !== childId);
+        }
+    }
+    for (const id of relations.dropUnions ?? []) {
+        const u = data.partnerships[id];
+        if (!u) continue;
+        for (const pid of [u.person1Id, u.person2Id]) {
+            const p = data.persons[pid];
+            if (p) p.partnerships = p.partnerships.filter(x => x !== id);
+            if (p?.photoSource?.partnershipId === id) delete p.photoSource;
+        }
+        for (const att of Object.values(data.media ?? {})) {
+            if (!att.places?.some(pl => 'partnershipId' in pl && pl.partnershipId === id)) continue;
+            const kept = att.places.filter(pl => !('partnershipId' in pl && pl.partnershipId === id));
+            for (const pid of [u.person1Id, u.person2Id]) {
+                if (data.persons[pid] && !kept.some(pl => 'personId' in pl && pl.personId === pid && !('fact' in pl && pl.fact) && !('eventId' in pl && pl.eventId))) kept.push({ personId: pid });
+            }
+            att.places = kept;
+        }
+        delete data.partnerships[id];
+    }
+}
+
+/**
+ * Parent links of the incoming tree between two persons that both came into
+ * the merged tree, which no union brought (its other partner was skipped or
+ * left out): the link comes alone, as it does for an added child. A child
+ * with two parents takes no third, and a link that would make a person its
+ * own ancestor (a hand-picked match into the wrong generation) stays out.
+ */
+function carryLoneParentLinks(
+    mergedData: StromData,
+    state: MergeState,
+    personMap: ReadonlyMap<PersonId, PersonId>,
+): void {
+    for (const [incomingId, incoming] of Object.entries(state.incomingData.persons) as [PersonId, Person][]) {
+        const childId = personMap.get(incomingId);
+        const child = childId ? mergedData.persons[childId] : undefined;
+        if (!child) continue;
+        for (const incomingParent of incoming.parentIds ?? []) {
+            const parentId = personMap.get(incomingParent);
+            const parent = parentId ? mergedData.persons[parentId] : undefined;
+            if (!parent || parent.id === child.id || child.parentIds.includes(parent.id)) continue;
+            // Counted as the tree will hold them: a link to oneself does not stay.
+            if (child.parentIds.filter(id => id !== child.id && mergedData.persons[id]).length >= 2) continue;
+            if (isAncestorOrSelf(mergedData, child.id, parent.id)) continue;
+            child.parentIds.push(parent.id);
+            if (!parent.childIds.includes(child.id)) parent.childIds.push(child.id);
+        }
     }
 }
 

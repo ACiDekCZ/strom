@@ -48,6 +48,7 @@ import { importProgramName } from './import-next.js';
 import { composePage, hasEntryFields } from './source-location.js';
 import { citationMainOf, citationQuality, type CitationHolder } from './citation-quality.js';
 import { citationFact, CitationRef, orderedCitations, recordPagesOf, sourceNumbers } from './citation-order.js';
+import { cleanEmails, emailOfLine } from './person-contact.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
 export interface GedcomExportOptions {
@@ -156,6 +157,13 @@ export interface GedcomExportOptions {
      * its data, as ever.
      */
     mediaRef?: GedcomMediaRef;
+    /**
+     * Write the people's contact (Person.emails) as `1 RESI` / `2 EMAIL`
+     * (spec 134 K0.10). Default: written, except in a file for the research
+     * (`research`): only to one that keeps it (`person.contact`); an older one
+     * would read it as a residence with no place, the app keeps it itself.
+     */
+    contacts?: boolean;
 }
 
 /**
@@ -1119,6 +1127,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // "Back to {prog}" (spec 066 K3.2): the records from that program's files
     // keep their xref where it is safe; every other xref is made around them.
     const back = backToXrefs(data, options.backTo);
+    const writeContacts = options.contacts ?? !options.research;
     /** A person or a family of that program's files ("Back to {prog}"). */
     const isBackRecord = (holder: FactHolder): boolean =>
         (!!holder.importId && back.imports.has(holder.importId)) || (holder.originalIds ?? []).some(e => back.imports.has(e.from));
@@ -1860,6 +1869,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // Life events. OCCU carries its detail as the tag value; the rest use
         // level-2 DATE/PLAC/NOTE. 'custom'/'military' have no dedicated tag and
         // ride on the generic EVEN with a TYPE label, so nothing is dropped.
+        // The contact's addresses written under an event (see below).
+        const contact = writeContacts ? cleanEmails(person.emails) ?? [] : [];
+        const contactWritten = new Set<string>();
         for (const fileEvent of person.events ?? []) {
             // "Back to {prog}": the file's e-mail addresses go back as EMAIL,
             // out of the note while it still has their line (spec 066 K3.1).
@@ -1911,7 +1923,13 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             pushDetails(lines, addressLines ? { ...event, address: undefined } : event);
             if (addressLines) lines.push(...addressLines);
-            for (const email of emails) pushWrapped(lines, 2, 'EMAIL', email);
+            // …and an address of the contact the file wrote under this event, there again (spec 134 K0.10).
+            const contactHere = backEvent ? (fileEvent.gedcomEmails ?? []).filter(e =>
+                contact.includes(e) && !emails.includes(e) && !contactWritten.has(e)) : [];
+            for (const email of [...emails, ...contactHere]) {
+                pushWrapped(lines, 2, 'EMAIL', email);
+                contactWritten.add(email);
+            }
             pushStatus(lines, event.status);
             if (event.note && !eventValueIsOnTag(event.type)) {
                 pushNote(lines, 2, event.note);
@@ -1948,6 +1966,25 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushPlaceMedia(mediaByPerson.get(personId), { personId, eventId: event.id }, 2, 'person');
             pushFactImport(person, `event:${event.id}`);
             pushFactOrigin(person, `event:${event.id}`);
+        }
+
+        // The person's contact (spec 134 K0.10): each e-mail as GEDCOM keeps
+        // it, in an address structure (`1 RESI` / `2 EMAIL`). "Back to {prog}"
+        // writes a `1 EMAIL` its file had under the person as the file did.
+        if (writeContacts) {
+            const asWritten = back.imports.size > 0 && person.gedcomExtra
+                ? person.gedcomExtra.filter(e => back.imports.has(e.from)).flatMap(e => notedStructures(e.lines))
+                    .filter(st => !!emailOfLine(st.lines[0])) : [];
+            for (const email of contact) {
+                if (contactWritten.has(email)) continue;
+                const own = asWritten.find(st => emailOfLine(st.lines[0]) === email);
+                if (own) {
+                    lines.push(...own.lines);
+                    continue;
+                }
+                lines.push('1 RESI');
+                pushWrapped(lines, 2, 'EMAIL', email);
+            }
         }
 
         // Source citations on the person (1 SOUR @Sx@ + 2 PAGE).

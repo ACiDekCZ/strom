@@ -18,7 +18,6 @@ export type {
     MergeState,
     IdMapping,
     MergeResult,
-    MatchFilter,
     MergeStats
 } from './types.js';
 

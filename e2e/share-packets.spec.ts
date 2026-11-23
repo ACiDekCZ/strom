@@ -1,6 +1,6 @@
 import { test, expect, Page, Browser, TestInfo } from '@playwright/test';
 import { readFileSync } from 'fs';
-import { openApp, createFirstPerson, addRelation, card, cardAction, waitForPersist } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card, cardAction, waitForPersist, mergeCompare, mergeGroup } from './helpers.js';
 
 /**
  * Collaboration beyond the basic round trip (share.spec.ts, share-diff.spec.ts):
@@ -257,7 +257,10 @@ test('a returned file opened as the app offers the merge and leaves view mode in
     await expect(reply).toBeHidden();
     const merge = page.locator('#merge-modal');
     await expect(merge).toBeVisible();
-    await expect(merge).toContainText('Strycek');
+    // The guide's comparison: step 2 lists the uncle's addition.
+    await mergeCompare(merge);
+    await mergeGroup(merge, 'new');
+    await expect(merge.locator('#merge-match-list')).toContainText('Strycek');
     // Out of view mode, onto my own stored tree, no extra tree created.
     await expect(page.locator('body')).not.toHaveClass(/view-mode/);
     expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(ownTreeId);

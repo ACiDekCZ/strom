@@ -103,7 +103,7 @@ test.describe('open a research', () => {
     test('a plain GEDCOM dropped in goes to the normal import dialog', async ({ page }) => {
         await openApp(page);
         await dropFile(page, 'family.ged', PLAIN_GED);
-        await expect(page.locator('#gedcom-result-modal')).toBeVisible();
+        await expect(page.locator('#merge-modal')).toBeVisible();
     });
 
     test('edited in the app → asks; "Open as new copy" keeps the edited tree untouched', async ({ page }) => {

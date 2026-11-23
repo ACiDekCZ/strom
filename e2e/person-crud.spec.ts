@@ -155,15 +155,18 @@ test('reference number and open question persist and mark the card (K12/F3)', as
     const modal = personModal(page);
     await modal.locator('#input-refn').fill('box 12/1880');
     await modal.locator('#input-question').fill('Does anyone know her birth date?');
+    // The contact: addresses separated by commas, each once (spec 134 K0.10).
+    await modal.locator('#input-emails').fill('hromoslav@example.org, HROMOSLAV@example.org; h.ozubec@example.org');
     await modal.getByRole('button', { name: 'Save' }).click();
     await expect(modal).toBeHidden();
 
     const stored = await page.evaluate(() => {
         const p = window.Strom.DataManager.getAllPersons()[0];
-        return { refn: p.refn, question: p.question };
+        return { refn: p.refn, question: p.question, emails: p.emails };
     });
     expect(stored.refn).toBe('box 12/1880');
     expect(stored.question).toBe('Does anyone know her birth date?');
+    expect(stored.emails).toEqual(['hromoslav@example.org', 'h.ozubec@example.org']);
 
     // The card's "?" badge carries the open question (no other marker, spec 066 P4 §6).
     await expect(card(page, 'Marie').locator('[class*="signal-question"]').first()).toBeVisible();
@@ -174,6 +177,7 @@ test('reference number and open question persist and mark the card (K12/F3)', as
     await cardAction(page, 'Marie', 'edit');
     await expect(modal.locator('#input-refn')).toBeVisible();
     await expect(modal.locator('#input-refn')).toHaveValue('box 12/1880');
+    await expect(modal.locator('#input-emails')).toHaveValue('hromoslav@example.org, h.ozubec@example.org');
     await modal.locator('#input-question').fill('');
     await modal.getByRole('button', { name: 'Save' }).click();
     await expect(card(page, 'Marie').locator('[class*="signal-question"]')).toHaveCount(0);
