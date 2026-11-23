@@ -2,7 +2,7 @@ import type { StringsType } from '../strings.js';
 import { nPl, plPl } from './helpers.js';
 
 export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'mobileMenu' | 'emptyState' | 'demo' | 'book'
-    | 'fileCopy' | 'snapshots' | 'split' | 'splitFamilies' | 'advanced' | 'surnames' | 'lineage' | 'surnameSuggest'
+    | 'memoryLimit' | 'fileCopy' | 'snapshots' | 'split' | 'splitFamilies' | 'advanced' | 'surnames' | 'lineage' | 'surnameSuggest'
     | 'fields' | 'events' | 'factStatus' | 'reliability' | 'verify' | 'origin' | 'partnerEvents' | 'sources'> = {
     toolbar: {
         title: 'Strom',
@@ -297,6 +297,17 @@ export const plPart1: Pick<StringsType, 'toolbar' | 'treeSwitcher' | 'menu' | 'm
             chapter: (n: number, names: string) => `${n} · ${names}`,
             saveFailed: 'Nie udało się zapisać księgi.',
         },
+    },
+
+    // The memory one page may use (spec 135)
+    memoryLimit: {
+        title: 'Pamięci może nie wystarczyć',
+        notice: (name: string) => `Drzewo „${name}” zbliża się do granicy pamięci, którą ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Więcej miejsca da zamknięcie innych okien aplikacji i usunięcie niepotrzebnych obrazów.`,
+        output: (name: string, size: string) => `Plik z obrazami drzewa „${name}” (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji lub usunąć niepotrzebne obrazy.`,
+        outputAll: (size: string) => `Plik z obrazami wszystkich drzew (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji lub usunąć niepotrzebne obrazy.`,
+        leaveOut: 'Pominąć obrazy w pliku',
+        import: (name: string, size: string) => `Wczytanie pliku „${name}” (${size}) może wymagać więcej pamięci, niż ta przeglądarka daje aplikacji; aplikacja może wtedy przestać działać. Przed kontynuacją warto zamknąć inne okna aplikacji.`,
+        continue: 'Kontynuuj',
     },
 
     // Versioned backups

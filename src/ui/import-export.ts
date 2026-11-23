@@ -14,6 +14,7 @@ import { allMedia } from '../media.js';
 import type { PrivacyMode, ContentOptions } from '../privacy.js';
 import { noteExportAll } from '../research-device.js';
 import { DataManager, auditPersonName, storedTreeForExport } from '../data.js';
+import { confirmMemoryForImport } from './memory-limit-ui.js';
 import { TreeManager } from '../tree-manager.js';
 import { sanitizeResearchField } from '../research-link.js';
 import { TreeRenderer } from '../renderer.js';
@@ -550,6 +551,7 @@ export const importExportMethods = uiModule({
         input.value = '';
 
         void (async () => {
+            if (!(await confirmMemoryForImport(file.size, file.name))) return;
             const got = await readPickedFile(origin, file, async ctl => {
                 // Raw bytes, not readAsText: the file's own HEAD > CHAR (or, for
                 // ANSI, its bytes) decides the encoding; the summary offers another.
@@ -1096,6 +1098,7 @@ export const importExportMethods = uiModule({
     /** See readJsonImportFile; `before` runs once the text is read, before the import. */
     async readJsonImportText(name: string, read: () => Promise<string>, size: number, origin: HTMLElement | null,
         again: () => void, before?: () => void): Promise<void> {
+        if (!(await confirmMemoryForImport(size, name))) return;
         const got = await readPickedFile(origin, { name }, async ctl => {
             const text = await read();
             await paintBeforeParse(size);
@@ -1400,6 +1403,7 @@ export const importExportMethods = uiModule({
         input.value = '';
 
         void (async () => {
+            if (!(await confirmMemoryForImport(file.size, file.name))) return;
             const got = await readPickedFile(origin, file, async () => {
                 const htmlContent = await file.text();
                 const envelope = this.extractEnvelopeFromHtml(htmlContent);

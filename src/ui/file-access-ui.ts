@@ -21,6 +21,7 @@ import { uiModule } from './module.js';
 import { activatedElement, runBusy } from './busy.js';
 import { imagesToAwait } from '../image-loads.js';
 import { imagesBeforeOutput } from './output-images.js';
+import { confirmMemoryForOutput } from './memory-limit-ui.js';
 import { holdLeave } from './busy-leave.js';
 import { whilePicking } from './file-pick.js';
 
@@ -154,6 +155,8 @@ export const fileAccessMethods = uiModule({
         const waits = imagesToAwait(treeId);
         if (await imagesBeforeOutput(strings.photos.out.backup, { el: origin, treeId }) === 'cancelled') return;
         if (waits) await TreeManager.flush(treeId);
+        // The file with its images may need more memory than the page has (spec 135): asked first.
+        if (await confirmMemoryForOutput({ treeId }) === 'cancel') return;
         const save = async (): Promise<void> => {
             const release = holdLeave('export');
             try {

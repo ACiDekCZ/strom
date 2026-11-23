@@ -2094,6 +2094,8 @@
         /* An output's wait for the photos (spec 116 §8): above the dialog it was asked from (the poster's 300, the
            export's 500), its Cancel and its three actions reachable. */
         .toast[data-output-wait] { z-index: 550; }
+        /* The memory question before a file (spec 135): above the export dialog (500) it was asked from. */
+        #confirmation-modal.over-dialog { z-index: 510; }
         .about-share .ui-icon { color: var(--primary); }
         /* Touch: both support buttons a finger high. */
         @media (pointer: coarse) {

@@ -6,6 +6,7 @@
 import { runBusy, isBusy, busyStep } from './busy.js';
 import { imagesToAwait } from '../image-loads.js';
 import { imagesBeforeOutput } from './output-images.js';
+import { confirmMemoryForOutput } from './memory-limit-ui.js';
 import { holdLeave } from './busy-leave.js';
 import { releaseImageUrls } from '../image-src.js';
 import { allMedia, hasTreeMedia, mediaSourceIds } from '../media.js';
@@ -1272,6 +1273,35 @@ export const encryptionUiMethods = uiModule({
         return parts.length ? `${lead} ${parts.join(', ')}` : lead;
     },
 
+    /**
+     * The file with the images near the memory limit (spec 135): Continue, Cancel, or
+     * Continue without the images (the Content choices then leave them out). Whether to go on.
+     */
+    async exportMemoryCheck(): Promise<boolean> {
+        const contentShown = document.getElementById('export-content-section')?.style.display === 'block';
+        const go = await confirmMemoryForOutput({
+            allTrees: exportAllTrees,
+            data: exportAllTrees ? null : this.exportMeasuredData(),
+            treeId: exportTreeIdFor ?? DataManager.getCurrentTreeId(),
+            content: this.readExportContentOptions(),
+            canLeaveOut: contentShown && this.exportGedcomPurpose() !== 'back',
+        });
+        if (go === 'cancel') return false;
+        if (go === 'without') {
+            for (const id of ['export-content-photos', 'export-content-attachments']) {
+                const el = document.getElementById(id) as HTMLInputElement | null;
+                if (el) el.checked = false;
+            }
+            const fieldset = document.getElementById('export-source-images');
+            if (fieldset && fieldset.dataset.choice) {
+                fieldset.dataset.choice = 'none';
+                this.renderExportSourceImages();
+            }
+            this.onExportContentChange();
+        }
+        return true;
+    },
+
     /** The export's file made while the dialog stays (see confirmExport). */
     async runExportSave(password: string | null): Promise<void> {
         const callback = this.exportPasswordCallback;
@@ -1306,6 +1336,8 @@ export const encryptionUiMethods = uiModule({
             if (this.exportPasswordCallback !== callback) return;
             // The tree as stored (its photos stored once they all came) is what goes into the file.
             if (waits) await TreeManager.flush();
+            // The file with its images may need more memory than the page has (spec 135): asked first.
+            if (!(await this.exportMemoryCheck()) || this.exportPasswordCallback !== callback) return;
         }
         if (!btn || isBusy(btn)) {
             saved(await work());

@@ -27,6 +27,7 @@ import { uiModule } from './module.js';
 import { activatedElement, runBusy } from './busy.js';
 import { imagesToAwait } from '../image-loads.js';
 import { imagesBeforeOutput } from './output-images.js';
+import { confirmMemoryForOutput } from './memory-limit-ui.js';
 import { holdLeave } from './busy-leave.js';
 import { whilePicking } from './file-pick.js';
 import { iconSvg } from '../icons.js';
@@ -395,13 +396,15 @@ export const fileCopyMethods = uiModule({
      * browser and the toast names it. A failure stays at the button with
      * "Try again". The shortcut (no button) says only the toast.
      */
-    runQuickSave(origin: HTMLElement | null, make: () => Promise<string | null>, again: () => void): void {
+    runQuickSave(origin: HTMLElement | null, make: () => Promise<string | null>, again: () => void, allTrees = false): void {
         // The tree's photos still on their way: the copy waits for them (spec 116 §8), its button says so.
         const waits = imagesToAwait();
         void imagesBeforeOutput(strings.photos.out.backup, { el: origin }).then(async (go) => {
             if (go === 'cancelled') return;
             // The tree as stored (its photos stored once they all came) is what goes into the file.
             if (waits) await TreeManager.flush();
+            // The file with its images may need more memory than the page has (spec 135): asked first.
+            if (await confirmMemoryForOutput({ allTrees }) === 'cancel') return;
             this.runQuickSaveNow(origin, make, again);
         });
     },
@@ -452,7 +455,7 @@ export const fileCopyMethods = uiModule({
             return;
         }
         this.runQuickSave(activatedElement(), () => this.downloadAllTreesJson(null, false, 'full', ALL_CONTENT),
-            () => this.saveAllTreesCopy());
+            () => this.saveAllTreesCopy(), true);
     },
 
     saveAllTreesCopyEncrypted(): void {

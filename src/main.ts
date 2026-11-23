@@ -35,6 +35,7 @@ import { backfillImageMeta } from './image-meta-backfill.js';
 import { imageCacheStats, setImageCacheLimits, releaseImageUrls } from './image-src.js';
 import { expandedData } from './image-expand.js';
 import { satellitesHolding } from './windows/window-images.js';
+import { MemoryLimit, initMemoryLimitNotice } from './ui/memory-limit-ui.js';
 import { keepLifelineChipsFor } from './lifeline-view.js';
 import { parseDeepLink, stripDeepLinkParams } from './deep-link.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
@@ -84,6 +85,8 @@ declare global {
                 /** The satellites that tell the main window which pooled images they hold (spec 135). */
                 satellitesHolding: typeof satellitesHolding;
             };
+            /** The memory limit's estimate and a stand-in limit (spec 135). */
+            MemoryLimit: typeof MemoryLimit;
             /** The main window's registry of its satellite windows (spec 079; absent in other windows). */
             Windows?: WindowRegistry;
         };
@@ -661,6 +664,7 @@ function initShell(): DebugOptions {
         TreeCompare,
         // The pooled images' object URLs (image-src.ts): their count and bounds.
         Images: { imageCacheStats, setImageCacheLimits, releaseImageUrls, expandedData, satellitesHolding },
+        MemoryLimit,
     };
 
     // Parse debug options from URL
@@ -959,6 +963,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         UI.initResearchTransferBanner();
         // A private window: its trees go when it closes (said once).
         void UI.initPrivateWindowNotice();
+        // A tree near the memory one page may use: said once (spec 135).
+        initMemoryLimitNotice();
 
         // Handle URL import parameter (from offline version redirect)
         handleUrlImportParam();

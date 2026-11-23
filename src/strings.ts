@@ -535,6 +535,17 @@ const stringsEN = {
         },
     },
 
+    // The memory one page may use (spec 135)
+    memoryLimit: {
+        title: 'Memory may not be enough',
+        notice: (name: string) => `The tree “${name}” is close to the memory this browser gives the app, which may then stop working. Closing the app’s other windows and removing images that are not needed leaves more room.`,
+        output: (name: string, size: string) => `A file with the images of “${name}” (${size}) may need more memory than this browser gives the app, which may then stop working. Closing the app’s other windows or removing images that are not needed helps before going on.`,
+        outputAll: (size: string) => `A file with the images of all trees (${size}) may need more memory than this browser gives the app, which may then stop working. Closing the app’s other windows or removing images that are not needed helps before going on.`,
+        leaveOut: 'Leave the images out of the file',
+        import: (name: string, size: string) => `Reading the file “${name}” (${size}) may need more memory than this browser gives the app, which may then stop working. Closing the app’s other windows helps before going on.`,
+        continue: 'Continue',
+    },
+
     // Versioned backups
     fileCopy: {
         indicatorTitle: 'Changes only in the browser, not in a file yet — the browser may clear them',
@@ -11422,6 +11433,17 @@ const stringsCZ: StringsType = {
         },
     },
 
+    // The memory one page may use (spec 135)
+    memoryLimit: {
+        title: 'Paměť nemusí stačit',
+        notice: (name: string) => `Strom „${name}“ se blíží mezi paměti, kterou tento prohlížeč aplikaci dává; aplikace pak může přestat fungovat. Víc místa uvolní zavření dalších oken aplikace a odebrání nepotřebných obrázků.`,
+        output: (name: string, size: string) => `Soubor s obrázky stromu „${name}“ (${size}) může potřebovat víc paměti, než tento prohlížeč aplikaci dává, a aplikace pak může přestat fungovat. Před pokračováním pomůže zavřít další okna aplikace nebo odebrat nepotřebné obrázky.`,
+        outputAll: (size: string) => `Soubor s obrázky všech stromů (${size}) může potřebovat víc paměti, než tento prohlížeč aplikaci dává, a aplikace pak může přestat fungovat. Před pokračováním pomůže zavřít další okna aplikace nebo odebrat nepotřebné obrázky.`,
+        leaveOut: 'Vynechat obrázky ze souboru',
+        import: (name: string, size: string) => `Načtení souboru „${name}“ (${size}) může potřebovat víc paměti, než tento prohlížeč aplikaci dává, a aplikace pak může přestat fungovat. Před pokračováním pomůže zavřít další okna aplikace.`,
+        continue: 'Pokračovat',
+    },
+
     // Versioned backups
     fileCopy: {
         indicatorTitle: 'Změny jsou jen v prohlížeči, zatím ne v souboru — prohlížeč je může smazat',
@@ -22055,6 +22077,17 @@ const stringsDE: StringsType = {
             chapter: (n: number, names: string) => `${n} · ${names}`,
             saveFailed: 'Das Buch konnte nicht gespeichert werden.',
         },
+    },
+
+    // The memory one page may use (spec 135)
+    memoryLimit: {
+        title: 'Der Speicher reicht womöglich nicht',
+        notice: (name: string) => `Der Stammbaum „${name}“ nähert sich dem Speicher, den dieser Browser der App gibt; die App kann dann aufhören zu funktionieren. Mehr Platz schafft das Schließen weiterer Fenster der App und das Entfernen nicht benötigter Bilder.`,
+        output: (name: string, size: string) => `Eine Datei mit den Bildern von „${name}“ (${size}) kann mehr Speicher brauchen, als dieser Browser der App gibt; die App kann dann aufhören zu funktionieren. Vor dem Fortfahren hilft es, weitere Fenster der App zu schließen oder nicht benötigte Bilder zu entfernen.`,
+        outputAll: (size: string) => `Eine Datei mit den Bildern aller Stammbäume (${size}) kann mehr Speicher brauchen, als dieser Browser der App gibt; die App kann dann aufhören zu funktionieren. Vor dem Fortfahren hilft es, weitere Fenster der App zu schließen oder nicht benötigte Bilder zu entfernen.`,
+        leaveOut: 'Bilder nicht in die Datei aufnehmen',
+        import: (name: string, size: string) => `Das Einlesen der Datei „${name}“ (${size}) kann mehr Speicher brauchen, als dieser Browser der App gibt; die App kann dann aufhören zu funktionieren. Vor dem Fortfahren hilft es, weitere Fenster der App zu schließen.`,
+        continue: 'Fortfahren',
     },
 
     // Versioned backups
