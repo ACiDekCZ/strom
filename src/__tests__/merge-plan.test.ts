@@ -7,17 +7,18 @@
  * Invented trees only (helpers/merge-trees.ts), deterministic seeds.
  */
 
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { AUTO_CONFIRM_SCORE, existingTargetOf } from '../merge/executor.js';
 import { createMergeState } from '../merge/matching.js';
 import {
-    applyPlan, bringsNothingNew, buildPlan, isRepeatOf, planCounts, planFates, planFingerprint, scopeExample,
-    MergePlan, MergeRecord, PersonFate, PlanScope, PlanSource, WizardChoices,
+    applyPlan, bringsNothingNew, buildPlan, isRepeatOf, planCounts, planFates, planFingerprint, scopeExample, verifyResult,
+    GroupDecision, MergePlan, MergeRecord, NewRel, PersonFate, PlanScope, PlanSource, WizardChoices,
 } from '../merge/plan.js';
+import { newPersons, unlinkedGroups } from '../merge/plan-select.js';
 import { MergeState } from '../merge/types.js';
 import { StorageManager } from '../storage.js';
 import { Partnership, PartnershipId, Person, PersonId, StromData } from '../types.js';
-import { mulberry32, randomDecisions, sourceTree, targetTree } from './helpers/merge-trees.js';
+import { dangling, mulberry32, randomDecisions, sourceTree, targetTree } from './helpers/merge-trees.js';
 
 const RUNS = 200;
 const SCOPES: readonly PlanScope[] = ['a', 'b', 'c', 'd'];
@@ -221,6 +222,111 @@ describe(`applyPlan on random pairs of invented trees (${RUNS} seeds)`, () => {
         expect(result.ok).toBe(true);
         expect(Object.keys(result.data.persons).sort()).toEqual(Object.keys(source.persons).sort());
     });
+});
+
+/**
+ * Random choices of step 3 (§5, §6): unticked people, people kept as "?",
+ * the living left out, and a decision for each unlinked group (some left
+ * undecided): add unlinked, a separate tree, do not add, or a link to a
+ * person of the tree or of the import.
+ */
+function randomStep3(state: MergeState, rnd: () => number, scope: PlanScope): WizardChoices {
+    const pick = <T>(list: readonly T[]): T => list[Math.floor(rnd() * list.length)];
+    const base = choices({ scope, groups: {} });
+    const fresh = newPersons(state, base);
+    const leftOut = fresh.filter(() => rnd() < 0.12);
+    const out = new Set(leftOut);
+    const placeholders = fresh.filter(id => !out.has(id) && rnd() < 0.08);
+    const w: WizardChoices = { ...base, leftOut, placeholders, skipLiving: rnd() < 0.3 };
+    if (rnd() < 0.2) w.splitGroups = ['all'];
+    const treeIds = Object.keys(state.existingData.persons) as PersonId[];
+    const importIds = named(state.incomingData).map(p => p.id);
+    const rels: readonly NewRel[] = ['parent', 'child', 'partner'];
+    const decisions: Record<string, GroupDecision> = {};
+    for (const g of unlinkedGroups(state, w)) {
+        const r = rnd();
+        if (r < 0.15) continue;
+        if (r < 0.35) decisions[g.key] = { kind: 'loose' };
+        else if (r < 0.5) decisions[g.key] = { kind: 'own-tree' };
+        else if (r < 0.65) decisions[g.key] = { kind: 'skip' };
+        else {
+            const inTree = rnd() < 0.6 && treeIds.length > 0;
+            decisions[g.key] = { kind: 'connect', person: pick(g.persons), rel: pick(rels), to: pick(inTree ? treeIds : importIds), in: inTree ? 'tree' : 'import' };
+        }
+    }
+    return { ...w, groups: decisions };
+}
+
+async function applyStep3(seed: number): Promise<string[]> {
+    const { rnd, target, source, state } = pairOf(seed);
+    randomDecisions(state, rnd);
+    delete state.updateOnly;
+    const w = randomStep3(state, rnd, (['a', 'b', 'c'] as const)[seed % 3]);
+    const plan = buildPlan(state, w);
+    const errors: string[] = [];
+    const c = planCounts(plan);
+    const persons = named(source);
+    if (c.total !== persons.length) errors.push(`total ${c.total}, source has ${persons.length}`);
+    if (c.joined + c.added + c.skipped + c.pending !== c.total) errors.push(`sum ${JSON.stringify(c)}`);
+    const fates = planFates(plan);
+    if (fates.size !== persons.length) errors.push(`${fates.size} fates for ${persons.length} persons`);
+    for (const g of plan.groups ?? []) {
+        for (const id of g.persons) {
+            const fate = fates.get(id);
+            const want = g.decision === null ? 'pending' : g.decision.kind === 'skip' ? 'skipped' : 'added';
+            if (fate !== want) errors.push(`group ${g.key} (${g.decision?.kind ?? 'undecided'}): ${id} ${fate}`);
+        }
+    }
+    for (const id of w.leftOut ?? []) if (fates.get(id) !== 'skipped') errors.push(`unticked ${id} ${fates.get(id)}`);
+    for (const id of w.placeholders ?? []) if (fates.get(id) !== 'skipped') errors.push(`"?" ${id} ${fates.get(id)}`);
+    if (errors.length) return errors;
+
+    const targetBefore = JSON.stringify(target);
+    const sourceBefore = JSON.stringify(source);
+    const result = await applyPlan(plan, target, source);
+    if (!result.ok) return [`not saved: ${JSON.stringify(result.issues).slice(0, 300)}`];
+    if (result.issues.length) errors.push(`issues ${JSON.stringify(result.issues)}`);
+    const again = verifyResult(plan, target, source, result.data, result.trace);
+    if (again.length) errors.push(`verify ${JSON.stringify(again)}`);
+    if (JSON.stringify(target) !== targetBefore) errors.push('target changed in place');
+    if (JSON.stringify(source) !== sourceBefore) errors.push('source changed in place');
+    const after = result.data;
+    for (const id of Object.keys(target.persons)) if (!after.persons[id as PersonId]) errors.push(`tree person ${id} gone`);
+    for (const id of Object.keys(target.partnerships)) if (!after.partnerships[id as PartnershipId]) errors.push(`tree couple ${id} gone`);
+    const afterLinks = new Set(links(after));
+    for (const l of links(target)) if (!afterLinks.has(l)) errors.push(`tree link ${l} gone`);
+    const gone = dangling(after);
+    if (gone.length) errors.push(`dangling ${gone.slice(0, 3).join(', ')}`);
+    // The added: in the tree, or in a tree of their own.
+    const own = (plan.groups ?? []).filter(g => g.decision?.kind === 'own-tree');
+    const ownCount = own.reduce((n, g) => n + g.persons.length, 0);
+    const addedNamed = named(after).filter(p => !target.persons[p.id]).length;
+    if (addedNamed + ownCount !== c.added) errors.push(`added ${addedNamed} + own trees ${ownCount}, plan says ${c.added}`);
+    if (result.ownTrees.length !== own.length) errors.push(`own trees ${result.ownTrees.length}, groups ${own.length}`);
+    for (const t of result.ownTrees) {
+        const n = named(t.data).length;
+        if (n !== t.persons.length) errors.push(`own tree ${t.group}: ${n} persons, group has ${t.persons.length}`);
+        const loose = dangling(t.data);
+        if (loose.length) errors.push(`own tree ${t.group} dangling ${loose.slice(0, 3).join(', ')}`);
+    }
+    return errors;
+}
+
+describe(`step 3 on random pairs of invented trees (${RUNS} seeds)`, () => {
+    beforeAll(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-05-04T10:00:00Z'));
+    });
+    afterAll(() => { vi.useRealTimers(); });
+
+    it('unticked, "?", living and group decisions: the sums stay whole, the write is what the plan says, nothing of the tree is lost', async () => {
+        const failures: string[] = [];
+        for (let seed = 1; seed <= RUNS; seed++) {
+            const errors = await applyStep3(seed);
+            if (errors.length) failures.push(`seed ${seed}: ${errors.slice(0, 4).join('; ')}`);
+        }
+        expect(failures.join('\n')).toBe('');
+    }, 120_000);
 });
 
 describe('edge sources', () => {

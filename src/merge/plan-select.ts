@@ -22,7 +22,7 @@ import { inferBirthUpperBounds, isLivingPerson } from '../privacy.js';
 import { masculineFormIn, sameSurname, surnameKey } from '../surnames.js';
 import { yearOf } from '../dates.js';
 import { isAncestorOrSelf } from './merge-check.js';
-import { normalizeSingleParents, isPurePlaceholder, fillPlaceholder } from '../single-parent.js';
+import { normalizeSingleParents } from '../single-parent.js';
 import { generatePartnershipId } from '../ids.js';
 import type { WizardChoices } from './plan.js';
 
@@ -345,6 +345,42 @@ export type GroupDecision =
     | { kind: 'skip' };
 
 /**
+ * Why a group's link to a person cannot be written, or null: the child of
+ * the link already has two parents, a "?" among them (the tree's "?" stays
+ * as it is: a merge changes none of the tree's links). The dialog offers
+ * only links this allows; the plan keeps the group undecided on one it does
+ * not. Partners always link.
+ */
+export function connectRefusal(state: MergeState, w: WizardChoices, d: Extract<GroupDecision, { kind: 'connect' }>, sel: Selection = selectionOf(state, w)): 'third-parent' | null {
+    if (d.rel === 'partner') return null;
+    const childIsGroup = d.rel === 'child';
+    const source = state.incomingData;
+    const tree = state.existingData;
+    const joined = joinedOf(state, w);
+    const parents = new Set<string>();
+    const fromSource = (id: PersonId): void => {
+        for (const pid of source.persons[id]?.parentIds ?? []) {
+            const at = joined.get(pid);
+            if (at) parents.add(`t:${at}`);
+            else if (sel.ticked.has(pid) || sel.standIns.has(pid) || source.persons[pid]?.isPlaceholder) parents.add(`s:${pid}`);
+        }
+    };
+    // A tree person's parents, and those the import brings to it through a person joined with it.
+    const fromTree = (id: PersonId): void => {
+        for (const pid of tree.persons[id]?.parentIds ?? []) if (tree.persons[pid]) parents.add(`t:${pid}`);
+        for (const [sid, at] of joined) if (at === id) fromSource(sid);
+    };
+    if (childIsGroup) fromSource(d.person);
+    else if (d.in === 'tree') fromTree(d.to);
+    else {
+        const at = joined.get(d.to);
+        if (at) fromTree(at);
+        else fromSource(d.to);
+    }
+    return parents.size >= 2 ? 'third-parent' : null;
+}
+
+/**
  * The ticked new people with no way to the tree, in groups: each set of
  * them related among themselves is a group; people with no relative among
  * them are one group "Individuals" (6e); when nobody of the import is
@@ -512,10 +548,11 @@ export function sourceWithStandIns(source: StromData, standIns: readonly PersonI
 
 /**
  * Link `a` and `b` in written data (a group's "link to a person"): `a` is
- * the `rel` of `b`. A third parent, a cycle in the ancestry or a person
- * missing refuses (false, nothing changed). A child gets the family of its
- * two parents (the existing one, or a new one), or a "?" family when the
- * link gives it its only parent.
+ * the `rel` of `b`. A third parent (a "?" counts: the tree's links stay as
+ * they are), a cycle in the ancestry or a person missing refuses (false,
+ * nothing changed). A child gets the family of its two parents (the
+ * existing one, or a new one), or a "?" family when the link gives it its
+ * only parent.
  */
 export function linkPersons(data: StromData, a: PersonId, rel: NewRel, b: PersonId): boolean {
     const pa = data.persons[a];
@@ -541,14 +578,7 @@ export function linkPersons(data: StromData, a: PersonId, rel: NewRel, b: Person
     const child = data.persons[childId];
     if (child.parentIds.includes(parentId)) return true;
     if (isAncestorOrSelf(data, childId, parentId)) return false;
-    const stand = child.parentIds.length >= 2 ? child.parentIds.find(pid => isPurePlaceholder(data, pid)) : undefined;
-    if (child.parentIds.length >= 2 && !stand) return false;
-    if (stand) {
-        fillPlaceholder(data, stand, parentId, [childId]);
-        if (!parent.childIds.includes(childId)) parent.childIds.push(childId);
-        if (!child.parentIds.includes(parentId)) child.parentIds.push(parentId);
-        return true;
-    }
+    if (child.parentIds.length >= 2) return false;
     parent.childIds.push(childId);
     child.parentIds.push(parentId);
     const otherId = child.parentIds.find(pid => pid !== parentId);

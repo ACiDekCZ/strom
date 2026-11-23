@@ -19,7 +19,7 @@ import { allMedia } from '../media.js';
 import { contentFingerprint } from '../research-link.js';
 import type { GedcomDroppedTag } from '../ged-parser.js';
 import {
-    GroupDecision, NewRel, UnlinkedGroup, baseFates, linkPersons, livingNew, selectionOf, sourceWithStandIns, unlinkedGroups,
+    GroupDecision, NewRel, UnlinkedGroup, baseFates, connectRefusal, linkPersons, livingNew, selectionOf, sourceWithStandIns, unlinkedGroups,
 } from './plan-select.js';
 
 export type { GroupDecision, NewRel, UnlinkedGroup } from './plan-select.js';
@@ -355,7 +355,7 @@ export function buildPlan(state: MergeState, w: WizardChoices): MergePlan {
     const leftOut = new Set(w.leftOut ?? []);
     const living = w.skipLiving ? new Set(livingNew(state, w)) : null;
     const groups = !newTree && w.groups ? unlinkedGroups(state, w, sel) : [];
-    const decided = groupDecisions(groups, w.groups ?? {}, tree, sel, base);
+    const decided = groupDecisions(groups, w.groups ?? {}, tree, sel, base, d => connectRefusal(state, w, d, sel) === null);
     const groupOf = new Map<PersonId, UnlinkedGroup>();
     for (const g of groups) for (const id of g.persons) groupOf.set(id, g);
     const standIns: PersonId[] = [];
@@ -485,7 +485,8 @@ const sourceGraphs = new WeakMap<StromData, { neighbors: Map<PersonId, PersonId[
  * The decision that holds for each group (null: still to decide). A link
  * holds while its person is in the group and its other person ends in the
  * target: a person of the tree, or of the import joined, added, or in a
- * group added (unlinked or linked itself); never one of its own group.
+ * group added (unlinked or linked itself); never one of its own group,
+ * and never a link that would give a child a third parent.
  */
 function groupDecisions(
     groups: readonly UnlinkedGroup[],
@@ -493,13 +494,14 @@ function groupDecisions(
     tree: StromData,
     sel: { ticked: ReadonlySet<PersonId> },
     base: ReadonlyMap<PersonId, string>,
+    writable: (d: Extract<GroupDecision, { kind: 'connect' }>) => boolean,
 ): Map<string, GroupDecision | null> {
     const out = new Map<string, GroupDecision | null>();
     const groupOf = new Map<PersonId, string>();
     for (const g of groups) {
         for (const id of g.persons) groupOf.set(id, g.key);
         const d = given[g.key] ?? null;
-        out.set(g.key, d && d.kind === 'connect' && !g.persons.includes(d.person) ? null : d);
+        out.set(g.key, d && d.kind === 'connect' && (!g.persons.includes(d.person) || !writable(d)) ? null : d);
     }
     const inTarget = (d: Extract<GroupDecision, { kind: 'connect' }>, own: string): boolean => {
         if (d.in === 'tree') return !!tree.persons[d.to];

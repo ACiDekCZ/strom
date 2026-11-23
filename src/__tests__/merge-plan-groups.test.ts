@@ -7,9 +7,10 @@
 
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { applyPlan, buildPlan, planCounts, planFates, verifyResult, GroupDecision, PlanCounts } from '../merge/plan.js';
-import { unlinkedGroups, selectionOf } from '../merge/plan-select.js';
+import { connectRefusal, unlinkedGroups, selectionOf } from '../merge/plan-select.js';
 import { StorageManager } from '../storage.js';
-import { Person, PersonId, StromData } from '../types.js';
+import { Person, PersonId } from '../types.js';
+import { dangling } from './helpers/merge-trees.js';
 import { Family, addChoices, stateOf } from './helpers/merge-select-trees.js';
 
 beforeAll(() => {
@@ -162,7 +163,7 @@ describe('group decisions in the plan', () => {
         // The group is linked now: the tree person's new father leads to it.
         expect(verifyResult(plan, target, source, result.data)).toEqual([]);
         // Nothing of the tree is lost.
-        for (const id of Object.keys(target.persons)) expect(result.data.persons[id]).toBeTruthy();
+        for (const id of Object.keys(target.persons) as PersonId[]) expect(result.data.persons[id]).toBeTruthy();
     });
 
     it('a link to a person of the import links through them', async () => {
@@ -192,6 +193,19 @@ describe('group decisions in the plan', () => {
         }));
         expect(planFates(toSkipped).get(family[0].id)).toBe('pending');
         whole(planCounts(toSkipped));
+    });
+
+    it('a link that would give a child a third parent is refused: the group stays undecided', () => {
+        const { state, target, head, mother, t2 } = decided();
+        const t3 = Object.values(target.persons).find(p => p.parentIds.length === 2)!;
+        const w = addChoices();
+        expect(connectRefusal(state, w, { kind: 'connect', person: head.id, rel: 'parent', to: t3.id, in: 'tree' })).toBe('third-parent');
+        expect(connectRefusal(state, w, { kind: 'connect', person: head.id, rel: 'parent', to: t2.id, in: 'tree' })).toBeNull();
+        expect(connectRefusal(state, w, { kind: 'connect', person: mother.id, rel: 'partner', to: t3.id, in: 'tree' })).toBeNull();
+        const groups = unlinkedGroups(state, w);
+        const plan = buildPlan(state, addChoices({ groups: { [groups[0].key]: { kind: 'connect', person: head.id, rel: 'parent', to: t3.id, in: 'tree' } } }));
+        expect(plan.groups?.[0].decision).toBeNull();
+        expect(planFates(plan).get(head.id)).toBe('pending');
     });
 
     it('a separate tree: the group is not written into the tree but comes back as a tree of its own', async () => {
@@ -227,16 +241,6 @@ describe('group decisions in the plan', () => {
     });
 });
 
-/** The ids the data refers to that are not in it. */
-function danglingIds(data: StromData): string[] {
-    const out: string[] = [];
-    for (const p of Object.values(data.persons)) {
-        for (const id of [...p.parentIds, ...p.childIds]) if (!data.persons[id]) out.push(`${p.id}→${id}`);
-        for (const uid of p.partnerships) if (!data.partnerships[uid]) out.push(`${p.id}→${uid}`);
-    }
-    return out;
-}
-
 describe('selection and groups together', () => {
     it('unticking the mother leaves her children as individuals with the others', () => {
         const { state, mother, kids, singles } = example();
@@ -252,6 +256,6 @@ describe('selection and groups together', () => {
         const w = addChoices({ groups: Object.fromEntries(groups.map(g => [g.key, { kind: 'loose' } as GroupDecision])) });
         const result = await applyPlan(buildPlan(ex.state, w), ex.target, ex.source);
         expect(result.ok).toBe(true);
-        expect(danglingIds(result.data)).toEqual([]);
+        expect(dangling(result.data)).toEqual([]);
     });
 });
