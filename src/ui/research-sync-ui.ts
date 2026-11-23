@@ -50,6 +50,7 @@ import {
 import { SettingsManager } from '../settings.js';
 import { loadResearchCopy } from '../research-copy.js';
 import { foreignSendCheck } from '../research-foreign-send.js';
+import { isMediaRefUnknown, mediaRefGate, mediaRefUnknownShas, noteMediaRefRefused, prepareMediaRef, utf8Length } from '../research-media-ref.js';
 import { ResearchWriteHeld, joinSaid, writeHeldOfRefusal, writeHeldOfStatus, writeHeldSettled } from '../research-write-held.js';
 import { forgetOriginalsHeld } from './originals-ui.js';
 import {
@@ -2026,7 +2027,7 @@ export const researchSyncMethods = uiModule({
     },
 
     /** The send itself (postResearchSend, under the windows' lock). */
-    async postResearchSendNow(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean; again?: boolean; undoAgain?: boolean; noIdsRetried?: boolean }): Promise<void> {
+    async postResearchSendNow(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean; again?: boolean; undoAgain?: boolean; noIdsRetried?: boolean; mediaRefRetried?: boolean }): Promise<void> {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!link || sendingTree || meta?.demo) return;
@@ -2135,12 +2136,23 @@ export const researchSyncMethods = uiModule({
         // send asked meanwhile is stopped here, not posted beside it.
         const whole = again ? null : await expandedData(data);
         if (sendingTree) return;
+        // The pictures the research holds go by reference (spec 133): never in a send written again (nothing is
+        // exported), nor in the one send with every picture's data after a reference it did not find.
+        const mediaFeatures = this.researchStatusOf(link.id)?.features;
+        const mediaRef = !whole || opts.mediaRefRetried ? undefined
+            : await prepareMediaRef({ researchId: link.id, base: bridge.base, features: mediaFeatures, data: whole, keepalive: !!opts.keepalive });
+        // Another send started while it was asked: one at a time.
+        if (sendingTree) return;
         const exported = !whole ? null : researchGedcomExport(whole, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}), ...(deletedSources.length ? { deletedSources } : {}),
         }, titles, researchSendsReadings(this.researchStatusOf(link.id)), researchSendsSourceFields(this.researchStatusOf(link.id)), researchCitationsOut(this.researchStatusOf(link.id)),
-        researchMediaOut(this.researchStatusOf(link.id)));
+        researchMediaOut(this.researchStatusOf(link.id)), mediaRef);
         const gedcom = exported?.content ?? '';
+        // What went by reference and how big the send is (no names; spec 133 K3.2).
+        if (exported && mediaRefGate(mediaFeatures)) {
+            console.info('Research send', { chars: gedcom.length, bytes: utf8Length(gedcom), ...exported.media, withData: !!opts.mediaRefRetried });
+        }
         // What this send carries, person by person (what was written, once it is).
         if (!again) this.researchNoteSending(treeId, data, fps.current);
         sendingTree = treeId;
@@ -2202,8 +2214,20 @@ export const researchSyncMethods = uiModule({
         // What it did not write keeps its codes only from a research that says it sends them.
         const replyFeatures = this.researchStatusOf(link.id)?.features;
         let reply = sanitizeSyncReply(null);
-        try { reply = sanitizeSyncReply(await res.json(), replyFeatures); } catch { /* a refusal without a reason */ }
+        let replyBody: unknown = null;
+        try {
+            replyBody = await res.json();
+            reply = sanitizeSyncReply(replyBody, replyFeatures);
+        } catch { /* a refusal without a reason */ }
         sendingTree = null;
+        // A picture by reference the research does not find (spec 133 §1.4): nothing was taken. Those hashes go
+        // with data from now on, and the same tree goes once more with every picture's data — nothing to tell.
+        if (!res.ok && isMediaRefUnknown(replyBody) && mediaRef && !opts.mediaRefRetried) {
+            const unknown = mediaRefUnknownShas(replyBody);
+            noteMediaRefRefused(link.id, unknown);
+            console.info('Research send: a picture by reference not found there, sent again with data', { unknown: unknown.length });
+            return this.postResearchSendNow(treeId, { ...opts, mediaRefRetried: true });
+        }
         // The research has this copy now (any answer with its mark; a send written again is the old copy, not this one).
         if (res.ok && reply.ok && reply.intake && !again) {
             patchResearchAutoState(treeId, { lastCopy: { intake: reply.intake, base: link.head ?? '', ...(version ? { version } : {}) } });

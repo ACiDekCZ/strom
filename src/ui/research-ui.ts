@@ -98,7 +98,7 @@ import { parseDeepLink } from '../deep-link.js';
 import { followNotice, researchNameBeside, FOLLOW_NOTICE_MS, FOLLOW_HIGHLIGHT_MS, FollowTreeRef } from '../research-follow.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
-import { exportToGedcom, countFamilies } from '../ged-exporter.js';
+import { exportToGedcom, countFamilies, type GedcomMediaCounts, type GedcomMediaRef } from '../ged-exporter.js';
 import { NO_CITATION_FEATURES, researchCitationsOut, type ResearchCitationsOut } from '../citation-gates.js';
 import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
@@ -1621,10 +1621,12 @@ export function researchGedcom(data: StromData, treeName: string, link: Research
 /**
  * researchGedcom with the xrefs it gave the records (a send's `ids` answer by
  * them). `readings`: the sources' reading marks go along (researchSendsReadings).
+ * `mediaRef`: the pictures the research holds go by reference (spec 133,
+ * prepareMediaRef); `media` counts what went so and what with data.
  */
-export function researchGedcomExport(data: StromData, treeName: string, link: ResearchHeaderInfo, titles: TitlesInGedcom, readings = false, sourceFields = false, citations: ResearchCitationsOut = NO_CITATION_FEATURES, media: ResearchMediaOut = NO_MEDIA_FEATURES): { content: string; xrefs: ExportXrefs } {
-    const r = exportToGedcom(data, treeName, { research: link, titles, readings, sourceFields, ...citations, ...media });
-    return { content: r.content, xrefs: r.xrefs };
+export function researchGedcomExport(data: StromData, treeName: string, link: ResearchHeaderInfo, titles: TitlesInGedcom, readings = false, sourceFields = false, citations: ResearchCitationsOut = NO_CITATION_FEATURES, media: ResearchMediaOut = NO_MEDIA_FEATURES, mediaRef?: GedcomMediaRef): { content: string; xrefs: ExportXrefs; media: GedcomMediaCounts } {
+    const r = exportToGedcom(data, treeName, { research: link, titles, readings, sourceFields, ...citations, ...media, ...(mediaRef ? { mediaRef } : {}) });
+    return { content: r.content, xrefs: r.xrefs, media: r.media };
 }
 
 /**
