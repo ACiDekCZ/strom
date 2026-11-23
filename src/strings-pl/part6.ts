@@ -111,8 +111,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
 
         // Pending merge in tree manager
         pendingMergeLabel: 'Rozpoczęte scalanie',
-        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
-        pendingMergeConflicts: (count: number) => nPl(count, 'konflikt', 'konflikty', 'konfliktów')
+        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`
     },
 
     mergeWizard: {
@@ -264,6 +263,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
             ? `Jedyna osoba jest już w drzewie ${t} i nie wnosi nic nowego.`
             : `${plPl(n, 'Wszystkie', 'Wszystkie', 'Wszystkich')} ${nPl(n, 'osoba', 'osoby', 'osób')} ${plPl(n, 'jest', 'są', 'jest')} już w drzewie ${t} i nie wnoszą nic nowego.`,
         repeat: (d: string, n: number, m: number) => `Ten plik został już scalony ${d}. ${plPl(n, 'Nowa jest', 'Nowe są', 'Nowych jest')} tylko ${nPl(n, 'osoba', 'osoby', 'osób')}; ${m} połączono ze scaleniem z ${d} i nie zostaną zdublowane.`,
+        repeatTree: (t: string, d: string, n: number, m: number) => `Drzewo ${t} zostało już tu scalone ${d}. ${plPl(n, 'Nowa jest', 'Nowe są', 'Nowych jest')} tylko ${nPl(n, 'osoba', 'osoby', 'osób')}; ${m} połączono ze scaleniem z ${d} i nie zostaną zdublowane.`,
         encLocked: (t: string) => `Drzewo ${t} jest zaszyfrowane i zablokowane.`,
         savedLater: (s: string, i: number) => `Zapisano na później · ${s} · krok ${i} · w Zarządzaniu drzewami w Niedokończonych scaleniach`,
         crashed: (t: string) => `Ostatnio scalenie się nie zakończyło. Drzewo ${t} i plik są bez zmian.`,
@@ -751,6 +751,10 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         newTreePlaceholder: 'Nazwa drzewa',
         confirmDelete: (name: string) => `Usunąć drzewo „${name}”? Tej operacji nie można cofnąć.`,
         duplicateSuffix: '(kopia)',
+        duplicateSuffixN: (n: number) => `(kopia ${n})`,
+        duplicateNameTaken: 'Drzewo o tej nazwie już istnieje.',
+        imagesShared: 'obrazy wspólne',
+        imagesSharedTip: 'Część obrazów drzewo dzieli z innym drzewem: rozmiar je wlicza, ale miejsce zajmują tylko raz.',
         importTreeName: 'Zaimportowane drzewo',
         importAsNewTree: 'Importuj jako nowe drzewo',
         treeNameLabel: 'Nazwa drzewa',

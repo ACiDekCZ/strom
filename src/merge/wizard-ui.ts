@@ -14,7 +14,7 @@
 
 import type { MergeState, MergeWizardState } from './types.js';
 import type { TreeId } from '../types.js';
-import { buildPlan, planCounts, type MergePlan, type PlanCounts, type PlanMode, type PlanSource, type WizardChoices } from './plan.js';
+import { planCounts, wizardPlan, type MergePlan, type PlanCounts, type PlanMode, type PlanSource, type WizardChoices } from './plan.js';
 import { stepInfo, nextStep, previousStep, WIZARD_STEPS, type StepInfo, type WizardStep } from './wizard-steps.js';
 import { strings, countText } from '../strings.js';
 import { announceText } from '../ui/live-announce.js';
@@ -237,8 +237,7 @@ export class MergeWizard {
     /** The plan again from the choices and the decisions. */
     rebuild(): void {
         const state = this.host.state();
-        const ws = state?.wizard;
-        this.plan = state && ws && (ws.compared || ws.choices.mode === 'new') ? buildPlan(state, ws.choices) : null;
+        this.plan = state ? wizardPlan(state) : null;
     }
 
     /** Each step's state on this way. */

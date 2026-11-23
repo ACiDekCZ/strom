@@ -67,6 +67,7 @@ import { surnameForms, addSurnameGroup, removeSurnameGroup, surnameKey } from '.
 import { buildLineages, cleanLineageOverrides, LineagePatch, type LineageIndex } from './lineage.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections, dismissalKey, surnameRejectionKey } from './quality-dismiss.js';
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
+import { freeCopyName } from './tree-copy-name.js';
 import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay, type SnapshotMeta, type SnapshotOptions } from './snapshots.js';
 import { ValidationIssue, stripUnsafeMediaDataUrls, cleanPortraitSources, dropStrayPoolRefs, isSafePhotoDataUrl, translateValidationType } from './validation.js';
 import { isPortraitSourceShape } from './photo.js';
@@ -1144,7 +1145,7 @@ class DataManagerClass {
 
             case 'copy': {
                 // Create copy with new name (no sourceExportId - it's a new lineage)
-                const copyName = `${this.embeddedEnvelope.treeName} (${strings.treeManager.duplicateSuffix})`;
+                const copyName = freeCopyName(this.embeddedEnvelope.treeName, TreeManager.getTrees().map(t => t.name));
                 const treeId = TreeManager.createTreeFromImport(data, copyName);
                 this.currentTreeId = treeId;
                 // Remove empty default tree(s) after import

@@ -10,6 +10,8 @@ import { activatedElement, busyLocal } from './busy.js';
 import type { FollowSwitchFrom } from './research-follow-ui.js';
 import { countFamilies } from '../ged-exporter.js';
 import { TreeManager } from '../tree-manager.js';
+import { freeCopyName, treeNameTaken } from '../tree-copy-name.js';
+import { sharedImageTrees, treeImageIds } from '../snapshots.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { TreePreview, TreeCompare } from '../tree-preview.js';
@@ -956,6 +958,8 @@ export const treeManagementMethods = uiModule({
 
         let html = '';
         const defaultTree = TreeManager.getDefaultTree();
+        // Trees whose images another tree shares (a copy): their sizes count the images each (134 S-P1).
+        const sharing = sharedImageTrees(new Map(await Promise.all(trees.map(async t => [t.id, await treeImageIds(t.id).catch(() => [])] as const))));
         for (const tree of visibleTrees) {
             const isActive = tree.id === activeId;
 
@@ -1006,7 +1010,9 @@ export const treeManagementMethods = uiModule({
                     <div class="tree-manager-item-header">
                         <span class="tree-manager-item-name clickable" title="${this.escapeHtml(tree.name)}" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${this.escapeHtml(tree.name)}</span>
                         ${badges}
-                        ${treeSizeFormatted ? `<span class="tree-manager-item-size">${treeSizeFormatted}</span>` : ''}
+                        ${treeSizeFormatted ? (sharing.has(tree.id)
+                            ? `<span class="tree-manager-item-size" title="${this.escapeHtml(s.imagesSharedTip)}">${treeSizeFormatted} · ${this.escapeHtml(s.imagesShared)}</span>`
+                            : `<span class="tree-manager-item-size">${treeSizeFormatted}</span>`) : ''}
                     </div>
                     <div class="tree-manager-item-stats-row">
                         ${s.persons(tree.personCount)} • ${s.families(familyCount)}
@@ -1050,11 +1056,11 @@ export const treeManagementMethods = uiModule({
             const mergeInfo = session.sourceTreeName && session.targetTreeName
                 ? strings.merge.pendingMergeInto(session.sourceTreeName, session.targetTreeName)
                 : '';
-            const conflictsInfo = session.stats.conflicts > 0
-                ? ` • ${strings.merge.pendingMergeConflicts(session.stats.conflicts)}`
-                : '';
+            // In the guide's words and number: step 2's "to decide" (134 S-P2).
+            const pending = session.stats.pending ?? 0;
+            const pendingInfo = pending > 0 ? strings.mergeWizard.subPending(pending) : '';
             const progressInfo = strings.merge.reviewedCount(session.stats.reviewed, session.stats.total);
-            const statsText = mergeInfo ? `${mergeInfo}${conflictsInfo} • ${progressInfo}` : `${progressInfo}${conflictsInfo}`;
+            const statsText = [mergeInfo, pendingInfo, progressInfo].filter(Boolean).join(' • ');
 
             html += `
                 <div class="tree-manager-item pending-merge">
@@ -1608,7 +1614,8 @@ export const treeManagementMethods = uiModule({
         if (!tree) return;
 
         this.duplicateTreeId = treeId as TreeId;
-        const defaultName = tree.name + ' ' + strings.treeManager.duplicateSuffix;
+        const names = TreeManager.getTrees().map(t => t.name);
+        const defaultName = freeCopyName(tree.name, names);
 
         const modal = document.getElementById('duplicate-tree-modal');
         const input = document.getElementById('duplicate-tree-name') as HTMLInputElement;
@@ -1621,9 +1628,16 @@ export const treeManagementMethods = uiModule({
         }
         this.pushDialog('duplicate-tree-modal');
 
+        const taken = document.getElementById('duplicate-tree-name-taken');
+        // A name another tree has is said under the field (not blocked: two trees may share a name).
+        const check = (): void => {
+            if (taken) taken.textContent = input && treeNameTaken(input.value, names) ? strings.treeManager.duplicateNameTaken : '';
+        };
         if (input) {
             input.value = defaultName;
+            input.oninput = check;
         }
+        check();
 
         modal?.classList.add('active');
         input?.focus();

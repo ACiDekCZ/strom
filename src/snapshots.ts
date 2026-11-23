@@ -424,6 +424,24 @@ export async function treeImageIds(treeId: string): Promise<string[]> {
     return raw?.pooled === 1 ? Object.keys(raw.media ?? {}) : [];
 }
 
+/**
+ * The trees (of `ids`: a tree's pooled image ids, treeImageIds) that have an
+ * image another of them has too: their sizes count the shared images each
+ * (Manage trees, 134 S-P1).
+ */
+export function sharedImageTrees(ids: ReadonlyMap<string, readonly string[]>): Set<string> {
+    const owner = new Map<string, string>();
+    const shared = new Set<string>();
+    for (const [tree, list] of ids) {
+        for (const img of new Set(list)) {
+            const first = owner.get(img);
+            if (first === undefined) owner.set(img, tree);
+            else if (first !== tree) { shared.add(first); shared.add(tree); }
+        }
+    }
+    return shared;
+}
+
 /** Space a tree's snapshots take (shared images counted once). */
 export async function totalSnapshotBytes(treeId: string): Promise<number> {
     let sum = 0;

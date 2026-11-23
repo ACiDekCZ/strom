@@ -174,6 +174,19 @@ test.describe('the comparison of a large tree (K3.5)', () => {
 });
 
 test.describe('step 2: decisions (K3.3, K3.4)', () => {
+    test('a merge saved for later: its row in Manage trees says "N to decide" as step 2 counts it, not conflicts (134 S-P2)', async ({ page }) => {
+        await openApp(page);
+        const wizard = await openGuide(page, modrinovi(false), modrinoviFile(false));
+        await mergeCompare(wizard);
+        await expect(mergeCount(wizard, 'pending')).toHaveText('2');
+        await wizard.locator('#merge-save-later').click();
+        await expect(wizard).toBeHidden();
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const stats = page.locator('#tree-manager-modal .tree-manager-item.pending-merge .tree-manager-item-stats');
+        await expect(stats).toHaveText('2 to decide • 0/3 reviewed');
+        await expect(stats).not.toContainText('conflict');
+    });
+
     test('Continue is locked while pairs are left and says why; the rest Do not add decides them all and the counts add up', async ({ page }) => {
         await openApp(page);
         const wizard = await openGuide(page, modrinovi(false), modrinoviFile(false));

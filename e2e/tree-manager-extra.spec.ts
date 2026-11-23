@@ -1,7 +1,7 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'url';
-import { openApp, createFirstPerson, card, addRelation, fillPerson, waitForPersist, focusViaSearch, openTreeActions, openTreeStructure } from './helpers.js';
+import { openApp, seedTree, createFirstPerson, card, addRelation, fillPerson, waitForPersist, focusViaSearch, openTreeActions, openTreeStructure } from './helpers.js';
 
 /**
  * Tree manager flows beyond create / rename / delete: duplicating a tree (an
@@ -151,6 +151,68 @@ test('duplicate dialog: Cancel and an empty name create nothing; Escape returns 
     await expect(dialog).toBeHidden();
     await expect(manager(page)).toBeVisible();
     expect(await treeCount()).toBe(1);
+});
+
+test('a second Duplicate offers a free name "(copy 2)"; a name another tree has is said under the field (134 S-N4)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await waitForPersist(page, 'Jan');
+    const original = await activeTreeName(page);
+    const dialog = page.locator('#duplicate-tree-modal');
+    const name = dialog.locator('#duplicate-tree-name');
+    const taken = dialog.locator('#duplicate-tree-name-taken');
+
+    await rowAction(page, original, 'Duplicate');
+    await expect(name).toHaveValue(`${original} (copy)`);
+    await expect(taken).toBeHidden();
+    await dialog.getByRole('button', { name: 'Duplicate' }).click();
+    await expect(row(page, `${original} (copy)`)).toHaveCount(1);
+
+    await rowAction(page, original, 'Duplicate');
+    await expect(name).toHaveValue(`${original} (copy 2)`);
+    await expect(taken).toBeHidden();
+    // Typed by hand: the name of the first copy is told inline, not refused.
+    await name.fill(`${original} (copy)`);
+    await expect(taken).toHaveText('A tree with this name already exists.');
+    await expect(name).toHaveAttribute('aria-describedby', 'duplicate-tree-name-taken');
+    await name.fill(`${original} (copy 2)`);
+    await expect(taken).toBeHidden();
+    await name.press('Enter');
+    await expect(dialog).toBeHidden();
+    await expect(row(page, `${original} (copy 2)`)).toHaveCount(1);
+});
+
+test('a copy whose images the original shares: both sizes say "images shared", a tree of its own images not (134 S-P1)', async ({ page }) => {
+    await openApp(page);
+    // A noisy drawn picture over 1 MB, so the size is shown.
+    const photo = await page.evaluate(() => {
+        const c = document.createElement('canvas');
+        c.width = 800; c.height = 600;
+        const x = c.getContext('2d')!;
+        const img = x.createImageData(c.width, c.height);
+        for (let i = 0; i < img.data.length; i += 65536) crypto.getRandomValues(img.data.subarray(i, i + 65536));
+        for (let i = 3; i < img.data.length; i += 4) img.data[i] = 255;
+        x.putImageData(img, 0, 0);
+        return c.toDataURL('image/png');
+    });
+    expect(photo.length).toBeGreaterThan(1_100_000);
+    await seedTree(page, { jan: { firstName: 'Jan', lastName: 'Novak', photo } }, 'Novak', 'jan');
+    await createTree(page, 'Dvorak');
+    await createFirstPerson(page, 'Karel', 'Dvorak');
+    await waitForPersist(page, 'Karel');
+    await page.evaluate(async () => {
+        const T = window.Strom.TreeManager;
+        await T.flush();
+        const novak = T.getTrees().find((t: { name: string }) => t.name === 'Novak')!;
+        await T.duplicateTree(novak.id, 'Novak (copy)');
+        await T.flush();
+    });
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    const size = (name: string) => row(page, name).locator('.tree-manager-item-size');
+    await expect(size('Novak')).toContainText('MB · images shared');
+    await expect(size('Novak (copy)')).toContainText('MB · images shared');
+    await expect(size('Novak')).toHaveAttribute('title', /shared with another tree/);
+    await expect(row(page, 'Dvorak')).not.toContainText('images shared');
 });
 
 // ---------------------------------------------------------------- Tree: submenu

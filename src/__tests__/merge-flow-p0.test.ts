@@ -72,6 +72,7 @@ import { executeMerge } from '../merge/executor.js';
 import { mergeCheckMessage } from '../merge/merge-check.js';
 import { createMergeState, rebaseMergeState, updateMatchDecision } from '../merge/matching.js';
 import { listMergeSessionsInfo, saveMergeSession, updateMergeSession } from '../merge/persistence.js';
+import { planCounts, wizardPlan } from '../merge/plan.js';
 import { listSnapshots } from '../snapshots.js';
 import { contentFingerprint } from '../research-link.js';
 import { mergeUiMethods } from '../ui/merge-ui.js';
@@ -389,6 +390,29 @@ describe('134 V-N4 · a merge started from another tree than its target', () => 
         const old = await saveMergeSession(opened, 'Family + Family', 'Family', 'Family');
         expect(await updateMergeSession(old, opened, { targetTreeName: 'Cousins', sourceTreeName: 'Family' })).toBe(true);
         expect((await listMergeSessionsInfo()).find(x => x.id === old)).toMatchObject({ targetTreeName: 'Cousins' });
+    });
+});
+
+describe('134 S-P2 · a saved merge counts "to decide" as step 2 does', () => {
+    it('its stats carry the guide\'s pending pairs (planCounts of wizardPlan), a session of an older version too', async () => {
+        const state = started();
+        const m = MergerUI as unknown as { wizardSource(): WizardSource };
+        state.wizard = { step: 2, reached: 2, compared: true, choices: freshChoices(m.wizardSource(), state) };
+        // Undecided pairs: what step 2 shows "to decide".
+        for (const match of state.matches) state.decisions.delete(match.incomingId);
+        const pending = planCounts(wizardPlan(state)!).pending;
+        expect(pending).toBeGreaterThan(0);
+        const id = await saveMergeSession(state, 'Family + cousins', 'Family', 'Cousins');
+        const info = (await listMergeSessionsInfo()).find(s => s.id === id)!;
+        expect(info.stats.pending).toBe(pending);
+        // Saved by an older version (no pending in its stats): counted from its guide's state.
+        const sessions = st('merge').get('sessions') as Array<{ stats: { pending?: number } }>;
+        for (const s of sessions) delete s.stats.pending;
+        expect((await listMergeSessionsInfo()).find(s => s.id === id)!.stats.pending).toBe(pending);
+        // Before the comparison there is nothing to decide yet.
+        state.wizard.compared = false;
+        const early = await saveMergeSession(state, 'Family + cousins', 'Family', 'Cousins');
+        expect((await listMergeSessionsInfo()).find(s => s.id === early)!.stats.pending).toBeUndefined();
     });
 });
 

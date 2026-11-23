@@ -12,7 +12,8 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { createMergeState, updateMatchDecision } from '../merge/matching.js';
 import { AUTO_CONFIRM_SCORE, isEffectivelyConfirmed } from '../merge/executor.js';
-import { applyPlan, buildPlan, planCounts, type MergeRecord, type PlanSource, type WizardChoices } from '../merge/plan.js';
+import { applyPlan, buildPlan, isRepeatOf, planCounts, repeatCounts, type MergeRecord, type PlanSource, type WizardChoices } from '../merge/plan.js';
+import { setLanguage, strings } from '../strings.js';
 import { sanitizeMergeRecords } from '../merge/record.js';
 import type { MergeState } from '../merge/types.js';
 import { StorageManager } from '../storage.js';
@@ -190,5 +191,32 @@ describe('the same tree merged again (134 N1)', () => {
         expect(Object.keys(first.record.from ?? {}).length).toBe(first.record.added.length);
         const stored = sanitizeMergeRecords(JSON.parse(JSON.stringify([first.record])))!;
         expect(stored[0].from).toEqual(first.record.from);
+    });
+});
+
+describe('step 1 says the same tree was merged here before (134 N1, part C 6)', () => {
+    it('found by the tree\'s id (a tree has no file fingerprint), not undone; counted by the record\'s pairs', async () => {
+        const source = sourceTree();
+        const first = await mergeOnce(targetTree(), source, '2026-11-20T10:00:00.000Z');
+        const before = isRepeatOf(SOURCE, first.after.merges);
+        expect(before?.id).toBe(first.record.id);
+        expect(repeatCounts(source, first.after, before, true)).toEqual({ joined: 9, fresh: 0 });
+        // A person added to the source tree since: one new.
+        const grown = structuredClone(source);
+        grown.persons['Sp99' as PersonId] = { id: 'Sp99' as PersonId, firstName: 'Radhošť', lastName: 'Pernštýn', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] };
+        expect(repeatCounts(grown, first.after, before, true)).toEqual({ joined: 9, fresh: 1 });
+        // Another tree, a file, an undone merge: not this source again.
+        expect(isRepeatOf({ ...SOURCE, treeId: 'tree-jina' as PlanSource['treeId'] }, first.after.merges)).toBeNull();
+        expect(isRepeatOf({ kind: 'json', label: 'x.json', persons: 9 }, first.after.merges)).toBeNull();
+        expect(isRepeatOf(SOURCE, first.after.merges!.map(r => ({ ...r, state: 'undone' as const })))).toBeNull();
+    });
+
+    it('in the tree\'s own words', () => {
+        setLanguage('cs');
+        expect(strings.mergeWizard.repeatTree('Pernštýnovi – sestřenice', '20. 11. 2026', 0, 9))
+            .toBe('Ze stromu Pernštýnovi – sestřenice už se sem slučovalo 20. 11. 2026. Nových je jen 0 osob; 9 je spojeno se sloučením z 20. 11. 2026 a nezdvojí se.');
+        setLanguage('en');
+        expect(strings.mergeWizard.repeatTree('Jilmovi', 'today 3:41 PM', 1, 3))
+            .toBe('The tree Jilmovi was already merged into this one today 3:41 PM. Only 1 person is new; 3 are joined with the merge of today 3:41 PM and will not be duplicated.');
     });
 });

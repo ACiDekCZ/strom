@@ -16,6 +16,7 @@ import {
     ConflictResolution
 } from './types.js';
 import { detectPartnershipConflicts } from './executor.js';
+import { planCounts, wizardPlan } from './plan.js';
 import { StorageManager } from '../storage.js';
 
 // ==================== IDB KEYS ====================
@@ -59,6 +60,12 @@ export interface SavedMergeSession {
         reviewed: number;
         resolved: number;
         conflicts: number;
+        /**
+         * The guide's "to decide" (planCounts().pending of wizardPlan, the
+         * number of step 2), when the comparison ran (134 S-P2). Absent in
+         * sessions of older versions and before the comparison.
+         */
+        pending?: number;
     };
     state: SerializableMergeState;
 }
@@ -134,7 +141,18 @@ function calculateStats(state: MergeState): SavedMergeSession['stats'] {
         }
     }
 
-    return { total, reviewed, resolved, conflicts };
+    const pending = pendingOf(state);
+    return { total, reviewed, resolved, conflicts, ...(pending !== undefined ? { pending } : {}) };
+}
+
+/** The guide's "to decide" of a merge (step 2), or undefined before its comparison. */
+function pendingOf(state: MergeState): number | undefined {
+    try {
+        const plan = wizardPlan(state);
+        return plan ? planCounts(plan).pending : undefined;
+    } catch {
+        return undefined;
+    }
 }
 
 // ==================== CURRENT MERGE (AUTO-SAVE) ====================
@@ -294,14 +312,24 @@ export async function listMergeSessions(): Promise<SavedMergeSession[]> {
 
 export async function listMergeSessionsInfo(): Promise<Array<Omit<SavedMergeSession, 'state'>>> {
     const sessions = await listMergeSessions();
-    return sessions.map(({ id, savedAt, incomingFileName, targetTreeName, sourceTreeName, stats }) => ({
+    return sessions.map(({ id, savedAt, incomingFileName, targetTreeName, sourceTreeName, stats, state }) => ({
         id,
         savedAt,
         incomingFileName,
         targetTreeName,
         sourceTreeName,
-        stats
+        // A session saved by an older version: its "to decide" from its guide's state.
+        stats: stats.pending === undefined && state?.wizard ? { ...stats, ...pendingStat(state) } : stats
     }));
+}
+
+function pendingStat(serialized: SerializableMergeState): { pending?: number } {
+    try {
+        const pending = pendingOf(deserializeState(serialized));
+        return pending !== undefined ? { pending } : {};
+    } catch {
+        return {};
+    }
 }
 
 export async function hasPendingMerges(): Promise<boolean> {

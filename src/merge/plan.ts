@@ -244,6 +244,16 @@ function newPlanId(): string {
 }
 
 /**
+ * The plan of a merge as its guide has it: from the guide's choices once the
+ * comparison of step 1 ran (or for a new tree), else none. The guide and a
+ * saved merge's row in Manage trees count from it (134 S-P2).
+ */
+export function wizardPlan(state: MergeState): MergePlan | null {
+    const ws = state.wizard;
+    return ws && (ws.compared || ws.choices.mode === 'new') ? buildPlan(state, ws.choices) : null;
+}
+
+/**
  * The plan from the wizard's choices and the comparison (`state`; for a new
  * tree its tree may be empty and its matches are not used).
  * - joined: a pair decided "same" or picked by hand, or undecided with a score
@@ -1256,13 +1266,18 @@ export function scopeExample(source: StromData, target: StromData, state?: Merge
  * The earlier merge of the same source (§13 13c, K1.5): a record with the
  * same fingerprint of the source (a file's SHA-256), not undone; the latest
  * one. Null when this source was not merged before. The import id alone says
- * nothing: every file read names its own import I1.
+ * nothing: every file read names its own import I1. A tree has no such
+ * fingerprint (its data change): a merge of the same tree (`treeId`) is it.
  */
 export function isRepeatOf(source: PlanSource, merges: readonly MergeRecord[] | undefined): MergeRecord | null {
-    if (!source.fingerprint) return null;
+    const tree = source.kind === 'tree' && source.treeId ? source.treeId : null;
+    if (!source.fingerprint && !tree) return null;
+    const same = (r: MergeRecord): boolean => source.fingerprint
+        ? r.source.fingerprint === source.fingerprint
+        : r.source.kind === 'tree' && r.source.treeId === tree;
     let found: MergeRecord | null = null;
     for (const r of merges ?? []) {
-        if (r.state === 'undone' || r.source.fingerprint !== source.fingerprint) continue;
+        if (r.state === 'undone' || !same(r)) continue;
         if (!found || r.at > found.at) found = r;
     }
     return found;
@@ -1288,10 +1303,19 @@ export function importedBefore(source: PlanSource, target: StromData): ImportRec
  * tree's person that merge added or joined, or with `record` null anyone of
  * the tree, was the same record of a file the same program wrote, K1.5) and
  * how many are new. Without such ids on both sides: the earlier merge's
- * totals stand in for it.
+ * totals stand in for it. A tree merged again (`byIds`) keeps its people's
+ * ids: the record's pairs name them (joined, added with `from`), where the
+ * tree's person is still there (134 N1).
  */
-export function repeatCounts(source: StromData, target: StromData, record: MergeRecord | null): { joined: number; fresh: number } {
+export function repeatCounts(source: StromData, target: StromData, record: MergeRecord | null, byIds = false): { joined: number; fresh: number } {
     const incoming = Object.values(source.persons).filter(p => !p.isPlaceholder);
+    if (record && byIds) {
+        const known = new Set<string>();
+        for (const [treeId, sourceId] of record.joined) if (target.persons[treeId]) known.add(sourceId);
+        for (const treeId of record.added) if (target.persons[treeId]) known.add(record.from?.[treeId] ?? treeId);
+        const joined = incoming.filter(p => known.has(p.id)).length;
+        return { joined, fresh: incoming.length - joined };
+    }
     const earlier = record
         ? [...record.added, ...record.joined.map(([id]) => id)].map(id => target.persons[id]).filter((p): p is Person => !!p)
         : Object.values(target.persons).filter(p => !p.isPlaceholder);

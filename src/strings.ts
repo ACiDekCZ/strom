@@ -6312,8 +6312,7 @@ const stringsEN = {
 
         // Pending merge in tree manager
         pendingMergeLabel: 'Pending merge',
-        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
-        pendingMergeConflicts: (count: number) => nEn(count, 'conflict', 'conflicts')
+        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`
     },
 
     // Import and merge guide (spec 134): the six steps, counts, inputs, steps 1-2, edge states
@@ -6476,6 +6475,8 @@ const stringsEN = {
             ? `The only person is already in the tree ${t} and brings nothing new.`
             : `All ${n} people are already in the tree ${t} and bring nothing new.`,
         repeat: (d: string, n: number, m: number) => `This file was already merged ${d}. Only ${nEn(n, 'person is', 'people are')} new; ${m} ${m === 1 ? 'is' : 'are'} joined with the merge of ${d} and will not be duplicated.`,
+        /** A tree merged into this one before (134 N1): `t` its name. */
+        repeatTree: (t: string, d: string, n: number, m: number) => `The tree ${t} was already merged into this one ${d}. Only ${nEn(n, 'person is', 'people are')} new; ${m} ${m === 1 ? 'is' : 'are'} joined with the merge of ${d} and will not be duplicated.`,
         encLocked: (t: string) => `The tree ${t} is encrypted and locked.`,
         savedLater: (s: string, i: number) => `Saved for later · ${s} · step ${i} · in Manage trees under Unfinished merges`,
         crashed: (t: string) => `Last time the merge did not finish. The tree ${t} and the file are unchanged.`,
@@ -6960,6 +6961,12 @@ const stringsEN = {
         newTreePlaceholder: 'Tree name',
         confirmDelete: (name: string) => `Delete tree "${name}"? This cannot be undone.`,
         duplicateSuffix: '(copy)',
+        /** The second, third… copy of one tree (S-N4). */
+        duplicateSuffixN: (n: number) => `(copy ${n})`,
+        duplicateNameTaken: 'A tree with this name already exists.',
+        /** Beside a tree's size when another tree has some of its images (134 S-P1). */
+        imagesShared: 'images shared',
+        imagesSharedTip: 'Some images are shared with another tree: the size counts them, but they take their space only once.',
         importTreeName: 'Imported Tree',
         importAsNewTree: 'Import as new tree',
         treeNameLabel: 'Tree name',
@@ -17547,8 +17554,7 @@ const stringsCZ: StringsType = {
 
         // Pending merge in tree manager
         pendingMergeLabel: 'Rozpracované sloučení',
-        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
-        pendingMergeConflicts: (count: number) => nCs(count, 'konflikt', 'konflikty', 'konfliktů')
+        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`
     },
 
     // Import and merge guide (spec 134): the six steps, counts, inputs, steps 1-2, edge states
@@ -17709,6 +17715,7 @@ const stringsCZ: StringsType = {
             : n >= 2 && n <= 4 ? `Všechny ${n} osoby už ve stromu ${t} jsou a nic nového nepřinesou.`
             : `Všech ${n} osob už ve stromu ${t} je a nic nového nepřinesou.`,
         repeat: (d: string, n: number, m: number) => `Tento soubor už byl sloučen ${d}. ${n === 1 ? 'Nová je jen 1 osoba' : n >= 2 && n <= 4 ? `Nové jsou jen ${n} osoby` : `Nových je jen ${n} osob`}; ${m} ${m === 1 ? 'je spojena' : m >= 2 && m <= 4 ? 'jsou spojeny' : 'je spojeno'} se sloučením z ${d} a nezdvojí se.`,
+        repeatTree: (t: string, d: string, n: number, m: number) => `Ze stromu ${t} už se sem slučovalo ${d}. ${n === 1 ? 'Nová je jen 1 osoba' : n >= 2 && n <= 4 ? `Nové jsou jen ${n} osoby` : `Nových je jen ${n} osob`}; ${m} ${m === 1 ? 'je spojena' : m >= 2 && m <= 4 ? 'jsou spojeny' : 'je spojeno'} se sloučením z ${d} a nezdvojí se.`,
         encLocked: (t: string) => `Strom ${t} je šifrovaný a zamčený.`,
         savedLater: (s: string, i: number) => `Uloženo na později · ${s} · krok ${i} · ve Správě stromů v Nedokončených sloučeních`,
         crashed: (t: string) => `Minule se sloučení nedokončilo. Strom ${t} i soubor jsou beze změny.`,
@@ -18196,6 +18203,10 @@ const stringsCZ: StringsType = {
         newTreePlaceholder: 'Název stromu',
         confirmDelete: (name: string) => `Smazat strom „${name}“? Toto nelze vrátit zpět.`,
         duplicateSuffix: '(kopie)',
+        duplicateSuffixN: (n: number) => `(kopie ${n})`,
+        duplicateNameTaken: 'Strom s tímto názvem už existuje.',
+        imagesShared: 'obrázky sdílené',
+        imagesSharedTip: 'Část obrázků má strom společnou s jiným stromem: velikost je počítá, místo ale zabírají jen jednou.',
         importTreeName: 'Importovaný strom',
         importAsNewTree: 'Importovat jako nový strom',
         treeNameLabel: 'Název stromu',
@@ -28629,8 +28640,7 @@ const stringsDE: StringsType = {
         incomingTree: 'Neue Daten',
 
         pendingMergeLabel: 'Ausstehende Zusammenführung',
-        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
-        pendingMergeConflicts: (count: number) => nDe(count, 'Konflikt', 'Konflikte')
+        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`
     },
 
     // Import and merge guide (spec 134): the six steps, counts, inputs, steps 1-2, edge states
@@ -28788,6 +28798,7 @@ const stringsDE: StringsType = {
             ? `Die einzige Person ist schon im Stammbaum ${t} und bringt nichts Neues.`
             : `Alle ${n} Personen sind schon im Stammbaum ${t} und bringen nichts Neues.`,
         repeat: (d: string, n: number, m: number) => `Diese Datei wurde schon am ${d} zusammengeführt. Nur ${nDe(n, 'Person ist', 'Personen sind')} neu; ${m === 1 ? '1 ist' : `${m} sind`} mit der Zusammenführung vom ${d} verbunden und ${m === 1 ? 'wird' : 'werden'} nicht verdoppelt.`,
+        repeatTree: (t: string, d: string, n: number, m: number) => `Der Stammbaum ${t} wurde schon am ${d} hierher zusammengeführt. Nur ${nDe(n, 'Person ist', 'Personen sind')} neu; ${m === 1 ? '1 ist' : `${m} sind`} mit der Zusammenführung vom ${d} verbunden und ${m === 1 ? 'wird' : 'werden'} nicht verdoppelt.`,
         encLocked: (t: string) => `Der Stammbaum ${t} ist verschlüsselt und gesperrt.`,
         savedLater: (s: string, i: number) => `Für später gespeichert · ${s} · Schritt ${i} · unter Stammbäume verwalten bei Unvollendete Zusammenführungen`,
         crashed: (t: string) => `Beim letzten Mal wurde die Zusammenführung nicht beendet. Stammbaum ${t} und Datei sind unverändert.`,
@@ -29267,6 +29278,10 @@ const stringsDE: StringsType = {
         newTreePlaceholder: 'Stammbaum-Name',
         confirmDelete: (name: string) => `Stammbaum „${name}“ löschen? Das kann nicht rückgängig gemacht werden.`,
         duplicateSuffix: '(Kopie)',
+        duplicateSuffixN: (n: number) => `(Kopie ${n})`,
+        duplicateNameTaken: 'Ein Stammbaum mit diesem Namen existiert bereits.',
+        imagesShared: 'Bilder geteilt',
+        imagesSharedTip: 'Einige Bilder teilt der Stammbaum mit einem anderen: Die Größe zählt sie mit, Platz belegen sie aber nur einmal.',
         importTreeName: 'Importierter Stammbaum',
         importAsNewTree: 'Als neuen Stammbaum importieren',
         treeNameLabel: 'Stammbaum-Name',

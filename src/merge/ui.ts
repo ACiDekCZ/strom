@@ -1103,8 +1103,11 @@ class MergerUIClass {
         const day = before ? formatRelativeDateTime(Date.parse(before.at), lang)
             : y && m && d ? new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'numeric', year: 'numeric' }).format(new Date(y, m - 1, d))
                 : loaded?.at ?? '';
-        const { joined, fresh } = repeatCounts(state.incomingData, target, before);
-        return strings.mergeWizard.repeat(day, fresh, joined);
+        const source = ws.choices.source;
+        // A tree merged again (134 N1): its people keep their ids, the record's pairs count them; its own words.
+        const tree = !!before && source.kind === 'tree' && !source.fingerprint;
+        const { joined, fresh } = repeatCounts(state.incomingData, target, before, tree);
+        return tree ? strings.mergeWizard.repeatTree(source.label, day, fresh, joined) : strings.mergeWizard.repeat(day, fresh, joined);
     }
 
     /** Step 5's "Save the list…" (K6.4): the plan as a .txt to read and a .json, living people protected. */
