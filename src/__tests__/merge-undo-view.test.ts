@@ -243,7 +243,7 @@ describe('the research in the undo dialog (11c, K9.3)', () => {
         try {
             const v = undoResearchView({ ...record, sentAt: '2026-11-22T14:41:00.000Z', sentToResearch: 'I0412' }, 1)!;
             expect(v.sent).toBe('Sloučení už je ve výzkumu (odesláno 22. 11. 2026). Výzkum osoby sám nesmaže.');
-            expect(v.comesBack).toBe('Do té doby výzkum při příští verzi vrátí 1 osobu zpět – aplikace je pak nabídne k odebrání.');
+            expect(v.comesBack).toBe('Do té doby výzkum při příští verzi vrátí 1 osobu zpět – aplikace ji pak nabídne k odebrání.');
         } finally {
             setLanguage('en');
         }
