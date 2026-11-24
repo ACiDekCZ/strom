@@ -58,6 +58,8 @@ import { treeActionsAsSheet, TreeActionRow } from './tree-actions.js';
 import { isPhoneToolbar } from './search.js';
 
 import { iconSvg } from '../icons.js';
+import { shortName, treeRowDrop, treeRowFileRoute, TREE_DRAG_TYPE, type TreeDrag } from '../tree-drop.js';
+import { TreeEditLock } from './tree-edit-lock.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { forgetTreeMaterials } from './materials-ui.js';
 import { updateDefaultFocusButtons } from './default-focus.js';
@@ -1017,6 +1019,7 @@ export const treeManagementMethods = uiModule({
             btn.addEventListener('click', () => { void this.discardPendingMergeFromManager(btn.dataset.sessionId ?? '', btn.dataset.mergeName ?? ''); });
         });
         this.wireTreeRowMenus(list);
+        this.wireTreeRowDrops(list);
         void this.markSharedImageTrees(list, trees.map(t => t.id));
     },
 
@@ -1076,6 +1079,101 @@ export const treeManagementMethods = uiModule({
     },
 
     /** Per-row "⋯" menus: one open at a time, outside click closes. Wired once. */
+    /**
+     * Drops on a tree's row (spec 134 K10.3): a file (.ged or a Strom tree
+     * .json) opens the import guide with that tree as the target; another
+     * tree's row, dragged with a mouse, opens it with the dragged tree as
+     * the import (as ⋯ → Merge into another tree…, the target chosen). The
+     * row under the drag is dashed and says what the drop does. Touch drags
+     * nothing (the ⋯ menu stays the way). The drop is taken here: the
+     * window's own drop sees it prevented and leaves it.
+     */
+    wireTreeRowDrops(list: HTMLElement): void {
+        const fine = typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches;
+        const canEdit = (): boolean => !DataManager.isViewMode();
+        if (fine && canEdit()) {
+            list.querySelectorAll<HTMLElement>('.tree-manager-item[data-tree-id]').forEach(row => { row.draggable = true; });
+        }
+        if (list.dataset.dropWired) return;
+        list.dataset.dropWired = '1';
+        // The tree whose row is being dragged (its id is not readable before the drop).
+        let dragged: string | null = null;
+        let over: HTMLElement | null = null;
+        const clear = (): void => {
+            over?.classList.remove('is-drop-target');
+            over?.querySelector('.tree-manager-drop-hint')?.remove();
+            over = null;
+        };
+        const rowOf = (e: Event): HTMLElement | null =>
+            (e.target as Element | null)?.closest?.<HTMLElement>('.tree-manager-item[data-tree-id]') ?? null;
+        const dragOf = (e: DragEvent): TreeDrag => {
+            const types = Array.from(e.dataTransfer?.types ?? []);
+            if (dragged && types.includes(TREE_DRAG_TYPE)) return { kind: 'tree', treeId: dragged };
+            return types.includes('Files') ? { kind: 'files' } : null;
+        };
+        const nameOf = (id: string): string => shortName(TreeManager.getTreeMetadata(id as TreeId)?.name ?? '');
+        list.addEventListener('dragstart', e => {
+            const row = rowOf(e);
+            if (!row?.draggable || !e.dataTransfer || e.target !== row) return;
+            dragged = row.dataset.treeId ?? null;
+            e.dataTransfer.setData(TREE_DRAG_TYPE, dragged ?? '');
+            e.dataTransfer.effectAllowed = 'copy';
+            row.classList.add('is-drag-source');
+        });
+        list.addEventListener('dragend', () => {
+            dragged = null;
+            clear();
+            list.querySelectorAll('.is-drag-source').forEach(r => r.classList.remove('is-drag-source'));
+        });
+        const hover = (e: DragEvent): void => {
+            const row = rowOf(e);
+            const drop = treeRowDrop(dragOf(e), row?.dataset.treeId, { canEdit: canEdit() });
+            if (drop.kind === 'none' || !row) {
+                if (over && over !== row) clear();
+                return;
+            }
+            // Taken: the row is where the drop goes.
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+            if (over === row) return;
+            clear();
+            over = row;
+            row.classList.add('is-drop-target');
+            // The browser names a dragged file only at the drop: until then "the file".
+            const file = drop.kind === 'file' ? e.dataTransfer?.files?.[0]?.name || null : nameOf(drop.source);
+            const hint = document.createElement('span');
+            hint.className = 'tree-manager-drop-hint';
+            const text = hint.appendChild(document.createElement('span'));
+            text.textContent = strings.mergeWizard.dropOnTree(file ? shortName(file) : null, nameOf(drop.target));
+            (row.querySelector('.tree-manager-item-actions') ?? row).appendChild(hint);
+        };
+        list.addEventListener('dragenter', hover);
+        list.addEventListener('dragover', hover);
+        list.addEventListener('dragleave', e => {
+            if (over && !over.contains(e.relatedTarget as Node | null)) clear();
+        });
+        list.addEventListener('drop', e => {
+            const drop = treeRowDrop(dragOf(e), rowOf(e)?.dataset.treeId, { canEdit: canEdit() });
+            clear();
+            if (drop.kind === 'none') return;
+            // Not stopped: the window's drop resets its drag count and, seeing it prevented, does nothing more.
+            e.preventDefault();
+            if (drop.kind === 'tree') {
+                void this.showMergeTreesDialog(drop.source, 'tree-manager-modal', drop.target as TreeId);
+                return;
+            }
+            // The tree is being replaced: a file dropped now is refused, as on the window.
+            if (TreeEditLock.refuse()) return;
+            const files = Array.from(e.dataTransfer?.files ?? []);
+            const into = { target: drop.target as TreeId };
+            const route = treeRowFileRoute(files.map(f => f.name));
+            if (route === 'none') return;
+            if (route === 'json') void this.openJsonFile(files[0], { batch: false, into });
+            // A GEDCOM file, or one the window would refuse: openGedcomFile says it opens only GEDCOM.
+            else void this.openGedcomFile(files[0], into);
+        });
+    },
+
     wireTreeRowMenus(list: HTMLElement): void {
         const closeAll = () =>
             list.querySelectorAll('.tree-row-menu.open').forEach(m => m.classList.remove('open'));

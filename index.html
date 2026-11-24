@@ -20096,6 +20096,20 @@
         .tree-manager-pending-actions .link-button.danger { color: var(--danger); background: none; margin-right: 0; }
         @media (pointer: coarse) { .tree-manager-pending-actions .link-button { min-height: 44px; } }
         @media (max-width: 760px) { .tree-manager-item:not(.pending-merge) { grid-template-columns: minmax(0, 1fr); } }
+        /* Spec 134 K10.3: the row under a dragged file or tree, dashed as the drop overlay's box; the sentence of what
+           the drop does stands over the row's buttons (never wider than they are), the dragged tree's row dimmed. */
+        .tree-manager-item.sel-opt.is-drop-target { outline: 2px dashed var(--primary); outline-offset: -2px; }
+        .tree-manager-item.is-drag-source { opacity: .55; }
+        .tree-manager-item[draggable="true"] { cursor: grab; }
+        .tree-manager-item[draggable="true"] :is(button, .clickable, a) { cursor: pointer; }
+        .tree-manager-item-actions { position: relative; }
+        .tree-manager-item.is-drop-target .tree-manager-item-actions > :not(.tree-manager-drop-hint) { visibility: hidden; }
+        .tree-manager-drop-hint {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end;
+            min-width: 0; pointer-events: none; font-size: 12.5px; line-height: 1.35; color: var(--primary-dark); text-align: right;
+        }
+        .tree-manager-drop-hint > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+        @media (max-width: 760px) { .tree-manager-drop-hint { justify-content: flex-start; text-align: left; } }
         .tree-row-menu-wrap { position: relative; margin-left: auto; }
         .tree-row-menu-btn { font-size: 16px; font-weight: 700; letter-spacing: 1px; }
         .tree-row-menu {

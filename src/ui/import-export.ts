@@ -16,6 +16,7 @@ import { noteExportAll } from '../research-device.js';
 import { DataManager, auditPersonName, storedTreeForExport, storedTreeWithRefs } from '../data.js';
 import { confirmMemoryForImport } from './memory-limit-ui.js';
 import { jsonDropKind } from '../drop-route.js';
+import type { DropInto } from '../tree-drop.js';
 import { TreeManager } from '../tree-manager.js';
 import { sanitizeResearchField } from '../research-link.js';
 import { TreeRenderer } from '../renderer.js';
@@ -96,7 +97,9 @@ import { jsonFileWithImages } from '../image-stream.js';
 
 /** A list the export dialog's list scope offers (spec 084 §12): one with people. */
 /** A Strom file to add to the open tree through the merge guide (spec 139 §6.2): the tree and the file's name. */
-interface JsonImportInto { treeId: TreeId; fileName: string }
+interface JsonImportInto { treeId: TreeId; fileName: string;
+    /** Dropped on this tree's row in Manage trees (K10.3): any tree, not only the open one; the guide returns there. */
+    dropped?: true }
 
 interface ExportableList { list: PersonList; count: number }
 
@@ -593,7 +596,7 @@ export const importExportMethods = uiModule({
     },
 
     /** The GEDCOM file just read, into the import guide: what it holds is step 1's left column. */
-    openGedcomGuide(fromManager: boolean): void {
+    openGedcomGuide(fromManager: boolean, target?: TreeId): void {
         const result = this.gedcomResult;
         if (!result) return;
         this.renderGedcomSummary();
@@ -603,7 +606,8 @@ export const importExportMethods = uiModule({
         MergerUI.startMerge(this.gedcomDataForImport(), file?.name || undefined, fromManager,
             { gedcom: true, ...(result.importId ? { importId: result.importId } : {}) },
             { kind: 'ged', ...(file?.sha ? { fingerprint: file.sha } : {}) },
-            { gedcomLive: true, ...(fromManager ? { mode: 'new' as const } : {}) });
+            // Dropped on a tree's row (K10.3): Add to that tree; otherwise from Manage trees, New tree.
+            { gedcomLive: true, ...(target ? { target } : fromManager ? { mode: 'new' as const } : {}) });
     },
 
     /** The import guide let the GEDCOM file go (written, saved as JSON or closed). */
@@ -1107,7 +1111,7 @@ export const importExportMethods = uiModule({
      * is material for a research that takes batches (`batch`), otherwise
      * said unreadable; nothing changes.
      */
-    async importDroppedJson(file: File, opts: { batch: boolean }): Promise<void> {
+    async importDroppedJson(file: File, opts: { batch: boolean; into?: DropInto }): Promise<void> {
         if (!(await confirmMemoryForImport(file.size, file.name))) return;
         let text = '';
         let parsed: unknown;
@@ -1122,11 +1126,13 @@ export const importExportMethods = uiModule({
             else await this.showAlert(strings.mergeWizard.unreadableJson(file.name), 'error');
             return;
         }
-        const treeId = DataManager.getCurrentTreeId();
+        // Dropped on a tree's row (K10.3): that tree; otherwise the open one.
+        const treeId = opts.into?.target ?? DataManager.getCurrentTreeId();
         // A file handle from an earlier "open from file" never belongs to this import.
         this.pendingOpenFileHandle = null;
         this.jsonImportFileName = file.name;
-        await this.importJsonString(text, parsed, treeId ? { treeId, fileName: file.name } : undefined);
+        await this.importJsonString(text, parsed, treeId
+            ? { treeId, fileName: file.name, ...(opts.into ? { dropped: true as const } : {}) } : undefined);
     },
 
     /** See readJsonImportFile; `before` runs once the text is read, before the import. */
@@ -1214,10 +1220,12 @@ export const importExportMethods = uiModule({
     processJsonImport(data: StromData, into?: JsonImportInto): void {
         // Add from a file to this tree (spec 139 §6.2, K1.4): the merge guide with the open tree as its
         // target, never a new tree; the file's research tie does not carry over.
-        if (into && into.treeId === DataManager.getCurrentTreeId() && !DataManager.isViewMode()) {
+        // Dropped on a tree's row in Manage trees (K10.3): that tree the target, open or not; closing returns there.
+        if (into && (into.dropped || into.treeId === DataManager.getCurrentTreeId()) && !DataManager.isViewMode()) {
             this.pendingImportResearch = null;
             this.closeImportDialog();
-            MergerUI.startMerge(data, into.fileName, false, undefined, { kind: 'json' });
+            if (into.dropped) this.closeTreeManagerDialog();
+            MergerUI.startMerge(data, into.fileName, !!into.dropped, undefined, { kind: 'json' }, into.dropped ? { target: into.treeId } : {});
             return;
         }
         // Check if importing directly to current tree (from empty state)

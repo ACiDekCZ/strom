@@ -160,6 +160,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         blockNewer: (t: string, v: number) => `Drzewo ${t} pochodzi z nowszej wersji aplikacji (wersja danych ${v}) i jest tu tylko do odczytu: nie może być celem.`,
         unreadable: (name: string) => `${name} nie jest czytelnym plikiem GEDCOM. Nic się nie zmieniło.`,
         unreadableJson: (name: string) => `${name} nie jest czytelnym plikiem drzewa genealogicznego (.json). Nic się nie zmieniło.`,
+        dropOnTree: (file: string | null, tree: string) => (file ? `Upuszczenie: dodanie ${file} do drzewa ${tree}` : `Upuszczenie: dodanie pliku do drzewa ${tree}`),
         otherDialog: (d: string) => `Najpierw trzeba zakończyć otwarte okno ${d}; potem plik otworzy się w kreatorze.`,
         resumeChanged: (t: string, n: number) => `Drzewo ${t} od tego czasu się zmieniło (${nPl(n, 'zmiana', 'zmiany', 'zmian')}): propozycje zostaną przeliczone, decyzje zostaną.`,
         pickOther: 'Wybierz inne drzewo',

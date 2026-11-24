@@ -50,6 +50,7 @@ import {
 } from './persistence.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { iconSvg } from '../icons.js';
+import { initialMergeTarget } from '../tree-drop.js';
 import { MergeWizard, targetBlock, targetBlockText, wizardRoute, type CompareRun, type WizardSource } from './wizard-ui.js';
 import type { WizardStep } from './wizard-steps.js';
 import { importedBefore, isRepeatOf, planCounts, repeatCounts, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
@@ -202,7 +203,9 @@ class MergerUIClass {
         incomingData: StromData, sourceTreeIdOrFileName?: string | TreeId, fromTreeManager: boolean = false,
         gedcomImport?: { gedcom: true; importId?: string },
         source?: Partial<Pick<PlanSource, 'kind' | 'fingerprint'>>,
-        opts: { mode?: PlanMode; gedcomLive?: boolean; exclude?: TreeId } = {},
+        opts: { mode?: PlanMode; gedcomLive?: boolean; exclude?: TreeId;
+            /** The target asked for (a drop on its row in Manage trees, K10.3): chosen when it can take the import. */
+            target?: TreeId } = {},
     ): void {
         const existingData = DataManager.getData();
         this.gedcomImport = gedcomImport;
@@ -230,15 +233,18 @@ class MergerUIClass {
             ? sourceTreeIdOrFileName as TreeId : null;
         const usable = (id: TreeId | null): id is TreeId => !!id && id !== sourceTreeId && id !== opts.exclude && !targetBlock(id);
         const twoTrees = source?.kind === 'tree' || source?.kind === 'view';
-        const targetId = usable(openId) ? openId
-            : twoTrees ? TreeManager.getTrees().map(t => t.id).find(usable) ?? null : null;
+        const { targetId, keepAdd } = initialMergeTarget({
+            requested: opts.target ?? null, openId, trees: TreeManager.getTrees().map(t => t.id), usable, twoTrees,
+        });
         const targetOpen = !!targetId && targetId === openId;
         if (targetOpen) this.mergeState.target = { treeId: targetId, fingerprint: contentFingerprint(existingData) };
         this.targetLoaded = targetOpen ? targetId : null;
         this.initialTarget = targetId && !targetOpen ? targetId : null;
         // Into an empty tree there is nothing to compare with: New tree first (the tree stays a choice).
         const emptyOpen = targetOpen && Object.values(existingData.persons).every(p => p.isPlaceholder);
-        if (!targetId) this.initialMode = 'new';
+        // A tree asked for: Add to it (a blocked one says why on its tile, no other is chosen for it).
+        if (keepAdd) this.initialMode = this.initialMode ?? 'add';
+        else if (!targetId) this.initialMode = 'new';
         else if (emptyOpen && !this.initialMode) this.initialMode = 'new';
         this.hasUnsavedChanges = false;
         this.openedFromTreeManager = fromTreeManager;

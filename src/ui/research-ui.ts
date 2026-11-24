@@ -133,6 +133,7 @@ import { expandedData } from '../image-expand.js';
 import { exportGedcomWithImages, gedcomText, type GedcomWithImages } from '../ged-export-images.js';
 import { looksLikeGedcom } from './file-pick.js';
 import { dragLooksLikeJson, dropRoute, isJsonFileName } from '../drop-route.js';
+import type { DropInto } from '../tree-drop.js';
 import { createSha256 } from '../sha256.js';
 import { localIsoDay } from '../import-origin.js';
 
@@ -2415,7 +2416,7 @@ export const researchUiMethods = uiModule({
      * the JSON import's own way. A file that is no file of the app is material
      * for a research that takes batches (`batch`), otherwise said unreadable.
      */
-    async openJsonFile(file: File, opts: { batch: boolean }): Promise<void> {
+    async openJsonFile(file: File, opts: { batch: boolean; into?: DropInto }): Promise<void> {
         if (!externalReady) {
             this.showToast(strings.research.notReady);
             return;
@@ -2427,8 +2428,11 @@ export const researchUiMethods = uiModule({
         await enqueueOpen(() => this.importDroppedJson(file, opts));
     },
 
-    /** A local GEDCOM file (dropped or from the file handler). */
-    async openGedcomFile(file: File): Promise<void> {
+    /**
+     * A local GEDCOM file (dropped or from the file handler). `into`: dropped
+     * on a tree's row in Manage trees (K10.3), that tree the guide's target.
+     */
+    async openGedcomFile(file: File, into?: DropInto): Promise<void> {
         if (!externalReady) {
             this.showToast(strings.research.notReady);
             return;
@@ -2460,7 +2464,7 @@ export const researchUiMethods = uiModule({
             // The guide's step 1 names the file and keeps its fingerprint, as Import → GEDCOM does.
             const sha = createSha256();
             sha.update(new Uint8Array(buffer));
-            await this.openGedcomText(text, { file: { name: file.name, sha: sha.digestHex(), at: localIsoDay() } });
+            await this.openGedcomText(text, { file: { name: file.name, sha: sha.digestHex(), at: localIsoDay() }, ...(into ? { into } : {}) });
         });
     },
 
@@ -2681,7 +2685,9 @@ export const researchUiMethods = uiModule({
         /** The file came with the tree's own files (spec 108 §5). */
         appMedia?: boolean;
         /** A local file (dropped, opened from the system): its name and fingerprint for the import guide. */
-        file?: { name: string; sha: string; at: string } } = {}): Promise<void> {
+        file?: { name: string; sha: string; at: string };
+        /** Dropped on a tree's row in Manage trees (K10.3): the guide's target, back to Manage trees on close. */
+        into?: DropInto } = {}): Promise<void> {
         if (DataManager.isViewMode()) {
             this.showToast(strings.research.notInViewMode, 5000);
             return;
@@ -2695,6 +2701,8 @@ export const researchUiMethods = uiModule({
             await this.showAlert(strings.gedcom.parseError, 'error');
             return;
         }
+        // Dropped on a tree's row: Manage trees gives way to what the file opens.
+        if (opts.into) this.closeTreeManagerDialog();
         if (!header.isStromResearch) {
             // The same way as Import → GEDCOM: the import guide, the file's summary in its step 1.
             this.importFromTreeManager = false;
@@ -2704,7 +2712,7 @@ export const researchUiMethods = uiModule({
             this.gedcomRawBuffer = null;
             this.gedcomDecoding = null;
             this.gedcomImportImages = null;
-            this.openGedcomGuide(false);
+            this.openGedcomGuide(!!opts.into, opts.into?.target);
             return;
         }
         if (!await this.ensureLocalUnlocked()) return;

@@ -330,6 +330,119 @@ test('a GEDCOM file dropped over another dialog: the toast says it needs finishi
     await expect(wizard.locator('#merge-route')).toHaveText('rodokmen-jilmovi.ged → Modřínovi');
 });
 
+/** Manage trees open, the row of tree `name`. */
+async function managerRow(page: Page, name: string): Promise<Locator> {
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    const manager = page.locator('#tree-manager-modal');
+    await expect(manager).toBeVisible();
+    return manager.locator('.tree-manager-item').filter({ has: page.locator('.tree-manager-item-name', { hasText: new RegExp(`^${name}$`) }) });
+}
+
+/** A file dropped on a row of Manage trees as the browser does it (dragenter, dragover, drop on the row). */
+async function dropFileOnRow(row: Locator, name: string, text: string, stopAt?: 'dragover', type = 'text/plain'): Promise<void> {
+    await row.evaluate((node, { name, text, stopAt, type }) => {
+        const dt = new DataTransfer();
+        dt.items.add(new File([text], name, { type }));
+        const fire = (t: string) => node.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, dataTransfer: dt }));
+        fire('dragenter');
+        fire('dragover');
+        if (stopAt === 'dragover') return;
+        fire('drop');
+    }, { name, text, stopAt, type });
+}
+
+/** The row `from` dragged with the mouse onto the row `to` (dragstart, dragenter, dragover, drop, dragend). */
+async function dragRowOnRow(from: Locator, to: Locator, stopAt?: 'dragover'): Promise<void> {
+    const target = await to.elementHandle();
+    await from.evaluate((source, { target, stopAt }) => {
+        const dt = new DataTransfer();
+        const fire = (node: Element, t: string) => node.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, dataTransfer: dt }));
+        fire(source, 'dragstart');
+        fire(target as Element, 'dragenter');
+        fire(target as Element, 'dragover');
+        if (stopAt === 'dragover') return;
+        fire(target as Element, 'drop');
+        fire(source, 'dragend');
+    }, { target, stopAt });
+}
+
+test('a GEDCOM file or a Strom tree dropped on a tree\'s row in Manage trees: step 1 with that tree as the target, closing returns to Manage trees (K10.3)', async ({ page }) => {
+    await openModrinovi(page);
+    await seedJilmovi(page);
+    const before = await stored(page);
+    const manager = page.locator('#tree-manager-modal');
+    const wizard = page.locator('#merge-modal');
+
+    await dropFileOnRow(await managerRow(page, 'Jilmovi'), 'rodokmen-jilmovi.ged', await gedText());
+    await expect(wizard).toBeVisible();
+    await expect(manager).toBeHidden();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+    await expect(wizard.locator('.merge-s1-modes [data-mode="add"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(target(wizard, 'Jilmovi').locator('input')).toBeChecked();
+    await expect(wizard.locator('#merge-route')).toHaveText('rodokmen-jilmovi.ged → Jilmovi');
+    // The open tree stays open: Jilmovi is read for the comparison only.
+    expect(await stored(page)).toBe(before);
+
+    await page.keyboard.press('Escape');
+    await expect(wizard).toBeHidden();
+    await expect(manager).toBeVisible();
+
+    // A Strom tree (.json) the same way.
+    const row = manager.locator('.tree-manager-item').filter({ has: page.locator('.tree-manager-item-name', { hasText: /^Jilmovi$/ }) });
+    await dropFileOnRow(row, 'strom-merge.json', await jsonText(), undefined, 'application/json');
+    await expect(wizard).toBeVisible();
+    await expect(target(wizard, 'Jilmovi').locator('input')).toBeChecked();
+    await expect(wizard.locator('#merge-route')).toHaveText('strom-merge.json → Jilmovi');
+    // The window's own drop left it: no toast about a dialog to finish.
+    await expect(page.locator('.toast', { hasText: 'needs finishing first' })).toHaveCount(0);
+    expect(await stored(page)).toBe(before);
+});
+
+test('a tree\'s row dragged onto another row: step 1 with the dragged tree as the import and the other as the target; onto itself nothing (K10.3)', async ({ page }) => {
+    await openModrinovi(page);
+    await seedJilmovi(page);
+    const before = await stored(page);
+    const from = await managerRow(page, 'Modřínovi');
+    const to = page.locator('#tree-manager-modal .tree-manager-item').filter({ has: page.locator('.tree-manager-item-name', { hasText: /^Jilmovi$/ }) });
+    await expect(from).toHaveAttribute('draggable', 'true');
+
+    // Onto itself: nothing happens.
+    await dragRowOnRow(from, from);
+    await expect(page.locator('#merge-modal')).toBeHidden();
+    await expect(from).not.toHaveClass(/is-drop-target/);
+
+    await dragRowOnRow(from, to);
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+    await expect(wizard.locator('#merge-route')).toHaveText('Modřínovi → Jilmovi');
+    await expect(target(wizard, 'Jilmovi').locator('input')).toBeChecked();
+    expect(await stored(page)).toBe(before);
+});
+
+test('while dragging over a tree\'s row: the row is dashed and says what the drop does (K10.3)', async ({ page }) => {
+    await openModrinovi(page);
+    await seedJilmovi(page);
+    const row = await managerRow(page, 'Jilmovi');
+
+    await dropFileOnRow(row, 'rodokmen-jilmovi.ged', await gedText(), 'dragover');
+    await expect(row).toHaveClass(/is-drop-target/);
+    const hint = row.locator('.tree-manager-drop-hint');
+    await expect(hint).toHaveText('Drop: add rodokmen-jilmovi.ged to the tree Jilmovi');
+    expect(await row.evaluate(el => getComputedStyle(el).outlineStyle)).toBe('dashed');
+    // The window's overlay stays away over Manage trees.
+    await expect(page.locator('#drop-overlay.active')).toHaveCount(0);
+    await row.evaluate(el => el.dispatchEvent(new DragEvent('dragleave', { bubbles: true, dataTransfer: new DataTransfer() })));
+    await expect(row).not.toHaveClass(/is-drop-target/);
+    await expect(hint).toHaveCount(0);
+
+    const from = page.locator('#tree-manager-modal .tree-manager-item').filter({ has: page.locator('.tree-manager-item-name', { hasText: /^Modřínovi$/ }) });
+    await dragRowOnRow(from, row, 'dragover');
+    await expect(row).toHaveClass(/is-drop-target/);
+    await expect(row.locator('.tree-manager-drop-hint')).toHaveText('Drop: add Modřínovi to the tree Jilmovi');
+    await expect(from).toHaveClass(/is-drag-source/);
+});
+
 test('a reload in an unfinished guide: the merge is offered again, the tree unchanged; its tree changed since: the line says so', async ({ page }) => {
     await openModrinovi(page);
     await page.locator('#gedcom-input').setInputFiles(GED);
