@@ -150,9 +150,12 @@ test.describe('decided in a terminal: the two devices\' edits without choices', 
 
 test.describe('sends and the history from two browsers', () => {
     test('a history line written by another browser\'s send says which one; this browser\'s and an older research\'s say nothing', async ({ page }) => {
+        // A fixed clock away from midnight: the lines of a few minutes ago stay in one day's group.
+        const NOW = new Date('2026-06-15T10:30:00Z');
+        await page.clock.setFixedTime(NOW);
         await openResearch(page);
         await ownDevice(page);
-        const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+        const at = (min: number) => new Date(NOW.getTime() - min * 60_000).toISOString();
         await fakeBridge(page, {
             sends: [
                 { intake: 'R3', at: at(2), state: 'written', changes: 1, tree: 'other-app-tree', sent: 'x', client: EDGE },
