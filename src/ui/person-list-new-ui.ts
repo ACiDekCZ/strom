@@ -21,14 +21,28 @@
  * list has is framed and the next free one is suggested; Create takes the
  * suggested one. A read-only tree never opens the dialog.
  *
+ * Custom rule (spec 136 §1): the last tile opens the builder of conditions
+ * and groups (src/ui/person-list-rule-ui.ts) in place of the tiles; its
+ * "Custom rule ▾" goes back to a tile (a one-condition rule the tile knows
+ * takes its parameters), ⋯ clears the rule. A rule the tiles know is saved
+ * as `rule` as before, anything else as the list's `custom` rule (D3).
+ * Ancestors / descendants offer "More options: family of a person…" (the
+ * builder with one Family of a person). Edit the rule of a list with a custom
+ * rule opens the builder at once. Create / Save wait for a complete rule (the
+ * reason in the footer and in the button's `title`); closing an unfinished
+ * rule of more than one edited condition asks first (§15).
+ *
  * On a phone the dialog fills the screen; on a phone held sideways it is a
  * 560 px sheet from below (index.html, `.pln-*`).
  */
 
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import type { PersonId, PersonList, PersonListRule } from '../types.js';
+import type { PersonId, PersonList, PersonListRule, RuleGroup } from '../types.js';
 import { listIsAuto, rulePersonIds } from '../person-lists.js';
+import { customToRule, ruleToCustom } from '../person-list-rules.js';
+import { cloneRuleNode, editedConditions, emptyRuleRoot } from '../person-list-rule-edit.js';
+import { newRuleBuilder, ruleBuilderBlock, ruleBuilderCounts, type RuleBuilderState, type RuleMenuRow } from './person-list-rule-ui.js';
 import { rodLabels, type RodId } from '../lineage.js';
 import { rodPickerItems, rodPickerSmallItems } from '../rod-picker.js';
 import { researchLinesOf, selectionLines } from './table-view/table-research.js';
@@ -62,6 +76,7 @@ export type NewListSource = 'new' | 'table' | 'unions' | 'search' | 'rod' | 'lin
  *  - `source`: new (default) or the view saved as a list.
  *  - `pinOut`: the pinned rows outside the filter (names), said in amber (§6b).
  *  - `listId`: Edit rule… of this list (the choice without name and Empty).
+ *  - `custom`: open the builder with this custom rule (new or edit).
  *  - `openLists`: open Lists of people on the new list afterwards (default true).
  *  - `onSaved`: called with the list made or changed.
  */
@@ -73,11 +88,15 @@ export interface NewPersonListOptions {
     source?: NewListSource;
     pinOut?: string;
     listId?: string;
+    custom?: RuleGroup;
     openLists?: boolean;
     onSaved?: (list: PersonList) => void;
 }
 
-type Opt = 'empty' | 'rods' | 'ancestors' | 'descendants' | 'line' | 'added';
+type Opt = 'empty' | 'rods' | 'ancestors' | 'descendants' | 'line' | 'added' | 'custom';
+
+/** The tiles a custom rule can go back to ("Custom rule ▾"). */
+const SIMPLE_OPTS: readonly Opt[] = ['empty', 'rods', 'ancestors', 'descendants', 'line', 'added'];
 
 interface NewListState {
     mode: 'new' | 'save' | 'edit';
@@ -103,6 +122,8 @@ interface NewListState {
     onSaved: ((list: PersonList) => void) | null;
     opener: HTMLElement | null;
     counts: Map<string, number>;
+    /** The custom rule's builder (kept while the dialog is open, also when a tile is chosen again). */
+    rb: RuleBuilderState | null;
 }
 
 let state: NewListState | null = null;
@@ -156,6 +177,7 @@ function ruleOf(st: NewListState, opt: Opt): PersonListRule | null {
             return line ? { kind: 'line', directionId: line.id, lineName: line.name } : null;
         }
         case 'added': return { kind: 'added', days: st.days };
+        case 'custom': return st.rb ? customToRule(st.rb.root) : null;
     }
 }
 
@@ -200,6 +222,16 @@ function defaultName(st: NewListState): string {
         }
         case 'line': return researchLines().find(l => l.id === st.lineId)?.name ?? '';
         case 'added': return t.rule.added(st.days);
+        case 'custom': {
+            // One Family of a person: "Family – {person}"; else the name is typed (or a template's).
+            const items = st.rb?.root.items ?? [];
+            const only = items.length === 1 ? items[0] : null;
+            if (only?.t === 'cond' && only.c === 'family' && only.p.personId && !only.not) {
+                const p = personOf(only.p.personId);
+                return t.new.nameFamily(p ? shownName(p) : only.p.personName);
+            }
+            return '';
+        }
     }
 }
 
@@ -207,6 +239,11 @@ function defaultName(st: NewListState): string {
 function canKeep(st: NewListState): boolean {
     if (st.mode === 'save') return !!st.saveRule && st.source !== 'search';
     return st.opt !== 'empty';
+}
+
+/** The builder's rule now (the custom option), or null. */
+function customRoot(st: NewListState): RuleGroup | null {
+    return st.opt === 'custom' && st.rb ? st.rb.root : null;
 }
 
 export const personListNewMethods = uiModule({
@@ -242,6 +279,7 @@ export const personListNewMethods = uiModule({
             onSaved: opts.onSaved ?? null,
             opener: active instanceof HTMLElement ? active : null,
             counts: new Map(),
+            rb: null,
         };
         if (mode !== 'save' && rule) {
             switch (rule.kind) {
@@ -261,10 +299,17 @@ export const personListNewMethods = uiModule({
                 default: break;
             }
         }
+        // A custom rule (the list's, or given): the builder at once.
+        const custom = mode === 'save' ? null : editList?.custom?.root ?? opts.custom ?? null;
+        if (custom) {
+            st.opt = 'custom';
+            st.rb = newRuleBuilder(cloneRuleNode(custom), st.listId, editList?.custom ? cloneRuleNode(custom) : null);
+        }
         if (mode === 'edit' && st.opt === 'empty') st.opt = 'ancestors';
         if (!canKeep(st)) st.dynamic = false;
         if (!st.nameTouched) st.name = defaultName(st);
         state = st;
+        if (st.rb) this.newPersonListAttachRule(st.rb);
 
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active pln-overlay';
@@ -272,7 +317,8 @@ export const personListNewMethods = uiModule({
         const wide = getCurrentLanguage() === 'de' ? ' pln-modal--de' : '';
         overlay.innerHTML = `<div class="modal modal--md pln-modal${mode === 'save' ? ' pln-modal--save' : ''}${wide}" role="dialog" aria-modal="true"`
             + ` aria-labelledby="pln-title" data-dialog-kind="form" data-skeleton="done"></div>`;
-        overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) this.closeNewPersonList(); });
+        overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) this.requestCloseNewPersonList(); });
+        overlay.addEventListener('pointerdown', (e) => this.ruleBuilderPointerDown(e));
         overlay.addEventListener('click', (e) => this.onNewPersonListClick(e));
         overlay.addEventListener('change', (e) => this.onNewPersonListChange(e));
         overlay.addEventListener('input', (e) => this.onNewPersonListInput(e));
@@ -281,7 +327,8 @@ export const personListNewMethods = uiModule({
         if (!this.isPersonListsOpen()) this.clearDialogStack();
         this.pushDialog(st.overlayId);
         this.renderNewPersonList();
-        const first = overlay.querySelector<HTMLElement>(mode === 'edit' ? '.pln-opt input:checked' : '#pln-name');
+        const first = overlay.querySelector<HTMLElement>(mode !== 'edit' ? '#pln-name'
+            : st.opt === 'custom' ? '.plr-row, .plr [data-rb="add"]' : '.pln-opt input:checked');
         first?.focus({ preventScroll: true });
         if (first instanceof HTMLInputElement && first.type === 'text') first.select();
     },
@@ -294,6 +341,7 @@ export const personListNewMethods = uiModule({
     closeNewPersonList(restoreFocus = true): void {
         closePicker?.();
         closePicker = null;
+        this.ruleBuilderDetach();
         const st = state;
         state = null;
         for (const id of [NEW_ID, SAVE_ID]) {
@@ -303,10 +351,46 @@ export const personListNewMethods = uiModule({
         if (restoreFocus && st?.opener?.isConnected) st.opener.focus({ preventScroll: true });
     },
 
-    /** Escape: the open person choice closes on its own; then the dialog. */
+    /** Escape: an open menu or person choice closes on its own; then the dialog (asking first about an unfinished rule). */
     newPersonListEscape(): void {
+        if (this.closeRuleMenu()) return;
         if (closePicker) { closePicker(); return; }
-        this.closeNewPersonList();
+        this.requestCloseNewPersonList();
+    },
+
+    /**
+     * Cancel, ×, Escape, a click beside the dialog: a custom rule with more
+     * than one edited condition asks "Discard the unfinished rule?" first
+     * (§15); else the dialog closes.
+     */
+    requestCloseNewPersonList(): void {
+        const st = state;
+        const root = st ? customRoot(st) : null;
+        const edited = st?.rb && root ? editedConditions(st.rb.start, root) : 0;
+        if (!st || edited <= 1) { this.closeNewPersonList(); return; }
+        const d = strings.lists.rules.discard;
+        void this.showConfirm(d.text(edited), d.title, { confirmLabel: d.discard, cancel: d.keep, variant: 'danger' }).then(ok => {
+            if (ok && state === st) this.closeNewPersonList();
+        });
+    },
+
+    /** Give the builder its state and how the dialog follows its changes. */
+    newPersonListAttachRule(rb: RuleBuilderState): void {
+        this.ruleBuilderAttach(rb, {
+            changed: (render: boolean) => {
+                const st = state;
+                if (!st) return;
+                if (!st.nameTouched) {
+                    st.name = defaultName(st);
+                    if (!render) {
+                        const input = document.querySelector<HTMLInputElement>(`#${st.overlayId} #pln-name`);
+                        if (input) input.value = st.name;
+                    }
+                }
+                if (render) this.renderNewPersonList();
+                else this.updateNewPersonListName();
+            },
+        });
     },
 
     /** Draw the dialog from the state, keeping the focus and the scroll. */
@@ -334,19 +418,69 @@ export const personListNewMethods = uiModule({
         if (canKeep(st) || st.mode !== 'save') body += this.newPersonListKeepHtml();
 
         const primary = st.mode === 'new' ? t.create : strings.buttons.save;
+        const rule = st.opt === 'custom' && st.mode !== 'save';
+        modal.classList.toggle('pln-modal--rule', rule);
+        // The custom rule's footer: the count (or why it cannot be saved yet) on the left (§6).
+        const total = rule ? `<div class="pln-total" data-count="custom" aria-live="polite"></div>${this.newPersonListFootExtraHtml()}` : '';
         modal.innerHTML = `<div class="modal-header pln-head"><h2 id="pln-title">${esc(title)}</h2>`
             + `<button type="button" class="close-btn" data-act="cancel" aria-label="${esc(strings.buttons.close)}">&times;</button></div>`
             + `<div class="modal-content pln-body">${body}</div>`
-            + `<div class="buttons pln-foot"><button type="button" class="secondary" data-dismiss data-act="cancel">${esc(strings.buttons.cancel)}</button>`
+            + `<div class="buttons pln-foot">${total}<button type="button" class="secondary" data-dismiss data-act="cancel">${esc(strings.buttons.cancel)}</button>`
             + `<button type="button" class="primary" data-act="create" data-key="create">${esc(primary)}</button></div>`;
         modal.querySelector<HTMLElement>('.pln-body')?.scrollTo(0, scroll);
         this.updateNewPersonListName();
         if (focusKey) modal.querySelector<HTMLElement>(`[data-key="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
+        if (rule) this.ruleBuilderFocus();
+    },
+
+    /**
+     * Beside the count in a custom rule's footer: "Show in the tree" (§6,
+     * the next part). Empty for now.
+     */
+    newPersonListFootExtraHtml(): string {
+        return '';
+    },
+
+    /**
+     * "Start from a template ▾" on the right of the line "Based on" (§1.2,
+     * §7; new lists only): the next part draws the button here (`.pln-tbtn`,
+     * `data-act="templates"`). Empty for now.
+     */
+    newPersonListTemplateHtml(): string {
+        return '';
+    },
+
+    /**
+     * More rows of the custom rule's ⋯ (`.pln-more`) before "Clear the rule":
+     * Save as template… (§7), on a phone also Start from a template… and Show
+     * in the tree (§14). Each row's id goes to newPersonListMoreAction.
+     */
+    newPersonListMoreRows(): RuleMenuRow[] {
+        return [];
+    },
+
+    /** A row of the custom rule's ⋯ other than "Clear the rule" (the next parts). */
+    newPersonListMoreAction(_id: string): void {
+        /* the next parts */
+    },
+
+    /** The custom rule: "Based on: Custom rule ▾", the template button, ⋯, then the builder. */
+    newPersonListRuleHtml(): string {
+        const st = state!;
+        const t = strings.lists;
+        return `<div class="pln-by"><span class="pln-legend pln-by-k" id="pln-based">${esc(t.new.basedOn)}:</span>`
+            + `<button type="button" class="pln-ctl pln-bybtn" data-act="by" data-key="by" aria-haspopup="menu" aria-expanded="false">`
+            + `<span class="pln-ctl-t">${esc(t.new.customRule)}</span><span class="pln-caret" aria-hidden="true">▾</span></button>`
+            + `<span class="pln-by-gap"></span>${st.mode === 'new' ? this.newPersonListTemplateHtml() : ''}`
+            + `<button type="button" class="pln-more" data-act="more" data-key="more" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t.rules.more)}"><span aria-hidden="true">⋯</span></button>`
+            + `</div>`
+            + this.ruleBuilderHtml();
     },
 
     /** The rule choice: one tile per option, the chosen one with its controls; the count on the right. */
     newPersonListOptionsHtml(): string {
         const st = state!;
+        if (st.opt === 'custom') return this.newPersonListRuleHtml();
         const t = strings.lists;
         const n = t.new;
         const opts: Array<[Opt, string, string]> = [];
@@ -355,12 +489,15 @@ export const personListNewMethods = uiModule({
         opts.push(['rods', n.rod, ''], ['ancestors', n.anc, ''], ['descendants', n.des, '']);
         if (offeredResearchLines(st.lineId).length) opts.push(['line', n.line, '']);
         opts.push(['added', n.added, '']);
-        let html = `<div class="pln-legend" id="pln-based">${esc(n.basedOn)}</div><div class="pln-opts" role="radiogroup" aria-labelledby="pln-based">`;
+        opts.push(['custom', n.customRule, n.customRuleSub]);
+        const tpl = st.mode === 'new' ? this.newPersonListTemplateHtml() : '';
+        let html = `<div class="pln-tline"><div class="pln-legend" id="pln-based">${esc(n.basedOn)}</div>${tpl}</div>`
+            + `<div class="pln-opts" role="radiogroup" aria-labelledby="pln-based">`;
         for (const [opt, label, sub] of opts) {
             const on = st.opt === opt;
             const disabled = opt === 'rods' && !rods.big.length && !rods.small.length;
             const rule = ruleOf(st, opt);
-            const count = opt === 'empty' ? (st.given ? t.persons(st.given.length) : '–') : rule ? t.persons(ruleCount(st, rule)) : '–';
+            const count = opt === 'empty' ? (st.given ? t.persons(st.given.length) : '–') : opt !== 'custom' && rule ? t.persons(ruleCount(st, rule)) : '–';
             html += `<div class="pln-opt sel-opt${on ? ' is-on' : ''}" data-sel-form="tile" data-opt="${opt}"${disabled ? ' aria-disabled="true"' : ''}>`
                 + `<input type="radio" class="pln-radio" name="pln-rule" id="pln-o-${opt}" value="${opt}" data-key="opt-${opt}"${on ? ' checked' : ''}${disabled ? ' disabled' : ''}>`
                 + `<div class="pln-opt-mid"><label class="pln-opt-label" for="pln-o-${opt}">${esc(label)}</label>`
@@ -395,10 +532,13 @@ export const personListNewMethods = uiModule({
                     + `<span class="pln-ctl-t">${esc(text)}</span><span class="pln-caret" aria-hidden="true">▾</span></button>`;
                 let gens = option(0, n.all, st.gens === 0);
                 for (let g = 1; g <= Math.max(MAX_GENERATIONS, st.gens); g++) gens += option(g, n.gens(g), st.gens === g);
-                return `<div class="pln-ctls">${person}${select('gens', n.generations, gens)}</div>`;
+                // §1.5: the builder with one Family of a person (the same people to start with).
+                const more = st.mode !== 'save' ? `<button type="button" class="pl-link pln-famlink" data-act="family-more" data-key="family-more">${esc(n.moreFamily)}</button>` : '';
+                return `<div class="pln-ctls">${person}${select('gens', n.generations, gens)}</div>${more}`;
             }
             case 'line':
                 return `<div class="pln-ctls">${select('line', n.line, offeredResearchLines(st.lineId).map(l => option(l.id, `${l.id} ${l.name}`, l.id === st.lineId)).join(''))}</div>`;
+            case 'custom': return '';
             case 'added': {
                 const periods = PERIODS.map(d => option(d, n.period(d), !st.customDays && st.days === d)).join('') + option('custom', n.custom, st.customDays);
                 const days = st.customDays
@@ -449,10 +589,24 @@ export const personListNewMethods = uiModule({
             err.hidden = !taken;
             err.textContent = taken ? strings.lists.save.dup(DataManager.suggestPersonListName(name, st.listId ?? undefined)) : '';
         }
+        // A custom rule: complete, or the reason it cannot be saved yet (in the footer and the button's title).
+        const block = st.opt === 'custom' && st.mode !== 'save' ? (st.rb ? ruleBuilderBlock(st.rb) : strings.lists.rules.noConditions) : null;
         const ready = (st.mode === 'edit' || !!name)
-            && (st.mode === 'save' ? (!!st.saveRule || !!st.given) : st.opt === 'empty' || !!currentRule(st));
+            && (st.mode === 'save' ? (!!st.saveRule || !!st.given)
+                : st.opt === 'custom' ? block === null
+                    : st.opt === 'empty' || !!currentRule(st));
         const create = modal.querySelector<HTMLButtonElement>('[data-act="create"]');
-        if (create) create.disabled = !ready;
+        if (create) {
+            create.disabled = !ready;
+            if (block) create.title = block; else create.removeAttribute('title');
+        }
+        const total = modal.querySelector<HTMLElement>('.pln-total');
+        if (total && st.rb) {
+            const r = strings.lists.rules;
+            const n = block === null ? ruleBuilderCounts(st.rb).total : null;
+            total.classList.toggle('is-block', block !== null);
+            total.textContent = block ?? (n ? r.match(n) : r.nobody);
+        }
     },
 
     onNewPersonListClick(e: MouseEvent): void {
@@ -461,7 +615,8 @@ export const personListNewMethods = uiModule({
         const target = e.target as HTMLElement;
         const el = target.closest<HTMLElement>('[data-act]');
         const act = el?.dataset.act;
-        if (act === 'cancel') { this.closeNewPersonList(); return; }
+        if (this.ruleBuilderClick(e)) return;
+        if (act === 'cancel') { this.requestCloseNewPersonList(); return; }
         if (act === 'create') { this.saveNewPersonList(); return; }
         if (act === 'keep') {
             if (el!.getAttribute('aria-disabled') === 'true') return;
@@ -470,6 +625,9 @@ export const personListNewMethods = uiModule({
             return;
         }
         if (act === 'person') { this.openNewPersonListPicker(el!); return; }
+        if (act === 'family-more') { this.newPersonListToFamily(); return; }
+        if (act === 'by') { this.openNewPersonListByMenu(el!); return; }
+        if (act === 'more') { this.openNewPersonListMoreMenu(el!); return; }
         // A click anywhere on a tile (not on its controls) chooses it.
         const tile = target.closest<HTMLElement>('.pln-opt');
         if (tile && !target.closest('select, input, button, label') && tile.getAttribute('aria-disabled') !== 'true') {
@@ -482,6 +640,7 @@ export const personListNewMethods = uiModule({
     onNewPersonListChange(e: Event): void {
         const st = state;
         if (!st) return;
+        if (this.ruleBuilderChange(e)) return;
         const el = e.target as HTMLInputElement | HTMLSelectElement;
         if (el.classList.contains('pln-radio')) {
             this.setNewPersonListOpt(el.value as Opt);
@@ -516,6 +675,7 @@ export const personListNewMethods = uiModule({
         const st = state;
         const el = e.target as HTMLInputElement;
         if (!st) return;
+        if (this.ruleBuilderInput(e)) return;
         if (el.id === 'pln-name') {
             st.name = el.value;
             st.nameTouched = el.value.trim() !== '';
@@ -532,8 +692,20 @@ export const personListNewMethods = uiModule({
 
     onNewPersonListKey(e: KeyboardEvent): void {
         const st = state;
-        if (!st || e.key !== 'Enter') return;
+        if (!st) return;
         const el = e.target as HTMLElement;
+        // Ctrl+Z (⌘Z) outside a text field: the builder's last step back, never the tree's undo.
+        if (st.opt === 'custom' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'z' || e.key === 'Z')) {
+            const typing = (el instanceof HTMLInputElement && el.type !== 'checkbox' && el.type !== 'radio') || el instanceof HTMLTextAreaElement;
+            if (!typing) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.ruleBuilderUndo();
+                return;
+            }
+        }
+        if (this.ruleBuilderKey(e)) return;
+        if (e.key !== 'Enter') return;
         if (el.id === 'pln-name' || el.classList.contains('pln-days')) {
             e.preventDefault();
             if (el.classList.contains('pln-days')) (el as HTMLInputElement).blur();
@@ -545,9 +717,112 @@ export const personListNewMethods = uiModule({
     setNewPersonListOpt(opt: Opt): void {
         const st = state;
         if (!st) return;
+        if (opt === 'custom' && !st.rb) {
+            // The builder starts from the tile's rule when it is complete (the same people), else empty.
+            const rule = st.opt !== 'custom' ? ruleOf(st, st.opt) : null;
+            const root: RuleGroup = rule ? { t: 'group', op: 'all', items: [ruleToCustom(rule, DataManager.getLineageIndex())] } : emptyRuleRoot();
+            st.rb = newRuleBuilder(root, st.listId);
+            st.rb.focus = rule ? { path: '0' } : { add: '' };
+        }
+        if (opt === 'custom' && st.rb) this.newPersonListAttachRule(st.rb);
+        else if (st.opt === 'custom') {
+            // Back to a tile: a one-condition rule it knows gives its parameters.
+            this.closeRuleMenu();
+            const simple = st.rb ? customToRule(st.rb.root) : null;
+            if (simple) this.newPersonListTakeRule(simple, opt);
+        }
         st.opt = opt;
         if (!canKeep(st)) st.dynamic = false;
         this.newPersonListRuleChanged();
+        if (opt !== 'custom') {
+            document.querySelector<HTMLElement>(`#${st.overlayId} .pln-opt[data-opt="${opt}"] .pln-radio`)?.focus({ preventScroll: true });
+        }
+    },
+
+    /** A one-condition rule's parameters into the tile it belongs to (only when it is that tile). */
+    newPersonListTakeRule(rule: PersonListRule, opt: Opt): void {
+        const st = state;
+        if (!st) return;
+        switch (rule.kind) {
+            case 'rods': if (opt === 'rods' && rule.rodIds[0]) st.rodId = rule.rodIds[0]; break;
+            case 'ancestors':
+            case 'descendants':
+                if (opt === rule.kind) {
+                    if (personOf(rule.personId)) st.personId = rule.personId;
+                    st.gens = rule.generations ?? 0;
+                }
+                break;
+            case 'line': if (opt === 'line') st.lineId = rule.directionId; break;
+            case 'added':
+                if (opt === 'added') {
+                    st.days = rule.days;
+                    st.customDays = !(PERIODS as readonly number[]).includes(rule.days);
+                }
+                break;
+            default: break;
+        }
+    },
+
+    /**
+     * "More options: family of a person…" (§1.5): the builder with one Family
+     * of a person – ancestors: up the generations, down 0; descendants the
+     * other way round; the direct line, both parents, no spouses.
+     */
+    newPersonListToFamily(): void {
+        const st = state;
+        const p = st ? personOf(st.personId) : null;
+        if (!st || !p || (st.opt !== 'ancestors' && st.opt !== 'descendants')) return;
+        const g: number | 'all' = st.gens || 'all';
+        const root: RuleGroup = {
+            t: 'group', op: 'all', items: [{
+                t: 'cond', c: 'family', p: {
+                    personId: p.id, personName: shownName(p), via: 'both', width: 'line', spouses: 'none',
+                    up: st.opt === 'ancestors' ? g : 0, down: st.opt === 'descendants' ? g : 0,
+                },
+            }],
+        };
+        const before = st.rb;
+        st.rb = newRuleBuilder(root, st.listId, before?.start ?? null);
+        st.rb.focus = { path: '0' };
+        this.setNewPersonListOpt('custom');
+    },
+
+    /** "Custom rule ▾": back to a tile (the custom rule stays until the dialog closes). */
+    openNewPersonListByMenu(anchor: HTMLElement): void {
+        const st = state;
+        if (!st) return;
+        const n = strings.lists.new;
+        const label: Record<Opt, string> = {
+            empty: n.empty, rods: n.rod, ancestors: n.anc, descendants: n.des, line: n.line, added: n.added, custom: n.customRule,
+        };
+        const rods = rodChoices();
+        const rows: RuleMenuRow[] = [];
+        for (const opt of SIMPLE_OPTS) {
+            if (opt === 'empty' && st.mode === 'edit') continue;
+            if (opt === 'line' && !offeredResearchLines(st.lineId).length) continue;
+            const off = opt === 'rods' && !rods.big.length && !rods.small.length;
+            rows.push({ id: opt, label: label[opt], checked: false, ...(off ? { disabled: true } : {}) });
+        }
+        rows.push({ id: 'custom', label: n.customRule, checked: true, sep: true });
+        this.openRuleMenu(anchor, n.basedOn, rows, (id) => {
+            if (id !== 'custom') this.setNewPersonListOpt(id as Opt);
+        });
+    },
+
+    /** The custom rule's ⋯: the next parts' rows, then "Clear the rule". */
+    openNewPersonListMoreMenu(anchor: HTMLElement): void {
+        const st = state;
+        if (!st?.rb) return;
+        const r = strings.lists.rules;
+        const extra = this.newPersonListMoreRows();
+        const rows: RuleMenuRow[] = [...extra, { id: 'clear', label: r.clear, disabled: !st.rb.root.items.length, sep: extra.length > 0 }];
+        this.openRuleMenu(anchor, r.more, rows, (id) => {
+            if (id === 'clear') {
+                this.ruleBuilderSet(emptyRuleRoot(), { add: '' });
+                return;
+            }
+            this.newPersonListMoreAction(id);
+        });
     },
 
     /** The rule changed: the name follows it (until typed over) and the dialog is drawn again. */
@@ -604,13 +879,22 @@ export const personListNewMethods = uiModule({
     saveNewPersonList(): void {
         const st = state;
         if (!st || DataManager.listsReadOnly()) return;
+        // A custom rule: one the tiles know is saved as `rule` (customToRule in currentRule), else as `custom` (D3).
+        const root = st.mode !== 'save' ? customRoot(st) : null;
+        if (root && (!st.rb || ruleBuilderBlock(st.rb) !== null)) return;
         const rule = currentRule(st);
+        const custom = root && !rule ? { v: 1 as const, root: cloneRuleNode(root), auto: st.dynamic } : null;
         let list: PersonList | null = null;
         if (st.mode === 'edit') {
             const before = st.listId ? DataManager.getPersonList(st.listId) : undefined;
-            if (!before || !rule) return;
-            const same = JSON.stringify(before.rule ?? null) === JSON.stringify(rule) && listIsAuto(before) === st.dynamic;
-            if (!same) DataManager.setPersonListRule(before.id, rule, st.dynamic);
+            if (!before || (!rule && !custom)) return;
+            if (custom) {
+                const same = JSON.stringify(before.custom?.root ?? null) === JSON.stringify(custom.root) && listIsAuto(before) === st.dynamic;
+                if (!same) DataManager.setPersonListCustomRule(before.id, custom);
+            } else if (rule) {
+                const same = !before.custom && JSON.stringify(before.rule ?? null) === JSON.stringify(rule) && listIsAuto(before) === st.dynamic;
+                if (!same) DataManager.setPersonListRule(before.id, rule, st.dynamic);
+            }
             list = DataManager.getPersonList(before.id) ?? null;
         } else {
             const typed = st.name.trim();
@@ -624,6 +908,8 @@ export const personListNewMethods = uiModule({
                 });
             } else if (st.opt === 'empty') {
                 list = DataManager.createPersonList({ name, dynamic: false, personIds: st.given ?? [] });
+            } else if (custom) {
+                list = DataManager.createCustomPersonList({ name, custom });
             } else if (rule) {
                 list = DataManager.createPersonList({ name, dynamic: st.dynamic, rule });
             }
