@@ -468,7 +468,7 @@ export const mergeHistoryMethods = uiModule({
             if (DataManager.getCurrentTreeId() !== treeId) return;
         }
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        if (!link || link.copy) return;
+        if (!link || !TreeManager.canSendToResearch(treeId)) return;
         if (!this.researchSyncCapable(link.id)) {
             const goes = this.researchLinkAvailable('send');
             await this.researchSendTree(treeId);

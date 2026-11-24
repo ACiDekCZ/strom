@@ -15,10 +15,10 @@ import { TreeManager } from '../tree-manager.js';
 
 type Hold = NonNullable<ResearchLink['mergeHold']>;
 
-/** The tree's link when it ties the tree to a research itself (not a copy). */
+/** The tree's link when the tree owns its research (a copy or a second tree of it never holds: spec 139 K5.3). */
 function linkOf(treeId: TreeId): ResearchLink | undefined {
     const link = TreeManager.getTreeMetadata(treeId)?.research;
-    return link && !link.copy ? link : undefined;
+    return link && TreeManager.canSendToResearch(treeId) ? link : undefined;
 }
 
 /**
@@ -72,8 +72,8 @@ export const MERGE_HOLD_EVENT = 'strom:merge-hold';
 
 /** A tree's hold, when it waits for a send after a merge (a tree tied to a research itself). */
 export function treeHold(tree: TreeMetadata | null | undefined): Hold | undefined {
-    const link = tree?.research;
-    return link && !link.copy ? link.mergeHold : undefined;
+    if (!tree?.research) return undefined;
+    return TreeManager.canSendToResearch(tree.id) ? tree.research.mergeHold : undefined;
 }
 
 /** The tree's data now: the open tree's, else stored. */

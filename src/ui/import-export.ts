@@ -1556,12 +1556,12 @@ export const importExportMethods = uiModule({
      * confirm, then import all of them as NEW trees (review V5).
      */
     async importMultiTreeBackup(trees: BackupTrees): Promise<void> {
-        const valid: Array<{ name: string; data: StromData; isHidden?: boolean; auditLog?: AuditLog; viewLinks?: unknown }> = [];
+        const valid: Array<{ name: string; data: StromData; isHidden?: boolean; auditLog?: AuditLog; viewLinks?: unknown; treeId?: string }> = [];
         let skipped = 0;
-        for (const entry of Object.values(trees)) {
+        for (const [treeId, entry] of Object.entries(trees)) {
             const result = validateJsonImport(JSON.stringify(entry.data));
             if (result.valid && result.data) {
-                valid.push({ name: entry.name, data: result.data, isHidden: entry.isHidden, auditLog: entry.auditLog, viewLinks: entry.viewLinks });
+                valid.push({ name: entry.name, data: result.data, isHidden: entry.isHidden, auditLog: entry.auditLog, viewLinks: entry.viewLinks, treeId });
             } else {
                 skipped++;
             }

@@ -1077,10 +1077,12 @@ class DataManagerClass {
     /**
      * Restore an "Export all" backup: every entry becomes a NEW tree (names
      * made unique), with its audit log when the backup carries one. Switches
-     * to the last imported tree. Returns the new tree ids.
+     * to the last imported tree. Returns the new tree ids. Each is a copy of
+     * the tree it was backed up from (`treeId`, its key in the backup)
+     * without research: one research, one tree (spec 139 K5.2).
      */
     async importTreesAsNew(
-        entries: Array<{ name: string; data: StromData; isHidden?: boolean; auditLog?: import('./types.js').AuditLog; viewLinks?: unknown }>
+        entries: Array<{ name: string; data: StromData; isHidden?: boolean; auditLog?: import('./types.js').AuditLog; viewLinks?: unknown; treeId?: string }>
     ): Promise<TreeId[]> {
         if (this.viewMode) return [];
         const existingNames = new Set(TreeManager.getTrees().map(t => t.name.toLowerCase()));
@@ -1088,6 +1090,7 @@ class DataManagerClass {
         for (const entry of entries) {
             const name = this.getUniqueTreeName(entry.name || strings.treeManager.importTreeName, existingNames);
             const id = TreeManager.createTreeFromImport(migrateData(entry.data), name);
+            if (entry.treeId) TreeManager.detachAsCopy(id, { treeId: entry.treeId as TreeId, name: entry.name || name });
             if (entry.isHidden) TreeManager.setTreeVisibility(id, true);
             if (entry.auditLog) await AuditLogManager.importForTree(id, entry.auditLog);
             // The view links a backup carried (a device setting of the tree).

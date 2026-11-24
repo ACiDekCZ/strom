@@ -523,4 +523,18 @@ describe('the view links of a tree', () => {
         expect(localStorage.getItem(`strom-view-links-master:${ids[0]}`)).toBe('false');
         expect(localStorage.getItem(`strom-view-links:${ids[1]}`)).toBeNull();
     });
+
+    it('a restored backup tree is a copy of the tree it was backed up from, never with its research (spec 139 K5.2)', async () => {
+        vi.stubGlobal('localStorage', memoryStorage());
+        resetTreeManager([meta('t1', 'Rodina Kalinovských', { personCount: 3, research: { id: 'kalinovsti' } as TreeMetadata['research'] })]);
+        const dm = DataManager as unknown as { viewMode: boolean };
+        dm.viewMode = false;
+        const ids = await DataManager.importTreesAsNew([{ name: 'Rodina Kalinovských', data: tree(['A']), treeId: 't1' }]);
+        const made = TreeManager.getTreeMetadata(ids[0])!;
+        expect(made.research).toBeUndefined();
+        expect(made.copyOf).toEqual({ treeId: 't1', name: 'Rodina Kalinovských' });
+        expect(TreeManager.canSendToResearch(ids[0])).toBe(false);
+        expect(TreeManager.researchCopyOrigin(ids[0])).toEqual({ name: 'Rodina Kalinovských' });
+        expect(TreeManager.canSendToResearch('t1' as TreeId)).toBe(true);
+    });
 });

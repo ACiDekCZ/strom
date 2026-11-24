@@ -292,6 +292,8 @@ export async function writePlan(plan: MergePlan, opts: WriteOptions): Promise<Wr
             await undoOwn();
             return { ok: false, reason: 'save', message: strings.merge.saveFailed };
         }
+        // A copy of the target + the import: a copy without research, naming the target (spec 139 K5.2).
+        if (targetId && plan.mode !== 'new') TreeManager.detachAsCopy(id, { treeId: targetId, name: plan.target.name });
         treeId = id;
     }
     progress('persons', persons, persons);

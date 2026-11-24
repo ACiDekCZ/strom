@@ -73,7 +73,7 @@ import { buildPlan, type MergePlan, type PlanScope, type WizardChoices } from '.
 import { exportPlan } from '../merge/plan-export.js';
 import { backupFailureWhy, writePlan, writeRestore, writeUndo, type WriteResult } from '../merge/write.js';
 import { contentFingerprint } from '../research-link.js';
-import { noteResearchSends, settleMergeHold, syncMergeHold } from '../merge/research-hold.js';
+import { noteResearchSends, settleMergeHold, syncMergeHold, treeHold } from '../merge/research-hold.js';
 import { researchSyncMethods } from '../ui/research-sync-ui.js';
 import {
     createSnapshot, listSnapshots, planRetention, MAX_SNAPSHOTS_PER_TREE, type SnapshotMeta,
@@ -100,7 +100,8 @@ function tree(people: Array<[string, string, string]>, extra: Partial<StromData>
 function meta(id: string, name: string): TreeMetadata {
     return {
         id: id as TreeId, name, createdAt: '2026-01-01', lastModifiedAt: '2026-01-01',
-        personCount: 0, partnershipCount: 0, sizeBytes: 0, research: { ...RESEARCH },
+        // Each tree its own research: one research, one tree (spec 139 K5.1).
+        personCount: 0, partnershipCount: 0, sizeBytes: 0, research: id === 't2' ? { ...RESEARCH, id: RESEARCH_T2 } : { ...RESEARCH },
     };
 }
 
@@ -117,6 +118,7 @@ function resetTreeManager(trees: TreeMetadata[]): void {
 
 /** The tree's research link (kept with the tree in the index) and a research detail of its data. */
 const RESEARCH = { id: 'a1b2c3d4-0000-4000-8000-000000000001', fingerprint: 'fp-research', syncedAt: '2026-03-01T10:00:00.000Z' };
+const RESEARCH_T2 = 'a1b2c3d4-0000-4000-8000-000000000002';
 const TARGET = tree([['e1', 'Alma', '1901'], ['e2', 'Berta', '1903']], { researchAsOf: '2026-03-01' });
 const linkOf = (id: TreeId) => TreeManager.getTrees().find(t => t.id === id)?.research;
 const INCOMING = tree([['i1', 'Alma', '1901'], ['i2', 'Cecilie', '1930']]);
@@ -392,12 +394,22 @@ describe('into the tree itself', () => {
         expect(Object.values(DataManager.getData().persons).map(p => p.firstName).sort()).toEqual(['Alma', 'Berta']);
     });
 
+    it('a tree that does not own its research (a second tree of it) gets no hold: nothing to send (spec 139 K5.3)', async () => {
+        TreeManager.getTreeMetadata(T2)!.research = { ...RESEARCH };
+        const { plan, target } = await planFor(T2, INCOMING);
+        const result = await writePlan(plan, { target, source: INCOMING, into: 'tree' });
+        expect(result).toMatchObject({ ok: true, into: 'tree', treeId: T2 });
+        expect(TreeManager.canSendToResearch(T2)).toBe(false);
+        expect(linkOf(T2)?.mergeHold).toBeUndefined();
+        expect(treeHold(TreeManager.getTreeMetadata(T2))).toBeUndefined();
+    });
+
     it('a tree not open: stored, the open tree untouched', async () => {
         const { plan, target } = await planFor(T2, INCOMING);
         const result = await writePlan(plan, { target, source: INCOMING, into: 'tree' });
         expect(result).toMatchObject({ ok: true, into: 'tree', treeId: T2 });
         expect(await storedNames(T2)).toEqual(['Alma', 'Berta', 'Cecilie']);
-        expect(linkOf(T2)).toMatchObject(RESEARCH);
+        expect(linkOf(T2)).toMatchObject({ ...RESEARCH, id: RESEARCH_T2 });
         expect((await TreeManager.getTreeData(T2))!.researchAsOf).toBe('2026-03-01');
         expect(DataManager.getCurrentTreeId()).toBe(T1);
         expect(Object.keys(DataManager.getData().persons)).toHaveLength(2);
@@ -416,6 +428,19 @@ describe('into a new tree', () => {
         expect(await storedNames(id)).toEqual(['Alma', 'Berta', 'Cecilie']);
         expect(contentFingerprint((await TreeManager.getTreeData(T1))!)).toBe(fingerprint);
         expect(contentFingerprint(DataManager.getData())).toBe(fingerprint);
+    });
+
+    it('is a copy of the target without research: copyOf, no tie, not the owner, no hold (spec 139 K5.2, K5.3)', async () => {
+        const { plan, target } = await planFor(T1, INCOMING);
+        const result = await writePlan(plan, { target, source: INCOMING, into: 'new' });
+        const id = (result as Extract<WriteResult, { ok: true }>).treeId;
+        const made = TreeManager.getTreeMetadata(id)!;
+        expect(made.research).toBeUndefined();
+        expect(made.copyOf).toEqual({ treeId: T1, name: 'Modřínovi' });
+        expect(TreeManager.canSendToResearch(id)).toBe(false);
+        expect(TreeManager.researchCopyOrigin(id)).toEqual({ name: 'Modřínovi' });
+        // The target keeps its research.
+        expect(TreeManager.canSendToResearch(T1)).toBe(true);
     });
 });
 

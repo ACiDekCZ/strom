@@ -1758,7 +1758,8 @@ class MergerUIClass {
     private step6Research(w: WrittenMerge): Step6Env['research'] {
         if (w.newTree) return undefined;
         const link = TreeManager.getTreeMetadata(w.treeId)?.research;
-        const hold = link && !link.copy ? link.mergeHold : undefined;
+        // Only the research's owner sends: a copy is a tree without research (spec 139 K5.3).
+        const hold = link && TreeManager.canSendToResearch(w.treeId) ? link.mergeHold : undefined;
         if (!link || !hold) return undefined;
         const data = DataManager.getDataFor(w.treeId);
         const pending = data ? unsentMerges(data, link) : [w.record];
