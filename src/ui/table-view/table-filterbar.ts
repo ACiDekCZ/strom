@@ -152,6 +152,13 @@ export class FilterBar {
     private readonly sheetBtn: HTMLButtonElement;
     /** The phone's row of the Statistics' chip (spec 138 §8, the chips' row is not there). */
     private readonly statsRow: HTMLElement;
+    /**
+     * The markup the stats row was last drawn from: compared instead of its
+     * innerHTML, which the browser serializes differently (`data-statschip`
+     * comes back as `data-statschip=""`), so every update replaced the chip
+     * and its × under a finger or a pointer.
+     */
+    private statsDrawn = '';
     private state: FilterBarState | null = null;
     private timer = 0;
     private readonly ro: ResizeObserver | null;
@@ -239,10 +246,11 @@ export class FilterBar {
         const grouped = state.phone ? null : state.grouped ?? null;
         // The Statistics' chip: on a phone in a row of its own (its focus kept when drawn again).
         const statsPhone = state.phone ? statsChipHtml(type, filter, !!state.statsBack, false) : '';
-        if (this.statsRow.innerHTML !== statsPhone) {
+        if (this.statsDrawn !== statsPhone) {
             const active = document.activeElement;
             const had = active instanceof HTMLElement && this.statsRow.contains(active) ? (active.matches('.tv-back') ? '.tv-back' : '.tv-chip-x') : null;
             this.statsRow.innerHTML = statsPhone;
+            this.statsDrawn = statsPhone;
             if (had) this.statsRow.querySelector<HTMLElement>(had)?.focus({ preventScroll: true });
         }
         this.statsRow.hidden = !statsPhone;

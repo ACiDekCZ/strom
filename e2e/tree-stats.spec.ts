@@ -658,6 +658,12 @@ test.describe('Statistics on a phone: the More sheet and the Table (spec 138 §8
             await expect(row).toBeVisible();
             await expect(row.locator('.tv-chip-text')).toHaveText('Statistics: first name Jan');
             await expect(tv(page, '.tv-status-count')).toHaveText(/^3 of \d+ people$/);
+            // The table drawn again (a check done, a mark set) keeps the row's chip and × as they are:
+            // a × replaced under a finger lost the tap (and the test's measurement of it).
+            const x = await row.locator('.tv-chip-x').elementHandle();
+            await page.evaluate(() => (window.Strom.UI as unknown as { redrawTableNow(): void }).redrawTableNow());
+            expect(await x!.evaluate(el => el.isConnected)).toBe(true);
+            await x!.dispose();
             for (const sel of ['.tv-chip-x', '.tv-back']) {
                 const box = (await row.locator(sel).boundingBox())!;
                 expect(box.height).toBeGreaterThanOrEqual(44);
