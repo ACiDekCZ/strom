@@ -1589,6 +1589,8 @@ export const treeManagementMethods = uiModule({
         }, () => ({ ok: false, kind: 'error', text: strings.busy.failed, retry: () => { void this.confirmDuplicateTree(); } }));
         if (!copied) return;
         this.closeDuplicateTreeDialog();
+        // Made from Change structure…: its work is done, back to where it was opened from.
+        if (this.isStructureDialogOpen()) this.closeStructureDialog();
         this.updateTreeManagerList();
         this.updateTreeSwitcher();
     },

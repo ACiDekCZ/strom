@@ -490,17 +490,40 @@ export async function openTreeActions(page: Page): Promise<Locator> {
 }
 
 /**
- * "Change structure ⌄" opened in the visible list of tree actions (the ⋯
- * flyout, the tree sheet, the tree manager's ⋯). Returns its group of rows.
+ * "Change structure…" chosen in the visible list of tree actions (the ⋯
+ * flyout, the tree sheet, the tree manager's ⋯; spec 139 §1). Returns the
+ * dialog, its options shown.
  */
-export async function openTreeStructure(page: Page, scope?: Locator): Promise<Locator> {
-    const toggle = (scope ?? page.locator('body')).locator('.tree-actions-structure-toggle').filter({ visible: true }).first();
-    await expect(toggle).toBeVisible();
-    if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    const group = page.locator(`[id="${await toggle.getAttribute('aria-controls')}"]`);
-    await expect(group).toBeVisible();
-    return group;
+export async function openStructureDialog(page: Page, scope?: Locator): Promise<Locator> {
+    const item = (scope ?? page.locator('body')).locator('[data-action="structure"]').filter({ visible: true }).first();
+    await expect(item).toBeVisible();
+    await item.click();
+    const dialog = page.locator('#structure-modal');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute('data-step', 'options');
+    return dialog;
+}
+
+/**
+ * The operations of Change structure… as the old rows named them: `makeTree`
+ * (a new tree from the open view), `duplicate`, `splitFamilies`, `split`
+ * (separate parts), `mergeInto` (the whole tree into another, through the
+ * guide), `mergeView` (the open view into another).
+ */
+export type StructureRun = 'makeTree' | 'duplicate' | 'splitFamilies' | 'split' | 'mergeInto' | 'mergeView';
+
+const STRUCTURE_OPTION: Record<StructureRun, string> = {
+    makeTree: 'select', duplicate: 'copy', splitFamilies: 'families', split: 'parts', mergeInto: 'into', mergeView: 'into',
+};
+
+/** Run an operation through Change structure… (opened from `scope`, see openStructureDialog). */
+export async function runStructure(page: Page, run: StructureRun, scope?: Locator): Promise<void> {
+    const dialog = await openStructureDialog(page, scope);
+    await dialog.locator(`.menu-option[data-action="${STRUCTURE_OPTION[run]}"]`).click();
+    if (run !== 'mergeInto' && run !== 'mergeView') return;
+    await expect(dialog).toHaveAttribute('data-step', 'join-what');
+    await dialog.locator(`[data-join="${run === 'mergeInto' ? 'whole' : 'selection'}"]`).click();
+    await dialog.locator('[data-action="continue"]').click();
 }
 
 /** A satellite's "Follow selection" mode (spec 079 K2.1): switch, mark or off. */

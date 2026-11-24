@@ -187,6 +187,6 @@ export const splitMethods = uiModule({
         this.dialogStack = this.dialogStack.filter(d => d !== 'split-modal');
         const parent = this.splitParentDialog;
         this.splitParentDialog = null;
-        if (parent) document.getElementById(parent)?.classList.add('active');
+        if (parent) this.openDialogById(parent);
     },
 });

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, createFirstPerson, addRelation, card, openTreeStructure } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card, openStructureDialog, runStructure } from './helpers.js';
 import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 /**
@@ -26,8 +26,7 @@ test('a tree with two unrelated families can be split into two trees, the origin
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     await page.locator('.tree-row-menu-btn').first().click();
-    const structure = await openTreeStructure(page, page.locator('.tree-row-menu.open'));
-    await structure.locator('.tree-row-menu-item', { hasText: 'Separate disconnected parts' }).click();
+    await runStructure(page, 'split', page.locator('.tree-row-menu.open'));
     await expect(page.locator('#split-modal')).toBeVisible();
 
     // Both families are listed, biggest first, named after their surname.
@@ -66,13 +65,16 @@ test('a connected tree offers nothing to split', async ({ page }) => {
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     await page.locator('.tree-row-menu-btn').first().click();
-    const structure = await openTreeStructure(page, page.locator('.tree-row-menu.open'));
-    await structure.locator('.tree-row-menu-item', { hasText: 'Separate disconnected parts' }).click();
+    const structure = await openStructureDialog(page, page.locator('.tree-row-menu.open'));
+    const parts = structure.locator('.menu-option[data-action="parts"]');
 
-    // One family: say so plainly rather than showing a pointless list.
-    await expect(page.locator('#split-modal')).toContainText('one family here');
-    await expect(page.locator('.split-row')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Split off/ })).toHaveCount(0);
+    // One family (spec 139 §2.4): the option is greyed and says why under it; choosing it opens nothing.
+    await expect(parts).toHaveAttribute('aria-disabled', 'true');
+    await expect(structure.locator('#structure-why-parts')).toHaveText('The whole tree is connected.');
+    await expect(parts).toHaveAttribute('aria-describedby', 'structure-why-parts');
+    await parts.click({ force: true });
+    await expect(page.locator('#split-modal')).toBeHidden();
+    await expect(structure).toHaveAttribute('data-step', 'options');
 });
 
 test('importing a file with several families offers to split it', async ({ page }) => {
@@ -147,8 +149,7 @@ test('Split off works at once: the button says it is creating, a double click cr
     await twoUnrelatedFamilies(page);
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     await page.locator('.tree-row-menu-btn').first().click();
-    const structure = await openTreeStructure(page, page.locator('.tree-row-menu.open'));
-    await structure.locator('.tree-row-menu-item', { hasText: 'Separate disconnected parts' }).click();
+    await runStructure(page, 'split', page.locator('.tree-row-menu.open'));
     const rows = page.locator('.split-row');
     await expect(rows).toHaveCount(2);
     const before = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);

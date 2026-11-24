@@ -553,6 +553,6 @@ export const splitFamiliesMethods = uiModule({
         this.splitFamiliesTreeId = null;
         this.splitFamiliesComponents = [];
         this.splitFamiliesShown = [];
-        if (parent) document.getElementById(parent)?.classList.add('active');
+        if (parent) this.openDialogById(parent);
     },
 });

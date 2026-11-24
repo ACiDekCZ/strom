@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, card, openTreeStructure } from './helpers.js';
+import { openApp, createFirstPerson, card } from './helpers.js';
 
-/** The open tree's sheet (More → Tree: {name}), menu 1020 §3.1: headings and rows (Change structure folded). */
+/** The open tree's sheet (More → Tree: {name}), menu 1020 §3.1: headings and rows (Change structure… one row). */
 const TREE_SHEET_HEADERS = ['Research', 'Tree settings'];
 const TREE_SHEET_KEYS = ['overview', 'overview-quality', 'snapshots', 'researchInfo',
     'rename', 'defaultPerson', 'startup', 'lifeline', 'places', 'surnames', 'structure',
@@ -337,17 +337,16 @@ test('the Tree row opens the tree-actions sheet: name, summary, the groups of th
     await expect(sheet.locator('.tree-actions-summary')).toContainText('edited');
 
     // Menu 1020 §3.1: no Export, Save to file nor Send changes here (one level up / the manager's ⋯);
-    // the structure actions fold under "Change structure ⌄"; Manage trees… last.
+    // the structure actions are one row, Change structure…; Manage trees… last.
     await expect(sheet.locator('.bottom-sheet-section')).toHaveText(TREE_SHEET_HEADERS);
     // Sentence case as in design 3d (not the uppercase labels of other sheets).
     expect(await sheet.locator('.bottom-sheet-section').first().evaluate(el => getComputedStyle(el).textTransform)).toBe('none');
     await expect(sheet.locator('[data-action="defaultPerson"] .tree-actions-value')).toHaveText('First person');
     const keys = () => sheet.locator('.tree-actions-row:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
     expect(await keys()).toEqual(TREE_SHEET_KEYS);
-    await openTreeStructure(page, sheet);
-    expect(await keys()).toEqual([...TREE_SHEET_KEYS.slice(0, TREE_SHEET_KEYS.indexOf('structure') + 1),
-        'makeTree', 'mergeView', 'splitFamilies', 'split', 'mergeInto', 'duplicate',
-        ...TREE_SHEET_KEYS.slice(TREE_SHEET_KEYS.indexOf('structure') + 1)]);
+    // Spec 139 §1: one row leading on (›) to the Change structure… dialog.
+    await expect(sheet.locator('[data-action="structure"]')).toContainText('Change structure…');
+    await expect(sheet.locator('[data-action="structure"] .tree-actions-chevron')).toHaveText('›');
     for (const box of await sheet.locator('.tree-actions-row:visible').evaluateAll(els => els.map(el => el.getBoundingClientRect().height))) {
         expect(Math.round(box)).toBeGreaterThanOrEqual(48); // subpixel layout
     }

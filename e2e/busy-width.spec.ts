@@ -9,7 +9,7 @@
  * its painted frame), so the button stays working until the test lets it go.
  */
 import { test, expect, type Page, type Locator } from '@playwright/test';
-import { openApp, openTreeStructure, mergeTreeInto, mergeShowCopy } from './helpers.js';
+import { openApp, openStructureDialog, mergeTreeInto, mergeShowCopy } from './helpers.js';
 
 function mk(id: string, first: string, last: string, gender: string, birth: string,
     partnerships: string[], parentIds: string[], childIds: string[]) {
@@ -258,20 +258,20 @@ test.describe('on a phone (390, de)', () => {
     });
 });
 
-test.describe('a working element hidden in its closed menu', () => {
-    test('Split into families from a tree manager row says its state in a progress toast (B210: its menu closed, the item kept hidden)', async ({ page }) => {
+test.describe('a working element in Change structure…', () => {
+    test('Split into families from a tree manager row, through Change structure…: the option stays on screen and carries the working state (spec 139; B210 needed a toast while the row menu hid the item)', async ({ page }) => {
         await loadTree(page, 1440, false);
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
         const active = page.locator('.tree-manager-item.active');
         await active.locator('.tree-row-menu-btn').click();
-        const structure = await openTreeStructure(page, active.locator('.tree-row-menu.open'));
+        const structure = await openStructureDialog(page, active.locator('.tree-row-menu.open'));
         await hold(page);
-        await structure.locator('.tree-row-menu-item', { hasText: 'In Familien aufteilen' }).click();
-        const toast = page.locator('.toast--progress');
-        await expect(toast).toBeVisible();
-        await expect(toast).toContainText('Familien werden gesucht…');
+        const families = structure.locator('.menu-option[data-action="families"]', { hasText: 'In Familien…' });
+        await families.click();
+        await expect(families).toHaveAttribute('aria-busy', 'true');
+        await expect(page.locator('.toast--progress')).toHaveCount(0);
         await release(page);
         await expect(page.locator('#split-families-modal')).toBeVisible();
-        await expect(toast).toBeHidden();
+        await expect(structure).toBeHidden();
     });
 });

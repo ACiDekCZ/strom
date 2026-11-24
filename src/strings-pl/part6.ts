@@ -720,7 +720,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         edited: (when: string) => `edytowano ${when}`,
         researchLinked: 'połączone z badaniem',
         researchNone: 'bez badania',
-        moreWhenOpen: 'Miejsca, nazwiska, historia zmian i podział drzewa są dostępne po otwarciu drzewa.',
+        moreWhenOpen: 'Miejsca, nazwiska i historia zmian są dostępne po otwarciu drzewa.',
         group: {
             research: 'Badanie',
             settings: 'Ustawienia drzewa',

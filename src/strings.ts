@@ -6932,7 +6932,7 @@ const stringsEN = {
         edited: (when: string) => `edited ${when}`,
         researchLinked: 'linked to research',
         researchNone: 'no research',
-        moreWhenOpen: 'Places, surnames, change log and splitting are available once the tree is open.',
+        moreWhenOpen: 'Places, surnames and the change log are available once the tree is open.',
         group: {
             research: 'Research',
             settings: 'Tree settings',
@@ -18223,7 +18223,7 @@ const stringsCZ: StringsType = {
         edited: (when: string) => `upraveno ${when}`,
         researchLinked: 'propojený s výzkumem',
         researchNone: 'bez výzkumu',
-        moreWhenOpen: 'Místa, příjmení, záznam změn a dělení stromu jsou dostupné po otevření stromu.',
+        moreWhenOpen: 'Místa, příjmení a záznam změn jsou dostupné po otevření stromu.',
         group: {
             research: 'Výzkum',
             settings: 'Nastavení stromu',
@@ -29347,7 +29347,7 @@ const stringsDE: StringsType = {
         edited: (when: string) => `bearbeitet ${when}`,
         researchLinked: 'mit Forschung verbunden',
         researchNone: 'ohne Forschung',
-        moreWhenOpen: 'Orte, Nachnamen, Änderungsprotokoll und Aufteilen sind verfügbar, sobald der Stammbaum geöffnet ist.',
+        moreWhenOpen: 'Orte, Nachnamen und das Änderungsprotokoll sind verfügbar, sobald der Stammbaum geöffnet ist.',
         group: {
             research: 'Forschung',
             settings: 'Stammbaum-Einstellungen',

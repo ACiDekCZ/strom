@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
-import { openApp, createFirstPerson, cardAction, focusViaSearch, openTreeStructure, mergeCompare, mergeCount, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeSetScope, mergeToStep4, mergeJoinPending, mergePickValue, mergeWrite, mergeCurrentStep } from './helpers.js';
+import { openApp, createFirstPerson, cardAction, focusViaSearch, runStructure, mergeCompare, mergeCount, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeSetScope, mergeToStep4, mergeJoinPending, mergePickValue, mergeWrite, mergeCurrentStep } from './helpers.js';
 
 /**
  * The tree merge driven end to end through the real UI: tree manager row menu
@@ -56,7 +56,7 @@ async function startMergeFromManager(page: Page, sourceName: string, targetName:
         has: page.locator('.tree-manager-item-name', { hasText: new RegExp(`^${sourceName}$`) }),
     });
     await row.locator('.tree-row-menu-btn').click();
-    await (await openTreeStructure(page, row)).locator('.tree-row-menu-item', { hasText: 'Merge into' }).click();
+    await runStructure(page, 'mergeInto', row);
 
     // The guide opens at once (spec 134 §2): the target is chosen in its step 1.
     const wizard = page.locator('#merge-modal');

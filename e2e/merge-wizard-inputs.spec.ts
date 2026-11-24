@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, mergeWriteAndSwitch, openTreeActions, openTreeStructure, reloadApp } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, mergeWriteAndSwitch, openTreeActions, runStructure, reloadApp } from './helpers.js';
 
 /**
  * The ways into the import guide and its first moment (spec 134 §2): a
@@ -108,10 +108,7 @@ test('Merge into another tree from Manage trees: the open tree is the target, Sw
     const manager = page.locator('#tree-manager-modal');
     const row = manager.locator('.tree-manager-item').filter({ has: page.locator('.tree-manager-item-name', { hasText: /^Jilmovi$/ }) });
     await row.locator('.tree-row-menu-btn').click();
-    const menu = row.locator('.tree-row-menu.open');
-    const entry = menu.locator('.tree-row-menu-item', { hasText: 'Merge into another tree' }).first();
-    if (!await entry.isVisible()) await openTreeStructure(page, menu);
-    await entry.click();
+    await runStructure(page, 'mergeInto', row.locator('.tree-row-menu.open'));
 
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
@@ -130,8 +127,7 @@ test('Merge this view into: the open tree is not offered, the other one is the t
     await openModrinovi(page);
     await seedJilmovi(page);
     const before = await stored(page);
-    const structure = await openTreeStructure(page, await openTreeActions(page));
-    await structure.locator('.tree-switcher-action').filter({ hasText: 'Merge view into' }).click();
+    await runStructure(page, 'mergeView', await openTreeActions(page));
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
     await expect(wizard.locator('.merge-s1-target')).toHaveCount(1);
@@ -345,8 +341,7 @@ for (const way of ['GEDCOM file', 'view', 'share'] as const) {
         if (way === 'GEDCOM file') {
             await page.locator('#gedcom-input').setInputFiles(GED);
         } else if (way === 'view') {
-            const structure = await openTreeStructure(page, await openTreeActions(page));
-            await structure.locator('.tree-switcher-action').filter({ hasText: 'Merge view into' }).click();
+            await runStructure(page, 'mergeView', await openTreeActions(page));
         } else {
             // A relative's reply to a shared file, as Review and merge takes it.
             await page.evaluate(async (id) => {

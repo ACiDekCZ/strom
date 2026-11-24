@@ -1,7 +1,7 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'url';
-import { openApp, seedTree, createFirstPerson, card, addRelation, fillPerson, waitForPersist, focusViaSearch, openTreeActions, openTreeStructure } from './helpers.js';
+import { openApp, seedTree, createFirstPerson, card, addRelation, fillPerson, waitForPersist, focusViaSearch, openTreeActions, runStructure, type StructureRun } from './helpers.js';
 
 /**
  * Tree manager flows beyond create / rename / delete: duplicating a tree (an
@@ -26,18 +26,25 @@ async function rowAction(page: Page, treeName: string, item: string): Promise<vo
     const r = row(page, treeName);
     await r.locator('.tree-row-menu-btn').click();
     const menu = r.locator('.tree-row-menu.open');
-    const entry = menu.locator('.tree-row-menu-item', { hasText: item }).first();
-    // Structure actions sit under "Change structure ⌄".
-    if (!await entry.isVisible()) await openTreeStructure(page, menu);
-    await entry.click();
+    // Structure actions run through Change structure… (spec 139).
+    if (STRUCTURE_ITEMS[item]) {
+        await runStructure(page, STRUCTURE_ITEMS[item], menu);
+        return;
+    }
+    await menu.locator('.tree-row-menu-item', { hasText: item }).first().click();
 }
 
-/** ⋯ → Tree: → item (a structure action: under Change structure ⌄). */
+/** The items of the old Change structure ⌄ group, now options of its dialog. */
+const STRUCTURE_ITEMS: Record<string, StructureRun> = { Duplicate: 'duplicate', 'Merge into another tree': 'mergeInto' };
+
+/** ⋯ → Tree: → item (a structure action: through Change structure…). */
 async function treeSubmenu(page: Page, item: string): Promise<void> {
     const sub = await openTreeActions(page);
-    const row = sub.locator('.tree-switcher-action', { hasText: item }).first();
-    if (!await row.isVisible()) await openTreeStructure(page, sub);
-    await row.click();
+    if (STRUCTURE_ITEMS[item]) {
+        await runStructure(page, STRUCTURE_ITEMS[item], sub);
+        return;
+    }
+    await sub.locator('.tree-switcher-action', { hasText: item }).first().click();
 }
 
 /** In the open tree overview: expand Data quality and press one of its buttons. */
@@ -136,6 +143,11 @@ test('duplicate dialog: Cancel and an empty name create nothing; Escape returns 
     await rowAction(page, original, 'Duplicate');
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toBeHidden();
+    // Back in Change structure… it came from; its Escape returns to the manager.
+    const structure = page.locator('#structure-modal');
+    await expect(structure).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(structure).toBeHidden();
     await expect(manager(page)).toBeVisible();
     expect(await treeCount()).toBe(1);
 
@@ -149,6 +161,8 @@ test('duplicate dialog: Cancel and an empty name create nothing; Escape returns 
 
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
+    await expect(structure).toBeVisible();
+    await page.keyboard.press('Escape');
     await expect(manager(page)).toBeVisible();
     expect(await treeCount()).toBe(1);
 });

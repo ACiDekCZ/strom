@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, card, cardAction, addRelation, openTreeActions, openTreeStructure, mergeCompare, mergeCount, mergePair, mergeSetScope, mergeTreeInto } from './helpers.js';
+import { openApp, createFirstPerson, card, cardAction, addRelation, openTreeActions, runStructure, mergeCompare, mergeCount, mergePair, mergeSetScope, mergeTreeInto } from './helpers.js';
 import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 function personCount(page: Page): Promise<number> {
@@ -159,11 +159,8 @@ test('actions menu "Merge view into…" (Tree: → From the current view) opens 
         });
     });
 
-    // ⋯ → Tree: → Change structure → "Merge view into…" (set apart from "Merge into another tree…").
-    const structure = await openTreeStructure(page, await openTreeActions(page));
-    const action = structure.locator('.tree-switcher-action').filter({ hasText: 'Merge view into' });
-    await expect(action).toBeVisible();
-    await action.click();
+    // ⋯ → Tree: → Change structure… → into another tree → a selection (for now the view, set apart from the whole tree).
+    await runStructure(page, 'mergeView', await openTreeActions(page));
 
     // The import guide opens on step 1 with the view as the import; the active tree is not offered, the other is the target.
     const wizard = page.locator('#merge-modal');

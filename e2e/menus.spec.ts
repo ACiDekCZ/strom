@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, openTreeActions, openTreeStructure } from './helpers.js';
+import { openApp, createFirstPerson, openTreeActions, openStructureDialog, runStructure, type StructureRun } from './helpers.js';
 
 /** The flyout "Tree: {name} ›" of a one-person tree (menu 1020 §3.1), Change structure folded. */
 const DESKTOP_TREE_KEYS = ['overview', 'overview-quality', 'snapshots', 'researchInfo',
@@ -324,7 +324,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect(label('rename')).toHaveText('Rename…');
         await expect(label('places')).toHaveText('Places…');
         await expect(label('surnames')).toHaveText('Surname spellings…');
-        await expect(label('structure')).toHaveText('Change structure');
+        await expect(label('structure')).toHaveText('Change structure…');
         await expect(label('visibility')).toHaveText('Hide tree');
         await expect(label('lock')).toHaveText('Lock tree');
         await expect(label('delete')).toHaveText('Delete tree…');
@@ -337,12 +337,10 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect(submenu).not.toContainText('Send changes');
         await expect(submenu).not.toContainText('Family book');
 
-        // Change structure ⌄ opens its rows in place.
-        const structure = await openTreeStructure(page, submenu);
-        expect(await structure.locator('[role^="menuitem"]').evaluateAll(els => els.map(el => (el as HTMLElement).innerText.trim()))).toEqual([
-            'New tree from view', 'Merge view into…', 'Split into families…', 'Separate disconnected parts…',
-            'Merge into another tree…', 'Duplicate',
-        ]);
+        // Change structure… is one item leading to its dialog (spec 139 §1): its options are no rows of the menu.
+        for (const key of ['makeTree', 'mergeView', 'splitFamilies', 'split', 'mergeInto', 'duplicate']) {
+            await expect(submenu.locator(`[data-action="${key}"]`)).toHaveCount(0);
+        }
         // 300px wide, 34px rows; the flyout stays inside the window, under the toolbar.
         const box = (await submenu.boundingBox())!;
         expect(Math.round(box.width)).toBe(300);
@@ -352,53 +350,23 @@ test.describe('actions menu "Tree:" submenu', () => {
         expect(Math.round(h)).toBe(34);
     });
 
-    test('Change structure ⌄: Enter / → open it on its first row, ← closes it back on the row; closed rows are not in the arrow order; closed with the menu', async ({ page }) => {
+    test('Change structure…: Enter opens its dialog on the first option and closes the menu; Escape closes it back to the tree', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         const submenu = await openTreeActions(page);
-        const toggle = submenu.locator('#actions-tree-structure-toggle');
-        await expect(toggle).toHaveAttribute('role', 'menuitem');
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-        await expect(toggle).toHaveAttribute('aria-controls', 'actions-tree-structure');
-        await expect(submenu.locator('#actions-tree-structure')).toHaveAttribute('role', 'group');
-
-        // Closed: ↓ from it skips its rows.
-        await toggle.focus();
-        await page.keyboard.press('ArrowDown');
-        await expect(submenu.locator('[data-action="visibility"]')).toBeFocused();
-        await page.keyboard.press('ArrowUp');
-        await expect(toggle).toBeFocused();
-
+        const item = submenu.locator('[data-action="structure"]');
+        await expect(item).toHaveAttribute('role', 'menuitem');
+        await item.focus();
         await page.keyboard.press('Enter');
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await expect(submenu.locator('[data-action="makeTree"]')).toBeFocused();
-        await page.keyboard.press('ArrowDown');
-        await expect(submenu.locator('[data-action="mergeView"]')).toBeFocused();
-        await page.keyboard.press('ArrowLeft');
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-        await expect(toggle).toBeFocused();
-        await expect(page.locator('#actions-tree-wrap')).toHaveClass(/submenu-open/);
 
-        await page.keyboard.press('ArrowRight');
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await expect(submenu.locator('[data-action="makeTree"]')).toBeFocused();
-        await page.keyboard.press('ArrowLeft');
-        await page.keyboard.press(' ');
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await expect(submenu.locator('[data-action="makeTree"]')).toBeFocused();
-        // Enter on the row of an open group closes it.
-        await toggle.focus();
-        await page.keyboard.press('Enter');
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-        await expect(toggle).toBeFocused();
-
-        // Open, then the menu closes and opens again: closed again.
-        await toggle.click();
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
-        await openTreeActions(page);
-        await expect(submenu.locator('#actions-tree-structure-toggle')).toHaveAttribute('aria-expanded', 'false');
-        await expect(submenu.locator('#actions-tree-structure')).toBeHidden();
+        const dialog = page.locator('#structure-modal');
+        await expect(dialog).toBeVisible();
+        await expect(dialog.locator('#structure-title')).toHaveText('Change structure: My Family Tree');
+        await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
+        await expect(dialog.locator('.menu-option[data-action="select"]')).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(dialog).toBeHidden();
+        await expect(page.locator('#tree-manager-modal')).not.toHaveClass(/active/);
     });
 
     test('the flyout as design 3d: headings in sentence case, Default person with its value (First person when none is set), Open at startup a switch', async ({ page }) => {
@@ -435,12 +403,12 @@ test.describe('actions menu "Tree:" submenu', () => {
         await createFirstPerson(page, 'Jan', 'Novak');
         await page.evaluate(() => window.Strom.DataManager.importAsNewTree({ persons: {}, partnerships: {} } as never, 'Jiný strom'));
 
-        /** Click one row of the flyout (structure rows: under Change structure); `then` checks what it opened. */
+        /** Click one row of the flyout (structure actions: through Change structure…); `then` checks what it opened. */
+        const STRUCTURE: Record<string, StructureRun> = { mergeInto: 'mergeInto', duplicate: 'duplicate' };
         const run = async (key: string, then: () => Promise<void>) => {
             const submenu = await openTreeActions(page);
-            const host = ['makeTree', 'mergeView', 'splitFamilies', 'split', 'mergeInto', 'duplicate'].includes(key)
-                ? await openTreeStructure(page, submenu) : submenu;
-            await host.locator(`[data-action="${key}"]`).click();
+            if (STRUCTURE[key]) await runStructure(page, STRUCTURE[key], submenu);
+            else await submenu.locator(`[data-action="${key}"]`).click();
             await then();
         };
         const modal = (id: string) => async () => {
@@ -468,8 +436,18 @@ test.describe('actions menu "Tree:" submenu', () => {
         });
         await run('surnames', modal('surnames-modal'));
         await run('mergeInto', modal('merge-modal'));
-        await run('duplicate', modal('duplicate-tree-modal'));
-        await run('split', modal('split-modal'));
+        // Duplicate's Escape returns to Change structure…, its own Escape to the tree.
+        await run('duplicate', async () => {
+            await modal('duplicate-tree-modal')();
+            await expect(page.locator('#structure-modal')).toBeVisible();
+            await page.keyboard.press('Escape');
+            await expect(page.locator('#structure-modal')).toBeHidden();
+        });
+        // A one-person tree is one connected family: nothing to separate (spec 139 §2.4).
+        const structure = await openStructureDialog(page, await openTreeActions(page));
+        await expect(structure.locator('.menu-option[data-action="parts"]')).toHaveAttribute('aria-disabled', 'true');
+        await page.keyboard.press('Escape');
+        await expect(structure).toBeHidden();
         await run('manageTrees', modal('tree-manager-modal'));
         // Open at startup toggles in place, the menu stays open.
         const submenu = await openTreeActions(page);
@@ -698,8 +676,7 @@ test.describe('tree manager row menu: Escape', () => {
                 await page.locator('#actions-tree-row').press('ArrowRight');
             }
             await expect(submenu).toBeVisible();
-            // Change structure open too: the longest list (menu 1020 §3.2) scrolls inside the window.
-            await openTreeStructure(page, submenu);
+            // The longest list (menu 1020 §3.2) scrolls inside the window.
             const box = (await submenu.boundingBox())!;
             expect(box.y).toBeGreaterThanOrEqual(62 - 1);
             expect(box.y + box.height).toBeLessThanOrEqual(560 - 8 + 1);
@@ -833,20 +810,23 @@ test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => 
         // to offer (none for a one-person tree without a link), never empty.
         await expect(menu.locator('.tree-row-menu-group:visible')).toHaveText(['Research', 'Tree settings']);
         const keys = await menu.locator('.tree-row-menu-item:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
-        expect(keys[0]).toBe('overview');
-        expect(keys[1]).toBe('overview-quality');
+        // Change structure… and Export… lead (spec 139 §1.1, the manager's first group).
+        expect(keys.slice(0, 4)).toEqual(['structure', 'export', 'overview', 'overview-quality']);
         expect(keys).not.toContain('stats');
         expect(keys).not.toContain('health');
         expect(keys).toContain('places');
         expect(keys).toContain('surnames');
-        expect(keys).toContain('export');
-        expect(keys).toContain('structure');
         expect(keys).not.toContain('split');
         expect(keys).not.toContain('manageTrees');
         expect(keys[keys.length - 1]).toBe('delete');
-        // Change structure ⌄ opens in the menu.
-        const structure = await openTreeStructure(page, menu);
-        await expect(structure.locator('[data-action="split"]')).toBeVisible();
+        // Change structure… opens its dialog over the manager.
+        const structure = await openStructureDialog(page, menu);
+        await expect(structure.locator('.menu-option[data-action="parts"]')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(structure).toBeHidden();
+        await expect(page.locator('#tree-manager-modal')).toHaveClass(/active/);
+        await btn.click();
+        await expect(menu).toBeVisible();
 
         // Rows, not bordered centered buttons (the row buttons' style leaked in).
         const item = menu.locator('.tree-row-menu-item[data-action="overview"]');
@@ -883,14 +863,15 @@ test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => 
         await row.locator('.tree-row-menu-btn').click();
         const menu = row.locator('.tree-row-menu.open');
         await expect(menu).toBeVisible();
-        for (const key of ['audit', 'places', 'surnames', 'makeTree', 'splitFamilies', 'split', 'saveToFile', 'manageTrees']) {
+        for (const key of ['audit', 'places', 'surnames', 'saveToFile', 'manageTrees']) {
             await expect(menu.locator(`[data-action="${key}"]`)).toHaveCount(0);
         }
-        for (const key of ['overview', 'export', 'rename', 'mergeInto', 'duplicate', 'delete']) {
+        // Change structure… too: its dialog says which options need the tree open (spec 139 §2.4).
+        for (const key of ['overview', 'export', 'rename', 'structure', 'delete']) {
             await expect(menu.locator(`[data-action="${key}"]`)).toHaveCount(1);
         }
         await expect(menu.locator('.tree-row-menu-note')).toHaveText(
-            'Places, surnames, change log and splitting are available once the tree is open.');
+            'Places, surnames and the change log are available once the tree is open.');
     });
 
     test('a menu taller than its room: a fade and chevron at the bottom, gone at the end', async ({ page }) => {

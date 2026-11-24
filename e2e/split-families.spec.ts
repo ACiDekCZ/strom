@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, card, openTreeStructure } from './helpers.js';
+import { openApp, card, runStructure } from './helpers.js';
 import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 /**
@@ -309,31 +309,30 @@ test("the third cut — one person's view: the depth decides where sibling famil
     await expect(modal.locator('.splitfam-persp-cut')).toContainText('Strejda Novák (*1933)');
 });
 
-test('tree manager row: split opens the proposals directly; a tree not open offers it once open', async ({ page }) => {
+test('tree manager row: split opens the proposals directly, a tree not open too; Cancel and Escape go back the way they came', async ({ page }) => {
     await loadTree(page);
     await page.evaluate(() => window.Strom.DataManager.createNewTree('Jiný strom'));
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    // Splitting needs the open tree: the other tree's menu leaves it out.
+    // Splitting reads the tree from storage (spec 139 §2.4): the tree that is not open offers it as well.
     const row = page.locator('.tree-manager-item', { hasText: 'Rodina Novákových' });
+    await expect(row).not.toHaveClass(/active/);
     await row.locator('.tree-row-menu-btn').click();
-    await expect(row.locator('.tree-row-menu.open')).toBeVisible();
-    await expect(row.locator('.tree-row-menu-item', { hasText: 'Split into families' })).toHaveCount(0);
-
-    await row.locator('.tree-open-btn').click();
-    // The switch finishes after the click: the manager shown before it would still mark the other tree as open.
-    await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Rodina Novákových');
-    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    const active = page.locator('.tree-manager-item.active');
-    await active.locator('.tree-row-menu-btn').click();
-    const structure = await openTreeStructure(page, active.locator('.tree-row-menu.open'));
-    await structure.locator('.tree-row-menu-item', { hasText: 'Split into families' }).click();
+    await runStructure(page, 'splitFamilies', row.locator('.tree-row-menu.open'));
 
     // No starting-person picker — the partition never depends on one.
     const modal = page.locator('#split-families-modal');
     await expect(modal).toBeVisible();
     await expect(modal.locator('.splitfam-row')).toHaveCount(2);
     await expect(page.locator('#split-fam-picker-modal')).toHaveCount(0);
+
+    // Cancel returns to Change structure…, its Escape to Manage trees.
+    await modal.locator('#splitfam-cancel').click();
+    const structure = page.locator('#structure-modal');
+    await expect(structure).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(structure).toBeHidden();
+    await expect(page.locator('#tree-manager-modal')).toBeVisible();
 });
 
 test('Create N trees works at once: the button says Creating…, each tree its step with k/n above the footer, a double click creates them once (8b)', async ({ page }) => {

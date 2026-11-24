@@ -291,7 +291,7 @@ export const structureMethods = uiModule({
         state = null;
         was?.abort.abort();
         document.getElementById(MODAL_ID)?.classList.remove('active');
-        this.dialogStack = this.dialogStack.filter(d => d !== MODAL_ID && d !== was?.parent);
+        this.dialogStack = this.dialogStack.filter(d => d !== MODAL_ID);
         if (back && was?.parent) {
             this.clearDialogStack();
             this.openDialogById(was.parent);
@@ -386,7 +386,7 @@ export const structureMethods = uiModule({
         if (parent === 'tree-manager-modal') this.closeTreeManagerDialog();
         const result = await this.switchToTree(treeId);
         if (result === 'switched' && TreeManager.getActiveTreeId() === treeId) {
-            await this.showStructureDialog(treeId, { source, parent: parent === 'tree-manager-modal' ? parent : undefined });
+            await this.showStructureDialog(treeId, { source });
         }
     },
 

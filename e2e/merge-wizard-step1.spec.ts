@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergePair, mergeSetMode, openTreeStructure } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergePair, mergeSetMode, runStructure } from './helpers.js';
 
 /**
  * Step 1 of the import guide, What to do (spec 134 §3, §13): the target
@@ -239,7 +239,7 @@ async function mergeTrees(page: Page, sourceName: string, targetName: string): P
         has: page.locator('.tree-manager-item-name', { hasText: new RegExp(`^${sourceName}$`) }),
     });
     await row.locator('.tree-row-menu-btn').click();
-    await (await openTreeStructure(page, row)).locator('.tree-row-menu-item', { hasText: 'Merge into' }).click();
+    await runStructure(page, 'mergeInto', row);
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
