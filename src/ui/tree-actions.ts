@@ -3,9 +3,11 @@
  * §3). The ⋯ actions menu's flyout (desktop), More → "Tree: {name}" (the
  * sheet) and the tree manager's ⋯ (its menu, its sheet on touch) all render
  * it, so the actions and their order never drift apart:
- *   Overview · [Export… — manager] · Research · Tree settings (with the
- *   person card timeline's default, K4.5) ·
- *   "Change structure ⌄" (collapsed) · Manage · [Manage trees… — not manager]
+ *   Overview · Research · Tree settings (with the person card timeline's
+ *   default, K4.5) · Change structure… · Manage · [Manage trees… — not manager]
+ * The tree manager's sheet (touch) starts with Change structure… · Export…
+ * (spec 139 §10.2); its desktop row menu has neither (they are buttons in the
+ * row, §8).
  * A tree that is not open gets the list without the rows that need the open
  * tree; a read-only tree (locked, followed live, locked data) only the rows
  * that read it (overview, quality, history) and Unlock when it is locked.
@@ -65,20 +67,22 @@ export interface TreeActionRow {
     hint?: string;
     /** Opens the research: its mark at the row's end. */
     research?: boolean;
+    /** Leads to a dialog of its own steps: "›" at its end in the sheet (Change structure…). */
+    next?: boolean;
 }
 
-export type TreeActionGroupKey = 'overview' | 'outputs' | 'research' | 'settings' | 'structure' | 'manage' | 'trees';
+export type TreeActionGroupKey = 'overview' | 'research' | 'settings' | 'structure' | 'manage' | 'trees';
 
 export interface TreeActionGroup {
     key: TreeActionGroupKey;
     /** A heading over the rows (Research, Tree settings); without one a divider separates the group. */
     header?: string;
-    /**
-     * The rows fold under one row of this label ("Change structure ⌄"),
-     * opened in place; closed again whenever the menu or sheet opens anew.
-     */
-    collapsedLabel?: string;
     rows: TreeActionRow[];
+}
+
+export interface TreeActionGroupsOptions {
+    /** The tree manager's desktop row menu (openTreeRowMenu): Change structure… and Export… are buttons in the row. */
+    inRow?: boolean;
 }
 
 /**
@@ -86,17 +90,21 @@ export interface TreeActionGroup {
  * Export… and Send changes are one level up in Actions / More (the Research
  * menu sends), so the list carries them in the tree manager only, where they
  * act on any tree; "Manage trees…" closes the list everywhere but there.
+ * The manager's desktop row menu has neither Change structure… nor Export…
+ * (buttons in its row); its sheet on touch has both first (spec 139 §1.1).
  */
-function sourceRows(source: TreeActionSource): { export: boolean; researchSend: boolean; manageTrees: boolean } {
+function sourceRows(source: TreeActionSource, opts: TreeActionGroupsOptions = {}): {
+    export: boolean; structure: boolean; structureFirst: boolean; researchSend: boolean; manageTrees: boolean;
+} {
+    const manager = source === 'manager';
     return {
-        export: source === 'manager',
-        researchSend: source === 'manager',
-        manageTrees: source !== 'manager',
+        export: manager && !opts.inRow,
+        structure: !(manager && opts.inRow),
+        structureFirst: manager,
+        researchSend: manager,
+        manageTrees: !manager,
     };
 }
-
-/** Id of the "Change structure" group in a rendered list (aria-controls of its row). */
-export const TREE_STRUCTURE_GROUP_SUFFIX = 'structure-group';
 
 /**
  * Strom Research runs in a terminal on a computer: phones and tablets (a
@@ -117,49 +125,15 @@ export function treeActionsAsSheet(): boolean {
     try { return window.matchMedia?.('(max-width: 1024px) and (pointer: coarse)').matches ?? false; } catch { return false; }
 }
 
-/**
- * The row that folds a group ("Change structure ⌄"): a menu item that says
- * whether its group is open and which group it controls.
- */
-export function collapsedToggle(label: string, groupId: string, className: string, labelClass: string, tag: 'button' | 'div' = 'button'): HTMLElement {
-    const toggle = document.createElement(tag);
-    if (toggle instanceof HTMLButtonElement) toggle.type = 'button';
-    else toggle.tabIndex = -1;
-    toggle.className = className;
-    toggle.dataset.action = 'structure';
-    toggle.setAttribute('role', 'menuitem');
-    toggle.setAttribute('aria-expanded', 'false');
-    toggle.setAttribute('aria-controls', groupId);
-    const text = document.createElement('span');
-    text.className = labelClass;
-    text.textContent = label;
-    const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    chevron.setAttribute('class', 'tree-actions-structure-chevron');
-    chevron.setAttribute('viewBox', '0 0 24 24');
-    chevron.setAttribute('width', '14');
-    chevron.setAttribute('height', '14');
-    chevron.setAttribute('aria-hidden', 'true');
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', 'M6 9l6 6 6-6');
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', 'currentColor');
-    path.setAttribute('stroke-width', '2');
-    path.setAttribute('stroke-linecap', 'round');
-    path.setAttribute('stroke-linejoin', 'round');
-    chevron.appendChild(path);
-    toggle.append(text, chevron);
-    return toggle;
-}
-
 export const treeActionsMethods = uiModule({
     /** The tree's action groups; empty groups are left out. */
-    async treeActionGroups(treeId: TreeId, source: TreeActionSource): Promise<TreeActionGroup[]> {
+    async treeActionGroups(treeId: TreeId, source: TreeActionSource, opts: TreeActionGroupsOptions = {}): Promise<TreeActionGroup[]> {
         const tree = TreeManager.getTreeMetadata(treeId);
         if (!tree) return [];
         const s = strings.treeManager;
         const g = strings.treeActions.group;
         const isActive = treeId === TreeManager.getActiveTreeId();
-        const by = sourceRows(source);
+        const by = sourceRows(source, opts);
         // The tree manager's dialogs return to it on close.
         const parent = source === 'manager' ? 'tree-manager-modal' : undefined;
         const id = tree.id;
@@ -189,7 +163,15 @@ export const treeActionsMethods = uiModule({
         // Merge history… (spec 134 §9): a tree with a merge in its record; a locked tree too (it says why no undo).
         const merged = !!(DataManager.getDataFor(id) ?? treeData)?.merges?.length;
 
+        // Change structure… (spec 139 §1): one row opening the dialog, which decides what each option can do.
+        const structureRows: TreeActionRow[] = editable && by.structure
+            ? [{ key: 'structure', label: strings.structure.menuItem, editOnly: true, next: true,
+                run: () => this.showStructureDialog(id, { source, parent }) }] : [];
+        const exportRows: TreeActionRow[] = by.export
+            ? [{ key: 'export', label: s.export, run: () => this.showExportDialogFromManager(id) }] : [];
+
         const groups: TreeActionGroup[] = [
+            ...(by.structureFirst ? [{ key: 'structure' as const, rows: [...structureRows, ...exportRows] }] : []),
             { key: 'overview', rows: [
                 { key: 'overview', label: strings.treeOverview.menu, run: () => void this.showTreeOverview(id, { parent }) },
                 {
@@ -201,8 +183,6 @@ export const treeActionsMethods = uiModule({
                 ...(merged ? [{ key: 'mergeHistory', label: strings.mergeWizard.menuHistory, run: () => void this.showMergeHistory(id, parent) }] : []),
                 ...(auditOffered ? [{ key: 'audit', label: strings.auditLog.viewLog, run: () => this.showAuditLogDialog(id, parent) }] : []),
             ] },
-            { key: 'outputs', rows: by.export
-                ? [{ key: 'export', label: s.export, run: () => this.showExportDialogFromManager(id) }] : [] },
             { key: 'research', header: g.research, rows: [
                 // The open tree's research overview, followed or not, read-only too, where no Research menu has it
                 // (a phone, a tablet; spec 057 §7.1, §6b).
@@ -227,17 +207,7 @@ export const treeActionsMethods = uiModule({
                     { key: 'surnames', label: strings.surnames.menu, editOnly: true, run: () => this.showSurnamesDialog(parent) },
                 ] : []),
             ] : [] },
-            { key: 'structure', collapsedLabel: strings.treeActions.structure, rows: editable ? [
-                ...(isActive ? [
-                    { key: 'makeTree', label: strings.menu.makeTree, editOnly: true, run: () => this.makeTreeFromCurrentView() },
-                    { key: 'mergeView', label: strings.menu.mergeViewInto, editOnly: true, run: () => this.mergeViewInto() },
-                    { key: 'splitFamilies', label: strings.menu.splitFamilies, hint: strings.menu.splitFamiliesHint, editOnly: true,
-                        run: () => source === 'manager' ? void this.showSplitFamiliesPickerDialog(id, parent) : this.showSplitFamiliesDialog() },
-                    { key: 'split', label: strings.split.menu, hint: strings.split.menuHint, editOnly: true, run: () => void this.showSplitDialog(id, parent) },
-                ] : []),
-                { key: 'mergeInto', label: s.mergeInto, editOnly: true, run: () => this.showMergeTreesDialog(id, parent) },
-                { key: 'duplicate', label: s.duplicate, editOnly: true, run: () => this.duplicateTree(id, parent) },
-            ] : [] },
+            ...(by.structureFirst ? [] : [{ key: 'structure' as const, rows: structureRows }]),
             { key: 'manage', rows: editable ? [
                 { key: 'visibility', label: tree.isHidden ? s.showTree : s.hideTree, editOnly: true, run: () => void this.toggleTreeVisibility(id) },
                 { key: 'lock', label: strings.lock.lockTree, editOnly: true, run: () => this.toggleTreeLock(id) },
@@ -381,11 +351,11 @@ export const treeActionsMethods = uiModule({
                 });
             } else {
                 btn.setAttribute('role', 'menuitem');
-                if (row.value !== undefined || row.key === 'defaultPerson') {
+                if (row.value !== undefined || row.key === 'defaultPerson' || row.next) {
                     const value = document.createElement('span');
                     value.className = 'tree-actions-value';
                     value.textContent = row.value ?? '';
-                    btn.appendChild(value);
+                    if (row.value !== undefined || row.key === 'defaultPerson') btn.appendChild(value);
                     const chevron = document.createElement('span');
                     chevron.className = 'tree-actions-chevron';
                     chevron.setAttribute('aria-hidden', 'true');
@@ -412,27 +382,7 @@ export const treeActionsMethods = uiModule({
                 divider.setAttribute('role', 'separator');
                 list.appendChild(divider);
             }
-            if (!group.collapsedLabel) {
-                for (const row of group.rows) list.appendChild(rowButton(row));
-                return;
-            }
-            // "Change structure ⌄": the rows open in place under their row.
-            const groupId = `tree-actions-sheet-${TREE_STRUCTURE_GROUP_SUFFIX}`;
-            const toggle = collapsedToggle(group.collapsedLabel, groupId, 'bottom-sheet-item tree-actions-row tree-actions-structure-toggle', 'bottom-sheet-label');
-            const box = document.createElement('div');
-            box.id = groupId;
-            box.className = 'tree-actions-structure';
-            box.setAttribute('role', 'group');
-            box.setAttribute('aria-label', group.collapsedLabel);
-            box.hidden = true;
-            for (const row of group.rows) box.appendChild(rowButton(row));
-            toggle.addEventListener('click', () => {
-                const open = box.hidden;
-                box.hidden = !open;
-                toggle.setAttribute('aria-expanded', String(open));
-                if (open) box.querySelector<HTMLElement>('.tree-actions-row')?.focus({ preventScroll: true });
-            });
-            list.append(toggle, box);
+            for (const row of group.rows) list.appendChild(rowButton(row));
         });
         if (!isActive && !readOnly) {
             const note = document.createElement('p');

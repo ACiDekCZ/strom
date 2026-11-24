@@ -53,7 +53,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { fitFlyout } from './flyout.js';
 import { uiModule } from './module.js';
-import { treeActionsAsSheet, collapsedToggle, TreeActionRow, TREE_STRUCTURE_GROUP_SUFFIX } from './tree-actions.js';
+import { treeActionsAsSheet, TreeActionRow } from './tree-actions.js';
 import { isPhoneToolbar } from './search.js';
 
 import { iconSvg } from '../icons.js';
@@ -70,14 +70,6 @@ const ACTIONS_SUBMENUS: readonly ActionsSubmenu[] = ['family', 'tree'];
 
 /** The tree's flyout never starts higher than this (px from the window's top: under the toolbar). */
 const TREE_FLYOUT_TOP = 62;
-
-/** "Change structure ⌄" in the ⋯ flyout is open (until the menu closes). */
-let actionsStructureOpen = false;
-
-/** The first row "Change structure ⌄" reveals in the ⋯ flyout. */
-function firstStructureItem(): HTMLElement | null {
-    return document.querySelector<HTMLElement>('#actions-tree-structure [role^="menuitem"]');
-}
 
 /**
  * Focus the first item of a ⋯-menu flyout opened from the keyboard. The tree's
@@ -460,7 +452,6 @@ export const treeManagementMethods = uiModule({
      */
     closeActionsMenu(): void {
         this.closeActionsSubmenu();
-        actionsStructureOpen = false;
         this.closeResearchTrialNote();
         const dropdown = document.getElementById('actions-menu-dropdown');
         if (dropdown?.classList.contains('active')) this.exportReminderClosed();
@@ -492,8 +483,7 @@ export const treeManagementMethods = uiModule({
      * The "Tree: {name} ›" flyout is the one list of tree actions
      * (treeActionGroups, menu 1020 §3), the same as the tree manager's ⋯ and
      * the More sheet, so they never drift apart. The previous rows stay until
-     * the new ones are ready (no empty flash). "Change structure ⌄" opens its
-     * rows in place; it starts closed with every opening of the menu.
+     * the new ones are ready (no empty flash).
      */
     async renderActionsTreeRows(treeId: TreeId): Promise<void> {
         const host = document.getElementById('actions-tree-submenu');
@@ -565,42 +555,7 @@ export const treeManagementMethods = uiModule({
                 divider.setAttribute('role', 'separator');
                 nodes.push(divider);
             }
-            if (!group.collapsedLabel) {
-                nodes.push(...group.rows.map(rowItem));
-                return;
-            }
-            const groupId = 'actions-tree-structure';
-            const toggle = collapsedToggle(group.collapsedLabel, groupId,
-                'tree-switcher-action actions-tree-action tree-actions-structure-toggle'
-                + (group.rows.every(r => r.editOnly) ? ' edit-only' : ''), 'actions-tree-action-label', 'div');
-            toggle.id = 'actions-tree-structure-toggle';
-            toggle.tabIndex = 0;
-            toggle.setAttribute('aria-expanded', String(actionsStructureOpen));
-            toggle.addEventListener('click', () => this.toggleActionsTreeStructure('row'));
-            toggle.addEventListener('keydown', (e) => {
-                if (e.altKey || e.ctrlKey || e.metaKey) return;
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    this.toggleActionsTreeStructure(actionsStructureOpen ? 'row' : 'first');
-                } else if (e.key === 'ArrowRight') {
-                    e.preventDefault();
-                    if (actionsStructureOpen) firstStructureItem()?.focus();
-                    else this.toggleActionsTreeStructure('first');
-                }
-            });
-            const box = document.createElement('div');
-            box.id = groupId;
-            box.className = 'actions-tree-structure';
-            box.setAttribute('role', 'group');
-            box.setAttribute('aria-label', group.collapsedLabel);
-            box.hidden = !actionsStructureOpen;
-            box.append(...group.rows.map(rowItem));
-            box.addEventListener('keydown', (e) => {
-                if (e.key !== 'ArrowLeft' || e.altKey || e.ctrlKey || e.metaKey) return;
-                e.preventDefault();
-                this.toggleActionsTreeStructure('row');
-            });
-            nodes.push(toggle, box);
+            nodes.push(...group.rows.map(rowItem));
         });
         // A row focused from the keyboard meanwhile (→ on "Tree:") keeps the focus on its new copy.
         const focused = document.activeElement instanceof HTMLElement && host.contains(document.activeElement)
@@ -610,18 +565,6 @@ export const treeManagementMethods = uiModule({
         if (document.getElementById('actions-tree-wrap')?.classList.contains('submenu-open')) {
             this.positionActionsSubmenu('actions-tree-submenu');
         }
-    },
-
-    /** "Change structure ⌄" in the ⋯ flyout opened or closed in place; focus on its first row (`first`) or the row. */
-    toggleActionsTreeStructure(focus: 'first' | 'row'): void {
-        actionsStructureOpen = !actionsStructureOpen;
-        const toggle = document.getElementById('actions-tree-structure-toggle');
-        const box = document.getElementById('actions-tree-structure');
-        toggle?.setAttribute('aria-expanded', String(actionsStructureOpen));
-        if (box) box.hidden = !actionsStructureOpen;
-        this.positionActionsSubmenu('actions-tree-submenu');
-        if (focus === 'first' && actionsStructureOpen) firstStructureItem()?.focus();
-        else toggle?.focus();
     },
 
     /**
@@ -1191,48 +1134,7 @@ export const treeManagementMethods = uiModule({
                 if (editOnly) divider.classList.add('edit-only');
                 menu.appendChild(divider);
             }
-            if (!group.collapsedLabel) {
-                for (const row of group.rows) menu.appendChild(rowItem(row));
-                return;
-            }
-            // "Change structure ⌄": its rows open in place (closed again with the menu).
-            const groupId = `tree-row-menu-${treeId}-${TREE_STRUCTURE_GROUP_SUFFIX}`;
-            const toggle = collapsedToggle(group.collapsedLabel, groupId,
-                'tree-row-menu-item tree-actions-structure-toggle' + (editOnly ? ' edit-only' : ''), 'tree-row-menu-label');
-            const box = document.createElement('div');
-            box.id = groupId;
-            box.className = 'tree-row-menu-structure';
-            box.setAttribute('role', 'group');
-            box.setAttribute('aria-label', group.collapsedLabel);
-            box.hidden = true;
-            for (const row of group.rows) box.appendChild(rowItem(row));
-            const setOpen = (open: boolean, focus: 'first' | 'row') => {
-                box.hidden = !open;
-                toggle.setAttribute('aria-expanded', String(open));
-                this.updateTreeRowMenuHint(menu);
-                if (focus === 'first' && open) box.querySelector<HTMLElement>('.tree-row-menu-item')?.focus();
-                else toggle.focus();
-            };
-            toggle.addEventListener('click', (e) => {
-                e.stopPropagation();
-                setOpen(box.hidden, 'row');
-            });
-            toggle.addEventListener('keydown', (e) => {
-                if (e.altKey || e.ctrlKey || e.metaKey) return;
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setOpen(box.hidden, 'first');
-                } else if (e.key === 'ArrowRight') {
-                    e.preventDefault();
-                    setOpen(true, 'first');
-                }
-            });
-            box.addEventListener('keydown', (e) => {
-                if (e.key !== 'ArrowLeft' || e.altKey || e.ctrlKey || e.metaKey) return;
-                e.preventDefault();
-                setOpen(false, 'row');
-            });
-            menu.append(toggle, box);
+            for (const row of group.rows) menu.appendChild(rowItem(row));
         });
         // A tree that is not open: say where the missing actions are.
         if (treeId !== TreeManager.getActiveTreeId()) {

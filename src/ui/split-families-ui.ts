@@ -73,9 +73,10 @@ export const splitFamiliesMethods = uiModule({
     /**
      * Live entry (actions menu / mobile sheet): split the ACTIVE tree. The focus
      * is the person on screen — it only decides which family is listed first; the
-     * partition is the same whatever it is.
+     * partition is the same whatever it is. `parentDialogId`: the dialog it
+     * returns to on close (Change structure…).
      */
-    showSplitFamiliesDialog(): Promise<void> {
+    showSplitFamiliesDialog(parentDialogId?: string): Promise<void> {
         if (DataManager.isReadOnly()) return Promise.resolve();
         const treeId = DataManager.getCurrentTreeId();
         const data = DataManager.getData();
@@ -91,6 +92,7 @@ export const splitFamiliesMethods = uiModule({
             treeId,
             data,
             focusPersonId: focus,
+            parentDialogId,
         }), { label: strings.busy.findingFamilies, atOnce: realCount >= SPLIT_SHOWN_AT_ONCE }).then(() => undefined);
     },
 

@@ -176,6 +176,7 @@ import { waitingAsideMethods } from './waiting-aside-ui.js';
 import type { PlaceStateFilter } from '../place-identity.js';
 import type { PlacesSort } from '../places.js';
 import { splitMethods } from './split-ui.js';
+import { structureMethods } from './structure-ui.js';
 import { splitFamiliesMethods } from './split-families-ui.js';
 import { surnamesMethods } from './surnames-ui.js';
 import { surnameSuggestMethods } from './surname-suggest-ui.js';
@@ -1160,6 +1161,10 @@ Object.assign(UIClass.prototype, waitingAsideMethods);
 type SplitMethods = typeof splitMethods;
 export interface UIClass extends SplitMethods {}
 Object.assign(UIClass.prototype, splitMethods);
+
+type StructureMethods = typeof structureMethods;
+export interface UIClass extends StructureMethods {}
+Object.assign(UIClass.prototype, structureMethods);
 
 type SplitFamiliesMethods = typeof splitFamiliesMethods;
 export interface UIClass extends SplitFamiliesMethods {}

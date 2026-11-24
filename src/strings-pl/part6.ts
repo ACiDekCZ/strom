@@ -2,7 +2,7 @@ import type { StringsType } from '../strings.js';
 import { joinAndPl, nPl, numPl, plPl } from './helpers.js';
 
 export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' | 'exportMenu' | 'settings' | 'treeActions'
-    | 'treeManager' | 'share' | 'shareDiff' | 'viewMode' | 'encryption' | 'treePreview' | 'slideshow' | 'live'
+    | 'structure' | 'treeManager' | 'share' | 'shareDiff' | 'viewMode' | 'encryption' | 'treePreview' | 'slideshow' | 'live'
     | 'viewLinks' | 'researchEdge'> = {
     merge: {
         analyzing: 'Analizowanie osób…',
@@ -725,8 +725,52 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
             research: 'Badanie',
             settings: 'Ustawienia drzewa',
         },
-        // The row that folds the rarely used structure actions (opened in place).
+        // The label of the back button of the Change structure dialog's steps (‹ Change structure).
         structure: 'Zmień strukturę',
+    },
+    // Change structure… (spec 139 §1–§2): one dialog for new trees, splitting and joining.
+    structure: {
+        menuItem: 'Zmień strukturę…',
+        title: (name: string) => `Zmień strukturę: ${name}`,
+        intro: 'Co ma się stać z drzewem. Przy każdej opcji napisano, które drzewo się zmieni.',
+        group: {
+            newTree: 'Nowe drzewo',
+            split: 'Podziel',
+            join: 'Połącz',
+        },
+        optSelect: 'Z wyboru…',
+        optSelectDesc: 'Ród, lista osób, linia albo widok. Powstanie nowe drzewo, to drzewo się nie zmienia.',
+        optCopy: 'Kopia całego drzewa',
+        optCopyDesc: 'Powstanie kopia, bez połączenia z badaniem. To drzewo się nie zmienia.',
+        optFamilies: 'Na rodziny…',
+        optFamiliesDesc: 'Według rodów, gałęzi lub z perspektywy osoby. Powstaną nowe drzewa, to drzewo się nie zmienia.',
+        // The title of "Separate disconnected parts…" is split.menu.
+        optPartsDesc: 'Części, których nic nie łączy. Powstaną nowe drzewa, to drzewo się nie zmienia.',
+        optInto: 'Wybór lub całe drzewo do innego drzewa…',
+        optIntoDesc: 'Przez kreator scalania. Zmieni się drzewo docelowe; można cofnąć.',
+        optFile: 'Dodaj z pliku do tego drzewa…',
+        optFileDesc: 'GEDCOM lub plik Strom (JSON), przez kreator scalania. Zmieni się to drzewo; można cofnąć.',
+        whyNotOpen: 'Po otwarciu drzewa.',
+        openTree: (name: string) => `Otwórz drzewo ${name}`,
+        whyConnected: 'Całe drzewo jest połączone.',
+        whyNoOther: 'Nie ma innego drzewa.',
+        whyFollowed: 'Drzewo jest śledzone na żywo; nie można teraz do niego zapisywać.',
+        // The header's back button: its aria-label "{back}: {the screen it returns to}".
+        back: 'Wstecz',
+        joinTitle: 'Połącz z innym drzewem',
+        joinWhatStep: 'co połączyć',
+        joinWhatIntro: 'Co z tego drzewa dodać do innego drzewa.',
+        joinWhole: (name: string) => `Całe drzewo ${name}`,
+        /** `people`: the tree's count of people, as treeManager.persons says it. */
+        joinWholeDesc: (people: string) => `${people}. Do drzewa docelowego zostanie dodane, czego w nim brakuje – jak, rozstrzyga się w kreatorze.`,
+        joinSelection: 'Wybór…',
+        joinSelectionDesc: 'Ród, lista, linia, bieżący widok albo ręcznie – jak przy nowym drzewie.',
+        joinNote: 'Dalej kreator scalania: dokąd, kto jest kim, co się zmieni. To drzewo się nie zmienia; docelowe zmieni się dopiero po potwierdzeniu w kreatorze i można to cofnąć.',
+        continueGuide: 'Przejdź do kreatora',
+        fileTitle: 'Dodaj z pliku do tego drzewa',
+        fileGed: 'Plik GEDCOM (.ged)',
+        fileGedDesc: 'Z innego programu: MyHeritage, Geni, Ancestry, Gramps…',
+        fileNote: (name: string) => `Po wybraniu pliku otworzy się kreator scalania z celem ${name}. Nic nie zostanie zapisane, dopóki kreator tego nie potwierdzi; scalenie można cofnąć.`,
     },
     treeManager: {
         defaultTreeName: 'Moje drzewo genealogiczne',

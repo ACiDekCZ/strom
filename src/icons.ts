@@ -40,6 +40,30 @@ export function chainLinkSvg(options: ChainLinkOptions = {}): string {
         + `</svg>`;
 }
 
+/** What a Change structure option does to the data (spec 139 §2.3). */
+export type StructureDirKind = 'new' | 'split' | 'into' | 'file';
+
+/**
+ * The direction of a Change structure option (spec 139 §2.3), 52 × 24: this
+ * tree (a filled square) → a new tree (dashed), two new trees, another tree
+ * (an outline with a plus); a sheet of paper → this tree for a file. Drawn in
+ * `currentColor`, decorative (the option's text says it).
+ */
+export function structureDirSvg(kind: StructureDirKind): string {
+    const filled = (x: number): string => `<rect x="${x}" y="5" width="14" height="14" rx="2" fill="currentColor" fill-opacity=".22"/>`;
+    const arrow = '<path d="M20 12h11M27.5 8.5L31 12l-3.5 3.5"/>';
+    const body = kind === 'new'
+        ? filled(1.5) + arrow + '<rect x="36.5" y="5" width="14" height="14" rx="2" stroke-dasharray="2.5 2"/>'
+        : kind === 'split'
+            ? filled(1.5) + arrow + '<rect x="36.5" y="1.5" width="14" height="9" rx="2" stroke-dasharray="2.5 2"/>'
+                + '<rect x="36.5" y="13.5" width="14" height="9" rx="2" stroke-dasharray="2.5 2"/>'
+            : kind === 'into'
+                ? filled(1.5) + arrow + '<rect x="36.5" y="5" width="14" height="14" rx="2"/><path d="M40 12h7M43.5 8.5v7"/>'
+                : '<path d="M3 3.5h7l4 4V20.5H3z"/><path d="M10 3.5v4h4"/>' + arrow + filled(36.5);
+    return `<svg class="structure-dir" width="52" height="24" viewBox="0 0 52 24" fill="none" stroke="currentColor" `
+        + `stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+}
+
 interface TwoFiguresOptions {
     /** Draw the second figure with a dashed outline (an excluded/step relative). */
     secondExcluded?: boolean;

@@ -908,6 +908,11 @@ export const miscMethods = uiModule({
                 }
                 // The Places dialog's menu, preview and selection close one at a time first.
                 if (this.topActiveOverlay()?.id === 'places-modal' && this.placesEscape()) return;
+                // Change structure…: one screen back, from its options back to the dialog it was opened from.
+                if (this.topActiveOverlay()?.id === 'structure-modal' && this.isStructureDialogOpen()) {
+                    this.structureEscape();
+                    return;
+                }
                 // New list / Save as list: its person choice, then the dialog (over Lists of people).
                 if (this.isNewPersonListOpen() && ['person-list-new', 'person-list-save'].includes(this.topActiveOverlay()?.id ?? '')) {
                     this.newPersonListEscape();
@@ -1592,6 +1597,8 @@ export const miscMethods = uiModule({
     openDialogById(dialogId: string | undefined): void {
         if (!dialogId) return;
         document.getElementById(dialogId)?.classList.add('active');
+        // Change structure… drawn again on return: a copy or a split made meanwhile changes its options.
+        if (dialogId === 'structure-modal') this.structureRender();
     },
 
     /**
