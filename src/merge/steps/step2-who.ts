@@ -697,7 +697,7 @@ function recalcHtml(state: MergeState, view: PairView): string {
 }
 
 /** Why yes of a pair that shares its parents (one of them), a child or a partner with the tree's person. */
-const FAMILY_REASONS: ReadonlySet<MatchReason> = new Set<MatchReason>(['name_gender_parents', 'child_of_matched', 'parent_of_matched', 'sibling_of_matched', 'partner_of_matched', 'partner_similarity']);
+const FAMILY_REASONS: ReadonlySet<MatchReason> = new Set<MatchReason>(['name_gender_parents', 'child_of_matched', 'parent_of_matched', 'sibling_of_matched', 'partner_of_matched', 'partner_shared_children', 'partner_similarity']);
 
 /** The ids of a person's parents, children or partners in one data set. */
 function relativeIds(p: Person, data: StromData, rel: 'parents' | 'children' | 'partners'): PersonId[] {

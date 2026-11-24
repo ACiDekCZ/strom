@@ -746,6 +746,20 @@ function* findMatchesSteps(
     // parent pairs with the "?" of that very family record in the tree.
     matches.push(...matchFamilyRecordStandIns(existingData, incomingData, matches, usedExisting, usedIncoming));
 
+    // Phase 2d (spec 134 K10.6): the partner of a joined person whose shared
+    // children are joined too is the tree's partner of those children, even
+    // under another surname (birth × after marriage) — offered, never joined
+    // by this alone. A weaker pair without that evidence gives way (its
+    // persons are free again for Phase 3); a pair found here seeds the
+    // propagation again.
+    const joined = new Map<PersonId, PersonId>();
+    for (const m of matches) if (m.score >= AUTO_CONFIRM_SCORE) joined.set(m.incomingId, m.existingId);
+    let familySeeds = applySharedChildrenSpouses(existingData, incomingData, joined, matches, usedExisting, usedIncoming, mayGiveWay);
+    for (let round = 0; round < maxRounds && familySeeds.length; round++) {
+        familySeeds = propagateFromMatches(existingData, incomingData, familySeeds, usedExisting, usedIncoming);
+        matches.push(...familySeeds);
+    }
+
     // Phase 3: Find remaining matches with lower threshold
     const remainingMatches = yield* findRemainingMatches(
         existingData, incomingData, usedExisting, usedIncoming, progress
@@ -1153,6 +1167,181 @@ function propagateFromMatches(
     }
 
     return propagated;
+}
+
+/**
+ * The least score of a partner offered through shared joined children
+ * (spec 134 K10.6): 'medium', in Maybe the same; never above the
+ * auto-confirm bar (a person decides).
+ */
+const SHARED_CHILDREN_SPOUSE_SCORE = 60;
+/** What shared joined children add to the pair's own score. */
+const SHARED_CHILDREN_BONUS = 20;
+
+/** A pair of a weaker kind than shared joined children: it gives way to them (Phase 2d). */
+function mayGiveWay(m: PersonMatch): boolean {
+    return m.score < AUTO_CONFIRM_SCORE && !m.reasons.includes('id') && !m.reasons.includes('merged_before')
+        && !m.reasons.includes('partner_shared_children') && !m.reasons.includes('manual');
+}
+
+/**
+ * The surname one of a couple carries is the other's (Modřínová of a
+ * Modřín): the surname after marriage, whatever field holds it.
+ */
+function surnameOfPartner(person: Person, partner: Person, data: StromData): boolean {
+    const own = [person.lastName, person.marriedSurname ?? ''].filter(Boolean);
+    return !!partner.lastName && own.some(s => sameSurnameIn(s, partner.lastName, data) || normalizeName(s) === normalizeName(partner.lastName));
+}
+
+/** A tree's person and an import's person a K10.6 pairing proposes, with the number of shared joined children. */
+interface SharedChildrenSpouse {
+    existing: Person;
+    incoming: Person;
+    children: number;
+}
+
+/**
+ * The partners the shared children of joined persons name (spec 134 K10.6).
+ * For every joined person of the import, each of their children that is
+ * joined to a child of the joined counterpart names the child's other parent
+ * on both sides: the import's parent and the tree's. An import's person
+ * named so is proposed with the tree's person the most such children name
+ * (a tie between two of the tree: none), when neither is joined already,
+ * neither is a "?", their sex may be the same and their given names agree
+ * (one of the given names the same, or one given name the start of the
+ * other: an initial or a short form). A given name agreeing only as a start
+ * also needs the surnames to agree: alike, or one of them the surname of the
+ * person's partner there (the surname after marriage against the birth one).
+ * A person of the tree proposed for two of the import: the one with more
+ * children, a tie: none. Only the partners of joined persons are visited.
+ */
+function sharedChildrenSpouses(
+    existingData: StromData,
+    incomingData: StromData,
+    joined: ReadonlyMap<PersonId, PersonId>
+): SharedChildrenSpouse[] {
+    const joinedTargets = new Set(joined.values());
+    const named = new Map<PersonId, Map<PersonId, number>>();
+    /** The import's partner of each proposed person, for the surname check (one joined parent the pair shares). */
+    const partnersOf = new Map<string, [Person, Person]>();
+    for (const [incomingId, existingId] of joined) {
+        const incomingParent = incomingData.persons[incomingId];
+        const existingParent = existingData.persons[existingId];
+        if (!incomingParent || !existingParent) continue;
+        for (const childId of incomingParent.childIds) {
+            const existingChildId = joined.get(childId);
+            const child = incomingData.persons[childId];
+            const existingChild = existingChildId ? existingData.persons[existingChildId] : undefined;
+            if (!child || !existingChild || !existingChild.parentIds.includes(existingParent.id)) continue;
+            const incomingOthers = child.parentIds.filter(id => id !== incomingId);
+            const existingOthers = existingChild.parentIds.filter(id => id !== existingParent.id);
+            if (incomingOthers.length !== 1 || existingOthers.length !== 1) continue;
+            const [incomingOther] = incomingOthers;
+            const [existingOther] = existingOthers;
+            if (joined.has(incomingOther) || joinedTargets.has(existingOther)) continue;
+            let counts = named.get(incomingOther);
+            if (!counts) named.set(incomingOther, counts = new Map());
+            counts.set(existingOther, (counts.get(existingOther) ?? 0) + 1);
+            partnersOf.set(`${incomingOther}\u0000${existingOther}`, [incomingParent, existingParent]);
+        }
+    }
+    const proposals: SharedChildrenSpouse[] = [];
+    for (const [incomingId, counts] of named) {
+        let best: PersonId | null = null;
+        let bestCount = 0;
+        let tie = false;
+        for (const [existingId, n] of counts) {
+            if (n > bestCount) { best = existingId; bestCount = n; tie = false; }
+            else if (n === bestCount) tie = true;
+        }
+        if (!best || tie) continue;
+        const incoming = incomingData.persons[incomingId];
+        const existing = existingData.persons[best];
+        if (!incoming || !existing || incoming.isPlaceholder || existing.isPlaceholder) continue;
+        if (!gendersCompatible(existing.gender, incoming.gender)) continue;
+        const given = firstNamesMatch(existing.firstName, incoming.firstName);
+        if (!given.exact && !given.firstWord && !given.anyWord) {
+            if (!given.prefix) continue;
+            const [incomingPartner, existingPartner] = partnersOf.get(`${incomingId}\u0000${best}`)!;
+            const surnamesAgree = bestLastNameMatch(existing, incoming, existingData, incomingData).similar
+                || surnameOfPartner(existing, existingPartner, existingData)
+                || surnameOfPartner(incoming, incomingPartner, incomingData);
+            if (!surnamesAgree) continue;
+        }
+        proposals.push({ existing, incoming, children: bestCount });
+    }
+    // One person of the tree for one person of the import.
+    const byExisting = new Map<PersonId, SharedChildrenSpouse[]>();
+    for (const p of proposals) {
+        const list = byExisting.get(p.existing.id);
+        if (list) list.push(p); else byExisting.set(p.existing.id, [p]);
+    }
+    const out: SharedChildrenSpouse[] = [];
+    for (const list of byExisting.values()) {
+        list.sort((a, b) => b.children - a.children);
+        if (list.length > 1 && list[0].children === list[1].children) continue;
+        out.push(list[0]);
+    }
+    return out;
+}
+
+/**
+ * Phase 2d (spec 134 K10.6): the pairs sharedChildrenSpouses proposes, put
+ * into `matches`. A pair already there gets the reason in front and at least
+ * the offer's score (below the auto-confirm bar). Otherwise a pair of either
+ * person that `mayGiveWay` lets go leaves `matches` (its other person is free
+ * again); a pair it does not let go keeps the proposal out. Returns the new
+ * pairs.
+ */
+function applySharedChildrenSpouses(
+    existingData: StromData,
+    incomingData: StromData,
+    joined: ReadonlyMap<PersonId, PersonId>,
+    matches: PersonMatch[],
+    usedExisting: Set<PersonId>,
+    usedIncoming: Set<PersonId>,
+    giveWay: (m: PersonMatch) => boolean
+): PersonMatch[] {
+    const proposals = sharedChildrenSpouses(existingData, incomingData, joined);
+    if (proposals.length === 0) return [];
+    const added: PersonMatch[] = [];
+    for (const { existing, incoming } of proposals) {
+        const ofIncoming = matches.find(m => m.incomingId === incoming.id);
+        const ofExisting = matches.find(m => m.existingId === existing.id);
+        if (ofIncoming && ofIncoming === ofExisting) {
+            if (ofIncoming.score >= AUTO_CONFIRM_SCORE || !giveWay(ofIncoming)) continue;
+            ofIncoming.reasons = ['partner_shared_children', ...ofIncoming.reasons.filter(r => r !== 'partner_of_matched')];
+            ofIncoming.score = Math.min(Math.max(ofIncoming.score, SHARED_CHILDREN_SPOUSE_SCORE), offerOnlyCap());
+            ofIncoming.confidence = scoreToConfidence(ofIncoming.score);
+            continue;
+        }
+        if ((ofIncoming && !giveWay(ofIncoming)) || (ofExisting && !giveWay(ofExisting))) continue;
+        if (!ofIncoming && usedIncoming.has(incoming.id)) continue;
+        if (!ofExisting && usedExisting.has(existing.id)) continue;
+        for (const m of [ofIncoming, ofExisting]) {
+            if (!m) continue;
+            matches.splice(matches.indexOf(m), 1);
+            usedIncoming.delete(m.incomingId);
+            usedExisting.delete(m.existingId);
+        }
+        const base = calculateMatchScore(existing, incoming, existingData, incomingData);
+        const score = Math.min(Math.max(base.score + SHARED_CHILDREN_BONUS, SHARED_CHILDREN_SPOUSE_SCORE), offerOnlyCap());
+        const match: PersonMatch = {
+            existingId: existing.id,
+            incomingId: incoming.id,
+            confidence: scoreToConfidence(score),
+            reasons: ['partner_shared_children', ...base.reasons.filter(r => r !== 'partner_of_matched')],
+            score,
+            existingPerson: existing,
+            incomingPerson: incoming,
+            conflicts: detectConflicts(existing, incoming)
+        };
+        matches.push(match);
+        added.push(match);
+        usedExisting.add(existing.id);
+        usedIncoming.add(incoming.id);
+    }
+    return added;
 }
 
 /**
@@ -2357,6 +2546,20 @@ export function reanalyzeMatches(state: MergeState, found?: readonly PersonMatch
             uniqueMatches.push(match);
         }
     }
+
+    // A partner of persons joined now (confirmed, picked by hand or joined
+    // by the comparison) through shared joined children (spec 134 K10.6):
+    // an undecided pair gives way as in the comparison; a decided one and a
+    // person told "not the same" stay as they are.
+    const joinedNow = new Map<PersonId, PersonId>();
+    for (const m of uniqueMatches) {
+        const decided = state.decisions.get(m.incomingId)?.type;
+        if (decided === 'manual_match' || decided === 'confirm' || m.score >= AUTO_CONFIRM_SCORE) joinedNow.set(m.incomingId, m.existingId);
+    }
+    const takenExisting = new Set(uniqueMatches.map(m => m.existingId));
+    const takenIncoming = new Set([...uniqueMatches.map(m => m.incomingId), ...rejectedIncoming]);
+    applySharedChildrenSpouses(state.existingData, state.incomingData, joinedNow, uniqueMatches, takenExisting, takenIncoming,
+        m => !state.decisions.has(m.incomingId) && mayGiveWay(m));
 
     // Update state
     state.matches = uniqueMatches;

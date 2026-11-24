@@ -1,0 +1,112 @@
+0 HEAD
+1 SOUR FAMILYNOTES
+2 NAME Family Notes
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Václav /Modřín/
+2 GIVN Václav
+2 SURN Modřín
+1 SEX M
+1 BIRT
+2 DATE 15 AUG 1842
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Kateřina /Modřínová/
+2 GIVN Kateřina
+2 SURN Modřínová
+1 SEX F
+1 BIRT
+2 DATE 30 JAN 1846
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Marie /Modřínová/
+2 GIVN Marie
+2 SURN Modřínová
+1 SEX F
+1 BIRT
+2 DATE 2 NOV 1874
+1 FAMC @F1@
+0 @I4@ INDI
+1 NAME Ondřej /Modřín/
+2 GIVN Ondřej
+2 SURN Modřín
+1 SEX M
+1 BIRT
+2 DATE 2 APR 1871
+1 FAMS @F2@
+1 FAMC @F1@
+0 @I5@ INDI
+1 NAME Marie /Šeříková/
+2 GIVN Marie
+2 SURN Šeříková
+1 SEX F
+1 FAMS @F2@
+0 @I6@ INDI
+1 NAME Karel /Modřín/
+2 GIVN Karel
+2 SURN Modřín
+1 SEX M
+1 BIRT
+2 DATE 10 JAN 1896
+1 FAMC @F2@
+0 @I7@ INDI
+1 NAME Věra /Modřínová/
+2 GIVN Věra
+2 SURN Modřínová
+1 SEX F
+1 BIRT
+2 DATE 11 MAR 1898
+1 FAMC @F2@
+0 @I8@ INDI
+1 NAME Josef /Modřín/
+2 GIVN Josef
+2 SURN Modřín
+1 SEX M
+1 BIRT
+2 DATE 12 JUL 1901
+1 FAMC @F2@
+0 @I9@ INDI
+1 NAME Ludmila /Modřínová/
+2 GIVN Ludmila
+2 SURN Modřínová
+1 SEX F
+1 BIRT
+2 DATE 14 SEP 1903
+1 FAMC @F2@
+0 @I10@ INDI
+1 NAME František /Modřín/
+2 GIVN František
+2 SURN Modřín
+1 SEX M
+1 BIRT
+2 DATE 8 FEB 1906
+1 FAMC @F2@
+0 @I11@ INDI
+1 NAME Božena /Modřínová/
+2 GIVN Božena
+2 SURN Modřínová
+1 SEX F
+1 BIRT
+2 DATE 1 DEC 1909
+1 FAMC @F2@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I4@
+1 CHIL @I3@
+1 MARR
+2 DATE 1868
+0 @F2@ FAM
+1 HUSB @I4@
+1 WIFE @I5@
+1 CHIL @I6@
+1 CHIL @I7@
+1 CHIL @I8@
+1 CHIL @I9@
+1 CHIL @I10@
+1 CHIL @I11@
+1 MARR
+2 DATE 1895
+0 TRLR

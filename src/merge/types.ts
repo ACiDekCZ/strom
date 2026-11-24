@@ -31,6 +31,7 @@ export type MatchReason =
     | 'first_name_birthyear'          // First name + birth year (relaxed)
     | 'lastname_birthyear'            // Last name + birth year (could be relative)
     | 'partner_of_matched'            // Partner of already matched person
+    | 'partner_shared_children'       // Partner of a joined person, with shared joined children (spec 134 K10.6)
     | 'child_of_matched'              // Child of already matched person
     | 'parent_of_matched'             // Parent of already matched person
     | 'sibling_of_matched'            // Sibling of already matched person (through parents of no name)

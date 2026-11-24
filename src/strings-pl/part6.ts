@@ -48,6 +48,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
             first_name_birthyear: 'Imię i rok urodzenia',
             lastname_birthyear: 'Nazwisko i rok urodzenia',
             partner_of_matched: 'Partner dopasowanej osoby',
+            partner_shared_children: 'Partner połączonej osoby, wspólne dzieci',
             child_of_matched: 'Dziecko dopasowanej osoby',
             parent_of_matched: 'Rodzic dopasowanej osoby',
             sibling_of_matched: 'Rodzeństwo dopasowanej osoby',
