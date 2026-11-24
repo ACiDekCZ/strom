@@ -366,7 +366,21 @@ export const personListRuleMethods = uiModule({
         const ctx = this.ruleEditorCtx(path);
         const fn = kind === 'change' ? editor?.change : editor?.input;
         const p = fn ? fn(node as never, el, ctx) : null;
-        if (p) ctx.update({ ...node, p } as RuleCond, { render: kind === 'change' });
+        if (!p) return true;
+        // A typed field's change (leaving it, Enter) keeps the drawing: drawing again here would take the
+        // focus from where it is going (the next field). The typing becomes one step back.
+        const typed = el instanceof HTMLInputElement && el.type !== 'checkbox' && el.type !== 'radio';
+        if (kind === 'change' && typed) {
+            ctx.update({ ...node, p } as RuleCond, { render: false });
+            const from = st.typingFrom;
+            st.typingFrom = null;
+            if (from && JSON.stringify(from) !== JSON.stringify(st.root)) {
+                st.undo.push(from);
+                if (st.undo.length > UNDO_MAX) st.undo.shift();
+            }
+            return true;
+        }
+        ctx.update({ ...node, p } as RuleCond, { render: kind === 'change' });
         return true;
     },
 
