@@ -12,6 +12,7 @@ import { startDeviceGateway, type FakeGateway } from './device-gateway.js';
 type DeviceHooks = {
     deviceFetch: (path: string, init?: RequestInit) => Promise<Response>;
     connection: () => { state: string } | null;
+    events: () => { event: string; data: unknown }[];
     pairing: () => Promise<{ deviceId: string; name: string; kind: string; computer: { name: string }; trees: { id: string }[] } | null>;
 };
 
@@ -77,9 +78,18 @@ test('pairs by the code of its address and asks the research through the tunnel'
     // connected: the event stream open
     await expect.poll(() => page.evaluate(() => (globalThis as unknown as { __stromDevice: DeviceHooks }).__stromDevice.connection()?.state)).toBe('connected');
     await expect.poll(() => gw.streams()).toBe(1);
+    // the stream as the research's U9b asks it: of the tree, with the app's version, signed over both
+    const q = gw.streamQueries.at(-1)!;
+    expect(q.get('tree')).toBe('pychavkovi');
+    expect(q.get('app')).toMatch(/^\d+\.\d+\.\d+/);
+    gw.ping();
+    // events in order (their order in each AAD): another device's rename and a change both come through
+    gw.sendEvent({ event: 'device', data: { type: 'device', what: 'renamed', id: 'dv_another', name: 'iPad · Safari' } });
+    gw.sendEvent({ event: 'change', data: { head: 'abc', what: ['person P0001: Jan Pýchavka'] } });
+    await expect.poll(() => page.evaluate(() => (globalThis as unknown as { __stromDevice: DeviceHooks }).__stromDevice.events().map(e => e.event))).toEqual(['device', 'change']);
 
     // unpaired on the computer: the device forgets its key
-    gw.sendEvent({ type: 'device', what: 'unpaired' });
+    gw.sendEvent({ event: 'device', data: { type: 'device', what: 'unpaired', id: gw.devices[0].id } });
     await expect.poll(() => page.evaluate(() => (globalThis as unknown as { __stromDevice: DeviceHooks }).__stromDevice.connection()?.state)).toBe('unpaired');
     expect(await page.evaluate(() => (globalThis as unknown as { __stromDevice: DeviceHooks }).__stromDevice.pairing())).toBeNull();
 });

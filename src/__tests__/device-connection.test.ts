@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createDeviceConnection, retryDelayMs, EVENTS_SILENT_MS, type ConnectionDeps, type EventSourceLike, type DeviceConnection } from '../device/device-connection';
 import { GatewayError } from '../device/gateway-client';
-import { deriveKey, sealEvent } from '../device/device-crypto';
+import { deriveKey, sealEvent, eventsAuth } from '../device/device-crypto';
 import type { DevicePairing } from '../device/device-store';
 import { parseDeviceCode, isDeviceModeCandidate, excludedFromDeviceMode } from '../device/device-mode';
 
@@ -78,24 +78,78 @@ describe('device connection', () => {
         c.stop();
     });
 
-    it('opens the events of the stream and turns unpaired on the device event', async () => {
-        const { c, sources, forgotten } = setup();
+    it('opens the events of the stream in their order and turns unpaired on the device event', async () => {
+        const { c, sources, forgotten } = setup({ appVersion: () => '3.33.0' });
+        const got: unknown[] = [];
+        c.onEvent(e => got.push(e));
+        c.start();
+        await vi.advanceTimersByTimeAsync(0);
+        const q = new URL(sources[0].url, 'http://x').searchParams;
+        const n = q.get('n')!;
+        expect(q.get('app')).toBe('3.33.0');
+        expect(q.get('a')).toBe(eventsAuth(KEY, NOW, n, 'pychavkovi', '3.33.0'));
+        sources[0].onopen?.({});
+        const send = (seq: number, ev: { event: string; data: unknown }, stream = n) => sources[0].onmessage?.({ data: JSON.stringify(sealEvent(KEY, PAIRING.deviceId, stream, seq, ev)) });
+        send(0, { event: 'sync', data: { intake: 'I0001' } });
+        expect(got).toEqual([{ event: 'sync', data: { intake: 'I0001' } }]);
+        // an event sealed for another stream is not taken (it still counts in the order)
+        send(1, { event: 'x', data: {} }, 'other');
+        expect(got).toHaveLength(1);
+        // another device unpaired: an ordinary event
+        send(2, { event: 'device', data: { type: 'device', what: 'unpaired', id: 'dv_another' } });
+        expect(got).toHaveLength(2);
+        expect(c.current().state).toBe('connected');
+        send(3, { event: 'device', data: { type: 'device', what: 'unpaired', id: PAIRING.deviceId } });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(c.current().state).toBe('unpaired');
+        expect(forgotten.n).toBe(1);
+        expect(sources[0].closed).toBe(true);
+    });
+
+    it('an event out of its order does not open', async () => {
+        const { c, sources } = setup();
         const got: unknown[] = [];
         c.onEvent(e => got.push(e));
         c.start();
         await vi.advanceTimersByTimeAsync(0);
         const n = new URL(sources[0].url, 'http://x').searchParams.get('n')!;
-        sources[0].onopen?.({});
-        sources[0].onmessage?.({ data: JSON.stringify(sealEvent(KEY, PAIRING.deviceId, n, { type: 'sync', intake: 'I0001' })) });
-        expect(got).toEqual([{ type: 'sync', intake: 'I0001' }]);
-        // an event sealed for another stream is not taken
-        sources[0].onmessage?.({ data: JSON.stringify(sealEvent(KEY, PAIRING.deviceId, 'other', { type: 'x' })) });
-        expect(got).toHaveLength(1);
-        sources[0].onmessage?.({ data: JSON.stringify(sealEvent(KEY, PAIRING.deviceId, n, { type: 'device', what: 'unpaired' })) });
+        sources[0].onmessage?.({ data: JSON.stringify(sealEvent(KEY, PAIRING.deviceId, n, 1, { event: 'change', data: {} })) });
+        expect(got).toEqual([]);
+        c.stop();
+    });
+
+    it('without a tree chosen no stream is asked (the heartbeat)', async () => {
+        let probes = 0;
+        const { c, sources } = setup({ treeId: () => null, probe: async () => { probes++; } });
+        c.start();
         await vi.advanceTimersByTimeAsync(0);
-        expect(c.current().state).toBe('unpaired');
-        expect(forgotten.n).toBe(1);
-        expect(sources[0].closed).toBe(true);
+        expect(sources).toHaveLength(0);
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(probes).toBe(2);
+        c.stop();
+    });
+
+    it('a stream refused before it opens is asked again after 2 s; a third refusal leaves the heartbeat', async () => {
+        let probes = 0;
+        const { c, sources } = setup({ probe: async () => { probes++; } });
+        c.start();
+        await vi.advanceTimersByTimeAsync(0);
+        sources[0].onerror?.({ status: 409, code: 'device.clock' });
+        await vi.advanceTimersByTimeAsync(1999);
+        expect(sources).toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(sources).toHaveLength(2);
+        sources[1].onerror?.({ status: 502, code: 'bridge.down' });
+        await vi.advanceTimersByTimeAsync(4000);
+        expect(sources).toHaveLength(3);
+        sources[2].onerror?.({ status: 502, code: 'bridge.down' });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(sources).toHaveLength(3);
+        expect(c.current().state).toBe('connected');
+        const before = probes;
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(probes).toBe(before + 1);
+        c.stop();
     });
 
     it('a refusal at once is unreachable (refused), tried again after 2 s, 4 s', async () => {
@@ -170,13 +224,24 @@ describe('device connection', () => {
         await vi.advanceTimersByTimeAsync(EVENTS_SILENT_MS);
         expect(probes).toBe(2);
         expect(sources).toHaveLength(2);
-        // the second stream fails before it opens (an older gateway): no third stream, the heartbeat
-        sources[1].onerror?.({});
+        // a comment ping keeps the stream alive
+        sources[1].onopen?.({});
+        await vi.advanceTimersByTimeAsync(EVENTS_SILENT_MS - 1000);
+        sources[1].listeners.get('ping')?.({});
+        await vi.advanceTimersByTimeAsync(EVENTS_SILENT_MS - 1000);
+        expect(sources).toHaveLength(2);
+        expect(probes).toBe(2);
+        // it falls; the third fails before it opens with 404 (an older gateway): no fourth stream, the heartbeat
+        sources[1].onerror?.({ status: 0 });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(probes).toBe(3);
+        expect(sources).toHaveLength(3);
+        sources[2].onerror?.({ status: 404, code: 'device.unknown-action' });
         await vi.advanceTimersByTimeAsync(0);
         expect(c.current().state).toBe('connected');
-        expect(sources).toHaveLength(2);
+        expect(sources).toHaveLength(3);
         await vi.advanceTimersByTimeAsync(30_000);
-        expect(probes).toBe(4);
+        expect(probes).toBe(5);
         c.stop();
     });
 

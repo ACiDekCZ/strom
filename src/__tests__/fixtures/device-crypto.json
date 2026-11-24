@@ -168,6 +168,62 @@
       "c": "ltKB7TmxGFFg8MS9cRRvmd2oL69dAJfclerovqmxxu3VB0GCNKbFGPT9kZQSNGUv3iK8CngQgzSm8kQq9g33La0DAP9RxQjwuhVQxU_lNROFDjS-qP6UNoraSLS4eaK8xZqhJ7QgeWw-vgOg5D-7WygyJEF4WIS77tMr2lJiKGdIfbCGt_60kVi4L-gfCXuNWjAPAm7RKZg7DwtTx-92"
     }
   },
+  "events": {
+    "key": "z-p5IumAleToVNvww7ghiDbBXxYoDKhNPMNCEsqWrmA",
+    "d": "dv_abcdefghijklmnop",
+    "t": 1764000000000,
+    "n": "GyZQ_jCph7r6MK9t",
+    "tree": "tr_lhotakovi",
+    "app": "3.33.0",
+    "message": "events|1764000000000|GyZQ_jCph7r6MK9t|tr_lhotakovi|3.33.0",
+    "a": "taAU6u94zTYCMHM2yl8fsZxm3K4osUrXIPyixUMrukg",
+    "messageWithoutApp": "events|1764000000000|GyZQ_jCph7r6MK9t|tr_lhotakovi|",
+    "aWithoutApp": "UunSRKfTzNbQVAVpVI2SVChc8b9zFiV8FUl43N2nEdc",
+    "sealed": [
+      {
+        "seq": 0,
+        "aad": "strom-device/1|dv_abcdefghijklmnop|GyZQ_jCph7r6MK9t|event|0",
+        "event": {
+          "event": "device",
+          "data": {
+            "type": "device",
+            "what": "renamed",
+            "id": "dv_abcdefghijklmnop",
+            "name": "Telefon Lhotáků · Лхота",
+            "kind": "phone",
+            "at": "2025-11-24T16:00:00.000Z"
+          }
+        },
+        "plain": "{\"event\":\"device\",\"data\":{\"type\":\"device\",\"what\":\"renamed\",\"id\":\"dv_abcdefghijklmnop\",\"name\":\"Telefon Lhotáků · Лхота\",\"kind\":\"phone\",\"at\":\"2025-11-24T16:00:00.000Z\"}}",
+        "sealed": {
+          "n": "s7RvkrU2Iy1W0YOC",
+          "c": "Kymgjh78eOngUgDf8Wy0j8bt14tEAn9eHmySj5Xb77J0cZ2sEMqlmwlpFrNhxkMhc2sFlEbvTTLKJjfioBtgCeNl0eOHIkm1MK6MluKeQYGVTzloemC2etKzQpvcv7YkBl13mO4-_4GsJ3NLPzoL6H19YumS6MLe9WMiYPcetD4Vmmik3MY3h-7y0a6WOFpbykY4V8nQkv2zcaOmlhARJ4IdHYJyYHTQ7BH4OYhWH2CTJcvTkqK8DRGxIG-4Rj4"
+        },
+        "line": "data: {\"n\":\"s7RvkrU2Iy1W0YOC\",\"c\":\"Kymgjh78eOngUgDf8Wy0j8bt14tEAn9eHmySj5Xb77J0cZ2sEMqlmwlpFrNhxkMhc2sFlEbvTTLKJjfioBtgCeNl0eOHIkm1MK6MluKeQYGVTzloemC2etKzQpvcv7YkBl13mO4-_4GsJ3NLPzoL6H19YumS6MLe9WMiYPcetD4Vmmik3MY3h-7y0a6WOFpbykY4V8nQkv2zcaOmlhARJ4IdHYJyYHTQ7BH4OYhWH2CTJcvTkqK8DRGxIG-4Rj4\"}"
+      },
+      {
+        "seq": 1,
+        "aad": "strom-device/1|dv_abcdefghijklmnop|GyZQ_jCph7r6MK9t|event|1",
+        "event": {
+          "event": "change",
+          "data": {
+            "head": "0123456789abcdef0123456789abcdef01234567",
+            "what": [
+              "person P0001: Jan Lhoták"
+            ],
+            "at": "2025-11-24T16:00:05.000Z",
+            "entries": []
+          }
+        },
+        "plain": "{\"event\":\"change\",\"data\":{\"head\":\"0123456789abcdef0123456789abcdef01234567\",\"what\":[\"person P0001: Jan Lhoták\"],\"at\":\"2025-11-24T16:00:05.000Z\",\"entries\":[]}}",
+        "sealed": {
+          "n": "Em8bozvKO-BwbO1s",
+          "c": "i064x88TQAHi1ttOoy215e5bULSF-fe6t-IWXBZ41xkwuW9tiITO2xKJIFugJKmyuzRfJA9TfLb17QoTU9RGdRVqXj3tLHBwIXtQBOXYXecOghn0X2NHM4PTMt00JxH45JMP5p6SS1-klC0UlM9aSGLt9W5dssIlfjveIH9OgTVJ5uJaPjXz70hMkhAIqMYhB34vL1l2iil3GOrkjRFyH8-RWVurF_L9yBPp9oDpdA"
+        },
+        "line": "data: {\"n\":\"Em8bozvKO-BwbO1s\",\"c\":\"i064x88TQAHi1ttOoy215e5bULSF-fe6t-IWXBZ41xkwuW9tiITO2xKJIFugJKmyuzRfJA9TfLb17QoTU9RGdRVqXj3tLHBwIXtQBOXYXecOghn0X2NHM4PTMt00JxH45JMP5p6SS1-klC0UlM9aSGLt9W5dssIlfjveIH9OgTVJ5uJaPjXz70hMkhAIqMYhB34vL1l2iil3GOrkjRFyH8-RWVurF_L9yBPp9oDpdA\"}"
+      }
+    ]
+  },
   "negative": [
     {
       "name": "a byte of the ciphertext changed",

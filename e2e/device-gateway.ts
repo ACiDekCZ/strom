@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import type { AddressInfo, Socket } from 'node:net';
 import {
     b64url, fromB64url, deriveKey, pairProof, sealPair, openRequest, sealResponse, sealEvent, eventsAuth,
-    type DeviceRequest, type RequestEnvelope, type PairAnswer,
+    type DeviceRequest, type RequestEnvelope, type PairAnswer, type StreamEvent,
 } from '../src/device/device-crypto';
 
 /**
@@ -16,7 +16,10 @@ import {
  * - GET /device/hello, POST /device/pair (a code the test made: pairCode()),
  * - POST /device/x — a sealed request opened, answered by the test's handler
  *   by its path (`onTunnel`, like the fake bridge of e2e/research-bridge.ts),
- * - GET /device/events — the stream; the test sends events (sendEvent),
+ * - GET /device/events?d&t&n&a&tree[&app] — the stream (as the research's
+ *   U9b: a = HMAC(K, events|t|n|tree|app), each event `{event, data}` sealed
+ *   with its order in the stream in the AAD, `: ping` a comment); the test
+ *   sends events (sendEvent) and pings (ping),
  * - refusals the test asks for (refuseNext: 401/404/409 clock/410/503), and
  *   `unreachable` (each connection closed without an answer).
  *
@@ -58,8 +61,12 @@ export interface FakeGateway {
     pairCode(mode?: 'app'): { pairId: string; secret: string; url: string };
     /** The next refusals outside the tunnel (taken one per request of /device/x, first first). */
     refuseNext(status: number, body: Record<string, unknown>, headers?: Record<string, string>): void;
-    /** An event sent to every open stream (sealed for each). */
-    sendEvent(event: unknown): void;
+    /** An event (`{event, data}`: the bridge's event's name and data) sent to every open stream (sealed for each). */
+    sendEvent(event: StreamEvent): void;
+    /** `: ping` to every open stream. */
+    ping(): void;
+    /** The queries of the streams asked (d, t, n, a, tree, app). */
+    streamQueries: URLSearchParams[];
     /** How many event streams are open. */
     streams(): number;
     close(): Promise<void>;
@@ -91,7 +98,7 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
     let code: { pairId: string; secret: Uint8Array; expiresAt: number } | null = null;
     const used = new Set<string>();
     const refusals: { status: number; body: Record<string, unknown>; headers?: Record<string, string> }[] = [];
-    const streams = new Set<{ res: ServerResponse; device: FakeDevice; n: string }>();
+    const streams = new Set<{ res: ServerResponse; device: FakeDevice; n: string; seq: number }>();
     const sockets = new Set<Socket>();
     const seenNonces = new Set<string>();
 
@@ -116,8 +123,12 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
             refusals.push({ status, body, headers });
         },
         sendEvent(event) {
-            for (const s of streams) s.res.write(`data: ${JSON.stringify(sealEvent(s.device.key, s.device.id, s.n, event))}\n\n`);
+            for (const s of streams) s.res.write(`data: ${JSON.stringify(sealEvent(s.device.key, s.device.id, s.n, s.seq++, event))}\n\n`);
         },
+        ping() {
+            for (const s of streams) s.res.write(': ping\n\n');
+        },
+        streamQueries: [],
         streams: () => streams.size,
         close: () => new Promise<void>(resolve => {
             for (const s of streams) s.res.end();
@@ -175,14 +186,21 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
 
     const events = (req: IncomingMessage, res: ServerResponse, url: URL): void => {
         const q = url.searchParams;
-        const device = gw.devices.find(d => d.id === q.get('d'));
-        if (!device) return json(res, 401, { code: 'device.unpaired' });
+        gw.streamQueries.push(new URLSearchParams(q));
         const t = Number(q.get('t'));
         const n = q.get('n') ?? '';
-        if (!fromB64url(n, 12) || q.get('a') !== eventsAuth(device.key, t, n)) return json(res, 400, { code: 'device.bad' });
-        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
-        res.write(': open\n\n');
-        const s = { res, device, n };
+        const tree = q.get('tree') ?? '';
+        const app = q.get('app') ?? undefined;
+        if (!q.get('d') || !Number.isSafeInteger(t) || !fromB64url(n, 12) || !tree) return json(res, 400, { code: 'device.bad' });
+        const device = gw.devices.find(d => d.id === q.get('d'));
+        if (!device) return json(res, 401, { code: 'device.unpaired' });
+        if (q.get('a') !== eventsAuth(device.key, t, n, tree, app)) return json(res, 400, { code: 'device.bad' });
+        if (Math.abs(t - (Date.now() + gw.clockOffsetMs)) > 2 * 60_000 || seenNonces.has(n)) return json(res, 409, { code: 'device.clock', now: Date.now() + gw.clockOffsetMs });
+        seenNonces.add(n);
+        if (!gw.trees.some(x => x.id === tree)) return json(res, 404, { code: 'tree.unknown' });
+        res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
+        res.flushHeaders();
+        const s = { res, device, n, seq: 0 };
         streams.add(s);
         req.on('close', () => streams.delete(s));
     };

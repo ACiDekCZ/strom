@@ -111,6 +111,11 @@ export function configureGateway(next: GatewayOptions | null): void {
     if (!next) clockSkew = 0;
 }
 
+/** The app's version said to the bridge (the event stream's `app` too). */
+export function gatewayAppVersion(): string | undefined {
+    return options.appVersion;
+}
+
 /** The offset of the gateway's clock from this device's (ms). */
 export function gatewayClockSkew(): number {
     return clockSkew;

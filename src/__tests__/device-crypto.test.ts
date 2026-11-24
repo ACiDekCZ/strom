@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import vectors from './fixtures/device-crypto.json';
 import {
     b64url, fromB64url, deriveKey, pairProof, seal, open, sealRequest, openRequest, openResponse, responseBody,
-    openPair, sealEvent, openEvent, eventsAuth, hmacB64, sealMediaBlock, openMediaBlock, mediaNonce, sealResponse,
+    openPair, sealEvent, openEvent, eventsAuth, eventsMessage, eventAad, hmacB64, sealMediaBlock, openMediaBlock, mediaNonce, sealResponse,
     DEVICE_PROTOCOL,
 } from '../device/device-crypto';
 
@@ -97,15 +97,39 @@ describe('device crypto: the research vectors (strom-device/1)', () => {
     });
 });
 
+describe('device crypto: the research vectors of the event stream (U9b)', () => {
+    const v = vectors.events;
+
+    it('signs the stream over t, n, the tree and the app', () => {
+        expect(eventsMessage(v.t, v.n, v.tree, v.app)).toBe(v.message);
+        expect(eventsMessage(v.t, v.n, v.tree)).toBe(v.messageWithoutApp);
+        expect(eventsAuth(bytes(v.key), v.t, v.n, v.tree, v.app)).toBe(v.a);
+        expect(eventsAuth(bytes(v.key), v.t, v.n, v.tree)).toBe(v.aWithoutApp);
+    });
+
+    it('opens each event by its order in the stream, as {event, data}', () => {
+        for (const e of v.sealed) {
+            expect(new TextDecoder().decode(eventAad(v.d, v.n, e.seq))).toBe(e.aad);
+            expect(openEvent(bytes(v.key), v.d, v.n, e.seq, e.line.replace(/^data: /, ''))).toEqual(e.event);
+            expect(openEvent(bytes(v.key), v.d, v.n, e.seq + 1, e.sealed)).toBeUndefined();
+            expect(sealEvent(bytes(v.key), v.d, v.n, e.seq, e.event, bytes(e.sealed.n))).toEqual(e.sealed);
+        }
+    });
+});
+
 describe('device crypto: events and media blocks', () => {
     const key = deriveKey(new Uint8Array(32).fill(7), 'pairPýchavka');
 
-    it('authorizes the event stream and opens its events, bound to the stream', () => {
-        expect(eventsAuth(key, 1764000000000, 'abc')).toBe(hmacB64(key, 'events|1764000000000|abc'));
-        const sealed = sealEvent(key, 'dv_abcdefghijklmnop', 'streamNonce1', { type: 'device', what: 'unpaired' });
-        expect(openEvent(key, 'dv_abcdefghijklmnop', 'streamNonce1', JSON.stringify(sealed))).toEqual({ type: 'device', what: 'unpaired' });
-        expect(openEvent(key, 'dv_abcdefghijklmnop', 'streamNonce2', sealed)).toBeUndefined();
-        expect(openEvent(key, 'dv_abcdefghijklmnop', 'streamNonce1', 'not json')).toBeUndefined();
+    it('authorizes the event stream and opens its events, bound to the stream and their order', () => {
+        expect(eventsAuth(key, 1764000000000, 'abc', 'pychavkovi')).toBe(hmacB64(key, 'events|1764000000000|abc|pychavkovi|'));
+        expect(eventsAuth(key, 1764000000000, 'abc', 'pychavkovi', '3.33.0')).toBe(hmacB64(key, 'events|1764000000000|abc|pychavkovi|3.33.0'));
+        const ev = { event: 'device', data: { type: 'device', what: 'unpaired' } };
+        const sealed = sealEvent(key, 'dv_abcdefghijklmnop', 'streamNonce1', 0, ev);
+        expect(openEvent(key, 'dv_abcdefghijklmnop', 'streamNonce1', 0, JSON.stringify(sealed))).toEqual(ev);
+        expect(openEvent(key, 'dv_abcdefghijklmnop', 'streamNonce2', 0, sealed)).toBeUndefined();
+        // moved or one left out: another order does not open
+        expect(openEvent(key, 'dv_abcdefghijklmnop', 'streamNonce1', 1, sealed)).toBeUndefined();
+        expect(openEvent(key, 'dv_abcdefghijklmnop', 'streamNonce1', 0, 'not json')).toBeUndefined();
     });
 
     it('seals media blocks with the base nonce XOR their index and their place in the AAD', () => {

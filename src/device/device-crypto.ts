@@ -109,9 +109,17 @@ export function pairProof(key: Uint8Array, pairId: string): string {
     return hmacB64(key, `pair|${pairId}`);
 }
 
-/** The `a` of GET /device/events: HMAC-SHA256(K, "events|" + t + "|" + n), base64url. */
-export function eventsAuth(key: Uint8Array, t: number, n: string): string {
-    return hmacB64(key, `events|${t}|${n}`);
+/**
+ * What a device signs to open its event stream (EventSource sends no header: the proof is in the query) — every
+ * value of the query that steers the stream: `events|<t>|<n>|<tree>|<app or nothing>`.
+ */
+export function eventsMessage(t: number, n: string, tree: string, app?: string): string {
+    return `events|${t}|${n}|${tree}|${app ?? ''}`;
+}
+
+/** The `a` of GET /device/events?d&t&n&a&tree[&app]: HMAC-SHA256(K, eventsMessage), base64url. */
+export function eventsAuth(key: Uint8Array, t: number, n: string, tree: string, app?: string): string {
+    return hmacB64(key, eventsMessage(t, n, tree, app));
 }
 
 /** SHA-256 of bytes as lowercase hex (the name of a media file, §2.4). */
@@ -152,11 +160,11 @@ export function pairAad(pairId: string): Uint8Array {
 }
 
 /**
- * AAD of an event of GET /device/events: strom-device/1|<d>|<the stream's n>|event
- * (bound to the stream it was asked by, like an answer to its request).
+ * AAD of an event of GET /device/events: strom-device/1|<d>|<the stream's n>|event|<its order from 0>
+ * (an event of another stream, one moved before another or one left out does not open).
  */
-export function eventAad(deviceId: string, streamNonce: string): Uint8Array {
-    return utf8(`${DEVICE_PROTOCOL}|${deviceId}|${streamNonce}|event`);
+export function eventAad(deviceId: string, streamNonce: string, seq: number): Uint8Array {
+    return utf8(`${DEVICE_PROTOCOL}|${deviceId}|${streamNonce}|event|${seq}`);
 }
 
 /** AAD of a block of PUT /device/media/<sha>: strom-device/1|<d>|<t>|media|<sha>|<i>|<last 0/1>. */
@@ -283,18 +291,28 @@ export function openPair(key: Uint8Array, pairId: string, envelope: unknown): Pa
     return a as unknown as PairAnswer;
 }
 
-/** An event sealed for a device's stream (the fake gateway of the tests). */
-export function sealEvent(key: Uint8Array, deviceId: string, streamNonce: string, event: unknown, nonce: Uint8Array = newNonce()): SealedEnvelope {
-    return { n: b64url(nonce), c: b64url(seal(key, nonce, eventAad(deviceId, streamNonce), utf8(JSON.stringify(event)))) };
+/** An event as the device opens it: the bridge's event's name and its data. */
+export interface StreamEvent {
+    event: string;
+    data: unknown;
 }
 
-/** The `data` of an event of the stream opened (text or parsed); undefined when it does not hold. */
-export function openEvent(key: Uint8Array, deviceId: string, streamNonce: string, data: unknown): unknown {
+/** An event sealed for a device's stream (the fake gateway of the tests): `data: {"n", "c"}`. */
+export function sealEvent(key: Uint8Array, deviceId: string, streamNonce: string, seq: number, event: StreamEvent, nonce: Uint8Array = newNonce()): SealedEnvelope {
+    return { n: b64url(nonce), c: b64url(seal(key, nonce, eventAad(deviceId, streamNonce, seq), utf8(JSON.stringify(event)))) };
+}
+
+/**
+ * An event of the stream opened (its `data:` as text or parsed; `seq` its order in the stream from 0);
+ * undefined when it is not that event of that stream.
+ */
+export function openEvent(key: Uint8Array, deviceId: string, streamNonce: string, seq: number, data: unknown): StreamEvent | undefined {
     let e = data;
     if (typeof e === 'string') {
         try { e = JSON.parse(e); } catch { return undefined; }
     }
-    return parseJson(openEnvelope(key, eventAad(deviceId, streamNonce), e, false));
+    const ev = asRecord(parseJson(openEnvelope(key, eventAad(deviceId, streamNonce, seq), e, false)));
+    return ev && typeof ev.event === 'string' ? { event: ev.event, data: ev.data } : undefined;
 }
 
 // ——— the body of an answer ———

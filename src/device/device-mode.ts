@@ -15,7 +15,8 @@
 
 import { hello, pair, configureGateway, deviceFetch, tunnel, type GatewayHello, type PairResult, GatewayError } from './gateway-client';
 import { hasPairingMark, loadPairing, proposeThisDevice, type DevicePairing } from './device-store';
-import { startDeviceConnection, deviceConnection, type DeviceConnectionController } from './device-connection';
+import { startDeviceConnection, deviceConnection, onDeviceEvent, type DeviceConnectionController } from './device-connection';
+import type { StreamEvent } from './device-crypto';
 
 export const GATEWAY_PORT = '47800';
 
@@ -130,10 +131,16 @@ async function doStart(opts: { computerWord?: string; appVersion?: string }): Pr
 
 /** The device mode's own hooks for the browser tests (only in the device mode). */
 function exposeForTests(): void {
+    const events: StreamEvent[] = [];
+    onDeviceEvent(e => {
+        events.push(e);
+        if (events.length > 50) events.shift();
+    });
     (globalThis as Record<string, unknown>).__stromDevice = {
         deviceFetch,
         tunnel,
         connection: () => deviceConnection(),
+        events: () => events.slice(),
         pairing: async () => {
             const p = await loadPairing();
             return p ? { deviceId: p.deviceId, name: p.name, kind: p.kind, computer: p.computer, trees: p.trees, treeId: p.treeId ?? null } : null;

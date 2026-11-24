@@ -4,7 +4,7 @@
  *
  * | what the device sees                                  | state          |
  * |-------------------------------------------------------|----------------|
- * | the event stream lives, its pings come                | connected      |
+ * | the event stream lives, its pings (`: ping`) come     | connected      |
  * | (trying)                                              | connecting     |
  * | refused at once (< 1 s) / no answer within 8 s        | unreachable    |
  * | the stored address fails, `http://<name>:47800` hello | otherAddress   |
@@ -14,12 +14,20 @@
  *
  * Tried again after 2 s, 4 s … 60 s, and at once on `online` and when the
  * page is shown again. Unpaired forgets the pairing (its queue stays).
+ *
+ * The event stream (GET /device/events?d&t&n&a&tree[&app], the research's
+ * U9b) is read by fetch (`event-stream.ts`): its `: ping` is a comment the
+ * browser's EventSource would not show. Each event opened is `{event, data}`
+ * (the bridge's event's name and its data). A stream refused before it opens
+ * is asked again after 2 s, 4 s; a gateway without it (404 of an older
+ * research) or a third refusal leaves the heartbeat alone.
  */
 
 import {
-    tunnel, hello, gatewayTime, GatewayError, REFUSED_AT_ONCE_MS, GATEWAY_TIMEOUT_MS,
+    tunnel, hello, gatewayTime, gatewayAppVersion, GatewayError, REFUSED_AT_ONCE_MS, GATEWAY_TIMEOUT_MS,
 } from './gateway-client';
-import { b64url, eventsAuth, newNonce, openEvent } from './device-crypto';
+import { b64url, eventsAuth, newNonce, openEvent, type StreamEvent } from './device-crypto';
+import { fetchEventSource, type EventStreamError } from './event-stream';
 import { loadPairing, forgetPairing, chosenTreeId, type DevicePairing } from './device-store';
 
 export type DeviceConnectionState = 'connected' | 'connecting' | 'unreachable' | 'otherAddress' | 'offline' | 'unpaired' | 'disabled';
@@ -50,11 +58,14 @@ export const EVENTS_SILENT_MS = 60_000;
 /** Without the event stream (an older research): the connection checked this often while connected. */
 export const HEARTBEAT_MS = 30_000;
 
-/** A minimal EventSource (the browser's, or the tests'). */
+/** Refusals of the stream before it opens, after which the heartbeat alone keeps the connection. */
+const STREAM_TRIES = 3;
+
+/** A minimal EventSource (read by fetch, or the tests'); `onerror` may say the refusal's status and code. */
 export interface EventSourceLike {
     onopen: ((ev: unknown) => void) | null;
     onmessage: ((ev: { data: string }) => void) | null;
-    onerror: ((ev: unknown) => void) | null;
+    onerror: ((ev: Partial<EventStreamError> | unknown) => void) | null;
     addEventListener(type: string, cb: (ev: { data?: string }) => void): void;
     close(): void;
 }
@@ -80,6 +91,8 @@ export interface ConnectionDeps {
     treeId: (p: DevicePairing) => string | null;
     /** The device's time as the gateway counts it. */
     gatewayTime: () => number;
+    /** The app's version said to the bridge (the stream's `app`); none: not said. */
+    appVersion?: () => string | undefined;
 }
 
 export interface DeviceConnectionController {
@@ -89,8 +102,8 @@ export interface DeviceConnectionController {
     retryNow(): void;
     current(): DeviceConnection;
     onChange(cb: (c: DeviceConnection) => void): () => void;
-    /** Each event of the research's stream (opened), other than the device's own unpairing. */
-    onEvent(cb: (e: unknown) => void): () => void;
+    /** Each event of the research's stream (opened: the bridge's event's name and data), other than the device's own unpairing. */
+    onEvent(cb: (e: StreamEvent) => void): () => void;
 }
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -100,13 +113,15 @@ function asRecord(v: unknown): Record<string, unknown> | null {
 export function createDeviceConnection(deps: ConnectionDeps): DeviceConnectionController {
     let conn: DeviceConnection = { state: 'connecting', reason: null, since: deps.now() };
     const listeners = new Set<(c: DeviceConnection) => void>();
-    const eventListeners = new Set<(e: unknown) => void>();
+    const eventListeners = new Set<(e: StreamEvent) => void>();
     let attempt = 0;
     let timer: unknown = null;
     let watchdog: unknown = null;
     let es: EventSourceLike | null = null;
-    /** The stream failed before it ever opened while the key held: an older gateway — the heartbeat alone. */
+    /** No stream from this gateway (an older one, or refused again and again): the heartbeat alone. */
     let eventsMissing = false;
+    /** Refusals of the stream in a row before it opened. */
+    let streamRefusals = 0;
     let running = false;
     let checking = false;
     let generation = 0;
@@ -176,19 +191,27 @@ export function createDeviceConnection(deps: ConnectionDeps): DeviceConnectionCo
             schedule(HEARTBEAT_MS);
             return;
         }
+        const tree = deps.treeId(p);
+        if (!tree) {
+            // a stream is always of a tree: none chosen yet — the heartbeat
+            schedule(HEARTBEAT_MS);
+            return;
+        }
         const t = deps.gatewayTime();
         const n = b64url(newNonce());
-        const q = new URLSearchParams({ d: p.deviceId, t: String(t), n, a: eventsAuth(p.key, t, n) });
-        const tree = deps.treeId(p);
-        if (tree) q.set('tree', tree);
+        const app = deps.appVersion?.() || undefined;
+        const q = new URLSearchParams({ d: p.deviceId, t: String(t), n, a: eventsAuth(p.key, t, n, tree, app), tree });
+        if (app) q.set('app', app);
         const mine = generation;
         let opened = false;
+        let seq = 0;
         const source = deps.eventSource(`/device/events?${q.toString()}`);
         es = source;
         armWatchdog();
         source.onopen = () => {
             if (mine !== generation) return;
             opened = true;
+            streamRefusals = 0;
             armWatchdog();
         };
         const alive = (): void => {
@@ -201,10 +224,11 @@ export function createDeviceConnection(deps: ConnectionDeps): DeviceConnectionCo
             if (mine !== generation) return;
             alive();
             if (!ev.data) return;
-            const event = openEvent(p.key, p.deviceId, n, ev.data);
-            const e = asRecord(event);
-            if (!e) return;
-            if (e.type === 'device' && e.what === 'unpaired') {
+            // each event's AAD carries its order in the stream (from 0): one left out or moved does not open
+            const event = openEvent(p.key, p.deviceId, n, seq++, ev.data);
+            if (!event) return;
+            const data = asRecord(event.data);
+            if (event.event === 'device' && data?.what === 'unpaired' && (data.id === undefined || data.id === p.deviceId)) {
                 void unpaired();
                 return;
             }
@@ -212,10 +236,21 @@ export function createDeviceConnection(deps: ConnectionDeps): DeviceConnectionCo
                 try { cb(event); } catch { /* its own */ }
             }
         };
-        source.onerror = () => {
+        source.onerror = (raw) => {
             if (mine !== generation) return;
             closeEvents();
-            if (!opened) eventsMissing = true;
+            const err = asRecord(raw);
+            const status = typeof err?.status === 'number' ? err.status : 0;
+            if (!opened) {
+                streamRefusals++;
+                // an older gateway has no stream (404, not "turned off"); a third refusal in a row: the heartbeat too
+                if ((status === 404 && err?.code !== 'device.disabled') || status === 405 || streamRefusals >= STREAM_TRIES) eventsMissing = true;
+                else if (status !== 401) {
+                    // refused before it opened (its clock, the bridge starting): asked again a little later
+                    schedule(retryDelayMs(streamRefusals - 1));
+                    return;
+                }
+            }
             // the probe tells why (unpaired, off, away) — or that only the stream is missing
             void check();
         };
@@ -338,11 +373,12 @@ function browserDeps(): ConnectionDeps {
         forgetPairing,
         probe: probeGateway,
         hello: base => hello(base),
-        eventSource: typeof EventSource !== 'undefined' ? (url => new EventSource(url) as unknown as EventSourceLike) : null,
+        eventSource: typeof fetch === 'function' && typeof ReadableStream !== 'undefined' ? (url => fetchEventSource(url)) : null,
         origin: () => location.origin,
         hostname: () => location.hostname,
         treeId: p => chosenTreeId(p),
         gatewayTime,
+        appVersion: gatewayAppVersion,
     };
 }
 
@@ -372,8 +408,8 @@ export function onDeviceConnection(cb: (c: DeviceConnection) => void): () => voi
     return controller ? controller.onChange(cb) : () => undefined;
 }
 
-/** Each event of the research's stream; returns the unsubscribe. */
-export function onDeviceEvent(cb: (e: unknown) => void): () => void {
+/** Each event of the research's stream (`{event, data}`); returns the unsubscribe. */
+export function onDeviceEvent(cb: (e: StreamEvent) => void): () => void {
     return controller ? controller.onEvent(cb) : () => undefined;
 }
 
