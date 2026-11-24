@@ -128,10 +128,30 @@ export const importNextMethods = uiModule({
         placesUsed = false;
         if (!switchListener) {
             switchListener = true;
-            window.addEventListener('strom:tree-switched', () => this.waitForImportNextCard());
+            // A switch from the tree switcher says data-changed, a new or imported tree tree-switched.
+            const follow = (): void => this.followImportNextTree();
+            window.addEventListener('strom:tree-switched', follow);
+            window.addEventListener('strom:data-changed', follow);
         }
         this.waitForImportNextCard();
         return true;
+    },
+
+    /**
+     * Another tree opened: the card belongs to its import's tree, so it goes
+     * from the screen (not closed for good: it comes back with its tree). Its
+     * tree deleted: the card is not waited for any more.
+     */
+    followImportNextTree(): void {
+        if (!pending) return;
+        if (!TreeManager.getTreeMetadata(pending.treeId)) {
+            this.hideImportNextCard();
+            pending = null;
+            stopWaiting();
+            return;
+        }
+        if (DataManager.getCurrentTreeId() !== pending.treeId) this.hideImportNextCard();
+        this.waitForImportNextCard();
     },
 
     /** Show the pending card as soon as its tree is open and nothing is in the way. */
@@ -141,6 +161,10 @@ export const importNextMethods = uiModule({
         const started = Date.now();
         const tick = (): boolean => {
             if (!pending) return true;
+            if (!TreeManager.getTreeMetadata(pending.treeId)) {
+                pending = null;
+                return true;
+            }
             if (DataManager.getCurrentTreeId() !== pending.treeId) return Date.now() - started > WAIT_MAX_MS;
             if (this.importNextBlocked()) return Date.now() - started > WAIT_MAX_MS;
             this.showImportNextCard();
