@@ -118,3 +118,48 @@ export function planSharedTieRepair(trees: readonly SharedTieOf[]): SharedTieDet
     }
     return out;
 }
+
+/**
+ * The tree whose research a copy came from and that owns it now (spec 139
+ * K5.4, K5.5): the tree `copyOf` names when it owns a research, else (an
+ * older copy still tied) the owner of the copy's research. Null when the copy
+ * is no copy without research, or its original has no research any more.
+ */
+export function researchOriginalOf<T extends ResearchTieOf>(trees: readonly T[], copyId: string): T | null {
+    const copy = trees.find(t => t.id === copyId);
+    if (!copy || copy.demo || isResearchOwner(trees, copyId)) return null;
+    if (copy.copyOf) {
+        const of = trees.find(t => t.id === copy.copyOf!.treeId);
+        if (of && of.id !== copyId && isResearchOwner(trees, of.id)) return of;
+    }
+    if (!copy.research?.id) return null;
+    const owner = researchOwnerIn(trees, copy.research.id);
+    return owner && owner.id !== copyId ? owner : null;
+}
+
+/** What a hand-over of a research moves: the tie and the marks of where a tree came from. */
+export interface ResearchTransferOf extends ResearchTieOf {
+    research?: { id: string; copy?: boolean; mergeHold?: unknown };
+    researchDetached?: { link: { id: string } };
+}
+
+/**
+ * Take over the research of `fromId` by `toId` (spec 139 K5.5): the tie
+ * moves whole to `toId` (as its owner: no `copy`, no `copyOf`, no notice of an
+ * older detached tie of that research), `fromId` stays a tree without
+ * research (no `copyOf` either). The merges held for the original are its
+ * own: their hold does not move. Nothing is sent. Changes `trees` in place;
+ * false (nothing changed) unless `fromId` owns its research and `toId` is
+ * another tree, not the sample tree.
+ */
+export function transferResearchTie(trees: ResearchTransferOf[], fromId: string, toId: string): boolean {
+    const from = trees.find(t => t.id === fromId);
+    const to = trees.find(t => t.id === toId);
+    if (!from?.research || !to || from === to || to.demo || !isResearchOwner(trees, fromId)) return false;
+    const { copy: _copy, mergeHold: _hold, ...link } = from.research;
+    delete from.research;
+    to.research = link;
+    delete to.copyOf;
+    if (to.researchDetached?.link.id === link.id) delete to.researchDetached;
+    return true;
+}

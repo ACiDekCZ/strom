@@ -9,6 +9,8 @@
 import type { MergeRecord, StromData, TreeId, TreeMetadata } from '../types.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
+import { researchMarkFlags } from './research-open-mark.js';
+import { researchLinkMark } from '../research-link.js';
 import { TreeRenderer } from '../renderer.js';
 import { AuditLogManager } from '../audit-log.js';
 import { strings } from '../strings.js';
@@ -349,6 +351,17 @@ export const mergeHistoryMethods = uiModule({
         this.updateUndoButton();
     },
 
+    /**
+     * The link that takes the merge back in the research (`sync-undo` with the send's input), for a merge
+     * sent there whose input is known and whose research takes the link; null otherwise.
+     */
+    mergeUndoResearchStep(st: UndoState): string | null {
+        const res = undoResearchView(st.record, 0);
+        const researchId = TreeManager.getTreeMetadata(st.treeId)?.research?.id ?? '';
+        if (!res?.input || !researchId || !TreeManager.canSendToResearch(st.treeId)) return null;
+        return researchUndoStep(researchId, res.input, this.researchLinkAvailable('sync-undo')).url;
+    },
+
     /** The send's input read from the research's last sends (11c); the dialog redrawn when it is named now. */
     async resolveUndoResearchInput(st: UndoState): Promise<void> {
         const link = TreeManager.getTreeMetadata(st.treeId)?.research;
@@ -420,6 +433,9 @@ export const mergeHistoryMethods = uiModule({
             return;
         }
         const { treeId, recordId, parent } = st;
+        // A merge sent to the research: the toast offers its undo there too (K5.6) — the step of its terminal
+        // with the send's input, when the research takes it by a link (else the dialog said the command).
+        const sentStep = this.mergeUndoResearchStep(st);
         const removed = res.items.filter(id => id.startsWith('p:') && !res.before.persons[id.slice(2) as keyof StromData['persons']]?.isPlaceholder).length;
         const kept = new Set(res.kept.map(k => k.id)).size;
         // The dialog closes; the guide's step 6 and the toast of its Done (stale now) go with it, a history comes back with the new state.
@@ -435,8 +451,12 @@ export const mergeHistoryMethods = uiModule({
         }
         const W = strings.mergeWizard;
         const before = res.before;
-        this.showToast(W.undone(removed, kept), 10000, {
+        this.showToast(W.undone(removed, kept), sentStep ? 20000 : 10000, {
             closable: true,
+            ...(sentStep ? { more: {
+                label: strings.research.undoStepRun, ...researchMarkFlags(researchLinkMark('sync-undo')),
+                run: () => void this.launchResearchLink(sentStep),
+            } } : {}),
             action: {
                 label: W.redo,
                 run: () => {

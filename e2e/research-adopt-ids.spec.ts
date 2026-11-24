@@ -94,7 +94,11 @@ async function routeBridge(page: Page, token: string, init: Partial<Bridge> = {}
  * (ADOPT_LOAD_WAITS, src/ui/research-adopt-ui.ts): the waits run on Playwright's clock, unless
  * `realWaits` walks them in real time.
  */
-async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Page) => Promise<void>, realWaits = false): Promise<Bridge> {
+/**
+ * @param oldNumbers the tree a copy of another research's tree: its people carry that research's numbers
+ *   (P0042 as the research's, P0043 without a type), which a new research must never get (spec 139 K5.4).
+ */
+async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Page) => Promise<void>, realWaits = false, oldNumbers = false): Promise<Bridge> {
     await page.setViewportSize({ width: 1440, height: 900 });
     const onClock = init.treeGed === null && !realWaits;
     if (onClock) await page.clock.install();
@@ -104,7 +108,7 @@ async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Pa
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: ['new', 'send', 'open'], at: new Date().toISOString() }));
     });
     await openApp(page);
-    await page.evaluate(async () => {
+    await page.evaluate(async (oldNumbers) => {
         const launched: string[] = [];
         (window as unknown as { __launched: string[] }).__launched = launched;
         window.Strom.UI.handOverResearchLink = (url: string) => { launched.push(url); };
@@ -113,15 +117,15 @@ async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Pa
         });
         await window.Strom.DataManager.importAsNewTree({
             persons: {
-                a: p('a', '1', 'male', { partnerships: ['u'], childIds: ['c'] }),
-                b: p('b', '2', 'female', { partnerships: ['u'], childIds: ['c'] }),
+                a: p('a', '1', 'male', { partnerships: ['u'], childIds: ['c'], ...(oldNumbers ? { refn: 'P0042', refnType: 'strom-research' } : {}) }),
+                b: p('b', '2', 'female', { partnerships: ['u'], childIds: ['c'], ...(oldNumbers ? { refn: 'P0043' } : {}) }),
                 c: p('c', '3', 'male', { parentIds: ['a', 'b'] }),
             },
             partnerships: { u: { id: 'u', person1Id: 'a', person2Id: 'b', childIds: ['c'], status: 'married' } },
         }, 'Test Win4');
         window.Strom.UI.updateTreeSwitcher();
         window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId());
-    });
+    }, oldNumbers);
     const url = (await page.evaluate(() => (window as unknown as { __launched: string[] }).__launched))[0];
     const b = await routeBridge(page, url.match(TOKEN_RE)![1], init);
     await page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: base })), BRIDGE);
@@ -198,6 +202,14 @@ test.describe('how changes go, chosen at the hand-over', () => {
 });
 
 test.describe('the research\'s numbers after a hand-over', () => {
+    test('a tree with another research\'s numbers (a copy of a research tree) goes without them: its people get the new research\'s (K5.4)', async ({ page }) => {
+        const b = await handOver(page, {}, undefined, false, true);
+        // The file carries none of the old research's numbers: the new one numbers each person afresh.
+        expect(b.adopted[0]).not.toMatch(/REFN P004[23]/);
+        expect(people(b.adopted[0]).map(p => p.refn)).toEqual(['', '', '']);
+        await expect.poll(() => refns(page)).toEqual(['1:P0001', '2:P0002', '3:P0003']);
+    });
+
     test('the sequence from Windows: the research\'s version back, a rename; the send names all three by REFN', async ({ page }) => {
         const b = await handOver(page);
         // The hand-over itself carries no numbers (a new tree).

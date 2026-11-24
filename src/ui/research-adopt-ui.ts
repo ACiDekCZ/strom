@@ -27,7 +27,7 @@ import { countFamilies } from '../ged-exporter.js';
 import { NO_CITATION_FEATURES, researchCitationsOut, type ResearchCitationsOut } from '../citation-gates.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
-    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, researchSendsSourceFields, TitlesInGedcom, sanitizeLiveStatus, statusAgentless, type BrowserInfo,
+    readResearchHeader, applyAdoptIds, withoutResearchNumbers, AdoptOffer, AdoptIds, researchGedcomTitles, researchSendsSourceFields, TitlesInGedcom, sanitizeLiveStatus, statusAgentless, type BrowserInfo,
     researchLinkMark, researchKeepsAppMedia, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut,
 } from '../research-link.js';
 import { newTieSendMode } from '../research-sync.js';
@@ -46,10 +46,15 @@ import { holdLeave } from './busy-leave.js';
 import { BUSY_TIMEOUTS, busyToast } from './busy.js';
 import { downloadStep, type TreeDownloadWatch } from './tree-load-progress.js';
 import { safeFileName } from '../filenames.js';
+import { researchShortId } from '../tree-row.js';
 import type { ProgressToastHandle } from './toast.js';
 import { exportGedcomWithImages, gedcomText } from '../ged-export-images.js';
 
 const ADOPT_ID = 'research-adopt-modal';
+/** "Research for a copy of a tree" (spec 139 §11.4). */
+const COPY_RESEARCH_ID = 'copy-research-modal';
+/** The longest folder name a new research's link carries (researchNewUrl). */
+const RESEARCH_NAME_MAX = 120;
 const ELSEWHERE_ID = 'research-elsewhere-modal';
 /** A transfer file carries the whole tree with its images: time to read a large one from the bridge. */
 const TRANSFER_TIMEOUT_MS = 120_000;
@@ -307,9 +312,88 @@ export const researchAdoptMethods = uiModule({
         return !!tree && !tree.demo && !DataManager.isViewMode() && onComputer() && this.researchLinkAvailable('new');
     },
 
-    /** The dialog "Research for a copy of a tree" (spec 139 §11.4): a new research of its own, or taking over the original's. */
-    showCopyResearchDialog(_treeId: TreeId): void {
-        // Filled with the copy's research dialog (§11.4).
+    /**
+     * The dialog "Research for a copy of a tree" (spec 139 §11.4, K5.4): the
+     * copy gets a new research of its own (the research's set-up in its
+     * terminal, as "Start research with this tree", the folder named after
+     * the copy), never quietly the original's. Taking over the original's
+     * research is the exception: a link on the left, behind a warning (K5.5).
+     */
+    showCopyResearchDialog(treeId: TreeId): void {
+        const copy = TreeManager.getTreeMetadata(treeId);
+        if (!copy) return;
+        this.closeCopyResearchDialog();
+        const st = strings.structure;
+        const esc = (text: string): string => this.escapeHtml(text);
+        const original = TreeManager.researchOriginalOf(treeId);
+        const originalName = original?.name ?? TreeManager.researchCopyOrigin(treeId)?.name ?? copy.copyOf?.name ?? '';
+        const rid = original?.research ? researchShortId(original.research.id) : '';
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+        overlay.id = COPY_RESEARCH_ID;
+        overlay.innerHTML = `
+            <div class="modal modal--md copy-research-modal" role="dialog" data-dialog-kind="form" aria-modal="true" aria-labelledby="copy-research-title">
+                <div class="modal-header">
+                    <h2 id="copy-research-title">${esc(st.copyResearchTitle)}</h2>
+                    <button type="button" class="close-btn" aria-label="${esc(strings.buttons.close)}">&times;</button>
+                </div>
+                <div class="modal-content">
+                    <p class="copy-research-text">${esc(st.copyResearchText(copy.name, originalName))}</p>
+                    <div class="form-group">
+                        <label for="copy-research-folder">${esc(st.copyResearchFolder)}</label>
+                        <input type="text" id="copy-research-folder" maxlength="${RESEARCH_NAME_MAX}" value="${esc(copy.name)}" autocomplete="off" spellcheck="false">
+                    </div>
+                    ${original && rid ? `<p class="copy-research-stays">${esc(st.copyResearchStays(rid, original.name))}</p>` : ''}
+                </div>
+                <div class="buttons">${original ? `
+                    <button type="button" class="link-button copy-research-takeover" data-act="takeover">${esc(st.takeOver(original.name))}</button>` : ''}
+                    <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.cancel)}</button>
+                    <button type="button" class="primary" data-act="create">${researchActionLabel(st.createResearch, researchLinkMark('new'))}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        this.pushDialog(COPY_RESEARCH_ID);
+        const close = (): void => this.closeCopyResearchDialog();
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+        overlay.querySelector('.close-btn')?.addEventListener('click', close);
+        overlay.querySelector('[data-dismiss]')?.addEventListener('click', close);
+        overlay.querySelector('[data-act="create"]')?.addEventListener('click', () => {
+            const name = overlay.querySelector<HTMLInputElement>('#copy-research-folder')?.value.trim() || copy.name;
+            close();
+            document.querySelectorAll('.tree-row-menu.open').forEach(m => m.classList.remove('open'));
+            this.startResearchAdopt(treeId, null, { name });
+        });
+        overlay.querySelector('[data-act="takeover"]')?.addEventListener('click', () => {
+            close();
+            if (original) void this.confirmTakeOverResearch(original.id, treeId);
+        });
+        normalizeModal(overlay.querySelector('.modal') as HTMLElement);
+        overlay.querySelector<HTMLElement>('.buttons .primary')?.focus();
+    },
+
+    closeCopyResearchDialog(): void {
+        document.getElementById(COPY_RESEARCH_ID)?.remove();
+        this.dialogStack = this.dialogStack.filter(d => d !== COPY_RESEARCH_ID);
+    },
+
+    /**
+     * "Take over the research of …" (spec 139 K5.5): after the warning, the
+     * copy owns the research and the original is a tree without research. It
+     * happens in the app alone (the research knows the app's trees only by
+     * what each send names), nothing is sent.
+     */
+    async confirmTakeOverResearch(originalId: TreeId, copyId: TreeId): Promise<boolean> {
+        const st = strings.structure;
+        const original = TreeManager.getTreeMetadata(originalId);
+        if (!original?.research || !TreeManager.canSendToResearch(originalId)) return false;
+        const ok = await this.showConfirm(st.takeOverText(original.name, researchShortId(original.research.id)), st.takeOverTitle(original.name), {
+            confirmLabel: st.takeOverBtn, variant: 'danger', note: { text: st.takeOverNote },
+        });
+        if (!ok || !TreeManager.transferResearch(originalId, copyId)) return false;
+        this.updateTreeSwitcher();
+        this.refreshResearchSyncUi();
+        if (document.getElementById('tree-manager-modal')?.classList.contains('active')) await this.updateTreeManagerList();
+        return true;
     },
 
     /** The active tree can be handed over (the explanation dialog's variant). */
@@ -323,7 +407,7 @@ export const researchAdoptMethods = uiModule({
      * the install dialog's Install step (its "I already have it" takes an
      * installed research too).
      */
-    startResearchAdopt(treeId: TreeId, el?: HTMLElement | null): void {
+    startResearchAdopt(treeId: TreeId, el?: HTMLElement | null, opts: { name?: string } = {}): void {
         if (needsTransfer(currentAppBrowser())) {
             void (async () => {
                 if (DataManager.getCurrentTreeId() !== treeId) await this.switchToTree(treeId, { follow: false });
@@ -334,7 +418,8 @@ export const researchAdoptMethods = uiModule({
         // Started for this tree already and still opening or waiting (a second click, Enter): nothing again.
         if (adoptWait?.treeId === treeId && !adoptWait.ended) return;
         const token = newAdoptToken();
-        const url = researchNewUrl(token, currentAppBrowser(), undefined, announcedResearchScheme());
+        // A copy's own research (§11.4): its folder's name, as the research's set-up may take it.
+        const url = researchNewUrl(token, currentAppBrowser(), undefined, announcedResearchScheme(), opts.name);
         if (!url || !TreeManager.getTreeMetadata(treeId)) return;
         TreeManager.setResearchAdoptToken(treeId, { token, at: new Date().toISOString() });
         void this.awaitResearchAdopt(treeId, url, el ?? null);
@@ -650,7 +735,8 @@ export const researchAdoptMethods = uiModule({
         await new Promise(resolve => setTimeout(resolve, 0));
         // (A tree the research has not had yet: its citations in the order of K1.1, never the list's own.)
         // The images read as the text is written (ged-export-images.ts): the tree is never expanded whole.
-        const exported = await exportGedcomWithImages(choice.images ? data : stripMedia(data), tree.name, { titles, sourceFields, citationMain: citations.citationMain, ...media });
+        // Never another research's numbers (a copy of a research tree): each goes as the file's own and gets this one's (K5.4).
+        const exported = await exportGedcomWithImages(withoutResearchNumbers(choice.images ? data : stripMedia(data)), tree.name, { titles, sourceFields, citationMain: citations.citationMain, ...media });
         state.content = gedcomText(exported);
         phase({ step: 'taking' });
         let reply: { tree: string; head: string | null; ids: AdoptIds | null } | null = null;

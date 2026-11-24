@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { fakeBridge, openResearch, poll, researchGed, BRIDGE, HEAD } from './research-bridge.js';
+import { fakeBridge, links, openResearch, poll, researchGed, BRIDGE, HEAD } from './research-bridge.js';
 import { seedResearchPromoSeen, seedSetting, seedWhatsNewSeen } from './helpers.js';
 
 /**
@@ -26,12 +26,6 @@ test('a copy of a research tree: its row says it has no research, its switch is 
     await poll(page);
     const ownerId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId()!);
     const copyId = await page.evaluate((id) => window.Strom.TreeManager.duplicateTree(id, 'Fíškovi (kopie)'), ownerId);
-    // The dialog of the copy's research comes with §11.4: here only that the switch asks for it.
-    await page.evaluate(() => {
-        const ui = window.Strom.UI as unknown as { showCopyResearchDialog(id: string): void; __copyResearch?: string[] };
-        ui.__copyResearch = [];
-        ui.showCopyResearchDialog = (id: string) => { ui.__copyResearch!.push(id); };
-    });
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
 
     const copy = row(page, copyId);
@@ -46,13 +40,74 @@ test('a copy of a research tree: its row says it has no research, its switch is 
     await expect(row(page, ownerId).locator('.tree-manager-item-origin')).toHaveAttribute('data-origin', 'research');
     await expect(row(page, ownerId).locator('.tree-manager-copy-research')).toHaveCount(0);
 
+    // The switch asks for the copy's own research (§11.4): the dialog, its folder named after the copy.
     await sw.click();
-    expect(await page.evaluate(() => (window.Strom.UI as unknown as { __copyResearch: string[] }).__copyResearch)).toEqual([copyId]);
-    // Not turned: still off, still a copy without research.
+    const dialog = page.locator('#copy-research-modal');
+    await expect(dialog.getByRole('heading')).toHaveText('Research for a copy of a tree');
+    await expect(dialog.locator('#copy-research-folder')).toHaveValue('Fíškovi (kopie)');
+    await expect(dialog.locator('.copy-research-stays')).toContainText('Fíškovi');
+    await expect(dialog.locator('.buttons .primary')).toContainText('Start a new research');
+    await expect(dialog.locator('.buttons .primary .research-open-mark')).toHaveCount(1);
+    await expect(dialog.locator('.copy-research-takeover')).toHaveText('Take over the research of “Fíškovi”…');
+    // Cancel changes nothing: still off, still a copy without research, nothing launched.
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
     await expect(sw).toHaveAttribute('aria-checked', 'false');
     const meta = await page.evaluate((id) => window.Strom.TreeManager.getTreeMetadata(id), copyId);
     expect(meta.research).toBeUndefined();
     expect(meta.copyOf).toEqual({ treeId: ownerId, name: 'Fíškovi' });
+    expect((await links(page)).filter(l => l.startsWith('strom-research://new'))).toEqual([]);
+
+    // ⋯ › Research of the copy: "Turn on research…" with the research terminal's mark, the same dialog.
+    const turnOn = await page.evaluate(async (id) => {
+        const ui = window.Strom.UI as unknown as { treeActionGroups(id: string, source: string): Promise<{ key: string; rows: { key: string; label: string; research?: boolean; run(): void }[] }[]> };
+        const rows = (await ui.treeActionGroups(id, 'more')).find(g => g.key === 'research')?.rows ?? [];
+        rows[0]?.run();
+        return rows.map(r => ({ key: r.key, label: r.label, research: !!r.research }));
+    }, copyId);
+    expect(turnOn).toEqual([{ key: 'researchCopy', label: 'Turn on research…', research: true }]);
+    await expect(dialog.getByRole('heading')).toHaveText('Research for a copy of a tree');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+
+    // Start a new research: the research's set-up, the folder's name on its link (K5.4).
+    await sw.click();
+    await dialog.locator('#copy-research-folder').fill('Fíškovi – druhá větev');
+    await dialog.locator('.buttons .primary').click();
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => (await links(page)).filter(l => l.startsWith('strom-research://new')))
+        .toEqual([expect.stringMatching(new RegExp(`^strom-research://new\\?app=[A-Za-z0-9_-]+(&browser=[a-z]+)?&name=${encodeURIComponent('Fíškovi – druhá větev').replace(/[()]/g, '\\$&')}$`))]);
+});
+
+test('a copy takes over the original\'s research only behind a warning: then the copy owns it, the original has none', async ({ page }) => {
+    await openResearch(page);
+    await fakeBridge(page, { links: ['send', 'open', 'live', 'app', 'setup', 'new'] });
+    await poll(page);
+    const ownerId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId()!);
+    const researchId = await page.evaluate((id) => window.Strom.TreeManager.getTreeMetadata(id)!.research!.id, ownerId);
+    const copyId = await page.evaluate((id) => window.Strom.TreeManager.duplicateTree(id, 'Fíškovi (kopie)'), ownerId);
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    await row(page, copyId).locator('.tree-manager-copy-research').click();
+    const dialog = page.locator('#copy-research-modal');
+    await dialog.locator('.copy-research-takeover').click();
+    await expect(dialog).toHaveCount(0);
+
+    const confirm = page.locator('#confirmation-modal');
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText('Take over the research of “Fíškovi”?');
+    const ok = confirm.locator('#confirm-ok-btn');
+    await expect(ok).toHaveText('Take over research');
+    await expect(ok).toHaveClass(/is-danger/);
+    // Taking over happens in the app alone: no research mark on the button.
+    await expect(ok.locator('.research-open-mark')).toHaveCount(0);
+    await ok.click();
+
+    await expect.poll(() => page.evaluate((id) => window.Strom.TreeManager.getTreeMetadata(id)?.research?.id ?? null, copyId)).toBe(researchId);
+    const [owner, copy] = await page.evaluate(([o, c]) => [window.Strom.TreeManager.getTreeMetadata(o), window.Strom.TreeManager.getTreeMetadata(c)], [ownerId, copyId]);
+    expect(owner.research).toBeUndefined();
+    expect(copy.copyOf).toBeUndefined();
+    expect(await page.evaluate((id) => window.Strom.TreeManager.canSendToResearch(id), copyId)).toBe(true);
+    expect((await links(page)).filter(l => l.startsWith('strom-research://new'))).toEqual([]);
 });
 
 /** The research followed from its bridge (`?live=`): the tree is read-only meanwhile. */

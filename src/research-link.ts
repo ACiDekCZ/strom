@@ -512,14 +512,18 @@ export type ResearchConflictTake = 'user' | 'research';
 const CONFLICT_TAKES: readonly string[] = ['user', 'research'];
 
 /** "Start research with this tree": the one link without a tree (the research makes one). */
-export function researchNewUrl(token: string, browser?: string, file?: string, scheme: string = DEFAULT_RESEARCH_SCHEME): string | null {
+export function researchNewUrl(token: string, browser?: string, file?: string, scheme: string = DEFAULT_RESEARCH_SCHEME, name?: string): string | null {
     const app = researchAdoptToken(token);
     if (!app) return null;
     // The browser it came from (research-transfer.ts AppBrowser): the research opens that one again;
     // from Safari, the file the tree moves by (STROM_FROM_FILE of the line).
     const b = browser && /^[a-z]{1,16}$/.test(browser) ? `&browser=${browser}` : '';
     const f = file && /^strom-prenos-[A-Za-z0-9_-]{8}\.json$/.test(file) ? `&file=${file}` : '';
-    return `${researchLinkScheme(scheme)}://new?app=${app}${b}${f}`;
+    // The new research's suggested name (a copy's own research, spec 139 §11.4): one line of at most 120
+    // characters. A research that does not read it asks the name as it always does.
+    const clean = (name ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120).trim();
+    const n = clean ? `&name=${encodeURIComponent(clean)}` : '';
+    return `${researchLinkScheme(scheme)}://new?app=${app}${b}${f}${n}`;
 }
 
 /**
@@ -5851,6 +5855,44 @@ export function applyAdoptIds(data: StromData, xrefs: ExportXrefs, ids: AdoptIds
         }
     }
     return { data: { ...data, persons, ...(sources ? { sources } : {}) }, persons: np, sources: ns };
+}
+
+/**
+ * The tree as a new research takes it (strom-research://new, POST /adopt):
+ * without the numbers another research gave its people and sources (a copy
+ * of a research tree, a tree taken off its research, spec 139 K5.4). A
+ * research reads `REFN P0012` (no TYPE, or TYPE strom-research) and
+ * `REFN S0004` as its own: the new research would number such a person as
+ * one of the file's under that number, and its answer (`ids`, by the file's
+ * xrefs) would not name them — the copy would keep the old research's
+ * numbers and send them as the new one's. Without them every person and
+ * source goes as the file's own and gets the new research's number back.
+ * Other numbers (an archive's, another program's) stay. Returns `data` when
+ * nothing is left out, else a new object.
+ */
+export function withoutResearchNumbers(data: StromData): StromData {
+    const personNumber = (p: { refn?: string; refnType?: string }): boolean =>
+        !!p.refn && /^P\d{4,}$/.test(p.refn.trim()) && (!p.refnType || p.refnType === RESEARCH_REFN_TYPE);
+    const sourceNumber = (s: { refn?: string }): boolean => !!s.refn && /^S\d{4,}$/.test(s.refn.trim());
+    const persons = Object.values(data.persons).some(p => p && personNumber(p));
+    const sources = Object.values(data.sources ?? {}).some(s => s && sourceNumber(s));
+    if (!persons && !sources) return data;
+    const out: StromData = { ...data };
+    if (persons) {
+        out.persons = Object.fromEntries(Object.entries(data.persons).map(([id, p]) => {
+            if (!p || !personNumber(p)) return [id, p];
+            const { refn: _refn, refnType: _type, ...rest } = p;
+            return [id, rest];
+        })) as StromData['persons'];
+    }
+    if (sources && data.sources) {
+        out.sources = Object.fromEntries(Object.entries(data.sources).map(([id, src]) => {
+            if (!src || !sourceNumber(src)) return [id, src];
+            const { refn: _refn, ...rest } = src;
+            return [id, rest];
+        })) as StromData['sources'];
+    }
+    return out;
 }
 
 /**

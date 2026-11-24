@@ -42,7 +42,7 @@ import { convertLegacyCensusEvents } from './events.js';
 import { fillResearchConfirmedValues, hasUnvaluedResearchConfirmations } from './verify.js';
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
-import { isResearchOwner, researchCopyOrigin, planSharedTieRepair } from './research-owner.js';
+import { isResearchOwner, researchCopyOrigin, planSharedTieRepair, researchOriginalOf, transferResearchTie } from './research-owner.js';
 import { importOriginOf } from './tree-row.js';
 import { asciiSlug } from './filenames.js';
 import { browserMediaFingerprint } from './browser-media.js';
@@ -2011,6 +2011,26 @@ class TreeManagerClass {
         tree.copyOf = { treeId: of.treeId, name: of.name };
         this.saveIndex();
         this.noteBaseChange(treeId, before);
+    }
+
+    /** The tree whose research the copy `copyId` came from and that owns it now (research-owner.ts), or null. */
+    researchOriginalOf(copyId: TreeId): TreeMetadata | null {
+        return researchOriginalOf(this.index.trees, copyId);
+    }
+
+    /**
+     * The copy `toId` takes over the research of `fromId` (spec 139 K5.5):
+     * the original stays a tree without research, the copy is its owner and
+     * no copy any more (research-owner.ts transferResearchTie). Nothing is
+     * sent. False when nothing changed.
+     */
+    transferResearch(fromId: TreeId, toId: TreeId): boolean {
+        const before = [this.researchBaseOf(fromId), this.researchBaseOf(toId)];
+        if (!transferResearchTie(this.index.trees, fromId, toId)) return false;
+        this.saveIndex();
+        this.noteBaseChange(fromId, before[0]);
+        this.noteBaseChange(toId, before[1]);
+        return true;
     }
 
     /**

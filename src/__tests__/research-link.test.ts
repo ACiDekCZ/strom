@@ -933,6 +933,11 @@ describe('strom-research:// links', () => {
         expect(researchNewUrl('short')).toBeNull();
         expect(researchNewUrl('x'.repeat(44))).toBeNull();
         expect(researchNewUrl('a'.repeat(21) + '&')).toBeNull();
+        // A copy's own research (spec 139 §11.4): the folder's name it suggests, one line, encoded, at most 120 characters.
+        expect(researchNewUrl(token, 'chrome', undefined, undefined, '  Rodina Kalinovských\n(kopie) & spol. '))
+            .toBe(`strom-research://new?app=${token}&browser=chrome&name=${encodeURIComponent('Rodina Kalinovských (kopie) & spol.')}`);
+        expect(researchNewUrl(token, undefined, undefined, undefined, '   ')).toBe(`strom-research://new?app=${token}`);
+        expect(researchNewUrl(token, undefined, undefined, undefined, 'x'.repeat(200))).toBe(`strom-research://new?app=${token}&name=${'x'.repeat(120)}`);
         expect(researchAdoptToken('a'.repeat(22))).toBe('a'.repeat(22));
         expect(researchSchemeUrl('new', { tree: UUID })).toBeNull();
 

@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { card, openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, mergeDone, mergeJoinPending, mergeToStep5, mergeWrite } from './helpers.js';
-import { type FakeBridge, fakeBridge, openResearch, poll } from './research-bridge.js';
+import { type FakeBridge, fakeBridge, links, openResearch, poll } from './research-bridge.js';
 
 /**
  * The research after a merge (spec 134 §11) against a simulated bridge:
@@ -116,6 +116,8 @@ test('Send to the research… of step 6 closes the guide and sends the merge; it
 
     // The research names the send's input in its sends: the undo says its command.
     bridge.sends[0].input = 'I0042';
+    // The research takes its undo by a link (`sync-undo` announced): the step is offered as an action too.
+    bridge.links = [...bridge.links, 'sync-undo'];
     await poll(page);
     await page.evaluate(() => {
         const D = window.Strom.DataManager;
@@ -132,6 +134,12 @@ test('Send to the research… of step 6 closes the guide and sends the merge; it
     await undo.locator('[data-act="undo"]').click();
     await expect(undo).not.toHaveClass(/active/);
     await expect.poll(() => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).some(p => p.firstName === 'Bedřich'))).toBe(false);
+    // Undone in the tree: its toast offers taking it back in the research too (K5.6), the terminal's step.
+    const take = page.locator('.toast').getByRole('button', { name: /Take back in the research/ });
+    await expect(take).toBeVisible();
+    await expect(take.locator('.research-open-mark')).toHaveCount(1);
+    await take.click();
+    await expect.poll(async () => (await links(page)).filter(l => l.includes('://sync-undo?'))).toEqual([expect.stringMatching(/^strom-research:\/\/sync-undo\?tree=[^&]+&intake=I0042$/)]);
 });
 
 test('a tree without a research: no step of the guide says a word about a research', async ({ page }) => {

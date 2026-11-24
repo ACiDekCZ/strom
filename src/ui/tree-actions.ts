@@ -234,8 +234,14 @@ export const treeActionsMethods = uiModule({
     treeResearchRow(id: TreeId, isActive: boolean): TreeActionRow[] {
         const tree = TreeManager.getTreeMetadata(id);
         if (!tree) return [];
-        // A copy of a research tree: a tree without research, its tie only a mark of where it came from. Turning
-        // its research on (a new research, spec 139 K5.4) is not offered yet — never the original's research.
+        // A copy of a research tree: a tree without research, its tie only a mark of where it came from. Its
+        // research is turned on through the dialog (a new research of its own, spec 139 §11.4, K5.4) — never
+        // quietly the original's; where the research does not run here, nothing.
+        if (!TreeManager.canSendToResearch(id) && TreeManager.researchCopyOrigin(id)) {
+            return this.copyResearchAvailable(tree)
+                ? [{ key: 'researchCopy', label: strings.structure.turnOnResearch, editOnly: true, research: researchLinkMark('new') !== 'none', run: () => this.showCopyResearchDialog(id) }]
+                : [];
+        }
         if (tree.research && !TreeManager.canSendToResearch(id)) return [];
         if (tree.research) {
             if (this.researchTranscriptsCapable(tree.research.id)) {

@@ -1239,6 +1239,10 @@ export const miscMethods = uiModule({
                         this.cancelResearchAdoptDialog();
                         return;
                     }
+                    if (currentDialog === 'copy-research-modal') {
+                        this.closeCopyResearchDialog();
+                        return;
+                    }
                     if (currentDialog === 'research-tree-settings-modal') {
                         this.closeResearchTreeSettings();
                         return;
