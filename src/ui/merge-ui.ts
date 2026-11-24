@@ -219,7 +219,8 @@ export const mergeUiMethods = uiModule({
             { confirmLabel: d.discardMerge, variant: 'danger' });
         if (!confirmed) return;
 
-        deleteMergeSession(sessionId);
+        // Stored before the list is drawn again (it no longer waits on every tree's data).
+        await deleteMergeSession(sessionId);
         this.updateTreeManagerList();
     },
 
@@ -231,7 +232,7 @@ export const mergeUiMethods = uiModule({
         const newName = await this.showPrompt(strings.treeManager.renameTitle, currentName);
         if (!newName) return;
 
-        renameMergeSession(sessionId, newName);
+        await renameMergeSession(sessionId, newName);
         this.updateTreeManagerList();
     },
 

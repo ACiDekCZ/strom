@@ -71,7 +71,7 @@ export interface TreeActionRow {
     next?: boolean;
 }
 
-export type TreeActionGroupKey = 'overview' | 'research' | 'settings' | 'structure' | 'manage' | 'trees';
+export type TreeActionGroupKey = 'overview' | 'research' | 'settings' | 'structure' | 'manage' | 'delete' | 'trees';
 
 export interface TreeActionGroup {
     key: TreeActionGroupKey;
@@ -211,10 +211,12 @@ export const treeActionsMethods = uiModule({
             { key: 'manage', rows: editable ? [
                 { key: 'visibility', label: tree.isHidden ? s.showTree : s.hideTree, editOnly: true, run: () => void this.toggleTreeVisibility(id) },
                 { key: 'lock', label: strings.lock.lockTree, editOnly: true, run: () => this.toggleTreeLock(id) },
-                { key: 'delete', label: s.delete, danger: true, editOnly: true, run: () => void this.confirmDeleteTree(id, parent) },
             ] : tree.isLocked
                 ? [{ key: 'lock', label: strings.lock.unlockTree, editOnly: true, run: () => this.toggleTreeLock(id) }]
                 : [] },
+            // Delete tree… last of the tree's own rows, apart behind a line (spec 139 §8.2).
+            { key: 'delete', rows: editable
+                ? [{ key: 'delete', label: s.delete, danger: true, editOnly: true, run: () => void this.confirmDeleteTree(id, parent) }] : [] },
             { key: 'trees', rows: by.manageTrees
                 ? [{ key: 'manageTrees', label: s.manage, run: () => this.showTreeManagerDialog() }] : [] },
         ];
