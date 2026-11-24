@@ -38,6 +38,8 @@ import {
     PersonList,
     PersonListRule,
     PersonListSort,
+    PersonListOrigin,
+    CustomRule,
     PersonCitationField, PrimaryName, 
     EmbeddedDataEnvelope,
     FamilyWizardSpec,
@@ -88,12 +90,15 @@ import { cleanPlaceGeoMeta, sanitizePlaceRecords, sanitizePlaceRefs } from './pl
 import { addPlaceAlias, sanitizePlaceAliases } from './place-groups.js';
 import { sanitizeTableViews } from './table-views-data.js';
 import {
-    earlierAddedAt, isListNameTaken, newPersonListId, onPersonDeleted, onPersonsMerged, personListsOf, sanitizeAddedAt,
-    sanitizePersonListRule, sanitizePersonLists, sanitizePersonListsDropped, suggestListName,
+    earlierAddedAt, isListNameTaken, listIsAuto, newPersonListId, onPersonDeleted, onPersonsMerged, personListsOf, sanitizeAddedAt,
+    sanitizeCustomRule, sanitizeListOrigin, sanitizePersonListRule, sanitizePersonLists, sanitizePersonListsDropped, stampChangedAt,
+    suggestListName,
 } from './person-lists-data.js';
+import { customLabel, customPersonIds, customToRule, ruleIssues } from './person-list-rules.js';
 import {
     listDisplayName, listPersonIds, personToastName, rulePersonIds, ruleLabel, sortListIds, withChecklist, withDoneToggled,
-    withFrozen, withManualOrder, withPersonMoved, withPersonsAdded, withPersonsRemoved, withRuleFilled, withSort, type ListEnv,
+    withCustomSnapshot, withFrozen, withManualOrder, withPersonMoved, withPersonsAdded, withPersonsRemoved, withRuleFilled, withSort,
+    type ListEnv,
 } from './person-lists.js';
 import {
     SharedEventCommon, SharedEventCommonField, SharedEventEdit, SharedEventSaveResult, SharedEventIndex, PersonSharedEvent,
@@ -378,6 +383,11 @@ export function migrateData(data: unknown): StromData {
         if (person && typeof person === 'object' && 'addedAt' in person) {
             const at = sanitizeAddedAt(person.addedAt);
             if (at) person.addedAt = at; else delete person.addedAt;
+        }
+        // spec 136 D4: the time of the person's last change, an ISO time or nothing.
+        if (person && typeof person === 'object' && 'changedAt' in person) {
+            const at = sanitizeAddedAt(person.changedAt);
+            if (at) person.changedAt = at; else delete person.changedAt;
         }
     }
     // Preserve the source catalog if present.
@@ -1615,8 +1625,33 @@ class DataManagerClass {
         if (this.editSession) return;
 
         if (this.currentTreeId) {
+            this.refreshCustomSnapshots();
             TreeManager.saveTreeData(this.currentTreeId, this.data);
             this.notifySaved();
+        }
+    }
+
+    /**
+     * The stored people of every list kept up to date by a custom rule
+     * brought up to its people now (spec 136 D3), so an older app shows a
+     * fresh fixed list. Only the lists whose people changed are replaced; no
+     * undo step (nothing a person did). Never stops a save.
+     */
+    private refreshCustomSnapshots(): void {
+        const lists = this.data.personLists;
+        if (!lists?.some(l => l.custom?.auto)) return;
+        try {
+            const index = this.getLineageIndex();
+            let changed = false;
+            const next = lists.map(l => {
+                const n = withCustomSnapshot(index, l);
+                if (!n) return l;
+                changed = true;
+                return n;
+            });
+            if (changed) this.data.personLists = next;
+        } catch (e) {
+            console.warn('Custom list snapshot failed', e);
         }
     }
 
@@ -1801,6 +1836,8 @@ class DataManagerClass {
         }
         UndoManager.setActiveTree(this.currentTreeId);
         if (this.pendingBefore) {
+            // The people this step changed get the time of their last change (spec 136 D4).
+            stampChangedAt(this.pendingBefore, this.data, new Date().toISOString());
             // Auto-backup the FIRST mutation of the day (state before it).
             this.maybeAutoSnapshot(this.pendingBefore, this.pendingBase);
             UndoManager.push({ data: this.pendingBefore, description, base: this.pendingBase, ...(mark ? { mark } : {}), ...(listsOnly ? { listsOnly } : {}) });
@@ -2494,7 +2531,7 @@ class DataManagerClass {
      * order: by generation for ancestors / descendants, by date added for the
      * "added" rule, manual for a fixed list of given people, else oldest first.
      */
-    createPersonList(input: { name: string; dynamic: boolean; rule?: PersonListRule; personIds?: PersonId[]; sort?: PersonListSort; checklist?: boolean }, env: ListEnv = {}): PersonList | null {
+    createPersonList(input: { name: string; dynamic: boolean; rule?: PersonListRule; personIds?: PersonId[]; sort?: PersonListSort; checklist?: boolean; origin?: PersonListOrigin }, env: ListEnv = {}): PersonList | null {
         if (this.listsReadOnly()) return null;
         const rule = input.rule ? sanitizePersonListRule(input.rule) : null;
         if (input.dynamic && !rule) return null;
@@ -2515,6 +2552,8 @@ class DataManagerClass {
             updated: new Date().toISOString(),
         };
         if (rule) list.rule = rule;
+        const origin = input.origin ? sanitizeListOrigin(input.origin) : null;
+        if (origin) list.origin = origin;
         if (!input.dynamic) {
             const ids = input.personIds ?? (rule ? sortListIds(index, list, rulePersonIds(index, rule, env), sort === 'manual' ? 'old' : sort, env) : []);
             list.personIds = [...new Set(ids)].filter(id => !!this.data.persons[id] && !this.data.persons[id].isPlaceholder);
@@ -2522,6 +2561,77 @@ class DataManagerClass {
         }
         this.storePersonList(list, strings.lists.undo.create(name), false, { text: strings.lists.toast.saved(name) }, true);
         return list;
+    }
+
+    /**
+     * A new list from a custom rule (spec 136 D3). A rule the tiles know (one
+     * plain condition, customToRule) is stored as a one-condition rule, as
+     * before; any other is stored as `custom` with `dynamic: false` and its
+     * people now in `personIds` (what an older app shows), automatic or
+     * fixed by `custom.auto`. Null when the lists cannot change or the rule
+     * has an issue (ruleIssues: incomplete, too deep, a loop…).
+     */
+    createCustomPersonList(input: { name: string; custom: CustomRule & { auto: boolean }; origin?: PersonListOrigin; sort?: PersonListSort; checklist?: boolean }, env: ListEnv = {}): PersonList | null {
+        if (this.listsReadOnly()) return null;
+        const custom = sanitizeCustomRule(input.custom);
+        if (!custom || ruleIssues(custom.root, { lists: personListsOf(this.data) }).length) return null;
+        const simple = customToRule(custom);
+        if (simple) {
+            return this.createPersonList({ name: input.name, dynamic: custom.auto, rule: simple, sort: input.sort, checklist: input.checklist, origin: input.origin }, env);
+        }
+        const index = this.getLineageIndex();
+        const name = this.suggestPersonListName(input.name.trim() || customLabel(custom, index));
+        if (!name) return null;
+        const sort: PersonListSort = input.sort && !(custom.auto && input.sort === 'manual') ? input.sort : 'old';
+        const list: PersonList = {
+            id: newPersonListId(personListsOf(this.data)), name, dynamic: false, sort, custom,
+            updated: new Date().toISOString(),
+        };
+        const origin = input.origin ? sanitizeListOrigin(input.origin) : null;
+        if (origin) list.origin = origin;
+        list.personIds = sortListIds(index, list, customPersonIds(index, custom, env, list.id), sort === 'manual' ? 'old' : sort, env);
+        if (input.checklist && !custom.auto) list.checklist = true;
+        this.storePersonList(list, strings.lists.undo.create(name), false, { text: strings.lists.toast.saved(name) }, true);
+        return list;
+    }
+
+    /**
+     * A list's rule changed in the rule dialog (spec 136 §5): a custom rule,
+     * automatic or fixed by `custom.auto`; one the tiles know is stored as a
+     * one-condition rule. An automatic list takes its people now; a fixed
+     * one keeps its people (a list that was automatic keeps the people it
+     * had: "Add from the rule" brings the rest). The origin stays. False
+     * when nothing could change (read-only, unknown list, a rule with an issue).
+     */
+    setPersonListCustomRule(id: string, input: CustomRule & { auto: boolean }, env: ListEnv = {}): boolean {
+        if (this.listsReadOnly()) return false;
+        const custom = sanitizeCustomRule(input);
+        if (!custom || ruleIssues(custom.root, { lists: personListsOf(this.data), listId: id }).length) return false;
+        const index = this.getLineageIndex();
+        return !!this.changePersonList(id, (l, now) => {
+            const was = l.custom ? l.custom.auto : !!l.dynamic;
+            const had = was ? listPersonIds(index, l, env) : (l.personIds ?? []);
+            const next: PersonList = { ...l, updated: now, name: listDisplayName(l) };
+            const simple = customToRule(custom);
+            if (simple) {
+                delete next.custom;
+                next.rule = simple;
+                next.dynamic = custom.auto;
+                if (custom.auto) { delete next.personIds; delete next.removed; delete next.checklist; delete next.done; }
+                else next.personIds = had.slice();
+            } else {
+                delete next.rule;
+                next.custom = custom;
+                next.dynamic = false;
+                if (custom.auto) {
+                    delete next.removed; delete next.checklist; delete next.done;
+                    next.personIds = [];
+                    next.personIds = listPersonIds(index, next, env).slice();
+                } else next.personIds = had.slice();
+            }
+            if (custom.auto && next.sort === 'manual') next.sort = 'old';
+            return next;
+        }, { silent: false, audit: true });
     }
 
     /** A new name; false when another list has it (or it is empty). */
@@ -2571,7 +2681,7 @@ class DataManagerClass {
     addPersonsToList(id: string, ids: PersonId[]): boolean {
         const list = this.getPersonList(id);
         // An automatic list takes nobody by hand (its rule fills it).
-        if (!list || list.dynamic) return false;
+        if (!list || listIsAuto(list)) return false;
         const have = new Set(list.personIds ?? []);
         const real = [...new Set(ids)].filter(pid => !!this.data.persons[pid] && !this.data.persons[pid].isPlaceholder && !have.has(pid));
         if (!real.length) return false;
@@ -2622,10 +2732,12 @@ class DataManagerClass {
         }
         return !!this.changePersonList(id, (l, now) => {
             const next: PersonList = { ...l, rule: clean, dynamic, updated: now };
+            // A one-condition rule replaces a custom one (spec 136 D3).
+            delete next.custom;
             if (dynamic) {
                 delete next.personIds; delete next.removed; delete next.checklist;
                 if (next.sort === 'manual') next.sort = 'old';
-            } else if (l.dynamic) {
+            } else if (listIsAuto(l)) {
                 next.personIds = sortListIds(index, next, rulePersonIds(index, clean, env), l.sort, env);
             }
             return next;

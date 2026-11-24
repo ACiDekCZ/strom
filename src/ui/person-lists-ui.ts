@@ -22,7 +22,7 @@ import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import type { PersonId, PersonList, PersonListSort } from '../types.js';
 import {
-    foldListName, listDisplayName, listGenerations, listKind, listPersonIds, listSummary, ruleBroken, ruleLabel,
+    foldListName, listDisplayName, listGenerations, listIsAuto, listKind, listPersonIds, listSummary, ruleBroken, ruleLabel,
     PERSON_LIST_SORTS, type ListKind,
 } from '../person-lists.js';
 import { addedTime } from '../person-lists-data.js';
@@ -148,14 +148,14 @@ const DOTS = '<span aria-hidden="true">⋯</span>';
 
 /** The people of a checklist ticked off (only those still in the list). */
 function doneSet(list: PersonList, ids: readonly PersonId[]): Set<PersonId> {
-    if (!list.checklist || list.dynamic || !list.done?.length) return new Set();
+    if (!list.checklist || listIsAuto(list) || !list.done?.length) return new Set();
     const inList = new Set(ids);
     return new Set(list.done.filter(id => inList.has(id)));
 }
 
 /** The people a checklist shows under All / Left / Done (any other list: all). */
 function filteredIds(list: PersonList, ids: PersonId[], filter: DoneFilter): PersonId[] {
-    if (!list.checklist || list.dynamic || filter === 'all') return ids;
+    if (!list.checklist || listIsAuto(list) || filter === 'all') return ids;
     const done = doneSet(list, ids);
     return ids.filter(id => done.has(id) === (filter === 'done'));
 }
@@ -317,9 +317,9 @@ export const personListsMethods = uiModule({
         if (narrow && (!st.selId || all.length === 0)) st.view = 'list';
         const sel = st.selId ? all.find(l => l.id === st.selId) ?? null : null;
         if (st.menu?.kind === 'list' && !all.some(l => l.id === (st.menu as { listId: string }).listId)) st.menu = null;
-        if (st.menu?.kind === 'person' && !(sel && !sel.dynamic && sel.personIds?.includes(st.menu.pid))) st.menu = null;
+        if (st.menu?.kind === 'person' && !(sel && !listIsAuto(sel) && sel.personIds?.includes(st.menu.pid))) st.menu = null;
         // A list that is not a checklist (any more) shows everyone; switched on again it starts at All.
-        if (!sel?.checklist || sel.dynamic) st.filter = 'all';
+        if (!sel?.checklist || listIsAuto(sel)) st.filter = 'all';
 
         const view = narrow ? st.view : 'both';
         modal.dataset.view = view;
@@ -412,7 +412,7 @@ export const personListsMethods = uiModule({
         const index = DataManager.getLineageIndex();
         const kind = listKind(list);
         const name = listDisplayName(list);
-        const auto = list.dynamic;
+        const auto = listIsAuto(list);
 
         // Name: edited in place (click, ✎, F2); Enter saves, Escape returns.
         let nameRow: string;
@@ -515,9 +515,9 @@ export const personListsMethods = uiModule({
         const st = state!;
         const data = DataManager.getData();
         const ro = DataManager.listsReadOnly();
-        const removable = !ro && !list.dynamic;
+        const removable = !ro && !listIsAuto(list);
         const manual = removable && list.sort === 'manual';
-        const check = !list.dynamic && !!list.checklist;
+        const check = !listIsAuto(list) && !!list.checklist;
         const done = check ? doneSet(list, all) : null;
         const pos = new Map(all.map((id, i) => [id, i + 1]));
         // The manual order: one row takes the keyboard (Alt+↑/↓ moves it).
@@ -585,7 +585,7 @@ export const personListsMethods = uiModule({
             if (!list) return '';
             const ro = DataManager.listsReadOnly();
             const items = PERSON_LIST_SORTS.map(s => {
-                const off = s === 'manual' && list.dynamic;
+                const off = s === 'manual' && listIsAuto(list);
                 const on = list.sort === s;
                 const sub = off ? `<span class="pl-menu-sub">${esc(t.manualOff)}</span>` : '';
                 return `<button type="button" class="pl-menu-item" role="menuitemradio" aria-checked="${on}" data-act="set-sort" data-sort="${s}" data-key="sort-${s}"${off || ro ? ' aria-disabled="true"' : ''}>`
@@ -710,7 +710,7 @@ export const personListsMethods = uiModule({
         const st = state;
         const list = DataManager.getPersonList(listId);
         const p = DataManager.getData().persons[personId];
-        if (!st || !list || !p || DataManager.listsReadOnly() || list.dynamic) return;
+        if (!st || !list || !p || DataManager.listsReadOnly() || listIsAuto(list)) return;
         if (!isNarrow()) {
             st.menu = st.menu?.kind === 'person' && st.menu.pid === personId ? null : { kind: 'person', pid: personId };
             this.renderPersonLists();
@@ -741,7 +741,7 @@ export const personListsMethods = uiModule({
     movePersonListPerson(listId: string, personId: PersonId, dir: -1 | 1): boolean {
         const st = state;
         const list = DataManager.getPersonList(listId);
-        if (!st || !list || list.dynamic || list.sort !== 'manual' || DataManager.listsReadOnly()) return false;
+        if (!st || !list || listIsAuto(list) || list.sort !== 'manual' || DataManager.listsReadOnly()) return false;
         const order = list.personIds ?? [];
         const shown = filteredIds(list, listPersonIds(DataManager.getLineageIndex(), list), st.filter);
         const at = shown.indexOf(personId);
@@ -833,7 +833,7 @@ export const personListsMethods = uiModule({
         if (!st?.selId) return;
         const list = DataManager.getPersonList(st.selId);
         st.menu = null;
-        if (list && !(sort === 'manual' && list.dynamic) && list.sort !== sort) DataManager.setPersonListSort(list.id, sort);
+        if (list && !(sort === 'manual' && listIsAuto(list)) && list.sort !== sort) DataManager.setPersonListSort(list.id, sort);
         this.renderPersonLists();
         this.focusPersonLists('[data-act="sort"]');
     },
@@ -1096,7 +1096,7 @@ export const personListsMethods = uiModule({
         const box = row?.closest<HTMLElement>('.pl-people');
         const pid = row?.dataset.pid as PersonId | undefined;
         const list = DataManager.getPersonList(st.selId);
-        if (!row || !box || !pid || !list || list.dynamic || list.sort !== 'manual' || DataManager.listsReadOnly()) return;
+        if (!row || !box || !pid || !list || listIsAuto(list) || list.sort !== 'manual' || DataManager.listsReadOnly()) return;
         e.preventDefault();
         st.menu = null;
         document.querySelector(`#${OVERLAY_ID} .pl-menu`)?.remove();

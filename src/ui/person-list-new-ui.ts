@@ -28,7 +28,7 @@
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import type { PersonId, PersonList, PersonListRule } from '../types.js';
-import { rulePersonIds } from '../person-lists.js';
+import { listIsAuto, rulePersonIds } from '../person-lists.js';
 import { rodLabels, type RodId } from '../lineage.js';
 import { rodPickerItems, rodPickerSmallItems } from '../rod-picker.js';
 import { researchLinesOf, selectionLines } from './table-view/table-research.js';
@@ -233,7 +233,7 @@ export const personListNewMethods = uiModule({
             listId: editList?.id ?? null,
             opt: 'empty', rodId: firstRod, personId: personOf(focus) ? focus : null, gens: 0,
             lineId: lines[0]?.id ?? null, days: 30, customDays: false,
-            dynamic: editList ? editList.dynamic : opts.dynamic ?? (mode === 'save' && (source === 'rod' || source === 'line' || source === 'selection')),
+            dynamic: editList ? listIsAuto(editList) : opts.dynamic ?? (mode === 'save' && (source === 'rod' || source === 'line' || source === 'selection')),
             name: opts.name ?? '', nameTouched: opts.name !== undefined,
             given: opts.personIds ? [...opts.personIds] : null,
             saveRule: mode === 'save' ? opts.rule ?? null : null,
@@ -609,7 +609,7 @@ export const personListNewMethods = uiModule({
         if (st.mode === 'edit') {
             const before = st.listId ? DataManager.getPersonList(st.listId) : undefined;
             if (!before || !rule) return;
-            const same = JSON.stringify(before.rule ?? null) === JSON.stringify(rule) && before.dynamic === st.dynamic;
+            const same = JSON.stringify(before.rule ?? null) === JSON.stringify(rule) && listIsAuto(before) === st.dynamic;
             if (!same) DataManager.setPersonListRule(before.id, rule, st.dynamic);
             list = DataManager.getPersonList(before.id) ?? null;
         } else {

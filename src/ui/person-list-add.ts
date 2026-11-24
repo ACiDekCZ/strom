@@ -10,7 +10,7 @@
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import type { PersonId, PersonList } from '../types.js';
-import { listDisplayName } from '../person-lists.js';
+import { listDisplayName, listIsAuto } from '../person-lists.js';
 import { filterAndSort } from '../person-picker.js';
 import { shownName } from '../person-name.js';
 import { cardYears } from '../card-fields.js';
@@ -33,7 +33,7 @@ const PICK_ROWS = 200;
 
 /** The fixed lists a menu offers, the most recently changed first; `more` when some did not fit. */
 export function addTargets(): { lists: PersonList[]; more: boolean } {
-    const fixed = DataManager.getPersonLists().filter(l => !l.dynamic)
+    const fixed = DataManager.getPersonLists().filter(l => !listIsAuto(l))
         .sort((a, b) => (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0));
     return { lists: fixed.slice(0, MENU_LISTS), more: fixed.length > MENU_LISTS };
 }
@@ -138,7 +138,7 @@ export const personListAddMethods = uiModule({
     runPersonListAction(personId: PersonId, action: string): boolean {
         if (action.startsWith(LIST_TOGGLE_ACTION)) {
             const list = DataManager.getPersonList(action.slice(LIST_TOGGLE_ACTION.length));
-            if (!list || list.dynamic) return true;
+            if (!list || listIsAuto(list)) return true;
             if (inList(list, personId)) DataManager.removePersonsFromList(list.id, [personId]);
             else DataManager.addPersonsToList(list.id, [personId]);
             return true;
@@ -161,7 +161,7 @@ export const personListAddMethods = uiModule({
      */
     showAddPersonsToList(listId: string): void {
         const list = DataManager.getPersonList(listId);
-        if (!list || list.dynamic || DataManager.listsReadOnly()) return;
+        if (!list || listIsAuto(list) || DataManager.listsReadOnly()) return;
         this.closeAddPersonsToList(false);
         const active = document.activeElement;
         pick = { listId, query: '', chosen: new Set(), opener: active instanceof HTMLElement ? active : null };

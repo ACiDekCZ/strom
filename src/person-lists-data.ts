@@ -7,7 +7,10 @@
  * importers use it. Evaluating a list (who is in it) is src/person-lists.ts.
  */
 
-import type { PersonId, PersonList, PersonListRule, PersonListSort, StromData } from './types.js';
+import type {
+    CustomRule, PersonId, PersonList, PersonListOrigin, PersonListRule, PersonListSort, RuleCond, RuleCondName, RuleGroup,
+    RuleHasWhat, RuleNearEvent, RuleNode, RuleParamsMap, RulePeriod, RuleYears, StromData,
+} from './types.js';
 
 /** The id of the ready-made "Added in the last 30 days" (spec 084 §8, Q3). */
 export const ADDED30_ID = 'added30';
@@ -81,6 +84,185 @@ export function sanitizePersonListRule(raw: unknown): PersonListRule | null {
     }
 }
 
+/**
+ * Whether a list is worked out each time (automatic): a custom rule by its
+ * `auto` (spec 136 D3; such a list is stored with `dynamic: false` for older
+ * apps), else by `dynamic`.
+ */
+export function listIsAuto(list: PersonList): boolean {
+    return list.custom ? list.custom.auto === true : !!list.dynamic;
+}
+
+// ---------------------------------------------------------------------------
+// Custom rules (spec 136): read back as the app can use them
+// ---------------------------------------------------------------------------
+
+/** The deepest a custom rule may nest (the root = 1). */
+const CUSTOM_MAX_DEPTH = 3;
+
+const HAS_WHAT: readonly RuleHasWhat[] = [
+    'birthDate', 'birthPlace', 'deathDate', 'deathPlace', 'photo', 'source',
+    'parents', 'partner', 'children', 'story', 'note', 'material', 'conflict', 'openTask',
+];
+const NEAR_EVENTS: readonly RuleNearEvent[] = ['birth', 'death', 'marriage', 'residence'];
+
+function str(v: unknown): string {
+    return typeof v === 'string' ? v : '';
+}
+
+function int(v: unknown): number | undefined {
+    return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : undefined;
+}
+
+function depth(v: unknown): number | 'all' | undefined {
+    if (v === 'all') return 'all';
+    const n = int(v);
+    return n !== undefined && n >= 0 ? n : undefined;
+}
+
+function years(raw: Record<string, unknown>): RuleYears {
+    const y: RuleYears = {};
+    const from = int(raw.from);
+    const to = int(raw.to);
+    if (from !== undefined) y.from = from;
+    if (to !== undefined) y.to = to;
+    return y;
+}
+
+function period(raw: Record<string, unknown>): RulePeriod | null {
+    if (raw.hours === 24) return { hours: 24 };
+    const days = int(raw.days);
+    if (days !== undefined && days >= 1) return { days };
+    if (typeof raw.since === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.since)) return { since: raw.since };
+    return null;
+}
+
+function strings(v: unknown): string[] {
+    return Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && x !== ''))] : [];
+}
+
+/**
+ * The parameters of one condition as the app can use them, or null when the
+ * condition is unknown or its parameters cannot be read. A parameter still
+ * "to fill in" (an empty person, place, list…) is kept: the condition then
+ * counts as empty (incomplete or missing, §11).
+ */
+function sanitizeCondParams(c: RuleCondName, raw: Record<string, unknown>): RuleParamsMap[RuleCondName] | null {
+    switch (c) {
+        case 'family': {
+            const up = depth(raw.up);
+            const down = depth(raw.down);
+            const via = raw.via === 'father' || raw.via === 'mother' ? raw.via : 'both';
+            const width = raw.width === 'siblings' || raw.width === 'cousins' ? raw.width : 'line';
+            const spouses = raw.spouses === 'spouses' || raw.spouses === 'families' ? raw.spouses : 'none';
+            if (up === undefined || down === undefined) return null;
+            const p: RuleParamsMap['family'] = { personId: str(raw.personId) as PersonId, personName: str(raw.personName), up, via, down, width, spouses };
+            const cousins = depth(raw.cousins);
+            if (width === 'cousins' && cousins !== undefined) p.cousins = cousins;
+            return p;
+        }
+        case 'ancestors':
+        case 'descendants': {
+            const p: RuleParamsMap['ancestors'] = { personId: str(raw.personId) as PersonId, personName: str(raw.personName) };
+            const g = generations(raw.generations);
+            if (g !== undefined) p.generations = g;
+            return p;
+        }
+        case 'rod': return { rodIds: strings(raw.rodIds), rodName: str(raw.rodName) };
+        case 'line': return { directionId: str(raw.directionId), lineName: str(raw.lineName) };
+        case 'list': return { listId: str(raw.listId), listName: str(raw.listName) };
+        case 'born': case 'died': case 'married': case 'livedIn': case 'deathAge': return years(raw);
+        case 'alive': return raw.value === 'living' || raw.value === 'deceased' ? { value: raw.value } : null;
+        case 'near': {
+            const km = typeof raw.km === 'number' && Number.isFinite(raw.km) && raw.km >= 0 ? raw.km : 0;
+            const events = strings(raw.events).filter((e): e is RuleNearEvent => (NEAR_EVENTS as readonly string[]).includes(e));
+            const p: RuleParamsMap['near'] = { placeKey: str(raw.placeKey), placeName: str(raw.placeName), events, km };
+            if (raw.below === true) p.below = true;
+            return p;
+        }
+        case 'gender': return raw.value === 'male' || raw.value === 'female' || raw.value === 'unknown' ? { value: raw.value } : null;
+        case 'occupation': {
+            const values = Array.isArray(raw.values) ? raw.values.filter((x): x is string => typeof x === 'string' && x !== '') : [];
+            const labels = Array.isArray(raw.labels) ? raw.labels.map(x => str(x)) : [];
+            return { values, labels: values.map((v, i) => labels[i] || v) };
+        }
+        case 'has': {
+            const what = HAS_WHAT.includes(raw.what as RuleHasWhat) ? raw.what as RuleHasWhat : null;
+            return what ? { have: raw.have !== false, what } : null;
+        }
+        case 'count': {
+            const what = raw.what === 'children' || raw.what === 'marriages' || raw.what === 'sources' ? raw.what : null;
+            const n = int(raw.n);
+            return what && n !== undefined && n >= 0 ? { what, cmp: raw.cmp === 'max' ? 'max' : 'min', n } : null;
+        }
+        case 'text': {
+            const where = raw.where === 'story' || raw.where === 'note' ? raw.where : 'both';
+            return { query: str(raw.query), where };
+        }
+        case 'added':
+        case 'changed': return period(raw);
+        case 'tableFilter': {
+            const rule = sanitizePersonListRule({ ...raw, kind: 'tableFilter' });
+            if (!rule || rule.kind !== 'tableFilter') return null;
+            return { viewName: str(raw.viewName), rowType: rule.rowType, filter: rule.filter, sort: rule.sort };
+        }
+    }
+}
+
+const COND_NAMES: ReadonlySet<string> = new Set<RuleCondName>([
+    'family', 'ancestors', 'descendants', 'rod', 'line', 'list', 'born', 'died', 'married', 'livedIn', 'deathAge', 'alive',
+    'near', 'gender', 'occupation', 'has', 'count', 'text', 'added', 'changed', 'tableFilter',
+]);
+
+function sanitizeNode(raw: unknown, level: number): RuleNode | null {
+    if (!isObject(raw)) return null;
+    if (raw.t === 'group') {
+        if (level > CUSTOM_MAX_DEPTH || !Array.isArray(raw.items)) return null;
+        const items: RuleNode[] = [];
+        for (const r of raw.items) {
+            const n = sanitizeNode(r, level + 1);
+            if (!n) return null;
+            items.push(n);
+        }
+        const g: RuleGroup = { t: 'group', op: raw.op === 'any' ? 'any' : 'all', items };
+        if (raw.not === true) g.not = true;
+        return g;
+    }
+    if (raw.t !== 'cond' || typeof raw.c !== 'string' || !COND_NAMES.has(raw.c) || !isObject(raw.p)) return null;
+    const c = raw.c as RuleCondName;
+    const p = sanitizeCondParams(c, raw.p);
+    if (!p) return null;
+    const cond = { t: 'cond', c, p } as RuleCond;
+    if (raw.not === true) cond.not = true;
+    return cond;
+}
+
+/**
+ * A stored custom rule as the app can use it, or null: version 1, the root a
+ * group, at most 3 levels, every condition one the app knows with readable
+ * parameters. A rule the app cannot read whole is not used at all (the list
+ * stays fixed with its stored people) rather than used in part.
+ */
+export function sanitizeCustomRule(raw: unknown): (CustomRule & { auto: boolean }) | null {
+    if (!isObject(raw) || raw.v !== 1) return null;
+    const root = sanitizeNode(raw.root, 1);
+    if (!root || root.t !== 'group') return null;
+    return { v: 1, root, auto: raw.auto === true };
+}
+
+/** A stored origin of a list (spec 136 K1.10), or null. */
+export function sanitizeListOrigin(raw: unknown): PersonListOrigin | null {
+    if (!isObject(raw) || typeof raw.at !== 'string') return null;
+    if (raw.by === 'template' && typeof raw.template === 'string' && raw.template) {
+        return { by: 'template', template: raw.template, name: str(raw.name), at: raw.at };
+    }
+    if (raw.by === 'agent') {
+        const agent = optName(raw.agent);
+        return agent ? { by: 'agent', at: raw.at, agent } : { by: 'agent', at: raw.at };
+    }
+    return null;
+}
+
 /** One stored list as the app can use it, or null (an automatic list without a usable rule is no list). */
 export function sanitizePersonList(raw: unknown): PersonList | null {
     if (!isObject(raw)) return null;
@@ -89,26 +271,33 @@ export function sanitizePersonList(raw: unknown): PersonList | null {
     const builtin = raw.builtin === 'added30' ? 'added30' as const : undefined;
     const name = typeof raw.name === 'string' ? raw.name.trim() : '';
     if (!name && !builtin) return null;
-    const rule = raw.rule === undefined ? null : sanitizePersonListRule(raw.rule);
-    const dynamic = raw.dynamic === true && !!rule;
-    if (raw.dynamic === true && !rule) return null;
+    // A custom rule (spec 136 D3) replaces the one-condition rule; it is stored with dynamic: false and its last people.
+    const custom = raw.custom === undefined ? null : sanitizeCustomRule(raw.custom);
+    const rule = custom || raw.rule === undefined ? null : sanitizePersonListRule(raw.rule);
+    const dynamic = !custom && raw.dynamic === true && !!rule;
+    if (!custom && raw.dynamic === true && !rule) return null;
+    const auto = dynamic || !!custom?.auto;
     const sort = PERSON_LIST_SORTS.includes(raw.sort as PersonListSort) ? raw.sort as PersonListSort : 'old';
     const list: PersonList = {
         id, name, dynamic,
         // A manual order belongs to a fixed list only.
-        sort: dynamic && sort === 'manual' ? 'old' : sort,
+        sort: auto && sort === 'manual' ? 'old' : sort,
         updated: typeof raw.updated === 'string' ? raw.updated : '',
     };
     if (rule) list.rule = rule;
+    if (custom) list.custom = custom;
     if (!dynamic) {
+        // A kept-up-to-date custom list keeps its last people too: what an older app shows.
         list.personIds = ids(raw.personIds);
         const removed = ids(raw.removed);
-        if (removed.length) list.removed = removed;
+        if (removed.length && !auto) list.removed = removed;
     }
-    if (raw.checklist === true && !dynamic) list.checklist = true;
+    if (raw.checklist === true && !auto) list.checklist = true;
     const done = ids(raw.done);
     if (done.length) list.done = done;
     if (builtin) list.builtin = builtin;
+    const origin = raw.origin === undefined ? null : sanitizeListOrigin(raw.origin);
+    if (origin) list.origin = origin;
     return list;
 }
 
@@ -226,17 +415,35 @@ export function onPersonDeleted(data: StromData, id: PersonId): number {
     return k;
 }
 
+/** A custom rule with the conditions naming `removeId` naming `keepId` (a merge), or null when none names it. */
+export function customWithPersonMerged(root: RuleGroup, removeId: PersonId, keepId: PersonId): RuleGroup | null {
+    let changed = false;
+    const walk = (node: RuleNode): RuleNode => {
+        if (node.t === 'group') return { ...node, items: node.items.map(walk) };
+        if ((node.c === 'family' || node.c === 'ancestors' || node.c === 'descendants') && node.p.personId === removeId) {
+            changed = true;
+            return { ...node, p: { ...node.p, personId: keepId } } as RuleCond;
+        }
+        return node;
+    };
+    const out = walk(root) as RuleGroup;
+    return changed ? out : null;
+}
+
 /**
  * Two people merged into `keepId` (spec 084 §7): the removed person's place
  * passes to the kept one; with both in a list the earlier position stays; the
  * result is done when either was, taken out only when both were. A rule's
- * person follows too. Mutates `data.personLists`.
+ * person follows too (a custom rule's every condition naming the person).
+ * Mutates `data.personLists`.
  */
 export function onPersonsMerged(data: StromData, keepId: PersonId, removeId: PersonId): void {
     if (!data.personLists?.length || keepId === removeId) return;
     data.personLists = data.personLists.map(l => {
+        const customRoot = l.custom ? customWithPersonMerged(l.custom.root, removeId, keepId) : null;
         const touches = l.personIds?.includes(removeId) || l.removed?.includes(removeId) || l.done?.includes(removeId)
-            || ((l.rule?.kind === 'ancestors' || l.rule?.kind === 'descendants') && l.rule.personId === removeId);
+            || ((l.rule?.kind === 'ancestors' || l.rule?.kind === 'descendants') && l.rule.personId === removeId)
+            || !!customRoot;
         if (!touches) return l;
         const next: PersonList = { ...l };
         if (l.personIds) {
@@ -264,6 +471,7 @@ export function onPersonsMerged(data: StromData, keepId: PersonId, removeId: Per
         if ((l.rule?.kind === 'ancestors' || l.rule?.kind === 'descendants') && l.rule.personId === removeId) {
             next.rule = { ...l.rule, personId: keepId };
         }
+        if (customRoot && l.custom) next.custom = { ...l.custom, root: customRoot };
         return next;
     });
 }
@@ -287,7 +495,7 @@ export function subsetForSubtree(lists: readonly PersonList[] | undefined, keep:
         const removed = (l.removed ?? []).filter(id => keep.has(id));
         if (removed.length) next.removed = removed; else delete next.removed;
         const personIds = (l.personIds ?? []).filter(id => keep.has(id));
-        if (!l.dynamic && !personIds.length) continue;
+        if (!l.dynamic && !l.custom?.auto && !personIds.length) continue;
         if (personIds.length) next.personIds = personIds; else delete next.personIds;
         out.push(next);
     }
@@ -312,6 +520,74 @@ export function stampAddedAt(data: StromData, at: string, only?: Iterable<string
     return data;
 }
 
+function sameValue(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+    if (Array.isArray(a)) {
+        if (!Array.isArray(b) || a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) if (!sameValue(a[i], b[i])) return false;
+        return true;
+    }
+    if (Array.isArray(b)) return false;
+    const ra = a as Record<string, unknown>;
+    const rb = b as Record<string, unknown>;
+    let na = 0;
+    for (const k in ra) {
+        if (ra[k] === undefined) continue;
+        na++;
+        if (!sameValue(ra[k], rb[k])) return false;
+    }
+    let nb = 0;
+    for (const k in rb) if (rb[k] !== undefined) nb++;
+    return na === nb;
+}
+
+/** Two states of a person the same but for the time of the last change. */
+function samePerson(a: object, b: object): boolean {
+    const ra = a as Record<string, unknown>;
+    const rb = b as Record<string, unknown>;
+    let na = 0;
+    for (const k in ra) {
+        if (k === 'changedAt' || ra[k] === undefined) continue;
+        na++;
+        if (!sameValue(ra[k], rb[k])) return false;
+    }
+    let nb = 0;
+    for (const k in rb) if (k !== 'changedAt' && rb[k] !== undefined) nb++;
+    return na === nb;
+}
+
+/**
+ * Writes `at` as Person.changedAt (spec 136 D4) of every person of `after`
+ * who was in `before` and differs from it there (their data, events,
+ * citations, parents) or whose union changed (both partners). People new in
+ * `after` get none (their time is addedAt); placeholders get none. Returns
+ * how many were stamped; mutates `after`.
+ */
+export function stampChangedAt(before: StromData, after: StromData, at: string): number {
+    const hit = new Set<PersonId>();
+    for (const [id, p] of Object.entries(after.persons ?? {})) {
+        const old = before.persons?.[id as PersonId];
+        if (!p || !old || p.isPlaceholder || p === old) continue;
+        if (!samePerson(old, p)) hit.add(id as PersonId);
+    }
+    const unions = new Set([...Object.keys(before.partnerships ?? {}), ...Object.keys(after.partnerships ?? {})]);
+    for (const id of unions) {
+        const a = before.partnerships?.[id as keyof StromData['partnerships']];
+        const b = after.partnerships?.[id as keyof StromData['partnerships']];
+        if (a === b || (a && b && sameValue(a, b))) continue;
+        for (const u of [a, b]) if (u) { hit.add(u.person1Id); hit.add(u.person2Id); }
+    }
+    let n = 0;
+    for (const id of hit) {
+        const p = after.persons?.[id];
+        if (!p || p.isPlaceholder || !before.persons?.[id]) continue;
+        p.changedAt = at;
+        n++;
+    }
+    return n;
+}
+
 /**
  * An addedAt value in ms: a full ISO time as it is, a bare day (a GEDCOM
  * import's) as that day's local midnight; NaN when it is no time.
@@ -331,8 +607,9 @@ export function earlierAddedAt(a: string | undefined, b: string | undefined): st
 
 /**
  * A version the research sends (spec 084 §8): the lists are the tree's own
- * (the research's GEDCOM has no place for them) and so is the date a person
- * came into the tree; a person new to the tree gets the research's own date
+ * (the research's GEDCOM has no place for them; custom rules and origins
+ * with them, spec 136) and so are the date a person came into the tree and
+ * the date of their last change; a person new to the tree gets the research's own date
  * (`research.added`) or `now`. `next` must already carry the previous ids
  * (stabilizeIds). Returns a new object; `next` is not changed.
  */
@@ -346,10 +623,13 @@ export function keepPersonListData(next: StromData, previous: StromData, now: st
         const old = previous.persons?.[id as PersonId];
         // A person the tree had keeps its own date (none = earlier); a new one gets the research's or now.
         const at = old ? old.addedAt : p.addedAt ?? sanitizeAddedAt(p.research?.added) ?? now;
-        if (at === p.addedAt) continue;
+        // The last change (spec 136 D4) is the tree's own too: the research's GEDCOM does not carry it.
+        const changed = p.changedAt ?? old?.changedAt;
+        if (at === p.addedAt && changed === p.changedAt) continue;
         persons ??= { ...next.persons };
         const copy = { ...p };
         if (at) copy.addedAt = at; else delete copy.addedAt;
+        if (changed) copy.changedAt = changed;
         persons[id as PersonId] = copy;
     }
     if (persons) out.persons = persons;

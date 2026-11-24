@@ -21,6 +21,7 @@
 
 import type { PersonList } from '../types.js';
 import { DataManager } from '../data.js';
+import { listIsAuto } from '../person-lists-data.js';
 import { strings } from '../strings.js';
 import type { UIClass } from './index.js';
 
@@ -85,7 +86,7 @@ export const personListHooks: PersonListHooks = {
  */
 function freezeAndChecklistRows(_ui: UIClass, list: PersonList): ListMenuRow[] {
     const t = strings.lists;
-    if (list.dynamic) {
+    if (listIsAuto(list)) {
         return [{ id: 'freeze', label: t.menu.freeze, sub: t.freezeSub, run: () => { DataManager.freezePersonList(list.id); } }];
     }
     return [{

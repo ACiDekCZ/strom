@@ -896,21 +896,6 @@ export function ruleNeeds(root: RuleGroup): RuleNeed[] {
     return [...out];
 }
 
-/** Persons named in a rule replaced (a merge keeps the survivor), and whether anything changed. */
-export function ruleWithPersonsMerged(root: RuleGroup, gone: PersonId, kept: PersonId): RuleGroup | null {
-    let changed = false;
-    const walk = (node: RuleNode): RuleNode => {
-        if (node.t === 'group') return { ...node, items: node.items.map(walk) };
-        if ((node.c === 'family' || node.c === 'ancestors' || node.c === 'descendants') && node.p.personId === gone) {
-            changed = true;
-            return { ...node, p: { ...node.p, personId: kept } } as RuleCond;
-        }
-        return node;
-    };
-    const next = walk(root) as RuleGroup;
-    return changed ? next : null;
-}
-
 // ---------------------------------------------------------------------------
 // In words (§8)
 // ---------------------------------------------------------------------------
@@ -1039,4 +1024,5 @@ export function customLabel(custom: CustomRule | RuleGroup, index?: LineageIndex
 // ---------------------------------------------------------------------------
 
 export { FAMILY_PRESETS, familyPresetOf, familySet };
+export { customWithPersonMerged } from './person-lists-data.js';
 export type { RuleCondName };

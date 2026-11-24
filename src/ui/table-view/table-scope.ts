@@ -11,6 +11,7 @@
 
 import type { PersonId, PersonList } from '../../types.js';
 import { DataManager } from '../../data.js';
+import { listIsAuto } from '../../person-lists-data.js';
 import { decodeSelectionRef, encodeSelectionRef, type SelectionRef } from '../../view-selection-ref.js';
 import { selectionPersonIds } from '../../view-selection.js';
 import type { ViewScope } from '../../view-scope.js';
@@ -102,7 +103,7 @@ export function tableScopeOf(key: string | null): TableScope | null {
     if (memo && memo.list && memo.ids === ids && (memo.list === list || (!!list.builtin && memo.list.id === list.id && memo.list.updated === list.updated))) return memo.scope;
     const pos = new Map<string, number>();
     ids.forEach((id, i) => pos.set(id, i + 1));
-    const fixed = !list.dynamic;
+    const fixed = !listIsAuto(list);
     const done = fixed && list.checklist ? new Set<string>(list.done ?? []) : null;
     const scope: TableScope = { kind: 'list', key, listId, list, ids, cells: { pos, done }, fixed };
     memo = { ids, list, ref: null, scope, rows: new Map(), model: null };
