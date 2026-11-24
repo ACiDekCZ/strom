@@ -214,9 +214,9 @@ describe('step 1 says the same tree was merged here before (134 N1, part C 6)', 
     it('in the tree\'s own words', () => {
         setLanguage('cs');
         expect(strings.mergeWizard.repeatTree('Pernštýnovi – sestřenice', '20. 11. 2026', 0, 9))
-            .toBe('Ze stromu Pernštýnovi – sestřenice už se sem slučovalo 20. 11. 2026. Nových je jen 0 osob; 9 je spojeno se sloučením z 20. 11. 2026 a nezdvojí se.');
+            .toBe('Ze stromu Pernštýnovi – sestřenice už se sem slučovalo (20. 11. 2026). Nových je jen 0 osob; 9 je spojeno s tím dřívějším sloučením a nezdvojí se.');
         setLanguage('en');
         expect(strings.mergeWizard.repeatTree('Jilmovi', 'today 3:41 PM', 1, 3))
-            .toBe('The tree Jilmovi was already merged into this one today 3:41 PM. Only 1 person is new; 3 are joined with the merge of today 3:41 PM and will not be duplicated.');
+            .toBe('The tree Jilmovi was already merged into this one (today 3:41 PM). Only 1 person is new; 3 are joined with that earlier merge and will not be duplicated.');
     });
 });

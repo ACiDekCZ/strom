@@ -44,7 +44,7 @@ test('the same file merged again: step 1 says it was merged, 1 new and 3 joined;
     await page.clock.setFixedTime(new Date(2026, 10, 22, 16, 41));
     wizard = await pickFile(page);
     await expect(wizard.locator('.merge-s1-note')).toHaveText(
-        'This file was already merged today 3:41 PM. Only 1 person is new; 3 are joined with the merge of today 3:41 PM and will not be duplicated.');
+        'This file was already merged (today 3:41 PM). Only 1 person is new; 3 are joined with that earlier merge and will not be duplicated.');
     await mergeCompare(wizard);
     await mergeWrite(wizard, 'tree');
     await mergeDone(wizard);
@@ -87,5 +87,5 @@ test('the same tree merged again: step 1 names the tree and its merge, 0 new and
     await page.clock.setFixedTime(new Date(2026, 10, 22, 16, 41));
     wizard = await mergeTreeInto(page, ids['Jilmovi'], ids['Modřínovi']);
     await expect(wizard.locator('.merge-s1-note')).toHaveText(
-        'The tree Jilmovi was already merged into this one today 3:41 PM. Only 0 people are new; 4 are joined with the merge of today 3:41 PM and will not be duplicated.');
+        'The tree Jilmovi was already merged into this one (today 3:41 PM). Only 0 people are new; 4 are joined with that earlier merge and will not be duplicated.');
 });

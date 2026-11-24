@@ -267,8 +267,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         sameAsTarget: (n: number, t: string) => n === 1
             ? `Jedyna osoba jest już w drzewie ${t} i nie wnosi nic nowego.`
             : `${plPl(n, 'Wszystkie', 'Wszystkie', 'Wszystkich')} ${nPl(n, 'osoba', 'osoby', 'osób')} ${plPl(n, 'jest', 'są', 'jest')} już w drzewie ${t} i nie wnoszą nic nowego.`,
-        repeat: (d: string, n: number, m: number) => `Ten plik został już scalony ${d}. ${plPl(n, 'Nowa jest', 'Nowe są', 'Nowych jest')} tylko ${nPl(n, 'osoba', 'osoby', 'osób')}; ${m} połączono ze scaleniem z ${d} i nie zostaną zdublowane.`,
-        repeatTree: (t: string, d: string, n: number, m: number) => `Drzewo ${t} zostało już tu scalone ${d}. ${plPl(n, 'Nowa jest', 'Nowe są', 'Nowych jest')} tylko ${nPl(n, 'osoba', 'osoby', 'osób')}; ${m} połączono ze scaleniem z ${d} i nie zostaną zdublowane.`,
+        repeat: (d: string, n: number, m: number) => `Ten plik został już scalony (${d}). ${plPl(n, 'Nowa jest', 'Nowe są', 'Nowych jest')} tylko ${nPl(n, 'osoba', 'osoby', 'osób')}; ${m} połączono z tamtym wcześniejszym scaleniem i nie zostaną zdublowane.`,
+        repeatTree: (t: string, d: string, n: number, m: number) => `Drzewo ${t} zostało już tu scalone (${d}). ${plPl(n, 'Nowa jest', 'Nowe są', 'Nowych jest')} tylko ${nPl(n, 'osoba', 'osoby', 'osób')}; ${m} połączono z tamtym wcześniejszym scaleniem i nie zostaną zdublowane.`,
         encLocked: (t: string) => `Drzewo ${t} jest zaszyfrowane i zablokowane.`,
         savedLater: (s: string, i: number) => `Zapisano na później · ${s} · krok ${i} · w Zarządzaniu drzewami w Niedokończonych scaleniach`,
         crashed: (t: string) => `Ostatnio scalenie się nie zakończyło. Drzewo ${t} i plik są bez zmian.`,
@@ -405,7 +405,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         undoReadOnly: (t: string) => `Drzewo ${t} jest teraz tylko do odczytu: scalenie można cofnąć, gdy będzie można je edytować.`,
         undoNothing: 'Z tego scalenia nie zostało w drzewie nic do cofnięcia.',
         undone: (a: number, k: number) => `Scalenie cofnięte: usunięto ${nPl(a, 'osobę', 'osoby', 'osób')}, zostawiono ${numPl(k)}`,
-        redo: 'Przywróć scalenie',
+        redo: 'Ponów scalenie',
         // §11 – cel z badaniami
         resBlock: (t: string) => `Badania ${t}`,
         // A count of zero is left out; the verb agrees with what is left: one subject 1 → singular,
@@ -873,7 +873,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         exportAllShort: 'Eksportuj wszystko',
         switcherTitle: 'Drzewa',
         searchTrees: 'Szukaj drzewa…',
-        pendingSection: 'Rozpoczęte scalania',
+        pendingSection: 'Niedokończone scalania',
         cannotHideLastVisible: 'Ostatniego widocznego drzewa nie można ukryć, dopóki nie zostanie pokazane inne drzewo.',
         activeBadge: 'Aktywne',
         lockedBadge: 'Zablokowane',

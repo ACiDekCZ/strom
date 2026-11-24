@@ -6297,7 +6297,7 @@ const stringsEN = {
         closeCancel: 'Continue merging',
 
         // Pending merges
-        pendingMerges: 'Pending merges',
+        pendingMerges: 'Unfinished merges',
         pendingMergeFound: 'Pending merge session found',
         resume: 'Resume',
         discard: 'Discard',
@@ -6546,9 +6546,9 @@ const stringsEN = {
         sameAsTarget: (n: number, t: string) => n === 1
             ? `The only person is already in the tree ${t} and brings nothing new.`
             : `All ${n} people are already in the tree ${t} and bring nothing new.`,
-        repeat: (d: string, n: number, m: number) => `This file was already merged ${d}. Only ${nEn(n, 'person is', 'people are')} new; ${m} ${m === 1 ? 'is' : 'are'} joined with the merge of ${d} and will not be duplicated.`,
+        repeat: (d: string, n: number, m: number) => `This file was already merged (${d}). Only ${nEn(n, 'person is', 'people are')} new; ${m} ${m === 1 ? 'is' : 'are'} joined with that earlier merge and will not be duplicated.`,
         /** A tree merged into this one before (134 N1): `t` its name. */
-        repeatTree: (t: string, d: string, n: number, m: number) => `The tree ${t} was already merged into this one ${d}. Only ${nEn(n, 'person is', 'people are')} new; ${m} ${m === 1 ? 'is' : 'are'} joined with the merge of ${d} and will not be duplicated.`,
+        repeatTree: (t: string, d: string, n: number, m: number) => `The tree ${t} was already merged into this one (${d}). Only ${nEn(n, 'person is', 'people are')} new; ${m} ${m === 1 ? 'is' : 'are'} joined with that earlier merge and will not be duplicated.`,
         encLocked: (t: string) => `The tree ${t} is encrypted and locked.`,
         savedLater: (s: string, i: number) => `Saved for later · ${s} · step ${i} · in Manage trees under Unfinished merges`,
         crashed: (t: string) => `Last time the merge did not finish. The tree ${t} and the file are unchanged.`,
@@ -17941,7 +17941,7 @@ const stringsCZ: StringsType = {
         closeCancel: 'Pokračovat ve slučování',
 
         // Pending merges
-        pendingMerges: 'Nedokončená sloučení',
+        pendingMerges: 'Rozpracovaná sloučení',
         pendingMergeFound: 'Nalezeno nedokončené sloučení',
         resume: 'Pokračovat',
         discard: 'Zahodit',
@@ -18187,10 +18187,10 @@ const stringsCZ: StringsType = {
             ? `Jediná osoba už ve stromu ${t} je a nic nového nepřinese.`
             : n >= 2 && n <= 4 ? `Všechny ${n} osoby už ve stromu ${t} jsou a nic nového nepřinesou.`
             : `Všech ${n} osob už ve stromu ${t} je a nic nového nepřinesou.`,
-        repeat: (d: string, n: number, m: number) => `Tento soubor už byl sloučen ${d}. ${n === 1 ? 'Nová je jen 1 osoba' : n >= 2 && n <= 4 ? `Nové jsou jen ${n} osoby` : `Nových je jen ${n} osob`}; ${m} ${m === 1 ? 'je spojena' : m >= 2 && m <= 4 ? 'jsou spojeny' : 'je spojeno'} se sloučením z ${d} a nezdvojí se.`,
-        repeatTree: (t: string, d: string, n: number, m: number) => `Ze stromu ${t} už se sem slučovalo ${d}. ${n === 1 ? 'Nová je jen 1 osoba' : n >= 2 && n <= 4 ? `Nové jsou jen ${n} osoby` : `Nových je jen ${n} osob`}; ${m} ${m === 1 ? 'je spojena' : m >= 2 && m <= 4 ? 'jsou spojeny' : 'je spojeno'} se sloučením z ${d} a nezdvojí se.`,
+        repeat: (d: string, n: number, m: number) => `Tento soubor už byl sloučen (${d}). ${n === 1 ? 'Nová je jen 1 osoba' : n >= 2 && n <= 4 ? `Nové jsou jen ${n} osoby` : `Nových je jen ${n} osob`}; ${m} ${m === 1 ? 'je spojena' : m >= 2 && m <= 4 ? 'jsou spojeny' : 'je spojeno'} s tím dřívějším sloučením a nezdvojí se.`,
+        repeatTree: (t: string, d: string, n: number, m: number) => `Ze stromu ${t} už se sem slučovalo (${d}). ${n === 1 ? 'Nová je jen 1 osoba' : n >= 2 && n <= 4 ? `Nové jsou jen ${n} osoby` : `Nových je jen ${n} osob`}; ${m} ${m === 1 ? 'je spojena' : m >= 2 && m <= 4 ? 'jsou spojeny' : 'je spojeno'} s tím dřívějším sloučením a nezdvojí se.`,
         encLocked: (t: string) => `Strom ${t} je šifrovaný a zamčený.`,
-        savedLater: (s: string, i: number) => `Uloženo na později · ${s} · krok ${i} · ve Správě stromů v Nedokončených sloučeních`,
+        savedLater: (s: string, i: number) => `Uloženo na později · ${s} · krok ${i} · ve Správě stromů v Rozpracovaných sloučeních`,
         crashed: (t: string) => `Minule se sloučení nedokončilo. Strom ${t} i soubor jsou beze změny.`,
         /** Unlinked groups (§6): a group's name, and the separate tree it can become. */
         groupFamily: (s: string, place: string) => place ? `${s} (${place})` : s,
@@ -29423,7 +29423,7 @@ const stringsDE: StringsType = {
         closeSave: 'Für später speichern',
         closeCancel: 'Weiter zusammenführen',
 
-        pendingMerges: 'Ausstehende Zusammenführungen',
+        pendingMerges: 'Unvollendete Zusammenführungen',
         pendingMergeFound: 'Eine Zusammenführungssitzung steht noch aus',
         resume: 'Fortsetzen',
         discard: 'Verwerfen',
@@ -29658,8 +29658,8 @@ const stringsDE: StringsType = {
         sameAsTarget: (n: number, t: string) => n === 1
             ? `Die einzige Person ist schon im Stammbaum ${t} und bringt nichts Neues.`
             : `Alle ${n} Personen sind schon im Stammbaum ${t} und bringen nichts Neues.`,
-        repeat: (d: string, n: number, m: number) => `Diese Datei wurde schon am ${d} zusammengeführt. Nur ${nDe(n, 'Person ist', 'Personen sind')} neu; ${m === 1 ? '1 ist' : `${m} sind`} mit der Zusammenführung vom ${d} verbunden und ${m === 1 ? 'wird' : 'werden'} nicht verdoppelt.`,
-        repeatTree: (t: string, d: string, n: number, m: number) => `Der Stammbaum ${t} wurde schon am ${d} hierher zusammengeführt. Nur ${nDe(n, 'Person ist', 'Personen sind')} neu; ${m === 1 ? '1 ist' : `${m} sind`} mit der Zusammenführung vom ${d} verbunden und ${m === 1 ? 'wird' : 'werden'} nicht verdoppelt.`,
+        repeat: (d: string, n: number, m: number) => `Diese Datei wurde schon zusammengeführt (${d}). Nur ${nDe(n, 'Person ist', 'Personen sind')} neu; ${m === 1 ? '1 ist' : `${m} sind`} mit dieser früheren Zusammenführung verbunden und ${m === 1 ? 'wird' : 'werden'} nicht verdoppelt.`,
+        repeatTree: (t: string, d: string, n: number, m: number) => `Der Stammbaum ${t} wurde schon hierher zusammengeführt (${d}). Nur ${nDe(n, 'Person ist', 'Personen sind')} neu; ${m === 1 ? '1 ist' : `${m} sind`} mit dieser früheren Zusammenführung verbunden und ${m === 1 ? 'wird' : 'werden'} nicht verdoppelt.`,
         encLocked: (t: string) => `Der Stammbaum ${t} ist verschlüsselt und gesperrt.`,
         savedLater: (s: string, i: number) => `Für später gespeichert · ${s} · Schritt ${i} · unter Stammbäume verwalten bei Unvollendete Zusammenführungen`,
         crashed: (t: string) => `Beim letzten Mal wurde die Zusammenführung nicht beendet. Stammbaum ${t} und Datei sind unverändert.`,
@@ -29796,7 +29796,7 @@ const stringsDE: StringsType = {
         undoReadOnly: (t: string) => `Der Stammbaum ${t} ist gerade schreibgeschützt: Die Zusammenführung lässt sich zurücknehmen, sobald er bearbeitet werden kann.`,
         undoNothing: 'Von dieser Zusammenführung ist im Stammbaum nichts mehr zurückzunehmen.',
         undone: (a: number, k: number) => `Zusammenführung zurückgenommen: ${nDe(a, 'Person', 'Personen')} entfernt, ${numDe(k)} behalten`,
-        redo: 'Zurücknahme rückgängig machen',
+        redo: 'Zusammenführung wiederholen',
         // §11 – ein Ziel mit Forschung
         resBlock: (t: string) => `Forschung ${t}`,
         resPending: (n: number, l: number) => `${nDe(n, 'neue Person', 'neue Personen')} und ${nDe(l, 'Verbindung', 'Verbindungen')} bleiben vorerst nur in der App. In die Forschung gehen sie als „Aus Stammbaum (ungeprüft)“.`,
@@ -30131,9 +30131,9 @@ const stringsDE: StringsType = {
         optFamiliesDesc: 'Nach Geschlechtern, Zweigen oder aus Sicht einer Person. Neue Stammbäume entstehen, dieser bleibt unverändert.',
         // The title of "Separate disconnected parts…" is split.menu.
         optPartsDesc: 'Teile, die nichts verbindet. Neue Stammbäume entstehen, dieser bleibt unverändert.',
-        optInto: 'Auswahl oder ganzen Stammbaum in einen anderen…',
+        optInto: 'Auswahl oder ganzen Stammbaum in einen anderen Stammbaum…',
         optIntoDesc: 'Über den Zusammenführungs-Assistenten. Der Zielstammbaum ändert sich; rückgängig machbar.',
-        optFrom: 'Aus einem anderen Stammbaum in diesen…',
+        optFrom: 'Aus einem anderen Stammbaum in diesen Stammbaum…',
         optFromDesc: 'Über den Zusammenführungs-Assistenten. Dieser Stammbaum ändert sich; rückgängig machbar.',
         optFile: 'Aus einer Datei in diesen Stammbaum…',
         optFileDesc: 'GEDCOM oder Strom-Datei (JSON), über den Zusammenführungs-Assistenten. Dieser Stammbaum ändert sich; rückgängig machbar.',
@@ -30241,7 +30241,7 @@ const stringsDE: StringsType = {
         fromTree: (name: string) => `Ausschnitt aus dem Stammbaum „${name}“`,
         fromGedcom: (file: string) => `aus GEDCOM ${file}`,
         fromFile: (file: string) => `aus der Datei ${file}`,
-        mergeHistory: (n: number) => `Zusammenführungen (${n})`,
+        mergeHistory: (n: number) => `Verlauf der Zusammenführungen (${n})`,
         pendingRow: (src: string, tgt: string) => `Unvollendete Zusammenführung: ${src} → ${tgt}`,
         savedAt: (when: string) => `gespeichert ${when}`,
         pendingOrphans: 'Unvollendete Zusammenführungen ohne Stammbaum',
@@ -30258,7 +30258,7 @@ const stringsDE: StringsType = {
         exportAllShort: 'Alle exportieren',
         switcherTitle: 'Stammbäume',
         searchTrees: 'Stammbäume durchsuchen…',
-        pendingSection: 'Unfertige Zusammenführungen',
+        pendingSection: 'Unvollendete Zusammenführungen',
         cannotHideLastVisible: 'Der letzte sichtbare Stammbaum kann nicht ausgeblendet werden — zuerst einen anderen einblenden.',
         activeBadge: 'Aktiv',
         lockedBadge: 'Gesperrt',
