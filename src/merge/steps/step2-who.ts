@@ -813,9 +813,10 @@ export function renderStep2(host: HTMLElement, ctx: StepContext): void {
         + tabsHtml(view, d.rows)
         + `<div class="merge-s2-search"><input type="search" class="merge-s2-q" value="${escapeHtml(view.query)}" placeholder="${escapeHtml(W.searchName)}" aria-label="${escapeHtml(W.searchName)}"></div>`
         + `<div class="merge-match-list" id="merge-match-list" role="listbox" aria-label="${escapeHtml(W.grpMaybe)}">${listHtml(ctx, view, d)}</div>`
-        + (wide ? restHtml(ctx.state, d) : '')
+        + (wide && !hidden ? restHtml(ctx.state, d) : '')
         + footHtml(view) + '</div>'
-        + `<div class="merge-s2-pane" id="merge-pair">${wide ? widePaneHtml(ctx, ctx.step2, view, d) : paneHtml(ctx, ctx.step2, view, d)}</div>`
+        // The list folded to a rail: the undecided rest stands under the pair (never hidden with the list).
+        + `<div class="merge-s2-pane" id="merge-pair">${wide ? widePaneHtml(ctx, ctx.step2, view, d) + (hidden ? restHtml(ctx.state, d) : '') : paneHtml(ctx, ctx.step2, view, d)}</div>`
         + '</div>';
     const list = host.querySelector<HTMLElement>('#merge-match-list');
     if (list) {

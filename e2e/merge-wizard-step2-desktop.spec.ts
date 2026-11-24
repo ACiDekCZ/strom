@@ -97,6 +97,10 @@ test.describe('step 2 on a wider window (dotaz 10)', () => {
         await expect(show).toHaveAttribute('aria-label', 'Show the list of pairs');
         await expect(show).toBeFocused();
         expect((await pane.boundingBox())!.width).toBeGreaterThan(before + 150);
+        // The undecided rest is never hidden with the list: it stands under the pair, and it works there.
+        const rest = pane.locator('#merge-rest');
+        await expect(rest).toBeVisible();
+        await expect(rest).toBeInViewport();
         // ↓ of the controls, then the key ↑ back.
         const down = pane.locator('.merge-pair-move[data-move="1"]');
         if (await down.isEnabled()) {
@@ -107,6 +111,9 @@ test.describe('step 2 on a wider window (dotaz 10)', () => {
         }
         await show.click();
         await expect(wizard.locator('#merge-s2-side')).toBeVisible();
+        // Unfolded, the rest is back at the list's foot.
+        await expect(wizard.locator('#merge-s2-side #merge-rest')).toBeVisible();
+        await expect(pane.locator('#merge-rest')).toHaveCount(0);
         await expect(wizard.locator('#merge-match-list .merge-item[aria-selected="true"]')).toContainText('Hostivít');
     });
 

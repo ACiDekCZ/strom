@@ -187,6 +187,34 @@ test.describe('step 2: decisions (K3.3, K3.4)', () => {
         await expect(stats).not.toContainText('conflict');
     });
 
+    test('the list of pairs folded: the rest stands under the pair, its Do not add decides (24 Nov, point 3)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        const tree = modrinovi(false);
+        tree.persons['m_vojmir' as never] = person('m_vojmir', 'Vojmír', 'Modřín', 'male', { birthDate: '1930' } as Partial<P>);
+        const file = modrinoviFile(false);
+        file.persons['i_vojmir' as never] = person('i_vojmir', 'Vojmír', 'Modřín', 'male');
+        const wizard = await openGuide(page, tree, file);
+        await mergeCompare(wizard);
+        await mergeGroup(wizard, 'maybe');
+        const pane = wizard.locator('#merge-pair');
+        await pane.locator('.merge-pairs-toggle').click();
+        await expect(wizard.locator('#merge-s2-side')).toBeHidden();
+        // The bulk action is never hidden with the list: "Remaining 1 undecided: Add as new · Do not add" under the pair.
+        const rest = pane.locator('#merge-rest');
+        await expect(rest).toBeVisible();
+        await expect(rest).toContainText('Remaining 1 undecided');
+        await expect(rest.locator('[data-rest="reject"]')).toHaveText('Add as new (1)');
+        await rest.locator('[data-rest="skip"]').click();
+        await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
+        await expect(mergeCount(wizard, 'pending')).toHaveText('2');
+        await expect(pane.locator('#merge-rest [data-rest]')).toHaveCount(0);
+        // Unfolded, the rest is back at the list's foot.
+        await wizard.locator('.merge-s2-rail .merge-pairs-toggle').click();
+        await expect(wizard.locator('#merge-s2-side #merge-rest')).toBeVisible();
+        await expect(pane.locator('#merge-rest')).toHaveCount(0);
+    });
+
     test('Continue is locked while pairs are left and says why; the rest Do not add leaves the pairs of one family to decide one by one (134 N2)', async ({ page }) => {
         await openApp(page);
         // Vojmír Modřín (1930 in the tree, no date in the file) has no family in either: only offered, decided with the rest.

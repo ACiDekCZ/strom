@@ -18946,6 +18946,8 @@
         .merge-s2.is-wide .merge-s2-side .merge-rest { flex-direction: column; align-items: stretch; gap: 6px; }
         .merge-s2.is-wide .merge-s2-side .merge-rest-warn,
         .merge-s2.is-wide .merge-s2-side .merge-rest-one { flex-basis: auto; }
+        /* The list folded to a rail: the rest under the pair keeps its height (the table scrolls instead). */
+        .merge-s2.is-wide .merge-s2-pane > .merge-rest { flex: none; }
         @media (min-width: 1800px) {
             .merge-s2.is-wide:not(.is-folded) { grid-template-columns: 320px minmax(0, 1fr); }
         }
