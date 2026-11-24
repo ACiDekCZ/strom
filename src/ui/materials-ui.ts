@@ -44,6 +44,7 @@ import { researchReachable } from './research-ui.js';
 import { openImageViewer } from './image-viewer.js';
 import { materialDetailsEdit } from './material-details-ui.js';
 import { uiModule } from './module.js';
+import { openBridgeFile } from '../device/device-bridge.js';
 import { canEditPortrait, treePortraitCopy } from './portrait-actions-ui.js';
 import { windowAddOffered } from '../materials-overview.js';
 
@@ -826,13 +827,13 @@ export const materialsMethods = uiModule({
             return;
         }
         if (mime === 'application/pdf') {
-            window.open(fileUrl(ctx.base, file.sha), '_blank', 'noopener');
+            openBridgeFile(fileUrl(ctx.base, file.sha));
             return;
         }
         // Anything the browser does not show: the system's program, through the research.
         const link = ctx.caps.openLinks !== false ? materialSystemLink(ctx.researchId, file.sha, announcedResearchScheme()) : null;
         if (link) this.launchResearchLink(link);
-        else window.open(fileUrl(ctx.base, file.sha), '_blank', 'noopener');
+        else openBridgeFile(fileUrl(ctx.base, file.sha));
     },
 
     // ==================== THE ⋯ MENU ====================

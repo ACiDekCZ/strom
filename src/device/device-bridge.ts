@@ -230,3 +230,50 @@ export function deviceBridgeBaseNow(): string | null {
     const tree = chosenTreeId();
     return tree && researchDeviceState() ? deviceBridgeBase(tree) : null;
 }
+
+// ——— files of the bridge opened or previewed outside an <img> on the page ———
+
+/** How long a file opened in a new tab keeps its blob URL (the tab has read it by then). */
+const OPENED_FILE_LIFETIME_MS = 60_000;
+
+/**
+ * A file of a device base as a blob URL of its bytes through the tunnel (the
+ * caller revokes it); null when it is no such URL or the bridge gave nothing.
+ */
+export async function deviceBlobUrl(url: string): Promise<string | null> {
+    const asked = deviceBridgeRequest(url);
+    if (!asked) return null;
+    try {
+        const res = await asked;
+        if (!res.ok) return null;
+        return URL.createObjectURL(await res.blob());
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * A file of a device base opened in a new tab (a PDF of the bridge): the tab
+ * opened now (within the click, so no popup blocker stops it), the bytes read
+ * through the tunnel, then shown by a blob URL let go a minute later. The
+ * gateway does not serve the device base itself. False: not such a URL.
+ */
+export function openDeviceFile(url: string, lifetimeMs = OPENED_FILE_LIFETIME_MS): boolean {
+    if (!parseDeviceBridge(url)) return false;
+    const tab = window.open('', '_blank');
+    void deviceBlobUrl(url).then((blob) => {
+        if (!blob) {
+            tab?.close();
+            return;
+        }
+        if (tab && !tab.closed) tab.location.href = blob;
+        else window.open(blob, '_blank');
+        setTimeout(() => URL.revokeObjectURL(blob), lifetimeMs);
+    });
+    return true;
+}
+
+/** A file of the research's bridge opened in a new tab: through the tunnel on a device, else its address as before. */
+export function openBridgeFile(url: string): void {
+    if (!openDeviceFile(url)) window.open(url, '_blank', 'noopener');
+}
