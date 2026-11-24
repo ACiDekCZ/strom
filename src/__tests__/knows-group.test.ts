@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { knowsGroupOptions, knowsGroupShown, knowsGroups, isKnowsGroup, type KnowsGroupLine } from '../knows-group.js';
+import { knowsGroupOptions, knowsGroupShown, knowsGroupedRows, knowsGroups, isKnowsGroup, type KnowsGroupLine } from '../knows-group.js';
 
 interface Row { id: string; lines: string[]; island?: boolean }
 
@@ -67,5 +67,12 @@ describe('knows groups (spec 140)', () => {
         const only = knowsGroups(rows.filter(r => !r.island), 'tree', ctx);
         expect(only.map(x => x.key)).toEqual(['in']);
         expect(only[0].kind).toBe('in');
+    });
+
+    it('guesses the grouped rows for the columns: the bar, a band per group (a long title wrapped up to three lines), an open group\'s rows', () => {
+        expect(knowsGroupedRows([])).toBe(1);
+        expect(knowsGroupedRows([{ title: 'Paternal ancestors', rows: 4 }, { title: 'No line', rows: 0 }])).toBe(1 + (1 + 4) + 1);
+        expect(knowsGroupedRows([{ title: 'x'.repeat(71), rows: 2 }])).toBe(1 + 2 + 2);
+        expect(knowsGroupedRows([{ title: 'x'.repeat(400), rows: 0 }])).toBe(1 + 3);
     });
 });

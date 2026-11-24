@@ -5,6 +5,8 @@
  * the kind chips and the search), each row keeping its place inside a group.
  */
 
+import { GROUP_TITLE_LINES, GROUP_TITLE_LINE_CHARS } from './research-waiting.js';
+
 export type KnowsGroup = 'none' | 'line' | 'tree';
 
 /** The choices the section offers: by line only with lines (K1.5). */
@@ -70,4 +72,15 @@ export function knowsGroups<R>(rows: readonly R[], group: Exclude<KnowsGroup, 'n
     const groups: KnowsGroupOf<R>[] = ctx.lines.map(l => ({ key: l.id, kind: 'line' as const, line: l, rows: byLine.get(l.id) ?? [] }));
     groups.push({ key: 'noLine', kind: 'noLine', rows: noLine });
     return groups.filter(g => g.rows.length > 0);
+}
+
+/**
+ * The rows "What the research knows" grouped adds to the guessed height of
+ * the overview's own window's columns (spec 140): its bar, each band (its
+ * title wrapped like a band of Awaiting action, up to its cap) and the rows
+ * of an open group. Guessed by the text's length, never measured.
+ */
+export function knowsGroupedRows(bands: readonly { title: string; rows: number }[]): number {
+    return 1 + bands.reduce((n, b) =>
+        n + Math.min(GROUP_TITLE_LINES, Math.max(1, Math.ceil(b.title.trim().length / GROUP_TITLE_LINE_CHARS))) + b.rows, 0);
 }

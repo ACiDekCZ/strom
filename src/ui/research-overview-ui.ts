@@ -68,7 +68,7 @@ import { focusQueueMoved, setQueueBranchFilter, waitBranchText, workingWhyText }
 import { setQueueKindFilter } from './queue-kind-ui.js';
 import { beginQueueSlots, endQueueSlots } from '../research-queue-pages.js';
 import { KnowsKind, knowsKindChoice, knowsKindShows } from '../knows-kind.js';
-import { knowsGroupOptions, knowsGroupShown, knowsGroups, type KnowsGroup, type KnowsGroupLine } from '../knows-group.js';
+import { knowsGroupOptions, knowsGroupShown, knowsGroupedRows, knowsGroups, type KnowsGroup, type KnowsGroupLine, type KnowsGroupOf } from '../knows-group.js';
 import { personLineIds, researchLinesOf } from './table-view/table-research.js';
 import { SettingsManager } from '../settings.js';
 import { activeQueueSearch, clearQueueSearch } from './queue-search-ui.js';
@@ -3324,6 +3324,28 @@ export const researchOverviewMethods = uiModule({
         const hasLines = lineModel.lines.length > 0;
         const offerGroups = !fold.collapsed && rows.length >= 2;
         const groupBy = offerGroups ? knowsGroupShown(SettingsManager.getKnowsGroupForTree(treeId), hasLines, rows.length) : 'none';
+        const linesOfPerson = new Map<string, ReadonlySet<string>>();
+        const groupCtx = {
+            lines: lineModel.lines.map((l): KnowsGroupLine => ({ id: l.id, name: l.name?.trim() || L.knowsGroupLineUnnamed, done: l.state === 'done' })),
+            lineIdsOf: (r: typeof rows[number]): ReadonlySet<string> => {
+                let ids = linesOfPerson.get(r.person.id);
+                if (!ids) linesOfPerson.set(r.person.id, ids = personLineIds(lineModel, r.person));
+                return ids;
+            },
+            islandOf: (r: typeof rows[number]): boolean => !!r.person.research?.island,
+        };
+        const groupName = (g: KnowsGroupOf<unknown>): string =>
+            g.line?.name ?? (g.kind === 'noLine' ? L.knowsGroupNoLine : g.kind === 'in' ? L.knowsGroupIn : L.knowsGroupOut);
+        // A phone (P2): only the first group open when the overview opens.
+        const firstOnly = mode === 'sheet' && isMobile();
+        if (groupBy !== 'none') {
+            // Its guessed height in the own window's columns: the bar, each band (its title wrapped) and an open group's rows, without the search.
+            const est = knowsGroups(rows.filter(r => knowsKindShows(choice.kind, r.conflict)), groupBy, groupCtx);
+            noteOverviewSectionRows('knows', knowsGroupedRows(est.map((g, i) => ({
+                title: g.line?.done ? `${groupName(g)} · ${L.knowsLineEnded}` : groupName(g),
+                rows: sectionPartOpen(`${groupBy}:${g.key}`, !firstOnly || i === 0, false, knowsGroupsOpen, null) ? g.rows.length : 0,
+            }))));
+        }
         // The kind chips and Group in one bar (the button wraps under the chips when it does not fit).
         if (choice.chips || offerGroups) {
             const bar = el('div', 'research-overview__knows-bar');
@@ -3406,23 +3428,11 @@ export const researchOverviewMethods = uiModule({
             // Grouped (spec 140 §2, §3): the head of the accepting once over the first group, each group's band and its rows.
             host.classList.add('is-knows-grouped');
             if (accept?.head) host.appendChild(accept.head);
-            const linesOfPerson = new Map<string, ReadonlySet<string>>();
-            const lines: KnowsGroupLine[] = lineModel.lines.map(l => ({ id: l.id, name: l.name?.trim() || L.knowsGroupLineUnnamed, done: l.state === 'done' }));
-            const groups = knowsGroups(shownRows, groupBy, {
-                lines,
-                lineIdsOf: (r) => {
-                    let ids = linesOfPerson.get(r.person.id);
-                    if (!ids) linesOfPerson.set(r.person.id, ids = personLineIds(lineModel, r.person));
-                    return ids;
-                },
-                islandOf: (r) => !!r.person.research?.island,
-            });
-            // A phone (P2): only the first group open when the overview opens.
-            const firstOnly = mode === 'sheet' && isMobile();
+            const groups = knowsGroups(shownRows, groupBy, groupCtx);
             groups.forEach((g, i) => {
                 const key = `${groupBy}:${g.key}`;
                 const open = sectionPartOpen(key, !firstOnly || i === 0, searching, knowsGroupsOpen, search?.searchOpen);
-                const name = g.line?.name ?? (g.kind === 'noLine' ? L.knowsGroupNoLine : g.kind === 'in' ? L.knowsGroupIn : L.knowsGroupOut);
+                const name = groupName(g);
                 const ended = !!g.line?.done;
                 const state = ended ? el('span', 'research-overview__group-state', ` · ${L.knowsLineEnded}`) : undefined;
                 const head = el('div', `research-overview__waiting-grouphead research-overview__knows-grouphead${i === 0 ? ' is-first' : ''}`);
