@@ -494,6 +494,9 @@ test.describe('Statistics window: the birth period fields', () => {
             for (const width of m.widths) expect(width).toBeLessThanOrEqual(70);
             expect(m.labelRight).toBeLessThanOrEqual(m.firstLeft);
             expect(m.sameRow).toBe(true);
+            // The search beside the segments keeps the design's 240 px too.
+            const search = await win.locator('.stv-search').evaluate(el => el.getBoundingClientRect().width);
+            expect(Math.round(search)).toBe(240);
         });
     }
 });
