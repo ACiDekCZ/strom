@@ -152,7 +152,8 @@ test.describe('desktop', () => {
         await expect(dialog.locator('#structure-footer [data-action="openTree"]')).toHaveCount(0);
     });
 
-    for (const [w, h] of [[1440, 900], [1280, 800]] as const) {
+    // Viewports, not screens: 1366 × 657 is a 1366 × 768 laptop's view in Chrome (the lowest, de the tallest).
+    for (const [w, h] of [[1440, 900], [1280, 800], [1366, 657], [1024, 768]] as const) {
         test(`${w}×${h}: every option in view without scrolling, in cs/en/de/pl (none cut at the bottom)`, async ({ page }) => {
             await page.setViewportSize({ width: w, height: h });
             await openApp(page);
@@ -171,11 +172,32 @@ test.describe('desktop', () => {
                     return { scrolls: body.scrollHeight > body.clientHeight + 1, lastCut: last.bottom > box.bottom + 1, offScreen: modal.bottom > window.innerHeight };
                 });
                 expect(fit, lang).toEqual({ scrolls: false, lastCut: false, offScreen: false });
+                await expect(dialog.locator('.modal-content')).not.toHaveClass(/is-scrollable/);
                 await page.keyboard.press('Escape');
                 await expect(dialog).not.toHaveClass(/active/);
             }
         });
     }
+
+    test('a screen too low for every option: the body fades at its bottom while more lies below, not at the end', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 560 });
+        await openApp(page);
+        await createFirstPerson(page, 'Vojtěch', 'Jesenský');
+        await page.evaluate(() => window.Strom.UI.setLanguage('de'));
+        await page.evaluate(() => window.Strom.UI.showStructureDialog(window.Strom.TreeManager.getActiveTreeId()!));
+        const dialog = page.locator('#structure-modal');
+        await expect(dialog).toHaveAttribute('data-step', 'options');
+        const body = dialog.locator('.modal-content');
+        expect(await body.evaluate(el => el.scrollHeight > el.clientHeight + 1)).toBe(true);
+        await expect(body).toHaveClass(/is-scrollable/);
+        await body.evaluate(el => { el.scrollTop = el.scrollHeight; });
+        await expect(body).not.toHaveClass(/is-scrollable/);
+        await expect(body).toHaveClass(/is-scrolled/);
+        // A step drawn into the same body says it again from its own top.
+        await option(dialog, 'file').click();
+        await expect(dialog).toHaveAttribute('data-step', 'file');
+        await expect(body).not.toHaveClass(/is-scrolled/);
+    });
 });
 
 test.describe('phone', () => {
@@ -211,6 +233,32 @@ test.describe('phone', () => {
             await expect(dialog).toBeHidden();
         });
     }
+
+    test('From another tree on a phone: a tree name without spaces wraps inside its row, nothing runs past the screen', async ({ page }) => {
+        const long = 'Rodina_Kalinovskych_bez_mezer_ve_jmenu_stromu';
+        await openApp(page);
+        await createFirstPerson(page, 'Vojtěch', 'Jesenský');
+        await secondTree(page, long);
+        await page.evaluate(() => window.Strom.UI.showStructureDialog(window.Strom.TreeManager.getActiveTreeId()!));
+        const dialog = page.locator('#structure-modal');
+        await option(dialog, 'from').click();
+        await expect(dialog).toHaveAttribute('data-step', 'from');
+        const row = dialog.locator('.structure-choice .sel-opt', { hasText: long });
+        await expect(row).toBeVisible();
+        const fit = await row.evaluate((r) => {
+            const title = r.querySelector<HTMLElement>('.option-title')!;
+            const content = r.closest<HTMLElement>('.modal-content')!;
+            const box = r.getBoundingClientRect();
+            const t = title.getBoundingClientRect();
+            return {
+                row: r.scrollWidth <= r.clientWidth,
+                title: title.scrollWidth <= title.clientWidth && t.right <= box.right,
+                body: content.scrollWidth <= content.clientWidth,
+                page: document.documentElement.scrollWidth <= window.innerWidth,
+            };
+        });
+        expect(fit).toEqual({ row: true, title: true, body: true, page: true });
+    });
 
     // §10.3: who to take as two screens - the kinds, then the kind's pane; ‹ goes a screen back each time.
     test('From a selection on a phone: the kinds, the kind over the whole screen, the summary; ‹ twice from the summary is the options', async ({ page }) => {

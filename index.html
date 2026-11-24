@@ -18298,10 +18298,19 @@
         /* Change structure… (spec 139 §2): the options as rows with the direction of their data, a greyed
            option says why under it (the way out a link beside the sentence, never inside the button). */
         @media (min-width: 641px) { .modal.modal--lg.structure-modal { height: min(600px, 88vh); max-height: min(600px, 88vh); } }
-        /* The options: every option in view without scrolling where the screen has room (de needs ~750px);
-           the other steps keep the fixed height. */
-        @media (min-width: 641px) and (min-height: 501px) { #structure-modal[data-step="options"] .modal.modal--lg.structure-modal { height: auto; max-height: min(800px, 92vh); } }
-        @media (min-width: 1025px) { #structure-modal[data-step="options"] .structure-modal .menu-option { padding-top: 8px; padding-bottom: 8px; } }
+        /* The options: every option in view without scrolling where the screen has room, down to a laptop's
+           1366 x 657 view in German (compact rows and spacing, the dialog up to 16 px from the screen's edges);
+           the other steps keep the fixed height. Rows stay 44 px for touch. */
+        @media (min-width: 641px) and (min-height: 501px) {
+            #structure-modal[data-step="options"] .modal.modal--lg.structure-modal { height: auto; max-height: min(800px, calc(100vh - 32px)); }
+            #structure-modal[data-step="options"] .structure-modal .modal-content { padding-top: 10px; padding-bottom: 10px; }
+            #structure-modal[data-step="options"] .structure-intro { margin-bottom: 8px; }
+            #structure-modal[data-step="options"] .structure-options { gap: 8px; }
+            #structure-modal[data-step="options"] .structure-options .menu-group-title { padding-bottom: 2px; }
+            #structure-modal[data-step="options"] .structure-modal .menu-option { padding-top: 4px; padding-bottom: 4px; }
+            #structure-modal[data-step="options"] .structure-modal .option-text { gap: 1px; }
+            #structure-modal[data-step="options"] .structure-modal .option-desc { line-height: 1.25; }
+        }
         .structure-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
         .structure-heading { min-width: 0; }
         .structure-modal .modal-header h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -18334,6 +18343,8 @@
         .structure-choice .sel-opt[aria-checked="true"] .structure-dot { border: 5px solid var(--text); }
         .structure-choice .sel-opt[aria-disabled="true"] :is(.option-title, .option-desc) { color: var(--text-faint); }
         .structure-choice .sel-opt[aria-disabled="true"] { cursor: default; }
+        /* A tree's name without spaces (an imported file's) wraps inside its row instead of running past it. */
+        .structure-choice :is(.option-title, .option-desc) { overflow-wrap: anywhere; }
         /* The header's way back to the screen before (spec 139 §5.2; shared by the steps and the dialogs opened from here). */
         .modal-back {
             flex: none; display: inline-flex; align-items: center; gap: 2px; height: 32px; padding: 0 8px 0 4px; margin-left: -8px;

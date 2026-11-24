@@ -84,8 +84,15 @@ export function normalizeModal(modal: HTMLElement): void {
  * lies below the fold, driving the bottom fade hint (a CSS mask), and
  * `is-scrolled` while it is scrolled down, driving the top fade (the row
  * going under the header fades out instead of being cut).
+ *
+ * Exported for a dialog whose `.modal-content` is in its HTML (the skeleton
+ * leaves it be) and redrawn screen by screen: `watchContent` also updates
+ * the hint when the body's content is replaced at the same body size.
+ * Once per body (repeated calls do nothing).
  */
-function attachScrollHint(content: HTMLElement): void {
+export function attachScrollHint(content: HTMLElement, watchContent = false): void {
+    if (content.dataset.scrollHint) return;
+    content.dataset.scrollHint = '1';
     const update = (): void => {
         const scrollable = content.scrollHeight - content.clientHeight > 1;
         const atBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 1;
@@ -96,6 +103,14 @@ function attachScrollHint(content: HTMLElement): void {
     if (typeof ResizeObserver !== 'undefined') {
         const ro = new ResizeObserver(update);
         ro.observe(content);
+    }
+    if (watchContent && typeof MutationObserver !== 'undefined') {
+        let queued = false;
+        new MutationObserver(() => {
+            if (queued) return;
+            queued = true;
+            requestAnimationFrame(() => { queued = false; update(); });
+        }).observe(content, { childList: true, subtree: true });
     }
     // Initial pass once layout settles (modal may be display:none at wrap time).
     requestAnimationFrame(update);

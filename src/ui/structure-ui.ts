@@ -30,6 +30,7 @@ import {
 import { uiModule } from './module.js';
 import { SPLIT_SHOWN_AT_ONCE } from './split-ui.js';
 import { MODAL_BACK_CHEVRON } from './modal-back.js';
+import { attachScrollHint } from './modal-skeleton.js';
 import { componentsKey, componentsOf } from './components-cache.js';
 import type { TreeActionSource } from './tree-actions.js';
 import { treeOriginText } from './tree-origin.js';
@@ -373,6 +374,8 @@ export const structureMethods = uiModule({
             back.setAttribute('aria-label', `${strings.structure.back}: ${label}`);
             back.onclick = () => this.structureBack();
         }
+        // The fade at the body's bottom while more lies below (a short laptop screen, a tablet).
+        attachScrollHint(body, true);
         body.replaceChildren();
         footer.replaceChildren();
         body.scrollTop = 0;
