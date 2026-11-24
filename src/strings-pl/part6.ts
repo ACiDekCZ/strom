@@ -750,6 +750,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         optPartsDesc: 'Części, których nic nie łączy. Powstaną nowe drzewa, to drzewo się nie zmienia.',
         optInto: 'Wybór lub całe drzewo do innego drzewa…',
         optIntoDesc: 'Przez kreator scalania. Zmieni się drzewo docelowe; można cofnąć.',
+        optFrom: 'Z innego drzewa do tego drzewa…',
+        optFromDesc: 'Przez kreator scalania. Zmieni się to drzewo; można cofnąć.',
         optFile: 'Dodaj z pliku do tego drzewa…',
         optFileDesc: 'GEDCOM lub plik Strom (JSON), przez kreator scalania. Zmieni się to drzewo; można cofnąć.',
         whyNotOpen: 'Po otwarciu drzewa.',
@@ -769,6 +771,11 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         joinSelectionDesc: 'Ród, lista, linia, bieżący widok albo ręcznie – jak przy nowym drzewie.',
         joinNote: 'Dalej kreator scalania: dokąd, kto jest kim, co się zmieni. To drzewo się nie zmienia; docelowe zmieni się dopiero po potwierdzeniu w kreatorze i można to cofnąć.',
         continueGuide: 'Przejdź do kreatora',
+        // ---- Join › from another tree into this tree (K3.2): which tree ----
+        fromTitle: 'Dodaj z innego drzewa',
+        fromStep: 'z którego drzewa',
+        fromIntro: 'Które drzewo dodać do tego drzewa. Wybiera się całe; zawęzić je można w pierwszym kroku kreatora.',
+        fromNote: 'Dalej kreator scalania: co wziąć, kto jest kim, co się zmieni. Wybrane drzewo się nie zmienia; to drzewo zmieni się dopiero po potwierdzeniu w kreatorze i można to cofnąć.',
         joinPartners: (n: number, people: string) => n === 1
             ? `Razem z nimi przejdzie też partner – drugi rodzic wybranego dziecka, łącznie ${people}.`
             : `Razem z nimi przejdą też ich partnerzy (${n}) – drudzy rodzice wybranych dzieci, łącznie ${people}.`,

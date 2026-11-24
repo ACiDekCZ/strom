@@ -32,6 +32,7 @@ import { SPLIT_SHOWN_AT_ONCE } from './split-ui.js';
 import { MODAL_BACK_CHEVRON } from './modal-back.js';
 import { componentsKey, componentsOf } from './components-cache.js';
 import type { TreeActionSource } from './tree-actions.js';
+import { treeOriginText } from './tree-origin.js';
 
 export const STRUCTURE_MODAL_ID = 'structure-modal';
 const MODAL_ID = STRUCTURE_MODAL_ID;
@@ -121,6 +122,7 @@ function optionText(key: StructureOptionKey): { title: string; desc: string } {
         case 'families': return { title: t.optFamilies, desc: t.optFamiliesDesc };
         case 'parts': return { title: strings.split.menu, desc: t.optPartsDesc };
         case 'into': return { title: t.optInto, desc: t.optIntoDesc };
+        case 'from': return { title: t.optFrom, desc: t.optFromDesc };
         case 'file': return { title: t.optFile, desc: t.optFileDesc };
     }
 }
@@ -191,6 +193,72 @@ function arrowKeys(host: HTMLElement, selector: string): void {
                     : (at < 0 ? items.length - 1 : Math.max(0, at - 1));
         items[next].focus();
     });
+}
+
+/** One choice of a step's radio group (§6.1): its title, the line under it, and why it cannot be chosen. */
+interface StructureRadioItem {
+    value: string;
+    title: string;
+    desc: string;
+    why?: string;
+}
+
+/**
+ * The choices of a step as a radio group of `.sel-opt` rows with a dot (the
+ * join step's "what", the trees of From another tree): a click or ↑ ↓ ← →
+ * choose, greyed rows are skipped. `key` names the data attribute carrying
+ * the value (`data-join`, `data-tree`). The first live row starts chosen.
+ */
+function structureRadioGroup(label: string, key: string, items: StructureRadioItem[]): { group: HTMLElement; chosen: () => string; focus: () => void } {
+    const group = el('div', 'structure-choice');
+    group.setAttribute('role', 'radiogroup');
+    group.setAttribute('aria-label', label);
+    let chosen = items.find(i => !i.why)?.value ?? '';
+    const choices: HTMLButtonElement[] = [];
+    const sync = (): void => {
+        for (const btn of choices) {
+            const on = btn.dataset[key] === chosen;
+            btn.setAttribute('aria-checked', String(on));
+            btn.tabIndex = on ? 0 : -1;
+        }
+    };
+    for (const item of items) {
+        const btn = el('button', 'sel-opt');
+        btn.type = 'button';
+        btn.setAttribute('role', 'radio');
+        btn.dataset[key] = item.value;
+        const dot = el('span', 'structure-dot');
+        dot.setAttribute('aria-hidden', 'true');
+        const text = el('span', 'option-text');
+        text.append(el('span', 'option-title', item.title), el('span', 'option-desc', item.why ? `${item.desc} ${item.why}` : item.desc));
+        btn.append(dot, text);
+        if (item.why) btn.setAttribute('aria-disabled', 'true');
+        btn.addEventListener('click', () => {
+            if (btn.getAttribute('aria-disabled') === 'true') return;
+            chosen = item.value;
+            sync();
+        });
+        choices.push(btn);
+        group.appendChild(btn);
+    }
+    // ↑ ↓ choose, as a radio group does.
+    group.addEventListener('keydown', (e) => {
+        if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+        const live = choices.filter(b => b.getAttribute('aria-disabled') !== 'true');
+        const at = live.findIndex(b => b.dataset[key] === chosen);
+        const to = live[(at + (e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : live.length - 1)) % live.length];
+        if (!to) return;
+        e.preventDefault();
+        chosen = to.dataset[key] ?? chosen;
+        sync();
+        to.focus();
+    });
+    sync();
+    return {
+        group,
+        chosen: () => chosen,
+        focus: () => (choices.find(b => b.dataset[key] === chosen) ?? choices[0])?.focus({ preventScroll: true }),
+    };
 }
 
 export const structureMethods = uiModule({
@@ -444,6 +512,9 @@ export const structureMethods = uiModule({
             case 'into':
                 this.structureGo(this.structureJoinWhatStep());
                 return;
+            case 'from':
+                this.structureGo(this.structureFromStep());
+                return;
             case 'file':
                 this.structureGo(this.structureFileStep());
                 return;
@@ -480,63 +551,19 @@ export const structureMethods = uiModule({
         const t = strings.structure;
         const isActive = treeId === TreeManager.getActiveTreeId();
         body.appendChild(el('p', 'structure-intro', t.joinWhatIntro));
-        const group = el('div', 'structure-choice');
-        group.setAttribute('role', 'radiogroup');
-        group.setAttribute('aria-label', t.joinWhatIntro);
-        let chosen: 'whole' | 'selection' = 'whole';
-        const choices: HTMLButtonElement[] = [];
-        const choice = (value: 'whole' | 'selection', title: string, desc: string, why?: string): HTMLButtonElement => {
-            const btn = el('button', 'sel-opt');
-            btn.type = 'button';
-            btn.setAttribute('role', 'radio');
-            btn.dataset.join = value;
-            const dot = el('span', 'structure-dot');
-            dot.setAttribute('aria-hidden', 'true');
-            const text = el('span', 'option-text');
-            text.append(el('span', 'option-title', title), el('span', 'option-desc', why ? `${desc} ${why}` : desc));
-            btn.append(dot, text);
-            if (why) btn.setAttribute('aria-disabled', 'true');
-            btn.addEventListener('click', () => {
-                if (btn.getAttribute('aria-disabled') === 'true') return;
-                chosen = value;
-                sync();
-            });
-            choices.push(btn);
-            return btn;
-        };
-        const sync = (): void => {
-            for (const btn of choices) {
-                const on = btn.dataset.join === chosen;
-                btn.setAttribute('aria-checked', String(on));
-                btn.tabIndex = on ? 0 : -1;
-            }
-        };
-        group.append(
-            choice('whole', t.joinWhole(tree.name), t.joinWholeDesc(strings.treeManager.persons(tree.personCount))),
-            choice('selection', t.joinSelection, t.joinSelectionDesc, isActive ? undefined : t.whyNotOpen),
-        );
-        // ↑ ↓ choose, as a radio group does.
-        group.addEventListener('keydown', (e) => {
-            if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
-            const live = choices.filter(b => b.getAttribute('aria-disabled') !== 'true');
-            const at = live.findIndex(b => b.dataset.join === chosen);
-            const to = live[(at + (e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : live.length - 1)) % live.length];
-            if (!to) return;
-            e.preventDefault();
-            chosen = to.dataset.join as 'whole' | 'selection';
-            sync();
-            to.focus();
-        });
-        sync();
-        body.appendChild(group);
+        const radios = structureRadioGroup(t.joinWhatIntro, 'join', [
+            { value: 'whole', title: t.joinWhole(tree.name), desc: t.joinWholeDesc(strings.treeManager.persons(tree.personCount)) },
+            { value: 'selection', title: t.joinSelection, desc: t.joinSelectionDesc, why: isActive ? undefined : t.whyNotOpen },
+        ]);
+        body.appendChild(radios.group);
         body.appendChild(el('p', 'structure-note', t.joinNote));
 
         // §6.1: Back · Continue to the guide.
         footer.append(footerButton(t.back, 'secondary', () => this.structureBack()), structureCancelButton(() => this.closeStructureDialog()));
-        const go = footerButton(t.continueGuide, 'primary', () => void this.structureJoin(chosen));
+        const go = footerButton(t.continueGuide, 'primary', () => void this.structureJoin(radios.chosen() as 'whole' | 'selection'));
         go.dataset.action = 'continue';
         footer.appendChild(go);
-        choices[0].focus({ preventScroll: true });
+        radios.focus();
     },
 
     /**
@@ -570,6 +597,61 @@ export const structureMethods = uiModule({
         await this.mergeSubsetInto(treeId, ids, name ? `${name} — ${what}` : what);
         if (state !== mine) return;
         if (document.getElementById('merge-modal')?.classList.contains('active')) this.structureLeaveFor(parent);
+    },
+
+    // ---- Join › from another tree into this tree (K3.2, K3.3) ----
+
+    structureFromStep(): StructureStep {
+        const treeId = state!.treeId;
+        const name = TreeManager.getTreeMetadata(treeId)?.name ?? '';
+        return {
+            key: 'from',
+            title: strings.structure.fromTitle,
+            sub: `${name} · ${strings.structure.fromStep}`,
+            render: (view) => this.renderStructureFrom(view),
+        };
+    },
+
+    /**
+     * Which tree to take in: every other tree of the app (hidden ones, copies
+     * and trees of another research too), alphabetically as in Manage trees,
+     * each with its people and its origin line from there (a copy, its
+     * research). The whole tree is chosen; the guide's step 1 narrows it.
+     */
+    renderStructureFrom(view: StructureView): void {
+        const { treeId, body, footer } = view;
+        const t = strings.structure;
+        const tm = strings.treeManager;
+        const trees = TreeManager.getTrees().filter(tr => tr.id !== treeId).sort((a, b) => a.name.localeCompare(b.name));
+        body.appendChild(el('p', 'structure-intro', t.fromIntro));
+        const radios = structureRadioGroup(t.fromIntro, 'tree', trees.map(tr => ({
+            value: tr.id,
+            title: tr.name,
+            desc: [tm.persons(tr.personCount), treeOriginText(tr), tr.isHidden ? tm.hiddenBadge : ''].filter(Boolean).join(' · '),
+        })));
+        body.appendChild(radios.group);
+        body.appendChild(el('p', 'structure-note', t.fromNote));
+        footer.append(footerButton(t.back, 'secondary', () => this.structureBack()), structureCancelButton(() => this.closeStructureDialog()));
+        const go = footerButton(t.continueGuide, 'primary', () => void this.structureJoinFrom(radios.chosen() as TreeId));
+        go.dataset.action = 'continue';
+        if (trees.length === 0) go.disabled = true;
+        footer.appendChild(go);
+        radios.focus();
+    },
+
+    /**
+     * The chosen tree into the open one through the merge guide: the tree is
+     * its import (read, never written), the open tree its target (spec 134
+     * §2, 2c, as Manage trees' "Merge into another tree…" of that tree). The
+     * dialog stays when the guide does not open (the tree unreadable).
+     */
+    async structureJoinFrom(sourceId: TreeId): Promise<void> {
+        if (!state || !TreeManager.getTreeMetadata(sourceId)) return;
+        const { parent } = state;
+        const mine = state;
+        await this.showMergeTreesDialog(sourceId, parent);
+        if (state !== mine) return;
+        if (document.getElementById('merge-modal')?.classList.contains('active')) this.closeStructureDialog(false);
     },
 
     // ---- Join › add from a file to this tree (§6.2) ----

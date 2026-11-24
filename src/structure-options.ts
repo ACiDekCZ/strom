@@ -18,7 +18,7 @@ import type { StructureDirKind } from './icons.js';
 export type StructureGroupKey = 'newTree' | 'split' | 'join';
 
 /** The options in the dialog's order (§2.2). */
-export type StructureOptionKey = 'select' | 'copy' | 'families' | 'parts' | 'into' | 'file';
+export type StructureOptionKey = 'select' | 'copy' | 'families' | 'parts' | 'into' | 'from' | 'file';
 
 /** Why an option is greyed out (structure.why*). */
 export type StructureReason = 'notOpen' | 'connected' | 'noOther' | 'followed';
@@ -65,6 +65,7 @@ const OPTIONS: ReadonlyArray<Pick<StructureOption, 'key' | 'group' | 'dir'>> = [
     { key: 'families', group: 'split', dir: 'split' },
     { key: 'parts', group: 'split', dir: 'split' },
     { key: 'into', group: 'join', dir: 'into' },
+    { key: 'from', group: 'join', dir: 'from' },
     { key: 'file', group: 'join', dir: 'file' },
 ];
 
@@ -80,6 +81,11 @@ function blocked(key: StructureOptionKey, ctx: StructureContext): Pick<Structure
             return ctx.connected === true ? { reason: 'connected' } : null;
         case 'into':
             return ctx.otherTrees ? null : { reason: 'noOther' };
+        // From another tree (K3.2): another tree to take, and the open tree written to as for a file.
+        case 'from':
+            if (!ctx.otherTrees) return { reason: 'noOther' };
+            if (!ctx.isActive) return { reason: 'notOpen' };
+            return ctx.liveFollowing ? { reason: 'followed', reasonAction: 'stopFollowing' } : null;
         // The guide writes into the open tree: it has to be open and writable.
         case 'file':
             if (!ctx.isActive) return { reason: 'notOpen' };

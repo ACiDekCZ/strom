@@ -205,6 +205,81 @@ test.describe('Join (§6)', () => {
         expect(await treeCount(page)).toBe(trees);
     });
 
+    test('From another tree (K3.2, K3.3): every other tree with its origin; the guide takes the chosen one into this tree, which stays as it was, and Undo takes it back', async ({ page }) => {
+        await openApp(page);
+        await seedTree(page, JESENSTI, 'Jesenští', 'vojtech');
+        await secondTree(page, 'Rodina Kalinovských');
+        // A copy of this tree and a hidden tree: offered too, said as Manage trees says them.
+        const ids = await page.evaluate(async () => {
+            const TM = window.Strom.TreeManager;
+            const open = TM.getActiveTreeId()!;
+            const copy = await TM.duplicateTree(open, 'Jesenští – kopie');
+            const hidden = TM.createTree('Archiv Ostrožných');
+            TM.setTreeVisibility(hidden, true);
+            const source = TM.getTrees().find((t: { name: string }) => t.name === 'Rodina Kalinovských')!.id;
+            return { open, copy, hidden, source };
+        });
+        const sourceNow = () => page.evaluate(async (id) => {
+            const TM = window.Strom.TreeManager;
+            const meta = TM.getTreeMetadata(id)!;
+            return JSON.stringify({ data: await TM.getTreeData(id), at: meta.lastModifiedAt, n: meta.personCount, merges: meta.mergeCount ?? 0 });
+        }, ids.source);
+        const sourceBefore = await sourceNow();
+        const trees = await treeCount(page);
+        const before = await realPeople(page);
+
+        const dialog = await openStructureDialog(page, await openTreeActions(page));
+        const from = option(dialog, 'from');
+        await expect(from.locator('.option-title')).toHaveText('From another tree into this tree…');
+        await expect(from.locator('.option-desc')).toHaveText('Through the merge guide. This tree changes; this can be undone.');
+        // Its own row right under "A selection or the whole tree into another tree…".
+        expect(await dialog.locator('.menu-option').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action).slice(-3))).toEqual(['into', 'from', 'file']);
+        await from.click();
+        await expect(dialog).toHaveAttribute('data-step', 'from');
+        await expect(dialog.locator('#structure-title')).toHaveText('Add from another tree');
+        await expect(dialog.locator('#structure-sub')).toHaveText('Jesenští · from which tree');
+        const rows = dialog.locator('.structure-choice [role="radio"]');
+        // Every other tree (not the open one), alphabetically as in Manage trees; the first one chosen.
+        await expect(rows.locator('.option-title')).toHaveText(['Archiv Ostrožných', 'Jesenští – kopie', 'Rodina Kalinovských']);
+        await expect(rows.nth(0)).toHaveAttribute('aria-checked', 'true');
+        await expect(rows.nth(0).locator('.option-desc')).toHaveText('0 people · no research · Hidden');
+        await expect(rows.nth(1).locator('.option-desc')).toHaveText('10 people · copy of the tree “Jesenští” · no research');
+        await expect(rows.nth(2).locator('.option-desc')).toHaveText('1 person · no research');
+        await expect(dialog.locator('#structure-footer button')).toHaveText(['Back', 'Cancel', 'Continue to the guide']);
+        // ↓ chooses as a radio group does.
+        await rows.nth(0).focus();
+        await page.keyboard.press('ArrowDown');
+        await expect(rows.nth(1)).toHaveAttribute('aria-checked', 'true');
+        await expect(rows.nth(1)).toBeFocused();
+        await dialog.locator(`[data-tree="${ids.source}"]`).click();
+        await expect(rows.nth(2)).toHaveAttribute('aria-checked', 'true');
+        await expect(rows.nth(1)).toHaveAttribute('aria-checked', 'false');
+        await dialog.locator('[data-action="continue"]').click();
+
+        // The guide: the chosen tree is the import, the open tree the target (the source is no target).
+        const wizard = page.locator('#merge-modal');
+        await expect(wizard).toBeVisible();
+        await expect(dialog).toBeHidden();
+        await expect(wizard.locator('.merge-s1-name')).toHaveText('Rodina Kalinovských');
+        await expect(wizard.locator('.merge-s1-target', { hasText: 'Rodina Kalinovských' })).toHaveCount(0);
+        await expect(wizard.locator(`.merge-s1-target[data-tree="${ids.open}"] input`)).toBeChecked();
+        await mergeCompare(wizard);
+        await mergeWrite(wizard, 'tree');
+        await mergeDone(wizard);
+        await expect.poll(() => realPeople(page)).toBe(before + 1);
+        expect(await treeCount(page)).toBe(trees);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(ids.open);
+        // The source tree is not touched: its data and index entry are as before.
+        expect(await sourceNow()).toBe(sourceBefore);
+
+        // Undo as for every merge: this tree as it was, the source still the same.
+        const toast = page.locator('.toast.show', { hasText: 'added to the tree Jesenští' });
+        await toast.locator('.toast-action', { hasText: 'Undo' }).click();
+        await expect.poll(() => realPeople(page)).toBe(before);
+        expect(await sourceNow()).toBe(sourceBefore);
+        expect(await treeCount(page)).toBe(trees);
+    });
+
     test('Import… of a Strom file still makes a new tree, also after the file of Add from a file was not chosen', async ({ page }) => {
         await openApp(page);
         await seedTree(page, JESENSTI, 'Jesenští', 'vojtech');

@@ -7028,6 +7028,8 @@ const stringsEN = {
         optPartsDesc: 'Parts nothing connects. New trees are created; this tree stays as it is.',
         optInto: 'A selection or the whole tree into another tree…',
         optIntoDesc: 'Through the merge guide. The target tree changes; this can be undone.',
+        optFrom: 'From another tree into this tree…',
+        optFromDesc: 'Through the merge guide. This tree changes; this can be undone.',
         optFile: 'Add from a file to this tree…',
         optFileDesc: 'GEDCOM or a Strom file (JSON), through the merge guide. This tree changes; this can be undone.',
         whyNotOpen: 'Once the tree is open.',
@@ -7047,6 +7049,11 @@ const stringsEN = {
         joinSelectionDesc: 'A family line, a list, a line, the current view or by hand – as for a new tree.',
         joinNote: 'Next comes the merge guide: where to, who is who, what changes. This tree stays as it is; the target changes only once confirmed in the guide, and it can be undone.',
         continueGuide: 'Continue to the guide',
+        // ---- Join › from another tree into this tree (K3.2): which tree ----
+        fromTitle: 'Add from another tree',
+        fromStep: 'from which tree',
+        fromIntro: 'Which tree to add to this tree. The whole tree is chosen; the guide\'s first step can narrow it.',
+        fromNote: 'Next comes the merge guide: what to take, who is who, what changes. The chosen tree stays as it is; this tree changes only once confirmed in the guide, and it can be undone.',
         /**
          * Under "Selected: …" of Join › A selection (spec 139 §6.1): the partners
          * the guide brings along (the other parents of chosen children) and
@@ -18663,6 +18670,8 @@ const stringsCZ: StringsType = {
         optPartsDesc: 'Části, které nic nespojuje. Vzniknou nové stromy, tento strom se nemění.',
         optInto: 'Výběr nebo celý strom do jiného stromu…',
         optIntoDesc: 'Přes průvodce sloučením. Změní se cílový strom; jde vrátit.',
+        optFrom: 'Z jiného stromu do tohoto stromu…',
+        optFromDesc: 'Přes průvodce sloučením. Změní se tento strom; jde vrátit.',
         optFile: 'Přidat ze souboru do tohoto stromu…',
         optFileDesc: 'GEDCOM nebo soubor Strom (JSON), přes průvodce sloučením. Změní se tento strom; jde vrátit.',
         whyNotOpen: 'Po otevření stromu.',
@@ -18682,6 +18691,11 @@ const stringsCZ: StringsType = {
         joinSelectionDesc: 'Rod, seznam osob, linie, aktuální pohled nebo ručně – jako u nového stromu.',
         joinNote: 'Dál pokračuje průvodce sloučením: kam, kdo je kdo, co se změní. Tento strom se nemění; cílový strom se změní až po potvrzení v průvodci a jde vrátit.',
         continueGuide: 'Pokračovat k průvodci',
+        // ---- Join › from another tree into this tree (K3.2): which tree ----
+        fromTitle: 'Přidat z jiného stromu',
+        fromStep: 'z kterého stromu',
+        fromIntro: 'Který strom přidat do tohoto stromu. Vybírá se celý; zúžit ho jde v prvním kroku průvodce.',
+        fromNote: 'Dál pokračuje průvodce sloučením: co vzít, kdo je kdo, co se změní. Vybraný strom se nemění; tento strom se změní až po potvrzení v průvodci a jde vrátit.',
         joinPartners: (n: number, people: string) => plural('cs', n,
             `S nimi přejde i 1 partner, druhý rodič vybraného dítěte – celkem ${people}.`,
             `S nimi přejdou i ${n} partneři, druzí rodiče vybraných dětí – celkem ${people}.`,
@@ -30119,6 +30133,8 @@ const stringsDE: StringsType = {
         optPartsDesc: 'Teile, die nichts verbindet. Neue Stammbäume entstehen, dieser bleibt unverändert.',
         optInto: 'Auswahl oder ganzen Stammbaum in einen anderen…',
         optIntoDesc: 'Über den Zusammenführungs-Assistenten. Der Zielstammbaum ändert sich; rückgängig machbar.',
+        optFrom: 'Aus einem anderen Stammbaum in diesen…',
+        optFromDesc: 'Über den Zusammenführungs-Assistenten. Dieser Stammbaum ändert sich; rückgängig machbar.',
         optFile: 'Aus einer Datei in diesen Stammbaum…',
         optFileDesc: 'GEDCOM oder Strom-Datei (JSON), über den Zusammenführungs-Assistenten. Dieser Stammbaum ändert sich; rückgängig machbar.',
         whyNotOpen: 'Nach dem Öffnen des Stammbaums.',
@@ -30138,6 +30154,11 @@ const stringsDE: StringsType = {
         joinSelectionDesc: 'Geschlecht, Liste, Linie, aktuelle Ansicht oder von Hand – wie beim neuen Stammbaum.',
         joinNote: 'Danach folgt der Zusammenführungs-Assistent: wohin, wer ist wer, was sich ändert. Dieser Stammbaum bleibt unverändert; das Ziel ändert sich erst nach Bestätigung im Assistenten und ist rückgängig machbar.',
         continueGuide: 'Weiter zum Assistenten',
+        // ---- Join › from another tree into this tree (K3.2): which tree ----
+        fromTitle: 'Aus einem anderen Stammbaum übernehmen',
+        fromStep: 'aus welchem Stammbaum',
+        fromIntro: 'Welcher Stammbaum in diesen übernommen wird. Gewählt wird der ganze; eingrenzen lässt er sich im ersten Schritt des Assistenten.',
+        fromNote: 'Danach folgt der Zusammenführungs-Assistent: was übernommen wird, wer ist wer, was sich ändert. Der gewählte Stammbaum bleibt unverändert; dieser ändert sich erst nach Bestätigung im Assistenten und ist rückgängig machbar.',
         joinPartners: (n: number, people: string) => n === 1
             ? `Mit ihnen kommt auch 1 Partner mit, der andere Elternteil eines gewählten Kindes – insgesamt ${people}.`
             : `Mit ihnen kommen auch ${n} Partner mit, die anderen Elternteile gewählter Kinder – insgesamt ${people}.`,

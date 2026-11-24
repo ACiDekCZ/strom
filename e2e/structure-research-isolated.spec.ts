@@ -228,13 +228,16 @@ test('the tree followed live: "◎ Followed live" with End following in its row;
     // Only that tree: the other row says nothing of following.
     await expect(manager(page).locator('.tree-manager-item-followed')).toHaveCount(1);
 
-    // Change structure… in its row; in the dialog only "Add from a file to this tree…" is greyed, with End following.
+    // Change structure… in its row; in the dialog only what writes into this tree ("From another tree into this
+    // tree…", "Add from a file to this tree…") is greyed, with End following.
     await item.locator('[data-row-action="structure"]').click();
     const dialog = page.locator('#structure-modal');
     await expect(dialog).toBeVisible();
     const option = (key: string) => dialog.locator(`.menu-option[data-action="${key}"]`);
-    await expect(option('file')).toHaveAttribute('aria-disabled', 'true');
-    await expect(dialog.locator('#structure-why-file')).toContainText('End following');
+    for (const key of ['from', 'file']) {
+        await expect(option(key)).toHaveAttribute('aria-disabled', 'true');
+        await expect(dialog.locator(`#structure-why-${key}`)).toContainText('End following');
+    }
     for (const key of ['select', 'copy', 'families', 'into']) await expect(option(key)).not.toHaveAttribute('aria-disabled', 'true');
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();

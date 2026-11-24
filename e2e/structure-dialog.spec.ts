@@ -7,7 +7,7 @@ import { openApp, createFirstPerson, openTreeActions, openStructureDialog, seedT
  * the steps of an option are further screens of the same dialog.
  */
 
-const OPTION_KEYS = ['select', 'copy', 'families', 'parts', 'into', 'file'];
+const OPTION_KEYS = ['select', 'copy', 'families', 'parts', 'into', 'from', 'file'];
 
 /** A second, empty tree; the first one stays open. */
 async function secondTree(page: Page, name: string): Promise<void> {
@@ -35,9 +35,9 @@ test.describe('desktop', () => {
         expect(await dialog.locator('.menu-option').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action))).toEqual(OPTION_KEYS);
         await expect(dialog.locator('.menu-option .option-title')).toHaveText([
             'From a selection…', 'Copy of the whole tree', 'Into families…', 'Separate disconnected parts…',
-            'A selection or the whole tree into another tree…', 'Add from a file to this tree…',
+            'A selection or the whole tree into another tree…', 'From another tree into this tree…', 'Add from a file to this tree…',
         ]);
-        await expect(dialog.locator('.menu-option svg.structure-dir')).toHaveCount(6);
+        await expect(dialog.locator('.menu-option svg.structure-dir')).toHaveCount(7);
         // No back button on the first screen; Close only (the tree is open).
         await expect(dialog.locator('#structure-back')).toBeHidden();
         await expect(dialog.locator('#structure-footer button')).toHaveText(['Close']);
@@ -95,6 +95,8 @@ test.describe('desktop', () => {
         let dialog = await openStructureDialog(page, await openTreeActions(page));
         await expect(option(dialog, 'into')).toHaveAttribute('aria-disabled', 'true');
         await expect(dialog.locator('#structure-why-into')).toHaveText('There is no other tree.');
+        await expect(option(dialog, 'from')).toHaveAttribute('aria-disabled', 'true');
+        await expect(dialog.locator('#structure-why-from')).toHaveText('There is no other tree.');
         await option(dialog, 'into').click({ force: true });
         await expect(dialog).toHaveAttribute('data-step', 'options');
         await page.keyboard.press('Escape');
@@ -121,7 +123,7 @@ test.describe('desktop', () => {
         const dialog = await openStructureDialog(page, row.locator('.tree-manager-item-actions'));
         await expect(manager).not.toHaveClass(/active/);
         await expect(dialog.locator('#structure-title')).toHaveText('Change structure: Ostrožní z Mezihoře');
-        for (const key of ['select', 'file']) {
+        for (const key of ['select', 'from', 'file']) {
             await expect(option(dialog, key)).toHaveAttribute('aria-disabled', 'true');
             await expect(dialog.locator(`#structure-why-${key}`)).toHaveText('Once the tree is open.');
         }

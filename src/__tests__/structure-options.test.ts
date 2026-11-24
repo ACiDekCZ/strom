@@ -16,12 +16,12 @@ function byKey(ctx: Partial<StructureContext>) {
 }
 
 describe('structureOptions', () => {
-    it('lists all six options in the dialog order, grouped, with their direction', () => {
+    it('lists all seven options in the dialog order, grouped, with their direction', () => {
         const options = structureOptions(base);
         expect(options.map(o => `${o.group}/${o.key}/${o.dir}`)).toEqual([
             'newTree/select/new', 'newTree/copy/new',
             'split/families/split', 'split/parts/split',
-            'join/into/into', 'join/file/file',
+            'join/into/into', 'join/from/from', 'join/file/file',
         ]);
         expect(options.every(o => o.enabled && !o.reason)).toBe(true);
     });
@@ -30,6 +30,7 @@ describe('structureOptions', () => {
         const o = byKey({ isActive: false });
         expect(o.select).toMatchObject({ enabled: false, reason: 'notOpen' });
         expect(o.file).toMatchObject({ enabled: false, reason: 'notOpen' });
+        expect(o.from).toMatchObject({ enabled: false, reason: 'notOpen' });
         expect(o.copy.enabled).toBe(true);
         expect(o.families.enabled).toBe(true);
         expect(o.parts.enabled).toBe(true);
@@ -49,14 +50,21 @@ describe('structureOptions', () => {
     it('the only tree has nothing to join into', () => {
         const o = byKey({ otherTrees: false });
         expect(o.into).toMatchObject({ enabled: false, reason: 'noOther' });
+        expect(o.from).toMatchObject({ enabled: false, reason: 'noOther' });
         expect(o.file.enabled).toBe(true);
     });
 
     it('a followed tree cannot take a file; the reason offers to end following', () => {
         const o = byKey({ liveFollowing: true });
         expect(o.file).toMatchObject({ enabled: false, reason: 'followed', reasonAction: 'stopFollowing' });
+        expect(o.from).toMatchObject({ enabled: false, reason: 'followed', reasonAction: 'stopFollowing' });
         expect(o.select.enabled).toBe(true);
         expect(o.into.enabled).toBe(true);
+    });
+
+    it('from another tree (K3.2): the only tree has none to take and says so before it says to open it', () => {
+        expect(byKey({ otherTrees: false, isActive: false }).from).toMatchObject({ enabled: false, reason: 'noOther' });
+        expect(byKey({}).from).toMatchObject({ enabled: true, group: 'join', dir: 'from' });
     });
 
     it('a read-only tree has no dialog', () => {

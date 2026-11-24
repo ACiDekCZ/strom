@@ -159,6 +159,9 @@ test('Change structure: every step follows its kind, closed and open', async ({ 
     await dialog.locator('.menu-option[data-action="into"]').click();
     await step('join-what');
     await dialog.locator('#structure-back').click();
+    await dialog.locator('.menu-option[data-action="from"]').click();
+    await step('from');
+    await dialog.locator('#structure-back').click();
     await dialog.locator('.menu-option[data-action="file"]').click();
     await step('file');
     // Cancel of a step that leads on closes the whole dialog.
