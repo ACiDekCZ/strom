@@ -39,7 +39,7 @@ import { canPromptInstall, promptInstall } from '../pwa.js';
 import { whilePicking } from './file-pick.js';
 import { setPendingAdopt, clearPendingAdopt } from './pending-adopt.js';
 import { researchSendModeCardsHtml, researchSendPrinciplesHtml, researchSendModeChecked, researchTrialTagHtml } from './research-tree-settings-ui.js';
-import { researchSendMode } from './research-sync-ui.js';
+import { researchSendMode, knownResearchTreesRoot } from './research-sync-ui.js';
 import { AdoptProgress, type AdoptPhase, type AdoptStep } from './adopt-progress.js';
 import { TreeEditLock } from './tree-edit-lock.js';
 import { holdLeave } from './busy-leave.js';
@@ -328,6 +328,11 @@ export const researchAdoptMethods = uiModule({
         const original = TreeManager.researchOriginalOf(treeId);
         const originalName = original?.name ?? TreeManager.researchCopyOrigin(treeId)?.name ?? copy.copyOf?.name ?? '';
         const rid = original?.research ? researchShortId(original.research.id) : '';
+        // The folder researches are made in here, when a bridge said it (§11.4): a prefix, the name stays the only field.
+        const root = knownResearchTreesRoot(original?.research?.id);
+        const sep = root && root.includes('\\') && !root.includes('/') ? '\\' : '/';
+        const rootHtml = root
+            ? `<span class="copy-research-root" id="copy-research-root" title="${esc(root + sep)}"><bdi dir="ltr">${esc(root + sep)}</bdi></span>` : '';
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = COPY_RESEARCH_ID;
@@ -341,7 +346,7 @@ export const researchAdoptMethods = uiModule({
                     <p class="copy-research-text">${esc(st.copyResearchText(copy.name, originalName))}</p>
                     <div class="form-group">
                         <label for="copy-research-folder">${esc(st.copyResearchFolder)}</label>
-                        <input type="text" id="copy-research-folder" maxlength="${RESEARCH_NAME_MAX}" value="${esc(copy.name)}" autocomplete="off" spellcheck="false">
+                        <div class="copy-research-path${root ? ' has-root' : ''}">${rootHtml}<input type="text" id="copy-research-folder" maxlength="${RESEARCH_NAME_MAX}" value="${esc(copy.name)}" autocomplete="off" spellcheck="false"${root ? ' aria-describedby="copy-research-root"' : ''}></div>
                     </div>
                     ${original && rid ? `<p class="copy-research-stays">${esc(st.copyResearchStays(rid, original.name))}</p>` : ''}
                 </div>
@@ -357,6 +362,8 @@ export const researchAdoptMethods = uiModule({
         overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
         overlay.querySelector('.close-btn')?.addEventListener('click', close);
         overlay.querySelector('[data-dismiss]')?.addEventListener('click', close);
+        // The folder's prefix is part of the field: a click on it edits the name.
+        overlay.querySelector('.copy-research-root')?.addEventListener('click', () => overlay.querySelector<HTMLInputElement>('#copy-research-folder')?.focus());
         overlay.querySelector('[data-act="create"]')?.addEventListener('click', () => {
             const name = overlay.querySelector<HTMLInputElement>('#copy-research-folder')?.value.trim() || copy.name;
             close();
@@ -411,7 +418,8 @@ export const researchAdoptMethods = uiModule({
         if (needsTransfer(currentAppBrowser())) {
             void (async () => {
                 if (DataManager.getCurrentTreeId() !== treeId) await this.switchToTree(treeId, { follow: false });
-                this.showResearchInstall('install');
+                // The copy's chosen name goes with the link the install dialog opens (§11.4).
+                this.showResearchInstall('install', opts.name ? { name: opts.name } : {});
             })();
             return;
         }

@@ -502,6 +502,28 @@ test.describe('installing the research from the app', () => {
         await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'what');
     });
 
+    test('Safari: the copy\'s research named in its dialog keeps that name on the link the install dialog opens (spec 139 §11.4)', async ({ page }) => {
+        await asBrowser(page, SAFARI_UA);
+        await setup(page);
+        await catchLinks(page);
+        // "Start a new research" of a copy's dialog with a name: from Safari the Install step, its file first.
+        await page.evaluate(() => window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId()!, null, { name: 'Novákovi – druhá větev 👨‍👩‍👧' }));
+        await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'install');
+        await Promise.all([page.waitForEvent('download'), dialog(page).locator('[data-act="have"]').click()]);
+        const token = (await installRecord(page))!.token;
+        await dialog(page).locator('[data-act="have"]').click();
+        await expect.poll(() => launched(page)).toEqual([
+            `strom-research://new?app=${token}&browser=safari&file=strom-prenos-${token.slice(0, 8)}.json&name=${encodeURIComponent('Novákovi – druhá větev 👨‍👩‍👧')}`,
+        ]);
+        // "Start research with this tree" itself names nothing (the research asks as always).
+        await page.evaluate(() => window.Strom.UI.closeResearchInstall());
+        await catchLinks(page);
+        await page.evaluate(() => window.Strom.UI.showResearchInstall('install'));
+        await dialog(page).locator('[data-act="have"]').click();
+        await expect.poll(async () => (await launched(page)).length).toBe(1);
+        expect((await launched(page))[0]).not.toContain('&name=');
+    });
+
     test('N20: "I already have it" in another tree takes the record, yet the first tree\'s installation still hands it over within its 24 h', async ({ page }) => {
         await page.clock.install();
         await setup(page);

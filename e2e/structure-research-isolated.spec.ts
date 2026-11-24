@@ -45,6 +45,8 @@ test('a copy of a research tree: its row says it has no research, its switch is 
     const dialog = page.locator('#copy-research-modal');
     await expect(dialog.getByRole('heading')).toHaveText('Research for a copy of a tree');
     await expect(dialog.locator('#copy-research-folder')).toHaveValue('Fíškovi (kopie)');
+    // A research that does not say where it makes researches (no `treesRoot`): the name alone, as before.
+    await expect(dialog.locator('.copy-research-root')).toHaveCount(0);
     await expect(dialog.locator('.copy-research-stays')).toContainText('Fíškovi');
     await expect(dialog.locator('.buttons .primary')).toContainText('Start a new research');
     await expect(dialog.locator('.buttons .primary .research-open-mark')).toHaveCount(1);
@@ -78,6 +80,64 @@ test('a copy of a research tree: its row says it has no research, its switch is 
     await expect.poll(async () => (await links(page)).filter(l => l.startsWith('strom-research://new')))
         .toEqual([expect.stringMatching(new RegExp(`^strom-research://new\\?app=[A-Za-z0-9_-]+(&browser=[a-z]+)?&name=${encodeURIComponent('Fíškovi – druhá větev').replace(/[()]/g, '\\$&')}$`))]);
 });
+
+/** Where the research makes researches on this computer (`/status.treesRoot`), long enough to be cut on a phone. */
+const TREES_ROOT = '/Users/jana.novakova/Documents/Rodinný archiv a výzkumy předků/Strom výzkum';
+
+for (const [label, viewport, lang] of [
+    ['desktop', DESKTOP, 'en'],
+    ['phone 390', { width: 390, height: 844 }, 'de'],
+    ['phone sideways 844×390', { width: 844, height: 390 }, 'de'],
+] as const) {
+    test(`${label}: the bridge says where researches are made — the folder field shows it as a fixed prefix, cut from the left, the link names only the new research (§11.4)`, async ({ page }) => {
+        await page.setViewportSize(viewport);
+        if (lang !== 'en') await seedSetting(page, 'language', lang);
+        await openResearch(page);
+        await fakeBridge(page, { links: ['send', 'open', 'live', 'app', 'setup', 'new'], statusExtra: { treesRoot: TREES_ROOT + '/' } });
+        await poll(page);
+        const ownerId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId()!);
+        const name = 'Fíškovi – druhá větev rodu z Horní Lhoty u Kunštátu';
+        const copyId = await page.evaluate(([id, n]) => window.Strom.TreeManager.duplicateTree(id, n), [ownerId, name] as const);
+        await page.evaluate((id) => window.Strom.UI.showCopyResearchDialog(id), copyId);
+
+        const dialog = page.locator('#copy-research-modal');
+        const root = dialog.locator('.copy-research-root');
+        const field = dialog.locator('#copy-research-folder');
+        // The prefix: the root with its separator (the trailing one said by the bridge dropped), whole in its title.
+        await expect(root).toHaveText(TREES_ROOT + '/');
+        await expect(root).toHaveAttribute('title', TREES_ROOT + '/');
+        await expect(field).toHaveValue(name);
+        await expect(field).toHaveAttribute('aria-describedby', 'copy-research-root');
+        // Not editable: a click on it edits the name.
+        await root.click();
+        await expect(field).toBeFocused();
+        // One line, inside the dialog: the prefix is cut, the field keeps its room, nothing overflows.
+        const box = await page.evaluate(() => {
+            const d = document.querySelector('#copy-research-modal .modal-content') as HTMLElement;
+            const path = document.querySelector('#copy-research-modal .copy-research-path') as HTMLElement;
+            const r = document.querySelector('#copy-research-modal .copy-research-root') as HTMLElement;
+            const f = document.querySelector('#copy-research-folder') as HTMLElement;
+            const pr = path.getBoundingClientRect(), rr = r.getBoundingClientRect(), fr = f.getBoundingClientRect();
+            return {
+                dialogOverflow: d.scrollWidth - d.clientWidth, pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
+                rootCut: r.scrollWidth > r.clientWidth, sameLine: Math.abs((rr.top + rr.bottom) / 2 - (fr.top + fr.bottom) / 2) < 2,
+                inside: rr.left >= pr.left - 0.5 && fr.right <= pr.right + 0.5 && rr.right <= fr.left + 0.5, fieldWidth: fr.width,
+            };
+        });
+        expect(box.dialogOverflow).toBeLessThanOrEqual(0);
+        expect(box.pageOverflow).toBeLessThanOrEqual(0);
+        expect(box.sameLine).toBe(true);
+        expect(box.inside).toBe(true);
+        expect(box.fieldWidth).toBeGreaterThan(90);
+        if (viewport.width < 600) expect(box.rootCut).toBe(true);
+        // The link names the new research only, never the root.
+        await field.fill('Fíškovi – druhá větev');
+        await dialog.locator('.buttons .primary').click();
+        await expect(dialog).toHaveCount(0);
+        await expect.poll(async () => (await links(page)).filter(l => l.startsWith('strom-research://new')))
+            .toEqual([expect.stringMatching(new RegExp(`&name=${encodeURIComponent('Fíškovi – druhá větev')}$`))]);
+    });
+}
 
 test('a copy takes over the original\'s research only behind a warning: then the copy owns it, the original has none', async ({ page }) => {
     await openResearch(page);

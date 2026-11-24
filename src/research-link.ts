@@ -30,6 +30,7 @@ import { sourcePlaceKey } from './source-location.js';
 import { isImageValue, isPoolRef } from './image-ref.js';
 import { pooledImageToken } from './image-meta.js';
 import { sameImageSync, imageFinder } from './image-equal.js';
+import { graphemes } from './text-clip.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -511,6 +512,23 @@ const CONFLICT_DOS: readonly string[] = ['decide', 'agent'];
 export type ResearchConflictTake = 'user' | 'research';
 const CONFLICT_TAKES: readonly string[] = ['user', 'research'];
 
+/** The most characters (as a person sees them) of the name a `new` link suggests — the research's own cut. */
+export const RESEARCH_NEW_NAME_MAX = 120;
+
+/**
+ * The name a `new` link suggests, cleaned as the research cleans it (1.37):
+ * NFC; control and format characters (but the joiners ZWJ/ZWNJ) and line
+ * ends become spaces, spaces merge; at most 120 whole characters as a person
+ * sees them (grapheme clusters — never half an emoji or a letter without its
+ * accent). '' when nothing is left.
+ */
+export function researchNewName(name: string | undefined): string {
+    const line = (name ?? '').normalize('NFC')
+        .replace(/[\p{Cc}\p{Cf}\u2028\u2029]/gu, (c) => (c === '\u200c' || c === '\u200d' ? c : ' '))
+        .replace(/\s+/g, ' ').trim();
+    return graphemes(line).slice(0, RESEARCH_NEW_NAME_MAX).join('').trim();
+}
+
 /** "Start research with this tree": the one link without a tree (the research makes one). */
 export function researchNewUrl(token: string, browser?: string, file?: string, scheme: string = DEFAULT_RESEARCH_SCHEME, name?: string): string | null {
     const app = researchAdoptToken(token);
@@ -519,9 +537,9 @@ export function researchNewUrl(token: string, browser?: string, file?: string, s
     // from Safari, the file the tree moves by (STROM_FROM_FILE of the line).
     const b = browser && /^[a-z]{1,16}$/.test(browser) ? `&browser=${browser}` : '';
     const f = file && /^strom-prenos-[A-Za-z0-9_-]{8}\.json$/.test(file) ? `&file=${file}` : '';
-    // The new research's suggested name (a copy's own research, spec 139 §11.4): one line of at most 120
-    // characters. A research that does not read it asks the name as it always does.
-    const clean = (name ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120).trim();
+    // The new research's suggested name (a copy's own research, spec 139 §11.4). A research that does
+    // not read it (before 1.37) asks the name as it always does, so it goes whenever there is one.
+    const clean = researchNewName(name);
     const n = clean ? `&name=${encodeURIComponent(clean)}` : '';
     return `${researchLinkScheme(scheme)}://new?app=${app}${b}${f}${n}`;
 }
@@ -2855,6 +2873,11 @@ export interface LiveStatus {
     /** `notDownloaded` (with `tree.notDownloaded` in `features`): files of the tree a cloud folder has not brought down yet. */
     notDownloaded?: number;
     /**
+     * `treesRoot` (Strom Research 1.37): the folder this computer's research makes new researches in, an absolute
+     * path for display only (the folder of a copy's new research, spec 139 §11.4); absent: not said.
+     */
+    treesRoot?: string;
+    /**
      * `experiments` (with `experiments` in `features`): `history` = the research looks for events of the time for this tree;
      * with `experiments.split` also each search alone: `regions` (history of regions) and `places` (history of places).
      */
@@ -4790,6 +4813,20 @@ function statusBooks(value: unknown, features: readonly string[] | null): LiveBo
     return features?.includes(BOOKS_FEATURE) ? sanitizeBooks(value, features.includes(INBOX_ASIDE_FEATURE)) : null;
 }
 
+/**
+ * `/status.treesRoot`: an absolute path (`/…`, `~/…`, `C:\…`, `\\server\…`) of one line, at most
+ * 1024 characters, its trailing separator dropped; anything else is not said (null). Shown, never used as a path.
+ */
+export function sanitizeTreesRoot(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const path = value.trim();
+    // eslint-disable-next-line no-control-regex
+    if (!path || path.length > 1024 || /[\u0000-\u001f\u007f\u2028\u2029]/.test(path)) return null;
+    if (!/^(\/|~(\/|$)|[A-Za-z]:[\\\/]|\\\\)/.test(path)) return null;
+    const trimmed = path.replace(/[\\\/]+$/, '');
+    return trimmed && !/^[A-Za-z]:$/.test(trimmed) ? trimmed : path;
+}
+
 export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
     const r = asRecord(value);
     if (!r) return null;
@@ -4836,6 +4873,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(SEAL_FOREIGN_FEATURE) && (r.seal === 'here' || r.seal === 'elsewhere') ? { seal: r.seal } : {}),
         ...(features?.includes(HANDOFFS_FEATURE) ? { handoffs: sanitizeHandoffs(r.handoffs) } : {}),
         ...(features?.includes(NOT_DOWNLOADED_FEATURE) && asCount(r.notDownloaded) !== null ? { notDownloaded: asCount(r.notDownloaded)! } : {}),
+        ...(sanitizeTreesRoot(r.treesRoot) ? { treesRoot: sanitizeTreesRoot(r.treesRoot)! } : {}),
         ...experimentsSaid(r, features),
         ...hypothesesSaid(r, features),
         ...(readAgainSaid(r.readAgain, features) ? { readAgain: readAgainSaid(r.readAgain, features)! } : {}),

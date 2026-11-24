@@ -439,8 +439,22 @@ export function lastBridgeStatus(researchId: string): LiveStatus | null {
     return lastSaidStatus.get(researchId.toLowerCase()) ?? null;
 }
 
+/** The last `treesRoot` any bridge said in this page (a computer's setting: every research here says the same). */
+let lastTreesRoot: string | null = null;
+
+/**
+ * Where the research on this computer makes a new research (`/status.treesRoot`, Strom Research 1.37), as a
+ * known status said it: `researchId`'s own when it said one, else the last any bridge said in this page; null:
+ * none said (an older research, none known) — the copy's dialog then shows the name alone (spec 139 §11.4).
+ */
+export function knownResearchTreesRoot(researchId?: string | null): string | null {
+    const own = researchId ? (researchStatusNow(researchId) ?? lastBridgeStatus(researchId))?.treesRoot : undefined;
+    return own ?? lastTreesRoot;
+}
+
 function tellBridgeStatus(researchId: string, status: LiveStatus): void {
     lastSaidStatus.set(researchId.toLowerCase(), status);
+    if (status.treesRoot) lastTreesRoot = status.treesRoot;
     for (const listener of bridgeStatusListeners) {
         try { listener(researchId, status); } catch (err) { console.warn('Bridge status listener failed', err); }
     }

@@ -68,6 +68,8 @@ const EXISTING_COMMAND = 'strom app';
 let current: {
     step: InstallStep; os: InstallOs; copied: boolean; otherOpen: boolean; resumed: boolean;
     back?: InstallStep; have?: boolean;
+    /** The new research's suggested name (a copy's own research, spec 139 §11.4): it goes with the `new` link. */
+    name?: string;
 } | null = null;
 let phaseTimer: ReturnType<typeof setInterval> | null = null;
 let channel: BroadcastChannel | null = null;
@@ -172,9 +174,10 @@ export const researchInstallMethods = uiModule({
     /**
      * Open the dialog. Without a step: the waiting step while an
      * installation is under way, else "What it is". On a phone or tablet the
-     * short variant (it installs on a computer).
+     * short variant (it installs on a computer). `opts.name`: the name the
+     * new research is offered (the dialog of a copy's research, §11.4).
      */
-    showResearchInstall(step?: InstallStep): void {
+    showResearchInstall(step?: InstallStep, opts: { name?: string } = {}): void {
         this.closeActionsMenu();
         this.hideBottomSheet();
         this.hideWhatsNewCard();
@@ -194,6 +197,7 @@ export const researchInstallMethods = uiModule({
         const first: InstallStep = step ?? (resumed ? 'wait' : 'what');
         current = {
             step: first, os: record?.os ?? (onComputer() || detectedOs() !== 'linux' ? detectedOs() : 'win'), copied: false, otherOpen: false, resumed,
+            ...(opts.name ? { name: opts.name } : {}),
         };
         // The Install step makes the token; opened straight on it, that happens now.
         if (first === 'install') this.ensureInstallRecord();
@@ -1057,7 +1061,7 @@ export const researchInstallMethods = uiModule({
             return;
         }
         const record = this.ensureInstallRecord();
-        const url = researchNewUrl(record.token, currentAppBrowser(), record.file, announcedResearchScheme());
+        const url = researchNewUrl(record.token, currentAppBrowser(), record.file, announcedResearchScheme(), current?.name);
         if (url) this.handOverResearchLink(url);
         if (current) current.have = true;
         this.goResearchInstallStep('wait');
