@@ -1510,6 +1510,47 @@ export interface FakePhone {
     posts: string[];
     /** Unpaired, still restorable. */
     removed: Map<string, FakePhoneEntry>;
+    /** The gateway of the devices (spec 094 P3, `devices` of `GET phone`); said only when set. */
+    devices?: FakeDevices;
+    /** Every ask of the gateway: `pair {"mode":"app",…}`, `rename <id> {"name":…}`, `delete <id>`, `restore <id> {"undo":…}`. */
+    deviceAsks?: string[];
+    /** `POST phone/pair` answers 503 phone.starting this many times first. */
+    pairStarting?: number;
+}
+
+/** A device of the home network paired with the Strom app (`devices.list[]`). */
+export interface FakeDevice {
+    id: string;
+    name: string;
+    kind?: 'phone' | 'tablet' | 'computer';
+    via: 'app';
+    pairedAt: string;
+    lastSeenAt: string | null;
+    connected: boolean;
+    stale: boolean;
+    home: boolean;
+}
+
+export interface FakeDevices {
+    app: 'ready' | 'fetching' | 'none';
+    appVersion: string;
+    name: string | null;
+    list: FakeDevice[];
+    /** Unpaired, restorable by their undo token (`undo-<id>`). */
+    removed?: Map<string, FakeDevice>;
+}
+
+/** The features of a research whose gateway of the devices is on (`devices.mode on`). */
+export const DEVICE_FEATURES = ['device.gateway', 'device.phonePage', 'device.rename', 'device.events'];
+
+/** A device row; `init` changes any of it. */
+export function fakeDevice(id: string, name: string, init: Partial<FakeDevice> = {}): FakeDevice {
+    return { id, name, via: 'app', pairedAt: '2026-11-18T09:00:00Z', lastSeenAt: null, connected: false, stale: false, home: false, ...init };
+}
+
+/** `devices` as `GET phone` says it (connected now counted from the rows). */
+function devicesOf(dv: FakeDevices): Record<string, unknown> {
+    return { app: dv.app, appVersion: dv.appVersion, name: dv.name, list: dv.list, connectedNow: dv.list.filter(x => x.connected).length };
 }
 
 /** A phone connection that is off, nothing paired, one address; `init` changes any of it. */
@@ -2200,7 +2241,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         const json = (status: number, body: unknown) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) })
             .catch((err: unknown) => { if (!late) throw err; });
         if (route.request().method() === 'OPTIONS') {
-            return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': 'GET, PUT, POST', 'access-control-allow-headers': '*' } });
+            return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': 'GET, PUT, POST, DELETE', 'access-control-allow-headers': '*' } });
         }
         // A new token: the old address turns everything down (as the research does an unknown token:
         // 404 without a body, core/live.ts).
@@ -2652,8 +2693,58 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         if (ph && phonePath) {
             const rest = phonePath[1] ?? '';
             if (method === 'GET' && rest === '') {
-                const { onReply: _r, qrExpiresAt: _q, qrAsks: _a, posts: _p, removed: _m, ...state } = ph;
-                return json(200, { ...state, pair: ph.state === 'on' ? { expiresAt: ph.qrExpiresAt ?? new Date(Date.now() + 600_000).toISOString() } : null });
+                const { onReply: _r, qrExpiresAt: _q, qrAsks: _a, posts: _p, removed: _m, devices: _d, deviceAsks: _da, pairStarting: _ps, ...state } = ph;
+                return json(200, {
+                    ...state, pair: ph.state === 'on' ? { expiresAt: ph.qrExpiresAt ?? new Date(Date.now() + 600_000).toISOString() } : null,
+                    ...(ph.devices ? { devices: devicesOf(ph.devices) } : {}),
+                });
+            }
+            const dv = ph.devices;
+            const asks = (ph.deviceAsks ??= []);
+            const body = route.request().postData() ?? '';
+            if (dv && method === 'POST' && rest === 'pair') {
+                asks.push(`pair ${body}`);
+                if (ph.state !== 'on') return json(409, { error: 'The phone connection is off.', code: 'phone.off' });
+                if (ph.pairStarting && ph.pairStarting > 0) {
+                    ph.pairStarting--;
+                    return json(503, { error: 'Starting.', code: 'phone.starting', retry: 1 });
+                }
+                const mode = (JSON.parse(body || '{}') as { mode?: string }).mode === 'page' ? 'page' : 'app';
+                const address = ph.addresses[0]?.url ?? '';
+                return json(200, {
+                    url: mode === 'app' ? `${address}/d#k=Q3mXv7TzPpL2aN8wRk4sYb6Hc1Jf9GdE` : `${address}/pair?m=page#7Kd2Xq9Lm4Rt`,
+                    qr: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29"><rect width="29" height="29" fill="#fff"/><path d="M4 4h7v7H4zM18 4h7v7h-7zM4 18h7v7H4zM14 14h2v2h-2z" fill="#000"/></svg>',
+                    expiresAt: ph.qrExpiresAt ?? new Date(Date.now() + 600_000).toISOString(),
+                });
+            }
+            const devPath = dv ? /^devices\/([^/]+)(\/restore)?$/.exec(rest) : null;
+            if (dv && devPath) {
+                const id = decodeURIComponent(devPath[1]);
+                const at = dv.list.findIndex(x => x.id === id);
+                if (method === 'PUT' && !devPath[2]) {
+                    asks.push(`rename ${id} ${body}`);
+                    const name = String((JSON.parse(body || '{}') as { name?: unknown }).name ?? '').trim();
+                    if (at < 0) return json(404, { error: 'No such device.', code: 'device.unknown' });
+                    if (!name || name.length > 60) return json(400, { error: 'The body: {"name": "1–60 characters"}', code: 'device.name' });
+                    dv.list[at] = { ...dv.list[at], name };
+                    return json(200, { device: dv.list[at], devices: devicesOf(dv) });
+                }
+                if (method === 'DELETE' && !devPath[2]) {
+                    asks.push(`delete ${id}`);
+                    if (at < 0) return json(404, { error: 'No such device.', code: 'device.unknown' });
+                    (dv.removed ??= new Map()).set(id, dv.list[at]);
+                    dv.list.splice(at, 1);
+                    return json(200, { undo: `undo-${id}`, devices: devicesOf(dv) });
+                }
+                if (method === 'POST' && devPath[2]) {
+                    asks.push(`restore ${id} ${body}`);
+                    const entry = dv.removed?.get(id);
+                    const undo = (JSON.parse(body || '{}') as { undo?: unknown }).undo;
+                    if (!entry || (undo !== undefined && undo !== `undo-${id}`)) return json(410, { error: 'Gone.', code: 'device.gone' });
+                    dv.removed!.delete(id);
+                    dv.list.push(entry);
+                    return json(200, { devices: devicesOf(dv) });
+                }
             }
             if (method === 'GET' && rest === 'qr.svg') {
                 ph.qrAsks.push(url.searchParams.toString().replace(/(^|&)app=[^&]*/, ''));
@@ -2671,7 +2762,6 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 });
             }
             if (method === 'POST') {
-                const body = route.request().postData() ?? '';
                 ph.posts.push(rest === 'on' ? `on ${body}` : rest);
                 if (rest === 'on') {
                     if (ph.onReply === 'no-dialog') return json(200, { state: 'off', error: { code: 'no-dialog' } });
