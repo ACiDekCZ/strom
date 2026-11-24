@@ -295,6 +295,9 @@ export const overviewWindowMethods = uiModule({
                 return true;
             case 'waiting-retry':
                 return !!s && this.retryWaitingRow(s, a.args.itemId);
+            case 'waiting-group-agent-retry':
+                // A place's tasks back to the agent, written here (its toast here), the outcome to the window.
+                return s ? this.retryWaitingGroup(s, a.args.group) : null;
             case 'waiting-agent-retry': {
                 // Written through this window's bridge (its toast here), the outcome to the window.
                 const w = item(a.args.itemId);

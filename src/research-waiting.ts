@@ -747,12 +747,15 @@ export const GROUP_TITLE_LINES = 3;
  * action (spec 105 U4 §1, §2): its title, one more line for every ~70
  * characters up to the cap; a book of the research's list its archive, its
  * facts and its actions; a place its actions under the title and the images
- * its items miss. Guessed by the text's length, never measured.
+ * its items miss; "Retry all with the agent" (spec 089 §8, `retry`) one line
+ * and one more kept for its confirmation beforehand (opening it never splits
+ * the columns anew), the Now line its items share (`now`) one. Guessed by the
+ * text's length, never measured.
  */
-export function waitingGroupBandLines(title: string, head: { book?: boolean; listed?: boolean; missing?: boolean }): number {
+export function waitingGroupBandLines(title: string, head: { book?: boolean; listed?: boolean; missing?: boolean; retry?: boolean; now?: boolean }): number {
     const titleLines = Math.min(GROUP_TITLE_LINES, Math.max(1, Math.ceil(title.trim().length / GROUP_TITLE_LINE_CHARS)));
     if (head.book) return titleLines + (head.listed ? 3 : 0);
-    return titleLines + 1 + (head.missing ? 1 : 0);
+    return titleLines + 1 + (head.missing ? 1 : 0) + (head.retry ? 2 : 0) + (head.now ? 1 : 0);
 }
 
 /** Files a task takes as images of its book (`<input accept>`; the research reads PDF page by page). */

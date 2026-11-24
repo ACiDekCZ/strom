@@ -362,6 +362,8 @@ export type OverviewAction =
     | { action: 'waiting-retry'; args: { itemId: string } }
     /** "Retry with the agent" at an item (spec 089 §1.3): written by the main window (its toast), the outcome back (WaitingRetryResult | null). */
     | { action: 'waiting-agent-retry'; args: { itemId: string } }
+    /** "Retry all with the agent" of a place (spec 089 §4): written by the main window (its toast), the outcome back (GroupRetryResult | null). */
+    | { action: 'waiting-group-agent-retry'; args: { group: string } }
     /**
      * A task's finding (spec 109 §2, §4): Leave as is, or its Undo (the main window writes it and says it with
      * Undo); the fix's preview read (answered: WaitingAuditPreviewResult); the fix written with the preview's
@@ -403,7 +405,7 @@ export const OVERVIEW_ACTION_IDS = [
     'waiting-images', 'line-edit', 'line-new', 'verify-bulk', 'offline-settings', 'books-settings', 'runs-settings',
     'hover-person', 'verify-stop', 'run-stop', 'highlight-end', 'follow-live', 'stop-follow', 'follow-tree', 'follow-view', 'follow-run', 'turn-on',
     'line-select', 'line-state', 'line-move', 'line-retry',
-    'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-retry', 'waiting-agent-retry', 'waiting-file', 'waiting-audit', 'waiting-aside',
+    'waiting-answer', 'waiting-sent', 'waiting-unsent', 'waiting-group-sent', 'waiting-retry', 'waiting-agent-retry', 'waiting-group-agent-retry', 'waiting-file', 'waiting-audit', 'waiting-aside',
     'hypothesis-ask', 'hypotheses-accept', 'answer-task', 'research-link',
     'queue-list', 'queue-order',
 ] as const satisfies readonly OverviewActionId[];
@@ -527,6 +529,7 @@ export function readOverviewAction(action: unknown, args: unknown): OverviewActi
         case 'answer-task':
             return str(a.itemId) ? { action, args: { itemId: a.itemId } } as OverviewAction : null;
         case 'waiting-group-sent':
+        case 'waiting-group-agent-retry':
             return str(a.group) ? { action, args: { group: a.group } } : null;
         case 'waiting-audit':
             if (!str(a.itemId)) return null;

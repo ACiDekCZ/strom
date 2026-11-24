@@ -331,6 +331,35 @@ describe('the overview\'s controls ask the main window', () => {
         expect(readOverviewAction('run-stop', {})).toBeNull();
     });
 
+    it('"Retry all with the agent" of a place (spec 089 §4) asks the main window; what it took back goes here at once', async () => {
+        const { o, sent, port } = overrides();
+        const group = { key: 'repo:R0412', kind: 'archive', name: 'Moravský zemský archiv v Brně' };
+        const s = {
+            waiting: [
+                { id: 'T0412', group }, { id: 'T0415', group }, { id: 'T0430', group },
+                { id: 'T0425', group: { key: 'host:lipnik.example', kind: 'web', name: 'lipnik.example' } },
+            ],
+        } as unknown as LiveSession;
+        const renderResearchOverview = vi.fn();
+        port.ask.mockResolvedValueOnce({ ok: true, retried: ['T0412', 'T0415'], group: 'repo:R0412', head: '' });
+        const r = await o.retryWaitingGroup.call({ renderResearchOverview }, s, 'repo:R0412');
+        expect(port.ask).toHaveBeenLastCalledWith('waiting-group-agent-retry', { group: 'repo:R0412' }, expect.any(Number));
+        expect(r).toEqual({ ok: true, retried: ['T0412', 'T0415'], group: 'repo:R0412', head: '' });
+        expect(s.waiting.map(w => w.id)).toEqual(['T0430', 'T0425']);
+        expect(renderResearchOverview).toHaveBeenCalledTimes(1);
+        // Refused or the main window silent: nothing goes, the outcome as it came (null: no answer).
+        port.ask.mockResolvedValueOnce({ ok: false, code: 'down', status: 0, reason: '' });
+        await expect(o.retryWaitingGroup.call({ renderResearchOverview }, s, 'repo:R0412')).resolves.toMatchObject({ ok: false, code: 'down' });
+        port.ask.mockResolvedValueOnce(null);
+        await expect(o.retryWaitingGroup.call({ renderResearchOverview }, s, 'repo:R0412')).resolves.toBeNull();
+        expect(s.waiting).toHaveLength(2);
+        expect(renderResearchOverview).toHaveBeenCalledTimes(1);
+        expect(sent).toEqual([]);
+        expect(readOverviewAction('waiting-group-agent-retry', { group: 'repo:R0412' }))
+            .toEqual({ action: 'waiting-group-agent-retry', args: { group: 'repo:R0412' } });
+        expect(readOverviewAction('waiting-group-agent-retry', {})).toBeNull();
+    });
+
     it('Stop and "All questions": the main window silent for 10 s is said here; a snapshot of the work keeps it waiting', async () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-11-18T10:00:00Z'));

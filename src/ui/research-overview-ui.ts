@@ -37,6 +37,7 @@ import {
     waitingGroupOpenByDefault, waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
     WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingForImages, waitingGroupBandLines, waitingGroupMissing, waitingPhaseLines, textWithLinks,
     waitingRetryCount, waitingRetryLimitText, waitingRetryMain, waitingRetryReason,
+    WaitingGroupRetry, groupRetryAria, groupRetryConfirmText, groupRetryCountText, groupRetryLaterText, waitingGroupRetry, waitingGroupRetryReason,
 } from '../research-waiting.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrived, imagesShortEl, itemKey, noteImagesArrived } from './waiting-images-ui.js';
@@ -120,6 +121,19 @@ const RECENT_MS = 24 * 60 * 60_000;
 const MAX_STEPS = 20;
 /** Items whose browser note their group's heading says (spec 048 §11.2): their details leave it out. */
 const browserNotedInHead = new Set<string>();
+
+/**
+ * A place's "Retry all with the agent" asked to confirm in its band (spec 089
+ * §4): the place's key, and whether its write runs. One place at a time;
+ * gone when the overview closes or the place no longer offers it.
+ */
+let retryConfirm: { key: string; saving: boolean } | null = null;
+
+/** The element with this focus key in the overview, focused after a redraw. */
+function focusOverviewKey(key: string): void {
+    const t = document.querySelector<HTMLElement>(`#research-overview [data-focus-key="${CSS.escape(key)}"]`);
+    if (t && !(t as HTMLButtonElement).disabled) t.focus({ preventScroll: true });
+}
 
 type Filter = 'all' | Exclude<LiveChangeKind, 'other'>;
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
@@ -668,6 +682,7 @@ export const researchOverviewMethods = uiModule({
         overviewSearches.reset();
         knowsKind = 'all';
         knowsGroupsOpen.clear();
+        retryConfirm = null;
         if (s !== liveSession()) this.closeOverviewViewing();
         closeAnswerForm();
         clearImagesSeen();
@@ -740,6 +755,7 @@ export const researchOverviewMethods = uiModule({
                 resetOverviewColumns();
                 knowsKind = 'all';
                 knowsGroupsOpen.clear();
+                retryConfirm = null;
             }
             keepSheetOverKeyboard(null);
             this.setResearchOverviewDocked(false);
@@ -1261,7 +1277,7 @@ export const researchOverviewMethods = uiModule({
             const all = waitingPhases(s.waiting, filter, order, !flat, groupOpts);
             // Without groups a phase's rows count, else its bands (a wrapped title, a book's archive, facts and actions,
             // a place's actions and what it misses; spec 105 U4 §1, §2), "No book" and the parts of "Most tasks" (U4 §4).
-            const lines = (p: WaitingPhase): number => waitingPhaseLines(all[p], g => this.waitingGroupBandRows(g));
+            const lines = (p: WaitingPhase): number => waitingPhaseLines(all[p], g => this.waitingGroupBandRows(g, s, p, mode));
             noteOverviewSectionRows('waiting', (['todo', 'sent'] as WaitingPhase[]).reduce((n, p) => n + (all[p].length > 0 ? 1 + lines(p) : 0), 0)
                 + (orderRow && order === 'most' ? 1 : 0) + this.overviewBooksOfferRows(s, filter) + this.waitingRetryOpenRows(s, mode));
         } else noteOverviewSectionRows('waiting', s.waiting.length + this.overviewBooksOfferRows(s, 'all') + this.waitingRetryOpenRows(s, mode));
@@ -1807,11 +1823,47 @@ export const researchOverviewMethods = uiModule({
         return g.key === PLACES_GROUP ? strings.places.waiting.group : g.group?.name ?? strings.live.waitingOtherGroup;
     },
 
-    /** How many lines a group's band adds to the section's guessed height (the own window's columns). */
-    waitingGroupBandRows(g: WaitingGroupRows): number {
+    /**
+     * How many lines a group's band adds to the section's guessed height (the
+     * own window's columns): with "Retry all with the agent" and its
+     * confirmation kept beforehand, and the Now line its items share (spec 089 §8).
+     */
+    waitingGroupBandRows(g: WaitingGroupRows, s: LiveSession, phase: WaitingPhase, mode: Mode): number {
         return waitingGroupBandLines(this.waitingGroupTitle(g), g.book
             ? { book: true, listed: listedBook(g.book) !== null }
-            : { missing: g.key !== PLACES_GROUP && waitingGroupMissing(g.items) !== null });
+            : {
+                missing: g.key !== PLACES_GROUP && waitingGroupMissing(g.items) !== null,
+                retry: this.waitingGroupRetryOffer(s, g, phase, mode) !== null,
+                now: this.waitingGroupRetryNow(g, mode) !== null,
+            });
+    },
+
+    /**
+     * "Retry all with the agent" of a place's band (spec 089 §4): what it
+     * takes back, counted of EVERY item of the place (the bridge takes the
+     * whole place, not what a filter or a search shows); null where it is not
+     * offered — the bridge without `waiting.retry`, a phone, the questions
+     * about places, a book or no place, fewer than two items that can go back
+     * now. Its band in one phase only: to do when one of them is there.
+     */
+    waitingGroupRetryOffer(s: LiveSession, g: WaitingGroupRows, phase: WaitingPhase, mode: Mode): WaitingGroupRetry | null {
+        const key = g.group?.key;
+        if (mode === 'sheet' || g.book || !key || g.key === PLACES_GROUP || !this.liveWaitingWrites(s).retry) return null;
+        const all = s.waiting.filter(w => w.group?.key === key);
+        const offer = waitingGroupRetry(all);
+        if (offer.n < 2) return null;
+        const at: WaitingPhase = all.some(w => w.retry?.can && waitingPhase(w) === 'todo') ? 'todo' : 'sent';
+        return at === phase ? offer : null;
+    },
+
+    /**
+     * The Now line a place's band says for its items (spec 089 §2, frame 9):
+     * two or more of its items shown wait for one reason; not on a phone (its
+     * band gets nothing new there, each item says its own).
+     */
+    waitingGroupRetryNow(g: WaitingGroupRows, mode: Mode): ReturnType<typeof waitingGroupRetryReason> {
+        if (mode === 'sheet' || g.book || g.key === PLACES_GROUP) return null;
+        return waitingGroupRetryReason(g.items, getCurrentLanguage());
     },
 
     /**
@@ -1845,12 +1897,21 @@ export const researchOverviewMethods = uiModule({
         const action = this.overviewWaitingGroupAction(s, g, phase, mode);
         if (action) row.appendChild(action);
         // Two or more of its items wait for images from one browser-only archive: said once, here (spec 048 §11.2).
+        // Items that can go back to the agent say why in their Now line instead (spec 089 §2).
         const ctx = this.overviewBrowserContext(mode);
-        const note = browserGroupNote(s.browser, g.items, s.waiting, ctx);
+        const noted = g.items.filter(w => !w.retry);
+        const note = browserGroupNote(s.browser, noted, s.waiting, ctx);
         if (note) {
             row.classList.add('has-browser-note');
             row.appendChild(this.browserNoteEl(note, s.researchId, 'research-overview__waiting-groupnote-browser'));
-            for (const w of g.items) if (browserNote(s.browser, w, s.waiting, ctx)?.host === note.host) browserNotedInHead.add(itemKey(s, w.id));
+            for (const w of noted) if (browserNote(s.browser, w, s.waiting, ctx)?.host === note.host) browserNotedInHead.add(itemKey(s, w.id));
+        }
+        // Two or more of its items that can go back wait for one reason: their Now line once, here; theirs left out (frame 9).
+        const shared = this.waitingGroupRetryNow(g, mode);
+        if (shared) {
+            row.classList.add('has-browser-note');
+            row.appendChild(this.waitingNowEl(s, shared, mode));
+            for (const id of shared.ids) browserNotedInHead.add(itemKey(s, id));
         }
         return row;
     },
@@ -2019,6 +2080,11 @@ export const researchOverviewMethods = uiModule({
                 box.appendChild(btn);
             }
         }
+        // Every item of the place that can go back, back to the agent at once (spec 089 §4), confirmed in place.
+        const retry = this.waitingGroupRetryOffer(s, g, phase, mode);
+        if (key && retry) this.appendWaitingGroupRetry(box, s, key, name, retry);
+        else if (key && retryConfirm && retryConfirm.key === key && !retryConfirm.saving
+            && !this.waitingGroupRetryOffer(s, g, 'todo', mode) && !this.waitingGroupRetryOffer(s, g, 'sent', mode)) retryConfirm = null;
         if (key && writes.note && waitingGroupHasNote(s.waiting.filter(w => w.group?.key === key))) {
             const btn = el('button', 'live-waiting-answer research-overview__waiting-groupwrite research-overview__waiting-groupnote', W.groupNote);
             btn.type = 'button';
@@ -2031,6 +2097,91 @@ export const researchOverviewMethods = uiModule({
             box.appendChild(btn);
         }
         return box.childElementCount > 0 ? box : null;
+    },
+
+    /**
+     * "Retry all with the agent (2 tasks, 5 images)" in a place's actions
+     * (spec 089 §4, frames 7, 8): through the bridge, no mark; "· 1 only
+     * tomorrow 9:12" after it for those held by the limit. A click asks in
+     * place — the question, Return (focused) and Cancel (Escape too) instead
+     * of the button; Return writes the place, "saving" meanwhile.
+     */
+    appendWaitingGroupRetry(box: HTMLElement, s: LiveSession, key: string, name: string, retry: WaitingGroupRetry): void {
+        const R = strings.live.waitingRetry;
+        const lang = getCurrentLanguage();
+        const buttonKey = `group-retry:${key}`;
+        if (retryConfirm?.key !== key) {
+            const btn = this.waitingWriteButton(R.groupAction, 'group-retry', () => {
+                retryConfirm = { key, saving: false };
+                this.renderResearchOverview();
+                focusOverviewKey('group-retry-yes');
+            }, 'research-overview__waiting-groupwrite research-overview__waiting-groupretry', false);
+            btn.append(' ', el('span', 'waiting-retry-count', groupRetryCountText(retry, lang)));
+            btn.setAttribute('aria-label', groupRetryAria(name, retry, lang));
+            btn.dataset.focusKey = buttonKey;
+            box.appendChild(btn);
+            const later = groupRetryLaterText(retry, lang);
+            if (later) box.appendChild(el('span', 'research-overview__muted research-overview__group-retry-later', `· ${later}`));
+            return;
+        }
+        const saving = retryConfirm.saving;
+        const ask = el('div', 'research-overview__retry-confirm');
+        ask.setAttribute('role', 'group');
+        ask.setAttribute('aria-label', R.groupAction);
+        ask.appendChild(el('span', 'research-overview__retry-question', groupRetryConfirmText(retry, lang)));
+        const cancel = (): void => {
+            if (retryConfirm?.key !== key || retryConfirm.saving) return;
+            retryConfirm = null;
+            this.renderResearchOverview();
+            focusOverviewKey(buttonKey);
+        };
+        const yes = el('button', 'waiting-action waiting-action--primary research-overview__retry-yes', R.yes);
+        yes.type = 'button';
+        yes.dataset.action = 'group-retry-yes';
+        yes.dataset.write = 'bridge';
+        yes.dataset.focusKey = 'group-retry-yes';
+        yes.disabled = saving;
+        yes.onclick = (e) => {
+            e.stopPropagation();
+            if (retryConfirm?.key !== key || retryConfirm.saving) return;
+            retryConfirm = { key, saving: true };
+            this.renderResearchOverview();
+            void this.retryWaitingGroup(s, key).then((r) => {
+                if (retryConfirm?.key === key) retryConfirm = null;
+                this.renderResearchOverview();
+                // Not taken: the focus back on the place's button.
+                if (!r || !r.ok || r.retried.length === 0) focusOverviewKey(buttonKey);
+            });
+        };
+        const no = el('button', 'waiting-action waiting-action--link research-overview__retry-no', R.no);
+        no.type = 'button';
+        no.dataset.action = 'group-retry-no';
+        no.disabled = saving;
+        no.onclick = (e) => {
+            e.stopPropagation();
+            cancel();
+        };
+        ask.append(yes, no);
+        if (saving) ask.appendChild(busyStatusEl(strings.busy.savingRow));
+        ask.onclick = (e) => e.stopPropagation();
+        ask.onkeydown = (e) => {
+            if (e.key !== 'Escape') return;
+            e.preventDefault();
+            e.stopPropagation();
+            cancel();
+        };
+        box.appendChild(ask);
+    },
+
+    /** A Now line (spec 089 §2): "Now:" bold, why it waits, the extension's link after it on a computer. */
+    waitingNowEl(s: LiveSession, reason: { text: string; extLink: boolean }, mode: Mode): HTMLElement {
+        const now = el('p', 'research-overview__waiting-now');
+        now.setAttribute('role', 'note');
+        const text = el('span');
+        text.append(el('b', undefined, strings.live.waitingRetry.now), ' ', reason.text);
+        now.appendChild(text);
+        if (reason.extLink && mode !== 'sheet' && s.browser?.url) now.appendChild(this.browserExtLink(s.browser.url));
+        return now;
     },
 
     /** The browser note's context in the overview: a phone gets no links. */
@@ -2345,16 +2496,9 @@ export const researchOverviewMethods = uiModule({
         const R = strings.live.waitingRetry;
         const lang = getCurrentLanguage();
         const box = el('div', 'research-overview__waiting-retry');
-        const reason = waitingRetryReason(w, lang);
-        if (reason) {
-            const now = el('p', 'research-overview__waiting-now');
-            now.setAttribute('role', 'note');
-            const text = el('span');
-            text.append(el('b', undefined, R.now), ' ', reason.text);
-            now.appendChild(text);
-            if (reason.extLink && mode !== 'sheet' && s.browser?.url) now.appendChild(this.browserExtLink(s.browser.url));
-            box.appendChild(now);
-        }
+        // Said once in its place's band for all its items (frame 9): only the button here.
+        const reason = browserNotedInHead.has(itemKey(s, w.id)) ? null : waitingRetryReason(w, lang);
+        if (reason) box.appendChild(this.waitingNowEl(s, reason, mode));
         const limit = waitingRetryLimitText(r, lang);
         if (limit) {
             box.appendChild(el('p', 'research-overview__waiting-hint', limit));

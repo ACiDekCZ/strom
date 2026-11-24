@@ -18,10 +18,10 @@ import {
     WaitingWrites, WaitingPending, WaitingSentResult, WaitingFileResult, WaitingAnswerResult, WaitingWriteRefused, GroupNoteDone, NO_WAITING_WRITES, WAITING_SETTLE_MS, WAITING_FILE_ACCEPT,
     waitingWrites, waitingGroupSendable, waitingTaskIds, waitingFileWritable, waitingWrittenPhase, applyWaitingPending, settleWaitingPending, waitingSentDay, waitingFileTaken,
     postWaitingSent, postGroupSent, postGroupUnsent, getGroupNote, putWaitingFile, answerWaiting, TaskImageResult, uploadTaskImage,
-    retryWaiting, WaitingRetryResult, GroupRetryResult,
+    retryWaiting, retryGroup, WaitingRetryResult, GroupRetryResult,
 } from '../research-waiting-write.js';
 import type { WaitingAnswerOutcome } from './waiting-answer-form.js';
-import { WaitingPhase, imagesState, waitingPhase, waitingRetryRefusedText } from '../research-waiting.js';
+import { WaitingPhase, groupRetryFailText, imagesState, waitingPhase, waitingRetryRefusedText } from '../research-waiting.js';
 import type { UploadOutcome } from './waiting-images-upload.js';
 import { imagesSentence, itemKey, takeOwnImages } from './waiting-images-ui.js';
 import { uiModule } from './module.js';
@@ -690,6 +690,59 @@ export const researchWaitingWriteMethods = uiModule({
             this.sayWaitingRowRefused(w.id, refused, fromRow);
         } else if (!rowSeen(w.id)) {
             this.showToast(waitingRetryRefusedText(result, lang), 6000, { kind: 'waiting-failed' });
+        }
+        return result;
+    },
+
+    /**
+     * "Retry all with the agent" of a place (spec 089 §4, §5) through the
+     * bridge (`waiting.retry`): every item of the place that can go back says
+     * "saving" in its row; the items the research took back leave at once and
+     * the toast says how many; nothing taken (refused, none of them could go
+     * back), the toast says why and the rows stay. The overview's own window
+     * waits for the outcome (its confirmation closes then).
+     */
+    async retryWaitingGroup(s: LiveSession, key: string): Promise<GroupRetryResult | null> {
+        if (!this.liveWaitingWrites(s).retry) return null;
+        const st = writeState(s);
+        if (st.groups.has(key)) return null;
+        const items = s.waiting.filter(w => w.group?.key === key && w.retry?.can === true && !!researchTaskRef(w.id)
+            && st.pending.get(w.id)?.until !== Infinity);
+        if (items.length === 0) return null;
+        const ids = items.map(w => w.id);
+        const back = new Map(ids.map(id => [id, st.pending.get(id)]));
+        const phases = new Map(ids.map(id => [id, waitingPhase(st.raw.find(x => x.id === id) ?? items.find(x => x.id === id)!)]));
+        for (const id of ids) st.pending.set(id, { phase: phases.get(id)!, until: Infinity });
+        st.groups.add(key);
+        this.startWaitingRows(s, ids);
+        this.reshowLiveWaiting(s);
+        let result: GroupRetryResult;
+        try {
+            const before = await this.waitingHeadBeforeWrite(s);
+            result = await retryGroup(s.bridge.base, key);
+            this.takeWaitingWriteHead(s, before, result);
+        } finally {
+            st.groups.delete(key);
+            for (const [id, was] of back) {
+                if (was) st.pending.set(id, was);
+                else st.pending.delete(id);
+            }
+        }
+        const taken = result.ok ? new Set(result.retried) : new Set<string>();
+        const gone = ids.filter(id => taken.has(researchTaskRef(id)!));
+        const settle = Date.now() + WAITING_SETTLE_MS;
+        for (const id of gone) st.pending.set(id, { phase: phases.get(id)!, gone: true, until: settle });
+        this.endWaitingRows(s, ids, null);
+        if (!stillFollowing(s)) return result;
+        this.reshowLiveWaiting(s);
+        this.researchStatusAfterWrite(s);
+        const R = strings.live.waitingRetry;
+        const lang = getCurrentLanguage();
+        if (result.ok && result.retried.length > 0) {
+            this.showToast(R.groupDone(R.tasks(gone.length || result.retried.length)), 6000, { kind: 'waiting-retried' });
+        } else {
+            // None of the place could go back: as a task that cannot go back any more.
+            this.showToast(groupRetryFailText(result.ok ? { code: 'not' } : result, lang), 6000, { kind: 'waiting-failed' });
         }
         return result;
     },

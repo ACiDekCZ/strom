@@ -9542,7 +9542,12 @@
             flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
             font-size: 12.5px; line-height: 1.45; color: var(--text);
         }
-        .research-overview__retry-confirm > .waiting-action { min-height: 30px; padding: 0 12px; }
+        .research-overview__retry-confirm > .waiting-action { min-height: 30px; }
+        .research-overview__retry-confirm > .waiting-action:not(.waiting-action--link) { padding: 0 12px; }
+        .research-overview__retry-question { min-width: 0; overflow-wrap: anywhere; }
+        /* A place's "Retry all with the agent (2 tasks, 5 images)": its text wraps, its count only as a whole (spec 089 §8). */
+        .research-overview__waiting-groupretry { max-width: 100%; text-align: left; overflow-wrap: anywhere; flex-wrap: wrap; column-gap: .3em; }
+        .research-overview__group-retry-later { font-size: 12px; }
         @media (pointer: coarse) {
             .research-overview__waiting-now .browser-ext-link { min-height: 44px; }
             .research-overview__retry-confirm > .waiting-action { min-height: 44px; }
