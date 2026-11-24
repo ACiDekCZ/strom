@@ -295,6 +295,12 @@ export const overviewWindowMethods = uiModule({
                 return true;
             case 'waiting-retry':
                 return !!s && this.retryWaitingRow(s, a.args.itemId);
+            case 'waiting-agent-retry': {
+                // Written through this window's bridge (its toast here), the outcome to the window.
+                const w = item(a.args.itemId);
+                if (!s || !w) return null;
+                return this.retryWaitingItem(s, w);
+            }
             case 'waiting-audit': {
                 const args = a.args;
                 if (args.do === 'preview' || args.do === 'fix') {

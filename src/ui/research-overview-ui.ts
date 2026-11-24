@@ -36,6 +36,7 @@ import {
     FLAT_GROUP, PLACES_GROUP, WaitingFilter, WaitingGroupOpts, WaitingGroupRows, WaitingOrder, WaitingPhase, isSortedOrder, isTimeOrder, listedBook, sortWaiting, waitingOrdersFor, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingGroupOpenByDefault, waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
     WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingForImages, waitingGroupBandLines, waitingGroupMissing, waitingPhaseLines, textWithLinks,
+    waitingRetryCount, waitingRetryLimitText, waitingRetryMain, waitingRetryReason,
 } from '../research-waiting.js';
 import { WaitingAnswerForm, waitingAnswerChangedNote } from './waiting-answer-form.js';
 import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrived, imagesShortEl, itemKey, noteImagesArrived } from './waiting-images-ui.js';
@@ -250,6 +251,10 @@ interface ItemAction {
     run?: () => void;
     /** Written through the bridge (one click only). */
     write?: boolean;
+    /** What goes with it, after its name and never wrapped apart ("· 2 images", spec 089 §3). */
+    count?: string;
+    /** Its write runs ("saving" in its row): no second click. */
+    disabled?: boolean;
 }
 
 /** Answer forms by tree and item: the open one (one at a time) and those kept over a redraw. */
@@ -330,9 +335,14 @@ function waitingActionEl(a: ItemAction, weight: 'primary' | 'secondary' | 'link'
     const btn = el('button', `${cls} research-overview__waiting-action`);
     if (a.mark) setResearchActionLabel(btn, a.label, a.mark);
     else btn.textContent = a.label;
+    if (a.count) {
+        btn.classList.add('has-count');
+        btn.append(' ', el('span', 'waiting-retry-count', a.count));
+    }
     btn.type = 'button';
     btn.dataset.action = a.key;
     if (a.write) btn.dataset.write = 'bridge';
+    if (a.disabled) btn.disabled = true;
     btn.onclick = (e) => {
         e.stopPropagation();
         if (a.write) {
@@ -1253,8 +1263,8 @@ export const researchOverviewMethods = uiModule({
             // a place's actions and what it misses; spec 105 U4 §1, §2), "No book" and the parts of "Most tasks" (U4 §4).
             const lines = (p: WaitingPhase): number => waitingPhaseLines(all[p], g => this.waitingGroupBandRows(g));
             noteOverviewSectionRows('waiting', (['todo', 'sent'] as WaitingPhase[]).reduce((n, p) => n + (all[p].length > 0 ? 1 + lines(p) : 0), 0)
-                + (orderRow && order === 'most' ? 1 : 0) + this.overviewBooksOfferRows(s, filter));
-        } else noteOverviewSectionRows('waiting', s.waiting.length + this.overviewBooksOfferRows(s, 'all'));
+                + (orderRow && order === 'most' ? 1 : 0) + this.overviewBooksOfferRows(s, filter) + this.waitingRetryOpenRows(s, mode));
+        } else noteOverviewSectionRows('waiting', s.waiting.length + this.overviewBooksOfferRows(s, 'all') + this.waitingRetryOpenRows(s, mode));
         // The hypotheses the search shows (the picked ones outside it stay picked) and what matched each by its number.
         const hypoSearch: HypothesisListSearch | null = searching ? {
             found: new Set(res.shown.filter(w => w.kind === 'hypothesis').map(w => w.id)),
@@ -2216,7 +2226,8 @@ export const researchOverviewMethods = uiModule({
         }
         // Images, a website or a check (spec 048 U6): the actions of their kind, an answer written here, the images' state.
         const writes = this.liveWaitingWrites(s);
-        const views = waitingActions(w, { writes, links: mode !== 'sheet' && this.researchLinkAvailable('task'), phone: mode === 'sheet' });
+        // "Retry with the agent" (spec 089 §1.2) stands among the actions of an item without the Deliver block.
+        let views = waitingActions(w, { writes, links: mode !== 'sheet' && this.researchLinkAvailable('task'), phone: mode === 'sheet', retry: true });
         const key = itemKey(s, w.id);
         // The body (spec 105 U4 §3): the text stands once, whole, in the open row above; first what changed of the answer,
         // then what it waits on, the images, the browser's note, the person · direction, the actions and their hint.
@@ -2224,11 +2235,15 @@ export const researchOverviewMethods = uiModule({
         // Images to deliver (spec 105 U4 §5): what and where first, the steps in their order (hidden while the upload
         // area is open or an answer is written); a phone only says where they are saved.
         const deliver = !!views && this.waitingTakesImages(s, w);
+        // With the Deliver block, "Retry with the agent" has its own row under the Now line (waitingRetryEl).
+        if (deliver) views = views!.filter(v => v.key !== 'retry');
         if (deliver) {
             const task = researchTaskRef(w.id);
             const busy = !!this.overviewImagesArea(s, w)
                 || (answeringKey === key && !!task && views!.some(v => v.key === 'answer' && v.via === 'bridge'));
-            detail.appendChild(this.waitingDeliverEl(s, w, { phone: mode === 'sheet', steps: !busy }));
+            // The one filled button of the item: Retry when it is the main action, "Add images" then outlined.
+            const retryMain = !!w.retry && this.waitingRetryOffered(s, w, mode) && waitingRetryMain(w.retry);
+            detail.appendChild(this.waitingDeliverEl(s, w, { phone: mode === 'sheet', steps: !busy, retryMain }));
         }
         const onBox = this.overviewWaitingOnBox(s, w);
         if (onBox) detail.appendChild(onBox);
@@ -2242,9 +2257,13 @@ export const researchOverviewMethods = uiModule({
         const img = views ? imagesState(w) : null;
         if (img) appendImagesDetail(detail, img);
         // An archive only the agent's browser reaches (spec 048 §11.2): under the book, unless its group's heading says it.
-        const bNote = views && !browserNotedInHead.has(key) ? browserNote(s.browser, w, s.waiting, this.overviewBrowserContext(mode)) : null;
+        // An item that can go back to the agent says why it waits in its Now line instead (spec 089 §2).
+        const bNote = views && !w.retry && !browserNotedInHead.has(key) ? browserNote(s.browser, w, s.waiting, this.overviewBrowserContext(mode)) : null;
         const bNoteEl = bNote ? this.browserNoteEl(bNote, s.researchId) : null;
         if (bNoteEl) detail.appendChild(bNoteEl);
+        // Its button there too with the Deliver block, or without actions of its kind; else among the actions below.
+        const retryEl = this.waitingRetryEl(s, w, mode, deliver || !views);
+        if (retryEl) detail.appendChild(retryEl);
         // A finding of how the task is recorded (spec 109 §1.2): under what it waits on and its images, above its actions.
         const audit = this.waitingAuditEl(s, w, mode);
         if (audit) detail.appendChild(audit);
@@ -2266,7 +2285,10 @@ export const researchOverviewMethods = uiModule({
         if (views) {
             this.appendWaitingTaskActions(detail, s, w, views, mode, deliver);
             // Not beside the open "Have images" area or an answer being written.
-            if (bNoteEl && detail.querySelector('.waiting-upload, .waiting-answer')) bNoteEl.remove();
+            if (detail.querySelector('.waiting-upload, .waiting-answer')) {
+                bNoteEl?.remove();
+                retryEl?.remove();
+            }
             return detail;
         }
 
@@ -2285,6 +2307,78 @@ export const researchOverviewMethods = uiModule({
         if (hint) detail.appendChild(el('p', 'research-overview__waiting-hint', L.waitingAnswerHint));
         if (mode === 'sheet') detail.appendChild(el('div', 'research-overview__muted', L.answerOnComputer));
         return detail;
+    },
+
+    /**
+     * "Retry with the agent" may be offered at an item (spec 089 §1.2, §7):
+     * the bridge here takes it, the item can go back now and it is not a
+     * phone. An item whose `retry` came while the bridge does not answer
+     * here keeps its Now line, without the button.
+     */
+    waitingRetryOffered(s: LiveSession, w: LiveWaiting, mode: Mode): boolean {
+        return mode !== 'sheet' && !!w.retry?.can && !!researchTaskRef(w.id) && this.liveWaitingWrites(s).retry;
+    },
+
+    /** The item's "Retry with the agent" as an action: its count after the name, disabled while its write runs. */
+    waitingRetryAction(s: LiveSession, w: LiveWaiting): ItemAction | null {
+        if (!w.retry) return null;
+        return {
+            key: 'retry', label: strings.live.waitingRetry.action, write: true,
+            count: waitingRetryCount(w.retry, getCurrentLanguage()) || undefined,
+            disabled: this.waitingRowNote(s, w.id)?.kind === 'saving',
+            run: () => { void this.retryWaitingItem(s, w); },
+        };
+    },
+
+    /**
+     * Why an item that can go back to the agent waits now, and what can be
+     * done (spec 089 §2, §3, §6, §8): the Now line (the extension's link
+     * after it on a computer), then — `button` — "Retry with the agent"
+     * (filled when it is the main action, else outlined), or the limit in
+     * its place (back three times in 24 hours), or on a phone where it is
+     * done. Null for an item without `retry` (an older research: today's
+     * detail). Without `button` the button stands among the item's actions.
+     */
+    waitingRetryEl(s: LiveSession, w: LiveWaiting, mode: Mode, button = true): HTMLElement | null {
+        const r = w.retry;
+        if (!r) return null;
+        const R = strings.live.waitingRetry;
+        const lang = getCurrentLanguage();
+        const box = el('div', 'research-overview__waiting-retry');
+        const reason = waitingRetryReason(w, lang);
+        if (reason) {
+            const now = el('p', 'research-overview__waiting-now');
+            now.setAttribute('role', 'note');
+            const text = el('span');
+            text.append(el('b', undefined, R.now), ' ', reason.text);
+            now.appendChild(text);
+            if (reason.extLink && mode !== 'sheet' && s.browser?.url) now.appendChild(this.browserExtLink(s.browser.url));
+            box.appendChild(now);
+        }
+        const limit = waitingRetryLimitText(r, lang);
+        if (limit) {
+            box.appendChild(el('p', 'research-overview__waiting-hint', limit));
+        } else if (mode === 'sheet') {
+            box.appendChild(el('p', 'research-overview__muted waiting-phone-note', R.phone));
+        } else if (button && this.waitingRetryOffered(s, w, mode)) {
+            const a = this.waitingRetryAction(s, w)!;
+            const row = el('div', 'research-overview__waiting-actions waiting-actions');
+            row.appendChild(waitingActionEl(a, waitingRetryMain(r) ? 'primary' : 'secondary'));
+            box.appendChild(row);
+        }
+        return box.childElementCount > 0 ? box : null;
+    },
+
+    /**
+     * The open item's rows of "Retry with the agent" for the guessed height
+     * in the own window's columns (spec 089 §8): its Now line, and the button
+     * or the limit in its place.
+     */
+    waitingRetryOpenRows(s: LiveSession, mode: Mode): number {
+        const w = s.waitingView.detail ? s.waiting.find(x => x.id === s.waitingView.detail) : undefined;
+        if (!w?.retry) return 0;
+        const now = waitingRetryReason(w, getCurrentLanguage()) ? 1 : 0;
+        return now + (!w.retry.can || this.waitingRetryOffered(s, w, mode) ? 1 : 0);
     },
 
     /**
@@ -2351,8 +2445,12 @@ export const researchOverviewMethods = uiModule({
         const list: ItemAction[] = [];
         for (const v of views) {
             if (v.key === 'chat' && audited) continue;
-            // Back to the agent (spec 089): drawn by its own button.
-            if (v.key === 'retry') continue;
+            // Back to the agent through the bridge (spec 089 §1.2): no mark, its count on the button.
+            if (v.key === 'retry') {
+                const a = this.waitingRetryAction(s, w);
+                if (a) list.push(a);
+                continue;
+            }
             if (v.key === 'web') {
                 if (w.url) list.push({ key: 'web', label: T.openWeb, href: w.url });
             } else if (v.key === 'images') {

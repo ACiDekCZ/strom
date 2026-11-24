@@ -18,9 +18,10 @@ import {
     WaitingWrites, WaitingPending, WaitingSentResult, WaitingFileResult, WaitingAnswerResult, WaitingWriteRefused, GroupNoteDone, NO_WAITING_WRITES, WAITING_SETTLE_MS, WAITING_FILE_ACCEPT,
     waitingWrites, waitingGroupSendable, waitingTaskIds, waitingFileWritable, waitingWrittenPhase, applyWaitingPending, settleWaitingPending, waitingSentDay, waitingFileTaken,
     postWaitingSent, postGroupSent, postGroupUnsent, getGroupNote, putWaitingFile, answerWaiting, TaskImageResult, uploadTaskImage,
+    retryWaiting, WaitingRetryResult, GroupRetryResult,
 } from '../research-waiting-write.js';
 import type { WaitingAnswerOutcome } from './waiting-answer-form.js';
-import { WaitingPhase, imagesState, waitingPhase } from '../research-waiting.js';
+import { WaitingPhase, imagesState, waitingPhase, waitingRetryRefusedText } from '../research-waiting.js';
 import type { UploadOutcome } from './waiting-images-upload.js';
 import { imagesSentence, itemKey, takeOwnImages } from './waiting-images-ui.js';
 import { uiModule } from './module.js';
@@ -142,7 +143,8 @@ export const researchWaitingWriteMethods = uiModule({
      * again for it. A commit of its agent meanwhile: nothing taken, the newer
      * version comes as ever.
      */
-    takeWaitingWriteHead(s: LiveSession, before: string, result: WaitingSentResult | WaitingFileResult | WaitingAnswerResult | TaskImageResult): void {
+    takeWaitingWriteHead(s: LiveSession, before: string,
+        result: WaitingSentResult | WaitingFileResult | WaitingAnswerResult | TaskImageResult | WaitingRetryResult | GroupRetryResult): void {
         if (!result.ok || !result.head) return;
         this.researchTakeOwnWriteHead(s.researchId, before, result.head, result.parent);
         if (!s.ended && TreeManager.getTreeMetadata(s.treeId)?.research?.head === result.head) s.head = result.head;
@@ -249,9 +251,10 @@ export const researchWaitingWriteMethods = uiModule({
      * A refusal drawn in its row: the focus on its sentence when it was in the row (`fromRow`); a row not seen
      * (the overview closed, its section folded) says it by the toast as before.
      */
-    sayWaitingRowRefused(id: string, result: WaitingWriteRefused, fromRow: boolean): void {
+    sayWaitingRowRefused(id: string, result: WaitingWriteRefused | string, fromRow: boolean): void {
         if (!rowSeen(id)) {
-            this.showWaitingRefused(result);
+            if (typeof result === 'string') this.showToast(result, 6000, { kind: 'waiting-failed' });
+            else this.showWaitingRefused(result);
             return;
         }
         if (!fromRow) return;
@@ -630,6 +633,65 @@ export const researchWaitingWriteMethods = uiModule({
             case 'held': this.showWaitingRefused(result); return 'fail';
             default: return 'fail';
         }
+    },
+
+    /**
+     * "Retry with the agent" at an item (spec 089 §1.3, §5, §6), through the
+     * bridge (`waiting.retry`) with the item's `at` as read: no dialog, the
+     * row says "saving" (its button disabled, a second click sends nothing);
+     * taken, the item leaves at once and the toast says whether the agent
+     * takes it up now or at its next start. Refused, the row says why without
+     * "Try again" (the button stays in the detail): it waits for something
+     * else now (drawn as the research says it), it cannot go back, the
+     * research not answering; back three times in 24 hours, the item shows the
+     * limit in place of its button until the next status. The overview's own
+     * window waits for the outcome.
+     */
+    async retryWaitingItem(s: LiveSession, w: LiveWaiting): Promise<WaitingRetryResult | null> {
+        const task = researchTaskRef(w.id);
+        if (!task || !w.retry?.can || !this.liveWaitingWrites(s).retry) return null;
+        const st = writeState(s);
+        if (st.pending.get(w.id)?.until === Infinity) return null;
+        const back = st.pending.get(w.id);
+        const phase = waitingPhase(st.raw.find(x => x.id === w.id) ?? w);
+        const fromRow = focusInRow(w.id);
+        st.pending.set(w.id, { phase, until: Infinity });
+        this.startWaitingRows(s, [w.id]);
+        this.reshowLiveWaiting(s);
+        let result: WaitingRetryResult;
+        try {
+            const before = await this.waitingHeadBeforeWrite(s);
+            result = await retryWaiting(s.bridge.base, task, { expect: w.at });
+            this.takeWaitingWriteHead(s, before, result);
+        } finally {
+            if (back) st.pending.set(w.id, back);
+            else st.pending.delete(w.id);
+        }
+        const lang = getCurrentLanguage();
+        let refused: string | null = null;
+        if (result.ok) {
+            st.pending.set(w.id, { phase, gone: true, until: Date.now() + WAITING_SETTLE_MS });
+        } else if (result.code === 'limit') {
+            // Held by the limit (§6): the item says when it can go back again, its button gone, until the next status.
+            const until = result.until;
+            st.raw = st.raw.map(x => x.id === w.id && x.retry ? { ...x, retry: { ...x.retry, can: false, ...(until ? { until } : {}) } } : x);
+        } else {
+            refused = waitingRetryRefusedText(result, lang);
+        }
+        this.endWaitingRows(s, [w.id], refused ? { text: refused, phase } : null);
+        if (!stillFollowing(s)) return result;
+        this.reshowLiveWaiting(s);
+        this.researchStatusAfterWrite(s);
+        if (result.ok) {
+            const R = strings.live.waitingRetry;
+            const running = s.working.some(x => !x.paused) || (s.runs?.length ?? 0) > 0;
+            this.showToast(running ? R.doneRunning : R.doneIdle, 6000, { kind: 'waiting-retried' });
+        } else if (refused) {
+            this.sayWaitingRowRefused(w.id, refused, fromRow);
+        } else if (!rowSeen(w.id)) {
+            this.showToast(waitingRetryRefusedText(result, lang), 6000, { kind: 'waiting-failed' });
+        }
+        return result;
     },
 
     /**
