@@ -136,6 +136,7 @@ import { dragLooksLikeJson, dropRoute, isJsonFileName } from '../drop-route.js';
 import type { DropInto } from '../tree-drop.js';
 import { createSha256 } from '../sha256.js';
 import { localIsoDay } from '../import-origin.js';
+import { deviceClient } from '../device-client.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -3201,7 +3202,7 @@ export const researchUiMethods = uiModule({
         const releaseLeave = holdLeave('send', tree.id);
         let res: Response;
         try {
-            res = await postSync(bridge.sync, gedcomText(await researchGedcomWithImages(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts, deletedSources: deletedSourcesToSend(link) }, researchGedcomTitles(status), researchSendsReadings(status), researchSendsSourceFields(status), researchCitationsOut(status))), 120000);
+            res = await postSync(bridge.sync, gedcomText(await researchGedcomWithImages(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts, deletedSources: deletedSourcesToSend(link), client: deviceClient() }, researchGedcomTitles(status), researchSendsReadings(status), researchSendsSourceFields(status), researchCitationsOut(status))), 120000);
         } catch (err) {
             releaseLeave();
             console.warn('Sending to the research failed', err);

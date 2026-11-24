@@ -31,6 +31,7 @@ import { isImageValue, isPoolRef } from './image-ref.js';
 import { pooledImageToken } from './image-meta.js';
 import { sameImageSync, imageFinder } from './image-equal.js';
 import { graphemes } from './text-clip.js';
+import type { DeviceClient } from './device-client.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -3368,6 +3369,8 @@ export interface ResearchSendRecord {
     mediaCount?: number;
     /** The sources deleted in the app a written send retracted (`retracted`, spec 117 §4); absent = none said. */
     retracted?: string[];
+    /** The browser that sent it (`client`, spec 094 K2.4); absent = the send carried none (an older app or research). */
+    client?: DeviceClient;
 }
 
 const SEND_STATES = new Set(['pending', 'written', 'discarded', 'replaced', 'nothing', 'undone', 'failed']);
@@ -3387,6 +3390,7 @@ export function sanitizeSends(value: unknown, codes = false): ResearchSendRecord
             const t = cleanText(v, 40);
             return Number.isFinite(Date.parse(t)) ? t : '';
         };
+        const client = sanitizeResearchClient(r.client);
         out.push({
             intake,
             at: iso(r.at),
@@ -3406,6 +3410,7 @@ export function sanitizeSends(value: unknown, codes = false): ResearchSendRecord
             ...(codes && (r.state === 'written' || r.state === 'nothing') ? sendNotWritten(r) : {}),
             ...(r.state === 'written' ? sendMedia(r) : {}),
             ...(r.state === 'written' && retractedSources(r.retracted).length ? { retracted: retractedSources(r.retracted) } : {}),
+            ...(client ? { client } : {}),
         });
     }
     return out;
@@ -5261,6 +5266,8 @@ export interface LiveLogEntry {
      * (and from an older research).
      */
     sources?: string[][];
+    /** The browser whose send wrote it (`via`, spec 094 K2.4); absent = not a send, or a send without one. */
+    via?: DeviceClient;
 }
 
 /** Most sources one history line names. */
@@ -5299,6 +5306,7 @@ export function sanitizeLiveLog(value: unknown): LiveLogEntry[] | null {
         const lines = rawText ? rawText.map((t, i) => ({ t: cleanText(t), k: rawKinds?.[i], s: lineSources(rawSources?.[i]) })).filter(l => l.t) : null;
         const research = researchDirectionRef(e.research);
         const run = researchRunRef(e.run);
+        const via = sanitizeResearchClient(e.via);
         out.push({
             head: cleanText(e.head, 80), at, what, task: cleanText(e.task),
             ...(lines ? { text: lines.map(l => l.t) } : {}),
@@ -5306,6 +5314,7 @@ export function sanitizeLiveLog(value: unknown): LiveLogEntry[] | null {
             ...(research ? { research } : {}),
             ...(run ? { run } : {}),
             ...(lines && lines.some(l => l.s.length > 0) ? { sources: lines.map(l => l.s) } : {}),
+            ...(via ? { via } : {}),
         });
     }
     return out;
@@ -5569,6 +5578,11 @@ export interface ResearchHeaderInfo {
     /** The fingerprint of the tree as sent (`_STROM_SENT`): only on a send to the bridge. */
     sent?: string;
     /**
+     * The browser that sends (`_STROM_CLIENT <id>` / `2 NAME <name>`, spec 094 K2.4): only on a send to
+     * the bridge, never in an exported file. A research that does not know it skips it.
+     */
+    client?: DeviceClient;
+    /**
      * The send whose copy this one builds on (`_STROM_SINCE R…`): written there,
      * its version not loaded here — this copy is that copy plus the edits since.
      * Only to a bridge that says `sync.since`.
@@ -5590,6 +5604,36 @@ function headerToken(value: unknown): string | null {
     return typeof value === 'string' && /^[A-Za-z0-9._:-]{1,64}$/.test(value) ? value : null;
 }
 
+/** Longest device name kept (graphemes; the research cuts at the same length). */
+const MAX_DEVICE_NAME = 60;
+
+/**
+ * A device as the research names it (`sends[].client`, `entries[].via`,
+ * `conflicts[].sent.*.client`): `{ id, name? }`, checked. Untrusted: an id
+ * not of the research's shape drops the whole device; the name is plain text
+ * (control and direction characters out, at most 60 graphemes), left out when
+ * empty or not text. Null: none said.
+ */
+export function sanitizeResearchClient(value: unknown): DeviceClient | null {
+    const r = asRecord(value);
+    const id = r ? headerToken(r.id) : null;
+    if (!r || !id) return null;
+    const name = deviceNameText(r.name);
+    return name ? { id, name } : { id };
+}
+
+/** A device's name as plain text ('' = none): NFC, no control or bidi characters, one line, at most 60 graphemes. */
+function deviceNameText(value: unknown): string {
+    if (typeof value !== 'string') return '';
+    // eslint-disable-next-line no-control-regex
+    const flat = value.normalize('NFC').replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]+/g, ' ')
+        .replace(/\s+/g, ' ').trim();
+    // A broken name (a replacement character, half of a surrogate pair): none, as the research takes it.
+    if (!flat || flat.includes('�') || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(flat)) return '';
+    const g = graphemes(flat);
+    return g.length <= MAX_DEVICE_NAME ? flat : g.slice(0, MAX_DEVICE_NAME).join('').trim();
+}
+
 /** The header lines that tie an exported GEDCOM to its research. */
 export function researchHeaderLines(link: ResearchHeaderInfo | null | undefined): string[] {
     const id = normalizeResearchId(link?.id);
@@ -5597,6 +5641,8 @@ export function researchHeaderLines(link: ResearchHeaderInfo | null | undefined)
     const head = isResearchHead(link?.head);
     const appTree = headerToken(link?.appTree);
     const sent = headerToken(link?.sent);
+    // The sending browser: only on a send to the bridge (the caller gives it then), never in a file.
+    const client = link?.client ? sanitizeResearchClient(link.client) : null;
     const since = headerToken(link?.since);
     const deleted = [...new Set((link?.deletedSources ?? []).filter(s => typeof s === 'string' && /^S\d{1,9}$/.test(s)))].slice(0, SOURCE_DELETED_MOST);
     return [
@@ -5606,6 +5652,7 @@ export function researchHeaderLines(link: ResearchHeaderInfo | null | undefined)
         ...(appTree ? [`1 _STROM_APP_TREE ${appTree}`] : []),
         ...(link?.transcripts === 'evidence' || link?.transcripts === 'lead' ? [`1 _STROM_TRANSCRIPTS ${link.transcripts}`] : []),
         ...(sent ? [`1 _STROM_SENT ${sent}`] : []),
+        ...(client ? [`1 _STROM_CLIENT ${client.id}`, ...(client.name ? [`2 NAME ${client.name}`] : [])] : []),
         ...(since ? [`1 _STROM_SINCE ${since}`] : []),
         // `1 _STROM_SEX_U Y` follows in every file the app writes (src/ged-exporter.ts STROM_SEX_U_LINE).
     ];
@@ -5675,6 +5722,50 @@ export interface SyncReply {
     mediaCount: number;
     /** The sources deleted in the app it retracted with this write (`retracted`, spec 117 §4; S ids); [] = none said. */
     retracted: string[];
+    /**
+     * The two sends a conflict is between (`conflicts[].sent`, spec 094 K2.4): an edit from one device
+     * against an edit from another. [] = none said (an older research, or only conflicts with the research's own value).
+     */
+    conflictSent: SyncConflictSent[];
+}
+
+/**
+ * A conflict between two sends (`conflicts[].sent`): `earlier` the send whose value stands in the
+ * research (`sent.research`, its input I… when said), `later` this send (`sent.user`). A side's
+ * `client` is absent when that send carried none (an older app): then it is "an earlier / the later send".
+ */
+export interface SyncConflictSent {
+    /** The research's conflict ("X0007"). */
+    id: string;
+    earlier: { client?: DeviceClient; input?: string };
+    later: { client?: DeviceClient };
+}
+
+/** Most conflicts with their two sends taken from one answer. */
+const MAX_CONFLICT_SENT = 20;
+
+/** The `sent` of a list of conflicts (at most 20, each conflict once); a conflict without `sent` is left out. Untrusted. */
+export function conflictSentOf(value: unknown): SyncConflictSent[] {
+    if (!Array.isArray(value)) return [];
+    const out: SyncConflictSent[] = [];
+    for (const item of value.slice(0, MAX_ITEMS)) {
+        if (out.length >= MAX_CONFLICT_SENT) break;
+        const r = asRecord(item);
+        const id = r ? researchConflictRef(r.id ?? r.conflict) : null;
+        const sent = r ? asRecord(r.sent) : null;
+        const later = sent ? asRecord(sent.user) : null;
+        const earlier = sent ? asRecord(sent.research) : null;
+        if (!id || !sent || (!later && !earlier) || out.some(c => c.id === id)) continue;
+        const earlierClient = earlier ? sanitizeResearchClient(earlier.client) : null;
+        const laterClient = later ? sanitizeResearchClient(later.client) : null;
+        const input = earlier && typeof earlier.input === 'string' && /^I\d{1,9}$/.test(earlier.input) ? earlier.input : '';
+        out.push({
+            id,
+            earlier: { ...(earlierClient ? { client: earlierClient } : {}), ...(input ? { input } : {}) },
+            later: laterClient ? { client: laterClient } : {},
+        });
+    }
+    return out;
 }
 
 /** The kinds of a change of the tree's own files a write names (`media[].kind`, spec 108). */
@@ -5900,7 +5991,7 @@ export function sanitizeSkipped(value: unknown, codes: boolean): SyncReply['skip
 export function sanitizeSyncReply(value: unknown, features?: readonly string[] | null): SyncReply {
     const codes = !!features?.includes(SYNC_NW_CODES_FEATURE);
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], personConflicts: [], ids: null, readings: [], media: [], mediaCount: 0, retracted: [] };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], personConflicts: [], ids: null, readings: [], media: [], mediaCount: 0, retracted: [], conflictSent: [] };
     const idsRec = asRecord(r.ids);
     const idPersons = adoptIdMap(idsRec?.persons, /^P\d{1,9}$/);
     const idSources = adoptIdMap(idsRec?.sources, /^S\d{1,9}$/);
@@ -5932,6 +6023,7 @@ export function sanitizeSyncReply(value: unknown, features?: readonly string[] |
         media,
         mediaCount: mediaCountOf(r.mediaCount, r.media, media.length),
         retracted: retractedSources(r.retracted),
+        conflictSent: conflictSentOf(r.conflicts),
     };
 }
 

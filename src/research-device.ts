@@ -12,6 +12,7 @@ import {
     ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, asideWaiting, sanitizeBooksAside, WAITING_GROUPS_FEATURE, sanitizeUpdate, sanitizeIntake, sanitizeBusy, LiveBusy,
     sanitizeAccepts, parseLiveBridge, isResearchHead, researchLinkScheme, DEFAULT_RESEARCH_SCHEME,
     ResearchTreeKind, ResearchTreeState, sanitizeTreeKind, sanitizeTreeState,
+    researchConflictRef, sanitizeResearchClient, type SyncConflictSent,
 } from './research-link.js';
 import { ResearchConflict, ResearchSend } from './types.js';
 import type { NotWrittenItem } from './research-changes.js';
@@ -648,6 +649,110 @@ export interface ResearchAutoState {
      * imported or linked with a research, `done` once it was offered (or there was nothing to offer).
      */
     placesOffer?: 'armed' | 'done';
+    /**
+     * Conflicts between two sends (spec 094 K2.4) as a send's answer named them (`conflicts[].sent`): which
+     * device's edit stands in the research and which came later. Said only in that answer, the conflict is
+     * shown later too; newest last, at most {@link CONFLICT_SENT_MOST}, forgotten as the conflict is decided here.
+     */
+    conflictSent?: StoredConflictSent[];
+}
+
+/** A device as remembered for a side of a conflict (none said: neither). */
+export interface ConflictSideDevice {
+    id?: string;
+    name?: string;
+}
+
+/** One conflict between two sends, remembered (see ResearchAutoState.conflictSent). */
+export interface StoredConflictSent {
+    /** The research's conflict ("X0007"). */
+    id: string;
+    /** The send whose value stands in the research; `input` its research input (I…) when said. */
+    earlier: ConflictSideDevice & { input?: string };
+    /** The later send (the one that met the conflict). */
+    later: ConflictSideDevice;
+}
+
+/** The devices of a conflict's two sends (an empty side: that send carried none). */
+export interface ConflictSides {
+    earlier: ConflictSideDevice;
+    later: ConflictSideDevice;
+}
+
+/** Most conflicts between sends remembered per tree. */
+export const CONFLICT_SENT_MOST = 50;
+
+const deviceOf = (c: { id: string; name?: string } | undefined): ConflictSideDevice =>
+    c ? { id: c.id, ...(c.name ? { name: c.name } : {}) } : {};
+
+/**
+ * The remembered conflicts with those of a new answer: a conflict named again takes its new sides and
+ * moves last; the oldest go past `most`. Pure.
+ */
+export function mergeConflictSent(stored: readonly StoredConflictSent[] | undefined, incoming: readonly SyncConflictSent[],
+    most = CONFLICT_SENT_MOST): StoredConflictSent[] {
+    const fresh: StoredConflictSent[] = incoming.map(c => ({
+        id: c.id,
+        earlier: { ...deviceOf(c.earlier.client), ...(c.earlier.input ? { input: c.earlier.input } : {}) },
+        later: deviceOf(c.later.client),
+    }));
+    const ids = new Set(fresh.map(c => c.id));
+    return [...(stored ?? []).filter(c => !ids.has(c.id)), ...fresh].slice(-most);
+}
+
+/** A conflict's two sides as remembered (null: not a conflict between two sends known here). Pure. */
+export function conflictSidesOf(stored: readonly StoredConflictSent[] | undefined, conflictId: string): ConflictSides | null {
+    const id = researchConflictRef(conflictId);
+    const c = id ? stored?.find(x => x.id === id) : undefined;
+    if (!c) return null;
+    const side = (d: ConflictSideDevice): ConflictSideDevice => ({ ...(d.id ? { id: d.id } : {}), ...(d.name ? { name: d.name } : {}) });
+    return { earlier: side(c.earlier), later: side(c.later) };
+}
+
+/** Remember the conflicts between two sends a send's answer named (none: nothing changes). */
+export function rememberConflictSent(treeId: string, incoming: readonly SyncConflictSent[]): void {
+    if (!incoming.length) return;
+    patchResearchAutoState(treeId, { conflictSent: mergeConflictSent(researchAutoState(treeId).conflictSent, incoming) });
+}
+
+/** The devices of a conflict's two sends in this tree (null: none known). */
+export function researchConflictSides(treeId: string, conflictId: string): ConflictSides | null {
+    return conflictSidesOf(researchAutoState(treeId).conflictSent, conflictId);
+}
+
+/** A conflict was decided: its sides are no longer kept. */
+export function forgetConflictSent(treeId: string, conflictId: string): void {
+    const id = researchConflictRef(conflictId);
+    const stored = researchAutoState(treeId).conflictSent;
+    if (!id || !stored?.some(c => c.id === id)) return;
+    const rest = stored.filter(c => c.id !== id);
+    patchResearchAutoState(treeId, { conflictSent: rest.length ? rest : undefined });
+}
+
+/** A stored device of a side, checked (the stored state is read like any outside input). */
+function storedSideDevice(value: unknown): ConflictSideDevice | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const v = value as Record<string, unknown>;
+    if (v.id === undefined) return {};
+    const client = sanitizeResearchClient(v);
+    return client ? deviceOf(client) : null;
+}
+
+function storedConflictSentFrom(value: unknown): StoredConflictSent[] {
+    if (!Array.isArray(value)) return [];
+    const out: StoredConflictSent[] = [];
+    for (const item of value.slice(-CONFLICT_SENT_MOST)) {
+        if (!item || typeof item !== 'object') continue;
+        const r = item as Record<string, unknown>;
+        const id = researchConflictRef(r.id);
+        const earlier = storedSideDevice(r.earlier);
+        const later = storedSideDevice(r.later);
+        if (!id || !earlier || !later || out.some(c => c.id === id)) continue;
+        const e = r.earlier as Record<string, unknown>;
+        const input = typeof e.input === 'string' && /^I\d{1,9}$/.test(e.input) ? e.input : '';
+        out.push({ id, earlier: { ...earlier, ...(input ? { input } : {}) }, later });
+    }
+    return out;
 }
 
 /**
@@ -881,6 +986,8 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (typeof p.manualWrites === 'number' && p.manualWrites > 0) out.manualWrites = Math.min(Math.floor(p.manualWrites), 9999);
         if (p.skipPreview === true) out.skipPreview = true;
         if (p.placesOffer === 'armed' || p.placesOffer === 'done') out.placesOffer = p.placesOffer;
+        const cs = storedConflictSentFrom(p.conflictSent);
+        if (cs.length) out.conflictSent = cs;
         const sc = p.settledConflicts as Record<string, unknown> | undefined;
         if (sc && typeof sc.base === 'string' && Array.isArray(sc.ids)) {
             out.settledConflicts = { base: sc.base, ids: sc.ids.filter((x): x is string => typeof x === 'string' && /^X\d{1,9}$/.test(x)).slice(0, 50) };

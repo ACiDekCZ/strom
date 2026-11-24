@@ -57,8 +57,9 @@ import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, researchTreeOfStatus, storedResearchBridge, researchLinksEnabled,
     researchAutoState, patchResearchAutoState, researchWriteKey, researchWriteIsNews, researchAutoIntroSeen, noteResearchAutoIntroSeen, forgetResearchWaitingItems, anyResearchBridgeKnown,
     researchSendPreviewSkipped, announcedResearchScheme, RESEARCH_BRIDGE_MOVED_EVENT,
-    ResearchAutoState, ResearchHeldConflicts, StoredResearchTree,
+    ResearchAutoState, ResearchHeldConflicts, StoredResearchTree, rememberConflictSent, forgetConflictSent,
 } from '../research-device.js';
+import { deviceClient } from '../device-client.js';
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, conflictTakeovers, heldConflicts,
@@ -2167,7 +2168,7 @@ export const researchSyncMethods = uiModule({
         if (sendingTree) return;
         const exported = !whole ? null : await researchGedcomWithImages(whole, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
-            ...(since ? { since } : {}), ...(deletedSources.length ? { deletedSources } : {}),
+            client: deviceClient(), ...(since ? { since } : {}), ...(deletedSources.length ? { deletedSources } : {}),
         }, titles, researchSendsReadings(this.researchStatusOf(link.id)), researchSendsSourceFields(this.researchStatusOf(link.id)), researchCitationsOut(this.researchStatusOf(link.id)),
         researchMediaOut(this.researchStatusOf(link.id)), mediaRef);
         // The images were read before this send counts as going: another send asked meanwhile is stopped here, not posted beside it.
@@ -2256,6 +2257,9 @@ export const researchSyncMethods = uiModule({
         if (res.ok && reply.ok && reply.intake && !again) {
             patchResearchAutoState(treeId, { lastCopy: { intake: reply.intake, base: link.head ?? '', ...(version ? { version } : {}) } });
         }
+        // Conflicts between this send and an earlier one (another device's, spec 094 K2.4): said only in this answer,
+        // shown later too. An older research says none: nothing is kept.
+        if (res.ok && reply.conflictSent.length) rememberConflictSent(treeId, reply.conflictSent);
         // The tree's files went with it, said so: its research's archive has them (spec 108 K2.7).
         if (res.ok && reply.ok && declaresMedia) patchResearchAutoState(treeId, { appMediaSent: link.id });
         // The first send out of "only load" went (through the preview): sending by itself may go on.
@@ -3681,6 +3685,7 @@ export const researchSyncMethods = uiModule({
         // The last write's own count: this one off it (its record there follows at the next ask).
         const lw = st.lastWritten;
         const named = !!lw?.conflictIds?.includes(conflictId);
+        forgetConflictSent(treeId, conflictId);
         patchResearchAutoState(treeId, {
             settledConflicts: { base, ids },
             ...(lw && named ? { lastWritten: { ...lw, conflicts: Math.max(0, (lw.conflicts ?? 0) - 1), conflictIds: lw.conflictIds!.filter(x => x !== conflictId) } } : {}),
