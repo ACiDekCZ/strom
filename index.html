@@ -28996,7 +28996,11 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .person-picker-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        /* The name shortens with "…"; the birth year and the tag after it
+           always stay whole in the row (a very long name on a phone). */
+        .person-picker-name { display: flex; align-items: baseline; min-width: 0; }
+        .person-picker-nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .person-picker-name > .birth-year, .person-picker-name > .person-picker-tagx { flex: none; }
         /* A row whose name repeats in the result: what tells it apart (years,
            ⚭ partner, parents, place), the end cut with "…" — the whole line is
            in the row's title and accessible name. */

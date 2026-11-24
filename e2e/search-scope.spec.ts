@@ -214,4 +214,32 @@ test.describe('search scope: phone', () => {
             await expect(page.locator('#search-filters-scope')).toHaveText('Searching the direct line only: Jan Vymyšlenský (*1871).');
         });
     }
+
+    test('390×844, German: a very long name shortens with "…", its birth year stays whole in the row', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await openApp(page);
+        await seedTree(page, {
+            ...PEOPLE,
+            long: { firstName: 'Florentýn Servác Bonifác', lastName: 'Hrabětický-Ambrožík ze Žabokřik', birthDate: '1902', parents: ['petr'] },
+        }, 'Vymyslensti', 'jan');
+        await page.evaluate(() => {
+            window.Strom.UI.setLanguage('de' as never);
+            window.Strom.UI.refreshSearch();
+        });
+        const p = picker(page);
+        const open = page.locator('#search-open-btn');
+        if (await open.isVisible()) await open.tap();
+        await p.input.fill('Florentýn');
+        await expect(p.items).toHaveCount(1);
+        await expect(p.items.first().locator('.birth-year')).toHaveText('(*1902)');
+        // The list takes the screen's width (positioned after it opens): the name is cut, the year inside the row.
+        await expect.poll(() => p.items.first().evaluate(row => {
+            const r = row.getBoundingClientRect();
+            const year = row.querySelector('.birth-year')!.getBoundingClientRect();
+            const name = row.querySelector('.person-picker-name')!;
+            const cut = [name, ...name.querySelectorAll('*')].some(el => el.scrollWidth > el.clientWidth);
+            return { cut, yearInRow: year.left >= r.left && year.right <= r.right, rowInScreen: r.right <= window.innerWidth };
+        })).toEqual({ cut: true, yearInRow: true, rowInScreen: true });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    });
 });

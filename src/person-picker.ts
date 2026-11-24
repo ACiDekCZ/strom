@@ -844,7 +844,7 @@ export class PersonPicker {
         return `
             <div class="person-picker-item sel-opt${selected ? ' selected' : ''}${dist ? ' has-dist' : ''}${note ? ' has-note' : ''}" data-sel-form="row" role="option" aria-selected="${selected}"${labelAttrs}
                  data-id="${this.escapeHtml(person.id)}">
-                <span class="person-picker-name">${nameHtml(person)} ${birthYear}${tag}</span>${below}${act}
+                <span class="person-picker-name"><span class="person-picker-nm">${nameHtml(person)}</span> ${birthYear}${tag}</span>${below}${act}
             </div>
         `;
     }
