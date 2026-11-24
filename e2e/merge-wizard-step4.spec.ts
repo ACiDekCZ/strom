@@ -155,7 +155,7 @@ test('step 4: the rule tiles, a kind\'s rule, By person with where each result c
     await row(wizard, 'vel', 'birthPlace').locator('.merge-s4-v[data-pick="import"]').click();
     const dialog = page.locator('#merge-s4-prot');
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator('h2')).toHaveText('Overwrite a documented detail?');
+    await expect(dialog.locator('h2')).toHaveText('Overwrite a proven detail?');
     await expect(dialog.getByRole('button', { name: 'Keep Křemenná' })).toBeFocused();
     await dialog.getByRole('button', { name: 'Use Mechová' }).click();
     await expect(dialog).toHaveCount(0);
