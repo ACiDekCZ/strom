@@ -834,7 +834,7 @@ export const structureSelectMethods = uiModule({
         const open = structureOpenFor();
         this.closeStructureDialog(false);
         if (open?.parent === 'tree-manager-modal') this.closeTreeManagerDialog();
-        this.showImportedTree(newId);
+        await this.showImportedTree(newId);
         const n = TreeManager.getTreeMetadata(newId)?.personCount ?? 0;
         showToast(strings.structure.createdToast(name, n), 10000, {
             closable: true,

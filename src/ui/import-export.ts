@@ -1699,7 +1699,7 @@ export const importExportMethods = uiModule({
         if (!gedcomImport && this.importTreeFileName) TreeManager.setImportedFrom(newTreeId, this.importTreeFileName);
 
         this.closeImportTreeDialog();
-        this.showImportedTree(newTreeId);
+        await this.showImportedTree(newTreeId);
         // If this import came from "open from file", attach that handle now.
         void this.attachPendingFileHandle(newTreeId);
         // M6: post-import health check — offer to review any data issues.
@@ -1708,13 +1708,19 @@ export const importExportMethods = uiModule({
             : {});
     },
 
-    /** A tree just imported as a new one, shown: the switcher, Manage trees, the canvas, search and the address. */
-    showImportedTree(newTreeId: TreeId): void {
+    /**
+     * A tree just imported as a new one, shown as a switch to it shows it
+     * (switchToTreeNow): the switcher, Manage trees, the focus the tree opens
+     * on (its own start person, never the focus of the tree left), the canvas
+     * centred on it, search and the address.
+     */
+    async showImportedTree(newTreeId: TreeId): Promise<void> {
         this.updateTreeSwitcher();
         this.updateTreeManagerList();
-        TreeRenderer.render();
-        TreeRenderer.resetFocusHistory();
+        TreeRenderer.restoreFromSession();
+        await TreeRenderer.renderAsync();
         this.refreshSearch();
+        ZoomPan.centerOnFocusWithContext();
         // Update URL to reflect new tree
         this.updateUrlTreeParam(newTreeId);
     },
@@ -1731,7 +1737,7 @@ export const importExportMethods = uiModule({
             () => ({ ok: false, kind: 'error', text: strings.busy.failed }));
         if (!newTreeId) return false;
         closed();
-        this.showImportedTree(newTreeId);
+        await this.showImportedTree(newTreeId);
         void this.afterImport(newTreeId, { gedcom: true, path: 'new', ...(importId ? { importId } : {}) });
         return true;
     },

@@ -87,6 +87,69 @@ test('Rod: the chosen line says its real count; Create opens the new tree with a
         .toEqual(['Jesenští', 'Jesenští — výřez']);
 });
 
+/**
+ * Create the tree of a line from Change structure… and say what the canvas
+ * shows then: the focus, whether it is a person of the new tree, the count
+ * under it and whether its card lies whole inside the visible canvas.
+ */
+async function createLineTree(page: Page): Promise<{ focus: string | null; inTree: boolean; count: string; inside: boolean; start: string | null }> {
+    // Opened as the phone's More › Tree does it too (one way for both widths).
+    await page.evaluate(() => window.Strom.UI.showStructureDialog(window.Strom.TreeManager.getActiveTreeId()!));
+    const dialog = page.locator('#structure-modal');
+    await expect(dialog).toHaveAttribute('data-step', 'options');
+    await dialog.locator('.menu-option[data-action="select"]').click();
+    await expect(dialog).toHaveAttribute('data-step', 'who');
+    await tab(dialog, 'rod').click();
+    await dialog.locator('li.sp-rodpick-rod', { hasText: 'Jesensk' }).first().locator('button').click();
+    await dialog.locator('#structure-footer [data-action="continue"]').click();
+    await expect(dialog).toHaveAttribute('data-step', 'summary');
+    await dialog.getByRole('button', { name: 'Create tree' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText(/^Jesenští — /);
+    // The toast comes once the new tree is shown; the count then is the new tree's.
+    await expect(page.locator('.toast', { hasText: 'created' })).toBeVisible();
+    const total = await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons).length);
+    // The focus panel's count (a phone keeps it in the panel behind the focus pill).
+    const count = page.locator('#focus-person-count');
+    await expect(count).toHaveText(new RegExp(` of ${total} people$`));
+    await page.evaluate(() => window.Strom.ZoomPan.finishAnimation());
+    return page.evaluate(() => {
+        const S = window.Strom;
+        const focus = S.TreeRenderer.getFocusPersonId() as string | null;
+        const persons = S.DataManager.getData().persons as Record<string, unknown>;
+        const box = (document.getElementById('tree-container') as HTMLElement).getBoundingClientRect();
+        const el = focus ? document.querySelector<HTMLElement>(`#tree-canvas .person-card[data-id="${CSS.escape(focus)}"]`) : null;
+        const r = el?.getBoundingClientRect();
+        const inside = !!r && r.width > 0 && r.left >= box.left - 1 && r.right <= box.right + 1 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1;
+        const start = (S.DataManager.getStartupFocus()?.personId as string | undefined) ?? null;
+        return { focus, inTree: !!focus && focus in persons, inside, start, count: '' };
+    }).then(async (r) => ({ ...r, count: (await count.textContent())?.trim() ?? '' }));
+}
+
+for (const [label, use] of [
+    ['desktop', { viewport: { width: 1440, height: 900 } }],
+    ['phone', { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }],
+] as const) test.describe(label, () => {
+    test.use(use);
+    test('Create tree opens the new tree on its own person, centred, all of it in view (not the focus of the tree left)', async ({ page }) => {
+        await openApp(page);
+        // Focused on Hana (married in, in the line's tree too) without generations, the view moved far away.
+        await seedTree(page, JESENSTI, 'Jesenští', 'hana');
+        await page.evaluate(() => {
+            const S = window.Strom;
+            S.TreeRenderer.setFocusDepth(0, 0);
+            S.ZoomPan.centerOnWorldPoint(6000, 6000);
+        });
+        const made = await createLineTree(page);
+        expect(made.inTree).toBe(true);
+        // The same person a reload would open on (the tree's start person, else the default rule).
+        if (made.start) expect(made.focus).toBe(made.start);
+        const total = await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons).length);
+        expect(made.count).toBe(`${total} of ${total} people`);
+        expect(made.inside).toBe(true);
+    });
+});
+
 test('a list of nobody: the row is chosen, but Continue stays off', async ({ page }) => {
     await openApp(page);
     await seedTree(page, JESENSTI, 'Jesenští', 'vojtech');
