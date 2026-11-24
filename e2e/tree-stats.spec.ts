@@ -474,6 +474,30 @@ test.describe('Statistics window: the look', () => {
     }
 });
 
+test.describe('Statistics window: the birth period fields', () => {
+    for (const [w, h] of [[1440, 900], [1024, 768]] as const) {
+        test(`German, ${w}×${h}: year fields 66 px wide, “Geboren von” on one line beside them`, async ({ page }) => {
+            await setup(page, w, h);
+            await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+            const win = await openStats(page);
+            await expect(win.locator('.stv-period-l')).toHaveText('Geboren von');
+            const m = await win.locator('.stv-period').evaluate(period => {
+                const label = period.querySelector('.stv-period-l') as HTMLElement;
+                const range = document.createRange();
+                range.selectNodeContents(label);
+                const tops = new Set([...range.getClientRects()].map(r => Math.round(r.top)));
+                const years = [...period.querySelectorAll<HTMLElement>('.stv-year')].map(y => y.getBoundingClientRect());
+                const l = label.getBoundingClientRect();
+                return { lines: tops.size, widths: years.map(y => y.width), labelRight: l.right, firstLeft: years[0].left, sameRow: years.every(y => Math.abs(y.top + y.height / 2 - (l.top + l.height / 2)) < 4) };
+            });
+            expect(m.lines).toBe(1);
+            for (const width of m.widths) expect(width).toBeLessThanOrEqual(70);
+            expect(m.labelRight).toBeLessThanOrEqual(m.firstLeft);
+            expect(m.sameRow).toBe(true);
+        });
+    }
+});
+
 /** The overview with one section open; waits for its "In detail" link. */
 async function overviewLink(page: Page, treeId: string, section: string, sel: string): Promise<Locator> {
     await page.evaluate(({ id, section }) => window.Strom.UI.showTreeOverview(id, { section: section as never }), { id: treeId, section });
