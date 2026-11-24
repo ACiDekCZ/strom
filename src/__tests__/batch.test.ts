@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     batchSkip, batchLimitsOf, batchOverLimit, batchEstimate, batchDefaultName, batchTree, batchFolderFiles,
-    batchPathHeader, sanitizeUnfinishedBatch, isZip, batchCloseWaitMs, CLOSE_RETRY_DEFAULT_MS, CLOSE_RETRY_MAX_MS,
+    batchPathHeader, sanitizeUnfinishedBatch, isZip, batchCloseWaitMs, CLOSE_RETRY_DEFAULT_MS, CLOSE_RETRY_MAX_MS, batchHeicRefused,
 } from '../batch.js';
 
 const MB = 1024 * 1024;
@@ -91,5 +91,17 @@ describe('the wait before a failed close of a batch is asked again (W136)', () =
         expect(batchCloseWaitMs({ retry: 0.2 }, null)).toBe(1000);
         expect(batchCloseWaitMs({ retry: 3600 }, null)).toBe(CLOSE_RETRY_MAX_MS);
         expect(batchCloseWaitMs({ retry: '2' }, null)).toBe(2000);
+    });
+});
+
+describe('HEIC on a device of the home network', () => {
+    const jpeg = [{ mime: 'image/jpeg', ext: ['jpg', 'jpeg'] }];
+    it('is refused only when the research names its types and none of them is HEIC', () => {
+        expect(batchHeicRefused('IMG_2036.HEIC', '', jpeg)).toBe(true);
+        expect(batchHeicRefused('IMG_2036.jpg', 'image/heif', jpeg)).toBe(true);
+        expect(batchHeicRefused('IMG_2036.jpg', 'image/jpeg', jpeg)).toBe(false);
+        expect(batchHeicRefused('IMG_2036.heic', 'image/heic', null)).toBe(false);
+        expect(batchHeicRefused('IMG_2036.heic', 'image/heic', [...jpeg, { mime: 'image/heic', ext: ['heic'] }])).toBe(false);
+        expect(batchHeicRefused('IMG_2036.heic', '', [{ mime: 'application/octet-stream', ext: ['.heif'] }])).toBe(false);
     });
 });

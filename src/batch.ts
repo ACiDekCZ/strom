@@ -9,7 +9,7 @@
 import type { LiveChange, LiveLogEntry } from './research-link.js';
 
 /** Why a file is left out of a batch. */
-export type BatchSkip = 'system' | 'secret' | 'program' | 'archive' | 'tooBig' | 'ged';
+export type BatchSkip = 'system' | 'secret' | 'program' | 'archive' | 'tooBig' | 'ged' | 'heic';
 
 export interface BatchFileInfo {
     /** Relative path in the picked folder ("Babička/Dopisy/1946.jpg"), or the file's name. */
@@ -52,6 +52,18 @@ export function batchSkip(info: BatchFileInfo, maxFile: number): { reason: Batch
 }
 
 export const isZip = (path: string): boolean => /\.zip$/i.test(path);
+
+const HEIC = /\.(heic|heif)$/i;
+
+/**
+ * A HEIC/HEIF photo (an iPhone's) the research does not take: it said the
+ * kinds of file it takes (`accepts.media.types`) and none of them is HEIC.
+ * Nothing said: the research is left to answer.
+ */
+export function batchHeicRefused(path: string, mime: string, types: readonly { mime: string; ext: string[] }[] | null): boolean {
+    if (!types || !(HEIC.test(path) || /^image\/hei[cf]/i.test(mime))) return false;
+    return !types.some(t => /^image\/hei[cf]/i.test(t.mime) || t.ext.some(e => /^\.?hei[cf]$/i.test(e)));
+}
 
 /** The research's limits for a batch, or null when it takes none. */
 export function batchLimitsOf(accepts: { mediaBatch: { files: number; bytes: number; zip: boolean } | null; mediaMaxBytes: number | null } | null): BatchLimits | null {
