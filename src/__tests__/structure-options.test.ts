@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { structureOptions, isWhollyConnected, summarizeSubset, summarizeSubsetSteps, islandsOf, summarizeCopy, type StructureContext } from '../structure-options.js';
 import type { PersonId, StromData } from '../types.js';
+import { getStringsForLang } from '../strings.js';
 
 const base: StructureContext = {
     isActive: true, readOnly: false, liveFollowing: false, otherTrees: true, connected: false,
@@ -188,5 +189,45 @@ describe('summarizeCopy', () => {
     it('counts the whole tree\'s sources and images by reference', () => {
         // Sources s1–s5; Petr's portrait, u1's photo, m1, m3, m4 (m2 is a PDF).
         expect(summarizeCopy(family())).toEqual({ sources: 5, images: 5 });
+    });
+});
+
+// ==================== §3.3 / §4.3 the texts that count ====================
+
+
+describe('the texts of who to take and the summary', () => {
+    it('Czech: the generations and the people chosen by hand go by the count (1 / 2 / 5)', () => {
+        const t = getStringsForLang('cs').structure;
+        expect(t.whatAncestors('Josef Ostrožný', 1)).toBe('předci: Josef Ostrožný, 1 generace');
+        expect(t.whatAncestors('Josef Ostrožný', 2)).toBe('předci: Josef Ostrožný, 2 generace');
+        expect(t.whatAncestors('Josef Ostrožný', 5)).toBe('předci: Josef Ostrožný, 5 generací');
+        expect(t.whatAncestors('Josef Ostrožný')).toBe('předci: Josef Ostrožný');
+        expect(t.whatHand(1)).toBe('1 osoba vybraná ručně');
+        expect(t.whatHand(2)).toBe('2 osoby vybrané ručně');
+        expect(t.whatHand(5)).toBe('5 osob vybraných ručně');
+        expect(t.stepOf(2, 3, t.stepWho)).toBe('krok 2 ze 3: koho vzít');
+        expect(t.summaryLead(t.whatRod('Jesenský'))).toBe('Rod Jesenský – nový strom dostane:');
+        expect(t.islands(1)).toBe('1 osoba je napojená jen přes nevybrané lidi a bude v novém stromu samostatně.');
+        expect(t.islands(3)).toBe('3 osoby jsou napojené jen přes nevybrané lidi a budou v novém stromu samostatně.');
+    });
+
+    it('English, German and Polish', () => {
+        const en = getStringsForLang('en').structure;
+        expect(en.whatAncestors('Josef Ostrožný', 1)).toBe('ancestors: Josef Ostrožný, 1 generation');
+        expect(en.whatAncestors('Josef Ostrožný', 4)).toBe('ancestors: Josef Ostrožný, 4 generations');
+        expect(en.whatHand(1)).toBe('1 person chosen by hand');
+        expect(en.whatHand(4)).toBe('4 people chosen by hand');
+        const de = getStringsForLang('de').structure;
+        expect(de.whatAncestors('Josef Ostrožný', 1)).toBe('Vorfahren: Josef Ostrožný, 1 Generation');
+        expect(de.whatAncestors('Josef Ostrožný', 3)).toBe('Vorfahren: Josef Ostrožný, 3 Generationen');
+        expect(de.whatHand(1)).toBe('1 von Hand gewählte Person');
+        expect(de.whatHand(4)).toBe('4 von Hand gewählte Personen');
+        const pl = getStringsForLang('pl').structure;
+        expect(pl.whatAncestors('Josef Ostrožný', 1)).toBe('przodkowie: Josef Ostrožný, 1 pokolenie');
+        expect(pl.whatAncestors('Josef Ostrožný', 2)).toBe('przodkowie: Josef Ostrožný, 2 pokolenia');
+        expect(pl.whatAncestors('Josef Ostrožný', 5)).toBe('przodkowie: Josef Ostrožný, 5 pokoleń');
+        expect(pl.whatHand(1)).toBe('1 osoba wybrana ręcznie');
+        expect(pl.whatHand(3)).toBe('3 osoby wybrane ręcznie');
+        expect(pl.whatHand(5)).toBe('5 osób wybranych ręcznie');
     });
 });

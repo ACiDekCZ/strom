@@ -1,5 +1,5 @@
 import type { StringsType } from '../strings.js';
-import { joinAndPl, nPl, numPl, plPl } from './helpers.js';
+import { capFirstPl, joinAndPl, nPl, numPl, plPl } from './helpers.js';
 
 export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' | 'exportMenu' | 'settings' | 'treeActions'
     | 'structure' | 'treeManager' | 'share' | 'shareDiff' | 'viewMode' | 'encryption' | 'treePreview' | 'slideshow' | 'live'
@@ -767,6 +767,56 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         joinSelectionDesc: 'Ród, lista, linia, bieżący widok albo ręcznie – jak przy nowym drzewie.',
         joinNote: 'Dalej kreator scalania: dokąd, kto jest kim, co się zmieni. To drzewo się nie zmienia; docelowe zmieni się dopiero po potwierdzeniu w kreatorze i można to cofnąć.',
         continueGuide: 'Przejdź do kreatora',
+
+        // ---- New tree from a selection: who to take (§3), the summary (§4) ----
+        selectTitle: 'Nowe drzewo z wyboru',
+        joinSelectTitle: 'Połącz wybór z innym drzewem',
+        stepOf: (n: number, total: number, what: string) => `krok ${n} z ${total}: ${what}`,
+        stepWho: 'kogo wziąć',
+        whoHeading: 'Kogo wziąć',
+        kind: {
+            view: 'Bieżący widok', rod: 'Ród / nazwisko', list: 'Lista osób', ancestors: 'Przodkowie osoby',
+            descendants: 'Potomkowie osoby', direct: 'Linia prosta osoby', hand: 'Ręcznie',
+        },
+        viewOnScreen: 'Osoby widoczne teraz na ekranie:',
+        viewOnlyFamily: 'Tylko w widoku Rodzina lub Potomkowie.',
+        directNote: 'Linia prosta: przodkowie i potomkowie osoby, bez rodzeństwa i ich rodzin.',
+        genAncestors: 'Przodkowie – pokolenia',
+        genDescendants: 'Potomkowie – pokolenia',
+        personLabel: 'Osoba',
+        searchList: 'Szukaj listy…',
+        listsFixed: 'Listy stałe',
+        listsAuto: 'Listy automatyczne',
+        chosen: (text: string) => `Wybrano: ${text}`,
+        whatRod: (name: string) => `ród ${name}`,
+        whatList: (name: string) => `lista „${name}”`,
+        /** `g` generations; none: all of them. */
+        whatAncestors: (name: string, g?: number) => `przodkowie: ${name}${g ? `, ${nPl(g, 'pokolenie', 'pokolenia', 'pokoleń')}` : ''}`,
+        whatDescendants: (name: string, g?: number) => `potomkowie: ${name}${g ? `, ${nPl(g, 'pokolenie', 'pokolenia', 'pokoleń')}` : ''}`,
+        whatDirect: (name: string) => `linia prosta: ${name}`,
+        whatView: 'wycinek',
+        whatHand: (n: number) => `${n} ${plPl(n, 'osoba wybrana', 'osoby wybrane', 'osób wybranych')} ręcznie`,
+        stepSummary: 'podsumowanie',
+        summaryLead: (what: string) => `${capFirstPl(what)} – nowe drzewo otrzyma:`,
+        copyLead: (name: string) => `Kopia otrzyma całe drzewo ${name}:`,
+        statPersons: (n: number) => plPl(n, 'osoba', 'osoby', 'osób'),
+        statCouples: (n: number) => plPl(n, 'para', 'pary', 'par'),
+        statSources: (n: number) => plPl(n, 'źródło', 'źródła', 'źródeł'),
+        statImages: (n: number) => plPl(n, 'obraz', 'obrazy', 'obrazów'),
+        islandsHead: 'Osobne części',
+        islands: (n: number) => `${n} ${plPl(n, 'osoba jest połączona', 'osoby są połączone', 'osób jest połączonych')} tylko przez niewybrane osoby i w nowym drzewie ${plPl(n, 'będzie', 'będą', 'będzie')} osobno.`,
+        islandVia: (name: string) => `łączy ${name}`,
+        showNames: (n: number) => `Pokaż nazwiska (${n})`,
+        hideNames: 'Ukryj nazwiska',
+        defaultName: (tree: string, what: string) => `${tree} — ${what}`,
+        keepNote: 'Pierwotne drzewo się nie zmienia. Nowe drzewo nie jest połączone z badaniem.',
+        copyKeepNote: 'Pierwotne drzewo się nie zmienia. Kopia nie jest połączona z badaniem; własne badanie można włączyć później w zarządzaniu drzewami.',
+        create: 'Utwórz drzewo',
+        createCopy: 'Utwórz kopię',
+        counting: (done: number, total: number) => `Liczenie… ${numPl(done)} z ${numPl(total)} osób`,
+        imagesNotLoaded: 'Obrazy są tylko liczone, nie są wczytywane do pamięci.',
+        createdToast: (name: string, n: number) => `Utworzono drzewo „${name}” (${nPl(n, 'osoba', 'osoby', 'osób')}).`,
+        backTo: (name: string) => `Wróć do ${name}`,
         fileTitle: 'Dodaj z pliku do tego drzewa',
         fileGed: 'Plik GEDCOM (.ged)',
         fileGedDesc: 'Z innego programu: MyHeritage, Geni, Ancestry, Gramps…',
