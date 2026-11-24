@@ -18298,6 +18298,10 @@
         /* Change structure… (spec 139 §2): the options as rows with the direction of their data, a greyed
            option says why under it (the way out a link beside the sentence, never inside the button). */
         @media (min-width: 641px) { .modal.modal--lg.structure-modal { height: min(600px, 88vh); max-height: min(600px, 88vh); } }
+        /* The options: every option in view without scrolling where the screen has room (de needs ~750px);
+           the other steps keep the fixed height. */
+        @media (min-width: 641px) and (min-height: 501px) { #structure-modal[data-step="options"] .modal.modal--lg.structure-modal { height: auto; max-height: min(800px, 92vh); } }
+        @media (min-width: 1025px) { #structure-modal[data-step="options"] .structure-modal .menu-option { padding-top: 8px; padding-bottom: 8px; } }
         .structure-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
         .structure-heading { min-width: 0; }
         .structure-modal .modal-header h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

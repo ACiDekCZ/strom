@@ -151,6 +151,31 @@ test.describe('desktop', () => {
         await expect(option(dialog, 'file')).not.toHaveAttribute('aria-disabled', 'true');
         await expect(dialog.locator('#structure-footer [data-action="openTree"]')).toHaveCount(0);
     });
+
+    for (const [w, h] of [[1440, 900], [1280, 800]] as const) {
+        test(`${w}×${h}: every option in view without scrolling, in cs/en/de/pl (none cut at the bottom)`, async ({ page }) => {
+            await page.setViewportSize({ width: w, height: h });
+            await openApp(page);
+            await createFirstPerson(page, 'Vojtěch', 'Jesenský');
+            await secondTree(page, 'Rodina Kalinovských');
+            for (const lang of ['cs', 'en', 'de', 'pl']) {
+                await page.evaluate((l) => window.Strom.UI.setLanguage(l), lang);
+                await page.evaluate(() => window.Strom.UI.showStructureDialog(window.Strom.TreeManager.getActiveTreeId()!));
+                const dialog = page.locator('#structure-modal');
+                await expect(dialog).toHaveAttribute('data-step', 'options');
+                const fit = await dialog.evaluate((d) => {
+                    const body = d.querySelector('.modal-content') as HTMLElement;
+                    const box = body.getBoundingClientRect();
+                    const last = [...d.querySelectorAll<HTMLElement>('.menu-option')].pop()!.getBoundingClientRect();
+                    const modal = d.querySelector('.modal')!.getBoundingClientRect();
+                    return { scrolls: body.scrollHeight > body.clientHeight + 1, lastCut: last.bottom > box.bottom + 1, offScreen: modal.bottom > window.innerHeight };
+                });
+                expect(fit, lang).toEqual({ scrolls: false, lastCut: false, offScreen: false });
+                await page.keyboard.press('Escape');
+                await expect(dialog).not.toHaveClass(/active/);
+            }
+        });
+    }
 });
 
 test.describe('phone', () => {
