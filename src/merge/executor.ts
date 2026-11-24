@@ -862,7 +862,7 @@ export async function executeMerge(givenState: MergeState): Promise<MergeResult>
 
         // Citations of a source that was already in the tree now name the kept entry.
         remapSourceReferences(mergedData, sourceRemap, state.incomingData.sources);
-        unlinkOrphanExcerpts(mergedData);
+        unlinkOrphanExcerpts(mergedData, [state.existingData, state.incomingData]);
 
         // A person holding two alike copies of one shared event keeps one; a
         // share left with one copy is an ordinary event.
@@ -1564,12 +1564,16 @@ function carryIncomingMedia(
 /**
  * Excerpts whose full-page attachment did not survive the merge (dropped as a
  * duplicate of the same bytes under another id) lose only their re-crop link.
+ * Only an attachment one of the trees had (`before`) and the merge dropped: a
+ * link that named no file already stays as it was (the merge did not touch
+ * that source, its undo has nothing of it to take back).
  */
-function unlinkOrphanExcerpts(data: StromData): void {
+function unlinkOrphanExcerpts(data: StromData, before: readonly StromData[]): void {
     const attachmentIds = new Set(allMedia(data).map(a => a.id));
+    const hadIds = new Set(before.flatMap(d => allMedia(d).map(a => a.id)));
     for (const src of Object.values(data.sources ?? {})) {
         for (const exc of src.excerpts ?? []) {
-            if (exc.fromAttachmentId && !attachmentIds.has(exc.fromAttachmentId)) {
+            if (exc.fromAttachmentId && hadIds.has(exc.fromAttachmentId) && !attachmentIds.has(exc.fromAttachmentId)) {
                 delete exc.fromAttachmentId;
                 delete exc.region;
             }

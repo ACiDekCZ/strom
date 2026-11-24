@@ -27,7 +27,7 @@
  */
 
 import type { EventParticipant, MergeEdit, MergeRecord, PartnershipId, Person, PersonId, StromData } from '../types.js';
-import { hasImageToken, personPrint, valueKey } from './record.js';
+import { hasImageToken, personPrint, valueKey, withImagesFrom } from './record.js';
 import { forEachCitationHolder } from '../citation-quality.js';
 import { partnershipParticipants } from '../model-values.js';
 import { rewriteStorySources } from '../story-sources.js';
@@ -302,12 +302,19 @@ function valueIn(data: StromData, e: MergeEdit): unknown {
     return isPlain(rec) ? rec[e.key] : undefined;
 }
 
-/** The edit's value before with its pictures: from the backup, when the backup has that very value. Null: not to be had. */
-function realBefore(e: MergeEdit, backup: StromData | null | undefined): { value: unknown } | null {
+/**
+ * The edit's value before with its pictures: from the backup, when the backup
+ * has that very value, else from the value now (`cur`) when each picture of
+ * it is still there (the merge changed the record around a picture, it did
+ * not replace it). Null: not to be had.
+ */
+function realBefore(e: MergeEdit, backup: StromData | null | undefined, cur: unknown): { value: unknown } | null {
     if (!hasImageToken(e.before)) return { value: e.before };
-    if (!backup) return null;
-    const v = valueIn(backup, e);
-    return valueKey(v) === valueKey(e.before) ? { value: clone(v) } : null;
+    if (backup) {
+        const v = valueIn(backup, e);
+        if (valueKey(v) === valueKey(e.before)) return { value: clone(v) };
+    }
+    return withImagesFrom(e.before, cur);
 }
 
 /** The day of a date or a time (YYYY-MM-DD). */
@@ -563,7 +570,7 @@ function run(record: MergeRecord, current: StromData, choices: UndoChoices): Run
             if (e.in !== '' && e.key !== '' && !isPlain(rec)) continue;   // the record is gone since
             const cur = e.in === '' ? (data as unknown as Record<string, unknown>)[e.key] : e.key === '' ? rec : (rec as Record<string, unknown>)[e.key];
             if (valueKey(cur) === valueKey(e.before)) continue;
-            const real = realBefore(e, choices.backup);
+            const real = realBefore(e, choices.backup, cur);
             if (!real) { picture = true; continue; }
             const next = revertValue(real.value, e.after, cur, ctx);
             if (e.in === '') {
