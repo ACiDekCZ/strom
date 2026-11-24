@@ -22,6 +22,7 @@ import { iconSvg } from '../icons.js';
 import { busySpinHtml } from './busy.js';
 import { poolKeyOf } from '../image-ref.js';
 import { imageBlob } from '../image-src.js';
+import { parseDeviceBridge } from '../research-link.js';
 import {
     ZoomView, ZoomBox, fitView, clampView, zoomAt, panBy, zoomPercent, isFitted, scaleLimits, ZOOM_STEP,
 } from '../image-zoom.js';
@@ -338,17 +339,21 @@ function releaseHeld(): void {
 }
 
 /**
- * The address to show `value` from: itself, or for a pooled image an object
- * URL of the viewer's own (at once when it has one, else once read; '' when
- * the pool gives none).
+ * The address to show `value` from: itself, or for a pooled image (or a file
+ * of the bridge on a device) an object URL of the viewer's own (at once when
+ * it has one, else once read; '' when the pool or the bridge gives none).
  */
 function viewerSrc(value: string): string | Promise<string> {
-    const id = poolKeyOf(value);
+    // A file of the research's bridge on a device of the home network (spec 094 P3): its bytes through
+    // the gateway's tunnel (the page's fetch), never asked of that address itself.
+    const device = parseDeviceBridge(value) ? `device:${value}` : null;
+    const id = device ?? poolKeyOf(value);
     if (!id) return value;
     const have = heldUrls.get(id);
     if (have) return have;
     const epoch = heldEpoch;
-    return imageBlob(value).then((blob) => {
+    const read = device ? fetch(value).then(r => (r.ok ? r.blob() : null)) : imageBlob(value);
+    return read.then((blob) => {
         if (!blob || epoch !== heldEpoch) return '';
         const again = heldUrls.get(id);
         if (again) return again;
