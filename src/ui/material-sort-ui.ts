@@ -34,7 +34,7 @@ import {
     sortJobWithout, sortRememberedWithout,
     type SortNext, type SortNextOpts, type SortRow, type SortChoice, type SortChip, type SortRevert, type SortWrite, type SortCounts, type SortStripState,
 } from '../material-sort.js';
-import { researchPersonRef } from '../research-link.js';
+import { researchPersonRef, sortAsksCost } from '../research-link.js';
 import { PersonPicker } from '../person-picker.js';
 import { researchAutoState, patchResearchAutoState, type ResearchSortRemembered, type ResearchAutoState, type ResearchSortLeft } from '../research-device.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
@@ -471,6 +471,9 @@ export const materialSortMethods = uiModule({
         const s = strings.materials.agentSort;
         // The research keeps a run of batches (material.sortRun); an older one takes one batch, the rest is for the next.
         const runs = !!mc.caps.sortRun;
+        // The research's sort.confirm `no` (spec 102 U8, set by a person in its terminal): the cost is not said each
+        // time; the sorting still goes only with the button, its AI badge and the count of files.
+        const asks = sortAsksCost(this.researchStatusOf(mc.researchId));
         const all = [...this.materialSortItemMap(mc.treeId).values()];
         // The scopes (spec 102 §2): the one it came from first; every file without a title or a person always.
         // What is left of a run (Try again, Continue): only that, it goes on with the proposal still open.
@@ -659,14 +662,14 @@ export const materialSortMethods = uiModule({
             // Over 30 batches the rest is for the next sorting; an older research takes 50 at once.
             over.textContent = scope === 'first' || !p.over ? '' : runs ? s.overRun(n) : s.olderRun;
             over.hidden = !over.textContent;
-            big.textContent = nb > SORT_MANY_BATCHES ? s.costBig(nb) : '';
+            big.textContent = asks && nb > SORT_MANY_BATCHES ? s.costBig(nb) : '';
             big.hidden = !big.textContent;
             // A selection sends everything selected; copies and sources' files are said.
             const odd = scope === 'selection' ? files.filter(flagged).length : 0;
             warn.replaceChildren(...(odd ? [h('p', 'mdlg-warn-text', s.selWarn(odd))] : []));
             warn.hidden = !odd;
             drawLeft(p, off.skipped.text.length);
-            cost.textContent = nb > SORT_MANY_BATCHES ? '' : nb > 1 ? s.costRun(nb) : s.cost;
+            cost.textContent = !asks || nb > SORT_MANY_BATCHES ? '' : nb > 1 ? s.costRun(nb) : s.cost;
             const label = nb > 1 ? s.goRun(nb) : s.go;
             go.innerHTML = researchBridgeActionLabel(label, 'material-sort');
             go.disabled = !n;

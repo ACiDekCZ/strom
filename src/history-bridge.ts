@@ -14,7 +14,8 @@
 
 import {
     cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, type ResearchExperiment, type ResearchHypothesesDecide,
-    sanitizeBooksSettings, sanitizeCensus, sanitizeIntakeSetting, type LiveBooksSettings, type LiveCensus, type LiveIntakeSetting,
+    sanitizeBooksSettings, sanitizeCensus, sanitizeIntakeSetting, sanitizeSortSetting, type LiveBooksSettings, type LiveCensus, type LiveIntakeSetting,
+    type LiveSortSetting, type SortConfirm,
 } from './research-link.js';
 import { writeHeldOfRefusal, type ResearchWriteHeld } from './research-write-held.js';
 import { READ_TASK_NAMES, READ_TASK_SETTING_PATH, readTaskSettingBody, sanitizeTaskSetting, type ReadTaskSetting } from './research-read-task.js';
@@ -777,6 +778,51 @@ export function intakeReply(status: number, body: unknown, features: readonly st
 export async function postBridgeIntake(base: string, auto: boolean, features: readonly string[] | null | undefined): Promise<IntakeWriteResult> {
     const res = await postWrite(base, '/intake', { auto });
     return res ? intakeReply(res.status, res.body, features) : { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
+}
+
+// ==================== SORTING WITHOUT ASKING (spec 102 U8) ====================
+
+/**
+ * Why `POST /settings/sort {confirm}` did not go: `raise` 403 sort.raise (`no` is the person's in the research's
+ * terminal: `command`, when it looks like one); `invalid` 400 sort.body; `archive` 409 sort.archive (an archive, or
+ * a research waiting for its agent); the rest as `POST /intake` (500 sort.failed: `unknown` with the bridge's sentence).
+ */
+export type SortConfirmWriteError = IntakeWriteError | 'raise';
+
+export type SortConfirmWriteResult =
+    | { ok: true; sort: LiveSortSetting | null; head: string; parent: string }
+    | { ok: false; code: SortConfirmWriteError; status: number; reason: string; bridgeCode: string; held?: ResearchWriteHeld; command?: string };
+
+/** The reply to `POST /settings/sort`, typed: the setting the research keeps now (null: not said validly) and its commit. */
+export function sortConfirmReply(status: number, body: unknown, features: readonly string[] | null | undefined): SortConfirmWriteResult {
+    const r = asRecord(body) ?? {};
+    if (status >= 200 && status < 300) return { ok: true, sort: sanitizeSortSetting(r.sort), ...headsOf(body) };
+    const reason = bridgeSentence(body);
+    const code = bridgeCode(body);
+    const out = (c: SortConfirmWriteError, extra: { held?: ResearchWriteHeld; command?: string } = {}): SortConfirmWriteResult =>
+        ({ ok: false, code: c, status, reason, bridgeCode: code, ...extra });
+    if (status === 403 && code === 'sort.raise') {
+        // The terminal command that sets it, only when it looks like one of the research's.
+        const command = cleanText(r.command, 120);
+        return out('raise', /^strom [A-Za-z0-9 ._=-]{1,100}$/.test(command) ? { command } : {});
+    }
+    const held = writeHeldOfRefusal(code, r.error, features, r.params);
+    if (held) return out('held', { held });
+    if (status === 400) return out('invalid');
+    if (status === 409 && code === 'sort.archive') return out('archive');
+    if (status === 503 || code === 'research.busy' || code === 'busy') return out('busy');
+    if (status === 423 || code === 'locked') return out('locked');
+    if (status === 507 || code === 'disk.full') return out('full');
+    return out('unknown');
+}
+
+/**
+ * Sort with the agent without asking for the cost, or asking again (`POST <token>/settings/sort {"confirm": …}`),
+ * no terminal. Only `ask` is written; `no` comes back 403 `sort.raise` with the terminal's command.
+ */
+export async function postBridgeSortConfirm(base: string, confirm: SortConfirm, features: readonly string[] | null | undefined): Promise<SortConfirmWriteResult> {
+    const res = await postWrite(base, '/settings/sort', { confirm });
+    return res ? sortConfirmReply(res.status, res.body, features) : { ok: false, code: 'network', status: 0, reason: '', bridgeCode: '' };
 }
 
 // ==================== KINDS OF EVENTS (spec 035) ====================

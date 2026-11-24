@@ -16,10 +16,10 @@ import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
 import {
-    researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, HYPOTHESES_DECIDE_FEATURE, CENSUS_FEATURE, INTAKE_AUTO_FEATURE, researchLinkMark, researchUrlMark,
-    booksOn, BOOKS_MIN_TASKS_DEFAULT, BOOKS_SAME_BOOK_DEFAULT, type ResearchHypothesesDecide, type LiveBooksSettings,
+    researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, HYPOTHESES_DECIDE_FEATURE, CENSUS_FEATURE, INTAKE_AUTO_FEATURE, SORT_CONFIRM_FEATURE, researchLinkMark, researchUrlMark,
+    booksOn, BOOKS_MIN_TASKS_DEFAULT, BOOKS_SAME_BOOK_DEFAULT, type ResearchHypothesesDecide, type LiveBooksSettings, type SortConfirm,
 } from '../research-link.js';
-import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask, postBridgeBooks, postBridgeCensus, postBridgeIntake, type BooksSettingBody } from '../history-bridge.js';
+import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask, postBridgeBooks, postBridgeCensus, postBridgeIntake, postBridgeSortConfirm, type BooksSettingBody } from '../history-bridge.js';
 import { booksSettingHtml, booksMinTasksInput, type BooksSettingNote } from './books-setting-view.js';
 import { READ_SOURCE_TASK_FEATURE, type ReadTaskSetting } from '../research-read-task.js';
 import { readTaskSettingHtml, type ReadTaskSettingNote } from './read-task-setting-view.js';
@@ -66,6 +66,15 @@ const census: { rid: string; note?: string; want?: boolean; wantHeld?: number | 
 const intake: { rid: string; note?: string; want?: boolean; busy?: boolean; sending?: boolean; gone?: boolean } = { rid: '' };
 
 /**
+ * "Sort with the agent without asking" (spec 102 U8), in the same group as `intake`: the same parts, the sentence
+ * under the row with the terminal's command when switching on was refused (403 `sort.raise`: only a person in the
+ * research's terminal sets `no`).
+ */
+const sortConfirm: {
+    rid: string; note?: { text: string; command?: string | null; raise?: boolean }; want?: SortConfirm; busy?: boolean; sending?: SortConfirm; gone?: boolean;
+} = { rid: '' };
+
+/**
  * "Who decides hypotheses" (spec 060): the same parts as `stories` — the
  * research's answer under the row (`link`: its terminal confirms the agent),
  * the value asked until the status says it (`want`), a write on its way (`busy`).
@@ -95,6 +104,7 @@ const RUNS_PEND = 'tree:runs';
  */
 const runsMax: { rid: string; want?: number; sending?: number; note?: { text: string; command?: string | null }; away?: boolean; stale?: boolean } = { rid: '' };
 const INTAKE_PEND = 'tree:intake';
+const SORT_CONFIRM_PEND = 'tree:sortconfirm';
 /** How long the group stays highlighted when a link opens the dialog at it. */
 const READ_TASK_FLASH_MS = 1500;
 
@@ -523,6 +533,8 @@ export const researchTreeSettingsMethods = uiModule({
         this.renderResearchCensusRow();
         intake.rid = link.id;
         delete intake.note; delete intake.want; delete intake.busy; delete intake.sending; delete intake.gone;
+        sortConfirm.rid = link.id;
+        delete sortConfirm.note; delete sortConfirm.want; delete sortConfirm.busy; delete sortConfirm.sending; delete sortConfirm.gone;
         this.renderResearchIntakeRow();
         hypos.rid = link.id;
         delete hypos.note; delete hypos.want; delete hypos.busy;
@@ -857,7 +869,8 @@ export const researchTreeSettingsMethods = uiModule({
      * Spec 130 K2.1: "The agent goes through files sent to the research by itself" — only with `intake.auto` and the
      * research's `/status.intake` (neither in an archive nor a research waiting for its agent: no host there, and
      * gone once the research says so); the switch follows `/status.intake.auto`; without the bridge inactive with
-     * its sentence. No mark: the write goes through the bridge, no terminal.
+     * its sentence. No mark: the write goes through the bridge, no terminal. The same group holds "Sort with the
+     * agent without asking" (spec 102 U8: `sort.confirm` and `/status.sort`, on the same conditions).
      */
     renderResearchIntakeRow(): void {
         const host = document.querySelector<HTMLElement>(`#${SETTINGS_ID} #research-intake-host`);
@@ -866,22 +879,28 @@ export const researchTreeSettingsMethods = uiModule({
         const ctx = this.historyManageContext();
         const last = (ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid)) ?? lastBridgeStatus(rid);
         const features = ctx?.researchId === rid ? ctx.features : last?.features ?? [];
+        const agentless = !!rid && this.researchAgentlessFor(rid);
         const said = last?.intake;
-        if (intake.gone || !features.includes(INTAKE_AUTO_FEATURE) || (!said && intake.want === undefined) || (rid && this.researchAgentlessFor(rid))) {
+        const showIntake = !intake.gone && features.includes(INTAKE_AUTO_FEATURE) && (!!said || intake.want !== undefined) && !agentless;
+        // Spec 102 U8: "Sort with the agent without asking" in the same group, on the same conditions.
+        const sortSaid = last?.sort;
+        const showSort = sortConfirm.rid === rid && !sortConfirm.gone && features.includes(SORT_CONFIRM_FEATURE)
+            && (!!sortSaid || sortConfirm.want !== undefined) && !agentless;
+        if (!showIntake && !showSort) {
             host.innerHTML = '';
             return;
         }
         const h = strings.history;
         const up = this.researchBridgeUp(rid);
-        if (intake.want !== undefined && said?.auto === intake.want) delete intake.want;
-        const on = intake.sending ?? intake.want ?? said?.auto === true;
-        const note = !up ? h.storiesBridgeDown : intake.note ?? '';
-        const focused = document.activeElement?.id === 'research-intake-auto';
-        // On its way (6.1): the new state at once, dashed and locked (keeping its focus), its words after 120 ms.
-        const pend = !!intake.busy;
-        host.innerHTML = `
-            <fieldset class="research-transcripts research-intake">
-                <legend>${esc(h.intakeSection)}</legend>
+        const focusId = ['research-intake-auto', 'research-sort-confirm'].find(id => document.activeElement?.id === id) ?? '';
+        let intakeHtml = '';
+        if (showIntake) {
+            if (intake.want !== undefined && said?.auto === intake.want) delete intake.want;
+            const on = intake.sending ?? intake.want ?? said?.auto === true;
+            const note = !up ? h.storiesBridgeDown : intake.note ?? '';
+            // On its way (6.1): the new state at once, dashed and locked (keeping its focus), its words after 120 ms.
+            const pend = !!intake.busy;
+            intakeHtml = `
                 <label class="settings-checkbox research-intake-row"${pend ? pendAttrs(INTAKE_PEND).replace(' aria-disabled="true"', '') : ''}>
                     <input type="checkbox" id="research-intake-auto"${on ? ' checked' : ''}${!up ? ' disabled' : pend ? ' aria-disabled="true"' : ''}>
                     <span class="settings-text">
@@ -889,15 +908,50 @@ export const researchTreeSettingsMethods = uiModule({
                         <span class="settings-desc">${esc(h.intakeDesc)}</span>${pend ? pendStatusHtml(INTAKE_PEND) : ''}
                     </span>
                 </label>
-                ${note ? `<p class="research-stories-note research-intake-note" id="research-intake-note"><span>${esc(note)}</span></p>` : ''}
+                ${note ? `<p class="research-stories-note research-intake-note" id="research-intake-note"><span>${esc(note)}</span></p>` : ''}`;
+        }
+        let sortHtml = '';
+        let sortNote: { text: string; command?: string | null } | undefined;
+        if (showSort) {
+            if (sortConfirm.want !== undefined && sortSaid?.confirm === sortConfirm.want) delete sortConfirm.want;
+            // Switched on in the terminal after a refusal: the command is not needed any more.
+            if (sortConfirm.note?.raise && sortSaid?.confirm === 'no') delete sortConfirm.note;
+            const on = (sortConfirm.sending ?? sortConfirm.want ?? sortSaid?.confirm) === 'no';
+            sortNote = !up ? { text: h.storiesBridgeDown } : sortConfirm.note;
+            const pend = !!sortConfirm.busy;
+            // Through the bridge, no terminal: no mark (the refused switching on gives the terminal's command as text).
+            sortHtml = `
+                <label class="settings-checkbox research-intake-row research-sort-confirm-row"${pend ? pendAttrs(SORT_CONFIRM_PEND).replace(' aria-disabled="true"', '') : ''}>
+                    <input type="checkbox" id="research-sort-confirm"${on ? ' checked' : ''}${!up ? ' disabled' : pend ? ' aria-disabled="true"' : ''}>
+                    <span class="settings-text">
+                        <span class="settings-name">${esc(h.sortConfirmTitle)}</span>
+                        <span class="settings-desc">${esc(h.sortConfirmDesc)}</span>${pend ? pendStatusHtml(SORT_CONFIRM_PEND) : ''}
+                    </span>
+                </label>`;
+        }
+        host.innerHTML = `
+            <fieldset class="research-transcripts research-intake">
+                <legend>${esc(h.intakeSection)}</legend>${intakeHtml}${sortHtml}
             </fieldset>`;
+        if (sortNote) {
+            const p = el('p', 'research-stories-note research-intake-note research-sort-confirm-note');
+            p.id = 'research-sort-confirm-note';
+            p.appendChild(el('span', undefined, sortNote.text));
+            if (sortNote.command) p.append(' ', commandLine(sortNote.command, c => this.copyResearchLiveCommand(c)));
+            host.querySelector('fieldset')!.appendChild(p);
+        }
         const input = host.querySelector<HTMLInputElement>('#research-intake-auto');
         // Locked while on its way: a click changes nothing (the row drawn again as it stands).
         input?.addEventListener('change', () => {
             if (intake.busy) { this.renderResearchIntakeRow(); return; }
             void this.setResearchIntake(input.checked);
         });
-        if (focused) input?.focus({ preventScroll: true });
+        const sortInput = host.querySelector<HTMLInputElement>('#research-sort-confirm');
+        sortInput?.addEventListener('change', () => {
+            if (sortConfirm.busy) { this.renderResearchIntakeRow(); return; }
+            void this.setResearchSortConfirm(sortInput.checked ? 'no' : 'ask');
+        });
+        if (focusId) host.querySelector<HTMLInputElement>(`#${focusId}`)?.focus({ preventScroll: true });
     },
 
     /**
@@ -930,6 +984,44 @@ export const researchTreeSettingsMethods = uiModule({
                 case 'locked': intake.note = W.locked; break;
                 case 'full': intake.note = r.reason || W.fileFull; break;
                 default: intake.note = r.reason || W.writeFailed;
+            }
+        }
+        this.renderResearchIntakeRow();
+    },
+
+    /**
+     * Spec 102 U8: `POST /settings/sort {"confirm": …}`. `ask` is written at once; `no` is refused (403
+     * `sort.raise`): the switch stays off and the sentence gives the terminal's command, until the status says `no`.
+     * Other refusals as `intake` (an archive: the row goes).
+     */
+    async setResearchSortConfirm(confirm: SortConfirm): Promise<void> {
+        const rid = sortConfirm.rid;
+        const ctx = this.historyManageContext();
+        const base = ctx?.researchId === rid ? ctx.base : null;
+        if (!base || sortConfirm.busy) { this.renderResearchIntakeRow(); return; }
+        sortConfirm.busy = true;
+        sortConfirm.sending = confirm;
+        delete sortConfirm.note;
+        startPend(SORT_CONFIRM_PEND, { redraw: () => this.renderResearchIntakeRow() });
+        this.renderResearchIntakeRow();
+        const r = await postBridgeSortConfirm(base, confirm, ctx!.features);
+        if (sortConfirm.rid !== rid) { dropPend(SORT_CONFIRM_PEND); return; }
+        await endPend(SORT_CONFIRM_PEND);
+        delete sortConfirm.busy;
+        delete sortConfirm.sending;
+        if (r.ok) {
+            sortConfirm.want = r.sort?.confirm ?? confirm;
+        } else {
+            const W = strings.live.waitingWrite;
+            switch (r.code) {
+                case 'raise': sortConfirm.note = { text: strings.history.sortConfirmRaise, command: r.command ?? null, raise: true }; break;
+                case 'archive': sortConfirm.gone = true; break;
+                case 'busy': sortConfirm.note = { text: strings.history.errBusy }; break;
+                case 'held': sortConfirm.note = { text: this.researchWriteHeldText(r.held!, false).toast }; break;
+                case 'locked': sortConfirm.note = { text: W.locked }; break;
+                case 'full': sortConfirm.note = { text: r.reason || W.fileFull }; break;
+                case 'network': sortConfirm.note = { text: strings.history.storiesBridgeDown }; break;
+                default: sortConfirm.note = { text: r.reason || W.writeFailed };
             }
         }
         this.renderResearchIntakeRow();

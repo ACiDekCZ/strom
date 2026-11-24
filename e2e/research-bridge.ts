@@ -143,6 +143,13 @@ export interface FakeBridge {
      * and said back, `replies` answer instead. A batch's close says `auto` / `sort` and its tasks only when on.
      */
     intake?: FakeIntake;
+    /**
+     * Sorting with the agent without asking (spec 102 U8, `sort.confirm` in `features`): `/status.sort` (`sort`, sent
+     * as it is; unset: not said), every `POST /settings/sort` body (`posts`). `{"confirm": "ask"}` is written;
+     * `{"confirm": "no"}` while `ask` is refused 403 `sort.raise` with the terminal's command; the same value again
+     * writes nothing; `replies` answer instead.
+     */
+    sortConfirm?: FakeSortConfirm;
     /** Stuck (SIGSTOP): `/status` never answers. */
     statusHang?: boolean;
     /**
@@ -242,6 +249,18 @@ export interface FakeIntake {
     intake?: unknown;
     posts: unknown[];
     replies: { status: number; body: unknown }[];
+}
+
+/** The research's setting of sorting with the agent without asking (spec 102 U8). */
+export interface FakeSortConfirm {
+    sort?: unknown;
+    posts: unknown[];
+    replies: { status: number; body: unknown }[];
+}
+
+/** A research whose Sort with the agent asks for the cost each time (`ask`, the default) or not (`no`). */
+export function fakeSortConfirm(confirm: 'ask' | 'no'): FakeSortConfirm {
+    return { sort: { confirm }, posts: [], replies: [] };
 }
 
 /** A research that sorts closed batches by itself (`auto`) or not (off, the default). */
@@ -2462,6 +2481,26 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             b.intake.intake = { auto: r.auto };
             return json(200, { intake: b.intake.intake, ...(was === r.auto ? { head: b.head, parent: b.head } : commitWrite(b)) });
         }
+        // Sorting with the agent without asking (spec 102 U8): only `ask` is written; `no` is the terminal's.
+        if (b.sortConfirm && method === 'POST' && /\/settings\/sort$/.test(url.pathname) && b.features?.includes('sort.confirm')) {
+            let body: unknown = null;
+            try { body = JSON.parse(route.request().postData() ?? ''); } catch { /* not JSON */ }
+            b.sortConfirm.posts.push(body);
+            const said = b.sortConfirm.replies.shift();
+            if (said) return json(said.status, said.body);
+            const r = body && typeof body === 'object' ? body as Record<string, unknown> : null;
+            if (!r || Object.keys(r).length !== 1 || (r.confirm !== 'ask' && r.confirm !== 'no')) {
+                return json(400, { error: 'Not a body /settings/sort takes.', code: 'sort.body' });
+            }
+            const was = (b.sortConfirm.sort as { confirm?: unknown } | undefined)?.confirm;
+            if (was === r.confirm) return json(200, { sort: b.sortConfirm.sort, head: b.head, parent: b.head });
+            if (r.confirm === 'no') {
+                return json(403, { error: 'Only a person in the research terminal switches this on.', code: 'sort.raise',
+                    command: 'strom config set sort.confirm no --for-tree' });
+            }
+            b.sortConfirm.sort = { confirm: r.confirm };
+            return json(200, { sort: b.sortConfirm.sort, ...commitWrite(b) });
+        }
         // A heavy part apart (research 1.26.0, `status.parts`): its rev and its fields as the full status has them.
         const partPath = /\/status\/([A-Za-z]+)$/.exec(url.pathname);
         if (partPath && method === 'GET' && b.features?.includes('status.parts')) {
@@ -2509,6 +2548,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.hypotheses?.decide !== undefined ? { hypotheses: { decide: b.hypotheses.decide } } : {}),
                 ...(b.census ? { census: b.census.census } : {}),
                 ...(b.intake?.intake !== undefined ? { intake: b.intake.intake } : {}),
+                ...(b.sortConfirm?.sort !== undefined ? { sort: b.sortConfirm.sort } : {}),
                 ...(b.live ? { live: { idleMinutes: b.live.idleMinutes, idleChoices: b.live.idleChoices ?? [0, 120] } } : {}),
                 ...(b.handoffs ? { handoffs: b.handoffs } : {}),
                 ...(b.statusExtra ?? {}),

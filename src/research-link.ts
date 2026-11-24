@@ -2962,6 +2962,12 @@ export interface LiveStatus {
      */
     intake?: LiveIntakeSetting;
     /**
+     * `sort` (with `sort.confirm` in `features`, spec 102 U8): whether Sort with the agent asks for the cost each
+     * time (`ask`) or not (`no`, set only by a person in the research's terminal). Absent: not said (an archive, a
+     * research waiting for its agent, an older research) — then no switch is offered and the dialog asks.
+     */
+    sort?: LiveSortSetting;
+    /**
      * `hypotheses.decide` (with `hypotheses.decide` in `features`, spec 060): who decides the research's
      * hypotheses; a value the app does not know reads as `person`. Absent: not said (an archive, a research
      * waiting for its agent, an older research).
@@ -3152,6 +3158,33 @@ export interface LiveIntakeSetting {
 export function sanitizeIntakeSetting(value: unknown): LiveIntakeSetting | null {
     const r = asRecord(value);
     return r && typeof r.auto === 'boolean' ? { auto: r.auto } : null;
+}
+/**
+ * `/status.features` (spec 102 U8, Strom Research 1.37): `/status.sort.confirm` and `POST /settings/sort {confirm}`.
+ * Only `ask` may be written from the app; `no` is the person's in the research's terminal (403 `sort.raise`).
+ */
+export const SORT_CONFIRM_FEATURE = 'sort.confirm';
+
+/** Whether Sort with the agent asks for the cost each time (`ask`, the default) or not (`no`). */
+export type SortConfirm = 'ask' | 'no';
+
+/** `/status.sort`: the research's setting of sorting with the agent. */
+export interface LiveSortSetting {
+    confirm: SortConfirm;
+}
+
+/** `/status.sort` (or the `sort` of a `POST /settings/sort` reply), checked: `confirm` `ask` or `no`, else null (not said). */
+export function sanitizeSortSetting(value: unknown): LiveSortSetting | null {
+    const r = asRecord(value);
+    return r && (r.confirm === 'ask' || r.confirm === 'no') ? { confirm: r.confirm } : null;
+}
+
+/**
+ * Sort with the agent says its cost before the click (spec 102 U8): always, unless the research says `no`
+ * (read only with `sort.confirm`). The click itself stays the person's either way.
+ */
+export function sortAsksCost(status: Pick<LiveStatus, 'sort'> | null | undefined): boolean {
+    return status?.sort?.confirm !== 'no';
 }
 /**
  * `/status.features` (spec 060): `/status.hypotheses.decide`, `POST /hypotheses {decide}` and who decided a
@@ -4943,6 +4976,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(statusBooks(r.books, features) ? { books: statusBooks(r.books, features)! } : {}),
         ...(features?.includes(CENSUS_FEATURE) ? { census: sanitizeCensus(r.census) } : {}),
         ...(features?.includes(INTAKE_AUTO_FEATURE) && sanitizeIntakeSetting(r.intake) ? { intake: sanitizeIntakeSetting(r.intake)! } : {}),
+        ...(features?.includes(SORT_CONFIRM_FEATURE) && sanitizeSortSetting(r.sort) ? { sort: sanitizeSortSetting(r.sort)! } : {}),
         ...(features?.includes(QUEUE_PAGE_FEATURE) && sanitizeQueueCounts(r.queueCounts) ? { queueCounts: sanitizeQueueCounts(r.queueCounts)! } : {}),
         ...runsSaid(r, features),
         ...agentSaid(r.agent),
