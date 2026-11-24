@@ -44,6 +44,7 @@ import { busyLocal, spinEl } from './busy.js';
 import { showToast } from './toast.js';
 import { SPLIT_SHOWN_AT_ONCE } from './split-ui.js';
 import { uiModule } from './module.js';
+import { barEl, setBarShare } from './prog-bar.js';
 import { el, footerButton, structureOpenFor, type StructureStep, type StructureView } from './structure-ui.js';
 
 /** The sources of who to take, in the tabs' order. */
@@ -383,7 +384,7 @@ export const structureSelectMethods = uiModule({
                 let shown = 0;
                 for (const li of rows()) {
                     if (li.classList.contains('sp-selpick-sh')) continue;
-                    if (li.classList.contains('sp-rodpick-other')) { li.hidden = !!key; continue; }
+                    if (li.classList.contains('sp-rodpick-other')) { li.hidden = !!key; if (!li.hidden) shown++; continue; }
                     const r = li.dataset.q;
                     // The small lines unfold with "Other families ▸"; a query finds them too.
                     const small = li.classList.contains('sp-rodpick-small');
@@ -695,11 +696,14 @@ export const structureSelectMethods = uiModule({
             statImages.set(s.images);
         };
         if (copy) {
+            // The button waits for the tree's sources and images (a tree not open is read first).
+            create.disabled = true;
             const data = treeId === DataManager.getCurrentTreeId() ? DataManager.getData() : await TreeManager.getTreeData(treeId);
             if (signal.aborted) return;
             const counts = data ? summarizeCopy(data) : { sources: 0, images: 0 };
             fill({ persons: tree.personCount, couples: tree.partnershipCount, ...counts });
             summary = { persons: tree.personCount };
+            create.disabled = false;
             return;
         }
         const data = DataManager.getData();
@@ -717,10 +721,8 @@ export const structureSelectMethods = uiModule({
         status.setAttribute('role', 'status');
         const busyRow = el('span', 'busy structure-counting');
         busyRow.append(spinEl(), status);
-        const bar = el('div', 'structure-bar');
-        bar.setAttribute('aria-hidden', 'true');
-        const barFill = el('i');
-        bar.appendChild(barFill);
+        // The app's one progress bar (src/ui/prog-bar.ts).
+        const bar = barEl(0, { cls: 'structure-bar' });
         progress.append(busyRow, bar, el('p', 'structure-note structure-images-note', t.imagesNotLoaded));
         create.disabled = true;
         const steps = summarizeSubsetSteps(data, input.ids);
@@ -730,7 +732,7 @@ export const structureSelectMethods = uiModule({
                 const next = steps.next();
                 if (next.done) return next.value;
                 status.textContent = t.counting(next.value.done, next.value.total);
-                barFill.style.width = `${Math.round(next.value.done / Math.max(1, next.value.total) * 100)}%`;
+                setBarShare(bar, next.value.done / Math.max(1, next.value.total));
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
         }, { label: strings.busy.generic, atOnce: true });
