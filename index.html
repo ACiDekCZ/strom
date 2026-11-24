@@ -18260,7 +18260,9 @@
         .structure-who-tabs { display: flex; flex-direction: column; }
         .structure-who-tabs .sel-tab {
             display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 0 16px 0 20px;
-            border: 0; background: none; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+            border: 0; background: none; font: inherit; font-size: 13.5px; line-height: 1.3; text-align: left; cursor: pointer;
+            /* A long label (German) wraps in the side column instead of running under the pane. */
+            white-space: normal; overflow-wrap: anywhere; padding-block: 6px;
         }
         .structure-who-tabs .sel-tab svg { flex: none; color: var(--text-faint); }
         .structure-who-tabs .sel-tab[aria-selected="true"] svg { color: var(--text); }
@@ -19986,7 +19988,8 @@
         .tree-manager-pending-text { flex: 1 1 280px; min-width: 0; overflow-wrap: anywhere; }
         .tree-manager-pending-actions { display: inline-flex; flex-wrap: wrap; gap: 2px 12px; }
         .tree-manager-pending-actions .link-button { font-size: 12.5px; padding: 0; }
-        .tree-manager-pending-actions .link-button.danger { color: var(--danger); }
+        /* A link in red, not the dialog's red danger button (.modal button.danger would fill it red under red text). */
+        .tree-manager-pending-actions .link-button.danger { color: var(--danger); background: none; margin-right: 0; }
         @media (pointer: coarse) { .tree-manager-pending-actions .link-button { min-height: 44px; } }
         @media (max-width: 760px) { .tree-manager-item:not(.pending-merge) { grid-template-columns: minmax(0, 1fr); } }
         .tree-row-menu-wrap { position: relative; margin-left: auto; }

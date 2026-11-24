@@ -173,3 +173,21 @@ test('a large tree: the summary counts in batches with Create off, images only b
     });
     expect(seen).toEqual({ waiting: true, createOff: true, note: true, mediaReads: 0 });
 });
+
+test('the German kinds wrap in the side column: none runs under the pane, at the desktop, tablet and sideways phone widths', async ({ page }) => {
+    await openApp(page);
+    await seedTree(page, JESENSTI, 'Jesenští', 'vojtech');
+    await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 844, height: 390 }]) {
+        await page.setViewportSize(viewport);
+        await page.evaluate(() => window.Strom.UI.showStructureDialog(window.Strom.TreeManager.getActiveTreeId()!));
+        const dialog = page.locator('#structure-modal');
+        await dialog.locator('.menu-option[data-action="select"]').click();
+        await expect(dialog).toHaveAttribute('data-step', 'who');
+        const over = await dialog.locator('.structure-who-nav').evaluate(nav => [nav, ...nav.querySelectorAll('.sel-tab')]
+            .filter(el => el.scrollWidth > el.clientWidth + 1).map(el => el.textContent!.trim()));
+        expect(over, `${viewport.width}px`).toEqual([]);
+        await page.evaluate(() => window.Strom.UI.closeStructureDialog());
+        await expect(dialog).toBeHidden();
+    }
+});

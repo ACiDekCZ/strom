@@ -569,7 +569,10 @@ test('tree merge close → save → pending-merge dialog resume, then discard le
     await wizard.getByRole('button', { name: 'Save for later' }).click();
     const pending = page.locator('#tree-manager-modal .tree-manager-item-pending');
     await expect(pending).toHaveCount(1);
-    await pending.locator('.pending-merge-discard').click();
+    // Discard is a red link like Resume and Rename, not a red button with its red words unreadable on it.
+    const discard = pending.locator('.pending-merge-discard');
+    expect(await discard.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+    await discard.click();
     await expect(confirmModal(page)).toHaveClass(/dialog-danger/);
     await confirmModal(page).locator('#confirm-ok-btn').click();
     await expect(pending).toHaveCount(0);
