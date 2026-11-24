@@ -592,7 +592,8 @@ export const waitingTaskMethods = uiModule({
             return btn;
         }
         const task = researchTaskRef(w.id);
-        if (v.key === 'images') return null;
+        // Back to the agent (spec 089) is never the panel's action.
+        if (v.key === 'images' || v.key === 'retry') return null;
         const taskDo = v.key === 'answer' ? undefined : v.key;
         const url = task ? this.activeResearchLink('task', { task, taskDo }) : null;
         if (!url) return null;

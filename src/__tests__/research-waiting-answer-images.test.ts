@@ -50,7 +50,7 @@ describe('what the status says (research 1.27)', () => {
         expect(sanitizeAccepts({ media: { taskImages: true } })?.mediaTaskImages).toBe(true);
         for (const v of ['true', 1, {}, false, undefined]) expect(sanitizeAccepts({ media: { taskImages: v } })).not.toHaveProperty('mediaTaskImages');
         expect(waitingWrites({ features: [WAITING_ANSWER_FEATURE], accepts: sanitizeAccepts({ media: { task: true, taskImages: true } }) }))
-            .toEqual({ sent: false, note: false, file: true, answer: true, images: true });
+            .toEqual({ sent: false, note: false, file: true, answer: true, images: true, retry: false });
         expect(waitingWrites({ features: ['waiting.sent'], accepts: sanitizeAccepts({ media: { task: true } }) })).toMatchObject({ answer: false, images: false });
     });
 
@@ -88,7 +88,8 @@ describe('an item\'s actions (§1, §5, §9)', () => {
         expect(keys(waitingActions(web, ctx()))).toEqual(['images:bridge', 'web:web', 'answer:bridge', 'chat:terminal+ai', 'folder:terminal']);
         // Variant B: one order array.
         expect(keys(waitingActions(w, ctx({ order: ['web', 'images', 'answer', 'chat', 'folder'] })))?.slice(0, 2)).toEqual(['web:web', 'images:bridge']);
-        expect(IMAGES_ORDER).toEqual(['images', 'web', 'answer', 'chat', 'folder']);
+        // "Retry with the agent" (spec 089) leads the order; it stands there only when offered (ctx.retry).
+        expect(IMAGES_ORDER).toEqual(['retry', 'images', 'web', 'answer', 'chat', 'folder']);
     });
 
     it('a website without a book and a check: the answer leads; a check is answered in the terminal', () => {

@@ -16,7 +16,7 @@
 
 import {
     LiveWaiting, ResearchAccepts, WaitingInbox, researchTaskRef, isResearchHead, cleanText, withAppVersion, waitingNote, imageNumber, imageNumbers,
-    sanitizeWaitingInbox, MAX_IMAGE_NUMBER,
+    sanitizeWaitingInbox, MAX_IMAGE_NUMBER, WAITING_RETRY_FEATURE,
 } from './research-link.js';
 import { waitingPhase, waitingTaskActions, WaitingPhase, fileExt } from './research-waiting.js';
 import { uploadHeaders, mediaReplyId, DEFAULT_MEDIA_MAX_BYTES } from './originals.js';
@@ -30,6 +30,8 @@ export const WAITING_SENT_FEATURE = 'waiting.sent';
 export const WAITING_NOTE_FEATURE = 'waiting.note';
 /** The bridge takes the person's answer to a task (`POST <token>/waiting/<T…>` `{do: "answer"}`, research 1.27, spec 048). */
 export const WAITING_ANSWER_FEATURE = 'waiting.answer';
+/** A waiting task goes back to the agent from the app (`{do: "retry"}` at an item or a place; items say `retry`; spec 089). */
+export { WAITING_RETRY_FEATURE };
 
 /** What the bridge takes from "Awaiting action" (each false: the task link, when the research offers it). */
 export interface WaitingWrites {
@@ -40,6 +42,8 @@ export interface WaitingWrites {
     answer: boolean;
     /** Images of a book a task waits for (`accepts.media.taskImages`). */
     images: boolean;
+    /** A task back to the agent, one or a place's (`waiting.retry`, spec 089). */
+    retry: boolean;
 }
 
 export function waitingWrites(env: {
@@ -52,11 +56,12 @@ export function waitingWrites(env: {
         file: env.accepts?.mediaTask === true,
         answer: !!env.features?.includes(WAITING_ANSWER_FEATURE),
         images: env.accepts?.mediaTaskImages === true,
+        retry: !!env.features?.includes(WAITING_RETRY_FEATURE),
     };
 }
 
 /** No writes at all (no bridge answering here). */
-export const NO_WAITING_WRITES: WaitingWrites = { sent: false, note: false, file: false, answer: false, images: false };
+export const NO_WAITING_WRITES: WaitingWrites = { sent: false, note: false, file: false, answer: false, images: false, retry: false };
 
 /** Kinds the bridge marks sent (anything else: 409 `waiting.not-sendable`). */
 const SENDABLE_KINDS: ReadonlySet<string> = new Set(['letter', 'family', 'other']);
@@ -359,6 +364,111 @@ export function waitingAnswerReply(status: number, body: unknown, retryAfter?: s
     return refusal(status, body, retryAfter);
 }
 
+// ==================== BACK TO THE AGENT (spec 089) ====================
+
+/**
+ * Why a task (or a place's tasks) did not go back to the agent:
+ * - `changed` (409 `waiting.changed`, `at`: what the item says now): it waits for something else since read;
+ * - `not` (409 `retry.not`): the task cannot go back (no `retry` at its item);
+ * - `limit` (409 `retry.limit`, `until`): back three times in 24 hours, again from `until`;
+ * - `none` (404 `waiting.none`, `group.none`): it waits no more, or nothing waits in the place;
+ * - `app-only` (403): the bridge took the request for not the app's;
+ * - `bad` (400, or not sent at all: a task or key it does not take);
+ * - `down`: no answer, or any other answer (busy, locked, failed, another code).
+ */
+export type WaitingRetryCode = 'changed' | 'not' | 'limit' | 'none' | 'app-only' | 'bad' | 'down';
+
+export interface WaitingRetryRefused {
+    ok: false;
+    code: WaitingRetryCode;
+    /** The HTTP status (0: no answer, or not sent). */
+    status: number;
+    /** The bridge's own sentence (for the details only; '' = none). */
+    reason: string;
+    /** `limit`: from when it can go back again (ISO; absent: not said). */
+    until?: string;
+    /** `changed`: the item's `at` now (absent: not said). */
+    at?: string;
+}
+
+export interface WaitingRetryDone {
+    ok: true;
+    /** The task back in the queue ('' = not said). */
+    task: string;
+    /** The research's version after the write ('' = not said), and the one it was made on. */
+    head: string;
+    parent?: string;
+}
+
+export type WaitingRetryResult = WaitingRetryDone | WaitingRetryRefused;
+
+export interface GroupRetryDone {
+    ok: true;
+    /** The tasks back in the queue (empty: none of the place could go back; nothing written). */
+    retried: string[];
+    /** The place's key as the research said it ('' = not said). */
+    group: string;
+    head: string;
+    parent?: string;
+}
+
+export type GroupRetryResult = GroupRetryDone | WaitingRetryRefused;
+
+/** A refusal of a write back to the agent, by its HTTP status and the bridge's code. */
+function retryRefusal(status: number, body: unknown): WaitingRetryRefused {
+    const r = asRecord(body) ?? {};
+    const code = typeof r.code === 'string' ? r.code : '';
+    // The params come beside the code (as `at` of `waiting.changed`) or in `params`.
+    const params = asRecord(r.params) ?? {};
+    const reason = cleanText(typeof r.text === 'string' && r.text ? r.text : r.error, 400);
+    const out = (c: WaitingRetryCode): WaitingRetryRefused => ({ ok: false, code: c, status, reason });
+    const time = (v: unknown): string => {
+        const t = cleanText(v, 40);
+        return t && Number.isFinite(Date.parse(t)) ? t : '';
+    };
+    if (status === 409) {
+        if (code === 'waiting.changed') {
+            const at = cleanText(r.at ?? params.at, 40);
+            return { ...out('changed'), ...(at ? { at } : {}) };
+        }
+        if (code === 'retry.limit') {
+            const until = time(r.until ?? params.until);
+            return { ...out('limit'), ...(until ? { until } : {}) };
+        }
+        if (code === 'retry.not') return out('not');
+        if (code === 'waiting.none' || code === 'group.none') return out('none');
+        return out('down');
+    }
+    if (status === 404) return out(code === 'waiting.none' || code === 'group.none' || !code ? 'none' : 'down');
+    if (status === 403) return out('app-only');
+    if (status === 400) return out('bad');
+    return out('down');
+}
+
+/** The bridge's answer to a task back to the agent, typed (200: the task back in the queue, first). */
+export function waitingRetryReply(status: number, body: unknown): WaitingRetryResult {
+    if (status >= 200 && status < 300) {
+        const r = asRecord(body);
+        if (!r) return { ok: false, code: 'down', status: 0, reason: '' };
+        const parent = isResearchHead(r.parent);
+        return { ok: true, task: researchTaskRef(r.task) ?? '', head: isResearchHead(r.head) ?? '', ...(parent ? { parent } : {}) };
+    }
+    if (status === 0) return { ok: false, code: 'down', status: 0, reason: '' };
+    return retryRefusal(status, body);
+}
+
+/** The bridge's answer to a place's tasks back to the agent, typed (`retried`: those it took back; may be none). */
+export function groupRetryReply(status: number, body: unknown): GroupRetryResult {
+    if (status >= 200 && status < 300) {
+        const r = asRecord(body);
+        if (!r) return { ok: false, code: 'down', status: 0, reason: '' };
+        const parent = isResearchHead(r.parent);
+        return { ok: true, retried: taskList(r.retried), group: cleanText(r.group, 200), head: isResearchHead(r.head) ?? '', ...(parent ? { parent } : {}) };
+    }
+    if (status === 0) return { ok: false, code: 'down', status: 0, reason: '' };
+    return retryRefusal(status, body);
+}
+
 /** How the research said it took an image's number: the header, the file's name, the order of the missing ones. */
 export type TaskImageBy = 'image' | 'name' | 'order';
 
@@ -562,6 +672,45 @@ export function answerWaiting(base: string, task: string, answer: { text: string
     const body = JSON.stringify({ do: 'answer', text, ...(expect ? { expect } : {}) });
     return bridgeRequest(`${base}|POST|waiting/${ref}|answer|${body}`, `${base}/waiting/${encodeURIComponent(ref)}`,
         { method: 'POST', headers: JSON_TEXT, body }, waitingAnswerReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+}
+
+const retryNotSent = (): WaitingRetryRefused => ({ ok: false, code: 'bad', status: 0, reason: '' });
+const retryNoAnswer = (): WaitingRetryRefused => ({ ok: false, code: 'down', status: 0, reason: '' });
+
+/**
+ * A task back to the agent (`POST <base>/waiting/<T…>` `{do: "retry",
+ * expect}`, `waiting.retry`, spec 089): it goes to the front of the queue,
+ * nothing is written as the person's answer, no agent starts. `expect`: the
+ * item's `at` as read (another one now: 409 `changed`, nothing written).
+ */
+export async function retryWaiting(base: string, task: string, opts: { expect?: string; timeoutMs?: number } = {}): Promise<WaitingRetryResult> {
+    const ref = researchTaskRef(task);
+    if (!ref || ref !== task) return retryNotSent();
+    const expect = typeof opts.expect === 'string' && opts.expect ? opts.expect : undefined;
+    const body = JSON.stringify({ do: 'retry', ...(expect ? { expect } : {}) });
+    const result = await bridgeRequest<WaitingRetryResult | WaitingWriteRefused>(`${base}|POST|waiting/${ref}|${body}`, `${base}/waiting/${encodeURIComponent(ref)}`,
+        { method: 'POST', headers: JSON_TEXT, body }, (status, json) => waitingRetryReply(status, json), opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+    // No answer at all (not running, not in time) comes as the shared refusal: down.
+    return result.ok || isRetryRefused(result) ? result : retryNoAnswer();
+}
+
+/**
+ * A place's tasks back to the agent (`POST <base>/group/<key>` `{do: "retry"}`,
+ * the key encoded): every item of it that can go back, at once, or none. The
+ * answer's `retried` lists those it took back.
+ */
+export async function retryGroup(base: string, key: string, opts: { timeoutMs?: number } = {}): Promise<GroupRetryResult> {
+    const path = waitingGroupPath(key);
+    if (!path) return retryNotSent();
+    const result = await bridgeRequest<GroupRetryResult | WaitingWriteRefused>(`${base}|POST|group/${path}|retry`, `${base}/group/${path}`,
+        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify({ do: 'retry' }) }, (status, json) => groupRetryReply(status, json),
+        opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+    return result.ok || isRetryRefused(result) ? result : retryNoAnswer();
+}
+
+const RETRY_CODES: readonly string[] = ['changed', 'not', 'limit', 'none', 'app-only', 'bad', 'down'];
+function isRetryRefused(r: WaitingRetryRefused | WaitingWriteRefused): r is WaitingRetryRefused {
+    return RETRY_CODES.includes(r.code) && !('retryAfter' in r);
 }
 
 /** A write of a task's finding (spec 109, `tasks.audit`). */

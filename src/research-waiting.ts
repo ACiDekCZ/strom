@@ -7,10 +7,10 @@
  */
 
 import {
-    LiveBook, LiveBooks, LiveWaiting, WAITING_SECTIONS, WaitingGroup, WaitingInbox, WaitingLinkAction, WaitingSection, imageNumber, researchTaskRef,
+    LiveBook, LiveBooks, LiveWaiting, WAITING_SECTIONS, WaitingGroup, WaitingInbox, WaitingLinkAction, WaitingRetry, WaitingSection, imageNumber, researchTaskRef,
 } from './research-link.js';
 import { bookTitle, bookWebUrl, bookWholeOnDisk, sortBooksMost } from './research-books.js';
-import type { strings } from './strings.js';
+import { getStringsForLang, type strings, type Language } from './strings.js';
 import type { WaitingWrites } from './research-waiting-write.js';
 
 export type WaitingPhase = 'todo' | 'sent';
@@ -476,7 +476,7 @@ export function textWithLinks(text: string): TextPiece[] {
  * What an item waiting for images, a website or a check offers: images sent
  * from the app, its website, an answer, a talk with the agent, its folder.
  */
-export type WaitAction = 'images' | 'web' | 'answer' | 'chat' | 'folder';
+export type WaitAction = 'retry' | 'images' | 'web' | 'answer' | 'chat' | 'folder';
 
 /**
  * One action as shown: how it goes (its mark: `bridge` none, `terminal` the
@@ -489,10 +489,14 @@ export interface WaitActionView {
     ai: boolean;
 }
 
-/** Images of a book: "Add images" leads, its website right beside (UIX O2 = A, Milan 4 Nov 2026). */
-export const IMAGES_ORDER: readonly WaitAction[] = ['images', 'web', 'answer', 'chat', 'folder'];
-/** A website without a book and a check: the answer leads. */
-export const ANSWER_ORDER: readonly WaitAction[] = ['answer', 'web', 'chat', 'folder'];
+/**
+ * Images of a book: "Add images" leads, its website right beside (UIX O2 = A, Milan 4 Nov 2026).
+ * "Retry with the agent" (spec 089 §1.2) leads before all when it is the main action (waitingRetryMain),
+ * else it stands right after the first action.
+ */
+export const IMAGES_ORDER: readonly WaitAction[] = ['retry', 'images', 'web', 'answer', 'chat', 'folder'];
+/** A website without a book and a check: the answer leads (after a main "Retry with the agent"). */
+export const ANSWER_ORDER: readonly WaitAction[] = ['retry', 'answer', 'web', 'chat', 'folder'];
 /** Actions shown beside the main one (the rest under "More actions"); a wide item (≥ 760 px) one more. */
 export const MAX_SECONDARY = 2;
 export const MAX_SECONDARY_WIDE = 3;
@@ -501,7 +505,14 @@ export const PHONE_SECONDARY = 1;
 
 export interface WaitActionsContext {
     /** What the bridge takes here now (none when no bridge answers on this page). */
-    writes: Pick<WaitingWrites, 'answer' | 'images'>;
+    writes: Pick<WaitingWrites, 'answer' | 'images'> & Partial<Pick<WaitingWrites, 'retry'>>;
+    /**
+     * "Retry with the agent" may stand among the actions (spec 089 §1.2): the
+     * overview's item without the Deliver block only — never the small panel,
+     * whose one action is the first, nor an item drawn with the Deliver block
+     * (its own row there, waitingRetryEl). Default false.
+     */
+    retry?: boolean;
     /** The research's task links open from here (this computer, its own research). */
     links: boolean;
     /** The phone layout (the overview's sheet). */
@@ -534,7 +545,9 @@ export function waitingActions(w: LiveWaiting, ctx: WaitActionsContext): WaitAct
     const terminal = ctx.links && !ctx.phone;
     const out: WaitActionView[] = [];
     for (const key of images ? ctx.order ?? IMAGES_ORDER : ANSWER_ORDER) {
-        if (key === 'web') {
+        if (key === 'retry') {
+            continue;
+        } else if (key === 'web') {
             if (w.url) out.push({ key, via: 'web', ai: false });
         } else if (key === 'images') {
             if (images && ctx.writes.images && !ctx.phone && offers('images')) out.push({ key, via: 'bridge', ai: false });
@@ -547,7 +560,22 @@ export function waitingActions(w: LiveWaiting, ctx: WaitActionsContext): WaitAct
             out.push({ key, via: 'terminal', ai: key === 'chat' });
         }
     }
+    // Back to the agent through the bridge (no mark, no agent starts here): first when it is the main
+    // action, else right after the first one; never on a phone.
+    if (ctx.retry && ctx.writes.retry && !ctx.phone && w.retry?.can && task) {
+        out.splice(waitingRetryMain(w.retry) ? 0 : Math.min(1, out.length), 0, { key: 'retry', via: 'bridge', ai: false });
+    }
     return out;
+}
+
+/**
+ * "Retry with the agent" is the item's main action (spec 089 §1.2): the
+ * agent can do it now (held, stopped, ready, read on screen, or a reason the
+ * app does not know); with the extension not connected or the agent without a
+ * browser it is an outlined one beside the main action.
+ */
+export function waitingRetryMain(r: Pick<WaitingRetry, 'why'>): boolean {
+    return r.why !== 'no-extension' && r.why !== 'agent-without-browser';
 }
 
 /**
@@ -1026,4 +1054,192 @@ export function imageSlotOptions(assigned: ImagesAssigned, index: number, want: 
     return [...new Set(want)].sort((x, y) => x - y).map(n => ({
         n, saved: have.includes(n), ...(at.has(n) ? { takenBy: at.get(n)! } : {}),
     }));
+}
+
+// ==================== BACK TO THE AGENT (spec 089) ====================
+
+/** The Now line of an item that can go back to the agent: its text, and whether the extension's link follows it. */
+export interface WaitingRetryReason {
+    text: string;
+    extLink: boolean;
+}
+
+function sameDayOf(a: Date, b: Date): boolean {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+/** "yesterday" / "tomorrow" in the UI language, capital-free. */
+function nearDay(offset: -1 | 1, lang: Language): string {
+    try {
+        return new Intl.RelativeTimeFormat(lang, { numeric: 'auto' }).format(offset, 'day');
+    } catch {
+        const words: Record<Language, [string, string]> = {
+            en: ['yesterday', 'tomorrow'], cs: ['včera', 'zítra'], de: ['gestern', 'morgen'], pl: ['wczoraj', 'jutro'],
+        };
+        return words[lang][offset < 0 ? 0 : 1];
+    }
+}
+
+/**
+ * When an item went back last or can go back again (spec 089 §6): "18:40"
+ * today, "yesterday 18:40", "tomorrow 9:12", any other day with its day and
+ * month ("22. 11. 18:40", as waitingSentDay). '' for a time not given.
+ */
+export function retryWhenText(iso: string | undefined, now: number, lang: Language): string {
+    const ts = iso ? Date.parse(iso) : NaN;
+    if (!Number.isFinite(ts)) return '';
+    const d = new Date(ts);
+    const today = new Date(now);
+    const time = new Intl.DateTimeFormat(lang, { hour: 'numeric', minute: '2-digit' }).format(d);
+    if (sameDayOf(d, today)) return time;
+    if (sameDayOf(d, new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1))) return `${nearDay(-1, lang)} ${time}`;
+    if (sameDayOf(d, new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1))) return `${nearDay(1, lang)} ${time}`;
+    return `${d.toLocaleDateString(lang, { day: 'numeric', month: 'numeric' })} ${time}`;
+}
+
+/**
+ * The Now line of an item with `retry` (spec 089 §2, §6), in the UI
+ * language: why it waits now by `why` (held with its host or "the archive's
+ * website", stopped, ready, read on screen; the extension not connected —
+ * the browser's sentence, "once connected…" and the extension's link; the
+ * agent without a browser), ended by "– retried 18:40, held back again" /
+ * "…waiting again" when it went back already. An unknown `why`: the
+ * research's own `says` (its language, as it is); without it, no line (null).
+ */
+export function waitingRetryReason(w: Pick<LiveWaiting, 'retry'>, lang: Language, now: number = Date.now()): WaitingRetryReason | null {
+    const r = w.retry;
+    if (!r) return null;
+    const S = getStringsForLang(lang);
+    const R = S.live.waitingRetry;
+    const B = S.research.browser;
+    let text: string;
+    let extLink = false;
+    switch (r.why) {
+        case 'held': text = r.host ? R.held(r.host) : R.heldNoHost; break;
+        case 'stopped': text = R.stopped; break;
+        case 'ready': text = R.ready; break;
+        case 'screen': text = R.screen; break;
+        case 'no-extension': text = `${B.waitNoExt} ${R.afterExt}`; extLink = true; break;
+        case 'agent-without-browser': text = B.waitAgent; break;
+        default: return r.says ? { text: r.says, extLink: false } : null;
+    }
+    const at = retryWhenText(r.again?.at, now, lang);
+    if (at) text = `${text.replace(/[.!]$/, '')} ${r.why === 'held' ? R.againHeld(at) : R.againWaits(at)}.`;
+    return { text, extLink };
+}
+
+/**
+ * What goes back with an item, as its button says after its name (spec 089
+ * §3): "· 2 images", "· read only", "· 2 images, read only"; '' when the
+ * number is not known (or none) and it is not read on screen.
+ */
+export function waitingRetryCount(r: Pick<WaitingRetry, 'images' | 'screen'>, lang: Language): string {
+    const R = getStringsForLang(lang).live.waitingRetry;
+    const parts = [r.images ? R.images(r.images) : '', r.screen ? R.readOnly : ''].filter(Boolean);
+    return parts.length ? `· ${parts.join(', ')}` : '';
+}
+
+/** The hint in place of the button of an item back three times in 24 hours (spec 089 §6); null: it can go back. */
+export function waitingRetryLimitText(r: Pick<WaitingRetry, 'can' | 'until'>, lang: Language, now: number = Date.now()): string | null {
+    if (r.can) return null;
+    return getStringsForLang(lang).live.waitingRetry.limit(retryWhenText(r.until, now, lang));
+}
+
+/**
+ * What a place's "Retry all with the agent" takes back (spec 089 §4), of
+ * EVERY item of the place (the bridge takes the whole place, not what a
+ * filter shows): `n` the items that can go back, `images` their missing
+ * images added up, `atLeast` some of them (not read on screen) do not say how
+ * many, `readOnly` all of them are only read on screen, `later` those back
+ * three times in 24 hours and the soonest time one of them can go back again.
+ */
+export interface WaitingGroupRetry {
+    n: number;
+    images: number;
+    atLeast: boolean;
+    readOnly: boolean;
+    later: { n: number; until: string } | null;
+}
+
+export function waitingGroupRetry(items: readonly Pick<LiveWaiting, 'retry'>[]): WaitingGroupRetry {
+    const can = items.filter(w => w.retry?.can === true).map(w => w.retry!);
+    const held = items.filter(w => w.retry && w.retry.can === false).map(w => w.retry!);
+    const soonest = held.map(r => r.until ?? '').filter(t => Number.isFinite(Date.parse(t)))
+        .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? '';
+    return {
+        n: can.length,
+        images: can.reduce((sum, r) => sum + (r.images ?? 0), 0),
+        atLeast: can.some(r => !r.screen && r.images === undefined),
+        readOnly: can.length > 0 && can.every(r => r.screen === true),
+        later: held.length ? { n: held.length, until: soonest } : null,
+    };
+}
+
+/** A place's counts as its texts take them: "2 tasks" and "5 images" / "at least 5 images" / "read only" ('' : none known). */
+export function groupRetryParts(g: WaitingGroupRetry, lang: Language): { tasks: string; images: string } {
+    const R = getStringsForLang(lang).live.waitingRetry;
+    const images = g.readOnly ? R.readOnly : g.images > 0 ? (g.atLeast ? R.atLeast(R.images(g.images)) : R.images(g.images)) : '';
+    return { tasks: R.tasks(g.n), images };
+}
+
+/** The count after a place's button: "(2 tasks, 5 images)", "(2 tasks, at least 5 images)", "(2 tasks, read only)", "(2 tasks)". */
+export function groupRetryCountText(g: WaitingGroupRetry, lang: Language): string {
+    const p = groupRetryParts(g, lang);
+    return getStringsForLang(lang).live.waitingRetry.count(p.tasks, p.images);
+}
+
+/** The question of a place's confirmation (spec 089 §4): "Return 2 tasks (5 images) to the agent? …". */
+export function groupRetryConfirmText(g: WaitingGroupRetry, lang: Language): string {
+    const p = groupRetryParts(g, lang);
+    return getStringsForLang(lang).live.waitingRetry.confirm(p.tasks, p.images);
+}
+
+/** The accessible name of a place's button: "Retry all with the agent · {place} · 2 tasks, 5 images". */
+export function groupRetryAria(name: string, g: WaitingGroupRetry, lang: Language): string {
+    const p = groupRetryParts(g, lang);
+    return getStringsForLang(lang).live.waitingRetry.groupAria(name, p.tasks, p.images);
+}
+
+/** The muted words after a place's button: "1 only tomorrow 9:12" (without the leading "·"); null: none held by the limit. */
+export function groupRetryLaterText(g: WaitingGroupRetry, lang: Language, now: number = Date.now()): string | null {
+    if (!g.later) return null;
+    return getStringsForLang(lang).live.waitingRetry.later(g.later.n, retryWhenText(g.later.until, now, lang));
+}
+
+/**
+ * The Now line a place's band says for its items (spec 089 §2, rámec 9): when
+ * two or more of its items have `retry` and all of them wait for the same
+ * reason (the same `why` and `host`, and the same line as each of them would
+ * say), that line and the ids of those items (their own Now line is left out,
+ * as a browser note said in the band is). Null otherwise.
+ */
+export function waitingGroupRetryReason<T extends Pick<LiveWaiting, 'id' | 'retry'>>(items: readonly T[], lang: Language, now: number = Date.now()):
+    (WaitingRetryReason & { ids: string[] }) | null {
+    const withRetry = items.filter(w => !!w.retry);
+    if (withRetry.length < 2) return null;
+    const first = withRetry[0].retry!;
+    if (withRetry.some(w => w.retry!.why !== first.why || (w.retry!.host ?? '') !== (first.host ?? ''))) return null;
+    const reasons = withRetry.map(w => waitingRetryReason(w, lang, now));
+    const one = reasons[0];
+    if (!one || reasons.some(r => !r || r.text !== one.text)) return null;
+    return { ...one, ids: withRetry.map(w => w.id) };
+}
+
+/**
+ * Why an item did not go back, as its row says it (spec 089 §5): it waits for
+ * something else now, it cannot go back any more, the limit (when again), the
+ * research not answering (anything else: it should not happen).
+ */
+export function waitingRetryRefusedText(r: { code: string; until?: string }, lang: Language, now: number = Date.now()): string {
+    const R = getStringsForLang(lang).live.waitingRetry;
+    if (r.code === 'changed') return R.errChanged;
+    if (r.code === 'not' || r.code === 'none') return R.errNot;
+    if (r.code === 'limit') return R.limit(retryWhenText(r.until, now, lang));
+    return R.errDown;
+}
+
+/** A place's refusal as its toast says it: "Nothing was returned: " + the reason (one sentence), lower case, without its period. */
+export function groupRetryFailText(r: { code: string; until?: string }, lang: Language, now: number = Date.now()): string {
+    const first = waitingRetryRefusedText(r, lang, now).replace(/[.!?]$/, '').trim();
+    return getStringsForLang(lang).live.waitingRetry.groupFail(first.charAt(0).toLocaleLowerCase(lang) + first.slice(1));
 }

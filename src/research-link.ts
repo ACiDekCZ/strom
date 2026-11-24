@@ -2659,6 +2659,63 @@ export interface LiveWaiting {
     audit?: WaitingAudit;
     /** What doing it gains the research (spec 105 K4.1; only with `waiting.gain`): the order "Most helpful". */
     gain?: WaitingGain;
+    /** The task can go back to the agent from the app (spec 089; only with `waiting.retry`, only at a task). */
+    retry?: WaitingRetry;
+}
+
+/** `/status.features`: a waiting task can go back to the agent from the app (`retry` of its item, `{do: "retry"}`; spec 089). */
+export const WAITING_RETRY_FEATURE = 'waiting.retry';
+/**
+ * Why a task that can go back to the agent waits now: the agent's browser held
+ * its downloads back, the agent's session stopped midway, the archive's viewer
+ * only lets the agent read the images on screen, the agent's browser is ready
+ * now, the browser extension is not connected, the agent has no browser.
+ */
+export type WaitingRetryWhy = 'held' | 'stopped' | 'screen' | 'ready' | 'no-extension' | 'agent-without-browser';
+export const WAITING_RETRY_WHYS: readonly WaitingRetryWhy[] = ['held', 'stopped', 'screen', 'ready', 'no-extension', 'agent-without-browser'];
+/**
+ * An item's `retry` (spec 089): why it waits (an unknown `why` is told by
+ * `says`, in the research's language), whether the agent only reads it on
+ * screen, the archive's host, how many images it still misses (absent: not
+ * known), when it went back last and waits again, and whether it can go back
+ * now (false: three times in 24 hours, again from `until`). Nothing of it is
+ * worked out in the app.
+ */
+export interface WaitingRetry {
+    why: WaitingRetryWhy | string;
+    screen?: boolean;
+    host?: string;
+    images?: number;
+    says?: string;
+    again?: { at: string };
+    can: boolean;
+    until?: string;
+}
+
+/** Most missing images taken from a `retry`. */
+const MAX_RETRY_IMAGES = 100_000;
+
+/** A valid ISO-like time (Date.parse takes it), or ''. */
+function retryTime(value: unknown): string {
+    const t = cleanText(value, 40);
+    return t && Number.isFinite(Date.parse(t)) ? t : '';
+}
+
+/** An item's `retry`, or null: without a boolean `can` or a word of `why` it is not one. Invalid fields are dropped. */
+export function sanitizeWaitingRetry(value: unknown): WaitingRetry | null {
+    const r = asRecord(value);
+    if (!r || typeof r.can !== 'boolean') return null;
+    const why = typeof r.why === 'string' && /^[a-z][a-z0-9-]{0,40}$/.test(r.why.trim()) ? r.why.trim() : '';
+    if (!why) return null;
+    const host = researchArchiveHost(r.host);
+    const images = typeof r.images === 'number' && Number.isInteger(r.images) && r.images >= 0 && r.images <= MAX_RETRY_IMAGES ? r.images : null;
+    const says = cleanText(r.says, MAX_WAITING_ON);
+    const again = asRecord(r.again) ? retryTime(asRecord(r.again)!.at) : '';
+    const until = r.can ? '' : retryTime(r.until);
+    return {
+        why, ...(r.screen === true ? { screen: true } : {}), ...(host ? { host } : {}), ...(images !== null ? { images } : {}),
+        ...(says ? { says } : {}), ...(again ? { again: { at: again } } : {}), can: r.can, ...(until ? { until } : {}),
+    };
 }
 
 /** `/status.features`: the items of `waiting` say what doing them gains (`gain`; spec 105 K4.1, Strom Research 1.37). */
@@ -4456,7 +4513,7 @@ export function waitingPlaceFields(r: Record<string, unknown>): Partial<LiveWait
  * announces `waiting.groups` (kind, section, group, phase … are read only then).
  * A place question (kind 'place') is read with or without them.
  */
-export function sanitizeWaiting(value: unknown, groups = false, branches = false, audit = false, gain = false): LiveWaiting[] {
+export function sanitizeWaiting(value: unknown, groups = false, branches = false, audit = false, gain = false, retry = false): LiveWaiting[] {
     if (!Array.isArray(value)) return [];
     const out: LiveWaiting[] = [];
     for (const item of value.slice(0, MAX_WAITING)) {
@@ -4494,6 +4551,7 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
             ...(researchBookRef(r.book) ? { book: researchBookRef(r.book)! } : {}),
             ...(audit ? waitingAuditField(r) : {}),
             ...(gain ? waitingGainField(r) : {}),
+            ...(retry ? waitingRetryField(r) : {}),
         });
     }
     return out;
@@ -4503,6 +4561,13 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
 function waitingGainField(r: Record<string, unknown>): Partial<LiveWaiting> {
     const gain = sanitizeWaitingGain(r.gain);
     return gain ? { gain } : {};
+}
+
+/** Whether a task can go back to the agent (`waiting.retry`, spec 089): only at a task ("T…"), only a well-formed one. */
+function waitingRetryField(r: Record<string, unknown>): Partial<LiveWaiting> {
+    if (!researchTaskRef(r.id)) return {};
+    const retry = sanitizeWaitingRetry(r.retry);
+    return retry ? { retry } : {};
 }
 
 /** A task's finding (`tasks.audit`, spec 109): only at a task ("T…"), only a well-formed one. */
@@ -4963,7 +5028,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         working: sanitizeWorking(r.working, !!features?.includes(WORKING_HELPS_FEATURE), holdsSaid(features), !!features?.includes(WORKING_SAVING_FEATURE)),
         waiting: [
             ...sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE),
-                !!features?.includes(TASKS_AUDIT_FEATURE), !!features?.includes(WAITING_GAIN_FEATURE)),
+                !!features?.includes(TASKS_AUDIT_FEATURE), !!features?.includes(WAITING_GAIN_FEATURE), !!features?.includes(WAITING_RETRY_FEATURE)),
             // The files of the books' inbox set aside (`inbox.aside`): decisions under their book.
             ...asideWaiting(statusBooks(r.books, features)),
         ],

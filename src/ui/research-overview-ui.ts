@@ -2351,6 +2351,8 @@ export const researchOverviewMethods = uiModule({
         const list: ItemAction[] = [];
         for (const v of views) {
             if (v.key === 'chat' && audited) continue;
+            // Back to the agent (spec 089): drawn by its own button.
+            if (v.key === 'retry') continue;
             if (v.key === 'web') {
                 if (w.url) list.push({ key: 'web', label: T.openWeb, href: w.url });
             } else if (v.key === 'images') {

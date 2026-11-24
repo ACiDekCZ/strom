@@ -39,6 +39,8 @@ const EXCEPTIONS: Record<'en' | 'cs' | 'de' | 'pl', Set<string>> = {
         'focus.parentsFoldedBody',
         // "Sie" the window management permission.
         'win.screenDenied',
+        // "Sie" the tasks going back to the agent (spec 089).
+        'live.waitingRetry.confirm',
         // The sample message the sender writes to a relative.
         'share.messagePlaceholder']),
     // The sample message the sender writes to a relative.
