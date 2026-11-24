@@ -31,7 +31,8 @@ import { uiModule } from './module.js';
 import { SPLIT_SHOWN_AT_ONCE } from './split-ui.js';
 import type { TreeActionSource } from './tree-actions.js';
 
-const MODAL_ID = 'structure-modal';
+export const STRUCTURE_MODAL_ID = 'structure-modal';
+const MODAL_ID = STRUCTURE_MODAL_ID;
 
 export interface StructureDialogOptions {
     /** Where the dialog is opened from (Actions, More, the tree manager). */
@@ -73,6 +74,11 @@ interface StructureState {
 
 let state: StructureState | null = null;
 
+/** The tree the dialog is open for and the dialog it returns to (null: closed). For the steps of other files. */
+export function structureOpenFor(): { treeId: TreeId; parent?: string } | null {
+    return state ? { treeId: state.treeId, parent: state.parent } : null;
+}
+
 /**
  * Whether a tree is one connected family, per tree and its last change: the
  * count runs once (the split dialog right after it finds the same parts).
@@ -107,7 +113,7 @@ function optionText(key: StructureOptionKey): { title: string; desc: string } {
     }
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
+export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
     const node = document.createElement(tag);
     if (className) node.className = className;
     if (text !== undefined) node.textContent = text;
@@ -115,7 +121,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
 }
 
 /** A footer button. */
-function footerButton(label: string, kind: 'primary' | 'secondary', onClick: () => void, dismiss = false): HTMLButtonElement {
+export function footerButton(label: string, kind: 'primary' | 'secondary', onClick: () => void, dismiss = false): HTMLButtonElement {
     const btn = el('button', kind, label);
     btn.type = 'button';
     if (dismiss) btn.setAttribute('data-dismiss', '');
@@ -396,15 +402,13 @@ export const structureMethods = uiModule({
         const { treeId, parent } = state;
         const isActive = treeId === TreeManager.getActiveTreeId();
         switch (key) {
-            // A new tree from a selection: for now the open view, as "New tree from view" did (the choice of
-            // who to take is implemented in §3).
+            // A new tree from a selection: who to take (§3), then its summary (§4).
             case 'select':
-                this.structureLeaveFor(parent);
-                this.makeTreeFromCurrentView();
+                this.structureGo(this.structureWhoStep({ mode: 'new' }));
                 return;
-            // A copy of the whole tree: today's Duplicate (its summary step is implemented in §4).
+            // A copy of the whole tree: its summary with the name (§4).
             case 'copy':
-                this.duplicateTree(treeId, MODAL_ID);
+                this.structureGo(this.structureCopyStep());
                 return;
             case 'families':
                 if (isActive) await this.showSplitFamiliesDialog(MODAL_ID);
