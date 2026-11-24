@@ -1,4 +1,5 @@
-import { test, expect, type Locator, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { test, expect, type Download, type Locator, type Page } from '@playwright/test';
 import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeDecide, mergeGroup, mergePair, mergeRow, mergeSetMode, mergeToStep5, mergeWriteAndSwitch, mergeGroupsLoose } from './helpers.js';
 
 /**
@@ -156,22 +157,74 @@ test('Save for later keeps the decision and the step; the merge goes on from Man
     await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
 });
 
-test('Only compare: the same steps, step 5 saves the list and nothing is written', async ({ page }) => {
-    const wizard = await openGuide(page);
-    const treesBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
+/**
+ * Everything stored about the trees: the tree index (metadata), every tree's
+ * data as stored (its merge records with it), the backups and the files.
+ */
+async function storedImprint(page: Page): Promise<string> {
+    return page.evaluate(async () => {
+        const TM = window.Strom.TreeManager;
+        await TM.flush();
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+            const r = indexedDB.open('strom-db');
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+        });
+        const dump = (store: string): Promise<Array<[IDBValidKey, unknown]>> => new Promise((resolve, reject) => {
+            const os = db.transaction(store, 'readonly').objectStore(store);
+            const keys = os.getAllKeys();
+            const values = os.getAll();
+            values.onsuccess = () => resolve((keys.result as IDBValidKey[]).map((k, i) => [k, values.result[i]]));
+            values.onerror = () => reject(values.error);
+        });
+        const stored = { trees: await dump('trees'), snapshots: await dump('snapshots'), media: await dump('media') };
+        db.close();
+        const data = await Promise.all(TM.getTrees().map((t: { id: string }) => TM.getTreeData(t.id)));
+        const merges = data.map((d: { merges?: unknown[] } | null) => d?.merges?.length ?? 0);
+        return JSON.stringify({ index: TM.getTrees(), stored, data, merges });
+    });
+}
+
+test('Only compare: the same steps, step 6 skipped, step 5 saves the list and nothing is written (K10.1)', async ({ page }) => {
+    await openApp(page);
+    await importJsonAsNewTree(page, 'e2e/fixtures/modrinovi.json', 'Modřínovi');
+    const before = await storedImprint(page);
+    expect(before).toContain('Florentýna');
+
+    await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/rodokmen-jilmovi.ged');
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
     await mergeSetMode(wizard, 'compare');
     await expect(wizard.locator('#merge-title')).toHaveText('Comparison (nothing is written)');
     await mergeCompare(wizard);
+    // Step 6 is skipped in the bar from the start: no write, no result.
+    const step6 = wizard.locator('#merge-progress .merge-step[data-step="6"]');
+    await expect(step6).toHaveClass(/is-skipped/);
+    await expect(wizard.locator('#merge-progress button.merge-step[data-step="6"]')).toHaveCount(0);
     await mergeToStep5(wizard);
+    await expect(step6).toHaveClass(/is-skipped/);
     await expect(wizard.locator('#merge-counts')).toContainText('Nothing has been written yet.');
     await expect(wizard.locator('#merge-next')).toHaveText('Save the list…');
-    const files: string[] = [];
-    page.on('download', d => files.push(d.suggestedFilename()));
+    const downloads: Download[] = [];
+    page.on('download', d => downloads.push(d));
     await wizard.locator('#merge-next').click();
     await expect(wizard).toBeHidden();
-    await expect.poll(() => files.sort()).toEqual(['rodokmen-jilmovi-plan.json', 'rodokmen-jilmovi-plan.txt']);
+    await expect.poll(() => downloads.map(d => d.suggestedFilename()).sort()).toEqual(['rodokmen-jilmovi-plan.json', 'rodokmen-jilmovi-plan.txt']);
 
-    expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().length)).toBe(treesBefore);
+    // The list as a write saves it (exportPlan): the route, the groups, the plan as JSON.
+    const read = async (name: string): Promise<string> =>
+        readFileSync((await downloads.find(d => d.suggestedFilename() === name)!.path())!, 'utf8');
+    const txt = await read('rodokmen-jilmovi-plan.txt');
+    expect(txt.split('\n')[0]).toBe('What will happen: rodokmen-jilmovi.ged → Modřínovi');
+    expect(txt).toMatch(/^New \(3\)$/m);
+    expect(txt).toMatch(/^Joined \(1\)$/m);
+    expect(txt).toContain('+ K. J.');
+    expect(txt).toContain('= K. M. · joined with K. M.');
+    expect(txt).toContain('Joined 1 · New 3 · Not added 0 · To decide 0 · = 4 people in the import');
+    expect(JSON.parse(await read('rodokmen-jilmovi-plan.json'))).toMatchObject({ mode: 'compare' });
+
+    // The trees, their data, records and backups exactly as before the guide.
+    expect(await storedImprint(page)).toBe(before);
     expect(await peopleOf(page, 'Modřínovi')).toEqual(['Florentýna', 'Kvido', 'Teofil']);
 });
 

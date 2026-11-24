@@ -102,6 +102,6 @@ export function exportPlan(plan: MergePlan, ctx: PlanExportContext): { txt: stri
     group(t.gNotTaken, plan.notTaken.filter(d => d.count > 0).map(d => t.notTakenItem(d.label ? `${d.tag} – ${d.label}` : d.tag, d.count, d.example)));
 
     const c = planCounts(plan);
-    lines.push(`${t.cntJoined} ${c.joined} · ${t.cntNew} ${c.added} · ${t.cntSkipped} ${c.skipped} · ${t.cntPending} ${c.pending} · ${t.cntTotal} ${c.total}`, '');
+    lines.push(`${t.cntJoined} ${c.joined} · ${t.cntNew} ${c.added} · ${t.cntSkipped} ${c.skipped} · ${t.cntPending} ${c.pending} · ${t.cntTotal(c.total)}`, '');
     return { txt: lines.join('\n'), json: JSON.stringify(plan, null, 2) };
 }
