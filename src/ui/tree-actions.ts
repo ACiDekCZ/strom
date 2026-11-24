@@ -27,6 +27,7 @@ import { uiModule } from './module.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { researchReachable } from './research-ui.js';
 import { SettingsManager } from '../settings.js';
+import { inDeviceMode } from './device-mode-ui.js';
 
 /** The tree's default of the person card timeline, as its settings row says it (K4.5). */
 function lifelineDefaultsSummary(treeId: TreeId): string {
@@ -134,6 +135,9 @@ export const treeActionsMethods = uiModule({
         const g = strings.treeActions.group;
         const isActive = treeId === TreeManager.getActiveTreeId();
         const by = sourceRows(source, opts);
+        // A device of the home network: the tree belongs to the computer's research — no
+        // deleting it, no browser backups, no managing trees here (spec 094 §3).
+        const device = inDeviceMode();
         // The tree manager's dialogs return to it on close.
         const parent = source === 'manager' ? 'tree-manager-modal' : undefined;
         const id = tree.id;
@@ -183,7 +187,7 @@ export const treeActionsMethods = uiModule({
                     key: 'overview-quality', label: strings.treeOverview.menuQuality,
                     run: () => void this.showTreeOverview(id, { section: 'quality', scroll: true, parent }),
                 },
-                ...(editable ? [{ key: 'snapshots', label: strings.snapshots.menu, editOnly: true, run: () => void this.showSnapshotsDialog(id, parent) }] : []),
+                ...(editable && !device ? [{ key: 'snapshots', label: strings.snapshots.menu, editOnly: true, run: () => void this.showSnapshotsDialog(id, parent) }] : []),
                 ...(merged ? [{ key: 'mergeHistory', label: strings.mergeWizard.menuHistory, run: () => void this.showMergeHistory(id, parent) }] : []),
                 ...(auditOffered ? [{ key: 'audit', label: strings.auditLog.viewLog, run: () => this.showAuditLogDialog(id, parent) }] : []),
             ] },
@@ -219,9 +223,9 @@ export const treeActionsMethods = uiModule({
                 ? [{ key: 'lock', label: strings.lock.unlockTree, editOnly: true, run: () => this.toggleTreeLock(id) }]
                 : [] },
             // Delete tree… last of the tree's own rows, apart behind a line (spec 139 §8.2).
-            { key: 'delete', rows: editable
+            { key: 'delete', rows: editable && !device
                 ? [{ key: 'delete', label: s.delete, danger: true, editOnly: true, run: () => void this.confirmDeleteTree(id, parent) }] : [] },
-            { key: 'trees', rows: by.manageTrees
+            { key: 'trees', rows: by.manageTrees && !device
                 ? [{ key: 'manageTrees', label: s.manage, run: () => this.showTreeManagerDialog() }] : [] },
         ];
         return groups.filter(group => group.rows.length > 0);

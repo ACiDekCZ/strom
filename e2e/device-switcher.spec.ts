@@ -222,3 +222,113 @@ test.describe('de', () => {
         await expectLinesInside(page);
     });
 });
+
+/** The tree's action rows offered here (the one list behind Actions › Tree, More and the tree manager). */
+const treeActionKeys = (page: Page, source: 'actions' | 'manager'): Promise<string[]> => page.evaluate(async (src) => {
+    const ui = (window as unknown as { Strom: { UI: { treeActionGroups: (id: string, s: string) => Promise<{ rows: { key: string }[] }[]> } } }).Strom.UI;
+    const id = (window as unknown as { Strom: { TreeManager?: { getActiveTreeId: () => string } } }).Strom.TreeManager?.getActiveTreeId()
+        ?? document.querySelector<HTMLElement>('#tree-switcher-dropdown [data-tree-id].active')?.dataset.treeId ?? '';
+    return (await ui.treeActionGroups(id, src)).flatMap(g => g.rows.map(r => r.key));
+}, source);
+
+/** ⌘S / Ctrl+S taken by the app (the browser's own default otherwise). */
+const saveKeyTaken = (page: Page): Promise<boolean> => page.evaluate(() => [{ ctrlKey: true }, { metaKey: true }].some(mod => {
+    const ev = new KeyboardEvent('keydown', { key: 's', bubbles: true, cancelable: true, ...mod });
+    document.body.dispatchEvent(ev);
+    return ev.defaultPrevented;
+}));
+
+test.describe('what belongs to the computer (3.7)', () => {
+    test.use({ locale: 'en-US' });
+
+    test('not offered on a device: import and managing trees, deleting, backups, a linked file, ⌘S; one quiet line instead; Export stays', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await seeds(page);
+        research(gw, 'Pýchavkovi z Mlýnků', 'Pracovna');
+        await openPaired(page, gw);
+        await expect.poll(() => state(page)).toBe('connected');
+        await expect(page.locator('body')).toHaveClass(/device-mode/);
+
+        // the switcher's list: the trees, then one quiet line
+        await page.locator('.tree-switcher-btn').click();
+        const dropdown = page.locator('#tree-switcher-dropdown');
+        await expect(dropdown).toHaveClass(/active/);
+        await expect(dropdown.locator('#tree-switcher-not-here')).toHaveText('On computer Pracovna. New tree, import and managing trees are on the computer with the research.');
+        await expect(dropdown.locator('#tree-switcher-import')).toHaveCount(0);
+        await expect(dropdown.getByText('Manage trees')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+
+        // the tree's actions: no deleting, no backups, no managing trees
+        const keys = await treeActionKeys(page, 'actions');
+        for (const gone of ['delete', 'snapshots', 'manageTrees']) expect(keys, gone).not.toContain(gone);
+        // the file's own state, the export reminder and a linked file: nowhere
+        for (const id of ['#file-link-indicator', '#unsaved-copy-indicator', '#actions-storage-row', '#actions-export-reminder']) {
+            await expect(page.locator(id), id).toBeHidden();
+        }
+        expect(await saveKeyTaken(page)).toBe(false);
+
+        // Export… stays, without linking a file
+        await page.locator('.actions-menu-btn').click();
+        await expect(page.locator('#actions-export-row')).toBeVisible();
+        await page.locator('#actions-export-row').click();
+        await expect(page.locator('#export-modal')).toHaveClass(/active/);
+        for (const el of await page.locator('#export-modal .fsa-only, #export-modal .fsa-linked-only').all()) await expect(el).toBeHidden();
+        await page.keyboard.press('Escape');
+
+        // the phone's Trees sheet: the tree, then the quiet line
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.locator('.tree-switcher-btn').click();
+        const sheet = page.locator('.bottom-sheet-menu');
+        await expect(sheet).toContainText('Pýchavkovi z Mlýnků');
+        await expect(sheet.locator('.bottom-sheet-quiet')).toHaveText('On computer Pracovna. New tree, import and managing trees are on the computer with the research.');
+        await expect(sheet.getByText('Import…')).toHaveCount(0);
+        await expect(sheet.getByText('Manage trees')).toHaveCount(0);
+    });
+
+    test('outside the device mode all of it is there as before', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await seeds(page);
+        await page.goto('/strom.html');
+        await expect(page.locator('#current-tree-name')).not.toHaveText('…', { timeout: 10000 });
+        await page.locator('.tree-switcher-btn').click();
+        await expect(page.locator('#tree-switcher-import')).toBeVisible();
+        await expect(page.locator('#tree-switcher-not-here')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        const keys = await treeActionKeys(page, 'actions');
+        expect(keys).toEqual(expect.arrayContaining(['delete', 'snapshots', 'manageTrees']));
+        expect(await saveKeyTaken(page)).toBe(true);
+    });
+});
+
+test.describe('de, what belongs to the computer', () => {
+    test.use({ locale: 'de-DE' });
+
+    test('the quiet line in the switcher\'s list and the Trees sheet at every width, light and dark', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await seeds(page);
+        research(gw, TREE_DE, PC_DE);
+        await openPaired(page, gw);
+        await expect.poll(() => state(page)).toBe('connected');
+        const text = `Auf dem Computer ${PC_DE}. Neuer Stammbaum, Import und Verwaltung der Stammbäume gibt es am Computer mit der Forschung.`;
+        for (const scheme of ['light', 'dark'] as const) {
+            await page.emulateMedia({ colorScheme: scheme });
+            for (const width of [360, 390, 1024, 1440]) {
+                await page.setViewportSize({ width, height: width > 1024 ? 900 : width === 1024 ? 768 : 844 });
+                await page.locator('.tree-switcher-btn').click();
+                const quiet = width <= 640 ? page.locator('.bottom-sheet-quiet', { hasText: 'Neuer Stammbaum' }) : page.locator('#tree-switcher-not-here');
+                await expect(quiet).toHaveText(text);
+                const m = await quiet.evaluate(el => {
+                    const r = el.getBoundingClientRect();
+                    return { page: document.documentElement.scrollWidth - window.innerWidth, left: r.left, right: r.right - window.innerWidth, own: el.scrollWidth - el.clientWidth };
+                });
+                expect(m.page, `${width}: page scrolls sideways`).toBeLessThanOrEqual(0);
+                expect(m.left, `${width}: the line starts off the window`).toBeGreaterThanOrEqual(0);
+                expect(m.right, `${width}: the line runs past the window`).toBeLessThanOrEqual(0);
+                expect(m.own, `${width}: the line scrolls`).toBeLessThanOrEqual(0);
+                if (width === 390 || width === 1440) await shot(page, `d4-stromy-jen-pocitac-de-${width}-${scheme === 'light' ? 'svetle' : 'tmave'}`);
+                await page.keyboard.press('Escape');
+                await expect(quiet).toBeHidden();
+            }
+        }
+    });
+});

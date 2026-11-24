@@ -23578,6 +23578,20 @@
         .tree-switcher-conn .phone-dot.is-wait { box-shadow: 0 0 0 3px var(--warning-soft); }
         .tree-switcher-conn-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         body.device-mode .toolbar.toolbar-squeeze-name .tree-switcher-btn .tree-switcher-lines { max-width: 110px; }
+        /* What belongs to the computer's research is not offered on the device (3.7): a linked file and
+           its save, the storage state of the browser, "Export all"; one quiet line in the switcher instead. */
+        body.device-mode #file-link-indicator,
+        body.device-mode #unsaved-copy-indicator,
+        body.device-mode #actions-storage-row,
+        body.device-mode .actions-storage-divider,
+        body.device-mode #actions-export-reminder,
+        body.device-mode #export-modal .fsa-only,
+        body.device-mode #export-modal .fsa-linked-only { display: none !important; }
+        .bottom-sheet-quiet { margin: 8px 16px 12px; font-size: 13px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .tree-switcher-quiet {
+            padding: 10px 14px; max-width: 320px; box-sizing: border-box;
+            font-size: 12.5px; line-height: 1.45; color: var(--text-light); white-space: normal;
+        }
         @media (min-width: 641px) and (max-width: 1024px) {
             body.device-mode .toolbar .tree-switcher-btn .tree-switcher-lines { max-width: 200px; }
         }

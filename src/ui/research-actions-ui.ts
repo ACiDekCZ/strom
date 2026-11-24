@@ -32,6 +32,7 @@ import { waitingTodoCount } from '../research-waiting.js';
 import { researchOpenMark, researchActionLabel, researchActionMark, researchMarkFlags } from './research-open-mark.js';
 import { researchOpenSvg } from '../history-symbols.js';
 import { overviewInWindow } from '../windows/overview-window.js';
+import { inDeviceMode } from './device-mode-ui.js';
 
 export { researchOpenMark } from './research-open-mark.js';
 
@@ -933,7 +934,8 @@ export const researchActionsMethods = uiModule({
 
     /** The last export of all trees for the reminder (null: never), or undefined when it is not shown now. */
     exportReminderLast(): string | null | undefined {
-        if (!this.researchSyncLink() || DataManager.isReadOnly()) return undefined;
+        // A device of the home network backs nothing up: the research's computer keeps the tree (spec 094 §3).
+        if (!this.researchSyncLink() || DataManager.isReadOnly() || inDeviceMode()) return undefined;
         return exportReminderDue() || reminderThisOpening ? lastExportAll() : undefined;
     },
 

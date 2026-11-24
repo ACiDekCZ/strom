@@ -25,6 +25,7 @@ import { imagesBeforeOutput } from './output-images.js';
 import { confirmMemoryForOutput } from './memory-limit-ui.js';
 import { holdLeave } from './busy-leave.js';
 import { whilePicking } from './file-pick.js';
+import { inDeviceMode } from './device-mode-ui.js';
 
 export const fileAccessMethods = uiModule({
     /** Reveal FSA controls only when supported; refresh the indicator. */
@@ -198,7 +199,8 @@ export const fileAccessMethods = uiModule({
         const indicator = document.getElementById('file-link-indicator');
         const treeId = DataManager.getCurrentTreeId();
         const handle: FileSystemFileHandleLike | null =
-            (treeId && !DataManager.isViewMode()) ? await loadHandle(treeId) : null;
+            // A device of the home network links no file: the tree is the computer's research's (spec 094 §3).
+            (treeId && !DataManager.isViewMode() && !inDeviceMode()) ? await loadHandle(treeId) : null;
         this.activeFileHandleName = handle?.name ?? null;
         // Gates the "Detach file" option in the export dialog.
         document.body.classList.toggle('file-linked', !!handle);
