@@ -1301,8 +1301,8 @@ class MergerUIClass {
      */
     private renderModalContent(): void {
         if (!this.mergeState) return;
-        // Step 2 draws its list and pair again; the other steps keep their body.
-        this.wizard.refresh({ body: this.wizard.step === 2 });
+        // Step 2 draws its list and pair again, step 4 its conflicts ("Same person", K10.7); the other steps keep their body.
+        this.wizard.refresh({ body: this.wizard.step === 2 || this.wizard.step === 4 });
     }
 
     /** Step 2: the decisions on the pairs and what opens from them (spec 134 §4). */

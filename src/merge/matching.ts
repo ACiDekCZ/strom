@@ -2443,7 +2443,7 @@ export function calculateMergeStats(state: MergeState): MergeStats {
 export function updateMatchDecision(
     state: MergeState,
     incomingId: PersonId,
-    decision: 'confirm' | 'reject' | 'skip' | { type: 'manual_match'; targetId: PersonId }
+    decision: 'confirm' | 'reject' | 'skip' | Extract<MatchDecision, { type: 'manual_match' }>
 ): void {
     if (typeof decision === 'string') {
         state.decisions.set(incomingId, { type: decision });

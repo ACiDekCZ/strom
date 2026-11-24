@@ -565,6 +565,9 @@ function whysHtml(state: MergeState, env: Step2Env | undefined, row: PairRow, pa
     const cand = cands.find(c => c.existingId === tree.id);
     const reasons = (row.match && row.match.existingId === tree.id ? row.match.reasons : cand?.reasons ?? [])
         .filter(r => r !== 'manual').map(reasonText);
+    // Joined by "Same person" on a conflict of relations of step 4 (K10.7): said first.
+    const decided = state.decisions.get(row.id);
+    if (decided?.type === 'manual_match' && decided.via === 'step4' && decided.targetId === tree.id) reasons.unshift(W.joinedInStep4);
     const against = againstLines(state, inc, tree, row.match);
     const unions = env?.unionConflicts(row.id) ?? [];
     const why: string[] = [];

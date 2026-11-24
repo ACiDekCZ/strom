@@ -29,7 +29,7 @@ import { isCopyOfTarget, pendingPairs, renderStep2, showFirstPending, step2Opene
 import { barHtml, setBarShare } from '../ui/prog-bar.js';
 import { busySpinHtml } from '../ui/busy.js';
 import { renderStep3, variantSub } from './steps/step3-whom.js';
-import { renderStep4 } from './steps/step4-rules.js';
+import { relationRowCount, renderStep4 } from './steps/step4-rules.js';
 import { renderStep5, showWriteStatus } from './steps/step5-plan.js';
 import { renderStep6, writtenWhen } from './steps/step6-done.js';
 
@@ -545,7 +545,8 @@ export class MergeWizard {
         }
         if (step === 3 && info.state === 'ok') return { text: variantSub(this.host.state() ?? null, ws.choices) };
         if (step === 4 && this.plan) {
-            const rel = this.plan.items.filter(i => i.kind === 'relation').length;
+            const state = this.host.state();
+            const rel = state && this.plan.items.some(i => i.kind === 'relation') ? relationRowCount(this.plan, state) : 0;
             if (rel > 0) return { text: W.subRelConf(rel), warn: true };
         }
         return { text: '' };

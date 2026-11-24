@@ -108,7 +108,13 @@ export type MatchDecision =
     | { type: 'confirm' }
     | { type: 'reject' }
     | { type: 'skip' }
-    | { type: 'manual_match'; targetId: PersonId };
+    | {
+        type: 'manual_match'; targetId: PersonId;
+        /** Joined by "Same person" on a conflict of relations in step 4 (spec 134 K10.7). */
+        via?: 'step4';
+        /** The decision "Same person" replaced (absent: none): Undo puts it back. */
+        prev?: MatchDecision;
+    };
 
 // ==================== MERGE STATE ====================
 
