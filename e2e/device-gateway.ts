@@ -59,6 +59,8 @@ export interface FakeGateway {
     clockOffsetMs: number;
     /** A new code to pair (one at a time, 10 minutes): its pairId, secret and the QR code's address. */
     pairCode(mode?: 'app'): { pairId: string; secret: string; url: string };
+    /** A home-screen icon's code (the same pairing, one at a time): its address `/#home.<pairId>.<secret>`. */
+    homeCode(): { pairId: string; secret: string; url: string };
     /** The next refusals outside the tunnel (taken one per request of /device/x, first first). */
     refuseNext(status: number, body: Record<string, unknown>, headers?: Record<string, string>): void;
     /** An event (`{event, data}`: the bridge's event's name and data) sent to every open stream (sealed for each). */
@@ -118,6 +120,12 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
             const secret = new Uint8Array(randomBytes(32));
             code = { pairId, secret, expiresAt: Date.now() + 10 * 60_000 };
             return { pairId, secret: b64url(secret), url: `${gw.origin}/pair?m=app#${pairId}.${b64url(secret)}` };
+        },
+        homeCode() {
+            const pairId = b64url(randomBytes(16));
+            const secret = new Uint8Array(randomBytes(32));
+            code = { pairId, secret, expiresAt: Date.now() + 24 * 60 * 60_000 };
+            return { pairId, secret: b64url(secret), url: `${gw.origin}/#home.${pairId}.${b64url(secret)}` };
         },
         refuseNext(status, body, headers) {
             refusals.push({ status, body, headers });

@@ -64,6 +64,8 @@ export function isDeviceModeCandidate(loc: { protocol: string; hostname: string;
 /** Whether this page may be a device's (no request, no database opened). */
 export function deviceModeCandidate(): boolean {
     if (typeof location === 'undefined') return false;
+    // a code already taken out of the address still makes this page a device's
+    if (takenCode) return true;
     return isDeviceModeCandidate(location, hasPairingMark());
 }
 
@@ -97,26 +99,55 @@ export interface DeviceModeStart {
 }
 
 let started: Promise<DeviceModeStart | null> | null = null;
+let watchingUnpair = false;
 
 /**
  * The device mode confirmed and started: the gateway's hello, the code of
  * the address used (paired with this device's proposed name), the connection
  * watched. null: not a device (the app as always).
  */
-export function startDeviceMode(opts: { computerWord?: string; appVersion?: string } = {}): Promise<DeviceModeStart | null> {
+export function startDeviceMode(opts: DeviceModeOptions = {}): Promise<DeviceModeStart | null> {
     if (!started) started = doStart(opts);
     return started;
 }
 
-async function doStart(opts: { computerWord?: string; appVersion?: string }): Promise<DeviceModeStart | null> {
+/**
+ * The start asked once more ("Try again" of a code that paired nothing): the
+ * same code of the address (taken once, kept in memory) paired again.
+ */
+export function restartDeviceMode(opts: DeviceModeOptions = {}): Promise<DeviceModeStart | null> {
+    started = null;
+    return startDeviceMode(opts);
+}
+
+/** How the device mode starts: the device's word for a computer, the app's version, who hears the gateway's hello. */
+export interface DeviceModeOptions {
+    computerWord?: string;
+    appVersion?: string;
+    /** The gateway answered (or not: null), before any pairing: the start screen names the computer. */
+    onHello?: (said: GatewayHello | null) => void;
+}
+
+/**
+ * Whether the code of the address pairs this origin: a home-screen icon's code
+ * (`#home.`) only where nothing is paired yet — the icon of iOS has its own
+ * storage; the browser holding its pairing (Safari reloaded with the code in
+ * its address, Android's shortcut sharing Chrome's storage) stays as it is.
+ */
+export function codePairs(code: DeviceCode, storedPairing: boolean): boolean {
+    return code.kind !== 'home' || !storedPairing;
+}
+
+async function doStart(opts: DeviceModeOptions): Promise<DeviceModeStart | null> {
     if (!deviceModeCandidate()) return null;
     const code = takeDeviceCode();
     if (opts.appVersion) configureGateway({ appVersion: opts.appVersion });
     const said = await hello();
+    try { opts.onHello?.(said); } catch { /* the screen's own */ }
     const stored = hasPairingMark() ? await loadPairing() : null;
     if (!said && !stored) return null;
     const out: DeviceModeStart = { hello: said, code, pairing: stored, connection: null };
-    if (code && said) {
+    if (code && said && codePairs(code, !!stored)) {
         const proposal = proposeThisDevice(opts.computerWord);
         try {
             out.paired = await pair(code.id, code.secret, stored?.name || proposal.name, stored?.kind ?? proposal.kind);
@@ -129,14 +160,20 @@ async function doStart(opts: { computerWord?: string; appVersion?: string }): Pr
         out.connection = startDeviceConnection();
         // The research's bridge through the gateway (spec 094 P3): its fetch, events and images; gone once unpaired.
         enterDeviceBridge(out.pairing);
-        onDeviceConnection(c => { if (c.state === 'unpaired') leaveDeviceBridge(); });
+        if (!watchingUnpair) {
+            watchingUnpair = true;
+            onDeviceConnection(c => { if (c.state === 'unpaired') leaveDeviceBridge(); });
+        }
     }
     exposeForTests();
     return out;
 }
 
 /** The device mode's own hooks for the browser tests (only in the device mode). */
+let exposed = false;
 function exposeForTests(): void {
+    if (exposed) return;
+    exposed = true;
     const events: StreamEvent[] = [];
     onDeviceEvent(e => {
         events.push(e);
