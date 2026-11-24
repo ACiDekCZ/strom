@@ -18236,6 +18236,8 @@
         @media (hover: hover) { .modal-back:hover { background: var(--hover-bg); color: var(--text); } }
         .modal-back:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         @media (pointer: coarse), (max-width: 1024px) { .modal-back { height: 44px; } }
+        /* A dialog opened from Change structure… (split): the way back, then the title filling the row. */
+        .modal-header > .modal-back + h2 { flex: 1; min-width: 0; margin-left: 4px; }
         /* Phone, either way up: the whole screen, options of 56 px (spec 139 §10.3). */
         @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .modal.modal--lg.structure-modal {

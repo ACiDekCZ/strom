@@ -1615,6 +1615,16 @@ class TreeManagerClass {
     }
 
     /**
+     * A tree split off another (Split into families, Separate unconnected
+     * parts; spec 139 §11.1): it names the tree it came from and the part
+     * (fromTree) and never carries a research tie.
+     */
+    createTreeFromPart(sourceId: TreeId | null, data: StromData, name: string, what: string = name): TreeId {
+        const source = sourceId ? this.getTreeMetadata(sourceId) : undefined;
+        return this.createTreeFromImport(data, name, false, sourceId && source ? { treeId: sourceId, name: source.name, what } : undefined);
+    }
+
+    /**
      * Format bytes to human readable string
      */
     formatBytes(bytes: number): string {

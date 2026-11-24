@@ -15,12 +15,14 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { PersonId, TreeId, StromData } from '../types.js';
-import { findComponents, componentName, TreeComponent } from '../components.js';
+import { componentName, TreeComponent } from '../components.js';
+import { componentsKey, componentsKnown, componentsOf } from './components-cache.js';
 import { extractSubtree } from '../subtree.js';
 import { uiModule } from './module.js';
 import { runBusy, nextPaint, activatedElement, type BusyCtl } from './busy.js';
 import { computeUnder } from './canvas-busy.js';
 import { busyProg } from './busy-prog.js';
+import { modalBackHtml, wireModalBack } from './modal-back.js';
 
 
 /** From this many people splitting a tree says its state at once (finding its parts takes longer than 120 ms). */
@@ -42,10 +44,12 @@ export const splitMethods = uiModule({
         if (!id) return;
         // §8: the tree read and its parts found under the working state of the choice (the canvas overlay
         // when its menu closed), at once for a large tree.
+        // Counted already by Change structure… for the tree as it is (§5.3): not again.
         const people = TreeManager.getTreeMetadata(id)?.personCount ?? 0;
-        const found = await computeUnder(activatedElement(), async () => {
+        const key = componentsKey(id);
+        const found = componentsKnown(key) ?? await computeUnder(activatedElement(), async () => {
             const data = await this.splitDataFor(id);
-            return data ? findComponents(data) : null;
+            return data ? componentsOf(key, data) : null;
         }, { label: strings.busy.findingParts, atOnce: people >= SPLIT_SHOWN_AT_ONCE });
         if (!found) return;
 
@@ -60,6 +64,7 @@ export const splitMethods = uiModule({
         overlay.innerHTML = `
             <div class="modal split-modal modal--md" role="dialog" data-dialog-kind="${this.splitComponents.length < 2 ? 'info' : 'form'}" aria-modal="true">
                 <div class="modal-header">
+                    ${modalBackHtml(this.splitParentDialog)}
                     <h2>${strings.split.title}</h2>
                     <button class="close-btn" id="split-close-x" aria-label="${strings.buttons.close}">&times;</button>
                 </div>
@@ -81,6 +86,8 @@ export const splitMethods = uiModule({
 
         const close = (): void => this.closeSplitDialog();
         (overlay.querySelector('#split-close-x') as HTMLButtonElement).onclick = close;
+        // From Change structure…: "‹ Change structure" returns there (§5.2).
+        wireModalBack(overlay, close);
         (overlay.querySelector('#split-close') as HTMLButtonElement).onclick = close;
         overlay.querySelectorAll('.split-check').forEach(box => {
             (box as HTMLInputElement).onchange = () => this.updateSplitButton();
@@ -162,7 +169,7 @@ export const splitMethods = uiModule({
                 await nextPaint();
             }
             const subtree = extractSubtree(data, new Set<PersonId>(component.personIds));
-            TreeManager.createTreeFromImport(subtree, name, false);
+            TreeManager.createTreeFromPart(this.splitTreeId, subtree, name);
         }
 
         this.updateTreeSwitcher();
