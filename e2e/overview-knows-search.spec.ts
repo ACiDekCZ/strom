@@ -112,7 +112,7 @@ test.describe('What the research knows searched in the overview', () => {
         await expect(field(page)).toHaveAttribute('aria-label', 'Search What the research knows');
         // The order: field, chips, the conflicts, the head, the hypotheses.
         const order = await sec(page).evaluate(s => [...s.children].map(c => c.className.split(' ')[0]));
-        expect(order.indexOf('research-overview__section-search')).toBeLessThan(order.indexOf('research-overview__filters'));
+        expect(order.indexOf('research-overview__section-search')).toBeLessThan(order.indexOf('research-overview__knows-bar'));
         await expect(chips(page)).toHaveText(['All 11', 'Conflicts 3', 'Hypotheses 8']);
         await expect(rows(page)).toHaveCount(11);
         await expect(head(page)).toHaveText('Select all with a proposal');

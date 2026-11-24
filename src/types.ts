@@ -2360,6 +2360,11 @@ export interface AppSettings {
      * 'view' | 'sel' | 'tree'; a view's default (Map, Timeline 'view', Table 'tree') is not stored.
      */
     scopeByTree?: Record<string, { map?: string; timeline?: string; table?: string }>;
+    /**
+     * Per tree (spec 140 K1.4): how the overview's "What the research knows" is grouped, 'line' | 'tree';
+     * 'none' (the default) is not stored. A view setting of this device, never tree data.
+     */
+    knowsGroupByTree?: Record<string, string>;
     historyKindRegion?: boolean;  // default: true - the card's timeline shows regional history (spec 1028 §6)
     historyKindPlace?: boolean;   // default: true - the card's timeline shows the history of a place (with history.place)
     historyKindLocal?: boolean;   // default: true - the card's timeline shows findings from the research's sources

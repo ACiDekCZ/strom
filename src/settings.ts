@@ -13,6 +13,7 @@ import { MapKind, MAP_KINDS, isMapKind, readPlacesSort, type PlacesSort } from '
 import { HISTORY_KINDS, isHistoryKind, type HistoryKind } from './history.js';
 import { sameSelectionRef, sanitizeSelectionRef, type SelectionRef } from './view-selection-ref.js';
 import { isViewScope, scopeDefault, type ScopedView, type ViewScope } from './view-scope.js';
+import { isKnowsGroup, type KnowsGroup } from './knows-group.js';
 
 /** How many recently cited sources the picker remembers per tree. */
 export const RECENT_SOURCES_MAX = 5;
@@ -189,6 +190,9 @@ class SettingsManagerClass {
     /** The map's kinds changed in a read-only window: kept here, never stored. */
     private localMapKinds: MapKind[] | null = null;
 
+    /** The grouping of "What the research knows" chosen in a read-only window, per tree: kept here, never stored. */
+    private localKnowsGroups: Map<string, KnowsGroup> | null = null;
+
     init(): void {
         this.load();
         this.applyTheme();
@@ -201,7 +205,7 @@ class SettingsManagerClass {
     /** Settings only read in this window (spec 079 §0); set before init. */
     setReadOnly(on: boolean): void {
         this.readOnly = on;
-        if (!on) { this.localCardSignals = null; this.localMapKinds = null; }
+        if (!on) { this.localCardSignals = null; this.localMapKinds = null; this.localKnowsGroups = null; }
     }
 
     isReadOnly(): boolean {
@@ -221,6 +225,7 @@ class SettingsManagerClass {
             // What the main window stores wins over a change made here, as for the other settings.
             this.localCardSignals = null;
             this.localMapKinds = null;
+            this.localKnowsGroups = null;
             this.load();
             this.applyTheme();
             onChange({ languageBefore });
@@ -415,7 +420,8 @@ class SettingsManagerClass {
     forgetLifelineDefaults(treeId: string): void {
         // The tree's selection and map scope go with it (spec 039 §3.5, 098 §7).
         let changed = false;
-        for (const all of [this.settings.selectionByTree, this.settings.scopeByTree]) {
+        // And the grouping of "What the research knows" (spec 140 K1.4).
+        for (const all of [this.settings.selectionByTree, this.settings.scopeByTree, this.settings.knowsGroupByTree]) {
             if (all?.[treeId]) { delete all[treeId]; changed = true; }
         }
         if (!this.settings.lifelineByTree?.[treeId]) { if (changed) this.save(); return; }
@@ -466,6 +472,33 @@ class SettingsManagerClass {
         else delete entry[view];
         if (Object.keys(entry).length) all[treeId] = entry;
         else delete all[treeId];
+        this.save();
+    }
+
+    /** How "What the research knows" is grouped for a tree (spec 140 K1.4); 'none' when never chosen. */
+    getKnowsGroupForTree(treeId: string | null): KnowsGroup {
+        if (!treeId) return 'none';
+        const local = this.localKnowsGroups?.get(treeId);
+        if (local) return local;
+        const v = this.settings.knowsGroupByTree?.[treeId];
+        return isKnowsGroup(v) ? v : 'none';
+    }
+
+    /**
+     * Remember how "What the research knows" is grouped for a tree ('none':
+     * forgotten). Stored by the main window only; a read-only window keeps
+     * its choice here until the main window's settings change.
+     */
+    setKnowsGroupForTree(treeId: string, group: KnowsGroup): void {
+        if (this.getKnowsGroupForTree(treeId) === group) return;
+        if (this.readOnly) {
+            (this.localKnowsGroups ??= new Map()).set(treeId, group);
+            return;
+        }
+        const all = (this.settings.knowsGroupByTree ??= {});
+        if (group === 'none') delete all[treeId];
+        else all[treeId] = group;
+        if (Object.keys(all).length === 0) delete this.settings.knowsGroupByTree;
         this.save();
     }
 

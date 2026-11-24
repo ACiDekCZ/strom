@@ -26508,6 +26508,32 @@
         /* "What the research knows": its kinds (spec 052 §3), the chips of the queue's filter. */
         .research-overview__knows-kinds { margin: 4px 0 8px; }
         .research-overview__knows + .hp2-head, .research-overview__knows-kinds + .research-overview__knows { margin-top: 0; }
+        /* Its bar (spec 140 §1): the kind chips and "Group: … ▾", the button under the chips when it does not fit. */
+        .research-overview__knows-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 4px 0 8px; min-width: 0; }
+        .research-overview__knows-bar > .research-overview__knows-kinds { margin: 0; flex: 0 1 auto; }
+        .research-overview__knows-bar + .research-overview__knows { margin-top: 0; }
+        .research-overview__knows-group-btn { min-width: 0; }
+        .research-overview__knows-group-btn .research-overview__groups-btn-label { font-weight: 400; }
+        .research-overview__knows-group-btn.is-set { border-color: var(--text); }
+        /* Grouped (spec 140 §2, §3): the bands of Awaiting action, the rows on a 2 px line under each. */
+        .live-section__body.is-knows-grouped { container: rov-knows / inline-size; }
+        .research-overview__knows-grouphead.is-first { margin-top: 6px; }
+        .research-overview__group-state { font-weight: 400; color: var(--text-light); }
+        .research-overview__knows.is-grouped { margin: 2px 0 0 13px; padding-left: 12px; border-left: 2px solid var(--border); }
+        .research-overview__knows.is-grouped > li:last-child { border-bottom: 0; }
+        .rok-tag--island { background: none; border: 1px solid var(--border); color: var(--text-light); font-weight: 400; line-height: 1.4; }
+        @container rov-knows (max-width: 379px) {
+            .research-overview__knows-grouphead { padding: 8px 8px 8px 6px; }
+            .research-overview__knows-grouphead .research-overview__group-title { --group-title-lines: 4; }
+            .research-overview__knows.is-grouped { margin-left: 0; padding-left: 8px; }
+        }
+        @media (max-width: 640px) {
+            .research-overview__knows.is-grouped { margin-left: 0; padding-left: 8px; }
+        }
+        @media (pointer: coarse) {
+            .research-overview__knows-group-btn { position: relative; height: 32px; }
+            .research-overview__knows-group-btn::before { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+        }
         @media (pointer: coarse) {
             .research-overview__queue-search, .research-overview__section-search { height: 44px; }
             .research-overview__queue-search-input, .research-overview__section-search-input { font-size: 16px; }

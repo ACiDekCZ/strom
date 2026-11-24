@@ -42,7 +42,7 @@ import { appendImagesDetail, bindImagesDrop, clearImagesSeen, forgetImagesArrive
 import { clearOverviewImages, foldOverviewImages, overviewImagesResult, auditFixedRowDrawn, waitingAuditMarkEl, waitingAuditShown } from './waiting-task-ui.js';
 import { formatLiveClock } from '../live-time.js';
 import { waitsText } from '../research-holds.js';
-import { MQ_PHONE_BAR, isPhoneBar } from '../breakpoints.js';
+import { MQ_PHONE_BAR, isMobile, isPhoneBar } from '../breakpoints.js';
 import { openHeadMenu } from './table-view/table-headmenu.js';
 import {
     ORDER_ICON, WaitingGroups, noteWaitingNew, setWaitingDrawn, shownWaitingGroups, storeWaitingGroupMode, storeWaitingGroups, storeWaitingOrder,
@@ -55,7 +55,7 @@ import {
     LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
     liveSession, nowHelpTopic, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip,
     liveState, pausedText, appendWorkingHold, workingHoldEl, workingSavingEl, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
-    markWaitingFocus, waitingWhyEl, overviewViewing, OverviewViewing, onComputer, lightsGroup, markOverviewLit, researchSession,
+    markWaitingFocus, waitingWhyEl, overviewViewing, OverviewViewing, onComputer, lightsGroup, markOverviewLit, researchSession, researchTableLive,
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
 import {
@@ -68,6 +68,9 @@ import { focusQueueMoved, setQueueBranchFilter, waitBranchText, workingWhyText }
 import { setQueueKindFilter } from './queue-kind-ui.js';
 import { beginQueueSlots, endQueueSlots } from '../research-queue-pages.js';
 import { KnowsKind, knowsKindChoice, knowsKindShows } from '../knows-kind.js';
+import { knowsGroupOptions, knowsGroupShown, knowsGroups, type KnowsGroup, type KnowsGroupLine } from '../knows-group.js';
+import { personLineIds, researchLinesOf } from './table-view/table-research.js';
+import { SettingsManager } from '../settings.js';
 import { activeQueueSearch, clearQueueSearch } from './queue-search-ui.js';
 import { overviewSearches, focusFirstSectionRow, type SectionSearch } from './section-search.js';
 import { appendSearchOutcome, keepSheetOverKeyboard, mountSectionSearch, paintSearchChip, searchHitTag, searchSummaryEl } from './section-search-view.js';
@@ -125,6 +128,8 @@ let filter: Filter = 'all';
 let relighting = false;
 /** The kind shown in "What the research knows" while the overview is open (All again once it closes). */
 let knowsKind: KnowsKind = 'all';
+/** The groups of "What the research knows" folded or unfolded by hand (`${group}:${key}`), while the overview is open (spec 140). */
+const knowsGroupsOpen = new Map<string, boolean>();
 /** When the overview was opened (changes after it are marked new for a moment). */
 let openedAt = 0;
 /** Older change groups the user unfolded (by group key). */
@@ -652,6 +657,7 @@ export const researchOverviewMethods = uiModule({
         // The sections' searches and the kind shown in "What the research knows" last while the overview is open.
         overviewSearches.reset();
         knowsKind = 'all';
+        knowsGroupsOpen.clear();
         if (s !== liveSession()) this.closeOverviewViewing();
         closeAnswerForm();
         clearImagesSeen();
@@ -723,6 +729,7 @@ export const researchOverviewMethods = uiModule({
                 overviewSearches.reset();
                 resetOverviewColumns();
                 knowsKind = 'all';
+                knowsGroupsOpen.clear();
             }
             keepSheetOverKeyboard(null);
             this.setResearchOverviewDocked(false);
@@ -923,7 +930,7 @@ export const researchOverviewMethods = uiModule({
                 if (!fromTree && !s.ended && shown('queue')) this.appendQueueSection(host, s, fold('queue'), 20, L.queueTitle, true);
             },
             knows: () => {
-                if (shown('knows')) this.appendOverviewKnows(host, fold('knows'), mode);
+                if (shown('knows')) this.appendOverviewKnows(host, fold('knows'), mode, s.treeId);
             },
         };
         // In the sections' order (one for the overview and the panel); the own window notes what each drew for its columns.
@@ -1743,29 +1750,42 @@ export const researchOverviewMethods = uiModule({
     },
 
     /**
-     * The fold button of a group's band (spec 105 U4 §1, §2): the chevron, the
-     * title wrapped up to its cap (its "more" goes under the button, see
-     * groupTitleMoreEl), and at the top right its kind, new and how many.
+     * The fold button of a group's band (spec 105 U4 §1, §2; spec 140 §2): the
+     * chevron, the title wrapped up to its cap (its "more" goes under the
+     * button, see groupTitleMoreEl; `titleExtra` wraps with it), and at the
+     * top right what `side` holds.
      */
+    groupBandButton(b: {
+        cls?: string; name: string; titleAttr: string; titleExtra?: HTMLElement; side: HTMLElement[];
+        label: string; open: boolean; toggle: () => void;
+    }): { button: HTMLButtonElement; title: HTMLElement } {
+        const gh = el('button', `research-overview__group-head research-overview__waiting-group${b.cls ? ` ${b.cls}` : ''}`);
+        gh.type = 'button';
+        gh.setAttribute('aria-expanded', String(b.open));
+        const chevron = el('span', 'live-section__chevron', b.open ? '▾' : '▸');
+        chevron.setAttribute('aria-hidden', 'true');
+        const title = el('span', 'research-overview__group-title', b.name);
+        if (b.titleExtra) title.appendChild(b.titleExtra);
+        title.title = b.titleAttr;
+        const side = el('span', 'research-overview__group-side');
+        side.append(...b.side);
+        gh.append(chevron, title, side);
+        gh.setAttribute('aria-label', b.label);
+        gh.onclick = b.toggle;
+        return { button: gh, title };
+    },
+
+    /** The band's button of a group of Awaiting action: its kind, new and how many at the top right. */
     waitingBandButton(g: WaitingGroupRows, open: boolean, toggle: () => void, h: {
         cls: string; name: string; titleAttr: string; kind: string | null; newText: string; label: string;
     }): { button: HTMLButtonElement; title: HTMLElement } {
-        const gh = el('button', `research-overview__group-head research-overview__waiting-group${h.cls ? ` ${h.cls}` : ''}`);
-        gh.type = 'button';
-        gh.dataset.group = g.key;
-        gh.setAttribute('aria-expanded', String(open));
-        const chevron = el('span', 'live-section__chevron', open ? '▾' : '▸');
-        chevron.setAttribute('aria-hidden', 'true');
-        const title = el('span', 'research-overview__group-title', h.name);
-        title.title = h.titleAttr;
-        const side = el('span', 'research-overview__group-side');
-        if (h.kind) side.appendChild(el('span', 'research-overview__group-kind', h.kind));
-        if (h.newText) side.appendChild(el('span', 'research-overview__new', h.newText));
-        side.appendChild(el('span', 'research-overview__group-span', String(g.items.length)));
-        gh.append(chevron, title, side);
-        gh.setAttribute('aria-label', h.label);
-        gh.onclick = toggle;
-        return { button: gh, title };
+        const side: HTMLElement[] = [];
+        if (h.kind) side.push(el('span', 'research-overview__group-kind', h.kind));
+        if (h.newText) side.push(el('span', 'research-overview__new', h.newText));
+        side.push(el('span', 'research-overview__group-span', String(g.items.length)));
+        const band = this.groupBandButton({ cls: h.cls, name: h.name, titleAttr: h.titleAttr, side, label: h.label, open, toggle });
+        band.button.dataset.group = g.key;
+        return band;
     },
 
     /** The title of a group's band as drawn (a place, "Other", the questions about places, a book with its years). */
@@ -3237,7 +3257,7 @@ export const researchOverviewMethods = uiModule({
      * found, the rows found, the bulk head and foot about the found ones, the
      * Verifying block under it all unchanged.
      */
-    appendOverviewKnows(body: HTMLElement, fold: LiveFold, mode: Mode): void {
+    appendOverviewKnows(body: HTMLElement, fold: LiveFold, mode: Mode, treeId: string): void {
         const L = strings.live;
         const facts = strings.research.changeWords.facts as Record<string, string>;
         const rows: (KnowsSearchRow & { person: Person; text: string; conflictId?: string; hypo?: ResearchHypothesis })[] = [];
@@ -3299,10 +3319,21 @@ export const researchOverviewMethods = uiModule({
         const shownKeys = new Set(res.shown);
         const shownRows = rows.filter(r => shownKeys.has(r.key));
         const hitOf = (r: { key: string }): SearchHit | undefined => searching ? res.hits.get(r.key) : undefined;
-        if (choice.chips) {
-            host.appendChild(this.knowsKindChips(choice.kind, {
-                all: chipCount(res, 'all', rows.length), con: chipCount(res, 'con', conflicts), hyp: chipCount(res, 'hyp', rows.length - conflicts),
-            }, searching));
+        // Its groups (spec 140): offered from two rows (D5), by line only with lines; a stored choice that cannot draw draws as None.
+        const lineModel = researchLinesOf(DataManager.getData(), researchTableLive().places);
+        const hasLines = lineModel.lines.length > 0;
+        const offerGroups = !fold.collapsed && rows.length >= 2;
+        const groupBy = offerGroups ? knowsGroupShown(SettingsManager.getKnowsGroupForTree(treeId), hasLines, rows.length) : 'none';
+        // The kind chips and Group in one bar (the button wraps under the chips when it does not fit).
+        if (choice.chips || offerGroups) {
+            const bar = el('div', 'research-overview__knows-bar');
+            if (choice.chips) {
+                bar.appendChild(this.knowsKindChips(choice.kind, {
+                    all: chipCount(res, 'all', rows.length), con: chipCount(res, 'con', conflicts), hyp: chipCount(res, 'hyp', rows.length - conflicts),
+                }, searching));
+            }
+            if (offerGroups) bar.appendChild(this.knowsGroupButton(groupBy, knowsGroupOptions(hasLines), mode, treeId));
+            host.appendChild(bar);
         }
         appendSearchOutcome(host, search, {
             searching, found: res.shown.length, total: res.total,
@@ -3324,22 +3355,8 @@ export const researchOverviewMethods = uiModule({
         // The head and "Select all" are about the rows shown; the conflicts alone have none.
         const accept = choice.kind === 'con' || !shownRows.some(r => !r.conflict) ? null
             : this.hypothesisKnowsAccept(shownRows.flatMap(r => r.hypo?.id ? [r.hypo.id] : []), mode, hypoSearch);
-        // Both kinds shown: the conflicts first, the head of the accepting over the hypotheses under them.
-        const split = !!accept?.head && shownRows.some(r => r.conflict) && shownRows.some(r => !r.conflict);
-        let list = el('ul', `live-panel-list research-overview__knows${accept ? ' has-accept' : ''}`);
-        if (accept?.head && !split) host.appendChild(accept.head);
-        for (const row of shownRows) {
-            if (split && !row.conflict && list.dataset.kind === 'con') {
-                // The first hypothesis: the conflicts' list ends, the head stands over the hypotheses' one.
-                host.appendChild(list);
-                host.appendChild(accept!.head!);
-                list = el('ul', 'live-panel-list research-overview__knows has-accept');
-                list.dataset.kind = 'hyp';
-            }
-            if (split && row.conflict && !list.dataset.kind) {
-                list.className = 'live-panel-list research-overview__knows';
-                list.dataset.kind = 'con';
-            }
+        // A row: its text and tags (an island's person "outside the tree" when grouped by line), its box when accepting.
+        const rowLi = (row: typeof rows[number], box: boolean, island: boolean, where: string): HTMLLIElement => {
             const li = el('li');
             const btn = el('button', `research-overview__knows-row${row.conflict ? ' is-conflict' : ''}`);
             btn.type = 'button';
@@ -3348,9 +3365,14 @@ export const researchOverviewMethods = uiModule({
             const hit = hitOf(row);
             const entry = row.hypo?.id ? accept?.entries.get(row.hypo.id) ?? null : null;
             let tags = row.hypo ? this.hypothesisKnowsTagsEl(row.hypo, entry) : null;
+            // Outside the tree (spec 140 §2, D2): the first tag, after the amber ones of a match.
+            if (island) {
+                tags ??= el('span', 'rok-tags');
+                tags.prepend(el('span', 'rok-tag rok-tag--island', L.knowsIsland));
+            }
             // A hypothesis found by its number or its person's: the amber H… and P… lead its line of tags.
-            const lead = row.hypo ? [
-                ...(hit?.h && row.hypo.id ? [searchHitTag(row.hypo.id)] : []),
+            const lead = row.hypo || island ? [
+                ...(hit?.h && row.hypo?.id ? [searchHitTag(row.hypo.id)] : []),
                 ...(hit?.p && row.personRef ? [searchHitTag(row.personRef)] : []),
             ] : [];
             if (lead.length > 0) {
@@ -3372,15 +3394,77 @@ export const researchOverviewMethods = uiModule({
                 this.showPersonResearchDialog(row.person.id, row.conflictId ? { conflict: row.conflictId }
                     : row.hypo?.id && this.researchHypothesisPickable(row.hypo) !== 'old' ? { hypo: { id: row.hypo.id } } : {});
             };
-            if (accept && !(split && row.conflict)) {
+            if (box) {
                 li.classList.add('rok-item');
-                if (entry) li.appendChild(this.hypothesisAcceptBoxEl(rid!, entry, 'knows'));
+                if (entry) li.appendChild(this.hypothesisAcceptBoxEl(rid!, entry, where));
                 else li.appendChild(el('span', 'hp2-box hp2-box--none')).setAttribute('aria-hidden', 'true');
             }
             li.appendChild(btn);
-            list.appendChild(li);
+            return li;
+        };
+        if (groupBy !== 'none') {
+            // Grouped (spec 140 §2, §3): the head of the accepting once over the first group, each group's band and its rows.
+            host.classList.add('is-knows-grouped');
+            if (accept?.head) host.appendChild(accept.head);
+            const linesOfPerson = new Map<string, ReadonlySet<string>>();
+            const lines: KnowsGroupLine[] = lineModel.lines.map(l => ({ id: l.id, name: l.name?.trim() || L.knowsGroupLineUnnamed, done: l.state === 'done' }));
+            const groups = knowsGroups(shownRows, groupBy, {
+                lines,
+                lineIdsOf: (r) => {
+                    let ids = linesOfPerson.get(r.person.id);
+                    if (!ids) linesOfPerson.set(r.person.id, ids = personLineIds(lineModel, r.person));
+                    return ids;
+                },
+                islandOf: (r) => !!r.person.research?.island,
+            });
+            // A phone (P2): only the first group open when the overview opens.
+            const firstOnly = mode === 'sheet' && isMobile();
+            groups.forEach((g, i) => {
+                const key = `${groupBy}:${g.key}`;
+                const open = sectionPartOpen(key, !firstOnly || i === 0, searching, knowsGroupsOpen, search?.searchOpen);
+                const name = g.line?.name ?? (g.kind === 'noLine' ? L.knowsGroupNoLine : g.kind === 'in' ? L.knowsGroupIn : L.knowsGroupOut);
+                const ended = !!g.line?.done;
+                const state = ended ? el('span', 'research-overview__group-state', ` · ${L.knowsLineEnded}`) : undefined;
+                const head = el('div', `research-overview__waiting-grouphead research-overview__knows-grouphead${i === 0 ? ' is-first' : ''}`);
+                const { button, title } = this.groupBandButton({
+                    name, titleAttr: name, titleExtra: state, side: [el('span', 'research-overview__group-span', String(g.rows.length))],
+                    label: L.knowsGroupBandAria(name, g.rows.length, ended), open,
+                    toggle: () => {
+                        toggleSectionPart(key, open, searching, knowsGroupsOpen, search?.searchOpen);
+                        this.renderResearchOverview();
+                    },
+                });
+                button.dataset.band = key;
+                button.dataset.focusKey = `knows-band:${key}`;
+                head.append(button, groupTitleMoreEl(title, `knows:${key}`, knowsGroupsOpen));
+                host.appendChild(head);
+                if (!open) return;
+                const list = el('ul', `live-panel-list research-overview__knows is-grouped${accept ? ' has-accept' : ''}`);
+                list.setAttribute('aria-label', name);
+                for (const row of g.rows) list.appendChild(rowLi(row, !!accept, groupBy === 'line' && !!row.person.research?.island, `knows:${key}`));
+                host.appendChild(list);
+            });
+        } else {
+            // Both kinds shown: the conflicts first, the head of the accepting over the hypotheses under them.
+            const split = !!accept?.head && shownRows.some(r => r.conflict) && shownRows.some(r => !r.conflict);
+            let list = el('ul', `live-panel-list research-overview__knows${accept ? ' has-accept' : ''}`);
+            if (accept?.head && !split) host.appendChild(accept.head);
+            for (const row of shownRows) {
+                if (split && !row.conflict && list.dataset.kind === 'con') {
+                    // The first hypothesis: the conflicts' list ends, the head stands over the hypotheses' one.
+                    host.appendChild(list);
+                    host.appendChild(accept!.head!);
+                    list = el('ul', 'live-panel-list research-overview__knows has-accept');
+                    list.dataset.kind = 'hyp';
+                }
+                if (split && row.conflict && !list.dataset.kind) {
+                    list.className = 'live-panel-list research-overview__knows';
+                    list.dataset.kind = 'con';
+                }
+                list.appendChild(rowLi(row, !!accept && !(split && row.conflict), false, 'knows'));
+            }
+            if (shownRows.length > 0) host.appendChild(list);
         }
-        if (shownRows.length > 0) host.appendChild(list);
         if (accept?.foot) host.appendChild(accept.foot);
         else if (searching && !accept && rid && rows.some(r => !r.conflict) && this.hypothesesAcceptAvailable()) {
             // Searching and no list of hypotheses drawn (none found, or Conflicts chosen): the picked ones are still said.
@@ -3417,6 +3501,37 @@ export const researchOverviewMethods = uiModule({
             pills.appendChild(chip);
         }
         return pills;
+    },
+
+    /**
+     * "Group: By research line ▾" of "What the research knows" (spec 140 §1):
+     * a menu (a sheet on a phone) of None / By research line / In the tree
+     * and outside it, kept for the tree; dark-framed when something is chosen.
+     */
+    knowsGroupButton(shown: KnowsGroup, options: readonly KnowsGroup[], mode: Mode, treeId: string): HTMLElement {
+        const L = strings.live;
+        const label = (g: KnowsGroup): string => g === 'line' ? L.knowsGroupLine : g === 'tree' ? L.knowsGroupTree : L.knowsGroupNone;
+        const btn = el('button', `research-overview__order-btn research-overview__knows-group-btn${shown !== 'none' ? ' is-set' : ''}`);
+        btn.type = 'button';
+        btn.dataset.focusKey = 'knows-group';
+        btn.setAttribute('aria-haspopup', 'menu');
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('aria-label', L.knowsGroupAria(label(shown)));
+        btn.append(el('span', 'research-overview__groups-btn-label', L.knowsGroupBtn), el('span', 'research-overview__order-name', label(shown)));
+        const caret = el('span', 'research-overview__order-caret', '▾');
+        caret.setAttribute('aria-hidden', 'true');
+        btn.appendChild(caret);
+        const choose = (g: KnowsGroup): void => {
+            if (g === shown) return;
+            SettingsManager.setKnowsGroupForTree(treeId, g);
+            this.renderResearchOverview();
+        };
+        btn.onclick = () => this.openWaitingChoice(btn, {
+            title: L.knowsGroup, sheet: mode === 'sheet' || isPhoneBar(),
+            sheetClass: 'research-overview__knows-group-sheet', menuClass: 'research-overview__knows-group-menu',
+            options: options.map(g => ({ id: `knows-group-${g}`, label: label(g), on: g === shown, run: () => choose(g) })),
+        });
+        return btn;
     },
 
     /** Foot: where evidence is missing (the tree overview's Data quality), Open the research (research). */

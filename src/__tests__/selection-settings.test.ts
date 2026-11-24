@@ -153,3 +153,32 @@ describe('scopes per tree and view (spec 098 §11)', () => {
         expect(store.get(SETTINGS_KEY)).toBe(before);
     });
 });
+
+describe('the grouping of What the research knows per tree (spec 140 K1.4)', () => {
+    it('each tree its own; None is not stored; forgetting the tree forgets it', () => {
+        SettingsManager.init();
+        expect(SettingsManager.getKnowsGroupForTree('k1')).toBe('none');
+        SettingsManager.setKnowsGroupForTree('k1', 'line');
+        SettingsManager.setKnowsGroupForTree('k2', 'tree');
+        expect(SettingsManager.getKnowsGroupForTree('k1')).toBe('line');
+        expect(SettingsManager.getKnowsGroupForTree('k2')).toBe('tree');
+        expect(SettingsManager.getKnowsGroupForTree(null)).toBe('none');
+        SettingsManager.setKnowsGroupForTree('k2', 'none');
+        expect(JSON.parse(store.get(SETTINGS_KEY)!).knowsGroupByTree).toEqual({ k1: 'line' });
+        SettingsManager.forgetLifelineDefaults('k1');
+        expect(SettingsManager.getKnowsGroupForTree('k1')).toBe('none');
+        expect(JSON.parse(store.get(SETTINGS_KEY)!).knowsGroupByTree?.k1).toBeUndefined();
+    });
+
+    it('a read-only window keeps its choice in itself and writes nothing', () => {
+        const before = JSON.stringify({ knowsGroupByTree: { k3: 'tree' } });
+        store.set(SETTINGS_KEY, before);
+        SettingsManager.setReadOnly(true);
+        SettingsManager.init();
+        expect(SettingsManager.getKnowsGroupForTree('k3')).toBe('tree');
+        SettingsManager.setKnowsGroupForTree('k3', 'line');
+        expect(SettingsManager.getKnowsGroupForTree('k3')).toBe('line');
+        expect(writes).toEqual([]);
+        expect(store.get(SETTINGS_KEY)).toBe(before);
+    });
+});

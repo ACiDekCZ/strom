@@ -373,9 +373,9 @@ test.describe('Research hypotheses in What waits and the overview', () => {
 
 test.describe('The kinds of What the research knows (spec 052 §3)', () => {
     const kinds = (page: Page) => ov(page).locator('.research-overview__knows-kinds');
-    /** The section's parts in order: the chips, the lists (by their kind) and the head of the accepting. */
+    /** The section's parts in order: the bar (with the chips, or Group alone), the lists (by their kind) and the head of the accepting. */
     const parts = (page: Page) => ov(page).locator('#ov-sec-knows').evaluate(n => [...n.children].map(c =>
-        c.classList.contains('research-overview__knows-kinds') ? 'chips'
+        c.classList.contains('research-overview__knows-bar') ? (c.querySelector('.research-overview__knows-kinds') ? 'chips' : 'bar')
             : c.classList.contains('hp2-head') ? 'head'
             : c.classList.contains('research-overview__knows') ? `list:${(c as HTMLElement).dataset.kind ?? 'all'}:${c.children.length}`
             : c.className.split(' ')[0]));
@@ -417,7 +417,7 @@ test.describe('The kinds of What the research knows (spec 052 §3)', () => {
         await unfold(page, 'What the research knows');
         await expect(ov(page).locator('.research-overview__knows-row')).toHaveCount(4);
         await expect(kinds(page)).toHaveCount(0);
-        expect((await parts(page)).slice(0, 2)).toEqual(['head', 'list:all:4']);
+        expect((await parts(page)).slice(0, 3)).toEqual(['bar', 'head', 'list:all:4']);
     });
 });
 
