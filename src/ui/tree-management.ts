@@ -270,7 +270,8 @@ export const treeManagementMethods = uiModule({
         const trees = TreeManager.getVisibleTrees();
         const activeId = TreeManager.getActiveTreeId();
 
-        let html = '';
+        // A device of the home network: the connection's state and "Connection…" on top (spec 094 3.11).
+        let html = this.deviceConnTopHtml();
 
         // Tree list (only visible trees): ✓ in its own column, the name, the research marks (spec 011).
         for (const tree of trees) {

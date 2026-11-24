@@ -740,6 +740,9 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         savePhotos: 'Zapisz zdjęcia na urządzeniu',
         unpaired: (pc: string) => `To urządzenie nie jest już sparowane z komputerem ${pc}.`,
         repair: 'Nowe parowanie: zeskanować kod QR na komputerze z badaniem.',
+        rename: 'Zmień nazwę',
+        renameAria: 'Nazwa tego urządzenia',
+        connDone: 'Gotowe',
     },
     read: {
         menu: 'Odczytaj dokument…',

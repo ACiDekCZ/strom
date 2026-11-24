@@ -1226,6 +1226,10 @@ export const miscMethods = uiModule({
                         this.closePhoneDialog();
                         return;
                     }
+                    if (currentDialog === 'device-conn-modal') {
+                        this.closeDeviceConnection();
+                        return;
+                    }
                     if (currentDialog === 'device-home-modal') {
                         this.closeDeviceHomeHow();
                         return;

@@ -113,6 +113,7 @@ import { researchChangesMethods } from './research-changes-ui.js';
 import { batchMethods } from './batch-ui.js';
 import { phoneMethods } from './phone-ui.js';
 import { deviceStartMethods } from './device-start-ui.js';
+import { deviceConnMethods } from './device-conn-ui.js';
 import { readDocumentMethods } from './read-document-ui.js';
 import { readProposeMethods } from './read-propose-ui.js';
 import { researchImagesMethods } from './research-images-ui.js';
@@ -893,6 +894,10 @@ Object.assign(UIClass.prototype, phoneMethods);
 type DeviceStartMethods = typeof deviceStartMethods;
 export interface UIClass extends DeviceStartMethods {}
 Object.assign(UIClass.prototype, deviceStartMethods);
+
+type DeviceConnMethods = typeof deviceConnMethods;
+export interface UIClass extends DeviceConnMethods {}
+Object.assign(UIClass.prototype, deviceConnMethods);
 
 type ReadDocumentMethods = typeof readDocumentMethods;
 export interface UIClass extends ReadDocumentMethods {}

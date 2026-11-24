@@ -244,6 +244,31 @@ export const deviceQueue = {
     ids: (): Promise<string[]> => backend().keys('queue'),
 };
 
+/**
+ * What waits in the queue, told apart: a photo (an entry of kind `photo`, or
+ * one carrying a file's name, bytes or blob), anything else an edit.
+ */
+export function queueEntryIsPhoto(entry: unknown): boolean {
+    if (!entry || typeof entry !== 'object') return false;
+    const e = entry as Record<string, unknown>;
+    if (typeof e.kind === 'string') return e.kind === 'photo';
+    return typeof e.name === 'string' || e.bytes instanceof Uint8Array
+        || (typeof Blob !== 'undefined' && (e.blob instanceof Blob || e.file instanceof Blob));
+}
+
+/** The photos and edits waiting on this device (the queue kept over an unpairing). */
+export async function queueCounts(): Promise<{ photos: number; edits: number }> {
+    let photos = 0;
+    let edits = 0;
+    for (const id of await deviceQueue.ids().catch(() => [] as string[])) {
+        const entry = await deviceQueue.get(id).catch(() => undefined);
+        if (entry === undefined) continue;
+        if (queueEntryIsPhoto(entry)) photos++;
+        else edits++;
+    }
+    return { photos, edits };
+}
+
 // ——— the name this device proposes ———
 
 /**

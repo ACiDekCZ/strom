@@ -28,7 +28,7 @@ import {
 } from './gateway-client';
 import { b64url, eventsAuth, newNonce, openEvent, type StreamEvent } from './device-crypto';
 import { fetchEventSource, type EventStreamError } from './event-stream';
-import { loadPairing, forgetPairing, chosenTreeId, type DevicePairing } from './device-store';
+import { loadPairing, savePairing, forgetPairing, chosenTreeId, type DevicePairing } from './device-store';
 
 export type DeviceConnectionState = 'connected' | 'connecting' | 'unreachable' | 'otherAddress' | 'offline' | 'unpaired' | 'disabled';
 
@@ -427,6 +427,36 @@ export async function requestMove(): Promise<{ url: string; expiresAt?: string }
         throw new GatewayError(typeof said?.code === 'string' ? said.code : `http.${a.s}`, a.s, said ?? {});
     }
     return { url: said.url, ...(typeof said.expiresAt === 'string' ? { expiresAt: said.expiresAt } : {}) };
+}
+
+// ——— this device's own row on the computer (the Connection sheet, §3) ———
+
+async function deviceAction(p: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const a = await tunnel({ m: 'POST', p, b: body });
+    let said: Record<string, unknown> | null = null;
+    try { said = asRecord(JSON.parse(new TextDecoder().decode(a.body ?? new Uint8Array()))); } catch { said = null; }
+    if (a.s !== 200 || !said) throw new GatewayError(typeof said?.code === 'string' ? said.code : `http.${a.s}`, a.s, said ?? {});
+    return said;
+}
+
+/** This device renamed on the computer (`device/rename`, at most 60 characters there): the name it keeps. */
+export async function renameThisDevice(name: string): Promise<string> {
+    const said = await deviceAction('device/rename', { name });
+    const kept = asRecord(said.device)?.name;
+    const next = typeof kept === 'string' && kept ? kept : name;
+    const p = await loadPairing();
+    if (p) await savePairing({ ...p, name: next });
+    return next;
+}
+
+/**
+ * This device unpaired (`device/unpair`): the computer forgets its key, this
+ * device its pairing (the queue stays), and the connection says "unpaired".
+ */
+export async function unpairThisDevice(): Promise<void> {
+    await deviceAction('device/unpair', {});
+    await forgetPairing();
+    controller?.retryNow();
 }
 
 /** This address left for the new one: its key forgotten here (the queue stays), the new address opened. */
