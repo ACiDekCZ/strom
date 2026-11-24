@@ -119,6 +119,28 @@ test('a clean file of one family: the check row says so, without a button, and n
     expect((await storedImports(page))[0]?.nextCardClosed).toBe(true);
 });
 
+test('another tree opened: the card goes with its tree and comes back with it; its tree deleted, it is not waited for', async ({ page }, testInfo) => {
+    await openApp(page);
+    await importAsNewTree(page, writeOtherProgramGedcom(testInfo, { oneFamily: true }));
+    const card = nextCard(page);
+    await expect(card).toBeVisible();
+    const imported = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId()!);
+    // A new tree (tree-switched), then back and to it again with the tree switcher's switch (data-changed).
+    const other = await page.evaluate(() => window.Strom.DataManager.createNewTree('Other tree'));
+    await expect(card).toHaveCount(0);
+    await page.evaluate((id) => window.Strom.UI.switchToTree(id), imported);
+    await expect(card).toBeVisible();
+    await page.evaluate((id) => window.Strom.UI.switchToTree(id), other);
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(other);
+    await expect(card).toHaveCount(0);
+    // Not closed for good: the import record does not say so.
+    expect(await page.evaluate(async (id) => (await window.Strom.TreeManager.getTreeData(id))?.imports?.[0]?.nextCardClosed, imported)).toBeUndefined();
+    // Its tree deleted: nothing waits for it.
+    await page.evaluate(async (id) => { await window.Strom.TreeManager.deleteTree(id); }, imported);
+    await expect.poll(() => page.evaluate((id) => window.Strom.UI.importNextPendingFor(id), imported)).toBe(false);
+    await expect(card).toHaveCount(0);
+});
+
 test('Review on the card opens the data check, and the card is closed for good', async ({ page }, testInfo) => {
     await openApp(page);
     await importAsNewTree(page, writeOtherProgramGedcom(testInfo, { finding: true }));

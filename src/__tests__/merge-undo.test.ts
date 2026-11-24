@@ -11,6 +11,7 @@ import { createMergeState, updateMatchDecision } from '../merge/matching.js';
 import { applyPlan, buildPlan, MergeRecord, PlanScope, PlanSource, WizardChoices } from '../merge/plan.js';
 import { applyUndo, redo, undoItems, undoPreview, undoResearchStep } from '../merge/undo-plan.js';
 import { danglingReferences } from '../merge/merge-check.js';
+import { mergeEdits } from '../merge/record.js';
 import { applySyncIds, contentFingerprint } from '../research-link.js';
 import { StorageManager } from '../storage.js';
 import { Partnership, PartnershipId, Person, PersonId, StromData } from '../types.js';
@@ -321,6 +322,61 @@ describe('a picture the merge replaced (§0.3: the record keeps no pictures)', (
         const other = structuredClone(target);
         other.persons['e1' as PersonId].photo = big('D');
         expect(applyUndo(record, after, { at: UNDO_AT, backup: other }).kept.map(k => k.what)).toEqual(['picture']);
+    });
+});
+
+describe('a picture the merge did not replace is not kept as one (snapshots 3.32)', () => {
+    const big = (c: string): string => `data:image/jpeg;base64,${c.repeat(3000)}`;
+    const person = (id: string, firstName: string, o: Partial<Person> = {}): Person => ({
+        id: id as PersonId, firstName, lastName: 'Kořenáč', gender: 'female', birthDate: '1901', isPlaceholder: false,
+        partnerships: [], parentIds: [], childIds: [], ...o,
+    });
+    /** A tree whose source has an excerpt cut from a page that is not among its files (the link names nothing). */
+    const tree = (): StromData => ({
+        persons: { e1: person('e1', 'Bohdana', { sourceIds: ['s1'] }) } as never, partnerships: {},
+        sources: { s1: { id: 's1', title: 'Oddavky Lhotka 1924', excerpts: [{ id: 'x1', dataUrl: big('A'), width: 10, height: 10, sizeBytes: 9000, fromAttachmentId: 'page-gone', region: { x: 0, y: 0, w: 1, h: 0.5 } }] } },
+    });
+
+    it('a merge that adds a person leaves that source as it was: no change recorded, nothing kept, the dialog lists nothing of it', async () => {
+        const target = tree();
+        const source: StromData = { persons: { i2: person('i2', 'Radmila', { birthDate: '1925' }) } as never, partnerships: {} };
+        const state = createMergeState(target, source);
+        const result = await applyPlan(buildPlan(state, choices({ rules: { all: 'import' } })), target, source);
+        expect(result.ok).toBe(true);
+        const after = result.data;
+        after.merges = [result.record];
+        expect(after.sources!.s1.excerpts![0].fromAttachmentId).toBe('page-gone');
+        expect((result.record.edits ?? []).filter(e => e.in === 'sources')).toEqual([]);
+        const preview = undoPreview(result.record, after);
+        expect(preview.changedSince).toEqual([]);
+        expect(preview.restore).toEqual([]);
+        expect(applyUndo(result.record, after, { at: UNDO_AT }).kept).toEqual([]);
+    });
+
+    it('a record that changed a source around its picture (an older merge) takes it back from the picture still there', () => {
+        const before = tree();
+        const after = tree();
+        const exc = after.sources!.s1.excerpts![0];
+        delete exc.fromAttachmentId;
+        delete exc.region;
+        const record = {
+            id: 'mg-old', at: AT, state: 'valid', source: SOURCE, target: { name: 'Modřínovi', newTree: false },
+            counts: { joined: 0, added: 0, skipped: 0, pending: 0, total: 0 },
+            added: [], joined: [], fields: [], partnerships: [], sources: [], media: [], places: [],
+            edits: mergeEdits(before, after),
+        } as unknown as MergeRecord;
+        expect(record.edits!.map(e => `${e.in}.${e.id}.${e.key}`)).toEqual(['sources.s1.excerpts']);
+        after.merges = [record];
+        const preview = undoPreview(record, after);
+        expect(preview.changedSince).toEqual([]);
+        expect(preview.restore.map(i => i.id)).toEqual(['t:sources/s1']);
+        const res = applyUndo(record, after, { at: UNDO_AT });
+        expect(res.kept).toEqual([]);
+        expect(res.data.sources!.s1).toEqual(before.sources!.s1);
+        // A picture that is not there any more still needs the backup.
+        const replaced = structuredClone(after);
+        replaced.sources!.s1.excerpts![0].dataUrl = big('B');
+        expect(undoPreview(record, replaced).changedSince.map(k => k.what)).toEqual(['picture']);
     });
 });
 

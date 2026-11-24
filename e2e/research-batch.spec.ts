@@ -257,6 +257,44 @@ test.describe('Add materials', () => {
         await expect(dialog.locator('.batch-list-sub')).toContainText('2 files');
     });
 
+    test('a Strom tree (.json) dropped onto the window opens the import guide, not the batch; another .json is material (K10.2)', async ({ page }) => {
+        await fakeBridge(page, { accepts: BATCH_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        const tree = JSON.stringify({ version: 26, persons: { j1: { id: 'j1', firstName: 'Amos', lastName: 'Jilm', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] } }, partnerships: {} });
+        const drop = (name: string, text: string, stopAt?: 'dragover') => page.evaluate(({ name, text, stopAt }) => {
+            const dt = new DataTransfer();
+            dt.items.add(new File([text], name, { type: 'application/json' }));
+            const fire = (type: string) => window.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+            fire('dragenter');
+            fire('dragover');
+            if (stopAt) return;
+            fire('drop');
+        }, { name, text, stopAt });
+
+        // While dragging one JSON file: the guide, not "add to materials".
+        await drop('strom-jilmovi.json', tree, 'dragover');
+        const overlay = page.locator('#drop-overlay');
+        await expect(overlay).toHaveClass(/active/);
+        await expect(overlay).toContainText('The import guide opens');
+        await page.evaluate(() => window.dispatchEvent(new DragEvent('dragleave', { bubbles: true, dataTransfer: new DataTransfer() })));
+
+        await drop('strom-jilmovi.json', tree);
+        const wizard = page.locator('#merge-modal');
+        await expect(wizard).toBeVisible();
+        await expect(wizard.locator('#merge-progress [aria-current="step"]')).toHaveAttribute('data-step', '1');
+        await expect(wizard.locator('#merge-route')).toContainText('strom-jilmovi.json →');
+        await expect(page.locator('#batch-modal')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(wizard).toBeHidden();
+
+        // A .json that is no tree of the app: material, as before.
+        await drop('mereni.json', '{"teplota": [1, 2]}');
+        await expect(page.locator('#batch-modal .batch-step.is-active')).toHaveText('Review');
+        await expect(page.locator('#batch-modal .batch-list-sub')).toContainText('1 file');
+        await expect(wizard).toBeHidden();
+    });
+
     test('the research stops answering: paused, said why; Continue once it runs goes on and closes the batch; Hide shows the line', async ({ page }) => {
         const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS });
         await openResearch(page, { media: true });

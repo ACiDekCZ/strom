@@ -2394,6 +2394,25 @@ export interface AppSettings {
     fileCopyReminders?: boolean;     // default: true - notice when edits are only in a storage the browser may clear
     importImages?: boolean;          // default: true - imports bring photos, attachments and source excerpts
     recentSourceIds?: Record<string, string[]>;  // per tree id: last cited sources, newest first (source picker)
+    mergeRules?: Record<string, SavedMergeRule>;  // per program (mergeRuleKey): the import guide's saved scope and rule (spec 134 K10.4)
+}
+
+/**
+ * The import guide's choices remembered for files of one program (spec 134
+ * K10.4): the scope of step 1 and who is right (step 4) for the whole merge
+ * and by kind of detail. Rules by person or value belong to one tree's
+ * people and are never saved. Stored in this device's settings, never in a tree.
+ */
+export interface SavedMergeRule {
+    /** The program as the file names it ("MyHeritage Family Tree Builder"). */
+    program: string;
+    scope: 'a' | 'b' | 'c' | 'd';
+    rules: {
+        all: 'mine' | 'import' | 'both' | 'precise' | 'each';
+        kind?: Partial<Record<'name' | 'birth' | 'death' | 'places' | 'events' | 'notes' | 'photos' | 'sex' | 'marriage', 'mine' | 'import' | 'both' | 'precise' | 'each'>>;
+    };
+    /** ISO time it was saved. */
+    savedAt: string;
 }
 
 // ==================== MULTI-TREE STORAGE ====================

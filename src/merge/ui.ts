@@ -50,6 +50,7 @@ import {
 } from './persistence.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { iconSvg } from '../icons.js';
+import { initialMergeTarget } from '../tree-drop.js';
 import { MergeWizard, targetBlock, targetBlockText, wizardRoute, type CompareRun, type WizardSource } from './wizard-ui.js';
 import type { WizardStep } from './wizard-steps.js';
 import { importedBefore, isRepeatOf, planCounts, repeatCounts, planTakesAll, scopeExample, type MergePlan, type MergeRecord, type PlanMode, type PlanSource, type ScopeExample } from './plan.js';
@@ -202,7 +203,9 @@ class MergerUIClass {
         incomingData: StromData, sourceTreeIdOrFileName?: string | TreeId, fromTreeManager: boolean = false,
         gedcomImport?: { gedcom: true; importId?: string },
         source?: Partial<Pick<PlanSource, 'kind' | 'fingerprint'>>,
-        opts: { mode?: PlanMode; gedcomLive?: boolean; exclude?: TreeId } = {},
+        opts: { mode?: PlanMode; gedcomLive?: boolean; exclude?: TreeId;
+            /** The target asked for (a drop on its row in Manage trees, K10.3): chosen when it can take the import. */
+            target?: TreeId } = {},
     ): void {
         const existingData = DataManager.getData();
         this.gedcomImport = gedcomImport;
@@ -230,15 +233,18 @@ class MergerUIClass {
             ? sourceTreeIdOrFileName as TreeId : null;
         const usable = (id: TreeId | null): id is TreeId => !!id && id !== sourceTreeId && id !== opts.exclude && !targetBlock(id);
         const twoTrees = source?.kind === 'tree' || source?.kind === 'view';
-        const targetId = usable(openId) ? openId
-            : twoTrees ? TreeManager.getTrees().map(t => t.id).find(usable) ?? null : null;
+        const { targetId, keepAdd } = initialMergeTarget({
+            requested: opts.target ?? null, openId, trees: TreeManager.getTrees().map(t => t.id), usable, twoTrees,
+        });
         const targetOpen = !!targetId && targetId === openId;
         if (targetOpen) this.mergeState.target = { treeId: targetId, fingerprint: contentFingerprint(existingData) };
         this.targetLoaded = targetOpen ? targetId : null;
         this.initialTarget = targetId && !targetOpen ? targetId : null;
         // Into an empty tree there is nothing to compare with: New tree first (the tree stays a choice).
         const emptyOpen = targetOpen && Object.values(existingData.persons).every(p => p.isPlaceholder);
-        if (!targetId) this.initialMode = 'new';
+        // A tree asked for: Add to it (a blocked one says why on its tile, no other is chosen for it).
+        if (keepAdd) this.initialMode = this.initialMode ?? 'add';
+        else if (!targetId) this.initialMode = 'new';
         else if (emptyOpen && !this.initialMode) this.initialMode = 'new';
         this.hasUnsavedChanges = false;
         this.openedFromTreeManager = fromTreeManager;
@@ -694,10 +700,12 @@ class MergerUIClass {
         const state = this.mergeState!;
         const targetTreeId = state.target?.treeId ?? this.initialTarget ?? null;
         const label = this.sourceTreeName || this.incomingFileName || strings.mergeWizard.titleImport;
+        const program = this.sourceProgram();
         return {
             source: {
                 kind: this.sourceInfo.kind,
                 label,
+                ...(program ? { program } : {}),
                 persons: Object.values(state.incomingData.persons).filter(p => !p.isPlaceholder).length,
                 ...(this.sourceInfo.fingerprint ? { fingerprint: this.sourceInfo.fingerprint } : {}),
                 ...(this.sourceInfo.treeId ? { treeId: this.sourceInfo.treeId } : {}),
@@ -710,7 +718,16 @@ class MergerUIClass {
                 || strings.treeManager.newTree,
             // Only a tree that owns its research has one: a copy is a tree without research (spec 139 K5.3).
             ...(TreeManager.canSendToResearch(targetTreeId) ? { research: true } : {}),
+            saved: program ? SettingsManager.getMergeRule(program) : null,
         };
+    }
+
+    /** The program a GEDCOM file names in its header (`HEAD.SOUR`), '' when it names none or the import is no such file (K10.4). */
+    private sourceProgram(): string {
+        if (this.sourceInfo.kind !== 'ged') return '';
+        const importId = this.gedcomImport?.importId;
+        const rec = importId ? this.mergeState?.incomingData.imports?.find(r => r.id === importId) : undefined;
+        return rec?.program.trim() ? importProgramName(rec) : '';
     }
 
     // ==================== STEP 1 (spec 134 §3) ====================
@@ -1284,8 +1301,8 @@ class MergerUIClass {
      */
     private renderModalContent(): void {
         if (!this.mergeState) return;
-        // Step 2 draws its list and pair again; the other steps keep their body.
-        this.wizard.refresh({ body: this.wizard.step === 2 });
+        // Step 2 draws its list and pair again, step 4 its conflicts ("Same person", K10.7); the other steps keep their body.
+        this.wizard.refresh({ body: this.wizard.step === 2 || this.wizard.step === 4 });
     }
 
     /** Step 2: the decisions on the pairs and what opens from them (spec 134 §4). */

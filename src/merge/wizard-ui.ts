@@ -13,7 +13,9 @@
  */
 
 import type { MergeState, MergeWizardState } from './types.js';
-import type { TreeId } from '../types.js';
+import type { SavedMergeRule, TreeId } from '../types.js';
+import { SettingsManager } from '../settings.js';
+import { applySavedRule, ruleFromChoices } from './saved-rules.js';
 import { planCounts, wizardPlan, type MergePlan, type PlanCounts, type PlanMode, type PlanSource, type WizardChoices } from './plan.js';
 import { stepInfo, nextStep, previousStep, WIZARD_STEPS, type StepInfo, type WizardStep } from './wizard-steps.js';
 import { strings, countText } from '../strings.js';
@@ -23,11 +25,11 @@ import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 import { getUI } from '../ui-ref.js';
 import { renderStep1, parkGedcomSummary } from './steps/step1-what.js';
-import { isCopyOfTarget, renderStep2 } from './steps/step2-who.js';
+import { isCopyOfTarget, pendingPairs, renderStep2, showFirstPending, step2Opened } from './steps/step2-who.js';
 import { barHtml, setBarShare } from '../ui/prog-bar.js';
 import { busySpinHtml } from '../ui/busy.js';
 import { renderStep3, variantSub } from './steps/step3-whom.js';
-import { renderStep4 } from './steps/step4-rules.js';
+import { relationRowCount, renderStep4 } from './steps/step4-rules.js';
 import { renderStep5, showWriteStatus } from './steps/step5-plan.js';
 import { renderStep6, writtenWhen } from './steps/step6-done.js';
 
@@ -86,15 +88,17 @@ export interface WizardSource {
     targetTreeId: TreeId | null;
     targetName: string;
     research?: boolean;
+    /** The rule saved for the file's program (K10.4): step 1 starts filled in from it. */
+    saved?: SavedMergeRule | null;
 }
 
 function newPlanId(): string {
     return `plan-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** The choices a guide starts with: Add to a tree (or the given mode), scope a), my tree applies. */
+/** The choices a guide starts with: Add to a tree (or the given mode), scope a), my tree applies; or the scope and rules saved for the file's program (K10.4). */
 export function freshChoices(src: WizardSource, state: MergeState): WizardChoices {
-    return {
+    return applySavedRule({
         mode: src.mode ?? 'add',
         targetTreeId: src.targetTreeId,
         scope: 'a',
@@ -105,7 +109,7 @@ export function freshChoices(src: WizardSource, state: MergeState): WizardChoice
         ...(state.target ? { targetFingerprint: state.target.fingerprint } : {}),
         planId: newPlanId(),
         createdAt: new Date().toISOString(),
-    };
+    }, src.saved);
 }
 
 /** Why the guide cannot go on yet: the pairs left to decide, else the unlinked groups left to decide (§6); '' when nothing is. */
@@ -213,6 +217,7 @@ export class MergeWizard {
         }
         this.busy = false;
         this.rebuild();
+        if (state.wizard.step === 2) step2Opened(state, this.plan);
         this.render(true);
     }
 
@@ -290,8 +295,40 @@ export class MergeWizard {
             ws.choices = { ...ws.choices, groups: {} };
             this.rebuild();
         }
+        // Step 2 opens on a pair still waiting in Maybe the same (K10.5).
+        const state = this.host.state();
+        if (step === 2 && state) step2Opened(state, this.plan);
         this.host.moved();
         this.render(true);
+    }
+
+    /**
+     * "To decide N" chosen in the counts or under step 2 (K10.5): step 2 at
+     * the first pair still to decide (in Maybe the same first), its row
+     * chosen, in view and focused. With no pair left, only persons of an
+     * unlinked group to decide (§6): step 3, which decides them.
+     */
+    showPending(): void {
+        const to = this.pendingStep();
+        if (!to) return;
+        if (to === 3) {
+            this.go(3);
+            return;
+        }
+        if (this.ws?.step !== 2) this.go(2);
+        const state = this.host.state();
+        if (this.ws?.step !== 2 || !state || !showFirstPending(state, this.plan)) return;
+        this.renderBody();
+    }
+
+    /** Where "To decide N" goes (K10.5): step 2 for a pair, step 3 for an unlinked group; null when it is no button. */
+    private pendingStep(): 2 | 3 | null {
+        const ws = this.ws;
+        if (!ws || this.busy || this.written || this.comparing || !this.plan) return null;
+        const info = this.info();
+        if (pendingPairs(this.plan).size > 0) return info[2].state === 'ok' ? 2 : null;
+        const groups = this.plan.items.some(i => i.kind === 'group-pending');
+        return groups && ws.step !== 3 && info[3].state === 'ok' ? 3 : null;
     }
 
     /** The primary button: compare (step 1), go on (2–4), write or finish (5). */
@@ -352,6 +389,7 @@ export class MergeWizard {
             if (ws.choices.mode === 'compare') {
                 // Only compare: the button saves the list, then the guide closes (nothing written).
                 if (this.plan) this.host.savePlan?.(this.plan);
+                this.rememberRule();
                 this.host.finishCompare();
                 return;
             }
@@ -393,10 +431,18 @@ export class MergeWizard {
         this.renderFooter();
         try {
             await this.host.write(plan, retention ? { retention } : {});
+            if (this.ws?.choices.writtenAt) this.rememberRule();
         } finally {
             this.busy = false;
             if (this.host.state()) this.renderFooter();
         }
+    }
+
+    /** Step 5's "Remember for files from {program}" ticked: the scope and the rules saved for the program (K10.4). */
+    private rememberRule(): void {
+        const c = this.ws?.choices;
+        const rule = c?.remember ? ruleFromChoices(c) : null;
+        if (rule) SettingsManager.setMergeRule(rule);
     }
 
     /** Where the write stands (8a–8f): said above step 5's list, the footer again. */
@@ -499,7 +545,8 @@ export class MergeWizard {
         }
         if (step === 3 && info.state === 'ok') return { text: variantSub(this.host.state() ?? null, ws.choices) };
         if (step === 4 && this.plan) {
-            const rel = this.plan.items.filter(i => i.kind === 'relation').length;
+            const state = this.host.state();
+            const rel = state && this.plan.items.some(i => i.kind === 'relation') ? relationRowCount(this.plan, state) : 0;
             if (rel > 0) return { text: W.subRelConf(rel), warn: true };
         }
         return { text: '' };
@@ -519,8 +566,12 @@ export class MergeWizard {
         for (const s of WIZARD_STEPS) {
             const name = `${s} ${stepName(s)}`;
             const sub = this.comparing && s === 2 ? { text: W.comparingSub } : this.stepSub(s, info[s]);
-            const subHtml = `<span class="merge-step-sub${sub.warn ? ' is-warn' : ''}${sub.text ? '' : ' is-empty'}">${sub.text ? escapeHtml(sub.text) : '&nbsp;'}</span>`;
             const current = s === at;
+            // The current step 2's "· N to decide" goes to the first pair still to decide (K10.5).
+            const subGo = s === 2 && current && !this.comparing && this.pendingStep() !== null;
+            const subHtml = subGo
+                ? `<button type="button" class="merge-step-sub merge-pending-go${sub.warn ? ' is-warn' : ''}" title="${escapeHtml(this.pendingLabel())}" aria-label="${escapeHtml(this.pendingLabel())}">${escapeHtml(sub.text)}</button>`
+                : `<span class="merge-step-sub${sub.warn ? ' is-warn' : ''}${sub.text ? '' : ' is-empty'}">${sub.text ? escapeHtml(sub.text) : '&nbsp;'}</span>`;
             const done = !current && (s === 1 && !!this.comparing || info[s].state === 'ok' && s <= ws.reached);
             const skipped = info[s].state === 'skip';
             // The number and the name apart: a narrow window keeps only the number of the other steps (4j).
@@ -552,6 +603,19 @@ export class MergeWizard {
             nav.classList.remove('is-open');
             this.go(Number(b.dataset.step) as WizardStep);
         }));
+        nav.querySelector<HTMLButtonElement>('.merge-pending-go')?.addEventListener('click', () => {
+            nav.classList.remove('is-open');
+            nav.querySelector('.merge-progress-short')?.setAttribute('aria-expanded', 'false');
+            this.showPending();
+        });
+    }
+
+    /** What "To decide N" does, said from the texts there are: "To decide 3 · 2 Who is who · Maybe the same". */
+    private pendingLabel(): string {
+        const W = strings.mergeWizard;
+        const n = this.plan ? planCounts(this.plan).pending : 0;
+        const to = this.pendingStep();
+        return to === 3 ? `${W.cntPending} ${countText(n)} · 3 ${stepName(3)}` : `${W.cntPending} ${countText(n)} · 2 ${stepName(2)} · ${W.grpMaybe}`;
     }
 
     renderCounts(): void {
@@ -561,9 +625,11 @@ export class MergeWizard {
         const W = strings.mergeWizard;
         const c = ws.choices;
         const state = this.host.state()!;
-        const chip = (kind: GlyphKind, cls: string, label: string, v: number | null): string =>
-            `<div class="merge-stat ${cls}" data-count="${kind}"><span class="merge-stat-label"><span class="merge-stat-glyph">${glyph(kind)}</span>${escapeHtml(label)}</span>`
-            + `<span class="merge-stat-value">${v === null ? '–' : countText(v)}</span></div>`;
+        // `go`: the chip is a button that goes where it says (K10.5), this its label.
+        const chip = (kind: GlyphKind, cls: string, label: string, v: number | null, go = ''): string =>
+            (go ? `<button type="button" class="merge-pending-go merge-stat ${cls}" data-count="${kind}" title="${go}" aria-label="${go}">` : `<div class="merge-stat ${cls}" data-count="${kind}">`)
+            + `<span class="merge-stat-label"><span class="merge-stat-glyph">${glyph(kind)}</span>${escapeHtml(label)}</span>`
+            + `<span class="merge-stat-value">${v === null ? '–' : countText(v)}</span>${go ? '</button>' : '</div>'}`;
         // The sum after the counts in the bar of a wider window ("= 187", 4j); the phone's line says it in words.
         const sum = (v: number): string => `<div class="merge-stat-sum"><span class="merge-stat-total">= <b>${countText(v)}</b></span></div>`;
         if (!this.plan) {
@@ -580,17 +646,24 @@ export class MergeWizard {
             return;
         }
         const n = planCounts(this.plan);
+        // "To decide N" goes to the first pair still to decide (K10.5); after the write nothing waits.
+        const go = n.pending > 0 && this.pendingStep() !== null;
+        const label = go ? escapeHtml(this.pendingLabel()) : '';
         const note = this.written ? W.writtenAt(writtenWhen(c.writtenAt!))
             : ws.step === 5 && c.mode !== 'compare' ? W.writeOnlyHere : W.nothingYet;
-        const line = [`${W.cntJoined} ${countText(n.joined)}`, `${W.cntNew} ${countText(n.added)}`,
-            `${W.cntSkipped} ${countText(n.skipped)}`, `${W.cntPending} ${countText(n.pending)}`, `= ${countText(n.total)}`].join(' · ');
+        const pendingText = escapeHtml(`${W.cntPending} ${countText(n.pending)}`);
+        const line = [`${W.cntJoined} ${countText(n.joined)}`, `${W.cntNew} ${countText(n.added)}`, `${W.cntSkipped} ${countText(n.skipped)}`]
+            .map(t => escapeHtml(t)).join(' · ')
+            + ' · ' + (go ? `<button type="button" class="merge-pending-go merge-stats-go" title="${label}" aria-label="${label}">${pendingText}</button>` : pendingText)
+            + ` · = ${countText(n.total)}`;
         box.className = 'merge-stats';
         box.innerHTML = chip('joined', 'highlight', W.cntJoined, n.joined)
             + chip('added', 'new', W.cntNew, n.added)
             + chip('skipped', 'skipped', W.cntSkipped, n.skipped)
-            + chip('pending', n.pending > 0 ? 'warning' : 'is-zero', W.cntPending, n.pending)
+            + chip('pending', n.pending > 0 ? 'warning' : 'is-zero', W.cntPending, n.pending, label)
             + sum(n.total)
-            + `<div class="merge-stats--line"><span>${escapeHtml(line)}</span><span class="merge-stats-note">${escapeHtml(note)}</span></div>`;
+            + `<div class="merge-stats--line"><span>${line}</span><span class="merge-stats-note">${escapeHtml(note)}</span></div>`;
+        box.querySelectorAll<HTMLButtonElement>('.merge-pending-go').forEach(b => b.addEventListener('click', () => this.showPending()));
         this.renderFootNote(note);
     }
 

@@ -132,6 +132,8 @@ import { completeStatus, statusAskUrl } from '../status-parts.js';
 import { expandedData } from '../image-expand.js';
 import { exportGedcomWithImages, gedcomText, type GedcomWithImages } from '../ged-export-images.js';
 import { looksLikeGedcom } from './file-pick.js';
+import { dragLooksLikeJson, dropRoute, isJsonFileName } from '../drop-route.js';
+import type { DropInto } from '../tree-drop.js';
 import { createSha256 } from '../sha256.js';
 import { localIsoDay } from '../import-origin.js';
 
@@ -2203,7 +2205,7 @@ export const researchUiMethods = uiModule({
                 for (const handle of files) {
                     if (!handle || typeof handle.getFile !== 'function') continue;
                     void handle.getFile().then(
-                        (file) => this.openGedcomFile(file),
+                        (file) => this.openDroppedFile(file),
                         (err) => console.warn('Launch file unreadable', err)
                     );
                 }
@@ -2256,6 +2258,8 @@ export const researchUiMethods = uiModule({
         // Files reading can take (spec 013): two zones, "Read now" left and "Add to materials" right.
         let readZones = false;
         let dropCancelled = false;
+        // One JSON file dragged: a tree for the guide, never material (K10.2).
+        let jsonDrag = false;
         const zoneAt = (e: DragEvent): 'read' | 'add' => (!this.batchAvailable() || e.clientX < window.innerWidth / 2 ? 'read' : 'add');
         const overlay = (show: boolean): void => {
             let node = document.getElementById('drop-overlay');
@@ -2289,7 +2293,7 @@ export const researchUiMethods = uiModule({
                 zones.appendChild(zone('read', t.dropRead, t.dropReadSub, true));
                 if (this.batchAvailable()) zones.appendChild(zone('add', t.dropAdd, t.dropAddSub, false));
                 node.appendChild(zones);
-            } else if (box && this.batchAvailable()) {
+            } else if (box && this.batchAvailable() && !jsonDrag) {
                 // A tree linked to a research that takes batches: other files go there as material.
                 box.innerHTML = '';
                 box.appendChild(el('div', 'drop-overlay-title', strings.batch.dropTitle));
@@ -2310,6 +2314,7 @@ export const researchUiMethods = uiModule({
                 if (depth === 0) {
                     dropCancelled = false;
                     readZones = !modalOpen() && this.readDropOffered(e.dataTransfer);
+                    jsonDrag = dragLooksLikeJson(e.dataTransfer?.items);
                 }
                 depth++;
                 if (!modalOpen() && !dropCancelled) overlay(true);
@@ -2346,7 +2351,7 @@ export const researchUiMethods = uiModule({
                 if (dropCancelled) { dropCancelled = false; return; }
                 if (modalOpen()) {
                     const one = e.dataTransfer?.files?.[0];
-                    if (e.dataTransfer?.files.length === 1 && one && isGedcomFileName(one.name)) this.gedcomDropAfterDialog(one);
+                    if (e.dataTransfer?.files.length === 1 && one && (isGedcomFileName(one.name) || isJsonFileName(one.name))) this.gedcomDropAfterDialog(one);
                     return;
                 }
                 // The tree is being replaced: a file dropped now waits for the load (§2.6).
@@ -2359,13 +2364,17 @@ export const researchUiMethods = uiModule({
                     return;
                 }
                 readZones = false;
-                // Anything but one family tree, for a research that takes batches: the batch's review.
-                if (this.batchAvailable() && !(files.length === 1 && isGedcomFileName(files[0].name))) {
+                const batch = this.batchAvailable();
+                const route = dropRoute(files.map(f => f.name), { batch });
+                // Anything but one family tree (.ged or .json), for a research that takes batches: the batch's review.
+                if (route === 'batch') {
                     void this.batchFilesFromDrop(e.dataTransfer).then(list => this.showBatchDialog({ files: list }));
                     return;
                 }
                 const file = files[0];
-                if (file) void this.openGedcomFile(file);
+                if (!file) return;
+                if (route === 'json') void this.openJsonFile(file, { batch });
+                else void this.openGedcomFile(file);
             });
         } catch (err) {
             console.warn('Drag and drop unavailable', err);
@@ -2373,7 +2382,7 @@ export const researchUiMethods = uiModule({
     },
 
     /**
-     * A GEDCOM file dropped while a dialog is open (spec 134 §2, 2k): a toast
+     * A GEDCOM file or a Strom tree (.json) dropped while a dialog is open (spec 134 §2, 2k, K10.2): a toast
      * says the dialog needs finishing first, with Open now, which closes the
      * dialog as its Esc does and opens the file in the guide; a dialog that
      * stays (it asks about its changes) keeps the file out.
@@ -2396,15 +2405,44 @@ export const researchUiMethods = uiModule({
                     const at = document.activeElement ?? document.body;
                     at.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
                     window.setTimeout(() => {
-                        if (!document.querySelector('.modal-overlay.active')) void this.openGedcomFile(file);
+                        if (!document.querySelector('.modal-overlay.active')) void this.openDroppedFile(file);
                     }, 0);
                 },
             },
         });
     },
 
-    /** A local file (dropped or from the file handler). */
-    async openGedcomFile(file: File): Promise<void> {
+    /** A local file (dropped or from the file handler): a .json as a Strom tree, anything else as GEDCOM. */
+    async openDroppedFile(file: File): Promise<void> {
+        if (isJsonFileName(file?.name)) await this.openJsonFile(file, { batch: this.batchAvailable() });
+        else await this.openGedcomFile(file);
+    },
+
+    /**
+     * A Strom tree (.json) dropped onto the window (spec 134 K10.2): the import
+     * guide as for a GEDCOM file, the open tree its target (as Add from a file
+     * to this tree), read and checked by the JSON import; an encrypted file
+     * asks its password first. An "Export all" backup or a change packet goes
+     * the JSON import's own way. A file that is no file of the app is material
+     * for a research that takes batches (`batch`), otherwise said unreadable.
+     */
+    async openJsonFile(file: File, opts: { batch: boolean; into?: DropInto }): Promise<void> {
+        if (!externalReady) {
+            this.showToast(strings.research.notReady);
+            return;
+        }
+        if (DataManager.isViewMode()) {
+            this.showToast(strings.research.notInViewMode, 5000);
+            return;
+        }
+        await enqueueOpen(() => this.importDroppedJson(file, opts));
+    },
+
+    /**
+     * A local GEDCOM file (dropped or from the file handler). `into`: dropped
+     * on a tree's row in Manage trees (K10.3), that tree the guide's target.
+     */
+    async openGedcomFile(file: File, into?: DropInto): Promise<void> {
         if (!externalReady) {
             this.showToast(strings.research.notReady);
             return;
@@ -2436,7 +2474,7 @@ export const researchUiMethods = uiModule({
             // The guide's step 1 names the file and keeps its fingerprint, as Import → GEDCOM does.
             const sha = createSha256();
             sha.update(new Uint8Array(buffer));
-            await this.openGedcomText(text, { file: { name: file.name, sha: sha.digestHex(), at: localIsoDay() } });
+            await this.openGedcomText(text, { file: { name: file.name, sha: sha.digestHex(), at: localIsoDay() }, ...(into ? { into } : {}) });
         });
     },
 
@@ -2657,7 +2695,9 @@ export const researchUiMethods = uiModule({
         /** The file came with the tree's own files (spec 108 §5). */
         appMedia?: boolean;
         /** A local file (dropped, opened from the system): its name and fingerprint for the import guide. */
-        file?: { name: string; sha: string; at: string } } = {}): Promise<void> {
+        file?: { name: string; sha: string; at: string };
+        /** Dropped on a tree's row in Manage trees (K10.3): the guide's target, back to Manage trees on close. */
+        into?: DropInto } = {}): Promise<void> {
         if (DataManager.isViewMode()) {
             this.showToast(strings.research.notInViewMode, 5000);
             return;
@@ -2671,6 +2711,8 @@ export const researchUiMethods = uiModule({
             await this.showAlert(strings.gedcom.parseError, 'error');
             return;
         }
+        // Dropped on a tree's row: Manage trees gives way to what the file opens.
+        if (opts.into) this.closeTreeManagerDialog();
         if (!header.isStromResearch) {
             // The same way as Import → GEDCOM: the import guide, the file's summary in its step 1.
             this.importFromTreeManager = false;
@@ -2680,7 +2722,7 @@ export const researchUiMethods = uiModule({
             this.gedcomRawBuffer = null;
             this.gedcomDecoding = null;
             this.gedcomImportImages = null;
-            this.openGedcomGuide(false);
+            this.openGedcomGuide(!!opts.into, opts.into?.target);
             return;
         }
         if (!await this.ensureLocalUnlocked()) return;

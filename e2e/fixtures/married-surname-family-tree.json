@@ -1,0 +1,145 @@
+{
+  "persons": {
+    "ondrej": {
+      "id": "ondrej",
+      "firstName": "Ondřej",
+      "lastName": "Modřín",
+      "gender": "male",
+      "birthDate": "1871-04-02",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u1"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5",
+        "c6"
+      ]
+    },
+    "marie": {
+      "id": "marie",
+      "firstName": "Marie Anna",
+      "lastName": "Modřínová",
+      "gender": "female",
+      "birthDate": "1874-05-20",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u1"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5",
+        "c6"
+      ]
+    },
+    "c1": {
+      "id": "c1",
+      "firstName": "Karel",
+      "lastName": "Modřín",
+      "gender": "male",
+      "birthDate": "1896-01-10",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "ondrej",
+        "marie"
+      ],
+      "childIds": []
+    },
+    "c2": {
+      "id": "c2",
+      "firstName": "Věra",
+      "lastName": "Modřínová",
+      "gender": "female",
+      "birthDate": "1898-03-11",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "ondrej",
+        "marie"
+      ],
+      "childIds": []
+    },
+    "c3": {
+      "id": "c3",
+      "firstName": "Josef",
+      "lastName": "Modřín",
+      "gender": "male",
+      "birthDate": "1901-07-12",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "ondrej",
+        "marie"
+      ],
+      "childIds": []
+    },
+    "c4": {
+      "id": "c4",
+      "firstName": "Ludmila",
+      "lastName": "Modřínová",
+      "gender": "female",
+      "birthDate": "1903-09-14",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "ondrej",
+        "marie"
+      ],
+      "childIds": []
+    },
+    "c5": {
+      "id": "c5",
+      "firstName": "František",
+      "lastName": "Modřín",
+      "gender": "male",
+      "birthDate": "1906-02-08",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "ondrej",
+        "marie"
+      ],
+      "childIds": []
+    },
+    "c6": {
+      "id": "c6",
+      "firstName": "Božena",
+      "lastName": "Modřínová",
+      "gender": "female",
+      "birthDate": "1909-12-01",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "ondrej",
+        "marie"
+      ],
+      "childIds": []
+    }
+  },
+  "partnerships": {
+    "u1": {
+      "id": "u1",
+      "person1Id": "ondrej",
+      "person2Id": "marie",
+      "status": "married",
+      "startDate": "1895",
+      "childIds": [
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5",
+        "c6"
+      ]
+    }
+  }
+}

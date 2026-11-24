@@ -18,10 +18,11 @@ const PHONE = { width: 390, height: 844 };
 const WRITTEN = new Date(2026, 10, 22, 15, 41);
 
 /** Modřínovi open with rodokmen-jilmovi.ged merged into it (step 6 left with Done). Resolves with its tree state before the merge. */
-async function mergedTree(page: Page, done = true): Promise<{ before: string; wizard: Locator }> {
+async function mergedTree(page: Page, done = true, prepare?: (page: Page) => Promise<void>): Promise<{ before: string; wizard: Locator }> {
     await page.clock.install({ time: WRITTEN });
     await openApp(page);
     await importJsonAsNewTree(page, 'e2e/fixtures/modrinovi.json', 'Modřínovi');
+    if (prepare) await prepare(page);
     const before = await treeState(page);
     await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/rodokmen-jilmovi.ged');
     const wizard = page.locator('#merge-modal');
@@ -38,6 +39,29 @@ const treeState = (page: Page): Promise<string> => page.evaluate(() => {
     const sort = (o: Record<string, unknown>) => Object.keys(o).sort().map(k => [k, o[k]]);
     return JSON.stringify({ persons: sort(d.persons), partnerships: sort(d.partnerships) });
 });
+
+/**
+ * A source of Kvido with an excerpt cut from a page that is not among the
+ * tree's files (its re-crop link names nothing): the merge does not touch it.
+ */
+async function sourceWithLooseExcerpt(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const c = document.createElement('canvas');
+        c.width = 300; c.height = 60;
+        const g = c.getContext('2d')!;
+        for (let x = 0; x < 300; x += 6) { g.fillStyle = `hsl(${x}, 60%, 50%)`; g.fillRect(x, 0, 6, 60); }
+        const dm = window.Strom.DataManager;
+        const kvido = dm.getAllPersons().find(p => p.firstName === 'Kvido')!;
+        const src = dm.addSource({ title: 'Oddavky Lhotka 1924',
+            excerpts: [{ id: 'e1', dataUrl: c.toDataURL('image/jpeg', 0.8), width: 300, height: 60, sizeBytes: 2000,
+                fromAttachmentId: 'page-gone', region: { x: 0, y: 0.1, w: 1, h: 0.2 } }] } as never);
+        dm.citePerson(kvido.id, src.id);
+    });
+}
+
+/** The re-crop links of the open tree's excerpts. */
+const excerptLinks = (page: Page): Promise<Array<string | undefined>> => page.evaluate(() =>
+    Object.values(window.Strom.DataManager.getData().sources ?? {}).flatMap((s: any) => (s.excerpts ?? []).map((e: any) => e.fromAttachmentId)));
 
 const openPeople = (page: Page): Promise<string[]> => page.evaluate(() =>
     Object.values(window.Strom.DataManager.getData().persons).filter((p: any) => !p.isPlaceholder).map((p: any) => p.firstName).sort());
@@ -151,8 +175,10 @@ test('Open the list: step 6 read from the record after a reload, and in a copy e
 });
 
 test('Undo right after the write: the tree as before, the toast Redo the merge brings it back; the history says undone, then stands', async ({ page }) => {
-    const { before } = await mergedTree(page);
+    // A source with an excerpt whose page is not among the files: the merge leaves it, its undo lists nothing of it.
+    const { before } = await mergedTree(page, true, sourceWithLooseExcerpt);
     expect(await openPeople(page)).toEqual(['Amos', 'Elvíra', 'Florentýna', 'Kasián', 'Kvido', 'Teofil']);
+    expect(await excerptLinks(page)).toEqual(['page-gone']);
     const h = await openHistory(page);
     await h.locator('.merge-hist-row button[data-act="undo"]').click();
     const u = undoDialog(page);
@@ -161,6 +187,8 @@ test('Undo right after the write: the tree as before, the toast Redo the merge b
     await expect(u.locator('.merge-undo-grp[data-group="remove"] .merge-undo-gcount')).toHaveText('3');
     await expect(u.locator('.merge-undo-grp[data-group="unjoin"] .merge-undo-gcount')).toHaveText('1');
     await expect(u.locator('.merge-undo-keep')).toHaveCount(0);
+    await expect(u.locator('.merge-undo-grp[data-group="tree"]')).toHaveCount(0);
+    await expect(u).not.toContainText('Oddavky Lhotka 1924');
     await expect(u.locator('.merge-undo-vs')).toContainText('Unlike restoring the backup');
     await expect(u.locator('[data-act="pick"]')).toHaveText('Choose only some…');
     await u.locator('[data-act="undo"]').click();
@@ -168,6 +196,7 @@ test('Undo right after the write: the tree as before, the toast Redo the merge b
 
     await expect.poll(() => treeState(page)).toBe(before);
     expect(await openPeople(page)).toEqual(['Florentýna', 'Kvido', 'Teofil']);
+    expect(await excerptLinks(page)).toEqual(['page-gone']);
     await expect(h).toHaveClass(/active/);
     await expect(h.locator('.merge-hist-row .merge-state-tag')).toHaveText('undone');
     await expect(h.locator('.merge-hist-row button[data-act="undo"]')).toHaveCount(0);

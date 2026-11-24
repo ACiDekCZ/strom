@@ -21,7 +21,7 @@ import type { MergeState, PersonMatch, MatchDecision, MatchReason } from '../typ
 import type { Partnership, Person, PersonId, StromData } from '../../types.js';
 import { AUTO_CONFIRM_SCORE, existingTargetOf } from '../executor.js';
 import { candidatesFor, timeConflict, type MatchCandidateInfo } from '../matching.js';
-import { bringsNothingNew, planFates, type PersonFate } from '../plan.js';
+import { bringsNothingNew, planFates, type MergePlan, type PersonFate } from '../plan.js';
 import type { StepContext, Step2Env, PairDecision } from './context.js';
 import { escapeHtml, glyph, stepHeading } from './context.js';
 import { shownName } from '../../person-name.js';
@@ -55,6 +55,8 @@ interface PairView {
     advanceFrom: PersonId | null;
     /** The decision came from the step: its row takes the focus again. */
     focusRow: boolean;
+    /** "To decide N" chosen (K10.5): with the list hidden, the pair takes the focus instead of its row. */
+    focusPair: boolean;
     scrollTop: number;
     /** The undecided pairs whose offer the last decision changed (K3.3). */
     recalc: PersonId[];
@@ -81,7 +83,7 @@ function viewOf(state: MergeState): PairView {
     let v = views.get(state);
     if (!v) {
         v = {
-            group: null, selected: null, query: '', cand: new Map(), checked: new Set(), advanceFrom: null, focusRow: false, scrollTop: 0,
+            group: null, selected: null, query: '', cand: new Map(), checked: new Set(), advanceFrom: null, focusRow: false, focusPair: false, scrollTop: 0,
             recalc: [], onlyRecalc: false, side: 'tree', listOpen: false, showCopy: false, pairsHidden: false, recordsOpen: null,
         };
         views.set(state, v);
@@ -123,6 +125,31 @@ export function defaultGroup(rows: readonly PairRow[]): PairGroup {
     if (rows.some(r => r.group === 'maybe')) return 'maybe';
     if (rows.some(r => r.group === 'same')) return 'same';
     return 'new';
+}
+
+/** The pairs still to decide in the plan (K10.5): offered below the joining score, nobody decided (a person of an undecided unlinked group is step 3's). */
+export function pendingPairs(plan: MergePlan | null): Set<PersonId> {
+    const out = new Set<PersonId>();
+    if (plan) for (const i of plan.items) if (i.kind === 'person-pending') out.add(i.id);
+    return out;
+}
+
+/** The first pair still to decide (K10.5): in Maybe the same first, in the list's order. Null when none waits. */
+export function firstPending(rows: readonly PairRow[], pending: ReadonlySet<PersonId>): PairRow | null {
+    const waiting = rows.filter(r => pending.has(r.id));
+    return waiting.find(r => r.group === 'maybe') ?? waiting[0] ?? null;
+}
+
+/**
+ * Where step 2 opens (K10.5): on Maybe the same at its first undecided pair
+ * when one waits there; otherwise the group shown last (the default one the
+ * first time) and its pair, as they were.
+ */
+export function openingView(rows: readonly PairRow[], pending: ReadonlySet<PersonId>,
+    group: PairGroup | null, selected: PersonId | null): { group: PairGroup; selected: PersonId | null } {
+    const first = rows.find(r => r.group === 'maybe' && pending.has(r.id));
+    if (first) return { group: 'maybe', selected: first.id };
+    return { group: group ?? defaultGroup(rows), selected };
 }
 
 /** The tree's person a row stands against now: the hand-picked one, else the offered one. */
@@ -538,6 +565,9 @@ function whysHtml(state: MergeState, env: Step2Env | undefined, row: PairRow, pa
     const cand = cands.find(c => c.existingId === tree.id);
     const reasons = (row.match && row.match.existingId === tree.id ? row.match.reasons : cand?.reasons ?? [])
         .filter(r => r !== 'manual').map(reasonText);
+    // Joined by "Same person" on a conflict of relations of step 4 (K10.7): said first.
+    const decided = state.decisions.get(row.id);
+    if (decided?.type === 'manual_match' && decided.via === 'step4' && decided.targetId === tree.id) reasons.unshift(W.joinedInStep4);
     const against = againstLines(state, inc, tree, row.match);
     const unions = env?.unionConflicts(row.id) ?? [];
     const why: string[] = [];
@@ -670,7 +700,7 @@ function recalcHtml(state: MergeState, view: PairView): string {
 }
 
 /** Why yes of a pair that shares its parents (one of them), a child or a partner with the tree's person. */
-const FAMILY_REASONS: ReadonlySet<MatchReason> = new Set<MatchReason>(['name_gender_parents', 'child_of_matched', 'parent_of_matched', 'sibling_of_matched', 'partner_of_matched', 'partner_similarity']);
+const FAMILY_REASONS: ReadonlySet<MatchReason> = new Set<MatchReason>(['name_gender_parents', 'child_of_matched', 'parent_of_matched', 'sibling_of_matched', 'partner_of_matched', 'partner_shared_children', 'partner_similarity']);
 
 /** The ids of a person's parents, children or partners in one data set. */
 function relativeIds(p: Person, data: StromData, rel: 'parents' | 'children' | 'partners'): PersonId[] {
@@ -763,6 +793,46 @@ export function isCopyOfTarget(ctx: Pick<StepContext, 'counts' | 'choices'>): bo
     return !((ctx.choices.scope === 'c' || ctx.choices.scope === 'd') && ctx.counts.differencesKept > 0);
 }
 
+/** The view stands on `row`: its group, the row chosen, a search that hides it cleared. */
+function showRow(state: MergeState, view: PairView, row: PairRow): void {
+    if (view.group !== row.group || view.onlyRecalc) view.scrollTop = 0;
+    view.group = row.group;
+    view.onlyRecalc = false;
+    view.selected = row.id;
+    if (!matchesQuery(state, row, view.query)) view.query = '';
+}
+
+/**
+ * Step 2 opened (entered from another step, or the guide opened or resumed
+ * on it, K10.5): a pair waiting in Maybe the same opens that group at the
+ * first one; otherwise the view stays as it was. A group switched by hand
+ * inside the step is kept: this runs only when the step opens.
+ */
+export function step2Opened(state: MergeState, plan: MergePlan | null): void {
+    const view = viewOf(state);
+    const rows = pairRows(state);
+    const pending = pendingPairs(plan);
+    const at = openingView(rows, pending, view.group, view.selected);
+    const row = at.group === 'maybe' && at.selected ? rows.find(r => r.id === at.selected) : undefined;
+    if (row && pending.has(row.id)) showRow(state, view, row);
+}
+
+/**
+ * "To decide N" chosen (K10.5): the view on the first pair still to decide,
+ * in its group, its row to take the focus when the step is drawn. False when
+ * no pair waits.
+ */
+export function showFirstPending(state: MergeState, plan: MergePlan | null): boolean {
+    const view = viewOf(state);
+    const row = firstPending(pairRows(state), pendingPairs(plan));
+    if (!row) return false;
+    showRow(state, view, row);
+    view.listOpen = false;
+    view.focusRow = true;
+    view.focusPair = true;
+    return true;
+}
+
 /** Close step 2's sheet of pairs (a phone; Esc), as its × does; true when it was open. */
 export function closeStep2Overlay(): boolean {
     const close = document.querySelector<HTMLButtonElement>('#merge-modal .merge-s2.is-list .merge-s2-sheet-close');
@@ -829,7 +899,13 @@ export function renderStep2(host: HTMLElement, ctx: StepContext): void {
     sel?.scrollIntoView?.({ block: 'nearest' });
     if (view.focusRow) {
         view.focusRow = false;
-        sel?.focus({ preventScroll: true });
+        // "To decide N" with the list hidden (a phone's closed sheet, a list folded to a rail): the pair's head or its decisions.
+        const shown = (el: HTMLElement | null | undefined): el is HTMLElement => !!el && el.getClientRects().length > 0;
+        const target = view.focusPair && !shown(sel)
+            ? [host.querySelector<HTMLElement>('#merge-pair .merge-pair-open'), host.querySelector<HTMLElement>('#merge-pair .merge-decide button')].find(shown)
+            : sel;
+        view.focusPair = false;
+        target?.focus({ preventScroll: true });
     }
     installKeys(host);
     watchWidth(host);

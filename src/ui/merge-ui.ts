@@ -758,8 +758,9 @@ export const mergeUiMethods = uiModule({
      * tree as the import and the open tree as the target (another one when the
      * row is the open tree), Swap in its step 1 (spec 134 §2, 2c). The target
      * is read for the comparison only; nothing is switched to before the write.
+     * `target`: the tree the row was dropped on (K10.3), the guide's target.
      */
-    async showMergeTreesDialog(sourceTreeId: string, parentDialogId?: string): Promise<void> {
+    async showMergeTreesDialog(sourceTreeId: string, parentDialogId?: string, target?: TreeId): Promise<void> {
         const sourceId = sourceTreeId as TreeId;
         if (!TreeManager.getTreeMetadata(sourceId)) return;
         if (!await this.mergeTargetReady(sourceId)) return;
@@ -772,7 +773,7 @@ export const mergeUiMethods = uiModule({
         // From Manage trees, closing the guide goes back there.
         const fromManager = parentDialogId === 'tree-manager-modal';
         if (fromManager) this.closeTreeManagerDialog();
-        MergerUI.startMerge(data, sourceId, fromManager, undefined, { kind: 'tree' });
+        MergerUI.startMerge(data, sourceId, fromManager, undefined, { kind: 'tree' }, target ? { target } : {});
     },
 
     /**

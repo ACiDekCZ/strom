@@ -4,7 +4,7 @@
  * state of its own; a change goes through `update` (the guide redraws).
  */
 
-import type { MergeState } from '../types.js';
+import type { MatchDecision, MergeState } from '../types.js';
 import type { MergePlan, PlanCounts, ScopeExample, WizardChoices } from '../plan.js';
 import type { MergeRecord, PartnershipId, PersonId, TreeId } from '../../types.js';
 import type { GedcomDroppedTag } from '../../ged-parser.js';
@@ -98,7 +98,7 @@ export type WriteStatus =
 export type WriteAction = 'whom' | 'backups' | 'save-tree' | 'retry' | 'keep-both' | 'drop-oldest';
 
 /** A decision of step 2: same, new, not added, another person of the tree; null = undecided again. */
-export type PairDecision = 'confirm' | 'reject' | 'skip' | { type: 'manual_match'; targetId: PersonId };
+export type PairDecision = 'confirm' | 'reject' | 'skip' | Extract<MatchDecision, { type: 'manual_match' }>;
 
 /** A couple both trees know that differs (a line under "What speaks against"). */
 export interface UnionConflictLine {

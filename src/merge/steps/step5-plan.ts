@@ -9,7 +9,8 @@
  * couple or a link leaves it out. The right column: Where to write (the
  * tree itself or a new tree, K6.3), the preview around a person (In the
  * tree moves it there, K6.2), the backup line (K6.6) and Save the list…
- * (K6.4). The button with the result is the guide's primary.
+ * (K6.4) and, for a file that names its program, Remember for files from
+ * {program} (K10.4). The button with the result is the guide's primary.
  *
  * The step keeps no state of the merge: the ticks go into the choices
  * (`leftOut`, `rules.value`, `offLinks`, `into`), every number comes from
@@ -28,6 +29,7 @@ import { afterText, fieldKind, ruleFor } from '../plan-rules.js';
 import { connectedNew, connectionTerm, displayName, familyName, type NewConnection } from '../plan-select.js';
 import { newTreeName } from '../write.js';
 import type { StepContext, WriteAction, WriteStatus } from './context.js';
+import { canRemember, rememberLabel } from '../saved-rules.js';
 import { barHtml } from '../../ui/prog-bar.js';
 import { busySpinHtml } from '../../ui/busy.js';
 import { escapeHtml, glyph, stepHeading } from './context.js';
@@ -544,6 +546,10 @@ function build(host: HTMLElement, view: View): void {
     <p class="merge-s5-note merge-s5-backup" hidden>${escapeHtml(W.backupLine)}</p>
     <p class="merge-s5-note merge-s5-research" hidden></p>
     <button type="button" class="link-button merge-s5-save">${escapeHtml(W.savePlan)}</button>
+    <div class="merge-s5-remember" hidden>
+      <label class="merge-s5-remember-row"><input type="checkbox" class="merge-s5-remember-cb"><span class="merge-s5-remember-text"></span></label>
+      <p class="merge-s5-note">${escapeHtml(W.rememberNote(strings.settings.groupData))}</p>
+    </div>
   </div>
 </div>`;
     view.root = host.querySelector<HTMLElement>('.merge-s5')!;
@@ -667,6 +673,16 @@ function updateSide(view: View): void {
     const research = root.querySelector<HTMLElement>('.merge-s5-research')!;
     research.hidden = !(adding && into === 'tree' && plan.target.research);
     research.textContent = research.hidden ? '' : W.resStep5(plan.target.name);
+    // Remember for files from {program} (K10.4): a file that names its program, added to a tree or compared.
+    const remember = root.querySelector<HTMLElement>('.merge-s5-remember')!;
+    remember.hidden = !canRemember(ctx.choices);
+    if (!remember.hidden) {
+        const label = rememberLabel(ctx.choices);
+        const text = remember.querySelector<HTMLElement>('.merge-s5-remember-text')!;
+        text.textContent = label;
+        text.title = label;
+        remember.querySelector<HTMLInputElement>('.merge-s5-remember-cb')!.checked = !!ctx.choices.remember;
+    }
     drawPreview(view);
 }
 
@@ -724,6 +740,8 @@ function wire(root: HTMLElement, view: View): void {
             const line = findLine(view, t.dataset.line ?? '');
             if (line) setLines(view.ctx!, [line], t.checked, line.name);
             else update(view);
+        } else if (t.matches('.merge-s5-remember-cb')) {
+            view.ctx?.update({ remember: t.checked });
         } else if (t.matches('.merge-s5-gcb')) {
             const g = view.groups.find(x => x.key === t.dataset.group);
             if (g) setLines(view.ctx!, [...g.lines, ...g.kept].filter(l => l.can), t.checked, g.title);

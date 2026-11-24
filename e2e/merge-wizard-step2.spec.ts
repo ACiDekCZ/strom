@@ -406,3 +406,141 @@ for (const vp of [{ width: 390, height: 844, name: 'a phone (14b)' }, { width: 8
         await expect(mergeCount(wizard, 'skipped')).toHaveText('1');
     });
 }
+
+/**
+ * K10.5: step 2 opens on Maybe the same at the first pair still to decide
+ * whenever one waits there; "To decide N" in the counts and under step 2 goes
+ * to that pair. The tree and the file with Vojmír Modřín too: Florentýna,
+ * Teofil and Vojmír are only offered (three pairs to decide), Kvido is The same.
+ */
+test.describe('step 2 opens where a pair waits; "To decide N" goes to it (K10.5)', () => {
+    function withVojmir(): { tree: StromData; file: StromData } {
+        const tree = modrinovi(false);
+        tree.persons['m_vojmir' as never] = person('m_vojmir', 'Vojmír', 'Modřín', 'male', { birthDate: '1930' } as Partial<P>);
+        const file = modrinoviFile(false);
+        file.persons['i_vojmir' as never] = person('i_vojmir', 'Vojmír', 'Modřín', 'male');
+        return { tree, file };
+    }
+    const tab = (wizard: Locator, g: string): Locator => wizard.locator(`.merge-tab[data-group="${g}"]`);
+    const firstPending = (wizard: Locator): Locator => wizard.locator('#merge-match-list .merge-item[data-fate="pending"]').first();
+    /** Maybe the same shown, its first pair still to decide chosen. */
+    async function atFirstPending(wizard: Locator): Promise<Locator> {
+        await expect(tab(wizard, 'maybe')).toHaveAttribute('aria-selected', 'true');
+        const row = firstPending(wizard);
+        await expect(row).toHaveAttribute('aria-selected', 'true');
+        return row;
+    }
+    const pendingChip = (wizard: Locator): Locator => wizard.locator('#merge-counts button.merge-pending-go[data-count="pending"]');
+
+    test('opened again from step 1 or resumed: Maybe the same at its first undecided pair; nothing waiting there: the group shown last', async ({ page }) => {
+        await openApp(page);
+        const { tree, file } = withVojmir();
+        const wizard = await openGuide(page, tree, file);
+        await mergeCompare(wizard);
+        await expect(mergeCount(wizard, 'pending')).toHaveText('3');
+        await atFirstPending(wizard);
+        // A group switched by hand inside the step stays.
+        await mergeGroup(wizard, 'same');
+        await expect(tab(wizard, 'same')).toHaveAttribute('aria-selected', 'true');
+        // Back on step 1 and on again: the step opens on the pairs that wait.
+        await wizard.locator('#merge-progress button.merge-step[data-step="1"]').click();
+        await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+        await wizard.locator('#merge-next').click();
+        await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
+        await atFirstPending(wizard);
+
+        // Saved for later on The same, resumed: Maybe the same again.
+        await mergeGroup(wizard, 'same');
+        await wizard.locator('#merge-save-later').click();
+        await expect(wizard).toBeHidden();
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        await page.locator('#tree-manager-modal .pending-merge-resume').first().click();
+        await expect(wizard).toBeVisible();
+        await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
+        await atFirstPending(wizard);
+
+        // Every pair decided: The same chosen by hand stays when the step opens again (from step 3).
+        await mergeDecide(wizard, /Vojmír/, 'skip', 'maybe');
+        await mergeDecide(wizard, /Teofil/, 'skip', 'maybe');
+        await mergeDecide(wizard, /Florentýna/, 'same', 'maybe');
+        await expect(mergeCount(wizard, 'pending')).toHaveText('0');
+        await expect(wizard.locator('#merge-counts .merge-pending-go')).toHaveCount(0);
+        await expect(wizard.locator('#merge-progress .merge-pending-go')).toHaveCount(0);
+        await mergeGroup(wizard, 'same');
+        await wizard.locator('#merge-next').click();
+        await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
+        await wizard.locator('#merge-progress button.merge-step[data-step="2"]').click();
+        await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
+        await expect(tab(wizard, 'same')).toHaveAttribute('aria-selected', 'true');
+    });
+
+    test('"To decide N" in the counts: from another group and from another step to the first undecided pair, focused', async ({ page }) => {
+        await openApp(page);
+        const { tree, file } = withVojmir();
+        const wizard = await openGuide(page, tree, file);
+        await mergeCompare(wizard);
+        const chip = pendingChip(wizard);
+        await expect(chip).toHaveAttribute('aria-label', 'To decide 3 · 2 Who is who · Maybe the same');
+        await expect(chip.locator('.merge-stat-value')).toHaveText('3');
+        // From The same in step 2.
+        await mergePair(wizard, /Kvido/, 'same');
+        await chip.click();
+        let row = await atFirstPending(wizard);
+        await expect(row).toBeFocused();
+        // The first pair decided: the count goes to the next one, wherever the list stood.
+        const first = await row.getAttribute('data-incoming-id');
+        await wizard.locator('#merge-pair .merge-dec[data-dec="skip"]').click();
+        await expect(mergeCount(wizard, 'pending')).toHaveText('2');
+        await mergeGroup(wizard, 'new');
+        await chip.click();
+        row = await atFirstPending(wizard);
+        await expect(row).not.toHaveAttribute('data-incoming-id', first!);
+        await expect(row).toBeFocused();
+        // From step 1 (back after the comparison).
+        await wizard.locator('#merge-back').click();
+        await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+        await chip.click();
+        await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
+        await expect(await atFirstPending(wizard)).toBeFocused();
+        // From step 4 opened to say why the scope skips it (7e).
+        const step4 = wizard.locator('#merge-progress button.merge-step[data-step="4"]');
+        await step4.click();
+        await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '4');
+        await chip.click();
+        await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
+        await expect(await atFirstPending(wizard)).toBeFocused();
+    });
+
+    test('"· N to decide" under step 2 in the step list goes to the first undecided pair', async ({ page }) => {
+        await openApp(page);
+        const { tree, file } = withVojmir();
+        const wizard = await openGuide(page, tree, file);
+        await mergeCompare(wizard);
+        const sub = wizard.locator('#merge-progress .merge-step.active button.merge-step-sub');
+        await expect(sub).toHaveText('3 to decide');
+        await expect(sub).toHaveAttribute('aria-label', 'To decide 3 · 2 Who is who · Maybe the same');
+        await mergeGroup(wizard, 'new');
+        await sub.click();
+        await expect(await atFirstPending(wizard)).toBeFocused();
+    });
+
+    test('a phone: the line of counts says "To decide N" as a button; the pair shown, its head focused', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await openApp(page);
+        const { tree, file } = withVojmir();
+        const wizard = await openGuide(page, tree, file);
+        await mergeCompare(wizard);
+        await mergeGroup(wizard, 'same');
+        await wizard.locator('.merge-s2-sheet-close').click();
+        const go = wizard.locator('#merge-counts .merge-stats--line button.merge-pending-go');
+        await expect(go).toBeVisible();
+        await expect(go).toHaveText('To decide 3');
+        await go.click();
+        await expect(wizard.locator('#merge-pair .merge-pair-open')).toBeFocused();
+        await expect(wizard.locator('#merge-pair .merge-pair-sub')).toContainText('Maybe the same');
+        await mergeOpenList(wizard);
+        await atFirstPending(wizard);
+        // Nothing sideways.
+        expect(await wizard.locator('#merge-counts').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    });
+});

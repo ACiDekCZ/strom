@@ -63,6 +63,35 @@ export function hasImageToken(value: unknown): boolean {
     return Object.values(value).some(hasImageToken);
 }
 
+/**
+ * A recorded value (`value`, its pictures tokens) with each token put back as
+ * the picture of the same token that `from` holds (the tree now, a backup).
+ * Null when a token has no such picture there.
+ */
+export function withImagesFrom(value: unknown, from: unknown): { value: unknown } | null {
+    const pictures = new Map<string, string>();
+    const collect = (v: unknown): void => {
+        if (isImage(v)) { pictures.set(imageHash(v), v); return; }
+        if (Array.isArray(v)) { for (const x of v) collect(x); return; }
+        if (v && typeof v === 'object') for (const x of Object.values(v)) collect(x);
+    };
+    collect(from);
+    let missing = false;
+    const fill = (v: unknown): unknown => {
+        if (Array.isArray(v)) return v.map(fill);
+        if (!v || typeof v !== 'object') return v;
+        const token = (v as ImageToken).$img;
+        if (typeof token === 'string' && Object.keys(v).length === 1) {
+            const picture = pictures.get(token);
+            if (picture === undefined) missing = true;
+            return picture;
+        }
+        return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fill(x)]));
+    };
+    const out = fill(value);
+    return missing ? null : { value: out };
+}
+
 function fnv(text: string, seed: number): string {
     let h = seed >>> 0;
     for (let i = 0; i < text.length; i++) {

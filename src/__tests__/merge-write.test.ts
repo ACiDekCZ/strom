@@ -69,7 +69,7 @@ import { applyContentOptions, applyLivingPrivacy } from '../privacy.js';
 import { SettingsManager } from '../settings.js';
 import { executeMerge } from '../merge/executor.js';
 import { createMergeState, updateMatchDecision } from '../merge/matching.js';
-import { buildPlan, type MergePlan, type PlanScope, type WizardChoices } from '../merge/plan.js';
+import { applyPlan, buildPlan, type MergePlan, type PlanScope, type WizardChoices } from '../merge/plan.js';
 import { exportPlan } from '../merge/plan-export.js';
 import { backupFailureWhy, writePlan, writeRestore, writeUndo, type WriteResult } from '../merge/write.js';
 import { contentFingerprint } from '../research-link.js';
@@ -528,6 +528,46 @@ describe('exportPlan (K6.4, 13e)', () => {
         const { txt } = exportPlan(plan, { source: SOURCE, target: TARGET, year: 2026 });
         expect(txt).toContain(`${strings.mergeWizard.gSkipped} (1)`);
         expect(txt).toContain('- Dora Fictus (1850–1920)');
+    });
+});
+
+describe('Only compare writes nothing (K10.1)', () => {
+    /** Everything stored: every store with its keys and values, the tree index, the open tree. */
+    const imprint = (): string => JSON.stringify({
+        stores: [...stores].map(([name, m]) => [name, [...m].sort(([a], [b]) => a.localeCompare(b))]),
+        trees: TreeManager.getTrees(),
+        open: DataManager.getData(),
+    });
+
+    it('writePlan and applyPlan refuse the plan of Only compare: the trees, the backups and the records as before', async () => {
+        const { plan, target } = await planFor(T1, INCOMING, { mode: 'compare' });
+        expect(plan.mode).toBe('compare');
+        const source = structuredClone(INCOMING);
+        const before = imprint();
+        const targetBefore = JSON.stringify(target);
+        const sourceBefore = JSON.stringify(source);
+        await expect(writePlan(plan, { target, source, into: 'tree' })).rejects.toThrow('A comparison plan is not written');
+        await expect(writePlan(plan, { target, source, into: 'new' })).rejects.toThrow('A comparison plan is not written');
+        await expect(applyPlan(plan, target, source)).rejects.toThrow('A comparison plan is not written');
+        await TreeManager.flush();
+        expect(imprint()).toBe(before);
+        expect(JSON.stringify(target)).toBe(targetBefore);
+        expect(JSON.stringify(source)).toBe(sourceBefore);
+        expect(await premerge(T1)).toEqual([]);
+        expect((await targetNow(T1)).merges).toBeUndefined();
+    });
+
+    it('its list is the list a write saves: the same exportPlan', async () => {
+        const { plan } = await planFor(T1, INCOMING, { mode: 'compare' });
+        const { plan: add } = await planFor(T1, INCOMING);
+        const opts = { source: INCOMING, target: TARGET, year: 2026 };
+        const { txt } = exportPlan(plan, opts);
+        expect(txt).toContain(`${strings.mergeWizard.gNew} (1)`);
+        expect(txt).toContain(`${strings.mergeWizard.gJoined} (1)`);
+        expect(txt).toBe(exportPlan(add, opts).txt);
+        // The totals line in words, not the text function itself.
+        expect(txt).toContain(`· ${strings.mergeWizard.cntTotal(2)}`);
+        expect(txt).not.toContain('=>');
     });
 });
 

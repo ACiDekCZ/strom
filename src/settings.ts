@@ -4,7 +4,7 @@
  */
 
 import { personMediaCount } from './media.js';
-import { AppSettings, BranchMarker, ThemeMode, SurnameDisplay, LanguageSetting, CardDensity, TreeSpacing, StromData, CardPhotoSize, CardPhotoShape } from './types.js';
+import { AppSettings, BranchMarker, ThemeMode, SurnameDisplay, LanguageSetting, CardDensity, TreeSpacing, StromData, CardPhotoSize, CardPhotoShape, SavedMergeRule } from './types.js';
 import { CARD_SIZE, NORMAL_PHOTO_BOX } from './layout-config.js';
 import { BRANCH_MARKERS, SURNAME_DISPLAYS, SETTINGS_KEY, personSourceIds } from './model-values.js';
 import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields, normalizeCardPhoto } from './card-fields.js';
@@ -128,6 +128,36 @@ export function migrateRodByTree(settings: AppSettings): boolean {
 }
 
 /** Per device, apart from the other settings. */
+/** The key a program's saved merge rule is stored under: trimmed, spaces folded, lower case ('' for no program). */
+export function mergeRuleKey(program: string): string {
+    return program.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+const MERGE_SCOPES: readonly string[] = ['a', 'b', 'c', 'd'];
+const MERGE_RULE_CHOICES: readonly string[] = ['mine', 'import', 'both', 'precise', 'each'];
+const MERGE_RULE_KINDS: readonly string[] = ['name', 'birth', 'death', 'places', 'events', 'notes', 'photos', 'sex', 'marriage'];
+
+/** A stored merge rule as it can be used, or null when it is not one (an older or hand-edited store). */
+export function sanitizeMergeRule(value: unknown): SavedMergeRule | null {
+    if (!value || typeof value !== 'object') return null;
+    const v = value as Record<string, unknown>;
+    const rules = v.rules as Record<string, unknown> | undefined;
+    if (typeof v.program !== 'string' || !v.program.trim() || !MERGE_SCOPES.includes(v.scope as string)
+        || !rules || !MERGE_RULE_CHOICES.includes(rules.all as string)) return null;
+    const kind: Record<string, string> = {};
+    if (rules.kind && typeof rules.kind === 'object') {
+        for (const [k, c] of Object.entries(rules.kind as Record<string, unknown>)) {
+            if (MERGE_RULE_KINDS.includes(k) && MERGE_RULE_CHOICES.includes(c as string)) kind[k] = c as string;
+        }
+    }
+    return {
+        program: v.program.trim(),
+        scope: v.scope as SavedMergeRule['scope'],
+        rules: { all: rules.all as SavedMergeRule['rules']['all'], ...(Object.keys(kind).length ? { kind: kind as SavedMergeRule['rules']['kind'] } : {}) },
+        savedAt: typeof v.savedAt === 'string' ? v.savedAt : '',
+    };
+}
+
 export const CARD_SIGNALS_KEY = 'strom-card-signals';
 
 /** The kinds of places the map shows (spec 031 §1), per device, apart from the other settings. */
@@ -590,6 +620,39 @@ class SettingsManagerClass {
 
     setImportImages(enabled: boolean): void {
         this.settings.importImages = enabled;
+        this.save();
+    }
+
+    /** The import guide's rule saved for files of `program` (spec 134 K10.4), or null. */
+    getMergeRule(program: string): SavedMergeRule | null {
+        const key = mergeRuleKey(program);
+        return key ? sanitizeMergeRule(this.settings.mergeRules?.[key]) : null;
+    }
+
+    /** Every saved merge rule with its key, by program name. */
+    getMergeRules(): Array<{ key: string; rule: SavedMergeRule }> {
+        return Object.entries(this.settings.mergeRules ?? {})
+            .flatMap(([key, value]) => {
+                const rule = sanitizeMergeRule(value);
+                return rule ? [{ key, rule }] : [];
+            })
+            .sort((a, b) => a.rule.program.localeCompare(b.rule.program));
+    }
+
+    /** Save the rule for files of its program (one per program: a newer one replaces it). */
+    setMergeRule(rule: SavedMergeRule): void {
+        const key = mergeRuleKey(rule.program);
+        const clean = sanitizeMergeRule(rule);
+        if (!key || !clean) return;
+        (this.settings.mergeRules ??= {})[key] = clean;
+        this.save();
+    }
+
+    /** Forget a saved merge rule (Settings › Remove). */
+    removeMergeRule(key: string): void {
+        if (!this.settings.mergeRules?.[key]) return;
+        delete this.settings.mergeRules[key];
+        if (!Object.keys(this.settings.mergeRules).length) delete this.settings.mergeRules;
         this.save();
     }
 

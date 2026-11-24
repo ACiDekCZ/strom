@@ -13,6 +13,7 @@ import {
     MergePlan, PlanRules, PlanSource, RelChoice, WizardChoices,
 } from '../merge/plan.js';
 import { MergeState } from '../merge/types.js';
+import { relationRows, samePersonOf } from '../merge/plan-rules.js';
 import { StorageManager } from '../storage.js';
 import { strings } from '../strings.js';
 import { Partnership, PartnershipId, Person, PersonId, StromData } from '../types.js';
@@ -360,5 +361,82 @@ describe('conflicts of relations (K5.5)', () => {
         expect(planNeedsStep4(rel)).toBe('relations-only');
         expect(planNeedsStep4({ ...rel, scope: 'c' })).toBe('full');
         expect(planNeedsStep4({ ...rel, mode: 'new' })).toBe('skip');
+    });
+});
+
+describe('a third parent and a second partner: one row per couple, Same person (K10.7, K10.8)', () => {
+    /** The tree: Velemír and Dobroslava with three children. */
+    function family(): Builder {
+        const t = tree();
+        t.couple(t.person('t1', 'Velemír', 'Modřín', { birthDate: '1850' }), t.person('t2', 'Dobroslava', 'Modřínová', { gender: 'female', birthDate: '1852' }),
+            ['t3', 't4', 't5'].map((k, i) => t.person(k, ['Kojata', 'Bohumil', 'Ludmila'][i], 'Modřín', { birthDate: String(1878 + i) })));
+        return t;
+    }
+    /** The import: Velemír and Dobroslava under her birth surname, with the same three children. */
+    function source(wife: Partial<Person> = {}): Builder {
+        const s = tree();
+        s.couple(s.person('s1', 'Velemír', 'Modřín', { birthDate: '1850' }), s.person('s2', 'Dobroslava', 'Jilmová', { gender: 'female', birthDate: '1852', ...wife }),
+            ['s3', 's4', 's5'].map((k, i) => s.person(k, ['Kojata', 'Bohumil', 'Ludmila'][i], 'Modřín', { birthDate: String(1878 + i) })));
+        return s;
+    }
+    const joined = { s1: 't1', s3: 't3', s4: 't4', s5: 't5' };
+    const parentsOf = (d: StromData, child: string): string[] => [...d.persons[id(child)].parentIds].sort();
+
+    it('the children of one couple share one row; the second partner is a row of its own', () => {
+        const state = stateOf(family().data, source().data, joined);
+        const rels = relationConflicts(state).map(c => ({ c }));
+        expect(rels.map(r => r.c.kind).sort()).toEqual(['partner', 'third-parent', 'third-parent', 'third-parent']);
+        const rows = relationRows(rels);
+        expect(rows.map(r => r.length).sort()).toEqual([1, 3]);
+        expect(rows.find(r => r.length === 3)!.map(r => r.c.person).sort()).toEqual(['t3', 't4', 't5']);
+    });
+
+    it('Same person joins the wife: the conflicts go, the children keep two parents and him one wife', async () => {
+        const t = family();
+        const s = source();
+        const state = stateOf(t.data, s.data, joined);
+        for (const c of relationConflicts(state)) expect(samePersonOf(state, c)).toEqual({ source: 's2', tree: 't2' });
+        const before = planCounts(buildPlan(state, choices({ scope: 'b' })));
+
+        // The choice is step 2's decision: the wife picked by hand as the tree's Dobroslava.
+        state.decisions.set(id('s2'), { type: 'manual_match', targetId: id('t2'), via: 'step4', prev: { type: 'reject' } });
+        expect(relationConflicts(state)).toEqual([]);
+        const plan = buildPlan(state, choices({ scope: 'b' }));
+        const after = planCounts(plan);
+        expect(after.joined).toBe(before.joined + 1);
+        expect(after.added).toBe(before.added - 1);
+        expect(plan.items.some(i => i.kind === 'relation')).toBe(false);
+        const data = await written(plan, t.data, s.data);
+        for (const k of ['t3', 't4', 't5']) expect(parentsOf(data, k)).toEqual(['t1', 't2']);
+        expect(data.persons[id('t1')].partnerships).toHaveLength(1);
+        expect(Object.keys(data.persons)).toHaveLength(5);
+    });
+
+    it('is not offered where the join cannot be: another sex, a person of the tree taken, a loop', () => {
+        const third = (state: MergeState) => relationConflicts(state).find(c => c.kind === 'third-parent')!;
+        let state = stateOf(family().data, source({ gender: 'male' }).data, joined);
+        expect(samePersonOf(state, third(state))).toBeNull();
+
+        const taken = source();
+        taken.person('s9', 'Dobroslava', 'Modřínová', { gender: 'female', birthDate: '1852' });
+        state = stateOf(family().data, taken.data, { ...joined, s9: 't2' });
+        expect(relationConflicts(state).filter(c => c.kind === 'third-parent').every(c => samePersonOf(state, c) === null)).toBe(true);
+
+        // The import's wife is a daughter of the tree's Dobroslava's son: joined, she would be her own descendant.
+        const loop = source();
+        loop.couple(loop.person('s6', 'Kojata', 'Modřín', { birthDate: '1878' }), loop.person('s8', 'Bohdana', 'Jilmová', { gender: 'female' }), []);
+        loop.data.persons[id('s2')].parentIds.push(id('s6'));
+        loop.data.persons[id('s6')].childIds.push(id('s2'));
+        state = stateOf(family().data, loop.data, { ...joined, s6: 't3' });
+        const c = relationConflicts(state).find(x => x.kind === 'third-parent' && x.person === 't4')!;
+        expect(c).toBeDefined();
+        expect(samePersonOf(state, c)).toBeNull();
+    });
+
+    it('a saved merge keeps the decision as it was', () => {
+        const state = stateOf(family().data, source().data, joined);
+        state.decisions.set(id('s2'), { type: 'manual_match', targetId: id('t2'), via: 'step4', prev: { type: 'reject' } });
+        const again = new Map(JSON.parse(JSON.stringify([...state.decisions])) as Array<[PersonId, unknown]>);
+        expect(again.get(id('s2'))).toEqual({ type: 'manual_match', targetId: 't2', via: 'step4', prev: { type: 'reject' } });
     });
 });

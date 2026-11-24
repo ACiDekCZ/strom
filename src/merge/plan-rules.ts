@@ -442,6 +442,76 @@ export function relationConflicts(state: MergeState, ends: EndOf = defaultEnds(s
 }
 
 /**
+ * The rows of step 4's conflicts of relations (K10.8): the children whose
+ * parents conflict the same way (the same parents in the tree, the same in
+ * the import) share one row, decided once for all of them; every other
+ * conflict is a row of its own. In the conflicts' order.
+ */
+export function relationRows<T extends { c: RelConflict }>(rels: readonly T[]): T[][] {
+    const rows = new Map<string, T[]>();
+    for (const r of rels) {
+        const { c } = r;
+        const key = c.kind === 'parents' || c.kind === 'third-parent'
+            ? `${c.kind}|${[...c.mine].sort().join(',')}|${[...c.theirs].sort().join(',')}`
+            : c.key;
+        const row = rows.get(key);
+        if (row) row.push(r);
+        else rows.set(key, [r]);
+    }
+    return [...rows.values()];
+}
+
+/**
+ * Whether the import's person `source` can be joined with the tree's `tree`
+ * (K10.7 "Same person"): both real, the sex not differing, no other person
+ * of the import ending there, and none of the source's parents, children or
+ * partners where it ends in the tree making a loop or the person its own
+ * relative.
+ */
+export function canJoinAs(state: MergeState, source: PersonId, tree: PersonId, ends: EndOf = defaultEnds(state)): boolean {
+    const s = state.incomingData.persons[source];
+    const t = state.existingData.persons[tree];
+    if (!s || !t || s.isPlaceholder || t.isPlaceholder) return false;
+    const sexes = [s.gender, t.gender];
+    if (sexes.every(g => g === 'male' || g === 'female') && s.gender !== t.gender) return false;
+    for (const id of Object.keys(state.incomingData.persons) as PersonId[]) {
+        if (id !== source && ends(id) === tree) return false;
+    }
+    const at = (id: PersonId): PersonId | null => { const e = ends(id); return e && e !== 'new' ? e : null; };
+    const data = state.existingData;
+    for (const par of s.parentIds) {
+        const e = at(par);
+        if (e && (e === tree || isAncestorOrSelf(data, tree, e))) return false;
+    }
+    for (const kid of s.childIds) {
+        const e = at(kid);
+        if (e && (e === tree || isAncestorOrSelf(data, e, tree))) return false;
+    }
+    for (const uid of s.partnerships) {
+        const u = state.incomingData.partnerships[uid];
+        const o = u ? (u.person1Id === source ? u.person2Id : u.person1Id) : undefined;
+        if (o && at(o) === tree) return false;
+    }
+    return true;
+}
+
+/**
+ * The join "Same person" offers on a third parent or a second partner
+ * (K10.7): the one person of the import new to the tree on its side and the
+ * one person of the tree the import does not know on the other; null when
+ * there is no such pair or the join cannot be (canJoinAs).
+ */
+export function samePersonOf(state: MergeState, c: RelConflict, ends: EndOf = defaultEnds(state)): { source: PersonId; tree: PersonId } | null {
+    if (c.kind !== 'third-parent' && c.kind !== 'partner') return null;
+    const fresh = c.theirs.filter((_, i) => c.theirsAt[i] === null);
+    const joined = c.theirsAt.filter((id): id is PersonId => !!id);
+    if (fresh.length !== 1 || joined.some(id => !c.mine.includes(id))) return null;
+    const treeOnly = c.mine.filter(id => !joined.includes(id));
+    if (treeOnly.length !== 1) return null;
+    return canJoinAs(state, fresh[0], treeOnly[0], ends) ? { source: fresh[0], tree: treeOnly[0] } : null;
+}
+
+/**
  * The choice that holds for a conflict of relations: the one made for it;
  * a loop always "Keep mine"; a marriage without one by the rules (kind
  * 'marriage' and wider, a protected couple's details kept); else "Keep mine".

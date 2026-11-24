@@ -12,10 +12,10 @@
 import { strings } from '../../strings.js';
 import type { StepContext } from './context.js';
 import { escapeHtml, stepHeading } from './context.js';
-import type { MergeState } from '../types.js';
+import type { MatchDecision, MergeState } from '../types.js';
 import type { FieldKind, MergePlan, PlanRules, RuleChoice, RuleSource } from '../plan.js';
 import {
-    FIELD_KINDS, afterText, mergeDifferences, relationConflicts, resolveField, ruleCounts,
+    FIELD_KINDS, afterText, mergeDifferences, relationConflicts, relationRows, resolveField, ruleCounts, samePersonOf,
     type EndOf, type FieldDifference, type Protection, type RelChoice, type RelConflict, type RuleExample,
 } from '../plan-rules.js';
 import { step4Need } from '../wizard-steps.js';
@@ -160,6 +160,11 @@ function planRelations(plan: MergePlan, state: MergeState): Array<{ c: RelConfli
         .filter(c => chosen.has(c.key)).map(c => ({ c, choice: chosen.get(c.key)! }));
 }
 
+/** The rows of the plan's conflicts of relations (the children of one couple one row, K10.8): the count step 4's line says. */
+export function relationRowCount(plan: MergePlan, state: MergeState): number {
+    return relationRows(planRelations(plan, state)).length;
+}
+
 /** A difference is an exception when a narrower rule than the whole merge's decides it, or it is protected from it. */
 function isException(d: FieldDifference, rules: PlanRules): boolean {
     const r = resolveField(d, rules);
@@ -186,7 +191,7 @@ export function renderStep4(host: HTMLElement, ctx: StepContext): void {
         const n = mergeDifferences(ctx.state).length;
         html = stepHeading(4)
             + `<div class="merge-s4 is-rels-only"><p class="merge-s4-note">${escapeHtml(W.step4Skipped(scopeLabel(plan), n))} ${escapeHtml(W.relOnly)}</p>`
-            + `${relationsHtml(ctx, rels)}</div>`;
+            + `${relationsHtml(ctx, rels)}${joinedSameHtml(ctx)}</div>`;
     } else html = fullHtml(ctx, v, rels);
     host.innerHTML = html;
     wire(host, ctx, v);
@@ -211,7 +216,7 @@ function skippedHtml(ctx: StepContext, v: View): string {
         + `<div class="merge-s4 is-skipped"><h4 class="merge-s4-skip-t">${escapeHtml(W.s4SkippedTitle)}</h4>`
         + `<p class="merge-s4-note">${escapeHtml(W.step4Skipped(scopeLabel(ctx.plan!), diffs.length))}`
         + (diffs.length && !v.diffsOpen ? ` <button type="button" class="link-button merge-s4-showdiffs" data-fk="showdiffs">${escapeHtml(W.showDiffs)}</button>` : '')
-        + `</p>${list}<p class="merge-s4-note">${escapeHtml(W.noRelConf)}</p></div>`;
+        + `</p>${list}<p class="merge-s4-note">${escapeHtml(W.noRelConf)}</p>${joinedSameHtml(ctx)}</div>`;
 }
 
 function fullHtml(ctx: StepContext, v: View, rels: Array<{ c: RelConflict; choice: RelChoice }>): string {
@@ -242,13 +247,13 @@ function fullHtml(ctx: StepContext, v: View, rels: Array<{ c: RelConflict; choic
     let panel: string;
     if (v.tab === 'kinds') panel = kindsHtml(counts.byKind, rules);
     else if (v.tab === 'persons') panel = personsHtml(ctx, v, diffs, persons, rules);
-    else panel = relationsHtml(ctx, rels);
+    else panel = relationsHtml(ctx, rels) + joinedSameHtml(ctx);
     return stepHeading(4)
         + `<div class="merge-s4">`
         + `<div class="merge-s4-head"><span class="merge-s4-h" id="merge-s4-all-l">${escapeHtml(W.ruleAll)}</span><span class="merge-s4-order">${escapeHtml(W.ruleOrder)}</span></div>`
         + `<div class="merge-s4-tiles" role="radiogroup" aria-labelledby="merge-s4-all-l">${RULES.map(tile).join('')}</div>`
         + prot
-        + `<div class="merge-s4-bar"><div class="merge-s4-tabs" role="tablist">${tab('kinds', W.byKind)}${tab('persons', W.byPerson, persons.length)}${tab('rels', W.relConf, rels.length)}</div>`
+        + `<div class="merge-s4-bar"><div class="merge-s4-tabs" role="tablist">${tab('kinds', W.byKind)}${tab('persons', W.byPerson, persons.length)}${tab('rels', W.relConf, relationRows(rels).length)}</div>`
         + `<input type="search" class="merge-s4-search" placeholder="${escapeHtml(W.s4Search)}" aria-label="${escapeHtml(W.s4Search)}" value="${escapeHtml(v.query)}" data-fk="search"></div>`
         + `<div class="merge-s4-panel" role="tabpanel" id="merge-s4-${v.tab}" aria-labelledby="merge-s4-tab-${v.tab}">${panel}</div>`
         + `</div>`;
@@ -380,27 +385,78 @@ function relSide(ctx: StepContext, c: RelConflict, side: 'mine' | 'theirs'): str
     return names.join(c.kind === 'partner' ? ', ' : ' + ') || '—';
 }
 
-/** 7d: the conflicts of relations, each with Keep mine · From the import · Both; a loop only Keep mine. */
+/** How many children's names a row of one couple's children shows before "+n" (K10.8). */
+const ROW_NAMES = 3;
+
+/**
+ * 7d: the conflicts of relations, each with Keep mine · From the import ·
+ * Both; a loop only Keep mine. The children of one couple whose parents
+ * conflict the same way share one row with their count, decided once
+ * (K10.8). A third parent or a second partner new to the tree, with one
+ * person of the tree on the other side, also offers Same person: the two
+ * are joined as a decision of step 2 (K10.7).
+ */
 function relationsHtml(ctx: StepContext, rels: Array<{ c: RelConflict; choice: RelChoice }>): string {
     const W = strings.mergeWizard;
     const { state } = ctx;
+    const ends = ctx.plan ? planEnds(ctx.plan, state) : null;
     const q = (view?.query ?? '').trim().toLocaleLowerCase();
-    const title = (c: RelConflict): string => c.kind === 'loop'
+    const names = (c: RelConflict): string => c.kind === 'loop'
         ? `${nameOf(state.existingData.persons[c.mine[0]])} ↔ ${nameOf(state.existingData.persons[c.person])}`
         : nameOf(state.existingData.persons[c.person]);
-    const shown = q ? rels.filter(r => title(r.c).toLocaleLowerCase().includes(q)) : rels;
+    const rows = relationRows(rels);
+    const shown = q ? rows.filter(r => r.some(x => names(x.c).toLocaleLowerCase().includes(q))) : rows;
     const label: Record<RelChoice, string> = { mine: W.keepMine, import: W.fromImport, both: W.both };
-    const rows = shown.map(({ c, choice }) => {
-        const seg = c.options.map(o => `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" aria-checked="${choice === o}" data-rel="${escapeHtml(c.key)}" data-choice="${o}" data-fk="rel-${escapeHtml(c.key)}-${o}">${escapeHtml(label[o])}</button>`).join('');
-        return `<div class="merge-s4-rel" data-rel-kind="${c.kind}" data-key="${escapeHtml(c.key)}">`
-            + `<div class="merge-s4-rel-h"><span class="merge-s4-pname">${escapeHtml(title(c))}</span><span class="merge-s4-tag">${escapeHtml(W.relKinds[c.kind])}</span>`
+    const html = shown.map(row => {
+        const { c } = row[0];
+        const keys = row.map(r => r.c.key);
+        const choice = row.every(r => r.choice === row[0].choice) ? row[0].choice : null;
+        const all = row.map(r => names(r.c));
+        const title = all.length > ROW_NAMES ? `${all.slice(0, ROW_NAMES).join(', ')} +${all.length - ROW_NAMES}` : all.join(', ');
+        const tag = row.length > 1 ? `${W.relKinds[c.kind]} · ${W.relChildren(row.length)}` : W.relKinds[c.kind];
+        const same = ends ? samePersonOf(state, c, ends) : null;
+        const fk = escapeHtml(c.key);
+        const seg = c.options.map(o => `<button type="button" class="sel-opt" data-sel-form="seg" role="radio" aria-checked="${choice === o}" data-rel="${escapeHtml(keys.join(' '))}" data-choice="${o}" data-fk="rel-${fk}-${o}">${escapeHtml(label[o])}</button>`).join('')
+            + (same ? `<button type="button" class="sel-opt merge-s4-same" data-sel-form="seg" role="radio" aria-checked="false" data-same="${escapeHtml(same.source)}" data-same-to="${escapeHtml(same.tree)}"`
+                + ` title="${escapeHtml(W.samePersonTitle(nameOf(state.incomingData.persons[same.source]), nameOf(state.existingData.persons[same.tree])))}" data-fk="same-${escapeHtml(same.source)}">${escapeHtml(W.samePerson)}</button>` : '');
+        return `<div class="merge-s4-rel" data-rel-kind="${c.kind}" data-key="${fk}"${row.length > 1 ? ` data-count="${row.length}"` : ''}>`
+            + `<div class="merge-s4-rel-h"><span class="merge-s4-pname"${all.length > ROW_NAMES ? ` title="${escapeHtml(all.join(', '))}"` : ''}>${escapeHtml(title)}</span><span class="merge-s4-tag">${escapeHtml(tag)}</span>`
             + (c.kind === 'loop' ? `<span class="merge-s4-loop">${escapeHtml(W.loopNever)}</span>` : '') + '</div>'
             + `<div class="merge-s4-rel-sides"><span><span class="merge-s4-side">${escapeHtml(ctx.choices.targetName)}:</span> ${escapeHtml(relSide(ctx, c, 'mine'))}</span>`
             + `<span><span class="merge-s4-side">${escapeHtml(W.colImport)}:</span> ${escapeHtml(relSide(ctx, c, 'theirs'))}</span></div>`
-            + `<div class="sel-seg" role="radiogroup" aria-label="${escapeHtml(`${title(c)} · ${W.relKinds[c.kind]}`)}">${seg}</div></div>`;
+            + `<div class="sel-seg" role="radiogroup" aria-label="${escapeHtml(`${title} · ${tag}`)}">${seg}</div></div>`;
     }).join('');
     return `<div class="merge-s4-rels"><p class="merge-s4-rels-h"><span class="merge-s4-h">${escapeHtml(W.relConf)}</span> <span class="merge-s4-note">${escapeHtml(W.relAlways)}</span></p>`
-        + (rels.length ? (shown.length ? rows : `<p class="merge-s4-note">${escapeHtml(W.s4NoHit)}</p>`) : `<p class="merge-s4-note">${escapeHtml(W.relNone)}</p>`) + '</div>';
+        + (rows.length ? (shown.length ? html : `<p class="merge-s4-note">${escapeHtml(W.s4NoHit)}</p>`) : `<p class="merge-s4-note">${escapeHtml(W.relNone)}</p>`) + '</div>';
+}
+
+/** The import's persons joined by Same person in this step (K10.7), each with Undo. */
+function joinedSameHtml(ctx: StepContext): string {
+    const W = strings.mergeWizard;
+    const { state } = ctx;
+    const lines: string[] = [];
+    for (const [id, d] of state.decisions) {
+        if (d.type !== 'manual_match' || d.via !== 'step4') continue;
+        const text = W.joinedSame(nameOf(state.incomingData.persons[id]), nameOf(state.existingData.persons[d.targetId]));
+        lines.push(`<li class="merge-s4-joined"><span>${escapeHtml(text)}</span> `
+            + `<button type="button" class="link-button merge-s4-unsame" data-unsame="${escapeHtml(id)}" data-fk="same-${escapeHtml(id)}">${escapeHtml(W.undoSame)}</button></li>`);
+    }
+    return lines.length ? `<ul class="merge-s4-joinedlist">${lines.join('')}</ul>` : '';
+}
+
+/** "Same person": the import's person joined with the tree's as step 2's decision, the one it replaces kept for Undo. */
+function joinSame(ctx: StepContext, source: PersonId, tree: PersonId): void {
+    const was = ctx.state.decisions.get(source);
+    const prev: MatchDecision | undefined = was?.type === 'manual_match' ? { type: 'manual_match', targetId: was.targetId } : was;
+    ctx.step2?.decide(source, { type: 'manual_match', targetId: tree, via: 'step4', ...(prev ? { prev } : {}) });
+}
+
+/** Undo of "Same person": the decision it replaced again (none: undecided). */
+function undoSame(ctx: StepContext, source: PersonId): void {
+    const d = ctx.state.decisions.get(source);
+    if (d?.type !== 'manual_match' || d.via !== 'step4') return;
+    const prev = d.prev;
+    ctx.step2?.decide(source, !prev ? null : prev.type === 'manual_match' ? prev : prev.type);
 }
 
 // ==================== EVENTS ====================
@@ -440,8 +496,14 @@ function wire(host: HTMLElement, ctx: StepContext, v: View): void {
             return;
         }
         if (b.dataset.pick) { pickValue(ctx, b); return; }
+        if (b.dataset.same && b.dataset.sameTo) { joinSame(ctx, b.dataset.same as PersonId, b.dataset.sameTo as PersonId); return; }
+        if (b.dataset.unsame) { undoSame(ctx, b.dataset.unsame as PersonId); return; }
         if (b.dataset.rel) {
-            ctx.update({ relations: { ...ctx.choices.relations, [b.dataset.rel]: b.dataset.choice as RelChoice } });
+            // One row decides every conflict it holds (the children of one couple, K10.8).
+            const choice = b.dataset.choice as RelChoice;
+            const next = { ...ctx.choices.relations };
+            for (const key of b.dataset.rel.split(' ')) next[key] = choice;
+            ctx.update({ relations: next });
         }
     });
     root.addEventListener('change', e => {

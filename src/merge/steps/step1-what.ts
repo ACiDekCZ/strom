@@ -150,7 +150,7 @@ function scopeHtml(ctx: StepContext, env: Step1Env | undefined): string {
             ${tile('a', W.scopeA, W.scopeADesc)}${tile('b', W.scopeB, W.scopeBDesc)}
             <button type="button" class="link-button merge-s1-more" data-s1="more" aria-expanded="${more}">${escapeHtml(W.moreOptions)}</button>
             ${tile('c', W.scopeC, W.scopeCDesc)}${tile('d', W.scopeD, W.scopeDDesc)}
-        </div>`;
+        </div>${ctx.choices.prefilledFrom ? `<p class="merge-s1-note merge-s1-prefilled">${escapeHtml(W.prefilledFrom(ctx.choices.prefilledFrom))}</p>` : ''}`;
 }
 
 function fromToHtml(ctx: StepContext, env: Step1Env): string {
