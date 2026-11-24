@@ -90,7 +90,7 @@ test.describe('open a research', () => {
         await openApp(page);
         const dataTransfer = await page.evaluateHandle(() => {
             const dt = new DataTransfer();
-            dt.items.add(new File(['{}'], 'notes.json', { type: 'application/json' }));
+            dt.items.add(new File(['notes'], 'notes.txt', { type: 'text/plain' }));
             return dt;
         });
         await page.dispatchEvent('#tree-container', 'dragenter', { dataTransfer });

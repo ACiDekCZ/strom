@@ -15,6 +15,7 @@ import type { PrivacyMode, ContentOptions } from '../privacy.js';
 import { noteExportAll } from '../research-device.js';
 import { DataManager, auditPersonName, storedTreeForExport, storedTreeWithRefs } from '../data.js';
 import { confirmMemoryForImport } from './memory-limit-ui.js';
+import { jsonDropKind } from '../drop-route.js';
 import { TreeManager } from '../tree-manager.js';
 import { sanitizeResearchField } from '../research-link.js';
 import { TreeRenderer } from '../renderer.js';
@@ -1096,6 +1097,36 @@ export const importExportMethods = uiModule({
         // would then silently overwrite the wrong file on disk.
         await this.readJsonImportText(file.name, () => file.text(), file.size, origin, again,
             () => { this.pendingOpenFileHandle = null; }, into);
+    },
+
+    /**
+     * A .json dropped onto the window (spec 134 K10.2), read: a tree goes to
+     * the import guide with the open tree as its target (as Add from a file
+     * to this tree; an encrypted one asks its password first); a backup of
+     * all trees or a change packet goes the JSON import's way. Anything else
+     * is material for a research that takes batches (`batch`), otherwise
+     * said unreadable; nothing changes.
+     */
+    async importDroppedJson(file: File, opts: { batch: boolean }): Promise<void> {
+        if (!(await confirmMemoryForImport(file.size, file.name))) return;
+        let text = '';
+        let parsed: unknown;
+        try {
+            text = await file.text();
+            parsed = JSON.parse(text);
+        } catch {
+            parsed = undefined;
+        }
+        if (jsonDropKind(parsed) === 'other') {
+            if (opts.batch) this.showBatchDialog({ files: [{ file, path: file.name }] });
+            else await this.showAlert(strings.mergeWizard.unreadableJson(file.name), 'error');
+            return;
+        }
+        const treeId = DataManager.getCurrentTreeId();
+        // A file handle from an earlier "open from file" never belongs to this import.
+        this.pendingOpenFileHandle = null;
+        this.jsonImportFileName = file.name;
+        await this.importJsonString(text, parsed, treeId ? { treeId, fileName: file.name } : undefined);
     },
 
     /** See readJsonImportFile; `before` runs once the text is read, before the import. */

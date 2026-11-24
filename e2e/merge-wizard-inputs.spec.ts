@@ -46,19 +46,21 @@ async function stored(page: Page): Promise<string> {
 }
 
 /** A file dropped on the page as the browser does it (dragenter, dragover, drop). */
-async function dropFile(page: Page, name: string, text: string, stopAt?: 'dragover'): Promise<void> {
-    await page.evaluate(({ name, text, stopAt }) => {
+async function dropFile(page: Page, name: string, text: string, stopAt?: 'dragover', type = 'text/plain'): Promise<void> {
+    await page.evaluate(({ name, text, stopAt, type }) => {
         const dt = new DataTransfer();
-        dt.items.add(new File([text], name, { type: 'text/plain' }));
+        dt.items.add(new File([text], name, { type }));
         const fire = (type: string) => document.body.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
         fire('dragenter');
         fire('dragover');
         if (stopAt === 'dragover') return;
         fire('drop');
-    }, { name, text, stopAt });
+    }, { name, text, stopAt, type });
 }
 
 const gedText = async (): Promise<string> => (await import('node:fs')).readFileSync(GED, 'utf-8');
+/** A Strom tree as a .json file (Jan, Marta and Lucie Merge, invented). */
+const jsonText = async (): Promise<string> => (await import('node:fs')).readFileSync('e2e/fixtures/merge-b.json', 'utf-8');
 
 const target = (wizard: Locator, name: string): Locator =>
     wizard.locator('.merge-s1-target').filter({ has: wizard.page().locator('.merge-s1-tname', { hasText: new RegExp(`^${name}$`) }) });
@@ -260,6 +262,57 @@ test('a dropped file that is no GEDCOM says so and changes nothing', async ({ pa
     await expect(dialog).toContainText('poznamky-jilm.ged is not a readable GEDCOM file. Nothing changed.');
     await expect(page.locator('#merge-modal')).toBeHidden();
     expect(await stored(page)).toBe(before);
+});
+
+test('a dropped Strom tree (.json): the guide as for a GEDCOM file, step 1 with the file and its modes, nothing written (K10.2)', async ({ page }) => {
+    await openModrinovi(page);
+    const before = await stored(page);
+    const text = await jsonText();
+
+    // While dragging: the overlay says the guide opens.
+    await dropFile(page, 'strom-merge.json', text, 'dragover', 'application/json');
+    const overlay = page.locator('#drop-overlay');
+    await expect(overlay).toHaveClass(/active/);
+    await expect(overlay).toContainText('Drop a .ged or .json file to open it');
+    await expect(overlay).toContainText('The import guide opens: first choose what to do with it.');
+    await page.evaluate(() => document.body.dispatchEvent(new DragEvent('dragleave', { bubbles: true, dataTransfer: new DataTransfer() })));
+
+    await dropFile(page, 'strom-merge.json', text, undefined, 'application/json');
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');
+    await expect(wizard.locator('#merge-route')).toHaveText('strom-merge.json → Modřínovi');
+    // New tree · Add to a tree · Only compare, as for a GEDCOM file (no Save as JSON for a JSON).
+    await expect(wizard.locator('.merge-s1-modes [data-mode]')).toHaveCount(3);
+    for (const m of ['new', 'add', 'compare']) await expect(wizard.locator(`.merge-s1-modes [data-mode="${m}"]`)).toBeVisible();
+    await mergeCompare(wizard);
+    await expect(wizard.locator('#merge-counts .merge-stat .merge-stat-value')).toHaveCount(4);
+    expect(await stored(page)).toBe(before);
+});
+
+test('a dropped .json that is no tree of the app says so and changes nothing (K10.2)', async ({ page }) => {
+    await openModrinovi(page);
+    const before = await stored(page);
+    await dropFile(page, 'poznamky-jilm.json', '{"notes": "Kniha Jilmů z Mechové"}', undefined, 'application/json');
+    const dialog = page.locator('#confirmation-modal');
+    await expect(dialog).toHaveClass(/active/);
+    await expect(dialog).toContainText('poznamky-jilm.json is not a readable family tree file (.json). Nothing changed.');
+    await expect(page.locator('#merge-modal')).toBeHidden();
+    expect(await stored(page)).toBe(before);
+});
+
+test('a Strom tree (.json) dropped over another dialog: the toast, Open now opens the guide (K10.2)', async ({ page }) => {
+    await openModrinovi(page);
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    await expect(page.locator('#tree-manager-modal')).toBeVisible();
+    await dropFile(page, 'strom-merge.json', await jsonText(), undefined, 'application/json');
+    const toast = page.locator('.toast').last();
+    await expect(toast).toContainText('needs finishing first; then the file opens in the guide.');
+    await expect(page.locator('#merge-modal')).toBeHidden();
+    await toast.getByRole('button', { name: 'Open now' }).click();
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    await expect(wizard.locator('#merge-route')).toHaveText('strom-merge.json → Modřínovi');
 });
 
 test('a GEDCOM file dropped over another dialog: the toast says it needs finishing first, Open now opens the guide', async ({ page }) => {
