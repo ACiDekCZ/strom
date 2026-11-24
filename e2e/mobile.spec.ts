@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page, Locator } from '@playwright/test';
 import { openApp, createFirstPerson, card } from './helpers.js';
 
 /** The open tree's sheet (More → Tree: {name}), menu 1020 §3.1: headings and rows (Change structure… one row). */
@@ -321,6 +321,49 @@ test.describe('More on a small phone and held sideways', () => {
         await expect.poll(() => sheet.evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
     });
 });
+
+/** Each word of a tile's name narrower than the name's box: no word broken inside the tile. */
+async function tileWordsFit(tile: Locator): Promise<{ text: string; fits: boolean; lines: number; overflow: number }> {
+    return tile.locator('.bottom-sheet-label').evaluate(el => {
+        const probe = document.createElement('span');
+        probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
+        el.appendChild(probe);
+        const words = (el.firstChild?.textContent ?? '').trim().split(/\s+/);
+        const widest = Math.max(...words.map(w => { probe.textContent = w; return probe.getBoundingClientRect().width; }));
+        probe.remove();
+        const r = el.getBoundingClientRect();
+        const line = parseFloat(getComputedStyle(el).lineHeight) || 18;
+        return { text: el.textContent ?? '', fits: widest <= r.width + 0.5, lines: Math.round(r.height / line), overflow: el.scrollWidth - el.clientWidth };
+    });
+}
+
+for (const touch of [true, false]) {
+    test.describe(`More, German, 360 × 640 ${touch ? 'by touch' : 'with a mouse'}: Undo | Redo`, () => {
+        test.use({ viewport: { width: 360, height: 640 }, hasTouch: touch, isMobile: touch });
+        test('neither "Rückgängig" nor "Wiederholen" breaks inside the word, the tiles keep 44 px', async ({ page }) => {
+            await openApp(page);
+            await createFirstPerson(page, 'Jan', 'Novak');
+            await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+            await page.locator('#bb-view-more').click();
+            const sheet = page.locator('.bottom-sheet-menu');
+            await expect(sheet.locator('#sheet-redo .bottom-sheet-label')).toHaveText('↷ Wiederholen');
+            // With a mouse the shortcut chips stand in the tiles too.
+            await expect(sheet.locator('#sheet-redo .menu-kbd')).toBeVisible({ visible: !touch });
+            for (const id of ['#sheet-undo', '#sheet-redo']) {
+                const tile = sheet.locator(id);
+                const m = await tileWordsFit(tile);
+                expect(m.fits, `${m.text}: a word broken inside`).toBe(true);
+                expect(m.lines).toBeLessThanOrEqual(2);
+                expect(m.overflow).toBeLessThanOrEqual(0);
+                const box = (await tile.boundingBox())!;
+                expect(box.height).toBeGreaterThanOrEqual(44);
+                expect(box.height).toBeLessThanOrEqual(48);
+            }
+            const items = sheet.locator(':scope > .bottom-sheet-items');
+            expect(await items.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+        });
+    });
+}
 
 test('the Tree row opens the tree-actions sheet: name, summary, the groups of the one list as 48px rows', async ({ page }) => {
     await openApp(page);

@@ -4176,6 +4176,10 @@
             min-height: 44px; min-width: 0; padding: 0 8px; gap: 8px;
             text-align: center; line-height: 1.2; overflow-wrap: break-word;
         }
+        /* Undo | Redo with a mouse on a narrow phone (de "Wiederholen" + "Ctrl+⇧+Z" at 360px): the shortcut
+           chip goes under the name instead of squeezing it, so no word breaks inside (the tile stays 44px). */
+        .bottom-sheet-more .bottom-sheet-pair:has(#sheet-undo) .bottom-sheet-item { flex-wrap: wrap; align-content: center; row-gap: 2px; }
+        .bottom-sheet-more .bottom-sheet-pair:has(#sheet-undo) .bottom-sheet-label { flex: 0 0 auto; max-width: 100%; overflow-wrap: normal; }
         .bottom-sheet-menu.bottom-sheet-more .bottom-sheet-tree-row { min-height: 48px; margin: 2px 4px; }
         /* Settings | How Strom works | About: three tiles, each as wide as its
            name allows (a longer name gets more of the row); a long name (de,
