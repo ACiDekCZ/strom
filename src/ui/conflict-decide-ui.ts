@@ -272,7 +272,7 @@ export const conflictDecideMethods = uiModule({
                     choice = `<button type="button" class="prc-choice" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${researchActionLabel(keepWords ?? (which === 'user' ? k.keepLink : k.takeLink), researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>`;
                 }
                 const note = !kind && view.notes && view.choices !== 'none'
-                    ? `<p class="prc-note" id="${noteId}">${esc(which === 'user' ? k.keepNote : this.researchConflictTakeNote(c))}</p>` : '';
+                    ? `<p class="prc-note" id="${noteId}">${esc(which === 'user' ? (devices ? k.keepNoteFrom(devices.user, devices.research) : k.keepNote) : this.researchConflictTakeNote(c, devices))}</p>` : '';
                 return `
                     <div class="prc-side" data-side="${which}">
                         <span class="prc-side-label">${esc(devices ? k.sideFrom(devices[which])
@@ -284,7 +284,7 @@ export const conflictDecideMethods = uiModule({
                     </div>`;
             };
             body = `
-                <div class="prc-sides${view.choices === 'none' || kind ? ' prc-sides--plain' : ''}">${side('user')}${side('research')}</div>${kind ? this.originConflictChoicesHtml(c, view, id) : ''}
+                <div class="prc-sides${view.choices === 'none' || kind ? ' prc-sides--plain' : ''}${devices ? ' prc-sides--devices' : ''}">${side('user')}${side('research')}</div>${kind ? this.originConflictChoicesHtml(c, view, id) : ''}
                 ${view.linkNote ? `<p class="prc-link-note">${esc(k.linkNote)}</p>` : ''}`;
         } else if (view.body === 'decided' && state && state.kind !== 'busy' && state.kind !== 'error' && state.kind !== 'gone') {
             const take: ResearchConflictTake | undefined = state.kind === 'kept' ? 'user' : state.kind === 'taken' ? 'research'
@@ -636,17 +636,19 @@ export const conflictDecideMethods = uiModule({
      * The sentence under "Take the research's value": what loading its
      * version brings besides this value, when read (the version read once
      * per head, quietly — the cards follow); not known: the plain sentence.
+     * A conflict between two devices' sends names the edit taken by its device.
      */
-    researchConflictTakeNote(c: ResearchConflict): string {
+    researchConflictTakeNote(c: ResearchConflict, devices?: ConflictDeviceWords | null): string {
         const k = strings.conflict;
+        const plain = devices ? k.takeNoteFrom(devices.research) : k.takeNote;
         const ctx = this.researchSyncLink();
-        if (!ctx || this.researchConflictDecideMode() !== 'bridge') return k.takeNote;
+        if (!ctx || this.researchConflictDecideMode() !== 'bridge') return plain;
         const key = this.researchVersionKey();
         if (versionRead?.key !== key) {
             if (key !== versionFailed && versionAsk?.key !== key) {
                 void this.researchVersionRead(false).then(v => { if (v) this.refreshResearchConflictCards(); });
             }
-            return k.takeNote;
+            return plain;
         }
         const id = researchConflictRef(c.id) ?? '';
         const facts = this.researchConflictsTakenFacts(id, c);
@@ -657,7 +659,7 @@ export const conflictDecideMethods = uiModule({
             n = otherLoadChanges(diffValues(DataManager.getData(), this.researchVersionAsLoaded(versionRead.data)), facts);
             takeCounts.set(id, { key: memoKey, n });
         }
-        return n > 0 ? k.takeNoteMore(n) : k.takeNote;
+        return n > 0 ? (devices ? k.takeNoteMoreFrom(devices.research, n) : k.takeNoteMore(n)) : plain;
     },
 
     /** The active research and the head its bridge says it has ('' = not said). */

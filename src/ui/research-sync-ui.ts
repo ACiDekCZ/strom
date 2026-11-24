@@ -3123,7 +3123,7 @@ export const researchSyncMethods = uiModule({
      * the line saying whom and what the menu's "Show" leads to. Null: more
      * than one, none known here, or one decided in the research only.
      */
-    researchShowConflictTarget(treeId: TreeId): { personId: PersonId; conflictId: string; lead: string } | null {
+    researchShowConflictTarget(treeId: TreeId): { personId: PersonId; conflictId: string; lead: string; devices: ConflictDeviceWords | null } | null {
         const named = researchAutoState(treeId).lastWritten?.conflictIds ?? [];
         if (named.length > 1) return null;
         // Named by the write: wherever it is shown here; unnamed: one person with one open conflict (as "Decide in the research (research)").
@@ -3143,7 +3143,7 @@ export const researchSyncMethods = uiModule({
         if (!person || !canDecideInApp(conflict, person)) return null;
         // Between two sends of two devices (spec 094 K2.4): whose edits, after whom and what.
         const devices = conflictDeviceWords(researchConflictSides(treeId, conflictId));
-        return { personId, conflictId, lead: [shownNameOrEmpty(person), researchConflictTitle(conflict), devices ? conflictDevicePair(devices) : ''].filter(Boolean).join(' · ') };
+        return { personId, conflictId, devices, lead: [shownNameOrEmpty(person), researchConflictTitle(conflict), devices ? conflictDevicePair(devices) : ''].filter(Boolean).join(' · ') };
     },
 
     /** "Show" (DEV §6.2): the person's "What the research knows" at the conflict's card; else the conflicts as before. */
@@ -3377,10 +3377,12 @@ export const researchSyncMethods = uiModule({
                 const conn = link ? this.researchConnectionNote(link.id) : null;
                 // The research's value stands there only while a conflict really is open.
                 const at = s.writtenAt(when(lw?.at ?? state.sent?.closedAt));
-                // Several between the same two devices' sends: that pair (one is said in the lead).
-                const devices = conflicts > 0 && !show && treeId ? this.researchConflictsDevices(treeId, lw?.conflictIds ?? []) : null;
+                // Between two devices' sends (the one in the lead, or several of the same pair): what stays here
+                // and what stands in the research said by device, not as the app's value and the research's.
+                const devices = conflicts > 0 && treeId ? (show ? show.devices : this.researchConflictsDevices(treeId, lw?.conflictIds ?? [])) : null;
+                const held = devices ? strings.conflict.heldFrom(devices.user, devices.research) : s.writtenConflictsSub;
                 return { tone: conn && conn.warn ? 'warn' : 'neutral', title: conflicts > 0 ? s.flyConflict(conflicts) : at,
-                    sub: [conn ? `${conn.title}.` : '', conn?.sub ?? '', conflicts > 0 ? at : '', conflicts > 0 ? s.writtenConflictsSub : '', devices ? conflictDevicePairLine(devices) : ''].filter(Boolean).join(' '), actions, lead: show?.lead };
+                    sub: [conn ? `${conn.title}.` : '', conn?.sub ?? '', conflicts > 0 ? at : '', conflicts > 0 ? held : ''].filter(Boolean).join(' '), actions, lead: show?.lead };
             },
             unsent: () => ({ tone: 'warn', title: s.stateUnsentShort, sub: changed ? s.changedAt(changed) : undefined, actions: [{ action: 'send', label: s.send }] }),
             notTaken: () => ({ tone: 'neutral', title: s.stateUnsentShort, sub: s.notTakenSub, actions: [{ action: 'send', label: s.send }] }),

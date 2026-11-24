@@ -256,7 +256,7 @@ export const conflictPanelMethods = uiModule({
                     aria-label="${esc(`${(which === 'user' ? keepLabel : takeLabel) ?? (devices ? k.keepFrom(devices[which]) : which === 'user' ? k.keepLink : k.takeLink)}, ${strings.research.opensInResearchSr}`)}"${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}>${researchActionLabel((which === 'user' ? keepLabel : takeLabel) ?? (which === 'user' ? k.keepShort : k.takeShort), researchLinkMark('conflict', { conflictDo: 'decide' }), { sr: false })}</button>`;
             }
             const was = kind === 'import' && which === 'research' ? this.originConflictWas(c) : '';
-            const note = notes ? `<p class="prc-panel-note" id="${noteId}">${esc(which === 'user' ? k.keepNote : was ? o.acceptNote(was) : this.researchConflictTakeNote(c))}</p>` : '';
+            const note = notes ? `<p class="prc-panel-note" id="${noteId}">${esc(which === 'user' ? (devices ? k.keepNoteFrom(devices.user, devices.research) : k.keepNote) : was ? o.acceptNote(was) : this.researchConflictTakeNote(c, devices))}</p>` : '';
             return `
                 <div class="prc-panel-row" data-side="${which}">
                     <div class="prc-panel-main">

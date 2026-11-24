@@ -1537,6 +1537,10 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         pair: (earlier: string, later: string) => `zmiana z ${earlier} × zmiana z ${later}`,
         pairLine: (earlier: string, later: string) => `Zmiana z ${earlier} × zmiana z ${later}.`,
         valueFrom: (d: string, v: string) => `zmiana z ${d}: ${v}`,
+        heldFrom: (here: string, there: string) => `Zmiana z ${here} zostaje tutaj, badanie ma w tym miejscu zmianę z ${there}, dopóki nie zapadnie decyzja.`,
+        keepNoteFrom: (here: string, there: string) => `Badanie zapisze zmianę z ${here}; zmiana z ${there} pozostanie w historii z podaniem powodu.`,
+        takeNoteFrom: (there: string) => `Tutaj zostanie przyjęta zmiana z ${there}. Wcześniej zostanie zapisana kopia zapasowa.`,
+        takeNoteMoreFrom: (there: string, n: number) => `Tutaj zostanie przyjęta zmiana z ${there}. Badanie ma jeszcze ${nPl(n, 'inną zmianę', 'inne zmiany', 'innych zmian')}; zostaną one pokazane do wczytania.`,
         // Whether a person comes back or goes (a PERSON conflict, `sync.removed`): 'back' — removed in another
         // window, edited here; 'remove' — removed here, edited elsewhere.
         person: {

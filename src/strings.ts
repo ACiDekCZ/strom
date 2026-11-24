@@ -4198,6 +4198,12 @@ const stringsEN = {
         pair: (earlier: string, later: string) => `edit from ${earlier} × edit from ${later}`,
         pairLine: (earlier: string, later: string) => `Edit from ${earlier} × edit from ${later}.`,
         valueFrom: (d: string, v: string) => `edit from ${d}: ${v}`,
+        // Its sentences where the plain ones speak of "the value from the app" and "the research's": `here` is
+        // the side kept in this tree (the later send), `there` the one standing in the research (the earlier send).
+        heldFrom: (here: string, there: string) => `The edit from ${here} stays here; the research has the edit from ${there} in that place until the conflict is decided.`,
+        keepNoteFrom: (here: string, there: string) => `The research writes the edit from ${here}; the edit from ${there} stays in its history with the reason.`,
+        takeNoteFrom: (there: string) => `The value here changes to the edit from ${there}. A backup is saved first.`,
+        takeNoteMoreFrom: (there: string, n: number) => `The value here changes to the edit from ${there}. The research has ${nEn(n, 'more change', 'more changes')}; they will be shown for loading.`,
         // Whether a person comes back or goes (a PERSON conflict, `sync.removed`): 'back' — removed in another
         // window, edited here; 'remove' — removed here, edited elsewhere.
         person: {
@@ -15985,6 +15991,10 @@ const stringsCZ: StringsType = {
         pair: (earlier: string, later: string) => `úprava z ${earlier} × úprava z ${later}`,
         pairLine: (earlier: string, later: string) => `Úprava z ${earlier} × úprava z ${later}.`,
         valueFrom: (d: string, v: string) => `úprava z ${d}: ${v}`,
+        heldFrom: (here: string, there: string) => `Úprava z ${here} zůstává tady, ve výzkumu je na tom místě úprava z ${there}, dokud nepadne rozhodnutí.`,
+        keepNoteFrom: (here: string, there: string) => `Výzkum zapíše úpravu z ${here}; úprava z ${there} zůstane v historii s důvodem.`,
+        takeNoteFrom: (there: string) => `Hodnota tady se změní na úpravu z ${there}. Předtím se uloží záloha.`,
+        takeNoteMoreFrom: (there: string, n: number) => `Hodnota tady se změní na úpravu z ${there}. Výzkum má i ${n} ${plural('cs', n, 'další změnu', 'další změny', 'dalších změn')}, ty se ukážou k načtení.`,
         person: {
             backTitle: 'Odebráno v jiném okně',
             backAsk: 'Jiné okno osobu ze stromu odebralo, tady se mezitím upravila. Vrátit do stromu?',
@@ -27581,6 +27591,10 @@ const stringsDE: StringsType = {
         pair: (earlier: string, later: string) => `Änderung von ${earlier} × Änderung von ${later}`,
         pairLine: (earlier: string, later: string) => `Änderung von ${earlier} × Änderung von ${later}.`,
         valueFrom: (d: string, v: string) => `Änderung von ${d}: ${v}`,
+        heldFrom: (here: string, there: string) => `Die Änderung von ${here} bleibt hier; die Forschung hat dort die Änderung von ${there} bis zur Entscheidung.`,
+        keepNoteFrom: (here: string, there: string) => `Die Forschung schreibt die Änderung von ${here}; die Änderung von ${there} bleibt mit Begründung im Verlauf.`,
+        takeNoteFrom: (there: string) => `Der Wert hier wird durch die Änderung von ${there} ersetzt. Vorher wird eine Sicherung angelegt.`,
+        takeNoteMoreFrom: (there: string, n: number) => `Der Wert hier wird durch die Änderung von ${there} ersetzt. Die Forschung hat ${nDe(n, 'weitere Änderung', 'weitere Änderungen')}; sie werden zum Laden angezeigt.`,
         person: {
             backTitle: 'In einem anderen Fenster entfernt',
             backAsk: 'In einem anderen Fenster aus dem Stammbaum entfernt, hier inzwischen bearbeitet. In den Stammbaum zurückholen?',
