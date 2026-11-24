@@ -734,3 +734,38 @@ describe('performance: 5 000 people', () => {
         if (m.judged) expect(m.ms).toBeLessThan(BUDGET_MS);
     }, 120_000);
 });
+
+describe('custom rules (spec 136) in the lists of people', () => {
+    const custom: NonNullable<PersonList['custom']> = {
+        v: 1, auto: true,
+        root: { t: 'group', op: 'all', items: [{ t: 'cond', c: 'gender', p: { value: 'female' } }, { t: 'cond', c: 'born', p: { from: 1900 } }] },
+    };
+    it('a stored custom list reads back with its rule; an automatic one has no manual order, no taken-out, no checklist', () => {
+        const raw = { id: 'c', name: 'Daughters', dynamic: false, personIds: ['ada', 'ada', 'emil'], removed: ['emil'], checklist: true, sort: 'manual', updated: '', custom };
+        const l = sanitizePersonList(JSON.parse(JSON.stringify(raw)))!;
+        expect(l.custom).toEqual(custom);
+        expect(l.dynamic).toBe(false);
+        expect(l.personIds).toEqual(['ada', 'emil']);
+        expect(l.sort).toBe('old');
+        expect(l.removed).toBeUndefined();
+        expect(l.checklist).toBeUndefined();
+        expect(listKind(l)).toBe('auto');
+        const fixedOne = sanitizePersonList({ ...raw, custom: { ...custom, auto: false } })!;
+        expect(fixedOne.sort).toBe('manual');
+        expect(fixedOne.checklist).toBe(true);
+        expect(listKind(fixedOne)).toBe('work');
+    });
+
+    it('the people of an automatic custom list come from its rule; changes by hand do nothing to it', () => {
+        const ix = buildLineages(family());
+        const l: PersonList = { id: 'c', name: 'Daughters', dynamic: false, personIds: [id('emil')], sort: 'old', updated: '', custom };
+        expect(listPersonIds(ix, l)).toEqual(['ada']);
+        expect(withPersonsAdded(l, [id('emil')], 'T')).toBe(l);
+        expect(withPersonsRemoved(l, [id('ada')], 'T')).toBe(l);
+        const fixedOne: PersonList = { ...l, custom: { ...custom, auto: false } };
+        expect(listPersonIds(ix, fixedOne)).toEqual(['emil']);
+        const filled = withRuleFilled(ix, fixedOne, 'T');
+        expect(filled.added).toBe(1);
+        expect(filled.list.personIds).toEqual(['emil', 'ada']);
+    });
+});
