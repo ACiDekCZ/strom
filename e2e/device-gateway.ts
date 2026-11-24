@@ -4,8 +4,9 @@ import { randomBytes } from 'node:crypto';
 import type { AddressInfo, Socket } from 'node:net';
 import {
     b64url, fromB64url, deriveKey, pairProof, sealPair, openRequest, sealResponse, sealEvent, eventsAuth,
-    type DeviceRequest, type RequestEnvelope, type PairAnswer, type StreamEvent,
+    sha256Hex, type DeviceRequest, type RequestEnvelope, type PairAnswer, type StreamEvent,
 } from '../src/device/device-crypto';
+import { openMediaBody } from '../src/device/media-blocks';
 
 /**
  * A fake gateway of the research's devices (spec 094 P3) for the browser
@@ -20,6 +21,9 @@ import {
  *   U9b: a = HMAC(K, events|t|n|tree|app), each event `{event, data}` sealed
  *   with its order in the stream in the AAD, `: ping` a comment); the test
  *   sends events (sendEvent) and pings (ping),
+ * - PUT /device/media/<sha> (094 §2.4, as the app seals it): the body opened
+ *   block by block, its SHA-256 checked, the bridge's answer by `onMedia`
+ *   (default 200 `{id}`), sealed as a tunnel's with the request's nonce base,
  * - refusals the test asks for (refuseNext: 401/404/409 clock/410/503), and
  *   `unreachable` (each connection closed without an answer).
  *
@@ -31,6 +35,15 @@ export interface TunnelReply {
     h?: Record<string, string>;
     /** A JSON value (sent as its text), or bytes. */
     body?: unknown;
+}
+
+export interface FakeMedia {
+    sha: string;
+    tree: string;
+    batch: string;
+    /** The headers of the meta block (the file's name, path, person, type). */
+    meta: Record<string, string>;
+    bytes: Buffer;
 }
 
 export interface FakeDevice {
@@ -53,6 +66,10 @@ export interface FakeGateway {
     computer: { name: string; label?: string };
     /** Answers of the tunnel by path (`status`, `waiting/T0001`, …); absent: the default (status, 404). */
     onTunnel: (req: DeviceRequest, device: FakeDevice) => TunnelReply | undefined;
+    /** Files of PUT /device/media opened, in order: the open headers' batch, the meta block's headers, the bytes. */
+    media: FakeMedia[];
+    /** The bridge's answer to a file of PUT /device/media (absent: 200 `{id}`). */
+    onMedia: (m: FakeMedia, device: FakeDevice) => TunnelReply | undefined;
     /** Each connection closed at once without an answer. */
     unreachable: boolean;
     /** The gateway's clock offset from the real one (ms): beyond ±2 min a request gets 409 device.clock. */
@@ -111,6 +128,8 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         trees: [{ id: 'pychavkovi', name: 'Pýchavkovi z Mlýnků', archive: false }],
         computer: { name: 'Pracovna', label: 'Pracovna' },
         onTunnel: () => undefined,
+        media: [],
+        onMedia: () => undefined,
         unreachable: false,
         clockOffsetMs: 0,
         pairCode() {
@@ -184,6 +203,33 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         }));
     };
 
+    const media = async (req: IncomingMessage, res: ServerResponse, sha: string): Promise<void> => {
+        const raw = await readBody(req);
+        const h = (k: string): string => String(req.headers[k.toLowerCase()] ?? '');
+        const device = gw.devices.find(d => d.id === h('X-Strom-Device'));
+        if (!device) return json(res, 401, { code: 'device.unpaired' });
+        const t = Number(h('X-Strom-Time'));
+        const n = h('X-Strom-Nonce');
+        const nonce = fromB64url(n, 12);
+        if (!nonce || !Number.isSafeInteger(t)) return json(res, 400, { code: 'device.bad' });
+        const now = Date.now() + gw.clockOffsetMs;
+        if (Math.abs(t - now) > 2 * 60_000 || seenNonces.has(n)) return json(res, 409, { code: 'device.clock', now });
+        const opened = openMediaBody(device.key, device.id, t, nonce, sha, Number(h('X-Strom-Meta')), new Uint8Array(raw));
+        if (!opened || opened.file.length !== Number(h('X-Strom-Size'))) return json(res, 400, { code: 'device.bad' });
+        seenNonces.add(n);
+        const m: FakeMedia = {
+            sha, tree: h('X-Strom-Tree'), batch: h('X-Strom-Batch'),
+            meta: (JSON.parse(new TextDecoder().decode(opened.meta)) as { h: Record<string, string> }).h, bytes: Buffer.from(opened.file),
+        };
+        const reply = sha256Hex(opened.file) !== sha ? { s: 409, body: { code: 'media.hash' } }
+            : gw.onMedia(m, device) ?? { s: 200, body: { id: `I${String(gw.media.length + 1).padStart(4, '0')}` } };
+        if (reply.s >= 200 && reply.s < 300) gw.media.push(m);
+        const bytes = reply.body === undefined || reply.body === null ? null : new TextEncoder().encode(JSON.stringify(reply.body));
+        json(res, 200, sealResponse(device.key, device.id, n, {
+            s: reply.s, h: reply.h ?? { 'Content-Type': 'application/json; charset=utf-8' }, b: bytes ? b64url(bytes) : null,
+        }));
+    };
+
     const events = (req: IncomingMessage, res: ServerResponse, url: URL): void => {
         const q = url.searchParams;
         gw.streamQueries.push(new URLSearchParams(q));
@@ -224,6 +270,8 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         if (req.method === 'POST' && p === '/device/pair') { void pair(req, res); return; }
         if (req.method === 'POST' && p === '/device/x') { void tunnel(req, res); return; }
         if (req.method === 'GET' && p === '/device/events') { events(req, res, url); return; }
+        const mediaPath = /^\/device\/media\/([0-9a-f]{64})$/.exec(p);
+        if (req.method === 'PUT' && mediaPath) { void media(req, res, mediaPath[1]); return; }
         json(res, 404, { code: 'phone.not-found' });
     });
     server.on('connection', s => {
