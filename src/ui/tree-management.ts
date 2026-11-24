@@ -194,6 +194,8 @@ export const treeManagementMethods = uiModule({
         // Keep the action-menu anniversaries signal in sync: this method is
         // already called wherever the count can change (tree switch, edits, ...).
         this.refreshActionMenuBadges();
+        // The device mode's second line under the name (spec 094 §3; nothing outside it).
+        this.refreshDeviceModeUi();
 
         const nameEl = document.getElementById('current-tree-name');
         const dropdown = document.getElementById('tree-switcher-dropdown');
