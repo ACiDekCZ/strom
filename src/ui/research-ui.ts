@@ -62,7 +62,7 @@ import {
 import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
-import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn } from '../research-link.js';
+import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn, waitingGainOn } from '../research-link.js';
 import { overviewChanged, overviewInWindow } from '../windows/overview-window.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import {
@@ -85,7 +85,7 @@ import {
     PrefKey, SECTION_PREFS_EVENT, SectionPref, autoFoldOrder, hasSectionPrefs, isImportantWaiting, resetSectionPrefs, restoreSectionPrefs, newWaiting, noteWaitingSeen, panelSectionOrder, sectionPrefs, sectionPrefsSnapshot, setSectionPref, topPrefs,
     waitingSeen, watchSectionPrefsStorage, PANEL_PREF_KEYS,
 } from './live-section-prefs.js';
-import { groupTitleMoreEl, shownWaitingGroups, storedWaitingGroupMode, storedWaitingOrder, waitingGroupName, waitingSinceText } from './waiting-order-ui.js';
+import { groupTitleMoreEl, shownWaitingGroups, waitingGainEl, storedWaitingGroupMode, storedWaitingOrder, waitingGroupName, waitingSinceText } from './waiting-order-ui.js';
 import {
     QUEUE_ROWS_CAP, QueueFilter, QueueList, loadMoreQueueList, noteQueueRev, onQueueListsChange, queueList, queueListItem, queueRemote, requestQueueList,
     resetQueueLists, retryQueueList,
@@ -4982,6 +4982,8 @@ export const researchUiMethods = uiModule({
         // The research's books (spec 105 §5, 5g): the order and the groups chosen, the books' heads compact.
         const ls = liveSession();
         const books = !!ls && ls.waiting === items && booksOn(ls) && items.some(w => w.section);
+        // "Most helpful" (spec 105 K4.1): the panel with the books draws the order chosen, with why each item helps.
+        const panelOrder = books ? storedWaitingOrder(true, waitingGainOn(ls)) : 'recommended';
         const rowOf = (w: LiveWaiting): HTMLLIElement => {
             const li = el('li', 'live-waiting-row');
             markWaitingFocus(li, w);
@@ -5013,6 +5015,8 @@ export const researchUiMethods = uiModule({
             }
             const at = timeEl(w.at, 'ago');
             if (at) text.appendChild(at);
+            const gainWhy = waitingGainEl(w, panelOrder, 'small', 'live-time');
+            if (gainWhy) text.appendChild(gainWhy);
             const why = waitingWhyEl(w);
             if (why) text.appendChild(why);
             li.appendChild(text);
@@ -5094,11 +5098,12 @@ export const researchUiMethods = uiModule({
      */
     appendPanelWaitingBooks(host: HTMLElement, s: LiveSession, items: readonly LiveWaiting[], rowOf: (w: LiveWaiting) => HTMLLIElement): number {
         const B = strings.live.books;
-        const order = storedWaitingOrder(true);
+        const gain = waitingGainOn(s);
+        const order = storedWaitingOrder(true, gain);
         const groupsShown = shownWaitingGroups(storedWaitingGroupMode(), order, true);
         const opts: WaitingGroupOpts = { ...(groupsShown === 'book' ? { by: 'book' as const } : {}), books: s.books };
         if (todoWaiting(items).length >= 2) {
-            host.appendChild(this.overviewWaitingOrderEl(order, true, 'docked', true, { compact: true, redraw: () => this.renderLivePanel() }));
+            host.appendChild(this.overviewWaitingOrderEl(order, true, 'docked', true, { compact: true, gain, redraw: () => this.renderLivePanel() }));
         }
         const { groups, more } = panelWaitingGroups(items, order, groupsShown !== 'none', opts, undefined, waitingFocusIds());
         for (const { rows, total } of groups) {

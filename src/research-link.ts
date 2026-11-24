@@ -2647,6 +2647,54 @@ export interface LiveWaiting {
     book?: string;
     /** What the research found wrong in how the task's waiting is recorded (spec 109; only with `tasks.audit`). */
     audit?: WaitingAudit;
+    /** What doing it gains the research (spec 105 K4.1; only with `waiting.gain`): the order "Most helpful". */
+    gain?: WaitingGain;
+}
+
+/** `/status.features`: the items of `waiting` say what doing them gains (`gain`; spec 105 K4.1, Strom Research 1.37). */
+export const WAITING_GAIN_FEATURE = 'waiting.gain';
+/** The order "Most helpful" is offered: the research says its items' gains (`waiting.gain`). */
+export function waitingGainOn(s: { features?: readonly string[] | null } | null | undefined): boolean {
+    return !!s?.features?.includes(WAITING_GAIN_FEATURE);
+}
+/** The parts of a gain: a new generation (whose parents are missing), the direct line, the tasks it unblocks. */
+export type WaitingGainPart =
+    | { kind: 'generation'; person?: string; name?: string; missing: 'parents' | 'father' | 'mother' }
+    | { kind: 'line' }
+    | { kind: 'unblocks'; n: number };
+/**
+ * What doing an item gains: its score (only for the order, never shown as a
+ * number), the reason as the research says it (in its language; may be
+ * empty) and the reason's parts.
+ */
+export interface WaitingGain { score: number; says: string; parts: WaitingGainPart[] }
+/** Most parts of a gain kept (the research sends three kinds, one each). */
+const MAX_GAIN_PARTS = 6;
+/** The highest score taken (the research's is at most 180). */
+const MAX_GAIN_SCORE = 1_000_000;
+const GAIN_MISSING: readonly string[] = ['parents', 'father', 'mother'];
+
+/** An item's `gain`, or null: no positive score (an item without a gain goes last, as one with none). Unknown parts are dropped. */
+export function sanitizeWaitingGain(value: unknown): WaitingGain | null {
+    const r = asRecord(value);
+    if (!r || typeof r.score !== 'number' || !Number.isFinite(r.score) || r.score <= 0) return null;
+    const parts: WaitingGainPart[] = [];
+    for (const raw of Array.isArray(r.parts) ? r.parts.slice(0, 20) : []) {
+        const p = asRecord(raw);
+        if (!p) continue;
+        if (p.kind === 'generation' && typeof p.missing === 'string' && GAIN_MISSING.includes(p.missing)) {
+            const person = researchPersonRef(p.person);
+            const name = cleanText(p.name, MAX_NAME);
+            parts.push({ kind: 'generation', ...(person ? { person } : {}), ...(name ? { name } : {}), missing: p.missing as 'parents' | 'father' | 'mother' });
+        } else if (p.kind === 'line') {
+            parts.push({ kind: 'line' });
+        } else if (p.kind === 'unblocks') {
+            const n = asCount(p.n);
+            if (n !== null && n > 0) parts.push({ kind: 'unblocks', n });
+        }
+        if (parts.length >= MAX_GAIN_PARTS) break;
+    }
+    return { score: Math.min(r.score, MAX_GAIN_SCORE), says: cleanText(r.says, 300), parts };
 }
 
 /** What a place question asks: pick a candidate, a location against another, a change of the written place. */
@@ -4345,7 +4393,7 @@ export function waitingPlaceFields(r: Record<string, unknown>): Partial<LiveWait
  * announces `waiting.groups` (kind, section, group, phase … are read only then).
  * A place question (kind 'place') is read with or without them.
  */
-export function sanitizeWaiting(value: unknown, groups = false, branches = false, audit = false): LiveWaiting[] {
+export function sanitizeWaiting(value: unknown, groups = false, branches = false, audit = false, gain = false): LiveWaiting[] {
     if (!Array.isArray(value)) return [];
     const out: LiveWaiting[] = [];
     for (const item of value.slice(0, MAX_WAITING)) {
@@ -4382,9 +4430,16 @@ export function sanitizeWaiting(value: unknown, groups = false, branches = false
             ...(groups ? waitingGroupFields(r, kind) : {}),
             ...(researchBookRef(r.book) ? { book: researchBookRef(r.book)! } : {}),
             ...(audit ? waitingAuditField(r) : {}),
+            ...(gain ? waitingGainField(r) : {}),
         });
     }
     return out;
+}
+
+/** An item's gain (`waiting.gain`, spec 105 K4.1): only a well-formed one with a positive score. */
+function waitingGainField(r: Record<string, unknown>): Partial<LiveWaiting> {
+    const gain = sanitizeWaitingGain(r.gain);
+    return gain ? { gain } : {};
 }
 
 /** A task's finding (`tasks.audit`, spec 109): only at a task ("T…"), only a well-formed one. */
@@ -4845,7 +4900,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         working: sanitizeWorking(r.working, !!features?.includes(WORKING_HELPS_FEATURE), holdsSaid(features)),
         waiting: [
             ...sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE),
-                !!features?.includes(TASKS_AUDIT_FEATURE)),
+                !!features?.includes(TASKS_AUDIT_FEATURE), !!features?.includes(WAITING_GAIN_FEATURE)),
             // The files of the books' inbox set aside (`inbox.aside`): decisions under their book.
             ...asideWaiting(statusBooks(r.books, features)),
         ],

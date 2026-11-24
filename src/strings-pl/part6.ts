@@ -1347,6 +1347,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         waitingOrderRec: 'Zalecana',
         waitingOrderNew: 'Najnowsze na górze',
         waitingOrderOld: 'Najstarsze na górze',
+        waitingOrderGain: 'Najbardziej pomocne',
         waitingOrderAria: (order: string) => `Kolejność: ${order}`,
         waitingGroups: 'Grupy',
         waitingNewTag: 'nowe',

@@ -9,7 +9,8 @@ import { fakeBridge, openResearch, poll, researchGed } from './research-bridge.j
  * name; the Groups switch only in a time order, off one list per phase with
  * each row's place in a tag; the "new" tag on what the record of Awaiting
  * action had not seen; the choice kept on this device when the overview opens
- * again; a phone's sheet. Invented data (the Fíškovi of Čapkov);
+ * again; a phone's sheet; "Most helpful" only with `waiting.gain` (spec 105
+ * K4.1), by score with its reason under the rows. Invented data (the Fíškovi of Čapkov);
  * the bridge is answered by page.route; a fixed clock in a fixed time zone.
  */
 
@@ -42,12 +43,23 @@ function waiting(): Record<string, unknown>[] {
     return items.map((w, i) => ({ order: i, ...w }));
 }
 
+/** The items with the research's gains (spec 105 K4.1): two by score 40 (in the research's order), two without one. */
+function gainItems(): Record<string, unknown>[] {
+    const gains: Record<string, unknown> = {
+        T0004: { score: 110, says: 'nová generace: rodiče osoby Jan Fíšek · přímá linie · odblokuje 3 úkoly', parts: [{ kind: 'line' }, { kind: 'unblocks', n: 3 }] },
+        T0003: { score: 40, says: 'přímá linie', parts: [{ kind: 'line' }] },
+        T0006: { score: 40, says: '', parts: [] },
+        T0002: { score: 10, says: '', parts: [] },
+    };
+    return waiting().map(w => (gains[w.id as string] ? { ...w, gain: gains[w.id as string] } : w));
+}
+
 /** The research tree, its bridge answering with `items`; not followed. */
-async function researchTree(page: Page, items = waiting(), width = 1440): Promise<void> {
+async function researchTree(page: Page, items = waiting(), width = 1440, features = ['waiting.groups']): Promise<void> {
     await page.clock.setFixedTime(NOW);
     await page.setViewportSize({ width, height: width > 640 ? 900 : 844 });
     await openResearch(page);
-    await fakeBridge(page, { accepts: ACCEPTS, links: LINKS, waiting: items, features: ['waiting.groups'], treeGed: researchGed() });
+    await fakeBridge(page, { accepts: ACCEPTS, links: LINKS, waiting: items, features, treeGed: researchGed() });
     await poll(page);
 }
 
@@ -151,6 +163,58 @@ test.describe('Awaiting action in an order', () => {
         await expect(orderBtn(page)).toBeFocused();
         await unfoldAll(page);
         expect(await rowIds(page)).toEqual(['T0003', 'T0002', 'T0005', 'T0004', 'T0006', 'T0001']);
+    });
+
+    test('Most helpful (spec 105 K4.1): not offered without waiting.gain; a kept choice draws Recommended and stays kept', async ({ page }) => {
+        await page.addInitScript(() => localStorage.setItem('strom-live-overview-waiting-order', 'gain'));
+        await researchTree(page, gainItems());
+        await openOverview(page);
+        await expect(orderBtn(page)).toHaveAttribute('aria-label', 'Order: Recommended');
+        await orderBtn(page).click();
+        await expect(page.getByRole('menu', { name: 'Order' }).getByRole('menuitemradio')).toHaveText([/Recommended/, /Newest first/, /Oldest first/]);
+        await page.keyboard.press('Escape');
+        await unfoldAll(page);
+        expect(await rowIds(page)).toEqual(['T0003', 'T0002', 'T0005', 'T0004', 'T0006', 'T0001']);
+        await expect(sec(page).locator('.waiting-gain')).toHaveCount(0);
+        expect(await page.evaluate(() => localStorage.getItem('strom-live-overview-waiting-order'))).toBe('gain');
+    });
+
+    test('Most helpful with waiting.gain: by score, without a gain last; its reason only in this order; kept', async ({ page }) => {
+        await researchTree(page, gainItems(), 1440, ['waiting.groups', 'waiting.gain']);
+        await openOverview(page);
+        await orderBtn(page).click();
+        const menu = page.getByRole('menu', { name: 'Order' });
+        await expect(menu.getByRole('menuitemradio')).toHaveText([/Recommended/, /Newest first/, /Oldest first/, /Most helpful/]);
+        await page.keyboard.press('Escape');
+        // Recommended: no reason.
+        await unfoldAll(page);
+        await expect(sec(page).locator('.waiting-gain')).toHaveCount(0);
+        await choose(page, 'Most helpful');
+        await expect(orderBtn(page)).toHaveAttribute('aria-label', 'Order: Most helpful');
+        await unfoldAll(page);
+        // Each place where its most helpful item stands; within it by score, then the research's order.
+        expect(await groupKeys(page)).toEqual(['to:Pfarramt Großhof', 'repo:R0001', 'host:rodokmen.example', 'family']);
+        expect(await rowIds(page)).toEqual(['T0004', 'T0003', 'T0002', 'T0006', 'T0001', 'T0005']);
+        // The reason under the row, only where the research said one; no time beside the rows.
+        await expect(item(page, 'T0004').locator('.waiting-gain')).toHaveText('nová generace: rodiče osoby Jan Fíšek · přímá linie · odblokuje 3 úkoly');
+        await expect(item(page, 'T0004').locator('.waiting-gain')).toBeVisible();
+        await expect(item(page, 'T0003').locator('.waiting-gain')).toHaveText('přímá linie');
+        await expect(item(page, 'T0006').locator('.waiting-gain')).toHaveCount(0);
+        await expect(item(page, 'T0005').locator('.waiting-gain')).toHaveCount(0);
+        await expect(sec(page).locator('.research-overview__waiting-side .research-overview__since')).toHaveCount(0);
+        // Groups off: one list by score, the items without a gain last in the research's order.
+        await groupsSwitch(page).click();
+        expect(await rowIds(page)).toEqual(['T0004', 'T0003', 'T0006', 'T0002', 'T0005', 'T0001']);
+        // Another order: no reason.
+        await choose(page, 'Newest first');
+        await expect(sec(page).locator('.waiting-gain')).toHaveCount(0);
+        await choose(page, 'Most helpful');
+        // Kept when the overview opens again.
+        await closeOverview(page);
+        await openOverview(page);
+        await expect(orderBtn(page)).toHaveAttribute('aria-label', 'Order: Most helpful');
+        await expect(item(page, 'T0004').locator('.waiting-gain')).toBeVisible();
+        expect(await page.evaluate(() => localStorage.getItem('strom-live-overview-waiting-order'))).toBe('gain');
     });
 
     test('one item: no order offered', async ({ page }) => {

@@ -29,11 +29,11 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId, ResearchHypothesis } from '../types.js';
 import { acceptBatch, acceptBatchRowResult } from '../research-hypothesis-waiting.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveBook, type LiveDirection, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, type QueueTaskKind, booksOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
+import { LiveBook, type LiveDirection, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, type QueueTaskKind, booksOn, waitingGainOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
 import { bookById, bookHeadTitle, bookImagesText, bookMetaParts, bookOfferText, bookTitle, bookWebUrl, urgentBooks, urgentBooksShown } from '../research-books.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
-    FLAT_GROUP, PLACES_GROUP, WaitingFilter, WaitingGroupOpts, WaitingGroupRows, WaitingOrder, WaitingPhase, isTimeOrder, listedBook, sortWaitingByTime, waitingOrdersFor, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
+    FLAT_GROUP, PLACES_GROUP, WaitingFilter, WaitingGroupOpts, WaitingGroupRows, WaitingOrder, WaitingPhase, isSortedOrder, isTimeOrder, listedBook, sortWaiting, waitingOrdersFor, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingGroupOpenByDefault, waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
     WaitActionView, imagesState, splitWaitingActions, waitingActions, waitingForImages, waitingGroupBandLines, waitingGroupMissing, waitingPhaseLines, textWithLinks,
 } from '../research-waiting.js';
@@ -47,7 +47,7 @@ import { openHeadMenu } from './table-view/table-headmenu.js';
 import {
     ORDER_ICON, WaitingGroups, noteWaitingNew, setWaitingDrawn, shownWaitingGroups, storeWaitingGroupMode, storeWaitingGroups, storeWaitingOrder,
     storedWaitingGroupMode, storedWaitingGroups, storedWaitingOrder, waitingDrawn, waitingGroupModesFor, waitingGroupsLabel,
-    groupTitleMoreEl, waitingOnMoreEl, waitingGroupTagEl, waitingOrderLabel, waitingSideEl, waitingSinceEl, watchWaitingOrderStorage,
+    groupTitleMoreEl, waitingOnMoreEl, waitingGainEl, waitingGroupTagEl, waitingOrderLabel, waitingSideEl, waitingSinceEl, watchWaitingOrderStorage,
 } from './waiting-order-ui.js';
 import { browserGroupNote, browserNote } from '../research-browser.js';
 import { uiModule } from './module.js';
@@ -1221,13 +1221,15 @@ export const researchOverviewMethods = uiModule({
         const books = grouped && booksOn(s);
         // The order chosen (spec 083 K5.1, K5.2): kept on this device; the Groups switch only in a time order.
         watchWaitingOrderStorage(() => this.renderResearchOverview());
-        const order = storedWaitingOrder(books);
+        // "Most helpful" (spec 105 K4.1) only where the research says what doing an item gains.
+        const gain = waitingGainOn(s);
+        const order = storedWaitingOrder(books, gain);
         const groupsShown = shownWaitingGroups(storedWaitingGroupMode(), order, books);
-        const flat = isTimeOrder(order) && grouped && groupsShown === 'none';
+        const flat = isSortedOrder(order) && grouped && groupsShown === 'none';
         // The research's books also by place: a file of a book's inbox set aside stands under its book there too.
         const groupOpts: WaitingGroupOpts = books ? { ...(groupsShown === 'book' ? { by: 'book' as const } : {}), books: s.books } : {};
         setWaitingDrawn(order, flat);
-        const orderRow = total >= 2 ? this.overviewWaitingOrderEl(order, grouped, mode, books) : null;
+        const orderRow = total >= 2 ? this.overviewWaitingOrderEl(order, grouped, mode, books, { gain }) : null;
         const chips = grouped ? waitingChips(s.waiting) : [];
         const chosen = storedWaitingFilter();
         const filter = grouped ? effectiveWaitingFilter(s.waiting, chosen) : 'all';
@@ -1280,7 +1282,7 @@ export const researchOverviewMethods = uiModule({
         if (!grouped) {
             if (orderRow) host.appendChild(orderRow);
             appendSearchOutcome(host, search, { searching, found: res.shown.length, total: res.total, kindLabel: null, onAllKinds: () => {} });
-            const shown = isTimeOrder(order) ? sortWaitingByTime(res.shown, order) : res.shown;
+            const shown = isSortedOrder(order) ? sortWaiting(res.shown, order) : res.shown;
             if (shown.length > 0) host.appendChild(rows(shown));
             outsideFoot();
             this.appendOverviewBooksOffer(host, s, { filter: 'all', toks, searching, searchOpen: search?.searchOpen });
@@ -1565,16 +1567,18 @@ export const researchOverviewMethods = uiModule({
      * switch beside it (a research with places only). With the research's
      * books (spec 105 §1, §2) "Most tasks" too, and in place of the switch
      * the choice of groups (Archive | Book [| No groups]), none in "Most
-     * tasks". All stay in the app (no mark) and are kept on this device for
-     * every tree.
+     * tasks". With the items' gains (`gain`, spec 105 K4.1) "Most helpful",
+     * grouped as a time order. All stay in the app (no mark) and are kept on
+     * this device for every tree.
      */
     overviewWaitingOrderEl(order: WaitingOrder, grouped: boolean, mode: Mode, books = false,
-        opts: { compact?: boolean; redraw?: () => void } = {}): HTMLElement {
+        opts: { compact?: boolean; redraw?: () => void; gain?: boolean } = {}): HTMLElement {
         const L = strings.live;
         const redraw = opts.redraw ?? (() => this.renderResearchOverview());
-        const orders = waitingOrdersFor(books);
+        const gain = !!opts.gain;
+        const orders = waitingOrdersFor(books, gain);
         const bar = el('div', 'research-overview__order');
-        const btn = el('button', `research-overview__order-btn${isTimeOrder(order) ? ' is-time' : ''}`);
+        const btn = el('button', `research-overview__order-btn${isSortedOrder(order) ? ' is-time' : ''}`);
         btn.type = 'button';
         btn.dataset.focusKey = 'waiting-order';
         btn.setAttribute('aria-haspopup', 'menu');
@@ -1586,7 +1590,7 @@ export const researchOverviewMethods = uiModule({
         caret.setAttribute('aria-hidden', 'true');
         btn.appendChild(caret);
         const choose = (o: WaitingOrder): void => {
-            if (o === storedWaitingOrder(books)) return;
+            if (o === storedWaitingOrder(books, gain)) return;
             storeWaitingOrder(o);
             redraw();
         };
@@ -1599,7 +1603,7 @@ export const researchOverviewMethods = uiModule({
         bar.appendChild(btn);
         if (books && order !== 'most') {
             bar.appendChild(this.waitingGroupsChoiceEl(order, { compact: sheet || !!opts.compact, sheet, redraw }));
-        } else if (isTimeOrder(order) && grouped && !books) {
+        } else if (isSortedOrder(order) && grouped && !books) {
             const on = storedWaitingGroups();
             const sw = el('button', 'research-overview__groups');
             sw.type = 'button';
@@ -2061,6 +2065,9 @@ export const researchOverviewMethods = uiModule({
         // Without groups: the place it belongs to (spec 083 K5.2).
         if (drawnAs.flat) meta.appendChild(waitingGroupTagEl(w));
         row.appendChild(meta);
+        // "Most helpful" (spec 105 K4.1): why it helps, quiet under the row.
+        const gainWhy = waitingGainEl(w, drawnAs.order, 'span', 'research-overview__muted');
+        if (gainWhy) row.appendChild(gainWhy);
         // The "new" tag (any order) over the time it has waited since (a time order).
         let side = waitingSideEl(w, { isNew: view.tagged.has(w.id), time: isTimeOrder(drawnAs.order) });
         // Its own write not confirmed yet (§7, 7a): "saving" with the small spinner at the row's end.

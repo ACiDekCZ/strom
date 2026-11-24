@@ -1,7 +1,8 @@
 /**
  * The order of "Awaiting action" in the Research overview (spec 083 U6,
  * K5.1–K5.4): the choice of order (recommended / newest first / oldest
- * first; with the research's books "Most tasks", spec 105 §2) and of the
+ * first; with the research's books "Most tasks", spec 105 §2; with the
+ * items' gains "Most helpful", spec 105 K4.1) and of the
  * groups (by archive, by book, none; before the books the Groups switch),
  * both kept on this device for every tree; an item's "new" tag and "waits
  * since" time beside its row.
@@ -20,14 +21,14 @@ export const WAITING_GROUPS_KEY = 'strom-live-overview-waiting-groups';
 
 /**
  * The order kept on this device: "Most tasks" only where the research says
- * its books (`books`), else Recommended — the kept value stays for a research
- * with books.
+ * its books (`books`), "Most helpful" only where it says the gains (`gain`),
+ * else Recommended — the kept value stays for a research that says them.
  */
-export function storedWaitingOrder(books = false): WaitingOrder {
+export function storedWaitingOrder(books = false, gain = false): WaitingOrder {
     try {
         const v = localStorage.getItem(WAITING_ORDER_KEY);
         if (!(ALL_WAITING_ORDERS as readonly string[]).includes(v ?? '')) return 'recommended';
-        return v === 'most' && !books ? 'recommended' : v as WaitingOrder;
+        return (v === 'most' && !books) || (v === 'gain' && !gain) ? 'recommended' : v as WaitingOrder;
     } catch {
         return 'recommended';
     }
@@ -107,7 +108,8 @@ export function watchWaitingOrderStorage(redraw: () => void): void {
 /** The order's name ("Newest first"). */
 export function waitingOrderLabel(order: WaitingOrder): string {
     const L = strings.live;
-    return order === 'newest' ? L.waitingOrderNew : order === 'oldest' ? L.waitingOrderOld : order === 'most' ? L.books.orderMost : L.waitingOrderRec;
+    return order === 'newest' ? L.waitingOrderNew : order === 'oldest' ? L.waitingOrderOld : order === 'most' ? L.books.orderMost
+        : order === 'gain' ? L.waitingOrderGain : L.waitingOrderRec;
 }
 
 /**
@@ -120,6 +122,20 @@ export function noteWaitingNew(treeId: string, items: readonly LiveWaiting[], ta
     const seen = waitingSeen(treeId);
     if (!seen) return;
     for (const w of todoWaiting(items)) if (!seen.has(w.id)) tagged.add(w.id);
+}
+
+/**
+ * Why an item helps (spec 105 K4.1), only in the order "Most helpful": the
+ * research's reason, quiet under the row (`cls`: the row's own subtext); null
+ * in any other order or when the research said none.
+ */
+export function waitingGainEl(w: LiveWaiting, order: WaitingOrder, tag: 'span' | 'small', cls: string): HTMLElement | null {
+    const says = order === 'gain' ? w.gain?.says : '';
+    if (!says) return null;
+    const node = document.createElement(tag);
+    node.className = `${cls} waiting-gain`;
+    node.textContent = says;
+    return node;
 }
 
 /** The "waits since" time of an item (refreshed by the panel's ticker), or null when the research said none. */

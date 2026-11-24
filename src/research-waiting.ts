@@ -219,22 +219,32 @@ export function waitingPhaseLines<T extends LiveWaiting>(groups: readonly Waitin
 /**
  * The order of Awaiting action (spec 083 K5.1): the research's (phases,
  * places, lines), or by when an item has waited since (`at`); with the
- * research's books (spec 105 §2) also "Most tasks" — the books by their tasks.
+ * research's books (spec 105 §2) also "Most tasks" — the books by their tasks;
+ * with the items' gains (`waiting.gain`, spec 105 K4.1) "Most helpful" — by
+ * what doing an item gains the research.
  */
-export type WaitingOrder = 'recommended' | 'newest' | 'oldest' | 'most';
+export type WaitingOrder = 'recommended' | 'newest' | 'oldest' | 'most' | 'gain';
 /** The orders of every research (without its books). */
 export const WAITING_ORDERS: readonly WaitingOrder[] = ['recommended', 'newest', 'oldest'];
 /** Every order there is (a kept one is checked against it). */
-export const ALL_WAITING_ORDERS: readonly WaitingOrder[] = [...WAITING_ORDERS, 'most'];
+export const ALL_WAITING_ORDERS: readonly WaitingOrder[] = [...WAITING_ORDERS, 'most', 'gain'];
 
-/** The orders offered: "Most tasks" only when the research says its books (booksOn). */
-export function waitingOrdersFor(books: boolean): readonly WaitingOrder[] {
-    return books ? ALL_WAITING_ORDERS : WAITING_ORDERS;
+/** The orders offered: "Most helpful" only when the research says the gains, "Most tasks" only when it says its books (booksOn). */
+export function waitingOrdersFor(books: boolean, gain = false): readonly WaitingOrder[] {
+    return ALL_WAITING_ORDERS.filter(o => (o !== 'most' || books) && (o !== 'gain' || gain));
 }
 
 /** An order by when the items have waited since (its time beside the rows and after the groups' names). */
 export function isTimeOrder(order: WaitingOrder): order is 'newest' | 'oldest' {
     return order === 'newest' || order === 'oldest';
+}
+
+/**
+ * An order that sorts the items themselves (by time, by gain): each group
+ * where its first item stands, or (the groups off) one list without them.
+ */
+export function isSortedOrder(order: WaitingOrder): order is 'newest' | 'oldest' | 'gain' {
+    return isTimeOrder(order) || order === 'gain';
 }
 /** The key of a phase's one list without groups (it has no heading). */
 export const FLAT_GROUP = '*';
@@ -261,14 +271,30 @@ export function sortWaitingByTime<T extends LiveWaiting>(items: readonly T[], or
         .map(x => x.w);
 }
 
-/** One phase's rows in an order: in groups, or (a time order only) one list without them. */
+/**
+ * Items by what doing them gains (spec 105 K4.1): the highest score first,
+ * an equal one in the research's order; items without a gain last, in the
+ * research's order.
+ */
+export function sortWaitingByGain<T extends LiveWaiting>(items: readonly T[]): T[] {
+    return orderWaiting(items).map((w, i) => ({ w, i, g: w.gain?.score ?? 0 }))
+        .sort((a, b) => b.g - a.g || a.i - b.i)
+        .map(x => x.w);
+}
+
+/** Items in a sorted order (by time, by gain). */
+export function sortWaiting<T extends LiveWaiting>(items: readonly T[], order: 'newest' | 'oldest' | 'gain'): T[] {
+    return order === 'gain' ? sortWaitingByGain(items) : sortWaitingByTime(items, order);
+}
+
+/** One phase's rows in an order: in groups, or (a sorted order only) one list without them. */
 function phaseRows<T extends LiveWaiting>(items: readonly T[], order: WaitingOrder, groups: boolean, opts: WaitingGroupOpts): WaitingGroupRows<T>[] {
     // "Most tasks" is always by book: the books by their tasks, the rest by place, all within in the research's order.
     if (order === 'most') return groupWaiting(items, { ...opts, by: 'book' }, true);
     if (order === 'recommended') return groupWaiting(items, opts);
-    const sorted = sortWaitingByTime(items, order);
+    const sorted = sortWaiting(items, order);
     if (!groups) return sorted.length > 0 ? [{ key: FLAT_GROUP, group: null, items: sorted }] : [];
-    // Each group where its newest (oldest) item stands; "Other" and "Places" too, not kept at the bottom.
+    // Each group where its newest (oldest, most helpful) item stands; "Other" and "Places" too, not kept at the bottom.
     const list = groupInOrder(sorted, opts);
     return booksFirst(list.filter(g => g.book), list.filter(g => !g.book), opts.by === 'book');
 }
