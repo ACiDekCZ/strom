@@ -1663,3 +1663,165 @@ export function selection(source: StromData | LineageIndex, spec: SelectionSpec)
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// A person's family by axes (spec 136 §4, spec 113 P1)
+
+/**
+ * The axes of "Family of a person": `up` generations of ancestors through
+ * both parents or the father's / mother's side only (at every step), `down`
+ * generations of descendants of the person, sideways the direct line only,
+ * the siblings of the person and of every ancestor in range, or the cousins
+ * (`cousins` = the degree, 1 = first cousins; 'all' = every blood descendant
+ * of every ancestor in range), and the spouses: none, the partners of
+ * everyone included, or also the parents and siblings of those partners.
+ */
+export interface FamilySpec {
+    personId: PersonId;
+    up: number | 'all';
+    via: 'both' | 'father' | 'mother';
+    down: number | 'all';
+    width: 'line' | 'siblings' | 'cousins';
+    cousins?: number | 'all';
+    spouses: 'none' | 'spouses' | 'families';
+}
+
+/** The quick choices of "Family of a person" (spec 136 §4); a choice is on exactly when the axes match. */
+export type FamilyPreset = 'closest' | 'ancestors' | 'descendants' | 'blood' | 'wholeFamily' | 'paternal' | 'maternal';
+
+export const FAMILY_PRESETS: Readonly<Record<FamilyPreset, Omit<FamilySpec, 'personId'>>> = {
+    closest: { up: 1, via: 'both', down: 1, width: 'siblings', spouses: 'spouses' },
+    ancestors: { up: 'all', via: 'both', down: 0, width: 'line', spouses: 'none' },
+    descendants: { up: 0, via: 'both', down: 'all', width: 'line', spouses: 'none' },
+    blood: { up: 'all', via: 'both', down: 'all', width: 'cousins', cousins: 'all', spouses: 'none' },
+    wholeFamily: { up: 'all', via: 'both', down: 'all', width: 'cousins', cousins: 'all', spouses: 'families' },
+    paternal: { up: 'all', via: 'father', down: 0, width: 'line', spouses: 'none' },
+    maternal: { up: 'all', via: 'mother', down: 0, width: 'line', spouses: 'none' },
+};
+
+/** The quick choice the axes match exactly, or null (a cousin degree counts only with width 'cousins'). */
+export function familyPresetOf(spec: Omit<FamilySpec, 'personId'>): FamilyPreset | null {
+    for (const [name, p] of Object.entries(FAMILY_PRESETS) as [FamilyPreset, Omit<FamilySpec, 'personId'>][]) {
+        if (p.up === spec.up && p.via === spec.via && p.down === spec.down && p.width === spec.width && p.spouses === spec.spouses
+            && (p.width !== 'cousins' || (p.cousins ?? 'all') === (spec.cousins ?? 'all'))) return name;
+    }
+    return null;
+}
+
+/**
+ * The parent of `child` in the role of father or mother: by sex as fatherOf /
+ * motherOf choose, but with two parents of the same sex by the order of the
+ * parents (the first is the "father's side", the second the "mother's";
+ * spec 113, decision on same-sex parents).
+ */
+function parentInRole(data: StromData, child: Person, role: 'father' | 'mother'): Person | null {
+    const parents = descentParents(data, child);
+    if (parents.length === 2 && parents[0].gender === parents[1].gender && parents[0].gender !== 'unknown') {
+        return role === 'father' ? parents[0] : parents[1];
+    }
+    return role === 'father' ? fatherOf(data, child) : motherOf(data, child);
+}
+
+/** The children of `id` that carry descent from them. */
+function descentChildren(data: StromData, id: PersonId): PersonId[] {
+    const p = data.persons[id];
+    if (!p) return [];
+    return p.childIds.filter(ch => {
+        const c = data.persons[ch];
+        return !!c && isDescentLink(c, id);
+    });
+}
+
+/** `id` and their descendants down to `depth` generations (null = all), into `out`. */
+function addDescendants(data: StromData, id: PersonId, depth: number | null, out: Set<PersonId>): void {
+    let frontier = [id];
+    const seen = new Set<PersonId>([id]);
+    out.add(id);
+    for (let d = 1; frontier.length && (depth == null || d <= depth); d++) {
+        const next: PersonId[] = [];
+        for (const pid of frontier) {
+            for (const ch of descentChildren(data, pid)) {
+                if (seen.has(ch)) continue;
+                seen.add(ch);
+                out.add(ch);
+                next.push(ch);
+            }
+        }
+        frontier = next;
+    }
+}
+
+/** The siblings of `id` through the parents that carry descent. */
+function descentSiblings(data: StromData, id: PersonId): PersonId[] {
+    const p = data.persons[id];
+    if (!p) return [];
+    const out = new Set<PersonId>();
+    for (const par of descentParents(data, p)) {
+        for (const ch of descentChildren(data, par.id)) if (ch !== id) out.add(ch);
+    }
+    return [...out];
+}
+
+/**
+ * The people of "Family of a person" (spec 136 §4): the person, their
+ * ancestors and descendants by the axes, sideways and with spouses as
+ * FamilySpec says. Placeholders are walked through but never in the result;
+ * a person not in the tree gives an empty set. With the axes of the
+ * ancestors / descendants quick choices it equals selection('ancestors' /
+ * 'descendants').memberIds without placeholders.
+ */
+export function familySet(source: StromData | LineageIndex, spec: FamilySpec): Set<PersonId> {
+    const data = 'rodByPerson' in source ? source.data : source;
+    const start = data.persons[spec.personId];
+    if (!start) return new Set();
+    const all = new Set<PersonId>([spec.personId]);
+    // Ancestors in range by generation (1 = parents).
+    const ancestorsByGen: PersonId[][] = [];
+    const upLimit = spec.up === 'all' ? Infinity : Math.max(0, spec.up);
+    const seenUp = new Set<PersonId>([spec.personId]);
+    let frontier: Person[] = [start];
+    for (let g = 1; frontier.length && g <= upLimit; g++) {
+        const next: Person[] = [];
+        for (const child of frontier) {
+            const parents = spec.via === 'both'
+                ? descentParents(data, child)
+                : [parentInRole(data, child, spec.via)].filter((x): x is Person => !!x);
+            for (const par of parents) {
+                if (seenUp.has(par.id)) continue;
+                seenUp.add(par.id);
+                next.push(par);
+            }
+        }
+        if (next.length) ancestorsByGen.push(next.map(p => p.id));
+        frontier = next;
+    }
+    for (const gen of ancestorsByGen) for (const id of gen) all.add(id);
+    // Down from the person.
+    const downLimit = spec.down === 'all' ? null : Math.max(0, spec.down);
+    if (downLimit !== 0) addDescendants(data, spec.personId, downLimit, all);
+    // Sideways.
+    if (spec.width !== 'line') {
+        const line = [spec.personId, ...ancestorsByGen.flat()];
+        for (const id of line) for (const sib of descentSiblings(data, id)) all.add(sib);
+        if (spec.width === 'cousins') {
+            const degree = spec.cousins ?? 'all';
+            const top = degree === 'all' ? ancestorsByGen.length : Math.min(ancestorsByGen.length, degree + 1);
+            for (let g = 0; g < top; g++) for (const id of ancestorsByGen[g]) addDescendants(data, id, null, all);
+        }
+    }
+    // Spouses.
+    if (spec.spouses !== 'none') {
+        const blood = [...all];
+        const partners = new Set<PersonId>();
+        for (const id of blood) for (const pid of partnersOf(data, id)) if (data.persons[pid] && !all.has(pid)) partners.add(pid);
+        for (const pid of partners) {
+            all.add(pid);
+            if (spec.spouses !== 'families') continue;
+            const p = data.persons[pid];
+            for (const par of descentParents(data, p)) all.add(par.id);
+            for (const sib of descentSiblings(data, pid)) all.add(sib);
+        }
+    }
+    for (const id of all) if (data.persons[id]?.isPlaceholder || !data.persons[id]) all.delete(id);
+    return all;
+}

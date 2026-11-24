@@ -68,14 +68,28 @@ interface IndexCache {
     unions?: ReturnType<typeof unionsByPerson>;
     tableModels: Map<string, TableModel>;
     lines?: ReturnType<typeof researchLinesOf>;
+    /** The people of each condition of custom rules (spec 136 D2), by condCacheKey. */
+    conds: Map<string, Set<PersonId>>;
+    /** What the custom rules work out once per index (places of people, files…), by name. */
+    ruleData: Map<string, unknown>;
 }
 
 const caches = new WeakMap<LineageIndex, IndexCache>();
 
 function cacheOf(index: LineageIndex): IndexCache {
     let c = caches.get(index);
-    if (!c) { c = { lists: new Map(), tableModels: new Map() }; caches.set(index, c); }
+    if (!c) { c = { lists: new Map(), tableModels: new Map(), conds: new Map(), ruleData: new Map() }; caches.set(index, c); }
     return c;
+}
+
+/** The caches custom rules keep per index (src/person-list-rules.ts): the conditions' people and what they work out once. */
+export function ruleCacheOf(index: LineageIndex): { conds: Map<string, Set<PersonId>>; ruleData: Map<string, unknown> } {
+    return cacheOf(index);
+}
+
+/** The research lines of the index's tree (cached). */
+export function researchLinesOfIndex(index: LineageIndex): ReturnType<typeof researchLinesOf> {
+    return cacheOf(index).lines ??= researchLinesOf(index.data);
 }
 
 const indexByData = new WeakMap<StromData, LineageIndex>();
@@ -94,7 +108,8 @@ function real(data: StromData, id: string): Person | null {
     return p && !p.isPlaceholder ? p : null;
 }
 
-function tableModelOf(index: LineageIndex, env: ListEnv): TableModel {
+/** The Table's model for a list's evaluation (the caller's when it is of this tree, else one per home person and language). */
+export function tableModelOf(index: LineageIndex, env: ListEnv): TableModel {
     if (env.tableModel && env.tableModel.data === index.data) return env.tableModel;
     const lang = env.lang ?? getCurrentLanguage();
     const key = `${env.homeId ?? ''}|${lang}`;
@@ -164,7 +179,7 @@ export function rulePersonIds(index: LineageIndex, rule: PersonListRule, env: Li
 }
 
 /** Local midnight of the day of `ms` ("the last 30 days" counts today as the first). */
-function startOfDay(ms: number): number {
+export function startOfDay(ms: number): number {
     const d = new Date(ms);
     d.setHours(0, 0, 0, 0);
     return d.getTime();
