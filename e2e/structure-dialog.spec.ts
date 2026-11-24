@@ -153,12 +153,14 @@ test.describe('desktop', () => {
     });
 
     // Viewports, not screens: 1366 × 657 is a 1366 × 768 laptop's view in Chrome (the lowest, de the tallest).
-    for (const [w, h] of [[1440, 900], [1280, 800], [1366, 657], [1024, 768]] as const) {
-        test(`${w}×${h}: every option in view without scrolling, in cs/en/de/pl (none cut at the bottom)`, async ({ page }) => {
+    // One tree (a new user's case) greys both Join options, each with a line of why under it.
+    const sizes = [[1440, 900, 2], [1280, 800, 2], [1366, 657, 2], [1024, 768, 2], [1366, 657, 1], [1024, 768, 1]] as const;
+    for (const [w, h, trees] of sizes) {
+        test(`${w}×${h}, ${trees === 1 ? 'one tree' : 'two trees'}: every option in view without scrolling, in cs/en/de/pl (none cut at the bottom)`, async ({ page }) => {
             await page.setViewportSize({ width: w, height: h });
             await openApp(page);
             await createFirstPerson(page, 'Vojtěch', 'Jesenský');
-            await secondTree(page, 'Rodina Kalinovských');
+            if (trees === 2) await secondTree(page, 'Rodina Kalinovských');
             for (const lang of ['cs', 'en', 'de', 'pl']) {
                 await page.evaluate((l) => window.Strom.UI.setLanguage(l), lang);
                 await page.evaluate(() => window.Strom.UI.showStructureDialog(window.Strom.TreeManager.getActiveTreeId()!));
@@ -173,6 +175,13 @@ test.describe('desktop', () => {
                 });
                 expect(fit, lang).toEqual({ scrolls: false, lastCut: false, offScreen: false });
                 await expect(dialog.locator('.modal-content')).not.toHaveClass(/is-scrollable/);
+                // The why under a greyed option starts where the option's title does.
+                const whys = await dialog.locator('.structure-row').evaluateAll(rows => rows.map((r) => {
+                    const title = r.querySelector('.option-title')!.getBoundingClientRect().left;
+                    return Math.round(r.querySelector('.structure-why')!.getBoundingClientRect().left - title);
+                }));
+                expect(whys.length, lang).toBe(trees === 1 ? 3 : 1);
+                expect(whys.every(dx => Math.abs(dx) <= 1), `${lang}: ${whys}`).toBe(true);
                 await page.keyboard.press('Escape');
                 await expect(dialog).not.toHaveClass(/active/);
             }

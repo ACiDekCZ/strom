@@ -217,6 +217,28 @@ test.describe('Awaiting action in an order', () => {
         expect(await page.evaluate(() => localStorage.getItem('strom-live-overview-waiting-order'))).toBe('gain');
     });
 
+    test('Most helpful on a phone: a reason with a long word without spaces wraps inside its row, nothing cut', async ({ page }) => {
+        const long = 'Pfarramt_Großhof_Matriken_und_Kirchenbücher_der_Gemeinde_Unterwaldenstein_1780';
+        const items = gainItems().map(w => (w.id === 'T0003' ? { ...w, gain: { score: 40, says: long, parts: [] } } : w));
+        await researchTree(page, items, 390, ['waiting.groups', 'waiting.gain']);
+        await openOverview(page);
+        await choose(page, 'Most helpful');
+        await unfoldAll(page);
+        const why = item(page, 'T0003').locator('.waiting-gain');
+        await expect(why).toHaveText(long);
+        const fit = await why.evaluate((g) => {
+            const row = g.closest<HTMLElement>('.research-overview__waiting-item')!;
+            const r = g.getBoundingClientRect();
+            return {
+                own: g.scrollWidth <= g.clientWidth + 1,
+                inRow: r.right <= row.getBoundingClientRect().right + 1,
+                wraps: r.height > parseFloat(getComputedStyle(g).fontSize) * 2,
+                page: document.documentElement.scrollWidth <= window.innerWidth,
+            };
+        });
+        expect(fit).toEqual({ own: true, inRow: true, wraps: true, page: true });
+    });
+
     test('one item: no order offered', async ({ page }) => {
         await researchTree(page, waiting().slice(0, 1));
         await openOverview(page);
