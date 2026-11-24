@@ -61,6 +61,7 @@ import { followSatelliteView, openAnotherWindow } from './windows/sat-views.js';
 import { currentSystem, isDesktopSystem, setWindowControlsRefresher } from './windows/window-open.js';
 import type { SatelliteClient } from './windows/satellite.js';
 import type { WindowRegistry } from './windows/window-registry.js';
+import { deviceModeCandidate, startDeviceMode } from './device/device-mode.js';
 
 // Make modules available globally for HTML event handlers
 declare global {
@@ -880,6 +881,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Listeners (save failures, tree switches, other tabs) — before any
     // password prompt, so a locked start never saves silently (V3).
     registerAppListeners();
+
+    // A device of the home network (spec 094 P3): only a page at the research's
+    // gateway (its port, a code in its address, a pairing of this origin) asks
+    // the gateway anything; the app on the web makes no new request.
+    if (deviceModeCandidate()) {
+        void startDeviceMode({ appVersion: APP_VERSION }).catch(err => console.warn('Device mode did not start', err));
+    }
 
     // PWA: offline indicator always; register the service worker only on the
     // hosted PWA (never in embedded/file:// exports or dev).
