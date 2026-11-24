@@ -1925,6 +1925,10 @@ class TreeManagerClass {
      * copy, a second tree of the same research and the sample tree never do.
      */
     canSendToResearch(treeId: TreeId | null | undefined): boolean {
+        // A satellite window has no index: the main window mirrors its tree's tie only when that tree owns it.
+        if (treeId && this.windowMeta?.id === treeId && !this.index.trees.some(t => t.id === treeId)) {
+            return isResearchOwner([this.windowMeta], treeId);
+        }
         return isResearchOwner(this.index.trees, treeId);
     }
 

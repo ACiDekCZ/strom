@@ -60,11 +60,13 @@ export const agentWindowMethods = uiModule({
             return { sections, stamps: {} };
         }
         const meta = TreeManager.getTreeMetadata(treeId as TreeId);
-        const researchId = meta?.research?.id ?? null;
+        // A copy of a research tree is a tree without research (spec 139 K5.1): its tie never reaches another window.
+        const owner = TreeManager.canSendToResearch(treeId as TreeId);
+        const researchId = owner ? meta?.research?.id ?? null : null;
         const l = liveSession();
         const secrets = bridgeSecrets(l?.bridge.base, researchId ? storedResearchBridge(researchId)?.base : null);
         const metaPart: Record<string, unknown> | null = meta ? {} : null;
-        if (meta && metaPart) for (const k of META_FIELDS) if (meta[k] !== undefined) metaPart[k] = meta[k];
+        if (meta && metaPart) for (const k of META_FIELDS) if (meta[k] !== undefined && (k !== 'research' || owner)) metaPart[k] = meta[k];
         const t = researchTableLive();
         const places = placesData(t.places);
         const status = researchId ? this.researchStatusOf(researchId) : null;
