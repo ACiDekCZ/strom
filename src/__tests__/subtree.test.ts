@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { extractSubtree } from '../subtree.js';
+import { extractSubtree, subtreeGlueCount, subtreePersonIds } from '../subtree.js';
+import { getStringsForLang } from '../strings.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
 function person(id: string, o: Partial<Person> = {}): Person {
@@ -59,5 +60,44 @@ describe('extractSubtree', () => {
             expect(ids.has(u.person2Id)).toBe(true);
             u.childIds.forEach(c => expect(ids.has(c)).toBe(true));
         }
+    });
+});
+
+/**
+ * Join › A selection (spec 139 §6.1): the step "who to take" counts the
+ * chosen people; the guide gets the subtree with the partners glued to
+ * chosen children. The step says how many come along and the guide's count.
+ */
+describe('the partners a selection brings along to the guide', () => {
+    it('counts the glue extractSubtree adds: the step and the guide say the same total', () => {
+        const data = sample();
+        // A line of the men: dad, me and kid; mom and partner are the glue.
+        const seeds = new Set(['dad', 'me', 'kid'] as PersonId[]);
+        expect(subtreeGlueCount(data, seeds)).toBe(2);
+        expect(seeds.size + subtreeGlueCount(data, seeds)).toBe(Object.keys(extractSubtree(data, seeds).persons).length);
+        expect([...subtreePersonIds(data, seeds)].sort()).toEqual(Object.keys(extractSubtree(data, seeds).persons).sort());
+    });
+
+    it('nothing when nobody comes along, and a "?" stand-in is not counted', () => {
+        const data = sample();
+        expect(subtreeGlueCount(data, new Set(['me', 'partner', 'kid'] as PersonId[]))).toBe(0);
+        data.persons['mom' as PersonId].isPlaceholder = true;
+        expect(subtreeGlueCount(data, new Set(['dad', 'me'] as PersonId[]))).toBe(0);
+    });
+
+    it('says it in every language, with the plural forms', () => {
+        const say = (lang: 'cs' | 'en' | 'de' | 'pl', n: number) => {
+            const s = getStringsForLang(lang);
+            return s.structure.joinPartners(n, s.treeManager.persons(7 + n));
+        };
+        expect(say('en', 1)).toBe('With them comes 1 partner too, the other parent of a chosen child – 8 people in all.');
+        expect(say('en', 2)).toBe('With them come 2 partners too, the other parents of chosen children – 9 people in all.');
+        expect(say('cs', 1)).toBe('S nimi přejde i 1 partner, druhý rodič vybraného dítěte – celkem 8 osob.');
+        expect(say('cs', 2)).toBe('S nimi přejdou i 2 partneři, druzí rodiče vybraných dětí – celkem 9 osob.');
+        expect(say('cs', 5)).toBe('S nimi přejde i 5 partnerů, druhých rodičů vybraných dětí – celkem 12 osob.');
+        expect(say('de', 1)).toBe('Mit ihnen kommt auch 1 Partner mit, der andere Elternteil eines gewählten Kindes – insgesamt 8 Personen.');
+        expect(say('de', 2)).toBe('Mit ihnen kommen auch 2 Partner mit, die anderen Elternteile gewählter Kinder – insgesamt 9 Personen.');
+        expect(say('pl', 1)).toBe('Razem z nimi przejdzie też partner – drugi rodzic wybranego dziecka, łącznie 8 osób.');
+        expect(say('pl', 2)).toBe('Razem z nimi przejdą też ich partnerzy (2) – drudzy rodzice wybranych dzieci, łącznie 9 osób.');
     });
 });

@@ -159,10 +159,16 @@ test.describe('Join (§6)', () => {
         const row = dialog.locator('li.sp-rodpick-rod', { hasText: 'Jesensk' }).first();
         await row.locator('button').click();
         await expect(go).toBeEnabled();
+        // The line is seven people; the guide takes Marie and Hana with them (the other parents of
+        // chosen children): the step says so under "Selected: …" and the guide's count is the same.
+        const chosen = dialog.locator('.structure-who-chosen');
+        await expect(chosen.locator('b')).toHaveText(/ line · 7 people$/);
+        await expect(chosen.locator('.structure-who-partners')).toHaveText('With them come 2 partners too, the other parents of chosen children – 9 people in all.');
         await go.click();
         const wizard = page.locator('#merge-modal');
         await expect(wizard).toBeVisible();
         await expect(dialog).toBeHidden();
+        await expect(wizard.locator('.merge-s1-tiles .stat-item .number').first()).toHaveText('9');
         await expect(wizard.locator('.merge-s1-name')).toHaveText(/^Jesenští — .*Jesensk.* line$/);
         await expect(wizard.locator('.merge-s1-target', { hasText: 'Jesenští' })).toHaveCount(0);
         await expect(wizard.locator('.merge-s1-target', { hasText: 'Rodina Kalinovských' })).toHaveCount(1);

@@ -769,6 +769,9 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         joinSelectionDesc: 'Ród, lista, linia, bieżący widok albo ręcznie – jak przy nowym drzewie.',
         joinNote: 'Dalej kreator scalania: dokąd, kto jest kim, co się zmieni. To drzewo się nie zmienia; docelowe zmieni się dopiero po potwierdzeniu w kreatorze i można to cofnąć.',
         continueGuide: 'Przejdź do kreatora',
+        joinPartners: (n: number, people: string) => n === 1
+            ? `Razem z nimi przejdzie też partner – drugi rodzic wybranego dziecka, łącznie ${people}.`
+            : `Razem z nimi przejdą też ich partnerzy (${n}) – drudzy rodzice wybranych dzieci, łącznie ${people}.`,
 
         // ---- New tree from a selection: who to take (§3), the summary (§4) ----
         selectTitle: 'Nowe drzewo z wyboru',

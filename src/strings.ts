@@ -7047,6 +7047,14 @@ const stringsEN = {
         joinSelectionDesc: 'A family line, a list, a line, the current view or by hand – as for a new tree.',
         joinNote: 'Next comes the merge guide: where to, who is who, what changes. This tree stays as it is; the target changes only once confirmed in the guide, and it can be undone.',
         continueGuide: 'Continue to the guide',
+        /**
+         * Under "Selected: …" of Join › A selection (spec 139 §6.1): the partners
+         * the guide brings along (the other parents of chosen children) and
+         * the guide's count. `people`: the total as treeManager.persons says it.
+         */
+        joinPartners: (n: number, people: string) => n === 1
+            ? `With them comes 1 partner too, the other parent of a chosen child – ${people} in all.`
+            : `With them come ${n} partners too, the other parents of chosen children – ${people} in all.`,
 
         // ---- New tree from a selection: who to take (§3), the summary (§4) ----
         selectTitle: 'New tree from a selection',
@@ -18674,6 +18682,10 @@ const stringsCZ: StringsType = {
         joinSelectionDesc: 'Rod, seznam osob, linie, aktuální pohled nebo ručně – jako u nového stromu.',
         joinNote: 'Dál pokračuje průvodce sloučením: kam, kdo je kdo, co se změní. Tento strom se nemění; cílový strom se změní až po potvrzení v průvodci a jde vrátit.',
         continueGuide: 'Pokračovat k průvodci',
+        joinPartners: (n: number, people: string) => plural('cs', n,
+            `S nimi přejde i 1 partner, druhý rodič vybraného dítěte – celkem ${people}.`,
+            `S nimi přejdou i ${n} partneři, druzí rodiče vybraných dětí – celkem ${people}.`,
+            `S nimi přejde i ${n} partnerů, druhých rodičů vybraných dětí – celkem ${people}.`),
 
         // ---- New tree from a selection: who to take (§3), the summary (§4) ----
         selectTitle: 'Nový strom z výběru',
@@ -30126,6 +30138,9 @@ const stringsDE: StringsType = {
         joinSelectionDesc: 'Geschlecht, Liste, Linie, aktuelle Ansicht oder von Hand – wie beim neuen Stammbaum.',
         joinNote: 'Danach folgt der Zusammenführungs-Assistent: wohin, wer ist wer, was sich ändert. Dieser Stammbaum bleibt unverändert; das Ziel ändert sich erst nach Bestätigung im Assistenten und ist rückgängig machbar.',
         continueGuide: 'Weiter zum Assistenten',
+        joinPartners: (n: number, people: string) => n === 1
+            ? `Mit ihnen kommt auch 1 Partner mit, der andere Elternteil eines gewählten Kindes – insgesamt ${people}.`
+            : `Mit ihnen kommen auch ${n} Partner mit, die anderen Elternteile gewählter Kinder – insgesamt ${people}.`,
 
         // ---- New tree from a selection: who to take (§3), the summary (§4) ----
         selectTitle: 'Neuer Stammbaum aus einer Auswahl',

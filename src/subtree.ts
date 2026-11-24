@@ -22,14 +22,12 @@ import { pruneImportOrigin } from './import-origin.js';
 import { subsetForSubtree } from './person-lists-data.js';
 
 /**
- * Build a deep-copied StromData containing only `seedIds` (plus glue partners),
- * with every relationship/partnership restricted to the kept set. Sources are
- * carried along only where still cited; the source catalog is pruned to what
- * remains referenced.
+ * The people a subtree of `seedIds` keeps: the seeds plus the glue — for any
+ * partnership with a kept child and one kept partner, the missing partner,
+ * so the child keeps both parents. What extractSubtree copies, and what the
+ * step "who to take" of Join counts before the guide opens (spec 139 §6.1).
  */
-export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromData {
-    // 1. Glue: for any partnership with a kept child and one kept partner,
-    //    add the missing partner so the child keeps both parents.
+export function subtreePersonIds(data: StromData, seedIds: ReadonlySet<PersonId>): Set<PersonId> {
     const kept = new Set<PersonId>(seedIds);
     for (const union of Object.values(data.partnerships)) {
         const p1In = kept.has(union.person1Id);
@@ -38,6 +36,27 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
         const hasKeptChild = union.childIds.some(c => seedIds.has(c));
         if (hasKeptChild) kept.add(p1In ? union.person2Id : union.person1Id);
     }
+    return kept;
+}
+
+/** How many people (no "?" stand-ins) the glue adds to `seedIds` — the partners that come along. */
+export function subtreeGlueCount(data: StromData, seedIds: ReadonlySet<PersonId>): number {
+    let n = 0;
+    for (const id of subtreePersonIds(data, seedIds)) {
+        if (!seedIds.has(id) && data.persons[id] && !data.persons[id].isPlaceholder) n++;
+    }
+    return n;
+}
+
+/**
+ * Build a deep-copied StromData containing only `seedIds` (plus glue partners),
+ * with every relationship/partnership restricted to the kept set. Sources are
+ * carried along only where still cited; the source catalog is pruned to what
+ * remains referenced.
+ */
+export function extractSubtree(data: StromData, seedIds: ReadonlySet<PersonId>): StromData {
+    // 1. The seeds with the glue partners.
+    const kept = subtreePersonIds(data, seedIds);
 
     // 2. Copy the kept persons, restricting relationship links to the kept set.
     const persons: Record<string, Person> = {};

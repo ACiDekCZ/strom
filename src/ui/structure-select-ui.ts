@@ -23,7 +23,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage, countText } from '../strings.js';
 import type { Person, PersonId, TreeId, ViewMode } from '../types.js';
-import { extractSubtree } from '../subtree.js';
+import { extractSubtree, subtreeGlueCount } from '../subtree.js';
 import {
     summarizeSubset, summarizeSubsetSteps, summarizeCopy, type SubsetSummary, type SubsetIslandPerson,
 } from '../structure-options.js';
@@ -301,6 +301,9 @@ export const structureSelectMethods = uiModule({
             const result = current();
             const n = result?.ids.size ?? 0;
             chosenInto(chosen, result && n > 0 ? `${result.what} · ${strings.treeManager.persons(n)}` : null);
+            // Join: the guide takes the subtree, the partners glued to chosen children with it (§6.1) — said here, so its count is no surprise.
+            const glue = opts.mode === 'join' && result && n > 0 ? subtreeGlueCount(DataManager.getData(), result.ids) : 0;
+            if (glue > 0) chosen.appendChild(el('span', 'structure-who-partners', t.joinPartners(glue, strings.treeManager.persons(n + glue))));
             go.disabled = !result || n === 0;
         };
 
