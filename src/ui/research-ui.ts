@@ -51,7 +51,7 @@ import { livePanelDrawnSections, livePanelNothingAtWork, livePanelWorkingOnly } 
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
     decideResearchOpen, stabilizeIds, keepContacts, keepEventShares, keepTitles, keepMarriedSurname, keepSurnameVariants, keepLineageOverrides, researchHasTitles, withResearchTitles, TITLES_FEATURE, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
-    sanitizeLiveEnd, sanitizeWorking, WORKING_HELPS_FEATURE, holdsSaid, researchFamilyPartners, workingWithFamilyPersons, parseEventData, extractChangedRefs, personsByRefs,
+    sanitizeLiveEnd, sanitizeWorking, WORKING_HELPS_FEATURE, WORKING_SAVING_FEATURE, holdsSaid, researchFamilyPartners, workingWithFamilyPersons, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
@@ -1830,6 +1830,16 @@ export function pausedText(w: LiveWorker): string {
 export function workingHoldEl(w: LiveWorker): HTMLElement | null {
     const text = w.paused ? '' : workingHoldText(w.hold);
     return text ? el('span', 'live-hold', text) : null;
+}
+
+/**
+ * "agent saving images (3 of 5)" beside a row's task while the agent's own browser saves its images
+ * (`working.saving`; no bar: `of` grows). `lead`: something stands before it, so " · " opens it.
+ */
+export function workingSavingEl(w: LiveWorker, lead = true): HTMLElement | null {
+    if (!w.saving) return null;
+    const text = strings.live.workingSaving(w.saving.saved, w.saving.of);
+    return el('span', 'live-saving', lead ? ` · ${text}` : text);
 }
 
 /** `workingHoldEl` as a line of its own under a row's since (a block of its own there). */
@@ -4314,7 +4324,8 @@ export const researchUiMethods = uiModule({
         });
         es.addEventListener('working', (e) => {
             s.workingEvents = (s.workingEvents ?? 0) + 1;
-            s.working = withFamilyPersons(sanitizeWorking(payload(e), !!s.features?.includes(WORKING_HELPS_FEATURE), holdsSaid(s.features)), s.bridge);
+            s.working = withFamilyPersons(sanitizeWorking(payload(e), !!s.features?.includes(WORKING_HELPS_FEATURE), holdsSaid(s.features),
+                !!s.features?.includes(WORKING_SAVING_FEATURE)), s.bridge);
             this.renderLivePanel();
             // The event names only who works: the directions (their spinner, tasks and what waits) come with a status.
             this.liveStatusSoon(s);
@@ -5228,6 +5239,8 @@ export const researchUiMethods = uiModule({
             }
             li.appendChild(el('strong', undefined, w.who));
             if (w.task) li.appendChild(el('span', 'live-task', ` — ${w.task}`));
+            const saving = workingSavingEl(w);
+            if (saving) li.appendChild(saving);
             // Whom it works on, a click shows them (focused when the tree on screen lacks them).
             const person = w.person ? Object.values(DataManager.getData().persons).find(p => p.refn === w.person) : undefined;
             if (person) {

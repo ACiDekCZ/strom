@@ -54,7 +54,7 @@ import { uiModule } from './module.js';
 import {
     LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
     liveSession, nowHelpTopic, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip,
-    liveState, pausedText, appendWorkingHold, workingHoldEl, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
+    liveState, pausedText, appendWorkingHold, workingHoldEl, workingSavingEl, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
     markWaitingFocus, waitingWhyEl, overviewViewing, OverviewViewing, onComputer, lightsGroup, markOverviewLit, researchSession,
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
@@ -2694,6 +2694,8 @@ export const researchOverviewMethods = uiModule({
             const text = el('div', 'research-overview__now-text');
             text.appendChild(el('strong', undefined, w.who));
             if (w.task) text.appendChild(el('span', 'live-task', ` — ${w.task}`));
+            const saving = workingSavingEl(w);
+            if (saving) text.appendChild(saving);
             // How the task helps its line, or its branch outside the lines; else the line's name (two or more lines).
             const why = workingWhyText(w, s);
             const dir = why || taskDirectionName(s, w.research);
@@ -2828,6 +2830,8 @@ export const researchOverviewMethods = uiModule({
             const head = el('div', 'research-overview__now-line');
             if (i === 0) head.appendChild(el('strong', undefined, name));
             if (w.task) head.appendChild(el('span', 'live-task', i === 0 ? ` — ${w.task}` : w.task));
+            const saving = workingSavingEl(w, head.childNodes.length > 0);
+            if (saving) head.appendChild(saving);
             text.appendChild(head);
             const meta = el('small', 'research-overview__now-meta');
             const person = personByRefn(w.person);
@@ -2924,6 +2928,8 @@ export const researchOverviewMethods = uiModule({
             const person = personByRefn(w.person);
             if (person || w.person) task.appendChild(el('span', 'research-overview__run-person', person ? fullName(person) : w.person!));
             if (w.task) task.appendChild(document.createTextNode(task.childNodes.length > 0 ? ` — ${w.task}` : w.task));
+            const saving = workingSavingEl(w, task.childNodes.length > 0);
+            if (saving) task.appendChild(saving);
             const why = workingWhyText(w, s, true);
             if (why) task.appendChild(el('span', 'research-overview__why', ` · ${why}`));
             if (task.childNodes.length > 0) text.appendChild(task);

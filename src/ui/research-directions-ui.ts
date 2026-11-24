@@ -18,7 +18,7 @@ import { Person, PersonId } from '../types.js';
 import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo, researchLinkMark } from '../research-link.js';
 import { uiModule } from './module.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
-import { LiveFold, LiveSession, el, liveSection, researchSession, pausedText, workingHoldEl, timeEl, workingNumberBadge, lightsGroup } from './research-ui.js';
+import { LiveFold, LiveSession, el, liveSection, researchSession, pausedText, workingHoldEl, workingSavingEl, timeEl, workingNumberBadge, lightsGroup } from './research-ui.js';
 import type { OverviewLinesState } from '../windows/overview-window.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import {
@@ -657,10 +657,12 @@ export const researchDirectionsMethods = uiModule({
         for (const w of g.workers) {
             // Two or more runs while following: each run's session number in its colour (as in the fan).
             const num = this.liveWorkingNumber(working.indexOf(w));
-            if (w.task || num !== null) {
+            const saving = workingSavingEl(w, !!w.task);
+            if (w.task || num !== null || saving) {
                 const task = main.appendChild(el('span', 'live-line__task'));
                 if (num !== null) task.appendChild(workingNumberBadge(num));
                 if (w.task) task.append(w.task);
+                if (saving) task.appendChild(saving);
             }
             const meta = el('span', 'live-line__meta');
             const person = personByRefn(w.person);

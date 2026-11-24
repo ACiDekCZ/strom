@@ -2426,7 +2426,15 @@ export interface LiveWorker {
     hold?: WorkHold;
     /** The run waits for an archive another session uses (`archive.holds`, spec 127); `paused` says it too. */
     waits?: { archive: string; since: string; until: string };
+    /** The agent's own browser saves a book's images for the task (`working.saving`). */
+    saving?: WorkSaving;
 }
+
+/**
+ * `working[].saving`: the book (`recordset`, "B0007") whose images the agent's browser saves, `saved` of the `of`
+ * handed to the browser in this session. `of` grows (one image is handed at a time): not a known total.
+ */
+export interface WorkSaving { recordset: string; saved: number; of: number }
 
 /** The bridge says who holds a task and till when (`working[].hold`, `queue[].heldBy`; spec 127). */
 export const TASK_HOLDS_FEATURE = 'task.holds';
@@ -2474,6 +2482,8 @@ export interface QueueArchiveHeld {
 export const WORKING_PLACE_FEATURE = 'working.place';
 /** The bridge says how a row of `working` helps its line, and its branch (`working[].helps`, `branch`; spec 036 K1.8). */
 export const WORKING_HELPS_FEATURE = 'working.helps';
+/** The bridge says how many images the agent's browser saved for a row of `working` (`working[].saving`). */
+export const WORKING_SAVING_FEATURE = 'working.saving';
 
 // ==================== RUNS (spec 126 U10) ====================
 // The words of `features` for the runs of the directions, in ONE place: named as the app asked the research
@@ -4049,8 +4059,25 @@ const asRecord = (v: unknown): Record<string, unknown> | null =>
 const asCount = (v: unknown): number | null =>
     typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null;
 
-/** The `working` list (status field or `working` event). Untrusted input. */
-export function sanitizeWorking(value: unknown, helpsSaid = false, holds: HoldsSaid = NO_HOLDS): LiveWorker[] {
+/** The most images of a `working[].saving` taken from the bridge. */
+const MAX_SAVING = 1_000_000;
+const asImageCount = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= MAX_SAVING ? v : null;
+
+/** `working[].saving`, or null: a book's id and two whole counts, `saved` not above `of`. Untrusted input. */
+export function sanitizeSaving(value: unknown): WorkSaving | null {
+    const r = asRecord(value);
+    const recordset = r ? researchBookRef(r.recordset) : null;
+    const saved = r ? asImageCount(r.saved) : null;
+    const of = r ? asImageCount(r.of) : null;
+    return recordset && saved !== null && of !== null && saved <= of ? { recordset, saved, of } : null;
+}
+
+/**
+ * The `working` list (status field or `working` event). Untrusted input. `helps`, the holds and `saving`
+ * only from a research whose features say them.
+ */
+export function sanitizeWorking(value: unknown, helpsSaid = false, holds: HoldsSaid = NO_HOLDS, savingSaid = false): LiveWorker[] {
     if (!Array.isArray(value)) return [];
     const out: LiveWorker[] = [];
     for (const item of value.slice(0, MAX_ITEMS)) {
@@ -4075,10 +4102,13 @@ export function sanitizeWorking(value: unknown, helpsSaid = false, holds: HoldsS
         const waits = holds.archive ? sanitizeWaits(r.waits) : null;
         // The row's run (spec 126 U10): read whenever sent — an older research sends none, and the app reads it only with `/status.runs`.
         const run = researchRunRef(r.run);
+        // The images the agent's browser saves: only from a research that says it.
+        const saving = savingSaid ? sanitizeSaving(r.saving) : null;
         out.push({
             who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}), ...(family ? { family } : {}), ...(paused ? { paused } : {}),
             ...(research ? { research } : {}), ...(session ? { session } : {}), ...(place ? { place } : {}),
             ...(helps ? { helps } : {}), ...(branch ? { branch } : {}), ...(hold ? { hold } : {}), ...(waits ? { waits } : {}), ...(run ? { run } : {}),
+            ...(saving ? { saving } : {}),
         });
     }
     return out;
@@ -4930,7 +4960,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         headAt: Number.isFinite(Date.parse(cleanText(r.headAt, 40))) ? cleanText(r.headAt, 40) : '',
         persons: asCount(r.persons),
         families: asCount(r.families),
-        working: sanitizeWorking(r.working, !!features?.includes(WORKING_HELPS_FEATURE), holdsSaid(features)),
+        working: sanitizeWorking(r.working, !!features?.includes(WORKING_HELPS_FEATURE), holdsSaid(features), !!features?.includes(WORKING_SAVING_FEATURE)),
         waiting: [
             ...sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE), !!features?.includes(OFF_LINE_BRANCHES_FEATURE),
                 !!features?.includes(TASKS_AUDIT_FEATURE), !!features?.includes(WAITING_GAIN_FEATURE)),

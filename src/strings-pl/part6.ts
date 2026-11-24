@@ -1884,6 +1884,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         runStateBrowser: 'czeka na przeglądarkę archiwum',
         runStateDownload: 'czeka na pobieranie',
         runBrowserNote: 'Przeglądarkę archiwum ma teraz inny przebieg; ten poczeka, aż się zwolni.',
+        workingSaving: (saved: number, of: number) => `agent zapisuje skany (${saved} z ${of})`,
         runStateFinishing: 'kończy – agent dopisuje znalezione',
         runStateEnded: (t: string) => `zakończył o ${t}`,
         runSkips: (names: string) => `Pomija: ${names}`,
