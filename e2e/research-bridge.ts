@@ -80,6 +80,12 @@ export interface FakeBridge {
     mediaPutStatus: number;
     /** The body of a PUT turned down (default `{error: 'no'}`; L3: `{error, code, text, params}`). */
     mediaPutReply?: unknown;
+    /** Every `PUT /lists/<ref>` (spec 137 §6.6, `media.list` in `features`): the ref and the JSON body. */
+    listPuts?: { ref: string; body: Record<string, unknown> }[];
+    /** Status of a list PUT (default 200; 400 / 413 / 403: refused). */
+    listPutStatus?: number;
+    /** The next file with `X-Strom-List-Ref` answers `404 media.no-list` (the bridge lost the list), once. */
+    listLostOnce?: boolean;
     /** Files it can serve in full (`GET /media/<sha>?file=1`); others answer 410. */
     mediaFiles: Map<string, { type: string; body: Buffer }>;
     /** Busy (starting up): every request answers 503 with Retry-After. */
@@ -2198,6 +2204,17 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             }
             return json(200, { known });
         }
+        const listPut = /\/lists\/([A-Za-z0-9-]{1,64})$/.exec(url.pathname);
+        if (listPut && method === 'PUT') {
+            if (!(b.features ?? []).includes('media.list')) return json(404, { error: 'Not found.', code: 'route.unknown' });
+            let body: Record<string, unknown> = {};
+            try { body = JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>; } catch { /* kept empty */ }
+            (b.listPuts ??= []).push({ ref: listPut[1], body });
+            const status = b.listPutStatus ?? 200;
+            if (status !== 200) return json(status, { error: 'refused', code: status === 413 ? 'list.large' : status === 403 ? 'app.only' : 'list.bad-body' });
+            const persons = Array.isArray(body.persons) ? body.persons as string[] : [];
+            return json(200, { list: listPut[1], persons: persons.length, unknown: [] });
+        }
         const media = /\/media\/([0-9a-f]{64})$/.exec(url.pathname);
         if (media) {
             const sha = media[1];
@@ -2210,6 +2227,10 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             if (route.request().method() === 'PUT') {
                 const body = route.request().postDataBuffer();
                 b.mediaPuts.push({ sha, headers: route.request().headers(), bytes: body?.length ?? 0 });
+                if (b.listLostOnce && route.request().headers()['x-strom-list-ref']) {
+                    b.listLostOnce = false;
+                    return json(404, { error: 'no list', code: 'media.no-list', list: route.request().headers()['x-strom-list-ref'] });
+                }
                 if (b.mediaPutStatus !== 200) return json(b.mediaPutStatus, b.mediaPutReply ?? { error: 'no' });
                 // Content it has: said so (as the research does), nothing new.
                 const prior = b.mediaKnown.get(sha);

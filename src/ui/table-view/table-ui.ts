@@ -2218,6 +2218,21 @@ export const tableMethods = uiModule({
     },
 
     /**
+     * The people of the rows the Table shows now, after its filter, search
+     * and scope (the search's In view, spec 137 §2.3); null while it shows
+     * the whole tree (neither a filter, a search nor a scope) or no people.
+     */
+    tableShownPersonIds(): ReadonlySet<PersonId> | null {
+        if (!mounted || !model) return null;
+        const state = stateOf(treeKey());
+        const type = state.rowType;
+        if (type === 'sources') return null;
+        const st = state.types[type];
+        if (!this.tableWindowScope() && !st.filter.items.length && !st.search.trim()) return null;
+        return new Set(mounted.saveRows.flatMap(rowPeople));
+    },
+
+    /**
      * Whether a person's row is pinned in the People table now (spec 103 §3):
      * a jump to them while the filter hides them lands on their pinned row.
      */

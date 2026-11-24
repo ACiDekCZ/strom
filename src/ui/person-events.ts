@@ -25,6 +25,7 @@ import { DETAIL_KEYS, offeredDetails, refreshDetailGroup, resetDetailGroup, rend
 import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 import { sharedWith } from '../shared-events.js';
 import { isEmptyResidence } from '../person-contact.js';
+import { dialogScopeSource } from './search-scope-ui.js';
 
 /**
  * The person's events as the list shows them: an empty residence (what an
@@ -248,6 +249,7 @@ export const personEventsMethods = uiModule({
             new PersonPicker({
                 containerId: 'participant-picker',
                 persons: DataManager.getAllPersons().filter(p => !p.isPlaceholder && p.id !== excludeId),
+                scope: dialogScopeSource(() => excludeId),
                 onSelect: (personId) => done(personId),
             });
             // Clicking the backdrop cancels, like the other modals.

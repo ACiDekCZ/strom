@@ -1279,7 +1279,7 @@
         /* Phone-only parts of the search (the rest of the widths keep the pill). */
         .toolbar-tree-icon, .toolbar-state-dot, .search-query-count, .search-clear-btn,
         .search-filters-head, .search-filters-sheet-foot, .search-filters-backdrop,
-        .search-cancel-btn, .search-open-btn { display: none; }
+        .search-cancel-btn, .search-open-btn, .search-filters-scope { display: none; }
 
         /* Phone top bar (≤640px, 1a–1e): the tree icon, the tree's name with all
            the room, the magnifier. Search states as body classes (search.ts):
@@ -1407,6 +1407,9 @@
                 font-size: 24px; line-height: 1; color: var(--text-light); cursor: pointer;
             }
             .search-filters .search-filters-footer { display: none; }
+            /* The search narrowed to the direct line or the view (spec 137 §5): said above the foot, no switch here. */
+            .search-filters .search-filters-scope { display: block; font-size: 13px; line-height: 1.4; color: var(--text-light); margin: 2px 2px 0; }
+            .search-filters .search-filters-scope[hidden] { display: none; }
             .search-filters .search-filters-sheet-foot {
                 display: flex; gap: 8px; position: sticky; bottom: 0; margin: auto -16px 0;
                 padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
@@ -9126,6 +9129,69 @@
         .source-material { margin-right: auto; }
         @media (max-width: 640px) { .material-dialog { max-width: calc(100vw - 16px); } .material-item { grid-template-columns: 32px minmax(0, 1fr) 28px; } .material-size { display: none; } }
         @media (min-width: 641px) and (max-width: 1024px) { .material-dialog { width: 480px; } }
+        /* "Concerns" of the material dialog: the person / the source or a list of people (material-concern-ui.ts, spec 137 §6.3). */
+        .material-concern-wrap { margin: 0 0 14px; }
+        .material-dialog .material-concern-label { display: block; margin: 0 0 6px; font-size: 12px; font-weight: 500; color: var(--text-light); }
+        /* `.modal button` (padding, no border) would win over a single class. */
+        .material-dialog .material-concern {
+            display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; height: 40px; box-sizing: border-box; margin: 0;
+            padding: 0 10px 0 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+            color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+        }
+        .material-dialog .material-concern:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .material-dialog .material-concern[aria-expanded="true"] { border-color: var(--text-light); }
+        .material-concern-icon, .material-concern-opt-icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text-light); }
+        .material-concern-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+        .material-concern-name.is-person { font-family: var(--font-serif); font-size: 15px; }
+        .material-concern-years { flex-shrink: 0; font-size: 12px; color: var(--text-light); }
+        .material-concern-count { flex-shrink: 0; margin-left: auto; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .material-concern-chev { display: inline-flex; flex-shrink: 0; margin-left: auto; color: var(--text-light); }
+        .material-concern-count + .material-concern-chev { margin-left: 0; }
+        .material-concern-menu {
+            position: fixed; z-index: 3; box-sizing: border-box; overflow: auto; overscroll-behavior: contain;
+            background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+        }
+        .material-concern-group { padding: 10px 12px 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-text); }
+        .material-concern-opt {
+            display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 44px;
+            box-sizing: border-box; padding: 6px 12px; cursor: pointer; color: var(--text);
+        }
+        .material-concern-opt[hidden] { display: none; }
+        .material-concern-opt:focus-visible { outline-offset: -2px; }
+        .material-concern-opt-mid { min-width: 0; }
+        .material-concern-opt-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+        .material-concern-opt-name.is-person { font-family: var(--font-serif); font-size: 15px; font-weight: 600; }
+        .material-concern-opt-years { font-family: var(--font-sans, inherit); font-size: 12px; font-weight: 400; color: var(--text-light); }
+        .material-concern-opt-sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 400; color: var(--text-light); }
+        .material-concern-opt-count { font-size: 12px; font-weight: 400; color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .material-concern-find-wrap { position: sticky; top: 0; z-index: 1; padding: 8px 12px; background: var(--card-bg); border-bottom: 1px solid var(--divider); }
+        .material-concern-find { width: 100%; box-sizing: border-box; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font: inherit; font-size: 14px; }
+        .material-concern-backdrop { position: fixed; inset: 0; z-index: 2; background: rgba(0,0,0,0.35); }
+        /* A phone (also sideways): the menu is a bottom sheet with a grip, a title and ×. */
+        .material-concern-menu.is-sheet {
+            left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 80vh; max-height: 80dvh;
+            border-radius: var(--r-lg) var(--r-lg) 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        .material-concern-grip { width: 36px; height: 4px; margin: 8px auto 2px; border-radius: 2px; background: var(--border); }
+        .material-concern-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 2px 4px 2px 12px; background: var(--card-bg); }
+        .material-concern-title { flex: 1; min-width: 0; font-family: var(--font-serif); font-size: 18px; font-weight: 600; color: var(--text); }
+        .material-concern-x { width: 44px; height: 44px; flex-shrink: 0; border: 0; background: none; font-size: 24px; line-height: 1; color: var(--text-light); cursor: pointer; }
+        .material-concern-menu.is-sheet .material-concern-find-wrap { top: 48px; }
+        .material-concern-menu.is-sheet .material-concern-opt { min-height: 56px; }
+        @media (max-width: 640px) {
+            .material-dialog .material-concern { height: 44px; font-size: 16px; }
+            .material-concern-find { font-size: 16px; height: 44px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .material-dialog .material-concern { height: 44px; }
+            .material-concern-menu.is-sheet { max-height: 88vh; max-height: 88dvh; left: 50%; right: auto; width: min(560px, 100vw); transform: translateX(-50%); }
+            .material-concern-menu.is-sheet .material-concern-opt { min-height: 48px; }
+        }
+        @media (pointer: coarse) { .material-concern-opt { min-height: 48px; } }
+        @media (hover: hover) {
+            .material-dialog .material-concern:hover { border-color: var(--text-light); }
+            .material-concern-x:hover { color: var(--text); }
+        }
 
         /* A checkbox in the confirm dialog ("Also discard the original waiting to be sent"). */
         .confirm-check { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 4px; font-size: 14px; cursor: pointer; }
@@ -28661,6 +28727,42 @@
             color: var(--text-light);
             font-size: 14px;
         }
+        /* The search scope head (spec 137 §1): segments Whole tree / Direct line / In view,
+           the count and a line saying what the narrowing keeps. Only the rows scroll. */
+        .person-picker-dropdown.has-scope { max-height: none; overflow: hidden; min-width: 340px; }
+        .person-picker-head { padding: 6px 8px; border-bottom: 1px solid var(--divider); background: var(--surface); }
+        .person-picker-head[hidden] { display: none; }
+        .person-picker-head-row { display: flex; align-items: center; gap: 10px; }
+        .person-picker-scope > .sel-opt { height: 26px; padding: 0 9px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+        .person-picker-scope > .sel-opt[hidden] { display: none; }
+        /* A segment not offered is hidden: the last one shown takes the frame's corners. */
+        .person-picker-scope > .sel-opt.is-last { border-radius: 0 calc(var(--sel-r) - 1px) calc(var(--sel-r) - 1px) 0; }
+        .person-picker-scope > .sel-opt.is-last:first-child { border-radius: calc(var(--sel-r) - 1px); }
+        .person-picker-count { margin-left: auto; padding-right: 4px; font-size: 12px; color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .person-picker-ref { margin: 5px 4px 0 2px; font-size: 12px; line-height: 1.4; color: var(--text-light); white-space: normal; }
+        .person-picker-ref[hidden] { display: none; }
+        .person-picker-ref b { font-weight: 600; color: var(--text); }
+        .person-picker-list { max-height: 250px; overflow-y: auto; }
+        /* Nobody in the narrowed scope, matches in the whole tree (§3): a plain paragraph with the way there. */
+        .person-picker-narrow-empty { padding: 14px 14px 12px; font-size: 13px; line-height: 1.45; color: var(--text-light); white-space: normal; }
+        .person-picker-whole { margin-top: 6px; min-height: 28px; font-weight: 600; color: var(--primary); }
+        /* In the toolbar's search the ".toolbar button" fill would paint the segments and the link green. */
+        .toolbar .person-picker-scope > .sel-opt { background: var(--surface); color: var(--text-light); transition: none; }
+        .toolbar .person-picker-scope > .sel-opt[aria-checked="true"], .person-picker-scope > .sel-opt[aria-checked="true"] { color: var(--sel-fg); font-weight: 600; }
+        .toolbar .person-picker-dropdown .person-picker-whole { padding: 0; border-radius: 0; background: none; color: var(--primary); font-size: 13px; }
+        /* The multi-person picker: the head above its list, inside the dialog. */
+        .person-picker--multi .ppm-head { border: 1px solid var(--divider); border-bottom: 0; border-radius: var(--r-sm) var(--r-sm) 0 0; margin-top: 6px; }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            /* A phone (§5): the segments across the width, 44px tall; the count ends the line under them. */
+            .person-picker-dropdown.has-scope { min-width: 0; }
+            .person-picker-head { padding: 8px; }
+            .person-picker-scope { display: flex; width: 100%; }
+            /* Equal thirds; a long label (de "Ganzer Stammbaum" at 390px) takes two lines inside the 44px. */
+            .person-picker-scope > .sel-opt { flex: 1; min-width: 0; height: 44px; font-size: 14px; padding: 0 6px; white-space: normal; line-height: 1.15; }
+            .person-picker-head-row .person-picker-count { display: none; }
+            .person-picker-ref { margin: 7px 4px 0; }
+            .person-picker-whole, .toolbar .person-picker-dropdown .person-picker-whole { min-height: 44px; font-size: 15px; }
+        }
 
         /* Tablet toolbar regime (500–1024px, toolbar-regime exception — see the
            breakpoint map): focus info in toolbar, bottom bar, hide floating */
@@ -34903,6 +35005,7 @@
                     <span id="search-result-count" class="search-result-count"></span>
                     <button type="button" class="secondary" onclick="window.Strom.UI.clearSearchFilters()" data-i18n="searchFilters.clear"></button>
                 </div>
+                <p id="search-filters-scope" class="search-filters-scope" hidden></p>
                 <div class="search-filters-sheet-foot">
                     <button type="button" class="secondary" onclick="window.Strom.UI.clearFilterFields()" data-i18n="searchFilters.clearFilters"></button>
                     <button type="button" id="search-filters-show" class="primary" onclick="window.Strom.UI.toggleSearchFilters()"></button>

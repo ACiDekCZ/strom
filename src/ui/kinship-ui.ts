@@ -14,6 +14,7 @@ import { findRelationship } from '../kinship.js';
 import { viewOnlyRelationship } from '../view-link-kinship.js';
 import { uiModule } from './module.js';
 import { shownName } from '../person-name.js';
+import { dialogScopeSource } from './search-scope-ui.js';
 
 function personName(id: PersonId): string {
     const p = DataManager.getPerson(id);
@@ -73,6 +74,7 @@ export const kinshipUiMethods = uiModule({
             placeholder: strings.personPicker.placeholder,
             showBirthYear: true,
             persons,
+            scope: dialogScopeSource(() => fromId),
             onSelect: (toId: PersonId) => {
                 const resultEl = overlay.querySelector('#kinship-result') as HTMLElement;
                 const relation = findRelationship(treeData!, fromId, toId);

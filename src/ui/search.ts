@@ -46,6 +46,13 @@ import { isPhoneBar } from '../breakpoints.js';
 import { shownName } from '../person-name.js';
 import { openHeadMenu } from './table-view/table-headmenu.js';
 import { listMenuEntries } from './person-list-add.js';
+import { getSearchScope, onSearchScope } from '../search-scope.js';
+import { toolbarScopeIds, toolbarScopeNote, toolbarScopeSource } from './search-scope-ui.js';
+import { VIEW_STEP_EVENT } from '../windows/window-focus.js';
+
+/** The toolbar follows the search scope and the view's changes once per page (initSearch runs again on a refresh). */
+let scopeWired = false;
+let scopeTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** The phone top bar (≤640px, or a phone sideways): the search folds to a magnifier there. */
 export function isPhoneToolbar(): boolean {
@@ -99,7 +106,10 @@ export const searchMethods = uiModule({
             searchDetails: true,
             // The map with the scope Selection: a person outside it says so, with a way to the whole tree.
             rowNote: (p) => this.mapSearchNote(p.id),
+            // Whole tree / Direct line / In view (spec 137 §1–§2).
+            scope: toolbarScopeSource(),
         });
+        this.wireSearchScope();
 
         // Live-highlight matches in the tree as the name query changes.
         const input = container.querySelector('.person-picker-input') as HTMLInputElement | null;
@@ -126,6 +136,30 @@ export const searchMethods = uiModule({
                 }
             });
         }
+    },
+
+    /**
+     * The search scope's changes (spec 137 §2.5, §4): a new scope highlights
+     * and counts anew at once; a new centre or another view works the open
+     * list and the highlight out again (debounced), while the search narrows.
+     */
+    wireSearchScope(): void {
+        if (scopeWired) return;
+        scopeWired = true;
+        onSearchScope(() => {
+            if (this.searchFilterTimer) clearTimeout(this.searchFilterTimer);
+            this.applySearchFilter();
+        });
+        const later = () => {
+            if (scopeTimer) clearTimeout(scopeTimer);
+            scopeTimer = setTimeout(() => {
+                scopeTimer = null;
+                this.toolbarSearchPicker?.refreshScope();
+                if (getSearchScope() !== 'tree') this.applySearchFilter();
+            }, 150);
+        };
+        window.addEventListener('strom:focus-changed', later);
+        window.addEventListener(VIEW_STEP_EVENT, later);
     },
 
     /** Phone: the magnifier opens the field over the whole bar, keyboard up. */
@@ -282,16 +316,25 @@ export const searchMethods = uiModule({
     applySearchFilter(): void {
         const criteria = this.readSearchCriteria();
         const countEl = document.getElementById('search-result-count');
+        // The scope narrows the results, the highlight and the counts (spec 137 §4); it is not a filter.
+        const narrow = toolbarScopeIds();
+        const note = narrow ? toolbarScopeNote() : null;
+        const sheet = document.getElementById('search-filters-scope');
+        if (sheet) {
+            sheet.hidden = !note;
+            sheet.textContent = note?.sheet ?? '';
+        }
         if (!hasSearchCriteria(criteria)) {
             TreeRenderer.setHighlight(null);
             if (countEl) countEl.textContent = '';
-            const all = Object.values(DataManager.getData().persons).filter(p => !p.isPlaceholder).length;
+            const all = narrow ? narrow.size : Object.values(DataManager.getData().persons).filter(p => !p.isPlaceholder).length;
             this.renderSearchSummary(null, criteria, all);
             return;
         }
-        const ids = filterPersons(DataManager.getData(), criteria);
+        let ids = filterPersons(DataManager.getData(), criteria);
+        if (narrow) ids = ids.filter(id => narrow.has(id));
         TreeRenderer.setHighlight(new Set(ids));
-        if (countEl) countEl.textContent = strings.searchFilters.resultCount(ids.length);
+        if (countEl) countEl.textContent = strings.searchFilters.resultCount(ids.length) + (note ? ` · ${note.foot}` : '');
         this.renderSearchSummary(ids.length, criteria, ids.length);
     },
 
