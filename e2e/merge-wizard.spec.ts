@@ -144,11 +144,12 @@ test('Save for later keeps the decision and the step; the merge goes on from Man
     await expect.poll(() => page.evaluate(async () =>
         (await window.Strom.MergerUI.getPendingMergeInfo()).saved.length)).toBe(1);
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    const pending = page.locator('#tree-manager-modal .tree-manager-item.pending-merge');
+    // Under the row of the tree it merges into (spec 139 §9.1).
+    const pending = page.locator('#tree-manager-modal .tree-manager-item:has(.tree-manager-item-name:text-is("Modřínovi")) .tree-manager-item-pending');
     await expect(pending).toHaveCount(1);
     expect(await peopleOf(page, 'Modřínovi')).toEqual(['Florentýna', 'Kvido', 'Teofil']);
 
-    await pending.locator('.tree-open-btn').click();
+    await pending.locator('.pending-merge-resume').click();
     await expect(wizard).toBeVisible();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '2');
     await expect(await kasian(wizard)).toHaveAttribute('data-fate', 'skipped');

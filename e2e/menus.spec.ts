@@ -813,8 +813,10 @@ test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => 
         // to offer (none for a one-person tree without a link), never empty.
         await expect(menu.locator('.tree-row-menu-group:visible')).toHaveText(['Research', 'Tree settings']);
         const keys = await menu.locator('.tree-row-menu-item:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
-        // Change structure… and Export… lead (spec 139 §1.1, the manager's first group).
-        expect(keys.slice(0, 4)).toEqual(['structure', 'export', 'overview', 'overview-quality']);
+        // Change structure… and Export… are buttons in the row, not in its ⋯ (spec 139 §8.2).
+        expect(keys.slice(0, 2)).toEqual(['overview', 'overview-quality']);
+        expect(keys).not.toContain('structure');
+        expect(keys).not.toContain('export');
         expect(keys).not.toContain('stats');
         expect(keys).not.toContain('health');
         expect(keys).toContain('places');
@@ -822,8 +824,10 @@ test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => 
         expect(keys).not.toContain('split');
         expect(keys).not.toContain('manageTrees');
         expect(keys[keys.length - 1]).toBe('delete');
-        // Change structure… opens its dialog over the manager.
-        const structure = await openStructureDialog(page, menu);
+        // Delete tree… apart, behind a line (spec 139 §8.2).
+        expect(await menu.locator('.tree-row-menu-item[data-action="delete"]').evaluate(el => el.previousElementSibling?.className)).toBe('tree-row-menu-divider edit-only');
+        // Change structure… (the row's button) opens its dialog over the manager.
+        const structure = await openStructureDialog(page, row.locator('.tree-manager-item-actions'));
         await expect(structure.locator('.menu-option[data-action="parts"]')).toBeVisible();
         await page.keyboard.press('Escape');
         await expect(structure).toBeHidden();
@@ -869,9 +873,13 @@ test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => 
         for (const key of ['audit', 'places', 'surnames', 'saveToFile', 'manageTrees']) {
             await expect(menu.locator(`[data-action="${key}"]`)).toHaveCount(0);
         }
-        // Change structure… too: its dialog says which options need the tree open (spec 139 §2.4).
-        for (const key of ['overview', 'export', 'rename', 'structure', 'delete']) {
+        for (const key of ['overview', 'rename', 'delete']) {
             await expect(menu.locator(`[data-action="${key}"]`)).toHaveCount(1);
+        }
+        // Change structure… and Export… are the row's buttons (spec 139 §8.1); the dialog says which options need the tree open (§2.4).
+        for (const key of ['export', 'structure']) {
+            await expect(menu.locator(`[data-action="${key}"]`)).toHaveCount(0);
+            await expect(row.locator(`.tree-manager-item-actions > [data-action="${key}"]`)).toBeVisible();
         }
         await expect(menu.locator('.tree-row-menu-note')).toHaveText(
             'Places, surnames and the change log are available once the tree is open.');

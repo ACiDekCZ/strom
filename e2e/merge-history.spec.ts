@@ -93,6 +93,20 @@ test('Merge history… only for a tree with a merge, in Actions › Tree and in 
     await page.keyboard.press('Escape');
     await expect(h).not.toHaveClass(/active/);
     await expect(manager).toHaveClass(/active/);
+
+    // The row's third line: where the tree came from and a link to its merges (spec 139 §7.2, §9.2).
+    const origin = item.locator('.tree-manager-item-origin');
+    await expect(origin.locator('.tree-manager-item-origin-text')).toHaveText('from the file modrinovi.json · no research');
+    const link = origin.locator('.tree-manager-merge-history');
+    await expect(link).toHaveText('Merge history (1)');
+    await link.click();
+    await expect(h).toHaveClass(/active/);
+    await expect(h.locator('#merge-history-title')).toHaveText('Merge history · Modřínovi');
+    await expect(manager).not.toHaveClass(/active/);
+    await page.keyboard.press('Escape');
+    await expect(manager).toHaveClass(/active/);
+    // A tree without a merge has no such link.
+    await expect(manager.locator('.tree-manager-item:not(:has(.tree-manager-item-name:text-is("Modřínovi"))) .tree-manager-merge-history')).toHaveCount(0);
 });
 
 test('Open the list: step 6 read from the record after a reload, and in a copy exported as JSON and imported', async ({ page }, testInfo) => {

@@ -116,9 +116,9 @@ test('the tree manager sideways looks like the phone one: the open tree labelled
     const modal = page.locator('#tree-manager-modal .modal');
     await expect(modal).toBeVisible();
     const active = page.locator('.tree-manager-item.active');
-    await expect(active.locator('.tree-opened-label')).toBeVisible();
-    await expect(active.locator('.tree-open-btn')).toBeHidden();
-    await expect(active.locator('.active-badge')).toBeHidden();
+    // The open tree is labelled by its chip at the name (spec 139 §7.2); it has no Open.
+    await expect(active.locator('.active-badge')).toBeVisible();
+    await expect(active.locator('.tree-open-btn')).toHaveCount(0);
     await expect(page.locator('.tree-manager-footer [data-dismiss]')).toBeHidden();
     const btns = await page.locator('.tree-manager-footer > button:visible').evaluateAll(els => els.map(el => el.getBoundingClientRect().y));
     expect(btns.length).toBe(2);

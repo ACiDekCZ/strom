@@ -238,8 +238,7 @@ async function mergeTrees(page: Page, sourceName: string, targetName: string): P
     const row = manager.locator('.tree-manager-item:not(.pending-merge)', {
         has: page.locator('.tree-manager-item-name', { hasText: new RegExp(`^${sourceName}$`) }),
     });
-    await row.locator('.tree-row-menu-btn').click();
-    await runStructure(page, 'mergeInto', row);
+    await runStructure(page, 'mergeInto', row.locator('.tree-manager-item-actions'));
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '1');

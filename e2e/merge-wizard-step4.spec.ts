@@ -269,7 +269,7 @@ test('step 4\'s choices survive a reload (13g) and Save for later (13j): the rul
     await reloadApp(page);
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     await expect(page.locator('#tree-manager-modal')).toBeVisible();
-    await page.locator('#tree-manager-modal .tree-manager-item.pending-merge .tree-open-btn').click();
+    await page.locator('#tree-manager-modal .tree-manager-item-pending .pending-merge-resume').click();
     await expect(wizard).toBeVisible();
     await rulesAreBack(wizard);
 });

@@ -107,7 +107,8 @@ test('an older copy still tied as a copy (copy: true) sends nothing either, by i
     // Manage trees calls it a copy without research, never a research tree.
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     const item = page.locator('.tree-manager-item', { hasText: 'Fíškovi – stará kopie' });
-    await expect(item.locator('.tree-manager-item-copy')).toHaveText('copy of the tree “Fíškovi” · no research');
+    await expect(item.locator('.tree-manager-item-origin')).toHaveAttribute('data-origin', 'copy');
+    await expect(item.locator('.tree-manager-item-origin-text')).toHaveText('copy of the tree “Fíškovi” · no research');
 });
 
 test('a merge into a copy of a research tree says nothing about the research and sends nothing', async ({ page }) => {

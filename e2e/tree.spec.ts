@@ -214,24 +214,20 @@ test('hiding the active tree switches to a visible one; the last visible cannot 
     await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText(original);
 });
 
-test('tree manager: Close button closes; the active tree has Open too', async ({ page }) => {
+test('tree manager: Close button closes; the open tree has no Open, only its chip', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await createTree(page, 'Branch E');   // creates + switches, manager open
     const manager = page.locator('#tree-manager-modal');
     await expect(manager).toBeVisible();
 
-    // Every row offers Open — the active one included: it also just shows the
-    // tree (a missing button on the active row read as an inconsistency).
+    // The open tree is labelled by its chip at the name and offers no Open (spec 139 §8.1).
     const activeRow = manager.locator('.tree-manager-item.active');
     await expect(activeRow).toContainText('Branch E');
-    await activeRow.locator('.tree-open-btn').click();
-    await expect(manager).toBeHidden();
-    await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Branch E');
+    await expect(activeRow.locator('.active-badge')).toBeVisible();
+    await expect(activeRow.locator('.tree-open-btn')).toHaveCount(0);
 
     // The header × closes it (the footer Close does the same).
-    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    await expect(manager).toBeVisible();
     await expect(manager.locator('.tree-manager-footer [data-dismiss]')).toHaveText('Close');
     await manager.locator('.modal-header .close-btn').click();
     await expect(manager).toBeHidden();
@@ -241,7 +237,7 @@ test('cancelling the file picker returns to the New Tree menu, not to nowhere', 
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    await page.locator('.tree-manager-footer .primary').click();   // New Tree
+    await page.locator('.tree-manager-footer .tree-manager-new-btn').click();   // New Tree
     const menu = page.locator('#new-tree-menu-modal');
     await expect(menu).toBeVisible();
 

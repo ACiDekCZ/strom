@@ -29,7 +29,7 @@ async function importFromManager(page: Page, option: 'From HTML file' | 'From JS
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     const manager = page.locator('#tree-manager-modal');
     await expect(manager).toBeVisible();
-    await manager.locator('button.primary.edit-only').click();
+    await manager.locator('.tree-manager-new-btn').click();
     const menu = page.locator('#new-tree-menu-modal');
     await expect(menu).toBeVisible();
     const [chooser] = await Promise.all([

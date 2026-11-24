@@ -107,8 +107,7 @@ test('Merge into another tree from Manage trees: the open tree is the target, Sw
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     const manager = page.locator('#tree-manager-modal');
     const row = manager.locator('.tree-manager-item').filter({ has: page.locator('.tree-manager-item-name', { hasText: /^Jilmovi$/ }) });
-    await row.locator('.tree-row-menu-btn').click();
-    await runStructure(page, 'mergeInto', row.locator('.tree-row-menu.open'));
+    await runStructure(page, 'mergeInto', row.locator('.tree-manager-item-actions'));
 
     const wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
@@ -387,7 +386,7 @@ test('a saved merge whose tree changed, gone on with as saved: the backup Before
     });
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    await page.locator('#tree-manager-modal .tree-manager-item.pending-merge .tree-open-btn').click();
+    await page.locator('#tree-manager-modal .tree-manager-item-pending .pending-merge-resume').click();
     const ask = page.locator('#confirmation-modal');
     await expect(page.locator('#confirm-title')).toHaveText('The tree has changed');
     await ask.getByRole('button', { name: 'Go on as saved' }).click();

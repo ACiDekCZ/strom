@@ -25,8 +25,7 @@ test('a tree with two unrelated families can be split into two trees, the origin
     await twoUnrelatedFamilies(page);
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    await page.locator('.tree-row-menu-btn').first().click();
-    await runStructure(page, 'split', page.locator('.tree-row-menu.open'));
+    await runStructure(page, 'split', page.locator('.tree-manager-item-actions').first());
     await expect(page.locator('#split-modal')).toBeVisible();
 
     // Both families are listed, biggest first, named after their surname.
@@ -64,8 +63,7 @@ test('a connected tree offers nothing to split', async ({ page }) => {
     await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    await page.locator('.tree-row-menu-btn').first().click();
-    const structure = await openStructureDialog(page, page.locator('.tree-row-menu.open'));
+    const structure = await openStructureDialog(page, page.locator('.tree-manager-item-actions').first());
     const parts = structure.locator('.menu-option[data-action="parts"]');
 
     // One family (spec 139 §2.4): the option is greyed and says why under it; choosing it opens nothing.
@@ -148,8 +146,7 @@ test('Split off works at once: the button says it is creating, a double click cr
     await openApp(page);
     await twoUnrelatedFamilies(page);
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    await page.locator('.tree-row-menu-btn').first().click();
-    await runStructure(page, 'split', page.locator('.tree-row-menu.open'));
+    await runStructure(page, 'split', page.locator('.tree-manager-item-actions').first());
     const rows = page.locator('.split-row');
     await expect(rows).toHaveCount(2);
     const before = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);

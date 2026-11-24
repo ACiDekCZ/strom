@@ -376,10 +376,10 @@ test('the tree manager on a phone: ⋯ opens the sheet over it; another tree has
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     const manager = page.locator('#tree-manager-modal');
 
-    // The open tree's row: a label instead of Open; Close gives way to × and the drag.
+    // The open tree's row: its chip at the name, no Open (spec 139 §7.2); Close gives way to × and the drag.
     const active = manager.locator('.tree-manager-item.active');
-    await expect(active.locator('.tree-opened-label')).toBeVisible();
-    await expect(active.locator('.tree-open-btn')).toBeHidden();
+    await expect(active.locator('.active-badge')).toBeVisible();
+    await expect(active.locator('.tree-open-btn')).toHaveCount(0);
     await expect(manager.locator('.tree-manager-footer [data-dismiss]')).toBeHidden();
     const more = (await active.locator('.tree-row-menu-btn').boundingBox())!;
     expect(more.width).toBeGreaterThanOrEqual(44);

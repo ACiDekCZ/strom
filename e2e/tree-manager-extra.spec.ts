@@ -24,13 +24,13 @@ function row(page: Page, treeName: string): Locator {
 async function rowAction(page: Page, treeName: string, item: string): Promise<void> {
     if (!await manager(page).isVisible()) await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     const r = row(page, treeName);
-    await r.locator('.tree-row-menu-btn').click();
-    const menu = r.locator('.tree-row-menu.open');
-    // Structure actions run through Change structure… (spec 139).
+    // Structure actions run through Change structure…, a button in the row (spec 139 §8.1).
     if (STRUCTURE_ITEMS[item]) {
-        await runStructure(page, STRUCTURE_ITEMS[item], menu);
+        await runStructure(page, STRUCTURE_ITEMS[item], r.locator('.tree-manager-item-actions'));
         return;
     }
+    await r.locator('.tree-row-menu-btn').click();
+    const menu = r.locator('.tree-row-menu.open');
     await menu.locator('.tree-row-menu-item', { hasText: item }).first().click();
 }
 
@@ -38,6 +38,18 @@ async function rowAction(page: Page, treeName: string, item: string): Promise<vo
 const STRUCTURE_ITEMS: Record<string, StructureRun> = { Duplicate: 'duplicate', 'Merge into another tree': 'mergeInto' };
 
 /** ⋯ → Tree: → item (a structure action: through Change structure…). */
+/** The value "Default person and view" shows in a row's ⋯ (the row itself no longer names it, spec 139 §7.2). */
+async function defaultPersonValue(page: Page, treeName: string): Promise<string> {
+    const r = row(page, treeName);
+    await r.locator('.tree-row-menu-btn').click();
+    const value = r.locator('.tree-row-menu.open .tree-row-menu-item[data-action="defaultPerson"] .tree-row-menu-value');
+    await expect(value).toBeVisible();
+    const text = (await value.textContent()) ?? '';
+    await r.locator('.tree-row-menu-btn').click();
+    await expect(r.locator('.tree-row-menu.open')).toHaveCount(0);
+    return text;
+}
+
 async function treeSubmenu(page: Page, item: string): Promise<void> {
     const sub = await openTreeActions(page);
     if (STRUCTURE_ITEMS[item]) {
@@ -340,7 +352,7 @@ test('a specific default person is the focus at the next start; "First person" g
     await expect(dialog).toBeHidden();
     // Back in the manager; the row names the start person.
     await expect(manager(page)).toBeVisible();
-    await expect(row(page, tree).locator('.tree-manager-item-stats-row')).toContainText('Marie Novak');
+    expect(await defaultPersonValue(page, tree)).toContain('Marie Novak');
     await page.evaluate(() => window.Strom.UI.closeTreeManagerDialog());
 
     // Focus someone else, start again (a reload would keep Petr, 1101): Marie is the focus.
@@ -357,7 +369,7 @@ test('a specific default person is the focus at the next start; "First person" g
     await expect(dialog.locator('#default-person-picker-container')).toBeHidden();
     await dialog.getByRole('button', { name: 'Save' }).click();
     await expect(dialog).toBeHidden();
-    await expect(row(page, tree).locator('.tree-manager-item-stats-row')).not.toContainText('Marie');
+    expect(await defaultPersonValue(page, tree)).not.toContain('Marie');
     await page.evaluate(() => window.Strom.UI.closeTreeManagerDialog());
     await waitForPersistGone(page, '"defaultPersonId"');
     await page.goto(page.url());
@@ -375,7 +387,7 @@ test('"Last focused" as the default person restores the last focused person at t
     await expect(dialog.locator('#default-person-picker-container')).toBeHidden();
     await dialog.getByRole('button', { name: 'Save' }).click();
     await expect(dialog).toBeHidden();
-    await expect(row(page, tree).locator('.tree-manager-item-stats-row')).toContainText('Last focused');
+    expect(await defaultPersonValue(page, tree)).toContain('Last focused');
     await page.evaluate(() => window.Strom.UI.closeTreeManagerDialog());
 
     await focusViaSearch(page, 'Petr');
@@ -429,7 +441,7 @@ test('New tree → "From current view" makes a tree of exactly the persons on sc
     const original = await activeTreeName(page);
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    await manager(page).locator('.tree-manager-footer .primary').click();
+    await manager(page).locator('.tree-manager-footer .tree-manager-new-btn').click();
     const menu = page.locator('#new-tree-menu-modal');
     await expect(menu).toBeVisible();
     await menu.locator('.menu-option', { hasText: 'From current view' }).click();
@@ -450,7 +462,7 @@ test('New tree → "From current view" makes a tree of exactly the persons on sc
 test('"From current view" on an empty tree warns and creates nothing', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    await manager(page).locator('.tree-manager-footer .primary').click();
+    await manager(page).locator('.tree-manager-footer .tree-manager-new-btn').click();
     await page.locator('#new-tree-menu-modal .menu-option', { hasText: 'From current view' }).click();
     await expect(page.locator('#confirmation-modal')).toBeVisible();
     await expect(page.locator('#confirm-message')).toHaveText('No focused data to create tree from');
@@ -644,4 +656,91 @@ test('turning automatic backups off with "Keep backups" keeps the existing backu
     await toggle.check();
     await expect(page.locator('#confirmation-modal')).toBeHidden();
     expect(await page.evaluate((i) => window.Strom.TreeManager.isAutoBackupEnabled(i), id)).toBe(true);
+});
+
+test.describe('the row of Manage trees (spec 139 §7, §8)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    async function twoTrees(page: Page): Promise<void> {
+        await openApp(page);
+        await createFirstPerson(page, 'Vojtěch', 'Jesenský');
+        // A tree that is not open, about 240 kB: its size shows all the same.
+        await page.evaluate(async () => {
+            const dm = window.Strom.DataManager;
+            const first = window.Strom.TreeManager.getActiveTreeId()!;
+            await dm.importAsNewTree({
+                persons: { k1: { id: 'k1', firstName: 'Bořivoj', lastName: 'Kalinovský', gender: 'male', notes: 'x'.repeat(240 * 1024), partnerships: [], parentIds: [], childIds: [] } },
+                partnerships: {},
+            } as never, 'Rodina Kalinovských');
+            await dm.switchTree(first);
+        });
+        await expect(card(page, 'Vojtěch')).toBeVisible();
+    }
+
+    test('every tree shows its facts from the index alone: size, couples, no research; no tree data read', async ({ page }) => {
+        await twoTrees(page);
+        // Drawing the list reads no tree's data (§7.1).
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager as unknown as { getTreeData: (...a: unknown[]) => unknown; __reads?: number };
+            const orig = tm.getTreeData.bind(tm);
+            tm.__reads = 0;
+            tm.getTreeData = (...a: unknown[]) => { tm.__reads!++; return orig(...a); };
+        });
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const r = row(page, 'Rodina Kalinovských');
+        await expect(r).toBeVisible();
+        const bytes = await page.evaluate(() => window.Strom.TreeManager.getTrees().find(t => t.name === 'Rodina Kalinovských')!.sizeBytes);
+        expect(bytes).toBeGreaterThan(240 * 1024);
+        expect(bytes).toBeLessThan(1024 * 1024);
+        await expect(r.locator('.tree-manager-item-size')).toHaveText(`${Math.round(bytes / 1024)} kB`);
+        await expect(r.locator('.tree-manager-item-stats-row')).toContainText('1 person · 0 couples · ');
+        await expect(r.locator('.tree-manager-item-origin')).toHaveAttribute('data-origin', 'none');
+        await expect(r.locator('.tree-manager-item-origin-text')).toHaveText('no research');
+        // The open tree: the chip at its name, its size too.
+        const open = manager(page).locator('.tree-manager-item.active');
+        await expect(open.locator('.tree-manager-item-header .active-badge')).toBeVisible();
+        await expect(open.locator('.tree-manager-item-size')).toHaveText(/^\d+ kB$/);
+        expect(await page.evaluate(() => (window.Strom.TreeManager as unknown as { __reads: number }).__reads)).toBe(0);
+        // The dialog is 880 px wide on a computer.
+        expect(Math.round((await manager(page).locator('.modal').boundingBox())!.width)).toBe(880);
+    });
+
+    test('one primary button at most: Open is quiet at rest, primary in the row under the pointer; Delete apart, last, asks first', async ({ page }) => {
+        await twoTrees(page);
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const primary = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--primary').trim());
+        const filled = (): Promise<number> => manager(page).locator('.tree-manager-item button').evaluateAll((els, p) => {
+            const probe = document.createElement('div');
+            probe.style.color = p;
+            document.body.appendChild(probe);
+            const want = getComputedStyle(probe).color;
+            probe.remove();
+            return els.filter(el => getComputedStyle(el).backgroundColor === want).length;
+        }, primary);
+        // At rest (the pointer away from every row): nothing filled.
+        await page.mouse.move(2, 2);
+        await expect.poll(filled).toBe(0);
+        const r = row(page, 'Rodina Kalinovských');
+        await expect(r.locator('.tree-manager-item-actions > button:visible')).toHaveText(['Open', 'Change structure…', 'Export…']);
+        await r.locator('.tree-manager-item-info').hover();
+        await expect.poll(filled).toBe(1);
+        await expect(r.locator('.tree-open-btn')).toHaveCSS('background-color', await r.locator('.tree-open-btn').evaluate((_, p) => {
+            const probe = document.createElement('div'); probe.style.color = p; document.body.appendChild(probe);
+            const c = getComputedStyle(probe).color; probe.remove(); return c;
+        }, primary));
+
+        // ⋯: no Export or structure (they are the row's buttons), Delete last behind a line.
+        await r.locator('.tree-row-menu-btn').click();
+        const menu = r.locator('.tree-row-menu.open');
+        await expect(menu.locator('.tree-row-menu-item[data-action="delete"]')).toBeVisible();
+        const keys = await menu.locator('.tree-row-menu-item').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
+        expect(keys).not.toContain('export');
+        expect(keys).not.toContain('structure');
+        expect(keys[keys.length - 1]).toBe('delete');
+        const del = menu.locator('.tree-row-menu-item[data-action="delete"]');
+        expect(await del.evaluate(el => el.previousElementSibling?.classList.contains('tree-row-menu-divider'))).toBe(true);
+        await del.click();
+        await expect(page.locator('#confirmation-modal')).toHaveClass(/active/);
+        await expect(page.locator('#confirmation-modal')).toHaveClass(/dialog-danger/);
+    });
 });

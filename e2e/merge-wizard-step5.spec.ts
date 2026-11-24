@@ -204,7 +204,7 @@ test('a reload in step 5 (13g) and Save for later there (13j): the merge comes b
     await expect(wizard).toBeHidden();
     await expect(page.locator('.toast')).toHaveText('Saved for later · rodokmen-jilmovi.ged → Modřínovi · step 5 · in Manage trees under Unfinished merges');
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-    await page.locator('#tree-manager-modal .tree-manager-item.pending-merge .tree-open-btn').click();
+    await page.locator('#tree-manager-modal .tree-manager-item-pending .pending-merge-resume').click();
     await expect(wizard).toBeVisible();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '5');
     await expect(mergeCount(wizard, 'skipped')).toHaveText('1');

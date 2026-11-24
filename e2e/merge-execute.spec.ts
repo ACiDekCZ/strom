@@ -55,8 +55,7 @@ async function startMergeFromManager(page: Page, sourceName: string, targetName:
     const row = manager.locator('.tree-manager-item:not(.pending-merge)', {
         has: page.locator('.tree-manager-item-name', { hasText: new RegExp(`^${sourceName}$`) }),
     });
-    await row.locator('.tree-row-menu-btn').click();
-    await runStructure(page, 'mergeInto', row);
+    await runStructure(page, 'mergeInto', row.locator('.tree-manager-item-actions'));
 
     // The guide opens at once (spec 134 §2): the target is chosen in its step 1.
     const wizard = page.locator('#merge-modal');
@@ -451,10 +450,11 @@ test('tree merge save for later → resume from the tree manager keeps the decis
     await expect(wizard).toBeHidden();
     const manager = page.locator('#tree-manager-modal');
     await expect(manager).toBeVisible();
-    const pending = manager.locator('.tree-manager-item.pending-merge');
+    // A sub-row of the target's row (spec 139 §9.1): what comes in and where.
+    const pending = manager.locator('.tree-manager-item-pending');
     await expect(pending).toHaveCount(1);
-    await expect(pending.locator('.tree-manager-item-name')).toHaveText('Target + Source');
-    await expect(pending).toContainText('Source → Target');
+    await expect(manager.locator('.tree-manager-item:has(.tree-manager-item-pending) .tree-manager-item-name')).toHaveText('Target');
+    await expect(pending).toContainText('Unfinished merge: Source → Target');
     // Nothing was written yet.
     expect(await personCountOf(page, targetId)).toBe(1);
 
@@ -465,7 +465,7 @@ test('tree merge save for later → resume from the tree manager keeps the decis
     await expect(pending).toHaveCount(1);
 
     // Resume: the decision (Bob skipped) is still there.
-    await pending.locator('.tree-open-btn').click();
+    await pending.locator('.pending-merge-resume').click();
     wizard = page.locator('#merge-modal');
     await expect(wizard).toBeVisible();
     await expect(manager).toBeHidden();
@@ -525,7 +525,7 @@ test('tree merge close → save → pending-merge dialog resume, then discard le
     await expect(closeConfirm).toHaveClass(/active/);
     await closeConfirm.getByRole('button', { name: 'Save for later' }).click();
     await expect(wizard).toBeHidden();
-    await expect(page.locator('#tree-manager-modal .tree-manager-item.pending-merge')).toHaveCount(1);
+    await expect(page.locator('#tree-manager-modal .tree-manager-item-pending')).toHaveCount(1);
     await page.evaluate(() => window.Strom.UI.closeTreeManagerDialog());
 
     // The pending-merge dialog lists the session; Resume reopens it with the
@@ -567,7 +567,7 @@ test('tree merge close → save → pending-merge dialog resume, then discard le
     // A third round discarded from the tree manager (danger confirm).
     wizard = await startMergeFromManager(page, 'Source', 'Target');
     await wizard.getByRole('button', { name: 'Save for later' }).click();
-    const pending = page.locator('#tree-manager-modal .tree-manager-item.pending-merge');
+    const pending = page.locator('#tree-manager-modal .tree-manager-item-pending');
     await expect(pending).toHaveCount(1);
     await pending.locator('.pending-merge-discard').click();
     await expect(confirmModal(page)).toHaveClass(/dialog-danger/);
@@ -579,6 +579,34 @@ test('tree merge close → save → pending-merge dialog resume, then discard le
     expect(await personCountOf(page, targetId)).toBe(1);
     expect(await personCountOf(page, sourceId)).toBe(2);
     expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().length)).toBe(treeCountBefore);
+});
+
+test('an unfinished merge whose target tree was deleted: in its own section, Discard only (spec 139 §9.1)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Seed', 'Person');
+    const { targetId } = await seedTrees(page,
+        { name: 'Target', data: treeData([{ id: 't_anna', firstName: 'Anna', lastName: 'Sdilena', gender: 'female', birthDate: '1900-01-01' }]) },
+        { name: 'Source', data: treeData([{ id: 's_bob', firstName: 'Bob', lastName: 'Novy', gender: 'male', birthDate: '1930-01-01' }]) });
+
+    const wizard = await startMergeFromManager(page, 'Source', 'Target');
+    await wizard.getByRole('button', { name: 'Save for later' }).click();
+    const manager = page.locator('#tree-manager-modal');
+    await expect(manager.locator('.tree-manager-item-pending')).toHaveCount(1);
+
+    await page.evaluate(id => window.Strom.TreeManager.deleteTree(id as never), targetId);
+    await page.evaluate(() => window.Strom.UI.closeTreeManagerDialog());
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    await expect(manager.locator('.tree-manager-item-pending')).toHaveCount(0);
+    await expect(manager.locator('.tree-manager-section')).toHaveText('Unfinished merges without a tree');
+    const orphan = manager.locator('.tree-manager-item.pending-merge');
+    await expect(orphan).toHaveCount(1);
+    await expect(orphan.locator('.tree-manager-item-stats')).toContainText('the target tree was deleted');
+    await expect(orphan.locator('.pending-merge-resume')).toHaveCount(0);
+    await expect(orphan.locator('.pending-merge-rename')).toHaveCount(0);
+    await orphan.locator('.pending-merge-discard').click();
+    await confirmModal(page).locator('#confirm-ok-btn').click();
+    await expect(orphan).toHaveCount(0);
+    await expect(manager.locator('.tree-manager-section')).toHaveCount(0);
 });
 
 /**

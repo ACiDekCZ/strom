@@ -118,8 +118,7 @@ test.describe('desktop', () => {
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
         const manager = page.locator('#tree-manager-modal');
         const row = manager.locator('.tree-manager-item', { hasText: 'Ostrožní z Mezihoře' });
-        await row.locator('.tree-row-menu-btn').click();
-        const dialog = await openStructureDialog(page, row.locator('.tree-row-menu.open'));
+        const dialog = await openStructureDialog(page, row.locator('.tree-manager-item-actions'));
         await expect(manager).not.toHaveClass(/active/);
         await expect(dialog.locator('#structure-title')).toHaveText('Change structure: Ostrožní z Mezihoře');
         for (const key of ['select', 'file']) {
@@ -140,8 +139,7 @@ test.describe('desktop', () => {
         await expect(manager).toHaveClass(/active/);
 
         // Open the tree…: the tree opens and its options come alive.
-        await row.locator('.tree-row-menu-btn').click();
-        await openStructureDialog(page, row.locator('.tree-row-menu.open'));
+        await openStructureDialog(page, row.locator('.tree-manager-item-actions'));
         const open = dialog.locator('#structure-footer [data-action="openTree"]');
         await expect(open).toHaveText('Open the tree Ostrožní z Mezihoře');
         await open.click();

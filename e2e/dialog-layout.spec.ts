@@ -256,14 +256,17 @@ test('the confirm dialog is the small width and its title keeps the 20px/24px in
     expect(i.titleTop, 'nor against the top edge').toBeGreaterThan(8);
 });
 
-test('tree manager: New tree is the only primary, rows offer "Open at startup"', async ({ page }) => {
+test('tree manager: no primary in the footer (the row under the pointer has it), Close last; rows offer "Open at startup"', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     const manager = page.locator('#tree-manager-modal');
     await expect(manager).toBeVisible();
     const footer = manager.locator('.tree-manager-footer');
-    await expect(footer.locator('button.primary')).toHaveCount(1);
-    await expect(footer.locator('button').last()).toHaveClass(/primary/);
+    // spec 139 §7.1: New tree is secondary.
+    await expect(footer.locator('button.primary')).toHaveCount(0);
+    await expect(footer.locator('button')).toHaveCount(3);
+    await expect(footer.locator('button').nth(1)).toHaveClass(/tree-manager-new-btn/);
+    await expect(footer.locator('button').last()).toHaveAttribute('data-dismiss', '');
     await expect(footer.locator('[data-dismiss]')).toHaveText('Close');
     await expect(footer).not.toContainText('Default tree');
 

@@ -317,8 +317,7 @@ test('tree manager row: split opens the proposals directly, a tree not open too;
     // Splitting reads the tree from storage (spec 139 §2.4): the tree that is not open offers it as well.
     const row = page.locator('.tree-manager-item', { hasText: 'Rodina Novákových' });
     await expect(row).not.toHaveClass(/active/);
-    await row.locator('.tree-row-menu-btn').click();
-    await runStructure(page, 'splitFamilies', row.locator('.tree-row-menu.open'));
+    await runStructure(page, 'splitFamilies', row.locator('.tree-manager-item-actions'));
 
     // No starting-person picker — the partition never depends on one.
     const modal = page.locator('#split-families-modal');

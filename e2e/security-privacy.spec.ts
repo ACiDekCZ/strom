@@ -344,8 +344,8 @@ async function exportAppFromManager(page: Page, treeName: string, privacy: 'full
     const manager = page.locator('#tree-manager-modal');
     await expect(manager).toBeVisible();
     const row = manager.locator('.tree-manager-item', { hasText: treeName }).first();
-    await row.locator('.tree-row-menu-btn').click();
-    await row.locator('.tree-row-menu-item', { hasText: 'Export' }).click();
+    // Export… is a button in the row (spec 139 §8.1).
+    await row.locator('.tree-manager-item-actions > [data-action="export"]').click();
     const exportModal = page.locator('#export-modal');
     await expect(exportModal).toBeVisible();
     await exportModal.locator('.menu-option[onclick*="exportTargetTreeApp"]').click();

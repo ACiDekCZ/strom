@@ -263,8 +263,8 @@ test.describe('a working element in Change structure…', () => {
         await loadTree(page, 1440, false);
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
         const active = page.locator('.tree-manager-item.active');
-        await active.locator('.tree-row-menu-btn').click();
-        const structure = await openStructureDialog(page, active.locator('.tree-row-menu.open'));
+        // Change structure… is a button in the row (spec 139 §8.1).
+        const structure = await openStructureDialog(page, active.locator('.tree-manager-item-actions'));
         await hold(page);
         const families = structure.locator('.menu-option[data-action="families"]', { hasText: 'In Familien…' });
         await families.click();

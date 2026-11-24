@@ -182,8 +182,8 @@ test.describe('step 2: decisions (K3.3, K3.4)', () => {
         await wizard.locator('#merge-save-later').click();
         await expect(wizard).toBeHidden();
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-        const stats = page.locator('#tree-manager-modal .tree-manager-item.pending-merge .tree-manager-item-stats');
-        await expect(stats).toHaveText('2 to decide • 0/3 reviewed');
+        const stats = page.locator('#tree-manager-modal .tree-manager-item-pending .tree-manager-pending-text');
+        await expect(stats).toContainText(' · 2 to decide · 0/3 reviewed · saved ');
         await expect(stats).not.toContainText('conflict');
     });
 
