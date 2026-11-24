@@ -179,6 +179,19 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         let reply = gw.onTunnel(r, device);
         if (!reply) {
             if (r.p === 'status' && r.m === 'GET') reply = { s: 200, body: { ...STATUS, device: { id: device.id, name: device.name, kind: device.kind, actions: ['device.rename', 'device.unpair'] } } };
+            else if (r.p === 'device/rename' && r.m === 'POST') {
+                // NFC, at most 60 characters, as the research keeps it
+                const name = typeof (r.b as { name?: unknown } | undefined)?.name === 'string' ? ((r.b as { name: string }).name).normalize('NFC').trim() : '';
+                if (!name || name.length > 60) reply = { s: 400, body: { code: 'device.name' } };
+                else {
+                    device.name = name;
+                    reply = { s: 200, body: { device: { id: device.id, name, kind: device.kind } } };
+                }
+            } else if (r.p === 'device/unpair' && r.m === 'POST') {
+                // the whole row goes: the next request is 401 device.unpaired
+                gw.devices = gw.devices.filter(d => d.id !== device.id);
+                reply = { s: 200, body: { unpaired: true } };
+            }
             else if (r.p === 'device' || r.p.startsWith('device/')) reply = { s: 404, body: { code: 'device.unknown-action' } };
             else reply = { s: 404, body: { code: 'not-found' } };
         }
