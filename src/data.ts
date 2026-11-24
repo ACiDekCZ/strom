@@ -1291,6 +1291,7 @@ class DataManagerClass {
                 this.currentTreeId = startupTreeId;
                 this.data = migrateData(treeData);
                 TreeManager.markDemoTree(startupTreeId, this.data);
+                TreeManager.noteTreeContents(startupTreeId, this.data);
                 return;
             }
             this.currentTreeId = startupTreeId;
@@ -1342,6 +1343,8 @@ class DataManagerClass {
             this.data = treeData ? migrateData(treeData) : this.createEmptyData();
             // An older sample tree is known by its content (never sent to a research).
             if (treeData) TreeManager.markDemoTree(treeId, this.data);
+            // The Manage trees row's import source and merges of an older tree (spec 139 §7.2).
+            if (treeData) TreeManager.noteTreeContents(treeId, this.data);
         } finally {
             if (seq === this.switchSeq) this.switchingTo = null;
         }

@@ -111,7 +111,9 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
 
         // Pending merge in tree manager
         pendingMergeLabel: 'Rozpoczęte scalanie',
-        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`
+        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
+        /** An unfinished merge's conflicts still to decide (Manage trees, spec 139 §9). */
+        pendingMergeConflicts: (n: number) => nPl(n, 'konflikt', 'konflikty', 'konfliktów'),
     },
 
     mergeWizard: {
@@ -823,6 +825,17 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         fileJson: 'Plik Strom (.json)',
         fileJsonDesc: 'Eksport ze Stromu, na przykład od krewnego.',
         fileNote: (name: string) => `Po wybraniu pliku otworzy się kreator scalania z celem ${name}. Nic nie zostanie zapisane, dopóki kreator tego nie potwierdzi; scalenie można cofnąć.`,
+        // Manage trees row (spec 139 §7, §9).
+        couples: (n: number) => nPl(n, 'para', 'pary', 'par'),
+        research: (rid: string) => `Badanie ${rid}`,
+        fromTree: (name: string) => `wycinek z drzewa „${name}”`,
+        fromGedcom: (file: string) => `z GEDCOM ${file}`,
+        fromFile: (file: string) => `z pliku ${file}`,
+        mergeHistory: (n: number) => `Historia scaleń (${n})`,
+        pendingRow: (src: string, tgt: string) => `Niedokończone scalanie: ${src} → ${tgt}`,
+        savedAt: (when: string) => `zapisano ${when}`,
+        pendingOrphans: 'Niedokończone scalania bez drzewa',
+        targetGone: 'drzewo docelowe zostało usunięte',
     },
     treeManager: {
         defaultTreeName: 'Moje drzewo genealogiczne',
@@ -842,8 +855,6 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         hiddenBadge: 'Ukryte',
         rename: 'Zmień nazwę…',
         renameTitle: 'Zmiana nazwy',
-        duplicate: 'Duplikuj',
-        duplicateTitle: 'Duplikowanie drzewa',
         newTreeNameLabel: 'Nazwa nowego drzewa',
         mergeInto: 'Scal z innym drzewem…',
         delete: 'Usuń drzewo…',

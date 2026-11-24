@@ -2455,6 +2455,19 @@ export interface TreeMetadata {
      */
     fromTree?: { treeId: TreeId; name: string; what: string };
     /**
+     * The file the tree was imported from (Manage trees row, spec 139 §7.2):
+     * written when the tree is made of a file, for an older tree from the last
+     * StromData.imports record with a file when it is opened. The row reads it
+     * without reading the tree's data.
+     */
+    importedFrom?: { file: string; kind: 'gedcom' | 'json' };
+    /**
+     * How many merges the tree's data records (StromData.merges), kept with
+     * every save and opening: the row's "Merge history (n)" without reading
+     * the data (spec 139 §9.2). Missing: none (or not known yet).
+     */
+    mergeCount?: number;
+    /**
      * The one-time repair of trees sharing one research (package 134 point
      * 13, TreeManager.repairSharedResearchTies) took this tree off its
      * research: the tie as it was (kept, nothing else of it is), the tree

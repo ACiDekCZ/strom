@@ -74,6 +74,16 @@ export function formatFileSize(bytes: number, lang: Language): string {
 }
 
 /**
+ * A tree's size, always told (Manage trees row, spec 139 §7.2): whole
+ * kilobytes below 1 MB ("240 kB"), otherwise as formatFileSize ("1,4 MB").
+ */
+export function formatTreeSize(bytes: number, lang: Language): string {
+    if (bytes >= SIZE_SHOWN_FROM) return formatFileSize(bytes, lang);
+    const kb = Math.max(1, Math.round((Number.isFinite(bytes) ? Math.max(0, bytes) : 0) / 1024));
+    return `${new Intl.NumberFormat(lang, { maximumFractionDigits: 0 }).format(kb)} kB`;
+}
+
+/**
  * A day and time this year, short, as the language writes it (spec 075 §5:
  * when a split was done): "11. 11. 14:20" (cs), "11 Nov, 14:20" (en),
  * "11. 11., 14:20" (de), "11.11, 14:20" (pl). Local time, no year, no seconds.

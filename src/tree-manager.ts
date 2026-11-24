@@ -43,6 +43,7 @@ import { fillResearchConfirmedValues, hasUnvaluedResearchConfirmations } from '.
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
 import { isResearchOwner, researchCopyOrigin, planSharedTieRepair } from './research-owner.js';
+import { importOriginOf } from './tree-row.js';
 import { asciiSlug } from './filenames.js';
 import { browserMediaFingerprint } from './browser-media.js';
 import { looksLikeSampleTree } from './demo-sample.js';
@@ -1555,6 +1556,7 @@ class TreeManagerClass {
             tree.partnershipCount = Object.keys(data.partnerships).length;
             tree.sizeBytes = sizeBytes;
             tree.mediaFp = browserMediaFingerprint(data);
+            this.noteContents(tree, data);
             this.saveIndex();
         }
     }
@@ -1600,6 +1602,9 @@ class TreeManagerClass {
             // Made of a selection of another tree: names it, never takes its research (spec 139 K2.4).
             ...(fromTree ? { fromTree: { ...fromTree } } : {}),
         };
+        // The file it came from and its merges, for the Manage trees row (spec 139 §7.2).
+        if (fromFile) this.noteContents(metadata, data);
+        else if (data.merges?.length) metadata.mergeCount = data.merges.length;
 
         // Add to index
         this.index.trees.push(metadata);
@@ -2102,6 +2107,43 @@ class TreeManagerClass {
         tree.demo = true;
         delete tree.researchAdoptToken;
         this.saveIndex();
+    }
+
+    /**
+     * What the Manage trees row tells of a tree's data without reading it
+     * (spec 139 §7.2, §9.2): the number of its merges, and the file it was
+     * imported from when that is not known yet (an older tree, at its
+     * opening). Saves the index only when something changed.
+     */
+    noteTreeContents(treeId: TreeId, data: StromData): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (tree && this.noteContents(tree, data)) this.saveIndex();
+    }
+
+    /** The JSON file a tree was imported from (its data carries no record of it). */
+    setImportedFrom(treeId: TreeId, file: string): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        const name = file.trim();
+        if (!tree || !name) return;
+        tree.importedFrom = { file: name, kind: /\.(ged|gedcom)$/i.test(name) ? 'gedcom' : 'json' };
+        this.saveIndex();
+    }
+
+    /** noteTreeContents on a metadata record; true when it changed. */
+    private noteContents(tree: TreeMetadata, data: StromData): boolean {
+        let changed = false;
+        const merges = data.merges?.length ?? 0;
+        if ((tree.mergeCount ?? 0) !== merges) {
+            if (merges) tree.mergeCount = merges;
+            else delete tree.mergeCount;
+            changed = true;
+        }
+        // A tree made of another one (a selection, a split-off part) came from no file.
+        if (!tree.importedFrom && !tree.fromTree) {
+            const from = importOriginOf(data);
+            if (from) { tree.importedFrom = from; changed = true; }
+        }
+        return changed;
     }
 
     /** Mark (or unmark) a tree as moving to another browser for the research. */

@@ -247,6 +247,10 @@ export class UIClass {
     gedcomFileInfo: { name: string; sha: string; at: string } | null = null;
     /** A new tree from a GEDCOM file waits for the import dialog's OK: the file's import record. */
     pendingGedcomImport: { importId?: string } | null = null;
+    /** The name of the JSON file read last (readJsonImportText): a new tree of it names it (spec 139 §7.2). */
+    jsonImportFileName: string | null = null;
+    /** A new tree from a JSON file waits for the import dialog's OK: the file's name. */
+    importTreeFileName: string | null = null;
     /** What the last import brought (the import summary reads it). */
     lastImport: ({ treeId: TreeId } & AfterImportOptions) | null = null;
     /** State of the optional checkbox of the last showChoice() dialog. */

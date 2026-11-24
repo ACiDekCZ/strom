@@ -6312,7 +6312,9 @@ const stringsEN = {
 
         // Pending merge in tree manager
         pendingMergeLabel: 'Pending merge',
-        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`
+        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
+        /** An unfinished merge's conflicts still to decide (Manage trees, spec 139 §9). */
+        pendingMergeConflicts: (n: number) => nEn(n, 'conflict', 'conflicts'),
     },
 
     // Import and merge guide (spec 134): the six steps, counts, inputs, steps 1-2, edge states
@@ -7037,6 +7039,17 @@ const stringsEN = {
         fileJson: 'Strom file (.json)',
         fileJsonDesc: 'An export from Strom, for example from a relative.',
         fileNote: (name: string) => `After the file is chosen, the merge guide opens with ${name} as the target. Nothing is written to the tree until the guide confirms it; the merge can be undone.`,
+        // Manage trees row (spec 139 §7, §9).
+        couples: (n: number) => nEn(n, 'couple', 'couples'),
+        research: (rid: string) => `Research ${rid}`,
+        fromTree: (name: string) => `cut from the tree “${name}”`,
+        fromGedcom: (file: string) => `from GEDCOM ${file}`,
+        fromFile: (file: string) => `from the file ${file}`,
+        mergeHistory: (n: number) => `Merge history (${n})`,
+        pendingRow: (src: string, tgt: string) => `Unfinished merge: ${src} → ${tgt}`,
+        savedAt: (when: string) => `saved ${when}`,
+        pendingOrphans: 'Unfinished merges without a tree',
+        targetGone: 'the target tree was deleted',
     },
     treeManager: {
         defaultTreeName: 'My Family Tree',
@@ -7056,8 +7069,6 @@ const stringsEN = {
         hiddenBadge: 'Hidden',
         rename: 'Rename…',
         renameTitle: 'Rename',
-        duplicate: 'Duplicate',
-        duplicateTitle: 'Duplicate tree',
         newTreeNameLabel: 'New tree name',
         mergeInto: 'Merge into another tree…',
         delete: 'Delete tree…',
@@ -17659,7 +17670,9 @@ const stringsCZ: StringsType = {
 
         // Pending merge in tree manager
         pendingMergeLabel: 'Rozpracované sloučení',
-        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`
+        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
+        /** An unfinished merge's conflicts still to decide (Manage trees, spec 139 §9). */
+        pendingMergeConflicts: (n: number) => nCs(n, 'rozpor', 'rozpory', 'rozporů'),
     },
 
     // Import and merge guide (spec 134): the six steps, counts, inputs, steps 1-2, edge states
@@ -18380,6 +18393,17 @@ const stringsCZ: StringsType = {
         fileJson: 'Soubor Strom (.json)',
         fileJsonDesc: 'Export ze Stromu, třeba od příbuzného.',
         fileNote: (name: string) => `Po výběru souboru se otevře průvodce sloučením s cílem ${name}. Do stromu se nic nezapíše, dokud to průvodce nepotvrdí; sloučení jde vrátit.`,
+        // Manage trees row (spec 139 §7, §9).
+        couples: (n: number) => nCs(n, 'pár', 'páry', 'párů'),
+        research: (rid: string) => `Výzkum ${rid}`,
+        fromTree: (name: string) => `výřez ze stromu „${name}“`,
+        fromGedcom: (file: string) => `z GEDCOM ${file}`,
+        fromFile: (file: string) => `ze souboru ${file}`,
+        mergeHistory: (n: number) => `Historie sloučení (${n})`,
+        pendingRow: (src: string, tgt: string) => `Rozpracované sloučení: ${src} → ${tgt}`,
+        savedAt: (when: string) => `uloženo ${when}`,
+        pendingOrphans: 'Rozpracovaná sloučení bez stromu',
+        targetGone: 'cílový strom byl smazán',
     },
     treeManager: {
         defaultTreeName: 'Můj rodokmen',
@@ -18399,8 +18423,6 @@ const stringsCZ: StringsType = {
         hiddenBadge: 'Skrytý',
         rename: 'Přejmenovat…',
         renameTitle: 'Přejmenovat',
-        duplicate: 'Duplikovat',
-        duplicateTitle: 'Duplikovat strom',
         newTreeNameLabel: 'Název nového stromu',
         mergeInto: 'Sloučit do jiného stromu…',
         delete: 'Smazat strom…',
@@ -28844,9 +28866,10 @@ const stringsDE: StringsType = {
 
         existingTree: 'Vorhandener Stammbaum',
         incomingTree: 'Neue Daten',
-
+        /** An unfinished merge's conflicts still to decide (Manage trees, spec 139 §9). */
+        pendingMergeConflicts: (n: number) => nDe(n, 'Widerspruch', 'Widersprüche'),
         pendingMergeLabel: 'Ausstehende Zusammenführung',
-        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`
+        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
     },
 
     // Import and merge guide (spec 134): the six steps, counts, inputs, steps 1-2, edge states
@@ -29558,6 +29581,17 @@ const stringsDE: StringsType = {
         fileJson: 'Strom-Datei (.json)',
         fileJsonDesc: 'Ein Export aus Strom, etwa von Verwandten.',
         fileNote: (name: string) => `Nach der Dateiauswahl öffnet sich der Zusammenführungs-Assistent mit dem Ziel ${name}. In den Stammbaum wird erst nach Bestätigung geschrieben; rückgängig machbar.`,
+        // Manage trees row (spec 139 §7, §9).
+        couples: (n: number) => nDe(n, 'Paar', 'Paare'),
+        research: (rid: string) => `Forschung ${rid}`,
+        fromTree: (name: string) => `Ausschnitt aus dem Stammbaum „${name}“`,
+        fromGedcom: (file: string) => `aus GEDCOM ${file}`,
+        fromFile: (file: string) => `aus der Datei ${file}`,
+        mergeHistory: (n: number) => `Zusammenführungen (${n})`,
+        pendingRow: (src: string, tgt: string) => `Unvollendete Zusammenführung: ${src} → ${tgt}`,
+        savedAt: (when: string) => `gespeichert ${when}`,
+        pendingOrphans: 'Unvollendete Zusammenführungen ohne Stammbaum',
+        targetGone: 'der Zielstammbaum wurde gelöscht',
     },
     treeManager: {
         defaultTreeName: 'Mein Stammbaum',
@@ -29577,8 +29611,6 @@ const stringsDE: StringsType = {
         hiddenBadge: 'Ausgeblendet',
         rename: 'Umbenennen…',
         renameTitle: 'Umbenennen',
-        duplicate: 'Duplizieren',
-        duplicateTitle: 'Stammbaum duplizieren',
         newTreeNameLabel: 'Neuer Stammbaum-Name',
         mergeInto: 'Mit Stammbaum zusammenführen…',
         delete: 'Stammbaum löschen…',

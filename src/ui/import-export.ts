@@ -1102,6 +1102,7 @@ export const importExportMethods = uiModule({
     async readJsonImportText(name: string, read: () => Promise<string>, size: number, origin: HTMLElement | null,
         again: () => void, before?: () => void, into?: JsonImportInto): Promise<void> {
         if (!(await confirmMemoryForImport(size, name))) return;
+        this.jsonImportFileName = name;
         const got = await readPickedFile(origin, { name }, async ctl => {
             const text = await read();
             await paintBeforeParse(size);
@@ -1209,8 +1210,12 @@ export const importExportMethods = uiModule({
 
         // Always import as new tree
         const fromManager = this.importFromTreeManager;
+        const fileName = this.jsonImportFileName;
+        this.jsonImportFileName = null;
         this.closeImportDialog();
         this.showImportTreeDialog(data, strings.treeManager.importTreeName, fromManager);
+        // The new tree's row names the file (spec 139 §7.2).
+        this.importTreeFileName = fileName;
     },
 
     /**
@@ -1612,8 +1617,9 @@ export const importExportMethods = uiModule({
 
         this.importTreeData = data;
         this.importFromTreeManager = fromTreeManager;
-        // Set again by a GEDCOM import right after this.
+        // Set again by a GEDCOM import (or a JSON file's name) right after this.
         this.pendingGedcomImport = null;
+        this.importTreeFileName = null;
 
         // Handle dialog stack - if from tree manager, it's already in stack
         if (fromTreeManager) {
@@ -1665,6 +1671,7 @@ export const importExportMethods = uiModule({
         this.importTreeData = null;
         this.pendingImportResearch = null;
         this.pendingGedcomImport = null;
+        this.importTreeFileName = null;
         if (this.importFromTreeManager) {
             this.returnToParentDialog();
             this.importFromTreeManager = false;
@@ -1688,6 +1695,8 @@ export const importExportMethods = uiModule({
             () => ({ ok: false, kind: 'error', text: strings.busy.failed, retry: () => { void this.confirmImportTree(); } }));
         if (!newTreeId) return;
         this.restoreImportResearch(newTreeId);
+        // A JSON file carries no import record: its name goes with the tree (a GEDCOM's is in data.imports).
+        if (!gedcomImport && this.importTreeFileName) TreeManager.setImportedFrom(newTreeId, this.importTreeFileName);
 
         this.closeImportTreeDialog();
         this.showImportedTree(newTreeId);

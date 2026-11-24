@@ -53,6 +53,12 @@ export interface SavedMergeSession {
     incomingFileName?: string;
     /** Target tree name (tree being merged into) */
     targetTreeName?: string;
+    /**
+     * The tree being merged into, when known (spec 139 §9.1: Manage trees
+     * shows the session under that tree's row). Older sessions: read from
+     * their state, else matched by targetTreeName.
+     */
+    targetTreeId?: string;
     /** Source tree name (tree being merged from, for tree-to-tree merge) */
     sourceTreeName?: string;
     stats: {
@@ -220,6 +226,7 @@ export async function saveMergeSession(
             incomingFileName: fileName,
             targetTreeName,
             sourceTreeName,
+            ...(stateTargetId(state) ? { targetTreeId: stateTargetId(state) ?? undefined } : {}),
             stats: calculateStats(state),
             state: serializeState(state)
         };
@@ -253,6 +260,8 @@ export async function updateMergeSession(id: string, state: MergeState, names?: 
         // The target chosen since (or named wrong by an older version, 134 V-N4): the row says the tree merged into.
         if (names?.targetTreeName) session.targetTreeName = names.targetTreeName;
         if (names?.sourceTreeName) session.sourceTreeName = names.sourceTreeName;
+        const targetId = stateTargetId(state);
+        if (targetId) session.targetTreeId = targetId;
         session.stats = calculateStats(state);
         session.state = serializeState(state);
         await StorageManager.set('merge', SESSIONS_KEY, sessions);
@@ -312,15 +321,22 @@ export async function listMergeSessions(): Promise<SavedMergeSession[]> {
 
 export async function listMergeSessionsInfo(): Promise<Array<Omit<SavedMergeSession, 'state'>>> {
     const sessions = await listMergeSessions();
-    return sessions.map(({ id, savedAt, incomingFileName, targetTreeName, sourceTreeName, stats, state }) => ({
+    return sessions.map(({ id, savedAt, incomingFileName, targetTreeName, targetTreeId, sourceTreeName, stats, state }) => ({
         id,
         savedAt,
         incomingFileName,
         targetTreeName,
+        // An older session: the target its state names.
+        targetTreeId: targetTreeId ?? stateTargetId(state) ?? undefined,
         sourceTreeName,
         // A session saved by an older version: its "to decide" from its guide's state.
         stats: stats.pending === undefined && state?.wizard ? { ...stats, ...pendingStat(state) } : stats
     }));
+}
+
+/** The tree a merge state writes into, when it names one. */
+function stateTargetId(state: Pick<MergeState, 'target' | 'wizard'> | undefined): string | null {
+    return state?.target?.treeId ?? state?.wizard?.choices?.targetTreeId ?? null;
 }
 
 function pendingStat(serialized: SerializableMergeState): { pending?: number } {
