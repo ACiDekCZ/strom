@@ -96,7 +96,7 @@ for (const [label, viewport, lang] of [
         await fakeBridge(page, { links: ['send', 'open', 'live', 'app', 'setup', 'new'], statusExtra: { treesRoot: TREES_ROOT + '/' } });
         await poll(page);
         const ownerId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId()!);
-        const name = 'Fíškovi – druhá větev rodu z Horní Lhoty u Kunštátu';
+        const name = 'Pětiokovi – druhá větev rodu z Dolní Mokřiny u Brdovic';
         const copyId = await page.evaluate(([id, n]) => window.Strom.TreeManager.duplicateTree(id, n), [ownerId, name] as const);
         await page.evaluate((id) => window.Strom.UI.showCopyResearchDialog(id), copyId);
 
