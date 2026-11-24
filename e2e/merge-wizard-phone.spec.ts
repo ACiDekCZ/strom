@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, mergeGroup, mergeGroupsLoose, mergeOpenList } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, mergeGroup, mergeGroupsLoose, mergeOpenList, mergePendingAsNew } from './helpers.js';
 
 /**
  * The import guide's steps 3 and 5 on a phone (spec 134 §14): held upright
@@ -66,9 +66,8 @@ test.describe('a phone held upright', () => {
 
     test('step 3: the filters fold under Filters ▾, the list starts on the first screen, the preview is a sheet, the primary button on the screen', async ({ page }) => {
         const wizard = await openGuide(page, manyNewGed());
-        // A pair left to decide (a child like the tree's own one) goes as new.
-        const rest = wizard.getByRole('button', { name: /^Add as new \(\d+\)$/ });
-        if (await rest.count()) await rest.click();
+        // A pair left to decide (a child like the tree's own one, so one by one: 134 N2) goes as new.
+        await mergePendingAsNew(wizard);
         // Step 2 scrolled down to its decisions: step 3 still starts at its top.
         await wizard.locator('.merge-decide').scrollIntoViewIfNeeded();
         await expect(wizard.locator('#merge-step-body .merge-step-title')).not.toBeInViewport();

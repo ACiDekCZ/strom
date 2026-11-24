@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeDone, mergeToStep5, mergeWrite, reloadApp } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCount, mergeCurrentStep, mergeDone, mergePendingAsNew, mergeToStep5, mergeWrite, reloadApp } from './helpers.js';
 
 /**
  * Step 5 of the import guide, What will happen (spec 134 §8): the whole plan
@@ -235,9 +235,8 @@ test('3 000 new people (13h): Show all draws at most 100 rows of the list, scrol
     await expect(wizard).toBeVisible();
     await mergeCompare(wizard);
     await expect(mergeCount(wizard, 'joined')).toHaveText('1');
-    // A pair left to decide (a new child like the tree's own one) goes as new.
-    const rest = wizard.getByRole('button', { name: /^Add as new \(\d+\)$/ });
-    if (await rest.count()) await rest.click();
+    // A pair left to decide (a new child like the tree's own one, so one by one: 134 N2) goes as new.
+    await mergePendingAsNew(wizard);
     await mergeToStep5(wizard);
     await expect(group(wizard, 'new').locator('.merge-s5-gcount')).toHaveText('3,000');
     const list = wizard.locator('.merge-s5-list');

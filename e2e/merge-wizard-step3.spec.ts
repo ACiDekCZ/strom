@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, reloadApp } from './helpers.js';
+import { openApp, importJsonAsNewTree, mergeCompare, mergeCurrentStep, mergePendingAsNew, reloadApp } from './helpers.js';
 
 /**
  * Step 3 of the import guide, Whom to add (spec 134 §5, K4.1–K4.5): the
@@ -77,9 +77,8 @@ async function toStep3(page: Page, file: string): Promise<Locator> {
     await expect(wizard).toBeVisible();
     await mergeCompare(wizard);
     await expect(wizard.locator('#merge-counts [data-count="joined"] .merge-stat-value')).toHaveText('1');
-    // A pair left to decide (a new child like the tree's own one) goes as new.
-    const rest = wizard.getByRole('button', { name: /^Add as new \(\d+\)$/ });
-    if (await rest.count()) await rest.click();
+    // A pair left to decide (a new child like the tree's own one, so one by one: 134 N2) goes as new.
+    await mergePendingAsNew(wizard);
     await wizard.locator('#merge-next').click();
     await expect(mergeCurrentStep(wizard)).toHaveAttribute('data-step', '3');
     return wizard;

@@ -618,6 +618,30 @@ export async function mergeJoinPending(wizard: Locator): Promise<void> {
     await expect(mergeCount(wizard, 'pending')).toHaveText('0');
 }
 
+/**
+ * Every pair of step 2 still to decide goes as new: the rest at once ("Add as
+ * new (n)"), then the pairs the rest leaves out one by one (a pair of one
+ * family, 134 N2: its person has the same parents, child or partner as the
+ * tree's). The pending count ends at 0.
+ */
+export async function mergePendingAsNew(wizard: Locator): Promise<void> {
+    const rest = wizard.getByRole('button', { name: /^Add as new \(\d+\)$/ });
+    if (await rest.count()) await rest.first().click();
+    const pending = mergeCount(wizard, 'pending');
+    for (let n = Number(await pending.textContent()); n > 0; n--) {
+        let row: Locator | null = null;
+        for (const g of ['maybe', 'same'] as MergeGroup[]) {
+            await mergeGroup(wizard, g);
+            const open = wizard.locator('#merge-match-list .merge-item[data-fate="pending"]');
+            if (await open.count()) { row = open.first(); break; }
+        }
+        if (!row) throw new Error('A pair left to decide is in no group of step 2');
+        await row.click();
+        await wizard.locator('#merge-pair .merge-dec[data-dec="new"]').click();
+        await expect(pending).toHaveText(String(n - 1));
+    }
+}
+
 /** A decision on the pair whose row says `text`: same, new, another person (its dialog opens) or not added. */
 export async function mergeDecide(wizard: Locator, text: string | RegExp, decision: 'same' | 'new' | 'other' | 'skip', group?: MergeGroup): Promise<void> {
     await mergePair(wizard, text, group);
