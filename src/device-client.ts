@@ -73,7 +73,7 @@ export interface DeviceEnv {
     maxTouchPoints?: number;
 }
 
-function browserOf(env: DeviceEnv): string {
+export function browserOf(env: DeviceEnv): string {
     const ua = env.userAgent || '';
     const brands = env.brands ?? [];
     const has = (b: string): boolean => brands.some(x => x === b);
@@ -89,7 +89,7 @@ function browserOf(env: DeviceEnv): string {
     return '';
 }
 
-function systemOf(env: DeviceEnv): string {
+export function systemOf(env: DeviceEnv): string {
     const ua = env.userAgent || '';
     const p = (env.platform ?? '').toLowerCase();
     if (/\biPhone\b|\biPod\b/.test(ua)) return 'iPhone';
