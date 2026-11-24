@@ -700,10 +700,12 @@ class MergerUIClass {
         const state = this.mergeState!;
         const targetTreeId = state.target?.treeId ?? this.initialTarget ?? null;
         const label = this.sourceTreeName || this.incomingFileName || strings.mergeWizard.titleImport;
+        const program = this.sourceProgram();
         return {
             source: {
                 kind: this.sourceInfo.kind,
                 label,
+                ...(program ? { program } : {}),
                 persons: Object.values(state.incomingData.persons).filter(p => !p.isPlaceholder).length,
                 ...(this.sourceInfo.fingerprint ? { fingerprint: this.sourceInfo.fingerprint } : {}),
                 ...(this.sourceInfo.treeId ? { treeId: this.sourceInfo.treeId } : {}),
@@ -716,7 +718,16 @@ class MergerUIClass {
                 || strings.treeManager.newTree,
             // Only a tree that owns its research has one: a copy is a tree without research (spec 139 K5.3).
             ...(TreeManager.canSendToResearch(targetTreeId) ? { research: true } : {}),
+            saved: program ? SettingsManager.getMergeRule(program) : null,
         };
+    }
+
+    /** The program a GEDCOM file names in its header (`HEAD.SOUR`), '' when it names none or the import is no such file (K10.4). */
+    private sourceProgram(): string {
+        if (this.sourceInfo.kind !== 'ged') return '';
+        const importId = this.gedcomImport?.importId;
+        const rec = importId ? this.mergeState?.incomingData.imports?.find(r => r.id === importId) : undefined;
+        return rec?.program.trim() ? importProgramName(rec) : '';
     }
 
     // ==================== STEP 1 (spec 134 §3) ====================

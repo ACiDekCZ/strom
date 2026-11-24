@@ -2746,6 +2746,17 @@
         /* An option that only applies while its parent is on: indented,
            quieter, and disabled while the parent is off. */
         .settings-row-dependent { padding-left: 44px; }
+        /* Saved import rules (spec 134 K10.4): program and what it fills in, Remove at the right. */
+        #merge-rules-row[hidden] { display: none; }
+        .merge-rules-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+        .merge-rules-item { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .merge-rules-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .merge-rules-program { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .merge-rules-detail { font-size: 12px; color: var(--text-light); line-height: 1.4; overflow-wrap: anywhere; }
+        .modal .merge-rules-remove { flex: none; min-height: 28px; padding: 2px 12px; font-size: 12.5px; border-radius: var(--r-md); }
+        @media (pointer: coarse) {
+            .modal .merge-rules-remove { min-height: 44px; }
+        }
         .settings-row-dependent .settings-name {
             font-size: 13px;
             color: var(--text-light);
@@ -19546,6 +19557,12 @@
         .merge-s5-note { margin: 0; color: var(--text-light); font-size: 12px; line-height: 1.4; }
         .merge-s5-backup { font-size: 11px; }
         .modal .merge-s5 .merge-s5-save { align-self: flex-start; }
+        /* Remember for files from {program} (K10.4): at the foot of the side column, above the footer's button. */
+        .merge-s5-remember { margin-top: auto; display: flex; flex-direction: column; gap: 4px; padding-top: 8px; }
+        .merge-s5-remember[hidden] { display: none; }
+        .modal label.merge-s5-remember-row { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; font-weight: 400; line-height: 1.4; color: var(--text); cursor: pointer; }
+        .merge-s5-remember-row > input { flex: none; margin: 2px 0 0; }
+        .merge-s5-remember-text { min-width: 0; overflow-wrap: anywhere; }
         .modal .merge-s5 .merge-s5-preview-open { display: none; }
         .merge-s5-preview { display: flex; flex-direction: column; gap: 6px; }
         .merge-s5-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -19593,6 +19610,7 @@
             .modal .merge-s5 button.merge-s5-caret { width: 32px; }
             .modal .merge-s5-into > .sel-opt { min-height: 44px; }
             .modal .merge-s5 .merge-s5-act { min-height: 44px; }
+            .modal label.merge-s5-remember-row { min-height: 44px; align-items: center; }
         }
         /* A phone (14d): Where to write on top, the groups closed; the step scrolls as a whole, a row wraps what it links to under the name. */
         @media (max-width: 640px) {
@@ -19611,6 +19629,7 @@
             .modal .merge-s5 .merge-s5-list .link-button { min-height: 32px; }
             .merge-s5-gh .merge-s5-gsum { display: none; }
             .modal .merge-s5 .merge-s5-preview-open { min-height: 44px; }
+            .merge-s5-remember { margin-top: 0; padding-top: 0; }
         }
         /* A phone held sideways: the step scrolls as a whole, the list keeps a view of its own. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
@@ -37103,6 +37122,14 @@
                             <span class="settings-desc" data-i18n="importImages.settingHint"></span>
                         </span>
                     </label>
+                    <!-- The import guide's rules saved per program (spec 134 K10.4, renderMergeRulesSetting); hidden while none is saved. -->
+                    <div class="settings-row settings-row-stacked" id="merge-rules-row" hidden>
+                        <span class="settings-text">
+                            <span class="settings-name" id="merge-rules-name" data-i18n="mergeWizard.rulesSetting"></span>
+                            <span class="settings-desc" data-i18n="mergeWizard.rulesSettingHint"></span>
+                        </span>
+                        <ul class="merge-rules-list" aria-labelledby="merge-rules-name"></ul>
+                    </div>
                     <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="geocoding-toggle" onchange="window.Strom.UI.toggleGeocoding(this.checked)">
                         <span class="settings-text">

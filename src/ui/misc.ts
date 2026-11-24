@@ -7,6 +7,7 @@ import { canvasBusy } from './canvas-busy.js';
 import { busyButtonHtml } from './busy.js';
 import { refreshWindowControls } from '../windows/window-open.js';
 import { initDialogFocus } from './dialog-focus.js';
+import { renderMergeRulesSetting } from './merge-rules-settings.js';
 import { initClosedPopups } from './closed-popups.js';
 import { initSheetSlide } from './sheet-slide.js';
 import { initKeyboardAccess } from './keyboard-access.js';
@@ -415,6 +416,7 @@ export const miscMethods = uiModule({
 
         const importImagesToggle = document.getElementById('import-images-toggle') as HTMLInputElement | null;
         if (importImagesToggle) importImagesToggle.checked = SettingsManager.isImportImages();
+        renderMergeRulesSetting();
         const advancedToggle = document.getElementById('advanced-fields-toggle') as HTMLInputElement | null;
         if (advancedToggle) advancedToggle.checked = SettingsManager.isAdvancedFields();
 

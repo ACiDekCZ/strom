@@ -161,6 +161,17 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         unreadable: (name: string) => `${name} nie jest czytelnym plikiem GEDCOM. Nic się nie zmieniło.`,
         unreadableJson: (name: string) => `${name} nie jest czytelnym plikiem drzewa genealogicznego (.json). Nic się nie zmieniło.`,
         dropOnTree: (file: string | null, tree: string) => (file ? `Upuszczenie: dodanie ${file} do drzewa ${tree}` : `Upuszczenie: dodanie pliku do drzewa ${tree}`),
+        /** Step 5's row above the button (K10.4): `s` the scope's letter, `r` who is right. */
+        rememberRules: (p: string, s: string, r: string) => `Zapamiętać dla plików z ${p}: zakres ${s}), ${r}`,
+        rememberNote: (where: string) => `Następnym razem krok 1 zostanie tak wypełniony (można zmienić). Zapisane reguły są w Ustawieniach → ${where}.`,
+        rememberKinds: 'z wyjątkami według rodzaju danej',
+        /** Step 1 under the scope, filled in from a saved rule (K10.4). */
+        prefilledFrom: (p: string) => `Wypełnione według reguły zapisanej dla plików z ${p} (można zmienić).`,
+        rulesSetting: 'Zapisane reguły importu',
+        rulesSettingHint: 'Wypełniają krok 1 kreatora importu dla plików z tego samego programu.',
+        rulesRowDetail: (s: string, r: string) => `zakres ${s} · ${r}`,
+        rulesRemove: 'Usuń',
+        rulesRemoveAria: (p: string) => `Usunąć regułę dla plików z ${p}`,
         otherDialog: (d: string) => `Najpierw trzeba zakończyć otwarte okno ${d}; potem plik otworzy się w kreatorze.`,
         resumeChanged: (t: string, n: number) => `Drzewo ${t} od tego czasu się zmieniło (${nPl(n, 'zmiana', 'zmiany', 'zmian')}): propozycje zostaną przeliczone, decyzje zostaną.`,
         pickOther: 'Wybierz inne drzewo',

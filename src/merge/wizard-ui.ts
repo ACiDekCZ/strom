@@ -13,7 +13,9 @@
  */
 
 import type { MergeState, MergeWizardState } from './types.js';
-import type { TreeId } from '../types.js';
+import type { SavedMergeRule, TreeId } from '../types.js';
+import { SettingsManager } from '../settings.js';
+import { applySavedRule, ruleFromChoices } from './saved-rules.js';
 import { planCounts, wizardPlan, type MergePlan, type PlanCounts, type PlanMode, type PlanSource, type WizardChoices } from './plan.js';
 import { stepInfo, nextStep, previousStep, WIZARD_STEPS, type StepInfo, type WizardStep } from './wizard-steps.js';
 import { strings, countText } from '../strings.js';
@@ -86,15 +88,17 @@ export interface WizardSource {
     targetTreeId: TreeId | null;
     targetName: string;
     research?: boolean;
+    /** The rule saved for the file's program (K10.4): step 1 starts filled in from it. */
+    saved?: SavedMergeRule | null;
 }
 
 function newPlanId(): string {
     return `plan-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** The choices a guide starts with: Add to a tree (or the given mode), scope a), my tree applies. */
+/** The choices a guide starts with: Add to a tree (or the given mode), scope a), my tree applies; or the scope and rules saved for the file's program (K10.4). */
 export function freshChoices(src: WizardSource, state: MergeState): WizardChoices {
-    return {
+    return applySavedRule({
         mode: src.mode ?? 'add',
         targetTreeId: src.targetTreeId,
         scope: 'a',
@@ -105,7 +109,7 @@ export function freshChoices(src: WizardSource, state: MergeState): WizardChoice
         ...(state.target ? { targetFingerprint: state.target.fingerprint } : {}),
         planId: newPlanId(),
         createdAt: new Date().toISOString(),
-    };
+    }, src.saved);
 }
 
 /** Why the guide cannot go on yet: the pairs left to decide, else the unlinked groups left to decide (§6); '' when nothing is. */
@@ -352,6 +356,7 @@ export class MergeWizard {
             if (ws.choices.mode === 'compare') {
                 // Only compare: the button saves the list, then the guide closes (nothing written).
                 if (this.plan) this.host.savePlan?.(this.plan);
+                this.rememberRule();
                 this.host.finishCompare();
                 return;
             }
@@ -393,10 +398,18 @@ export class MergeWizard {
         this.renderFooter();
         try {
             await this.host.write(plan, retention ? { retention } : {});
+            if (this.ws?.choices.writtenAt) this.rememberRule();
         } finally {
             this.busy = false;
             if (this.host.state()) this.renderFooter();
         }
+    }
+
+    /** Step 5's "Remember for files from {program}" ticked: the scope and the rules saved for the program (K10.4). */
+    private rememberRule(): void {
+        const c = this.ws?.choices;
+        const rule = c?.remember ? ruleFromChoices(c) : null;
+        if (rule) SettingsManager.setMergeRule(rule);
     }
 
     /** Where the write stands (8a–8f): said above step 5's list, the footer again. */

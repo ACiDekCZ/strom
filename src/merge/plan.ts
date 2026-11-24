@@ -215,6 +215,10 @@ export interface WizardChoices {
     into?: 'tree' | 'new';
     /** Couples (the import's id) and parent links (`${child}<${parent}`) unticked in step 5: not written. */
     offLinks?: readonly string[];
+    /** Step 5's "Remember for files from {program}" (K10.4): the scope and the rules are saved once the guide writes or saves its list. */
+    remember?: boolean;
+    /** Step 1 was filled in from the rule saved for files of this program (K10.4); its name as the file gives it. */
+    prefilledFrom?: string;
 }
 
 /** A problem the check before saving found (merge-check kinds, plus the plan's own). */

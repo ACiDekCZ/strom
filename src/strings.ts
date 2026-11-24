@@ -6431,6 +6431,17 @@ const stringsEN = {
         unreadableJson: (name: string) => `${name} is not a readable family tree file (.json). Nothing changed.`,
         /** A row of Manage trees under a dragged file or tree (K10.3): what the drop does; `file` null when the browser does not name the file yet. */
         dropOnTree: (file: string | null, tree: string) => (file ? `Drop: add ${file} to the tree ${tree}` : `Drop: add the file to the tree ${tree}`),
+        /** Step 5's row above the button (K10.4): `s` the scope's letter, `r` who is right. */
+        rememberRules: (p: string, s: string, r: string) => `Remember for files from ${p}: scope ${s}), ${r}`,
+        rememberNote: (where: string) => `Next time step 1 is filled in with it (can be changed). Saved rules are in Settings → ${where}.`,
+        rememberKinds: 'with exceptions by kind of detail',
+        /** Step 1 under the scope, filled in from a saved rule (K10.4). */
+        prefilledFrom: (p: string) => `Filled in from the rule saved for files from ${p} (can be changed).`,
+        rulesSetting: 'Saved import rules',
+        rulesSettingHint: 'Fill in step 1 of the import guide for files from the same program.',
+        rulesRowDetail: (s: string, r: string) => `scope ${s} · ${r}`,
+        rulesRemove: 'Remove',
+        rulesRemoveAria: (p: string) => `Remove the rule for files from ${p}`,
         otherDialog: (d: string) => `The open dialog ${d} needs finishing first; then the file opens in the guide.`,
         resumeChanged: (t: string, n: number) => `The tree ${t} has changed since (${nEn(n, 'edit', 'edits')}): suggestions are recalculated, decisions stay.`,
         pickOther: 'Choose another tree',
@@ -18070,6 +18081,17 @@ const stringsCZ: StringsType = {
         unreadable: (name: string) => `${name} není čitelný soubor GEDCOM. Nic se nezměnilo.`,
         unreadableJson: (name: string) => `${name} není čitelný soubor rodokmenu (.json). Nic se nezměnilo.`,
         dropOnTree: (file: string | null, tree: string) => (file ? `Pustit: přidat ${file} do stromu ${tree}` : `Pustit: přidat soubor do stromu ${tree}`),
+        /** Step 5's row above the button (K10.4): `s` the scope's letter, `r` who is right. */
+        rememberRules: (p: string, s: string, r: string) => `Zapamatovat pro soubory z ${p}: rozsah ${s}), ${r}`,
+        rememberNote: (where: string) => `Příště se v kroku 1 předvyplní (jde změnit). Uložená pravidla jsou v Nastavení → ${where}.`,
+        rememberKinds: 's výjimkami podle druhu údaje',
+        /** Step 1 under the scope, filled in from a saved rule (K10.4). */
+        prefilledFrom: (p: string) => `Předvyplněno podle pravidla uloženého pro soubory z ${p} (jde změnit).`,
+        rulesSetting: 'Uložená pravidla importu',
+        rulesSettingHint: 'Předvyplní krok 1 průvodce importem pro soubory ze stejného programu.',
+        rulesRowDetail: (s: string, r: string) => `rozsah ${s} · ${r}`,
+        rulesRemove: 'Odebrat',
+        rulesRemoveAria: (p: string) => `Odebrat pravidlo pro soubory z ${p}`,
         otherDialog: (d: string) => `Nejdřív je potřeba dokončit otevřený dialog ${d}; pak se soubor otevře v průvodci.`,
         resumeChanged: (t: string, n: number) => `Strom ${t} se od té doby změnil (${nCs(n, 'úprava', 'úpravy', 'úprav')}): návrhy se přepočítají, rozhodnuté zůstanou.`,
         pickOther: 'Vybrat jiný strom',
@@ -29539,6 +29561,17 @@ const stringsDE: StringsType = {
         unreadable: (name: string) => `${name} ist keine lesbare GEDCOM-Datei. Nichts wurde geändert.`,
         unreadableJson: (name: string) => `${name} ist keine lesbare Stammbaumdatei (.json). Nichts wurde geändert.`,
         dropOnTree: (file: string | null, tree: string) => (file ? `Ablegen: ${file} zum Stammbaum ${tree} hinzufügen` : `Ablegen: Datei zum Stammbaum ${tree} hinzufügen`),
+        /** Step 5's row above the button (K10.4): `s` the scope's letter, `r` who is right. */
+        rememberRules: (p: string, s: string, r: string) => `Für Dateien aus ${p} merken: Umfang ${s}), ${r}`,
+        rememberNote: (where: string) => `Beim nächsten Mal wird Schritt 1 damit vorausgefüllt (änderbar). Gespeicherte Regeln stehen unter Einstellungen → ${where}.`,
+        rememberKinds: 'mit Ausnahmen nach Art der Angabe',
+        /** Step 1 under the scope, filled in from a saved rule (K10.4). */
+        prefilledFrom: (p: string) => `Vorausgefüllt nach der für Dateien aus ${p} gespeicherten Regel (änderbar).`,
+        rulesSetting: 'Gespeicherte Importregeln',
+        rulesSettingHint: 'Füllen Schritt 1 des Import-Assistenten für Dateien aus demselben Programm vor.',
+        rulesRowDetail: (s: string, r: string) => `Umfang ${s} · ${r}`,
+        rulesRemove: 'Entfernen',
+        rulesRemoveAria: (p: string) => `Regel für Dateien aus ${p} entfernen`,
         otherDialog: (d: string) => `Zuerst muss der offene Dialog ${d} abgeschlossen werden; dann öffnet sich die Datei im Assistenten.`,
         resumeChanged: (t: string, n: number) => `Der Stammbaum ${t} hat sich seither geändert (${nDe(n, 'Änderung', 'Änderungen')}): Vorschläge werden neu berechnet, Entscheidungen bleiben.`,
         pickOther: 'Anderen Stammbaum wählen',
