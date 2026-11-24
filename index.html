@@ -18764,6 +18764,25 @@
         .merge-stats--line {
             display: none;
         }
+        /* "To decide N" goes to the first pair still to decide (K10.5): the chip, the phone's line and step 2's
+           second line are buttons that look as before; underlined under a mouse, the focus ring shown. */
+        button.merge-pending-go {
+            font-family: inherit; font-weight: inherit; line-height: inherit; letter-spacing: inherit;
+            color: inherit; margin: 0; text-align: left; cursor: pointer;
+        }
+        button.merge-pending-go:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        button.merge-stats-go { position: relative; font-size: inherit; font-variant-numeric: inherit; padding: 0; border: 0; background: none; }
+        button.merge-step-sub.merge-pending-go { padding: 0; border: 0; background: none; }
+        @media (pointer: coarse) {
+            /* The line's words are small to tap: the button reaches above and below them. */
+            button.merge-stats-go::after { content: ''; position: absolute; inset: -12px -4px; }
+        }
+        @media (hover: hover) {
+            button.merge-pending-go:hover .merge-stat-label,
+            button.merge-pending-go:hover .merge-stat-value,
+            button.merge-stats-go:hover,
+            button.merge-step-sub.merge-pending-go:hover { text-decoration: underline; }
+        }
         /* The steps and the counts: one bar on a wider window (below); on a phone they stand as before. */
         .merge-topbar { display: contents; }
         .merge-foot-note { display: none; }

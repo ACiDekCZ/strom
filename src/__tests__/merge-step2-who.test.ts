@@ -9,8 +9,9 @@
 import { describe, it, expect } from 'vitest';
 import { AUTO_CONFIRM_SCORE } from '../merge/executor.js';
 import { createMergeState, updateMatchDecision } from '../merge/matching.js';
-import { decisionKind, defaultGroup, isCopyOfTarget, pairRows } from '../merge/steps/step2-who.js';
-import type { PlanCounts, WizardChoices } from '../merge/plan.js';
+import { decisionKind, defaultGroup, firstPending, isCopyOfTarget, openingView, pairRows, pendingPairs, type PairRow } from '../merge/steps/step2-who.js';
+import type { PersonId } from '../types.js';
+import type { MergePlan, PlanCounts, WizardChoices } from '../merge/plan.js';
 import { mulberry32, sourceTree, targetTree } from './helpers/merge-trees.js';
 
 function stateOf(seed: number) {
@@ -60,6 +61,46 @@ describe('step 2 – the groups of the pairs', () => {
             return;
         }
         throw new Error('no seed gave a pair below the joining score');
+    });
+});
+
+describe('step 2 – where it opens and "To decide N" (K10.5)', () => {
+    const row = (id: string, group: PairRow['group']): PairRow => ({ id: id as PersonId, group, match: null });
+    const pending = (...ids: string[]): Set<PersonId> => new Set(ids as PersonId[]);
+    const rows = [row('s1', 'same'), row('m1', 'maybe'), row('m2', 'maybe'), row('m3', 'maybe'), row('n1', 'new'), row('n2', 'new')];
+
+    it('opens on Maybe the same at its first undecided pair, whatever group was shown before', () => {
+        const f = pending('m2', 'm3');
+        expect(openingView(rows, f, 'same', 's1' as PersonId)).toEqual({ group: 'maybe', selected: 'm2' });
+        expect(openingView(rows, f, 'new', null)).toEqual({ group: 'maybe', selected: 'm2' });
+        expect(openingView(rows, f, null, null)).toEqual({ group: 'maybe', selected: 'm2' });
+        expect(openingView(rows, f, 'maybe', 'm3' as PersonId)).toEqual({ group: 'maybe', selected: 'm2' });
+    });
+
+    it('keeps the group and pair shown last when nothing waits in Maybe the same (the default group the first time)', () => {
+        const f = pending();
+        expect(openingView(rows, f, 'same', 's1' as PersonId)).toEqual({ group: 'same', selected: 's1' });
+        expect(openingView(rows, f, 'new', 'n1' as PersonId)).toEqual({ group: 'new', selected: 'n1' });
+        expect(openingView(rows, f, null, null)).toEqual({ group: 'maybe', selected: null });
+        expect(openingView([row('s1', 'same')], pending(), null, null)).toEqual({ group: 'same', selected: null });
+    });
+
+    it('finds the first pair to decide in Maybe the same first, in the list\'s order', () => {
+        expect(firstPending(rows, pending('m3', 'm2'))?.id).toBe('m2');
+        expect(firstPending(rows, pending('s1', 'm3'))?.id).toBe('m3');
+        expect(firstPending(rows, pending('n2'))).toEqual(row('n2', 'new'));
+        expect(firstPending(rows, pending())).toBeNull();
+        expect(firstPending([], pending())).toBeNull();
+    });
+
+    it('counts as a pair to decide only an offered pair nobody decided, not a person of an undecided unlinked group (step 3\'s)', () => {
+        const plan = { items: [
+            { kind: 'person-pending', id: 'm1', candidate: 't1', score: 60 },
+            { kind: 'group-pending', id: 'n1', group: 'g1' },
+            { kind: 'person-add', id: 'n2', on: true },
+        ] } as unknown as MergePlan;
+        expect([...pendingPairs(plan)]).toEqual(['m1']);
+        expect(pendingPairs(null).size).toBe(0);
     });
 });
 
