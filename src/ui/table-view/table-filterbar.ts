@@ -15,7 +15,7 @@ import { columnLabel, type ColumnDef } from './table-columns.js';
 import { ROW_KEY, type RowType, type TableModel } from './table-model.js';
 import {
     activeFilterCount, availableChips, CHECK_CHIPS, chipItem, chipLabel, columnItemLabel, columnValues, equalChoices, equalsOf,
-    filterKindOf, isEqualityItem, generationSpan, newWindowOf, rodChoices, shownColumnItems,
+    filterKindOf, isEqualityItem, generationSpan, newWindowOf, rodChoices, shownColumnItems, STATS_CHIP,
     type ChipFilter, type ChipId, type ColumnFilter, type EqualValue, type TableFilter,
 } from './table-filter.js';
 import { closeHeadMenu, openHeadMenu, type HeadMenuEntry, type MenuEntry } from './table-headmenu.js';
@@ -53,6 +53,8 @@ export interface FilterBarState {
     pinned?: number;
     /** The rows' grouping (spec 084 §10): the chip "Grouped: <value> ×" before the pinned rows' (none on a phone). */
     grouped?: string | null;
+    /** Back to Statistics beside the Statistics' chip (spec 138 §8): the window's state is still at hand. */
+    statsBack?: boolean;
 }
 
 /** The research's part of the chips' row (§16.5, 16a0, 16n–16p, 16z, 16zk). */
@@ -96,6 +98,8 @@ export interface FilterBarHandlers {
     onUngroup?(): void;
     /** The phone's Filters button. */
     onSheet(): void;
+    /** Back to Statistics (spec 138 §8): the Statistics as they were. */
+    onStatsBack?(): void;
 }
 
 /** The grouping's chip (spec 084 §10): "Grouped: <value>", × ends the grouping; an outline like the pinned rows'. */
@@ -124,12 +128,30 @@ function participantChipHtml(model: TableModel, type: RowType, filter: TableFilt
         + `<button type="button" class="tv-chip-x" data-xchip="participant" aria-label="${esc(strings.table.removeFilter(label))}">×</button></span>`;
 }
 
+/**
+ * The Statistics' chip (spec 138 §8: "Statistics: first name Jan ×") and
+ * Back to Statistics: first in the chips' row with a separator after them,
+ * on a phone a row of their own under the bar.
+ */
+function statsChipHtml(type: RowType, filter: TableFilter, back: boolean, sep: boolean): string {
+    const item = type === 'persons' ? chipItem(filter, STATS_CHIP) : null;
+    if (!item) return '';
+    const label = item.name ?? '';
+    return `<span class="tv-chip sel-opt tv-chip--col tv-chip--stats is-active" data-statschip>`
+        + `<span class="tv-chip-text" title="${esc(label)}">${esc(label)}</span>`
+        + `<button type="button" class="tv-chip-x" data-xchip="${STATS_CHIP}" aria-label="${esc(strings.table.removeFilter(label))}">×</button></span>`
+        + (back ? `<button type="button" class="tv-back">${esc(strings.treeStats.table.back)}</button>` : '')
+        + (sep ? '<span class="tv-bar-sep tv-statssep" aria-hidden="true"></span>' : '');
+}
+
 /** The bar's filter controls: search, the chips' row and the phone's Filters button. */
 export class FilterBar {
     private readonly input: HTMLInputElement;
     private readonly matches: HTMLElement;
     private readonly row: HTMLElement;
     private readonly sheetBtn: HTMLButtonElement;
+    /** The phone's row of the Statistics' chip (spec 138 §8, the chips' row is not there). */
+    private readonly statsRow: HTMLElement;
     private state: FilterBarState | null = null;
     private timer = 0;
     private readonly ro: ResizeObserver | null;
@@ -166,6 +188,16 @@ export class FilterBar {
         this.sheetBtn.setAttribute('aria-haspopup', 'dialog');
         this.sheetBtn.addEventListener('click', () => handlers.onSheet());
         slot.after(this.sheetBtn);
+
+        this.statsRow = document.createElement('div');
+        this.statsRow.className = 'tv-statsrow';
+        this.statsRow.hidden = true;
+        this.statsRow.addEventListener('click', (e) => {
+            const t = e.target as Element;
+            if (t.closest('.tv-back')) { handlers.onStatsBack?.(); return; }
+            if (t.closest(`[data-xchip="${STATS_CHIP}"]`)) handlers.onChip(STATS_CHIP, false);
+        });
+        bar.querySelector('.tv-bar-row1')?.after(this.statsRow);
 
         this.row = bar.querySelector<HTMLElement>('.tv-chips')!;
         this.row.setAttribute('role', 'toolbar');
@@ -205,11 +237,21 @@ export class FilterBar {
         const cols = shownColumnItems(type, filter);
         const pinned = state.phone ? 0 : state.pinned ?? 0;
         const grouped = state.phone ? null : state.grouped ?? null;
+        // The Statistics' chip: on a phone in a row of its own (its focus kept when drawn again).
+        const statsPhone = state.phone ? statsChipHtml(type, filter, !!state.statsBack, false) : '';
+        if (this.statsRow.innerHTML !== statsPhone) {
+            const active = document.activeElement;
+            const had = active instanceof HTMLElement && this.statsRow.contains(active) ? (active.matches('.tv-back') ? '.tv-back' : '.tv-chip-x') : null;
+            this.statsRow.innerHTML = statsPhone;
+            if (had) this.statsRow.querySelector<HTMLElement>(had)?.focus({ preventScroll: true });
+        }
+        this.statsRow.hidden = !statsPhone;
         this.row.hidden = state.phone || (!chips.length && !cols.length && !pinned && !grouped);
         if (this.row.hidden) { this.row.innerHTML = ''; return; }
         // The pinned rows (spec 103 3a): first, fixed (it never gives way to "More filters"), not a filter;
-        // the grouping's chip (spec 084 §10) before it.
-        let html = (grouped ? groupChipHtml(grouped) : '') + (pinned ? pinChipHtml(pinned) : grouped ? '<span class="tv-bar-sep tv-pinsep" aria-hidden="true"></span>' : '');
+        // the grouping's chip (spec 084 §10) before it; the Statistics' chip (spec 138 §8) before them all.
+        let html = statsChipHtml(type, filter, !!state.statsBack, true)
+            + (grouped ? groupChipHtml(grouped) : '') + (pinned ? pinChipHtml(pinned) : grouped ? '<span class="tv-bar-sep tv-pinsep" aria-hidden="true"></span>' : '');
         for (const chip of chips) {
             const item = chipItem(filter, chip);
             const waits = state.checking && CHECK_CHIPS.includes(chip);
@@ -297,7 +339,7 @@ export class FilterBar {
         if (!over()) return;
         // Active chips go first, column chips after them, the rest keeps its order.
         quick.forEach((c, i) => { c.style.order = String(c.classList.contains('is-active') ? i : 100 + i); });
-        for (const c of this.row.querySelectorAll<HTMLElement>('.tv-chip--col')) c.style.order = '50';
+        for (const c of this.row.querySelectorAll<HTMLElement>('.tv-chip--col:not(.tv-chip--stats)')) c.style.order = '50';
         more.style.order = '500';
         more.hidden = false;
         const inactive = quick.filter(c => !c.classList.contains('is-active'));
@@ -341,6 +383,7 @@ export class FilterBar {
         if (!st) return;
         const t = e.target as Element;
         if (t.closest('.tv-chips-clear')) { this.handlers.onClear(); return; }
+        if (t.closest('.tv-back')) { this.handlers.onStatsBack?.(); return; }
         if (t.closest('.tv-grpchip-x')) { this.handlers.onUngroup?.(); return; }
         if (t.closest('.tv-pinchip-x')) { this.handlers.onUnpinAll?.(); return; }
         const xc = t.closest<HTMLElement>('[data-xchip]');
@@ -863,6 +906,12 @@ export class FilterSheet {
                 + `<span class="tv-fs-label">${esc(t.chip[chip])}</span>${waits ? `<span class="tv-cp-note">${esc(t.checksWait)}</span>` : ''}</label>`;
         }
         if (rest > 0) html += `<button type="button" class="tv-fs-row tv-fs-more">${esc(t.moreN(rest))}</button>`;
+        const stats = st.type === 'persons' ? chipItem(st.filter, STATS_CHIP) : null;
+        if (stats) {
+            const label = stats.name ?? '';
+            html += `<div class="tv-fs-row tv-fs-part tv-fs-stats"><span class="tv-fs-label">${esc(label)}</span>`
+                + `<button type="button" class="tv-fs-x" data-xchip="${STATS_CHIP}" aria-label="${esc(t.removeFilter(label))}">×</button></div>`;
+        }
         const part = st.type === 'events' ? chipItem(st.filter, 'participant') : null;
         if (part) {
             const label = chipLabel(st.model, part, 'participant');

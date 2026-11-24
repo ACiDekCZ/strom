@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { openApp, createFirstPerson, openTreeActions, openStructureDialog, runStructure, type StructureRun } from './helpers.js';
 
 /** The flyout "Tree: {name} ›" of a one-person tree (menu 1020 §3.1), Change structure folded. */
-const DESKTOP_TREE_KEYS = ['overview', 'overview-quality', 'snapshots', 'researchInfo',
+const DESKTOP_TREE_KEYS = ['overview', 'stats', 'overview-quality', 'snapshots', 'researchInfo',
     'rename', 'defaultPerson', 'startup', 'lifeline', 'places', 'surnames', 'structure',
     'visibility', 'lock', 'delete', 'manageTrees'];
 
@@ -464,7 +464,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.isLocked)).toBe(true);
         await openTreeActions(page);
         await expect.poll(() => submenu.locator('[role^="menuitem"]:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action)))
-            .toEqual(['overview', 'overview-quality', ...(await submenu.locator('[data-action="audit"]').count() ? ['audit'] : []), 'lock', 'manageTrees']);
+            .toEqual(['overview', 'stats', 'overview-quality', ...(await submenu.locator('[data-action="audit"]').count() ? ['audit'] : []), 'lock', 'manageTrees']);
         await expect(submenu.locator('[data-action="lock"]')).toHaveText('Unlock tree');
         await submenu.locator('[data-action="lock"]').click();
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.isLocked)).toBeFalsy();
@@ -813,11 +813,11 @@ test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => 
         // to offer (none for a one-person tree without a link), never empty.
         await expect(menu.locator('.tree-row-menu-group:visible')).toHaveText(['Research', 'Tree settings']);
         const keys = await menu.locator('.tree-row-menu-item:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
-        // Change structure… and Export… are buttons in the row, not in its ⋯ (spec 139 §8.2).
-        expect(keys.slice(0, 2)).toEqual(['overview', 'overview-quality']);
+        // Change structure… and Export… are buttons in the row, not in its ⋯ (spec 139 §8.2);
+        // Statistics under the overview (spec 138 §10.1).
+        expect(keys.slice(0, 3)).toEqual(['overview', 'stats', 'overview-quality']);
         expect(keys).not.toContain('structure');
         expect(keys).not.toContain('export');
-        expect(keys).not.toContain('stats');
         expect(keys).not.toContain('health');
         expect(keys).toContain('places');
         expect(keys).toContain('surnames');

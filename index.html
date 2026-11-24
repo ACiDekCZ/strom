@@ -4184,6 +4184,20 @@
         .bottom-sheet-more .bottom-sheet-pair:has(#sheet-help) .bottom-sheet-item {
             flex: 1 1 auto; width: auto; min-width: auto; padding: 4px;
         }
+        /* View: Fan | Map | Timeline | Statistics (spec 138 §10.1): each tile as wide as its name allows,
+           none narrower than its longest word (a word never breaks inside a tile on a 360px phone). */
+        @media not all and (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .bottom-sheet-more .bottom-sheet-pair:has(> .bottom-sheet-pair-label) { gap: 6px; }
+            .bottom-sheet-more .bottom-sheet-pair:has(> .bottom-sheet-pair-label) > .bottom-sheet-item {
+                flex: 1 1 auto; width: auto; min-width: auto; padding: 0 6px;
+            }
+        }
+        /* A 360px phone in German or Polish: the four names need every pixel. */
+        @media (max-width: 400px) {
+            .bottom-sheet-more .bottom-sheet-pair:has(> .bottom-sheet-pair-label) { gap: 4px; }
+            .bottom-sheet-more .bottom-sheet-pair:has(> .bottom-sheet-pair-label) > .bottom-sheet-item { padding: 0 4px; }
+            .bottom-sheet-more .bottom-sheet-pair:has(> .bottom-sheet-pair-label) > .bottom-sheet-pair-label { padding: 0 2px 0 6px; }
+        }
         .bottom-sheet-pair-label { flex: none; font-size: 13px; color: var(--text-light); padding: 0 4px 0 8px; }
         /* Shortcut chips only with a mouse (a touch screen has no keyboard to hint at). */
         .bottom-sheet .menu-kbd { display: none; margin-left: 0; }
@@ -11156,6 +11170,15 @@
         .tv-chips.is-tight .tv-chip-edit { flex: 1 1 auto; min-width: 0; }
         .tv-chips.is-tight .tv-chip-x { flex: none; }
         .tv-chip-text { padding: 0 4px 0 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* The Statistics' chip (spec 138 §8): first in the row, Back to Statistics and a separator after it. */
+        .tv-chip--stats .tv-chip-text { max-width: 420px; }
+        .tv-back {
+            flex: none; padding: 0 2px; border: none; background: none; color: var(--primary); font: inherit; font-size: 12.5px;
+            text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap;
+        }
+        .tv-back:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: var(--r-sm); }
+        .tv-statssep { margin-left: 0; }
+        .tv-statsrow { display: none; }
         .tv-chips-clear {
             flex: none; margin-left: auto; padding: 0 2px; border: none; background: none; color: var(--primary);
             font: inherit; font-size: 12.5px; text-decoration: underline; cursor: pointer; white-space: nowrap; order: 1000;
@@ -12312,6 +12335,15 @@
             }
             .tv-bar-row1::after { content: ''; order: 9; flex-basis: 100%; height: 0; }
             .tv-chips { display: none; }
+            /* The Statistics' chip across the width (× 44 px), Back to Statistics under it (spec 138 §8, frame 23). */
+            .tv-statsrow:not([hidden]) {
+                display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px 12px 10px;
+                border-top: 1px solid var(--divider);
+            }
+            .tv-statsrow .tv-chip--stats { align-self: stretch; height: auto; min-height: 44px; padding: 0; }
+            .tv-statsrow .tv-chip-text { flex: 1 1 auto; min-width: 0; max-width: none; padding: 6px 4px 6px 12px; white-space: normal; line-height: 1.3; font-size: 14px; }
+            .tv-statsrow .tv-chip-x { flex: none; width: 44px; align-self: stretch; height: auto; min-height: 44px; }
+            .tv-statsrow .tv-back { min-height: 44px; font-size: 14px; }
             .tv-ff select, .tv-ff input[type="text"], .tv-ff input[type="number"] { height: 44px; font-size: 16px; }
             .tv-ff-check { min-height: 48px; }
             .tv-ff-values { max-height: none; }
@@ -12357,6 +12389,10 @@
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .tv-bar-row1 { flex-wrap: nowrap; min-height: 50px; padding: 5px 12px; }
             .tv-bar-row1::after { display: none; }
+            /* The Statistics' chip and Back to Statistics side by side: no height to spare (spec 138 §8). */
+            .tv-statsrow:not([hidden]) { flex-direction: row; align-items: center; gap: 8px; padding: 2px 12px 4px; }
+            .tv-statsrow .tv-chip--stats { flex: 0 1 auto; min-width: 0; align-self: auto; }
+            .tv-statsrow .tv-chip-text { white-space: nowrap; }
             .tv-slot-view { flex: 0 1 auto; max-width: 220px; }
             /* The scope's button in the one row, after the view (11c on a phone held sideways). */
             .tv-slot-scope { order: 1; flex: 0 1 auto; max-width: 200px; }
@@ -28011,7 +28047,16 @@
         .tov-month-detail { margin: 6px 0 0; }
         .tov-names { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; }
         .tov-names-col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-        .tov-names-col .tov-chart-title { margin-bottom: 4px; }
+        .tov-names-col > .tov-chart-title, .tov-names-col > .tov-chart-head { margin-bottom: 4px; }
+        /* "In detail" (spec 138 §2): a link at the right of a block's or chart's title, the Statistics on its topic. */
+        .tov-chart-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+        .tov-chart-head > .tov-chart-title { min-width: 0; }
+        .modal.tov .tov-link.tov-stats-more {
+            flex: none; margin-left: auto; padding: 0 4px; border-radius: var(--r-sm); font-size: 13px; font-weight: 500; white-space: nowrap;
+        }
+        .tov-rod-actions > .tov-stats-more { align-self: center; }
+        @media (hover: hover) { .modal.tov .tov-link.tov-stats-more:hover { color: var(--primary-dark); background: var(--hover-bg); } }
+        @media (pointer: coarse) { .modal.tov .tov-link.tov-stats-more { display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; } }
         .tov-name-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13.5px; min-height: 22px; align-items: center; }
         .tov-name-n { color: var(--text-light); font-variant-numeric: tabular-nums; }
         .tov-counts { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13.5px; }
@@ -28367,6 +28412,277 @@
             .modal.tov .tov-rod-row { grid-template-columns: 14px minmax(0, 1fr); min-height: 52px; }
             .tov-rod-bar { display: none; }
             .tov-rod-small { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
+        /* ---- Statistics (src/ui/tree-stats-ui.ts, spec 138) ----
+           Desktop: a 1120 x 820 dialog of a fixed height (a topic of other
+           rows does not move it): topics on the left, the frequency table
+           scrolling inside, footer with Export CSV and Close. Tablet: the
+           same at the window's width less 48px. Phone: a full-screen sheet,
+           Topic and Scope as two buttons opening sheets. Phone sideways: one
+           52px bar, the content scrolls under it. The buttons outrank the
+           generic `.modal button` with `.stv` in front. */
+        #tree-stats-modal .modal.stv {
+            --stv-row-h: 32px;
+            position: relative; width: 1120px; max-width: calc(100vw - 48px); height: min(820px, calc(100vh - 48px)); max-height: none;
+            display: flex; flex-direction: column; padding: 0; overflow: hidden;
+            background: var(--surface); color: var(--text);
+        }
+        .stv-head { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 16px 22px 12px; border-bottom: 1px solid var(--divider); background: var(--surface); }
+        .stv-titlebar { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .modal.stv .stv-title { margin: 0; min-width: 0; font-family: var(--font-serif); font-size: 20px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+        .stv-title-p, .stv-sub, .stv-pbtns, .stv .stv-pexport, .stv-l-short { display: none; }
+        .stv .stv-close, .stv .stv-pexport {
+            flex: none; margin-left: auto; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--r-md); background: none; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; color: var(--text-faint);
+        }
+        /* The header's Export is the phone held sideways' only (no footer there). */
+        .stv .stv-pexport { display: none; color: var(--text-light); }
+        .stv-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-width: 0; }
+        .stv-scope-label { font-size: 13.5px; color: var(--text-light); }
+        .stv .stv-scope-btn {
+            display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px 0 12px; max-width: 320px; min-width: 0;
+            border: 1px solid var(--line-color); border-radius: var(--r-md); background: var(--surface-2); color: var(--text);
+            font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+        }
+        .stv .stv-scope-btn.is-open { border-color: var(--sel-border); box-shadow: inset 0 0 0 1px var(--sel-border); }
+        .stv-scope-ic { flex: none; display: inline-flex; color: var(--text-light); }
+        .stv-scope-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .stv-caret { flex: none; font-size: 11px; color: var(--text-faint); }
+        .stv-period { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; font-size: 13.5px; color: var(--text-light); }
+        .stv-year {
+            width: 66px; height: 34px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--surface); color: var(--text); font: inherit; font-size: 14px; font-variant-numeric: tabular-nums;
+        }
+        .stv-year::placeholder { color: var(--text-ghost); }
+        .stv-year:focus { outline: none; border-color: var(--primary); box-shadow: var(--shadow-focus); }
+        .stv-year[aria-invalid="true"] { border-color: var(--danger); }
+        .stv .stv-year-x {
+            width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-sm); background: none; cursor: pointer;
+            color: var(--text-light); font-size: 16px; line-height: 1;
+        }
+        .stv .stv-year-x[hidden] { display: none; }
+        .stv-count { margin-left: auto; font-size: 14px; color: var(--text-light); white-space: nowrap; }
+        .stv-count strong, .stv-total strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+        .stv-scope-note { margin-top: -4px; font-size: 12.5px; color: var(--text-light); }
+        .stv-scope-note.is-invalid { color: var(--danger); }
+        .stv-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 232px minmax(0, 1fr); }
+        .stv-topics { min-height: 0; border-right: 1px solid var(--divider); overflow-y: auto; overscroll-behavior: contain; padding: 4px 0 12px; }
+        .stv-group { padding: 12px 16px 4px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent-text); }
+        .stv .stv-topic {
+            display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 0 16px;
+            font: inherit; font-size: 14px; text-align: left; color: var(--text); cursor: pointer;
+        }
+        .stv-topic-t { min-width: 0; overflow-wrap: anywhere; }
+        .stv-topic-n { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .stv .stv-topic.is-empty { color: var(--text-faint); }
+        .stv .stv-topic:focus-visible { outline-offset: -2px; }
+        .stv-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 16px 22px 0; }
+        .stv-th { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+        .modal.stv .stv-th-t { margin: 0; font-size: 16px; font-weight: 600; }
+        .stv-th-d { font-size: 12.5px; color: var(--text-light); }
+        .stv-readonly { margin-top: 6px; font-size: 12.5px; color: var(--text-light); }
+        .stv-readonly[hidden], .stv-opts[hidden], .stv-tools[hidden] { display: none; }
+        .stv-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 12px; }
+        .stv-opt { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+        .stv-opt-l { font-size: 12.5px; color: var(--text-light); }
+        .stv-seg { flex: none; max-width: 100%; background: var(--surface); overflow: hidden; }
+        .stv .stv-seg > .sel-opt {
+            display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; padding: 0 11px;
+            font: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer;
+        }
+        .stv-seg-n { font-weight: 400; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .stv-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+        .stv-search {
+            width: 240px; max-width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
+        }
+        .stv-search:focus { outline: none; border-color: var(--primary); box-shadow: var(--shadow-focus); }
+        .stv-matches { font-size: 12px; color: var(--text-light); white-space: nowrap; }
+        .stv-sortbox { margin-left: auto; }
+        .stv-area { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+        .stv-table {
+            flex: 1 1 auto; min-height: 0; margin-top: 12px; border: 1px solid var(--border); border-bottom: 0;
+            border-radius: var(--r-lg) var(--r-lg) 0 0; display: flex; flex-direction: column; overflow: hidden;
+        }
+        .stv-rows { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+        .stv-rows:focus { outline: none; }
+        .stv-grid { display: grid; grid-template-columns: minmax(0, 1fr) 84px 64px 150px 28px; align-items: center; column-gap: 10px; }
+        .stv-hrow {
+            position: sticky; top: 0; z-index: 1; height: 34px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--border);
+            background: var(--surface); font-size: 12px; font-weight: 600; color: var(--text-light);
+        }
+        .stv-hrow .r { text-align: right; }
+        .stv .stv-hsort {
+            padding: 0; border: 0; border-radius: var(--r-sm); background: none; font: inherit; color: inherit; cursor: pointer; white-space: nowrap;
+        }
+        @media (hover: hover) { .stv .stv-hsort:hover { color: var(--text); } }
+        .stv .stv-hsort:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .stv-sortmark { margin-left: 4px; color: var(--text); }
+        .stv-vbody { position: relative; }
+        .stv-vbody > .stv-row { position: absolute; left: 0; right: 0; }
+        .stv .stv-row {
+            width: 100%; height: var(--stv-row-h); padding: 0 8px 0 14px; border: 0; border-bottom: 1px solid var(--divider); border-radius: 0;
+            background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; text-align: left;
+        }
+        .stv .stv-row.is-link, .stv button.stv-row { cursor: pointer; }
+        .stv .stv-row.is-muted .stv-val { color: var(--text-light); }
+        .stv .stv-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .stv-val { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .stv-val .v2 { margin-left: 6px; font-size: 12px; color: var(--text-faint); }
+        .stv-val.is-none { color: var(--text-light); }
+        mark.stv-hit, .stv-val mark.tv-hit { background: var(--help-mark-hit); color: inherit; border-radius: var(--r-tag); padding: 0; }
+        .stv-n { text-align: right; font-variant-numeric: tabular-nums; }
+        .stv-pct { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-light); }
+        .stv-bar { display: block; height: 10px; border-radius: var(--r-tag); background: var(--surface-2); overflow: hidden; }
+        .stv-bar > span { display: block; height: 100%; min-width: 2px; background: var(--primary); }
+        .stv-go { visibility: hidden; text-align: center; font-size: 15px; color: var(--text-light); }
+        .stv .stv-row:focus-visible .stv-go { visibility: visible; }
+        @media (hover: hover) {
+            .stv .stv-row.is-link:hover, .stv button.stv-row:hover { background: var(--hover-bg); }
+            .stv .stv-row.is-link:hover .stv-go, .stv button.stv-row:hover .stv-go { visibility: visible; }
+            .stv .stv-topic:hover { color: var(--text); }
+            .stv .stv-close:hover, .stv .stv-pexport:hover, .stv .stv-year-x:hover { background: var(--hover-bg); color: var(--text); }
+            .stv .stv-scope-btn:hover, .stv .stv-btn:not([aria-disabled="true"]):hover { background: var(--hover-bg); }
+        }
+        .stv-sum { flex: none; border: 1px solid var(--border); border-radius: 0 0 var(--r-lg) var(--r-lg); background: var(--surface-2); overflow: hidden; }
+        .stv .stv-sum .stv-row { background: transparent; }
+        .stv .stv-sum .stv-row[hidden] { display: none; }
+        .modal.stv .stv-total { margin: 0; padding: 8px 14px; font-size: 13px; color: var(--text-light); }
+        .modal.stv .stv-note { flex: none; margin: 0; padding: 8px 0 12px; font-size: 12px; line-height: 1.45; color: var(--text-faint); }
+        .stv-busy { padding: 14px 0; }
+        .modal.stv .stv-empty { margin: 0; padding: 24px 0; font-size: 14px; line-height: 1.5; color: var(--text-light); }
+        .modal.stv .stv-empty .tov-link { padding: 0; border-radius: var(--r-sm); font-size: 13.5px; }
+        .stv-foot { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 22px; border-top: 1px solid var(--divider); background: var(--surface-2); }
+        .stv .stv-btn {
+            flex: none; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text);
+            font: inherit; font-size: 13.5px; font-weight: 500; white-space: nowrap; cursor: pointer;
+        }
+        .stv :is(.stv-btn, .stv-pexport)[aria-disabled="true"] { opacity: .5; cursor: default; }
+        .stv :is(.stv-close, .stv-pexport, .stv-btn, .stv-scope-btn, .stv-year-x):focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .stv-foot-what { flex: 1 1 auto; min-width: 0; font-size: 12.5px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .stv .stv-foot-close { flex: none; height: 34px; padding: 0 18px; border-radius: var(--r-md); font-weight: 600; }
+        /* The scope's choice under its button (an absolute host in the overlay). */
+        .stv-scope-pick .sp-rodpick-pop { width: 380px; }
+        /* Tablet held upright: the window's width less 48px, the topics stay. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            #tree-stats-modal .modal.stv { width: calc(100vw - 48px); }
+        }
+        /* Touch: 44px targets. */
+        @media (pointer: coarse) {
+            #tree-stats-modal .modal.stv { --stv-row-h: 44px; }
+            .stv .stv-topic { min-height: 44px; }
+            .stv .stv-close, .stv .stv-pexport { width: 44px; height: 44px; }
+            .stv-search, .stv-year, .stv .stv-scope-btn, .stv .stv-btn, .stv .stv-foot-close, .stv .stv-seg > .sel-opt { height: 44px; }
+            .stv .stv-year-x { width: 44px; height: 44px; }
+            .stv .stv-hsort { min-height: 34px; }
+        }
+        /* Phone and phone sideways: full screen, no topic column, Topic and Scope as buttons (sheets). */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            #tree-stats-modal { align-items: stretch; }
+            #tree-stats-modal .modal.stv {
+                --stv-row-h: 44px;
+                width: 100vw; max-width: 100vw; min-width: 0; height: 100%; max-height: 100%; border-radius: 0; box-shadow: none;
+                padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
+            }
+            .stv-scope, .stv-topics, .stv-sortbox, .stv-go, .stv-go-h { display: none; }
+            .stv-body { grid-template-columns: minmax(0, 1fr); }
+            .stv-pbtns { display: flex; gap: 8px; min-width: 0; }
+            .stv .stv-pbtn {
+                display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 0 12px;
+                border: 1px solid var(--line-color); border-radius: var(--r-md); background: var(--surface-2); color: var(--text);
+                font: inherit; font-size: 15px; font-weight: 500; text-align: left; cursor: pointer;
+            }
+            .stv .stv-pbtn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+            .stv-pbtn-v { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .stv .stv-close, .stv .stv-pexport { width: 44px; height: 44px; font-size: 24px; }
+            .stv-opt-l { display: none; }
+            .stv-search { height: 44px; font-size: 16px; }
+            .stv-grid { grid-template-columns: minmax(0, 1fr) 56px 58px 46px; column-gap: 8px; }
+            .stv .stv-row { font-size: 15px; padding: 0 10px 0 12px; }
+            .stv-hrow { padding: 0 10px 0 12px; }
+            .stv .stv-hsort { min-height: 34px; }
+            .stv .stv-row .stv-val .v2 { display: block; margin: 0; font-size: 11.5px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; }
+        }
+        /* Phone held upright: sticky head (title, tree and people, ×), Topic and Scope below it, the footer of two buttons. */
+        @media (max-width: 640px) {
+            .stv-head { padding: 8px 8px 10px 16px; gap: 8px; }
+            .stv-titlebar {
+                display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t x" "s x"; column-gap: 8px; align-items: center;
+            }
+            .modal.stv .stv-title { grid-area: t; font-size: 18px; }
+            .stv-title-d { display: none; }
+            .stv-title-p { display: inline; }
+            .stv-sub { display: block; grid-area: s; min-width: 0; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+            .stv .stv-close { grid-area: x; margin: 0; }
+            .stv-pbtns { flex-direction: column; padding-right: 8px; }
+            .stv-scope-note { padding-right: 8px; margin-top: 0; }
+            .stv-main { padding: 12px 16px 0; }
+            .stv-opts { margin-top: 0; gap: 8px; }
+            .stv-th + .stv-readonly + .stv-opts:not([hidden]) { margin-top: 10px; }
+            .stv-opt { display: flex; width: 100%; }
+            .stv-seg { display: flex; flex: 1 1 auto; width: 100%; }
+            .stv .stv-seg > .sel-opt { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 6px; font-size: 14px; white-space: normal; line-height: 1.15; overflow-wrap: anywhere; }
+            .stv-tools { margin-top: 10px; flex-wrap: nowrap; }
+            .stv-search { flex: 1 1 auto; width: auto; min-width: 0; }
+            .stv-table { margin-top: 10px; }
+            .stv-foot { padding: 8px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+            .stv-foot-what { display: none; }
+            .stv .stv-btn, .stv .stv-foot-close { flex: 1 1 0; justify-content: center; height: 44px; }
+        }
+        /* Phone sideways: one 52px bar (title, Topic, Scope, Export, ×); the rest scrolls under it, no footer. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .stv-head { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 8px; min-height: 52px; padding: 4px 4px 4px 16px; }
+            .stv-titlebar { display: contents; }
+            .modal.stv .stv-title { order: 0; flex: 1 1 0; font-size: 15px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+            .stv-pbtns { order: 1; flex: 0 1 auto; }
+            .stv .stv-pbtn { flex: 0 1 220px; width: 220px; font-size: 14px; }
+            .stv .stv-pexport { display: inline-flex; order: 2; margin-left: 0; }
+            .stv .stv-close { order: 3; margin-left: 0; }
+            .stv-scope-note { order: 4; flex: 1 0 100%; margin: 0 0 4px; }
+            .stv-body { overflow-y: auto; overscroll-behavior: contain; padding-bottom: env(safe-area-inset-bottom, 0px); }
+            .stv-main { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 12px; min-height: auto; padding: 10px 16px 0; }
+            .stv-th, .stv-readonly, .stv-area { flex: 1 0 100%; }
+            .stv-opts, .stv-tools { margin-top: 10px; flex-wrap: nowrap; }
+            .stv-tools { flex: 1 1 200px; min-width: 0; }
+            .stv-search { flex: 1 1 auto; width: auto; min-width: 0; }
+            .stv .stv-seg > .sel-opt { height: 44px; font-size: 13.5px; }
+            .stv-l-long { display: none; }
+            .stv-l-short { display: inline; }
+            .stv-table { flex: none; height: max(180px, calc(100dvh - 140px)); }
+            .stv-foot { display: none; }
+        }
+        /* The phone's sheets: Topic and Scope (bottom sheets over the window). */
+        .stv-sheet { display: flex; flex-direction: column; padding: 0 0 env(safe-area-inset-bottom, 0px); overflow: hidden; }
+        .stv-sheet-head { flex: none; border-bottom: 1px solid var(--divider); }
+        .stv-sheet .bottom-sheet-handle { margin: 6px auto 4px; }
+        .stv-sheet-bar { display: flex; align-items: center; gap: 8px; padding: 0 8px 4px 16px; }
+        .stv-sheet-title { flex: 1; min-width: 0; margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+        .stv-sheet-x {
+            flex: none; width: 44px; height: 44px; padding: 0; border: 0; border-radius: var(--r-md); background: none;
+            color: var(--text-light); font-size: 24px; line-height: 1; cursor: pointer;
+        }
+        .stv-sheet-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .stv-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 8px; }
+        .bottom-sheet-menu .bottom-sheet-item.stv-sheet-row { min-height: 48px; padding: 0 16px; gap: 10px; justify-content: flex-start; color: var(--text); font: inherit; font-size: 15px; }
+        .stv-sheet-row.is-empty { color: var(--text-faint); }
+        .stv-sheet-l { flex: 1 1 auto; min-width: 0; }
+        .stv-sheet-ic { flex: none; display: inline-flex; color: var(--text-light); }
+        .stv-sheet-n { flex: 0 1 auto; min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .stv-sheet-chev { flex: none; color: var(--text-light); }
+        .stv-sheet-period { display: flex; gap: 12px; padding: 4px 16px; }
+        .stv-sheet-pl { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-light); }
+        .stv-sheet-pl .stv-year { width: 100%; height: 44px; font-size: 16px; }
+        .stv-sheet-hint { margin: 0; padding: 6px 16px 0; font-size: 12.5px; color: var(--text-light); }
+        .stv-sheet-foot { padding: 12px 16px 4px; }
+        .stv-sheet-done {
+            width: 100%; height: 44px; padding: 0 18px; border: 0; border-radius: var(--r-md);
+            background: var(--primary); color: var(--on-primary); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+        }
+        .stv-sheet-done:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .stv-sheet { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
         }
 
         /* Undo toast — paper pill raised after each single user mutation. */

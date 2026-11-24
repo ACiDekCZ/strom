@@ -38,17 +38,22 @@ export const CHIP_ORDER = ['living', 'deceased', 'blood', 'rod', 'gen', 'multiU'
 export const EVENT_CHIP_ORDER = ['evBirth', 'evMarriage', 'evDeath', 'evOther', 'noSource'] as const;
 
 /**
- * Every chip: the quick ones of both row types and the participant filter
+ * Every chip: the quick ones of both row types, the participant filter
  * (§14.1 "Godparent: {name} ×"), which is set from a participant's name in
- * a cell and is not in the quick row.
+ * a cell and is not in the quick row, and the people of a Statistics' value
+ * (spec 138 §8: "Statistics: first name Jan ×", its people in `values`, its
+ * words in `name`), which a view never keeps.
  */
-export type ChipId = typeof CHIP_ORDER[number] | typeof EVENT_CHIP_ORDER[number] | typeof SOURCE_CHIP_ORDER[number] | typeof LIST_CHIPS[number] | 'participant' | ResearchChipId;
+export type ChipId = typeof CHIP_ORDER[number] | typeof EVENT_CHIP_ORDER[number] | typeof SOURCE_CHIP_ORDER[number] | typeof LIST_CHIPS[number] | 'participant' | typeof STATS_CHIP | ResearchChipId;
+
+/** The chip of a Statistics' value (spec 138 §8): set by the Statistics only, never stored in a view. */
+export const STATS_CHIP = 'stats';
 
 /** A work list's chips (spec 084 §13d): first in the row while the scope is a work list; they exclude each other. */
 export const LIST_CHIPS = ['left', 'done'] as const;
 
 /** A chip of the quick row (not the research's block, §16.5): its words are `strings.table.chip`. */
-export type QuickChipId = Exclude<ChipId, `line:${string}`>;
+export type QuickChipId = Exclude<ChipId, `line:${string}` | typeof STATS_CHIP>;
 
 /** The Sources table's quick chips (§14.2), in their fixed order. */
 export const SOURCE_CHIP_ORDER = ['srcNoPerson', 'srcUnread', 'srcTranscript', 'srcOnline'] as const;
@@ -361,6 +366,7 @@ export function clearFilter(filter: TableFilter): boolean {
 
 /** Whether a chip applies to a row type and tree (§8.1: "Unconfirmed research" only in a research tree). */
 export function chipAvailable(model: TableModel, type: RowType, chip: ChipId): boolean {
+    if (chip === STATS_CHIP) return type === 'persons';
     if (type === 'events') return chip === 'participant' || (EVENT_CHIP_ORDER as readonly string[]).includes(chip);
     if (type === 'sources') return (SOURCE_CHIP_ORDER as readonly string[]).includes(chip);
     if (type === 'persons' && isResearchChipId(chip)) return !!model.ctx.research && researchChipActive(model.ctx.research, chip);
@@ -444,11 +450,20 @@ export function sourcePassesChip(row: SourceRow, item: ChipFilter): boolean {
     }
 }
 
+/** A Statistics chip's people as a set (once per chip). */
+const statsSets = new WeakMap<ChipFilter, ReadonlySet<string>>();
+function statsIds(item: ChipFilter): ReadonlySet<string> {
+    let set = statsSets.get(item);
+    if (!set) statsSets.set(item, set = new Set(item.values ?? []));
+    return set;
+}
+
 /** Whether a person passes one chip. Chips on findings pass everyone while the checks run. */
 export function personPassesChip(model: TableModel, row: PersonRow, item: ChipFilter): boolean {
     const ctx = model.ctx;
     const p = row.person;
     switch (item.chip) {
+        case STATS_CHIP: return statsIds(item).has(row.id);
         case 'living': return ctx.living(p);
         case 'deceased': return !ctx.living(p);
         case 'blood': return ctx.blood().has(row.id);
@@ -810,6 +825,7 @@ function num(n: number): string {
 /** A chip's label (§8.1): active Family line and Generation say their choice. */
 export function chipLabel(model: TableModel | null, item: ChipFilter | null, chip: ChipId): string {
     const t = strings.table;
+    if (chip === STATS_CHIP) return item?.name ?? '';
     if (chip === 'participant' && item?.role) {
         const p = item.personId && model ? model.ctx.person(item.personId as PersonId) : null;
         return t.chipParticipant[item.role]((p ? shownNameOrEmpty(p) : '') || item.name || '');

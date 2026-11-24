@@ -3,7 +3,7 @@ import { openApp, createFirstPerson, card } from './helpers.js';
 
 /** The open tree's sheet (More → Tree: {name}), menu 1020 §3.1: headings and rows (Change structure… one row). */
 const TREE_SHEET_HEADERS = ['Research', 'Tree settings'];
-const TREE_SHEET_KEYS = ['overview', 'overview-quality', 'snapshots', 'researchInfo',
+const TREE_SHEET_KEYS = ['overview', 'stats', 'overview-quality', 'snapshots', 'researchInfo',
     'rename', 'defaultPerson', 'startup', 'lifeline', 'places', 'surnames', 'structure',
     'visibility', 'lock', 'delete', 'manageTrees'];
 
@@ -201,7 +201,7 @@ test('the "More" sheet (menu 1020 §7): Undo|Redo tiles, content, For the family
     // The window's selection under the View tiles in every tree (spec 098 §10).
     expect(rows).toEqual(['Anniversaries', 'Lists of people', 'Export…', 'For the family ›', 'Selection No selection ›', 'Full screen', 'Tree: My Family Tree ›', 'Add family…']);
     await expect(pairs.nth(1)).toHaveAttribute('aria-label', 'View');
-    await expect(pairs.nth(1).locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map', 'Timeline']);
+    await expect(pairs.nth(1).locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map', 'Timeline', 'Statistics']);
     await expect(pairs.nth(2).locator('.bottom-sheet-item')).toHaveText(['Settings', 'How Strom works', 'About Strom']);
     // Tree management left the first level (Tree › and the tree switcher carry it).
     await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Manage trees' })).toHaveCount(0);
@@ -316,7 +316,7 @@ test.describe('More on a small phone and held sideways', () => {
         // Full screen joins the View line as a fourth tile (spec 082 K1.3), the window's selection closes it
         // (spec 098 §10): no extra row to scroll to.
         await expect(sheet.locator('.bottom-sheet-pair[aria-label="View"] .bottom-sheet-item'))
-            .toHaveText(['Fan', 'Map', 'Timeline', 'Full screen', /^Selection\s*No selection\s*›$/]);
+            .toHaveText(['Fan', 'Map', 'Timeline', 'Statistics', 'Full screen', /^Selection\s*No selection\s*›$/]);
         await expect(sheet.locator(':scope > .bottom-sheet-items > .more-rod-row')).toHaveCount(0);
         await expect.poll(() => sheet.evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
     });

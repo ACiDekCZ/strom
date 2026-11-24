@@ -38,6 +38,7 @@ import {
     validateTreeData, translateValidationType, groupValidationIssues, validationCounts, ValidationResult, ValidationIssue,
 } from '../validation.js';
 import { validationSummaryText, validationGroupTitle } from './tree-stats.js';
+import { STATS_TOPICS, type StatsOptions, type StatsTopic } from '../tree-stats.js';
 import { QUALITY_CHANGED_EVENT } from './quality-ui.js';
 import {
     AncestorOverview, FocusCard, GrandparentLine, ancestorGenerationLabel, ancestorGenerations, birthYearOf,
@@ -1570,6 +1571,7 @@ export const treeOverviewMethods = uiModule({
             <button type="button" class="tov-btn tov-rod-act tov-rod-act--plain" data-tov="rod-page" ${id}>${esc(strings.familyPages.rodPage)}</button>
             <button type="button" class="tov-btn tov-rod-act tov-rod-act--plain" data-tov="rod-book" ${id}>${esc(r.book)}</button>
             ${this.treeOverviewActionHtml('rod-edit', r.edit, 'tov-btn tov-rod-act tov-rod-act--plain', id)}
+            ${this.treeOverviewStatsLink(d.labels.get(rod.id) ?? rod.surname, { topic: 'firstNames', rodId: rod.id })}
         </div>`;
         // The actions right under the facts: a long line's members and spouses would push them below the fold.
         return `<div class="tov-rod-detail${ui.allGens ? ' is-all-gens' : ''}" id="${domId}">${factsHtml}${actions}${membersBlock}${spousesBlock}</div>`;
@@ -1738,10 +1740,11 @@ export const treeOverviewMethods = uiModule({
         const { summary: s, periods } = this.treeOverviewLifeData();
         const under5 = hasEnoughSample(s.diedUnder5.n);
         const adults = hasEnoughSample(s.adultMedian.n) && s.adultMedian.median !== null;
-        const head = `<div class="tov-block-head"><span class="tov-block-title">${esc(t.deathAgeTitle)}</span><span class="tov-block-scope">${esc(t.deathAgeScope)}</span></div>`;
+        const headOf = (more: string): string => `<div class="tov-block-head"><span class="tov-block-title">${esc(t.deathAgeTitle)}</span><span class="tov-block-scope">${esc(t.deathAgeScope)}</span>${more}</div>`;
         if (!under5 && !adults) {
-            return { body: `<div class="tov-block">${head}<p class="tov-muted">${esc(t.deathAgeNotEnough(s.diedUnder5.n))}</p></div>`, summary: '' };
+            return { body: `<div class="tov-block">${headOf('')}<p class="tov-muted">${esc(t.deathAgeNotEnough(s.diedUnder5.n))}</p></div>`, summary: '' };
         }
+        const head = headOf(this.treeOverviewStatsLink(t.deathAgeTitle, { topic: 'deathAge' }));
         const median = adults ? Math.round(s.adultMedian.median!) : 0;
         const tile = (label: string, value: string, note: string, kind: string): string => `
             <div class="tov-tile" data-tile="${kind}">
@@ -1805,6 +1808,10 @@ export const treeOverviewMethods = uiModule({
         const lang = getCurrentLanguage();
         const d = this.treeOverviewTimeData();
         const stats = this.treeOverviewFamilyStats();
+        // A chart's title with "In detail" beside it (spec 138 §2).
+        const chartHead = (title: string, more: string): string => more
+            ? `<div class="tov-chart-head"><span class="tov-chart-title">${esc(title)}</span>${more}</div>`
+            : `<span class="tov-chart-title">${esc(title)}</span>`;
         const split = (kind: string, label: string, parts: { text: string; n: number; cls: string }[]): string => {
             const total = parts.reduce((sum, x) => sum + x.n, 0);
             const shown = parts.filter(x => x.n > 0);
@@ -1829,8 +1836,9 @@ export const treeOverviewMethods = uiModule({
                 ])}
             </div>`;
 
-        // Children per couple, by generation relative to the chosen person.
+        // Children per couple, by generation relative to the chosen person; "In detail" only beside a chart.
         let children: string;
+        let childrenMore = '';
         const root = realPerson(st.data, st.rootId);
         if (!d.children || !root) {
             children = `<div class="tov-need"><p>${esc(t.childrenNeedPerson)}</p>
@@ -1842,6 +1850,7 @@ export const treeOverviewMethods = uiModule({
                 children = `<p class="tov-muted">${esc(t.childrenNotEnough(couples))}</p>`;
             } else {
                 const top = Math.max(...rows.map(g => g.avgChildren), 1);
+                childrenMore = this.treeOverviewStatsLink(t.childrenByGen, { topic: 'childrenPerCouple' });
                 children = rows.map(g => `
                     <div class="tov-hbar-row" data-generation="${g.generation}" title="${esc(t.couplesN(g.n))}">
                         <span class="tov-hbar-label">${esc(capitalize(ancestorGenerationLabel(-g.generation, lang, 'of')))}</span>
@@ -1850,14 +1859,16 @@ export const treeOverviewMethods = uiModule({
                     </div>`).join('') + `<span class="tov-note">${esc(t.childrenGenNote(shownName(root)))}</span>`;
             }
         }
-        const childrenBlock = `<div class="tov-chart" data-chart="children"><span class="tov-chart-title">${esc(t.childrenByGen)}</span>${children}</div>`;
+        const childrenBlock = `<div class="tov-chart" data-chart="children">${chartHead(t.childrenByGen, childrenMore)}${children}</div>`;
 
         // Births by month.
         let months: string;
+        let monthsMore = '';
         if (!hasEnoughSample(stats.birthsByMonthN)) {
             months = `<p class="tov-muted">${esc(t.monthsNotEnough(stats.birthsByMonthN))}</p>`;
         } else {
             const top = Math.max(...stats.birthsByMonth.map(m => m.count), 1);
+            monthsMore = this.treeOverviewStatsLink(t.birthsByMonth, { topic: 'births', opts: { births: 'month' } });
             // The full month and its count: a tooltip for the mouse, the label for
             // a screen reader, and on touch (no tooltip) a tap shows it under the chart.
             months = `
@@ -1872,12 +1883,12 @@ export const treeOverviewMethods = uiModule({
                 </div>
                 <p class="tov-month-detail tov-note" aria-live="polite" hidden></p>`;
         }
-        const monthsBlock = `<div class="tov-chart" data-chart="months"><span class="tov-chart-title">${esc(t.birthsByMonth)}</span>${months}</div>`;
+        const monthsBlock = `<div class="tov-chart" data-chart="months">${chartHead(t.birthsByMonth, monthsMore)}${months}</div>`;
 
         // Most common first names.
-        const names = (title: string, list: { name: string; count: number }[], kind: string): string => list.length === 0 ? '' : `
+        const names = (title: string, list: { name: string; count: number }[], kind: 'male' | 'female'): string => list.length === 0 ? '' : `
             <div class="tov-names-col" data-names="${kind}">
-                <span class="tov-chart-title">${esc(title)}</span>
+                ${chartHead(title, this.treeOverviewStatsLink(title, { topic: 'firstNames', opts: { sex: kind } }))}
                 ${list.map(n => `<div class="tov-name-row"><span>${esc(n.name)}</span><span class="tov-name-n">${n.count}</span></div>`).join('')}
             </div>`;
         const namesHtml = names(t.topMaleNames, stats.topMaleNames, 'male') + names(t.topFemaleNames, stats.topFemaleNames, 'female');
@@ -2114,6 +2125,38 @@ export const treeOverviewMethods = uiModule({
         };
     },
 
+    /**
+     * "In detail" beside a block (spec 138 §2): the Statistics on its topic
+     * and options (a family line as the scope); none in an exported page
+     * (it has no Statistics).
+     */
+    treeOverviewStatsLink(what: string, open: { topic: StatsTopic; opts?: Partial<Pick<StatsOptions, 'sex' | 'births'>>; rodId?: RodId }): string {
+        if (DataManager.isViewMode()) return '';
+        const esc = (s: string): string => this.escapeHtml(s);
+        const t = strings.treeStats.overview;
+        const attrs = [`data-topic="${open.topic}"`];
+        if (open.opts?.sex) attrs.push(`data-sex="${open.opts.sex}"`);
+        if (open.opts?.births) attrs.push(`data-births="${open.opts.births}"`);
+        if (open.rodId) attrs.push(`data-rod="${esc(open.rodId)}"`);
+        return `<button type="button" class="tov-link tov-stats-more" data-tov="stats" ${attrs.join(' ')} aria-label="${esc(t.moreAria(what))}">${esc(t.more)}</button>`;
+    },
+
+    /** "In detail": the Statistics over the overview (a plain close comes back to it). */
+    openTreeOverviewStats(target: HTMLElement): void {
+        const st = state;
+        if (!st) return;
+        const topic = target.dataset.topic as StatsTopic;
+        if (!STATS_TOPICS.includes(topic)) return;
+        const opts: Partial<StatsOptions> = {};
+        const sex = target.dataset.sex;
+        if (sex === 'male' || sex === 'female') opts.sex = sex;
+        if (target.dataset.births === 'month') opts.births = 'month';
+        const rodId = target.dataset.rod as RodId | undefined;
+        void this.showTreeStats(st.treeId, {
+            topic, opts, ...(rodId ? { scope: { ref: { kind: 'rod', rodId } } } : {}), parent: OVERLAY_ID,
+        });
+    },
+
     /** One click handler for the whole dialog (delegated by data-tov). */
     onTreeOverviewClick(e: MouseEvent): void {
         const target = (e.target as HTMLElement).closest<HTMLElement>('[data-tov]');
@@ -2236,6 +2279,9 @@ export const treeOverviewMethods = uiModule({
             }
             case 'levels':
                 void this.showEvidenceLevelsFromOverview();
+                return;
+            case 'stats':
+                this.openTreeOverviewStats(target);
                 return;
             case 'month':
                 this.showTreeOverviewMonth(target);

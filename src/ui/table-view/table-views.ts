@@ -18,7 +18,7 @@ import type { ResearchLine, TableView, TableViewRowType } from '../../types.js';
 import { sanitizeTableView } from '../../table-views-data.js';
 import { columnById, DEFAULT_VIEWS, type SortSpec } from './table-columns.js';
 import { ROW_TYPES, type RowType } from './table-model.js';
-import type { FilterItem } from './table-filter.js';
+import { isChipItem, STATS_CHIP, type FilterItem } from './table-filter.js';
 import { defaultUnionCollapse } from './table-subrows.js';
 import { groupKeysOf } from './table-group.js';
 import { lineOffered } from './table-research.js';
@@ -266,7 +266,8 @@ export function viewFromState(type: RowType, st: RowTypeState, id: string, name:
     return {
         id, name, rowType: type,
         columns: setup.columns, pinned: setup.pinned, collapsedGroups: setup.collapsedGroups, coverageRow: setup.coverageRow,
-        filter: { op: 'and', items: structuredClone(st.filter.items) as unknown as Record<string, unknown>[] },
+        // The Statistics' chip (spec 138 §8) is the window's own: never in a view, a list's rule or the stored work.
+        filter: { op: 'and', items: structuredClone(st.filter.items.filter(i => !isChipItem(i) || i.chip !== STATS_CHIP)) as unknown as Record<string, unknown>[] },
         sort: st.sort.map(fromSpec),
         ...(type === 'persons' ? { unions: { collapsed: st.unions.collapsed, except: [...st.unions.except].sort() } } : {}),
         // The scope belongs to the window (the shared switch, spec 098 §11c), not to a view: a view no longer keeps one.

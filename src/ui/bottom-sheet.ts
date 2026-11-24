@@ -485,6 +485,8 @@ export const bottomSheetMethods = uiModule({
             { label: s.viewModeSwitch.fan, run: () => this.setDisplayViewMode('fan'), active: mode === 'fan' },
             { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
             { label: s.viewModeSwitch.timeline, run: () => this.setDisplayViewMode('timeline'), active: mode === 'timeline' },
+            // The Statistics (spec 138 §10.1): no view mode, a window over the tree; an exported page has none.
+            ...(viewMode ? [] : [{ label: s.treeStats.menu, id: 'sheet-stats', run: () => this.showActiveTreeStats() }]),
             ...(fullscreenRow && sideways ? [fullscreenRow] : []),
         ], valueRow: selectionRow, valueInPair: sideways });
         if (fullscreenRow && !sideways) blocks.push({ rows: [fullscreenRow] });

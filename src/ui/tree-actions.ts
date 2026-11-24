@@ -176,6 +176,8 @@ export const treeActionsMethods = uiModule({
             ...(by.structureFirst ? [{ key: 'structure' as const, rows: [...structureRows, ...exportRows] }] : []),
             { key: 'overview', rows: [
                 { key: 'overview', label: strings.treeOverview.menu, run: () => void this.showTreeOverview(id, { parent }) },
+                // The Statistics (spec 138 §10.1): read only, so any tree; a plain close comes back to the manager.
+                { key: 'stats', label: strings.treeStats.menu, run: () => void this.showTreeStats(id, { parent }) },
                 {
                     // A shortcut to the overview's quality section, drawn like its neighbours (T43).
                     key: 'overview-quality', label: strings.treeOverview.menuQuality,
