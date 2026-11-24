@@ -216,7 +216,8 @@ test.describe('Statistics window', () => {
         await pick.locator('li[data-sel^="rod:"] .sp-rodpick-a').filter({ hasText: 'Ostrožný' }).first().click();
         await expect(pick).toHaveCount(0);
         await expect(btn).toHaveText(/Ostrožný line/);
-        await expect(win.locator('.stv-count')).not.toHaveText('10 people');
+        // The count is empty while the scope is counted: wait for the line's number, not just for "not 10".
+        await expect(win.locator('.stv-count')).toHaveText(/^(?!10 people$)\d+ (person|people)$/);
         const lineCount = await win.locator('.stv-count').textContent();
 
         // The line born 1868 and later: Anna, Josef, Marie.
