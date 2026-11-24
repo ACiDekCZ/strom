@@ -98,13 +98,17 @@ test('Duplicate in a tree row makes an independent copy: editing it leaves the o
     await family(page);
     const original = await activeTreeName(page);
 
+    // Change structure… › Copy of the whole tree: its summary with the name (spec 139 §4).
     await rowAction(page, original, 'Duplicate');
-    const dialog = page.locator('#duplicate-tree-modal');
-    await expect(dialog).toBeVisible();
+    const dialog = page.locator('#structure-modal');
+    await expect(dialog).toHaveAttribute('data-step', 'summary');
     await expect(manager(page)).toBeHidden();
-    await expect(dialog.locator('#duplicate-tree-name')).toHaveValue(`${original} (copy)`);
-    await dialog.locator('#duplicate-tree-name').fill('Novak copy');
-    await dialog.getByRole('button', { name: 'Duplicate' }).click();
+    await expect(dialog.locator('.structure-lead')).toHaveText(`The copy gets the whole tree ${original}:`);
+    await expect(dialog.locator('.structure-stat b')).toHaveText(['3', '1', '0', '0']);
+    await expect(dialog.locator('.structure-stat span')).toHaveText(['people', 'couple', 'sources', 'images']);
+    await expect(dialog.locator('#structure-name')).toHaveValue(`${original} (copy)`);
+    await dialog.locator('#structure-name').fill('Novak copy');
+    await dialog.getByRole('button', { name: 'Create copy' }).click();
     await expect(dialog).toBeHidden();
 
     // Back in the manager with both trees; the original is still the active one.
@@ -133,35 +137,48 @@ test('Duplicate in a tree row makes an independent copy: editing it leaves the o
     });
 });
 
-test('duplicate dialog: Cancel and an empty name create nothing; Escape returns to the manager', async ({ page }) => {
+test('copy summary: Back and an empty name create nothing; Escape goes a step back, then to the manager', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     const original = await activeTreeName(page);
     const treeCount = () => page.evaluate(() => window.Strom.TreeManager.getTrees().length);
-    const dialog = page.locator('#duplicate-tree-modal');
+    const dialog = page.locator('#structure-modal');
 
     await rowAction(page, original, 'Duplicate');
-    await dialog.getByRole('button', { name: 'Cancel' }).click();
-    await expect(dialog).toBeHidden();
-    // Back in Change structure… it came from; its Escape returns to the manager.
-    const structure = page.locator('#structure-modal');
-    await expect(structure).toBeVisible();
+    await expect(dialog).toHaveAttribute('data-step', 'summary');
+    await dialog.locator('#structure-footer').getByRole('button', { name: 'Back' }).click();
+    // Back on the options of Change structure…; its Escape returns to the manager.
+    await expect(dialog).toHaveAttribute('data-step', 'options');
     await page.keyboard.press('Escape');
-    await expect(structure).toBeHidden();
+    await expect(dialog).toBeHidden();
     await expect(manager(page)).toBeVisible();
     expect(await treeCount()).toBe(1);
 
-    // An empty name is refused: the dialog stays, the field keeps the focus.
+    // An empty name is refused: the step stays, the field keeps the focus.
     await rowAction(page, original, 'Duplicate');
-    await dialog.locator('#duplicate-tree-name').fill('   ');
-    await dialog.getByRole('button', { name: 'Duplicate' }).click();
-    await expect(dialog).toBeVisible();
-    await expect(dialog.locator('#duplicate-tree-name')).toBeFocused();
+    await dialog.locator('#structure-name').fill('   ');
+    await dialog.getByRole('button', { name: 'Create copy' }).click();
+    await expect(dialog).toHaveAttribute('data-step', 'summary');
+    await expect(dialog.locator('#structure-name')).toBeFocused();
     expect(await treeCount()).toBe(1);
 
     await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
-    await expect(structure).toBeVisible();
+    await expect(dialog).toHaveAttribute('data-step', 'options');
+    await page.keyboard.press('Escape');
+    await expect(manager(page)).toBeVisible();
+    expect(await treeCount()).toBe(1);
+
+    // Duplicate as a call (the old naming dialog is gone): the dialog opens on the copy's summary over its options.
+    await page.evaluate((name) => {
+        const tree = window.Strom.TreeManager.getTrees().find((t: { name: string }) => t.name === name)!;
+        window.Strom.UI.duplicateTree(tree.id, 'tree-manager-modal');
+    }, original);
+    await expect(dialog).toHaveAttribute('data-step', 'summary');
+    await expect(manager(page)).toBeHidden();
+    await expect(page.locator('#duplicate-tree-modal')).toHaveCount(0);
+    await expect(dialog.locator('#structure-name')).toHaveValue(`${original} (copy)`);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveAttribute('data-step', 'options');
     await page.keyboard.press('Escape');
     await expect(manager(page)).toBeVisible();
     expect(await treeCount()).toBe(1);
@@ -172,14 +189,14 @@ test('a second Duplicate offers a free name "(copy 2)"; a name another tree has 
     await createFirstPerson(page, 'Jan', 'Novak');
     await waitForPersist(page, 'Jan');
     const original = await activeTreeName(page);
-    const dialog = page.locator('#duplicate-tree-modal');
-    const name = dialog.locator('#duplicate-tree-name');
-    const taken = dialog.locator('#duplicate-tree-name-taken');
+    const dialog = page.locator('#structure-modal');
+    const name = dialog.locator('#structure-name');
+    const taken = dialog.locator('#structure-name-taken');
 
     await rowAction(page, original, 'Duplicate');
     await expect(name).toHaveValue(`${original} (copy)`);
     await expect(taken).toBeHidden();
-    await dialog.getByRole('button', { name: 'Duplicate' }).click();
+    await dialog.getByRole('button', { name: 'Create copy' }).click();
     await expect(row(page, `${original} (copy)`)).toHaveCount(1);
 
     await rowAction(page, original, 'Duplicate');
@@ -188,7 +205,7 @@ test('a second Duplicate offers a free name "(copy 2)"; a name another tree has 
     // Typed by hand: the name of the first copy is told inline, not refused.
     await name.fill(`${original} (copy)`);
     await expect(taken).toHaveText('A tree with this name already exists.');
-    await expect(name).toHaveAttribute('aria-describedby', 'duplicate-tree-name-taken');
+    await expect(name).toHaveAttribute('aria-describedby', 'structure-name-taken');
     await name.fill(`${original} (copy 2)`);
     await expect(taken).toBeHidden();
     await name.press('Enter');
@@ -241,9 +258,11 @@ test('⋯ → Tree: Duplicate / Rename / Tree overview / Merge into / Hide act o
 
     // Duplicate: prefilled with the ACTIVE tree's name; Enter confirms.
     await treeSubmenu(page, 'Duplicate');
-    const dup = page.locator('#duplicate-tree-modal');
-    await expect(dup.locator('#duplicate-tree-name')).toHaveValue('Second (copy)');
-    await dup.locator('#duplicate-tree-name').press('Enter');
+    const dup = page.locator('#structure-modal');
+    await expect(dup).toHaveAttribute('data-step', 'summary');
+    await expect(dup.locator('#structure-name')).toHaveValue('Second (copy)');
+    await expect(dup.getByRole('button', { name: 'Create copy' })).toBeEnabled();
+    await dup.locator('#structure-name').press('Enter');
     await expect(dup).toBeHidden();
     await expect(row(page, 'Second (copy)')).toHaveCount(1);
     expect((await storedTrees(page))['Second (copy)']).toEqual(['Karel']);

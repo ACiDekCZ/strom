@@ -436,12 +436,15 @@ test.describe('actions menu "Tree:" submenu', () => {
         });
         await run('surnames', modal('surnames-modal'));
         await run('mergeInto', modal('merge-modal'));
-        // Duplicate's Escape returns to Change structure…, its own Escape to the tree.
+        // Duplicate is the copy's summary in Change structure… (spec 139 §4): Escape a step back, then to the tree.
         await run('duplicate', async () => {
-            await modal('duplicate-tree-modal')();
-            await expect(page.locator('#structure-modal')).toBeVisible();
+            const structure = page.locator('#structure-modal');
+            await expect(structure).toHaveAttribute('data-step', 'summary');
+            await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
             await page.keyboard.press('Escape');
-            await expect(page.locator('#structure-modal')).toBeHidden();
+            await expect(structure).toHaveAttribute('data-step', 'options');
+            await page.keyboard.press('Escape');
+            await expect(structure).toBeHidden();
         });
         // A one-person tree is one connected family: nothing to separate (spec 139 §2.4).
         const structure = await openStructureDialog(page, await openTreeActions(page));

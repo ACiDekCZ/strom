@@ -344,14 +344,21 @@ test('make a tree from the current view creates a separate tree of the shown peo
     const treesBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
     const shown = await page.evaluate(() => window.Strom.TreeRenderer.getVisiblePersonIds().size);
 
-    // ⋯ → Tree: → Change structure… → New tree from a selection (for now the view).
+    const original = await page.evaluate(() => window.Strom.TreeManager.getTreeMetadata(window.Strom.TreeManager.getActiveTreeId()!)!.name);
+
+    // ⋯ → Tree: → Change structure… → From a selection → Current view → Continue → summary → Create tree.
     await runStructure(page, 'makeTree', await openTreeActions(page));
-    const importDialog = page.locator('#import-tree-modal');
-    await expect(importDialog).toBeVisible();
-    // Name is pre-filled from the focus person.
-    await expect(importDialog.locator('#import-tree-name')).toHaveValue(/Johan/);
-    await importDialog.getByRole('button', { name: 'Import' }).click();
-    await expect(importDialog).toBeHidden();
+    const dialog = page.locator('#structure-modal');
+    await expect(dialog.locator('#structure-who-tab-view')).toHaveAttribute('aria-selected', 'true');
+    await expect(dialog.locator('.structure-who-chosen')).toHaveText(`Selected: cut · ${shown} people`);
+    await dialog.locator('[data-action="continue"]').click();
+    await expect(dialog).toHaveAttribute('data-step', 'summary');
+    await expect(dialog.locator('.structure-stat b').first()).toHaveText(/^\d+$/);
+    // The name: the tree's and what was chosen.
+    await expect(dialog.locator('#structure-name')).toHaveValue(`${original} — cut`);
+    await dialog.getByRole('button', { name: 'Create tree' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('.toast', { hasText: `Tree “${original} — cut” created` })).toBeVisible();
 
     // A new tree exists and it is now active; it has at most the shown people.
     const treesAfter = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);

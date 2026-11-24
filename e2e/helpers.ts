@@ -506,7 +506,8 @@ export async function openStructureDialog(page: Page, scope?: Locator): Promise<
 
 /**
  * The operations of Change structure… as the old rows named them: `makeTree`
- * (a new tree from the open view), `duplicate`, `splitFamilies`, `split`
+ * (a new tree from a selection: the step "who to take"), `duplicate` (the
+ * copy's summary), `splitFamilies`, `split`
  * (separate parts), `mergeInto` (the whole tree into another, through the
  * guide), `mergeView` (the open view into another).
  */
@@ -520,6 +521,9 @@ const STRUCTURE_OPTION: Record<StructureRun, string> = {
 export async function runStructure(page: Page, run: StructureRun, scope?: Locator): Promise<void> {
     const dialog = await openStructureDialog(page, scope);
     await dialog.locator(`.menu-option[data-action="${STRUCTURE_OPTION[run]}"]`).click();
+    // A new tree from a selection: who to take (§3); a copy: its summary with the name (§4).
+    if (run === 'makeTree') { await expect(dialog).toHaveAttribute('data-step', 'who'); return; }
+    if (run === 'duplicate') { await expect(dialog).toHaveAttribute('data-step', 'summary'); return; }
     if (run !== 'mergeInto' && run !== 'mergeView') return;
     await expect(dialog).toHaveAttribute('data-step', 'join-what');
     await dialog.locator(`[data-join="${run === 'mergeInto' ? 'whole' : 'selection'}"]`).click();
