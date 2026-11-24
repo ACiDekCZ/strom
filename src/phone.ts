@@ -52,6 +52,80 @@ export interface PhoneState {
     platform: PhonePlatform | null;
     network: { category: 'private' | 'public' | 'domain' | null } | null;
     firewall: { on: boolean | null } | null;
+    /**
+     * The devices of the home network (spec 094 P3, `devices` of `GET phone`): said only by a research
+     * whose bridge has `device.gateway` in its features; null otherwise (and read only then).
+     */
+    devices: PhoneDevices | null;
+}
+
+/** What a paired device is, as the bridge says it (a word in the list, no icon). */
+export type DeviceKind = 'phone' | 'tablet' | 'computer';
+
+/** A device of the home network paired with the Strom app (`devices.list[]`). */
+export interface DeviceEntry {
+    id: string;
+    name: string;
+    /** null: not said (and not told by its name). */
+    kind: DeviceKind | null;
+    /** `page`: the phone's page (spec 012); `app`: the Strom app. */
+    via: 'app' | 'page';
+    pairedAt: string;
+    lastSeenAt: string;
+    /** Seen within the last minute and a half. */
+    connected: boolean;
+    /** It has not found the computer since its address changed (pair it again). */
+    stale: boolean;
+    /** It also has an icon on its home screen. */
+    home: boolean;
+}
+
+/** `GET phone` → `devices` (device.gateway). */
+export interface PhoneDevices {
+    /** The app for the devices: downloaded, being downloaded, none (the QR then opens the phone's page alone). */
+    app: 'ready' | 'fetching' | 'none';
+    appVersion: string;
+    /** The computer's name on the network ('' = an IP address alone). */
+    name: string;
+    list: DeviceEntry[];
+    /** Devices connected now. */
+    connectedNow: number;
+}
+
+/** `/status.features` of a research that has the gateway of the devices (spec 094 P3, `devices.mode on`). */
+export const DEVICE_GATEWAY_FEATURE = 'device.gateway';
+/** `PUT <token>/phone/devices/<id> {name}`. */
+export const DEVICE_RENAME_FEATURE = 'device.rename';
+/** The event `device` in the bridge's stream. */
+export const DEVICE_EVENTS_FEATURE = 'device.events';
+/** The quiet choice "Open only the phone page" (`POST phone/pair {mode: "page"}`). */
+export const DEVICE_PHONE_PAGE_FEATURE = 'device.phonePage';
+
+/** What the research's bridge offers for the devices; all false without `device.gateway` (the dialog then as ever). */
+export interface DeviceGatewayCaps {
+    gateway: boolean;
+    rename: boolean;
+    events: boolean;
+    phonePage: boolean;
+}
+
+/** The gateway's abilities by `/status.features` (nothing of P3 without `device.gateway`, not even its other features). */
+export function deviceGatewayCaps(features: readonly string[] | null | undefined): DeviceGatewayCaps {
+    const gateway = !!features?.includes(DEVICE_GATEWAY_FEATURE);
+    return {
+        gateway,
+        rename: gateway && !!features?.includes(DEVICE_RENAME_FEATURE),
+        events: gateway && !!features?.includes(DEVICE_EVENTS_FEATURE),
+        phonePage: gateway && !!features?.includes(DEVICE_PHONE_PAGE_FEATURE),
+    };
+}
+
+/** An event `device` of the bridge's stream (device.events). */
+export interface DeviceEvent {
+    what: 'paired' | 'connected' | 'gone' | 'renamed' | 'unpaired';
+    id: string;
+    name: string;
+    kind: DeviceKind | null;
 }
 
 /** The dialog's body, chosen from the state (DEV §4) and what the user did in it. */
@@ -59,6 +133,9 @@ export type PhoneView = 'intro' | 'wait' | 'refused' | 'noGui' | 'offList' | 'qr
 
 const MAX_PHONES = 50;
 const MAX_ADDRESSES = 8;
+const MAX_DEVICES = 50;
+/** A device's name as the research keeps it (1–60 characters). */
+export const DEVICE_NAME_MAX = 60;
 
 function asRecord(v: unknown): Record<string, unknown> | null {
     return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null;
@@ -114,6 +191,68 @@ function sanitizePhone(value: unknown): PhoneEntry | null {
     };
 }
 
+/** A device's kind: the bridge's word, else told by its name ("iPhone · Safari" → phone); null: not known. */
+export function deviceKindOf(value: unknown, name: string): DeviceKind | null {
+    if (value === 'phone' || value === 'tablet' || value === 'computer') return value;
+    if (/\biPad\b|\btablet\b/i.test(name)) return 'tablet';
+    if (/\biPhone\b|\bAndroid\b/i.test(name)) return 'phone';
+    if (/\b(Mac|Windows|Linux|Notebook|Laptop)\b/i.test(name)) return 'computer';
+    return null;
+}
+
+function sanitizeDevice(value: unknown): DeviceEntry | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const id = text(r.id, 40);
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) return null;
+    const name = text(r.name, 80);
+    return {
+        id,
+        name,
+        kind: deviceKindOf(r.kind, name),
+        via: r.via === 'page' ? 'page' : 'app',
+        pairedAt: isoTime(r.pairedAt),
+        lastSeenAt: isoTime(r.lastSeenAt),
+        connected: r.connected === true,
+        stale: r.stale === true,
+        home: r.home === true,
+    };
+}
+
+/** `devices` of `GET phone` (device.gateway), tolerated as it comes; null when not an object. */
+export function sanitizePhoneDevices(value: unknown): PhoneDevices | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const seen = new Set<string>();
+    const list: DeviceEntry[] = Array.isArray(r.list)
+        ? r.list.slice(0, MAX_DEVICES).map(sanitizeDevice).filter((d): d is DeviceEntry => {
+            if (!d || seen.has(d.id)) return false;
+            seen.add(d.id);
+            return true;
+        }) : [];
+    const said = typeof r.connectedNow === 'number' && Number.isFinite(r.connectedNow) && r.connectedNow >= 0
+        ? Math.min(999, Math.floor(r.connectedNow)) : null;
+    return {
+        app: r.app === 'fetching' || r.app === 'none' ? r.app : 'ready',
+        appVersion: text(r.appVersion, 40),
+        name: text(r.name, 120),
+        list,
+        connectedNow: said ?? list.filter(d => d.connected).length,
+    };
+}
+
+/** An event `device` of the bridge's stream, without trusting it; null: not one the app knows. */
+export function sanitizeDeviceEvent(value: unknown): DeviceEvent | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const whats: DeviceEvent['what'][] = ['paired', 'connected', 'gone', 'renamed', 'unpaired'];
+    if (!whats.includes(r.what as DeviceEvent['what'])) return null;
+    const id = text(r.id, 40);
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) return null;
+    const name = text(r.name, 80);
+    return { what: r.what as DeviceEvent['what'], id, name, kind: deviceKindOf(r.kind, name) };
+}
+
 /** `GET phone` without trusting it: unknown or missing values tolerated, an unreadable answer is null. */
 export function sanitizePhoneState(value: unknown): PhoneState | null {
     const r = asRecord(value);
@@ -157,6 +296,7 @@ export function sanitizePhoneState(value: unknown): PhoneState | null {
         platform,
         network: net ? { category: cat === 'private' || cat === 'public' || cat === 'domain' ? cat : null } : null,
         firewall: fw ? { on: typeof fw.on === 'boolean' ? fw.on : null } : null,
+        devices: sanitizePhoneDevices(r.devices),
     };
 }
 
@@ -201,6 +341,13 @@ export interface PhoneViewContext {
     wantQr: boolean;
     /** A phone just paired: its name stays until Done. */
     paired: boolean;
+    /** The research's bridge has the gateway of the devices: its devices count as paired too. */
+    gateway?: boolean;
+}
+
+/** Paired with this computer: the phones (the phone's page), and with the gateway also the devices of the app. */
+export function phonePairedCount(s: PhoneState, gateway = false): number {
+    return s.phones.length + (gateway ? s.devices?.list.length ?? 0 : 0);
 }
 
 /** Which body the dialog shows (DEV §4 at opening, then by what happens). */
@@ -210,14 +357,14 @@ export function phoneView(s: PhoneState, ctx: PhoneViewContext): PhoneView {
     if (s.state === 'error') return 'error';
     if (s.state === 'on') {
         if (ctx.paired) return 'paired';
-        return ctx.wantQr || s.phones.length === 0 ? 'qr' : 'list';
+        return ctx.wantQr || phonePairedCount(s, ctx.gateway) === 0 ? 'qr' : 'list';
     }
     // Off.
     if (ctx.noDialog) return 'noGui';
     if (ctx.refused) return 'refused';
     // Pressed, the bridge has not said "confirm" yet: waiting already.
     if (ctx.enabling) return 'wait';
-    return s.phones.length === 0 ? 'intro' : 'offList';
+    return phonePairedCount(s, ctx.gateway) === 0 ? 'intro' : 'offList';
 }
 
 /** A phone in the list now that was not when the QR was shown: the one just paired (null: none). */
@@ -282,7 +429,13 @@ export function phoneDate(iso: string, lang: string): string {
     return new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'numeric' }).format(new Date(t));
 }
 
-/** The address changed while phones were paired at the old one: the yellow bar. */
-export function phoneAddressChanged(s: PhoneState): boolean {
-    return !!s.addressChangedAt && s.phones.some(p => p.stale);
+/** The address changed while phones were paired at the old one: the yellow bar (with the gateway, a device that did not find it too). */
+export function phoneAddressChanged(s: PhoneState, gateway = false): boolean {
+    return !!s.addressChangedAt && (s.phones.some(p => p.stale) || (gateway && !!s.devices?.list.some(d => d.stale)));
+}
+
+/** "Code valid for …": said to a screen reader once a minute, not every second (the minutes left; null: not known). */
+export function pairMinutesLeft(expiresAt: number, now: number): number | null {
+    if (!Number.isFinite(expiresAt)) return null;
+    return Math.ceil(Math.max(0, expiresAt - now) / 60_000);
 }

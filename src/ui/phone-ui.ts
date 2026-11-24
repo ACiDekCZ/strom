@@ -14,11 +14,14 @@ import { formatLiveClock } from '../live-time.js';
 import {
     PhoneState, PhoneEntry, PhoneAddress, PhoneView, PhonePlatform, sanitizePhoneState, sanitizePhoneSummary, phoneView,
     newlyPaired, phoneSilent, pairCountdown, seenAgo, phoneDate, phoneIp, phonePort, phonePlatform, phoneAddressChanged,
+    DeviceEntry, DeviceKind, PhoneDevices, DeviceGatewayCaps, deviceGatewayCaps, deviceKindOf, phonePairedCount, pairMinutesLeft,
+    sanitizePhoneDevices, sanitizeDeviceEvent, DEVICE_NAME_MAX,
 } from '../phone.js';
 import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
 import { runBusy } from './busy.js';
 import { tallyBridgeAsk } from '../bridge-ask.js';
+import { iconSvg } from '../icons.js';
 
 const DIALOG_ID = 'phone-modal';
 const POLL_MS = 2000;
@@ -40,12 +43,17 @@ interface Qr {
     shownAt: number;
     /** Phones there when the code was shown: a new one is the one just paired. */
     known: Set<string>;
+    /** The gateway of the devices: the whole address with its one-time code (shown and copied, never logged). */
+    url?: string;
 }
 
 interface Removed {
     entry: PhoneEntry;
     index: number;
     until: number;
+    /** A device of the app (the gateway): put back by `restore` with this token. */
+    device?: DeviceEntry;
+    undo?: string;
 }
 
 interface PhoneDialog {
@@ -82,6 +90,11 @@ interface PhoneDialog {
     replacedDone: Set<string>;
     asking: boolean;
     html: string;
+    /** The gateway: "Open only the phone page" ticked (the next code opens the phone's page). */
+    pageOnly?: boolean;
+    /** The gateway: the device being renamed in its row ('' = none) and the field's text. */
+    renaming?: string;
+    renameValue?: string;
 }
 
 let ph: PhoneDialog | null = null;
@@ -89,6 +102,36 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 /** What the last tick drew: a change redraws the whole body (expired code, the phone silent). */
 let tickKey = '';
+/** Per research: its devices connected now and paired (the gateway), as `GET phone` last said them. */
+const devicesNow = new Map<string, { connected: number; paired: number }>();
+/** Per research: when the menu last looked at its devices (a look at most every PEEK_MS). */
+const peekedAt = new Map<string, number>();
+const PEEK_MS = 15_000;
+/** A removed device's key in the dialog's `removed` (a phone's page row keys by its own id). */
+const DEV_KEY = 'dev:';
+
+type PhoneTexts = typeof strings.phone;
+
+/** The dialog's texts: with the gateway of the devices "device(s)" over today's "phone(s)". */
+function phoneTexts(gateway: boolean): PhoneTexts {
+    return gateway ? { ...strings.phone, ...strings.phoneDevices } : strings.phone;
+}
+
+/** A device's kind as a word (no icons). */
+function kindWord(kind: DeviceKind | null): string {
+    const t = strings.phoneDevices;
+    return kind === 'tablet' ? t.typeTablet : kind === 'computer' ? t.typeComputer : t.typePhone;
+}
+
+/** A just-paired device of the app as the "Paired" view shows it. */
+function deviceAsEntry(x: DeviceEntry): PhoneEntry {
+    return { id: x.id, name: x.name, pairedAt: x.pairedAt, lastSeenAt: x.lastSeenAt, address: '', stale: x.stale, maybeReplaces: [] };
+}
+
+/** The gateway's answer (`{ devices }`), else what was there. */
+function devicesFrom(value: unknown, was: PhoneDevices | null): PhoneDevices | null {
+    return sanitizePhoneDevices(value) ?? was;
+}
 
 function esc(text: string): string {
     return text
@@ -101,13 +144,13 @@ function bridgeBase(researchId: string): string | null {
     return parseLiveBridge(storedResearchBridge(researchId)?.base)?.base ?? null;
 }
 
-async function postBridge(base: string, path: string, body = '{}'): Promise<Response> {
+async function postBridge(base: string, path: string, body = '{}', method: 'POST' | 'PUT' | 'DELETE' = 'POST'): Promise<Response> {
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), ASK_TIMEOUT_MS) : null;
     try {
         return await fetch(withAppVersion(`${base}/${path}`), {
-            method: 'POST', mode: 'cors', credentials: 'omit', cache: 'no-store',
-            headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body, signal: ctl?.signal,
+            method, mode: 'cors', credentials: 'omit', cache: 'no-store',
+            headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, ...(method === 'DELETE' ? {} : { body }), signal: ctl?.signal,
         });
     } finally {
         if (timer) clearTimeout(timer);
@@ -131,8 +174,7 @@ function portOf(s: PhoneState | null): number {
 }
 
 /** "last seen …" as the list says it. */
-function seenText(iso: string, now: number): string {
-    const p = strings.phone;
+function seenText(iso: string, now: number, p: PhoneTexts = strings.phone): string {
     const ago = seenAgo(iso, now, getCurrentLanguage());
     switch (ago.kind) {
         case 'never': return p.rowNotSeen;
@@ -155,6 +197,17 @@ export const phoneMethods = uiModule({
         const id = this.activeResearchId();
         if (!id) return false;
         return this.phoneResearchReady(id) || !this.researchBridgeFresh(id);
+    },
+
+    /** What the research's bridge offers for the devices (spec 094 P3): nothing of it without `device.gateway`. */
+    phoneCaps(researchId?: string | null): DeviceGatewayCaps {
+        const id = researchId === undefined ? ph?.researchId ?? this.activeResearchId() : researchId;
+        return deviceGatewayCaps(id ? this.researchStatusOf(id)?.features : null);
+    },
+
+    /** The phone dialog's and menu's texts: "device(s)" with the gateway, today's "phone(s)" without. */
+    phoneT(): PhoneTexts {
+        return phoneTexts(this.phoneCaps().gateway);
     },
 
     /** The research's last status has the phone connection, its bridge is known: the dialog talks to it. */
@@ -190,6 +243,11 @@ export const phoneMethods = uiModule({
             this.pushDialog(DIALOG_ID);
         }
         overlay.addEventListener('click', (e) => this.phoneDialogClick(e));
+        overlay.addEventListener('keydown', (e) => this.phoneDialogKey(e as KeyboardEvent));
+        overlay.addEventListener('input', (e) => {
+            const el = e.target as HTMLInputElement | null;
+            if (ph && el?.dataset.act === 'dev-rename-field') ph.renameValue = el.value;
+        });
         this.renderPhoneDialog();
         overlay.querySelector<HTMLElement>('[data-act="close"]')?.focus();
         void this.phonePoll();
@@ -312,8 +370,10 @@ export const phoneMethods = uiModule({
             if (prev?.state === 'confirm' || d.noDialog || d.enabling) d.wantQr = true;
             d.noDialog = false;
             d.refused = false;
-            // A phone that was not there when the code was shown: the one just paired.
-            const fresh = d.qr ? newlyPaired(next.phones, d.qr.known) : null;
+            // A phone (with the gateway also a device) that was not there when the code was shown: the one just paired.
+            const known = d.qr?.known;
+            const freshDevice = known && this.phoneCaps(d.researchId).gateway ? next.devices?.list.find(x => !known.has(x.id)) : undefined;
+            const fresh = freshDevice ? deviceAsEntry(freshDevice) : known ? newlyPaired(next.phones, known) : null;
             if (fresh) {
                 d.paired = fresh;
                 d.wantQr = false;
@@ -326,7 +386,8 @@ export const phoneMethods = uiModule({
             d.how = false;
             revokeQr();
         }
-        if (this.notePhoneSummary(d.researchId, sanitizePhoneSummary({ state: next.state, phones: next.phones.length }))) this.refreshResearchMenu();
+        const counted = this.phoneNoteDevices(d.researchId, next);
+        if (this.notePhoneSummary(d.researchId, sanitizePhoneSummary({ state: next.state, phones: next.phones.length })) || counted) this.refreshResearchMenu();
         if (this.phoneViewNow() === 'qr' && !d.qr && !d.qrLoading) void this.loadPhoneQr();
         this.renderPhoneDialog();
     },
@@ -334,13 +395,67 @@ export const phoneMethods = uiModule({
     phoneViewNow(): PhoneView | null {
         const d = ph;
         if (!d?.state) return null;
-        return phoneView(d.state, { enabling: d.enabling, noDialog: d.noDialog, refused: d.refused, wantQr: d.wantQr, paired: !!d.paired });
+        return phoneView(d.state, {
+            enabling: d.enabling, noDialog: d.noDialog, refused: d.refused, wantQr: d.wantQr, paired: !!d.paired, gateway: this.phoneCaps(d.researchId).gateway,
+        });
+    },
+
+    /** The devices' counts for the menu (the gateway); true: they changed. */
+    phoneNoteDevices(researchId: string, s: PhoneState): boolean {
+        if (!this.phoneCaps(researchId).gateway || !s.devices) return false;
+        const now = { connected: s.devices.connectedNow, paired: s.devices.list.length + s.phones.length };
+        const was = devicesNow.get(researchId);
+        devicesNow.set(researchId, now);
+        return !was || was.connected !== now.connected || was.paired !== now.paired;
+    },
+
+    /**
+     * The menu opened (the gateway): a quiet `GET phone` for "on · N connected", at most every 15 s
+     * (`force`: a device event said something changed). Never throws.
+     */
+    async phonePeekDevices(force = false): Promise<void> {
+        const id = this.activeResearchId();
+        if (!id || !this.phoneCaps(id).gateway || !this.phoneResearchReady(id)) return;
+        if (ph?.researchId === id) return;
+        const at = Date.now();
+        if (!force && at - (peekedAt.get(id) ?? 0) < PEEK_MS) return;
+        peekedAt.set(id, at);
+        const base = bridgeBase(id);
+        if (!base) return;
+        try {
+            const res = await fetchWithTimeout(`${base}/phone`, ASK_TIMEOUT_MS);
+            const next = res.ok ? sanitizePhoneState(await res.json().catch(() => null)) : null;
+            if (!next) return;
+            const counted = this.phoneNoteDevices(id, next);
+            if (this.notePhoneSummary(id, sanitizePhoneSummary({ state: next.state, phones: next.phones.length })) || counted) this.refreshResearchMenu();
+        } catch {
+            /* the next look tries again */
+        }
+    },
+
+    /**
+     * An event `device` of the bridge's stream (device.events): a new device paired says so in a toast
+     * ("Devices…" opens the list), the others refresh the count; with the dialog open it asks again.
+     */
+    noteDeviceEvent(researchId: string, raw: unknown): void {
+        if (!this.phoneCaps(researchId).events) return;
+        const ev = sanitizeDeviceEvent(raw);
+        if (!ev) return;
+        if (ph?.researchId === researchId) { void this.askPhone(); return; }
+        if (researchId !== this.activeResearchId()) return;
+        void this.phonePeekDevices(true);
+        if (ev.what !== 'paired') return;
+        const t = strings.device;
+        this.showToast(t.newToast(ev.name || strings.phoneDevices.unnamed), 8000, {
+            closable: true, action: { label: t.newToastLink, run: () => this.showPhoneDialog() },
+        });
     },
 
     /** `GET phone/qr.svg`: the research makes the code; it is shown as an image. `address`: '' = the research's first. */
     async loadPhoneQr(address = ''): Promise<void> {
         const d = ph;
         if (!d) return;
+        if (this.phoneCaps(d.researchId).gateway) { await this.loadDeviceQr(); return; }
         const base = bridgeBase(d.researchId);
         if (!base) return;
         d.qrLoading = true;
@@ -374,6 +489,52 @@ export const phoneMethods = uiModule({
         this.renderPhoneDialog();
     },
 
+    /**
+     * The gateway: `POST phone/pair {mode}` — the code for the Strom app, or the phone's page alone
+     * ("Open only the phone page" ticked, or no app for the devices on this computer). The address
+     * carries its one-time code after `#`: shown and copied, never logged.
+     */
+    async loadDeviceQr(): Promise<void> {
+        const d = ph;
+        const base = d ? bridgeBase(d.researchId) : null;
+        if (!d || !base) return;
+        d.qrLoading = true;
+        const mode = d.pageOnly || d.state?.devices?.app === 'none' ? 'page' : 'app';
+        const body = JSON.stringify({ mode, lang: getCurrentLanguage() });
+        try {
+            let res = await postBridge(base, 'phone/pair', body);
+            // 503 phone.starting: its server is starting, asked once more a moment later.
+            if (res.status === 503) {
+                await new Promise(r => setTimeout(r, 1000));
+                if (ph !== d) return;
+                res = await postBridge(base, 'phone/pair', body);
+            }
+            if (ph !== d) return;
+            const j = res.ok ? await res.json().catch(() => null) as { url?: unknown; qr?: unknown; expiresAt?: unknown } | null : null;
+            const svg = typeof j?.qr === 'string' && /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(j.qr) ? j.qr : '';
+            if (ph !== d) return;
+            if (!svg) {
+                d.qrLoading = false;
+                // 409 phone.off: the connection went off meanwhile; the state says what now.
+                void this.askPhone();
+                return;
+            }
+            const url = typeof j?.url === 'string' && /^https?:\/\/[^\s<>"]+$/.test(j.url) ? j.url.slice(0, 600) : '';
+            revokeQr();
+            d.qr = {
+                researchId: d.researchId, blobUrl: URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' })),
+                expiresAt: typeof j?.expiresAt === 'string' ? Date.parse(j.expiresAt) : NaN,
+                pairUrl: '', url, address: '', shownAt: Date.now(),
+                known: new Set([...(d.state?.phones.map(x => x.id) ?? []), ...(d.state?.devices?.list.map(x => x.id) ?? [])]),
+            };
+        } catch {
+            if (ph === d) d.lost = true;
+        } finally {
+            if (ph === d) d.qrLoading = false;
+        }
+        this.renderPhoneDialog();
+    },
+
     /** Every second: the code's countdown and the "last seen" times in place; a new phase redraws. */
     phoneTick(): void {
         const d = ph;
@@ -397,15 +558,23 @@ export const phoneMethods = uiModule({
         const d = ph;
         if (!overlay || !d) return;
         const now = Date.now();
+        const p = this.phoneT();
         overlay.querySelectorAll<HTMLElement>('[data-seen]').forEach(el => {
-            const t = seenText(el.dataset.seen ?? '', now);
+            const t = seenText(el.dataset.seen ?? '', now, p);
             if (el.textContent !== t) el.textContent = t;
         });
         const left = overlay.querySelector<HTMLElement>('[data-countdown]');
         if (left && d.qr) {
             const t = pairCountdown(d.qr.expiresAt, now);
-            const text = t ? strings.phone.qrValid(t) : '';
+            const text = t ? p.qrValid(t) : '';
             if (left.textContent !== text) left.textContent = text;
+        }
+        // The gateway: a screen reader hears the code's time once a minute, not every second.
+        const sr = overlay.querySelector<HTMLElement>('[data-countdown-sr]');
+        if (sr && d.qr) {
+            const m = pairMinutesLeft(d.qr.expiresAt, now);
+            const text = m ? strings.phoneDevices.qrValidSr(m) : '';
+            if (sr.textContent !== text) sr.textContent = text;
         }
     },
 
@@ -421,6 +590,8 @@ export const phoneMethods = uiModule({
         // Keep keyboard focus across the redraw (by what the element does).
         const active = document.activeElement as HTMLElement | null;
         const focusKey = active && overlay.contains(active) ? `${active.dataset.act ?? ''}|${active.dataset.id ?? ''}` : '';
+        // A field being typed in keeps its caret through the redraw.
+        const caret = active instanceof HTMLInputElement && active.type === 'text' ? [active.selectionStart, active.selectionEnd] as const : null;
         d.html = html;
         overlay.innerHTML = html;
         this.paintPhoneTimes();
@@ -429,14 +600,17 @@ export const phoneMethods = uiModule({
             const again = Array.from(overlay.querySelectorAll<HTMLElement>('[data-act]'))
                 .find(el => el.dataset.act === act && (el.dataset.id ?? '') === id);
             (again ?? overlay.querySelector<HTMLElement>('[data-act="close"]'))?.focus();
+            if (again instanceof HTMLInputElement && caret && caret[0] !== null && caret[1] !== null) {
+                try { again.setSelectionRange(caret[0], caret[1]); } catch { /* not a text field */ }
+            }
         }
     },
 
     phoneFrameHtml(view: PhoneView | null): string {
-        const p = strings.phone;
+        const p = this.phoneT();
         const d = ph!;
         // Back: from "How to" to the code, from the code to the list it was chosen from.
-        const back = view === 'qr' && (d.how || (d.state?.phones.length ?? 0) > 0);
+        const back = view === 'qr' && (d.how || (d.state ? phonePairedCount(d.state, this.phoneCaps(d.researchId).gateway) : 0) > 0);
         const narrow = d.research !== 'running' || view === null || view === 'intro' || view === 'wait' || view === 'refused' || view === 'noGui';
         const body = d.research !== 'running' ? this.phoneResearchDownHtml()
             : view === null ? this.phoneLoadingHtml() : this.phoneBodyHtml(view);
@@ -453,7 +627,7 @@ export const phoneMethods = uiModule({
 
     /** The research not running: the phone connects through it, "Start the research (research)"; or a version without the phone. */
     phoneResearchDownHtml(): string {
-        const p = strings.phone;
+        const p = this.phoneT();
         const d = ph!;
         const close = `<button type="button" class="${d.research === 'older' ? 'primary' : 'secondary'}" data-act="close">${esc(p.close)}</button>`;
         if (d.research === 'older') {
@@ -496,13 +670,16 @@ export const phoneMethods = uiModule({
      * research waiting for its agent until the agent starts; else the research's.
      */
     phoneIntroLines(): readonly string[] {
-        return this.activeResearchAgentless() ? strings.phone.introArchive : strings.phone.intro;
+        const p = this.phoneT();
+        return this.activeResearchAgentless() ? p.introArchive : p.intro;
     },
 
     phoneBodyHtml(view: PhoneView): string {
-        const p = strings.phone;
+        const p = this.phoneT();
         const d = ph!;
         const s = d.state!;
+        const gw = this.phoneCaps(d.researchId).gateway;
+        const paired = phonePairedCount(s, gw);
         const lost = d.lost ? `<p class="phone-lost" role="status">${esc(p.lost)}</p>` : '';
         const note = d.note ? `<p class="phone-note" role="status">${esc(d.note)}</p>` : '';
         let content = '';
@@ -539,13 +716,15 @@ export const phoneMethods = uiModule({
                 footer = `<span class="phone-foot-note"></span>${close}`;
                 break;
             case 'refused':
+                // The gateway: why (the computer's window) and what turning it on gives, under the state.
                 content = `
                     <div class="phone-state">
                         <span class="phone-dot is-ring" aria-hidden="true"></span>
-                        <div class="phone-state-text"><strong>${esc(p.refused)}</strong></div>
+                        <div class="phone-state-text"><strong>${esc(p.refused)}</strong>${gw ? `<p>${esc(strings.phoneDevices.refusedWhy)}</p>` : ''}</div>
                         ${enable('primary btn-sm')}
                     </div>
-                    ${s.phones.length ? this.phoneListHtml() : ''}`;
+                    ${gw && !paired ? `<ul class="phone-intro">${this.phoneIntroLines().map(t => `<li><span class="phone-check" aria-hidden="true">✓</span><span>${esc(t)}</span></li>`).join('')}</ul>` : ''}
+                    ${paired ? this.phoneListHtml() : ''}`;
                 footer = `<span class="phone-foot-note"></span>${close}`;
                 break;
             case 'noGui':
@@ -560,7 +739,7 @@ export const phoneMethods = uiModule({
             case 'qr':
                 content = d.how
                     ? this.phoneSystemHtml()
-                    : `${this.phoneAddressBarHtml()}${this.phoneStatusBarHtml()}${this.phoneQrHtml()}`;
+                    : `${this.phoneAddressBarHtml()}${this.phoneStatusBarHtml()}${gw ? this.deviceQrHtml() : this.phoneQrHtml()}`;
                 footer = `<span class="phone-foot-note">${d.how ? '' : esc(p.qrWaiting)}</span>${close}`;
                 break;
             case 'paired':
@@ -573,7 +752,7 @@ export const phoneMethods = uiModule({
                 footer = `<span class="phone-foot-note"></span><button type="button" class="secondary" data-act="qr"${d.lost ? ' disabled' : ''}>${esc(p.connect)}</button>${done}`;
                 break;
             case 'error':
-                content = `${this.phoneErrorBarHtml()}${s.phones.length || d.removed.size ? this.phoneListHtml() : ''}`;
+                content = `${this.phoneErrorBarHtml()}${paired || d.removed.size ? this.phoneListHtml() : ''}`;
                 footer = `<span class="phone-foot-note"></span>${done}`;
                 break;
         }
@@ -587,7 +766,7 @@ export const phoneMethods = uiModule({
 
     /** "What appears on the computer": by the computer's system (Windows with a sketch of the firewall window). */
     phoneSystemHtml(): string {
-        const p = strings.phone;
+        const p = this.phoneT();
         const s = ph?.state ?? null;
         const os = platformHere(s);
         const steps = os === 'win' ? [p.sysStep1, p.sysWin] : [p.sysStep1];
@@ -618,7 +797,7 @@ export const phoneMethods = uiModule({
 
     /** The bar of a connection that is on: its address, since when, "Turn connection off"; under it, that phones stay paired. */
     phoneStatusBarHtml(): string {
-        const p = strings.phone;
+        const p = this.phoneT();
         const d = ph!;
         const s = d.state!;
         const ip = phoneIp(s.addresses[0]?.url ?? '');
@@ -635,10 +814,10 @@ export const phoneMethods = uiModule({
 
     /** The computer's address changed while phones were paired at the old one. */
     phoneAddressBarHtml(): string {
-        const p = strings.phone;
+        const p = this.phoneT();
         const d = ph!;
         const s = d.state!;
-        if (!phoneAddressChanged(s) || d.how) return '';
+        if (!phoneAddressChanged(s, this.phoneCaps(d.researchId).gateway) || d.how) return '';
         return `
                     <div class="phone-bar sel-opt is-address" data-sel-form="chip">
                         <div class="phone-bar-text"><strong>${esc(p.addrTitle(phoneIp(s.addresses[0]?.url ?? '')))}</strong>
@@ -648,7 +827,7 @@ export const phoneMethods = uiModule({
     },
 
     phoneErrorBarHtml(): string {
-        const p = strings.phone;
+        const p = this.phoneT();
         const d = ph!;
         const s = d.state!;
         const code = s.error?.code ?? 'bind-failed';
@@ -663,7 +842,7 @@ export const phoneMethods = uiModule({
     },
 
     phoneQrHtml(): string {
-        const p = strings.phone;
+        const p = this.phoneT();
         const d = ph!;
         const s = d.state!;
         const qr = d.qr;
@@ -698,9 +877,135 @@ export const phoneMethods = uiModule({
                     </div>`;
     },
 
+    /**
+     * The gateway's code (1.8): the QR, how to scan it (a phone, a computer), the address with its
+     * one-time code to copy, the time left (a screen reader hears it once a minute), the quiet
+     * "Open only the phone page" while the bridge offers it.
+     */
+    deviceQrHtml(): string {
+        const p = this.phoneT();
+        const t = strings.phoneDevices;
+        const d = ph!;
+        const s = d.state!;
+        const qr = d.qr;
+        const now = Date.now();
+        const expired = !!qr && now >= qr.expiresAt;
+        const noApp = s.devices?.app === 'none';
+        const dis = d.lost ? ' disabled' : '';
+        const image = qr
+            ? `<img class="phone-qr-img" src="${esc(qr.blobUrl)}" alt="${esc(t.qrAlt)}" width="216" height="216">`
+            : `<div class="phone-qr-wait">${esc(p.qrLoading)}</div>`;
+        const silent = qr && !expired && phoneSilent(s.lanSeenAt, qr.shownAt, now) ? this.phoneChecklistHtml() : '';
+        const validity = expired
+            ? `<div class="phone-expired" role="status"><strong>${esc(p.qrExpired)}</strong><span>${esc(t.qrExpiredHint)}</span>
+                <button type="button" class="primary btn-sm" data-act="new-code" data-action="phone-new-code"${dis}>${esc(p.qrNew)}</button></div>`
+            : qr && Number.isFinite(qr.expiresAt)
+                ? '<p class="phone-valid" data-countdown aria-hidden="true"></p><p class="phone-sr" role="status" data-countdown-sr></p>' : '';
+        const first = s.addresses[0];
+        const nets = s.addresses.length >= 2 && first ? `<div class="phone-nets"><span>${esc(p.qrNet(phoneIp(first.url), first.kind))}</span></div>` : '';
+        const address = qr?.url ? `
+                            <div class="phone-addr">
+                                <code class="phone-url phone-url--code">${esc(qr.url)}</code>
+                                <button type="button" class="secondary btn-sm" data-act="copy"${expired ? ' disabled' : ''}>${esc(t.copyAddress)}</button>
+                            </div>` : '';
+        const pageOnly = this.phoneCaps(d.researchId).phonePage && !noApp ? `
+                            <label class="phone-page-only"><input type="checkbox" data-act="page-only"${d.pageOnly ? ' checked' : ''}${dis}><span>${esc(t.pageOnly)}</span></label>` : '';
+        return `
+                    <div class="phone-qr phone-qr--devices">
+                        <div class="phone-qr-box${expired ? ' is-expired' : ''}">${image}</div>
+                        <div class="phone-qr-text">
+                            <p class="phone-qr-lead">${esc(t.qrScan)}</p>
+                            <p class="phone-quiet">${esc(t.qrSameNet)}</p>
+                            ${noApp ? `<p class="phone-app-none">${esc(t.appNone)}</p>` : ''}
+                            <p class="phone-quiet">${esc(t.qrHow)}</p>
+                            <p class="phone-quiet">${esc(t.qrHowPc)}</p>
+                            ${address}
+                            ${validity}
+                            ${nets}
+                            ${pageOnly}
+                            ${silent}
+                        </div>
+                    </div>`;
+    },
+
+    /**
+     * The gateway's list (1.11–1.12): "Paired devices · N" with "connected now K"; a row per device of the
+     * app (its kind as a word, connected now / last seen / not seen yet, paired on; a pencil renames it in
+     * place while the bridge offers it) and per phone's page ("· phone page"); "Unpair", 15 s "Undo".
+     */
+    deviceListHtml(): string {
+        const t = strings.phoneDevices;
+        const d = ph!;
+        const s = d.state!;
+        const caps = this.phoneCaps(d.researchId);
+        const lang = getCurrentLanguage();
+        const dis = d.lost ? ' disabled' : '';
+        const devs = s.devices?.list ?? [];
+        type Row = { key: string; device?: DeviceEntry; phone?: PhoneEntry; removed?: Removed };
+        const rows: Row[] = [
+            ...devs.map(x => ({ key: DEV_KEY + x.id, device: x })),
+            ...s.phones.map(x => ({ key: x.id, phone: x })),
+        ];
+        const back = [...d.removed.entries()].filter(([key]) => !rows.some(r => r.key === key))
+            .map(([key, r]) => ({ key, removed: r, at: r.device ? r.index : devs.length + r.index }))
+            .sort((a, b) => a.at - b.at);
+        for (const r of back) rows.splice(Math.min(r.at, rows.length), 0, { key: r.key, removed: r.removed });
+        const items = rows.map(row => {
+            if (row.removed) {
+                const r = row.removed;
+                const id = r.device?.id ?? r.entry.id;
+                return `
+                        <li class="phone-row is-removed" data-id="${esc(id)}">
+                            <div class="phone-row-text"><s class="phone-row-name">${esc((r.device?.name ?? r.entry.name) || t.unnamed)}</s><span class="phone-row-sub">${esc(t.rowUnpaired)}</span></div>
+                            <button type="button" class="phone-link" data-act="${r.device ? 'dev-undo' : 'undo'}" data-action="phone-undo" data-id="${esc(id)}"${dis}>${esc(t.rowUndo)}</button>
+                        </li>`;
+            }
+            const x = row.device;
+            const page = row.phone;
+            const id = x?.id ?? page!.id;
+            const name = (x?.name ?? page!.name) || t.unnamed;
+            const kind = x ? x.kind : deviceKindOf(null, page!.name) ?? 'phone';
+            const stale = x?.stale ?? page!.stale;
+            const pairedOn = phoneDate(x?.pairedAt ?? page!.pairedAt, lang);
+            const state = x?.connected
+                ? `<span class="phone-row-now"><span class="phone-dot is-on" aria-hidden="true"></span>${esc(t.rowNow)}</span>`
+                : stale ? `<span class="phone-row-stale">${esc(t.rowStale)}</span>`
+                    : `<span data-seen="${esc(x?.lastSeenAt ?? page!.lastSeenAt)}"></span>`;
+            const sub = [state, esc(kindWord(kind)), ...(page ? [esc(t.rowPage)] : []), ...(pairedOn ? [esc(t.rowPaired(pairedOn))] : [])].join(' · ');
+            if (x && caps.rename && d.renaming === x.id) {
+                return `
+                        <li class="phone-row is-renaming" data-id="${esc(id)}">
+                            <div class="phone-row-text">
+                                <input type="text" class="phone-rename" data-act="dev-rename-field" data-id="${esc(id)}" value="${esc(d.renameValue ?? x.name)}" maxlength="${DEVICE_NAME_MAX}"
+                                    aria-label="${esc(t.rowRenameField)}" aria-describedby="phone-rename-hint" autocomplete="off" spellcheck="false"${dis}>
+                                <span class="phone-row-sub" id="phone-rename-hint">${esc(kindWord(kind))} · ${esc(x.name || t.unnamed)} · ${esc(t.rowRenameHint)}</span>
+                            </div>
+                            <button type="button" class="primary btn-sm" data-act="dev-rename-save" data-action="device-rename" data-id="${esc(id)}"${dis}>${esc(t.rowSave)}</button>
+                        </li>`;
+            }
+            const pencil = x && caps.rename
+                ? `<button type="button" class="phone-rename-btn" data-act="dev-rename" data-id="${esc(id)}" aria-label="${esc(t.rowRenameSr(name))}" title="${esc(t.rowRename)}"${dis}>${iconSvg('pencil', { size: 14 })}</button>` : '';
+            return `
+                        <li class="phone-row" data-id="${esc(id)}">
+                            <div class="phone-row-text">
+                                <span class="phone-row-head"><span class="phone-row-name">${esc(name)}</span>${pencil}</span>
+                                <span class="phone-row-sub">${sub}</span>
+                            </div>
+                            <button type="button" class="secondary btn-sm" data-act="${x ? 'dev-unpair' : 'unpair'}" data-action="phone-unpair" data-id="${esc(id)}" aria-label="${esc(t.rowUnpairSr(name))}"${dis}>${esc(t.rowUnpair)}</button>
+                        </li>`;
+        }).join('');
+        const count = devs.length + s.phones.length;
+        const now = s.state === 'on' && s.devices ? `<span class="phone-list-now">${esc(t.listNow(s.devices.connectedNow))}</span>` : '';
+        return `
+                    <section class="phone-list" aria-labelledby="phone-list-title">
+                        <div class="phone-list-head"><h3 class="phone-section-title" id="phone-list-title">${esc(t.listTitle(count))}</h3>${now}</div>
+                        ${rows.length ? `<ul class="phone-rows">${items}</ul>` : `<p class="phone-quiet">${esc(t.listEmpty)}</p>`}
+                    </section>`;
+    },
+
     /** "The phone has not reached the computer yet": what to check, by the computer's system. */
     phoneChecklistHtml(): string {
-        const p = strings.phone;
+        const p = this.phoneT();
         const s = ph?.state ?? null;
         const os = platformHere(s);
         const fw = os === 'win' ? p.checkFwWin : os === 'mac' ? p.checkFwMac : p.checkFwLinux(portOf(s));
@@ -716,7 +1021,7 @@ export const phoneMethods = uiModule({
     },
 
     phonePairedHtml(): string {
-        const p = strings.phone;
+        const p = this.phoneT();
         const d = ph!;
         const s = d.state!;
         const fresh = d.paired!;
@@ -745,8 +1050,9 @@ export const phoneMethods = uiModule({
 
     /** "Paired phones · N": name, paired / last seen, the old address; "Unpair" (struck through 15 s with "Undo", as long as the research keeps it). */
     phoneListHtml(): string {
-        const p = strings.phone;
         const d = ph!;
+        if (this.phoneCaps(d.researchId).gateway) return this.deviceListHtml();
+        const p = this.phoneT();
         const s = d.state!;
         const lang = getCurrentLanguage();
         const rows: { entry: PhoneEntry; removed: boolean }[] = s.phones.map(entry => ({ entry, removed: false }));
@@ -816,7 +1122,155 @@ export const phoneMethods = uiModule({
             case 'unpair': void runBusy(el, () => this.phoneUnpair(id), { label: strings.busy.removing, kind: 'bridge' }); break;
             case 'undo': void runBusy(el, () => this.phoneRestore(id), { label: strings.busy.reverting, kind: 'bridge' }); break;
             case 'replace': void runBusy(el, () => this.phoneUnpair(id, true), { label: strings.busy.removing, kind: 'bridge' }); break;
+            // The gateway of the devices.
+            case 'copy': void this.phoneCopyAddress(); break;
+            case 'page-only':
+                d.pageOnly = (el as HTMLInputElement).checked;
+                void this.loadPhoneQr();
+                break;
+            case 'dev-rename': this.phoneRenameStart(id); break;
+            case 'dev-rename-save': void runBusy(el, () => this.deviceRename(id), { kind: 'bridge' }); break;
+            case 'dev-unpair': void runBusy(el, () => this.deviceUnpair(id), { label: strings.busy.removing, kind: 'bridge' }); break;
+            case 'dev-undo': void runBusy(el, () => this.deviceRestore(id), { label: strings.busy.reverting, kind: 'bridge' }); break;
         }
+    },
+
+    /** The rename field: Enter saves, Esc reverts (and closes nothing else). */
+    phoneDialogKey(e: KeyboardEvent): void {
+        const el = e.target as HTMLInputElement | null;
+        const d = ph;
+        if (!d || el?.dataset.act !== 'dev-rename-field') return;
+        const id = el.dataset.id ?? '';
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            this.phoneRenameEnd(id);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            d.renameValue = el.value;
+            const save = document.getElementById(DIALOG_ID)?.querySelector<HTMLElement>('[data-act="dev-rename-save"]');
+            if (save && !(save as HTMLButtonElement).disabled) void runBusy(save, () => this.deviceRename(id), { kind: 'bridge' });
+        }
+    },
+
+    /** The pencil: the row's name becomes a field, its text chosen. */
+    phoneRenameStart(id: string): void {
+        const d = ph;
+        const x = d?.state?.devices?.list.find(v => v.id === id);
+        if (!d || !x) return;
+        d.renaming = id;
+        d.renameValue = x.name;
+        this.renderPhoneDialog();
+        const field = document.getElementById(DIALOG_ID)?.querySelector<HTMLInputElement>('[data-act="dev-rename-field"]');
+        field?.focus();
+        field?.select();
+    },
+
+    /** The field gone (saved or reverted): the pencil of its row takes focus. */
+    phoneRenameEnd(id: string): void {
+        const d = ph;
+        if (!d) return;
+        d.renaming = '';
+        d.renameValue = '';
+        this.renderPhoneDialog();
+        const pencil = Array.from(document.getElementById(DIALOG_ID)?.querySelectorAll<HTMLElement>('[data-act="dev-rename"]') ?? [])
+            .find(b => b.dataset.id === id);
+        pencil?.focus();
+    },
+
+    /** "Copy address": the address with its one-time code to the clipboard (never logged). */
+    async phoneCopyAddress(): Promise<void> {
+        const url = ph?.qr?.url;
+        if (!url) return;
+        try {
+            await navigator.clipboard.writeText(url);
+            this.showToast(strings.phoneDevices.copied, 2500);
+        } catch {
+            /* not allowed here: the address stays shown to be copied by hand */
+        }
+    },
+
+    /** `PUT phone/devices/<id> {name}` (device.rename): an empty or unchanged name reverts. */
+    async deviceRename(id: string): Promise<void> {
+        const d = ph;
+        const base = d ? bridgeBase(d.researchId) : null;
+        const was = d?.state?.devices?.list.find(v => v.id === id);
+        if (!d || !base || !was) return;
+        const name = (d.renameValue ?? '').trim().slice(0, DEVICE_NAME_MAX);
+        if (!name || name === was.name) { this.phoneRenameEnd(id); return; }
+        try {
+            const res = await postBridge(base, `phone/devices/${encodeURIComponent(id)}`, JSON.stringify({ name }), 'PUT');
+            if (ph !== d) return;
+            if (res.ok) {
+                const j = await res.json().catch(() => null) as { devices?: unknown } | null;
+                if (ph !== d || !d.state) return;
+                d.state = { ...d.state, devices: devicesFrom(j?.devices, d.state.devices) };
+                this.phoneRenameEnd(id);
+                void this.askPhone();
+                return;
+            }
+            // 400 device.name / 404 device.unknown: the field stays, the line says the research did not take it.
+            d.note = strings.phone.failed;
+        } catch {
+            if (ph === d) d.lost = true;
+        }
+        this.renderPhoneDialog();
+    },
+
+    /** `DELETE phone/devices/<id>`: at once; the row stays struck through with "Undo" for a while. */
+    async deviceUnpair(id: string): Promise<void> {
+        const d = ph;
+        const base = d ? bridgeBase(d.researchId) : null;
+        const list = d?.state?.devices?.list ?? [];
+        const index = list.findIndex(v => v.id === id);
+        const device = list[index];
+        if (!d || !base || !device) return;
+        try {
+            const res = await postBridge(base, `phone/devices/${encodeURIComponent(id)}`, '', 'DELETE');
+            if (ph !== d) return;
+            if (res.ok) {
+                const j = await res.json().catch(() => null) as { undo?: unknown; devices?: unknown } | null;
+                if (ph !== d || !d.state) return;
+                d.removed.set(DEV_KEY + id, {
+                    entry: deviceAsEntry(device), device, index, until: Date.now() + UNDO_MS,
+                    ...(typeof j?.undo === 'string' ? { undo: j.undo.slice(0, 200) } : {}),
+                });
+                const next = devicesFrom(j?.devices, d.state.devices);
+                d.state = { ...d.state, devices: next ? { ...next, list: next.list.filter(v => v.id !== id) } : next };
+                if (d.renaming === id) d.renaming = '';
+                this.renderPhoneDialog();
+            }
+            // 404 device.unknown: gone already; the list says what is there.
+        } catch {
+            if (ph === d) d.lost = true;
+        }
+        await this.askPhone();
+    },
+
+    /** `POST phone/devices/<id>/restore {undo}` (the research keeps it 15 s; after that 410 device.gone). */
+    async deviceRestore(id: string): Promise<void> {
+        const d = ph;
+        const base = d ? bridgeBase(d.researchId) : null;
+        if (!d || !base) return;
+        const r = d.removed.get(DEV_KEY + id);
+        try {
+            const res = await postBridge(base, `phone/devices/${encodeURIComponent(id)}/restore`, JSON.stringify(r?.undo ? { undo: r.undo } : {}));
+            if (ph !== d) return;
+            d.removed.delete(DEV_KEY + id);
+            if (res.ok) {
+                const j = await res.json().catch(() => null) as { devices?: unknown } | null;
+                if (ph !== d || !d.state) return;
+                d.state = { ...d.state, devices: devicesFrom(j?.devices, d.state.devices) };
+                // A device put back is not "just paired".
+                if (d.qr) for (const v of d.state.devices?.list ?? []) d.qr.known.add(v.id);
+                this.renderPhoneDialog();
+            } else {
+                d.note = strings.phone.failed;
+            }
+        } catch {
+            if (ph === d) d.lost = true;
+        }
+        await this.askPhone();
     },
 
     /** `POST phone/on`: the research asks on the computer (its own window); the dialog waits for the answer. */
@@ -930,10 +1384,21 @@ export const phoneMethods = uiModule({
     },
 
     /** The Research menu's item: "Connect phone…" off or the research not running; "Phone" with a pill when on or failing. */
-    phoneMenuItem(): { label: string; pill?: { text: string; tone: 'on' | 'error' } } | null {
+    phoneMenuItem(): { label: string; pill?: { text: string; tone: 'on' | 'error' | 'off' } } | null {
         if (!this.phoneAvailable()) return null;
         const sum = this.phoneSummaryNow();
-        const p = strings.phone;
+        const p = this.phoneT();
+        if (this.phoneCaps().gateway) {
+            // The gateway: "Devices" with "on · N connected" (connected now), "off" while devices stay paired.
+            const t = strings.phoneDevices;
+            const id = this.activeResearchId();
+            const counts = id ? devicesNow.get(id) : undefined;
+            if (!sum) return { label: t.menuConnect };
+            if (sum.state === 'on') return { label: t.menuItem, pill: { text: t.menuOn(counts?.connected ?? 0), tone: 'on' } };
+            if (sum.state === 'error') return { label: t.menuItem, pill: { text: t.menuError, tone: 'error' } };
+            if ((counts?.paired ?? sum.phones) > 0) return { label: t.menuItem, pill: { text: t.menuOff, tone: 'off' } };
+            return { label: t.menuConnect };
+        }
         if (!sum) return { label: p.menuConnect };
         if (sum.state === 'on') return { label: p.menuItem, pill: { text: p.menuOn(sum.phones), tone: 'on' } };
         if (sum.state === 'error') return { label: p.menuItem, pill: { text: p.menuError, tone: 'error' } };
