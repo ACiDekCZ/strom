@@ -36,7 +36,7 @@ import type { ResearchLinkKind } from './research-ui.js';
 import { auditRefusalOf, auditResearchUnavailable, setWaitingAuditState } from './waiting-task-ui.js';
 import { asAuditPreview } from '../research-audit.js';
 import { readAsideOutcome, type AsideDo, type AsideOutcome } from '../research-aside.js';
-import type { WaitingAuditPreviewResult, WaitingAuditResult, WaitingFileResult } from '../research-waiting-write.js';
+import type { GroupRetryResult, WaitingAuditPreviewResult, WaitingAuditResult, WaitingFileResult, WaitingRetryResult } from '../research-waiting-write.js';
 import { itemKey } from './waiting-images-ui.js';
 import { SECTION_PREFS_EVENT, sectionPrefs, watchSectionPrefsStorage } from './live-section-prefs.js';
 import {
@@ -362,6 +362,26 @@ export function overviewWindowOverrides(port: OverviewWindowPort, read: () => Ov
             const out = readAsideOutcome(r) ?? { ok: false, text: strings.busy.mainWindowSilent, retry: true, tone: 'danger' };
             if (out.ok || out.gone) s.waiting = s.waiting.filter(x => x.id !== w.id);
             return out;
+        },
+        // "Retry with the agent" (spec 089 §1.3): written by the main window (its toast); taken, the item goes here at once.
+        async retryWaitingItem(this: UIClass, s: LiveSession, w: LiveWaiting): Promise<WaitingRetryResult | null> {
+            const r = await port.ask('waiting-agent-retry', { itemId: w.id }, OVERVIEW_ANSWER_WAIT_MS) as WaitingRetryResult | null;
+            if (r && typeof r === 'object' && r.ok === true) {
+                s.waiting = s.waiting.filter(x => x.id !== w.id);
+                this.renderResearchOverview();
+            }
+            return r && typeof r === 'object' && typeof r.ok === 'boolean' ? r : null;
+        },
+        // "Retry all with the agent" of a place (spec 089 §4): written by the main window (its toast); what it took back goes here at once.
+        async retryWaitingGroup(this: UIClass, s: LiveSession, key: string): Promise<GroupRetryResult | null> {
+            const r = await port.ask('waiting-group-agent-retry', { group: key }, OVERVIEW_ANSWER_WAIT_MS) as GroupRetryResult | null;
+            if (!r || typeof r !== 'object' || typeof r.ok !== 'boolean') return null;
+            if (r.ok && Array.isArray(r.retried) && r.retried.length > 0) {
+                const taken = new Set(r.retried);
+                s.waiting = s.waiting.filter(x => !(x.group?.key === key && taken.has(researchTaskRef(x.id) ?? '')));
+                this.renderResearchOverview();
+            }
+            return r;
         },
         async markWaitingSent(_s: LiveSession, w: LiveWaiting): Promise<void> { run('waiting-sent', { itemId: w.id }); },
         async markWaitingUnsent(_s: LiveSession, id: string): Promise<undefined> { run('waiting-unsent', { itemId: id }); return undefined; },

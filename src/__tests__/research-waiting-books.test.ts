@@ -274,4 +274,12 @@ describe('the guessed height of a group\'s band (spec 105 U4 §1, §2)', () => {
         expect(waitingGroupBandLines('Archiv ve Vzorově', { missing: true })).toBe(3);
         expect(waitingGroupBandLines('y'.repeat(150), { missing: true })).toBe(3 + 1 + 1);
     });
+
+    it('a place with "Retry all with the agent" (spec 089 §8): its line and one kept for its confirmation, its shared Now line', () => {
+        expect(waitingGroupBandLines('Moravský zemský archiv v Brně', { retry: true })).toBe(2 + 2);
+        expect(waitingGroupBandLines('Moravský zemský archiv v Brně', { retry: true, now: true })).toBe(2 + 2 + 1);
+        expect(waitingGroupBandLines('Moravský zemský archiv v Brně', { missing: true, now: true })).toBe(2 + 1 + 1);
+        // A book gets nothing of it.
+        expect(waitingGroupBandLines('Vzorov 3, N 1784–1820', { book: true, listed: true, retry: true, now: true })).toBe(1 + 3);
+    });
 });

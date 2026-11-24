@@ -389,9 +389,10 @@ export const waitingTaskMethods = uiModule({
      * narrow column (`column`, or the phase's container under 380 px). A
      * phone: the sentence and where images are saved, no steps. `upload`:
      * the upload area stands under the block (the panel's dialog), the
-     * last step it is, no button for it.
+     * last step it is, no button for it. `retryMain`: "Retry with the agent"
+     * is the item's main action (spec 089 §1.2), ③ outlined then.
      */
-    waitingDeliverEl(s: LiveSession, w: LiveWaiting, opts: { phone: boolean; steps: boolean; column?: boolean; upload?: boolean }): HTMLElement {
+    waitingDeliverEl(s: LiveSession, w: LiveWaiting, opts: { phone: boolean; steps: boolean; column?: boolean; upload?: boolean; retryMain?: boolean }): HTMLElement {
         const L = strings.live;
         const T = L.waitingTask;
         const box = el('div', 'research-overview__waiting-deliver');
@@ -439,7 +440,8 @@ export const waitingTaskMethods = uiModule({
                 a.onclick = (e) => e.stopPropagation();
                 action = a;
             } else {
-                const btn = el('button', `waiting-action ${step === 'images' ? 'waiting-action--primary' : 'waiting-action--secondary'} research-overview__waiting-action`);
+                const filled = step === 'images' && !opts.retryMain;
+                const btn = el('button', `waiting-action ${filled ? 'waiting-action--primary' : 'waiting-action--secondary'} research-overview__waiting-action`);
                 btn.type = 'button';
                 if (step === 'images') {
                     btn.textContent = T.haveImages;
