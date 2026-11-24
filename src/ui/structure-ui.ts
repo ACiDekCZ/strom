@@ -39,6 +39,8 @@ export interface StructureDialogOptions {
     source?: TreeActionSource;
     /** The dialog it returns to on close (the tree manager). */
     parent?: string;
+    /** Open on this step over the options (the copy's summary: Duplicate). */
+    step?: 'copy';
 }
 
 /** What a step draws into: the dialog's body and footer, both emptied for it. */
@@ -198,6 +200,7 @@ export const structureMethods = uiModule({
         this.pushDialog(MODAL_ID);
         modal.classList.add('active');
         this.structureGo(this.structureOptionsStep());
+        if (opts.step === 'copy') this.structureGo(this.structureCopyStep());
         if (large && structureConnectedKnown(treeId) === null) {
             // The count after the first paint; the options drawn again with its answer (if still shown).
             setTimeout(() => {

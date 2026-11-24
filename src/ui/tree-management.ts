@@ -6,11 +6,10 @@
 import { researchOpenMark, researchOpenSrHtml } from './research-open-mark.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { runTreeSwitch, type TreeSwitchPlace, type TreeSwitchResult } from './tree-switch-busy.js';
-import { activatedElement, busyLocal } from './busy.js';
+import { activatedElement } from './busy.js';
 import type { FollowSwitchFrom } from './research-follow-ui.js';
 import { countFamilies } from '../ged-exporter.js';
 import { TreeManager } from '../tree-manager.js';
-import { freeCopyName, treeNameTaken } from '../tree-copy-name.js';
 import { sharedImageTrees, treeImageIds } from '../snapshots.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -1509,90 +1508,11 @@ export const treeManagementMethods = uiModule({
 
     // ---- DUPLICATE TREE ----
     /**
-     * Show duplicate tree dialog
+     * Copy of a whole tree: Change structure… on the copy's summary with its
+     * name (the old naming dialog is gone, spec 139 §4).
      */
     duplicateTree(treeId: string, parentDialogId?: string): void {
-        const tree = TreeManager.getTreeMetadata(treeId as TreeId);
-        if (!tree) return;
-
-        this.duplicateTreeId = treeId as TreeId;
-        const names = TreeManager.getTrees().map(t => t.name);
-        const defaultName = freeCopyName(tree.name, names);
-
-        const modal = document.getElementById('duplicate-tree-modal');
-        const input = document.getElementById('duplicate-tree-name') as HTMLInputElement;
-
-        // Dialog stack: Escape returns to the parent (the tree manager) when there is one.
-        this.clearDialogStack();
-        if (parentDialogId) {
-            this.pushDialog(parentDialogId);
-            this.closeDialogById(parentDialogId);
-        }
-        this.pushDialog('duplicate-tree-modal');
-
-        const taken = document.getElementById('duplicate-tree-name-taken');
-        // A name another tree has is said under the field (not blocked: two trees may share a name).
-        const check = (): void => {
-            if (taken) taken.textContent = input && treeNameTaken(input.value, names) ? strings.treeManager.duplicateNameTaken : '';
-        };
-        if (input) {
-            input.value = defaultName;
-            input.oninput = check;
-        }
-        check();
-
-        modal?.classList.add('active');
-        input?.focus();
-        input?.select();
-
-        // Handle Enter key
-        if (input) {
-            input.onkeydown = (e: KeyboardEvent) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    this.confirmDuplicateTree();
-                }
-            };
-        }
-    },
-
-    /**
-     * Close duplicate tree dialog
-     */
-    closeDuplicateTreeDialog(): void {
-        const modal = document.getElementById('duplicate-tree-modal');
-        modal?.classList.remove('active');
-        this.returnToParentDialog();
-        this.duplicateTreeId = null;
-    },
-
-    /**
-     * Confirm duplicate tree
-     */
-    async confirmDuplicateTree(): Promise<void> {
-        if (!this.duplicateTreeId) return;
-
-        const input = document.getElementById('duplicate-tree-name') as HTMLInputElement;
-        const newName = input?.value.trim();
-
-        if (!newName) {
-            input?.focus();
-            return;
-        }
-
-        // The dialog's button carries the copying (§1: the tree read and written anew); Enter in the name has it too.
-        const btn = activatedElement() ?? document.querySelector<HTMLElement>('#duplicate-tree-modal .buttons .primary');
-        const sourceId = this.duplicateTreeId;
-        const copied = await busyLocal(btn, strings.busy.saving, async () => {
-            await TreeManager.duplicateTree(sourceId, newName);
-            return true;
-        }, () => ({ ok: false, kind: 'error', text: strings.busy.failed, retry: () => { void this.confirmDuplicateTree(); } }));
-        if (!copied) return;
-        this.closeDuplicateTreeDialog();
-        // Made from Change structure…: its work is done, back to where it was opened from.
-        if (this.isStructureDialogOpen()) this.closeStructureDialog();
-        this.updateTreeManagerList();
-        this.updateTreeSwitcher();
+        void this.showStructureDialog(treeId as TreeId, { parent: parentDialogId, step: 'copy' });
     },
 
     // ---- TREE VISIBILITY ----

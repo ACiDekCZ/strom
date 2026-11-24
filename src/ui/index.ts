@@ -259,7 +259,6 @@ export class UIClass {
 
     // Tree management state
     renameTreeId: TreeId | null = null;
-    duplicateTreeId: TreeId | null = null;
     importTreeData: StromData | null = null;
     /** The `research` tie named by the JSON file being imported (restored on the new tree). */
     pendingImportResearch: { id: string; head?: string } | null = null;
