@@ -234,3 +234,25 @@ for (const size of [{ width: 640, height: 360 }, { width: 568, height: 320 }]) {
         expect(b.y).toBeGreaterThanOrEqual(head.y + head.height);
     });
 }
+
+// Spec 139 §10.1: sideways the facts stay left, Open and ⋯ right in the row of the name, 44 px.
+test('the tree manager sideways: Open and ⋯ on the right of the name, 44 px', async ({ page }) => {
+    await sample(page);
+    await page.evaluate(async () => {
+        await window.Strom.DataManager.importAsNewTree({ persons: {}, partnerships: {} } as never, 'Jesenští');
+        window.Strom.UI.showTreeManagerDialog();
+    });
+    const other = page.locator('.tree-manager-item:not(.active)').first();
+    await expect(other).toBeVisible();
+    const name = (await other.locator('.tree-manager-item-name').boundingBox())!;
+    const info = (await other.locator('.tree-manager-item-info').boundingBox())!;
+    const open = (await other.locator('.tree-open-btn').boundingBox())!;
+    const more = (await other.locator('.tree-row-menu-btn').boundingBox())!;
+    expect(open.x).toBeGreaterThanOrEqual(info.x + info.width - 1);
+    expect(open.y).toBeLessThan(info.y + info.height);
+    expect(open.y + open.height).toBeGreaterThan(name.y);
+    expect(Math.abs(open.y - more.y)).toBeLessThanOrEqual(1);
+    expect(open.height).toBeGreaterThanOrEqual(44);
+    expect(more.height).toBeGreaterThanOrEqual(44);
+    await expect(other.locator('[data-row-action="structure"]')).toBeHidden();
+});

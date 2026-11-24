@@ -405,6 +405,37 @@ test('the tree manager on a phone: ⋯ opens the sheet over it; another tree has
     await expect(manager).toHaveClass(/active/);
 });
 
+// Spec 139 §10.1–10.2: a phone's row has Open and ⋯ only (44 px, ⋯ 48 wide); the ⋯ sheet starts with
+// Change structure… and Export…, Delete tree… last.
+test('the tree manager on a phone: Open and ⋯ 44 px, the sheet starts with Change structure… and Export…', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Vojtěch', 'Jesenský');
+    await page.evaluate(() => window.Strom.DataManager.importAsNewTree({ persons: {}, partnerships: {} } as never, 'Jesenští'));
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    const manager = page.locator('#tree-manager-modal');
+    const other = manager.locator('.tree-manager-item:not(.active)').first();
+    await expect(other.locator('[data-row-action="structure"]')).toBeHidden();
+    await expect(other.locator('[data-row-action="export"]')).toBeHidden();
+    const open = (await other.locator('.tree-open-btn').boundingBox())!;
+    const more = (await other.locator('.tree-row-menu-btn').boundingBox())!;
+    expect(open.height).toBeGreaterThanOrEqual(44);
+    expect(more.height).toBeGreaterThanOrEqual(44);
+    expect(more.width).toBeGreaterThanOrEqual(48);
+    // One column: Open under the facts.
+    const info = (await other.locator('.tree-manager-item-info').boundingBox())!;
+    expect(open.y).toBeGreaterThanOrEqual(info.y + info.height - 1);
+    expect(await other.locator('.tree-manager-item-stats-row').evaluate(el => getComputedStyle(el).fontSize)).toBe('13.5px');
+
+    await other.locator('.tree-row-menu-btn').tap();
+    const sheet = page.locator('.bottom-sheet-tree-actions');
+    await expect(sheet).toBeVisible();
+    const rows = sheet.locator('.tree-actions-list [data-action]');
+    expect((await rows.evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action))).slice(0, 2)).toEqual(['structure', 'export']);
+    await expect(rows.nth(0)).toContainText('Change structure…');
+    await expect(rows.nth(1)).toContainText('Export…');
+    await expect(rows.last()).toHaveAttribute('data-action', 'delete');
+});
+
 // The top bar ⋯ opening the same "More" sheet: toolbar-responsive.spec.ts
 // (the mobile ⋯ stays ghost … when its sheet is open).
 

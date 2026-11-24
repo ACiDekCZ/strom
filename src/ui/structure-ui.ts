@@ -69,6 +69,8 @@ export interface StructureStep {
      * typed (the backdrop leaves it alone), 'choice' otherwise (Cancel).
      */
     kind?: 'info' | 'choice' | 'form';
+    /** A way back inside the step (a phone's second screen): true when it went back itself. */
+    goBack?: () => boolean;
     render(view: StructureView): void | Promise<void>;
 }
 
@@ -262,6 +264,7 @@ export const structureMethods = uiModule({
     /** One screen back; from the options the dialog closes. */
     structureBack(): void {
         if (!state) return;
+        if (state.steps[state.steps.length - 1]?.goBack?.()) return;
         if (state.steps.length <= 1) {
             this.closeStructureDialog();
             return;

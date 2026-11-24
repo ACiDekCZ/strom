@@ -110,6 +110,19 @@ interface WhoState {
     /** Generations per stepper (undefined: all). */
     gen: { ancestors?: number; descendants?: number; directUp?: number; directDown?: number };
     hand: PersonId[];
+    /**
+     * A phone held upright (spec 139 §10.3): the step is two screens, the
+     * kinds as rows, then the chosen kind's pane over the whole screen; its
+     * header ‹ first goes back to the kinds (true: it did).
+     */
+    phoneBack?: () => boolean;
+}
+
+/** A phone held upright: the step "who to take" as two screens (the CSS of `.structure-who[data-screen]`). */
+const PHONE_SCREENS = '(max-width: 640px)';
+
+function phoneScreens(): boolean {
+    return typeof window.matchMedia === 'function' && window.matchMedia(PHONE_SCREENS).matches;
 }
 
 function esc(text: string): string {
@@ -188,6 +201,7 @@ export const structureSelectMethods = uiModule({
             title: join ? t.joinSelectTitle : t.selectTitle,
             sub: join ? `${name} · ${t.stepWho}` : `${name} · ${t.stepOf(2, 3, t.stepWho)}`,
             back: join ? t.joinWhatStep : undefined,
+            goBack: () => who.phoneBack?.() ?? false,
             render: (view) => this.renderStructureWho(view, who, opts),
         };
     },
@@ -302,6 +316,10 @@ export const structureSelectMethods = uiModule({
             tab.setAttribute('aria-controls', pane.id);
             tab.insertAdjacentHTML('afterbegin', kindIcon(kind));
             tab.appendChild(el('span', undefined, t.kind[kind]));
+            // "›" leads to the kind's own screen on a phone (hidden beside the pane).
+            const next = el('span', 'structure-next', '\u203a');
+            next.setAttribute('aria-hidden', 'true');
+            tab.appendChild(next);
             if (kind === 'view' && !viewReady) {
                 tab.setAttribute('aria-disabled', 'true');
                 tab.setAttribute('aria-describedby', 'structure-who-view-why');
@@ -309,6 +327,7 @@ export const structureSelectMethods = uiModule({
             tab.addEventListener('click', () => {
                 if (tab.getAttribute('aria-disabled') === 'true') return;
                 show(kind);
+                if (phoneScreens()) screen('pane');
             });
             tabButtons.push(tab);
             tabs.appendChild(tab);
@@ -574,7 +593,30 @@ export const structureSelectMethods = uiModule({
             cleanups.push(() => picker.destroy());
         };
 
+        // ---- A phone: the kinds, then the kind's pane as screens of their own (§10.3) ----
+        const stepTitle = document.getElementById('structure-title');
+        const stepSub = document.getElementById('structure-sub');
+        const headTexts = { title: stepTitle?.textContent ?? '', sub: stepSub?.textContent ?? '', subHidden: stepSub?.hidden ?? true };
+        const screen = (to: 'kinds' | 'pane'): void => {
+            root.dataset.screen = to;
+            if (stepTitle) stepTitle.textContent = to === 'pane' && who.kind ? t.kind[who.kind] : headTexts.title;
+            if (stepSub) {
+                stepSub.textContent = headTexts.sub;
+                stepSub.hidden = to === 'pane' || headTexts.subHidden;
+            }
+            if (to === 'pane') document.getElementById('structure-back')?.focus({ preventScroll: true });
+            else tabButtons.find(b => b.dataset.kind === who.kind)?.focus({ preventScroll: true });
+        };
+        who.phoneBack = () => {
+            if (root.dataset.screen !== 'pane' || !phoneScreens()) return false;
+            screen('kinds');
+            return true;
+        };
+        signal.addEventListener('abort', () => { who.phoneBack = undefined; }, { once: true });
+
         show(who.kind);
+        // Back from the summary comes to the kinds again: ‹ twice from the summary is the options.
+        root.dataset.screen = 'kinds';
         tabButtons.find(b => b.dataset.kind === who.kind)?.focus({ preventScroll: true });
     },
 

@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
-import { openApp, createFirstPerson, openTreeActions, openStructureDialog } from './helpers.js';
+import { openApp, createFirstPerson, openTreeActions, openStructureDialog, seedTree, type SeedPerson } from './helpers.js';
 
 /**
  * Change structure… (spec 139 §1–§2): one item of the tree's actions opens a
@@ -184,4 +184,75 @@ test.describe('phone', () => {
             await expect(dialog).toBeHidden();
         });
     }
+
+    // §10.3: who to take as two screens - the kinds, then the kind's pane; ‹ goes a screen back each time.
+    test('From a selection on a phone: the kinds, the kind over the whole screen, the summary; ‹ twice from the summary is the options', async ({ page }) => {
+        const people: Record<string, SeedPerson> = {
+            vojtech: { firstName: 'Vojtěch', lastName: 'Jesenský', partners: ['marie'] },
+            marie: { firstName: 'Marie', lastName: 'Kalinovská', gender: 'female', partners: ['vojtech'] },
+            petr: { firstName: 'Petr', lastName: 'Jesenský', parents: ['vojtech', 'marie'], partners: ['hana'] },
+            anna: { firstName: 'Anna', lastName: 'Jesenská', gender: 'female', parents: ['vojtech', 'marie'] },
+            karel: { firstName: 'Karel', lastName: 'Jesenský', parents: ['vojtech', 'marie'] },
+            hana: { firstName: 'Hana', lastName: 'Ostrožná', gender: 'female', partners: ['petr'] },
+            jakub: { firstName: 'Jakub', lastName: 'Jesenský', parents: ['petr', 'hana'] },
+            eliska: { firstName: 'Eliška', lastName: 'Jesenská', gender: 'female', parents: ['petr', 'hana'] },
+            tomas: { firstName: 'Tomáš', lastName: 'Jesenský', parents: ['petr', 'hana'] },
+        };
+        await openApp(page);
+        await seedTree(page, people, 'Jesenští', 'vojtech');
+        await page.evaluate(() => window.Strom.UI.showStructureDialog(window.Strom.TreeManager.getActiveTreeId()!));
+        const dialog = page.locator('#structure-modal');
+        await expect(dialog).toHaveAttribute('data-step', 'options');
+        await dialog.locator('.menu-option[data-action="select"]').click();
+        await expect(dialog).toHaveAttribute('data-step', 'who');
+
+        // Screen 1: the kinds as rows of 48 px with "›", no pane, no footer; ‹ is 44 px.
+        const tabs = dialog.locator('.structure-who-tabs [role="tab"]');
+        await expect(tabs).toHaveCount(7);
+        for (const h of await tabs.evaluateAll(els => els.map(e => e.getBoundingClientRect().height))) expect(h).toBeGreaterThanOrEqual(48);
+        await expect(dialog.locator('#structure-who-tab-rod .structure-next')).toBeVisible();
+        await expect(dialog.locator('.structure-who-pane')).toBeHidden();
+        await expect(dialog.locator('#structure-footer')).toBeHidden();
+        const back = dialog.locator('#structure-back');
+        const b = (await back.boundingBox())!;
+        expect(Math.round(b.width)).toBeGreaterThanOrEqual(44);
+        expect(Math.round(b.height)).toBeGreaterThanOrEqual(44);
+
+        // Screen 2: the kind's pane over the whole dialog, its name the title; "Selected: …" just over Continue.
+        await dialog.locator('#structure-who-tab-rod').click();
+        await expect(dialog.locator('.structure-who-nav')).toBeHidden();
+        await expect(dialog.locator('.structure-who-pane')).toBeVisible();
+        await expect(dialog.locator('#structure-title')).toHaveText('Family line / surname');
+        await expect(dialog.locator('#structure-sub')).toBeHidden();
+        const row = dialog.locator('li.sp-rodpick-rod', { hasText: 'Jesensk' }).first();
+        const rowBox = (await row.locator('button').boundingBox())!;
+        expect(rowBox.height).toBeGreaterThanOrEqual(48);
+        await row.locator('button').click();
+        const go = dialog.locator('#structure-footer [data-action="continue"]');
+        await expect(go).toBeEnabled();
+        const chosen = (await dialog.locator('.structure-who-chosen').boundingBox())!;
+        const goBox = (await go.boundingBox())!;
+        expect(chosen.y + chosen.height).toBeLessThanOrEqual(goBox.y + 1);
+        await expect(dialog.locator('.structure-who-chosen')).toContainText('Selected:');
+
+        // ‹ on the pane: back to the kinds, still in the step.
+        await back.click();
+        await expect(dialog).toHaveAttribute('data-step', 'who');
+        await expect(dialog.locator('.structure-who-nav')).toBeVisible();
+        await expect(dialog.locator('#structure-title')).toHaveText('New tree from a selection');
+        await dialog.locator('#structure-who-tab-rod').click();
+        await go.click();
+        await expect(dialog).toHaveAttribute('data-step', 'summary');
+        // The numbers by two.
+        const tops = await dialog.locator('.structure-stat').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().top)));
+        expect(new Set(tops).size).toBe(2);
+
+        // ‹ twice from the summary: the kinds, then the options.
+        await back.click();
+        await expect(dialog).toHaveAttribute('data-step', 'who');
+        await expect(dialog.locator('.structure-who-nav')).toBeVisible();
+        await back.click();
+        await expect(dialog).toHaveAttribute('data-step', 'options');
+        await expect(dialog).toBeVisible();
+    });
 });
