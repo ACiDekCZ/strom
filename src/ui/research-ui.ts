@@ -136,7 +136,8 @@ import { dragLooksLikeJson, dropRoute, isJsonFileName } from '../drop-route.js';
 import type { DropInto } from '../tree-drop.js';
 import { createSha256 } from '../sha256.js';
 import { localIsoDay } from '../import-origin.js';
-import { deviceClient } from '../device-client.js';
+import { deviceClient, type DeviceClient } from '../device-client.js';
+import { otherDeviceWords } from '../conflict-devices.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -265,6 +266,8 @@ export interface LiveChangeItem {
     sourceRefs?: string[];
     /** A hypothesis decided in the Strom app (its `what` line says so; spec 074 V14). */
     inApp?: boolean;
+    /** The browser whose send wrote it (`via`, spec 094 K2.4); absent: not a send, or one without a device. */
+    via?: DeviceClient;
 }
 
 /** What one research commit added (the "+N people, +N sources" of the last 24 hours). */
@@ -722,7 +725,7 @@ function appendQueueNote(text: HTMLElement, q: LiveQueueItem, s: LiveSession): v
 }
 
 function entryItems(e: LiveLogEntry, data: StromData | null, nameOf: (ref: string) => string | null): LiveChangeItem[] {
-    const base = { at: e.at, task: e.task, head: e.head, ...(e.research ? { research: e.research } : {}) };
+    const base = { at: e.at, task: e.task, head: e.head, ...(e.research ? { research: e.research } : {}), ...(e.via ? { via: e.via } : {}) };
     const ids = (refs: string[]): PersonId[] => (data && refs.length > 0 ? personsByRefs(data, refs) : []);
     // Hypotheses decided in the Strom app: their lines tagged (the research's text, or the line in these words).
     const inApp = new Set(e.what.map(line => researchHypothesisLogLine(line)?.id).filter((id): id is string => !!id));
@@ -821,6 +824,9 @@ export function appendChangeText(host: HTMLElement, c: LiveChangeItem, show: (id
     if (pos < c.text.length) host.appendChild(document.createTextNode(c.text.slice(pos)));
     // A hypothesis decided in the app (spec 074 DEV §5): the same tag as in the Load dialog.
     if (c.inApp) host.append(' ', el('span', 'research-change-inapp', strings.research.hypoInApp));
+    // Written by a send of another browser (spec 094 K2.4): which one, quietly after the line.
+    const from = otherDeviceWords(c.via);
+    if (from) host.append(' ', el('span', 'research-change-via', strings.research.fromDevice(from)));
     return missing;
 }
 

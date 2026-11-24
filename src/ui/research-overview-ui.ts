@@ -3276,8 +3276,11 @@ export const researchOverviewMethods = uiModule({
                 const what = c.title || facts[c.fact] || c.fact;
                 const values = c.values.map(v => conflictValueSaid(researchValueText(c.fact, v.value)));
                 const conflictId = researchConflictRef(c.id) ?? undefined;
+                // Between two sends of two devices (spec 094 K2.4): each value by the device its edit came from.
+                const devices = this.researchConflictDevices(c);
+                const said = devices ? c.values.map((v, i) => v.side === 'user' || v.side === 'research' ? strings.conflict.valueFrom(devices[v.side], values[i]) : values[i]) : values;
                 rows.push({ key: `c:${p.id}:${conflictId ?? n++}`, person: p, name, personRef, words: [what, ...values],
-                    text: `${name} · ${what}: ${values.join(' × ')}`, conflict: true, conflictId });
+                    text: `${name} · ${what}: ${said.join(' × ')}`, conflict: true, conflictId });
             }
             for (const h of p.research?.hypotheses ?? []) {
                 if (!isOpenHypothesis(h) && !(h.id && acceptBatchRowResult(batch, h.id))) continue;

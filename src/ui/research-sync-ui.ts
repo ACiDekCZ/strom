@@ -57,9 +57,10 @@ import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, researchTreeOfStatus, storedResearchBridge, researchLinksEnabled,
     researchAutoState, patchResearchAutoState, researchWriteKey, researchWriteIsNews, researchAutoIntroSeen, noteResearchAutoIntroSeen, forgetResearchWaitingItems, anyResearchBridgeKnown,
     researchSendPreviewSkipped, announcedResearchScheme, RESEARCH_BRIDGE_MOVED_EVENT,
-    ResearchAutoState, ResearchHeldConflicts, StoredResearchTree, rememberConflictSent, forgetConflictSent,
+    ResearchAutoState, ResearchHeldConflicts, StoredResearchTree, rememberConflictSent, forgetConflictSent, researchConflictSides,
 } from '../research-device.js';
 import { deviceClient } from '../device-client.js';
+import { conflictDeviceWords, conflictDevicePair, conflictDevicePairLine, otherDeviceWords, sharedConflictWords, type ConflictDeviceWords } from '../conflict-devices.js';
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, conflictTakeovers, heldConflicts,
@@ -2525,7 +2526,8 @@ export const researchSyncMethods = uiModule({
         if (sent.manual && sent.changes !== 0) patchResearchAutoState(treeId, { manualWrites: (researchAutoState(treeId).manualWrites ?? 0) + 1 });
         if (sent.manual) {
             if (conflicts > 0) {
-                this.showToast(s.writtenConflictToast(sent.changes ?? 0, conflicts), 8000,
+                const devices = this.researchConflictsDevices(treeId, known?.ids ?? []);
+                this.showToast([s.writtenConflictToast(sent.changes ?? 0, conflicts), devices ? conflictDevicePairLine(devices) : ''].filter(Boolean).join(' '), 8000,
                     { action: { label: s.showConflicts, run: () => this.researchShowConflicts(persons) } });
             } else if (sent.changes !== 0 && toldNotWritten !== sent.fingerprint) {
                 // (0 written: nothing to say here — what was left out or skipped is told on its own;
@@ -2533,7 +2535,7 @@ export const researchSyncMethods = uiModule({
                 this.showToast(s.writtenToast(sent.changes ?? 0), 6000);
             }
         } else if (conflicts > 0) {
-            this.showResearchConflictNote(conflicts, persons);
+            this.showResearchConflictNote(conflicts, persons, this.researchConflictsDevices(treeId, known?.ids ?? []));
         }
         this.refreshResearchSyncUi();
     },
@@ -3094,6 +3096,14 @@ export const researchSyncMethods = uiModule({
         return persons.filter(id => this.personOpenConflicts(id).length > 0);
     },
 
+    /**
+     * The conflicts a write named, when every one is between the same two sends' devices (spec 094 K2.4):
+     * those devices; null otherwise (one with the research's own value, none known, or different pairs).
+     */
+    researchConflictsDevices(treeId: TreeId, ids: readonly string[]): ConflictDeviceWords | null {
+        return sharedConflictWords(ids.map(id => conflictDeviceWords(researchConflictSides(treeId, id))));
+    },
+
     /** "Decide in the research (research)": the one open conflict of the one person, when the research announced the link. */
     researchDecideUrl(treeId: TreeId): string | null {
         if (!this.researchLinkAvailable('conflict')) return null;
@@ -3131,7 +3141,9 @@ export const researchSyncMethods = uiModule({
         const [[conflictId, { personId, conflict }]] = [...found];
         const person = DataManager.getPerson(personId);
         if (!person || !canDecideInApp(conflict, person)) return null;
-        return { personId, conflictId, lead: [shownNameOrEmpty(person), researchConflictTitle(conflict)].filter(Boolean).join(' · ') };
+        // Between two sends of two devices (spec 094 K2.4): whose edits, after whom and what.
+        const devices = conflictDeviceWords(researchConflictSides(treeId, conflictId));
+        return { personId, conflictId, lead: [shownNameOrEmpty(person), researchConflictTitle(conflict), devices ? conflictDevicePair(devices) : ''].filter(Boolean).join(' · ') };
     },
 
     /** "Show" (DEV §6.2): the person's "What the research knows" at the conflict's card; else the conflicts as before. */
@@ -3339,6 +3351,9 @@ export const researchSyncMethods = uiModule({
                     const name = one ? shownNameOrEmpty(one) : '';
                     actions.push({ action: 'showConflicts', label: name ? `${name} ›` : `${s.showConflicts} ›`, asLink: true });
                     if (treeId && this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
+                    // Several between the same two devices' sends: that pair (one is said in the lead).
+                    const devices = treeId ? this.researchConflictsDevices(treeId, lw?.conflictIds ?? []) : null;
+                    if (devices) parts.push(conflictDevicePair(devices));
                 }
                 return { tone: 'quiet', title: s.writtenAt(when(lw?.at)), sub: parts.join(' · ') || undefined, actions, lead: show?.lead };
             },
@@ -3362,8 +3377,10 @@ export const researchSyncMethods = uiModule({
                 const conn = link ? this.researchConnectionNote(link.id) : null;
                 // The research's value stands there only while a conflict really is open.
                 const at = s.writtenAt(when(lw?.at ?? state.sent?.closedAt));
+                // Several between the same two devices' sends: that pair (one is said in the lead).
+                const devices = conflicts > 0 && !show && treeId ? this.researchConflictsDevices(treeId, lw?.conflictIds ?? []) : null;
                 return { tone: conn && conn.warn ? 'warn' : 'neutral', title: conflicts > 0 ? s.flyConflict(conflicts) : at,
-                    sub: [conn ? `${conn.title}.` : '', conn?.sub ?? '', conflicts > 0 ? at : '', conflicts > 0 ? s.writtenConflictsSub : ''].filter(Boolean).join(' '), actions, lead: show?.lead };
+                    sub: [conn ? `${conn.title}.` : '', conn?.sub ?? '', conflicts > 0 ? at : '', conflicts > 0 ? s.writtenConflictsSub : '', devices ? conflictDevicePairLine(devices) : ''].filter(Boolean).join(' '), actions, lead: show?.lead };
             },
             unsent: () => ({ tone: 'warn', title: s.stateUnsentShort, sub: changed ? s.changedAt(changed) : undefined, actions: [{ action: 'send', label: s.send }] }),
             notTaken: () => ({ tone: 'neutral', title: s.stateUnsentShort, sub: s.notTakenSub, actions: [{ action: 'send', label: s.send }] }),
@@ -3499,7 +3516,8 @@ export const researchSyncMethods = uiModule({
         const behind = this.researchUndoneLeftBehind();
         if (behind && !['rejected', 'stale', 'safari', 'sending'].includes(state.kind)) {
             b.tone = 'warn';
-            b.sub = [b.sub, s.leftBehind(when(behind.at))].filter(Boolean).join(' ');
+            const from = otherDeviceWords(behind.client);
+            b.sub = [b.sub, s.leftBehind(when(behind.at)), from ? strings.research.sentFromDevice(from) : ''].filter(Boolean).join(' ');
             if (!(b.actions ?? []).some(a => a.action === 'loadNewer')) b.actions = [...(b.actions ?? []), { action: 'loadNewer', label: s.loadVersion, asLink: true }];
         }
         // Whether a person comes back or goes, asked by a send and not decided there yet: said in any state
@@ -3601,6 +3619,9 @@ export const researchSyncMethods = uiModule({
         const sub = [foreign ? s.undoneForeignSub(when(sent?.closedAt))
             : kept ? s.undoneKeptSub(when(sent?.closedAt)) : auto ? s.undoneAutoSub(when(sent?.closedAt)) : s.undoneSub(when(sent?.closedAt))];
         if (sent?.takenBack) sub.push(s.takenBackSub(sent.takenBack));
+        // A send of another browser (spec 094 K2.4): which one, first.
+        const from = link && sent?.intake ? this.researchSendDevice(link.id, sent.intake) : '';
+        if (from) sub.unshift(strings.research.sentFromDevice(from));
         const conn = link ? this.researchConnectionNote(link.id) : null;
         if (conn) sub.unshift(`${conn.title}.`, ...(conn.warn ? [conn.sub] : []));
         if (treeId && conflicts > 0) {
@@ -3617,6 +3638,11 @@ export const researchSyncMethods = uiModule({
         if (foreign) actions.unshift({ action: 'acceptUndo', label: s.loadVersion });
         else actions.push({ action: 'acceptUndo', label: s.loadVersion, asLink: true });
         return { tone: 'warn', title: s.stateUndone(when(sent?.at)), sub: sub.join(' '), actions };
+    },
+
+    /** The browser a send of the research came from, when another one than this (spec 094 K2.4); '' this one or none said. */
+    researchSendDevice(researchId: string, intake: string): string {
+        return otherDeviceWords(this.researchStatusOf(researchId)?.sends?.find(r => r.intake === intake)?.client);
     },
 
     /**
@@ -4100,18 +4126,20 @@ export const researchSyncMethods = uiModule({
     },
 
     /** The note under the mark: a send by itself left a new conflict. */
-    showResearchConflictNote(conflicts: number, persons: readonly PersonId[]): void {
+    showResearchConflictNote(conflicts: number, persons: readonly PersonId[], devices: ConflictDeviceWords | null = null): void {
         const s = strings.sync;
         const one = persons.length === 1 ? DataManager.getPerson(persons[0]) : null;
         const name = one ? shownNameOrEmpty(one) : '';
+        // Between two sends of two devices (spec 094 K2.4): the pair after the count.
+        const said = [s.flyConflict(conflicts), devices ? conflictDevicePairLine(devices) : ''].filter(Boolean);
         // No room for the note under the mark: a toast says it, with the way to the conflicts.
         if (!toolbarWide()) {
-            this.showToast(s.flyConflict(conflicts), CONFLICT_NOTE_MS,
+            this.showToast(said.join('. '), CONFLICT_NOTE_MS,
                 { action: { label: name || s.showConflicts, run: () => this.researchShowConflicts([...persons]) } });
             return;
         }
         const ids = JSON.stringify(persons).replace(/"/g, '&quot;');
-        this.setResearchSyncNote('conflict', `<span class="research-sync-note-text">${esc(s.flyConflict(conflicts))}</span>`
+        this.setResearchSyncNote('conflict', `<span class="research-sync-note-text">${esc(said.join('. '))}</span>`
             + `<button type="button" class="research-sync-note-link" onclick="${call('researchShowConflicts', ids)}">${esc(name || s.showConflicts)} ›</button>`
             + `<button type="button" class="research-sync-note-x" aria-label="${esc(strings.buttons.close)}" onclick="${call('closeResearchSyncNote')}">&times;</button>`,
         CONFLICT_NOTE_MS);

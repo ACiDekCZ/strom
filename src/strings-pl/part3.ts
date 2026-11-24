@@ -1298,6 +1298,8 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         hypoElsewhere: (v: string, who: string) => who ? `W badaniu już rozstrzygnięto: ${v} (${who})` : `W badaniu już rozstrzygnięto: ${v}`,
         hypoByApp: 'rozstrzygnięto w aplikacji',
         hypoInApp: 'w aplikacji',
+        fromDevice: (d: string) => `z ${d}`,
+        sentFromDevice: (d: string) => `Wysłano z ${d}.`,
         hypoNoneWord: 'żadna wersja nie obowiązuje',
         hypoRowDecided: (h: string, v: string) => `${h} rozstrzygnięta na ${v}`,
         hypoRowNone: (h: string) => `${h}: żadna wersja nie obowiązuje`,
@@ -1527,6 +1529,14 @@ export const plPart3: Pick<StringsType, 'changes' | 'researchOlder' | 'material'
         saveFirst: 'Najpierw trzeba zapisać zmianę osoby, potem rozstrzygnąć.',
         panelTitle: (f: string) => `Sprzeczność · ${f}`,
         moreInKnows: 'Więcej w „Co wie badanie” ›',
+        device: { earlier: 'wcześniejszego wysłania', later: 'późniejszego wysłania', thisBrowser: 'tej przeglądarki' },
+        sideFrom: (d: string) => `Zmiana z ${d}`,
+        sentOn: (d: string) => `wysłano ${d}`,
+        keepFrom: (d: string) => `Zachowaj zmianę z ${d}`,
+        decidedFrom: (d: string) => `zmiana z ${d}`,
+        pair: (earlier: string, later: string) => `zmiana z ${earlier} × zmiana z ${later}`,
+        pairLine: (earlier: string, later: string) => `Zmiana z ${earlier} × zmiana z ${later}.`,
+        valueFrom: (d: string, v: string) => `zmiana z ${d}: ${v}`,
         // Whether a person comes back or goes (a PERSON conflict, `sync.removed`): 'back' — removed in another
         // window, edited here; 'remove' — removed here, edited elsewhere.
         person: {

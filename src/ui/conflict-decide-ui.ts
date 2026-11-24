@@ -24,7 +24,8 @@ import {
     researchLinkMark, researchPersonRef,
 } from '../research-link.js';
 import { keepImports } from '../import-origin.js';
-import { storedResearchBridge, researchAutoState } from '../research-device.js';
+import { storedResearchBridge, researchAutoState, researchConflictSides } from '../research-device.js';
+import { conflictDeviceWords, type ConflictDeviceWords } from '../conflict-devices.js';
 import { diffValues } from '../research-changes.js';
 import { canDecideInApp, conflictSides, DecideResult } from '../research-decide.js';
 import { otherRevertChanges, revertedFact, RevertResult } from '../research-revert.js';
@@ -131,6 +132,18 @@ export const conflictDecideMethods = uiModule({
         });
     },
 
+    /**
+     * The devices of a conflict between two sends (spec 094 K2.4), as a send's answer named them
+     * (research-device.ts conflictSent); null: a conflict with the research's own value, one of a kind,
+     * or none known here — its sides read as before.
+     */
+    researchConflictDevices(c: ResearchConflict): ConflictDeviceWords | null {
+        const id = researchConflictRef(c.id);
+        const treeId = this.researchSyncLink()?.treeId ?? DataManager.getCurrentTreeId();
+        if (!id || !treeId || c.kind === 'import' || c.kind === 'user') return null;
+        return conflictDeviceWords(researchConflictSides(treeId, id));
+    },
+
     /** The values a decided card shows, as they read now. */
     researchConflictDecidedValues(c: ResearchConflict): ConflictDecidedValues {
         const sides = conflictSides(c);
@@ -185,6 +198,9 @@ export const conflictDecideMethods = uiModule({
         // A conflict about a family tree's value or a person's (spec 066 §3): its sentence, its sides, one row of choices.
         const o = strings.origin;
         const kind = c.kind === 'import' || c.kind === 'user' ? c.kind : null;
+        // A conflict between two sends: each side by the device its edit came from.
+        const devices = this.researchConflictDevices(c);
+        const sentDay = dayOf(ctx?.link.sent?.at);
         const kindLine = kind && view.body === 'sides' ? `<p class="prc-kind">${esc(kind === 'import' ? o.proposeImport : o.proposeUser)}.</p>` : '';
 
         const tag = view.tag === 'busy'
@@ -241,22 +257,26 @@ export const conflictDecideMethods = uiModule({
                     : view.unsent
                         ? `<span class="prc-meta">${esc(k.appUnsent(dayOf(ctx ? TreeManager.getTreeMetadata(ctx.treeId)?.changedAt : undefined) || dayOf(new Date().toISOString())))}</span>
                            <span class="prc-knows">${esc(k.researchKnows(said(sideText(c, v))))}</span>`
-                        : `<span class="prc-meta">${esc(k.appSource(dayOf(ctx?.link.sent?.at)))}</span>`;
+                    : devices
+                        ? (sentDay ? `<span class="prc-meta">${esc(k.sentOn(sentDay))}</span>` : '')
+                        : `<span class="prc-meta">${esc(k.appSource(sentDay))}</span>`;
+                const keepWords = devices ? k.keepFrom(devices[which]) : null;
                 let choice = '';
                 if (kind) {
                     // A conflict of a kind: the choices stand in one row under both sides (kindRow).
                 } else if (view.choices === 'buttons') {
                     choice = `<button type="button" class="prc-choice" data-decide="${which}" data-focus="choice-${which}"${busy ? ' aria-busy="true" aria-disabled="true"' : ''}${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${busy
                         ? `<i class="busy-spin" aria-hidden="true"></i>${esc(k.busy)}`
-                        : esc(which === 'user' ? k.keep : k.take)}</button>`;
+                        : esc(keepWords ?? (which === 'user' ? k.keep : k.take))}</button>`;
                 } else if (view.choices === 'links') {
-                    choice = `<button type="button" class="prc-choice" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${researchActionLabel(which === 'user' ? k.keepLink : k.takeLink, researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>`;
+                    choice = `<button type="button" class="prc-choice" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${researchActionLabel(keepWords ?? (which === 'user' ? k.keepLink : k.takeLink), researchLinkMark('conflict', { conflictDo: 'decide' }))}</button>`;
                 }
                 const note = !kind && view.notes && view.choices !== 'none'
                     ? `<p class="prc-note" id="${noteId}">${esc(which === 'user' ? k.keepNote : this.researchConflictTakeNote(c))}</p>` : '';
                 return `
                     <div class="prc-side" data-side="${which}">
-                        <span class="prc-side-label">${esc(which === 'research' ? (kind ? o.sideProposal : k.sideResearch)
+                        <span class="prc-side-label">${esc(devices ? k.sideFrom(devices[which])
+                            : which === 'research' ? (kind ? o.sideProposal : k.sideResearch)
                             : kind === 'import' ? o.sideImport : kind === 'user' ? o.sideUser : k.sideApp)}</span>
                         <span class="prc-side-main"><span class="prc-value">${conflictValueHtml(value)}</span>
                         <span class="prc-side-meta">${meta}</span></span>
@@ -271,7 +291,9 @@ export const conflictDecideMethods = uiModule({
                 : state.kind === 'elsewhere' ? state.take : undefined;
             const value = take === 'user' ? decidedValues.user : take === 'research' ? decidedValues.research
                 : state.kind === 'elsewhere' ? state.resolution : '';
-            const sideWords = take === 'user' ? k.fromApp : take === 'research' ? k.fromResearch(decidedValues.source) : '';
+            const sideWords = devices && take
+                ? [k.decidedFrom(devices[take]), take === 'research' ? decidedValues.source : ''].filter(Boolean).join(' · ')
+                : take === 'user' ? k.fromApp : take === 'research' ? k.fromResearch(decidedValues.source) : '';
             const loaded = (state.kind === 'taken' || state.kind === 'elsewhere') ? state.loaded : undefined;
             const line = state.kind === 'kept' ? k.keptLine(dayAndTime(state.at), said(decidedValues.research))
                 : loaded ? k.takenLine(said(loaded.from)) : '';

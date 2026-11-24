@@ -47,7 +47,8 @@ export interface FakeBridge {
     head: string;
     accepts: unknown;
     inbox: { tree: string; at: string; changes: number; sent: string }[];
-    sends: { intake: string; at: string; state: string; changes: number; tree: string; sent: string; decidedAt?: string; input?: string; reason?: string; conflicts?: unknown }[];
+    /** `client`: the browser that sent it (`_STROM_CLIENT` of the send, spec 094 K2.4); absent: none said (an older app or research). */
+    sends: { intake: string; at: string; state: string; changes: number; tree: string; sent: string; decidedAt?: string; input?: string; reason?: string; conflicts?: unknown; client?: unknown }[];
     lastIntake: { id: string; at: string } | null;
     syncReply: { status: number; body: unknown };
     /** Answers to the next sends, first first (each taken once), before `syncReply` (e.g. one refusal, then the usual). */
@@ -111,6 +112,8 @@ export interface FakeBridge {
     strom?: string;
     /** Tasks waiting for the user (`/status.waiting`). */
     waiting?: unknown[];
+    /** The research's history (`GET /log` `entries`, each its `via` when a send wrote it); unset: 404, an older bridge. */
+    log?: unknown[];
     /** What the bridge says it can do (`/status.features`, 1.12.0-rc.20). */
     features?: string[];
     /** More fields of `/status` (e.g. `channel`, `linkScheme`). */
@@ -2575,6 +2578,10 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             (b.postQueries ??= []).push(url.searchParams);
             const sent = /1 _STROM_SENT (\S+)/.exec(body)?.[1] ?? '';
             const appTree = /1 _STROM_APP_TREE (\S+)/.exec(body)?.[1] ?? UUID;
+            // The sending browser, as the research keeps it with the send (`sends[].client`, spec 094 K2.4).
+            const clientId = /\n1 _STROM_CLIENT (\S+)/.exec(body)?.[1];
+            const clientName = clientId ? /\n1 _STROM_CLIENT \S+\r?\n2 NAME ([^\r\n]+)/.exec(body)?.[1] : undefined;
+            const client = clientId ? { client: { id: clientId, ...(clientName ? { name: clientName } : {}) } } : {};
             const intake = `R${Date.now()}-${b.posts.length}`;
             const once = b.syncReplies?.shift();
             if (once) return json(once.status, once.body);
@@ -2584,20 +2591,21 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 const v = b.onWrite(body);
                 b.head = v.head;
                 b.treeGed = v.ged;
-                b.sends.unshift({ intake, at: new Date().toISOString(), state: 'written', changes: 6, tree: appTree, sent, decidedAt: new Date().toISOString() });
+                b.sends.unshift({ intake, at: new Date().toISOString(), state: 'written', changes: 6, tree: appTree, sent, decidedAt: new Date().toISOString(), ...client });
                 return json(200, { ...reply, head: v.head, intake, ...(b.replyExtra?.(body) ?? {}) });
             }
             if (b.syncReply.status === 202 || reply.pending) {
-                b.sends.unshift({ intake, at: new Date().toISOString(), state: 'pending', changes: 6, tree: appTree, sent });
+                b.sends.unshift({ intake, at: new Date().toISOString(), state: 'pending', changes: 6, tree: appTree, sent, ...client });
             }
             if (b.syncReply.status === 200 && reply.inbox) {
                 const at = new Date().toISOString();
                 for (const rec of b.sends) if (rec.tree === appTree && rec.state === 'pending') rec.state = 'replaced';
                 b.inbox = [{ tree: appTree, at, changes: 6, sent }];
-                b.sends.unshift({ intake, at, state: 'pending', changes: 6, tree: appTree, sent });
+                b.sends.unshift({ intake, at, state: 'pending', changes: 6, tree: appTree, sent, ...client });
             }
             return json(b.syncReply.status, b.syncReply.status < 300 ? { ...(b.syncReply.body as object), intake } : b.syncReply.body);
         }
+        if (url.pathname.endsWith('/log') && method === 'GET' && b.log) return json(200, { entries: b.log });
         if (url.pathname.endsWith('/tree.ged')) {
             b.treeGets = (b.treeGets ?? 0) + 1;
             if (b.treeDelayMs) await new Promise(r => setTimeout(r, b.treeDelayMs));
