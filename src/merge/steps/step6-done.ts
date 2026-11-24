@@ -40,7 +40,10 @@ export function renderStep6(host: HTMLElement, ctx: StepContext): void {
     const W = strings.mergeWizard;
     renderDone(host, env, list => renderPlanListReadOnly(list, ctx), {
         title: W.doneTitle(env.treeName),
-        notes: [W.inHistory, ...(env.noNextCard ? [W.noNextCard] : [])],
+        notes: [
+            ...(env.noResearch ? [strings.structure.mergeNoResearch(env.treeName)] : []),
+            W.inHistory, ...(env.noNextCard ? [W.noNextCard] : []),
+        ],
     });
 }
 

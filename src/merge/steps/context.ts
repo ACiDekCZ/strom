@@ -48,6 +48,8 @@ export interface Step6Env {
     undoMerge(): void;
     /** A tree with a research and the merge not sent there yet (§11): the block "Research {t}". */
     readonly research?: Step6Research;
+    /** A copy without research (spec 139 K5.3): nothing is offered to send, the step says so. */
+    readonly noResearch?: boolean;
 }
 
 /** Step 6's block of the research (§11, 11a/11d/11e): what stays in the app, Send… or Keep. */
@@ -131,8 +133,10 @@ export interface TargetRow {
     open: boolean;
     /** The tree owns a research (a copy of a research tree does not: src/research-owner.ts). */
     research: boolean;
-    /** "copy of the tree … · no research" for a copy of a research tree, else ''. */
-    copyOf?: string;
+    /** A research tree or a copy, as Manage trees' third line says it ("copy of the tree … · no research"); else ''. */
+    origin?: string;
+    /** A copy of a tree, without research (spec 139 K5.2): step 1 says nothing is sent after the merge. */
+    copy?: boolean;
     /** The latest backup, as said ("today 9:12"), or null. */
     backup: string | null;
     block: TargetBlock | null;

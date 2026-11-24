@@ -13,6 +13,7 @@ import { PersonId, PartnershipId, Person, StromData, TreeId, PartnershipStatus, 
 import { contentFingerprint } from '../research-link.js';
 import { strings } from '../strings.js';
 import { runHeavy, activatedElement } from '../ui/busy.js';
+import { isResearchCopy, treeOrigin } from '../ui/tree-origin.js';
 import {
     MergeState,
     PersonMatch,
@@ -57,7 +58,7 @@ import { heldLinks, unsentMerges } from './research-hold.js';
 import { peopleKeys, sharesPeople, SAME_PEOPLE_MIN } from './same-people.js';
 import { exportPlan } from './plan-export.js';
 import type { Step1Env, Step2Env, Step6Env, TargetRow, UnionConflictLine, WriteStatus } from './steps/context.js';
-import { closeNotTaken, parkGedcomSummary } from './steps/step1-what.js';
+import { closeNotTaken, parkGedcomSummary, treeLine as targetLine } from './steps/step1-what.js';
 import { closeStep3Overlay } from './steps/step3-whom.js';
 import { closeStep5Overlay } from './steps/step5-plan.js';
 import { writtenWhen } from './steps/step6-done.js';
@@ -785,15 +786,19 @@ class MergerUIClass {
     private targetRow(id: TreeId): TargetRow {
         const meta = TreeManager.getTreeMetadata(id);
         const block = targetBlock(id);
-        // A copy of a research tree is a tree without research, said as in Manage trees (spec 139 K5.2, K5.3).
-        const copy = TreeManager.researchCopyOrigin(id);
+        // A research tree and a copy said as Manage trees' third line says them (spec 139 K5.2, K5.3); a tree
+        // never tied to a research says no word of it here (134 §11).
+        const said = meta ? treeOrigin(meta) : null;
+        const copy = !!meta && said?.kind === 'copy' && isResearchCopy(meta);
+        const origin = said && (said.kind === 'research' || copy) ? said : null;
         return {
             treeId: id,
             name: meta?.name ?? '',
             persons: meta?.personCount ?? 0,
             open: !DataManager.isViewMode() && DataManager.getCurrentTreeId() === id,
             research: TreeManager.canSendToResearch(id),
-            copyOf: copy ? strings.research.copyOf(copy.name) : '',
+            origin: origin?.text ?? '',
+            copy,
             backup: this.backups.get(id) ?? null,
             block,
             why: block ? targetBlockText(block, id) : '',
@@ -864,7 +869,7 @@ class MergerUIClass {
                 const row = this.targetRow(id);
                 if (row.block) return;
                 const line = document.querySelector(`#merge-step-body .merge-s1-target[data-tree="${CSS.escape(id)}"] .merge-s1-tline`);
-                if (line) line.textContent = [strings.mergeWizard.treeLine(row.persons, row.open, row.research, row.backup), row.copyOf].filter(Boolean).join(' · ');
+                if (line) line.textContent = targetLine(row);
             }).catch(() => undefined);
         }
     }
@@ -1748,7 +1753,14 @@ class MergerUIClass {
             checkTree: () => void getUI().showTreeValidationDialog(w.treeId, 'merge-modal'),
             undoMerge: () => getUI().showUndoMerge(w.treeId, w.record.id, 'merge-modal'),
             research: this.step6Research(w),
+            // A copy of a research tree (also the new tree a merge made of one): no research, nothing sent (spec 139 K5.3).
+            noResearch: this.isResearchCopyTree(w.treeId),
         };
+    }
+
+    private isResearchCopyTree(id: TreeId): boolean {
+        const meta = TreeManager.getTreeMetadata(id);
+        return !!meta && isResearchCopy(meta);
     }
 
     /**

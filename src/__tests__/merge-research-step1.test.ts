@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { researchHtml } from '../merge/steps/step1-what.js';
+import { researchHtml, treeLine } from '../merge/steps/step1-what.js';
 import type { Step1Env, TargetRow } from '../merge/steps/context.js';
 import { peopleKeys, sharesPeople } from '../merge/same-people.js';
 import { setLanguage, strings } from '../strings.js';
@@ -39,6 +39,17 @@ describe('step 1 says of the research (11f–11h, K9.5)', () => {
             expect(researchHtml(env(null), null)).not.toMatch(RESEARCH);
         }
         setLanguage('en');
+    });
+
+    it('a copy as the target: it has no research, nothing is sent after the merge (spec 139 K5.2, K5.3)', () => {
+        setLanguage('en');
+        const copy: TargetRow = { ...row('Rodina Kalinovských (kopie)', false), copy: true, origin: strings.research.copyOf('Rodina Kalinovských') };
+        const html = researchHtml(env(null), copy);
+        expect(html).toContain(strings.structure.mergeNoResearch('Rodina Kalinovských (kopie)'));
+        expect(html).not.toContain(strings.mergeWizard.researchKept('Rodina Kalinovských (kopie)'));
+        // Its line says what it is as Manage trees does.
+        expect(treeLine(copy)).toBe('12 people · copy of the tree “Rodina Kalinovských” · no research');
+        expect(treeLine({ ...row('Rodina Kalinovských', true), origin: strings.structure.research('kalinovs') })).toBe('12 people · Research kalinovs');
     });
 
     it('a target with a research: its link stays', () => {

@@ -109,9 +109,11 @@ test('an older copy still tied as a copy (copy: true) sends nothing either, by i
     const item = page.locator('.tree-manager-item', { hasText: 'Fíškovi – stará kopie' });
     await expect(item.locator('.tree-manager-item-origin')).toHaveAttribute('data-origin', 'copy');
     await expect(item.locator('.tree-manager-item-origin-text')).toHaveText('copy of the tree “Fíškovi” · no research');
+    // The research here does not offer a new research (`new` not announced): words only, no switch (spec 139 §11.2).
+    await expect(item.locator('.tree-manager-copy-research')).toHaveCount(0);
 });
 
-test('a merge into a copy of a research tree says nothing about the research and sends nothing', async ({ page }) => {
+test('a merge into a copy of a research tree says the copy has no research, offers no send and sends nothing (spec 139 K5.3)', async ({ page }) => {
     const { bridge, ownerId } = await researchTree(page);
     const copyId = await page.evaluate((id) => window.Strom.TreeManager.duplicateTree(id, 'Fíškovi – zkouška'), ownerId);
     await switchTo(page, copyId);
@@ -123,11 +125,16 @@ test('a merge into a copy of a research tree says nothing about the research and
     await expect(target).toContainText('copy of the tree “Fíškovi” · no research');
     await expect(target.locator('input')).toBeChecked();
     await expect(wizard.locator('.merge-s1-res-kept')).toHaveCount(0);
+    await expect(wizard.locator('#merge-s1-res-none')).toHaveText('Fíškovi – zkouška has no research: nothing is sent after the merge.');
     await mergeCompare(wizard);
     await mergeToStep5(wizard);
     await expect(wizard.locator('.merge-s5-research')).toBeHidden();
     await mergeWrite(wizard, 'tree');
+    // The last step: no Send to the research…, no "not sent", the sentence instead.
     await expect(wizard.locator('.merge-s6-research')).toBeHidden();
+    await expect(wizard.locator('[data-ract="send"]')).toHaveCount(0);
+    await expect(wizard.locator('.merge-s6-note').first()).toHaveText('Fíškovi – zkouška has no research: nothing is sent after the merge.');
+    expect(await page.evaluate((id) => window.Strom.TreeManager.getTreeMetadata(id)?.research?.mergeHold, copyId)).toBeUndefined();
     await mergeDone(wizard);
     await poll(page);
     await page.clock.fastForward(150_000);

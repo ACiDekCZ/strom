@@ -298,6 +298,20 @@ export const researchAdoptMethods = uiModule({
         return !!tree && !tree.research && !tree.demo && !DataManager.isViewMode() && onComputer() && this.researchLinkAvailable('new');
     },
 
+    /**
+     * A copy's switch "Research on" (off) in Manage trees (spec 139 §11.2):
+     * where "Start research with this tree" could be offered — the research
+     * runs on this computer and announced `new` — never the sample tree.
+     */
+    copyResearchAvailable(tree: TreeMetadata | null | undefined): boolean {
+        return !!tree && !tree.demo && !DataManager.isViewMode() && onComputer() && this.researchLinkAvailable('new');
+    },
+
+    /** The dialog "Research for a copy of a tree" (spec 139 §11.4): a new research of its own, or taking over the original's. */
+    showCopyResearchDialog(_treeId: TreeId): void {
+        // Filled with the copy's research dialog (§11.4).
+    },
+
     /** The active tree can be handed over (the explanation dialog's variant). */
     researchAdoptActiveAvailable(): boolean {
         return this.researchAdoptAvailable(TreeManager.getActiveTreeMetadata());

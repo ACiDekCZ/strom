@@ -28,7 +28,8 @@ import {
 import { LAST_FOCUSED } from '../model-values.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatRelativeDateTime, formatTreeSize } from '../format.js';
-import { pendingMergeHasTarget, pendingMergeSourceName, pendingMergeTreeId, treeOriginLine } from '../tree-row.js';
+import { pendingMergeHasTarget, pendingMergeSourceName, pendingMergeTreeId } from '../tree-row.js';
+import { treeOrigin } from './tree-origin.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -1020,23 +1021,40 @@ export const treeManagementMethods = uiModule({
     },
 
     /**
-     * A tree row's third line (spec 139 §7.2): its origin and research, never
-     * empty ("no research" at least), then the research's switch (its owner,
-     * on a computer with the bridge: fillResearchLiveSlot) and the link to its
-     * merge history. Read from the tree index only.
+     * A tree row's third line (spec 139 §7.2, §11.2): its origin and research,
+     * never empty ("no research" at least), then the research's switch (its
+     * owner, on a computer with the bridge: fillResearchLiveSlot) or a copy's
+     * switch, off (where the research runs here: it opens the dialog of the
+     * copy's own research), and the link to its merge history. The open tree
+     * followed live says so instead, with End following (K5.7). Read from the
+     * tree index only.
      */
     treeManagerOriginHtml(tree: TreeMetadata): string {
-        const origin = treeOriginLine(tree, {
-            owner: TreeManager.canSendToResearch(tree.id),
-            copyOrigin: TreeManager.researchCopyOrigin(tree.id),
-        });
-        const title = origin.researchId ? ` title="${this.escapeHtml(strings.structure.research(origin.researchId))}"` : '';
+        const esc = (text: string) => this.escapeHtml(text);
+        const st = strings.structure;
+        const origin = treeOrigin(tree);
+        const followed = origin.kind === 'research' && DataManager.isLiveFollowing() && DataManager.getCurrentTreeId() === tree.id;
+        const title = origin.researchId ? ` title="${esc(st.research(origin.researchId))}"` : '';
         const merges = tree.mergeCount ?? 0;
+        let research = '';
+        if (followed) {
+            research = `<button type="button" class="link-button tree-manager-stop-follow" data-row-action="stopFollowing" data-tree-id="${tree.id}">${esc(strings.research.stop)}</button>`;
+        } else if (origin.kind === 'research') {
+            research = this.researchLiveSlotHtml(tree.id);
+        } else if (origin.kind === 'copy' && this.copyResearchAvailable(tree)) {
+            // Off, and a click does not turn it: the copy gets a research of its own only through the dialog (§11.4).
+            research = `<div class="research-live research-live--manager"><div class="research-live-row">`
+                + `<button type="button" class="view-link-switch research-live-switch tree-manager-copy-research" role="switch" aria-checked="false" data-row-action="copyResearch" data-tree-id="${tree.id}">`
+                + `<span class="view-link-switch__label">${esc(strings.researchLive.switchLabel)}</span><span class="view-link-switch__track" aria-hidden="true"></span></button></div></div>`;
+        }
+        const text = followed
+            ? `<span class="tree-manager-item-followed">${esc(st.followed)}</span><span class="tree-manager-item-origin-text"${title}>${esc(`${origin.text} · ${st.writeStopped}`)}</span>`
+            : `<span class="tree-manager-item-origin-text"${title}>${esc(origin.text)}</span>`;
         return `
-            <div class="tree-manager-item-origin" data-origin="${origin.kind}">
-                <span class="tree-manager-item-origin-text"${title}>${this.escapeHtml(origin.text)}</span>
-                ${origin.kind === 'research' ? this.researchLiveSlotHtml(tree.id) : ''}
-                ${merges > 0 ? `<button type="button" class="link-button tree-manager-merge-history" data-row-action="mergeHistory" data-tree-id="${tree.id}">${this.escapeHtml(strings.structure.mergeHistory(merges))}</button>` : ''}
+            <div class="tree-manager-item-origin" data-origin="${origin.kind}"${followed ? ' data-followed="1"' : ''}>
+                ${text}
+                ${research}
+                ${merges > 0 ? `<button type="button" class="link-button tree-manager-merge-history" data-row-action="mergeHistory" data-tree-id="${tree.id}">${esc(st.mergeHistory(merges))}</button>` : ''}
             </div>`;
     },
 
@@ -1074,6 +1092,11 @@ export const treeManagementMethods = uiModule({
                     if (act.dataset.rowAction === 'structure') void this.showStructureDialog(id, { source: 'manager', parent: 'tree-manager-modal' });
                     else if (act.dataset.rowAction === 'export') this.showExportDialogFromManager(id);
                     else if (act.dataset.rowAction === 'mergeHistory') void this.showMergeHistory(id, 'tree-manager-modal');
+                    else if (act.dataset.rowAction === 'copyResearch') this.showCopyResearchDialog(id);
+                    else if (act.dataset.rowAction === 'stopFollowing') {
+                        this.stopLiveFollow();
+                        void this.updateTreeManagerList();
+                    }
                     e.stopPropagation();
                     return;
                 }

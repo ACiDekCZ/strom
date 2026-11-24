@@ -828,6 +828,10 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         // Manage trees row (spec 139 §7, §9).
         couples: (n: number) => nPl(n, 'para', 'pary', 'par'),
         research: (rid: string) => `Badanie ${rid}`,
+        // Research isolated per tree (spec 139 §11).
+        followed: '◎ Śledzone na żywo',
+        writeStopped: 'zapis do drzewa wstrzymany',
+        mergeNoResearch: (t: string) => `${t} nie ma badania: po scaleniu nic nie jest wysyłane.`,
         fromTree: (name: string) => `wycinek z drzewa „${name}”`,
         fromGedcom: (file: string) => `z GEDCOM ${file}`,
         fromFile: (file: string) => `z pliku ${file}`,

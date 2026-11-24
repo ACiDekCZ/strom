@@ -33,8 +33,9 @@ function modeOf(c: WizardChoices): StepMode {
     return c.json ? 'json' : c.mode;
 }
 
-function treeLine(row: TargetRow): string {
-    return [strings.mergeWizard.treeLine(row.persons, row.open, row.research, row.backup), row.copyOf].filter(Boolean).join(' · ');
+/** A target's line: its people, open, its backup and what it is, said as in Manage trees (spec 139 §11.2). */
+export function treeLine(row: TargetRow): string {
+    return [strings.mergeWizard.treeLine(row.persons, row.open, row.origin ? false : row.research, row.backup), row.origin].filter(Boolean).join(' · ');
 }
 
 const LOCK = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
@@ -77,7 +78,7 @@ function targetsHtml(ctx: StepContext, env: Step1Env): string {
     const chosen = ctx.choices.targetTreeId;
     const items = rows.map(r => {
         const on = r.treeId === chosen && !r.block;
-        const line = r.block ? [W.treeLine(r.persons, r.open, false, null), r.copyOf, r.why].filter(Boolean).join(' · ') : treeLine(r);
+        const line = r.block ? [W.treeLine(r.persons, r.open, false, null), r.copy ? r.origin : '', r.why].filter(Boolean).join(' · ') : treeLine(r);
         return `<label class="sel-opt merge-s1-target${r.block ? ' is-blocked' : ''}" data-sel-form="tile" data-tree="${escapeHtml(r.treeId)}"${r.block ? ` aria-disabled="true" data-block="${r.block}"` : ''} title="${escapeHtml(r.block ? r.why : r.name)}">`
             + `<input type="radio" name="merge-target" value="${escapeHtml(r.treeId)}"${on ? ' checked' : ''}${r.block ? ' disabled' : ''}>`
             + `<span class="merge-s1-tname">${escapeHtml(r.name)}</span>${r.block ? `<span class="merge-s1-lock">${LOCK}</span>` : ''}`
@@ -100,7 +101,7 @@ const SWAP_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" s
 /**
  * What step 1 says of the research (§11, 11f–11h, K9.5, K9.6) – nothing at
  * all when no tree of the merge is linked to one. Into a tree (`target`):
- * the target's research stays (researchKept); a linked source and a target
+ * the target's research stays (researchKept), a copy has none (mergeNoResearch); a linked source and a target
  * without one: the link does not carry over, with Swap (11g); both linked:
  * the source's link and numbers do not carry over (11h). A new tree
  * (`target` null): it will not be linked (11f). Either way another linked
@@ -113,6 +114,8 @@ export function researchHtml(env: Step1Env, target: TargetRow | null): string {
     let html = '';
     if (target) {
         if (target.research) html += note(W.researchKept(target.name), 'merge-s1-res-kept');
+        // A copy is a tree without research: nothing goes anywhere after the merge (spec 139 K5.2, K5.3).
+        else if (target.copy) html += note(strings.structure.mergeNoResearch(target.name), 'merge-s1-res-none');
         if (source?.research && target.research) html += note(W.resTwo, 'merge-s1-res-two');
         if (source?.research && !target.research) {
             const swap = env.swapBlocked() ? ''

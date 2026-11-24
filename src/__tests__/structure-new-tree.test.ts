@@ -30,6 +30,7 @@ import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
 import { extractSubtree } from '../subtree.js';
 import { isResearchOwner } from '../research-owner.js';
+import { isResearchCopy, treeOrigin, treeOriginText } from '../ui/tree-origin.js';
 import type { PersonId, StromData, TreeId, TreeMetadata } from '../types.js';
 
 const POOL_PORTRAIT = '\u0000sm:p:' + 'b'.repeat(40);
@@ -98,6 +99,27 @@ describe('a copy of the whole tree', () => {
         await TreeManager.flush(copy!);
         // Stored as the reference: the image itself was never read.
         expect(JSON.stringify(st('trees').get(copy!))).toContain(JSON.stringify(POOL_PORTRAIT).slice(1, -1));
+    });
+});
+
+describe('what a copy is said to be (spec 139 §11.2)', () => {
+    it('Manage trees: every copy "copy of the tree … · no research"; the merge guide speaks of research only for a copy of a research tree', async () => {
+        setIndex([
+            meta('t-res', 'Rodina Kalinovských', { research: { id: R, fingerprint: 'f', syncedAt: '2026-01-01' } }),
+            meta('t-plain', 'Jesenští'),
+        ]);
+        st('trees').set('t-res', ostrozni());
+        st('trees').set('t-plain', ostrozni());
+        const resCopy = (await TreeManager.duplicateTree('t-res' as TreeId, 'Rodina Kalinovských (kopie)'))!;
+        const plainCopy = (await TreeManager.duplicateTree('t-plain' as TreeId, 'Jesenští (kopie)'))!;
+        const m = (id: string) => TreeManager.getTreeMetadata(id as TreeId)!;
+        expect(treeOriginText(m(resCopy))).toBe('copy of the tree “Rodina Kalinovských” · no research');
+        expect(treeOriginText(m(plainCopy))).toBe('copy of the tree “Jesenští” · no research');
+        expect(treeOrigin(m('t-res')).kind).toBe('research');
+        expect(isResearchCopy(m(resCopy))).toBe(true);
+        expect(isResearchCopy(m(plainCopy))).toBe(false);
+        expect(isResearchCopy(m('t-res'))).toBe(false);
+        expect(isResearchCopy(m('t-plain'))).toBe(false);
     });
 });
 

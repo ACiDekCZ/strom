@@ -164,7 +164,9 @@ export const treeActionsMethods = uiModule({
         const merged = !!(DataManager.getDataFor(id) ?? treeData)?.merges?.length;
 
         // Change structure… (spec 139 §1): one row opening the dialog, which decides what each option can do.
-        const structureRows: TreeActionRow[] = editable && by.structure
+        // A tree followed live has it too: following stops only writing into this tree (§2.4, K5.7).
+        const structurable = editable || (live && tree.isLocked !== true && !DataManager.isReadOnly() && !TreeManager.isTreeNewer(id));
+        const structureRows: TreeActionRow[] = structurable && by.structure
             ? [{ key: 'structure', label: strings.structure.menuItem, editOnly: true, next: true,
                 run: () => this.showStructureDialog(id, { source, parent }) }] : [];
         const exportRows: TreeActionRow[] = by.export

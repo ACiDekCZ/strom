@@ -7042,6 +7042,10 @@ const stringsEN = {
         // Manage trees row (spec 139 §7, §9).
         couples: (n: number) => nEn(n, 'couple', 'couples'),
         research: (rid: string) => `Research ${rid}`,
+        // Research isolated per tree (spec 139 §11).
+        followed: '◎ Followed live',
+        writeStopped: 'writing to the tree is paused',
+        mergeNoResearch: (t: string) => `${t} has no research: nothing is sent after the merge.`,
         fromTree: (name: string) => `cut from the tree “${name}”`,
         fromGedcom: (file: string) => `from GEDCOM ${file}`,
         fromFile: (file: string) => `from the file ${file}`,
@@ -18396,6 +18400,10 @@ const stringsCZ: StringsType = {
         // Manage trees row (spec 139 §7, §9).
         couples: (n: number) => nCs(n, 'pár', 'páry', 'párů'),
         research: (rid: string) => `Výzkum ${rid}`,
+        // Research isolated per tree (spec 139 §11).
+        followed: '◎ Sleduje se živě',
+        writeStopped: 'zápis do stromu stojí',
+        mergeNoResearch: (t: string) => `${t} nemá výzkum: po sloučení se nic neposílá.`,
         fromTree: (name: string) => `výřez ze stromu „${name}“`,
         fromGedcom: (file: string) => `z GEDCOM ${file}`,
         fromFile: (file: string) => `ze souboru ${file}`,
@@ -29584,6 +29592,10 @@ const stringsDE: StringsType = {
         // Manage trees row (spec 139 §7, §9).
         couples: (n: number) => nDe(n, 'Paar', 'Paare'),
         research: (rid: string) => `Forschung ${rid}`,
+        // Research isolated per tree (spec 139 §11).
+        followed: '◎ Live verfolgt',
+        writeStopped: 'Schreiben in den Stammbaum pausiert',
+        mergeNoResearch: (t: string) => `${t} hat keine Forschung: nach der Zusammenführung wird nichts gesendet.`,
         fromTree: (name: string) => `Ausschnitt aus dem Stammbaum „${name}“`,
         fromGedcom: (file: string) => `aus GEDCOM ${file}`,
         fromFile: (file: string) => `aus der Datei ${file}`,
