@@ -69,7 +69,7 @@ test.describe('desktop', () => {
         await expect(back).toHaveText('Change structure');
         await expect(dialog.locator('[data-join="whole"]')).toHaveAttribute('aria-checked', 'true');
         await expect(dialog.locator('[data-join="whole"]')).toContainText('The whole tree My Family Tree');
-        await expect(dialog.locator('#structure-footer button')).toHaveText(['Back', 'Continue to the guide']);
+        await expect(dialog.locator('#structure-footer button')).toHaveText(['Back', 'Cancel', 'Continue to the guide']);
         // ↓ chooses the selection, as a radio group does.
         await page.keyboard.press('ArrowDown');
         await expect(dialog.locator('[data-join="selection"]')).toHaveAttribute('aria-checked', 'true');

@@ -134,6 +134,40 @@ test('every dialog follows its kind: ×, one Close|Cancel before the primary', a
     }
 });
 
+// Change structure… draws each step's footer; the dialog closed (the static
+// audit above), every step keeps the rules: options Close (info), the steps
+// that lead on Back · Cancel · primary (as the merge guide), the file Cancel.
+test('Change structure: every step follows its kind, closed and open', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
+    await page.evaluate(() => window.Strom.TreeManager.createTree('Rodina Kalinovských'));
+    expect(await dialogRuleProblems(page)).toEqual([]);
+    await page.evaluate(() => window.Strom.UI.showStructureDialog(window.Strom.TreeManager.getActiveTreeId()!));
+    const dialog = page.locator('#structure-modal');
+    const step = async (key: string) => {
+        await expect(dialog).toHaveAttribute('data-step', key);
+        expect(await dialogRuleProblems(page), key).toEqual([]);
+    };
+    await step('options');
+    await dialog.locator('.menu-option[data-action="select"]').click();
+    await step('who');
+    await dialog.locator('#structure-footer [data-action="continue"]').click();
+    await step('summary');
+    await dialog.locator('#structure-back').click();
+    await dialog.locator('#structure-back').click();
+    await dialog.locator('.menu-option[data-action="into"]').click();
+    await step('join-what');
+    await dialog.locator('#structure-back').click();
+    await dialog.locator('.menu-option[data-action="file"]').click();
+    await step('file');
+    // Cancel of a step that leads on closes the whole dialog.
+    await dialog.locator('#structure-back').click();
+    await dialog.locator('.menu-option[data-action="select"]').click();
+    await dialog.locator('#structure-footer [data-dismiss]').click();
+    await expect(dialog).toBeHidden();
+});
+
 test('info dialogs close on the backdrop and on Close; forms ignore the backdrop', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');

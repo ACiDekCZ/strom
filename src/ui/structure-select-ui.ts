@@ -45,7 +45,7 @@ import { showToast } from './toast.js';
 import { SPLIT_SHOWN_AT_ONCE } from './split-ui.js';
 import { uiModule } from './module.js';
 import { barEl, setBarShare } from './prog-bar.js';
-import { el, footerButton, structureOpenFor, type StructureStep, type StructureView } from './structure-ui.js';
+import { el, footerButton, structureCancelButton, structureOpenFor, type StructureStep, type StructureView } from './structure-ui.js';
 
 /** The sources of who to take, in the tabs' order. */
 export type StructureWhoKind = 'view' | 'rod' | 'list' | 'ancestors' | 'descendants' | 'direct' | 'hand';
@@ -184,6 +184,7 @@ export const structureSelectMethods = uiModule({
         const join = opts.mode === 'join';
         return {
             key: 'who',
+            kind: 'form',
             title: join ? t.joinSelectTitle : t.selectTitle,
             sub: join ? `${name} · ${t.stepWho}` : `${name} · ${t.stepOf(2, 3, t.stepWho)}`,
             back: join ? t.joinWhatStep : undefined,
@@ -225,7 +226,7 @@ export const structureSelectMethods = uiModule({
             else this.structureGo(this.structureSummaryStep({ kind: 'selection', ids: result.ids, what: result.what }));
         });
         go.dataset.action = 'continue';
-        footer.append(footerButton(strings.structure.back, 'secondary', () => this.structureBack()), go);
+        footer.append(footerButton(strings.structure.back, 'secondary', () => this.structureBack()), structureCancelButton(() => this.closeStructureDialog()), go);
 
         // Pickers to put away when the step is left.
         const cleanups: Array<() => void> = [];
@@ -589,6 +590,7 @@ export const structureSelectMethods = uiModule({
         if (input.kind === 'copy') {
             return {
                 key: 'summary',
+                kind: 'form',
                 title: t.optCopy,
                 sub: `${name} · ${t.stepSummary}`,
                 render: (view) => this.renderStructureSummary(view, input, typed),
@@ -672,7 +674,7 @@ export const structureSelectMethods = uiModule({
         let summary: Pick<SubsetSummary, 'persons'> | null = null;
         const create = footerButton(copy ? t.createCopy : t.create, 'primary', () => void submit());
         create.dataset.action = 'create';
-        footer.append(footerButton(strings.structure.back, 'secondary', () => this.structureBack()), create);
+        footer.append(footerButton(strings.structure.back, 'secondary', () => this.structureBack()), structureCancelButton(() => this.closeStructureDialog()), create);
         nameInput.addEventListener('keydown', (e) => {
             if (e.key !== 'Enter' || e.isComposing) return;
             e.preventDefault();

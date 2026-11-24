@@ -37622,7 +37622,7 @@
          (the options, then each option's steps) are drawn by src/ui/structure-ui.ts into the same skeleton,
          one height for all of them so the footer does not jump. -->
     <div class="modal-overlay" id="structure-modal">
-        <div class="modal modal--lg structure-modal" role="dialog" data-dialog-kind="choice" aria-modal="true" aria-labelledby="structure-title">
+        <div class="modal modal--lg structure-modal" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="structure-title">
             <div class="modal-header">
                 <div class="structure-head">
                     <button type="button" class="modal-back" id="structure-back" hidden></button>
@@ -37634,7 +37634,10 @@
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeStructureDialog()">&times;</button>
             </div>
             <div class="modal-content" id="structure-body"></div>
-            <div class="buttons" id="structure-footer"></div>
+            <!-- Each step draws its own footer; the first one (the options) only closes. -->
+            <div class="buttons" id="structure-footer">
+                <button type="button" class="secondary" data-dismiss data-i18n="buttons.close" onclick="window.Strom.UI.closeStructureDialog()">Close</button>
+            </div>
         </div>
     </div>
 

@@ -63,6 +63,12 @@ export interface StructureStep {
     sub?: string;
     /** The label of the header's back button, the screen it returns to (default: "Change structure"). */
     back?: string;
+    /**
+     * The dialog kind of this screen (the app's dialog rules): 'info' when its
+     * footer only closes (Close), 'form' while something is being chosen or
+     * typed (the backdrop leaves it alone), 'choice' otherwise (Cancel).
+     */
+    kind?: 'info' | 'choice' | 'form';
     render(view: StructureView): void | Promise<void>;
 }
 
@@ -131,6 +137,14 @@ export function footerButton(label: string, kind: 'primary' | 'secondary', onCli
     if (dismiss) btn.setAttribute('data-dismiss', '');
     btn.addEventListener('click', onClick);
     return btn;
+}
+
+/**
+ * The footer's Cancel of a step that leads on (Back · Cancel · primary, as in
+ * the merge guide): it closes the whole dialog, Back and ‹ go a step back.
+ */
+export function structureCancelButton(close: () => void): HTMLButtonElement {
+    return footerButton(strings.buttons.cancel, 'secondary', close, true);
 }
 
 /**
@@ -269,6 +283,7 @@ export const structureMethods = uiModule({
         state.abort.abort();
         state.abort = new AbortController();
         modal.dataset.step = step.key;
+        modal.querySelector(':scope > .modal')?.setAttribute('data-dialog-kind', step.kind ?? 'choice');
         const title = document.getElementById('structure-title');
         const sub = document.getElementById('structure-sub');
         const back = document.getElementById('structure-back') as HTMLButtonElement | null;
@@ -321,6 +336,7 @@ export const structureMethods = uiModule({
         const name = TreeManager.getTreeMetadata(treeId)?.name ?? '';
         return {
             key: 'options',
+            kind: 'info',
             title: strings.structure.title(name),
             render: (view) => this.renderStructureOptions(view),
         };
@@ -513,7 +529,7 @@ export const structureMethods = uiModule({
         body.appendChild(el('p', 'structure-note', t.joinNote));
 
         // §6.1: Back · Continue to the guide.
-        footer.appendChild(footerButton(t.back, 'secondary', () => this.structureBack(), true));
+        footer.append(footerButton(t.back, 'secondary', () => this.structureBack()), structureCancelButton(() => this.closeStructureDialog()));
         const go = footerButton(t.continueGuide, 'primary', () => void this.structureJoin(chosen));
         go.dataset.action = 'continue';
         footer.appendChild(go);
