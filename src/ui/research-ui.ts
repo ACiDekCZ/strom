@@ -4371,6 +4371,11 @@ export const researchUiMethods = uiModule({
             this.liveBridgeBack(s);
             this.noteQualityEvent(s.researchId, payload(e));
         });
+        // A device of the home network paired, connected, gone… (spec 094 P3, device.events).
+        es.addEventListener('device', (e) => {
+            this.liveBridgeBack(s);
+            this.noteDeviceEvent(s.researchId, payload(e));
+        });
         es.addEventListener('working', (e) => {
             s.workingEvents = (s.workingEvents ?? 0) + 1;
             s.working = withFamilyPersons(sanitizeWorking(payload(e), !!s.features?.includes(WORKING_HELPS_FEATURE), holdsSaid(s.features),

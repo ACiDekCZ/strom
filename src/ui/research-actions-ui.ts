@@ -93,7 +93,7 @@ interface SubmenuItem {
     /** A quiet second line ("sent 11:20"). */
     sub?: string;
     /** A state pill at the end ("on · 2", "connection problem"). */
-    pill?: { text: string; tone: 'on' | 'error' };
+    pill?: { text: string; tone: 'on' | 'error' | 'off' };
     /** Not possible now (`aria-disabled`, grey): its second line says why. */
     disabled?: boolean;
     /** A separate item right under it ("Open research" beside an inactive item, with its link's mark). */
@@ -760,8 +760,9 @@ export const researchActionsMethods = uiModule({
         if (phoneDot) phoneDot.hidden = !phoneOn;
         const base = waiting > 0 ? r.menuButtonAriaWaiting(waiting) : unsent.label ? r.menuButtonAriaUnsent : r.menuTitle;
         const name = reading ? `${base}, ${strings.read.stripRunning}` : base;
-        btn.setAttribute('aria-label', phoneOn ? `${name}, ${strings.phone.btnOn}` : name);
-        if (phoneOn) btn.title = `${r.menuTitle} · ${strings.phone.btnOn}`;
+        const btnOn = phoneOn ? this.phoneT().btnOn : '';
+        btn.setAttribute('aria-label', phoneOn ? `${name}, ${btnOn}` : name);
+        if (phoneOn) btn.title = `${r.menuTitle} · ${btnOn}`;
         else btn.removeAttribute('title');
         return signal;
     },
@@ -782,6 +783,8 @@ export const researchActionsMethods = uiModule({
      */
     openResearchMenu(opts: { opener?: HTMLElement | null; focus?: 'first' | 'last' } = {}): void {
         if (!this.researchMenuShown()) return;
+        // The gateway of the devices: "on · N connected" counts the devices connected now (a quiet look, at most every 15 s).
+        void this.phonePeekDevices();
         const btn = document.getElementById('research-menu-btn');
         const menu = document.getElementById('research-menu');
         if (!btn || !menu || btn.getClientRects().length === 0) {

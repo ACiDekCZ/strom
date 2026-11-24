@@ -8,7 +8,8 @@ import { describe, it, expect } from 'vitest';
 import {
     sanitizePhoneSummary, sanitizePhoneState, phoneView, newlyPaired, lanSeenSince, phoneSilent, PHONE_SILENT_MS,
     pairCountdown, seenAgo, phoneDate, phoneAddressChanged, phoneIp, phonePort, phonePlatform,
-    PhoneState, PhoneViewContext,
+    PhoneState, PhoneViewContext, deviceGatewayCaps, sanitizePhoneDevices, sanitizeDeviceEvent, deviceKindOf,
+    phonePairedCount, pairMinutesLeft,
 } from '../phone.js';
 
 const NO_CTX: PhoneViewContext = { enabling: false, noDialog: false, refused: false, wantQr: false, paired: false };
@@ -16,7 +17,7 @@ const NO_CTX: PhoneViewContext = { enabling: false, noDialog: false, refused: fa
 function state(extra: Partial<PhoneState> = {}): PhoneState {
     return {
         state: 'off', since: '', addresses: [], addressChangedAt: '', lanSeenAt: '', pair: null, phones: [],
-        error: null, platform: null, network: null, firewall: null, ...extra,
+        error: null, platform: null, network: null, firewall: null, devices: null, ...extra,
     };
 }
 
@@ -206,5 +207,80 @@ describe('addresses and the system', () => {
         expect(phonePlatform(null, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)')).toBe('mac');
         expect(phonePlatform(null, 'Mozilla/5.0 (X11; Linux x86_64)')).toBe('linux');
         expect(phonePlatform(null, '', 'Win32')).toBe('win');
+    });
+});
+
+const device = (id: string, extra = {}) => ({
+    id, name: 'iPhone · Safari', kind: 'phone', via: 'app', pairedAt: '2026-11-18T09:00:00Z', lastSeenAt: '2026-11-24T13:05:00Z',
+    connected: false, stale: false, home: false, ...extra,
+});
+
+describe('the gateway of the devices (spec 094 P3)', () => {
+    it('nothing of it without device.gateway, not even its other features', () => {
+        expect(deviceGatewayCaps(['phone', 'device.rename', 'device.events', 'device.phonePage']))
+            .toEqual({ gateway: false, rename: false, events: false, phonePage: false });
+        expect(deviceGatewayCaps(null).gateway).toBe(false);
+        expect(deviceGatewayCaps(['device.gateway', 'device.events']))
+            .toEqual({ gateway: true, rename: false, events: true, phonePage: false });
+    });
+
+    it('devices of GET phone read tolerantly: unknown fields, bad rows and duplicates dropped', () => {
+        const d = sanitizePhoneDevices({
+            app: 'odd', appVersion: '3.33.0', name: 'Pracovna.local', connectedNow: 1, extra: true,
+            list: [device('dv_a', { connected: true }), device('dv_a'), { id: 'bad id!' }, 'x', device('dv_b', { kind: 'gizmo', name: 'iPad · Safari' })],
+        });
+        expect(d?.app).toBe('ready');
+        expect(d?.name).toBe('Pracovna.local');
+        expect(d?.list.map(x => x.id)).toEqual(['dv_a', 'dv_b']);
+        expect(d?.list[1]!.kind).toBe('tablet');
+        expect(d?.connectedNow).toBe(1);
+        expect(sanitizePhoneDevices(null)).toBeNull();
+        // Without connectedNow: counted from the rows.
+        expect(sanitizePhoneDevices({ list: [device('dv_a', { connected: true }), device('dv_b', { connected: true })] })?.connectedNow).toBe(2);
+        expect(sanitizePhoneDevices({ app: 'none', list: 'no' })).toMatchObject({ app: 'none', list: [] });
+    });
+
+    it('a state without devices (a bridge without the gateway) has none', () => {
+        expect(sanitizePhoneState({ state: 'on', phones: [] })?.devices).toBeNull();
+        expect(sanitizePhoneState({ state: 'on', phones: [], devices: { list: [device('dv_a')] } })?.devices?.list).toHaveLength(1);
+    });
+
+    it('a kind by the bridge, else told by the name', () => {
+        expect(deviceKindOf('computer', 'iPhone')).toBe('computer');
+        expect(deviceKindOf(undefined, 'Android · Chrome')).toBe('phone');
+        expect(deviceKindOf(undefined, 'iPad · Safari')).toBe('tablet');
+        expect(deviceKindOf(undefined, 'Notebook · Firefox')).toBe('computer');
+        expect(deviceKindOf(undefined, 'Kuchyň')).toBeNull();
+    });
+
+    it('device events: known kinds only', () => {
+        expect(sanitizeDeviceEvent({ type: 'device', what: 'paired', id: 'dv_a', name: 'iPad · Safari', kind: 'tablet' }))
+            .toEqual({ what: 'paired', id: 'dv_a', name: 'iPad · Safari', kind: 'tablet' });
+        expect(sanitizeDeviceEvent({ what: 'exploded', id: 'dv_a' })).toBeNull();
+        expect(sanitizeDeviceEvent({ what: 'gone', id: '../x' })).toBeNull();
+        expect(sanitizeDeviceEvent('paired')).toBeNull();
+    });
+
+    it('with the gateway, devices count as paired (the list, not the intro)', () => {
+        const s = state({ state: 'on', devices: sanitizePhoneDevices({ list: [device('dv_a')] }) });
+        expect(phonePairedCount(s)).toBe(0);
+        expect(phonePairedCount(s, true)).toBe(1);
+        expect(phoneView(s, NO_CTX)).toBe('qr');
+        expect(phoneView(s, { ...NO_CTX, gateway: true })).toBe('list');
+        expect(phoneView({ ...s, state: 'off' }, { ...NO_CTX, gateway: true })).toBe('offList');
+    });
+
+    it('the address changed: a stale device counts only with the gateway', () => {
+        const s = state({ state: 'on', addressChangedAt: '2026-11-24T10:00:00Z', devices: sanitizePhoneDevices({ list: [device('dv_a', { stale: true })] }) });
+        expect(phoneAddressChanged(s)).toBe(false);
+        expect(phoneAddressChanged(s, true)).toBe(true);
+    });
+
+    it('the code\'s minutes for a screen reader', () => {
+        const now = Date.parse('2026-11-24T10:00:00Z');
+        expect(pairMinutesLeft(now + 9 * 60_000 + 41_000, now)).toBe(10);
+        expect(pairMinutesLeft(now + 60_000, now)).toBe(1);
+        expect(pairMinutesLeft(now - 1, now)).toBe(0);
+        expect(pairMinutesLeft(NaN, now)).toBeNull();
     });
 });
