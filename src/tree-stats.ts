@@ -18,7 +18,7 @@
 
 import type { CoupleEventType, Partnership, Person, PersonId, PlaceRecord, StromData } from './types.js';
 import type { LineageIndex } from './lineage.js';
-import { rulePersonIds } from './person-lists.js';
+import { directLineIds } from './search-scope.js';
 import { selectionPersonIds, type SelectionRef } from './view-selection.js';
 import { parseFlexDate, ageBetween, ageRangeBetween, yearOf } from './dates.js';
 import { ageBirthDate } from './recorded-age.js';
@@ -174,22 +174,6 @@ const realPerson = (data: StromData, id: PersonId): Person | null => {
     return p && !p.isPlaceholder ? p : null;
 };
 
-/** A person's direct line: the person, every ancestor and every descendant (real people only). */
-export function directLineIds(index: LineageIndex, personId: PersonId): PersonId[] {
-    const data = index.data;
-    if (!realPerson(data, personId)) return [];
-    const seen = new Set<PersonId>([personId]);
-    const out: PersonId[] = [personId];
-    for (const kind of ['ancestors', 'descendants'] as const) {
-        for (const id of rulePersonIds(index, { kind, personId })) {
-            if (seen.has(id)) continue;
-            seen.add(id);
-            out.push(id);
-        }
-    }
-    return out;
-}
-
 /**
  * The real people of a scope, and — with a period — how many of the scope
  * have no birth year (they fall out of the period). A gone selection is empty.
@@ -198,7 +182,7 @@ export function scopePersonIds(data: StromData, index: LineageIndex, scope: Stat
     let base: Iterable<PersonId>;
     const ref = scope.ref;
     if (!ref) base = Object.keys(data.persons) as PersonId[];
-    else if (ref.kind === 'direct') base = directLineIds(index, ref.personId);
+    else if (ref.kind === 'direct') base = realPerson(data, ref.personId) ? directLineIds(index, ref.personId) : [];
     else base = selectionPersonIds(data, index, ref) ?? [];
     const period = scope.from !== undefined || scope.to !== undefined;
     const ids: PersonId[] = [];

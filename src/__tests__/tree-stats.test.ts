@@ -7,9 +7,10 @@ import { describe, it, expect } from 'vitest';
 import { buildLineages, rodOf } from '../lineage.js';
 import type { LifeEvent, Partnership, PartnershipId, Person, PersonId, PersonList, PlaceRecord, StromData } from '../types.js';
 import {
-    DEFAULT_STATS_OPTIONS, STATS_GROUPS, STATS_TOPICS, defaultSort, directLineIds, rowShare, scopePersonIds, searchRows, sexCounts,
+    DEFAULT_STATS_OPTIONS, STATS_GROUPS, STATS_TOPICS, defaultSort, rowShare, scopePersonIds, searchRows, sexCounts,
     sortRows, statsContext, statsCsv, statsTable, type StatsOptions, type StatsRow, type StatsTable, type StatsTopic,
 } from '../tree-stats.js';
+import { directLineIds } from '../search-scope.js';
 
 const P = (id: string): PersonId => id as PersonId;
 
@@ -365,7 +366,16 @@ describe('scope (§7)', () => {
         expect(scopePersonIds(data, buildLineages(data), { ref: { kind: 'list', listId: 'l1' } }).ids).toEqual([P('joh')]);
         const direct = scopePersonIds(data, index, { ref: { kind: 'direct', personId: P('anna') } }).ids;
         expect(direct.sort()).toEqual([P('anna'), P('jan'), P('joh'), P('marie'), P('matej'), P('matej2')].sort());
-        expect(directLineIds(index, P('ghost'))).toEqual([]);
+        expect(scopePersonIds(data, index, { ref: { kind: 'direct', personId: P('ghost') } }).ids).toEqual([]);
+    });
+
+    it('the direct line is the search scope\'s direct line of the same person (spec 137 helper)', () => {
+        for (const p of Object.values(data.persons)) {
+            if (p.isPlaceholder) continue;
+            const stats = scopePersonIds(data, index, { ref: { kind: 'direct', personId: p.id } }).ids;
+            expect(new Set(stats).size).toBe(stats.length);
+            expect([...stats].sort()).toEqual([...directLineIds(data, p.id)].sort());
+        }
     });
 
     it('a period: birth years inclusive, people without a year fall out and are counted; from without to', () => {

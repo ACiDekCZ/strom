@@ -24,7 +24,7 @@ import { buildLineages, rodLabels, rods, type LineageIndex, type RodId } from '.
 import {
     STATS_GROUPS, STATS_TOPICS, DEFAULT_STATS_OPTIONS, type StatsTopic, type StatsOptions, type StatsSort, type StatsScope,
     type StatsScopeRef, type StatsTable, type StatsRow, type StatsContext, type StatsValueLabels,
-    statsContext, isValueTopic, defaultSort, directLineIds, scopePersonIds, sexCounts, statsTable, sortRows, searchRows,
+    statsContext, isValueTopic, defaultSort, scopePersonIds, sexCounts, statsTable, sortRows, searchRows,
     rowShare, shareText, statsCsv,
 } from '../tree-stats.js';
 import { encodeSelectionRef, decodeSelectionRef, selectionLabel, selectionLabelText, selectionPersonIds, type SelectionRef } from '../view-selection.js';
@@ -42,6 +42,7 @@ import { readRecent } from './tree-overview.js';
 import { highlightHtml } from './table-view/table-filter.js';
 import { tableCsvFileName } from './table-view/table-export.js';
 import { filterAndSort } from '../person-picker.js';
+import { directLineIds } from '../search-scope.js';
 import { shownName } from '../person-name.js';
 import { displayYear } from '../dates.js';
 import { uiModule } from './module.js';
@@ -489,7 +490,7 @@ function personSub(p: Person): string {
 function directRow(r: Runtime, p: Person, sub: string): SelectionPickRow {
     const sel = encodeScope({ kind: 'direct', personId: p.id });
     return {
-        sel, label: shownName(p), sub, count: directLineIds(r.index, p.id).length, icon: selectionIcon('ancestors'),
+        sel, label: shownName(p), sub, count: directLineIds(r.index, p.id).size, icon: selectionIcon('ancestors'),
         current: sel === encodeScope(r.win.scope.ref),
     };
 }
