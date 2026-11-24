@@ -509,7 +509,7 @@ export async function openStructureDialog(page: Page, scope?: Locator): Promise<
  * (a new tree from a selection: the step "who to take"), `duplicate` (the
  * copy's summary), `splitFamilies`, `split`
  * (separate parts), `mergeInto` (the whole tree into another, through the
- * guide), `mergeView` (the open view into another).
+ * guide), `mergeView` (the open view into another: A selection, the current view).
  */
 export type StructureRun = 'makeTree' | 'duplicate' | 'splitFamilies' | 'split' | 'mergeInto' | 'mergeView';
 
@@ -528,6 +528,15 @@ export async function runStructure(page: Page, run: StructureRun, scope?: Locato
     await expect(dialog).toHaveAttribute('data-step', 'join-what');
     await dialog.locator(`[data-join="${run === 'mergeInto' ? 'whole' : 'selection'}"]`).click();
     await dialog.locator('[data-action="continue"]').click();
+    if (run === 'mergeInto') return;
+    // A selection: who to take (§3, its 'join' mode), the current view; on to the guide.
+    await expect(dialog).toHaveAttribute('data-step', 'who');
+    const view = dialog.locator('#structure-who-tab-view');
+    await view.click();
+    await expect(view).toHaveAttribute('aria-selected', 'true');
+    const go = dialog.locator('#structure-footer [data-action="continue"]');
+    await expect(go).toBeEnabled();
+    await go.click();
 }
 
 /** A satellite's "Follow selection" mode (spec 079 K2.1): switch, mark or off. */

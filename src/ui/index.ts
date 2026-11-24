@@ -607,6 +607,8 @@ export class UIClass {
 
     // Import-as-new-tree flag
     importToCurrentTree: boolean = false;
+    /** A Strom file chosen to add to this (open) tree through the merge guide (Change structure… › Add from a file, spec 139 §6.2). */
+    importIntoTreeId: TreeId | null = null;
 
     // Relationship calculator picker
     kinshipPicker: PersonPicker | null = null;

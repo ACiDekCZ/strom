@@ -820,6 +820,8 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         fileTitle: 'Dodaj z pliku do tego drzewa',
         fileGed: 'Plik GEDCOM (.ged)',
         fileGedDesc: 'Z innego programu: MyHeritage, Geni, Ancestry, Gramps…',
+        fileJson: 'Plik Strom (.json)',
+        fileJsonDesc: 'Eksport ze Stromu, na przykład od krewnego.',
         fileNote: (name: string) => `Po wybraniu pliku otworzy się kreator scalania z celem ${name}. Nic nie zostanie zapisane, dopóki kreator tego nie potwierdzi; scalenie można cofnąć.`,
     },
     treeManager: {

@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, card, cardAction, addRelation, openTreeActions, runStructure, mergeCompare, mergeCount, mergePair, mergeSetScope, mergeTreeInto } from './helpers.js';
+import { openApp, createFirstPerson, seedTree, card, cardAction, addRelation, openTreeActions, runStructure, mergeCompare, mergeCount, mergePair, mergeSetScope, mergeTreeInto } from './helpers.js';
 import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
 
 function personCount(page: Page): Promise<number> {
@@ -147,7 +147,11 @@ test('merge wizard: scope d) (only update existing people) drops "New" to 0, and
 
 test('actions menu "Merge view into…" (Tree: → From the current view) opens the target picker', async ({ page }) => {
     await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
+    // A view of two people: the step "who to take" offers the current view from two up (spec 139 §3).
+    await seedTree(page, {
+        jan: { firstName: 'Jan', lastName: 'Novak', partners: ['marta'] },
+        marta: { firstName: 'Marta', lastName: 'Novakova', gender: 'female', partners: ['jan'] },
+    }, 'Novak');
 
     // A second tree to serve as the merge target (createTree does not switch).
     await page.evaluate(() => {
@@ -159,7 +163,7 @@ test('actions menu "Merge view into…" (Tree: → From the current view) opens 
         });
     });
 
-    // ⋯ → Tree: → Change structure… → into another tree → a selection (for now the view, set apart from the whole tree).
+    // ⋯ → Tree: → Change structure… → into another tree → a selection → the current view.
     await runStructure(page, 'mergeView', await openTreeActions(page));
 
     // The import guide opens on step 1 with the view as the import; the active tree is not offered, the other is the target.

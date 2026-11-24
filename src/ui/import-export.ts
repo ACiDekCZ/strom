@@ -94,6 +94,9 @@ import { expandedData } from '../image-expand.js';
 import { jsonFileWithImages } from '../image-stream.js';
 
 /** A list the export dialog's list scope offers (spec 084 §12): one with people. */
+/** A Strom file to add to the open tree through the merge guide (spec 139 §6.2): the tree and the file's name. */
+interface JsonImportInto { treeId: TreeId; fileName: string }
+
 interface ExportableList { list: PersonList; count: number }
 
 /** The active tree's lists with people, by name. */
@@ -1075,7 +1078,11 @@ export const importExportMethods = uiModule({
         if (!file) return;
         // Reset input
         input.value = '';
-        void this.readJsonImportFile(file, origin, () => { openFilePicker(input, origin); });
+        // Snapshot the intent now (Add from a file to this tree): it never leaks into a later import.
+        const into = this.importIntoTreeId;
+        this.importIntoTreeId = null;
+        void this.readJsonImportFile(file, origin, () => { this.importIntoTreeId = into; openFilePicker(input, origin); },
+            into ? { treeId: into, fileName: file.name } : undefined);
     },
 
     /**
@@ -1083,17 +1090,17 @@ export const importExportMethods = uiModule({
      * is not JSON is said there with "Choose another file", the rest goes on
      * as an import of its text.
      */
-    async readJsonImportFile(file: File, origin: HTMLElement | null, again: () => void): Promise<void> {
+    async readJsonImportFile(file: File, origin: HTMLElement | null, again: () => void, into?: JsonImportInto): Promise<void> {
         // A stale handle from an earlier (failed/cancelled) "open from
         // file" must never get attached to THIS unrelated import — Ctrl+S
         // would then silently overwrite the wrong file on disk.
         await this.readJsonImportText(file.name, () => file.text(), file.size, origin, again,
-            () => { this.pendingOpenFileHandle = null; });
+            () => { this.pendingOpenFileHandle = null; }, into);
     },
 
     /** See readJsonImportFile; `before` runs once the text is read, before the import. */
     async readJsonImportText(name: string, read: () => Promise<string>, size: number, origin: HTMLElement | null,
-        again: () => void, before?: () => void): Promise<void> {
+        again: () => void, before?: () => void, into?: JsonImportInto): Promise<void> {
         if (!(await confirmMemoryForImport(size, name))) return;
         const got = await readPickedFile(origin, { name }, async ctl => {
             const text = await read();
@@ -1112,7 +1119,7 @@ export const importExportMethods = uiModule({
         if (!got) return;
         before?.();
         this.leavePickDialog();
-        await this.importJsonString(got.text, got.parsed);
+        await this.importJsonString(got.text, got.parsed, into);
     },
 
     /**
@@ -1120,7 +1127,7 @@ export const importExportMethods = uiModule({
      * (encrypted → password prompt, invalid → dialog, warnings → confirm). Shared
      * by the file-input upload and the File System Access "open from file" flow.
      */
-    async importJsonString(content: string, parsedAlready?: unknown): Promise<void> {
+    async importJsonString(content: string, parsedAlready?: unknown, into?: JsonImportInto): Promise<void> {
         let parsed: unknown = parsedAlready;
         if (parsedAlready === undefined) {
             try {
@@ -1141,7 +1148,7 @@ export const importExportMethods = uiModule({
 
         const { isEncrypted } = await import('../crypto.js');
         if (isEncrypted(parsed)) {
-            this.handleEncryptedJsonImport(parsed);
+            this.handleEncryptedJsonImport(parsed, into);
             return;
         }
 
@@ -1162,7 +1169,7 @@ export const importExportMethods = uiModule({
         }
         const data = result.data!;
         const images = countImages(data);
-        const withImages = (include: boolean) => this.processJsonImport(include ? data : stripMedia(data));
+        const withImages = (include: boolean) => this.processJsonImport(include ? data : stripMedia(data), into);
         if (result.warnings.length > 0) {
             // The dialog is shown anyway: it carries the images checkbox too.
             this.showValidationDialog(result, withImages,
@@ -1172,7 +1179,15 @@ export const importExportMethods = uiModule({
         }
     },
 
-    processJsonImport(data: StromData): void {
+    processJsonImport(data: StromData, into?: JsonImportInto): void {
+        // Add from a file to this tree (spec 139 §6.2, K1.4): the merge guide with the open tree as its
+        // target, never a new tree; the file's research tie does not carry over.
+        if (into && into.treeId === DataManager.getCurrentTreeId() && !DataManager.isViewMode()) {
+            this.pendingImportResearch = null;
+            this.closeImportDialog();
+            MergerUI.startMerge(data, into.fileName, false, undefined, { kind: 'json' });
+            return;
+        }
         // Check if importing directly to current tree (from empty state)
         if (this.importToCurrentTree) {
             this.importToCurrentTree = false;
@@ -1201,15 +1216,15 @@ export const importExportMethods = uiModule({
     /**
      * Handle encrypted JSON import - show password prompt with retry
      */
-    handleEncryptedJsonImport(encryptedData: EncryptedData): void {
+    handleEncryptedJsonImport(encryptedData: EncryptedData, into?: JsonImportInto): void {
         this.pendingEncryptedImport = encryptedData;
-        this.showEncryptedImportPrompt();
+        this.showEncryptedImportPrompt(into);
     },
 
     /**
      * Show password prompt for encrypted import
      */
-    showEncryptedImportPrompt(): void {
+    showEncryptedImportPrompt(into?: JsonImportInto): void {
         const modal = document.getElementById('password-prompt-modal');
         const input = document.getElementById('password-prompt-input') as HTMLInputElement;
         const error = document.getElementById('password-prompt-error');
@@ -1223,7 +1238,7 @@ export const importExportMethods = uiModule({
 
         // Set callback for this specific import - callback manages dialog
         this.passwordPromptCallback = async (password: string) => {
-            await this.tryDecryptImport(password);
+            await this.tryDecryptImport(password, into);
         };
         this.passwordPromptCallbackManagesDialog = true;
 
@@ -1234,7 +1249,7 @@ export const importExportMethods = uiModule({
     /**
      * Try to decrypt and import with given password
      */
-    async tryDecryptImport(password: string): Promise<void> {
+    async tryDecryptImport(password: string, into?: JsonImportInto): Promise<void> {
         if (!this.pendingEncryptedImport) return;
 
         const error = document.getElementById('password-prompt-error');
@@ -1265,7 +1280,7 @@ export const importExportMethods = uiModule({
         this.pendingEncryptedImport = null;
 
         // Same routing as a plain file (single tree or "Export all" backup)
-        await this.importJsonString(decrypted);
+        await this.importJsonString(decrypted, undefined, into);
     },
 
     // ---- SAVE CURRENT DATA DIALOG ----
@@ -1317,6 +1332,7 @@ export const importExportMethods = uiModule({
      */
     importJsonToCurrentTree(): void {
         this.importToCurrentTree = true;
+        this.importIntoTreeId = null;
         // The dialog stays while the file is chosen and read (9a); it goes once the file is read.
         this.pickImportFile('file-input');
     },
@@ -1335,6 +1351,7 @@ export const importExportMethods = uiModule({
      */
     startJsonImportFromManager(): void {
         this.importFromTreeManager = true;
+        this.importIntoTreeId = null;
         // The New tree menu stays while the file is chosen and read (9a); leavePickDialog
         // then closes it and keeps the tree manager in the stack.
         this.pickImportFile('file-input');
@@ -1349,7 +1366,20 @@ export const importExportMethods = uiModule({
     startGedcomImportPlain(): void {
         this.importFromTreeManager = false;
         this.importToCurrentTree = false;
+        this.importIntoTreeId = null;
         this.pickImportFile('gedcom-input');
+    },
+
+    /**
+     * Change structure… › Add from a file to this tree › Strom file (spec 139
+     * §6.2): the file read goes to the merge guide with this (open) tree as
+     * its target, never to a new tree.
+     */
+    startJsonImportIntoTree(treeId: TreeId): void {
+        this.importFromTreeManager = false;
+        this.importToCurrentTree = false;
+        this.importIntoTreeId = treeId;
+        this.pickImportFile('file-input');
     },
 
     startGedcomImportFromManager(): void {
@@ -1365,6 +1395,7 @@ export const importExportMethods = uiModule({
      * as always).
      */
     handleImportFileCancel(): void {
+        this.importIntoTreeId = null;
         if (!this.importFromTreeManager) return;
         // The menu stays open while the file is chosen (9a): nothing to come back to.
         if (document.getElementById('new-tree-menu-modal')?.classList.contains('active')) return;

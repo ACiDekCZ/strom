@@ -7034,6 +7034,8 @@ const stringsEN = {
         fileTitle: 'Add from a file to this tree',
         fileGed: 'GEDCOM file (.ged)',
         fileGedDesc: 'From another program: MyHeritage, Geni, Ancestry, Gramps…',
+        fileJson: 'Strom file (.json)',
+        fileJsonDesc: 'An export from Strom, for example from a relative.',
         fileNote: (name: string) => `After the file is chosen, the merge guide opens with ${name} as the target. Nothing is written to the tree until the guide confirms it; the merge can be undone.`,
     },
     treeManager: {
@@ -18375,6 +18377,8 @@ const stringsCZ: StringsType = {
         fileTitle: 'Přidat ze souboru do tohoto stromu',
         fileGed: 'Soubor GEDCOM (.ged)',
         fileGedDesc: 'Z jiného programu: MyHeritage, Geni, Ancestry, Gramps…',
+        fileJson: 'Soubor Strom (.json)',
+        fileJsonDesc: 'Export ze Stromu, třeba od příbuzného.',
         fileNote: (name: string) => `Po výběru souboru se otevře průvodce sloučením s cílem ${name}. Do stromu se nic nezapíše, dokud to průvodce nepotvrdí; sloučení jde vrátit.`,
     },
     treeManager: {
@@ -29551,6 +29555,8 @@ const stringsDE: StringsType = {
         fileTitle: 'Aus einer Datei in diesen Stammbaum',
         fileGed: 'GEDCOM-Datei (.ged)',
         fileGedDesc: 'Aus einem anderen Programm: MyHeritage, Geni, Ancestry, Gramps…',
+        fileJson: 'Strom-Datei (.json)',
+        fileJsonDesc: 'Ein Export aus Strom, etwa von Verwandten.',
         fileNote: (name: string) => `Nach der Dateiauswahl öffnet sich der Zusammenführungs-Assistent mit dem Ziel ${name}. In den Stammbaum wird erst nach Bestätigung geschrieben; rückgängig machbar.`,
     },
     treeManager: {

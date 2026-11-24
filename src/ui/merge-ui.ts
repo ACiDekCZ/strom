@@ -710,33 +710,43 @@ export const mergeUiMethods = uiModule({
         }
     },
 
-    // ---- MERGE CURRENT VIEW INTO A TREE (Primitive 3) ----
+    // ---- MERGE A SELECTION OR THE CURRENT VIEW INTO A TREE (Primitive 3) ----
     /**
-     * "Merge this view into…": take exactly the persons currently shown (the
-     * WYSIWYG subtree of the focus view) as the import of the guide, whose
-     * step 1 chooses the target among the other trees (spec 134 §2, 2d). No
-     * intermediate tree is created — the subtree lives only in memory. Edit-flow only.
+     * "Merge this view into…": the persons currently shown (the WYSIWYG
+     * subtree of the focus view) into another tree, as `mergeSubsetInto`.
      */
     async mergeViewInto(): Promise<void> {
-        if (DataManager.isReadOnly()) return;
-        const visibleIds = TreeRenderer.getVisiblePersonIds();
-        // Empty view (e.g. fan/timeline/map don't populate layout positions, or
-        // nothing is focused): nothing to merge.
-        if (visibleIds.size === 0) {
-            this.showToast(strings.merge.mergeViewEmpty);
-            return;
-        }
-        // Merging a view into its OWN tree is person-merge territory, not this flow.
         const activeTreeId = TreeManager.getActiveTreeId();
-        if (!await this.mergeTargetReady(activeTreeId)) return;
-
-        // Snapshot the subtree now, while the active tree is still current.
-        const data = extractSubtree(DataManager.getData(), visibleIds);
-        const activeName = activeTreeId ? TreeManager.getTreeMetadata(activeTreeId)?.name : undefined;
+        if (!activeTreeId) return;
+        const activeName = TreeManager.getTreeMetadata(activeTreeId)?.name;
         const label = activeName
             ? `${activeName} — ${strings.merge.mergeViewSourceLabel}`
             : strings.merge.mergeViewSourceLabel;
-        MergerUI.startMerge(data, label, false, undefined, { kind: 'view' }, activeTreeId ? { exclude: activeTreeId } : {});
+        await this.mergeSubsetInto(activeTreeId, TreeRenderer.getVisiblePersonIds(), label);
+    },
+
+    /**
+     * People `ids` of the open tree `treeId` into another tree: the subtree
+     * (with the glue partners) is the import of the guide, whose step 1
+     * chooses the target among the other trees (spec 134 §2, 2d; spec 139
+     * §6.1). No intermediate tree is created — the subtree lives only in
+     * memory. `label`: the source as the guide names it ("{tree} — {what}").
+     * Edit-flow only; true when the guide opened.
+     */
+    async mergeSubsetInto(treeId: TreeId, ids: ReadonlySet<PersonId>, label: string): Promise<boolean> {
+        if (DataManager.isReadOnly()) return false;
+        // Nothing chosen (e.g. fan/timeline/map don't populate layout positions): nothing to merge.
+        if (ids.size === 0) {
+            this.showToast(strings.merge.mergeViewEmpty);
+            return false;
+        }
+        if (treeId !== TreeManager.getActiveTreeId()) return false;
+        // Merging into its OWN tree is person-merge territory, not this flow.
+        if (!await this.mergeTargetReady(treeId)) return false;
+        // Snapshot the subtree now, while the tree is still the open one.
+        const data = extractSubtree(DataManager.getData(), new Set(ids));
+        MergerUI.startMerge(data, label, false, undefined, { kind: 'view' }, { exclude: treeId });
+        return true;
     },
 
     // ---- MERGE A TREE INTO ANOTHER ----

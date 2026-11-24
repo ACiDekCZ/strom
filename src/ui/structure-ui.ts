@@ -21,14 +21,16 @@
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
-import { TreeId } from '../types.js';
+import { PersonId, TreeId } from '../types.js';
 import { structureDirSvg } from '../icons.js';
 import {
-    structureOptions, isWhollyConnected, STRUCTURE_GROUPS,
+    structureOptions, STRUCTURE_GROUPS,
     type StructureContext, type StructureOption, type StructureOptionKey, type StructureReason,
 } from '../structure-options.js';
 import { uiModule } from './module.js';
 import { SPLIT_SHOWN_AT_ONCE } from './split-ui.js';
+import { MODAL_BACK_CHEVRON } from './modal-back.js';
+import { componentsKey, componentsOf } from './components-cache.js';
 import type { TreeActionSource } from './tree-actions.js';
 
 export const STRUCTURE_MODAL_ID = 'structure-modal';
@@ -217,7 +219,8 @@ export const structureMethods = uiModule({
         if (connectedCache.has(key)) return;
         const data = treeId === DataManager.getCurrentTreeId() ? DataManager.getData() : await TreeManager.getTreeData(treeId);
         if (!data) return;
-        connectedCache.set(key, isWhollyConnected(data));
+        // The parts kept for the split dialog that may follow (§5.3).
+        connectedCache.set(key, componentsOf(componentsKey(treeId), data).length <= 1);
     },
 
     /** What decides the options of the tree now (§2.4). */
@@ -279,8 +282,7 @@ export const structureMethods = uiModule({
         back.hidden = first;
         if (!first) {
             const label = step.back ?? strings.treeActions.structure;
-            back.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
-                + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>';
+            back.innerHTML = MODAL_BACK_CHEVRON;
             back.appendChild(el('span', undefined, label));
             back.setAttribute('aria-label', `${strings.structure.back}: ${label}`);
             back.onclick = () => this.structureBack();
@@ -510,7 +512,8 @@ export const structureMethods = uiModule({
         body.appendChild(group);
         body.appendChild(el('p', 'structure-note', t.joinNote));
 
-        footer.appendChild(footerButton(strings.buttons.cancel, 'secondary', () => this.structureBack(), true));
+        // §6.1: Back · Continue to the guide.
+        footer.appendChild(footerButton(t.back, 'secondary', () => this.structureBack(), true));
         const go = footerButton(t.continueGuide, 'primary', () => void this.structureJoin(chosen));
         go.dataset.action = 'continue';
         footer.appendChild(go);
@@ -519,21 +522,35 @@ export const structureMethods = uiModule({
 
     /**
      * Into another tree through the merge guide: the whole tree (today's
-     * "Merge into another tree…"), or a selection — for now the open view as
-     * "Merge view into…" did (the choice of who to take is implemented in §6).
+     * "Merge into another tree…"), or a selection — who to take (§3, the
+     * step in its 'join' mode), then the guide with it as the import.
      * The dialog stays when no tree can take it (the guide's check says why).
      */
     async structureJoin(what: 'whole' | 'selection'): Promise<void> {
         if (!state) return;
         const { treeId, parent } = state;
+        if (what === 'selection') {
+            this.structureGo(this.structureWhoStep({ mode: 'join', onDone: (r) => void this.structureJoinSelection(r.ids, r.what) }));
+            return;
+        }
         const mine = state;
-        if (what === 'whole') await this.showMergeTreesDialog(treeId, parent);
-        else await this.mergeViewInto();
+        await this.showMergeTreesDialog(treeId, parent);
         if (state !== mine) return;
         if (document.getElementById('merge-modal')?.classList.contains('active')) {
             // The guide returns to the tree manager itself when it came from there.
             this.closeStructureDialog(false);
         }
+    },
+
+    /** A selection of the open tree into another tree: the guide's import is "{tree} — {what}" (§6.1). */
+    async structureJoinSelection(ids: ReadonlySet<PersonId>, what: string): Promise<void> {
+        if (!state) return;
+        const { treeId, parent } = state;
+        const mine = state;
+        const name = TreeManager.getTreeMetadata(treeId)?.name ?? '';
+        await this.mergeSubsetInto(treeId, ids, name ? `${name} — ${what}` : what);
+        if (state !== mine) return;
+        if (document.getElementById('merge-modal')?.classList.contains('active')) this.structureLeaveFor(parent);
     },
 
     // ---- Join › add from a file to this tree (§6.2) ----
@@ -549,7 +566,7 @@ export const structureMethods = uiModule({
         };
     },
 
-    /** The kinds of file (the Strom file through the guide is implemented in §6). */
+    /** The kinds of file: a GEDCOM or a Strom file, either one through the merge guide into this tree (K1.4, K3.1). */
     renderStructureFile(view: StructureView): void {
         const { treeId, body, footer } = view;
         const name = TreeManager.getTreeMetadata(treeId)?.name ?? '';
@@ -562,7 +579,13 @@ export const structureMethods = uiModule({
             this.structureLeaveFor(parent);
             this.startGedcomImportPlain();
         });
-        list.appendChild(ged);
+        const json = structureOptionButton({ action: 'json', dir: 'file', title: t.fileJson, desc: t.fileJsonDesc, next: false });
+        json.addEventListener('click', () => {
+            const parent = state?.parent;
+            this.structureLeaveFor(parent);
+            this.startJsonImportIntoTree(treeId);
+        });
+        list.append(ged, json);
         arrowKeys(list, '.menu-option');
         body.appendChild(list);
         body.appendChild(el('p', 'structure-note', t.fileNote(name)));
