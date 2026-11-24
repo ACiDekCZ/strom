@@ -15526,43 +15526,43 @@
             max-height: min(760px, calc(100vh - var(--toolbar-h, 56px) - 16px)); max-height: min(760px, calc(100dvh - var(--toolbar-h, 56px) - 16px));
         }
         .rod-picker-host .sp-rodpick-list { flex: 1 1 auto; min-height: 0; max-height: none; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-x {
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) button.sp-rodpick-x {
             box-sizing: border-box; display: grid; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 8px;
             border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 14.5px;
             text-align: left; cursor: pointer; transition: none;
         }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 72px 36px; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) .sp-rodpick-tree button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-x { grid-template-columns: minmax(0, 1fr) auto; min-height: 48px; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; min-height: 40px; padding-left: 36px; }
-        :is(.rod-picker-host, .rod-pick-sheet, .scope-pick) .sp-rodpick-xchev { color: var(--text-faint); }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 72px 36px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) .sp-rodpick-tree button.sp-rodpick-a, :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) button.sp-rodpick-x { grid-template-columns: minmax(0, 1fr) auto; min-height: 48px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; min-height: 40px; padding-left: 36px; }
+        :is(.rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) .sp-rodpick-xchev { color: var(--text-faint); }
         /* A line's row is a .sel-opt row on its <li> (src/ui/sel-css.ts). */
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-first { box-shadow: inset 0 0 0 2px var(--primary); }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-a:focus-visible, :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) button.sp-rodpick-first { box-shadow: inset 0 0 0 2px var(--primary); }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) button.sp-rodpick-a:focus-visible, :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) button.sp-rodpick-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         /* The choice's last row (spec 084 §6): the chosen line saved as a list of people, behind a line of its own. */
         .sp-rodpick-save { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--divider); list-style: none; }
         .sp-rodpick-save[hidden] { display: none; }
-        :is(.rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-savebtn {
+        :is(.rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) button.sp-rodpick-savebtn {
             box-sizing: border-box; display: block; width: 100%; min-height: 40px; padding: 6px 8px; border: 0; border-radius: var(--r-sm);
             background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
         }
-        :is(.rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-savebtn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        :is(.rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) button.sp-rodpick-savebtn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         @media (hover: hover) {
-            :is(.rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-savebtn:hover { background: var(--hover-bg); }
+            :is(.rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) button.sp-rodpick-savebtn:hover { background: var(--hover-bg); }
         }
         @media (pointer: coarse) {
-            :is(.rod-picker-host, .rod-pick-sheet, .scope-pick) button.sp-rodpick-savebtn { min-height: 48px; }
+            :is(.rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) button.sp-rodpick-savebtn { min-height: 48px; }
         }
         /* The window's selection (spec 098 §2, 2a): the same list in sections —
            No selection, Family lines, People (a query's), Ancestors and
            descendants, Research lines, Lists of people — every row with its
            icon; the chosen ancestors' or descendants' person and generations
            on top, the footer (Save as list…, Lists of people…) under it. */
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) .sp-selpick button.sp-rodpick-a,
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) .sp-selpick button.sp-rodpick-x { gap: 8px; grid-template-columns: 20px minmax(0, 1fr) auto; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) .sp-selpick .sp-rodpick-rod button.sp-rodpick-a { grid-template-columns: 20px minmax(0, 1fr) 72px 36px; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) .sp-selpick .sp-rodpick-tree button.sp-rodpick-a { grid-template-columns: 20px minmax(0, 1fr) auto; min-height: 44px; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) .sp-selpick .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; padding-left: 36px; }
-        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) .sp-selpick button.sp-rodpick-x { min-height: 44px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) .sp-selpick button.sp-rodpick-a,
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) .sp-selpick button.sp-rodpick-x { gap: 8px; grid-template-columns: 20px minmax(0, 1fr) auto; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) .sp-selpick .sp-rodpick-rod button.sp-rodpick-a { grid-template-columns: 20px minmax(0, 1fr) 72px 36px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) .sp-selpick .sp-rodpick-tree button.sp-rodpick-a { grid-template-columns: 20px minmax(0, 1fr) auto; min-height: 44px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) .sp-selpick .sp-rodpick-small button.sp-rodpick-a { grid-template-columns: minmax(0, 1fr) 36px; padding-left: 36px; }
+        :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) .sp-selpick button.sp-rodpick-x { min-height: 44px; }
         .sp-selpick .sp-rodpick-other { margin-top: 0; padding-top: 0; border-top: 0; }
         .sp-selpick .sp-selpick-ic { display: inline-flex; align-items: center; justify-content: center; color: var(--text-faint); }
         .sp-selpick .sp-selpick-ic svg { display: block; }
@@ -15604,7 +15604,7 @@
         }
         @media (pointer: coarse) {
             .rod-picker-host .sp-rodpick-btn { min-height: 44px; }
-            :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick) .sp-rodpick-small button.sp-rodpick-a { min-height: 44px; }
+            :is(.toolbar .rod-picker-host, .rod-pick-sheet, .scope-pick, .structure-who) .sp-rodpick-small button.sp-rodpick-a { min-height: 44px; }
         }
         /* Narrow desktop: no "Line" before the name, the name to 150px, tighter tabs
            (8.4 px, not 9: the labels take the 500 cut, the earlier tabs 400) and a
@@ -18250,6 +18250,101 @@
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .structure-modal .modal-header { min-height: 48px; padding-top: 2px; padding-bottom: 2px; }
             .structure-modal .modal-content { padding: 8px 16px; }
+        }
+
+        /* Change structure… › From a selection (spec 139 §3): the sources as side tabs left (Linka), the source's
+           pane right with its search on top and the list scrolling under it, "Selected: …" under the pane. */
+        #structure-body:has(> .structure-who) { padding: 0; overflow: hidden; }
+        .structure-who { display: grid; grid-template-columns: 208px minmax(0, 1fr); height: 100%; min-height: 0; }
+        .structure-who-nav { display: flex; flex-direction: column; min-height: 0; padding: 8px 0; overflow-y: auto; border-right: 1px solid var(--divider); }
+        .structure-who-head { padding: 10px 20px 4px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); }
+        .structure-who-tabs { display: flex; flex-direction: column; }
+        .structure-who-tabs .sel-tab {
+            display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 0 16px 0 20px;
+            border: 0; background: none; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+        }
+        .structure-who-tabs .sel-tab svg { flex: none; color: var(--text-faint); }
+        .structure-who-tabs .sel-tab[aria-selected="true"] svg { color: var(--text); }
+        .structure-who-tabs .sel-tab[aria-disabled="true"] { cursor: default; }
+        .structure-who-why { padding: 0 16px 6px 48px; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .structure-who-pane { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; padding: 14px 20px; overflow: hidden; }
+        .structure-who-content { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+        .structure-who-content:has(> .structure-who-list) { overflow: hidden; }
+        .structure-who-content > .sp-rodpick-q { flex: none; margin: 0; }
+        .structure-who-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+        .structure-who .structure-who-list .sp-rodpick-list { max-height: none; overflow: visible; }
+        .structure-who-none { margin: 6px 8px; font-size: 13px; color: var(--text-faint); }
+        .structure-who-none[hidden] { display: none; }
+        .structure-who-chosen { flex: none; min-height: 1.4em; padding-top: 2px; font-size: 13px; line-height: 1.4; color: var(--text-light); }
+        .structure-who-chosen b { font-weight: 600; color: var(--text); }
+        .structure-who-lead { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text); }
+        .structure-who-view { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .structure-who-view-person { font-family: var(--font-serif); font-weight: 600; color: var(--text); }
+        .structure-who-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        .structure-who-label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 500; color: var(--text-light); }
+        .structure-who-prow { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 0; border-bottom: 1px solid var(--divider); }
+        .structure-who-ptext { flex: 1 1 auto; min-width: 0; }
+        .structure-who-pname { font: 600 15px/1.2 var(--font-serif); color: var(--text); overflow-wrap: anywhere; }
+        .structure-who-pyears { font-size: 12px; color: var(--text-faint); }
+        .structure-who-picker { flex: 1 1 auto; min-width: 0; }
+        .structure-who-steppers { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+        /* The summary (§4): plain text, four numbers, the separate parts folded, the name. */
+        .structure-summary { display: flex; flex-direction: column; gap: 12px; }
+        .structure-summary .structure-lead { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text); }
+        .structure-stats { display: flex; gap: 32px; padding: 6px 0 4px; }
+        .structure-stat b { display: block; font: 600 22px/1.15 var(--font-serif); font-variant-numeric: tabular-nums; color: var(--text); }
+        .structure-stat span { font-size: 12px; color: var(--text-light); }
+        .structure-stat.is-wait b { color: var(--text-ghost); }
+        .structure-progress { display: flex; flex-direction: column; gap: 6px; }
+        .structure-progress:empty { display: none; }
+        .structure-counting { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-light); }
+        .structure-bar { height: 3px; overflow: hidden; border-radius: var(--r-pill); background: var(--divider); }
+        .structure-bar > i { display: block; width: 0; height: 100%; background: var(--text-light); }
+        .structure-summary :is(.structure-progress, .structure-islands) .structure-note { margin: 0; }
+        .structure-islands { display: flex; flex-direction: column; gap: 4px; }
+        .structure-islands[hidden] { display: none; }
+        .structure-h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text); }
+        .structure-names > summary {
+            display: inline; list-style: none; font-size: 12.5px; color: var(--primary); cursor: pointer;
+            text-decoration: underline; text-underline-offset: 2px;
+        }
+        .structure-names > summary::-webkit-details-marker { display: none; }
+        .structure-names > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--r-sm); }
+        .structure-names ul { margin: 6px 0 0; padding: 0; list-style: none; font-size: 13px; }
+        .structure-names li { padding: 3px 0; }
+        .structure-names-n { font-family: var(--font-serif); font-weight: 600; color: var(--text); }
+        .structure-names-s { color: var(--text-faint); }
+        .structure-summary .structure-name { margin: 4px 0 0; }
+        .structure-summary .structure-name + .structure-note { margin: 0; }
+        @media (pointer: coarse) {
+            .structure-who-tabs .sel-tab { min-height: 48px; }
+            .structure-who :is(button.sp-rodpick-a, button.sp-rodpick-x) { min-height: 48px; }
+        }
+        /* Tablet: a narrower side. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .structure-who { grid-template-columns: 184px minmax(0, 1fr); }
+            .structure-who-tabs .sel-tab { padding-left: 16px; }
+        }
+        /* Phone held upright: the sources as one row of tabs over the pane (the line under the chosen one), the numbers by two. */
+        @media (max-width: 640px) {
+            .structure-who { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+            .structure-who-nav { padding: 0; overflow: visible; border-right: 0; border-bottom: 1px solid var(--divider); }
+            .structure-who-head { padding: 8px 16px 0; }
+            .structure-who-tabs { flex-direction: row; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+            .structure-who-tabs .sel-tab { flex: none; width: auto; min-height: 48px; padding: 0 12px; white-space: nowrap; }
+            .structure-who-tabs .sel-tab[data-sel-dir="side"][aria-selected="true"] { box-shadow: inset 0 calc(-1 * var(--sel-line-w)) 0 var(--sel-line); }
+            .structure-who-why { padding: 0 16px 8px; }
+            .structure-who-pane { padding: 12px 16px; }
+            .structure-stats { flex-wrap: wrap; gap: 12px 28px; }
+            .structure-stat { min-width: calc(50% - 14px); }
+        }
+        /* Phone held sideways: the side tabs stay, narrower and lower. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .structure-who { grid-template-columns: 176px minmax(0, 1fr); }
+            .structure-who-head { padding: 6px 16px 2px; }
+            .structure-who-tabs .sel-tab { min-height: 44px; padding: 0 12px 0 16px; }
+            .structure-who-pane { gap: 8px; padding: 8px 16px; }
+            .structure-stats { gap: 24px; padding: 2px 0; }
         }
 
         /* Disabled menu option */
