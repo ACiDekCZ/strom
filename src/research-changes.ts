@@ -8,6 +8,7 @@
 import { StromData, Person, Partnership, PartnershipId, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo } from './types.js';
 import { isPrimaryName, personSourceIds } from './model-values.js';
 import { isPurePlaceholder } from './single-parent.js';
+import { isLegacyCensus } from './events.js';
 import { mediaPersonIds, mediaSourceId, mediaSourceIds, personMediaIndex, placePersonId, placeSourceId, samePlace } from './media.js';
 import { collectPlaces } from './places.js';
 import { factValueSignature, handedConfirmations } from './verify.js';
@@ -1269,13 +1270,15 @@ export function pairEvents(here: readonly LifeEvent[], there: readonly LifeEvent
             left.delete(t);
         }
     };
+    // A custom event named only "Census" is the census the tree stores it as (data v20): the same kind.
+    const kind = (e: LifeEvent): string[] => isLegacyCensus(e) ? ['census', ''] : [e.type, str(e.customLabel)];
     take(e => `id\u0000${e.id}`);
-    take(e => [e.type, e.customLabel, e.date, e.place, e.note, e.address].map(str).join('\u0000'));
-    take(e => [e.type, e.customLabel, e.date].map(str).join('\u0000'));
+    take(e => [...kind(e), e.date, e.place, e.note, e.address].map(str).join('\u0000'));
+    take(e => [...kind(e), e.date].map(str).join('\u0000'));
     // One of a type left on each side: the same event, its values changed.
     const restHere = here.filter(h => !out.has(h));
     for (const h of restHere) {
-        const same = (e: LifeEvent): boolean => e.type === h.type && str(e.customLabel) === str(h.customLabel);
+        const same = (e: LifeEvent): boolean => kind(e).join('\u0000') === kind(h).join('\u0000');
         const theirs = [...left].filter(same);
         if (theirs.length === 1 && restHere.filter(same).length === 1) {
             out.set(h, theirs[0]);

@@ -77,7 +77,7 @@ import { localAge } from './recorded-age';
 import { isGedcomDateFormOf } from './gedcom-date-form';
 import { placeKey } from './places';
 import { isPlaceRecordId, sanitizePlaceRecord, PLACE_TEXT_LIMITS } from './place-records';
-import { coupleEventTypeOfTag, eventValueIsOnTag } from './events';
+import { convertLegacyCensusEvents, coupleEventTypeOfTag, eventValueIsOnTag } from './events';
 import {
     applyShareMark, convertGedShares, isHouseholdShareRole, type PendingCoupleShars, type PendingPersonShars, type RawRoleAt,
     type RawShareMark, roleAtEventId, roleAtEventType, roleAtRole, roleAtTypeOfTag, sharRoleWord, LINK_REJECTED_TAG,
@@ -7377,6 +7377,13 @@ export function* convertToStromSteps(gedcom: ParsedGedcom, options: GedcomConver
     // Only valid shares of two copies or more (a copy alone, of a subtree or
     // an edited file, is an ordinary event), roles of persons in the tree.
     cleanEventShares(data);
+
+    // A person's custom event named only "Census" (`1 EVEN` / `2 TYPE
+    // Sčítání lidu`, as a research may write one) is a census, as the tree
+    // stores it (data v20, migrateData): the research's version shown before
+    // a load and compared with the tree is the one the load saves, so the
+    // same file read again pairs with what the tree holds (K052).
+    convertLegacyCensusEvents(data);
 
     // A file the user imports: every portrait is in a record of the tree's
     // files (data v25), as a tree read from storage has it; the same picture

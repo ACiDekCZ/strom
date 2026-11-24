@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { NEW_HEAD, fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
+import { HEAD, NEW_HEAD, fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
 
 /**
  * "Load the research version?" (data protection 3.2): every value here the
@@ -260,4 +260,40 @@ test.describe('loading the research version: a number added to a source', () => 
             expect(src).toMatchObject({ image: '51', imageDerived: true, reference: 'fol. 41' });
         });
     }
+});
+
+test.describe('loading the research version: a census the research writes as EVEN / TYPE (K052)', () => {
+    /** Jan's census as the research keeps a custom fact so named: the tree stores it as a census. */
+    const CENSUS = ['1 EVEN', '2 TYPE Sčítání lidu', '2 DATE 31 DEC 1890', '2 PLAC Čapkov', '2 NOTE Zápis: „Fíšek Jan, syn“'];
+
+    test('the same version under a new head is taken without asking; a newer one asks with no census row', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.clock.install();
+        await openResearch(page, { ged: researchGed(HEAD, CENSUS) });
+        const bridge = await fakeBridge(page, { accepts: ACCEPTS, treeGed: researchGed(HEAD, CENSUS) });
+        await poll(page);
+        const janEvents = () => page.evaluate(() => ((Object.values(window.Strom.DataManager.getData().persons) as any[])
+            .find(p => p.firstName === 'Jan').events ?? []).map((e: { type: string; customLabel?: string }) => e.customLabel ? `${e.type}:${e.customLabel}` : e.type));
+        expect(await janEvents()).toEqual(['census']);
+        // The very same tree, its head moved on: taken, nothing asked.
+        bridge.head = NEW_HEAD;
+        bridge.treeGed = researchGed(NEW_HEAD, CENSUS);
+        await poll(page);
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await expect.poll(() => head(page)).toBe(NEW_HEAD);
+        await expect(dialog(page)).toHaveCount(0);
+        // A newer version adding an occupation: the census is no value that goes, nor one added.
+        const NEWER = '5e4d3c2b1a09';
+        bridge.head = NEWER;
+        bridge.treeGed = researchGed(NEWER, [...CENSUS, '1 OCCU tesař']);
+        await poll(page);
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await expect(dialog(page)).toBeVisible();
+        await expect(dialog(page).locator('tbody tr')).toHaveCount(0);
+        await expect(dialog(page).locator('.research-load-nothing')).toHaveText('Nothing here will be overwritten.');
+        await expect(dialog(page).locator('.research-load-added')).toHaveText('Added from the research: 1 fact');
+        await dialog(page).locator('#research-load-ok').click();
+        await expect.poll(() => head(page)).toBe(NEWER);
+        expect(await janEvents()).toEqual(['census', 'occupation']);
+    });
 });
