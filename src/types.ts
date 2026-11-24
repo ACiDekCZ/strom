@@ -2449,6 +2449,12 @@ export interface TreeMetadata {
      */
     copyOf?: { treeId: TreeId; name: string };
     /**
+     * A tree made of a selection of another tree (Change structure › From a
+     * selection, spec 139 §4.2): that tree, its name then and what was
+     * selected ("Jesenský line"). Like a copy it has no research (K2.4).
+     */
+    fromTree?: { treeId: TreeId; name: string; what: string };
+    /**
      * The one-time repair of trees sharing one research (package 134 point
      * 13, TreeManager.repairSharedResearchTies) took this tree off its
      * research: the tie as it was (kept, nothing else of it is), the tree

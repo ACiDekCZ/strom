@@ -19,6 +19,7 @@ import {
     StromData,
     NewPersonData,
     TreeId,
+    TreeMetadata,
     
     LifeEvent,
     CoupleEvent,
@@ -5633,12 +5634,13 @@ class DataManagerClass {
      * Import data as a new tree
      * @param data The data to import
      * @param treeName Name for the new tree
+     * @param opts.fromTree Made of a selection of another tree (not a file; spec 139 §4.2)
      * @returns The new tree's ID
      */
-    async importAsNewTree(data: StromData, treeName: string): Promise<TreeId> {
+    async importAsNewTree(data: StromData, treeName: string, opts: { fromTree?: TreeMetadata['fromTree'] } = {}): Promise<TreeId> {
         this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         const migratedData = migrateData(data);
-        const treeId = TreeManager.createTreeFromImport(migratedData, treeName);
+        const treeId = TreeManager.createTreeFromImport(migratedData, treeName, !opts.fromTree, opts.fromTree);
         // A copy of the sample tree (its JSON) is the sample tree too.
         TreeManager.markDemoTree(treeId, migratedData);
         this.currentTreeId = treeId;

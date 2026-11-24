@@ -631,9 +631,9 @@ class TreeManagerClass {
             sizeBytes,
             // A newer app's tree stays one in its copy (read-only here too).
             dataVersion: sourceData.version ?? 1,
-            // A duplicate of a research tree is a tree without research: one research, one tree (spec 139 K5.1,
-            // K5.2). It only names the tree it was copied from (a copy of a copy: that copy).
-            ...(source && (source.research || source.copyOf) ? { copyOf: { treeId: source.id, name: source.name } } : {}),
+            // Every copy is a tree without research: one research, one tree (spec 139 K2.4, K5.1, K5.2). It
+            // only names the tree it was copied from (a copy of a copy: that copy).
+            ...(source ? { copyOf: { treeId: source.id, name: source.name } } : {}),
         };
 
         // Add to index, then save through the encrypting path — a direct
@@ -1574,9 +1574,10 @@ class TreeManagerClass {
     // ==================== IMPORT ====================
 
     /**
-     * Create a new tree from imported data
+     * Create a new tree from imported data (or from a selection of another
+     * tree, `fromTree`); it never carries a research tie.
      */
-    createTreeFromImport(data: StromData, name: string, fromFile = true): TreeId {
+    createTreeFromImport(data: StromData, name: string, fromFile = true, fromTree?: TreeMetadata['fromTree']): TreeId {
         // Set current version on import
         data.version = STROM_DATA_VERSION;
 
@@ -1595,7 +1596,9 @@ class TreeManagerClass {
             sizeBytes,
             mediaFp: browserMediaFingerprint(data),
             // The file it came from is a copy (a split-off part is not).
-            ...(fromFile ? { fileCopyAt: now, fileCopyMediaFp: browserMediaFingerprint(data) } : {})
+            ...(fromFile ? { fileCopyAt: now, fileCopyMediaFp: browserMediaFingerprint(data) } : {}),
+            // Made of a selection of another tree: names it, never takes its research (spec 139 K2.4).
+            ...(fromTree ? { fromTree: { ...fromTree } } : {}),
         };
 
         // Add to index

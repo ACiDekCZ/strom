@@ -10,7 +10,9 @@
  */
 
 import { findComponents } from './components.js';
-import type { StromData } from './types.js';
+import { allMedia, mediaSourceIds, placePartnershipId, placePersonId, treeMedia } from './media.js';
+import { partnershipSourceIds, personSourceIds } from './model-values.js';
+import type { PartnershipId, PersonId, StromData } from './types.js';
 import type { StructureDirKind } from './icons.js';
 
 export type StructureGroupKey = 'newTree' | 'split' | 'join';
@@ -99,4 +101,192 @@ export function structureOptions(ctx: StructureContext): StructureOption[] {
 /** Whether the tree is one connected family (nothing to separate); an empty tree is. */
 export function isWhollyConnected(data: StromData): boolean {
     return findComponents(data).length <= 1;
+}
+
+// ==================== THE SUMMARY BEFORE CREATING (§4) ====================
+
+/** One person of a separate part: whom they were linked by in the tree. */
+export interface SubsetIslandPerson {
+    id: PersonId;
+    /** The person not selected through whom they were linked to the rest (first on the shortest way). */
+    via?: PersonId;
+}
+
+/** What a new tree made of a selection gets (the same rules as extractSubtree). */
+export interface SubsetSummary {
+    /** Real people (placeholders excluded), the selection with its glue partners. */
+    persons: number;
+    couples: number;
+    /** The sources the result cites (also as documents of its files). */
+    sources: number;
+    /** Portraits, couples' photos and image files of the result, counted by reference (never loaded). */
+    images: number;
+    /** The people standing alone in the new tree (all parts but the largest). */
+    islands: SubsetIslandPerson[];
+}
+
+/** Progress of a summary counted in batches. */
+export interface SubsetProgress {
+    done: number;
+    total: number;
+}
+
+/** The kept people: the selection plus the other partner of a couple with a selected child (extractSubtree's glue). */
+function keptWithGlue(data: StromData, ids: ReadonlySet<PersonId>): Set<PersonId> {
+    const kept = new Set<PersonId>();
+    for (const id of ids) if (data.persons[id]) kept.add(id);
+    for (const union of Object.values(data.partnerships ?? {})) {
+        if (!union) continue;
+        const in1 = kept.has(union.person1Id);
+        const in2 = kept.has(union.person2Id);
+        if (in1 === in2) continue;
+        if (union.childIds.some(c => ids.has(c))) {
+            const other = in1 ? union.person2Id : union.person1Id;
+            if (data.persons[other]) kept.add(other);
+        }
+    }
+    return kept;
+}
+
+/** A person's neighbours over parent/child/partner links, optionally only inside `within` (a union only when both partners are in). */
+function neighboursOf(data: StromData, id: PersonId, within?: ReadonlySet<PersonId>): PersonId[] {
+    const person = data.persons[id];
+    if (!person) return [];
+    const out: PersonId[] = [...person.parentIds, ...person.childIds];
+    for (const uid of person.partnerships) {
+        const union = data.partnerships[uid];
+        if (!union) continue;
+        if (within && !(within.has(union.person1Id) && within.has(union.person2Id))) continue;
+        out.push(union.person1Id, union.person2Id, ...union.childIds);
+    }
+    return out.filter(n => n !== id && !!data.persons[n] && (!within || within.has(n)));
+}
+
+/**
+ * The separate parts of a new tree made of `kept`: every connected part but
+ * the largest, as the people in them, each with the person not selected who
+ * linked them to the largest part in the tree (first on the shortest way).
+ * A part that was separate in the tree already is not listed (nothing of it
+ * is cut off). Placeholders are left out of the list.
+ */
+function islandsOfKept(data: StromData, kept: ReadonlySet<PersonId>): SubsetIslandPerson[] {
+    const part = new Map<PersonId, number>();
+    const parts: PersonId[][] = [];
+    for (const start of kept) {
+        if (part.has(start)) continue;
+        const index = parts.length;
+        const members: PersonId[] = [start];
+        part.set(start, index);
+        for (let i = 0; i < members.length; i++) {
+            for (const n of neighboursOf(data, members[i], kept)) {
+                if (part.has(n)) continue;
+                part.set(n, index);
+                members.push(n);
+            }
+        }
+        parts.push(members);
+    }
+    if (parts.length <= 1) return [];
+    const realCount = (members: PersonId[]) => members.filter(id => !data.persons[id]?.isPlaceholder).length;
+    let largest = 0;
+    let largestSize = -1;
+    parts.forEach((members, i) => {
+        const size = realCount(members);
+        if (size > largestSize) { largest = i; largestSize = size; }
+    });
+    // Walk the whole tree out from the largest part: `towards` points one step back to it.
+    const towards = new Map<PersonId, PersonId | null>();
+    const queue: PersonId[] = [];
+    for (const id of parts[largest]) { towards.set(id, null); queue.push(id); }
+    for (let i = 0; i < queue.length; i++) {
+        for (const n of neighboursOf(data, queue[i])) {
+            if (towards.has(n)) continue;
+            towards.set(n, queue[i]);
+            queue.push(n);
+        }
+    }
+    const result: SubsetIslandPerson[] = [];
+    parts.forEach((members, i) => {
+        if (i === largest || !members.some(id => towards.has(id))) return;
+        for (const id of members) {
+            if (data.persons[id]?.isPlaceholder) continue;
+            let step = towards.get(id);
+            while (step && kept.has(step)) step = towards.get(step);
+            result.push(step ? { id, via: step } : { id });
+        }
+    });
+    return result;
+}
+
+/** The people who will stand alone in a new tree made of the selection `ids` (see SubsetSummary.islands). */
+export function islandsOf(data: StromData, ids: ReadonlySet<PersonId>): SubsetIslandPerson[] {
+    return islandsOfKept(data, keptWithGlue(data, ids));
+}
+
+const isImage = (mime: string | undefined): boolean => /^image\//i.test(mime ?? '');
+
+/**
+ * The summary of a new tree made of the selection `ids`, counted in batches
+ * of `batch` people: yields the progress after each batch, returns the
+ * summary. Nothing is copied and no image is read — a portrait or a file is
+ * counted by its reference (images outside memory stay where they are).
+ */
+export function* summarizeSubsetSteps(data: StromData, ids: ReadonlySet<PersonId>, batch = 2000): Generator<SubsetProgress, SubsetSummary, void> {
+    const kept = keptWithGlue(data, ids);
+    const total = kept.size;
+    const sources = new Set<string>();
+    const keptUnions = new Set<PartnershipId>();
+    let persons = 0;
+    let images = 0;
+    let done = 0;
+    for (const id of kept) {
+        const p = data.persons[id];
+        if (!p.isPlaceholder) persons++;
+        if (p.photo) images++;
+        personSourceIds(p).forEach(s => sources.add(s));
+        p.events?.forEach(ev => ev.sourceIds?.forEach(s => sources.add(s)));
+        for (const uid of p.partnerships) {
+            const u = data.partnerships[uid];
+            if (!u || keptUnions.has(uid) || !kept.has(u.person1Id) || !kept.has(u.person2Id)) continue;
+            keptUnions.add(uid);
+            if (u.photo) images++;
+            partnershipSourceIds(u).forEach(s => sources.add(s));
+        }
+        if (++done % batch === 0) yield { done, total };
+    }
+    // The files of the kept people and couples bring the sources they are documents of.
+    const media = allMedia(data);
+    const keptMedia = new Set(media.filter(a => (a.places ?? []).some(pl => {
+        const pid = placePersonId(pl);
+        const uid = placePartnershipId(pl);
+        return (!!pid && kept.has(pid)) || (!!uid && keptUnions.has(uid));
+    })));
+    for (const a of keptMedia) mediaSourceIds(a).forEach(s => sources.add(s));
+    const keptSources = [...sources].filter(sid => !!data.sources?.[sid]);
+    const sourceSet = new Set(keptSources);
+    for (const a of media) {
+        if (keptMedia.has(a) || mediaSourceIds(a).some(sid => sourceSet.has(sid))) {
+            if (isImage(a.mimeType)) images++;
+        }
+    }
+    yield { done: total, total };
+    return { persons, couples: keptUnions.size, sources: keptSources.length, images, islands: islandsOfKept(data, kept) };
+}
+
+/** The summary of a new tree made of the selection `ids` at once (see summarizeSubsetSteps). */
+export function summarizeSubset(data: StromData, ids: ReadonlySet<PersonId>): SubsetSummary {
+    const steps = summarizeSubsetSteps(data, ids, Number.MAX_SAFE_INTEGER);
+    for (;;) {
+        const next = steps.next();
+        if (next.done) return next.value;
+    }
+}
+
+/** What a copy of the whole tree gets: sources and images from its data (people and couples come from its metadata). */
+export function summarizeCopy(data: StromData): Pick<SubsetSummary, 'sources' | 'images'> {
+    let images = 0;
+    for (const p of Object.values(data.persons ?? {})) if (p?.photo) images++;
+    for (const u of Object.values(data.partnerships ?? {})) if (u?.photo) images++;
+    for (const a of treeMedia(data)) if (isImage(a.mimeType)) images++;
+    return { sources: Object.keys(data.sources ?? {}).length, images };
 }
