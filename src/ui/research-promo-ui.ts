@@ -29,7 +29,7 @@ import {
 } from '../research-promo.js';
 import { isTabletOrMobile } from '../breakpoints.js';
 import { uiModule } from './module.js';
-import { onComputer } from './research-ui.js';
+import { researchHere } from './research-ui.js';
 import { researchDisplayName } from './research-sync-ui.js';
 
 const INFO_MODAL_ID = 'research-info-modal';
@@ -273,7 +273,7 @@ export const researchPromoMethods = uiModule({
         // A tree that has its research already, on a phone or tablet: not the way to install it — where
         // the research is and what a phone can do (finding 2 of the mobile round).
         const link = TreeManager.getActiveTreeMetadata()?.research;
-        if (link && !onComputer()) {
+        if (link && !researchHere()) {
             this.closeActionsMenu();
             this.hideBottomSheet();
             void this.showAlert(strings.research.phoneHasResearch(researchDisplayName(link.id)), 'info');

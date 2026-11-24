@@ -9040,6 +9040,11 @@
         /* Something asks for attention (an update): an amber dot at the row's end. */
         .research-item-attn { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--signal-warn); }
         .research-item-val { flex: none; margin-left: auto; font-size: 13px; color: var(--text-light); white-space: nowrap; }
+        /* A device of the home network (spec 094 §6): one quiet sentence, what stays on the computer with the research. */
+        .research-menu-only-computer {
+            margin-top: 4px; padding: 6px 14px 4px; font-size: 12px; line-height: 1.4; color: var(--text-light);
+            overflow-wrap: anywhere;
+        }
         /* The footer (not an item): "trial" and what ↗ means, the whole sentence in its title. */
         .research-menu-foot {
             display: flex; align-items: center; gap: 8px; min-height: 34px; box-sizing: border-box; margin-top: 6px; padding: 6px 14px 0;
@@ -9116,6 +9121,7 @@
         .research-sheet-body .research-menu-more .tree-switcher-action { padding-left: 30px; }
         .research-sheet-body .research-more-divider { margin-left: 30px; }
         .research-sheet-body .research-menu-foot { min-height: 44px; padding: 6px 16px 0; }
+        .research-sheet-body .research-menu-only-computer { padding: 8px 16px 4px; font-size: 13px; }
         /* "Export all" now and then: a quiet line with a link under Export… (Actions, More). */
         .export-reminder { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0 14px 8px; }
         .export-reminder[hidden] { display: none; }

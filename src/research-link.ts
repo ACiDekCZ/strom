@@ -113,6 +113,8 @@ export interface ResearchLinkMarkParams {
 
 /** The mark of an action of the research, by its link (see `ResearchActionMark`). */
 export function researchLinkMark(action: ResearchLinkAction, p: ResearchLinkMarkParams = {}): ResearchActionMark {
+    // A device of the home network (spec 094 §6): what it draws goes through the bridge, never a terminal.
+    if (deviceState) return 'none';
     // A conversation about a task or a conflict is the agent's; an experiment switched off goes at once.
     if (action === 'task' && p.taskDo === 'chat') return 'agent';
     if (action === 'conflict' && p.conflictDo === 'agent') return 'agent';
@@ -159,6 +161,141 @@ export function researchUrlMark(url: string): ResearchActionMark | null {
     const action = m[1] as ResearchLinkAction;
     const what = new URLSearchParams(m[2] ?? '').get('do') ?? undefined;
     return researchLinkMark(action, { taskDo: what, conflictDo: what, experimentDo: what, fixDo: what });
+}
+
+/** The mark of an action asked through the bridge: its own (RESEARCH_BRIDGE_MARKS), none on a device (spec 094 §6). */
+export function researchBridgeMark(action: ResearchBridgeAction): ResearchBridgeMark {
+    return deviceState ? 'none' : RESEARCH_BRIDGE_MARKS[action];
+}
+
+// ==================== A DEVICE OF THE HOME NETWORK (spec 094 P3) ====================
+
+/**
+ * The app opened from the research's gateway on another device and paired
+ * (spec 094 P3): where it is (`origin`), the trees the pairing opens, the
+ * computer's name to show, and the device actions its status announced
+ * (`status.device.actions`). null: not a device — the app as always.
+ */
+export interface ResearchDeviceState {
+    origin: string;
+    trees: readonly string[];
+    computer: string;
+    actions: readonly string[];
+}
+
+let deviceState: ResearchDeviceState | null = null;
+/** A page of the research's gateway, its device mode not yet confirmed or turned down (spec 094 P3). */
+let devicePage = false;
+
+/** The page may be a device of the gateway (true at start), or turned out not to be one (false). */
+export function setResearchDevicePage(on: boolean): void {
+    devicePage = on;
+}
+
+/** A page of the research's gateway (a device): never the research's own computer, even before it is confirmed. */
+export function researchDevicePage(): boolean {
+    return devicePage || deviceState !== null;
+}
+
+/** The device mode confirmed and paired (or left: null). */
+export function setResearchDeviceState(next: ResearchDeviceState | null): void {
+    deviceState = next ? { origin: next.origin, trees: [...next.trees], computer: next.computer, actions: [...next.actions] } : null;
+}
+
+/** The device actions a status announced (`status.device.actions`), kept with the device's state. */
+export function noteResearchDeviceActions(actions: unknown): void {
+    if (!deviceState || !Array.isArray(actions)) return;
+    deviceState = { ...deviceState, actions: actions.filter((a): a is string => typeof a === 'string') };
+}
+
+/** The device's state, or null outside the device mode. */
+export function researchDeviceState(): ResearchDeviceState | null {
+    return deviceState;
+}
+
+/** The path under the device's own origin that stands for a tree's bridge (no token: the tunnel carries the key). */
+export const DEVICE_BRIDGE_PATH = '/__device/';
+
+/** The bridge of a tree reached through the gateway: `<origin>/__device/<tree>` (the origin: the device's own). */
+export function deviceBridgeBase(treeId: string, origin: string = deviceState?.origin ?? ''): string {
+    return `${origin.replace(/\/+$/, '')}${DEVICE_BRIDGE_PATH}${encodeURIComponent(treeId)}`;
+}
+
+/**
+ * A URL of a tree's bridge through the gateway: the tree and the bridge's path
+ * after it (`status`, `media/<sha>?thumb=1`). Only in the device mode and at
+ * the device's own origin; anything else is null.
+ */
+export function parseDeviceBridge(raw: unknown): { treeId: string; base: string; path: string } | null {
+    if (!deviceState || typeof raw !== 'string' || raw.length > 4096) return null;
+    let url: URL;
+    try {
+        url = new URL(raw, deviceState.origin);
+    } catch {
+        return null;
+    }
+    if (url.origin !== deviceState.origin || url.username || url.password || !url.pathname.startsWith(DEVICE_BRIDGE_PATH)) return null;
+    const rest = url.pathname.slice(DEVICE_BRIDGE_PATH.length);
+    const slash = rest.indexOf('/');
+    let treeId: string;
+    try {
+        treeId = decodeURIComponent(slash < 0 ? rest : rest.slice(0, slash));
+    } catch {
+        return null;
+    }
+    if (!treeId) return null;
+    return { treeId, base: deviceBridgeBase(treeId), path: (slash < 0 ? '' : rest.slice(slash + 1)) + url.search };
+}
+
+/**
+ * What a device may do besides the actions of the scheme and of the bridge
+ * (spec 094 §6): undo this one send, answer what waits, read a document with
+ * the agent, the devices, the research tools, the tree's settings in the
+ * research, a newer version loaded, a new direction or the agent's work on one,
+ * a conflict left to the agent.
+ */
+export type ResearchDeviceExtra = 'sync-undo-this' | 'waiting-answer' | 'read-document' | 'devices' | 'research-tools'
+    | 'tree-settings' | 'load-version' | 'direction-new' | 'direction-work' | 'conflict-agent';
+
+export type ResearchDeviceAction = ResearchLinkAction | ResearchBridgeAction | ResearchDeviceExtra;
+
+/**
+ * §6 of spec 094: true — the device does it through the bridge, without a mark;
+ * a device action of the gateway — only when the status announced it; false —
+ * only on the computer with the research (not drawn on a device).
+ */
+const DEVICE_ALLOWS: Readonly<Record<ResearchDeviceAction, boolean | string>> = {
+    // The tree's own things through the bridge: changes sent, an excerpt or an original, the tree, a book's files.
+    send: true, excerpt: true, media: true, app: true, live: true, book: true,
+    // A direction paused, ended, resumed or moved (its state through the bridge).
+    direction: true,
+    // Decided through the gateway's own paths, when it says so.
+    conflict: 'conflict.decide', hypothesis: 'hypothesis.decide', hypotheses: 'hypothesis.decide', 'sync-undo-this': 'sync.undo',
+    // Asked through the bridge without an agent.
+    'fact-confirm': true, 'verify-stop': true, 'sources-split': true, 'run-stop': true, 'waiting-answer': true,
+    // The terminal, an agent, the research's settings and approvals: only on the computer.
+    open: false, chat: false, task: false, review: false, research: false, new: false, update: false, sessions: false,
+    story: false, 'sync-undo': false, setup: false, finish: false, archive: false, seal: false, experiment: false,
+    history: false, fixes: false, doctor: false, places: false, 'history-kinds': false, 'history-align': false, work: false,
+    verify: false, 'verify-bulk': false, 'material-sort': false, 'run-limit': false,
+    'read-document': false, devices: false, 'research-tools': false, 'tree-settings': false, 'load-version': false,
+    'direction-new': false, 'direction-work': false, 'conflict-agent': false,
+};
+
+/** Whether `action` may be drawn on a device by what §6 allows and what the gateway announced (`actions`). */
+export function deviceAllows(action: ResearchDeviceAction, actions: readonly string[]): boolean {
+    const rule = DEVICE_ALLOWS[action];
+    return typeof rule === 'string' ? actions.includes(rule) : rule === true;
+}
+
+/** Whether an action of the research is drawn here: always outside the device mode, on a device only what §6 allows. */
+export function researchDeviceAllows(action: ResearchDeviceAction): boolean {
+    return deviceState ? deviceAllows(action, deviceState.actions) : true;
+}
+
+/** The mark an action is drawn with here, or `hidden` (a device: only on the computer with the research). */
+export function researchDeviceMark(action: ResearchLinkAction, p: ResearchLinkMarkParams = {}): ResearchActionMark | 'hidden' {
+    return researchDeviceAllows(action) ? researchLinkMark(action, p) : 'hidden';
 }
 
 /** A group of the research tools, in this order: look, assign work, run the agent (from free to paid). */
@@ -902,9 +1039,10 @@ export interface LiveBridgeUrls {
 /** Endpoints of the bridge at `raw` (`http://127.0.0.1:<port>/<token>`), or null. */
 export function parseLiveBridge(raw: unknown): LiveBridgeUrls | null {
     const url = parseLoopbackUrl(raw);
-    if (!url) return null;
-    const path = url.pathname.replace(/\/+$/, '');
-    const base = `${url.origin}${path}`;
+    // A device (spec 094 P3): a tree's bridge through the gateway, at the device's own origin.
+    const device = url ? null : parseDeviceBridge(raw);
+    if (!url && !device) return null;
+    const base = device ? device.base : `${url!.origin}${url!.pathname.replace(/\/+$/, '')}`;
     return {
         base,
         status: `${base}/status`,

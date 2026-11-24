@@ -9,7 +9,7 @@
 
 import { strings } from '../strings.js';
 import { researchOpenSvg } from '../history-symbols.js';
-import { researchUrlMark, RESEARCH_BRIDGE_MARKS, type ResearchActionMark, type ResearchBridgeAction } from '../research-link.js';
+import { researchUrlMark, researchBridgeMark, researchDeviceState, type ResearchActionMark, type ResearchBridgeAction } from '../research-link.js';
 
 export type ResearchOpenMarkSize = 12 | 14 | 16;
 
@@ -111,7 +111,7 @@ export function researchBridgeAgentLabel(label: string): string {
 
 /** An action asked through the bridge (`RESEARCH_BRIDGE_MARKS`): its label with the AI badge alone, or plain. */
 export function researchBridgeActionLabel(label: string, action: ResearchBridgeAction): string {
-    return RESEARCH_BRIDGE_MARKS[action] === 'bridgeAgent' ? researchBridgeAgentLabel(label) : esc(researchLabelText(label));
+    return researchBridgeMark(action) === 'bridgeAgent' ? researchBridgeAgentLabel(label) : esc(researchLabelText(label));
 }
 
 /** The same for an element built in the DOM: its text replaced by the label with the mark of its group. */
@@ -136,7 +136,8 @@ export function researchMarkFlags(mark: ResearchActionMark): { research: boolean
 
 /** A toast's or a sheet's action that launches a ready link: its flags by the link's group (a link not known: the terminal). */
 export function researchLinkFlags(url: string): { research: boolean; ai: boolean } {
-    return researchMarkFlags(researchUrlMark(url) ?? 'terminal');
+    // A device (spec 094 §6): what it draws goes through the bridge, never with a mark.
+    return researchMarkFlags(researchDeviceState() ? 'none' : researchUrlMark(url) ?? 'terminal');
 }
 
 /** A note's link (a refused write, a switched-off search): its label, what it runs, and the group of the link it launches. */

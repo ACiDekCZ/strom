@@ -24,7 +24,7 @@ import {
     agoShort, BridgeAnswer, elsewhereTrees, otherBridgeTargets, OtherBridgesPoller, OtherBridgesTimings, OTHER_BRIDGES_TIMINGS,
     researchTreesDot, researchTreeState, ResearchTreeState,
 } from '../research-others.js';
-import { el, liveSession, onComputer } from './research-ui.js';
+import { el, liveSession, researchHere } from './research-ui.js';
 import { researchBridgesAskable, researchPageVisible } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 
@@ -135,7 +135,7 @@ export const researchOthersMethods = uiModule({
 
     /** Marks apply on this device: a computer (not a phone), not Safari, research links on, not a shared file. */
     otherResearchEnabled(): boolean {
-        return !DataManager.isViewMode() && onComputer() && researchLinksEnabled() && researchBridgesAskable();
+        return !DataManager.isViewMode() && researchHere() && researchLinksEnabled() && researchBridgesAskable();
     },
 
     /** Ask the other trees now unless their answers are fresh (the switcher opened). */

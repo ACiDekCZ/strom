@@ -11,7 +11,7 @@ import { strings } from '../strings.js';
 import { storedResearchBridge } from '../research-device.js';
 import { TITLES_FEATURE, hasTitles } from '../research-link.js';
 import { DataManager } from '../data.js';
-import { onComputer } from './research-ui.js';
+import { researchHere } from './research-ui.js';
 import { installChannel, npmUpdateCommand } from '../research-install.js';
 import { isBetaBuildHere } from '../pwa.js';
 import { uiModule } from './module.js';
@@ -35,7 +35,7 @@ export const researchUpdateMethods = uiModule({
      */
     researchOlderVersion(): { version: string; titles?: true } | null {
         const ctx = this.researchSyncLink();
-        if (!ctx || !onComputer()) return null;
+        if (!ctx || !researchHere()) return null;
         const id = ctx.link.id;
         if (!storedResearchBridge(id)?.base) return null;
         if (!this.researchSyncCapable(id)) return { version: this.researchBridgeVersion(id) };

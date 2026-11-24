@@ -25,7 +25,7 @@ import { FactHolder, factCitations, isPartnership, localIsoDay } from '../import
 import { factConfirmation, factConfirmMark, factPendingPosition, factSourceIds, factValueSignature, factVerifyInfo, factVerifyReaders, type FactVerifyInfo } from '../verify.js';
 import { confirmRefusalText, verifyRefusalText } from '../verify-refusal.js';
 import { postFactConfirm, postVerify, type FactConfirmResult, type VerifyFact, type VerifyResult } from '../research-verify.js';
-import type { VerifyResearch } from '../verify-offer.js';
+import { verifyFeaturesHere, type VerifyResearch } from '../verify-offer.js';
 import type { FactReliability, ReliabilityInput, ReliabilityStepName } from '../reliability.js';
 import { type FactOffer, factOffer, verifyFactKind, verifyRecordText, verifyTogetherKind } from '../verify-ui-model.js';
 import { type FactPillTarget, importOriginParts, reliabilityLabel, setFactPendingResolver } from './fact-status.js';
@@ -331,7 +331,7 @@ export const verifyUiMethods = uiModule({
         const treeState = this.researchTreeSaid(rid)?.state;
         // Its bridge has not answered here: confirmations are the app's own, handed over with the tree.
         if (!status) return { features: [], treeState, offline: true };
-        return { features: status.features ?? [], treeState };
+        return { features: verifyFeaturesHere(status.features ?? []), treeState };
     },
 
     /** One fact's offer as the tip shows it now. */

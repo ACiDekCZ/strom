@@ -40,7 +40,7 @@ import { materialThumbs } from '../material-thumbs.js';
 import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT } from '../image-loads.js';
 import { setTileState, standInState, waitingTileHtml, type ImgState } from './image-slot.js';
 import { formatBytesShort } from './originals-ui.js';
-import { onComputer } from './research-ui.js';
+import { researchReachable } from './research-ui.js';
 import { openImageViewer } from './image-viewer.js';
 import { materialDetailsEdit } from './material-details-ui.js';
 import { uiModule } from './module.js';
@@ -335,7 +335,7 @@ export const materialsMethods = uiModule({
         const live = this.researchStatusOf(researchId)?.features;
         const features = live ?? rememberedMaterialFeatures(researchId);
         const bridgeUp = this.researchBridgeUp(researchId);
-        const env: MaterialEnv = { features, linked: true, onComputer: onComputer(), bridgeUp };
+        const env: MaterialEnv = { features, linked: true, onComputer: researchReachable(), bridgeUp };
         const links = researchLinksEnabled();
         return {
             treeId: ctx.treeId,
@@ -387,7 +387,7 @@ export const materialsMethods = uiModule({
         if (ctx?.caps.list) return ctx;
         const treeId = DataManager.getCurrentTreeId();
         if (!treeId || !this.materialsWindowOn()) return null;
-        const env: MaterialEnv = { features: null, linked: false, onComputer: onComputer(), bridgeUp: false };
+        const env: MaterialEnv = { features: null, linked: false, onComputer: researchReachable(), bridgeUp: false };
         return { treeId, researchId: '', base: null, env, caps: materialCaps(env), agent: !!ctx?.agent };
     },
 

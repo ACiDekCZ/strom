@@ -22,7 +22,7 @@ import {
 } from '../import-next.js';
 import { isMobile, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import { researchBridgeActionLabel, setResearchActionLabel } from './research-open-mark.js';
-import { onComputer } from './research-ui.js';
+import { researchHere } from './research-ui.js';
 import { isHelpOpen } from './help-ui.js';
 import { HELP_LINKS } from '../help/topics.js';
 import { uiModule } from './module.js';
@@ -215,7 +215,7 @@ export const importNextMethods = uiModule({
         // After a merge into a tree the guide asked about the unlinked groups itself (§6): no question about families here.
         const families = p.path === 'merge' ? 0 : findComponents(data).filter(c => c.count >= 2).length;
         const meta = TreeManager.getTreeMetadata(p.treeId);
-        const computer = onComputer();
+        const computer = researchHere();
         const research = importNextResearchState({
             onComputer: computer,
             linked: !!meta?.research,

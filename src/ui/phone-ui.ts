@@ -17,7 +17,7 @@ import {
     DeviceEntry, DeviceKind, PhoneDevices, DeviceGatewayCaps, deviceGatewayCaps, deviceKindOf, phonePairedCount, pairMinutesLeft,
     sanitizePhoneDevices, sanitizeDeviceEvent, DEVICE_NAME_MAX,
 } from '../phone.js';
-import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
+import { fetchWithTimeout, bridgeFailure, researchHere } from './research-ui.js';
 import { uiModule } from './module.js';
 import { runBusy } from './busy.js';
 import { tallyBridgeAsk } from '../bridge-ask.js';
@@ -193,7 +193,7 @@ export const phoneMethods = uiModule({
      * whose bridge answers without `phone` (a version that has none).
      */
     phoneAvailable(): boolean {
-        if (!this.researchMenuShown() || !onComputer() || bridgeFailure(null) === 'safari') return false;
+        if (!this.researchMenuShown() || !researchHere() || bridgeFailure(null) === 'safari') return false;
         const id = this.activeResearchId();
         if (!id) return false;
         return this.phoneResearchReady(id) || !this.researchBridgeFresh(id);

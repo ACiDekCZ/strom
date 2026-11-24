@@ -32,7 +32,7 @@ import { conflictScope, researchValueText } from './person-research-ui.js';
 import { eventTypeLabel } from './person-events.js';
 import { importOriginParts } from './fact-status.js';
 import { researchActionLabel } from './research-open-mark.js';
-import { onComputer } from './research-ui.js';
+import { researchHere } from './research-ui.js';
 import { uiModule } from './module.js';
 
 const esc = (s: string): string => s
@@ -147,7 +147,7 @@ export const factOriginMethods = uiModule({
         if (!model) states.delete(key);
         let html = '';
         if (model) {
-            const available = revertAvailability({ ref: model.ref, onComputer: onComputer(), bridge: bridge === 'live' ? 'live' : 'down' });
+            const available = revertAvailability({ ref: model.ref, onComputer: researchHere(), bridge: bridge === 'live' ? 'live' : 'down' });
             const c = revertControls(available, states.get(key));
             const source = model.sourceId
                 ? `<button type="button" class="fact-origin-link fact-was-source" data-origin-act="source" data-source="${esc(model.sourceId)}">${esc(o.by(sources[model.sourceId].title))}</button>` : '';

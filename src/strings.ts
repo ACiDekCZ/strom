@@ -9291,6 +9291,9 @@ const stringsEN = {
     device: {
         newToast: (name: string) => `New device connected: ${name}`,
         newToastLink: 'Devices…',
+        // A device of the home network (spec 094 §6): what stays on the computer with the research, one quiet sentence.
+        onlyComputer: 'Only on the computer with the research.',
+        onlyComputerAll: (pc: string) => `Approvals, starting the agent and research settings are on ${pc}.`,
     },
     read: {
         menu: 'Read a document…',
@@ -21059,6 +21062,8 @@ const stringsCZ: StringsType = {
     device: {
         newToast: (name: string) => `Připojeno nové zařízení: ${name}`,
         newToastLink: 'Zařízení…',
+        onlyComputer: 'Jen na počítači s výzkumem.',
+        onlyComputerAll: (pc: string) => `Souhlasy, spuštění agenta a nastavení výzkumu jsou na počítači ${pc}.`,
     },
     read: {
         menu: 'Přečíst dokument…',
@@ -32660,6 +32665,8 @@ const stringsDE: StringsType = {
     device: {
         newToast: (name: string) => `Neues Gerät verbunden: ${name}`,
         newToastLink: 'Geräte…',
+        onlyComputer: 'Nur auf dem Computer mit der Forschung.',
+        onlyComputerAll: (pc: string) => `Zustimmungen, Start des Agenten und Forschungseinstellungen sind auf ${pc}.`,
     },
     read: {
         menu: 'Dokument lesen…',

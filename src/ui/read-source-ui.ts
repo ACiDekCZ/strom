@@ -19,7 +19,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { uiModule } from './module.js';
 import { researchBridgeAgentLabel } from './research-open-mark.js';
 import { readSourceAgainOffered, readSourceAgainCandidate, readSourceAgainClip, readSourceId, LiveRead, ReadResult } from '../research-read.js';
-import { onComputer } from './research-ui.js';
+import { researchHere } from './research-ui.js';
 import { researchLinksEnabled } from '../research-device.js';
 import { lastBridgeStatus } from './research-sync-ui.js';
 import {
@@ -114,7 +114,7 @@ export const readSourceMethods = uiModule({
     readSourceAgainView(src: Source): SourceAgainView {
         const none: SourceAgainView = { refn: '', offered: false, running: null, after: null, phone: false };
         const refn = readSourceId(src.refn?.trim());
-        if (!onComputer()) {
+        if (!researchHere()) {
             // The bridge is on the computer: the research's file alone says the source could be read again there.
             const phone = !!refn && !this.sourceViewerReadOnly && !!this.researchSyncLink() && researchLinksEnabled()
                 && !this.activeResearchAgentless() && readSourceAgainCandidate(src);
@@ -173,7 +173,7 @@ export const readSourceMethods = uiModule({
         }
         // The agent's proposal: with the newer reading's state, else from the waiting list (a source with no differing newer reading).
         const proposal = state?.proposal ?? said?.proposal ?? status?.sourceProposals?.[refn] ?? null;
-        return { rid, key, refn, state, proposal, features, up: this.researchBridgeUp(rid), phone: !onComputer() };
+        return { rid, key, refn, state, proposal, features, up: this.researchBridgeUp(rid), phone: !researchHere() };
     },
 
     /** §2: the row under the links (and §3 the proposal under it); '' when the research says nothing of the source. */

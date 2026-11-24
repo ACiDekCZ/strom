@@ -15,7 +15,7 @@ import { Source, SourceExcerpt, StromData, TreeId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { uiModule } from './module.js';
 import { runBusy } from './busy.js';
-import { onComputer } from './research-ui.js';
+import { researchReachable } from './research-ui.js';
 import { heldReasonKey } from './sources.js';
 import { setTileState } from './image-slot.js';
 import { imageLoads, IMAGES_ARRIVED_EVENT, IMAGES_STATE_EVENT, type ImagesArrivedDetail } from '../image-loads.js';
@@ -96,7 +96,7 @@ export const researchImagesMethods = uiModule({
         const link = ctx?.link;
         const base = link ? parseLiveBridge(storedResearchBridge(link.id)?.base)?.base ?? '' : '';
         const mode = heldImageMode({
-            onComputer: onComputer(),
+            onComputer: researchReachable(),
             linked: !!link,
             bridgeUp: !!link && !!base && this.researchBridgeUp(link.id),
             features: link ? this.researchStatusOf(link.id)?.features : null,

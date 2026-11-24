@@ -80,9 +80,7 @@ import { runBusy, activatedElement, busyToast, BUSY_SHOW_MS, BUSY_TIMEOUTS, type
 import { holdLeave, takeLeftPending } from './busy-leave.js';
 import { startTreeLoad, currentTreeLoad } from './tree-load-progress.js';
 import { researchWrittenList } from './research-changes-ui.js';
-import {
-    fetchWithTimeout, readStatusPart, readResearchTreeFile, postSync, onComputer, readTree, researchGedcom, researchGedcomWithImages,
-} from './research-ui.js';
+import { fetchWithTimeout, readStatusPart, readResearchTreeFile, postSync, readTree, researchGedcom, researchGedcomWithImages, researchReachable, researchDevice } from './research-ui.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { browserMediaFingerprint, browserMediaSafe, treeHasAppMedia, archiveHoldsAppMedia } from '../browser-media.js';
 import { poolRefSnapshot } from '../image-expand.js';
@@ -343,6 +341,8 @@ function markCount(n: number): string {
 const LOADED_BLOCK_MS = 60 * 60 * 1000;
 
 function safariBrowser(): boolean {
+    // A device of the gateway (spec 094 P3) asks its own origin: Safari's block of 127.0.0.1 does not apply.
+    if (researchDevice()) return false;
     return typeof navigator !== 'undefined' && isSafariBrowser(navigator.userAgent || '')
         && /apple/i.test(navigator.vendor || '');
 }
@@ -1115,7 +1115,7 @@ export const researchSyncMethods = uiModule({
         const ctx = this.researchSyncLink();
         if (!ctx) return { kind: 'none', core: 'none' };
         const { treeId, link } = ctx;
-        const shown = onComputer() && researchLinksEnabled() && !DataManager.isTreeLocked();
+        const shown = researchReachable() && researchLinksEnabled() && !DataManager.isTreeLocked();
         const capable = this.researchSyncCapable(link.id);
         if (!shown || !capable) return { kind: 'none', core: 'none' };
         const rt = runtime.get(link.id);
@@ -1229,7 +1229,7 @@ export const researchSyncMethods = uiModule({
     async pollResearchBridge(opts: { timeout?: number; reschedule?: boolean } = {}): Promise<boolean> {
         if (opts.reschedule !== false) this.scheduleResearchPoll();
         const ctx = this.researchSyncLink();
-        if (!ctx || !onComputer() || !researchLinksEnabled()) return false;
+        if (!ctx || !researchReachable() || !researchLinksEnabled()) return false;
         const researchId = ctx.link.id;
         // A research that said what it takes (at a ?live= / ?send=) is asked
         // on its own. One that did not (an older version) is asked once per
@@ -3163,7 +3163,7 @@ export const researchSyncMethods = uiModule({
     /** What a delete adds in an archive the research already wrote to: it is set aside there, not lost. */
     researchArchiveDeleteNote(): { tag: string; text: string } | undefined {
         const ctx = this.researchSyncLink();
-        if (!ctx || !onComputer() || !this.researchSyncCapable(ctx.link.id)) return undefined;
+        if (!ctx || !researchReachable() || !this.researchSyncCapable(ctx.link.id)) return undefined;
         if (this.researchModeOf(ctx.link.id, ctx.link) !== 'archive') return undefined;
         // The archive has the tree: it came from there, or a send was written there.
         if (!ctx.link.head && !researchAutoState(ctx.treeId).lastWritten) return undefined;
@@ -3259,7 +3259,7 @@ export const researchSyncMethods = uiModule({
     researchHoldsTree(treeId: TreeId, now = Date.now()): { holds: boolean; until?: number; photos?: boolean } {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
-        if (!link || !onComputer() || !researchLinksEnabled() || !this.researchSyncCapable(link.id)) return { holds: false };
+        if (!link || !researchReachable() || !researchLinksEnabled() || !this.researchSyncCapable(link.id)) return { holds: false };
         const rest = this.researchHoldsTreeText(treeId, now);
         if (browserMediaSafe(this.researchTreeMediaFp(treeId, meta), meta.fileCopyMediaFp, this.researchArchiveHoldsMedia(treeId))) return rest;
         return rest.holds ? { holds: false, photos: true, ...(rest.until ? { until: rest.until } : {}) } : { holds: false };

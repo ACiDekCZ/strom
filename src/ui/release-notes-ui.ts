@@ -46,7 +46,7 @@ import {
 } from '../research-whats-new.js';
 import { parseLiveBridge, LiveStatus } from '../research-link.js';
 import { anyResearchBridgeKnown, storedResearchBridge } from '../research-device.js';
-import { onComputer, fetchWithTimeout } from './research-ui.js';
+import { fetchWithTimeout, researchHere } from './research-ui.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 
@@ -489,7 +489,7 @@ export const releaseNotesMethods = uiModule({
      * bridge and the setting off. Nothing on a phone or tablet.
      */
     noteResearchWhatsNewStatus(researchId: string, status: LiveStatus): void {
-        if (!onComputer() || !status.version) return;
+        if (!researchHere() || !status.version) return;
         const feature = !!status.features?.includes(WHATS_NEW_FEATURE);
         pageResearch = { researchId, version: status.version, feature };
         if (readKnownResearch()?.version !== status.version) writeKnownResearch(status.version);
@@ -565,7 +565,7 @@ export const releaseNotesMethods = uiModule({
      */
     fillAboutResearchRow(meta: Element): void {
         meta.querySelector('.about-research')?.remove();
-        if (!onComputer()) return;
+        if (!researchHere()) return;
         const known = readKnownResearch();
         const version = pageResearch?.version || known?.version || '';
         if (!version) return;

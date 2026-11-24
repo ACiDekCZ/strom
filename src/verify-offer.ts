@@ -6,8 +6,8 @@
 
 import type { FactVerifyPending } from './types.js';
 import type { ReliabilityStepName } from './reliability.js';
-import type { ResearchTreeState } from './research-link.js';
-import { VERIFY_FEATURE, FACTS_CONFIRM_FEATURE } from './verify.js';
+import { researchDeviceAllows, type ResearchTreeState } from './research-link.js';
+import { VERIFY_FEATURE, VERIFY_BULK_FEATURE, FACTS_CONFIRM_FEATURE } from './verify.js';
 
 /** The research the tree is linked to, as the offer needs it; null: no research. */
 export interface VerifyResearch {
@@ -80,6 +80,14 @@ export interface VerifyOffer {
      */
     prioritize?: boolean;
     row: VerifyOfferRow | null;
+}
+
+/**
+ * What the research's status says it does, as offered here: a device of the home network (spec 094 §6)
+ * verifies nothing (the agent works on the computer with the research); confirmations stay.
+ */
+export function verifyFeaturesHere(features: readonly string[]): string[] {
+    return researchDeviceAllows('verify') ? [...features] : features.filter(f => f !== VERIFY_FEATURE && f !== VERIFY_BULK_FEATURE);
 }
 
 /** The research verifies (feature, and a tree that is not an archive or waiting). */

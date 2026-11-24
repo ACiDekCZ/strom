@@ -33,7 +33,7 @@ import {
     BulkScopeOption, FactOffer, PERSON_VERIFY_KINDS, VERIFY_TRY_PEOPLE, bulkScopeOptions, factOffer, personVerifyAskCount, personVerifyCounts, queuedToastDue,
     verifyCostSplit, verifyFactKind, verifyRecordText,
 } from '../verify-ui-model.js';
-import { VerifyResearch, researchVerifies } from '../verify-offer.js';
+import { VerifyResearch, researchVerifies, verifyFeaturesHere } from '../verify-offer.js';
 import { closeStatusTip, openStatusTip, refreshStatusTip, registerStatusTipExtension } from './status-tip.js';
 import { reliabilityLabel } from './fact-status.js';
 import { researchBridgeActionLabel, researchLinkFlags } from './research-open-mark.js';
@@ -255,7 +255,7 @@ export const verifyPersonMethods = uiModule({
         if (!rid || !this.researchBridgeUp(rid)) return null;
         const status = this.researchStatusOf(rid);
         if (!status) return null;
-        return { rid, status, research: { features: status.features ?? [], ...(status.treeState ? { treeState: status.treeState } : {}) } };
+        return { rid, status, research: { features: verifyFeaturesHere(status.features ?? []), ...(status.treeState ? { treeState: status.treeState } : {}) } };
     },
 
     /** A person's facts and their couples' marriages, each with its offer. */

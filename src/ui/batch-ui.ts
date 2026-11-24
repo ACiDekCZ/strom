@@ -26,7 +26,7 @@ import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { isWriteHeldCode, joinSaid, writeHeldOfRefusal } from '../research-write-held.js';
 import { formatBytesShort } from './originals-ui.js';
 import { barHtml } from './prog-bar.js';
-import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
+import { fetchWithTimeout, bridgeFailure, researchReachable } from './research-ui.js';
 import { uiModule } from './module.js';
 import { runBusy } from './busy.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
@@ -210,7 +210,7 @@ export const batchMethods = uiModule({
     /** "Add materials…" is offered: on a computer, a tree linked to a research that takes batches (not Safari). */
     batchAvailable(): boolean {
         const link = this.researchOriginalsLink();
-        if (!link || !onComputer() || bridgeFailure(null) === 'safari') return false;
+        if (!link || !researchReachable() || bridgeFailure(null) === 'safari') return false;
         return !!batchLimitsOf(this.researchAcceptsOf(link.researchId)) && !!this.researchMediaAccepts(link.researchId);
     },
 

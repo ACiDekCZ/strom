@@ -14,7 +14,7 @@
  */
 
 import { researchOpenMark, researchOpenSrHtml } from './research-open-mark.js';
-import { researchLinkMark } from '../research-link.js';
+import { researchLinkMark, researchDeviceAllows } from '../research-link.js';
 import { TreeId } from '../types.js';
 import { LAST_FOCUSED } from '../model-values.js';
 import { TreeManager } from '../tree-manager.js';
@@ -25,7 +25,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { formatFileSize, formatRelativeDateTime } from '../format.js';
 import { uiModule } from './module.js';
 import { shownNameOrEmpty } from '../person-name.js';
-import { onComputer } from './research-ui.js';
+import { researchReachable } from './research-ui.js';
 import { SettingsManager } from '../settings.js';
 
 /** The tree's default of the person card timeline, as its settings row says it (K4.5). */
@@ -246,11 +246,12 @@ export const treeActionsMethods = uiModule({
         }
         if (tree.research && !TreeManager.canSendToResearch(id)) return [];
         if (tree.research) {
-            if (this.researchTranscriptsCapable(tree.research.id)) {
+            // Not on a device of the home network (spec 094 §6): the tree's settings in the research are the computer's.
+            if (this.researchTranscriptsCapable(tree.research.id) && researchDeviceAllows('tree-settings')) {
                 return [{ key: 'researchSettings', label: strings.sync.treeSettings, run: () => void this.showResearchTreeSettings(id) }];
             }
             // A phone or tablet: where its research is (the explanation dialog says so).
-            return isActive && !onComputer() && this.researchMenuItemVisible()
+            return isActive && !researchReachable() && this.researchMenuItemVisible()
                 ? [{ key: 'researchInfo', label: strings.research.menuItem, run: () => this.showResearchInfoDialog() }] : [];
         }
         if (this.researchAdoptAvailable(tree)) {

@@ -48,7 +48,7 @@ import {
 import { resultPlaces, lineMarksHtml, checkHtml, placePopHtml, sortPlaces, sortedCounts, type ResultMarks, type ShownPlace } from './read-result-view.js';
 import { gedcomTagEventType } from '../ged-parser.js';
 import { formatBytesShort } from './originals-ui.js';
-import { onComputer, bridgeFailure } from './research-ui.js';
+import { bridgeFailure, researchHere } from './research-ui.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 import { helpMark } from './help-mark.js';
@@ -615,7 +615,7 @@ export const readDocumentMethods = uiModule({
     readDocumentAccepts(): ReadAccepts | null {
         this.ensureReadListener();
         const link = this.researchOriginalsLink();
-        if (!link || !onComputer() || bridgeFailure(null) === 'safari') return null;
+        if (!link || !researchHere() || bridgeFailure(null) === 'safari') return null;
         if (this.activeResearchArchive() || this.activeResearchAgentAway()) return null;
         return this.researchStatusOf(link.researchId)?.accepts?.read ?? null;
     },
@@ -1047,7 +1047,7 @@ export const readDocumentMethods = uiModule({
     /** Why a source's reading cannot be fetched now at all (null: ask the research). */
     readSourceBlocked(): SourceWhy | null {
         const link = this.researchOriginalsLink();
-        if (!link) return this.researchSyncLink() && researchLinksEnabled() && !onComputer() ? 'computer' : 'unlinked';
+        if (!link) return this.researchSyncLink() && researchLinksEnabled() && !researchHere() ? 'computer' : 'unlinked';
         if (this.activeResearchAgentless()) return 'archive';
         if (!this.researchBridgeUp(link.researchId) || !this.readBridgeBase(link.researchId)) return 'down';
         // An older research has no reading results to give (`GET read/<id>` is an unknown path there).
@@ -2466,7 +2466,7 @@ export const readDocumentMethods = uiModule({
             ...(s.decided ? { decided: s.decided } : {}),
             ...(s.openTask ? { openTask: s.openTask } : {}),
             confirmed: !!src && !!this.sourceConfirmState(src).conf,
-            computer: onComputer(),
+            computer: researchHere(),
             counts: this.readSourceCounts(res),
             canOpenTask: this.researchLinkAvailable('task'),
             // Uncertain places to hand over (spec 059 P8): only a research that says it takes them.

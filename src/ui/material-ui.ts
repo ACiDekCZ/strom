@@ -24,7 +24,7 @@ import { formatBytesShort, QueueOutcome, researchKnownAdded, researchRefusalOf, 
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
-import { RESEARCH_BRIDGE_MARKS, researchSendsLists, researchSendsSourceLists } from '../research-link.js';
+import { researchBridgeMark, researchSendsLists, researchSendsSourceLists } from '../research-link.js';
 import { materialListFacts, materialListSnapshot, type MaterialListFacts, type MaterialListSnapshot } from '../material-list.js';
 import { listDisplayName, listKind, ruleLabel } from '../person-lists.js';
 import { shownName } from '../person-name.js';
@@ -504,7 +504,7 @@ export const materialMethods = uiModule({
             if (waits) {
                 const ids = saved.map(f => f.id);
                 const sort = this.materialsListOn() && this.materialSortGate() === 'on' && ids.length
-                    ? { action: { label: strings.materials.agentSort.sort, ai: RESEARCH_BRIDGE_MARKS['material-sort'] === 'bridgeAgent', run: () => void this.openSortForFiles(ids, 'personId' in target ? DataManager.getPerson(target.personId)?.refn : undefined) },
+                    ? { action: { label: strings.materials.agentSort.sort, ai: researchBridgeMark('material-sort') === 'bridgeAgent', run: () => void this.openSortForFiles(ids, 'personId' in target ? DataManager.getPerson(target.personId)?.refn : undefined) },
                         ...('action' in show ? { more: show.action } : {}) }
                     : show;
                 this.showToast((list ? m.sentWaitToastList(sent, list.body.name) : m.sentWaitToast(sent, name, !('personId' in target))) + knownPart, 8000, { closable: true, ...sort });

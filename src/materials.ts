@@ -17,7 +17,7 @@
 
 import { Attachment, MaterialKind, Person, StromData } from './types.js';
 import { personMedia } from './media.js';
-import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, MATERIAL_LINKS_FEATURE, MEDIA_APP_FEATURE } from './research-link.js';
+import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, MATERIAL_LINKS_FEATURE, MEDIA_APP_FEATURE, researchDeviceAllows } from './research-link.js';
 import { strings } from './strings.js';
 import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
 import { formatDateForInput, formatFlexDate, normalizeDateInput, parseFlexDate } from './dates.js';
@@ -744,7 +744,8 @@ export function matEdit(env: MaterialEnv): boolean {
 
 /** The research's agent sorts files (`material.sort`; never an archive or a research waiting for its agent). */
 export function matSort(env: MaterialEnv): boolean {
-    return matList(env) && has(env, MATERIAL_SORT_FEATURE);
+    // Not on a device of the home network (spec 094 §6): the agent works on the computer with the research.
+    return matList(env) && has(env, MATERIAL_SORT_FEATURE) && researchDeviceAllows('material-sort');
 }
 
 /** The research keeps a run of batches (`material.sortRun`): one action sends up to 1500 files. */

@@ -62,6 +62,7 @@ import { currentSystem, isDesktopSystem, setWindowControlsRefresher } from './wi
 import type { SatelliteClient } from './windows/satellite.js';
 import type { WindowRegistry } from './windows/window-registry.js';
 import { deviceModeCandidate, startDeviceMode } from './device/device-mode.js';
+import { setResearchDevicePage } from './research-link.js';
 
 // Make modules available globally for HTML event handlers
 declare global {
@@ -886,7 +887,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // gateway (its port, a code in its address, a pairing of this origin) asks
     // the gateway anything; the app on the web makes no new request.
     if (deviceModeCandidate()) {
-        void startDeviceMode({ appVersion: APP_VERSION }).catch(err => console.warn('Device mode did not start', err));
+        // Until it is confirmed or turned down: never the research's own computer (no terminal, no install).
+        setResearchDevicePage(true);
+        void startDeviceMode({ appVersion: APP_VERSION })
+            .then(started => {
+                if (!started?.pairing) setResearchDevicePage(false);
+                // The research's bridge through the gateway now (or not a device after all): the research's places drawn again.
+                UI.refreshResearchMenu();
+            })
+            .catch(err => {
+                setResearchDevicePage(false);
+                console.warn('Device mode did not start', err);
+            });
     }
 
     // PWA: offline indicator always; register the service worker only on the

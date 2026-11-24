@@ -28,7 +28,7 @@ import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, 
 import { sourceReadingHash, unverifiedOlderSources, newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
-import { el, onComputer, readTree } from './research-ui.js';
+import { el, readTree, researchHere } from './research-ui.js';
 import { researchDisplayName, researchSendMode, onBridgeStatus, lastBridgeStatus } from './research-sync-ui.js';
 import { SettingsManager } from '../settings.js';
 import { formatBytesShort } from './originals-ui.js';
@@ -301,7 +301,7 @@ export const researchTreeSettingsMethods = uiModule({
                     <span class="research-transcripts-desc">${esc(desc)}</span>
                 </span>
             </label>`;
-        const setup = onComputer() && this.researchLinkAvailable('setup') ? researchSchemeUrl('setup', { tree: link.id }, announcedResearchScheme()) : null;
+        const setup = researchHere() && this.researchLinkAvailable('setup') ? researchSchemeUrl('setup', { tree: link.id }, announcedResearchScheme()) : null;
         const s = strings.sync;
         const archive = this.researchModeOf(link.id, link) === 'archive';
         const modeLine = this.researchModeSinceLine(treeId);
@@ -316,7 +316,7 @@ export const researchTreeSettingsMethods = uiModule({
         const agentAway = !archive && this.researchAgentAway(link.id, link);
         const effect = archive || agentAway ? t.effectArchive : this.researchReviewOn(link.id) ? t.effectReview : t.effectAgent;
         // Where the mode is switched, both ways (in the research, in a terminal): one sentence, the research a click away.
-        const modeWhere = sendingShown && onComputer() ? (archive ? t.modeWhereArchive : agentAway ? t.modeWhereWaiting : t.modeWhereResearch) : '';
+        const modeWhere = sendingShown && researchHere() ? (archive ? t.modeWhereArchive : agentAway ? t.modeWhereWaiting : t.modeWhereResearch) : '';
         const openUrl = modeWhere && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }, announcedResearchScheme()) : null;
         const modeWhereHtml = modeWhere ? `
                 <p class="research-mode-where" id="research-mode-where"><span>${esc(modeWhere)}</span>${openUrl
@@ -1380,7 +1380,7 @@ export const researchTreeSettingsMethods = uiModule({
      */
     maybeAskResearchSendMode(treeId: TreeId): void {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        if (!link || link.copy || !onComputer() || DataManager.getCurrentTreeId() !== treeId || DataManager.isReadOnly()) return;
+        if (!link || link.copy || !researchHere() || DataManager.getCurrentTreeId() !== treeId || DataManager.isReadOnly()) return;
         if (researchAutoState(treeId).modeAsked || askLater.has(treeId) || document.getElementById(ASK_ID)) return;
         if (document.querySelector('.modal-overlay.active, #research-changes-panel, .actions-menu-dropdown.active, #actions-menu-dropdown.active')
             || this.isFollowingActiveResearch()) return;

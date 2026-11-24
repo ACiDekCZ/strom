@@ -22,7 +22,7 @@ import {
 import { canPromptInstall, promptInstall, isStandaloneDisplay } from '../pwa.js';
 import { appBrowserName, currentAppBrowser, needsTransfer } from '../research-transfer.js';
 import { isPromoAvailable } from '../research-promo.js';
-import { onComputer } from './research-ui.js';
+import { researchHere } from './research-ui.js';
 import { uiModule } from './module.js';
 import { activatedElement, runBusy } from './busy.js';
 import { imagesToAwait } from '../image-loads.js';
@@ -605,7 +605,7 @@ export const fileCopyMethods = uiModule({
         const s = strings.fileCopy;
         const advice = currentAdvice();
         // Installing it here would settle the trees in a browser that cannot reach the research.
-        const research = needsTransfer(currentAppBrowser()) && onComputer() && advice !== 'ios-safari' && advice !== 'ios-app'
+        const research = needsTransfer(currentAppBrowser()) && researchHere() && advice !== 'ios-safari' && advice !== 'ios-app'
             && isPromoAvailable(this.researchPromoContext())
             ? ' ' + s.adviceResearch(strings.research.noConnect(appBrowserName(currentAppBrowser()))) : '';
         return this.storageAdviceBase(advice) + research;

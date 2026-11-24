@@ -10,7 +10,7 @@
 
 import {
     ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, asideWaiting, sanitizeBooksAside, WAITING_GROUPS_FEATURE, sanitizeUpdate, sanitizeIntake, sanitizeBusy, LiveBusy,
-    sanitizeAccepts, parseLiveBridge, isResearchHead, researchLinkScheme, DEFAULT_RESEARCH_SCHEME,
+    sanitizeAccepts, parseLiveBridge, researchDeviceState, deviceBridgeBase, isResearchHead, researchLinkScheme, DEFAULT_RESEARCH_SCHEME,
     ResearchTreeKind, ResearchTreeState, sanitizeTreeKind, sanitizeTreeState,
     researchConflictRef, sanitizeResearchClient, type SyncConflictSent,
 } from './research-link.js';
@@ -216,11 +216,16 @@ function storedTree(value: unknown): StoredResearchTree | undefined {
 export function hasStoredResearchBridge(researchId: string): boolean {
     try {
         const raw = localStorage.getItem(BRIDGE_KEY + researchId);
-        if (!raw) return false;
+        if (!raw) return !!deviceTreeBridge(researchId);
         return !!parseLiveBridge((JSON.parse(raw) as { base?: unknown }).base);
     } catch {
         return false;
     }
+}
+
+/** A device (spec 094 P3): a tree its pairing opens has its bridge through the gateway, before any status said so. */
+function deviceTreeBridge(researchId: string): StoredResearchBridge | null {
+    return researchDeviceState()?.trees.includes(researchId) ? { base: deviceBridgeBase(researchId), accepts: null, head: '' } : null;
 }
 
 export function storedResearchBridge(researchId: string): StoredResearchBridge | null {
@@ -228,9 +233,9 @@ export function storedResearchBridge(researchId: string): StoredResearchBridge |
     if (bridgelessWindow) return null;
     try {
         const raw = localStorage.getItem(BRIDGE_KEY + researchId);
-        if (!raw) return null;
+        if (!raw) return deviceTreeBridge(researchId);
         const parsed = JSON.parse(raw) as { base?: unknown; accepts?: unknown; head?: unknown; tree?: unknown };
-        const base = parseLiveBridge(parsed.base)?.base ?? '';
+        const base = parseLiveBridge(parsed.base)?.base ?? deviceTreeBridge(researchId)?.base ?? '';
         const head = isResearchHead(parsed.head) ?? '';
         const tree = storedTree(parsed.tree);
         return { base, accepts: sanitizeAccepts(parsed.accepts), head, ...(tree ? { tree } : {}) };

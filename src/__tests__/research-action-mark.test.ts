@@ -8,7 +8,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
     RESEARCH_LINK_ACTIONS, RESEARCH_LINK_MARKS, RESEARCH_ACTION_MARKS, researchLinkMark, researchUrlMark, researchSchemeUrl,
-    RESEARCH_BRIDGE_ACTIONS, RESEARCH_BRIDGE_MARKS,
+    RESEARCH_BRIDGE_ACTIONS, RESEARCH_BRIDGE_MARKS, researchBridgeMark, setResearchDeviceState, researchDeviceAllows,
+    researchDeviceMark, deviceAllows,
 } from '../research-link.js';
 import { researchActionLabel, researchBridgeActionLabel, researchBridgeAgentLabel, researchLinkFlags } from '../ui/research-open-mark.js';
 import { syncActionMark } from '../ui/research-sync-ui.js';
@@ -133,6 +134,48 @@ describe('the map of research actions to their marks', () => {
         expect(bulk).not.toContain('research-open-mark');
         expect(researchBridgeActionLabel(strings.verify.scan, 'fact-confirm')).toBe(strings.verify.scan);
         expect(researchBridgeActionLabel(strings.verify.stop, 'verify-stop')).toBe(strings.verify.stop);
+    });
+});
+
+describe('on a device of the home network (spec 094 §6)', () => {
+    afterEach(() => setResearchDeviceState(null));
+    const device = (actions: string[] = []) => setResearchDeviceState({ origin: 'http://192.168.1.20:47800', trees: [TREE], computer: 'Pracovna', actions });
+
+    it('draws what it does through the bridge with no mark, and nothing that opens a terminal or starts an agent', () => {
+        device(['conflict.decide', 'hypothesis.decide', 'sync.undo']);
+        for (const a of RESEARCH_LINK_ACTIONS) {
+            expect(researchLinkMark(a)).toBe('none');
+            expect(researchDeviceMark(a)).toBe(researchDeviceAllows(a) ? 'none' : 'hidden');
+        }
+        for (const a of RESEARCH_BRIDGE_ACTIONS) expect(researchBridgeMark(a)).toBe('none');
+        expect(researchUrlMark(researchSchemeUrl('chat', { tree: TREE })!)).toBe('none');
+        expect(researchLinkFlags(researchSchemeUrl('open', { tree: TREE })!)).toEqual({ research: false, ai: false });
+        expect(researchBridgeActionLabel(strings.verify.start, 'verify')).toBe(strings.verify.start);
+    });
+
+    it('allows only the actions of the table: the tree\'s own through the bridge, decisions the gateway announced', () => {
+        device([]);
+        for (const a of ['send', 'excerpt', 'media', 'app', 'live', 'book', 'direction', 'fact-confirm', 'verify-stop',
+            'sources-split', 'run-stop', 'waiting-answer'] as const) expect(researchDeviceAllows(a)).toBe(true);
+        for (const a of ['open', 'chat', 'work', 'places', 'history', 'story', 'review', 'sessions', 'experiment', 'setup',
+            'update', 'fixes', 'doctor', 'seal', 'archive', 'finish', 'task', 'new', 'research', 'sync-undo', 'verify',
+            'verify-bulk', 'material-sort', 'run-limit', 'read-document', 'devices', 'research-tools', 'tree-settings',
+            'load-version', 'direction-new', 'direction-work', 'conflict-agent'] as const) expect(researchDeviceAllows(a)).toBe(false);
+        // A decision only once the gateway announces it in status.device.actions.
+        for (const a of ['conflict', 'hypothesis', 'hypotheses', 'sync-undo-this'] as const) expect(researchDeviceAllows(a)).toBe(false);
+        expect(deviceAllows('conflict', ['conflict.decide'])).toBe(true);
+        expect(deviceAllows('hypothesis', ['hypothesis.decide'])).toBe(true);
+        expect(deviceAllows('sync-undo-this', ['sync.undo'])).toBe(true);
+        expect(deviceAllows('sync-undo', ['sync.undo'])).toBe(false);
+    });
+
+    it('outside the device mode changes nothing: every action allowed, every mark its own', () => {
+        for (const a of RESEARCH_LINK_ACTIONS) {
+            expect(researchDeviceAllows(a)).toBe(true);
+            expect(researchDeviceMark(a)).toBe(RESEARCH_LINK_MARKS[a]);
+        }
+        for (const a of RESEARCH_BRIDGE_ACTIONS) expect(researchBridgeMark(a)).toBe(RESEARCH_BRIDGE_MARKS[a]);
+        expect(researchLinkFlags(researchSchemeUrl('chat', { tree: TREE })!)).toEqual({ research: true, ai: true });
     });
 });
 

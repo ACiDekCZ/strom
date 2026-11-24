@@ -15,7 +15,8 @@
 
 import { hello, pair, configureGateway, deviceFetch, tunnel, type GatewayHello, type PairResult, GatewayError } from './gateway-client';
 import { hasPairingMark, loadPairing, proposeThisDevice, type DevicePairing } from './device-store';
-import { startDeviceConnection, deviceConnection, onDeviceEvent, type DeviceConnectionController } from './device-connection';
+import { startDeviceConnection, deviceConnection, onDeviceEvent, onDeviceConnection, type DeviceConnectionController } from './device-connection';
+import { enterDeviceBridge, leaveDeviceBridge } from './device-bridge';
 import type { StreamEvent } from './device-crypto';
 
 export const GATEWAY_PORT = '47800';
@@ -124,7 +125,12 @@ async function doStart(opts: { computerWord?: string; appVersion?: string }): Pr
             out.pairError = e instanceof GatewayError ? e.code : 'network';
         }
     }
-    if (out.pairing) out.connection = startDeviceConnection();
+    if (out.pairing) {
+        out.connection = startDeviceConnection();
+        // The research's bridge through the gateway (spec 094 P3): its fetch, events and images; gone once unpaired.
+        enterDeviceBridge(out.pairing);
+        onDeviceConnection(c => { if (c.state === 'unpaired') leaveDeviceBridge(); });
+    }
     exposeForTests();
     return out;
 }

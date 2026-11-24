@@ -26,7 +26,7 @@ import {
     detectInstallOs, installLine, npmLines, installAppUrl, installPhase, newInstallRecord, INSTALL_KEY,
     readInstallRecord, writeInstallRecord, clearInstallRecord,
 } from '../research-install.js';
-import { onComputer } from './research-ui.js';
+import { researchHere } from './research-ui.js';
 import { AppBrowser, appBrowserName, currentAppBrowser, needsTransfer, transferFileName, buildTransferJson } from '../research-transfer.js';
 import { viewLinksPayload } from '../view-links.js';
 import { isIosDevice } from '../file-copy.js';
@@ -115,7 +115,7 @@ function noConnectLead(): string {
 
 /** The browser the move is made from: a phone or tablet is "mobile" whatever its browser (the research is on a computer). */
 function transferFrom(): AppBrowser {
-    return onComputer() ? currentAppBrowser() : 'mobile';
+    return researchHere() ? currentAppBrowser() : 'mobile';
 }
 
 /**
@@ -196,7 +196,7 @@ export const researchInstallMethods = uiModule({
         const resumed = !step && installForThisTree(record) && (phase === 'waiting' || phase === 'long' || phase === 'expired');
         const first: InstallStep = step ?? (resumed ? 'wait' : 'what');
         current = {
-            step: first, os: record?.os ?? (onComputer() || detectedOs() !== 'linux' ? detectedOs() : 'win'), copied: false, otherOpen: false, resumed,
+            step: first, os: record?.os ?? (researchHere() || detectedOs() !== 'linux' ? detectedOs() : 'win'), copied: false, otherOpen: false, resumed,
             ...(opts.name ? { name: opts.name } : {}),
         };
         // The Install step makes the token; opened straight on it, that happens now.
@@ -247,7 +247,7 @@ export const researchInstallMethods = uiModule({
             overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeResearchInstall(); });
             document.body.appendChild(overlay);
         }
-        const touch = !onComputer();
+        const touch = !researchHere();
         const step = current.step;
         const pills = touch || step === 'existing' ? '' : `
             <ol class="install-steps" aria-label="${esc(s.title)}">
@@ -282,8 +282,8 @@ export const researchInstallMethods = uiModule({
         const tree = TreeManager.getActiveTreeMetadata();
         const people = Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder);
         // A browser that cannot reach the research moves the tree (never "it stays here").
-        const moving = needsTransfer(currentAppBrowser()) || !onComputer();
-        const mobile = !onComputer();
+        const moving = needsTransfer(currentAppBrowser()) || !researchHere();
+        const mobile = !researchHere();
         const intro = tree && people ? (moving ? s.introMove(tree.name, mobile) : s.intro(tree.name)) : moving ? s.introMoveEmpty(mobile) : s.introEmpty;
         // An empty app (the browser's data cleared, most likely): a research already on this
         // computer is the first way, said before the installation; with people, a link below.
@@ -664,7 +664,7 @@ export const researchInstallMethods = uiModule({
      * once "Continue here" was chosen. The move by a file stays the rescue.
      */
     browserNoticeApplies(): boolean {
-        if (!needsTransfer(currentAppBrowser()) || !onComputer()) return false;
+        if (!needsTransfer(currentAppBrowser()) || !researchHere()) return false;
         // An iPad asks for the desktop site as a Mac: its touch points give it away.
         if (typeof navigator !== 'undefined' && isIosDevice(navigator.userAgent || '', navigator.platform || '', navigator.maxTouchPoints ?? 0)) return false;
         return isPromoAvailable(this.researchPromoContext());
@@ -1170,6 +1170,6 @@ export const researchInstallMethods = uiModule({
     /** ?research=install (the link sent from a phone): on a computer, straight to the Install step. */
     openResearchInstallFromLink(): void {
         if (!isPromoAvailable(this.researchPromoContext())) return;
-        this.showResearchInstall(onComputer() ? 'install' : undefined);
+        this.showResearchInstall(researchHere() ? 'install' : undefined);
     },
 });

@@ -62,6 +62,8 @@ import {
 import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
+import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge } from '../research-link.js';
+import { deviceEventSource } from '../device/device-bridge.js';
 import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn, waitingGainOn } from '../research-link.js';
 import { overviewChanged, overviewInWindow } from '../windows/overview-window.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
@@ -1098,7 +1100,7 @@ let unfollowedAgent: { status: LiveStatus; working: LiveSession['working'] } | n
  * never asks, a bridge down said nothing).
  */
 function unfollowedAgentNow(researchId: string): Pick<LiveSession, 'working' | 'queue'> | null {
-    if (!onComputer()) return null;
+    if (!researchReachable()) return null;
     const status = researchStatusNow(researchId);
     if (!status || status.treeId !== researchId) return null;
     if (unfollowedAgent?.status !== status) {
@@ -1662,7 +1664,8 @@ const CONNECT_HINT_MS = 1500;
 export type BridgeFailure = 'timeout' | 'unreachable' | 'safari';
 
 export function bridgeFailure(err: unknown): BridgeFailure {
-    if (typeof navigator !== 'undefined' && isSafariBrowser(navigator.userAgent || '')) return 'safari';
+    // A device of the gateway (spec 094 P3) asks its own origin: never Safari's block of 127.0.0.1.
+    if (!researchDevice() && typeof navigator !== 'undefined' && isSafariBrowser(navigator.userAgent || '')) return 'safari';
     return err instanceof DOMException && (err.name === 'AbortError' || err.name === 'TimeoutError') ? 'timeout' : 'unreachable';
 }
 
@@ -1681,9 +1684,12 @@ async function localNetworkReason(): Promise<ConnectReason> {
 export async function fetchStatus(url: string, ms = BRIDGE_ANSWER_MS): Promise<LiveStatus | null> {
     const res = await fetchWithTimeout(statusAskUrl(url), ms);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const status = sanitizeLiveStatus(await completeStatus(url, await res.json(), readStatusPart));
-    // The bridge runs on this computer: what it announces holds here.
-    if (status) noteResearchLinks(status.links, status.linkScheme);
+    const json: unknown = await res.json();
+    const status = sanitizeLiveStatus(await completeStatus(url, json, readStatusPart));
+    // The bridge runs on this computer: what it announces holds here. A device (spec 094 P3): the actions
+    // the gateway announced for it (status.device.actions); the gateway hands over no links.
+    if (status && researchDevice()) noteResearchDeviceActions((json as { device?: { actions?: unknown } } | null)?.device?.actions);
+    else if (status) noteResearchLinks(status.links, status.linkScheme);
     if (status?.treeId) {
         noteResearchWaiting(status.treeId, status.waiting, status);
         // Where this research's bridge is now (the port can change between runs).
@@ -1695,10 +1701,32 @@ export async function fetchStatus(url: string, ms = BRIDGE_ANSWER_MS): Promise<L
     return status;
 }
 
-/** Strom Research runs in a terminal on a computer, never on a phone or tablet. */
-export function onComputer(): boolean {
+/**
+ * The research's bridge and terminal on this very computer (127.0.0.1): a
+ * computer with a mouse, not a page of the research's gateway on another device
+ * (spec 094 P3). Strom Research runs in a terminal, never on a phone or tablet.
+ */
+export function researchHere(): boolean {
+    if (researchDevicePage()) return false;
     try { return !(window.matchMedia?.('(pointer: coarse)').matches ?? false); } catch { return true; }
 }
+
+/**
+ * The app on a device of the home network, paired with the computer's
+ * research (spec 094 P3): its bridge through the gateway, no terminal, only
+ * what §6 allows (researchDeviceAllows).
+ */
+export function researchDevice(): boolean {
+    return researchDeviceState() !== null;
+}
+
+/** The research reachable from here at all: its bridge on this computer, or through the gateway on a device. */
+export function researchReachable(): boolean {
+    return researchHere() || researchDevice();
+}
+
+/** The older name of researchHere (the research on this computer). */
+export const onComputer = researchHere;
 
 /** Read a File as bytes (FileReader fallback for browsers without File.arrayBuffer). */
 function readFileBuffer(file: Blob): Promise<ArrayBuffer> {
@@ -2592,7 +2620,7 @@ export const researchUiMethods = uiModule({
         // A ?live= link on a phone: the research runs on a computer, and a browser of the phone
         // (all of them WebKit on an iPhone) is never the way to it. A touch computer without
         // a phone's browser or size keeps the computer's texts.
-        const onPhone = request?.param === 'live' && !onComputer()
+        const onPhone = request?.param === 'live' && !researchHere()
             && (reason === 'safari' || isMobile() || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || ''));
         const text = onPhone ? c.textPhoneLive : browserText;
         // The heading too: no browser of the phone is the cause, the computer is the way.
@@ -3251,7 +3279,7 @@ export const researchUiMethods = uiModule({
 
     /** The research on this computer handles `action` (announced, not switched off, on a computer). */
     researchLinkAvailable(action: ResearchLinkAction): boolean {
-        return onComputer() && researchLinksEnabled() && announcedResearchLinks().includes(action);
+        return researchHere() && researchLinksEnabled() && announcedResearchLinks().includes(action);
     },
 
     /** Hand a strom-research:// link to the system (the browser asks first). */
@@ -3352,7 +3380,7 @@ export const researchUiMethods = uiModule({
         const announced = this.activeResearchLink('open') ?? this.activeResearchLink('live');
         if (announced) return announced;
         const tree = this.activeResearchId();
-        if (!tree || !onComputer() || !researchLinksEnabled()) return null;
+        if (!tree || !researchHere() || !researchLinksEnabled()) return null;
         return researchSchemeUrl('open', { tree }, announcedResearchScheme());
     },
 
@@ -3597,7 +3625,7 @@ export const researchUiMethods = uiModule({
         }
         this.syncOverviewViewing(false);
         // What the bridge says now (unless it said so seconds ago): the overview follows its answer.
-        if (onComputer()) this.refreshResearchStateSoon();
+        if (researchReachable()) this.refreshResearchStateSoon();
         return true;
     },
 
@@ -3624,7 +3652,7 @@ export const researchUiMethods = uiModule({
             if (draw) this.renderLivePanel();
             return;
         }
-        const status = onComputer() ? this.researchStatusOf(v.researchId) : null;
+        const status = researchReachable() ? this.researchStatusOf(v.researchId) : null;
         const bridge = status ? parseLiveBridge(storedResearchBridge(v.researchId)?.base) : null;
         if (status && bridge && status.treeId === v.researchId) {
             if (status !== v.status) this.takeViewingStatus(v, status, bridge);
@@ -4327,6 +4355,17 @@ export const researchUiMethods = uiModule({
     /** Open the bridge's event stream (or poll its status without EventSource). */
     connectLiveEvents(s: LiveSession): void {
         if (s.ended || live !== s) return;
+        // A device of the home network (spec 094 P3): the gateway's own event stream stands in for the bridge's.
+        const device = parseDeviceBridge(s.bridge.events);
+        if (device) {
+            const des = deviceEventSource(device.treeId);
+            if (!des) {
+                this.scheduleLive(s, () => this.probeLive(s), POLL_MS);
+                return;
+            }
+            this.listenLiveEvents(s, des as unknown as EventSource);
+            return;
+        }
         if (typeof EventSource !== 'function') {
             this.scheduleLive(s, () => this.probeLive(s), POLL_MS);
             return;
@@ -4338,6 +4377,11 @@ export const researchUiMethods = uiModule({
             this.scheduleLive(s, () => this.probeLive(s), POLL_MS);
             return;
         }
+        this.listenLiveEvents(s, es);
+    },
+
+    /** The live events of the research (its bridge's stream, or the gateway's on a device) taken in. */
+    listenLiveEvents(s: LiveSession, es: EventSource): void {
         s.es = es;
         const payload = (e: Event): unknown => parseEventData((e as MessageEvent).data);
         es.addEventListener('hello', (e) => {
@@ -4474,7 +4518,7 @@ export const researchUiMethods = uiModule({
             this.liveStatusSoon(s);
             return;
         }
-        if (way !== 'bridge' || !onComputer()) return;
+        if (way !== 'bridge' || !researchReachable()) return;
         const v = viewing!;
         void this.askResearchBridge(v.researchId, BRIDGE_ANSWER_MS, s.bridge.base).then(() => {
             // Still the overview of that research: it takes in what the bridge said (with the rest of the app).

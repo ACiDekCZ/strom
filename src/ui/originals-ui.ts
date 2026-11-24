@@ -32,7 +32,7 @@ import {
     QueuedOriginal, Region, queueKey, fitsBudget, exifOrientation, originalTargets, uploadHeaders, mediaReplyId,
     regionToStored, originalsBudget, DEFAULT_MEDIA_MAX_BYTES, takesPortraitOriginals, takesCoupleOriginals,
 } from '../originals.js';
-import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
+import { fetchWithTimeout, bridgeFailure, researchReachable } from './research-ui.js';
 import { uiModule } from './module.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { unionPhotoCaption } from '../union-photo.js';
@@ -272,7 +272,7 @@ export const originalsMethods = uiModule({
      */
     researchOriginalsLink(): { treeId: TreeId; researchId: string } | null {
         const ctx = this.researchSyncLink();
-        if (!ctx || !onComputer() || !researchLinksEnabled()) return null;
+        if (!ctx || !researchReachable() || !researchLinksEnabled()) return null;
         return { treeId: ctx.treeId, researchId: ctx.link.id };
     },
 

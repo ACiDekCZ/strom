@@ -33,7 +33,7 @@ import {
     applyResearch, isResearchChipId, researchChipCounts, researchChipOffer, researchColumnLiveOff, researchConflictWhat, researchOffer,
     researchAgentRow, researchOpenConflicts, researchTableEnv, type ResearchChipId, type ResearchColumnId, type ResearchNewWindow, type ResearchTableEnv, type ResearchTableInput,
 } from './table-research.js';
-import { onComputer, researchTableLive } from '../research-ui.js';
+import { researchTableLive, researchHere } from '../research-ui.js';
 import { researchBubble, researchConflictBubble, type ResearchBubble } from './table-research-bubble.js';
 import { AGENT_DONE_MS, materialsCountNow, researchConflictsNow } from '../../card-signals.js';
 import { onDirectionPlaces } from '../../research-directions-write.js';
@@ -1412,7 +1412,7 @@ export const tableMethods = uiModule({
         const env = researchMemo?.env;
         if (!col || !env || !mounted || line.kind === 'more' || line.row.kind !== 'person') return;
         const b = researchBubble(env, line.row.person, col.id as ResearchColumnId, {
-            onComputer: onComputer(), bridgeLive: this.researchOriginBridge() === 'live',
+            onComputer: researchHere(), bridgeLive: this.researchOriginBridge() === 'live',
         });
         if (!b) return;
         this.openTableResearchAt(env, b, line, colPos, () => (cellEl.isConnected ? cellEl : null));

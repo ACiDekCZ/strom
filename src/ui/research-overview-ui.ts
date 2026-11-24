@@ -53,12 +53,7 @@ import {
 } from './waiting-order-ui.js';
 import { browserGroupNote, browserNote } from '../research-browser.js';
 import { uiModule } from './module.js';
-import {
-    LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
-    liveSession, nowHelpTopic, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip,
-    liveState, pausedText, appendWorkingHold, workingHoldEl, workingSavingEl, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
-    markWaitingFocus, waitingWhyEl, overviewViewing, OverviewViewing, onComputer, lightsGroup, markOverviewLit, researchSession, researchTableLive,
-} from './research-ui.js';
+import { LiveChangeItem, LiveFold, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection, liveSession, nowHelpTopic, timeEl, appendAllHidden, noteWaitingShown, waitingChip, waitingNewChip, liveState, pausedText, appendWorkingHold, workingHoldEl, workingSavingEl, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn, markWaitingFocus, waitingWhyEl, overviewViewing, OverviewViewing, lightsGroup, markOverviewLit, researchSession, researchTableLive, researchHere } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
 import {
     WorkingLine, directionDragActive, directionGlyph, directionPersonIds, directionRedrawHeld, keepLineFocus, setQueueDirectionFilter, taskDirectionName, workingLineCount, workingLineGroups,
@@ -871,7 +866,7 @@ export const researchOverviewMethods = uiModule({
         if (source === 'live') appendFollowNote(body, s);
         this.appendOverviewSummary(body, s, mode, viewed);
         // The own window without the bridge (§6 state 3): "not running · showing what is in the tree" and Turn on.
-        if (mode === 'window' && viewed?.kind === 'tree' && onComputer()) this.appendOverviewOffFrame(body, viewed);
+        if (mode === 'window' && viewed?.kind === 'tree' && researchHere()) this.appendOverviewOffFrame(body, viewed);
         if (s.update) this.appendUpdateStrip(body, s.update.version, s.busy);
 
         // A section hidden by the choice is not drawn, unless shown until the overview closes
@@ -969,7 +964,7 @@ export const researchOverviewMethods = uiModule({
         }
         // The research not running (on a computer): one line names what comes once it runs (not on a phone,
         // whose state says the agent's work is seen on the computer; none when all of it is hidden).
-        if (fromTree && onComputer()) {
+        if (fromTree && researchHere()) {
             const names = afterTurnOnKeys(sectionOrder(), sectionPrefs()).map(k => sectionTitle('overview', k));
             if (names.length > 0) body.appendChild(el('p', 'research-overview__after-on', L.afterTurnOn(joinAnd(getCurrentLanguage(), names))));
         }
@@ -1111,7 +1106,7 @@ export const researchOverviewMethods = uiModule({
         const L = strings.live;
         const c = strip.appendChild(el('div', 'research-overview__cell is-off'));
         c.appendChild(el('div', 'research-overview__cell-label', L.state));
-        if (!onComputer()) {
+        if (!researchHere()) {
             c.append(el('div', 'research-overview__cell-value', L.phoneTreeOnly), el('div', 'research-overview__cell-sub research-overview__why-off', L.phoneWhy));
             return;
         }

@@ -16,7 +16,7 @@ import {
 } from '../research-fixes.js';
 import { formatLiveClock } from '../live-time.js';
 import { onBridgeStatus } from './research-sync-ui.js';
-import { onComputer } from './research-ui.js';
+import { researchHere } from './research-ui.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { uiModule } from './module.js';
@@ -126,7 +126,7 @@ export const researchFixesMethods = uiModule({
     /** The open tree's list, when the item and the dialog are offered (else null). */
     researchFixesNow(): FixesOfResearch | null {
         const rid = this.fixesResearchId();
-        if (!rid || !onComputer()) return null;
+        if (!rid || !researchHere()) return null;
         if (!(lastFeatures.get(rid) ?? []).includes(FIXES_LIST_FEATURE)) return null;
         if (!this.researchLinkAvailable('fixes')) return null;
         return lists.get(rid) ?? null;

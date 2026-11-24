@@ -36,7 +36,7 @@ import {
     LIVE_IDLE_FOREVER, LIVE_IDLE_TWO_HOURS, liveEndKind, liveFeaturesWord, noteLiveEnded, noteLiveStatus, postLiveIdle, postLiveStop,
     storedLiveState, type LiveWriteRefusal,
 } from '../research-live.js';
-import { el, onComputer } from './research-ui.js';
+import { el, researchHere } from './research-ui.js';
 import { startPend, endPend, dropPend, pendOf, applyPend, pendStatusEl } from './switch-pend.js';
 import { busySpinHtml } from './busy.js';
 import { onBridgeStatus } from './research-sync-ui.js';
@@ -217,7 +217,7 @@ export const researchLiveMethods = uiModule({
 
     /** A tree's switch state (null: no switch here). */
     researchLiveState(treeId: string): SwitchState | null {
-        if (!onComputer() || DataManager.isViewMode()) return null;
+        if (!researchHere() || DataManager.isViewMode()) return null;
         const link = TreeManager.getTreeMetadata(treeId as TreeId)?.research;
         if (!link?.id || link.copy || !bridgeBase(link.id)) return null;
         const rid = link.id;
@@ -508,7 +508,7 @@ export const researchLiveMethods = uiModule({
         const group = document.getElementById('settings-group-research-live');
         const body = group?.querySelector<HTMLElement>('.settings-group-body');
         if (!group || !body) return;
-        const show = onComputer() && !DataManager.isViewMode() && TreeManager.getTrees().some(t => !!t.research?.id && !t.research.copy);
+        const show = researchHere() && !DataManager.isViewMode() && TreeManager.getTrees().some(t => !!t.research?.id && !t.research.copy);
         group.hidden = !show;
         if (!show) {
             body.replaceChildren();

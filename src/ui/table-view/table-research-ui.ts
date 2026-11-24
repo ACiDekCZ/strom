@@ -28,7 +28,7 @@ import { ZoomPan } from '../../zoom.js';
 import { isPhoneBar } from '../../breakpoints.js';
 import type { PersonId } from '../../types.js';
 import { uiModule } from '../module.js';
-import { liveSession, onComputer } from '../research-ui.js';
+import { liveSession, researchHere } from '../research-ui.js';
 import { closeTableBubble, openBubblePanel, researchBubbleHtml, researchBubbleTitle, sheetElement } from './table-bubble.js';
 import { researchBubble, researchBubbleActions, type ResearchBubble, type ResearchBubbleAction } from './table-research-bubble.js';
 import { inLine, researchBranchName, type ResearchTableEnv } from './table-research.js';
@@ -162,7 +162,7 @@ export const tableResearchMethods = uiModule({
         const person = args ? DataManager.getPerson(args.personId as PersonId) : null;
         const env = person ? this.tableResearchEnvNow() : null;
         if (!args || !person || !env) return false;
-        const b = researchBubble(env, person, 'rSum', { onComputer: onComputer(), bridgeLive: this.researchOriginBridge() === 'live' });
+        const b = researchBubble(env, person, 'rSum', { onComputer: researchHere(), bridgeLive: this.researchOriginBridge() === 'live' });
         const a = b ? findBubbleAction(researchBubbleActions(b), args) : null;
         if (!a || bubbleRunsHere(a) || a.via === 'item' || !this.tableResearchActionShown(a)) return false;
         this.runTableResearchAction(env, a);

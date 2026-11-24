@@ -32,7 +32,7 @@ import {
 import { foldText, KnownStreets } from '../streets.js';
 import { stampedGeo } from '../place-find.js';
 import { fixText, STREET_PLACES_FIX } from '../research-fixes.js';
-import { onComputer } from './research-ui.js';
+import { researchHere } from './research-ui.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { SettingsManager } from '../settings.js';
@@ -609,7 +609,7 @@ export const placesManagerMethods = uiModule({
      */
     placeResearchHtml(town: string, keys: readonly string[], strip: boolean): string {
         const m = strings.map;
-        const here = onComputer() && this.researchKnownHere();
+        const here = researchHere() && this.researchKnownHere();
         const { fix, towns } = this.streetPlacesFixNow();
         if (!here) {
             if (!strip) return '';

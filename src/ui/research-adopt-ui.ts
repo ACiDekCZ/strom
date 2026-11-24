@@ -32,7 +32,7 @@ import {
 } from '../research-link.js';
 import { newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
-import { onComputer, fetchWithTimeout, fetchStatus, readResearchTreeFile, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
+import { fetchWithTimeout, fetchStatus, readResearchTreeFile, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS, researchHere } from './research-ui.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { canPromptInstall, promptInstall } from '../pwa.js';
@@ -300,7 +300,7 @@ export const researchAdoptMethods = uiModule({
      * app says how it starts — C1). Never the sample tree.
      */
     researchAdoptAvailable(tree: TreeMetadata | null | undefined): boolean {
-        return !!tree && !tree.research && !tree.demo && !DataManager.isViewMode() && onComputer() && this.researchLinkAvailable('new');
+        return !!tree && !tree.research && !tree.demo && !DataManager.isViewMode() && researchHere() && this.researchLinkAvailable('new');
     },
 
     /**
@@ -309,7 +309,7 @@ export const researchAdoptMethods = uiModule({
      * runs on this computer and announced `new` — never the sample tree.
      */
     copyResearchAvailable(tree: TreeMetadata | null | undefined): boolean {
-        return !!tree && !tree.demo && !DataManager.isViewMode() && onComputer() && this.researchLinkAvailable('new');
+        return !!tree && !tree.demo && !DataManager.isViewMode() && researchHere() && this.researchLinkAvailable('new');
     },
 
     /**

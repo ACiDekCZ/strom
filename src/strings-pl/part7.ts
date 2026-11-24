@@ -682,6 +682,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
     device: {
         newToast: (name: string) => `Połączono nowe urządzenie: ${name}`,
         newToastLink: 'Urządzenia…',
+        onlyComputer: 'Tylko na komputerze z badaniem.',
+        onlyComputerAll: (pc: string) => `Zgody, uruchamianie agenta i ustawienia badania są na komputerze ${pc}.`,
     },
     read: {
         menu: 'Odczytaj dokument…',
