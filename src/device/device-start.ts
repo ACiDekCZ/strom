@@ -43,6 +43,17 @@ export function deviceTreeToOpen(trees: readonly DeviceTree[], chosen: string | 
     return trees.length === 1 ? trees[0].id : null;
 }
 
+/**
+ * The name the research's tree takes on the device after its first load, or null to keep it: a tree.ged
+ * whose header names nothing was opened under the default name ("Research" in any language), while the
+ * pairing knows the research's own name.
+ */
+export function deviceTreeRename(current: string, paired: string | undefined, defaults: readonly string[]): string | null {
+    const name = (paired ?? '').trim();
+    if (!name || name === current) return null;
+    return !current.trim() || defaults.includes(current) ? name : null;
+}
+
 /** A tree's row in the chooser, read from its bridge's status (any field may be missing). */
 export interface DeviceTreeRow {
     persons: number | null;

@@ -7,7 +7,7 @@
  * draws any of it.
  */
 
-import { strings } from '../strings.js';
+import { strings, getStringsForLang, SUPPORTED_LANGUAGES } from '../strings.js';
 import { uiModule } from './module.js';
 import { iconSvg } from '../icons.js';
 import { TreeManager } from '../tree-manager.js';
@@ -18,7 +18,7 @@ import {
 import { hasPairingMark, chosenTreeId, chooseTree, type DevicePairing, type DeviceTree } from '../device/device-store.js';
 import { deviceFetch, type GatewayHello } from '../device/gateway-client.js';
 import {
-    deviceStartEnd, deviceStartScreen, deviceTreeToOpen, deviceTreeRow, homeHowSystem, homeLineDue, homeAddressHere,
+    deviceStartEnd, deviceStartScreen, deviceTreeToOpen, deviceTreeRename, deviceTreeRow, homeHowSystem, homeLineDue, homeAddressHere,
     type DeviceTreeRow, type HomeHowSystem,
 } from '../device/device-start.js';
 import { setResearchDevicePage, deviceBridgeBase, researchDeviceState, normalizeResearchId } from '../research-link.js';
@@ -142,7 +142,7 @@ export const deviceStartMethods = uiModule({
             } else if (pairing.trees.length > 1 && !pairing.treeId) {
                 await chooseTree(treeId);
             }
-            await this.openDeviceTree(treeId, !!screen || !TreeManager.findTreeByResearchId(treeId));
+            await this.openDeviceTree(treeId, !!screen || !TreeManager.findTreeByResearchId(treeId), pairing.trees.find(t => t.id === treeId)?.name);
         };
         await run(false);
     },
@@ -153,7 +153,7 @@ export const deviceStartMethods = uiModule({
      * tree is loaded from the bridge (as ?import-url= does); afterwards the tree held here opens and the research's
      * newer version (the agent's, another device's) is offered as on the computer, by the status asked now and then.
      */
-    async openDeviceTree(treeId: string, first: boolean): Promise<void> {
+    async openDeviceTree(treeId: string, first: boolean, pairedName?: string): Promise<void> {
         // A research's tree has the research's id (strom.json's); anything else is no tree the app can open.
         if (!normalizeResearchId(treeId)) {
             this.closeDeviceBoot();
@@ -173,6 +173,13 @@ export const deviceStartMethods = uiModule({
             this.closeDeviceBoot();
         }
         const held = TreeManager.findTreeByResearchId(treeId);
+        // A file whose header names nothing: the research's name the pairing knows, not the default one.
+        const rename = held ? deviceTreeRename(held.name, pairedName, SUPPORTED_LANGUAGES.map(l => getStringsForLang(l.code).research.defaultName)) : null;
+        if (held && rename) {
+            TreeManager.renameTree(held.id, rename);
+            if (DataManager.getCurrentTreeId() === held.id) this.updateUrlTreeParam(held.id);
+            this.updateTreeSwitcher();
+        }
         if (first && held && DataManager.getCurrentTreeId() === held.id) this.setDisplayViewMode('family');
         this.showDeviceHomeLine();
         this.refreshResearchMenu();

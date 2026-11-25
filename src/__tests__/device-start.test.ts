@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    deviceStartEnd, deviceStartScreen, deviceTreeToOpen, deviceTreeRow, homeHowSystem, homeLineDue, homeAddressHere,
+    deviceStartEnd, deviceStartScreen, deviceTreeToOpen, deviceTreeRename, deviceTreeRow, homeHowSystem, homeLineDue, homeAddressHere,
 } from '../device/device-start';
 import { codePairs, type DeviceCode } from '../device/device-mode';
 
@@ -75,5 +75,20 @@ describe('device start (spec 094 §2)', () => {
         expect(homeAddressHere('http://10.0.0.9:47800/#home.a.b', origin)).toBeNull();
         expect(homeAddressHere(`${origin}/#pair.a.b`, origin)).toBeNull();
         expect(homeAddressHere(42, origin)).toBeNull();
+    });
+});
+
+describe('deviceTreeRename', () => {
+    const defaults = ['Research', 'Výzkum', 'Forschung'];
+    it('a tree opened under the default name (its file names nothing) takes the pairing\'s name', () => {
+        expect(deviceTreeRename('Research', 'Pýchavkovi z Mlýnků', defaults)).toBe('Pýchavkovi z Mlýnků');
+        expect(deviceTreeRename('Forschung', 'Pýchavkovi z Mlýnků', defaults)).toBe('Pýchavkovi z Mlýnků');
+        expect(deviceTreeRename('', 'Pýchavkovi z Mlýnků', defaults)).toBe('Pýchavkovi z Mlýnků');
+    });
+    it('a name of its own, the same name or no name in the pairing: kept', () => {
+        expect(deviceTreeRename('Hrotkovi', 'Pýchavkovi z Mlýnků', defaults)).toBeNull();
+        expect(deviceTreeRename('Research', 'Research', defaults)).toBeNull();
+        expect(deviceTreeRename('Research', undefined, defaults)).toBeNull();
+        expect(deviceTreeRename('Research', '  ', defaults)).toBeNull();
     });
 });
