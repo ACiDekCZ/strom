@@ -732,6 +732,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         dirWorkOnComputer: (pc: string) => `„Pracuj nad tą linią” (agent) jest na komputerze ${pc}.`,
         fromDevice: (name: string) => `z urządzenia ${name}`,
         fromComputer: (name: string) => `z komputera ${name}`,
+        keepFrom: (name: string) => `Zachowaj z ${name}`,
         byAgent: 'agent',
         newMark: 'nowe',
         sendRow: (n: number | null) => n === null ? 'Wysłanie' : `Wysłanie: ${nPl(n, 'zmiana', 'zmiany', 'zmian')}`,

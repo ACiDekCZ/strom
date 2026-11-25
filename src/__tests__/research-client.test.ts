@@ -176,7 +176,8 @@ describe('the sides of a conflict, kept per tree', () => {
         const raw = storage.getItem(`strom-research-auto:${TREE}`)!;
         storage.clear();
         storage.setItem(`strom-research-auto:${TREE}`, raw);
-        expect(researchConflictSides(TREE, 'X0007')).toEqual({ earlier: MAC, later: WIN });
+        // The earlier side keeps the input its send wrote (its time is found by it, spec 094 §9).
+        expect(researchConflictSides(TREE, 'X0007')).toEqual({ earlier: { ...MAC, input: 'I0003' }, later: WIN });
         expect(researchAutoState(TREE).edits).toBe(3);
         expect(researchConflictSides(TREE, 'X0008')).toBeNull();
         expect(researchConflictSides('tree_other', 'X0007')).toBeNull();
@@ -230,7 +231,7 @@ describe('the sides of a conflict, kept per tree', () => {
     it('the pure helpers', () => {
         const stored = mergeConflictSent(undefined, [sent('X0002', MAC, undefined, 'I0001')], 3);
         expect(stored).toEqual([{ id: 'X0002', earlier: { ...MAC, input: 'I0001' }, later: {} }]);
-        expect(conflictSidesOf(stored, ' X0002 ')).toEqual({ earlier: MAC, later: {} });
+        expect(conflictSidesOf(stored, ' X0002 ')).toEqual({ earlier: { ...MAC, input: 'I0001' }, later: {} });
         expect(conflictSidesOf(stored, 'P0002')).toBeNull();
         expect(conflictSidesOf(undefined, 'X0002')).toBeNull();
     });

@@ -48,7 +48,7 @@ import {
     researchMediaOut, researchSendDeclaresMedia, researchSyncUrl, researchMediaFirstSendDue, researchKeepsAppMedia,
     noteResearchDeviceActions, researchDeviceAllows,
 } from '../research-link.js';
-import { inDeviceMode } from './device-mode-ui.js';
+import { deviceComputerName, inDeviceMode } from './device-mode-ui.js';
 import { SettingsManager } from '../settings.js';
 import { loadResearchCopy } from '../research-copy.js';
 import { foreignSendCheck } from '../research-foreign-send.js';
@@ -3113,7 +3113,8 @@ export const researchSyncMethods = uiModule({
      * those devices; null otherwise (one with the research's own value, none known, or different pairs).
      */
     researchConflictsDevices(treeId: TreeId, ids: readonly string[]): ConflictDeviceWords | null {
-        return sharedConflictWords(ids.map(id => conflictDeviceWords(researchConflictSides(treeId, id))));
+        const pc = inDeviceMode() ? deviceComputerName() : '';
+        return sharedConflictWords(ids.map(id => conflictDeviceWords(researchConflictSides(treeId, id), undefined, pc)));
     },
 
     /** "Decide in the research (research)": the one open conflict of the one person, when the research announced the link. */

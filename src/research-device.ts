@@ -680,7 +680,8 @@ export interface StoredConflictSent {
 
 /** The devices of a conflict's two sends (an empty side: that send carried none). */
 export interface ConflictSides {
-    earlier: ConflictSideDevice;
+    /** With the research's input its send wrote (`I0412`), when the answer said it. */
+    earlier: ConflictSideDevice & { input?: string };
     later: ConflictSideDevice;
 }
 
@@ -711,7 +712,7 @@ export function conflictSidesOf(stored: readonly StoredConflictSent[] | undefine
     const c = id ? stored?.find(x => x.id === id) : undefined;
     if (!c) return null;
     const side = (d: ConflictSideDevice): ConflictSideDevice => ({ ...(d.id ? { id: d.id } : {}), ...(d.name ? { name: d.name } : {}) });
-    return { earlier: side(c.earlier), later: side(c.later) };
+    return { earlier: { ...side(c.earlier), ...(c.earlier.input ? { input: c.earlier.input } : {}) }, later: side(c.later) };
 }
 
 /** Remember the conflicts between two sends a send's answer named (none: nothing changes). */

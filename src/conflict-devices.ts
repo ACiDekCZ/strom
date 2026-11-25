@@ -48,10 +48,14 @@ export function sendSourceWords(client: ConflictSideDevice | null | undefined, b
     return byAgent ? D.byAgent : '';
 }
 
-/** A device after "from": this browser, its name, or its id's first characters; '' when none is said. */
-export function deviceWords(d: ConflictSideDevice | null | undefined, thisDevice: ThisDevice = isThisDevice): string {
+/**
+ * A device after "from": this browser, its name, or its id's first characters; '' when none is said. On a device
+ * of the gateway (`pc`: its computer's name) a browser of the computer is that computer (spec 094 §9).
+ */
+export function deviceWords(d: ConflictSideDevice | null | undefined, thisDevice: ThisDevice = isThisDevice, pc = ''): string {
     if (!d?.id) return '';
     if (thisDevice(d.id)) return strings.conflict.device.thisBrowser;
+    if (pc && !d.id.startsWith(DEVICE_ID_PREFIX)) return pc;
     return d.name || d.id.slice(0, ID_SHOWN);
 }
 
@@ -68,6 +72,11 @@ export function otherDeviceWords(client: ConflictSideDevice | null | undefined, 
 export interface ConflictDeviceWords {
     user: string;
     research: string;
+    /**
+     * A side is a device of the gateway (spec 094 §9): each side's short words for its choice ("Keep from iPhone");
+     * absent: the choices say the whole words, as before.
+     */
+    short?: { user: string; research: string };
 }
 
 /**
@@ -76,12 +85,24 @@ export interface ConflictDeviceWords {
  * is the earlier / the later send; two sides that would read the same (both
  * this browser, or one device twice) are told apart by their order.
  */
-export function conflictDeviceWords(sides: ConflictSides | null | undefined, thisDevice: ThisDevice = isThisDevice): ConflictDeviceWords | null {
+export function conflictDeviceWords(sides: ConflictSides | null | undefined, thisDevice: ThisDevice = isThisDevice,
+    pc = ''): ConflictDeviceWords | null {
     if (!sides) return null;
     const d = strings.conflict.device;
-    const user = deviceWords(sides.later, thisDevice) || d.later;
-    const research = deviceWords(sides.earlier, thisDevice) || d.earlier;
-    return user === research ? { user: d.later, research: d.earlier } : { user, research };
+    const user = deviceWords(sides.later, thisDevice, pc) || d.later;
+    const research = deviceWords(sides.earlier, thisDevice, pc) || d.earlier;
+    if (user === research) return { user: d.later, research: d.earlier };
+    if (!isGatewayDevice(sides.later) && !isGatewayDevice(sides.earlier)) return { user, research };
+    // A device's short name (its first part); two that would read the same keep their whole words.
+    const shortOf = (side: ConflictSideDevice, words: string): string =>
+        isGatewayDevice(side) && side.name && !thisDevice(side.id!) ? shortDeviceName(side.name) : words;
+    const short = { user: shortOf(sides.later, user), research: shortOf(sides.earlier, research) };
+    return { user, research, short: short.user === short.research ? { user, research } : short };
+}
+
+/** A side's choice: "Keep from iPhone" for a device of the gateway (spec 094 §9), else "Keep the edit from …". */
+export function conflictKeepWords(words: ConflictDeviceWords, which: 'user' | 'research'): string {
+    return words.short ? strings.device.keepFrom(words.short[which]) : strings.conflict.keepFrom(words[which]);
 }
 
 /** "edit from {earlier} × edit from {later}" (the research's order: the value standing there first). */

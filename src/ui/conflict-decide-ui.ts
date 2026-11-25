@@ -16,7 +16,7 @@ import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { inDeviceMode } from './device-mode-ui.js';
+import { deviceComputerName, inDeviceMode } from './device-mode-ui.js';
 import { FactPart, PartnershipId, PersonId, ResearchConflict, ResearchConflictValue, StromData } from '../types.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
@@ -26,7 +26,7 @@ import {
 } from '../research-link.js';
 import { keepImports } from '../import-origin.js';
 import { storedResearchBridge, researchAutoState, researchConflictSides } from '../research-device.js';
-import { conflictDeviceWords, type ConflictDeviceWords } from '../conflict-devices.js';
+import { conflictDeviceWords, conflictKeepWords, type ConflictDeviceWords } from '../conflict-devices.js';
 import { diffValues } from '../research-changes.js';
 import { canDecideInApp, conflictSides, DecideResult } from '../research-decide.js';
 import { otherRevertChanges, revertedFact, RevertResult } from '../research-revert.js';
@@ -142,7 +142,28 @@ export const conflictDecideMethods = uiModule({
         const id = researchConflictRef(c.id);
         const treeId = this.researchSyncLink()?.treeId ?? DataManager.getCurrentTreeId();
         if (!id || !treeId || c.kind === 'import' || c.kind === 'user') return null;
-        return conflictDeviceWords(researchConflictSides(treeId, id));
+        return conflictDeviceWords(researchConflictSides(treeId, id), undefined, inDeviceMode() ? deviceComputerName() : '');
+    },
+
+    /**
+     * When each send of a conflict between two devices was made (spec 094 §9, 9.3), by the research's record of
+     * the sends: the earlier one by the input it wrote, the later one as the newest send that met the conflict.
+     * null: no side is a device of the gateway, or neither is known.
+     */
+    researchConflictSideTimes(c: ResearchConflict, devices: ConflictDeviceWords | null): { user: string; research: string } | null {
+        const id = researchConflictRef(c.id);
+        const ctx = this.researchSyncLink();
+        if (!id || !ctx || !devices?.short) return null;
+        const sides = researchConflictSides(ctx.treeId, id);
+        const sends = this.researchStatusOf(ctx.link.id)?.sends ?? [];
+        const at = (iso: string | undefined): string => {
+            const ts = iso ? Date.parse(iso) : NaN;
+            return Number.isFinite(ts) ? dayAndTime(ts) : '';
+        };
+        const earlier = sides?.earlier.input ? sends.find(r => r.input === sides.earlier.input) : undefined;
+        const later = sends.filter(r => r.conflictIds?.includes(id)).sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))[0];
+        const times = { user: at(later?.at), research: at(earlier?.at) };
+        return times.user || times.research ? times : null;
     },
 
     /** The values a decided card shows, as they read now. */
@@ -202,6 +223,8 @@ export const conflictDecideMethods = uiModule({
         // A conflict between two sends: each side by the device its edit came from.
         const devices = this.researchConflictDevices(c);
         const sentDay = dayOf(ctx?.link.sent?.at);
+        // Two devices (spec 094 §9): each side's own send time, when the research's record of the sends has it.
+        const sideTimes = this.researchConflictSideTimes(c, devices);
         const kindLine = kind && view.body === 'sides' ? `<p class="prc-kind">${esc(kind === 'import' ? o.proposeImport : o.proposeUser)}.</p>` : '';
 
         const tag = view.tag === 'busy'
@@ -259,9 +282,9 @@ export const conflictDecideMethods = uiModule({
                         ? `<span class="prc-meta">${esc(k.appUnsent(dayOf(ctx ? TreeManager.getTreeMetadata(ctx.treeId)?.changedAt : undefined) || dayOf(new Date().toISOString())))}</span>
                            <span class="prc-knows">${esc(k.researchKnows(said(sideText(c, v))))}</span>`
                     : devices
-                        ? (sentDay ? `<span class="prc-meta">${esc(k.sentOn(sentDay))}</span>` : '')
+                        ? ((sideTimes ? sideTimes[which] : sentDay) ? `<span class="prc-meta">${esc(k.sentOn(sideTimes ? sideTimes[which] : sentDay))}</span>` : '')
                         : `<span class="prc-meta">${esc(k.appSource(sentDay))}</span>`;
-                const keepWords = devices ? k.keepFrom(devices[which]) : null;
+                const keepWords = devices ? conflictKeepWords(devices, which) : null;
                 let choice = '';
                 if (kind) {
                     // A conflict of a kind: the choices stand in one row under both sides (kindRow).

@@ -17,6 +17,7 @@ import { helpMark } from './help-mark.js';
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { inDeviceMode } from './device-mode-ui.js';
+import { conflictKeepWords } from '../conflict-devices.js';
 import { PersonId, ResearchConflict, ResearchConflictValue } from '../types.js';
 import { researchConflictRef, ResearchConflictTake, researchLinkMark } from '../research-link.js';
 import { canDecideInApp, conflictSides } from '../research-decide.js';
@@ -250,11 +251,11 @@ export const conflictPanelMethods = uiModule({
             if (view.choices === 'buttons') {
                 const label = which === 'user' ? keepLabel : takeLabel;
                 choice = `<button type="button" class="prc-panel-choice${kind && which === 'research' ? ' prc-kind-choice--primary' : ''}" data-decide="${which}" data-focus="choice-${which}"
-                    aria-label="${esc(label ?? (devices ? k.keepFrom(devices[which]) : which === 'user' ? k.keep : k.take))}"${busy ? ' aria-busy="true" aria-disabled="true"' : ''}${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}>${busy
+                    aria-label="${esc(label ?? (devices ? conflictKeepWords(devices, which) : which === 'user' ? k.keep : k.take))}"${busy ? ' aria-busy="true" aria-disabled="true"' : ''}${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}>${busy
                     ? `<i class="busy-spin s12" aria-hidden="true"></i>${esc(k.busyTag)}` : esc(label ?? (which === 'user' ? k.keepShort : k.takeShort))}</button>`;
             } else if (view.choices === 'links') {
                 choice = `<button type="button" class="prc-panel-choice" data-take="${which}" data-focus="choice-${which}"
-                    aria-label="${esc(`${(which === 'user' ? keepLabel : takeLabel) ?? (devices ? k.keepFrom(devices[which]) : which === 'user' ? k.keepLink : k.takeLink)}, ${strings.research.opensInResearchSr}`)}"${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}>${researchActionLabel((which === 'user' ? keepLabel : takeLabel) ?? (which === 'user' ? k.keepShort : k.takeShort), researchLinkMark('conflict', { conflictDo: 'decide' }), { sr: false })}</button>`;
+                    aria-label="${esc(`${(which === 'user' ? keepLabel : takeLabel) ?? (devices ? conflictKeepWords(devices, which) : which === 'user' ? k.keepLink : k.takeLink)}, ${strings.research.opensInResearchSr}`)}"${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}>${researchActionLabel((which === 'user' ? keepLabel : takeLabel) ?? (which === 'user' ? k.keepShort : k.takeShort), researchLinkMark('conflict', { conflictDo: 'decide' }), { sr: false })}</button>`;
             }
             const was = kind === 'import' && which === 'research' ? this.originConflictWas(c) : '';
             const note = notes ? `<p class="prc-panel-note" id="${noteId}">${esc(which === 'user' ? (devices ? k.keepNoteFrom(devices.user, devices.research) : k.keepNote) : was ? o.acceptNote(was) : this.researchConflictTakeNote(c, devices))}</p>` : '';

@@ -9399,6 +9399,8 @@ const stringsEN = {
         /** Progress on a device (spec 094 §4, 4.6; §9): where a row came from, under it. */
         fromDevice: (name: string) => `from ${name}`,
         fromComputer: (name: string) => `from computer ${name}`,
+        /** A choice of a conflict between two devices' edits (spec 094 §9): the device's short name. */
+        keepFrom: (name: string) => `Keep from ${name}`,
         byAgent: 'agent',
         /** After the source of a row new since Progress was last seen. */
         newMark: 'new',
@@ -21301,6 +21303,7 @@ const stringsCZ: StringsType = {
         dirWorkOnComputer: (pc: string) => `„Pracovat na této linii“ (agent) je na počítači ${pc}.`,
         fromDevice: (name: string) => `ze zařízení ${name}`,
         fromComputer: (name: string) => `z počítače ${name}`,
+        keepFrom: (name: string) => `Ponechat z ${name}`,
         byAgent: 'agent',
         newMark: 'nové',
         sendRow: (n: number | null) => n === null ? 'Poslání' : `Poslání: ${nCs(n, 'úprava', 'úpravy', 'úprav')}`,
@@ -33036,6 +33039,7 @@ const stringsDE: StringsType = {
         dirWorkOnComputer: (pc: string) => `„An dieser Linie arbeiten“ (Agent) ist auf ${pc}.`,
         fromDevice: (name: string) => `von ${name}`,
         fromComputer: (name: string) => `vom Computer ${name}`,
+        keepFrom: (name: string) => `Von ${name} behalten`,
         byAgent: 'Agent',
         newMark: 'neu',
         sendRow: (n: number | null) => n === null ? 'Senden' : `Senden: ${nDe(n, 'Änderung', 'Änderungen')}`,

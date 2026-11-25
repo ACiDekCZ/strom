@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { setLanguage } from '../strings.js';
 import {
     conflictDevicePair, conflictDevicePairLine, conflictDeviceWords, deviceWords, otherDeviceWords, sendSourceWords, sharedConflictWords,
-    shortDeviceName,
+    shortDeviceName, conflictKeepWords,
 } from '../conflict-devices.js';
 
 /** The devices of the research's sends in words (spec 094 K2.4): this browser, a name, an id, a send's words. */
@@ -120,5 +120,35 @@ describe('sendSourceWords (spec 094 §9: a line\'s source where the research has
         expect(shortDeviceName('iPhone · Safari')).toBe('iPhone');
         expect(shortDeviceName('Pracovna')).toBe('Pracovna');
         expect(shortDeviceName(' · Safari')).toBe(' · Safari');
+    });
+});
+
+describe('a conflict between two devices of the gateway (spec 094 §9, 9.3)', () => {
+    const PHONE = { id: 'dv_7f3a9c21e0b4', name: 'iPhone · Safari' };
+    const PAD = { id: 'dv_0c1d2e3f4a5b', name: 'iPad · Safari' };
+
+    it('sides by the whole names, choices by the short ones; a browser of the computer is the computer on a device', () => {
+        const w = conflictDeviceWords({ earlier: EDGE, later: PHONE }, thisOne, 'Pracovna')!;
+        expect(w).toEqual({ user: 'iPhone · Safari', research: 'Pracovna', short: { user: 'iPhone', research: 'Pracovna' } });
+        expect(conflictKeepWords(w, 'user')).toBe('Keep from iPhone');
+        expect(conflictKeepWords(w, 'research')).toBe('Keep from Pracovna');
+        setLanguage('cs');
+        expect(conflictKeepWords(w, 'user')).toBe('Ponechat z iPhone');
+        setLanguage('de');
+        expect(conflictKeepWords(w, 'research')).toBe('Von Pracovna behalten');
+        setLanguage('pl');
+        expect(conflictKeepWords(w, 'user')).toBe('Zachowaj z iPhone');
+    });
+
+    it('two devices whose short names are the same keep their whole names', () => {
+        const w = conflictDeviceWords({ earlier: PAD, later: { id: 'dv_99', name: 'iPad · Chrome' } }, thisOne)!;
+        expect(w.short).toEqual({ user: 'iPad · Chrome', research: 'iPad · Safari' });
+        expect(conflictKeepWords(w, 'user')).toBe('Keep from iPad · Chrome');
+    });
+
+    it('two browsers of the computer (no device of the gateway): as before', () => {
+        const w = conflictDeviceWords({ earlier: EDGE, later: { id: OWN } }, thisOne)!;
+        expect(w.short).toBeUndefined();
+        expect(conflictKeepWords(w, 'research')).toBe('Keep the edit from Edge · Windows');
     });
 });
