@@ -35239,7 +35239,8 @@
         .pl-none-title { margin: 6px 0 0; font-family: var(--font-serif); font-size: 18px; font-weight: 600; }
         .pl-none-sub { margin: 0 0 8px; max-width: 34em; font-size: 13px; color: var(--text-light); }
         .pl-menu { position: absolute; z-index: 5; min-width: 210px; max-width: 300px; padding: 4px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-lg); }
-        .modal .pl-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 5px 10px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); font-size: 13px; text-align: left; cursor: pointer; }
+        /* A rule builder's menu (.plr-menu) sits in its overlay, beside the .modal, not inside it. */
+        .modal .pl-menu-item, .plr-menu .pl-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 5px 10px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); font-size: 13px; text-align: left; cursor: pointer; }
         .pl-menu-item.is-danger { color: var(--danger); }
         .pl-menu-item[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
         .pl-menu-label { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
@@ -35276,7 +35277,7 @@
             .modal .pl-pencil { width: 40px; height: 40px; }
             .pl-person { min-height: 48px; }
             .modal .pl-x { width: 40px; height: 40px; opacity: 1; }
-            .modal .pl-menu-item { min-height: 44px; }
+            .modal .pl-menu-item, .plr-menu .pl-menu-item { min-height: 44px; }
             .pl-sort, .pl-order-opt, .pl-filter-opt, .pl-search, .pl-acts > button, .pl-note .secondary { min-height: 44px; }
             .pl-handle { width: 44px; height: 44px; margin: 0 -12px 0 -8px; }
             .pl-person .pl-check { width: 44px; height: 44px; margin: 0 -10px; }
@@ -35421,7 +35422,7 @@
         .modal .plr-add .pl-link { margin-left: 0; font-size: 13px; }
         .modal.pln-modal input.pln-ctl.plr-yr { width: 76px; }
         .plr-dash { line-height: 30px; color: var(--text-light); }
-        .pl-menu.plr-menu { position: fixed; z-index: 10; max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; box-sizing: border-box; }
+        .pl-menu.plr-menu { position: fixed; z-index: 10; color: var(--text); max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; box-sizing: border-box; }
         .pl-menu.plr-menu--wide { width: 330px; max-width: calc(100vw - 16px); }
         /* Templates (spec 136 §7): the menu 380 px, a faint "needs a person", an own template's ⋯ beside its row;
            over the builder "From template: name · Drop the template"; the small dialog Save as template. */
@@ -35429,8 +35430,8 @@
         .plr-need { color: var(--text-faint); }
         .plr-mrow { position: relative; display: flex; align-items: stretch; }
         .plr-mrow > .pl-menu-item { flex: 1 1 auto; min-width: 0; padding-right: 36px; }
-        .modal .plr-mdots { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-light); font-size: 15px; line-height: 1; cursor: pointer; }
-        .modal .plr-mdots:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .modal .plr-mdots, .plr-menu .plr-mdots { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-light); font-size: 15px; line-height: 1; cursor: pointer; }
+        .modal .plr-mdots:focus-visible, .plr-menu .plr-mdots:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .plr-sheet .plr-sheet-row { display: flex; align-items: stretch; }
         .plr-sheet .plr-sheet-row > .bottom-sheet-item { flex: 1 1 auto; min-width: 0; }
         .plr-sheet .plr-sheet-dots { flex: none; width: 48px; min-height: 48px; padding: 0; border: 0; background: transparent; color: var(--text-light); font-size: 18px; cursor: pointer; }
@@ -35443,10 +35444,10 @@
         .modal.plt-modal input.pln-name.is-taken { border: 2px solid var(--warning-text); padding: 0 9px; }
         .plt-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
         @media (hover: hover) {
-            .modal .plr-mdots:hover, .plr-sheet .plr-sheet-dots:hover { background: var(--hover-bg); color: var(--text); }
+            .modal .plr-mdots:hover, .plr-menu .plr-mdots:hover, .plr-sheet .plr-sheet-dots:hover { background: var(--hover-bg); color: var(--text); }
         }
         @media (pointer: coarse) {
-            .modal .plr-mdots { width: 44px; height: 44px; right: 0; }
+            .modal .plr-mdots, .plr-menu .plr-mdots { width: 44px; height: 44px; right: 0; }
             .plr-mrow > .pl-menu-item { padding-right: 48px; }
             .modal .pln-from .pl-link.pln-link { padding: 12px 0; }
             .modal.plt-modal input.pln-name { height: 44px; font-size: 16px; }
@@ -35505,8 +35506,8 @@
         .modal .plr-stb[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
         .plr-sv { min-width: 96px; padding: 0 4px; font-size: 13px; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .plr-menu--search { padding-top: 0; }
-        .modal .plr-menu .pl-msearch { position: sticky; top: 0; z-index: 1; box-sizing: border-box; width: calc(100% + 8px); height: 34px; margin: 0 -4px 4px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--divider); border-radius: var(--r-md) var(--r-md) 0 0; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; outline: none; }
-        .modal .plr-menu .pl-msearch:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
+        .modal .plr-menu .pl-msearch, .plr-menu .pl-msearch { position: sticky; top: 0; z-index: 1; box-sizing: border-box; width: calc(100% + 8px); height: 34px; margin: 0 -4px 4px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--divider); border-radius: var(--r-md) var(--r-md) 0 0; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; outline: none; }
+        .modal .plr-menu .pl-msearch:focus-visible, .plr-menu .pl-msearch:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
         .pl-menu-val { flex: none; font-size: 11.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         .pl-mnone { padding: 10px; font-size: 12.5px; color: var(--text-light); }
         .plr-menu .pl-menu-item[hidden], .plr-menu .pl-mh[hidden], .plr-menu .pl-menu-sep[hidden] { display: none; }
