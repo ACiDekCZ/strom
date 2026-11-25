@@ -28,7 +28,7 @@ import {
     deviceConnection, onDeviceConnection, retryDeviceConnection, type DeviceConnectionState,
 } from '../device/device-connection.js';
 import { deviceQueue, queueCounts } from '../device/device-store.js';
-import { deviceDrafts, type DeviceBatchDraft } from '../device/device-photos.js';
+import { deviceDrafts, loadDeviceDraft, saveDeviceDraft, dropDeviceDraft, type DeviceBatchDraft } from '../device/device-photos.js';
 import { onGatewayOutcome } from '../device/gateway-client.js';
 import { formatLiveClock } from '../live-time.js';
 import type { TreeId } from '../types.js';
@@ -394,9 +394,12 @@ export const deviceOfflineMethods = uiModule({
 
     /** Unpaired and discarded: the research's trees kept on this device go (the device sees nothing of the research any more). */
     async forgetDeviceTrees(): Promise<void> {
-        const ids = TreeManager.getTrees().filter(t => !!t.research?.id).map(t => t.id as TreeId);
+        const held = TreeManager.getTrees().filter(t => !!t.research?.id);
+        const ids = held.map(t => t.id as TreeId);
         if (ids.length === 0) return;
         const open = DataManager.getCurrentTreeId();
+        // Photos kept for a tree that goes wait under its research's ID: a tree downloaded after pairing again takes them over.
+        for (const t of held) await this.keepDraftForResearch(t.id, t.research!.id);
         for (const id of ids) await TreeManager.deleteTree(id);
         if (!TreeManager.hasTrees()) {
             const fresh = DataManager.createNewTree(strings.treeManager.defaultTreeName);
@@ -408,6 +411,17 @@ export const deviceOfflineMethods = uiModule({
         }
         this.updateTreeSwitcher();
         TreeRenderer.render();
+    },
+
+    async keepDraftForResearch(treeId: string, researchId: string): Promise<void> {
+        if (treeId === researchId) return;
+        const draft = await loadDeviceDraft(treeId).catch(() => null);
+        if (!draft) return;
+        const there = await loadDeviceDraft(researchId).catch(() => null);
+        const have = new Set(there?.photos.map(p => p.id) ?? []);
+        const photos = [...(there?.photos ?? []), ...draft.photos.filter(p => !have.has(p.id))];
+        await saveDeviceDraft({ ...draft, ...there, treeId: researchId, photos });
+        await dropDeviceDraft(treeId);
     },
 
     closeDeviceWaiting(): void {

@@ -86,9 +86,15 @@ async function queue(page: Page, entries: Record<string, unknown>): Promise<void
     }, entries);
 }
 
-/** Photos kept on the device for the tree (a batch not handed over yet: `batch:<tree>` in the queue, its files as Blobs). */
+/** The queue key of the photos kept for the open tree (its own ID, as the batch keeps them). */
+async function treeBatchKey(page: Page): Promise<string> {
+    return `batch:${await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())}`;
+}
+
+/** Photos kept on the device for the open tree (a batch not handed over yet: `batch:<tree>` in the queue, its files as Blobs). */
 async function keptPhotos(page: Page, names: string[]): Promise<void> {
-    await page.evaluate(async ({ tree, names }) => {
+    await page.evaluate(async ({ names }) => {
+        const tree = window.Strom.TreeManager.getActiveTreeId()!;
         const db = await new Promise<IDBDatabase>((resolve, reject) => {
             const req = indexedDB.open('strom-device');
             req.onsuccess = () => resolve(req.result);
@@ -105,7 +111,7 @@ async function keptPhotos(page: Page, names: string[]): Promise<void> {
             tx.onerror = () => reject(tx.error);
         });
         db.close();
-    }, { tree: PYCH, names });
+    }, { names });
 }
 
 /** The keys of the device's queue. */
@@ -275,7 +281,7 @@ test.describe('en', () => {
         await expect(page.locator('.toast', { hasText: 'This device is no longer paired with Pracovna.' })).toBeVisible();
         await expect(page.locator('.toast', { hasText: 'To pair again: scan the QR code' })).toBeVisible();
         expect(await page.evaluate(() => 'strom-device-paired' in localStorage)).toBe(false);
-        // the queue stays on the device: the photos and the edit
+        // the queue stays on the device: the photos (under the research's ID, its tree gone) and the edit
         expect(await queueKeys(page)).toEqual([`batch:${PYCH}`, 'edit-1']);
         // the device has left the gateway's bridge: no Connection offered any more (the unpaired state is §7's)
         await page.locator('.tree-switcher-btn').click();
@@ -305,7 +311,7 @@ test.describe('en', () => {
         expect(text).toContain('svatba-1924.jpg');
         expect(text).toContain('svatba-1924 (2).jpg');
         expect(text).toContain('mlyn.jpg');
-        expect(await queueKeys(page)).toEqual([`batch:${PYCH}`, 'edit-1']);
+        expect(await queueKeys(page)).toEqual([await treeBatchKey(page), 'edit-1']);
 
         // Discard…: asked first; Cancel keeps everything
         const confirm = page.locator('#confirmation-modal');
@@ -315,7 +321,7 @@ test.describe('en', () => {
         await confirm.getByRole('button', { name: 'Cancel' }).click();
         await expect(confirm).toBeHidden();
         await expect(dialog).toContainText('Waiting to be sent: 3 photos, 1 edit.');
-        expect(await queueKeys(page)).toEqual([`batch:${PYCH}`, 'edit-1']);
+        expect(await queueKeys(page)).toEqual([await treeBatchKey(page), 'edit-1']);
 
         // confirmed: the photos gone, the edit stays; the confirmation counts again
         await dialog.getByRole('button', { name: 'Discard…' }).click();
