@@ -181,6 +181,19 @@
  *   (StromData.merges, spec 134 §0.3): what each merge brought and what was
  *   undone of it, for the Merge history and the undo. Additive: a tree of
  *   v25 has none (absent = none), nothing is made when it is read.
+ *   Custom list rules and a list's origin (PersonList.custom / .origin,
+ *   spec 136) and the time of a person's last change (Person.changedAt) are
+ *   additive fields of v26 too, out in the same release: a list with a
+ *   custom rule is stored with `dynamic: false` and its last worked-out
+ *   people in `personIds`, so an older app keeps showing it as a fixed list
+ *   with that set (the app refreshes the set at every save while the rule
+ *   keeps the list up to date). A custom rule the app cannot read whole (a
+ *   later rule version or condition) is kept as it came in
+ *   `PersonList.customUnknown` while the list stays fixed, and read back as
+ *   `custom` by an app that can read it: a later rule version needs no bump
+ *   of its own. Only the betas 3.32.0-beta.1 to beta.3 read
+ *   v26 without knowing them and drop them on a re-save. Were they released
+ *   later than v26, they would need a bump of their own.
  */
 export const STROM_DATA_VERSION = 26;
 

@@ -683,6 +683,13 @@ export interface Person {
      */
     addedAt?: string;
     /**
+     * When the person was last changed (ISO; spec 136 D4): written by the
+     * DataManager on every edit of the person, their events, unions and
+     * citations. Absent for people not changed since it is recorded (and for
+     * people only added: their time is `addedAt`). Never written to GEDCOM.
+     */
+    changedAt?: string;
+    /**
      * Explicit override of the "is this person alive?" heuristic used by the
      * living-privacy export filter. true = deceased, false = definitely alive,
      * undefined = fall back to the age heuristic.
@@ -1693,7 +1700,127 @@ export interface PersonList {
     builtin?: 'added30';
     /** ISO time of the last change. */
     updated: string;
+    /**
+     * A custom rule (spec 136): conditions and groups. When set, `rule` is
+     * absent and the list is stored with `dynamic: false` and `personIds` =
+     * the last worked-out people, so an older app sees a fixed list.
+     * `auto` = kept up to date ("automatic"); false = a fixed list made from it.
+     */
+    custom?: CustomRule & { auto: boolean };
+    /**
+     * A custom rule this app cannot read whole (a newer version, a condition
+     * it does not know), kept exactly as it came (spec 136 K1.8): the list is
+     * fixed with its stored people meanwhile, and an app that reads the rule
+     * takes it back as `custom` when it loads the tree. Never set together
+     * with a readable `custom` (that one wins).
+     */
+    customUnknown?: Record<string, unknown>;
+    /** Where the list came from (spec 136 K1.10); absent = made by hand. */
+    origin?: PersonListOrigin;
 }
+
+/**
+ * Where a list of people came from (spec 136 K1.10). `template` is the
+ * stable id of a built-in template (src/person-list-templates.ts) or
+ * `own:<id>` for a template saved on the device; `name` its name then.
+ */
+export type PersonListOrigin =
+    | { by: 'template'; template: string; name: string; at: string }
+    | { by: 'agent'; at: string; agent?: string };
+
+/**
+ * The stable, language-independent names of the conditions of a custom list
+ * rule (spec 136 K1.10). Never translated, never renamed: they are stored in
+ * the tree and read by the research and by agents.
+ */
+export type RuleCondName =
+    | 'family' | 'ancestors' | 'descendants' | 'rod' | 'line' | 'list'
+    | 'born' | 'died' | 'married' | 'livedIn' | 'deathAge' | 'alive'
+    | 'near' | 'gender' | 'occupation' | 'has' | 'count' | 'text'
+    | 'added' | 'changed' | 'tableFilter';
+
+/** A year period of a condition; at least one end is set. Both ends are included. */
+export interface RuleYears { from?: number; to?: number }
+
+/** A period back from now (`hours` / `days`) or from a day on (`since`, YYYY-MM-DD). */
+export type RulePeriod = { hours: 24 } | { days: number } | { since: string };
+
+/** A generation count or 'all'. */
+export type RuleDepth = number | 'all';
+
+/** What `has` asks about (spec 136 §3.2). `conflict` and `openTask` are about a research tree. */
+export type RuleHasWhat =
+    | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace' | 'photo' | 'source'
+    | 'parents' | 'partner' | 'children' | 'story' | 'note' | 'material' | 'conflict' | 'openTask';
+
+/** The kinds of event `near` looks at. */
+export type RuleNearEvent = 'birth' | 'death' | 'marriage' | 'residence';
+
+/**
+ * The parameters of each condition (spec 136 §3.2), by condition name.
+ * Names of people, places and lists are kept beside their ids so the
+ * condition can still be described when they are gone ("missing").
+ * - family: a person's family by axes (§4): `up` generations through both
+ *   parents or the father's / mother's side only, `down` generations, sideways
+ *   the direct line, siblings or cousins (`cousins` = degree, 1 = first
+ *   cousins), and spouses (none, spouses, spouses' families).
+ * - ancestors / descendants: as the one-condition rule (`generations` absent = all).
+ * - rod: family lines (rody) by id; line: a research line.
+ * - list: the people of another list.
+ * - born / died / married / livedIn / deathAge: years (deathAge: whole years of age).
+ * - near: a place (`placeKey`, src/places.ts) and its surroundings in km (0 = the
+ *   place and the parts of its town), `below` also the places under its record.
+ * - occupation: `values` folded (foldText), `labels` as shown.
+ * - count: at least (`min`) or at most (`max`) `n`.
+ * - text: in the story, the notes or both, ignoring case and accents.
+ * - added / changed: a period (RulePeriod).
+ * - tableFilter: a copy of a saved Table view's filter and sort.
+ */
+export interface RuleParamsMap {
+    family: {
+        personId: PersonId; personName: string;
+        up: RuleDepth; via: 'both' | 'father' | 'mother'; down: RuleDepth;
+        width: 'line' | 'siblings' | 'cousins'; cousins?: RuleDepth;
+        spouses: 'none' | 'spouses' | 'families';
+    };
+    ancestors: { personId: PersonId; personName: string; generations?: number };
+    descendants: { personId: PersonId; personName: string; generations?: number };
+    rod: { rodIds: string[]; rodName: string };
+    line: { directionId: string; lineName: string };
+    list: { listId: string; listName: string };
+    born: RuleYears;
+    died: RuleYears;
+    married: RuleYears;
+    livedIn: RuleYears;
+    deathAge: RuleYears;
+    alive: { value: 'living' | 'deceased' };
+    near: { placeKey: string; placeName: string; events: RuleNearEvent[]; km: number; below?: true };
+    gender: { value: 'male' | 'female' | 'unknown' };
+    occupation: { values: string[]; labels: string[] };
+    has: { have: boolean; what: RuleHasWhat };
+    count: { what: 'children' | 'marriages' | 'sources'; cmp: 'min' | 'max'; n: number };
+    text: { query: string; where: 'story' | 'note' | 'both' };
+    added: RulePeriod;
+    changed: RulePeriod;
+    tableFilter: { viewName: string; rowType: 'persons' | 'unions'; filter: TableView['filter']; sort: TableView['sort'] };
+}
+
+/** The parameters of a condition (a union discriminated by the condition's name). */
+export type RuleParams = RuleParamsMap[RuleCondName];
+
+/** One condition of a custom rule; `not` = "except" (taken away from its group). */
+export type RuleCond = { [C in RuleCondName]: { t: 'cond'; c: C; p: RuleParamsMap[C]; not?: true } }[RuleCondName];
+
+/** A group of a custom rule: all (intersection) or any (union) of its items, minus the items with `not`. */
+export interface RuleGroup { t: 'group'; op: 'all' | 'any'; items: RuleNode[]; not?: true }
+
+export type RuleNode = RuleCond | RuleGroup;
+
+/** A custom rule (spec 136 v1). The root is always a group; depth at most 3 (the root = 1). */
+export interface CustomRule { v: 1; root: RuleGroup }
+
+/** A custom list rule template saved on the device (spec 136 D5). */
+export interface ListTemplate { id: string; name: string; root: RuleGroup; created: string }
 
 /**
  * Manual corrections of the lineages (rody, see src/lineage.ts), by person id.
@@ -2400,6 +2527,11 @@ export interface AppSettings {
     importImages?: boolean;          // default: true - imports bring photos, attachments and source excerpts
     recentSourceIds?: Record<string, string[]>;  // per tree id: last cited sources, newest first (source picker)
     mergeRules?: Record<string, SavedMergeRule>;  // per program (mergeRuleKey): the import guide's saved scope and rule (spec 134 K10.4)
+    /**
+     * Custom list rule templates saved on this device (spec 136 D5), usable in any tree.
+     * Without people, places, lists, family lines and research lines (stripTemplateParams).
+     */
+    listTemplates?: ListTemplate[];
 }
 
 /**

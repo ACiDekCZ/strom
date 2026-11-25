@@ -139,6 +139,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         archives: 'Szukaj w archiwach…',
         toList: 'Dodaj do listy',
         newListWith: 'Nowa lista z tą osobą…',
+        listFromFamily: 'Lista z rodziny tej osoby…',
         newListWithMany: 'Nowa lista z tymi osobami…',
         autoListsNote: 'Listy automatyczne wypełniają się same według reguły.',
         moreLists: 'Więcej list…',

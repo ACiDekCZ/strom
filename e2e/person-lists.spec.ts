@@ -253,10 +253,16 @@ test.describe('Lists of people: a computer', () => {
         const d = dialog(page);
         await d.locator('.pl-row', { hasText: 'Ancestors – Quillon' }).click();
         await d.locator('.pl-more').click();
-        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'On the map', 'Rename', 'Duplicate', 'FreezeBecomes fixed with the people it has now', 'Export›', 'Delete']);
+        // Add condition… (spec 136 §9) before Freeze.
+        await expect(d.locator('.pl-menu .pl-menu-item')).toHaveText(['Open in Table', 'On the map', 'Rename', 'Duplicate', 'Add condition…', 'FreezeBecomes fixed with the people it has now', 'Export›', 'Delete']);
+        await expect(d.locator('.pl-rule .pl-rule-k')).toHaveText('Based on');
+        await expect(d.locator('.pl-rule .pl-link')).toHaveText(['Edit rule…', 'Add condition…']);
         await d.locator('.pl-menu [data-run="freeze"]').click();
         await expect(d.locator('.pl-badge')).toHaveText('Fixed list');
-        await expect(d.locator('.pl-rule')).toContainText('Created from Ancestors: Quillon Varnholm, all generations');
+        // The rule stays as what the list was made from: its words, Add from the rule and Add condition….
+        await expect(d.locator('.pl-rule .pl-rule-k')).toHaveText('Created from');
+        await expect(d.locator('.pl-rule .pl-rule-v')).toHaveText('Ancestors: Quillon Varnholm, all generations');
+        await expect(d.locator('.pl-rule .pl-link')).toHaveText(['Add from the rule', 'Add condition…']);
         await expect(d.locator('.pl-note')).toHaveCount(0);
         await expect(people(page)).toHaveCount(5);
         await expect(d.locator('.pl-x')).toHaveCount(5);

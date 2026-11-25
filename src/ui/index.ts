@@ -135,6 +135,7 @@ import { treeOverviewMethods } from './tree-overview.js';
 import { statsWindowMethods } from './tree-stats-ui.js';
 import { personListsMethods } from './person-lists-ui.js';
 import { personListNewMethods } from './person-list-new-ui.js';
+import { personListRuleMethods } from './person-list-rule-ui.js';
 import { personListAddMethods } from './person-list-add.js';
 import { cardSignalsUiMethods } from './card-signals-ui.js';
 import { researchOverviewMethods } from './research-overview-ui.js';
@@ -1022,6 +1023,9 @@ Object.assign(UIClass.prototype, personListsMethods);
 type PersonListNewMethods = typeof personListNewMethods;
 export interface UIClass extends PersonListNewMethods {}
 Object.assign(UIClass.prototype, personListNewMethods);
+type PersonListRuleMethods = typeof personListRuleMethods;
+export interface UIClass extends PersonListRuleMethods {}
+Object.assign(UIClass.prototype, personListRuleMethods);
 type PersonListAddMethods = typeof personListAddMethods;
 export interface UIClass extends PersonListAddMethods {}
 Object.assign(UIClass.prototype, personListAddMethods);

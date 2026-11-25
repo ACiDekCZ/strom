@@ -1105,7 +1105,8 @@ function fnv1a(text: string, seed: number): number {
 /**
  * People without what the app keeps for itself and never sends in the file
  * (a hidden married surname suggestion; the research's verification of facts,
- * spec 065, which comes with its version): hiding a suggestion leaves the
+ * spec 065, which comes with its version; the time of a person's last
+ * change, spec 136, which an edit writes and the research never has): hiding a suggestion leaves the
  * tree in step with the research. A fact confirmed, or a confirmation of the
  * research taken back, here does go (`_STROM_CONFIRMED`, which the research
  * reads against `_STROM_HEAD`): only what differs from the research's own
@@ -1115,9 +1116,10 @@ function fnv1a(text: string, seed: number): number {
 function withoutAppLocal(persons: StromData['persons']): StromData['persons'] {
     let out: StromData['persons'] | null = null;
     for (const [id, p] of Object.entries(persons)) {
-        if (p?.dismissedMarriedSuggestion === undefined && p?.confirmed === undefined && p?.researchVerify === undefined) continue;
+        if (p?.dismissedMarriedSuggestion === undefined && p?.confirmed === undefined && p?.researchVerify === undefined
+            && p?.changedAt === undefined) continue;
         out ??= { ...persons };
-        const { dismissedMarriedSuggestion: _local, confirmed: _confirmed, researchVerify: _verify, ...rest } = p;
+        const { dismissedMarriedSuggestion: _local, confirmed: _confirmed, researchVerify: _verify, changedAt: _changed, ...rest } = p;
         const edits = confirmationEdits(p);
         out[id as PersonId] = (Object.keys(edits).length ? { ...rest, confirmed: edits } : rest) as Person;
     }

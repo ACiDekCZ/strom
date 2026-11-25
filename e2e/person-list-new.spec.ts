@@ -53,8 +53,8 @@ test.describe('New list: a computer', () => {
         await expect(f.locator('#pln-name')).toBeFocused();
         await expect(f.locator('#pln-name')).toHaveValue('');
         // Empty is chosen: no rule, no automatic list, Create waits for a name.
-        await expect(f.locator('.pln-opt')).toHaveCount(5);
-        await expect(f.locator('.pln-opt-label')).toHaveText(['Empty', 'Family line', 'Ancestors of a person', 'Descendants of a person', 'Added in a period']);
+        await expect(f.locator('.pln-opt')).toHaveCount(6);
+        await expect(f.locator('.pln-opt-label')).toHaveText(['Empty', 'Family line', 'Ancestors of a person', 'Descendants of a person', 'Added in a period', 'Custom rule']);
         await expect(tile(page, 'empty')).toHaveClass(/is-on/);
         await expect(tile(page, 'ancestors').locator('.pln-count')).toHaveText('5 people');
         await expect(tile(page, 'descendants').locator('.pln-count')).toHaveText('1 person');

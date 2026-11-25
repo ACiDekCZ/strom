@@ -402,7 +402,8 @@ type OwnedElsewhere =
     | 'researchOrigins'     // written by Strom Research only (GEDCOM import), never edited
     | 'confirmed'           // confirmFact / unconfirmFact (spec 065); a changed value ends it by itself
     | 'researchVerify'      // written by Strom Research only (GEDCOM import, spec 065), never edited
-    | 'addedAt';            // written when the person comes into the tree (spec 084 §8), never edited
+    | 'addedAt'             // written when the person comes into the tree (spec 084 §8), never edited
+    | 'changedAt';          // stamped by the DataManager on every edit of the person (spec 136 D4), never edited
 
 /**
  * Compile-time proof that the two lists together cover Person exactly. Add a

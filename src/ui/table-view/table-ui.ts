@@ -65,7 +65,7 @@ import {
     applyScopeCells, legacyScopeSelection, outsideScope, scopeCounts, scopeRows, selectionScopeKey, tableScopeNow, tableScopeOf, type TableScope,
 } from './table-scope.js';
 import { LEAD_COLUMNS } from './table-columns.js';
-import { listDisplayName, listKind } from '../../person-lists.js';
+import { listDisplayName, listIsAuto, listKind } from '../../person-lists.js';
 import { listKindIcon } from '../list-kind-icon.js';
 import { applyTableWindowState, readTableWindowState, tableWindowStateOf, type TableWindowState } from './table-window-state.js';
 import { canOpenWindows, openInNewWindow } from '../../windows/window-open.js';
@@ -2801,7 +2801,7 @@ export const tableMethods = uiModule({
         const type = list.rule.rowType;
         const st = stateOf(treeKey()).types[type];
         const v = viewFromState(type, st, '', '', '');
-        if (!DataManager.setPersonListRule(list.id, { kind: 'tableFilter', rowType: type, filter: v.filter, sort: v.sort }, list.dynamic)) return;
+        if (!DataManager.setPersonListRule(list.id, { kind: 'tableFilter', rowType: type, filter: v.filter, sort: v.sort }, listIsAuto(list))) return;
         ruleEdit = null;
         this.showToast(strings.lists.toast.saved(listDisplayName(list)));
         if (mounted) this.renderTableView(mounted.container);

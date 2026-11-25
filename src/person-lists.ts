@@ -25,7 +25,8 @@ import { getCurrentLanguage, strings, type Language } from './strings.js';
 import { inLine, researchLinesOf } from './ui/table-view/table-research.js';
 import { buildTableModel, rowsOf, type TableModel } from './ui/table-view/table-model.js';
 import { filterRows, sortRows, type FilterItem, type TableFilter } from './ui/table-view/table-filter.js';
-import { ADDED30_DAYS, addedTime, personListsOf } from './person-lists-data.js';
+import { ADDED30_DAYS, addedTime, listIsAuto, personListsOf } from './person-lists-data.js';
+import { customLabel, customPersonIds, customToRule, type FilterWords } from './person-list-rules.js';
 
 export * from './person-lists-data.js';
 
@@ -45,7 +46,24 @@ export interface ListEnv {
 export type ListKind = 'fixed' | 'auto' | 'work';
 
 export function listKind(list: PersonList): ListKind {
-    return list.dynamic ? 'auto' : list.checklist ? 'work' : 'fixed';
+    return listIsAuto(list) ? 'auto' : list.checklist ? 'work' : 'fixed';
+}
+
+/** Whether a custom rule's people depend on now (added / changed) or on the Table's home and language. */
+function customDepends(node: import('./types.js').RuleNode): { now: boolean; table: boolean } {
+    if (node.t === 'cond') {
+        return {
+            now: node.c === 'added' || node.c === 'changed',
+            table: node.c === 'tableFilter' || node.c === 'alive' || node.c === 'deathAge' || node.c === 'has' || node.c === 'count' || node.c === 'list',
+        };
+    }
+    const out = { now: false, table: false };
+    for (const n of node.items) {
+        const d = customDepends(n);
+        out.now ||= d.now;
+        out.table ||= d.table;
+    }
+    return out;
 }
 
 /** A list's shown name: the ready-made one follows its period until renamed. */
@@ -68,14 +86,28 @@ interface IndexCache {
     unions?: ReturnType<typeof unionsByPerson>;
     tableModels: Map<string, TableModel>;
     lines?: ReturnType<typeof researchLinesOf>;
+    /** The people of each condition of custom rules (spec 136 D2), by condCacheKey. */
+    conds: Map<string, Set<PersonId>>;
+    /** What the custom rules work out once per index (places of people, files…), by name. */
+    ruleData: Map<string, unknown>;
 }
 
 const caches = new WeakMap<LineageIndex, IndexCache>();
 
 function cacheOf(index: LineageIndex): IndexCache {
     let c = caches.get(index);
-    if (!c) { c = { lists: new Map(), tableModels: new Map() }; caches.set(index, c); }
+    if (!c) { c = { lists: new Map(), tableModels: new Map(), conds: new Map(), ruleData: new Map() }; caches.set(index, c); }
     return c;
+}
+
+/** The caches custom rules keep per index (src/person-list-rules.ts): the conditions' people and what they work out once. */
+export function ruleCacheOf(index: LineageIndex): { conds: Map<string, Set<PersonId>>; ruleData: Map<string, unknown> } {
+    return cacheOf(index);
+}
+
+/** The research lines of the index's tree (cached). */
+export function researchLinesOfIndex(index: LineageIndex): ReturnType<typeof researchLinesOf> {
+    return cacheOf(index).lines ??= researchLinesOf(index.data);
 }
 
 const indexByData = new WeakMap<StromData, LineageIndex>();
@@ -94,7 +126,8 @@ function real(data: StromData, id: string): Person | null {
     return p && !p.isPlaceholder ? p : null;
 }
 
-function tableModelOf(index: LineageIndex, env: ListEnv): TableModel {
+/** The Table's model for a list's evaluation (the caller's when it is of this tree, else one per home person and language). */
+export function tableModelOf(index: LineageIndex, env: ListEnv): TableModel {
     if (env.tableModel && env.tableModel.data === index.data) return env.tableModel;
     const lang = env.lang ?? getCurrentLanguage();
     const key = `${env.homeId ?? ''}|${lang}`;
@@ -164,7 +197,7 @@ export function rulePersonIds(index: LineageIndex, rule: PersonListRule, env: Li
 }
 
 /** Local midnight of the day of `ms` ("the last 30 days" counts today as the first). */
-function startOfDay(ms: number): number {
+export function startOfDay(ms: number): number {
     const d = new Date(ms);
     d.setHours(0, 0, 0, 0);
     return d.getTime();
@@ -217,6 +250,20 @@ export function ruleLabel(rule: PersonListRule, index?: LineageIndex, filterLabe
     }
 }
 
+/**
+ * A list's rule in words (§8): a custom rule's by customLabel, else the
+ * one-condition rule's; '' for a list without a rule.
+ */
+export function listRuleLabel(list: PersonList, index?: LineageIndex, filterLabel?: (rule: Extract<PersonListRule, { kind: 'tableFilter' }>) => string): string {
+    if (list.custom) {
+        const words: FilterWords | undefined = filterLabel
+            ? p => filterLabel({ kind: 'tableFilter', rowType: p.rowType, filter: p.filter, sort: p.sort })
+            : undefined;
+        return customLabel(list.custom, index, words);
+    }
+    return list.rule ? ruleLabel(list.rule, index, filterLabel) : '';
+}
+
 // ---------------------------------------------------------------------------
 // Order
 // ---------------------------------------------------------------------------
@@ -254,7 +301,7 @@ function ruleGenerations(index: LineageIndex, rule: Extract<PersonListRule, { ki
 
 /** The generation shown beside a person of the list (the rule's for ancestors / descendants, else the Table's). */
 export function listGenerations(index: LineageIndex, list: PersonList, ids: readonly PersonId[]): Map<string, number> {
-    const rule = list.rule;
+    const rule = list.custom ? customToRule(list.custom) : list.rule;
     if (rule && (rule.kind === 'ancestors' || rule.kind === 'descendants')) return ruleGenerations(index, rule, new Set(ids));
     const c = cacheOf(index);
     return c.generations ??= assignGenerations(index.data);
@@ -298,15 +345,19 @@ export function sortListIds(index: LineageIndex, list: PersonList, ids: readonly
 // ---------------------------------------------------------------------------
 
 function signature(list: PersonList, env: ListEnv): string {
-    const day = list.rule?.kind === 'added' ? startOfDay(env.now ?? Date.now()) : 0;
-    const table = list.rule?.kind === 'tableFilter' && list.dynamic ? `${env.homeId ?? ''}|${env.lang ?? getCurrentLanguage()}` : '';
+    const auto = listIsAuto(list);
+    const dep = list.custom && auto ? customDepends(list.custom.root) : null;
+    const day = list.rule?.kind === 'added' ? startOfDay(env.now ?? Date.now())
+        : dep?.now ? Math.floor((env.now ?? Date.now()) / 60_000) : 0;
+    const table = (list.rule?.kind === 'tableFilter' && auto) || dep?.table ? `${env.homeId ?? ''}|${env.lang ?? getCurrentLanguage()}` : '';
     const lang = list.sort === 'name' ? env.lang ?? getCurrentLanguage() : '';
-    return JSON.stringify([list.id, list.updated, list.sort, list.dynamic, list.rule ?? null, list.personIds ?? null, day, table, lang]);
+    return JSON.stringify([list.id, list.updated, list.sort, auto, list.rule ?? null, list.custom ?? null, list.personIds ?? null, day, table, lang]);
 }
 
 /**
  * The people of a list in the list's order: a fixed list's people still in
- * the tree, an automatic list's from its rule; no placeholders. Cached per
+ * the tree, an automatic list's from its rule (a custom rule's when it has
+ * one and is kept up to date, spec 136 D3); no placeholders. Cached per
  * index (one per data revision).
  */
 export function listPersonIds(index: LineageIndex, list: PersonList, env: ListEnv = {}): PersonId[] {
@@ -316,11 +367,26 @@ export function listPersonIds(index: LineageIndex, list: PersonList, env: ListEn
     if (hit) return hit;
     const data = index.data;
     let ids: PersonId[];
-    if (list.dynamic && list.rule) ids = rulePersonIds(index, list.rule, env);
+    if (list.custom) ids = list.custom.auto ? customPersonIds(index, list.custom, env, list.id) : (list.personIds ?? []).filter(id => !!real(data, id));
+    else if (list.dynamic && list.rule) ids = rulePersonIds(index, list.rule, env);
     else ids = (list.personIds ?? []).filter(id => !!real(data, id));
     const out = sortListIds(index, list, ids, list.sort, env);
     c.lists.set(key, out);
     return out;
+}
+
+/**
+ * A list kept up to date by a custom rule with its stored people
+ * (`personIds`, what an older app shows) brought up to its people now
+ * (spec 136 D3), or null when they are the same. `updated` is left as it
+ * is: the list itself did not change.
+ */
+export function withCustomSnapshot(index: LineageIndex, list: PersonList, env: ListEnv = {}): PersonList | null {
+    if (!list.custom?.auto) return null;
+    const ids = listPersonIds(index, list, env);
+    const old = list.personIds ?? [];
+    if (!list.dynamic && old.length === ids.length && old.every((id, i) => id === ids[i])) return null;
+    return { ...list, dynamic: false, personIds: ids.slice() };
 }
 
 /** How many people a list has. */
@@ -365,7 +431,7 @@ export function listSummary(index: LineageIndex, list: PersonList, env: ListEnv 
         if (p.story?.text?.trim()) s.withStory++;
         if (!done.has(id)) left++;
     }
-    if (list.checklist && !list.dynamic) s.left = left;
+    if (list.checklist && !listIsAuto(list)) s.left = left;
     return s;
 }
 
@@ -384,7 +450,7 @@ function touched(list: PersonList, now: string): PersonList {
 
 /** People added by hand to a fixed list: at the end of its manual order, no longer "taken out". */
 export function withPersonsAdded(list: PersonList, ids: readonly PersonId[], now: string): PersonList {
-    if (list.dynamic) return list;
+    if (listIsAuto(list)) return list;
     const personIds = [...(list.personIds ?? [])];
     const have = new Set(personIds);
     for (const id of ids) if (!have.has(id)) { have.add(id); personIds.push(id); }
@@ -396,10 +462,10 @@ export function withPersonsAdded(list: PersonList, ids: readonly PersonId[], now
 
 /** People taken out of a fixed list: "Add from the rule" does not bring them back; they are no longer done. */
 export function withPersonsRemoved(list: PersonList, ids: readonly PersonId[], now: string): PersonList {
-    if (list.dynamic) return list;
+    if (listIsAuto(list)) return list;
     const drop = new Set<string>(ids);
     const next = touched({ ...list, personIds: (list.personIds ?? []).filter(id => !drop.has(id)) }, now);
-    if (list.rule) {
+    if (list.rule || list.custom) {
         const removed = [...(list.removed ?? [])];
         for (const id of ids) if (!removed.includes(id) && list.personIds?.includes(id)) removed.push(id);
         if (removed.length) next.removed = removed;
@@ -411,9 +477,10 @@ export function withPersonsRemoved(list: PersonList, ids: readonly PersonId[], n
 
 /** "Add from the rule" (§7): the rule's people not in the list and not taken out, at the end in the list's order. */
 export function withRuleFilled(index: LineageIndex, list: PersonList, now: string, env: ListEnv = {}): { list: PersonList; added: number } {
-    if (list.dynamic || !list.rule) return { list, added: 0 };
+    if (listIsAuto(list) || (!list.rule && !list.custom)) return { list, added: 0 };
     const have = new Set<string>([...(list.personIds ?? []), ...(list.removed ?? [])]);
-    const fresh = rulePersonIds(index, list.rule, env).filter(id => !have.has(id));
+    const ruleIds = list.custom ? customPersonIds(index, list.custom, env, list.id) : rulePersonIds(index, list.rule!, env);
+    const fresh = ruleIds.filter(id => !have.has(id));
     if (!fresh.length) return { list, added: 0 };
     const ordered = sortListIds(index, list, fresh, list.sort === 'manual' ? 'old' : list.sort, env);
     return { list: touched({ ...list, personIds: [...(list.personIds ?? []), ...ordered] }, now), added: ordered.length };
@@ -421,7 +488,7 @@ export function withRuleFilled(index: LineageIndex, list: PersonList, now: strin
 
 /** A person moved in a fixed list's manual order by `delta` places (clamped). */
 export function withPersonMoved(list: PersonList, id: PersonId, delta: number, now: string): PersonList {
-    if (list.dynamic || !list.personIds) return list;
+    if (listIsAuto(list) || !list.personIds) return list;
     const from = list.personIds.indexOf(id);
     if (from < 0 || !delta) return list;
     const to = Math.max(0, Math.min(list.personIds.length - 1, from + delta));
@@ -434,7 +501,7 @@ export function withPersonMoved(list: PersonList, id: PersonId, delta: number, n
 
 /** A new manual order (drag and drop): `ids` first, in that order, the rest after them as they were. */
 export function withManualOrder(list: PersonList, ids: readonly PersonId[], now: string): PersonList {
-    if (list.dynamic) return list;
+    if (listIsAuto(list)) return list;
     const have = new Set(list.personIds ?? []);
     const first = ids.filter(id => have.has(id));
     const rest = (list.personIds ?? []).filter(id => !first.includes(id));
@@ -443,21 +510,65 @@ export function withManualOrder(list: PersonList, ids: readonly PersonId[], now:
 
 /** Another order (an automatic list has no manual order); the manual order is kept for a return to it. */
 export function withSort(list: PersonList, sort: PersonListSort, now: string): PersonList {
-    if (list.sort === sort || (list.dynamic && sort === 'manual')) return list;
+    if (list.sort === sort || (listIsAuto(list) && sort === 'manual')) return list;
     return touched({ ...list, sort }, now);
 }
 
 /** "Freeze" (§7): fixed with the people it has now, in its order now; the rule stays as its origin. */
 export function withFrozen(index: LineageIndex, list: PersonList, now: string, env: ListEnv = {}): PersonList {
-    if (!list.dynamic) return list;
+    if (!listIsAuto(list)) return list;
     const personIds = listPersonIds(index, list, env).slice();
     const next = touched({ ...list, dynamic: false, personIds, name: listDisplayName(list) }, now);
+    if (list.custom) next.custom = { ...list.custom, auto: false };
+    return next;
+}
+
+/** The rule's people of a fixed list with a rule (none without one). */
+function fixedRuleIds(index: LineageIndex, list: PersonList, env: ListEnv): PersonId[] {
+    if (list.custom) return customPersonIds(index, { v: 1, root: list.custom.root }, env, list.id);
+    return list.rule ? rulePersonIds(index, list.rule, env) : [];
+}
+
+/**
+ * What "Keep by the rule" (spec 136 §10) drops from a fixed list: the people
+ * added by hand (in the list, not found by the rule), those taken out and
+ * the manual order. Null when the list cannot be kept by its rule (automatic,
+ * no rule, or a checklist).
+ */
+export function keptByRuleLoss(index: LineageIndex, list: PersonList, env: ListEnv = {}): { added: number; removed: number; manual: boolean } | null {
+    if (listIsAuto(list) || (!list.rule && !list.custom) || list.checklist) return null;
+    const found = new Set<string>(fixedRuleIds(index, list, env));
+    const added = (list.personIds ?? []).filter(id => !found.has(id)).length;
+    return { added, removed: list.removed?.length ?? 0, manual: list.sort === 'manual' };
+}
+
+/**
+ * "Keep by the rule" (§10): a fixed list with a rule becomes automatic again –
+ * `dynamic` (a one-condition rule) or `custom.auto`; what was taken out, done
+ * and the checklist go, a manual order becomes "oldest first". A custom
+ * rule's stored people are the rule's now (older apps read them). A
+ * checklist is not switched (it is switched off first).
+ */
+export function withKeptByRule(index: LineageIndex, list: PersonList, now: string, env: ListEnv = {}): PersonList {
+    if (!keptByRuleLoss(index, list, env)) return list;
+    const next = touched({ ...list, name: listDisplayName(list) }, now);
+    delete next.removed; delete next.done; delete next.checklist;
+    if (next.sort === 'manual') next.sort = 'old';
+    if (list.custom) {
+        next.custom = { ...list.custom, auto: true };
+        next.dynamic = false;
+        next.personIds = [];
+        next.personIds = listPersonIds(index, next, env).slice();
+    } else {
+        next.dynamic = true;
+        delete next.personIds;
+    }
     return next;
 }
 
 /** "Tick off done" on or off (a fixed list only); off keeps what is done for the next time. */
 export function withChecklist(list: PersonList, on: boolean, now: string): PersonList {
-    if (list.dynamic || !!list.checklist === on) return list;
+    if (listIsAuto(list) || !!list.checklist === on) return list;
     const next = touched({ ...list }, now);
     if (on) next.checklist = true; else delete next.checklist;
     return next;
@@ -465,7 +576,7 @@ export function withChecklist(list: PersonList, on: boolean, now: string): Perso
 
 /** A person ticked off or back (a checklist only). */
 export function withDoneToggled(list: PersonList, id: PersonId, now: string, done?: boolean): PersonList {
-    if (!list.checklist || list.dynamic) return list;
+    if (!list.checklist || listIsAuto(list)) return list;
     const set = new Set(list.done ?? []);
     const want = done ?? !set.has(id);
     if (want === set.has(id)) return list;

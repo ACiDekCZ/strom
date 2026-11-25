@@ -1257,6 +1257,68 @@ touch UI on a phone, a phone held sideways and a tablet.
 
 ---
 
+## 8b. Person list rules (v1)
+
+A list of people (`PersonList`, spec 084) is fixed (`personIds`), worked out
+from a one-condition rule (`rule` + `dynamic: true`), or, since spec 136,
+worked out from a **custom rule** (`custom`). The code: types in
+`src/types.ts` (`CustomRule`, `RuleGroup`, `RuleCond`, `RuleParamsMap`),
+evaluation and words in `src/person-list-rules.ts`, storage in
+`src/person-lists-data.ts` / `src/person-lists.ts`, built-in templates in
+`src/person-list-templates.ts`.
+
+**Structure.** `custom = { v: 1, root, auto }`. `root` is always a group
+`{ t: 'group', op: 'all' | 'any', items, not? }`; an item is a group or a
+condition `{ t: 'cond', c, p, not? }`. At most 3 levels (the root = 1).
+`not` means "except": a group is the intersection (`all`) or union (`any`)
+of its plain items minus the union of its `not` items; a group of excepts
+only is empty, and an except may not be a group's first item.
+
+**Condition names** (`c`) are stable and language-independent; they are never
+translated or renamed, since the research and agents read them:
+`family`, `ancestors`, `descendants`, `rod`, `line`, `list`, `born`, `died`,
+`married`, `livedIn`, `deathAge`, `alive`, `near`, `gender`, `occupation`,
+`has`, `count`, `text`, `added`, `changed`, `tableFilter`. Their parameters
+(`p`) are listed per name in `RuleParamsMap`. People, places and lists are
+referenced by id with their name beside it, so a condition whose person,
+place, list, family line or research line is gone still has a description;
+it then counts as an empty set ("missing").
+
+**Semantics** (summary). Years include both ends. A date condition holds only
+when the whole span the date may mean lies in the period ("about 1820" is
+1818-1822); a person without that date never holds. `livedIn` is an overlap of
+the life with the period (no death date: birth + 90 years; neither date: no).
+`near` is a place and its surroundings in km (haversine over the coordinates
+the Map uses); places without coordinates count by name and place hierarchy
+only. `text` ignores case and accents. `added` / `changed` are periods back
+from now (24 hours, n days) or from a day on; `changed` reads
+`Person.changedAt`, which the DataManager writes on every edit step that
+changes the person, a union of theirs or their events and citations (people
+not changed since it exists have none). Conditions the Table's filter knows
+are worked out by the Table's own functions; the one-condition rules of 084
+by `rulePersonIds`. Each condition's set is cached per lineage index (one per
+data revision), so the per-row counts of the editor and the whole list come
+from the same work.
+
+**Storage and older apps.** A list with `custom` has no `rule`, is stored
+with `dynamic: false`, and keeps its last worked-out people in `personIds`.
+Whether it is automatic is `custom.auto` (`listIsAuto`). The DataManager
+refreshes `personIds` of automatic custom lists at every save of the tree
+when the set changed. An app that does not know `custom` therefore shows a
+fixed list with that set. A custom rule that is one plain condition the
+one-condition rules can express is stored as `rule`, as before. A stored
+custom rule is read back whole or not at all (an unknown condition or version:
+the list stays fixed with its stored people). `origin` records where a list
+came from: `{ by: 'template', template, name, at }` (a built-in template's
+stable id or `own:<id>`) or `{ by: 'agent', at, agent? }`. Both fields are
+additive within data version 26 (see `src/version.ts`). Lists are not written
+to GEDCOM; a research's version of the tree keeps the tree's lists.
+
+**Templates.** Twelve built-in templates (stable ids such as `missingSource`,
+`paternal`, `nearPlace`) are offered only when a list is made; templates saved
+by a person live in the device settings (`AppSettings.listTemplates`) without
+people, places, lists, family lines or research lines.
+
 ## 9. Testing
 
 ### Active suites (29 vitest files, 2556 tests + 17 Playwright e2e)

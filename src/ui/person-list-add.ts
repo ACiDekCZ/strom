@@ -10,9 +10,10 @@
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import type { PersonId, PersonList } from '../types.js';
-import { listDisplayName } from '../person-lists.js';
+import { listDisplayName, listIsAuto } from '../person-lists.js';
 import { filterAndSort } from '../person-picker.js';
 import { shownName } from '../person-name.js';
+import { FAMILY_PRESETS } from '../lineage.js';
 import { cardYears } from '../card-fields.js';
 import { listKindIcon } from './list-kind-icon.js';
 import type { PersonMenuAction } from './context-menu.js';
@@ -23,6 +24,7 @@ import type { UIClass } from './index.js';
 /** Person menu actions of the lists' second level. */
 export const LIST_TOGGLE_ACTION = 'list-toggle:';
 export const LIST_NEW_WITH_ACTION = 'list-new-with';
+export const LIST_FROM_FAMILY_ACTION = 'list-from-family';
 export const LISTS_MORE_ACTION = 'lists-more';
 
 /** At most this many lists in a menu; the rest behind "More lists…". */
@@ -33,7 +35,7 @@ const PICK_ROWS = 200;
 
 /** The fixed lists a menu offers, the most recently changed first; `more` when some did not fit. */
 export function addTargets(): { lists: PersonList[]; more: boolean } {
-    const fixed = DataManager.getPersonLists().filter(l => !l.dynamic)
+    const fixed = DataManager.getPersonLists().filter(l => !listIsAuto(l))
         .sort((a, b) => (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0));
     return { lists: fixed.slice(0, MENU_LISTS), more: fixed.length > MENU_LISTS };
 }
@@ -64,6 +66,7 @@ export function personListMenuRows(personId: PersonId): PersonMenuAction[] {
     });
     if (more) rows.push({ action: LISTS_MORE_ACTION, label: c.moreLists });
     rows.push({ action: LIST_NEW_WITH_ACTION, label: c.newListWith, divider: rows.length > 0 });
+    rows.push({ action: LIST_FROM_FAMILY_ACTION, label: c.listFromFamily });
     rows.push({ action: 'lists-hint', label: c.autoListsNote, hint: true });
     return [{ action: 'add-to-list', label: c.toList, submenu: rows }];
 }
@@ -138,13 +141,22 @@ export const personListAddMethods = uiModule({
     runPersonListAction(personId: PersonId, action: string): boolean {
         if (action.startsWith(LIST_TOGGLE_ACTION)) {
             const list = DataManager.getPersonList(action.slice(LIST_TOGGLE_ACTION.length));
-            if (!list || list.dynamic) return true;
+            if (!list || listIsAuto(list)) return true;
             if (inList(list, personId)) DataManager.removePersonsFromList(list.id, [personId]);
             else DataManager.addPersonsToList(list.id, [personId]);
             return true;
         }
         if (action === LIST_NEW_WITH_ACTION) {
             this.showNewPersonList({ personIds: [personId] });
+            return true;
+        }
+        if (action === LIST_FROM_FAMILY_ACTION) {
+            // The custom rule with one Family of the person, the closest family (spec 136 §12).
+            const p = DataManager.getData().persons[personId];
+            if (!p) return true;
+            this.showNewPersonList({
+                custom: { t: 'group', op: 'all', items: [{ t: 'cond', c: 'family', p: { personId, personName: shownName(p), ...FAMILY_PRESETS.closest } }] },
+            });
             return true;
         }
         if (action === LISTS_MORE_ACTION) {
@@ -161,7 +173,7 @@ export const personListAddMethods = uiModule({
      */
     showAddPersonsToList(listId: string): void {
         const list = DataManager.getPersonList(listId);
-        if (!list || list.dynamic || DataManager.listsReadOnly()) return;
+        if (!list || listIsAuto(list) || DataManager.listsReadOnly()) return;
         this.closeAddPersonsToList(false);
         const active = document.activeElement;
         pick = { listId, query: '', chosen: new Set(), opener: active instanceof HTMLElement ? active : null };

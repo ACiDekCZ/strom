@@ -22,10 +22,12 @@ import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import type { PersonId, PersonList, PersonListSort } from '../types.js';
 import {
-    foldListName, listDisplayName, listGenerations, listKind, listPersonIds, listSummary, ruleBroken, ruleLabel,
+    foldListName, listDisplayName, listGenerations, listIsAuto, listKind, listPersonIds, listRuleLabel, listSummary, ruleBroken,
     PERSON_LIST_SORTS, type ListKind,
 } from '../person-lists.js';
 import { addedTime } from '../person-lists-data.js';
+import { listTemplateName } from '../person-list-templates.js';
+import { customMissing, listUsedBy, type MissingRef } from '../person-list-rules.js';
 import { shownName } from '../person-name.js';
 import { cardYears } from '../card-fields.js';
 import { listKindIcon, LIST_KIND_COLOR } from './list-kind-icon.js';
@@ -111,6 +113,14 @@ function shortDate(iso: string | undefined, withYear = false): string {
     return d.toLocaleDateString(lang, opts);
 }
 
+/** Where a list came from, in words: a template or the agent, with the day (spec 136 §8); '' for a list made by hand. */
+export function listOriginText(list: PersonList): string {
+    const t = strings.lists;
+    const o = list.origin;
+    if (o?.by === 'template') return t.origin.template(listTemplateName(o), shortDate(o.at, true));
+    return o?.by === 'agent' ? t.origin.agent(shortDate(o.at, true)) : '';
+}
+
 function kindWord(kind: ListKind): string {
     return strings.lists.kind[kind];
 }
@@ -131,11 +141,18 @@ function shownLists(st: ListsState): PersonList[] {
     return q ? all.filter(l => foldListName(listDisplayName(l)).includes(q)) : all;
 }
 
+/** The first reference of an automatic list's custom rule no longer in the tree (spec 136 §11), or null. */
+function listMissing(list: PersonList): MissingRef | null {
+    return list.custom && listIsAuto(list) ? customMissing(DataManager.getLineageIndex(), list.custom)[0] ?? null : null;
+}
+
 /** The line under a list's name in the overview: its kind and what tells it apart. */
 function rowMeta(list: PersonList): string {
     const kind = listKind(list);
     const index = DataManager.getLineageIndex();
-    if (kind === 'auto') return `${kindWord(kind)} · ${list.rule ? ruleLabel(list.rule, index) : ''}`;
+    const gone = listMissing(list);
+    if (gone) return `${kindWord(kind)} · ${strings.lists.rules.missingRef[gone.kind]}`;
+    if (kind === 'auto') return `${kindWord(kind)} · ${listRuleLabel(list, index)}`;
     if (kind === 'work') {
         const s = listSummary(index, list);
         return `${kindWord(kind)} · ${strings.lists.left(s.left ?? 0, s.persons)}`;
@@ -148,14 +165,14 @@ const DOTS = '<span aria-hidden="true">⋯</span>';
 
 /** The people of a checklist ticked off (only those still in the list). */
 function doneSet(list: PersonList, ids: readonly PersonId[]): Set<PersonId> {
-    if (!list.checklist || list.dynamic || !list.done?.length) return new Set();
+    if (!list.checklist || listIsAuto(list) || !list.done?.length) return new Set();
     const inList = new Set(ids);
     return new Set(list.done.filter(id => inList.has(id)));
 }
 
 /** The people a checklist shows under All / Left / Done (any other list: all). */
 function filteredIds(list: PersonList, ids: PersonId[], filter: DoneFilter): PersonId[] {
-    if (!list.checklist || list.dynamic || filter === 'all') return ids;
+    if (!list.checklist || listIsAuto(list) || filter === 'all') return ids;
     const done = doneSet(list, ids);
     return ids.filter(id => done.has(id) === (filter === 'done'));
 }
@@ -317,9 +334,9 @@ export const personListsMethods = uiModule({
         if (narrow && (!st.selId || all.length === 0)) st.view = 'list';
         const sel = st.selId ? all.find(l => l.id === st.selId) ?? null : null;
         if (st.menu?.kind === 'list' && !all.some(l => l.id === (st.menu as { listId: string }).listId)) st.menu = null;
-        if (st.menu?.kind === 'person' && !(sel && !sel.dynamic && sel.personIds?.includes(st.menu.pid))) st.menu = null;
+        if (st.menu?.kind === 'person' && !(sel && !listIsAuto(sel) && sel.personIds?.includes(st.menu.pid))) st.menu = null;
         // A list that is not a checklist (any more) shows everyone; switched on again it starts at All.
-        if (!sel?.checklist || sel.dynamic) st.filter = 'all';
+        if (!sel?.checklist || listIsAuto(sel)) st.filter = 'all';
 
         const view = narrow ? st.view : 'both';
         modal.dataset.view = view;
@@ -397,7 +414,7 @@ export const personListsMethods = uiModule({
             const dots = ro ? '' : `<button type="button" class="pl-dots${hot ? ' is-open' : ''}" data-act="menu-row" data-key="dots-${esc(l.id)}" tabindex="-1" aria-label="${esc(t.actions)}" aria-haspopup="menu" aria-expanded="${hot}">${DOTS}</button>`;
             return `<div class="sel-opt pl-row" data-sel-form="row" role="option" data-list="${esc(l.id)}" data-key="row-${esc(l.id)}" data-kind="${kind}" aria-selected="${on}" aria-label="${esc(aria)}" tabindex="${l.id === focusable ? 0 : -1}">`
                 + `<span class="pl-row-icon">${listKindIcon(kind, 16)}</span>`
-                + `<span class="pl-row-mid"><span class="pl-row-name" title="${esc(name)}">${esc(name)}</span><span class="pl-row-meta">${esc(rowMeta(l))}</span></span>`
+                + `<span class="pl-row-mid"><span class="pl-row-name" title="${esc(name)}">${esc(name)}</span><span class="pl-row-meta${listMissing(l) ? ' is-warn' : ''}">${esc(rowMeta(l))}</span></span>`
                 + `<span class="pl-row-count">${fmtNum(n)}</span>${dots}</div>`;
         }).join('');
         return `<div class="pl-side"><div class="pl-tools">${newBtn}<div class="sel-seg pl-order" role="group" aria-label="${esc(t.title)}">${seg}</div></div>${search}`
@@ -412,7 +429,7 @@ export const personListsMethods = uiModule({
         const index = DataManager.getLineageIndex();
         const kind = listKind(list);
         const name = listDisplayName(list);
-        const auto = list.dynamic;
+        const auto = listIsAuto(list);
 
         // Name: edited in place (click, ✎, F2); Enter saves, Escape returns.
         let nameRow: string;
@@ -433,14 +450,30 @@ export const personListsMethods = uiModule({
         // The rule: what an automatic list is worked out from, what a fixed one was made from.
         const broken = auto ? ruleBroken(index, list.rule) : null;
         let ruleRow = '';
-        if (list.rule) {
+        if (list.rule || list.custom) {
+            // Edit rule… (automatic) or Add from the rule (fixed), then Add condition… (spec 136 §9).
             const link = ro || broken ? ''
-                : auto ? (personListHooks.editRule ? `<button type="button" class="pl-link" data-act="edit-rule" data-key="edit-rule">${esc(t.editRule)}</button>` : '')
-                    : `<button type="button" class="pl-link" data-act="fill" data-key="fill">${esc(t.fill)}</button>`;
-            ruleRow = `<div class="pl-rule"><span class="pl-rule-k">${esc(auto ? t.rule.key : t.rule.origin)}</span> <span class="pl-rule-v">${esc(ruleLabel(list.rule, index))}</span>${link}</div>`;
+                : (auto ? (personListHooks.editRule ? `<button type="button" class="pl-link" data-act="edit-rule" data-key="edit-rule">${esc(t.editRule)}</button>` : '')
+                    : `<button type="button" class="pl-link" data-act="fill" data-key="fill">${esc(t.fill)}</button>`)
+                + `<button type="button" class="pl-link" data-act="add-condition" data-key="add-condition">${esc(t.addCondition)}</button>`;
+            const words = listRuleLabel(list, index);
+            // The words at most 2 lines (4 on a phone), whole in the tooltip (spec 136 §8); a phone has "Whole rule ›":
+            // the rule's dialog, or the words unfolded in a read-only tree (the dialog does not open there).
+            const whole = narrow && (ro || personListHooks.editRule)
+                ? `<button type="button" class="pl-link pl-rule-whole" data-act="${ro ? 'whole-rule' : 'edit-rule'}" data-key="whole-rule">${esc(t.wholeRule)}</button>` : '';
+            ruleRow = `<div class="pl-rule"><div class="pl-rule-t" title="${esc(words)}"><span class="pl-rule-k">${esc(auto ? t.rule.key : t.rule.origin)}</span> <span class="pl-rule-v">${esc(words)}</span></div>`
+                + `${whole}${link ? `<div class="pl-rule-acts">${link}</div>` : ''}</div>`;
         }
+        // Where the list came from: a template or the agent, with the day (spec 136 §8); none for a list made by hand.
+        const origin = listOriginText(list);
+        if (origin) ruleRow += `<div class="pl-origin">${esc(origin)}</div>`;
+        const gone = broken ? null : listMissing(list);
         let note = '';
-        if (broken) {
+        if (gone) {
+            const text = t.rules.missingNote(t.rules.missingRef[gone.kind], gone.name);
+            const acts = ro || !personListHooks.editRule ? '' : `<button type="button" class="secondary" data-act="edit-rule" data-key="note-edit-rule">${esc(t.editRule)}</button>`;
+            note = `<div class="pl-note pl-note--warn" role="note"><span class="pl-note-dot" aria-hidden="true"></span><span class="pl-note-text">${esc(text)}</span>${acts}</div>`;
+        } else if (broken) {
             const text = broken.kind === 'person' ? t.ruleGone(broken.name) : broken.kind === 'rod' ? t.ruleGoneRod : t.ruleGoneLine;
             const acts = ro ? '' : (personListHooks.editRule ? `<button type="button" class="secondary" data-act="edit-rule" data-key="note-edit-rule">${esc(t.editRule)}</button>` : '')
                 + `<button type="button" class="secondary" data-act="delete" data-key="note-delete">${esc(t.deleteList)}</button>`;
@@ -515,9 +548,9 @@ export const personListsMethods = uiModule({
         const st = state!;
         const data = DataManager.getData();
         const ro = DataManager.listsReadOnly();
-        const removable = !ro && !list.dynamic;
+        const removable = !ro && !listIsAuto(list);
         const manual = removable && list.sort === 'manual';
-        const check = !list.dynamic && !!list.checklist;
+        const check = !listIsAuto(list) && !!list.checklist;
         const done = check ? doneSet(list, all) : null;
         const pos = new Map(all.map((id, i) => [id, i + 1]));
         // The manual order: one row takes the keyboard (Alt+↑/↓ moves it).
@@ -585,7 +618,7 @@ export const personListsMethods = uiModule({
             if (!list) return '';
             const ro = DataManager.listsReadOnly();
             const items = PERSON_LIST_SORTS.map(s => {
-                const off = s === 'manual' && list.dynamic;
+                const off = s === 'manual' && listIsAuto(list);
                 const on = list.sort === s;
                 const sub = off ? `<span class="pl-menu-sub">${esc(t.manualOff)}</span>` : '';
                 return `<button type="button" class="pl-menu-item" role="menuitemradio" aria-checked="${on}" data-act="set-sort" data-sort="${s}" data-key="sort-${s}"${off || ro ? ' aria-disabled="true"' : ''}>`
@@ -710,7 +743,7 @@ export const personListsMethods = uiModule({
         const st = state;
         const list = DataManager.getPersonList(listId);
         const p = DataManager.getData().persons[personId];
-        if (!st || !list || !p || DataManager.listsReadOnly() || list.dynamic) return;
+        if (!st || !list || !p || DataManager.listsReadOnly() || listIsAuto(list)) return;
         if (!isNarrow()) {
             st.menu = st.menu?.kind === 'person' && st.menu.pid === personId ? null : { kind: 'person', pid: personId };
             this.renderPersonLists();
@@ -741,7 +774,7 @@ export const personListsMethods = uiModule({
     movePersonListPerson(listId: string, personId: PersonId, dir: -1 | 1): boolean {
         const st = state;
         const list = DataManager.getPersonList(listId);
-        if (!st || !list || list.dynamic || list.sort !== 'manual' || DataManager.listsReadOnly()) return false;
+        if (!st || !list || listIsAuto(list) || list.sort !== 'manual' || DataManager.listsReadOnly()) return false;
         const order = list.personIds ?? [];
         const shown = filteredIds(list, listPersonIds(DataManager.getLineageIndex(), list), st.filter);
         const at = shown.indexOf(personId);
@@ -810,8 +843,32 @@ export const personListsMethods = uiModule({
         if (copy && state) this.selectPersonList(copy.id);
     },
 
-    /** Delete without asking (2e): the toast offers Undo; the next list is chosen. */
+    /**
+     * Delete without asking (2e): the toast offers Undo; the next list is chosen. A list another list's rule
+     * uses asks first, naming those lists (spec 136 §11); Undo brings the references back with the list.
+     */
     deletePersonListUi(listId: string): void {
+        const st = state;
+        if (!st) return;
+        const list = DataManager.getPersonList(listId);
+        const users = list ? listUsedBy(DataManager.getPersonLists(), listId) : [];
+        if (list && users.length) {
+            const t = strings.lists;
+            const shown = users.slice(0, 3).map(l => listDisplayName(l)).join(', ');
+            const n = listPersonIds(DataManager.getLineageIndex(), list).length;
+            st.menu = null;
+            void this.showConfirm(`${t.deletePeople(t.persons(n))}\n\n${t.deleteUsedBy(shown, users.length - 3 > 0 ? users.length - 3 : 0)}`,
+                t.deleteTitle(listDisplayName(list)), { confirmLabel: t.menu.delete, variant: 'danger', note: { text: t.deleteUsedNote } })
+                .then(ok => {
+                    if (ok && state === st) this.deletePersonListNow(listId);
+                    else if (state === st) this.renderPersonLists();
+                });
+            return;
+        }
+        this.deletePersonListNow(listId);
+    },
+
+    deletePersonListNow(listId: string): void {
         const st = state;
         if (!st) return;
         const shown = shownLists(st);
@@ -833,7 +890,7 @@ export const personListsMethods = uiModule({
         if (!st?.selId) return;
         const list = DataManager.getPersonList(st.selId);
         st.menu = null;
-        if (list && !(sort === 'manual' && list.dynamic) && list.sort !== sort) DataManager.setPersonListSort(list.id, sort);
+        if (list && !(sort === 'manual' && listIsAuto(list)) && list.sort !== sort) DataManager.setPersonListSort(list.id, sort);
         this.renderPersonLists();
         this.focusPersonLists('[data-act="sort"]');
     },
@@ -900,6 +957,13 @@ export const personListsMethods = uiModule({
             case 'on-map': if (listId) personListHooks.showOnMap(this, listId); return;
             case 'no-cite': if (listId) personListHooks.openInTable(this, listId, { noSource: true }); return;
             case 'edit-rule': if (listId) personListHooks.editRule?.(this, listId); return;
+            case 'whole-rule': {
+                // A read-only tree: the rule's words unfolded in place.
+                el?.closest('.pl-rule')?.classList.add('is-whole');
+                el?.remove();
+                return;
+            }
+            case 'add-condition': if (listId) this.showNewPersonList({ listId, startWith: 'addCondition' }); return;
             case 'add-person': if (listId) personListHooks.addPerson?.(this, listId); return;
             case 'fill': {
                 if (!listId) return;
@@ -1096,7 +1160,7 @@ export const personListsMethods = uiModule({
         const box = row?.closest<HTMLElement>('.pl-people');
         const pid = row?.dataset.pid as PersonId | undefined;
         const list = DataManager.getPersonList(st.selId);
-        if (!row || !box || !pid || !list || list.dynamic || list.sort !== 'manual' || DataManager.listsReadOnly()) return;
+        if (!row || !box || !pid || !list || listIsAuto(list) || list.sort !== 'manual' || DataManager.listsReadOnly()) return;
         e.preventDefault();
         st.menu = null;
         document.querySelector(`#${OVERLAY_ID} .pl-menu`)?.remove();

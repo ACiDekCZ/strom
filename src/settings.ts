@@ -4,7 +4,8 @@
  */
 
 import { personMediaCount } from './media.js';
-import { AppSettings, BranchMarker, ThemeMode, SurnameDisplay, LanguageSetting, CardDensity, TreeSpacing, StromData, CardPhotoSize, CardPhotoShape, SavedMergeRule } from './types.js';
+import { AppSettings, BranchMarker, ThemeMode, SurnameDisplay, LanguageSetting, CardDensity, TreeSpacing, StromData, CardPhotoSize, CardPhotoShape, SavedMergeRule, ListTemplate } from './types.js';
+import { sanitizeCustomRule } from './person-lists-data.js';
 import { CARD_SIZE, NORMAL_PHOTO_BOX } from './layout-config.js';
 import { BRANCH_MARKERS, SURNAME_DISPLAYS, SETTINGS_KEY, personSourceIds } from './model-values.js';
 import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields, normalizeCardPhoto } from './card-fields.js';
@@ -686,6 +687,27 @@ class SettingsManagerClass {
         if (!this.settings.mergeRules?.[key]) return;
         delete this.settings.mergeRules[key];
         if (!Object.keys(this.settings.mergeRules).length) delete this.settings.mergeRules;
+        this.save();
+    }
+
+    /**
+     * The list rule templates saved on this device (spec 136 D5), oldest
+     * first; one the app cannot read whole is left out.
+     */
+    getListTemplates(): ListTemplate[] {
+        const raw: unknown = this.settings.listTemplates;
+        if (!Array.isArray(raw)) return [];
+        return raw.flatMap((t: Partial<ListTemplate>) => {
+            if (!t || typeof t.id !== 'string' || !t.id || typeof t.name !== 'string' || !t.name.trim()) return [];
+            const rule = sanitizeCustomRule({ v: 1, root: t.root });
+            return rule ? [{ id: t.id, name: t.name.trim(), root: rule.root, created: typeof t.created === 'string' ? t.created : '' }] : [];
+        });
+    }
+
+    /** Store the device's list templates (none: the key is dropped). */
+    setListTemplates(templates: readonly ListTemplate[]): void {
+        if (templates.length) this.settings.listTemplates = templates.map(t => structuredClone(t));
+        else delete this.settings.listTemplates;
         this.save();
     }
 
