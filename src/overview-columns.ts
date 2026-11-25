@@ -14,9 +14,6 @@ export const OVERVIEW_WINDOW_COLS_3 = 1600;
 export const OVERVIEW_COLS_HYSTERESIS = 24;
 /** A third column shorter than this share of the columns' height: two columns instead. */
 export const OVERVIEW_SMALL_COLUMN = 0.2;
-/** One column at most this wide; the columns stand centred in a wider window. */
-export const OVERVIEW_COLUMN_MAX = 660;
-
 export type OverviewColumns = 1 | 2 | 3;
 
 /**

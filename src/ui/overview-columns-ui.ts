@@ -1,8 +1,8 @@
 /**
  * The Research overview's own window by its width (spec 083 §4): from 1100 px
  * the sections stand in two columns, from 1600 px in three, each column
- * scrolled by itself (the window's body does not scroll), at most 660 px
- * wide and centred; under 1100 px one column as the panel, unchanged.
+ * scrolled by itself (the window's body does not scroll), the columns
+ * sharing the window's whole width; under 1100 px one column as the panel, unchanged.
  *
  * The overview draws its sections one after another into its body as
  * always; here they are then moved into the columns. A section's split

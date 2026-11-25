@@ -3,7 +3,8 @@ import { test, expect, Page } from '@playwright/test';
 /**
  * The Research overview's own window by its width (spec 083 §4, story 3):
  * one column under 1100 px as before, two from 1100 px, three from 1600 px,
- * each column at most 660 px and scrolled by itself (the window's body does
+ * the columns sharing the window's whole width (no empty margins on a wide
+ * window), each scrolled by itself (the window's body does
  * not scroll), the sections split in their reading order; a long section's
  * head (heading, field, chips) sticks to its column's top while its rows
  * scroll; a drag of the window across a threshold moves the same nodes into
@@ -125,16 +126,30 @@ test.describe('the overview window by its width', () => {
         await popup.setViewportSize({ width: 1700, height: 600 });
         await expect(cols(popup)).toHaveCount(3);
         expect(await titlesByColumn(popup)).toEqual([['Now'], ['Awaiting action', 'Progress'], ['Queue']]);
-        // At most 660 px each, centred, a divider from the second on, each focusable by a click into it.
-        const geo = await cols(popup).evaluateAll(cs => cs.map(c => {
+        // The window's whole width shared evenly (no empty margins, Milan 25 Nov), a divider from the second on,
+        // each focusable by a click into it.
+        const geoAt = () => cols(popup).evaluateAll(cs => cs.map(c => {
             const r = c.getBoundingClientRect();
             return { left: r.left, right: r.right, width: r.width, border: getComputedStyle(c).borderLeftWidth, tab: (c as HTMLElement).tabIndex };
         }));
-        for (const g of geo) expect(g.width).toBeLessThanOrEqual(660.5);
+        const fills = (geo: Awaited<ReturnType<typeof geoAt>>, vw: number) => {
+            expect(geo[0].left).toBeLessThan(12);
+            expect(vw - geo[geo.length - 1].right).toBeLessThan(12);
+            for (const g of geo) expect(Math.abs(g.width - (vw - 16) / geo.length)).toBeLessThan(2);
+        };
+        const geo = await geoAt();
         expect(geo.map(g => g.border)).toEqual(['0px', '1px', '1px']);
         expect(geo.every(g => g.tab === -1)).toBe(true);
-        const vw = 1700;
-        expect(Math.abs(geo[0].left - (vw - geo[2].right))).toBeLessThan(24);
+        fills(geo, 1700);
+        expect(geo[0].width).toBeGreaterThan(560);
+        // 2000 px: still the whole width, each column wider than the old 660 px cap.
+        await popup.setViewportSize({ width: 2000, height: 600 });
+        await expect(cols(popup)).toHaveCount(3);
+        const wide = await geoAt();
+        fills(wide, 2000);
+        expect(wide[0].width).toBeGreaterThan(660);
+        await popup.setViewportSize({ width: 1700, height: 600 });
+        await expect(cols(popup)).toHaveCount(3);
 
         // The Queue's column scrolls by itself; the body and the page do not.
         const queueCol = cols(popup).nth(2);
