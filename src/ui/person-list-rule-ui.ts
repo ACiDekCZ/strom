@@ -617,6 +617,8 @@ export const personListRuleMethods = uiModule({
                 this.ruleBuilderSet(r.root, r.path ? { path: r.path } : { add: nodeAt(r.root, groupPath)?.t === 'group' ? groupPath : '' });
                 const was = root;
                 this.showToast(strings.lists.rules.removed, UNDO_MS, {
+                    // Over the dialog: its Undo can be pressed.
+                    kind: 'over-dialog',
                     clearOf: '.pln-foot',
                     action: {
                         label: strings.undo.undo,

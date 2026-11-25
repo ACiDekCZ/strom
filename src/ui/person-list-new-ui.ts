@@ -642,6 +642,8 @@ export const personListNewMethods = uiModule({
             const gone = all[at];
             SettingsManager.setListTemplates(all.filter(x => x.id !== id));
             this.showToast(strings.lists.templates.deleted(gone.name), 6000, {
+                // Over the dialog: its Undo can be pressed.
+                kind: 'over-dialog',
                 clearOf: '.pln-foot',
                 action: {
                     label: strings.undo.undo,
