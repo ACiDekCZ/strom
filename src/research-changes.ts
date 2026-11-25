@@ -53,7 +53,9 @@ const CITATION_FIELDS: (keyof Person)[] = ['sourceIds', 'birthSourceIds', 'death
 /** Not the user's: the research's own knowledge and statuses, and what the app keeps for itself. */
 const IGNORED_FIELDS = new Set<string>(['research', 'birthStatus', 'deathStatus', 'nameStatus', 'marriedNameStatus', 'photoOriginalName', 'photoDate', 'photoOriginal', 'partnerships', 'childIds', 'isLocked',
     'dismissedMarriedSuggestion', 'importId', 'importedValues', 'importedParents', 'researchOrigins', 'originalIds', 'gedcomExtra', 'alsoChildOf',
-    'confirmed', 'researchVerify']);
+    'confirmed', 'researchVerify',
+    // The time of the person's last change in this app (spec 136 D4): local bookkeeping, not a change of its own.
+    'changedAt']);
 const MARRIAGE_FIELDS: (keyof Partnership)[] = ['status', 'startDate', 'startPlace', 'endDate', 'endPlace', 'address', 'ages', 'note'];
 
 /** JSON with sorted keys and images reduced to their length (two copies of one tree compare equal). */
