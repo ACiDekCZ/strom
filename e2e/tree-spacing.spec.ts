@@ -218,8 +218,12 @@ test.describe('the spacing segment\'s pictures', () => {
 
 test.describe('a choice that lays the tree out anew (C80, waiting buttons §8)', () => {
     type Watch = { atLayout: string[]; chosenAtLayout: string[]; shown: boolean; added: number; removed: number; layoutEnd: number };
-    /** The layout of the view made `ms` long (in one go), and what the tree's area says around it. */
-    const watch = (page: Page, ms: number) => page.evaluate((ms) => {
+    /**
+     * The layout of the view made `ms` long (in one go), and what the tree's area says around it. `null`: the
+     * layout is replaced by one that takes no time, so "quick" does not hang on the machine's speed (the sample
+     * tree's real layout takes 120 ms and more on a slow CI runner, and there the overlay is rightly seen).
+     */
+    const watch = (page: Page, ms: number | null) => page.evaluate((ms) => {
         const w = window as unknown as { __cb: Watch };
         w.__cb = { atLayout: [], chosenAtLayout: [], shown: false, added: 0, removed: 0, layoutEnd: 0 };
         const R = window.Strom.TreeRenderer as unknown as { renderKeepingView: () => Promise<void> };
@@ -227,6 +231,10 @@ test.describe('a choice that lays the tree out anew (C80, waiting buttons §8)',
         R.renderKeepingView = () => {
             w.__cb.atLayout.push(document.querySelector('#tree-container > .canvas-busy')?.textContent ?? '');
             w.__cb.chosenAtLayout.push(window.Strom.SettingsManager.getTreeSpacing());
+            if (ms === null) {
+                w.__cb.layoutEnd = performance.now();
+                return Promise.resolve();
+            }
             const end = performance.now() + ms;
             while (performance.now() < end) { /* the layout of a large tree */ }
             const r = orig();
@@ -264,11 +272,15 @@ test.describe('a choice that lays the tree out anew (C80, waiting buttons §8)',
     test('a quick layout never shows the overlay', async ({ page }) => {
         await sampleTree(page);
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());
-        await watch(page, 0);
+        await watch(page, null);
         await page.evaluate(() => window.Strom.UI.setTreeSpacing('dense'));
         await expect(page.locator('#tree-container > .canvas-busy')).toHaveCount(0);
         const cb = await watched(page);
         expect(cb.atLayout).toEqual(['Calculating the layout…']);
+        expect(cb.chosenAtLayout).toEqual(['dense']);
+        // It went over the tree and away again without ever being seen.
+        expect(cb.added).toBeGreaterThan(0);
+        expect(cb.removed).toBeGreaterThan(0);
         expect(cb.shown).toBe(false);
     });
 });
