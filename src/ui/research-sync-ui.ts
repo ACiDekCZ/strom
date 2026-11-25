@@ -3956,6 +3956,9 @@ export const researchSyncMethods = uiModule({
             this.closeResearchSyncNote();
         };
         if (kind === 'none' || !ctx) { hide(); return; }
+        // On a device the computer's state is the tree switcher's second line (094 §3.1): no quiet mark of the
+        // bridge beside it, which would stay green while the computer is away.
+        const quietMarkOff = inDeviceMode();
         const set = (cls: string, html: string, title = ''): void => {
             const full = html + (note ? `<div class="research-sync-note" role="status">${note.html}</div>` : '');
             // A button of the bar in its working state or its ✓: redrawn after it (waiting buttons §1.5).
@@ -4052,6 +4055,7 @@ export const researchSyncMethods = uiModule({
             if (safariBrowser()) { hide(); return; }
             // "Only load from the research": never a Send button — the quiet mark says nothing goes.
             if (researchSendMode(link) === 'off') {
+                if (quietMarkOff) { hide(); return; }
                 const down = kind === 'bridgeDown';
                 const label = down ? s.stateBridgeDown : s.sendOffLine;
                 set('is-send', `<button type="button" class="research-sync-mark" id="research-sync-mark" data-look="${down ? 'ghost' : 'off'}"`
@@ -4061,6 +4065,7 @@ export const researchSyncMethods = uiModule({
             }
             // Nothing to send: the button's place stays (empty), so the toolbar does not move when it comes.
             if (kind !== 'unsent' && kind !== 'notTaken') {
+                if (quietMarkOff) { hide(); return; }
                 // In its place the quiet mark (in step, or the research not running), at the end next to the tree switcher.
                 const down = kind === 'bridgeDown' || kind === 'unsentBridgeDown';
                 // Changes waiting for a research that is not running: their number stays in sight beside the mark (audit 017 a-D6).
@@ -4089,6 +4094,7 @@ export const researchSyncMethods = uiModule({
             return;
         }
         // Sent by itself: the mark, always there (the toolbar does not move while a send goes).
+        if (quietMarkOff) { hide(); return; }
         const lw = researchAutoState(ctx.treeId).lastWritten;
         const writtenAt = lw ? s.writtenAt(when(lw.at)) : s.stateInSync;
         let look: 'ring' | 'spin' | 'check' | 'dot' | 'ghost';

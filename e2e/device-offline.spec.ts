@@ -414,6 +414,19 @@ test.describe('a computer', () => {
 });
 
 test.describe('German, a long computer and tree name', () => {
+    for (const width of [1024, 1440]) {
+        test(`no quiet sync mark beside the tree switcher at ${width}: the switcher's second line carries the computer's state (094 §3.1)`, async ({ page }) => {
+            await pairedTree(page, { lang: 'de', width });
+            await keptPhotos(page, ['hochzeit-1924.png']);
+            const mark = page.locator('#research-sync-mark');
+            await expect(page.locator('#current-tree-conn .phone-dot')).toBeVisible();
+            await expect(mark).toHaveCount(0);
+            await goAway(page);
+            await expect(page.locator('#device-qline')).toContainText('nicht erreichbar');
+            await expect(mark).toHaveCount(0);
+        });
+    }
+
     for (const width of [390, 1024, 1440]) {
         test(`the quiet line and what waits at ${width}, light and dark: nothing overflows or overlaps`, async ({ page }) => {
             treeName = TREE_DE;
