@@ -104,7 +104,7 @@ export function parseGiftMemory(raw: unknown, recipients: readonly PersonId[]): 
         ...(typeof s.fileName === 'string' && s.fileName ? { fileName: s.fileName } : {}),
     };
     const cutSize = typeof raw.cutSize === 'number' && Number.isFinite(raw.cutSize) ? raw.cutSize : 0;
-    return { lastAt: raw.lastAt, settings, cutSize };
+    return { lastAt: raw.lastAt, ...(typeof raw.madeAt === 'string' && raw.madeAt ? { madeAt: raw.madeAt } : {}), settings, cutSize };
 }
 
 function readAll(storage: StorageLike, treeId: string): Record<string, unknown> {

@@ -109,8 +109,10 @@ export interface GiftSettings {
 
 /** What the tree remembers for one person or couple (spec 093 §9). */
 export interface GiftMemory {
-    /** ISO time of the last package. */
+    /** ISO time the settings were last used: a package made, or the guide closed. */
     lastAt: string;
+    /** ISO time of the last package made (the person menu's date, §9 [66]); absent while none was made. */
+    madeAt?: string;
     settings: GiftSettings;
     /** People in the cut then (to say what changed since). */
     cutSize: number;
