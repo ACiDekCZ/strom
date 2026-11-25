@@ -22,6 +22,7 @@
 import type { PersonList } from '../types.js';
 import { DataManager } from '../data.js';
 import { listIsAuto } from '../person-lists-data.js';
+import { keptByRuleLoss } from '../person-lists.js';
 import { strings } from '../strings.js';
 import type { UIClass } from './index.js';
 
@@ -58,8 +59,8 @@ export const personListHooks: PersonListHooks = {
     },
     editRule(ui, listId) {
         const list = DataManager.getPersonList(listId);
-        if (!list?.rule) return;
-        if (list.rule.kind === 'tableFilter') {
+        if (!list?.rule && !list?.custom) return;
+        if (list.rule?.kind === 'tableFilter') {
             ui.closePersonLists();
             ui.openTableForRule(listId);
         } else ui.showNewPersonList({ listId });
@@ -84,15 +85,43 @@ export const personListHooks: PersonListHooks = {
  * now, a toast with Undo); a fixed list switches "Tick off done" on and off
  * (off keeps what is done for the next time it is on).
  */
-function freezeAndChecklistRows(_ui: UIClass, list: PersonList): ListMenuRow[] {
+function freezeAndChecklistRows(ui: UIClass, list: PersonList): ListMenuRow[] {
     const t = strings.lists;
-    if (listIsAuto(list)) {
-        return [{ id: 'freeze', label: t.menu.freeze, sub: t.freezeSub, run: () => { DataManager.freezePersonList(list.id); } }];
+    const rows: ListMenuRow[] = [];
+    // Add condition… (spec 136 §9): a list with a rule.
+    if (list.rule || list.custom) {
+        rows.push({ id: 'add-condition', label: t.addCondition, run: () => { ui.showNewPersonList({ listId: list.id, startWith: 'addCondition' }); } });
     }
-    return [{
+    if (listIsAuto(list)) {
+        rows.push({ id: 'freeze', label: t.menu.freeze, sub: t.freezeSub, run: () => { DataManager.freezePersonList(list.id); } });
+        return rows;
+    }
+    rows.push({
         id: 'work', label: t.menu.work, checked: !!list.checklist,
         run: () => { DataManager.setPersonListChecklist(list.id, !list.checklist); },
-    }];
+    });
+    // Keep by the rule (§10): a fixed list with a rule; a checklist is switched off first.
+    if (list.rule || list.custom) {
+        rows.push({
+            id: 'keep-by-rule', label: t.menu.keepByRule,
+            ...(list.checklist ? { sub: t.keepByRule.checklistFirst, disabled: true, why: t.keepByRule.checklistFirst } : { sub: t.menu.keepByRuleSub }),
+            run: () => { keepByRule(ui, list.id); },
+        });
+    }
+    return rows;
+}
+
+/** "Keep by the rule": asked first only when something done by hand would go (§10). */
+function keepByRule(ui: UIClass, listId: string): void {
+    const list = DataManager.getPersonList(listId);
+    if (!list) return;
+    const loss = keptByRuleLoss(DataManager.getLineageIndex(), list, { now: Date.now() });
+    if (!loss) return;
+    if (!loss.added && !loss.removed && !loss.manual) { DataManager.keepPersonListByRule(listId); return; }
+    const k = strings.lists.keepByRule;
+    void ui.showConfirm(k.confirm(loss.added, loss.removed, loss.manual), k.title, { confirmLabel: strings.lists.menu.keepByRule }).then(ok => {
+        if (ok) DataManager.keepPersonListByRule(listId);
+    });
 }
 
 /**

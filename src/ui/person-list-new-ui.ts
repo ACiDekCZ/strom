@@ -380,11 +380,15 @@ export const personListNewMethods = uiModule({
                 default: break;
             }
         }
-        // A custom rule (the list's, or given): the builder at once.
-        const custom = mode === 'save' ? null : editList?.custom?.root ?? opts.custom ?? null;
+        // A custom rule (the list's, or given): the builder at once. "Add condition…" (§9) of a list with a
+        // one-condition rule: the builder with that condition.
+        const addCond = mode === 'edit' && opts.startWith === 'addCondition' && !!editList && (!!editList.custom || !!editList.rule);
+        const fromRule: RuleGroup | null = addCond && !editList!.custom && editList!.rule
+            ? { t: 'group', op: 'all', items: [ruleToCustom(editList!.rule, DataManager.getLineageIndex())] } : null;
+        const custom = mode === 'save' ? null : editList?.custom?.root ?? fromRule ?? opts.custom ?? null;
         if (custom) {
             st.opt = 'custom';
-            st.rb = newRuleBuilder(cloneRuleNode(custom), st.listId, editList?.custom ? cloneRuleNode(custom) : null);
+            st.rb = newRuleBuilder(cloneRuleNode(custom), st.listId, editList?.custom || fromRule ? cloneRuleNode(custom) : null);
         }
         if (mode === 'edit' && st.opt === 'empty') st.opt = 'ancestors';
         if (!canKeep(st)) st.dynamic = false;
@@ -412,6 +416,7 @@ export const personListNewMethods = uiModule({
             : st.opt === 'custom' ? '.plr-row, .plr [data-rb="add"]' : '.pln-opt input:checked');
         first?.focus({ preventScroll: true });
         if (first instanceof HTMLInputElement && first.type === 'text') first.select();
+        if (addCond && st.opt === 'custom') this.ruleBuilderStartAdd();
     },
 
     isNewPersonListOpen(): boolean {

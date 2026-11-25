@@ -97,7 +97,7 @@ import {
 import { customLabel, customPersonIds, customToRule, ruleIssues } from './person-list-rules.js';
 import {
     listDisplayName, listPersonIds, personToastName, rulePersonIds, ruleLabel, sortListIds, withChecklist, withDoneToggled,
-    withCustomSnapshot, withFrozen, withManualOrder, withPersonMoved, withPersonsAdded, withPersonsRemoved, withRuleFilled, withSort,
+    withCustomSnapshot, withFrozen, withKeptByRule, withManualOrder, withPersonMoved, withPersonsAdded, withPersonsRemoved, withRuleFilled, withSort,
     type ListEnv,
 } from './person-lists.js';
 import {
@@ -2748,6 +2748,13 @@ class DataManagerClass {
     freezePersonList(id: string, env: ListEnv = {}): boolean {
         return !!this.changePersonList(id, (l, now) => withFrozen(this.getLineageIndex(), l, now, env), {
             silent: false, toast: () => ({ text: strings.lists.toast.frozen }), audit: true,
+        });
+    }
+
+    /** "Keep by the rule" (spec 136 §10): a fixed list with a rule automatic again (toast with Undo). */
+    keepPersonListByRule(id: string, env: ListEnv = {}): boolean {
+        return !!this.changePersonList(id, (l, now) => withKeptByRule(this.getLineageIndex(), l, now, env), {
+            silent: false, toast: () => ({ text: strings.lists.toast.keptByRule }), audit: true,
         });
     }
 

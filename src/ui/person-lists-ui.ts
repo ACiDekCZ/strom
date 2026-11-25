@@ -22,7 +22,7 @@ import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import type { PersonId, PersonList, PersonListSort } from '../types.js';
 import {
-    foldListName, listDisplayName, listGenerations, listIsAuto, listKind, listPersonIds, listSummary, ruleBroken, ruleLabel,
+    foldListName, listDisplayName, listGenerations, listIsAuto, listKind, listPersonIds, listRuleLabel, listSummary, ruleBroken,
     PERSON_LIST_SORTS, type ListKind,
 } from '../person-lists.js';
 import { addedTime } from '../person-lists-data.js';
@@ -135,7 +135,7 @@ function shownLists(st: ListsState): PersonList[] {
 function rowMeta(list: PersonList): string {
     const kind = listKind(list);
     const index = DataManager.getLineageIndex();
-    if (kind === 'auto') return `${kindWord(kind)} · ${list.rule ? ruleLabel(list.rule, index) : ''}`;
+    if (kind === 'auto') return `${kindWord(kind)} · ${listRuleLabel(list, index)}`;
     if (kind === 'work') {
         const s = listSummary(index, list);
         return `${kindWord(kind)} · ${strings.lists.left(s.left ?? 0, s.persons)}`;
@@ -433,11 +433,14 @@ export const personListsMethods = uiModule({
         // The rule: what an automatic list is worked out from, what a fixed one was made from.
         const broken = auto ? ruleBroken(index, list.rule) : null;
         let ruleRow = '';
-        if (list.rule) {
+        if (list.rule || list.custom) {
+            // Edit rule… (automatic) or Add from the rule (fixed), then Add condition… (spec 136 §9).
             const link = ro || broken ? ''
-                : auto ? (personListHooks.editRule ? `<button type="button" class="pl-link" data-act="edit-rule" data-key="edit-rule">${esc(t.editRule)}</button>` : '')
-                    : `<button type="button" class="pl-link" data-act="fill" data-key="fill">${esc(t.fill)}</button>`;
-            ruleRow = `<div class="pl-rule"><span class="pl-rule-k">${esc(auto ? t.rule.key : t.rule.origin)}</span> <span class="pl-rule-v">${esc(ruleLabel(list.rule, index))}</span>${link}</div>`;
+                : (auto ? (personListHooks.editRule ? `<button type="button" class="pl-link" data-act="edit-rule" data-key="edit-rule">${esc(t.editRule)}</button>` : '')
+                    : `<button type="button" class="pl-link" data-act="fill" data-key="fill">${esc(t.fill)}</button>`)
+                + `<button type="button" class="pl-link" data-act="add-condition" data-key="add-condition">${esc(t.addCondition)}</button>`;
+            const words = listRuleLabel(list, index);
+            ruleRow = `<div class="pl-rule"><span class="pl-rule-k">${esc(auto ? t.rule.key : t.rule.origin)}</span> <span class="pl-rule-v" title="${esc(words)}">${esc(words)}</span>${link ? `<span class="pl-rule-acts">${link}</span>` : ''}</div>`;
         }
         let note = '';
         if (broken) {
@@ -900,6 +903,7 @@ export const personListsMethods = uiModule({
             case 'on-map': if (listId) personListHooks.showOnMap(this, listId); return;
             case 'no-cite': if (listId) personListHooks.openInTable(this, listId, { noSource: true }); return;
             case 'edit-rule': if (listId) personListHooks.editRule?.(this, listId); return;
+            case 'add-condition': if (listId) this.showNewPersonList({ listId, startWith: 'addCondition' }); return;
             case 'add-person': if (listId) personListHooks.addPerson?.(this, listId); return;
             case 'fill': {
                 if (!listId) return;

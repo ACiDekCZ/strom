@@ -487,7 +487,7 @@ export const personListRuleMethods = uiModule({
     },
 
     /** The catalog under "+ Add condition" (or "+ Add group": the condition picked starts a new group). */
-    ruleBuilderOpenCatalog(anchor: HTMLElement, groupPath: string, asGroup: boolean): void {
+    ruleBuilderOpenCatalog(anchor: HTMLElement, groupPath: string, asGroup: boolean, onClose?: () => void): void {
         const st = rb;
         if (!st) return;
         const t = strings.lists.rules;
@@ -515,7 +515,39 @@ export const personListRuleMethods = uiModule({
                 const ctl = document.querySelector<HTMLElement>(`.pln-overlay [data-key="${CSS.escape(rowKey(r.path, `p-${editor.firstControl}`))}"]`);
                 ctl?.click();
             }
-        }, { wide: true, search: t.catalog.search, none: t.catalog.none });
+        }, { wide: true, search: t.catalog.search, none: t.catalog.none, ...(onClose ? { onClose } : {}) });
+    },
+
+    /**
+     * "Add condition…" of an existing list (spec 136 §9): under the rule a
+     * row for a while – the joining word and "choose a condition…" – with the
+     * catalog open by it. A condition picked takes its place; Escape (or any
+     * close) takes the row away with the catalog, the focus on "+ Add condition".
+     */
+    ruleBuilderStartAdd(): void {
+        const st = rb;
+        const box = document.querySelector<HTMLElement>('.pln-overlay .plr');
+        const rows = box?.querySelector<HTMLElement>(':scope > .plr-rows');
+        if (!st || !box || !rows) return;
+        const t = strings.lists.rules;
+        const conj = st.root.items.length ? (st.root.op === 'all' ? t.and : t.or) : '';
+        const row = document.createElement('div');
+        row.className = 'plr-row plr-temp';
+        row.tabIndex = -1;
+        row.setAttribute('aria-label', `${conj} ${t.pickCond}`.trim());
+        row.innerHTML = `<span class="plr-h" aria-hidden="true"></span><span class="plr-c">${esc(conj)}</span>`
+            + `<div class="plr-m">${conj ? `<span class="plr-ci">${esc(conj)}</span>` : ''}<span class="plr-n plr-pickn">${esc(t.pickCond)}</span></div>`;
+        rows.appendChild(row);
+        row.scrollIntoView({ block: 'nearest' });
+        this.ruleBuilderOpenCatalog(row, '', false, () => {
+            const had = row.isConnected;
+            row.remove();
+            if (!had) return;
+            const active = document.activeElement;
+            if (!active || active === document.body || active === row || !box.contains(active)) {
+                box.querySelector<HTMLElement>(':scope > .plr-add [data-rb="add"]')?.focus({ preventScroll: true });
+            }
+        });
     },
 
     /** A person's choice by an editor's control (the dialog's person popover). */

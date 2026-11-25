@@ -523,6 +523,49 @@ export function withFrozen(index: LineageIndex, list: PersonList, now: string, e
     return next;
 }
 
+/** The rule's people of a fixed list with a rule (none without one). */
+function fixedRuleIds(index: LineageIndex, list: PersonList, env: ListEnv): PersonId[] {
+    if (list.custom) return customPersonIds(index, { v: 1, root: list.custom.root }, env, list.id);
+    return list.rule ? rulePersonIds(index, list.rule, env) : [];
+}
+
+/**
+ * What "Keep by the rule" (spec 136 §10) drops from a fixed list: the people
+ * added by hand (in the list, not found by the rule), those taken out and
+ * the manual order. Null when the list cannot be kept by its rule (automatic,
+ * no rule, or a checklist).
+ */
+export function keptByRuleLoss(index: LineageIndex, list: PersonList, env: ListEnv = {}): { added: number; removed: number; manual: boolean } | null {
+    if (listIsAuto(list) || (!list.rule && !list.custom) || list.checklist) return null;
+    const found = new Set<string>(fixedRuleIds(index, list, env));
+    const added = (list.personIds ?? []).filter(id => !found.has(id)).length;
+    return { added, removed: list.removed?.length ?? 0, manual: list.sort === 'manual' };
+}
+
+/**
+ * "Keep by the rule" (§10): a fixed list with a rule becomes automatic again –
+ * `dynamic` (a one-condition rule) or `custom.auto`; what was taken out, done
+ * and the checklist go, a manual order becomes "oldest first". A custom
+ * rule's stored people are the rule's now (older apps read them). A
+ * checklist is not switched (it is switched off first).
+ */
+export function withKeptByRule(index: LineageIndex, list: PersonList, now: string, env: ListEnv = {}): PersonList {
+    if (!keptByRuleLoss(index, list, env)) return list;
+    const next = touched({ ...list, name: listDisplayName(list) }, now);
+    delete next.removed; delete next.done; delete next.checklist;
+    if (next.sort === 'manual') next.sort = 'old';
+    if (list.custom) {
+        next.custom = { ...list.custom, auto: true };
+        next.dynamic = false;
+        next.personIds = [];
+        next.personIds = listPersonIds(index, next, env).slice();
+    } else {
+        next.dynamic = true;
+        delete next.personIds;
+    }
+    return next;
+}
+
 /** "Tick off done" on or off (a fixed list only); off keeps what is done for the next time. */
 export function withChecklist(list: PersonList, on: boolean, now: string): PersonList {
     if (listIsAuto(list) || !!list.checklist === on) return list;
