@@ -180,6 +180,8 @@ let st: {
     held: boolean;
 } | null = null;
 let run: Run | null = null;
+/** Trees whose handed photos this page sent again by itself since the connection last came back. */
+const deviceResumed = new Set<string>();
 /** A batch id safe inside the line's inline handler (the bridge's ids are UUIDs or `b-…`). */
 const BATCH_LINK_ID = /^[A-Za-z0-9_.-]{1,120}$/;
 let downTimer: ReturnType<typeof setInterval> | null = null;
@@ -311,13 +313,17 @@ export const batchMethods = uiModule({
         return { file, path, size: file.size, checked: !skip, skip: skip?.reason ?? null, fixed: skip?.fixed ?? false, ...(researchDevice() ? { key: key ?? newPhotoKey() } : {}) };
     },
 
-    /** The photos chosen on a device kept in its queue (they stay over a reload, an unpairing; spec 094 §5). */
-    batchSaveDeviceDraft(): void {
+    /**
+     * The photos chosen on a device kept in its queue (they stay over a reload, an unpairing; spec 094 §5).
+     * `handed`: sent (or held for the computer) — such a batch goes again by itself when it was left
+     * without its run (a reload, the computer away); one only chosen waits for its Send.
+     */
+    batchSaveDeviceDraft(handed = false): void {
         const s = st;
         const link = this.researchOriginalsLink();
         if (!s || !link || !researchDevice()) return;
         const photos: DevicePhoto[] = s.items.filter(i => i.key).map(i => ({ id: i.key!, blob: i.file, name: i.path.split('/').pop() || i.file.name, type: i.file.type, size: i.size }));
-        void saveDeviceDraft({ treeId: link.treeId, name: s.nameTouched ? s.name : '', personId: s.personId, note: s.note, photos, ...(s.held ? { handedAt: new Date().toISOString() } : {}) });
+        void saveDeviceDraft({ treeId: link.treeId, name: s.nameTouched ? s.name : '', personId: s.personId, note: s.note, photos, ...(handed || s.held ? { handedAt: new Date().toISOString() } : {}) });
     },
 
     openBatchOverlay(): void {
@@ -1105,7 +1111,7 @@ export const batchMethods = uiModule({
 
     // ==================== SENDING ====================
 
-    async startBatchRun(): Promise<void> {
+    async startBatchRun(opts: { hidden?: boolean } = {}): Promise<void> {
         const s = st;
         const link = this.researchOriginalsLink();
         const bridge = link ? parseLiveBridge(storedResearchBridge(link.researchId)?.base) : null;
@@ -1124,6 +1130,9 @@ export const batchMethods = uiModule({
             states: [], errs: new Map(), curDone: 0,
         };
         s.step = 'progress';
+        if (opts.hidden) run.hidden = true;
+        // A device: its photos kept as handed over until they reach the research (they go again by themselves).
+        if (researchDevice()) this.batchSaveDeviceDraft(true);
         window.addEventListener('beforeunload', onLeave);
         this.batchRemember();
         this.renderBatchDialog();
@@ -1571,6 +1580,51 @@ export const batchMethods = uiModule({
         if (!r || r.finished || r.cancelled || !r.paused || !r.lost || !researchDevice()) return 0;
         this.resumeBatchRun();
         return Math.max(0, r.queue.length - r.index);
+    },
+
+    /**
+     * The tree whose batch of this page has not ended (null: none). A device's photos of
+     * that tree go on by themselves when the computer is back.
+     */
+    batchRunTree(): string | null {
+        return run && !run.finished && !run.cancelled ? run.treeId : null;
+    },
+
+    /**
+     * The open tree's photos handed over on a device (Send) with no batch of this page going
+     * — a reload or the computer away cut it — that go again by themselves now: the
+     * computer answers and takes files of devices, no batch window is open, and this
+     * page has not sent them again since the connection last came back (a batch that
+     * could not be closed is not sent over and over). `count`: only how many would go.
+     * How many photos go (0: none).
+     */
+    async batchResumeDevicePhotos(opts: { count?: boolean } = {}): Promise<number> {
+        const idle = (): boolean => !(run && !run.finished) && !document.getElementById(DIALOG_ID);
+        const link = this.researchOriginalsLink();
+        if (!researchDevice() || !link || !idle() || deviceResumed.has(link.treeId)) return 0;
+        const draft = await loadDeviceDraft(link.treeId);
+        if (!draft?.handedAt || !draft.photos.length || !idle() || this.researchOriginalsLink()?.treeId !== link.treeId) return 0;
+        if (opts.count) return draft.photos.length;
+        if (!this.batchAvailable() || !deviceMediaOn() || deviceResumed.has(link.treeId)) return 0;
+        deviceResumed.add(link.treeId);
+        st = {
+            step: 'send', items: [], name: draft.name, nameTouched: !!draft.name, personId: draft.personId, note: draft.note,
+            search: '', full: new Set(), collapsed: new Set(), resume: readUnfinished(link.treeId), held: false,
+        };
+        st.items = draft.photos.map(p => this.batchItemOf(new File([p.blob], p.name, { type: p.type }), p.name, p.id));
+        run = null;
+        const n = st.items.filter(i => i.checked).length;
+        if (n > 0) void this.startBatchRun({ hidden: true });
+        if (!run) {
+            st = null;
+            return 0;
+        }
+        return n;
+    },
+
+    /** The connection of a device came back: its handed photos may go by themselves again. */
+    batchDeviceResumeAgain(): void {
+        deviceResumed.clear();
     },
 
     resumeBatchRun(): void {

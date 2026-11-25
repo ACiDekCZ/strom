@@ -102,9 +102,14 @@ async function pairedTree(page: Page, opts: { lang: 'en' | 'de'; width: number; 
     await poll(page);
 }
 
-/** Photos kept on the device for the tree (`batch:<tree>` in its queue, the files as Blobs). */
-async function keptPhotos(page: Page, names: string[]): Promise<void> {
-    await page.evaluate(async ({ tree, names, png }) => {
+/**
+ * Photos kept on the device for the tree (`batch:<tree>` in its queue, the files as Blobs) and one
+ * edit. `handed`: sent (Send) and left by a reload without their batch, kept as the app keeps
+ * them (by the open tree); else only chosen.
+ */
+async function keptPhotos(page: Page, names: string[], handed = false): Promise<void> {
+    await page.evaluate(async ({ research, names, png, handed }) => {
+        const tree = handed ? window.Strom.TreeManager.getActiveTreeId()! : research;
         const db = await new Promise<IDBDatabase>((resolve, reject) => {
             const req = indexedDB.open('strom-device', 1);
             req.onsuccess = () => resolve(req.result);
@@ -117,13 +122,13 @@ async function keptPhotos(page: Page, names: string[]): Promise<void> {
         });
         await new Promise<void>((resolve, reject) => {
             const tx = db.transaction('queue', 'readwrite');
-            tx.objectStore('queue').put({ treeId: tree, name: '', personId: '', note: '', photos }, `batch:${tree}`);
+            tx.objectStore('queue').put({ treeId: tree, name: '', personId: '', note: '', photos, ...(handed ? { handedAt: '2026-11-24T12:50:00Z' } : {}) }, `batch:${tree}`);
             tx.objectStore('queue').put({ kind: 'edit', changes: 1 }, 'edit-1');
             tx.oncomplete = () => resolve();
             tx.onerror = () => reject(tx.error);
         });
         db.close();
-    }, { tree: TREE, names, png: PNG.toString('base64') });
+    }, { research: TREE, names, png: PNG.toString('base64'), handed });
 }
 
 async function queueKeys(page: Page): Promise<string[]> {
@@ -211,7 +216,8 @@ test.describe('a phone of the home network (touch)', () => {
         const list = page.locator('.device-waiting-sheet');
         await expect(list).toBeVisible();
         await expect(list).toContainText('Waiting on this device');
-        await expect(list).toContainText('Sent automatically once Pracovna is reachable.');
+        // Only chosen photos and edits sent by hand: neither goes by itself (K3.8), the sentence says how they go
+        await expect(list.locator('.device-waiting-note')).toHaveText('Edits are sent with “Send to research” once Pracovna is reachable. Photos not sent yet go with “Add materials…”.');
         await expect(list.locator('.device-waiting-th')).toHaveCount(3);
         await expect(list.getByRole('button', { name: 'Save photos to the device' })).toBeVisible();
         await expect(list.getByRole('button', { name: 'Discard…' })).toBeVisible();
@@ -257,6 +263,72 @@ test.describe('a phone of the home network (touch)', () => {
         await expect(page.locator('.toast', { hasText: 'Reconnected – sending 3 photos.' })).toBeVisible();
         await expect.poll(() => gw.media.length, { timeout: 15000 }).toBe(3);
         await expect.poll(() => queueKeys(page), { timeout: 15000 }).toEqual([]);
+    });
+
+    test('photos handed over and left by a reload go by themselves when the computer is back; edits sent by hand stay', async ({ page }) => {
+        await pairedTree(page, { lang: 'en', width: 390 });
+        await keptPhotos(page, ['svatba-1924.png', 'mlyn.png', 'kaplicka.png'], true);
+        await goAway(page);
+        await page.locator('#device-qline [data-act="pending"]').tap();
+        const list = page.locator('.device-waiting-sheet');
+        await expect(list.locator('.device-waiting-note')).toHaveText('Photos are sent automatically once Pracovna is reachable. Edits are sent with “Send to research” once Pracovna is reachable.');
+        await page.evaluate(() => window.Strom.UI.closeDeviceWaiting());
+        gw.unreachable = false;
+        await page.locator('#device-qline').getByRole('button', { name: 'Try again' }).tap();
+        await expect(page.locator('.toast', { hasText: 'Reconnected – sending 3 photos.' })).toBeVisible();
+        await expect.poll(() => gw.media.length, { timeout: 15000 }).toBe(3);
+        // the photos left the queue; the edit sent by hand stays
+        await expect.poll(() => queueKeys(page), { timeout: 15000 }).toEqual(['edit-1']);
+    });
+
+    test('photos handed over and left by a reload go by themselves once the research answers after the reload', async ({ page }) => {
+        await pairedTree(page, { lang: 'en', width: 390 });
+        await keptPhotos(page, ['svatba-1924.png', 'mlyn.png'], true);
+        await page.reload();
+        await expect.poll(() => state(page), { timeout: 15000 }).toBe('connected');
+        await expect.poll(() => gw.media.length, { timeout: 15000 }).toBe(2);
+        await expect.poll(() => queueKeys(page), { timeout: 15000 }).toEqual(['edit-1']);
+    });
+
+    test('photos sent while the computer is away are kept as handed over (they go by themselves after a reload too)', async ({ page }) => {
+        await pairedTree(page, { lang: 'en', width: 390 });
+        await page.evaluate(() => window.Strom.UI.showBatchDialog());
+        const dlg = page.locator(DLG);
+        await dlg.locator('#batch-input-gallery').setInputFiles([photo('IMG_2080.png', 80), photo('IMG_2081.png', 81)]);
+        await dlg.locator('[data-act="next"]').tap();
+        gw.unreachable = true;
+        await dlg.locator('[data-act="go"]').tap();
+        await page.evaluate(() => window.dispatchEvent(new Event('online')));
+        await expect.poll(() => state(page)).toBe('unreachable');
+        // The page is served by the gateway: a reload while it is away cannot be had here; the batch kept
+        // on the device says it was handed over, which is what a reload leaves (the tests above).
+        const handed = await page.evaluate(async () => {
+            const tree = window.Strom.TreeManager.getActiveTreeId()!;
+            const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('strom-device', 1); r.onsuccess = () => resolve(r.result); });
+            const v = await new Promise<{ handedAt?: string; photos: unknown[] } | undefined>((resolve) => {
+                const r = db.transaction('queue').objectStore('queue').get(`batch:${tree}`);
+                r.onsuccess = () => resolve(r.result as never);
+            });
+            db.close();
+            return { handed: typeof v?.handedAt === 'string', photos: v?.photos.length ?? 0 };
+        });
+        expect(handed).toEqual({ handed: true, photos: 2 });
+        await dlg.locator('[data-act="hide"]').tap().catch(() => undefined);
+        await page.evaluate(() => window.Strom.UI.showDeviceWaiting());
+        await expect(page.locator('.device-waiting-sheet .device-waiting-note')).toHaveText('Sent automatically once Pracovna is reachable.');
+    });
+
+    test('photos only chosen do not go by themselves when the computer is back', async ({ page }) => {
+        await pairedTree(page, { lang: 'en', width: 390 });
+        await keptPhotos(page, ['svatba-1924.png']);
+        await goAway(page);
+        gw.unreachable = false;
+        await page.locator('#device-qline').getByRole('button', { name: 'Try again' }).tap();
+        await expect(page.locator('.toast', { hasText: 'Reconnected.' })).toBeVisible();
+        await poll(page);
+        await page.waitForTimeout(500);
+        expect(gw.media.length).toBe(0);
+        expect(await queueKeys(page)).toEqual([`batch:${TREE}`, 'edit-1']);
     });
 
     test('Discard… while a cut-off batch waits: it stops and keeps none of its photos again', async ({ page }) => {
@@ -360,7 +432,7 @@ test.describe('German, a long computer and tree name', () => {
                 await line.locator('[data-act="pending"]').click();
                 const host = page.locator('.device-waiting');
                 await expect(host).toBeVisible();
-                await expect(host).toContainText(`Wird automatisch gesendet, sobald ${PC_DE} erreichbar ist.`);
+                await expect(host.locator('.device-waiting-note')).toHaveText(`Änderungen werden mit „An Forschung senden“ gesendet, sobald ${PC_DE} erreichbar ist. Noch nicht gesendete Fotos gehen über „Materialien hinzufügen…“.`);
                 const over = await page.evaluate(() => {
                     const root = document.querySelector('.device-waiting')!;
                     const edge = Math.min(root.getBoundingClientRect().right, window.innerWidth) + 1;

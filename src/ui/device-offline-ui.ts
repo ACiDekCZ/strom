@@ -28,7 +28,7 @@ import {
     deviceConnection, onDeviceConnection, retryDeviceConnection, type DeviceConnectionState,
 } from '../device/device-connection.js';
 import { deviceQueue, queueCounts } from '../device/device-store.js';
-import { deviceDrafts } from '../device/device-photos.js';
+import { deviceDrafts, type DeviceBatchDraft } from '../device/device-photos.js';
 import { onGatewayOutcome } from '../device/gateway-client.js';
 import { formatLiveClock } from '../live-time.js';
 import type { TreeId } from '../types.js';
@@ -115,7 +115,7 @@ export const deviceOfflineMethods = uiModule({
             TreeRenderer.render();
             this.refreshResearchMenu();
         }
-        if (was && was !== 'unpaired' && !down && conn?.state === 'connected') this.deviceReconnected();
+        if (was && was !== 'unpaired' && !down && conn?.state === 'connected') void this.deviceReconnected();
         if (down === 'unpaired' && was !== 'unpaired') void this.deviceForgetHeldTree();
         void this.renderDeviceQline();
     },
@@ -188,9 +188,15 @@ export const deviceOfflineMethods = uiModule({
         document.body.style.removeProperty('--device-home-line-h');
     },
 
-    /** Back again (7.9, 7.14): a paused batch goes on, changes sent by themselves go; the toast says what goes. */
-    deviceReconnected(): void {
-        const photos = this.batchResumeAfterReconnect();
+    /**
+     * Back again (7.9, 7.14): a paused batch goes on, photos handed over whose batch a reload cut
+     * go again (once the research's status is read), changes sent by themselves go; the toast
+     * says what goes.
+     */
+    async deviceReconnected(): Promise<void> {
+        this.batchDeviceResumeAgain();
+        let photos = this.batchResumeAfterReconnect();
+        if (!photos) photos = await this.batchResumeDevicePhotos({ count: true });
         const ctx = this.researchSyncLink();
         let edits = 0;
         if (ctx && this.researchAutoOn(ctx.link)) {
@@ -257,7 +263,7 @@ export const deviceOfflineMethods = uiModule({
         const pc = deviceComputerName();
         const note = waiting.photos + waiting.edits === 0 ? d.pendingNone
             : down === 'unpaired' ? d.pendingStay
-            : down ? d.pendingAuto(pc) : '';
+            : down ? this.deviceWaitingNote(drafts, waiting.edits) : '';
         dropThumbs();
         const photos = drafts.flatMap(x => x.photos);
         const thumbs = photos.slice(0, THUMBS_MAX).map(p => {
@@ -284,6 +290,35 @@ export const deviceOfflineMethods = uiModule({
             + photoBlock
             + (rows ? `<div class="device-waiting-rows">${rows}</div>` : '')
             + actions;
+    },
+
+    /**
+     * What happens to what waits once the computer is back, as it will (K3.8): photos handed
+     * over (Send) and a batch the computer cut go by themselves, photos only chosen go with
+     * Add materials…; edits go by themselves only with sending by itself on, else with Send.
+     */
+    deviceWaitingNote(drafts: readonly DeviceBatchDraft[], edits: number): string {
+        const d = strings.device;
+        const pc = deviceComputerName();
+        const going = this.batchRunTree();
+        let photosAuto = 0;
+        let photosManual = 0;
+        for (const x of drafts) {
+            if (x.handedAt || x.treeId === going) photosAuto += x.photos.length;
+            else photosManual += x.photos.length;
+        }
+        const ctx = this.researchSyncLink();
+        const editsAuto = edits > 0 && !!ctx && this.researchAutoOn(ctx.link);
+        const editsManual = edits > 0 && !editsAuto;
+        if (!photosManual && !editsManual) return d.pendingAuto(pc);
+        const auto = photosAuto > 0 && editsAuto ? d.pendingAuto(pc)
+            : photosAuto > 0 ? d.pendingPhotosAuto(pc)
+            : editsAuto ? d.pendingEditsAuto(pc) : '';
+        return [
+            auto,
+            editsManual ? d.pendingEditsManual(pc, strings.sync.sendButton) : '',
+            photosManual ? d.pendingPhotosManual(strings.batch.menu) : '',
+        ].filter(Boolean).join(' ');
     },
 
     deviceWaitingClick(e: Event): void {

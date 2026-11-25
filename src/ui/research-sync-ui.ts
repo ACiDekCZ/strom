@@ -1292,6 +1292,8 @@ export const researchSyncMethods = uiModule({
         if (status && opts.reschedule !== false) void this.researchAutoCheck();
         // Originals waiting for it go while it answers.
         if (status) void this.researchOriginalsKick();
+        // A device: photos handed over whose batch a reload or the computer away cut go again by themselves.
+        if (status) void this.batchResumeDevicePhotos();
         // A tree just imported or linked: its places not on the map, offered once (spec 034 U5 point 7).
         if (status) void this.maybeOfferPlaces();
         return !!status;
