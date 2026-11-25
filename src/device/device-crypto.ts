@@ -27,7 +27,6 @@ const fromUtf8 = (b: Uint8Array): string => new TextDecoder('utf-8', { fatal: fa
 
 // ——— base64url ———
 
-const B64URL = /^[A-Za-z0-9_-]*$/;
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 const LOOKUP = (() => {
     const t = new Int16Array(128).fill(-1);
@@ -54,27 +53,43 @@ export function b64url(bytes: Uint8Array): string {
     return out;
 }
 
+/** Native base64 of typed arrays (Chrome 140+, Firefox 133+, Safari 18.2+). */
+type NativeFromBase64 = { fromBase64?: (b64: string, o: { alphabet: 'base64url' }) => Uint8Array };
+
 /**
  * The bytes of a base64url text (no padding, the one spelling of its bytes);
  * null for anything else, or when `length` is given and they are not that many.
+ *
+ * Decoded natively (fromBase64, else atob): an answer of the gateway is tens of
+ * MB of this text, and a loop per character with a pattern test over the whole
+ * text took seconds on a phone. No pattern test either: '+' and '/' are looked
+ * for (they would decode after the translation for atob), the decoders throw on
+ * anything else outside the alphabet, and what they accept beyond it (ASCII
+ * whitespace, '=') leaves fewer bytes than a text of this length gives.
  */
 export function fromB64url(s: unknown, length?: number): Uint8Array | null {
-    if (typeof s !== 'string' || !B64URL.test(s) || s.length % 4 === 1) return null;
-    const out = new Uint8Array(Math.floor((s.length * 3) / 4));
-    let o = 0;
-    let acc = 0;
-    let bits = 0;
-    for (let i = 0; i < s.length; i++) {
-        acc = (acc << 6) | LOOKUP[s.charCodeAt(i)];
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out[o++] = (acc >> bits) & 0xff;
+    if (typeof s !== 'string') return null;
+    const n = s.length;
+    const rest = n % 4;
+    if (rest === 1) return null;
+    const want = Math.floor((n * 3) / 4);
+    if (length !== undefined && want !== length) return null;
+    if (s.indexOf('+') >= 0 || s.indexOf('/') >= 0) return null;
+    let out: Uint8Array;
+    try {
+        const native = (Uint8Array as unknown as NativeFromBase64).fromBase64;
+        if (typeof native === 'function') out = native(s, { alphabet: 'base64url' });
+        else {
+            const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+            out = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
         }
+    } catch {
+        return null;
     }
+    if (out.length !== want) return null;
     // stray bits in the last character: not the one spelling of these bytes
-    if (bits > 0 && (acc & ((1 << bits) - 1)) !== 0) return null;
-    if (length !== undefined && out.length !== length) return null;
+    if (rest !== 0 && (LOOKUP[s.charCodeAt(n - 1)] & (rest === 2 ? 0x0f : 0x03)) !== 0) return null;
     return out;
 }
 

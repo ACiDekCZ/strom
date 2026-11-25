@@ -1585,8 +1585,12 @@ class TreeManagerClass {
 
         const treeId = generateTreeId();
         const now = new Date().toISOString();
-        const dataStr = JSON.stringify(data);
-        const sizeBytes = new Blob([dataStr]).size;
+        // Measured without building the JSON: a tree with its photos is 100 MB
+        // and more, and the text and its Blob are two more copies of them in
+        // memory at once (a phone's tab, opening a research). The save that
+        // follows sets the size as it is stored.
+        const sizeBytes = estimateJsonBytes(data);
+        const mediaFp = browserMediaFingerprint(data);
 
         const metadata: TreeMetadata = {
             id: treeId,
@@ -1596,9 +1600,9 @@ class TreeManagerClass {
             personCount: realPersonCount(data),
             partnershipCount: Object.keys(data.partnerships).length,
             sizeBytes,
-            mediaFp: browserMediaFingerprint(data),
+            mediaFp,
             // The file it came from is a copy (a split-off part is not).
-            ...(fromFile ? { fileCopyAt: now, fileCopyMediaFp: browserMediaFingerprint(data) } : {}),
+            ...(fromFile ? { fileCopyAt: now, fileCopyMediaFp: mediaFp } : {}),
             // Made of a selection of another tree: names it, never takes its research (spec 139 K2.4).
             ...(fromTree ? { fromTree: { ...fromTree } } : {}),
         };

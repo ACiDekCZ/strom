@@ -26,7 +26,7 @@ import { StorageManager } from './storage.js';
 import { CryptoSession, EncryptedData } from './crypto.js';
 import { bytesToBase64, base64ToBytes, canonicalBase64Bytes } from './base64.js';
 import { sha256Bytes } from './sha256.js';
-import { takeImageBytes } from './known-image-bytes.js';
+import { takeKnownImage } from './known-image-bytes.js';
 import { computeImageMeta, imageMetaOf, setImageMeta, noteImageMeta, noteOwnImages, headMime, type ImageMeta, type ImageMetaRecord } from './image-meta.js';
 
 /** Strings at least this long starting with "data:" go to the pool. */
@@ -162,27 +162,33 @@ function ownBuffer(bytes: Uint8Array): ArrayBuffer {
         : bytes.slice().buffer as ArrayBuffer;
 }
 
-/** The stored form of an image; `bytes`: its decoded bytes when they came along (for its catalog entry). */
-async function encodeMedia(url: string, encrypted: boolean): Promise<{ record: StoredMedia; size: number; bytes?: Uint8Array }> {
-    const known = takeImageBytes(url);
+/**
+ * The stored form of an image; `bytes`: its decoded bytes when they came along,
+ * `sha` their checked hash (both for its catalog entry).
+ */
+async function encodeMedia(url: string, encrypted: boolean): Promise<{ record: StoredMedia; size: number; bytes?: Uint8Array; sha?: string }> {
+    const taken = takeKnownImage(url);
+    const known = taken?.bytes;
+    const sha = taken?.sha ? { sha: taken.sha } : {};
     if (encrypted) {
         const enc = await CryptoSession.encrypt(url);
-        return { record: { encrypted: enc }, size: enc.data.length, ...(known ? { bytes: known } : {}) };
+        return { record: { encrypted: enc }, size: enc.data.length, ...(known ? { bytes: known, ...sha } : {}) };
     }
     const comma = url.indexOf(',');
     const head = url.slice(0, comma + 1);
     if (!head.endsWith(';base64,')) return { record: { text: url }, size: url.length };
     // Only bytes that give back exactly the same text are stored as bytes.
-    const bytes = known ?? canonicalBase64Bytes(url.slice(comma + 1));
+    if (known) return { record: { head, bytes: ownBuffer(known) }, size: known.byteLength, bytes: known, ...sha };
+    const bytes = canonicalBase64Bytes(url.slice(comma + 1));
     if (bytes) return { record: { head, bytes: ownBuffer(bytes) }, size: bytes.byteLength, bytes };
     return { record: { text: url }, size: url.length };
 }
 
-/** The catalog entry of an image (computed once per window, image-meta.ts). */
-async function metaOf(id: string, url: string, bytes?: Uint8Array): Promise<ImageMeta> {
+/** The catalog entry of an image (computed once per window, image-meta.ts); `sha`: the checked hash of `bytes`. */
+async function metaOf(id: string, url: string, bytes?: Uint8Array, sha?: string): Promise<ImageMeta> {
     let meta = imageMetaOf(id);
     if (!meta) {
-        meta = await computeImageMeta(url, bytes);
+        meta = await computeImageMeta(url, bytes, sha);
         setImageMeta(id, meta);
     }
     return meta;
@@ -256,8 +262,8 @@ export async function storeImages(urls: Set<string>, encrypted: boolean, scope: 
                 continue;
             }
         }
-        const { record, size, bytes } = await encodeMedia(url, encrypted);
-        meta[id] = await metaOf(id, url, bytes);
+        const { record, size, bytes, sha } = await encodeMedia(url, encrypted);
+        meta[id] = await metaOf(id, url, bytes, sha);
         batch.push({ store: 'media', key: id, value: record });
         batchBytes += size;
         media[id] = size;

@@ -459,10 +459,11 @@ export function personMediaIndex(data: Pick<StromData, 'media'>): Map<PersonId, 
 /**
  * A person's files in stored data of any version, read as it is (not
  * through migrateData): the attachments a tree of v23 and older keeps on the
- * person, else personMedia.
+ * person, else personMedia. `index`: personMediaIndex of `data`, for code
+ * that goes through all people (personMedia reads every record of the tree).
  */
-export function personFilesAnyVersion(data: Pick<StromData, 'media' | 'persons'>, personId: PersonId): Omit<Attachment, 'places'>[] {
+export function personFilesAnyVersion(data: Pick<StromData, 'media' | 'persons'>, personId: PersonId, index?: ReadonlyMap<PersonId, Attachment[]>): Omit<Attachment, 'places'>[] {
     const legacy = (data.persons?.[personId] as { attachments?: unknown } | undefined)?.attachments;
     if (Array.isArray(legacy)) return legacy.filter((a): a is Attachment => !!a && typeof a === 'object');
-    return personMedia(data, personId);
+    return index ? [...(index.get(personId) ?? [])] : personMedia(data, personId);
 }

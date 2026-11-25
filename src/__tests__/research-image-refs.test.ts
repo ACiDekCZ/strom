@@ -15,7 +15,7 @@ import { stripMedia } from '../attachments.js';
 import { researchGedcom } from '../ui/research-ui.js';
 import {
     findImageRefs, imageRefSha, resolveImageFile, imagesUrlOf, refTreeUrl, fetchImagesByHash, resolveImageRefs,
-    forgetHeldImages, heldImageShas, internHeldImages, ImagesNotResolved, IMAGE_BATCH, IMAGE_RETRY_MS, sha256Hex,
+    forgetHeldImages, heldImageShas, internHeldImages, ImagesNotResolved, IMAGE_BATCH, IMAGE_ASK_BYTES, IMAGE_RETRY_MS, sha256Hex,
     type ImageFetchDeps, type ImageRef, type ImageResolveDeps,
 } from '../research-image-refs.js';
 import { storedTreeEtag, bridgeGivesImagesByHash, treeReplyImages } from '../research-tree-file.js';
@@ -322,6 +322,24 @@ describe('the images from the bridge', () => {
         const asked = b.asks.flatMap(a => a.shas);
         expect(new Set(asked).size).toBe(1203);
         expect(b.asks.length).toBeGreaterThan(3);
+    });
+
+    it('photos whose sizes the file says go in asks of a size an answer takes, two at a time from the start', async () => {
+        // 40 photos of 1 MB as the file says them (`_BYTES`): never one ask answered 8 MB at a time through `more`.
+        const imgs = many(40);
+        const MB = 1024 * 1024;
+        const b = bridge(storeOf(imgs));
+        const got = await fetchImagesByHash(URL_IMAGES, imgs.map(img => ({ ...refOf(img), bytes: MB })), b.deps);
+        expect(got.size).toBe(40);
+        const per = Math.floor(IMAGE_ASK_BYTES / MB);
+        expect(b.asks.map(a => a.shas.length)).toEqual([...Array(Math.floor(40 / per)).fill(per), ...(40 % per ? [40 % per] : [])]);
+        expect(b.maxInFlight()).toBe(2);
+        // Each once, in the file's order.
+        expect(b.asks.flatMap(a => a.shas)).toEqual(imgs.map(shaOf));
+        // A photo bigger than an answer still goes, alone.
+        const big = bridge(storeOf(imgs.slice(0, 3)));
+        await fetchImagesByHash(URL_IMAGES, imgs.slice(0, 3).map(img => ({ ...refOf(img), bytes: 2 * IMAGE_ASK_BYTES })), big.deps);
+        expect(big.asks.map(a => a.shas.length)).toEqual([1, 1, 1]);
     });
 
     it('a network error, a 5xx and an answer cut short are asked again after a wait', async () => {

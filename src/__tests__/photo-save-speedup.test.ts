@@ -49,6 +49,7 @@ import { storeImages, forgetPoolScope, unpoolObject, POOL_REF } from '../media-p
 import { rememberImageBytes, rememberedImageCount, forgetImageBytes, KNOWN_BYTES_MAX } from '../known-image-bytes.js';
 import { fetchImagesByHash, sha256Hex, type ImageFetchDeps, type ImageRef } from '../research-image-refs.js';
 import { decodeGedcomBytes, hasNonAscii } from '../ged-parser.js';
+import { clearImageMeta, computeImageMeta } from '../image-meta.js';
 import { budgetReport, measureAgainstBudget } from './helpers/perf-budget.js';
 
 // ---- invented inputs (seeded, repeatable) ----
@@ -360,6 +361,44 @@ describe('images from the research bridge', () => {
         const stored = (media.get(ids.get(url)!) as { bytes: ArrayBuffer }).bytes;
         expect(stored.byteLength).toBe(3000);
         expect([...new Uint8Array(stored)]).toEqual([...view]);
+    });
+    it('hashes each image once: its catalog entry takes the hash it was checked against', async () => {
+        clearImageMeta();
+        const real = randomBytes(3000, 4242);
+        const url = 'data:image/jpeg;base64,' + bytesToBase64(real);
+        // A stand-in hash shows which one the entry took.
+        const stand = 'ab'.repeat(32);
+        rememberImageBytes(url, real, stand);
+        const { meta, ids } = await storeImages(new Set([url]), false, 't');
+        expect(meta[ids.get(url)!].sha).toBe(stand);
+    });
+
+    it('a tree from the bridge stored: one hash per image (its content id), the same entries as before', async () => {
+        clearImageMeta();
+        const { refs, bytes } = await fixture();
+        // Images of their own (the catalog of this window keeps the entries of the tests before).
+        const own = new Map<string, string>();
+        const ownRefs: ImageRef[] = [];
+        for (const [i, ref] of refs.entries()) {
+            const b = randomBytes(2100 + i * 5, 9100 + i);
+            const sha = await sha256Hex(b);
+            own.set(sha, bytesToBase64(b));
+            bytes.set(sha, b);
+            ownRefs.push({ ...ref, sha });
+        }
+        const got = await fetchImagesByHash(URL_IMAGES, ownRefs, bridge(own));
+        const digest = vi.spyOn(crypto.subtle, 'digest');
+        const { meta, ids } = await storeImages(new Set(got.values()), false, 't');
+        // The content ids hash the data URLs; the catalog's hash is the one checked, not taken again.
+        expect(digest).toHaveBeenCalledTimes(ownRefs.length);
+        digest.mockRestore();
+        for (const ref of ownRefs) {
+            const url = got.get(ref.sha)!;
+            const entry = meta[ids.get(url)!];
+            // The same entry as computed from the text alone.
+            expect(entry).toEqual(await computeImageMeta(url));
+            expect(entry.sha).toBe(ref.sha);
+        }
     });
 });
 

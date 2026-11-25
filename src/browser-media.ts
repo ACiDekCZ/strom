@@ -12,7 +12,7 @@
  * tree-manager records them, the UI asks these functions.
  */
 
-import { hasTreeMedia, personFilesAnyVersion } from './media.js';
+import { hasTreeMedia, personFilesAnyVersion, personMediaIndex } from './media.js';
 import type { PersonId, StromData } from './types.js';
 import { mediaToken as token, fnvHash as fnv } from './image-meta.js';
 
@@ -37,11 +37,14 @@ export function archiveHoldsAppMedia(o: { keeps: boolean | null; researchId: str
  */
 export function browserMediaFingerprint(data: StromData): string {
     const parts: string[] = [];
+    // Each person's files read once for all (not every record of the tree per person: a research
+    // of a thousand people with a thousand photos is a million steps, on every save).
+    const index = personMediaIndex(data);
     for (const id of Object.keys(data.persons ?? {}).sort()) {
         const p = data.persons[id as keyof typeof data.persons];
         if (!p) continue;
         // An attachment that is only its original (no preview) lives in the research, not here.
-        const atts = personFilesAnyVersion(data, id as PersonId).filter(a => a.dataUrl);
+        const atts = personFilesAnyVersion(data, id as PersonId, index).filter(a => a.dataUrl);
         if (!p.photo && atts.length === 0) continue;
         parts.push(`p${id}:${token(p.photo)}:${atts.map(a => `${a.id}=${token(a.dataUrl)}`).join(',')}`);
     }

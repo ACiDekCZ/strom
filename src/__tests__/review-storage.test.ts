@@ -255,6 +255,19 @@ describe('rapid saves of one tree are coalesced', () => {
         setSpy.mockRestore();
     });
 
+    it('a tree imported (a research opened, 100 MB of photos) is measured without a JSON copy of it', async () => {
+        encryptionOn = false;
+        resetTreeManager([meta('t1', 'One')]);
+        const data = tree(['Imported']);
+        const stringify = vi.spyOn(JSON, 'stringify');
+        const id = TreeManager.createTreeFromImport(data, 'Imported');
+        expect(stringify.mock.calls.some(c => c[0] === data)).toBe(false);
+        stringify.mockRestore();
+        // Its size as a JSON of it would have it, until the save sets the stored one.
+        expect(TreeManager.getTreeMetadata(id)?.sizeBytes).toBe(new Blob([JSON.stringify(data)]).size);
+        await TreeManager.flush(id);
+    });
+
     it('the saved state does not follow later changes of the live object', async () => {
         encryptionOn = false;
         resetTreeManager([meta('t1', 'One')]);

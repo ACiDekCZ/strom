@@ -5,7 +5,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { browserMediaFingerprint, browserMediaSafe, archiveHoldsAppMedia } from '../browser-media.js';
-import type { StromData } from '../types.js';
+import { personFilesAnyVersion } from '../media.js';
+import { mediaToken, fnvHash } from '../image-meta.js';
+import type { PersonId, StromData } from '../types.js';
 
 const img = (fill: string, n = 4000) => `data:image/jpeg;base64,${fill.repeat(n)}`;
 
@@ -52,6 +54,63 @@ describe('browserMediaFingerprint', () => {
     it('leaves out an attachment that is only its original (kept by the research)', () => {
         const onlyOriginal = { ...att('a1', ''), originalOnly: true, original: { sha256: 'f'.repeat(64), bytes: 9 } };
         expect(browserMediaFingerprint(tree({ attachments: [onlyOriginal] }))).toBe('');
+    });
+});
+
+/** The fingerprint as it was computed before: every record of the tree read again for each person. */
+function fingerprintBefore(data: StromData): string {
+    const parts: string[] = [];
+    for (const id of Object.keys(data.persons ?? {}).sort()) {
+        const p = data.persons[id as keyof typeof data.persons];
+        if (!p) continue;
+        const atts = personFilesAnyVersion(data, id as PersonId).filter(a => a.dataUrl);
+        if (!p.photo && atts.length === 0) continue;
+        parts.push(`p${id}:${mediaToken(p.photo)}:${atts.map(a => `${a.id}=${mediaToken(a.dataUrl)}`).join(',')}`);
+    }
+    for (const id of Object.keys(data.partnerships ?? {}).sort()) {
+        const photo = data.partnerships[id as keyof typeof data.partnerships]?.photo;
+        if (photo) parts.push(`u${id}:${mediaToken(photo)}`);
+    }
+    if (parts.length === 0) return '';
+    const text = parts.join('|');
+    return `${parts.length.toString(36)}-${fnvHash(text, 0, 1, 0x811c9dc5).toString(36)}-${fnvHash(text, 0, 1, 0x01000193).toString(36)}`;
+}
+
+/** A research of `n` people with a file per person and more (v24: the files in data.media, each with its places). */
+function bigTree(n: number): StromData {
+    const persons: Record<string, unknown> = {};
+    const media: Record<string, unknown> = {};
+    for (let i = 0; i < n; i++) {
+        const id = `P${i}`;
+        persons[id] = { id, firstName: `Osoba${i}`, lastName: 'Mlýnková', gender: i % 2 ? 'male' : 'female', partnerships: [], parentIds: [], childIds: [],
+            ...(i % 3 === 0 ? { photo: img(String.fromCharCode(65 + (i % 26)), 50 + i) } : {}),
+            // A tree of v23 and older keeps its attachments on the person: read as they are.
+            ...(i % 97 === 5 ? { attachments: [att(`L${i}`, img('L', 60 + i))] } : {}) };
+        const places: unknown[] = [{ personId: id }];
+        // A fact of theirs too (the same person once), another person, a source, nothing (taken out).
+        if (i % 4 === 1) places.push({ personId: id, fact: 'birth' });
+        if (i % 5 === 2) places.push({ personId: `P${(i + 7) % n}` });
+        if (i % 6 === 3) places.push({ sourceId: `S${i}` });
+        media[`M${i}`] = { ...att(`M${i}`, i % 11 === 4 ? '' : img(String.fromCharCode(97 + (i % 26)), 40 + i)), places: i % 13 === 7 ? [] : places };
+        if (i % 9 === 0) media[`X${i}`] = { ...att(`X${i}`, img('X', 30 + i)), places: [{ sourceId: `S${i}` }] };
+    }
+    return { version: 24, persons, partnerships: {}, media } as unknown as StromData;
+}
+
+describe('browserMediaFingerprint of a big research (a phone opening it, every save)', () => {
+    it('is exactly the fingerprint it was before', () => {
+        for (const n of [0, 1, 7, 40, 300]) {
+            const data = bigTree(n);
+            expect(browserMediaFingerprint(data)).toBe(fingerprintBefore(data));
+        }
+    });
+
+    it('reads the records of the tree once, not once per person', () => {
+        const data = bigTree(400);
+        let reads = 0;
+        data.media = new Proxy(data.media!, { ownKeys(t) { reads++; return Reflect.ownKeys(t); } });
+        browserMediaFingerprint(data);
+        expect(reads).toBeLessThanOrEqual(2);
     });
 });
 

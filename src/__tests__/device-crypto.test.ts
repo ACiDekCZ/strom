@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import vectors from './fixtures/device-crypto.json';
 import {
     b64url, fromB64url, deriveKey, pairProof, seal, open, sealRequest, openRequest, openResponse, responseBody,
@@ -152,5 +152,88 @@ describe('device crypto: events and media blocks', () => {
         const r = sealResponse(key, 'dv_abcdefghijklmnop', 'nonceA', { s: 200, h: { 'Content-Type': 'application/json' }, b: b64url(enc.encode('{"ok":true}')) });
         const opened = openResponse(key, 'dv_abcdefghijklmnop', 'nonceA', r);
         expect(new TextDecoder().decode((await responseBody(opened!))!)).toBe('{"ok":true}');
+    });
+});
+
+/** The decoder as it was (a loop per character after a pattern test): what any text must still give. */
+function referenceFromB64url(s: unknown, length?: number): Uint8Array | null {
+    if (typeof s !== 'string' || !/^[A-Za-z0-9_-]*$/.test(s) || s.length % 4 === 1) return null;
+    const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const out = new Uint8Array(Math.floor((s.length * 3) / 4));
+    let o = 0, acc = 0, bits = 0;
+    for (let i = 0; i < s.length; i++) {
+        acc = (acc << 6) | A.indexOf(s[i]);
+        bits += 6;
+        if (bits >= 8) { bits -= 8; out[o++] = (acc >> bits) & 0xff; }
+    }
+    if (bits > 0 && (acc & ((1 << bits) - 1)) !== 0) return null;
+    if (length !== undefined && out.length !== length) return null;
+    return out;
+}
+
+describe('device crypto: base64url of a big answer (a phone opening a research through the gateway)', () => {
+    type U8 = { fromBase64?: unknown };
+    const native = (Uint8Array as unknown as U8).fromBase64;
+    afterEach(() => {
+        vi.restoreAllMocks();
+        (Uint8Array as unknown as U8).fromBase64 = native;
+    });
+
+    /** Texts of every kind: canonical, stray bits, whitespace, padding, the other alphabet, other characters. */
+    function texts(): string[] {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+        const odd = [' ', '\n', '\t', '=', '+', '/', '.', 'é', '\u0000', '\u00a0', '€'];
+        let seed = 7;
+        const rnd = (n: number): number => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+        const out: string[] = ['', 'Kg', 'Kh', 'KgA', 'KgB', 'AAAA', 'AA==', 'AAA=', 'A', 'ab+/', 'ab=', ' Kg', 'Kg ', 'K g', 'AAAA\nAAAA'];
+        for (let i = 0; i < 4000; i++) {
+            const n = rnd(14);
+            let t = '';
+            for (let k = 0; k < n; k++) t += rnd(9) === 0 ? odd[rnd(odd.length)] : chars[rnd(chars.length)];
+            out.push(t);
+        }
+        return out;
+    }
+
+    function sameAsBefore(): void {
+        for (const t of texts()) {
+            expect(fromB64url(t), JSON.stringify(t)).toEqual(referenceFromB64url(t));
+            expect(fromB64url(t, 2), JSON.stringify(t)).toEqual(referenceFromB64url(t, 2));
+        }
+        for (const v of [undefined, null, 3, {}, ['Kg']]) expect(fromB64url(v)).toBeNull();
+    }
+
+    it('gives exactly what it gave before, through the native decoder', () => {
+        if (typeof native !== 'function') (Uint8Array as unknown as U8).fromBase64 = (b: string, o: { alphabet?: string }) => {
+            if (o?.alphabet !== 'base64url') throw new Error('alphabet');
+            const bin = atob(b.replace(/-/g, '+').replace(/_/g, '/'));
+            return Uint8Array.from(bin, c => c.charCodeAt(0));
+        };
+        sameAsBefore();
+    });
+
+    it('gives exactly what it gave before through atob (a browser without fromBase64)', () => {
+        (Uint8Array as unknown as U8).fromBase64 = undefined;
+        sameAsBefore();
+    });
+
+    it('decodes a text in one native call: no loop per character, no pattern test over it', () => {
+        const bytes = new Uint8Array(256 * 1024 + 2).map((_, i) => (i * 131 + 7) & 0xff);
+        const text = b64url(bytes);
+        const decode = vi.fn((b: string) => new Uint8Array(Buffer.from(b, 'base64url')));
+        (Uint8Array as unknown as U8).fromBase64 = decode;
+        const test = vi.spyOn(RegExp.prototype, 'test');
+        const at = vi.spyOn(String.prototype, 'charCodeAt');
+        expect(fromB64url(text)).toEqual(bytes);
+        expect(decode).toHaveBeenCalledTimes(1);
+        expect(test).not.toHaveBeenCalled();
+        expect(at.mock.calls.length).toBeLessThan(10);
+        at.mockRestore();
+        // Without fromBase64: atob, its text translated once (its bytes then taken one by one, as base64ToBytes does).
+        (Uint8Array as unknown as U8).fromBase64 = undefined;
+        const atobSpy = vi.spyOn(globalThis, 'atob');
+        expect(fromB64url(text)).toEqual(bytes);
+        expect(atobSpy).toHaveBeenCalledTimes(1);
+        expect(test).not.toHaveBeenCalled();
     });
 });

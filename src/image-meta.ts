@@ -133,9 +133,10 @@ function hex(buf: ArrayBuffer): string {
 
 /**
  * The catalog entry of a data URL. `bytes`: its decoded bytes when the caller
- * has them already (they must be exactly what the base64 gives).
+ * has them already (they must be exactly what the base64 gives); `sha`: their
+ * SHA-256 (lowercase hex) when it was already checked, used with `bytes` only.
  */
-export async function computeImageMeta(url: string, bytes?: Uint8Array | null): Promise<ImageMeta> {
+export async function computeImageMeta(url: string, bytes?: Uint8Array | null, sha?: string): Promise<ImageMeta> {
     const head = headOf(url);
     const meta: ImageMeta = {
         len: url.length,
@@ -147,7 +148,8 @@ export async function computeImageMeta(url: string, bytes?: Uint8Array | null): 
     const size = dataUrlImageSize(url);
     if (size) { meta.w = size.w; meta.h = size.h; }
     const raw = head.endsWith(';base64,') ? (bytes ?? base64Bytes(url)) : null;
-    if (raw) meta.sha = hex(await sha256Bytes(raw));
+    // `sha`: the hash of exactly these bytes, already checked (an image of the research's bridge).
+    if (raw) meta.sha = sha && bytes ? sha : hex(await sha256Bytes(raw));
     return meta;
 }
 

@@ -51,6 +51,32 @@ const SAFE_IMAGE_MIME = /^image\/(jpeg|png|webp|gif)$/;
 export const IMAGE_BATCH = 500;
 /** Asks in flight at once (the bridge recommends 2–3). */
 export const IMAGE_CONCURRENCY = 2;
+/**
+ * Image bytes asked at once when the file says their sizes (`_BYTES`): an
+ * answer this big fits into one of the bridge's (≤ 8 MB with the base64), so
+ * the asks go side by side from the start — the next one on its way while one
+ * is opened and checked — instead of one after another through `more`.
+ */
+export const IMAGE_ASK_BYTES = 6 * 1024 * 1024;
+
+/** The hashes of `refs` in asks of at most IMAGE_BATCH and, as far as their sizes are said, IMAGE_ASK_BYTES. */
+function imageAsks(refs: Iterable<ImageRef>): string[][] {
+    const asks: string[][] = [];
+    let ask: string[] = [];
+    let size = 0;
+    for (const ref of refs) {
+        const bytes = ref.bytes ?? 0;
+        if (ask.length && (ask.length >= IMAGE_BATCH || size + bytes > IMAGE_ASK_BYTES)) {
+            asks.push(ask);
+            ask = [];
+            size = 0;
+        }
+        ask.push(ref.sha);
+        size += bytes;
+    }
+    if (ask.length) asks.push(ask);
+    return asks;
+}
 /** Waits before asking again after a network error, a 5xx or an answer cut short. */
 export const IMAGE_RETRY_MS: readonly number[] = [500, 1500, 4000];
 /** How long one answer (≤ 8 MB) is waited for. */
@@ -399,8 +425,8 @@ async function checkedImage(img: { sha: string; mime: string; data: string }, re
     }
     if (!bytes || await deps.sha256Hex(bytes) !== sha) return null;
     const dataUrl = `data:${mime};base64,${canonical ? img.data : bytesToBase64(bytes)}`;
-    // Storing the tree takes these checked bytes instead of decoding the text again.
-    rememberImageBytes(dataUrl, bytes);
+    // Storing the tree takes these checked bytes (and their hash) instead of decoding and hashing them again.
+    rememberImageBytes(dataUrl, bytes, sha);
     return { url: dataUrl };
 }
 
@@ -414,9 +440,7 @@ async function checkedImage(img: { sha: string; mime: string; data: string }, re
 export async function fetchImagesByHash(url: string, refs: readonly ImageRef[], deps: ImageFetchDeps, signal?: AbortSignal): Promise<Map<string, string>> {
     const out = new Map<string, string>();
     const wanted = new Map(refs.map(r => [r.sha, r]));
-    const queue: string[][] = [];
-    const all = [...wanted.keys()];
-    for (let i = 0; i < all.length; i += IMAGE_BATCH) queue.push(all.slice(i, i + IMAGE_BATCH));
+    const queue: string[][] = imageAsks(wanted.values());
     /** Hashes whose bytes did not give them once: asked once more. */
     const mismatched = new Set<string>();
     let failed: unknown = null;

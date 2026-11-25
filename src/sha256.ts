@@ -8,6 +8,8 @@
  * responsive (and on the main thread with pauses when a worker cannot start).
  */
 
+import { sha256 as nobleSha256 } from '@noble/hashes/sha2.js';
+
 /** Files up to this size go through crypto.subtle.digest in one piece. */
 export const SUBTLE_MAX_BYTES = 64 * 1024 * 1024;
 /** Piece size of the streaming hash. */
@@ -184,21 +186,17 @@ function hashInWorker(blob: Blob, onProgress?: (done: number) => void): Promise<
 }
 
 /**
- * SHA-256 of bytes in memory: WebCrypto where the page has it, the
- * self-contained implementation otherwise. crypto.subtle exists only in a
- * secure context (https, localhost, a file opened from disk); on plain http
- * at a network address the app still has to hash its images.
+ * SHA-256 of bytes in memory: WebCrypto where the page has it, @noble's
+ * otherwise (a third faster than createSha256 in Safari's engine: a device of
+ * the home network hashes every photo of a research it opens). crypto.subtle
+ * exists only in a secure context (https, localhost, a file opened from disk);
+ * on plain http at a network address the app still has to hash its images.
  */
 export async function sha256Bytes(bytes: Uint8Array): Promise<ArrayBuffer> {
     if (typeof crypto !== 'undefined' && crypto.subtle) {
         return crypto.subtle.digest('SHA-256', bytes as BufferSource);
     }
-    const h = createSha256();
-    h.update(bytes);
-    const hexText = h.digestHex();
-    const out = new Uint8Array(32);
-    for (let i = 0; i < 32; i++) out[i] = parseInt(hexText.slice(i * 2, i * 2 + 2), 16);
-    return out.buffer;
+    return nobleSha256(bytes).slice().buffer as ArrayBuffer;
 }
 
 /**
