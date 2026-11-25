@@ -52,7 +52,7 @@ Každé téma vypíše všechny hodnoty, které někdo v rozsahu má, ne jen nej
 | | **Příjmení** | osoby | **Příjmení** (**Rodné** / **U žen i po sňatku**) |
 | Místa | **Místa narození**, **Místa úmrtí** | osoby | **Úroveň** (**Obec**, **Okres**, **Země**) |
 | | **Místa sňatku** | sňatky | **Úroveň** |
-| Život | **Povolání**, **Náboženství** | osoby | – |
+| Život | **Povolání**, **Vyznání** | osoby | – |
 | | **Věk dožití**, **Věk při prvním sňatku**, **Věk při prvním dítěti** | osoby, po pětiletých skupinách | – |
 | | **Počet dětí na pár** | páry | – |
 | Čas | **Narození v čase** | osoby | **Seskupit** (**Po desetiletích** / **Po měsících**) |
