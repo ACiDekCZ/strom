@@ -154,6 +154,8 @@ export interface FakeGateway {
      * `agent.start` (start) and `agent.bridge` (bridge); null: a gateway without it (device/agent: 404).
      */
     agent: { start?: boolean; bridge?: boolean } | null;
+    /** More features the default GET status says (e.g. `fixes.list`). */
+    features: string[];
     /** How POST device/agent answers when `agentSteps` is empty (default `ask`). */
     agentScenario: FakeAgentStep;
     /** How the next POSTs device/agent answer, one per request (first first); empty: `agentScenario`. */
@@ -310,6 +312,7 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         glance: null,
         finds: null,
         agent: null,
+        features: [],
         agentScenario: 'ask',
         agentSteps: [],
         agentAsk: null,
@@ -445,7 +448,7 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
             if (r.p === 'status' && r.m === 'GET') {
                 const tree = gw.trees.find(x => x.id === r.tree);
                 const features = [...STATUS.features, ...(gw.glance ? ['glance'] : []), ...(gw.finds ? ['finds', 'finds.person'] : []),
-                    ...(gw.agent ? ['device.agent'] : [])];
+                    ...(gw.agent ? ['device.agent'] : []), ...gw.features];
                 const actions = ['device.rename', 'device.unpair', ...(gw.agent?.start ? ['agent.start'] : []), ...(gw.agent?.bridge ? ['agent.bridge'] : [])];
                 reply = { s: 200, body: { ...STATUS, features, tree: { id: r.tree, name: tree?.name ?? 'Pýchavkovi z Mlýnků' },
                     device: { id: device.id, name: device.name, kind: device.kind, actions, others: gw.others } } };

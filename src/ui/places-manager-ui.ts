@@ -32,7 +32,7 @@ import {
 import { foldText, KnownStreets } from '../streets.js';
 import { stampedGeo } from '../place-find.js';
 import { fixText, STREET_PLACES_FIX } from '../research-fixes.js';
-import { researchHere } from './research-ui.js';
+import { researchDevice, researchHere } from './research-ui.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { researchLinkMark } from '../research-link.js';
 import { SettingsManager } from '../settings.js';
@@ -499,7 +499,7 @@ export const placesManagerMethods = uiModule({
         const action = variantRowAction(mem.tag, mem.same, managerCanResearch);
         let act = '';
         if (action === 'unify') act = `<button type="button" class="place-unify-open place-act is-strong">${esc(d.unify(v.head))}</button>`;
-        else if (action === 'resFix' && this.activeResearchLink('fixes')) {
+        else if (action === 'resFix' && (this.activeResearchLink('fixes') || this.deviceStreetFixLink())) {
             // The research's terminal at its tree fixes: the terminal mark (AI too for a fix its agent reads again), never ↗.
             const mark = researchLinkMark('fixes', { fixPaid: !!this.streetPlacesFixNow().fix?.paid });
             act = `<button type="button" class="place-resfix place-act is-research">${researchActionLabel(d.resFix, mark)}</button>`;
@@ -537,6 +537,11 @@ export const placesManagerMethods = uiModule({
         if (unify) unify.onclick = () => this.openPlaceUnify(row, key, head);
         const fix = row.querySelector<HTMLButtonElement>('.place-resfix');
         if (fix) fix.onclick = () => {
+            // A device starts the paid fix itself (K3.15): it has no list of fixes in a terminal to open.
+            if (this.deviceStreetFixLink()) {
+                this.openStreetPlacesFix();
+                return;
+            }
             const url = this.activeResearchLink('fixes');
             if (url) this.launchResearchLink(url);
         };
@@ -611,12 +616,14 @@ export const placesManagerMethods = uiModule({
         const m = strings.map;
         const here = researchHere() && this.researchKnownHere();
         const { fix, towns } = this.streetPlacesFixNow();
-        if (!here) {
+        // A device whose gateway starts the agent: the paid fix goes from here as on the computer (K3.15).
+        const deviceUrl = here ? null : this.deviceStreetFixLink();
+        if (!here && !deviceUrl) {
             if (!strip) return '';
             const title = fix ? fixText(fix.title, getCurrentLanguage()) : '';
             return `<p class="place-research-note">${this.escapeHtml(m.researchElsewhere(title || m.researchElsewhereFix))}</p>`;
         }
-        const url = this.activeResearchLink('fixes', { fix: STREET_PLACES_FIX });
+        const url = deviceUrl ?? this.activeResearchLink('fixes', { fix: STREET_PLACES_FIX });
         const keySet = new Set(keys);
         const folded = foldText(town);
         const named = !towns || !!fix?.towns?.some(t =>
@@ -637,8 +644,15 @@ export const placesManagerMethods = uiModule({
             this.runResearchFix(STREET_PLACES_FIX, 'open');
             return;
         }
-        const url = this.activeResearchLink('fixes', { fix: STREET_PLACES_FIX });
-        if (url) this.launchResearchLink(url);
+        const extra = this.streetPlacesFixNow().fix?.paid ? { fixPaid: true } : {};
+        const url = this.activeResearchLink('fixes', { fix: STREET_PLACES_FIX }, extra);
+        if (url) this.launchResearchLink(url, 'terminal', null, extra);
+    },
+
+    /** On a device whose gateway starts the agent: the street-places fix's link when the fix is paid (K3.15), else null. */
+    deviceStreetFixLink(): string | null {
+        if (!researchDevice() || !this.streetPlacesFixNow().fix?.paid) return null;
+        return this.activeResearchLink('fixes', { fix: STREET_PLACES_FIX }, { fixPaid: true });
     },
 
     /** A row's checkbox for the selection (shown while selecting). */

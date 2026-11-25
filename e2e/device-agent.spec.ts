@@ -415,3 +415,71 @@ test.describe('the Research screen\'s buttons (a phone, en)', () => {
         await expect(menu(page).locator('#phone-line-run, #phone-line-work')).toHaveCount(0);
     });
 });
+
+/**
+ * Paid tree fixes from a device (spec 094 K3.15 part C2): the research's Tree fixes on a second computer of the
+ * home network; a fix its agent reads again starts through POST device/agent (the research: `fixes&id=` only when
+ * paid), a fix that is not paid stays the computer's (no button, its quiet sentence), nothing handed to the system.
+ */
+test.describe('tree fixes on a device (a second computer, en)', () => {
+    test.use({ locale: 'en-US' });
+    const FIXES = {
+        rev: 'r1',
+        fixes: [
+            { id: 'dates', state: 'pending', count: 4, unit: 'fact', paid: true,
+                title: { en: 'Dates read again from the images' }, summary: { en: 'The agent reads the dates of four facts again.' } },
+            { id: 'street-places', state: 'pending', count: 2, unit: 'place', paid: false,
+                title: { en: 'Streets and house numbers in fact places' }, summary: { en: 'Town and house split.' } },
+        ],
+    };
+
+    async function withFixes(page: Page, o: { start: boolean }): Promise<void> {
+        gw.trees = [{ id: PYCH, name: NAME, archive: false }];
+        gw.computer = { name: '127.0.0.1', label: 'Pracovna' };
+        gw.agent = o.start ? { start: true } : {};
+        gw.features = ['fixes.list'];
+        gw.onTunnel = (req): TunnelReply | undefined => req.p === 'tree.ged'
+            ? { s: 200, h: { 'Content-Type': 'text/plain; charset=utf-8' }, body: ged() }
+            : req.p === 'fixes' && req.m === 'GET' ? { s: 200, body: FIXES } : undefined;
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await seeds(page);
+        await page.goto(gw.pairCode().url);
+        await expect(page.locator('#device-boot')).toHaveCount(0, { timeout: 20000 });
+        await expect(page.locator('#research-menu-btn')).toBeVisible({ timeout: 15000 });
+        await page.evaluate(() => {
+            // Opening links in the system is never done here: record any (none is expected).
+            const ui = window.Strom.UI as unknown as { handOverResearchLink: (u: string) => void; __links: string[] };
+            ui.__links = [];
+            ui.handOverResearchLink = (u: string) => { ui.__links.push(u); };
+        });
+        await page.evaluate(() => window.Strom.UI.pollResearchBridge());
+    }
+
+    test('a paid fix starts through the gateway; a fix that is not paid is the computer\'s', async ({ page }) => {
+        await withFixes(page, { start: true });
+        await expect.poll(() => gw.tunnelled.some(r => r.p === 'fixes')).toBe(true);
+        await page.evaluate(() => window.Strom.UI.showResearchFixesDialog());
+        const dlg = page.locator('#research-fixes-modal');
+        const paid = dlg.locator('.research-fix[data-fix="dates"]');
+        const free = dlg.locator('.research-fix[data-fix="street-places"]');
+        await expect(paid.locator('.research-fix-action .research-ai-badge')).toHaveCount(1);
+        await expect(free.locator('.research-fix-action')).toHaveCount(0);
+        await expect(free.locator('.research-fix-only')).toHaveText('Only on the computer with the research.');
+        await paid.locator('.research-fix-action').click();
+        await expect(sheet(page)).toBeVisible();
+        await sheet(page).locator('#device-agent-go').click();
+        await expect(sheet(page)).toHaveCount(0);
+        expect(gw.agentRequests.map(r => [r.link, !!r.yes])).toEqual([
+            [`strom-research://fixes?tree=${PYCH}&id=dates`, false], [`strom-research://fixes?tree=${PYCH}&id=dates`, true]]);
+        // Opened in the research: the row waits for its answer, no button.
+        await expect(paid.locator('.research-fix-action')).toHaveCount(0);
+        expect(await page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links)).toEqual([]);
+    });
+
+    test('without agent.start: no Tree fixes on the device', async ({ page }) => {
+        await withFixes(page, { start: false });
+        await page.evaluate(() => window.Strom.UI.showResearchFixesDialog());
+        await expect(page.locator('#research-fixes-modal')).toHaveCount(0);
+        expect(gw.agentRequests).toHaveLength(0);
+    });
+});

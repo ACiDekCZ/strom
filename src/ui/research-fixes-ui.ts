@@ -4,11 +4,15 @@
  * gives (`GET /fixes`, research-fixes.ts). Running and undoing a fix happen
  * in the research's terminal (`strom-research://fixes?…`), confirmed there;
  * the changes come back with sync. Only a research tree on a computer whose
- * research announces `fixes.list` and the `fixes` link; else nothing at all.
+ * research announces `fixes.list` and the `fixes` link, or on a device whose
+ * gateway starts the agent (`agent.start`, spec 094 K3.15: a paid fix starts
+ * there through the gateway, the others stay the computer's); else nothing.
  */
 
 import { strings, getCurrentLanguage } from '../strings.js';
-import { parseLiveBridge, researchLinkMark, type LiveStatus } from '../research-link.js';
+import {
+    parseLiveBridge, researchDeviceAgentLink, researchDeviceAllows, researchDeviceLinkAllows, researchLinkMark, type LiveStatus,
+} from '../research-link.js';
 import { storedResearchBridge } from '../research-device.js';
 import {
     FIXES_LIST_FEATURE, FIXES_TOWNS_FEATURE, STREET_PLACES_FIX, availableFixCount, fetchResearchFixes, fixRows, fixText, fixesEmpty,
@@ -16,7 +20,7 @@ import {
 } from '../research-fixes.js';
 import { formatLiveClock } from '../live-time.js';
 import { onBridgeStatus } from './research-sync-ui.js';
-import { researchHere } from './research-ui.js';
+import { researchDevice, researchHere } from './research-ui.js';
 import { researchActionLabel } from './research-open-mark.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { uiModule } from './module.js';
@@ -126,9 +130,11 @@ export const researchFixesMethods = uiModule({
     /** The open tree's list, when the item and the dialog are offered (else null). */
     researchFixesNow(): FixesOfResearch | null {
         const rid = this.fixesResearchId();
-        if (!rid || !researchHere()) return null;
+        // A device of the home network: the list when its gateway starts the agent (a paid fix starts from there).
+        const device = researchDevice() && researchDeviceAllows('fixes');
+        if (!rid || !(researchHere() || device)) return null;
         if (!(lastFeatures.get(rid) ?? []).includes(FIXES_LIST_FEATURE)) return null;
-        if (!this.researchLinkAvailable('fixes')) return null;
+        if (!device && !this.researchLinkAvailable('fixes')) return null;
         return lists.get(rid) ?? null;
     },
 
@@ -191,7 +197,7 @@ export const researchFixesMethods = uiModule({
         overlay.onclick = (e) => {
             if (e.target === overlay) { close(); return; }
             const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-fix-act]');
-            if (btn?.dataset.fix) this.runResearchFix(btn.dataset.fix, btn.dataset.fixAct === 'undo' ? 'undo' : 'open');
+            if (btn?.dataset.fix) this.runResearchFix(btn.dataset.fix, btn.dataset.fixAct === 'undo' ? 'undo' : 'open', btn);
         };
         (overlay.querySelector('#research-fixes-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#research-fixes-close') as HTMLButtonElement).onclick = close;
@@ -244,29 +250,47 @@ export const researchFixesMethods = uiModule({
             : f.stateDeclined(date);
         const label = action === 'undo' ? f.undo : f.open;
         // A fix that reads images again with the agent costs: the AI label before the mark (not for an undo).
-        const mark = researchLinkMark('fixes', { fixPaid: !!fix.paid, ...(action === 'undo' ? { fixDo: 'undo' } : {}) });
-        const button = action
+        const p = { fixPaid: !!fix.paid, ...(action === 'undo' ? { fixDo: 'undo' } : {}) };
+        const mark = researchLinkMark('fixes', p);
+        // A device starts only a paid fix (not its undo): the others say they are the computer's.
+        const here = researchDeviceLinkAllows('fixes', p);
+        const button = action && here
             ? `<button type="button" class="secondary research-fix-action" data-fix="${esc(fix.id)}" data-fix-act="${action}">${researchActionLabel(label, mark)}</button>`
             : '';
+        const elsewhere = action && !here ? `<p class="research-fix-summary research-fix-only">${esc(strings.device.onlyComputer)}</p>` : '';
         return `<li class="research-fix" data-fix="${esc(fix.id)}" data-view="${view}">`
             + '<div class="research-fix-main">'
             + `<div class="research-fix-head"><span class="research-fix-title">${esc(title)}</span>`
             + (count ? `<span class="research-fix-count">${esc(count)}</span>` : '') + '</div>'
             + (summary ? `<p class="research-fix-summary">${esc(summary)}</p>` : '')
             + `<div class="research-fix-state is-${view}">${esc(state)}</div>`
-            + '</div>' + button + '</li>';
+            + elsewhere + '</div>' + button + '</li>';
     },
 
     /** "Open in the research" / "Undo in the research": the research's terminal at that fix; the row waits for its answer. */
-    runResearchFix(id: string, what: 'open' | 'undo'): void {
+    runResearchFix(id: string, what: 'open' | 'undo', from?: HTMLElement | null): void {
         const rid = this.fixesResearchId();
         const now = this.researchFixesNow();
         if (!rid || !now) return;
-        const url = this.activeResearchLink('fixes', what === 'undo' ? { fix: id, fixDo: 'undo' } : { fix: id });
+        // A fix its agent reads again (not its undo): on a device it starts through the gateway (K3.15).
+        const extra = what !== 'undo' && now.reply.fixes.some(f => f.id === id && f.paid) ? { fixPaid: true } : {};
+        const url = this.activeResearchLink('fixes', what === 'undo' ? { fix: id, fixDo: 'undo' } : { fix: id }, extra);
         if (!url) return;
-        const mine = opened.get(rid) ?? { rev: now.reply.rev, ids: new Set<string>() };
-        mine.ids.add(id);
-        opened.set(rid, mine);
+        const mark = (): void => {
+            const mine = opened.get(rid) ?? { rev: now.reply.rev, ids: new Set<string>() };
+            mine.ids.add(id);
+            opened.set(rid, mine);
+        };
+        if (researchDeviceAgentLink(url, extra)) {
+            // Opened in the research once it started (or waits on the computer); Back or a refusal leaves the row.
+            void this.startAgentFromDevice(url, { from: from ?? null }).then(r => {
+                if (r !== 'started' && r !== 'waitPc') return;
+                mark();
+                this.fixesChanged();
+            });
+            return;
+        }
+        mark();
         this.launchResearchLink(url);
         this.fixesChanged();
     },

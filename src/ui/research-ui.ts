@@ -63,7 +63,7 @@ import {
 import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
-import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge, researchDeviceAgentLink } from '../research-link.js';
+import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge, researchDeviceAgentLink, type ResearchLinkMarkParams } from '../research-link.js';
 import { deviceEventSource, isDeviceTunnelled } from '../device/device-bridge.js';
 import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn, waitingGainOn } from '../research-link.js';
 import { overviewChanged, overviewInWindow } from '../windows/overview-window.js';
@@ -3353,7 +3353,9 @@ export const researchUiMethods = uiModule({
      * (waiting buttons §3.1, src/ui/research-open-busy.ts). A new version from the research waits as before.
      */
     launchResearchLink(url: string, kind: ResearchLinkKind = 'terminal', el?: HTMLElement | null,
-        opts: Omit<OpenBusyOpts, 'agent' | 'relayed'> = {}): Promise<OpenBusyResult> {
+        launch: Omit<OpenBusyOpts, 'agent' | 'relayed'> & Pick<ResearchLinkMarkParams, 'fixPaid'> = {}): Promise<OpenBusyResult> {
+        // `fixPaid`: a fix its agent reads again (the link does not say so) — on a device it starts as the agent's work.
+        const { fixPaid, ...opts } = launch;
         if (kind === 'version') {
             this.handOverResearchLink(url);
             this.awaitResearchVersion();
@@ -3361,7 +3363,7 @@ export const researchUiMethods = uiModule({
         }
         // A device of the home network: the agent's work starts through the gateway (device/agent), its own
         // confirmation and state (device-agent-ui.ts); the computer opens the link as before.
-        if (researchDeviceAgentLink(url)) {
+        if (researchDeviceAgentLink(url, fixPaid ? { fixPaid } : {})) {
             return this.startAgentFromDevice(url, { from: el ?? null, ...(opts.quiet ? { quiet: true } : {}) })
                 .then(r => r === 'busy' ? 'busy' : 'opened');
         }
@@ -3423,12 +3425,14 @@ export const researchUiMethods = uiModule({
     },
 
     /** A strom-research:// link for the active research tree, or null (not announced, not a research tree, bad id). */
-    activeResearchLink(action: ResearchLinkAction, params: Omit<ResearchLinkParams, 'tree'> = {}): string | null {
+    activeResearchLink(action: ResearchLinkAction, params: Omit<ResearchLinkParams, 'tree'> = {},
+        extra: Pick<ResearchLinkMarkParams, 'fixPaid'> = {}): string | null {
         if (!this.researchLinkAvailable(action)) {
-            // A device with the agent's start (`agent.start`): the agent's links, started through the gateway.
+            // A device with the agent's start (`agent.start`): the agent's links, started through the gateway
+            // (`extra.fixPaid`: a fix its agent reads again, the only fix a device starts).
             const tree = researchDeviceState() ? this.activeResearchId() : null;
             const url = tree ? researchSchemeUrl(action, { tree, ...params }) : null;
-            return url && researchDeviceAgentLink(url) ? url : null;
+            return url && researchDeviceAgentLink(url, extra) ? url : null;
         }
         const tree = this.activeResearchId();
         return tree ? researchSchemeUrl(action, { tree, ...params }, announcedResearchScheme()) : null;
