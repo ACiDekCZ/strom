@@ -386,10 +386,30 @@ export function buildFanModel(data: StromData, focusId: PersonId, opts: number |
  */
 export type FanPortrait = { href: string; loading?: false } | { loading: true; initials: string; href?: string };
 
-/** Ancestor rings with portraits (parents and grandparents), besides the focus disc. */
-export const FAN_PORTRAIT_RINGS = 2;
-/** A portrait smaller than this (screen px, poster px ≈ 7 mm) is not drawn: the text comes first. */
-export const FAN_PORTRAIT_MIN_PX = 26;
+/**
+ * The smallest portrait drawn on screen (its diameter, px at the current
+ * zoom, spec 118 K2.8): any sector of any ring, ancestors and descendants,
+ * gets one where it is at least this large and the text still fits.
+ */
+export const FAN_PORTRAIT_MIN_PX = 32;
+/** The same on a poster or a print: the diameter on paper, mm. */
+export const FAN_PORTRAIT_MIN_MM = 7;
+/**
+ * The paper the view's own print (Ctrl+P) puts the whole fan on, mm: an A4
+ * sheet on its side less the 1 cm margins, the drawing at most 85 % of its
+ * height (index.html's print rules). Letter is about the same.
+ */
+const FAN_PRINT_AREA_MM = { w: 277, h: 0.85 * 190 };
+
+/**
+ * The smallest portrait (px of a drawing at `ppu`) for the view's own print
+ * of the whole fan (`bounds`): FAN_PORTRAIT_MIN_MM on the paper, never under
+ * the screen's FAN_PORTRAIT_MIN_PX (spec 118 K2.8).
+ */
+export function fanPrintPortraitMinPx(bounds: FanBounds, ppu: number): number {
+    const mmPerUnit = Math.min(FAN_PRINT_AREA_MM.w / bounds.w, FAN_PRINT_AREA_MM.h / bounds.h);
+    return Math.max(FAN_PORTRAIT_MIN_PX, (FAN_PORTRAIT_MIN_MM / mmPerUnit) * ppu);
+}
 /** The largest portrait in a sector, fan units. */
 const PORTRAIT_MAX_U = 46;
 /** Between a sector's portrait and its text, px. */
@@ -401,14 +421,15 @@ const FOCUS_PHOTO_Y = -0.38;
 const FOCUS_TEXT_Y = 0.36;
 
 /**
- * The people a fan may show a portrait of (spec 118 §6): the focus and the
- * ancestors of the rings 1–2 (never the descendants of the two-way fan),
- * each once, without the protected living. Their photos are the caller's.
+ * The people a fan may show a portrait of (spec 118 §6, K2.7): the focus,
+ * the ancestors, and in the two-way fan the descendants and their partners,
+ * each once, without the protected living. Which of them get one depends on
+ * the zoom (K2.8: buildFanSvg's `onPortrait` tells). Their photos are the caller's.
  */
 export function fanPortraitPeople(model: FanModel, protect?: (p: Person) => boolean): Person[] {
     const seen = new Set<PersonId>();
     const out: Person[] = [];
-    for (const p of [model.focus, ...model.sectors.filter(s => s.generation <= FAN_PORTRAIT_RINGS).map(s => s.person)]) {
+    for (const p of [model.focus, ...model.sectors.map(s => s.person), ...model.desc.map(s => s.person)]) {
         if (!p || seen.has(p.id) || protect?.(p)) continue;
         seen.add(p.id);
         out.push(p);
@@ -437,6 +458,13 @@ export interface FanSvgOptions {
     relTypeLabel?: (type: Exclude<ParentChildRelType, 'biological'>) => string;
     /** Screen pixels per fan unit (labels are fitted for it); default 1. */
     ppu?: number;
+    /**
+     * The smallest portrait drawn (diameter, px of this drawing; spec 118 K2.8).
+     * Default FAN_PORTRAIT_MIN_PX on screen; a poster passes FAN_PORTRAIT_MIN_MM in its px.
+     */
+    portraitMinPx?: number;
+    /** Told of every portrait drawn (the person and the photo), in drawing order. */
+    onPortrait?: (p: Person, ph: FanPortrait) => void;
     /** The visible part (fan units): the viewBox; labels only for sectors in it (+ a ring's margin). Default: the whole fan. */
     viewport?: FanBounds;
     /**
@@ -460,9 +488,11 @@ export interface FanSvgOptions {
      */
     content?: FanContent;
     /**
-     * Portraits (spec 118 §6) in the focus disc and the rings 1–2: a person's
-     * photo, or null (the sector stays as it is). Missing: no portraits. Never
-     * asked for a protected person.
+     * Portraits (spec 118 §6, K2.7–K2.8) in the focus disc and any sector
+     * where one is at least `portraitMinPx` across and the text still fits: a
+     * person's photo, or null (the sector stays as it is). Missing: no
+     * portraits. Asked only for the sectors in view that would show one,
+     * never for a protected person.
      */
     portrait?: (person: Person) => FanPortrait | null;
     /** A link per person (saved pages): the sector becomes an `<a>`. */
@@ -750,19 +780,26 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         const state = ph.loading ? ` data-img-state="${ph.href ? 'refresh' : 'loading'}"` : '';
         return `<g class="fan-photo"${state} pointer-events="none">${out}</g>`;
     };
+    const portraitMin = opts.portraitMinPx && opts.portraitMinPx > 0 ? opts.portraitMinPx : FAN_PORTRAIT_MIN_PX;
+    /** Note a portrait drawn (`svg`) for its person and give the drawing back. */
+    const drawn = (p: Person, ph: FanPortrait, svg: string): string => {
+        opts.onPortrait?.(p, ph);
+        return svg;
+    };
     /**
-     * The portrait of an ancestor in the rings 1–2: a circle at the sector's
-     * inner edge, at the angle of its text, which moves outward past it.
-     * Null where there is none or it would be too small.
+     * The portrait of a person in a sector of any ring (spec 118 K2.7, K2.8):
+     * a circle at the sector's inner edge, at the angle of its text, which
+     * moves outward past it. Null where there is none or it would be smaller
+     * than `portraitMin` at this scale — the photo is not even asked for then.
      */
-    const portraitOf = (p: Person, s: FanSector): { box: (b: FanLabelBox) => FanLabelBox; svg: (b: FanLabelBox) => string } | null => {
-        if (!opts.portrait || s.generation > FAN_PORTRAIT_RINGS || protect(p)) return null;
-        const ph = opts.portrait(p);
-        if (!ph) return null;
+    const portraitOf = (p: Person, s: { r1: number; r2: number; lo: number; hi: number }): { box: (b: FanLabelBox) => FanLabelBox; svg: (b: FanLabelBox) => string } | null => {
+        if (!opts.portrait || protect(p)) return null;
         const w = s.r2 - s.r1;
         const dU = Math.min(0.5 * w, 0.62 * rad(s.hi - s.lo) * (s.r1 + w / 3), PORTRAIT_MAX_U);
         const dPx = dU * ppu;
-        if (dPx < FAN_PORTRAIT_MIN_PX) return null;
+        if (dPx < portraitMin) return null;
+        const ph = opts.portrait(p);
+        if (!ph) return null;
         const shift = dPx + PORTRAIT_GAP_PX;
         return {
             box: b => b.curved
@@ -772,7 +809,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
             svg: b => {
                 const inner = b.rc * ppu - (b.curved ? b.cross : b.len) / 2 - shift;
                 const [cx, cy] = pt((inner + dPx / 2) / ppu, b.anchor);
-                return photoSvg(ph, cx, cy, dU / 2);
+                return drawn(p, ph, photoSvg(ph, cx, cy, dU / 2));
             },
         };
     };
@@ -871,21 +908,30 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         let label = '';
         if (withLabels && inView(s)) {
             const box = fanLabelBox(s, ppu);
+            // The text comes first (K2.7): a portrait only while the label still fits beside it.
+            const por = portraitOf(p, s);
             if (s.kind === 'partner') {
                 // A thin band: one light row along the arc, the name or the surname.
-                if (box.curved && box.cross >= sizes.min) {
-                    const fs = Math.max(sizes.min, Math.min(10, box.cross / 1.1));
-                    const lab = fitFanLabel(p, { ...box, cross: fs * 1.18 }, { base: fs, min: fs, protect: prot, repeat: rep, measure });
-                    if (lab && lab.level >= 4) {
-                        label = fanLabelSvg({ rows: lab.rows.slice(0, 1).map(r => ({ ...r, bold: false })), level: lab.level }, box, ppu, labelOpts);
-                    }
-                }
+                const row = (b: FanLabelBox): string => {
+                    if (!b.curved || b.cross < sizes.min) return '';
+                    const fs = Math.max(sizes.min, Math.min(10, b.cross / 1.1));
+                    const lab = fitFanLabel(p, { ...b, cross: fs * 1.18 }, { base: fs, min: fs, protect: prot, repeat: rep, measure });
+                    return lab && lab.level >= 4
+                        ? fanLabelSvg({ rows: lab.rows.slice(0, 1).map(r => ({ ...r, bold: false })), level: lab.level }, b, ppu, labelOpts)
+                        : '';
+                };
+                const pbox = por ? por.box(box) : null;
+                const prow = pbox ? row(pbox) : '';
+                label = por && pbox && prow ? por.svg(pbox) + prow : row(box);
             } else {
-                const fit = fitFanSectorLabel(p, s, ppu, {
+                const lopts = {
                     base: fanBaseSize(sizes, 'desc', s.depth) + namesBoost, min: sizes.min, yearsDrop: sizes.yearsDrop,
                     protect: prot, repeat: rep, content, measure,
-                });
-                if (fit) label = fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
+                };
+                let fit = por ? fitFanSectorLabel(p, s, ppu, lopts, por.box) : null;
+                if (por && fit && fit.label.level <= 6) label = por.svg(fit.box);
+                else fit = fitFanSectorLabel(p, s, ppu, lopts);
+                if (fit) label += fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
             }
         }
         const kindCls = s.kind === 'partner' ? ' fan-partner' : ' fan-desc';
@@ -915,11 +961,11 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         let photo = '';
         let box = fbox(1.7, 1.25);
         let fit: ReturnType<typeof fitFanLabel> = null;
-        if (fph && 2 * photoR * ppu >= FAN_PORTRAIT_MIN_PX) {
+        if (fph && 2 * photoR * ppu >= portraitMin) {
             const pbox = fbox(1.55, 0.62);
             const pfit = fitFanLabel(f, pbox, fopts);
             if (pfit && pfit.level <= 6) {
-                photo = photoSvg(fph, 0, FOCUS_PHOTO_Y * FOCUS_R, photoR);
+                photo = drawn(f, fph, photoSvg(fph, 0, FOCUS_PHOTO_Y * FOCUS_R, photoR));
                 box = pbox;
                 fit = pfit;
             }
@@ -1253,6 +1299,8 @@ export function buildFanPosterSvg(model: FanModel, opts: FanPosterOptions, meta:
         // A fixed id: one fan per poster file, and the same view gives the same file.
         uid: 'fanposter', ...opts, editable: false, embedStyles: true, theme: 'print', ppu: L.scale, viewport: model.bounds,
         sizes: opts.sizes ?? fanPrintSizes(opts.mmPerPx ?? 0.26), marks: [], focusBack: undefined, labels: true,
+        // A portrait at least 7 mm across on paper (spec 118 K2.8).
+        portraitMinPx: opts.portraitMinPx ?? FAN_PORTRAIT_MIN_MM / (opts.mmPerPx ?? 0.26),
     });
     // Nest the fan with an explicit viewport so its viewBox maps into poster px.
     const nested = fan.replace('<svg class="fan-svg"',

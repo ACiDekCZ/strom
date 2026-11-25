@@ -50,7 +50,7 @@ export const FAN_STORAGE_KEYS = {
     rodScope: 'strom-fan-rod-scope',
     /** 'years' / 'places' / 'names'. */
     content: 'strom-fan-content',
-    /** Portraits in the centre and the rings 1–2: '1' / '0'. */
+    /** Portraits wherever a sector is large enough at the zoom (spec 118 K2.8): '1' / '0'. */
     portraits: 'strom-fan-portraits',
 } as const;
 
