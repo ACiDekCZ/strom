@@ -89,8 +89,12 @@ function bridge(req: DeviceRequest, device: { id: string; name: string; kind: st
     const undo = /^device\/sync\/(I\d+)\/undo$/.exec(req.p);
     if (undo) {
         if (bodyOf<{ dry?: boolean }>(req).dry) {
-            return { s: 200, body: { input: undo[1], undone: false, fields: [{ what: 'Hřibík Pýchavka · birth', field: 'BIRT.DATE', from: '1901', to: '1902' }],
-                kept: [{ event: 'E0031', fields: ['BIRT.PLAC'], what: 'Hřibík Pýchavka · birth place', by: 'device', client: { id: 'dv_ipad0000000000000000000000000', name: 'iPad · Safari' } }] } };
+            if (undone.has(undo[1])) return { s: 200, body: { input: undo[1], undone: 0, undoneAt: at(-10) } };
+            return { s: 200, body: { input: undo[1], undone: 3, fields: [
+                { what: 'Birth – Hřibík Pýchavka', field: 'date', from: '3 APR 1902', to: '1902', event: 'E0031', person: 'P0003' },
+                { what: 'Marriage – Bonifác Pýchavka', field: 'place', from: 'Mlýnky', to: '', event: 'E0040', family: 'F0001' },
+                { what: 'Note – Hřibík Pýchavka', field: 'fact', from: 'The miller of Mlýnky', to: '', event: 'E0041', person: 'P0003' },
+            ], kept: [{ event: 'E0031', fields: ['place'], what: 'Birth – Hřibík Pýchavka', by: 'send', client: { id: 'dv_ipad0000000000000000000000000', name: 'iPad · Safari' } }] } };
         }
         undone.add(undo[1]);
         return { s: 200, body: { input: undo[1], undone: true, fields: [] } };
@@ -132,6 +136,8 @@ test.afterEach(async () => {
 type Lang = 'en' | 'de';
 const SHOTS = process.env.STROM_SHOTS ?? '';
 const shot = (page: Page, name: string): Promise<unknown> => SHOTS ? page.screenshot({ path: `${SHOTS}/d5b-${name}.png` }) : Promise.resolve();
+/** The review's screenshots of the third part (Undo this send's confirmation). */
+const shotC = (page: Page, name: string): Promise<unknown> => SHOTS ? page.screenshot({ path: `${SHOTS}/d5c-${name}.png` }) : Promise.resolve();
 
 /** Paired from the gateway's QR code, the research's tree loaded through it (editable), the bridge asked. */
 async function paired(page: Page, opts: { lang: Lang; width: number; dark: boolean }): Promise<void> {
@@ -415,8 +421,12 @@ test.describe('Progress on a phone of the home network', () => {
         await ov.locator('.research-overview__undo-send').tap();
         const confirm = page.locator('#confirmation-modal');
         await expect(confirm.locator('#confirm-title')).toHaveText('Undo this send?');
-        await expect(confirm.locator('.confirm-list li')).toHaveText(['Hřibík Pýchavka · birth: 1901 → 1902']);
-        await expect(confirm.locator('.confirm-list-after')).toHaveText('Only these fields are reverted. Later changes from other devices and from Pracovna stay.');
+        // Whose send and when, each field now → after (a fact it added is removed), whose later changes stay.
+        await expect(confirm.locator('#confirm-message')).toHaveText(new RegExp(`^From ${gw.devices[0].name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}, \\d{1,2}:\\d{2}`));
+        await expect(confirm.locator('.confirm-list li')).toHaveText([
+            'Birth – Hřibík Pýchavka: 3 APR 1902 → 1902', 'Marriage – Bonifác Pýchavka: Mlýnky → empty', 'Note – Hřibík Pýchavka: The miller of Mlýnky → removed',
+        ]);
+        await expect(confirm.locator('.confirm-list-after')).toHaveText('Only these fields are reverted. Later changes from iPad · Safari and from Pracovna stay.');
         expect(scene.writes.map(w => `${w.p} ${JSON.stringify(bodyOf(w))}`)).toEqual(['device/sync/I0007/undo {"dry":true}']);
         await noSideways(page);
         await shot(page, 'undo-send-390');
@@ -426,6 +436,54 @@ test.describe('Progress on a phone of the home network', () => {
         await expect(ov.locator('.research-overview__row--device[data-send="I0007"]')).toHaveCount(0);
         await expect(ov.locator('.research-overview__undo-send')).toHaveCount(0);
     });
+
+    test('a send undone meanwhile (elsewhere) is said, not asked; one that is no longer a send too', async ({ page }) => {
+        await paired(page, { lang: 'en', width: 390, dark: false });
+        await openOverview(page);
+        await unfold(page, 'timeline');
+        const ov = page.locator('#research-overview');
+        // Taken back on another device after this one read the status: the preview says when, nothing is asked.
+        undone.add('I0007');
+        await ov.locator('.research-overview__undo-send').tap();
+        await expect(page.locator('.toast').filter({ hasText: 'This send has already been undone.' })).toBeVisible();
+        await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
+        expect(scene.writes.map(w => JSON.stringify(bodyOf(w)))).toEqual(['{"dry":true}']);
+        await expect(ov.locator('.research-overview__undo-send')).toHaveCount(0);
+    });
+
+    test('404 sync.not-sync: the send can no longer be undone', async ({ page }) => {
+        scene.refuse['POST device/sync/I0007/undo'] = { s: 404, body: { code: 'sync.not-sync', error: 'I0007 is not a sync' } };
+        await paired(page, { lang: 'en', width: 390, dark: false });
+        await openOverview(page);
+        await unfold(page, 'timeline');
+        await page.locator('#research-overview .research-overview__undo-send').tap();
+        await expect(page.locator('.toast').filter({ hasText: 'This send can no longer be undone.' })).toBeVisible();
+        await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
+    });
+
+    for (const dark of [false, true]) {
+        test(`the confirmation in German at 360${dark ? ', dark' : ''}: nothing overflows`, async ({ page }) => {
+            await paired(page, { lang: 'de', width: 360, dark });
+            await openOverview(page);
+            await unfold(page, 'timeline');
+            await page.locator('#research-overview .research-overview__undo-send').tap();
+            const confirm = page.locator('#confirmation-modal');
+            await expect(confirm.locator('#confirm-title')).toHaveText('Dieses Senden zurücknehmen?');
+            await expect(confirm.locator('#confirm-message')).toHaveText(/^Von .+, \d{1,2}:\d{2}/);
+            await expect(confirm.locator('.confirm-list li').nth(2)).toHaveText('Note – Hřibík Pýchavka: The miller of Mlýnky → wird entfernt');
+            await expect(confirm.locator('.confirm-list-after')).toHaveText('Nur diese Felder werden zurückgesetzt. Spätere Änderungen von iPad · Safari und von Pracovna bleiben.');
+            await expect(confirm.locator('#confirm-ok-btn')).toHaveText('Senden zurücknehmen');
+            await expect(confirm.locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
+            expect(await overflowing(page, '#confirmation-modal .modal')).toEqual([]);
+            // The list's bullets stay inside the dialog.
+            const dialog = (await confirm.locator('.modal').boundingBox())!;
+            const list = (await confirm.locator('.confirm-list').boundingBox())!;
+            expect(list.x).toBeGreaterThanOrEqual(dialog.x + 16);
+            await noSideways(page);
+            await page.waitForTimeout(400); // (the tap's highlight gone)
+            await shotC(page, `undo-send-de-360${dark ? '-dark' : ''}`);
+        });
+    }
 
     test('a 403 device.computer-only takes Undo this send away; without sync.undo it is not offered', async ({ page }) => {
         scene.refuse['POST device/sync/I0007/undo'] = { s: 403, body: { code: 'device.computer-only', action: 'sync.undo' } };

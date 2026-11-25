@@ -367,6 +367,11 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         undoThisOk: 'Cofnij wysłanie',
         undoThisEmpty: 'puste',
         undoThisFailed: 'Nie udało się cofnąć wysłania.',
+        undoThisFrom: (name: string, time: string) => `Z urządzenia ${name}, ${time}`,
+        undoThisRemoved: 'zostanie usunięte',
+        undoThisKeepFrom: (names: string, pc: string) => `Cofną się tylko te pola. Późniejsze zmiany z ${names} i z komputera ${pc} zostają.`,
+        undoThisAlready: 'To wysłanie zostało już cofnięte.',
+        undoThisGone: 'Tego wysłania nie da się już cofnąć.',
         // Writes the research holds until something there is settled (spec 017 U7). Its own sentence is shown first.
         held: {
             titleSeal: 'Zapieczętowano na innym komputerze',

@@ -2002,6 +2002,14 @@ const stringsEN = {
         undoThisOk: 'Undo send',
         undoThisEmpty: 'empty',
         undoThisFailed: 'The send could not be undone.',
+        /** Under the question: whose send and when ("From iPhone · Safari, 13:52"). */
+        undoThisFrom: (name: string, time: string) => `From ${name}, ${time}`,
+        /** A fact, a name or a person the send added: it goes away. */
+        undoThisRemoved: 'removed',
+        /** Later changes another device made to what the send changed: named. */
+        undoThisKeepFrom: (names: string, pc: string) => `Only these fields are reverted. Later changes from ${names} and from ${pc} stay.`,
+        undoThisAlready: 'This send has already been undone.',
+        undoThisGone: 'This send can no longer be undone.',
         // Writes the research holds until something there is settled (spec 017 U7). Its own sentence is shown first.
         held: {
             titleSeal: 'Sealed on another computer',
@@ -14030,6 +14038,11 @@ const stringsCZ: StringsType = {
         undoThisOk: 'Vrátit poslání',
         undoThisEmpty: 'prázdné',
         undoThisFailed: 'Poslání se vrátit nepodařilo.',
+        undoThisFrom: (name: string, time: string) => `Ze zařízení ${name}, ${time}`,
+        undoThisRemoved: 'odebere se',
+        undoThisKeepFrom: (names: string, pc: string) => `Vrátí se jen tato pole. Pozdější změny z ${names} a z počítače ${pc} zůstanou.`,
+        undoThisAlready: 'Toto poslání už je vrácené.',
+        undoThisGone: 'Toto poslání už vrátit nejde.',
         // Zápisy, které výzkum drží, dokud se u něj něco nevyřeší (spec 017 U7). Jeho vlastní věta je první.
         held: {
             titleSeal: 'Zapečetěno na jiném počítači',
@@ -25808,6 +25821,11 @@ const stringsDE: StringsType = {
         undoThisOk: 'Senden zurücknehmen',
         undoThisEmpty: 'leer',
         undoThisFailed: 'Das Senden ließ sich nicht zurücknehmen.',
+        undoThisFrom: (name: string, time: string) => `Von ${name}, ${time}`,
+        undoThisRemoved: 'wird entfernt',
+        undoThisKeepFrom: (names: string, pc: string) => `Nur diese Felder werden zurückgesetzt. Spätere Änderungen von ${names} und von ${pc} bleiben.`,
+        undoThisAlready: 'Dieses Senden wurde schon zurückgenommen.',
+        undoThisGone: 'Dieses Senden lässt sich nicht mehr zurücknehmen.',
         // Schreibvorgänge, die die Forschung zurückhält, bis dort etwas geklärt ist (Spec 017 U7). Ihr eigener Satz steht zuerst.
         held: {
             titleSeal: 'Auf einem anderen Computer versiegelt',
