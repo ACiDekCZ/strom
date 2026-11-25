@@ -4167,6 +4167,20 @@
         .device-agent--sheet .device-agent__foot.buttons { margin: 0; padding: 12px 16px 0; }
         .device-agent--dialog .device-agent__foot.buttons { justify-content: flex-end; }
         .device-agent__foot > button { min-height: 44px; margin: 0; }
+        /* The sheet is no .modal: its buttons take the design's own look (10.2), Back plain, the start primary. */
+        .device-agent--sheet .device-agent__foot > button {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--surface); color: var(--text); font: inherit; font-size: 14px; font-weight: 500;
+            white-space: nowrap; cursor: pointer;
+        }
+        .device-agent--sheet .device-agent__foot > button.primary {
+            background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600;
+        }
+        @media (hover: hover) {
+            .device-agent--sheet .device-agent__foot > button.secondary:hover { background: var(--hover-bg); }
+            .device-agent--sheet .device-agent__foot > button.primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+        }
         .device-agent__back { flex: 0 0 auto; }
         .device-agent__go {
             display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -34571,6 +34585,8 @@
         .batch-sort-title { font-size: 14px; font-weight: 600; color: var(--text); }
         .batch-sort-text, .batch-sort-older { margin: 0; font-size: 13px; color: var(--text-light); }
         .batch-sort-where { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--text-light); }
+        /* Touch: Sort with the agent at the end of a batch keeps a 44 px target (a device's batch, K3.15). */
+        @media (pointer: coarse) { .batch-sort-btn { min-height: 44px; } }
         .mdlg--sortprop { width: 1200px; height: calc(100vh - 32px); }
         .mdlg--sortprop .mdlg-body { flex: 1; padding-top: 4px; }
         .msp-know { font-style: italic; }
