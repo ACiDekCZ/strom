@@ -1707,6 +1707,14 @@ export interface PersonList {
      * `auto` = kept up to date ("automatic"); false = a fixed list made from it.
      */
     custom?: CustomRule & { auto: boolean };
+    /**
+     * A custom rule this app cannot read whole (a newer version, a condition
+     * it does not know), kept exactly as it came (spec 136 K1.8): the list is
+     * fixed with its stored people meanwhile, and an app that reads the rule
+     * takes it back as `custom` when it loads the tree. Never set together
+     * with a readable `custom` (that one wins).
+     */
+    customUnknown?: Record<string, unknown>;
     /** Where the list came from (spec 136 K1.10); absent = made by hand. */
     origin?: PersonListOrigin;
 }

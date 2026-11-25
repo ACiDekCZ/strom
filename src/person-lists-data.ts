@@ -272,7 +272,10 @@ export function sanitizePersonList(raw: unknown): PersonList | null {
     const name = typeof raw.name === 'string' ? raw.name.trim() : '';
     if (!name && !builtin) return null;
     // A custom rule (spec 136 D3) replaces the one-condition rule; it is stored with dynamic: false and its last people.
-    const custom = raw.custom === undefined ? null : sanitizeCustomRule(raw.custom);
+    // One this app cannot read whole is kept as it came (customUnknown, K1.8); a later app reads it back from there.
+    const rawCustom = raw.custom !== undefined ? raw.custom : raw.customUnknown;
+    const custom = rawCustom === undefined ? null : sanitizeCustomRule(rawCustom);
+    const customUnknown = !custom && isObject(rawCustom) ? rawCustom : null;
     const rule = custom || raw.rule === undefined ? null : sanitizePersonListRule(raw.rule);
     const dynamic = !custom && raw.dynamic === true && !!rule;
     if (!custom && raw.dynamic === true && !rule) return null;
@@ -286,6 +289,7 @@ export function sanitizePersonList(raw: unknown): PersonList | null {
     };
     if (rule) list.rule = rule;
     if (custom) list.custom = custom;
+    if (customUnknown) list.customUnknown = customUnknown;
     if (!dynamic) {
         // A kept-up-to-date custom list keeps its last people too: what an older app shows.
         list.personIds = ids(raw.personIds);

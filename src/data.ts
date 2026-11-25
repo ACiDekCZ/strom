@@ -488,6 +488,8 @@ export function migrateData(data: unknown): StromData {
     // v22: the lists of people and the ready-made lists deleted (src/person-lists-data.ts).
     const personLists = sanitizePersonLists(d.personLists);
     if (personLists) result.personLists = personLists;
+    // Automatic custom lists that came without their people (an agent, another app; spec 136 K1.8).
+    const unsnapped = personLists ? listsWithoutPeople(d.personLists) : null;
     const personListsDropped = sanitizePersonListsDropped(d.personListsDropped);
     if (personListsDropped) result.personListsDropped = personListsDropped;
 
@@ -525,8 +527,38 @@ export function migrateData(data: unknown): StromData {
     pruneMedia(result);
     // A pooled image's reference only where an image may be (validation.ts dropStrayPoolRefs).
     dropStrayPoolRefs(result);
+    if (unsnapped?.size) snapshotCustomLists(result, unsnapped);
 
     return result;
+}
+
+/** Ids of the stored lists that carry no `personIds` at all. */
+function listsWithoutPeople(raw: unknown): Set<string> {
+    const out = new Set<string>();
+    if (!Array.isArray(raw)) return out;
+    for (const r of raw) {
+        if (r && typeof r === 'object' && typeof (r as { id?: unknown }).id === 'string' && !Array.isArray((r as { personIds?: unknown }).personIds)) {
+            out.add((r as { id: string }).id);
+        }
+    }
+    return out;
+}
+
+/**
+ * The people of the automatic custom lists (of `ids`) worked out as the tree
+ * is read, so an export right after carries them for an older app (spec 136
+ * K1.8) without waiting for a save; a save refreshes them anyway. Only in
+ * the data read: nothing is stored here. Mutates `data`.
+ */
+function snapshotCustomLists(data: StromData, ids: ReadonlySet<string>): void {
+    const lists = data.personLists;
+    if (!lists?.some(l => ids.has(l.id) && l.custom?.auto)) return;
+    try {
+        const index = buildLineages(data);
+        data.personLists = lists.map(l => (ids.has(l.id) ? withCustomSnapshot(index, l) ?? l : l));
+    } catch (e) {
+        console.warn('Custom list snapshot failed', e);
+    }
 }
 
 /**
@@ -2634,6 +2666,8 @@ class DataManagerClass {
             const was = l.custom ? l.custom.auto : !!l.dynamic;
             const had = was ? listPersonIds(index, l, env) : (l.personIds ?? []);
             const next: PersonList = { ...l, updated: now, name: listDisplayName(l) };
+            // The rule set here replaces one of a newer app kept as it came (K1.8).
+            delete next.customUnknown;
             const simple = customToRule(custom);
             if (simple) {
                 delete next.custom;
@@ -2754,8 +2788,9 @@ class DataManagerClass {
         }
         return !!this.changePersonList(id, (l, now) => {
             const next: PersonList = { ...l, rule: clean, dynamic, updated: now };
-            // A one-condition rule replaces a custom one (spec 136 D3).
+            // A one-condition rule replaces a custom one (spec 136 D3), a newer app's kept one too.
             delete next.custom;
+            delete next.customUnknown;
             if (dynamic) {
                 delete next.personIds; delete next.removed; delete next.checklist;
                 if (next.sort === 'manual') next.sort = 'old';

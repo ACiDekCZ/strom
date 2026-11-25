@@ -187,7 +187,11 @@
  *   custom rule is stored with `dynamic: false` and its last worked-out
  *   people in `personIds`, so an older app keeps showing it as a fixed list
  *   with that set (the app refreshes the set at every save while the rule
- *   keeps the list up to date). Only the betas 3.32.0-beta.1 to beta.3 read
+ *   keeps the list up to date). A custom rule the app cannot read whole (a
+ *   later rule version or condition) is kept as it came in
+ *   `PersonList.customUnknown` while the list stays fixed, and read back as
+ *   `custom` by an app that can read it: a later rule version needs no bump
+ *   of its own. Only the betas 3.32.0-beta.1 to beta.3 read
  *   v26 without knowing them and drop them on a re-save. Were they released
  *   later than v26, they would need a bump of their own.
  */

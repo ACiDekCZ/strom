@@ -26,6 +26,7 @@ import {
     PERSON_LIST_SORTS, type ListKind,
 } from '../person-lists.js';
 import { addedTime } from '../person-lists-data.js';
+import { listTemplateName } from '../person-list-templates.js';
 import { customMissing, listUsedBy, type MissingRef } from '../person-list-rules.js';
 import { shownName } from '../person-name.js';
 import { cardYears } from '../card-fields.js';
@@ -110,6 +111,14 @@ function shortDate(iso: string | undefined, withYear = false): string {
         ? { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) }
         : { day: 'numeric', month: 'numeric', ...(year ? { year: 'numeric' } : {}) };
     return d.toLocaleDateString(lang, opts);
+}
+
+/** Where a list came from, in words: a template or the agent, with the day (spec 136 §8); '' for a list made by hand. */
+export function listOriginText(list: PersonList): string {
+    const t = strings.lists;
+    const o = list.origin;
+    if (o?.by === 'template') return t.origin.template(listTemplateName(o), shortDate(o.at, true));
+    return o?.by === 'agent' ? t.origin.agent(shortDate(o.at, true)) : '';
 }
 
 function kindWord(kind: ListKind): string {
@@ -456,8 +465,7 @@ export const personListsMethods = uiModule({
                 + `${whole}${link ? `<div class="pl-rule-acts">${link}</div>` : ''}</div>`;
         }
         // Where the list came from: a template or the agent, with the day (spec 136 §8); none for a list made by hand.
-        const origin = list.origin?.by === 'template' ? t.origin.template(list.origin.name, shortDate(list.origin.at, true))
-            : list.origin?.by === 'agent' ? t.origin.agent(shortDate(list.origin.at, true)) : '';
+        const origin = listOriginText(list);
         if (origin) ruleRow += `<div class="pl-origin">${esc(origin)}</div>`;
         const gone = broken ? null : listMissing(list);
         let note = '';

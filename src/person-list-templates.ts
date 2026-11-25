@@ -8,6 +8,7 @@
 
 import { FAMILY_PRESETS } from './lineage.js';
 import { ruleNeeds, type RuleNeed } from './person-list-rules.js';
+import { strings } from './strings.js';
 import type { PersonId, RuleCond, RuleGroup, RuleNearEvent } from './types.js';
 
 /** The stable ids of the built-in templates, in the menu's order. */
@@ -48,6 +49,15 @@ const ALL_EVENTS: RuleNearEvent[] = ['birth', 'death', 'marriage', 'residence'];
 
 function isTemplateId(id: string): id is ListTemplateId {
     return (LIST_TEMPLATE_IDS as readonly string[]).includes(id);
+}
+
+/**
+ * The name of the template a list came from: a built-in one's in the current
+ * language (its stable id), a template saved on the device or one this app
+ * does not know by the name stored with the list.
+ */
+export function listTemplateName(origin: { template: string; name: string }): string {
+    return isTemplateId(origin.template) ? strings.lists.templates[origin.template].name : origin.name;
 }
 
 /** "Family of a person" with a quick choice's axes and the person to fill in. */

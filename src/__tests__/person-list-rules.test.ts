@@ -492,6 +492,8 @@ describe('K1.8 storage an older app reads', () => {
             expect(l.custom).toBeUndefined();
             expect(l.personIds).toEqual(['konst']);
             expect(listIsAuto(l)).toBe(false);
+            // Kept as it came (N4b): a newer app takes it back.
+            expect(l.customUnknown).toEqual(raw.custom);
         }
     });
 
@@ -510,6 +512,114 @@ describe('K1.8 storage an older app reads', () => {
         const ged = exportToGedcom(data).content;
         expect(ged).not.toContain('noPhoto');
         expect(ged).not.toContain('Paternal without photo');
+    });
+});
+
+describe('Findings of the check of spec 136 (N3, N4)', () => {
+    const AT = '2026-11-12T09:00:00.000Z';
+    /** A rule of a newer app: a version and a condition this app does not know, with fields of its own. */
+    const newer = { v: 2, auto: true, root: { t: 'group', op: 'all', items: [{ t: 'cond', c: 'zodiac', p: { sign: 'leo' } }] }, by: { x: [1, 2] } };
+
+    it('N3: a built-in template is named in the UI language, a template of the device or an unknown one by its stored name', async () => {
+        const { listOriginText } = await import('../ui/person-lists-ui.js');
+        const near = stored({ origin: { by: 'template', template: 'nearPlace', name: 'From a place and surroundings', at: AT } });
+        const own = stored({ origin: { by: 'template', template: 'own:t1', name: 'Mill villages', at: AT } });
+        const unknown = stored({ origin: { by: 'template', template: 'zodiac', name: 'By the stars', at: AT } });
+        setLanguage('cs');
+        expect(listOriginText(near)).toMatch(/^Ze šablony „Z místa a okolí“ · /);
+        expect(listOriginText(own)).toMatch(/^Ze šablony „Mill villages“ · /);
+        expect(listOriginText(unknown)).toMatch(/^Ze šablony „By the stars“ · /);
+        setLanguage('de');
+        expect(listOriginText(near)).toMatch(/^Aus Vorlage „Aus Ort und Umgebung“ · /);
+        setLanguage('en');
+        expect(listOriginText(near)).toMatch(/^From template “From a place and surroundings” · /);
+    });
+
+    it('N4a: an automatic custom list read without its people has them at once; people it came with stay until a save', () => {
+        const data = family();
+        const { personIds: _p, ...bare } = stored();
+        data.personLists = [bare as PersonList];
+        expect(migrateData(JSON.parse(JSON.stringify(data))).personLists?.[0].personIds).toEqual(['viktor', 'konst', 'ada']);
+        data.personLists = [stored()];
+        expect(migrateData(JSON.parse(JSON.stringify(data))).personLists?.[0].personIds).toEqual(['konst']);
+        // A fixed custom list or a rule this app cannot read is not worked out.
+        data.personLists = [{ ...bare, custom: { ...custom, auto: false } } as PersonList, { ...bare, id: 'c2', name: 'Newer', custom: newer } as unknown as PersonList];
+        expect(migrateData(JSON.parse(JSON.stringify(data))).personLists?.map(l => l.personIds)).toEqual([[], []]);
+    });
+
+    it('N4b: a rule of a newer app is kept as it came, the list fixed with its people; an app that reads it takes it back', () => {
+        const data = family();
+        data.personLists = [{ ...stored(), custom: newer } as unknown as PersonList];
+        const loaded = migrateData(JSON.parse(JSON.stringify(data)));
+        const l = loaded.personLists![0];
+        expect(l.custom).toBeUndefined();
+        expect(listIsAuto(l)).toBe(false);
+        expect(listKind(l)).toBe('fixed');
+        expect(listPersonIds(lineageIndexOf(loaded), l)).toEqual(['konst']);
+        expect(l.customUnknown).toEqual(newer);
+        // Stored and read again: the same, nothing added.
+        const again = migrateData(JSON.parse(JSON.stringify(loaded))).personLists![0];
+        expect(again).toEqual(l);
+        // An app that reads the rule uses it as the list's rule again.
+        const readable = sanitizePersonList({ ...stored(), custom: undefined, customUnknown: custom })!;
+        expect(readable.custom).toEqual(custom);
+        expect(readable.customUnknown).toBeUndefined();
+        expect(listIsAuto(readable)).toBe(true);
+        // A readable rule wins over one kept from a newer app (a rule set since).
+        const both = sanitizePersonList({ ...stored(), customUnknown: newer })!;
+        expect(both.custom).toEqual(custom);
+        expect(both.customUnknown).toBeUndefined();
+    });
+
+    describe('DataManager', () => {
+        const TREE = 'rules-findings-tree' as TreeId;
+        const dm = DataManager as unknown as { data: StromData; currentTreeId: TreeId | null; viewMode: boolean; pendingBefore: StromData | null };
+        let saved: StromData[] = [];
+        beforeEach(() => {
+            saved = [];
+            vi.spyOn(TreeManager, 'saveTreeData').mockImplementation((_id, d) => { saved.push(JSON.parse(JSON.stringify(d))); });
+            vi.spyOn(TreeManager, 'getActiveTreeMetadata').mockReturnValue(null);
+            vi.spyOn(AuditLogManager, 'log').mockImplementation(() => {});
+            dm.data = migrateData(family());
+            dm.currentTreeId = TREE;
+            dm.viewMode = false;
+            dm.pendingBefore = null;
+            UndoManager.setActiveTree(null);
+            UndoManager.setActiveTree(TREE);
+        });
+        afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+        it('N4a: a tree loaded and a tree imported as new carry the people of an automatic custom list', async () => {
+            const data = family();
+            const { personIds: _p, ...bare } = stored();
+            data.personLists = [bare as PersonList];
+            DataManager.loadStromData(JSON.parse(JSON.stringify(data)));
+            expect(dm.data.personLists?.[0].personIds).toEqual(['viktor', 'konst', 'ada']);
+            vi.stubGlobal('window', new EventTarget());
+            const made: StromData[] = [];
+            vi.spyOn(TreeManager, 'createTreeFromImport').mockImplementation((d) => { made.push(JSON.parse(JSON.stringify(d))); return 'imported-tree' as TreeId; });
+            vi.spyOn(TreeManager, 'markDemoTree').mockImplementation(() => {});
+            vi.spyOn(TreeManager, 'getTrees').mockReturnValue([]);
+            await DataManager.importAsNewTree(JSON.parse(JSON.stringify(data)), 'Imported');
+            expect(made[0].personLists?.[0].personIds).toEqual(['viktor', 'konst', 'ada']);
+            expect(dm.data.personLists?.[0].personIds).toEqual(['viktor', 'konst', 'ada']);
+        });
+
+        it('N4b: a save keeps a newer app\'s rule as it came; a rule set in this app replaces it', () => {
+            const data = family();
+            data.personLists = [{ ...stored(), custom: newer } as unknown as PersonList];
+            dm.data = migrateData(JSON.parse(JSON.stringify(data)));
+            expect(DataManager.renamePersonList('c1', 'Paternal by the stars')).toBe(true);
+            const last = saved[saved.length - 1].personLists![0];
+            expect(last.name).toBe('Paternal by the stars');
+            expect(last.customUnknown).toEqual(newer);
+            expect(last.custom).toBeUndefined();
+            expect(last.personIds).toEqual(['konst']);
+            expect(DataManager.setPersonListCustomRule('c1', custom)).toBe(true);
+            const ruled = DataManager.getPersonList('c1')!;
+            expect(ruled.custom).toEqual(custom);
+            expect(ruled.customUnknown).toBeUndefined();
+        });
     });
 });
 
