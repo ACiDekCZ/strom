@@ -55,6 +55,8 @@ export interface FakeGateway {
     onTunnel: (req: DeviceRequest, device: FakeDevice) => TunnelReply | undefined;
     /** Each connection closed at once without an answer. */
     unreachable: boolean;
+    /** The gateway's own paths (/device/*) held without an answer (the app's request times out: connecting meanwhile). */
+    stall: boolean;
     /** The gateway's clock offset from the real one (ms): beyond ±2 min a request gets 409 device.clock. */
     clockOffsetMs: number;
     /** A new code to pair (one at a time, 10 minutes): its pairId, secret and the QR code's address. */
@@ -114,6 +116,7 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         computer: { name: 'Pracovna', label: 'Pracovna' },
         onTunnel: () => undefined,
         unreachable: false,
+        stall: false,
         clockOffsetMs: 0,
         pairCode() {
             const pairId = b64url(randomBytes(16));
@@ -234,6 +237,7 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
             return;
         }
         const p = url.pathname;
+        if (gw.stall && p.startsWith('/device/')) return;
         if (req.method === 'GET' && (p === '/' || p === '/pair')) {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
             res.end(app);

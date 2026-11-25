@@ -32,6 +32,7 @@ import { holdLeave } from './busy-leave.js';
 import { whilePicking } from './file-pick.js';
 import { iconSvg } from '../icons.js';
 import { watchStorageNotices } from './notice-place.js';
+import { inDeviceMode } from './device-mode-ui.js';
 
 /** Last known storage state (refreshed on every check; best-effort until known). */
 let knownState: PersistenceState = 'best-effort';
@@ -213,7 +214,8 @@ export const fileCopyMethods = uiModule({
 
     renderUnsavedIndicator(): void {
         const unsaved = this.unsavedOutsideResearchKind();
-        const show = shouldShowUnsavedIndicator({
+        // A device of the home network keeps nothing of its own: the tree is the computer's research's (spec 094 §3).
+        const show = !inDeviceMode() && shouldShowUnsavedIndicator({
             state: knownState,
             unsavedCount: unsaved.trees.length,
             viewMode: DataManager.isViewMode(),

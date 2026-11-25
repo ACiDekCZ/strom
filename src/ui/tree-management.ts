@@ -63,6 +63,7 @@ import { TreeEditLock } from './tree-edit-lock.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { forgetTreeMaterials } from './materials-ui.js';
 import { updateDefaultFocusButtons } from './default-focus.js';
+import { inDeviceMode, deviceTreesNotHere } from './device-mode-ui.js';
 
 /** Room (px) a row menu needs beside ⋯ to show a useful part of its rows. */
 const TREE_MENU_MIN_ROOM = 240;
@@ -194,6 +195,8 @@ export const treeManagementMethods = uiModule({
         // Keep the action-menu anniversaries signal in sync: this method is
         // already called wherever the count can change (tree switch, edits, ...).
         this.refreshActionMenuBadges();
+        // The device mode's second line under the name (spec 094 §3; nothing outside it).
+        this.refreshDeviceModeUi();
 
         const nameEl = document.getElementById('current-tree-name');
         const dropdown = document.getElementById('tree-switcher-dropdown');
@@ -295,7 +298,13 @@ export const treeManagementMethods = uiModule({
         // The switcher is trees only: view/tree actions live in the ⋯ actions
         // menu (desktop) and the mobile "More" sheet (≤1024px). Import… makes a
         // new tree, so it belongs here, not with the open tree's actions.
-        html += `
+        // On a device of the home network the trees belong to the computer's
+        // research: one quiet line says where new trees and import are (spec 094 §3).
+        if (inDeviceMode()) html += `
+            <div class="tree-switcher-divider"></div>
+            <div class="tree-switcher-quiet" id="tree-switcher-not-here">${this.escapeHtml(deviceTreesNotHere())}</div>
+        `;
+        else html += `
             <div class="tree-switcher-divider"></div>
             <div class="tree-switcher-action edit-only" id="tree-switcher-import" role="menuitem" tabindex="0" onclick="window.Strom.UI.treeSwitcherImport()">
                 ${strings.treeSwitcher.import}
@@ -745,7 +754,8 @@ export const treeManagementMethods = uiModule({
                     run: () => { if (tree.id !== activeId) void this.switchToTree(tree.id); },
                 };
             }) },
-            { divider: true, lead: blocked, rows: [
+            // A device of the home network: the trees are the computer's, one quiet line instead (spec 094 §3).
+            inDeviceMode() ? { divider: true, lead: blocked, rows: [], quiet: deviceTreesNotHere() } : { divider: true, lead: blocked, rows: [
                 ...(DataManager.isReadOnly() ? [] : [{ label: strings.treeSwitcher.import, id: 'tree-sheet-import', run: () => this.showImportDialog() }]),
                 { label: strings.treeManager.manageTreesTitle, value: '\u203a', run: () => this.showTreeManagerDialog() },
             ] },

@@ -126,6 +126,8 @@ export const deviceStartMethods = uiModule({
             const pc = computerOf(started.hello, pairing);
             // The research's places drawn again: the bridge through the gateway now.
             this.refreshResearchMenu();
+            // The switcher's second line follows the connection from now on (spec 094 §3).
+            this.watchDeviceConnection();
             if (started.paired && code?.kind === 'home') hideHomeLineForGood();
             if (screen && started.paired) {
                 this.renderDeviceBoot('paired', { pc, host: location.hostname });

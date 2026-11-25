@@ -24,7 +24,7 @@ import { formatLiveClock } from '../live-time.js';
 
 const DIALOG_ID = 'device-conn-modal';
 const SHEET_CLASS = 'device-conn-sheet';
-const TOP_ID = 'tree-switcher-conn';
+const TOP_ID = 'tree-switcher-conn-top';
 /** The name the gateway keeps (`device/rename`: at most 60 characters). */
 const NAME_MAX = 60;
 
@@ -83,20 +83,22 @@ export const deviceConnMethods = uiModule({
         this.hookDeviceConn();
         const pc = researchDeviceState()?.computer ?? '';
         const line = deviceConnLine(deviceConnection(), pc, true);
-        return `<div id="${TOP_ID}" class="tree-switcher-conn" role="menuitem" tabindex="0" data-device-conn>`
+        return `<div id="${TOP_ID}" class="tree-switcher-conn-top" role="menuitem" tabindex="0" data-device-conn>`
             + `<span class="phone-dot ${line.dot}" aria-hidden="true"></span>`
-            + `<span class="tree-switcher-conn-t">${esc(line.text)}</span>`
-            + `<span class="tree-switcher-conn-a">${esc(strings.device.connOpen)}</span>`
+            + `<span class="tree-switcher-conn-top-t">${esc(line.text)}</span>`
+            + `<span class="tree-switcher-conn-top-a">${esc(strings.device.connOpen)}</span>`
             + '</div><div class="tree-switcher-divider"></div>';
     },
 
-    /** Once: a tap on what carries `data-device-conn` (the top block, the switcher's second line) opens the Connection. */
+    /** Once: a tap on the top block opens the Connection; on a phone the switcher's second line opens it too
+     *  (elsewhere that line belongs to the switcher's button, whose dropdown carries the top block). */
     hookDeviceConn(): void {
         if (hooked) return;
         hooked = true;
         const open = (e: Event): void => {
             const el = (e.target as Element | null)?.closest?.('[data-device-conn], #current-tree-conn');
             if (!el || !this.deviceConnOn()) return;
+            if (el.id === 'current-tree-conn' && !isPhoneToolbar()) return;
             if (e instanceof KeyboardEvent && e.key !== 'Enter' && e.key !== ' ') return;
             e.preventDefault();
             e.stopPropagation();
@@ -114,7 +116,7 @@ export const deviceConnMethods = uiModule({
         if (top) {
             const line = deviceConnLine(deviceConnection(), researchDeviceState()?.computer ?? '', true);
             top.querySelector('.phone-dot')?.setAttribute('class', `phone-dot ${line.dot}`);
-            const t = top.querySelector('.tree-switcher-conn-t');
+            const t = top.querySelector('.tree-switcher-conn-top-t');
             if (t) t.textContent = line.text;
         }
         const pcEl = this.deviceConnHost()?.querySelector<HTMLElement>('.device-conn-pc');

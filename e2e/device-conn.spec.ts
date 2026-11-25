@@ -90,11 +90,12 @@ async function queue(page: Page, entries: Record<string, unknown>): Promise<void
 async function openConnection(page: Page): Promise<void> {
     const width = page.viewportSize()!.width;
     if (width <= 640) {
-        await page.evaluate(() => (window as unknown as { Strom: { UI: { showDeviceConnection(): void } } }).Strom.UI.showDeviceConnection());
+        // On a phone the tree switcher's second line opens the Connection.
+        await page.locator('#current-tree-conn').click();
         await expect(page.locator('.device-conn-sheet')).toBeVisible();
     } else {
         await page.locator('.tree-switcher-btn').click();
-        await page.locator('#tree-switcher-conn').click();
+        await page.locator('#tree-switcher-conn-top').click();
         await expect(page.locator('#device-conn-modal')).toBeVisible();
     }
 }
@@ -151,12 +152,12 @@ test.describe('en', () => {
         research(gw);
         await pairedApp(page, gw);
         await page.locator('.tree-switcher-btn').click();
-        const top = page.locator('#tree-switcher-conn');
+        const top = page.locator('#tree-switcher-conn-top');
         await expect(top).toContainText('On computer Pracovna · connected');
         await expect(top).toContainText('Connection…');
         await expect(top.locator('.phone-dot.is-on')).toHaveCount(1);
         // first in the dropdown, the trees below
-        await expect(page.locator('#tree-switcher-dropdown > *').first()).toHaveId('tree-switcher-conn');
+        await expect(page.locator('#tree-switcher-dropdown > *').first()).toHaveId('tree-switcher-conn-top');
         await top.click();
         await expect(page.locator('#tree-switcher-dropdown')).not.toHaveClass(/active/);
         const dialog = page.locator('#device-conn-modal');
@@ -252,7 +253,7 @@ test.describe('en', () => {
         // the device has left the gateway's bridge: no Connection offered any more (the unpaired state is §7's)
         await page.locator('.tree-switcher-btn').click();
         await expect(page.locator('#tree-switcher-dropdown')).toHaveClass(/active/);
-        await expect(page.locator('#tree-switcher-conn')).toHaveCount(0);
+        await expect(page.locator('#tree-switcher-conn-top')).toHaveCount(0);
     });
 
     test('a gateway that announces neither rename nor unpair: neither offered', async ({ page }) => {
@@ -315,11 +316,11 @@ test.describe('de', () => {
                 await page.setViewportSize({ width, height: heightOf(width) });
                 if (width > 640) {
                     await page.locator('.tree-switcher-btn').click();
-                    const top = page.locator('#tree-switcher-conn');
+                    const top = page.locator('#tree-switcher-conn-top');
                     await expect(top).toContainText(`Auf dem Computer ${LONG_PC} · verbunden`);
                     await expect(top).toContainText('Verbindung…');
                     await expectNoOverflow(page, '#tree-switcher-dropdown');
-                    expect(overlaps(await top.locator('.tree-switcher-conn-t').boundingBox(), await top.locator('.tree-switcher-conn-a').boundingBox())).toBe(false);
+                    expect(overlaps(await top.locator('.tree-switcher-conn-top-t').boundingBox(), await top.locator('.tree-switcher-conn-top-a').boundingBox())).toBe(false);
                     if (width === 1440) await shot(page, `d4d-prepinac-spojeni-de-${width}-${themeWord(scheme)}`);
                     await page.keyboard.press('Escape');
                     await page.locator('body').click({ position: { x: 5, y: page.viewportSize()!.height - 5 } }).catch(() => undefined);

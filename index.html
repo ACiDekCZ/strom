@@ -23557,19 +23557,19 @@
         }
         /* The Connection of a device (spec 094 3.5, 3.6): a sheet from below on a phone, a dialog elsewhere (3.12);
            its state and "Connection…" on top of the tree switcher's dropdown (3.11). */
-        .tree-switcher-conn {
+        .tree-switcher-conn-top {
             display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; box-sizing: border-box;
             padding: 8px 14px; font-size: 13px; color: var(--text-light); cursor: pointer;
         }
-        .tree-switcher-conn .phone-dot { margin-top: 0; }
-        .tree-switcher-conn-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .tree-switcher-conn-t::first-letter { text-transform: uppercase; }
-        .tree-switcher-conn-a { flex: none; color: var(--primary-dark); font-weight: 600; }
+        .tree-switcher-conn-top .phone-dot { margin-top: 0; }
+        .tree-switcher-conn-top-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tree-switcher-conn-top-t::first-letter { text-transform: uppercase; }
+        .tree-switcher-conn-top-a { flex: none; color: var(--primary-dark); font-weight: 600; }
         @media (hover: hover) {
-            .tree-switcher-conn:hover { background: var(--hover-bg); }
-            .tree-switcher-conn:hover .tree-switcher-conn-a { text-decoration: underline; }
+            .tree-switcher-conn-top:hover { background: var(--hover-bg); }
+            .tree-switcher-conn-top:hover .tree-switcher-conn-top-a { text-decoration: underline; }
         }
-        .tree-switcher-conn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .tree-switcher-conn-top:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .device-conn { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
         .device-conn--sheet { padding: 4px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
         .device-conn-row {
@@ -23632,6 +23632,52 @@
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .device-conn--sheet { gap: 8px; }
             .device-conn-row { padding: 8px 12px; }
+        }
+        /* ==================== DEVICE MODE (spec 094 §3) ====================
+           The tree switcher's second line: the connection with the computer.
+           Outside the device mode the wrapper is no box at all and the line is hidden. */
+        .tree-switcher-lines { display: contents; }
+        .tree-switcher-conn[hidden] { display: none !important; }
+        body.device-mode .toolbar .tree-switcher-btn { max-width: min(300px, 100%); }
+        body.device-mode .toolbar .tree-switcher-btn .tree-switcher-lines {
+            display: flex; flex-direction: column; justify-content: center; gap: 1px;
+            flex: 0 1 auto; min-width: 0; text-align: left;
+        }
+        body.device-mode .toolbar .tree-switcher-btn .tree-name {
+            max-width: none; min-width: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-family: var(--font-serif); font-size: 14px; font-weight: 600; line-height: 1.15;
+        }
+        .tree-switcher-conn {
+            display: flex; align-items: center; gap: 5px; min-width: 0;
+            font-size: 11px; line-height: 1.2; font-weight: 400; color: var(--text-light);
+        }
+        .tree-switcher-conn .phone-dot { width: 7px; height: 7px; margin: 0; }
+        .tree-switcher-conn .phone-dot.is-wait { box-shadow: 0 0 0 3px var(--warning-soft); }
+        .tree-switcher-conn-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        body.device-mode .toolbar.toolbar-squeeze-name .tree-switcher-btn .tree-switcher-lines { max-width: 110px; }
+        /* What belongs to the computer's research is not offered on the device (3.7): a linked file and
+           its save, the storage state of the browser, "Export all"; one quiet line in the switcher instead. */
+        body.device-mode #file-link-indicator,
+        body.device-mode #unsaved-copy-indicator,
+        body.device-mode #actions-storage-row,
+        body.device-mode .actions-storage-divider,
+        body.device-mode #actions-export-reminder,
+        body.device-mode #export-modal .fsa-only,
+        body.device-mode #export-modal .fsa-linked-only { display: none !important; }
+        .bottom-sheet-quiet { margin: 8px 16px 12px; font-size: 13px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .tree-switcher-quiet {
+            padding: 10px 14px; max-width: 320px; box-sizing: border-box;
+            font-size: 12.5px; line-height: 1.45; color: var(--text-light); white-space: normal;
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            body.device-mode .toolbar .tree-switcher-btn .tree-switcher-lines { max-width: 200px; }
+        }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            body.device-mode .toolbar .tree-switcher-btn { max-width: 100%; }
+            body.device-mode .toolbar .tree-switcher-btn .tree-switcher-lines { max-width: none; }
+            body.device-mode .toolbar .tree-switcher-btn .tree-name { font-size: 16px; }
+            .tree-switcher-conn { font-size: 12px; }
         }
         .phone-section-title { margin: 0 0 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
         .phone-intro { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -35750,7 +35796,7 @@
             <button class="tree-switcher-btn" onclick="window.Strom.UI.toggleTreeSwitcher()">
                 <!-- Phone: one dot for "only in the browser" / offline (the pills have no room) -->
                 <span class="toolbar-state-dot" aria-hidden="true"></span>
-                <span id="current-tree-name" class="tree-name">…</span>
+                <span class="tree-switcher-lines"><span id="current-tree-name" class="tree-name">…</span><span id="current-tree-conn" class="tree-switcher-conn" hidden></span></span>
                 <svg class="tree-dropdown-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
             </button>
             <div id="tree-switcher-dropdown" class="tree-switcher-dropdown" role="menu">

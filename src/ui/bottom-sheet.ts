@@ -74,6 +74,8 @@ interface StorageRow { title: string; sub?: string; run: () => void; }
 interface ValueRow { label: string; value: string; run: () => void; id?: string; }
 interface MenuBlock {
     header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; storageRow?: StorageRow; note?: string;
+    /** A quiet sentence after the rows (what is not here, and where it is). */
+    quiet?: string;
     /** A quiet label at the start of the pair's line ("View:"). */
     pairLabel?: string;
     /** A framed row across the sheet under the pair ("Family line · Whole tree ›"). */
@@ -938,6 +940,12 @@ export const bottomSheetMethods = uiModule({
                 note.className = 'bottom-sheet-note';
                 note.textContent = block.note;
                 list.appendChild(note);
+            }
+            if (block.quiet) {
+                const quiet = document.createElement('p');
+                quiet.className = 'bottom-sheet-quiet';
+                quiet.textContent = block.quiet;
+                list.appendChild(quiet);
             }
             if (block.divider) {
                 const divider = document.createElement('div');
