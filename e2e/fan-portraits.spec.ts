@@ -4,7 +4,7 @@ import { openApp, seedSetting, seedTree, SeedPerson } from './helpers.js';
 /**
  * The fan's portraits (spec 118 K2.7, K2.8): in any ring, ancestors and
  * descendants with their partners, wherever a portrait is at least 32 px
- * across at the current zoom and the text still fits. Zooming in shows the
+ * across at the current zoom and the sector's text stays as without it. Zooming in shows the
  * outer rings' photos, zooming out hides them again.
  */
 

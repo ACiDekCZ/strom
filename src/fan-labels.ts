@@ -529,6 +529,21 @@ export function fanFocusFallbackRows(text: string, box: Pick<FanLabelBox, 'len' 
     return rows.map(r => ({ text: fits(r) ? r : cut(r), fs, bold: true }));
 }
 
+/** A label's words, whatever its rows and sizes ("Anna / Novak / 1919 – 1979" → "Anna Novak 1919–1979"). */
+function fanTextOf(l: FanLabel): string {
+    return l.rows.map(r => r.text).join(' ').replace(/\s+/g, ' ').replace(/\s*–\s*/g, '–').replace(/-\s+/g, '-').trim();
+}
+
+/**
+ * Whether two labels say the same: the same words, however they break into
+ * rows and whatever their size (years alone are the same at step 1 and 2).
+ * A portrait is drawn only where the label beside it says what it says
+ * without one (spec 118 K2.8: the text comes first).
+ */
+export function sameFanText(a: FanLabel, b: FanLabel): boolean {
+    return fanTextOf(a) === fanTextOf(b);
+}
+
 /**
  * The label of a person's sector: the ladder in the box fanLabelBox chose,
  * and where that gives nothing or only a shortened surname (the initial or a

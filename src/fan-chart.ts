@@ -34,6 +34,7 @@ import { assignFanRodColors, fanRodLegend, FanRodAssignment } from './fan-rod-as
 import {
     FanLabelSizes, FanMeasure, fanScreenSizes, fanPrintSizes, fanBaseSize, defaultFanMeasure, fanLabelBox, fitFanLabel, fitFanSectorLabel,
     fanLabelSvg, fanCenteredRowsSvg, fanFocusFallbackRows, fanRadialRotation, fanYears, FanLabelBox, FanContent,
+    FanLabel, sameFanText,
 } from './fan-labels.js';
 
 // ==================== GEOMETRY ====================
@@ -489,7 +490,8 @@ export interface FanSvgOptions {
     content?: FanContent;
     /**
      * Portraits (spec 118 §6, K2.7–K2.8) in the focus disc and any sector
-     * where one is at least `portraitMinPx` across and the text still fits: a
+     * where one is at least `portraitMinPx` across and the sector's text says
+     * beside it just what it says without one (the text comes first): a
      * person's photo, or null (the sector stays as it is). Missing: no
      * portraits. Asked only for the sectors in view that would show one,
      * never for a protected person.
@@ -857,12 +859,13 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
                 base: fanBaseSize(sizes, 'anc', s.generation) + namesBoost, min: sizes.min, yearsDrop: sizes.yearsDrop,
                 protect: prot, repeat: rep, content, measure,
             };
-            // The text comes first: a portrait only while the label stays at step 6 or better.
+            // The text comes first (K2.8): a portrait only where the label says beside it
+            // just what it says without one; else the sector as without portraits.
             const por = portraitOf(p, s);
-            let fit = por ? fitFanSectorLabel(p, s, ppu, lopts, b => por.box(k.box(b))) : null;
-            if (por && fit && fit.label.level <= 6) label = por.svg(fit.box);
-            else fit = fitFanSectorLabel(p, s, ppu, lopts, k.box);
-            if (fit) label += fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
+            const fit = fitFanSectorLabel(p, s, ppu, lopts, k.box);
+            const pfit = por && fit ? fitFanSectorLabel(p, s, ppu, lopts, b => por.box(k.box(b))) : null;
+            if (por && pfit && sameFanText(pfit.label, fit!.label)) label = por.svg(pfit.box) + fanLabelSvg(pfit.label, pfit.box, ppu, labelOpts);
+            else if (fit) label = fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
         }
         if (marks.has(s.key)) over.push(`<path class="fan-mark" d="${d}" fill="none" stroke-width="3" vector-effect="non-scaling-stroke" pointer-events="none"/>`);
         body.push(wrap(p.id, `<g class="fan-sector ${p.gender}${nonBio}${rep ? ' fan-repeat' : ''}${dim ? ' fan-hl-dim' : ''}" data-fan-key="${s.key}" data-fan-kind="anc"`
@@ -908,30 +911,33 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         let label = '';
         if (withLabels && inView(s)) {
             const box = fanLabelBox(s, ppu);
-            // The text comes first (K2.7): a portrait only while the label still fits beside it.
+            // The text comes first (K2.7, K2.8): a portrait only where the label says beside it
+            // just what it says without one; else the sector as without portraits.
             const por = portraitOf(p, s);
             if (s.kind === 'partner') {
                 // A thin band: one light row along the arc, the name or the surname.
-                const row = (b: FanLabelBox): string => {
-                    if (!b.curved || b.cross < sizes.min) return '';
+                const row = (b: FanLabelBox): FanLabel | null => {
+                    if (!b.curved || b.cross < sizes.min) return null;
                     const fs = Math.max(sizes.min, Math.min(10, b.cross / 1.1));
                     const lab = fitFanLabel(p, { ...b, cross: fs * 1.18 }, { base: fs, min: fs, protect: prot, repeat: rep, measure });
                     return lab && lab.level >= 4
-                        ? fanLabelSvg({ rows: lab.rows.slice(0, 1).map(r => ({ ...r, bold: false })), level: lab.level }, b, ppu, labelOpts)
-                        : '';
+                        ? { rows: lab.rows.slice(0, 1).map(r => ({ ...r, bold: false })), level: lab.level }
+                        : null;
                 };
-                const pbox = por ? por.box(box) : null;
-                const prow = pbox ? row(pbox) : '';
-                label = por && pbox && prow ? por.svg(pbox) + prow : row(box);
+                const plain = row(box);
+                const pbox = por && plain ? por.box(box) : null;
+                const prow = pbox ? row(pbox) : null;
+                if (por && pbox && prow && sameFanText(prow, plain!)) label = por.svg(pbox) + fanLabelSvg(prow, pbox, ppu, labelOpts);
+                else if (plain) label = fanLabelSvg(plain, box, ppu, labelOpts);
             } else {
                 const lopts = {
                     base: fanBaseSize(sizes, 'desc', s.depth) + namesBoost, min: sizes.min, yearsDrop: sizes.yearsDrop,
                     protect: prot, repeat: rep, content, measure,
                 };
-                let fit = por ? fitFanSectorLabel(p, s, ppu, lopts, por.box) : null;
-                if (por && fit && fit.label.level <= 6) label = por.svg(fit.box);
-                else fit = fitFanSectorLabel(p, s, ppu, lopts);
-                if (fit) label += fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
+                const fit = fitFanSectorLabel(p, s, ppu, lopts);
+                const pfit = por && fit ? fitFanSectorLabel(p, s, ppu, lopts, por.box) : null;
+                if (por && pfit && sameFanText(pfit.label, fit!.label)) label = por.svg(pfit.box) + fanLabelSvg(pfit.label, pfit.box, ppu, labelOpts);
+                else if (fit) label = fanLabelSvg(fit.label, fit.box, ppu, labelOpts);
             }
         }
         const kindCls = s.kind === 'partner' ? ' fan-partner' : ' fan-desc';

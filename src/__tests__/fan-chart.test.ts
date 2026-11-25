@@ -983,6 +983,41 @@ describe('portraits (spec 118 §6)', () => {
         expect(buildFanSvg(m, { ...o, portrait: photoOf })).toBe(buildFanSvg(m, o));
     });
 
+    it('the text comes first in every ring (K2.8): a portrait never changes what a sector says, a long name keeps its sector without one', () => {
+        // Long names as in the finding of 1124 ("Kristina Johann Jarnwick 1879–1947" → "Jarnwick").
+        const d = withPhotos(7);
+        for (const p of Object.values(d.persons)) {
+            const n = Number(p.id.slice(1));
+            if (n >= 8 && n % 3 === 0) { p.firstName = p.gender === 'male' ? 'Bartolomej Johann' : 'Kristina Johann'; p.lastName = 'Jarnwick'; }
+        }
+        d.persons['w1' as PersonId] = person('w1', 'female', [], { firstName: 'Ida', lastName: 'Quernova', photo: PHOTO, birthDate: '2001' });
+        d.persons['k1' as PersonId] = person('k1', 'male', [], { firstName: 'Kristian Johann', lastName: 'Oberwaldenfeldt', photo: PHOTO, birthDate: '2024' });
+        const fam = withUnions(Object.values(d.persons), [union('u1', 'a1', 'w1', ['k1'])]);
+        const m = buildFanModel(fam, 'a1' as PersonId, { generations: 7, shape: 'two', descGenerations: 1 })!;
+        // The sectors (the focus disc has its own room for the photo above its text).
+        const keys = [...m.sectors.filter(s => s.person).map(s => s.key), ...m.desc.filter(s => s.person).map(s => s.key)];
+        const text = (g: string) => [...g.matchAll(/>([^<>]+)</g)].map(x => x[1]).filter(t => !/^\s*$/.test(t)).join(' ')
+            .replace(/#\d+ · .*$/, '').replace(/\s+/g, ' ').replace(/\s*–\s*/g, '–').replace(/-\s+/g, '-').trim();
+        let portraits = 0;
+        const changed: string[] = [];
+        for (const ppu of [1, 1.5, 2, 3, 4, 6, 8]) {
+            const o = { ...svgOpts, uid: 'pt', measure: estimate, ppu };
+            const on = buildFanSvg(m, { ...o, portrait: photoOf });
+            const off = buildFanSvg(m, o);
+            for (const key of keys) {
+                const a = sectorOf2(on, key);
+                if (a.includes('<image ')) portraits++;
+                if (text(a) !== text(sectorOf2(off, key))) changed.push(`${key} @${ppu}: ${text(sectorOf2(off, key))} → ${text(a)}`);
+            }
+        }
+        expect(changed).toEqual([]);
+        // Portraits are still drawn where the text keeps beside them.
+        expect(portraits).toBeGreaterThan(20);
+        // a9 (Kristina Johann Jarnwick) in the fourth ring next to the narrow fifth: no portrait where its text would be shortened.
+        const o = { ...svgOpts, uid: 'pt', measure: estimate, ppu: 2 };
+        expect(text(sectorOf2(buildFanSvg(m, { ...o, portrait: photoOf }), 'a9'))).toBe(text(sectorOf2(buildFanSvg(m, o), 'a9')));
+    });
+
     it('a portrait moves the text outward, past itself', () => {
         const m = buildFanModel(withPhotos(3), 'a1' as PersonId, { generations: 3, shape: 'half' })!;
         const svg = buildFanSvg(m, { ...svgOpts, uid: 'po', measure: estimate, ppu: 2, portrait: photoOf });
