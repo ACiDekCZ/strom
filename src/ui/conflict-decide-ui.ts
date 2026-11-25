@@ -273,7 +273,8 @@ export const conflictDecideMethods = uiModule({
                 const value = which === 'user' && view.unsent ? this.researchConflictValueNow(personId, c) : sideText(c, v);
                 const importSource = which === 'user' && kind === 'import' ? this.originConflictImportSource(personId, c) : '';
                 const meta = which === 'research'
-                    ? sourceLink(v, 'source')
+                    // Two devices' sends (9.3): the earlier send's time beside its source.
+                    ? sourceLink(v, 'source') + (sideTimes?.research ? `<span class="prc-meta">${esc(k.sentOn(sideTimes.research))}</span>` : '')
                     : v.retracted?.length
                         ? retractedSourceHtml(v, '')
                     : importSource
