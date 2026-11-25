@@ -345,7 +345,8 @@ test.describe('the research\'s numbers after a hand-over', () => {
         await expect.poll(() => b.posts.length).toBe(2);
         expect(people(b.posts[0]).map(p => p.refn)).toEqual(['', '', '']);
         expect(people(b.posts[1])).toEqual(SENT_WITH_IDS);
-        await expect(page.locator('.toast')).toContainText('Sent to the research');
+        // The progress toast may still be fading out beside the result toast.
+        await expect(page.locator('.toast', { hasText: 'Sent to the research' })).toBeVisible();
     });
 });
 
