@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { seedResearchPromoSeen, seedSetting, seedWhatsNewSeen, card } from './helpers.js';
-import { dropFile, poll } from './research-bridge.js';
+import { poll } from './research-bridge.js';
 import { startDeviceGateway, type FakeGateway, type TunnelReply } from './device-gateway.js';
 import type { DeviceRequest } from '../src/device/device-crypto';
 
@@ -98,7 +98,8 @@ async function pairedTree(page: Page, opts: { lang: 'en' | 'de'; width: number; 
         const d = (globalThis as { __stromDevice?: { connection(): { state: string } | null } }).__stromDevice;
         return d?.connection()?.state === 'connected';
     });
-    await dropFile(page, 'pychavkovi.ged', GED);
+    // The start opens the research's tree itself (tree.ged through the gateway).
+    await expect(page.locator('#device-boot')).toHaveCount(0, { timeout: 15000 });
     await expect(card(page, 'Hřibík')).toBeVisible();
     await page.evaluate(() => {
         const tm = window.Strom.TreeManager;
