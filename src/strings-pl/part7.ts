@@ -882,6 +882,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         down: (pc: string) => `Komputer ${pc} jest niedostępny; agent się nie uruchomił.`,
         noTerminal: (pc: string) => `Na komputerze ${pc} nie można otworzyć terminala. Nic nie zostało uruchomione.`,
         researchNewer: 'Badanie zapisała ostatnio nowsza wersja Strom Research; agent się nie uruchomił.',
+        /** The start failed for another reason (a request or an answer of another shape). */
+        failed: 'Nie udało się uruchomić agenta.',
         queueRunRow: 'Kolejka · agent',
         sortWhere: (pc: string) => `Działa w badaniu na komputerze ${pc}, bez terminala.`,
     },

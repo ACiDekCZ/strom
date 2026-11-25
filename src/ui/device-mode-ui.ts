@@ -87,6 +87,7 @@ export const deviceModeMethods = uiModule({
             refusalWatched = true;
             window.addEventListener(DEVICE_COMPUTER_ONLY_EVENT, () => this.deviceActionRefused());
             window.addEventListener(DEVICE_REPLAY_EVENT, () => this.deviceWriteUnsure());
+            this.exposeDeviceAgentForTests();
         }
         this.refreshDeviceModeUi();
     },

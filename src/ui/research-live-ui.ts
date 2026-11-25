@@ -30,7 +30,7 @@ import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
-    LIVE_IDLE_FEATURE, LIVE_START_FEATURE, LIVE_STOP_FEATURE, parseLiveBridge, researchSchemeUrl, type LiveStatus,
+    LIVE_IDLE_FEATURE, LIVE_START_FEATURE, LIVE_STOP_FEATURE, parseLiveBridge, researchDeviceAgentLink, researchSchemeUrl, type LiveStatus,
 } from '../research-link.js';
 import {
     LIVE_IDLE_FOREVER, LIVE_IDLE_TWO_HOURS, liveEndKind, liveFeaturesWord, noteLiveEnded, noteLiveStatus, postLiveIdle, postLiveStop,
@@ -169,6 +169,11 @@ export const researchLiveMethods = uiModule({
     beginRunWork(url: string, scope?: string): void {
         const rid = this.activeResearchId();
         if (!rid) return;
+        // A device of the home network: started through the gateway, its state kept by device-agent.ts (spec 094 K3.15).
+        if (researchDeviceAgentLink(url)) {
+            void this.startAgentFromDevice(url, { tree: rid });
+            return;
+        }
         const at = this.queueWorkMenuState()?.state as { working?: readonly unknown[]; features?: readonly string[] | null } | undefined;
         // An older research where someone works already: no session can prove this start, the link's own state says it
         // (a toast). With runs side by side (`run.lines`) the start always shows in Now.

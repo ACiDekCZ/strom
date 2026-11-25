@@ -19,7 +19,8 @@
 
 import { strings } from '../strings.js';
 import {
-    QUEUE_PAGE_FEATURE, RUN_TASKS_FEATURE, WORK_LINK_FEATURE, WORK_TASKS_MAX, WORK_TASKS_MIN, researchLinkMark, workTasksCount,
+    QUEUE_PAGE_FEATURE, RUN_TASKS_FEATURE, WORK_LINK_FEATURE, WORK_TASKS_MAX, WORK_TASKS_MIN, researchDeviceAgentLink, researchLinkMark,
+    researchSchemeUrl, workTasksCount,
     type LiveAgent, type LiveBusy, type LiveDirection, type LiveQueueCounts, type LiveQueueItem, type LiveRunEnded, type LiveRunLimits,
     type LiveRunWire, type LiveWork, type LiveWorker, type ResearchLinkParams,
 } from '../research-link.js';
@@ -36,6 +37,7 @@ import { directionGlyph } from './research-directions-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { QUEUE_SCOPE } from './queue-start.js';
 import { researchActionLabel, setResearchActionLabel } from './research-open-mark.js';
+import { inDeviceMode } from './device-mode-ui.js';
 
 const DIALOG_ID = 'queue-work-modal';
 /** The reason under the Queue heading's held "Work on the queue…" (and Now's). */
@@ -290,11 +292,16 @@ function esc(text: string): string {
 let opener: HTMLElement | null = null;
 
 export const queueWorkMethods = uiModule({
+    /** The `work` link opens here: on a computer, announced; on a device, started through the gateway (`agent.start`). */
+    queueWorkLinkAvailable(): boolean {
+        return this.researchLinkAvailable('work') || (inDeviceMode() && !!this.activeResearchLink('work', { workDo: 'loop' }));
+    },
+
     /** The offer for a followed session drawn in the overview (the overview's own window too). */
     queueWorkOfferFor(s: LiveSession): QueueWorkOffer {
         return queueWorkOffer(s, {
             live: !s.ended && s.lostSince === null,
-            linkAvailable: this.researchLinkAvailable('work'),
+            linkAvailable: this.queueWorkLinkAvailable(),
             noAgent: this.activeResearchNoAgent(),
             phone: overviewMode() === 'sheet',
             starting: this.lineRunsStarting(),
@@ -392,7 +399,7 @@ export const queueWorkMethods = uiModule({
         const at = this.queueWorkMenuState();
         return !at ? 'none' : queueWorkOffer(at.state, {
             live: at.live,
-            linkAvailable: this.researchLinkAvailable('work'),
+            linkAvailable: this.queueWorkLinkAvailable(),
             noAgent: this.activeResearchNoAgent(),
             phone: overviewMode() === 'sheet',
             starting: this.lineRunsStarting(),
@@ -432,6 +439,11 @@ export const queueWorkMethods = uiModule({
      */
     showWorkDialog(state: QueueWorkState, from: HTMLElement | null, scope: { line?: LiveDirection; researchId?: string; base?: string }): void {
         this.closeQueueWorkDialog(false);
+        // A device of the home network: the same choice in the sheet of its start (10.2, 10.9), asked through the gateway.
+        if (inDeviceMode()) {
+            this.startWorkFromDevice(state, from, scope);
+            return;
+        }
         const L = strings.live;
         opener = from;
         const line = scope.line ?? null;
@@ -644,6 +656,42 @@ export const queueWorkMethods = uiModule({
         // Focus after the skeleton has wrapped the body (moving a node drops focus).
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
         radios.find(r => r.checked)?.focus();
+    },
+
+    /**
+     * The queue's work (10.2) or a line's run (10.9) started from a device (spec 094 K3.15): what the dialog says,
+     * told to the sheet of the start (device-agent-ui.ts); its choice Automatically / Only N asks with its own link.
+     */
+    startWorkFromDevice(state: QueueWorkState, from: HTMLElement | null, scope: { line?: LiveDirection; researchId?: string }): void {
+        const tree = scope.researchId ?? this.activeResearchId();
+        if (!tree) return;
+        const line = scope.line ?? null;
+        const agents = line ? workDialogAgents(state) : null;
+        const agentId = line && agents ? lineRunAgent(line, agents, tree) : null;
+        const agentName = agentId ? agents?.find(a => a.id === agentId)?.name ?? '' : '';
+        const extra = line ? { research: line.id, ...(agentId ? { agent: agentId } : {}) } : {};
+        const linkFor = (mode: 'loop' | 'tasks'): string | null => {
+            const params = queueWorkParams(mode, WORK_TASKS_DEFAULT, extra);
+            const url = params ? researchSchemeUrl('work', { tree, ...params }) : null;
+            return url && researchDeviceAgentLink(url) ? url : null;
+        };
+        const link = linkFor('loop');
+        if (!link) return;
+        const general = line ? null : generalWorkQueue(state);
+        const queue = line ? lineWorkQueue(state, line.id) : general!.queue;
+        const tasks = line ? state.queueCounts?.research[line.id] ?? queue.length : general!.total ?? queue.length;
+        const first = queueWorkFirst(queue);
+        void this.startAgentFromDevice(link, {
+            tree, from, ...(line ? { label: line.name } : {}),
+            sheet: {
+                kind: line ? 'line' : 'queue', tasks, ...(line ? { lineName: line.name } : {}),
+                ...(first ? { first: `${first.text} (${first.id})` } : {}), ...(agentName ? { agent: agentName } : {}),
+                ...(queueWorkCounted(state) ? { mode: { n: WORK_TASKS_DEFAULT, on: 'loop' as const }, linkFor } : {}),
+            },
+        }).then(r => {
+            // The agent chosen is kept for the line once it starts (spec 126 U10 §2).
+            if (line && agentId && (r === 'started' || r === 'waitPc')) rememberLineAgent(tree, line.id, agentId);
+        });
     },
 
     /**

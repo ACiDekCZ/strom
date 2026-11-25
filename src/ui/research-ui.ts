@@ -63,7 +63,7 @@ import {
 import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
-import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge } from '../research-link.js';
+import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge, researchDeviceAgentLink } from '../research-link.js';
 import { deviceEventSource, isDeviceTunnelled } from '../device/device-bridge.js';
 import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn, waitingGainOn } from '../research-link.js';
 import { overviewChanged, overviewInWindow } from '../windows/overview-window.js';
@@ -3333,6 +3333,11 @@ export const researchUiMethods = uiModule({
 
     /** Hand a strom-research:// link to the system (the browser asks first). */
     handOverResearchLink(url: string, handoff?: string | null): void {
+        // A device of the home network: the agent's link starts through the gateway, never as a link (spec 094 K3.15).
+        if (researchDeviceAgentLink(url)) {
+            void this.startAgentFromDevice(url);
+            return;
+        }
         const a = document.createElement('a');
         a.href = handoff ? withHandoff(url, handoff) : url;
         a.rel = 'noopener';
@@ -3353,6 +3358,12 @@ export const researchUiMethods = uiModule({
             this.handOverResearchLink(url);
             this.awaitResearchVersion();
             return Promise.resolve('opened');
+        }
+        // A device of the home network: the agent's work starts through the gateway (device/agent), its own
+        // confirmation and state (device-agent-ui.ts); the computer opens the link as before.
+        if (researchDeviceAgentLink(url)) {
+            return this.startAgentFromDevice(url, { from: el ?? null, ...(opts.quiet ? { quiet: true } : {}) })
+                .then(r => r === 'busy' ? 'busy' : 'opened');
         }
         return openResearchBusy(el ?? null, url, { agent: kind === 'agent', ...opts }, {
             handOver: (link, handoff) => this.handOverResearchLink(link, handoff),
@@ -3413,7 +3424,12 @@ export const researchUiMethods = uiModule({
 
     /** A strom-research:// link for the active research tree, or null (not announced, not a research tree, bad id). */
     activeResearchLink(action: ResearchLinkAction, params: Omit<ResearchLinkParams, 'tree'> = {}): string | null {
-        if (!this.researchLinkAvailable(action)) return null;
+        if (!this.researchLinkAvailable(action)) {
+            // A device with the agent's start (`agent.start`): the agent's links, started through the gateway.
+            const tree = researchDeviceState() ? this.activeResearchId() : null;
+            const url = tree ? researchSchemeUrl(action, { tree, ...params }) : null;
+            return url && researchDeviceAgentLink(url) ? url : null;
+        }
         const tree = this.activeResearchId();
         return tree ? researchSchemeUrl(action, { tree, ...params }, announcedResearchScheme()) : null;
     },

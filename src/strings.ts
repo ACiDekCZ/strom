@@ -9562,6 +9562,8 @@ const stringsEN = {
         noTerminal: (pc: string) => `A terminal cannot be opened on ${pc}. Nothing was started.`,
         /** 409 research.locked: a newer Strom Research wrote the research last (D14). */
         researchNewer: 'The research was last written by a newer version of Strom Research; the agent did not start.',
+        /** The start failed for another reason (a request or an answer of another shape). */
+        failed: 'The agent could not be started.',
         queueRunRow: 'Queue · agent',
         sortWhere: (pc: string) => `Runs in the research on ${pc}, without a terminal.`,
     },
@@ -21818,6 +21820,8 @@ const stringsCZ: StringsType = {
         down: (pc: string) => `Počítač ${pc} není dostupný; agent se nespustil.`,
         noTerminal: (pc: string) => `Na počítači ${pc} nejde otevřít terminál. Nic se nespustilo.`,
         researchNewer: 'Výzkum naposledy zapsala novější verze Strom Research; agent se nespustil.',
+        /** The start failed for another reason (a request or an answer of another shape). */
+        failed: 'Agenta se nepodařilo spustit.',
         queueRunRow: 'Fronta · agent',
         sortWhere: (pc: string) => `Běží ve výzkumu na počítači ${pc}, bez terminálu.`,
     },
@@ -33899,6 +33903,8 @@ const stringsDE: StringsType = {
         down: (pc: string) => `${pc} ist nicht erreichbar; der Agent wurde nicht gestartet.`,
         noTerminal: (pc: string) => `Auf ${pc} lässt sich kein Terminal öffnen. Nichts wurde gestartet.`,
         researchNewer: 'Die Forschung wurde zuletzt von einer neueren Version von Strom Research geschrieben; der Agent wurde nicht gestartet.',
+        /** The start failed for another reason (a request or an answer of another shape). */
+        failed: 'Der Agent konnte nicht gestartet werden.',
         queueRunRow: 'Warteschlange · Agent',
         sortWhere: (pc: string) => `Läuft in der Forschung auf ${pc}, ohne Terminal.`,
     },
