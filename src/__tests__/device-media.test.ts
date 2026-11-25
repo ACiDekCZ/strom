@@ -162,6 +162,8 @@ describe('PUT /device/media of a device (U9c)', () => {
         expect(gw.seen).toHaveLength(2);
         expect(Number(gw.seen[1].headers['X-Strom-Time'])).toBe(NOW + 300_000);
         expect(gatewayClockSkew()).toBe(300_000);
+        // A nonce seen may be the browser's own second sending after a cut: what the gateway has is asked first.
+        expect(gw.asked).toEqual([`GET device/media/${sha256Hex(bytes(10))}`]);
     });
 
     it('a request that ended before the last block (200 {have}) goes on from have', async () => {

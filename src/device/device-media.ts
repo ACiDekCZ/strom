@@ -163,7 +163,8 @@ function busyWaitMs(h: Record<string, string>): number {
  * media.hash` sends the file once more from the start. A refusal of the
  * gateway itself (outside the seal), no answer, a time-out or `502
  * bridge.down` throw GatewayError (the file waits; the batch pauses); 409
- * device.clock evens the clock out and sends it once more, 401
+ * device.clock evens the clock out, asks what the gateway has and sends it
+ * once more, 401
  * device.unpaired forgets the pairing (the queue stays). A file of 0 B is
  * never sent (the gateway takes a size of 1 at least): `media.empty`.
  */
@@ -240,6 +241,9 @@ export async function putDeviceMedia(opts: {
             if (err.code === 'device.clock' && !clockTried && typeof extra.now === 'number') {
                 clockTried = true;
                 evenGatewayClock(extra.now);
+                // Its nonce seen already may be the browser sending the body once more after a connection
+                // cut under it: the gateway may keep blocks of the first, so it is asked before going on.
+                try { from = await deviceMediaHave(opts.sha, size, tree); } catch { /* sent as it was */ }
                 continue;
             }
             if (err.code === 'device.unpaired') { begun.delete(mark); await forgetPairing(); }

@@ -1,12 +1,14 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { randomBytes } from 'node:crypto';
 import type { AddressInfo, Socket } from 'node:net';
 import {
     b64url, fromB64url, deriveKey, pairProof, sealPair, openRequest, sealResponse, sealEvent, eventsAuth,
     sha256Hex, type DeviceRequest, type RequestEnvelope, type PairAnswer, type StreamEvent,
 } from '../src/device/device-crypto';
-import { openMediaBody } from '../src/device/media-blocks';
+import { openMediaBody, mediaBlockCount } from '../src/device/media-blocks';
+import { MEDIA_BLOCK } from '../src/device/device-crypto';
 
 /**
  * A fake gateway of the research's devices (spec 094 P3) for the browser
@@ -21,9 +23,20 @@ import { openMediaBody } from '../src/device/media-blocks';
  *   U9b: a = HMAC(K, events|t|n|tree|app), each event `{event, data}` sealed
  *   with its order in the stream in the AAD, `: ping` a comment); the test
  *   sends events (sendEvent) and pings (ping),
- * - PUT /device/media/<sha> (094 §2.4, as the app seals it): the body opened
- *   block by block, its SHA-256 checked, the bridge's answer by `onMedia`
- *   (default 200 `{id}`), sealed as a tunnel's with the request's nonce base,
+ * - PUT /device/media/<sha> (094 §2.4 as the research's U9c): the open headers
+ *   (Device, Time, Nonce, Tree, Size ≥ 1, From ≤ N) checked, the meta block
+ *   (4112 B) opened, its headers only the allowlist (else a sealed 400
+ *   device.bad {header}), From against the blocks kept (409 media.from
+ *   {have}), blocks From+1…N opened and kept per device and file, a body
+ *   ending short answered 200 {sha, have, size}, the whole file's SHA-256
+ *   checked (409 media.hash, nothing kept), then the bridge's answer by
+ *   `onMedia` (default 200 `{id}`) — all sealed as a tunnel's with the
+ *   request's nonce base; the test's `mediaSteps`, one per request: 429
+ *   device.busy, blocks kept up to one and the connection closed without an
+ *   answer, a hash that does not hold; `GET device/media/<sha>` through the tunnel says
+ *   what is kept (`{sha, size, have}`),
+ * - a tunnelled request with `z: "gzip"` unpacked before its handler sees it
+ *   (as the research carries it),
  * - refusals the test asks for (refuseNext: 401/404/409 clock/410/503), and
  *   `unreachable` (each connection closed without an answer).
  *
@@ -40,10 +53,18 @@ export interface TunnelReply {
 export interface FakeMedia {
     sha: string;
     tree: string;
-    batch: string;
-    /** The headers of the meta block (the file's name, path, person, type). */
+    /** The headers of the meta block (the file's name, path, batch, person). */
     meta: Record<string, string>;
     bytes: Buffer;
+}
+
+/** One PUT /device/media as it came: its From and the data blocks opened in it. */
+export interface FakeMediaRequest {
+    sha: string;
+    from: number;
+    blocks: number[];
+    /** The open headers (lower-case). */
+    headers: Record<string, string>;
 }
 
 export interface FakeDevice {
@@ -70,6 +91,14 @@ export interface FakeGateway {
     media: FakeMedia[];
     /** The bridge's answer to a file of PUT /device/media (absent: 200 `{id}`). */
     onMedia: (m: FakeMedia, device: FakeDevice) => TunnelReply | undefined;
+    /** Every PUT /device/media whose meta block opened, in order. */
+    mediaRequests: FakeMediaRequest[];
+    /**
+     * What the next PUTs /device/media meet, one per request (first first; none: as it should go):
+     * `busy` 429 device.busy (Retry-After 1), `{cutAfter}` blocks kept up to it and the connection closed
+     * without an answer, `badHash` the whole file's SHA-256 does not hold (409 media.hash, nothing kept).
+     */
+    mediaSteps: ('busy' | 'badHash' | { cutAfter: number } | null)[];
     /** Each connection closed at once without an answer. */
     unreachable: boolean;
     /** The gateway's own paths (/device/*) held without an answer (the app's request times out: connecting meanwhile). */
@@ -122,6 +151,8 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
     const streams = new Set<{ res: ServerResponse; device: FakeDevice; n: string; seq: number }>();
     const sockets = new Set<Socket>();
     const seenNonces = new Set<string>();
+    /** The blocks of files kept per device and file (`<device>|<sha>`). */
+    const kept = new Map<string, { size: number; blocks: Map<number, Uint8Array> }>();
 
     const gw: FakeGateway = {
         origin: '',
@@ -134,6 +165,8 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         onTunnel: () => undefined,
         media: [],
         onMedia: () => undefined,
+        mediaRequests: [],
+        mediaSteps: [],
         unreachable: false,
         stall: false,
         clockOffsetMs: 0,
@@ -197,8 +230,20 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         const now = Date.now() + gw.clockOffsetMs;
         if (Math.abs(env.t - now) > 2 * 60_000 || seenNonces.has(env.n)) return json(res, 409, { code: 'device.clock', now });
         seenNonces.add(env.n);
+        if (r.z === 'gzip' && typeof r.b64 === 'string') {
+            const packed = fromB64url(r.b64);
+            let plain: Buffer;
+            try { plain = gunzipSync(packed ?? new Uint8Array(0)); } catch { return json(res, 200, sealResponse(device.key, device.id, env.n, { s: 400, h: { 'Content-Type': 'application/json; charset=utf-8' }, b: b64url(new TextEncoder().encode('{"code":"device.body"}')) })); }
+            r.b64 = b64url(new Uint8Array(plain));
+            delete r.z;
+        }
         gw.tunnelled.push(r);
         let reply = gw.onTunnel(r, device);
+        const state = /^device\/media\/([0-9a-f]{64})$/.exec(r.p);
+        if (!reply && state && r.m === 'GET') {
+            const k = kept.get(`${device.id}|${state[1]}`);
+            reply = { s: 200, body: k ? { sha: state[1], size: k.size, have: k.blocks.size } : { sha: state[1], have: 0 } };
+        }
         if (!reply) {
             if (r.p === 'status' && r.m === 'GET') reply = { s: 200, body: { ...STATUS, device: { id: device.id, name: device.name, kind: device.kind, actions: ['device.rename', 'device.unpair'] } } };
             else if (r.p === 'device/rename' && r.m === 'POST') {
@@ -230,28 +275,60 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
     const media = async (req: IncomingMessage, res: ServerResponse, sha: string): Promise<void> => {
         const raw = await readBody(req);
         const h = (k: string): string => String(req.headers[k.toLowerCase()] ?? '');
-        const device = gw.devices.find(d => d.id === h('X-Strom-Device'));
-        if (!device) return json(res, 401, { code: 'device.unpaired' });
-        const t = Number(h('X-Strom-Time'));
+        const num = (v: string): number => (/^\d{1,16}$/.test(v) ? Number(v) : NaN);
+        const t = num(h('X-Strom-Time'));
         const n = h('X-Strom-Nonce');
         const nonce = fromB64url(n, 12);
-        if (!nonce || !Number.isSafeInteger(t)) return json(res, 400, { code: 'device.bad' });
+        const size = num(h('X-Strom-Size'));
+        const from = num(h('X-Strom-From'));
+        const total = mediaBlockCount(size);
+        // The open headers' shape first (nothing else is open: no batch, no meta length).
+        if (!nonce || !Number.isSafeInteger(t) || !h('X-Strom-Tree') || !(size >= 1) || !(from >= 0) || from > total
+            || h('X-Strom-Batch') || h('X-Strom-Meta')) return json(res, 400, { code: 'device.bad' });
+        const device = gw.devices.find(d => d.id === h('X-Strom-Device'));
+        if (!device) return json(res, 401, { code: 'device.unpaired' });
+        const opened = openMediaBody(device.key, device.id, t, nonce, sha, size, from, new Uint8Array(raw));
+        if (!opened.ok && !opened.meta) return json(res, 400, { code: 'device.bad' });
         const now = Date.now() + gw.clockOffsetMs;
         if (Math.abs(t - now) > 2 * 60_000 || seenNonces.has(n)) return json(res, 409, { code: 'device.clock', now });
-        const opened = openMediaBody(device.key, device.id, t, nonce, sha, Number(h('X-Strom-Meta')), new Uint8Array(raw));
-        if (!opened || opened.file.length !== Number(h('X-Strom-Size'))) return json(res, 400, { code: 'device.bad' });
         seenNonces.add(n);
-        const m: FakeMedia = {
-            sha, tree: h('X-Strom-Tree'), batch: h('X-Strom-Batch'),
-            meta: (JSON.parse(new TextDecoder().decode(opened.meta)) as { h: Record<string, string> }).h, bytes: Buffer.from(opened.file),
+        const sealed = (s: number, body: unknown, headers: Record<string, string> = {}): void => {
+            const bytes = body === undefined || body === null ? null : new TextEncoder().encode(JSON.stringify(body));
+            json(res, 200, sealResponse(device.key, device.id, n, {
+                s, h: { 'Content-Type': 'application/json; charset=utf-8', ...headers }, b: bytes ? b64url(bytes) : null,
+            }));
         };
-        const reply = sha256Hex(opened.file) !== sha ? { s: 409, body: { code: 'media.hash' } }
-            : gw.onMedia(m, device) ?? { s: 200, body: { id: `I${String(gw.media.length + 1).padStart(4, '0')}` } };
+        if (!opened.ok && !('blocks' in opened)) return sealed(400, { code: 'device.bad', ...(opened.header ? { header: opened.header } : {}) });
+        gw.mediaRequests.push({ sha, from, blocks: [...opened.blocks.keys()], headers: Object.fromEntries(Object.entries(req.headers).map(([k, v]) => [k, String(v)])) });
+        const step = gw.mediaSteps.shift() ?? null;
+        if (step === 'busy') return sealed(429, { code: 'device.busy' }, { 'Retry-After': '1' });
+        const id = `${device.id}|${sha}`;
+        const k = kept.get(id);
+        const have = k && k.size === size ? k.blocks.size : 0;
+        if (from > 0 && from !== have) return sealed(409, { code: 'media.from', have: String(have) });
+        const keep = from === 0 || !k ? { size, blocks: new Map<number, Uint8Array>() } : k;
+        kept.set(id, keep);
+        const cutAfter = step && typeof step === 'object' ? step.cutAfter : null;
+        for (const [i, b] of opened.blocks) {
+            if (cutAfter !== null && i > cutAfter) break;
+            keep.blocks.set(i, b);
+        }
+        if (cutAfter !== null) {
+            req.socket.destroy();
+            return;
+        }
+        if (!opened.ok) return sealed(400, { code: 'device.bad', have: String(keep.blocks.size) });
+        if (keep.blocks.size < total) return sealed(200, { sha, have: keep.blocks.size, size });
+        const file = Buffer.alloc(size);
+        for (const [i, b] of keep.blocks) file.set(b, (i - 1) * MEDIA_BLOCK);
+        kept.delete(id);
+        if (step === 'badHash' || sha256Hex(new Uint8Array(file)) !== sha) {
+            return sealed(409, { code: 'media.hash' });
+        }
+        const m: FakeMedia = { sha, tree: h('X-Strom-Tree'), meta: opened.headers, bytes: file };
+        const reply = gw.onMedia(m, device) ?? { s: 200, body: { id: `I${String(gw.media.length + 1).padStart(4, '0')}` } };
         if (reply.s >= 200 && reply.s < 300) gw.media.push(m);
-        const bytes = reply.body === undefined || reply.body === null ? null : new TextEncoder().encode(JSON.stringify(reply.body));
-        json(res, 200, sealResponse(device.key, device.id, n, {
-            s: reply.s, h: reply.h ?? { 'Content-Type': 'application/json; charset=utf-8' }, b: bytes ? b64url(bytes) : null,
-        }));
+        sealed(reply.s, reply.body, reply.h);
     };
 
     const events = (req: IncomingMessage, res: ServerResponse, url: URL): void => {
