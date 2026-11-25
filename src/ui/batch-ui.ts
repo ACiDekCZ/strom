@@ -1174,6 +1174,8 @@ export const batchMethods = uiModule({
                 r.states[r.index] = 'error';
                 r.errs.set(r.index, r.refused[r.refused.length - 1].why);
             } else r.states[r.index] = r.skipped + r.skippedAsked > before.had ? 'had' : 'in';
+            // Each photo's new state shows at once (a device lists them; the throttle is for the bar).
+            if (deviceTouch()) draw(true);
             r.doneBytes += item.size;
             r.index++;
             if (r.index % 5 === 0 || r.index === r.queue.length) this.batchRemember();
@@ -1625,7 +1627,17 @@ export const batchMethods = uiModule({
         const r = run;
         if (!link || !r || r.finished || r.treeId !== link.treeId) return null;
         const sent = r.states.filter(x => x === 'in' || x === 'had').length;
-        return { label: strings.batch.sendingRow, value: strings.batch.progressCount(sent, r.total), run: () => this.showBatchDialog() };
+        return { label: strings.batch.sendingRow, value: strings.batch.progressCount(sent, r.total), run: () => this.batchReopen() };
+    },
+
+    /** The batch's list again (from the sheet's row): its run, also one that ended meanwhile (its Done with what failed). */
+    batchReopen(): void {
+        const r = run;
+        if (!r || r.cancelled || (!r.finished && !r.hidden && document.getElementById(DIALOG_ID))) { this.showBatchDialog(); return; }
+        r.hidden = false;
+        st = null;
+        this.openBatchOverlay();
+        this.renderBatchDialog();
     },
 
     discardUnfinishedBatch(): void {
