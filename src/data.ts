@@ -585,6 +585,12 @@ class DataManagerClass {
     private pendingBase: ResearchBase | null = null;
     /** The mutation being committed changes only lists of people (an undo step allowed while following a research). */
     private pendingListsOnly = false;
+    /**
+     * The step puts back a state whole (a backup, a merge's undo or redo): the
+     * people keep the time of their last change the state has (spec 136 D4),
+     * as the Undo button keeps it.
+     */
+    private pendingKeepChangedAt = false;
     /** True while a batch (multiple mutations → one undo step) is in progress. */
     private batchActive = false;
     /** Nesting depth of beginBatch/commitBatch (a batch may run inside a batch). */
@@ -1824,6 +1830,8 @@ class DataManagerClass {
     private commitMutation(description: string, silent = false, mark?: UndoMark, toast?: MutationToast): void {
         const listsOnly = this.pendingListsOnly;
         this.pendingListsOnly = false;
+        const keepChangedAt = this.pendingKeepChangedAt;
+        this.pendingKeepChangedAt = false;
         // The files' places name only what is still in the tree (a person, couple, event or source deleted).
         pruneMedia(this.data);
         if (this.batchActive) {
@@ -1834,7 +1842,7 @@ class DataManagerClass {
         if (this.windowSink) {
             // A satellite: the main window saves the edit and keeps its undo step. The changed people get the
             // time here too, so this window's copy counts them (spec 136 D4); the main window writes its own.
-            if (this.windowBefore) stampChangedAt(this.windowBefore, this.data, new Date().toISOString());
+            if (this.windowBefore && !keepChangedAt) stampChangedAt(this.windowBefore, this.data, new Date().toISOString());
             this.windowBefore = null;
             this.pendingBefore = null;
             this.save();
@@ -1847,7 +1855,7 @@ class DataManagerClass {
         UndoManager.setActiveTree(this.currentTreeId);
         if (this.pendingBefore) {
             // The people this step changed get the time of their last change (spec 136 D4).
-            stampChangedAt(this.pendingBefore, this.data, new Date().toISOString());
+            if (!keepChangedAt) stampChangedAt(this.pendingBefore, this.data, new Date().toISOString());
             // Auto-backup the FIRST mutation of the day (state before it).
             this.maybeAutoSnapshot(this.pendingBefore, this.pendingBase);
             UndoManager.push({ data: this.pendingBefore, description, base: this.pendingBase, ...(mark ? { mark } : {}), ...(listsOnly ? { listsOnly } : {}) });
@@ -2118,8 +2126,10 @@ class DataManagerClass {
      * last focus, the default person and view) staying as it is. The caller
      * has stored the data already; this save writes the same again. False when
      * tree `treeId` is not the open one or may not be changed now.
+     * `keepChangedAt`: the data carry the people's time of their last change
+     * already (an undo of a merge, its redo), none is written here.
      */
-    adoptMergeResult(treeId: TreeId, data: StromData, label: string): boolean {
+    adoptMergeResult(treeId: TreeId, data: StromData, label: string, keepChangedAt = false): boolean {
         if (this.currentTreeId !== treeId || this.windowSink || this.isReadOnly() || this.isTreeLocked()) return false;
         this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         const next = data;
@@ -2130,6 +2140,7 @@ class DataManagerClass {
         this.imagesReplaced(treeId);
         this.beginMutation();
         this.data = next;
+        this.pendingKeepChangedAt = keepChangedAt;
         this.commitMutation(label, true);
         CrossTree.invalidateCacheForTree(treeId);
         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
@@ -2172,6 +2183,7 @@ class DataManagerClass {
         TreeManager.restoreResearchBase(this.currentTreeId, restoredBase);
         this.imagesReplaced(this.currentTreeId);
         this.data = migrated;
+        this.pendingKeepChangedAt = true;
         this.commitMutation(strings.undo.restoreBackup, true);
         AuditLogManager.log(this.currentTreeId, 'data.load', strings.auditLog.restoredBackup);
         if (this.currentTreeId) CrossTree.invalidateCacheForTree(this.currentTreeId);

@@ -353,13 +353,16 @@ test('no data lost: the satellites store nothing; the main window stores their e
     };
     expect(meta(after.db.trees._index)).toEqual(meta(before.db.trees._index));
     // The sample tree as stored: as before but for the two names, and as the main window has it.
-    type Stored = { persons: Record<string, { firstName: string }> };
+    type Stored = { persons: Record<string, { firstName: string; changedAt?: unknown }> };
     const storedAfter = await page.evaluate((id) => window.Strom.TreeManager.getTreeData(id as never), sample) as Stored;
     expect(storedAfter.persons[erik].firstName).toBe('Ermenrich');
     expect(storedAfter.persons[ida].firstName).toBe('Hartwiga');
     const expected = JSON.parse(JSON.stringify(storedBefore)) as Stored;
+    // The two edited people get the time of their last change (spec 136 D4), nobody else.
     expected.persons[erik].firstName = 'Ermenrich';
+    expected.persons[erik].changedAt = expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/);
     expected.persons[ida].firstName = 'Hartwiga';
+    expected.persons[ida].changedAt = expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/);
     expect(storedAfter).toEqual(expected);
     expect(await page.evaluate(() => window.Strom.DataManager.getData().persons)).toEqual(storedAfter.persons);
 

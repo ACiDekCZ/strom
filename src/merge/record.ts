@@ -110,6 +110,8 @@ function fnv(text: string, seed: number): string {
 const PRINT_SKIP = new Set([
     'partnerships', 'parentIds', 'childIds', 'parentRelTypes', 'importedParents',
     'research', 'researchOrigins', 'researchVerify', 'confirmed',
+    // The time of the last change (spec 136 D4): a new relative or couple writes it, the details stay.
+    'changedAt',
     'nameStatus', 'marriedNameStatus', 'birthStatus', 'deathStatus',
 ]);
 

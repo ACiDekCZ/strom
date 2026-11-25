@@ -376,6 +376,8 @@ function stripDetails(person: Person): void {
     delete person.research;
     // When they came into the tree (spec 084 §8) is a date about them like the rest.
     delete person.addedAt;
+    // …and so is the time of their last change here (spec 136 D4).
+    delete person.changedAt;
 }
 
 /**

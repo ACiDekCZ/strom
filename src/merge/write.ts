@@ -31,6 +31,7 @@ import { mergeCheckMessage, type MergeCheckProblem } from './merge-check.js';
 import { hasImageToken } from './record.js';
 import { applyUndo, type ChangedSince, type UndoChoices } from './undo-plan.js';
 import { syncMergeHold } from './research-hold.js';
+import { restoreChangedAt, stampChangedAt } from '../person-lists-data.js';
 
 /** Where the plan goes: the target tree itself, or a new tree (a copy of the target + the import). */
 export type WriteInto = 'tree' | 'new';
@@ -333,13 +334,14 @@ export type UndoWriteResult =
     | { ok: false; reason: 'missing' | 'backup' | 'save'; why: string; detail?: string };
 
 /**
- * The tree's data of the backup "Before merge" of `record`, when its changes
- * hold a picture (null otherwise or when gone). Its pictures stay pooled
+ * The tree's data of the backup "Before merge" of `record` (null when gone):
+ * the pictures the merge replaced and the people's times of their last
+ * change before it come back from it. Its pictures stay pooled
  * references, as the tree holds them (spec 135): the undo puts back the
  * reference, no picture of the backup is read whole.
  */
-async function pictureBackup(record: MergeRecord): Promise<StromData | null> {
-    if (!record.backupId || !(record.edits ?? []).some(e => hasImageToken(e.before))) return null;
+async function mergeBackup(record: MergeRecord): Promise<StromData | null> {
+    if (!record.backupId) return null;
     const json = (await getSnapshotPayload(record.backupId, { images: 'refs' }).catch(() => null))?.json;
     if (!json) return null;
     try {
@@ -365,13 +367,19 @@ export async function writeUndo(treeId: TreeId, recordId: string, choices: Omit<
     } catch (err) {
         return { ok: false, reason: 'backup', why: await backupFailureWhy(err), detail: errorText(err) };
     }
-    const res = applyUndo(record, before, { ...choices, backup: await pictureBackup(record) });
+    const backup = await mergeBackup(record);
+    const pictures = (record.edits ?? []).some(e => hasImageToken(e.before));
+    const res = applyUndo(record, before, { ...choices, backup: pictures ? backup : null });
+    // The people it changed get the time of their last change, those back as before the merge
+    // their time from before it (spec 136 D4): an undo right after the merge leaves the tree as it was.
+    stampChangedAt(before, res.data, new Date().toISOString());
+    if (backup) restoreChangedAt(res.data, before, backup);
     if (!await TreeManager.saveTreeDataConfirmed(treeId, res.data, { quiet: true })) {
         return { ok: false, reason: 'save', why: strings.merge.saveFailed };
     }
     // Undone before it was sent: the research gets nothing of it.
     syncMergeHold(treeId, res.data);
-    if (!DataManager.adoptMergeResult(treeId, res.data, strings.undo.undoMerge)) TreeManager.noteUserChange(treeId);
+    if (!DataManager.adoptMergeResult(treeId, res.data, strings.undo.undoMerge, true)) TreeManager.noteUserChange(treeId);
     AuditLogManager.log(treeId, 'data.import', `${strings.auditLog.mergeUndone(record.source.label || '?')} · ${strings.auditLog.mergeLink}`);
     return { ok: true, data: res.data, before: structuredClone(before), record: res.record, kept: res.kept, items: res.items, backupId };
 }
@@ -385,7 +393,7 @@ export async function writeRestore(treeId: TreeId, before: StromData, recordId: 
     const data = structuredClone(before);
     if (!await TreeManager.saveTreeDataConfirmed(treeId, data, { quiet: true })) return false;
     syncMergeHold(treeId, data);
-    if (!DataManager.adoptMergeResult(treeId, data, strings.undo.restoreMerge)) TreeManager.noteUserChange(treeId);
+    if (!DataManager.adoptMergeResult(treeId, data, strings.undo.restoreMerge, true)) TreeManager.noteUserChange(treeId);
     const record = data.merges?.find(r => r.id === recordId);
     AuditLogManager.log(treeId, 'data.import', strings.auditLog.mergeRestored(record?.source.label || '?'));
     return true;

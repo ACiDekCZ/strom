@@ -84,13 +84,28 @@ function stableStringify(value: unknown): string {
     return `{${keys.map(k => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`;
 }
 
+/**
+ * Keys a record holds for this tree alone, never a change to share: the time
+ * of a person's last change (spec 136 D4) is written by every edit here and
+ * there, each tree its own.
+ */
+const LOCAL_KEYS = new Set(['changedAt']);
+
+/** A record without its LOCAL_KEYS (the same object when it has none). */
+function withoutLocalKeys<T>(obj: T): T {
+    if (!obj || typeof obj !== 'object' || !Object.keys(obj).some(k => LOCAL_KEYS.has(k))) return obj;
+    const out = { ...obj } as Record<string, unknown>;
+    for (const k of LOCAL_KEYS) delete out[k];
+    return out as T;
+}
+
 function diffCollection<T extends { id: string }>(
     base: Record<string, T>, current: Record<string, T>
 ): EntityChanges<T> {
     const added: T[] = [], changed: T[] = [], changedBase: T[] = [], removedIds: string[] = [];
     for (const id of Object.keys(current)) {
         if (!(id in base)) added.push(current[id]);
-        else if (stableStringify(current[id]) !== stableStringify(base[id])) {
+        else if (stableStringify(withoutLocalKeys(current[id])) !== stableStringify(withoutLocalKeys(base[id]))) {
             changed.push(current[id]);
             changedBase.push(base[id]);
         }
@@ -279,7 +294,7 @@ function diffPersonFields(before: Person, after: Person): string[] {
     // Anything else (relations, events, attachments, sources, name variants…)
     // rolls up into one honest "other details" marker.
     const strip = (p: Person) => {
-        const c = { ...p } as Record<string, unknown>;
+        const c = withoutLocalKeys({ ...p }) as Record<string, unknown>;
         for (const f of PREVIEW_FIELD_KEYS) delete c[f as string];
         return c;
     };
@@ -464,6 +479,8 @@ function mergeObject<T>(cur: T, theirs: T, base: T | undefined): T {
     const b = base as unknown as Obj | undefined;
     const keys = new Set([...Object.keys(t), ...Object.keys(b ?? {})]);
     keys.delete('id');
+    // The sender's time of a last change is theirs: this tree writes its own when the changes are taken.
+    for (const k of LOCAL_KEYS) keys.delete(k);
     for (const key of keys) {
         const tv = t[key];
         if (b) {

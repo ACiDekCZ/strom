@@ -589,6 +589,32 @@ export function stampChangedAt(before: StromData, after: StromData, at: string):
 }
 
 /**
+ * A step that puts people back as they were in an `earlier` state (the undo
+ * of a merge, with its backup "Before merge"), after stampChangedAt(current,
+ * next): each person the step stamped who is again as in `earlier` (all but
+ * the time, their unions too) gets back the time of their last change of
+ * `earlier` (none when it had none), as the Undo button gives it back.
+ * Returns how many; mutates `next`.
+ */
+export function restoreChangedAt(next: StromData, current: StromData, earlier: StromData): number {
+    const sameUnion = (id: string): boolean => {
+        const a = next.partnerships?.[id as keyof StromData['partnerships']];
+        const b = earlier.partnerships?.[id as keyof StromData['partnerships']];
+        return a === b || (!!a && !!b && sameValue(a, b));
+    };
+    let n = 0;
+    for (const [id, p] of Object.entries(next.persons ?? {})) {
+        const now = current.persons?.[id as PersonId];
+        const was = earlier.persons?.[id as PersonId];
+        if (!p || !now || !was || p.isPlaceholder || p.changedAt === now.changedAt || !samePerson(was, p)) continue;
+        if (![...p.partnerships ?? [], ...was.partnerships ?? []].every(sameUnion)) continue;
+        if (was.changedAt) p.changedAt = was.changedAt; else delete p.changedAt;
+        n++;
+    }
+    return n;
+}
+
+/**
  * An addedAt value in ms: a full ISO time as it is, a bare day (a GEDCOM
  * import's) as that day's local midnight; NaN when it is no time.
  */

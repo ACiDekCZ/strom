@@ -124,6 +124,16 @@ describe('applyLivingPrivacy', () => {
         }
     });
 
+    it('so does the time of a living person\'s last change (spec 136 D4)', () => {
+        const data = tree({ ...living, changedAt: '2026-11-20T09:00:00.000Z' }, { ...deceased, changedAt: '2026-11-20T09:00:00.000Z' });
+        expect(P(applyLivingPrivacy(data, 'full', NOW))['living'].changedAt).toBe('2026-11-20T09:00:00.000Z');
+        for (const mode of ['initials', 'anonymous', 'minimal'] as const) {
+            const out = applyLivingPrivacy(data, mode, NOW);
+            expect(P(out)['living'].changedAt, mode).toBeUndefined();
+            expect(P(out)['dead'].changedAt, mode).toBe('2026-11-20T09:00:00.000Z');
+        }
+    });
+
     it('leaves deceased persons untouched', () => {
         const out = applyLivingPrivacy(tree(deceased), 'anonymous', NOW);
         expect(P(out)['dead']).toEqual(deceased);

@@ -571,6 +571,20 @@ describe('D4 Person.changedAt', () => {
             expect(DataManager.getPerson(id('emil'))?.changedAt).toBe('2026-11-16T10:30:00.000Z');
         });
 
+        it('a merge written here gives the time; its undo and redo put back the people\'s own (keepChangedAt)', () => {
+            vi.useFakeTimers({ toFake: ['Date'] });
+            vi.setSystemTime(NOW);
+            const original = structuredClone(dm.data);
+            const merged = structuredClone(dm.data);
+            merged.persons[id('emil')].birthPlace = 'Vrbatín';
+            expect(DataManager.adoptMergeResult(TREE, merged, 'Merge')).toBe(true);
+            expect(DataManager.getPerson(id('emil'))?.changedAt).toBe('2026-11-16T10:30:00.000Z');
+            vi.setSystemTime(NOW + 60_000);
+            expect(DataManager.adoptMergeResult(TREE, structuredClone(original), 'Undo the merge', true)).toBe(true);
+            expect(DataManager.getPerson(id('emil'))?.changedAt).toBeUndefined();
+            expect(DataManager.getPerson(id('emil'))?.birthPlace).toBe(original.persons[id('emil')].birthPlace);
+        });
+
         it('a custom list is stored with dynamic false and its people, refreshed when they change', () => {
             const made = DataManager.createCustomPersonList({ name: 'Paternal without photo', custom: stored().custom!, origin: stored().origin })!;
             const kept = DataManager.getPersonList(made.id)!;
