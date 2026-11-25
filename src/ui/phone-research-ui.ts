@@ -28,7 +28,16 @@ import {
     type DeviceGlance, type DeviceGlanceLine, type DeviceGlanceNow, type DeviceGlanceWaiting, type DeviceResearchFeatures, type DeviceResearchState,
     type DeviceWaitingDo, type DeviceWay,
 } from '../device/device-research-data.js';
-import { deviceBridgeBase, researchDeviceAllows } from '../research-link.js';
+import {
+    deviceBridgeBase, researchBridgeMark, researchConflictRef, researchDeviceAgentLink, researchDeviceAllows, researchDeviceState, researchLinkMark,
+    researchSchemeUrl, researchTaskRef, type ResearchLinkAction, type ResearchLinkParams,
+} from '../research-link.js';
+import { researchActionLabel, researchMarkFlags } from './research-open-mark.js';
+import { busySpinHtml } from './busy.js';
+import {
+    clearDeviceAgentStart, deviceAgentStartOf, noteDeviceAgentGlance, onDeviceAgentStart, type DeviceAgentStartEntry,
+} from '../device/device-agent.js';
+import type { DeviceAgentCtx, DeviceAgentSheetInfo } from './device-agent-ui.js';
 import {
     answerBranchWaiting, researchBridgeWrite, setDirectionState, writeDirectionOrder,
     type BridgeWriteResult, type DirectionStateDo, type DirectionWriteRefused,
@@ -247,15 +256,121 @@ export function lineWriteBusy(r: BridgeWriteResult<object>): boolean {
 }
 
 /**
- * The quiet sentences of what stays on the computer for now (spec 094 K3.15: the device starts the agent later, in
- * U19b, where each of these becomes a button). One place, so U19b replaces them here.
+ * The quiet sentences of what stays on the computer (spec 094 K3.15): null where this device starts that work itself —
+ * a line's conversation with `agent.start`, sorting by the agent with `agent.bridge` (§10: the sentence is not drawn,
+ * the button stands in its place). A conflict's sentence stays (its value is chosen on the computer).
  */
 export type PhoneComputerOnly = 'line-work' | 'batch-sort' | 'conflict';
-export function phoneComputerOnlyNote(kind: PhoneComputerOnly, pc: string): string {
+/** A device of a research (the marks of the computer itself are no device's). */
+const onDevice = (): boolean => researchDeviceState() !== null;
+export function phoneComputerOnlyNote(kind: PhoneComputerOnly, pc: string): string | null {
     switch (kind) {
-        case 'line-work': return strings.device.dirWorkOnComputer(pc);
-        case 'batch-sort': return strings.batch.sortOnComputer;
+        case 'line-work': return onDevice() && researchLinkMark('chat') === 'agent' ? null : strings.device.dirWorkOnComputer(pc);
+        case 'batch-sort': return onDevice() && researchBridgeMark('material-sort') === 'bridgeAgent' ? null : strings.batch.sortOnComputer;
         case 'conflict': return strings.deviceResearch.conflictOnComputer(pc);
+    }
+}
+
+// ——— The agent started from the device (§10, K3.15) ———
+
+/** "Only N tasks" of the queue's sheet (as the computer's WORK_TASKS_DEFAULT). */
+export const PHONE_WORK_TASKS = 5;
+
+/**
+ * The agent's link of a research tree, built as the computer builds it; null where this device does not start it
+ * (no `agent.start`, a link the research would not take).
+ */
+export function phoneAgentLink(tree: string | null, action: ResearchLinkAction, params: Omit<ResearchLinkParams, 'tree'> = {}): string | null {
+    const url = tree ? researchSchemeUrl(action, { tree, ...params }) : null;
+    return url && researchDeviceAgentLink(url) ? url : null;
+}
+
+/** A start of the tree on its way (not ended, not a conversation at the computer): what it holds. */
+function startOnWay(start: DeviceAgentStartEntry | null): boolean {
+    return !!start && (start.state === 'starting' || start.state === 'waitPc' || (start.state === 'running' && start.kind !== 'chat'));
+}
+
+/**
+ * Whether "Work on the queue…" stands under Now (§2 point 6): a research that is no archive, a link this device
+ * starts, the queue's run not at work and no start of the queue on its way. The most runs at once is the research's
+ * to say (its answer of the start), the glance does not tell it.
+ */
+export function phoneQueueWorkOffered(g: DeviceGlance | null, start: DeviceAgentStartEntry | null, link: string | null): boolean {
+    if (!g || !link || g.tree.state === 'archive') return false;
+    if (g.runs.some(r => r.line === null)) return false;
+    return !(startOnWay(start) && start!.kind === 'queue');
+}
+
+/**
+ * A line's own run in its actions (§3 point 2): null while it is not offered (ended, at work, no link), else
+ * `why` it is grey (paused, nothing to do, its start on its way) or offered ('').
+ */
+export function phoneLineRunWhy(line: DeviceGlanceLine, g: DeviceGlance, start: DeviceAgentStartEntry | null, link: string | null): string | null {
+    if (!link || line.state === 'done' || g.runs.some(r => r.line === line.id)) return null;
+    if (startOnWay(start) && start!.kind === 'line' && start!.line === line.id) return strings.busy.starting;
+    if (line.state === 'paused') return strings.live.lineRunPaused;
+    if (line.tasks <= 0) return strings.live.lineRunEmpty;
+    return '';
+}
+
+/** A row of a sheet of the screen (presentMenuSheet's row): the agent's carry their marks as flags. */
+interface PhoneSheetRow {
+    label: string;
+    run: () => void;
+    id: string;
+    sub?: string;
+    ai?: boolean;
+    ext?: boolean;
+    disabled?: boolean;
+    why?: string;
+}
+
+/** Now's row of a start from this device (10.3–10.7): what it says and what can be done there. */
+export interface PhoneStartRow {
+    state: 'starting' | 'waitPc' | 'notStarted' | 'chat';
+    title: string;
+    /** The quiet line under it (where the agent comes up, without confirmation, what is confirmed at the computer). */
+    sub: string;
+    /** Why it did not start (the error colour). */
+    why: string;
+    /** Try again (not started). */
+    retry: boolean;
+    /** The conversation's row can be put away. */
+    close: boolean;
+}
+
+/** The row of a start, or null where Now's own rows say it (a run proved: the research's row). */
+export function phoneStartRow(start: DeviceAgentStartEntry | null, pc: string): PhoneStartRow | null {
+    if (!start) return null;
+    const A = strings.deviceAgent;
+    const L = strings.live;
+    const b = strings.busy;
+    const name = start.label ?? '';
+    switch (start.state) {
+        case 'starting':
+            return {
+                state: 'starting',
+                title: start.kind === 'queue' ? b.queueStarting : name ? L.lineRunStarting(name) : b.starting,
+                sub: start.noConfirm ? A.noConfirm(pc) : A.startingSub(pc), why: '', retry: false, close: false,
+            };
+        case 'running':
+            return start.kind === 'chat' ? { state: 'chat', title: A.chatRow(pc), sub: name, why: '', retry: false, close: true } : null;
+        case 'waitPc':
+            return { state: 'waitPc', title: A.waitPc(pc), sub: A.waitPcSub, why: '', retry: false, close: false };
+        case 'notStarted': {
+            if (start.why === 'timeout') {
+                const title = start.kind === 'queue' ? b.queueNotStarted : name ? `${L.lineRunNotStarted} · ${name}` : L.lineRunNotStarted;
+                return { state: 'notStarted', title, sub: '', why: '', retry: true, close: false };
+            }
+            const title = start.kind === 'queue' ? A.notStartedTitle : start.kind === 'line' ? A.notStartedLine
+                : start.kind === 'chat' ? A.notStartedChat : A.failed;
+            const why = start.why === 'said' && start.text ? start.text
+                : start.why === 'noTerminal' ? A.noTerminal(pc)
+                : start.why === 'researchNewer' ? A.researchNewer
+                : start.why === 'down' ? A.down(pc)
+                : title === A.failed ? '' : A.failed;
+            return { state: 'notStarted', title, sub: start.kind === 'line' || start.kind === 'chat' ? name : '', why, retry: true, close: false };
+        }
     }
 }
 
@@ -622,6 +737,10 @@ interface WaitingHere {
     set: number;
 }
 const waitingHere = new Map<string, WaitingHere>();
+/** What each tree's last start from here asked (its sheet, its row's words): Try again asks the same. */
+const startsAsked = new Map<string, DeviceAgentCtx>();
+/** The starts' changes draw Now again (subscribed once). */
+let startsWatched = false;
 /** A write of an item on its way (its buttons wait). */
 const waitingWriting = new Set<string>();
 /** The research refused an item's last write: its quiet sentence at the row until a write of it goes. */
@@ -793,6 +912,36 @@ function phoneWaitingFind(id: string): { item: DeviceGlanceWaiting; here?: Waiti
 }
 
 /** What a row of Waiting shows. */
+/** A button of an item: an action through the bridge (`waiting-do`), or the agent started on the computer (`waiting-agent`). */
+interface WaitingAct {
+    do: DeviceWaitingDo | PhoneWaitingAgent;
+    label: string;
+    cls: string;
+    /** The label with its mark (trusted markup), for the agent's buttons. */
+    html?: string;
+    act?: 'waiting-agent';
+}
+
+/** The agent's work on an item (§5, §10): a task talked over, a conflict left to the agent. */
+export type PhoneWaitingAgent = 'discuss' | 'leave';
+
+/** The agent's link of an item (null: not offered here): a task talked over (T…), a conflict left to the agent (X…). */
+export function phoneWaitingAgentLink(tree: string | null, item: Pick<DeviceGlanceWaiting, 'id'>, what: PhoneWaitingAgent): string | null {
+    if (what === 'discuss') {
+        const task = researchTaskRef(item.id);
+        return task ? phoneAgentLink(tree, 'task', { task, taskDo: 'chat' }) : null;
+    }
+    const conflict = researchConflictRef(item.id);
+    return conflict ? phoneAgentLink(tree, 'conflict', { conflict, conflictDo: 'agent' }) : null;
+}
+
+/** The agent's button of an item, its label with the mark the computer gives it. */
+function waitingAgentAct(what: PhoneWaitingAgent): WaitingAct {
+    const label = what === 'discuss' ? strings.live.waitingTask.discuss : strings.research.leaveToAgent;
+    const mark = what === 'discuss' ? researchLinkMark('task', { taskDo: 'chat' }) : researchLinkMark('conflict', { conflictDo: 'agent' });
+    return { do: what, label, cls: 'is-outline is-agent', html: researchActionLabel(label, mark), act: 'waiting-agent' };
+}
+
 interface WaitingRowData {
     id: string;
     tag: string;
@@ -804,7 +953,7 @@ interface WaitingRowData {
     meta: string;
     /** The quiet sentence of what is decided on the computer (a conflict). */
     note?: string;
-    acts: { do: DeviceWaitingDo; label: string; cls: string }[];
+    acts: WaitingAct[];
     busy: boolean;
     /** Without the computer: its actions grey (§8 point 1). */
     locked?: boolean;
@@ -837,6 +986,8 @@ function waitingActLabel(d: DeviceWaitingDo): { label: string; cls: string } {
 /** A row's data from the item and what was done here. */
 function phoneWaitingRowData(item: DeviceGlanceWaiting, here: WaitingHere | undefined, o: {
     g: DeviceGlance; lang: string; now: number; seen: string | null; pc: string; allows: (d: DeviceWaitingDo) => boolean; locked?: boolean;
+    /** The agent's link of the item (absent: none here, e.g. an archive). */
+    agent?: (what: PhoneWaitingAgent) => string | null;
 }): WaitingRowData {
     const r = strings.deviceResearch;
     const kind = phoneWaitingKind(item);
@@ -862,7 +1013,16 @@ function phoneWaitingRowData(item: DeviceGlanceWaiting, here: WaitingHere | unde
         meta = [kind === 'task' ? '' : item.on ?? '', since].filter(Boolean).join(' · ');
     }
     const person = personShown && item.person && o.g.people[item.person] ? item.person : undefined;
-    const acts = here?.answered ? [] : phoneWaitingActions({ ...item, phase }, { decided, allows: o.allows });
+    const acts: WaitingAct[] = (here?.answered ? [] : phoneWaitingActions({ ...item, phase }, { decided, allows: o.allows }))
+        .map(d => ({ do: d, ...waitingActLabel(d) }));
+    // The agent's work beside the item's own actions, as on the computer (§5, §10): after Answer, after Keep.
+    if (!here?.answered && !decided && o.agent) {
+        const what: PhoneWaitingAgent | null = kind === 'task' && phase === 'todo' ? 'discuss' : kind === 'conflict' ? 'leave' : null;
+        if (what && o.agent(what)) {
+            const after = acts.findIndex(a => a.do === (what === 'discuss' ? 'answer' : 'keep'));
+            acts.splice(after + 1, 0, waitingAgentAct(what));
+        }
+    }
     return {
         id: item.id,
         tag: WAITING_TAGS[kind](),
@@ -870,8 +1030,8 @@ function phoneWaitingRowData(item: DeviceGlanceWaiting, here: WaitingHere | unde
         text: item.what,
         ...(person ? { person, personName: o.g.people[person].name } : {}),
         meta,
-        ...(kind === 'conflict' ? { note: phoneComputerOnlyNote('conflict', o.pc) } : {}),
-        acts: acts.map(d => ({ do: d, ...waitingActLabel(d) })),
+        ...(kind === 'conflict' ? { note: phoneComputerOnlyNote('conflict', o.pc) ?? undefined } : {}),
+        acts,
         busy: waitingWriting.has(item.id),
         locked: !!o.locked,
         ...(waitingProblems.has(item.id) ? { problem: waitingProblems.get(item.id) } : {}),
@@ -913,10 +1073,11 @@ function fillWaitingRow(row: HTMLElement, d: WaitingRowData): void {
             const b = document.createElement('button');
             b.type = 'button';
             b.className = `phone-wait__btn ${a.cls}`;
-            b.dataset.act = 'waiting-do';
+            b.dataset.act = a.act ?? 'waiting-do';
             b.dataset.do = a.do;
             b.dataset.id = d.id;
-            b.textContent = a.label;
+            if (a.html) b.innerHTML = a.html;
+            else b.textContent = a.label;
             return b;
         }));
     }
@@ -1019,6 +1180,45 @@ function findGroupRow(key: string, g: DeviceFindGroup, seenAt: string | null, ol
 }
 
 /** A quiet link-like button as a keyed row ("Show older finds"). */
+/**
+ * Now's row of a start from this device (10.3–10.7): the spinner while it starts, waiting at the computer in the
+ * warning colour, not started with why (the error colour) and Try again, the conversation at the computer with
+ * Close. Without the computer its buttons are grey (10.13).
+ */
+function phoneStartRowKeyed(m: PhoneStartRow, locked: boolean): KeyedRow {
+    return {
+        key: `start:${m.state}`,
+        make: () => {
+            const row = document.createElement('div');
+            row.className = `phone-start is-${m.state}`;
+            row.innerHTML = '<span class="phone-start__icon" aria-hidden="true"></span>'
+                + '<div class="phone-line__main"><span class="phone-start__title"></span><span class="phone-start__sub"></span>'
+                + '<span class="phone-start__why"></span></div>'
+                + '<button type="button" class="phone-wait__btn is-link phone-start__btn"></button>';
+            if (m.state === 'starting') {
+                row.setAttribute('aria-busy', 'true');
+                row.querySelector('.phone-start__icon')!.innerHTML = busySpinHtml(16);
+            } else if (m.state === 'chat') row.querySelector('.phone-start__icon')!.innerHTML = '<span class="phone-dot is-on"></span>';
+            row.querySelector('.phone-start__title')!.setAttribute('role', 'status');
+            return row;
+        },
+        fill: (row) => {
+            setText(row.querySelector('.phone-start__title'), m.title);
+            const sub = row.querySelector<HTMLElement>('.phone-start__sub')!;
+            setText(sub, m.sub);
+            sub.hidden = !m.sub;
+            const why = row.querySelector<HTMLElement>('.phone-start__why')!;
+            setText(why, m.why);
+            why.hidden = !m.why;
+            const btn = row.querySelector<HTMLButtonElement>('.phone-start__btn')!;
+            btn.hidden = !m.retry && !m.close;
+            btn.dataset.act = m.retry ? 'agent-retry' : 'agent-close';
+            setText(btn, m.retry ? strings.busy.retry : strings.buttons.close);
+            btn.disabled = m.retry && locked;
+        },
+    };
+}
+
 function linkRow(key: string, act: string, text: string, busy: boolean, locked = false): KeyedRow {
     return {
         key,
@@ -1094,6 +1294,13 @@ export const phoneResearchMethods = uiModule({
         if (!phoneResearchReady()) return;
         let screen = document.getElementById(PHONE_RESEARCH_ID);
         if (!screen) screen = this.buildPhoneResearch();
+        if (!startsWatched) {
+            startsWatched = true;
+            // A start's state changed (the flow's answer, the 30 s without a proof): Now drawn again.
+            onDeviceAgentStart((tree) => {
+                if (phoneResearchShown() && tree === phoneResearchTreeId()) this.renderPhoneResearch();
+            });
+        }
         screen.hidden = false;
         document.body.classList.add(PHONE_RESEARCH_ON);
         this.placePhoneScreenLines();
@@ -1221,6 +1428,10 @@ export const phoneResearchMethods = uiModule({
             else if (act === 'finds-older') void this.phoneFindsOlder();
             else if (act === 'finds-new') this.phoneScrollToFinds();
             else if (act === 'waiting-do' && at?.dataset.id && at.dataset.do) this.phoneWaitingDo(at.dataset.id, at.dataset.do as DeviceWaitingDo);
+            else if (act === 'waiting-agent' && at?.dataset.id && at.dataset.do) this.phoneWaitingAgent(at.dataset.id, at.dataset.do as PhoneWaitingAgent, at);
+            else if (act === 'queue-work') this.phoneStartQueueWork(at ?? null);
+            else if (act === 'agent-retry') this.phoneAgentRetry();
+            else if (act === 'agent-close') this.phoneAgentClose();
             else if (act === 'waiting-person' && at?.dataset.person) void this.phoneOpenTree({ person: at.dataset.person });
             else if (act === 'waiting-more') void this.phoneOpenTree({ overview: 'waiting' });
             else if (act === 'dock-pick' && at?.dataset.pick) this.phoneDockPick(at.dataset.pick as 'camera' | 'gallery' | 'file');
@@ -1334,7 +1545,9 @@ export const phoneResearchMethods = uiModule({
         }
         const rows: KeyedRow[] = now.map((n, i) => {
             const line = n.line ? g?.lines.find(l => l.id === n.line) : undefined;
-            const name = line?.name || (n.person ? g?.people[n.person]?.name : '') || n.task?.text || '';
+            // The queue's own run (10.4): "Queue · agent", the task under it.
+            const queueRun = !line && !!n.run && g?.runs.find(x => x.id === n.run)?.line === null;
+            const name = queueRun ? strings.deviceAgent.queueRunRow : line?.name || (n.person ? g?.people[n.person]?.name : '') || n.task?.text || '';
             const task = name === n.task?.text ? undefined : n.task?.text;
             const finishing = !!n.run && g?.runs.find(x => x.id === n.run)?.state === 'finishing';
             const stopping = !!n.run && (stopsAsked.has(n.run) || finishing);
@@ -1366,7 +1579,29 @@ export const phoneResearchMethods = uiModule({
                 },
             });
         }
+        const treeId = phoneResearchTreeId();
+        const start = treeId ? deviceAgentStartOf(treeId) : null;
+        const startRow = phoneStartRow(start, computerName());
+        if (startRow) rows.push(phoneStartRowKeyed(startRow, away));
         if (g?.day) rows.push(quietRow('day', r.dayLine(g.day.persons, g.day.sources, g.day.saves), 'phone-sec__day'));
+        // "Work on the queue…" under Now (§2 point 6, §10): AI + the terminal, as on the computer; grey without it.
+        const queueLink = phoneAgentLink(treeId, 'work', { workDo: 'loop' });
+        if (phoneQueueWorkOffered(g ?? null, start, queueLink)) {
+            rows.push({
+                key: 'queue-work',
+                make: () => {
+                    const box = document.createElement('div');
+                    box.className = 'phone-now-acts';
+                    box.innerHTML = '<button type="button" class="phone-wait__btn is-link phone-now-work" data-act="queue-work" aria-haspopup="dialog"></button>';
+                    return box;
+                },
+                fill: (box) => {
+                    const b = box.querySelector<HTMLButtonElement>('button')!;
+                    b.innerHTML = researchActionLabel(strings.live.queueWork, researchLinkMark('work'));
+                    b.disabled = away;
+                },
+            });
+        }
         syncRows(el.body, rows);
     },
 
@@ -1402,7 +1637,10 @@ export const phoneResearchMethods = uiModule({
         const rows: KeyedRow[] = shown.items.map(({ item, here }) => ({
             key: `w:${item.id}`,
             make: makeWaitingRow,
-            fill: (row: HTMLElement) => fillWaitingRow(row, phoneWaitingRowData(item, here, { g: g!, lang, now, seen, pc, allows, locked: away })),
+            fill: (row: HTMLElement) => fillWaitingRow(row, phoneWaitingRowData(item, here, {
+                g: g!, lang, now, seen, pc, allows, locked: away,
+                ...(archive ? {} : { agent: (what: PhoneWaitingAgent) => phoneWaitingAgentLink(treeId, item, what) }),
+            })),
         }));
         if (shown.more) {
             rows.push({
@@ -1877,9 +2115,10 @@ export const phoneResearchMethods = uiModule({
     },
 
     /**
-     * Line actions (§3 point 2): move up, down, to the top, pause ↔ resume, Show in the tree, End… (with its
-     * confirmation) — each through the bridge, none with a mark. Under them the quiet sentence of what is on the
-     * computer for now (phoneComputerOnlyNote).
+     * Line actions (§3 point 2): on top the agent's work as on the computer (§10, AI + the terminal) — its own run
+     * (grey with the reason while it cannot start) and the conversation about it; then move up, down, to the top,
+     * pause ↔ resume, Show in the tree, End… (with its confirmation) — each through the bridge, none with a mark.
+     * A device that does not start the agent says where the conversation is (phoneComputerOnlyNote).
      */
     openPhoneLineMenu(lineId: string): void {
         const g = shownState?.glance;
@@ -1906,9 +2145,98 @@ export const phoneResearchMethods = uiModule({
         if (writes && line.state !== 'done') {
             rows.push({ label: L.dirEndMenu, danger: true, id: 'phone-line-end', run: () => { void this.phoneEndLine(line.id, line.name); } });
         }
-        this.presentMenuSheet(line.name, [{ rows, quiet: phoneComputerOnlyNote('line-work', computerName()) }], {
+        const agentRows = this.phoneLineAgentRows(line, g);
+        const quietNote = phoneComputerOnlyNote('line-work', computerName()) ?? undefined;
+        this.presentMenuSheet(line.name, agentRows.length
+            ? [{ rows: agentRows }, { rows, divider: rows.length > 0 }]
+            : [{ rows, quiet: quietNote }], {
             subtitle: r.lineSheetSub(line.n, line.tasks), overlayClass: 'phone-sheet-overlay',
         });
+    },
+
+    /** The agent's rows of Line actions (§3 point 2, 10.8): Put an agent on this line, Work on this line. */
+    phoneLineAgentRows(line: DeviceGlanceLine, g: DeviceGlance): PhoneSheetRow[] {
+        const L = strings.live;
+        const tree = phoneResearchTreeId();
+        const pc = computerName();
+        const rows: PhoneSheetRow[] = [];
+        const runLink = phoneAgentLink(tree, 'work', { workDo: 'loop', research: line.id });
+        const why = phoneLineRunWhy(line, g, tree ? deviceAgentStartOf(tree) : null, runLink);
+        if (why !== null && runLink) {
+            const f = researchMarkFlags(researchLinkMark('work'));
+            rows.push({
+                label: L.lineRun, id: 'phone-line-run', ai: f.ai, ext: f.research,
+                ...(why ? { disabled: true, why } : { sub: strings.deviceAgent.whereLine(pc) }),
+                run: () => this.phoneStartAgent(runLink, { sheet: { kind: 'line', lineName: line.name, tasks: line.tasks }, label: line.name }),
+            });
+        }
+        const chatLink = line.state === 'active' ? phoneAgentLink(tree, 'chat', { research: line.id }) : null;
+        if (chatLink) {
+            const f = researchMarkFlags(researchLinkMark('chat'));
+            rows.push({
+                label: L.dirWork, id: 'phone-line-work', ai: f.ai, ext: f.research, sub: L.dirWorkHint,
+                run: () => this.phoneStartAgent(chatLink, { sheet: { kind: 'chat', sub: line.name }, label: line.name }),
+            });
+        }
+        return rows;
+    },
+
+    /**
+     * The agent's link of the screen's tree started from here (§10): its sheet (or none), then its state in Now
+     * (quiet: no toast). Without the computer nothing starts and nothing waits to start later (10.13).
+     */
+    phoneStartAgent(link: string, o: { sheet: DeviceAgentSheetInfo; label?: string; from?: HTMLElement | null }): void {
+        const tree = phoneResearchTreeId();
+        if (!tree || away || this.deviceDownKind() !== null) return;
+        const ctx: DeviceAgentCtx = { tree, pc: computerName(), sheet: o.sheet, quiet: true, ...(o.label ? { label: o.label } : {}) };
+        startsAsked.set(tree, ctx);
+        void this.startAgentFromDevice(link, { ...ctx, from: o.from ?? null }).then(() => {
+            if (phoneResearchShown()) this.renderPhoneResearch();
+        });
+    },
+
+    /** "Work on the queue…" (§2 point 6, 10.2): its sheet with Automatically / Only N. */
+    phoneStartQueueWork(from: HTMLElement | null): void {
+        const tree = phoneResearchTreeId();
+        const linkFor = (mode: 'loop' | 'tasks'): string | null => mode === 'loop'
+            ? phoneAgentLink(tree, 'work', { workDo: 'loop' })
+            : phoneAgentLink(tree, 'work', { workDo: 'tasks', n: String(PHONE_WORK_TASKS) });
+        const link = linkFor('loop');
+        if (!link) return;
+        this.phoneStartAgent(link, { sheet: { kind: 'queue', mode: { n: PHONE_WORK_TASKS, on: 'loop' }, linkFor }, from });
+    },
+
+    /** The agent's work on an item of Waiting (§5, §10): a task talked over, a conflict left to the agent. */
+    phoneWaitingAgent(id: string, what: PhoneWaitingAgent, from: HTMLElement | null): void {
+        const found = phoneWaitingFind(id);
+        const link = found ? phoneWaitingAgentLink(phoneResearchTreeId(), found.item, what) : null;
+        if (!found || !link) return;
+        this.phoneStartAgent(link, { sheet: { kind: 'chat', sub: found.item.what }, label: found.item.what, from });
+    },
+
+    /** Try again (10.6, after 30 s without a proof): the start forgotten, the same link asked anew. */
+    phoneAgentRetry(): void {
+        const tree = phoneResearchTreeId();
+        const start = tree ? deviceAgentStartOf(tree) : null;
+        if (!tree || !start || away) return;
+        const asked = startsAsked.get(tree);
+        clearDeviceAgentStart(tree);
+        const sheet = asked?.sheet;
+        // The queue's choice as the link says it (Only N chosen before).
+        const on = /[?&]do=tasks(&|$)/.test(start.link) ? 'tasks' as const : 'loop' as const;
+        const ctx: DeviceAgentCtx = {
+            ...(asked ?? { tree, pc: computerName(), quiet: true, ...(start.label ? { label: start.label } : {}) }),
+            ...(sheet?.mode ? { sheet: { ...sheet, mode: { ...sheet.mode, on } } } : {}),
+        };
+        void this.startAgentFromDevice(start.link, ctx).then(() => {
+            if (phoneResearchShown()) this.renderPhoneResearch();
+        });
+    },
+
+    /** The conversation's row put away (it goes on in the terminal on the computer). */
+    phoneAgentClose(): void {
+        const tree = phoneResearchTreeId();
+        if (tree) clearDeviceAgentStart(tree);
     },
 
     /** A line moved in the order of work: shown at once, written through the bridge; refused, back where it was. */
@@ -2092,6 +2420,8 @@ export const phoneResearchMethods = uiModule({
             if (phoneResearchShown()) readWhileShown = true;
             shownState = state.glance || state.finds ? state : shownState;
             readFailed = false;
+            // A start from here proved (or ended) by what the research says now (D15).
+            if (state.glance) noteDeviceAgentGlance(treeId, state.glance, pairingNow()?.deviceId ?? null);
             // Photos handed over here for this research go now that it answers (§6 point 4; no tree needed).
             if (phoneResearchShown()) void this.batchResumeDevicePhotos({ screen: treeId }).then(() => this.phoneQueueChanged());
         } catch {

@@ -9557,6 +9557,9 @@ const stringsEN = {
         waitPc: (pc: string) => `Waiting on ${pc}: the terminal asks for a confirmation.`,
         waitPcSub: 'A cost estimate or a consent is confirmed at the computer, not on the device.',
         notStartedTitle: 'The work on the queue did not start',
+        /** A line's run or a conversation that did not start (10.6, by the action). */
+        notStartedLine: 'The direction’s run did not start',
+        notStartedChat: 'The conversation with the agent did not open',
         down: (pc: string) => `${pc} is not reachable; the agent did not start.`,
         /** 503 agent.noterminal: the computer could not open a terminal (spec 094 K3.15, D14). */
         noTerminal: (pc: string) => `A terminal cannot be opened on ${pc}. Nothing was started.`,
@@ -9566,6 +9569,8 @@ const stringsEN = {
         failed: 'The agent could not be started.',
         queueRunRow: 'Queue · agent',
         sortWhere: (pc: string) => `Runs in the research on ${pc}, without a terminal.`,
+        /** Now's row of a conversation started from the device (10.10): it runs in the terminal on the computer. */
+        chatRow: (pc: string) => `Conversation with the agent · on ${pc}`,
     },
     read: {
         menu: 'Read a document…',
@@ -21817,6 +21822,8 @@ const stringsCZ: StringsType = {
         waitPc: (pc: string) => `Čeká na počítači ${pc}: terminál žádá potvrzení.`,
         waitPcSub: 'Odhad ceny nebo souhlas se potvrzuje u počítače; na zařízení se nepotvrzuje.',
         notStartedTitle: 'Práce na frontě se nespustila',
+        notStartedLine: 'Běh linie se nespustil',
+        notStartedChat: 'Rozhovor s agentem se neotevřel',
         down: (pc: string) => `Počítač ${pc} není dostupný; agent se nespustil.`,
         noTerminal: (pc: string) => `Na počítači ${pc} nejde otevřít terminál. Nic se nespustilo.`,
         researchNewer: 'Výzkum naposledy zapsala novější verze Strom Research; agent se nespustil.',
@@ -21824,6 +21831,7 @@ const stringsCZ: StringsType = {
         failed: 'Agenta se nepodařilo spustit.',
         queueRunRow: 'Fronta · agent',
         sortWhere: (pc: string) => `Běží ve výzkumu na počítači ${pc}, bez terminálu.`,
+        chatRow: (pc: string) => `Rozhovor s agentem · na počítači ${pc}`,
     },
     read: {
         menu: 'Přečíst dokument…',
@@ -33900,6 +33908,8 @@ const stringsDE: StringsType = {
         waitPc: (pc: string) => `Wartet auf ${pc}: Das Terminal bittet um eine Bestätigung.`,
         waitPcSub: 'Eine Kostenschätzung oder Zustimmung wird am Computer bestätigt, nicht auf dem Gerät.',
         notStartedTitle: 'Die Arbeit an der Warteschlange hat nicht begonnen',
+        notStartedLine: 'Der Lauf der Richtung hat nicht begonnen',
+        notStartedChat: 'Das Gespräch mit dem Agenten wurde nicht geöffnet',
         down: (pc: string) => `${pc} ist nicht erreichbar; der Agent wurde nicht gestartet.`,
         noTerminal: (pc: string) => `Auf ${pc} lässt sich kein Terminal öffnen. Nichts wurde gestartet.`,
         researchNewer: 'Die Forschung wurde zuletzt von einer neueren Version von Strom Research geschrieben; der Agent wurde nicht gestartet.',
@@ -33907,6 +33917,7 @@ const stringsDE: StringsType = {
         failed: 'Der Agent konnte nicht gestartet werden.',
         queueRunRow: 'Warteschlange · Agent',
         sortWhere: (pc: string) => `Läuft in der Forschung auf ${pc}, ohne Terminal.`,
+        chatRow: (pc: string) => `Gespräch mit dem Agenten · auf ${pc}`,
     },
     read: {
         menu: 'Dokument lesen…',

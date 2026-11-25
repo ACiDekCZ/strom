@@ -879,6 +879,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         waitPc: (pc: string) => `Czeka na komputerze ${pc}: terminal prosi o potwierdzenie.`,
         waitPcSub: 'Szacunek kosztu lub zgodę potwierdza się przy komputerze, nie na urządzeniu.',
         notStartedTitle: 'Praca nad kolejką się nie rozpoczęła',
+        notStartedLine: 'Przebieg linii się nie rozpoczął',
+        notStartedChat: 'Rozmowa z agentem się nie otworzyła',
         down: (pc: string) => `Komputer ${pc} jest niedostępny; agent się nie uruchomił.`,
         noTerminal: (pc: string) => `Na komputerze ${pc} nie można otworzyć terminala. Nic nie zostało uruchomione.`,
         researchNewer: 'Badanie zapisała ostatnio nowsza wersja Strom Research; agent się nie uruchomił.',
@@ -886,6 +888,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         failed: 'Nie udało się uruchomić agenta.',
         queueRunRow: 'Kolejka · agent',
         sortWhere: (pc: string) => `Działa w badaniu na komputerze ${pc}, bez terminala.`,
+        chatRow: (pc: string) => `Rozmowa z agentem · na komputerze ${pc}`,
     },
     read: {
         menu: 'Odczytaj dokument…',

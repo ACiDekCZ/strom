@@ -599,6 +599,10 @@ export const batchMethods = uiModule({
         const link = this.batchLink();
         const stored = !!link && (this.researchModeOf(link.researchId) === 'archive' || this.researchAgentAway(link.researchId));
         const pc = computerLabelOf(pairingNow()?.computer);
+        // Sorting by the agent: started from here through the bridge where the device may (K3.15 `agent.bridge`),
+        // as at the end of a batch on the computer; else the sentence that it is the computer's.
+        const sortNote = stored ? null : phoneComputerOnlyNote('batch-sort', pc);
+        const sortBlock = stored || sortNote ? '' : this.batchSortHtml(inside, strings.deviceAgent.sortWhere(pc));
         return `
                 <div class="modal-content batch-content batch-done">
                     <h3 class="batch-confirm-title">${failed.length ? '' : '✓ '}${esc(b.doneDevice(inside + had, r.total))}</h3>
@@ -607,7 +611,7 @@ export const batchMethods = uiModule({
                         <span class="batch-photo-name">${esc(item.path.split('/').pop() || item.path)}</span>
                         <span class="batch-photo-state">${esc(b.stateError)}</span>
                         <span class="batch-photo-why">${esc(r.errs.get(i) ?? '')}</span></li>`).join('')}</ul>` : ''}
-                    ${stored ? '' : `<p class="batch-done-text">${esc(phoneComputerOnlyNote('batch-sort', pc))}</p>`}
+                    ${sortNote ? `<p class="batch-done-text">${esc(sortNote)}</p>` : sortBlock}
                 </div>
                 <div class="buttons batch-footer">
                     <span class="batch-foot-note"></span>
@@ -950,8 +954,9 @@ export const batchMethods = uiModule({
      * The end of a batch beside a research whose agent sorts (spec 102 §13a):
      * what the new files lack and the button that opens the dialog of Sort
      * with the agent. Nothing is sent from here; an older research is only said.
+     * `where`: a quiet line under the button (a device: where the agent sorts, K3.15).
      */
-    batchSortHtml(received: number): string {
+    batchSortHtml(received: number, where = ''): string {
         const r = run!;
         const gate = this.materialSortGate();
         if (!gate || !r.id || received <= 0) return '';
@@ -963,6 +968,7 @@ export const batchMethods = uiModule({
                     <div class="batch-sort-title">${esc(s.doneSortTitle(received, persons ? 0 : received))}</div>
                     <p class="batch-sort-text">${esc(gate === 'offRun' ? s.offRun : s.doneSortText)}</p>
                     <button type="button" class="secondary batch-sort-btn" data-act="sort-agent"${off}>${researchBridgeActionLabel(s.sort, 'material-sort')}</button>
+                    ${where ? `<p class="batch-sort-where">${esc(where)}</p>` : ''}
                 </div>`;
     },
 

@@ -10,7 +10,7 @@
  */
 
 import { deviceComputerName, inDeviceMode } from './device-mode-ui.js';
-import { setResearchActionLabel } from './research-open-mark.js';
+import { researchMarkFlags, setResearchActionLabel } from './research-open-mark.js';
 import { workingWhyText } from './research-offline-ui.js';
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -1349,7 +1349,8 @@ export const researchDirectionsMethods = uiModule({
      * "Line actions · {name}" of a device's phone (spec 094 §4, 4.7): a sheet
      * from below with the moves the order allows, Pause / Restart, End… and
      * Show in tree, each through the bridge without a mark. Working on the line
-     * with its agent is the computer's: one quiet sentence says where.
+     * with its agent: on a device that starts the agent (K3.15) the row as on
+     * the computer (AI + the terminal), else one quiet sentence says where.
      */
     openDeviceDirectionSheet(anchor: HTMLElement, s: LiveSession, d: LiveDirection): void {
         const L = strings.live;
@@ -1366,10 +1367,14 @@ export const researchDirectionsMethods = uiModule({
         if (d.state !== 'done') rows.push({ id: 'device-dir-end', label: L.dirEndMenu, sub: L.dirEndHint, run: () => this.openDirectionEnd(anchor, d) });
         if (directionPersonIds(d)) rows.push({ id: 'device-dir-show', label: L.dirShow, run: () => this.showDirectionInTree(d, 'sheet') });
         const pc = deviceComputerName();
+        // A device that starts the agent (K3.15 `agent.start`): the conversation as on the computer, through the gateway.
+        const work = d.state === 'active' && !this.activeResearchNoAgent() ? this.activeResearchLink('chat', { research: d.id }) : null;
+        const flags = researchMarkFlags(researchLinkMark('chat'));
+        const workRows = work ? [{ id: 'device-dir-work', label: L.dirWork, sub: L.dirWorkHint, ai: flags.ai, ext: flags.research, run: () => this.launchResearchLink(work, 'agent') }] : [];
         // The quiet sentence after the rows (a block's own comes before its rows).
         this.presentMenuSheet(L.dirActions(d.name), [
-            { rows },
-            ...(d.state === 'active' && pc ? [{ rows: [], quiet: strings.device.dirWorkOnComputer(pc) }] : []),
+            ...(workRows.length ? [{ rows: workRows }, { rows, divider: true }] : [{ rows }]),
+            ...(d.state === 'active' && pc && !work ? [{ rows: [], quiet: strings.device.dirWorkOnComputer(pc) }] : []),
         ], { overlayClass: 'research-direction-sheet' });
     },
 

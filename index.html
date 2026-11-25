@@ -23793,6 +23793,22 @@
         .phone-line__more:disabled, .phone-research.is-away .phone-sec__link:disabled { opacity: .5; cursor: default; }
         .phone-now-idle { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 10px; align-items: center; margin: 0 16px; padding: 8px 0; }
         .phone-now-idle .phone-dot { justify-self: center; }
+        /* A start of the agent from this device (§10, 10.3–10.7): the spinner while it starts, waiting at the
+           computer in the warning colour, not started with why in the error colour and Try again (44px). */
+        .phone-start {
+            display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; column-gap: 10px; align-items: start;
+            margin: 0 16px; padding: 8px 0; border-top: 1px solid var(--border);
+        }
+        .phone-sec__body > .phone-start:first-child { border-top: 0; }
+        .phone-start__icon { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; color: var(--text-light); }
+        .phone-start__title { font-size: 15px; font-weight: 500; line-height: 20px; color: var(--text); overflow-wrap: anywhere; }
+        .phone-start.is-waitPc .phone-start__title { color: var(--warning-text); }
+        .phone-start__sub { font-size: 12.5px; line-height: 1.35; color: var(--text-light); overflow-wrap: anywhere; }
+        .phone-start__why { font-size: 13px; line-height: 1.4; color: var(--error-text); overflow-wrap: anywhere; }
+        .phone-start__sub[hidden], .phone-start__why[hidden], .phone-start__btn[hidden] { display: none; }
+        .phone-start__btn { margin: -12px 0 -12px; align-self: center; }
+        .phone-now-acts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 16px; padding: 0 0 8px; }
+        .phone-now-acts .phone-wait__btn.is-link { padding: 0; }
         .phone-sec__day { margin: 0; padding: 4px 16px 12px; font-size: 12.5px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
         .phone-sec__warn { padding-top: 6px; color: var(--warning-text); }
         /* Finds (§4): each group a button — the name (a person's or a family's serif 16px, new sources and resolved
@@ -34554,6 +34570,7 @@
         .batch-sort { margin: 0 0 14px; padding: 12px 14px; background: var(--surface-2); border-radius: var(--r-md); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
         .batch-sort-title { font-size: 14px; font-weight: 600; color: var(--text); }
         .batch-sort-text, .batch-sort-older { margin: 0; font-size: 13px; color: var(--text-light); }
+        .batch-sort-where { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--text-light); }
         .mdlg--sortprop { width: 1200px; height: calc(100vh - 32px); }
         .mdlg--sortprop .mdlg-body { flex: 1; padding-top: 4px; }
         .msp-know { font-style: italic; }
