@@ -57,6 +57,10 @@ export interface WaitingImagesUploadOptions {
     cancel: () => void;
     /** Narrow (the panel's dialog): a file's number under its name. */
     narrow?: boolean;
+    /** A device's phone (spec 094 §4, 4.4): "Take photo" (the camera) and "From gallery" in place of the file chooser. */
+    capture?: boolean;
+    /** Set inside another form (the answer's sheet): nothing to cancel before a file is chosen. */
+    embedded?: boolean;
 }
 
 type FileState =
@@ -190,8 +194,12 @@ export class WaitingImagesUpload {
         return this.files.length > 0;
     }
 
-    /** The system's file chooser. */
-    pick(): void {
+    /** The system's file chooser; `camera`: the device's camera (a phone of the home network). */
+    pick(camera = false): void {
+        // The camera: images only (a phone opens it for `image/*` with `capture`); the gallery and a computer: every kind taken.
+        if (camera) this.input.setAttribute('capture', 'environment');
+        else this.input.removeAttribute('capture');
+        this.input.accept = camera ? 'image/*' : TASK_IMAGE_ACCEPT;
         this.input.click();
     }
 
@@ -435,13 +443,26 @@ export class WaitingImagesUpload {
         const maxMb = Math.round(this.opts.maxBytes / MB);
         if (this.phase === 'pick') {
             const zone = node('div', 'waiting-upload__drop');
-            zone.appendChild(node('span', 'waiting-upload__drop-text', T.dropHere));
-            const choose = this.button('waiting-action waiting-action--secondary waiting-upload__choose', T.chooseFiles, 'choose', () => this.pick());
-            zone.appendChild(choose);
+            if (!this.opts.capture) zone.appendChild(node('span', 'waiting-upload__drop-text', T.dropHere));
+            if (this.opts.capture) {
+                // The camera and the gallery, side by side, each a whole tap target.
+                const pair = node('div', 'waiting-upload__capture');
+                pair.append(
+                    this.button('waiting-action waiting-action--secondary waiting-upload__choose waiting-upload__photo', T.takePhoto, 'photo', () => this.pick(true)),
+                    this.button('waiting-action waiting-action--secondary waiting-upload__gallery', T.fromGallery, 'gallery', () => this.pick()),
+                );
+                zone.appendChild(pair);
+            } else {
+                const choose = this.button('waiting-action waiting-action--secondary waiting-upload__choose', T.chooseFiles, 'choose', () => this.pick());
+                zone.appendChild(choose);
+            }
             zone.appendChild(node('span', 'waiting-upload__formats', T.formats(maxMb)));
-            const row = node('div', 'waiting-upload__foot');
-            row.appendChild(this.button('waiting-action waiting-action--link waiting-upload__cancel', T.cancel, 'cancel', () => this.close()));
-            this.root.append(zone, row);
+            this.root.appendChild(zone);
+            if (!this.opts.embedded) {
+                const row = node('div', 'waiting-upload__foot');
+                row.appendChild(this.button('waiting-action waiting-action--link waiting-upload__cancel', T.cancel, 'cancel', () => this.close()));
+                this.root.appendChild(row);
+            }
         } else if (this.phase === 'assign') {
             this.renderAssign();
         } else {

@@ -13,7 +13,7 @@
 
 import { researchMarkFlags } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { LiveWaiting, researchTaskRef } from '../research-link.js';
+import { LiveWaiting, researchDeviceAllows, researchTaskRef } from '../research-link.js';
 import {
     WaitingWrites, WaitingPending, WaitingSentResult, WaitingFileResult, WaitingAnswerResult, WaitingWriteRefused, GroupNoteDone, NO_WAITING_WRITES, WAITING_SETTLE_MS, WAITING_FILE_ACCEPT,
     waitingWrites, waitingGroupSendable, waitingTaskIds, waitingFileWritable, waitingWrittenPhase, applyWaitingPending, settleWaitingPending, waitingSentDay, waitingFileTaken,
@@ -163,7 +163,8 @@ export const researchWaitingWriteMethods = uiModule({
 
     /** What the followed (or viewed) research's bridge takes from "Awaiting action". */
     liveWaitingWrites(s: LiveSession | null = researchSession()): WaitingWrites {
-        if (!s || s.ended) return NO_WAITING_WRITES;
+        // A device the gateway refused answers on (403 device.computer-only): nothing written here (spec 094 §4).
+        if (!s || s.ended || !researchDeviceAllows('waiting-answer')) return NO_WAITING_WRITES;
         return waitingWrites({ features: s.features, accepts: s.accepts });
     },
 

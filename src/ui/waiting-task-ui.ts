@@ -7,6 +7,7 @@
  * no mark; a terminal action keeps its mark.
  */
 
+import { inDeviceMode } from './device-mode-ui.js';
 import { browserNote } from '../research-browser.js';
 import { isHelpOpen } from './help-ui.js';
 import { strings } from '../strings.js';
@@ -32,10 +33,16 @@ import {
     getWaitingAuditPreview, postWaitingAudit, type WaitingAuditPreviewResult, type WaitingAuditResult, type WaitingWriteRefused,
 } from '../research-waiting-write.js';
 
+/** A device of the home network with a touch screen (spec 094 §4): the camera and the gallery for a task's images. */
+function deviceCapture(): boolean {
+    return inDeviceMode() && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+}
+
 const DIALOG_ID = 'waiting-dialog';
 const SHEET_ID = 'waiting-answer-sheet';
 
-type UploadPlace = 'ov' | 'dlg';
+/** The overview's detail, the small panel's dialog, or the answer's sheet of a device (spec 094 §4, 4.5). */
+type UploadPlace = 'ov' | 'dlg' | 'sheet';
 
 /** The upload areas by place and item: the files chosen stay while it is closed (until Cancel or sent). */
 const uploads = new Map<string, WaitingImagesUpload>();
@@ -289,6 +296,8 @@ export const waitingTaskMethods = uiModule({
             numbers: () => this.waitingImagesNumbers(s, w.id),
             upload: (file, opts) => this.uploadWaitingImage(s, task, file, opts),
             narrow: place === 'dlg',
+            ...(deviceCapture() ? { capture: true } : {}),
+            ...(place === 'sheet' ? { embedded: true } : {}),
             done: (outcome) => {
                 uploads.delete(key);
                 this.waitingImagesDone(s, w, place, outcome);
@@ -296,6 +305,7 @@ export const waitingTaskMethods = uiModule({
             cancel: () => {
                 uploads.delete(key);
                 if (place === 'ov') this.closeOverviewImages(s, w);
+                else if (place === 'sheet') this.mountSheetImages(s, w);
                 else this.closeWaitingDialog();
             },
         });
@@ -314,10 +324,23 @@ export const waitingTaskMethods = uiModule({
                 this.renderResearchOverview();
                 document.querySelector<HTMLElement>(`#research-overview .research-overview__waiting-item[data-id="${CSS.escape(w.id)}"] [data-action="images"]`)?.focus();
             }
+        } else if (place === 'sheet') {
+            // The answer's sheet stays: its photos went, the next can go (the toast says how it stands).
+            this.mountSheetImages(s, w);
+            if (text) this.showToast(text, 6000, { kind: 'waiting-images' });
         } else {
             if (dialogFor?.key === key && dialogFor.kind === 'images') this.closeWaitingDialog();
             if (text) this.showToast(text, 6000, { kind: 'waiting-images' });
         }
+    },
+
+    /** The photos of the answer's sheet on a device (Take photo / From gallery), drawn afresh in their place. */
+    mountSheetImages(s: LiveSession, w: LiveWaiting): void {
+        const slot = document.querySelector<HTMLElement>(`#${SHEET_ID}[data-id="${CSS.escape(w.id)}"] .waiting-answer-sheet__images`);
+        if (!slot) return;
+        const upload = this.waitingImagesUpload(s, w, 'sheet');
+        slot.replaceChildren(...(upload ? [upload.root] : []));
+        upload?.refresh();
     },
 
     /**
@@ -326,7 +349,7 @@ export const waitingTaskMethods = uiModule({
      * come in at once. Only with `accepts.media.taskImages`, never on a phone.
      */
     openWaitingImages(s: LiveSession, w: LiveWaiting, files?: readonly File[]): void {
-        if (!this.liveWaitingWrites(s).images || !researchTaskRef(w.id) || isPhone()) return;
+        if (!this.liveWaitingWrites(s).images || !researchTaskRef(w.id) || (isPhone() && !inDeviceMode())) return;
         if (s.overview && document.getElementById('research-overview')) this.openOverviewImages(s, w, files);
         else this.openWaitingDialog(s, w, 'images', files);
     },
@@ -783,8 +806,12 @@ export const waitingTaskMethods = uiModule({
             void f.submit();
         };
         body.appendChild(f.root);
+        // A device of the home network (spec 094 §4, 4.5): a photo taken now or one of the gallery goes to the task, as a
+        // computer's file does.
+        if (inDeviceMode() && this.waitingTakesImages(s, w)) body.appendChild(el('div', 'waiting-answer-sheet__images'));
         sheet.append(head, what, body);
         document.body.appendChild(sheet);
+        this.mountSheetImages(s, w);
         sync(f);
         // The keyboard up: the sheet as high as what is visible, its head on top.
         const vv = window.visualViewport;

@@ -16,7 +16,7 @@
 
 import {
     LiveWaiting, ResearchAccepts, WaitingInbox, researchTaskRef, isResearchHead, cleanText, withAppVersion, waitingNote, imageNumber, imageNumbers,
-    sanitizeWaitingInbox, MAX_IMAGE_NUMBER, WAITING_RETRY_FEATURE,
+    sanitizeWaitingInbox, MAX_IMAGE_NUMBER, WAITING_RETRY_FEATURE, parseDeviceBridge,
 } from './research-link.js';
 import { waitingPhase, waitingTaskActions, WaitingPhase, fileExt } from './research-waiting.js';
 import { uploadHeaders, mediaReplyId, DEFAULT_MEDIA_MAX_BYTES } from './originals.js';
@@ -860,7 +860,9 @@ function sendWithProgress(url: string, headers: Record<string, string>, body: Bl
     const parse = (text: string): unknown => {
         try { return JSON.parse(text); } catch { return null; }
     };
-    if (typeof XMLHttpRequest !== 'function') {
+    // A device of the home network (spec 094 §4, 4.4): its bridge is reached through the gateway's tunnel, which only
+    // `fetch` goes through — the file goes whole, its progress said at the end.
+    if (typeof XMLHttpRequest !== 'function' || parseDeviceBridge(url)) {
         if (typeof fetch !== 'function') return Promise.resolve(null);
         return (async () => {
             const ctl = typeof AbortController === 'function' ? new AbortController() : null;

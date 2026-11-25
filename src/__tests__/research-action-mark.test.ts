@@ -9,7 +9,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
     RESEARCH_LINK_ACTIONS, RESEARCH_LINK_MARKS, RESEARCH_ACTION_MARKS, researchLinkMark, researchUrlMark, researchSchemeUrl,
     RESEARCH_BRIDGE_ACTIONS, RESEARCH_BRIDGE_MARKS, researchBridgeMark, setResearchDeviceState, researchDeviceAllows,
-    researchDeviceMark, deviceAllows,
+    researchDeviceMark, deviceAllows, deviceActionOfBridgeWrite, noteResearchDeviceRefused,
 } from '../research-link.js';
 import { researchActionLabel, researchBridgeActionLabel, researchBridgeAgentLabel, researchLinkFlags } from '../ui/research-open-mark.js';
 import { syncActionMark } from '../ui/research-sync-ui.js';
@@ -167,6 +167,29 @@ describe('on a device of the home network (spec 094 §6)', () => {
         expect(deviceAllows('hypothesis', ['hypothesis.decide'])).toBe(true);
         expect(deviceAllows('sync-undo-this', ['sync.undo'])).toBe(true);
         expect(deviceAllows('sync-undo', ['sync.undo'])).toBe(false);
+    });
+
+    it('hides an action the gateway refused as the computer\'s only (403 device.computer-only), until the mode is left', () => {
+        expect(deviceActionOfBridgeWrite('POST', 'runs/stop')).toBe('run-stop');
+        expect(deviceActionOfBridgeWrite('POST', 'waiting/T0001')).toBe('waiting-answer');
+        expect(deviceActionOfBridgeWrite('PUT', 'media/ab12', true)).toBe('waiting-answer');
+        expect(deviceActionOfBridgeWrite('PUT', 'media/ab12')).toBe('media');
+        expect(deviceActionOfBridgeWrite('POST', 'directions/G0001/state')).toBe('direction');
+        expect(deviceActionOfBridgeWrite('GET', 'waiting/T0001/fix')).toBeNull();
+        expect(deviceActionOfBridgeWrite('POST', 'status')).toBeNull();
+        device();
+        expect(researchDeviceAllows('run-stop')).toBe(true);
+        noteResearchDeviceRefused('run-stop');
+        expect(researchDeviceAllows('run-stop')).toBe(false);
+        expect(researchDeviceAllows('waiting-answer')).toBe(true);
+        setResearchDeviceState(null);
+        expect(researchDeviceAllows('run-stop')).toBe(true);
+        device();
+        expect(researchDeviceAllows('run-stop')).toBe(true);
+        // Outside the device mode nothing is noted.
+        setResearchDeviceState(null);
+        noteResearchDeviceRefused('waiting-answer');
+        expect(researchDeviceAllows('waiting-answer')).toBe(true);
     });
 
     it('outside the device mode changes nothing: every action allowed, every mark its own', () => {

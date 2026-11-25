@@ -335,16 +335,27 @@ export const treeManagementMethods = uiModule({
         if (dot) dot.style.display = annDot ? 'block' : 'none';
         // The "More" tab carries both: there the research group sits in its sheet (a narrow window with a mouse).
         // Changes waiting for a research that is not running: their number on the tab, in place of the dot (audit 017 a-D6).
-        const resting = this.researchRestingWaitingCount();
+        // A device of the home network (spec 094 §4, 4.11): the tab says what the Research button says on a computer —
+        // what waits for action counted first, else the dot of edits not sent, else the dot of news.
+        const waitingHere = inDeviceMode() && researchSignal === 'count' ? this.researchWaitingCount() : 0;
+        const resting = waitingHere > 0 ? 0 : this.researchRestingWaitingCount();
+        const shownCount = waitingHere || resting;
         const moreCount = document.getElementById('bottom-bar-more-count');
         if (moreCount) {
-            moreCount.hidden = resting === 0;
-            moreCount.textContent = resting > 99 ? '99+' : resting > 0 ? String(resting) : '';
-            if (resting > 0) moreCount.title = `${strings.sync.stateBridgeDown} · ${strings.sync.waitingN(resting)}`;
+            moreCount.hidden = shownCount === 0;
+            moreCount.classList.toggle('research-count-badge', waitingHere > 0);
+            moreCount.textContent = shownCount > 99 ? '99+' : shownCount > 0 ? String(shownCount) : '';
+            if (waitingHere > 0) moreCount.title = `${strings.research.waiting}: ${waitingHere}`;
+            else if (resting > 0) moreCount.title = `${strings.sync.stateBridgeDown} · ${strings.sync.waitingN(resting)}`;
             else moreCount.removeAttribute('title');
         }
         const moreDot = document.getElementById('bottom-bar-more-dot');
-        if (moreDot) moreDot.style.display = resting === 0 && (annDot || researchSignal !== '') ? 'block' : 'none';
+        if (moreDot) {
+            moreDot.style.display = shownCount === 0 && (annDot || researchSignal !== '') ? 'block' : 'none';
+            // Edits not sent (or a state asking for action) in the research's colour; news in the accent.
+            if (inDeviceMode() && (researchSignal === 'unsent' || researchSignal === 'attention')) moreDot.dataset.signal = researchSignal;
+            else delete moreDot.dataset.signal;
+        }
         this.renderActionsExportReminder();
         // Count badge on the Anniversaries row; its tooltip and the row's
         // spoken name say what the number counts (the next days, T33).

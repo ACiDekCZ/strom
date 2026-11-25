@@ -20,6 +20,7 @@
  * The pure logic lives in src/research-link.ts.
  */
 
+import { inDeviceMode } from './device-mode-ui.js';
 import { batchHeldChange } from '../batch.js';
 import { allMedia } from '../media.js';
 import { cloneTreeDataAsJson } from '../clone.js';
@@ -898,7 +899,8 @@ export function markWaitingFocus(li: HTMLElement, w: LiveWaiting): void {
 
 /** The line under a lit row that cannot be answered here (null: none). */
 export function waitingWhyEl(w: LiveWaiting): HTMLElement | null {
-    if (!waitingFocus?.why || !waitingFocusIds().has(w.id)) return null;
+    // A device of the home network answers through the bridge: no "not answerable here" (spec 094 §4).
+    if (!waitingFocus?.why || !waitingFocusIds().has(w.id) || inDeviceMode()) return null;
     const p = el('p', 'live-waiting-why', strings.live.waitingNoAnswerHere);
     p.setAttribute('role', 'note');
     return p;

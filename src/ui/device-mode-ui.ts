@@ -11,12 +11,13 @@
 import { strings } from '../strings.js';
 import { uiModule } from './module.js';
 import { deviceConnection, onDeviceConnection, type DeviceConnection } from '../device/device-connection.js';
-import { researchDeviceState } from '../research-link.js';
+import { DEVICE_COMPUTER_ONLY_EVENT, researchDeviceState } from '../research-link.js';
 
 const CONN_ID = 'current-tree-conn';
 
 /** The computer's name last known (kept once unpaired, when the device's state is gone). */
 let lastComputer = '';
+let refusalWatched = false;
 let unwatch: (() => void) | null = null;
 
 /** The app runs as a device of the research's gateway (paired, or unpaired since). */
@@ -64,7 +65,19 @@ export const deviceModeMethods = uiModule({
     watchDeviceConnection(): void {
         unwatch?.();
         unwatch = onDeviceConnection(() => this.refreshDeviceModeUi());
+        if (!refusalWatched) {
+            refusalWatched = true;
+            window.addEventListener(DEVICE_COMPUTER_ONLY_EVENT, () => this.deviceActionRefused());
+        }
         this.refreshDeviceModeUi();
+    },
+
+    /** The gateway refused an action as the computer's only: it goes from what is drawn, one quiet sentence says why. */
+    deviceActionRefused(): void {
+        this.showToast(strings.device.onlyComputer, 5000);
+        this.refreshResearchMenu();
+        this.refreshActionMenuBadges();
+        if (document.getElementById('research-overview')) this.renderResearchOverview();
     },
 
     /** The device mode's marks on the page: the body's class and the switcher's second line. */

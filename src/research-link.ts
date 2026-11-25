@@ -200,6 +200,7 @@ export function researchDevicePage(): boolean {
 /** The device mode confirmed and paired (or left: null). */
 export function setResearchDeviceState(next: ResearchDeviceState | null): void {
     deviceState = next ? { origin: next.origin, trees: [...next.trees], computer: next.computer, actions: [...next.actions] } : null;
+    if (!next) refusedOnDevice.clear();
 }
 
 /** The device actions a status announced (`status.device.actions`), kept with the device's state. */
@@ -290,7 +291,33 @@ export function deviceAllows(action: ResearchDeviceAction, actions: readonly str
 
 /** Whether an action of the research is drawn here: always outside the device mode, on a device only what §6 allows. */
 export function researchDeviceAllows(action: ResearchDeviceAction): boolean {
-    return deviceState ? deviceAllows(action, deviceState.actions) : true;
+    return deviceState ? deviceAllows(action, deviceState.actions) && !refusedOnDevice.has(action) : true;
+}
+
+/** Said on the page when the gateway refused an action as the computer's only (its button goes; spec 094 §4). */
+export const DEVICE_COMPUTER_ONLY_EVENT = 'strom-device-computer-only';
+
+/** Actions the gateway refused on this device as the computer's only (`403 device.computer-only`), for this page. */
+const refusedOnDevice = new Set<ResearchDeviceAction>();
+
+/**
+ * The action a write of the bridge stands for on a device (what a `403 device.computer-only` of it hides), or null
+ * (a read, or a path no action is drawn for). `task`: the write carries a task (a file to what waits).
+ */
+export function deviceActionOfBridgeWrite(method: string, path: string, task = false): ResearchDeviceAction | null {
+    if (method === 'GET' || method === 'HEAD') return null;
+    const p = path.split('?')[0];
+    if (p === 'runs/stop') return 'run-stop';
+    if (p.startsWith('waiting/') || (p.startsWith('media/') && task)) return 'waiting-answer';
+    if (p.startsWith('directions/')) return 'direction';
+    if (p === 'sync') return 'send';
+    if (p.startsWith('media/')) return 'media';
+    return null;
+}
+
+/** The gateway refused `action` here as the computer's only: it is not drawn on this device any more (spec 094 §4). */
+export function noteResearchDeviceRefused(action: ResearchDeviceAction): void {
+    if (deviceState) refusedOnDevice.add(action);
 }
 
 /** The mark an action is drawn with here, or `hidden` (a device: only on the computer with the research). */

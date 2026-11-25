@@ -18220,6 +18220,12 @@
         }
         .bottom-bar-more-count[hidden] { display: none; }
         body.storage-unsaved .bottom-bar-more-count { left: auto; right: calc(100% - 6px); }
+        /* A device of the home network (spec 094 §4, 4.11): what waits for action, counted in the research's colour. */
+        .bottom-bar-more-count.research-count-badge {
+            height: 16px; min-width: 16px; padding: 0 4px; font-size: 10px;
+            background: var(--signal-warn); color: var(--on-signal-warn); box-shadow: 0 0 0 1.5px var(--surface);
+        }
+        .bottom-bar-more-dot[data-signal] { background: var(--signal-warn); }
         /* Central FAB (add person): a 48px circle in a 64px slot, inside the
            bar (nothing pokes up into the tree, 3.3). */
         .bottom-bar-fab {
@@ -21921,6 +21927,9 @@
         }
         .live-panel-list li:last-child { border-bottom: 0; }
         .live-panel-list .live-empty { color: var(--text-faint); }
+        /* Nothing worked on now, on a device (spec 094 §4, 4.3): when the research last worked, quieter, under it. */
+        .research-overview__idle { display: flex; flex-direction: column; gap: 2px; }
+        .research-overview__idle-last { font-size: 12px; color: var(--text-faint); overflow-wrap: anywhere; }
         .research-overview__older { display: block; margin: 8px 0 4px; font-size: 12px; color: var(--text-faint); }
         p.research-overview__group-more { margin: 2px 0 8px; color: var(--text-faint); font-size: 12px; }
         .live-panel-list .live-time { display: block; color: var(--text-faint); font-size: 11px; }
@@ -25864,6 +25873,11 @@
         .waiting-upload.is-over .waiting-upload__drop,
         .waiting-upload.is-over .waiting-upload__files { border-color: var(--primary); background: var(--primary-soft); }
         .waiting-upload__drop-text { font-size: 13.5px; font-weight: 500; color: var(--text); }
+        /* A device's phone (spec 094 §4, 4.4): Take photo · From gallery, side by side, wrapping on a narrow phone. */
+        .waiting-upload__capture { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; }
+        .waiting-upload__capture > .waiting-action { flex: 1 1 140px; min-height: 44px; justify-content: center; }
+        .waiting-answer-sheet__images { margin-top: 12px; }
+        .waiting-answer-sheet__images:empty { display: none; }
         .waiting-upload__formats { font-size: 12px; color: var(--text-faint); }
         .waiting-upload__files {
             display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none;

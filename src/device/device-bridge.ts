@@ -16,7 +16,10 @@
 import { deviceFetch } from './gateway-client';
 import { onDeviceConnection, onDeviceEvent, deviceConnection } from './device-connection';
 import { chosenTreeId, pairingNow, type DevicePairing } from './device-store';
-import { DEVICE_BRIDGE_PATH, deviceBridgeBase, parseDeviceBridge, researchDeviceState, setResearchDeviceState } from '../research-link.js';
+import {
+    DEVICE_BRIDGE_PATH, DEVICE_COMPUTER_ONLY_EVENT, deviceActionOfBridgeWrite, deviceBridgeBase, noteResearchDeviceRefused, parseDeviceBridge, researchDeviceState,
+    setResearchDeviceState,
+} from '../research-link.js';
 
 export { deviceBridgeBase };
 
@@ -63,13 +66,33 @@ export function deviceBridgeRequest(input: RequestInfo | URL, init?: RequestInit
     if (signal?.aborted) return Promise.reject(abortError());
     const body = init?.body !== undefined ? Promise.resolve(init.body)
         : req && method !== 'GET' && method !== 'HEAD' ? req.arrayBuffer() : Promise.resolve(undefined);
-    const asked = body.then(b => deviceFetch(target.path, { method, headers, body: b ?? null, tree: target.treeId }));
+    const asked = body.then(b => deviceFetch(target.path, { method, headers, body: b ?? null, tree: target.treeId }))
+        .then(res => {
+            if (res.status === 403) void noteComputerOnly(res.clone(), method, target.path, headers);
+            return res;
+        });
     if (!signal) return asked;
     return new Promise<Response>((resolve, reject) => {
         const onAbort = (): void => reject(abortError());
         signal.addEventListener('abort', onAbort, { once: true });
         asked.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
     });
+}
+
+/** A `403 device.computer-only` of a write: its action is not drawn here any more, and the page is told. */
+async function noteComputerOnly(res: Response, method: string, path: string, headers: HeadersInit | undefined): Promise<void> {
+    let code = '';
+    try {
+        const body = await res.json() as { code?: unknown } | null;
+        code = typeof body?.code === 'string' ? body.code : '';
+    } catch { /* not JSON: not this refusal */ }
+    if (code !== 'device.computer-only') return;
+    let task = false;
+    try { task = new Headers(headers).has('X-Strom-Task'); } catch { /* none */ }
+    const action = deviceActionOfBridgeWrite(method.toUpperCase(), path, task);
+    if (!action) return;
+    noteResearchDeviceRefused(action);
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(DEVICE_COMPUTER_ONLY_EVENT, { detail: { action } }));
 }
 
 /** The interceptor in place (once); only called in the confirmed device mode. */

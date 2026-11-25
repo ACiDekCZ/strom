@@ -914,9 +914,19 @@ export const researchActionsMethods = uiModule({
         if (!this.researchMenuShown()) return null;
         const model = this.researchMenuModel();
         // "Open research", "Read a document" and the rest: on the second level, "All research actions ›".
-        const frequent = new Set(['research-item-overview', 'research-item-waiting', 'research-item-chat', 'research-item-images', 'research-item-materials']);
+        // A device of the home network (spec 094 §4, 4.1): the overview, what waits (always, its count when any),
+        // the materials and "Add materials…", in this order.
+        const device = researchDevice();
+        const frequent = device
+            ? ['research-item-overview', 'research-item-waiting', 'research-item-materials', 'research-item-batch']
+            : ['research-item-overview', 'research-item-waiting', 'research-item-chat', 'research-item-images', 'research-item-materials'];
         const ui = this as unknown as Record<string, (...args: string[]) => void>;
-        const rows: ResearchSheetRow[] = [...model.first, ...model.more].filter(i => frequent.has(i.id) && !i.disabled).map(i => ({
+        const items = [...model.first, ...model.more];
+        if (device && !items.some(i => i.id === 'research-item-waiting')) {
+            items.push({ id: 'research-item-waiting', label: strings.research.waiting, method: 'researchActionWaiting' });
+        }
+        const order = (i: SubmenuItem): number => device ? frequent.indexOf(i.id) : 0;
+        const rows: ResearchSheetRow[] = items.filter(i => frequent.includes(i.id) && !i.disabled).sort((a, b) => order(a) - order(b)).map(i => ({
             label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i), value: i.val, id: `sheet-${i.id}`,
             run: () => ui[i.method](...(i.args ?? [])),
         }));

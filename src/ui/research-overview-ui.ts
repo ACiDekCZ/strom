@@ -29,7 +29,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId, ResearchHypothesis } from '../types.js';
 import { acceptBatch, acceptBatchRowResult } from '../research-hypothesis-waiting.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveBook, type LiveDirection, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, type QueueTaskKind, booksOn, waitingGainOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchLinkMark } from '../research-link.js';
+import { LiveBook, type LiveDirection, LiveChangeKind, LiveWaiting, LiveWorker, ResearchActionMark, WAITING_SECTIONS, type QueueTaskKind, booksOn, waitingGainOn, researchConflictRef, researchPersonRef, researchTaskRef, recentAddsCount, researchDeviceAllows, researchLinkMark } from '../research-link.js';
 import { bookById, bookHeadTitle, bookImagesText, bookMetaParts, bookOfferText, bookTitle, bookWebUrl, urgentBooks, urgentBooksShown } from '../research-books.js';
 import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
@@ -75,7 +75,8 @@ import { fieldVisible, foldSearch2, idNumber, tokenize, type SearchDoc, type Sea
 import { chipCount, searchIndex, searchSection, sectionPartOpen, toggleSectionPart, type SearchIndex } from '../section-search-filter.js';
 import type { HypothesisListSearch } from './hypothesis-waiting-ui.js';
 import { knowsSearchIndex, type KnowsIndex, type KnowsSearchRow } from '../knows-search.js';
-import { PREF_KEYS, PrefKey, SectionPref, prefKeyOfOverview, sectionOrder, sectionPrefs, setSectionPref, topPrefs, topTileShown } from './live-section-prefs.js';
+import { inDeviceMode, deviceComputerName } from './device-mode-ui.js';
+import { PREF_KEYS, PrefKey, SectionPref, prefKeyOfOverview, overviewKeyOf, sectionOrder, sectionPrefs, setSectionPref, topPrefs, topTileShown } from './live-section-prefs.js';
 import { OverviewSourceKind, afterTurnOnKeys, skeletonLines } from '../research-overview-source.js';
 import { sectionTitle } from './live-section-edit.js';
 import { keepSectionControlFocus } from './live-section-edit-ui.js';
@@ -222,6 +223,41 @@ function sectionCollapsed(key: string): boolean {
 export function overviewSectionState(key: string): SectionPref {
     const p = sectionPref(key);
     return p ?? (FOLDED_BY_DEFAULT.has(key) ? 'collapsed' : 'expanded');
+}
+
+/**
+ * The overview's first section with something in it, in the sections' order (spec 094 §4, 4.3: on a device's
+ * phone only that one opens by itself). Now always has its line; without the bridge only what the tree holds.
+ */
+function firstSectionWithContent(s: LiveSession, fromTree: boolean): string | null {
+    for (const k of sectionOrder()) {
+        if (sectionPref(overviewKeyOf(k)) === 'hidden') continue;
+        const has = k === 'working' ? !fromTree && s.working.length > 0
+            : k === 'waiting' ? s.waiting.length > 0
+                : k === 'directions' ? s.researches.length > 0
+                    : k === 'changes' ? !fromTree && (s.changes.length > 0 || s.adds.length > 0)
+                        : k === 'queue' ? !fromTree && !s.ended && s.queue.length > 0
+                            : true;
+        if (has) return overviewKeyOf(k);
+    }
+    return null;
+}
+
+/**
+ * Now on a device while nothing is worked on (spec 094 §4, 4.10): "Nothing is being worked on now" and, when the
+ * research said its last run, when it ended and on which line.
+ */
+function idleNowRow(s: LiveSession): HTMLElement {
+    const L = strings.live;
+    const li = el('li', 'live-empty research-overview__idle');
+    li.appendChild(el('span', 'research-overview__idle-title', L.nothingAtWork));
+    const last = [...(s.runsEnded ?? [])].sort((a, b) => Date.parse(b.ended) - Date.parse(a.ended))[0];
+    if (last) {
+        const line = last.research ? s.researches.find(d => d.id === last.research)?.name ?? '' : '';
+        const when = formatLiveClock(Date.parse(last.ended), Date.now(), getCurrentLanguage());
+        li.appendChild(el('span', 'research-overview__idle-last', L.lastWorked(when, line)));
+    }
+    return li;
 }
 
 function personByRefn(refn: string | undefined): Person | null {
@@ -882,6 +918,8 @@ export const researchOverviewMethods = uiModule({
             const pk = prefKeyOfOverview(key);
             return pk ? { ...f, menu: (h, at) => this.openLiveSectionMenu(h, pk, 'overview', at) } : f;
         };
+        // A device's phone (spec 094 §4, 4.3): a section without a choice of its own opens only when it is the first with content.
+        const firstOpen = mode === 'sheet' && inDeviceMode() ? firstSectionWithContent(s, source === 'tree') : null;
         const foldOf = (key: string): LiveFold => {
             const id = `ov-sec-${key}`;
             const pk = prefKeyOfOverview(key);
@@ -902,7 +940,7 @@ export const researchOverviewMethods = uiModule({
                     this.renderResearchOverview();
                 } };
             }
-            const collapsed = sectionCollapsed(key);
+            const collapsed = firstOpen !== null && sectionPref(key) === undefined ? key !== firstOpen : sectionCollapsed(key);
             return { id, collapsed, onToggle: () => {
                 if (pk) setSectionPref(pk, collapsed ? 'expanded' : 'collapsed');
             } };
@@ -1106,6 +1144,11 @@ export const researchOverviewMethods = uiModule({
         const L = strings.live;
         const c = strip.appendChild(el('div', 'research-overview__cell is-off'));
         c.appendChild(el('div', 'research-overview__cell-label', L.state));
+        // A device of the home network asks the bridge through the gateway: without it its computer is not reachable (spec 094 §4).
+        if (inDeviceMode()) {
+            c.appendChild(el('div', 'research-overview__cell-value', strings.device.downShort(deviceComputerName())));
+            return;
+        }
         if (!researchHere()) {
             c.append(el('div', 'research-overview__cell-value', L.phoneTreeOnly), el('div', 'research-overview__cell-sub research-overview__why-off', L.phoneWhy));
             return;
@@ -2373,7 +2416,9 @@ export const researchOverviewMethods = uiModule({
         // Images, a website or a check (spec 048 U6): the actions of their kind, an answer written here, the images' state.
         const writes = this.liveWaitingWrites(s);
         // "Retry with the agent" (spec 089 §1.2) stands among the actions of an item without the Deliver block.
-        let views = waitingActions(w, { writes, links: mode !== 'sheet' && this.researchLinkAvailable('task'), phone: mode === 'sheet', retry: true });
+        // A device of the home network (spec 094 §4, 4.4): its photos go with the item, as a computer's files do.
+        const phoneOnly = mode === 'sheet' && !inDeviceMode();
+        let views = waitingActions(w, { writes, links: mode !== 'sheet' && this.researchLinkAvailable('task'), phone: phoneOnly, retry: true });
         const key = itemKey(s, w.id);
         // The body (spec 105 U4 §3): the text stands once, whole, in the open row above; first what changed of the answer,
         // then what it waits on, the images, the browser's note, the person · direction, the actions and their hint.
@@ -2389,7 +2434,7 @@ export const researchOverviewMethods = uiModule({
                 || (answeringKey === key && !!task && views!.some(v => v.key === 'answer' && v.via === 'bridge'));
             // The one filled button of the item: Retry when it is the main action, "Add images" then outlined.
             const retryMain = !!w.retry && this.waitingRetryOffered(s, w, mode) && waitingRetryMain(w.retry);
-            detail.appendChild(this.waitingDeliverEl(s, w, { phone: mode === 'sheet', steps: !busy, retryMain }));
+            detail.appendChild(this.waitingDeliverEl(s, w, { phone: phoneOnly, steps: !busy, retryMain }));
         }
         const onBox = this.overviewWaitingOnBox(s, w);
         if (onBox) detail.appendChild(onBox);
@@ -2561,7 +2606,7 @@ export const researchOverviewMethods = uiModule({
         const task = researchTaskRef(w.id);
         const phone = mode === 'sheet';
         // The upload area of "Add images" (spec 048 §3): open, the actions hide meanwhile.
-        const area = !phone && views.some(v => v.key === 'images') ? this.overviewImagesArea(s, w) : null;
+        const area = (!phone || inDeviceMode()) && views.some(v => v.key === 'images') ? this.overviewImagesArea(s, w) : null;
         if (area) {
             detail.appendChild(area);
             return;
@@ -2945,7 +2990,7 @@ export const researchOverviewMethods = uiModule({
             return;
         }
         if (starting) list.appendChild(this.overviewQueueStartRow(starting));
-        else if (s.working.length === 0 && lineStarts.length === 0) list.appendChild(el('li', 'live-empty', L.nobody));
+        else if (s.working.length === 0 && lineStarts.length === 0) list.appendChild(inDeviceMode() ? idleNowRow(s) : el('li', 'live-empty', L.nobody));
         for (const w of s.working) {
             const li = el('li', 'research-overview__now-row');
             if (w.run) li.dataset.run = w.run;
@@ -2966,7 +3011,7 @@ export const researchOverviewMethods = uiModule({
             li.appendChild(text);
             // Its actions in a row of links under the text (the text keeps the whole width).
             const person = personByRefn(w.person);
-            const actions = this.overviewNowActions(w, mode, person ? () => this.overviewShowPerson(person.id, mode) : null);
+            const actions = this.overviewNowActions(w, mode, person ? () => this.overviewShowPerson(person.id, mode) : null, s.features);
             if (actions) li.appendChild(actions);
             list.appendChild(li);
         }
@@ -3042,13 +3087,30 @@ export const researchOverviewMethods = uiModule({
      * what it found and closes the session; not on the phone's sheet).
      * Nothing to offer: no row.
      */
-    overviewNowActions(w: LiveWorker, mode: Mode, show: (() => void) | null): HTMLElement | null {
+    overviewNowActions(w: LiveWorker, mode: Mode, show: (() => void) | null, features: readonly string[] | null = null): HTMLElement | null {
         const L = strings.live;
         const row = el('div', 'research-overview__now-actions');
         if (show) {
             const btn = el('button', 'link-button research-overview__show-in-tree', L.showInTree);
             btn.type = 'button';
             btn.onclick = show;
+            row.appendChild(btn);
+        }
+        // A device of the home network (spec 094 §4, 4.3): "Stop run" through the bridge, without a mark.
+        const runId = w.run;
+        if (inDeviceMode() && runId && !w.paused && runStopOn(features) && researchDeviceAllows('run-stop')) {
+            const btn = el('button', 'link-button research-overview__run-stop');
+            btn.type = 'button';
+            btn.title = L.runStopHint;
+            if (runStopNote({ id: runId })?.state === 'stopping') {
+                btn.setAttribute('aria-disabled', 'true');
+                btn.setAttribute('aria-busy', 'true');
+                btn.classList.add('is-busy');
+                btn.innerHTML = `${busySpinHtml(12)}${researchBridgeActionLabel(L.runStopping, 'run-stop')}`;
+            } else {
+                btn.innerHTML = researchBridgeActionLabel(L.stopRun, 'run-stop');
+                btn.onclick = () => void this.stopRun(runId);
+            }
             row.appendChild(btn);
         }
         const finish = mode !== 'sheet' && w.session && !w.paused ? this.activeResearchLink('finish', { session: w.session }) : null;
@@ -3293,7 +3355,8 @@ export const researchOverviewMethods = uiModule({
             row.appendChild(btn);
         }
         const live = run.state === 'working' || run.state === 'waiting';
-        if (mode !== 'sheet' && live && runStopOn(s.features)) {
+        // A device's sheet stops a run too, through the bridge (spec 094 §4, 4.3).
+        if ((mode !== 'sheet' || inDeviceMode()) && live && runStopOn(s.features) && researchDeviceAllows('run-stop')) {
             const btn = el('button', 'link-button research-overview__run-stop');
             btn.type = 'button';
             btn.title = L.runStopHint;
@@ -3303,7 +3366,7 @@ export const researchOverviewMethods = uiModule({
                 btn.classList.add('is-busy');
                 btn.innerHTML = `${busySpinHtml(12)}${researchBridgeActionLabel(L.runStopping, 'run-stop')}`;
             } else {
-                btn.innerHTML = researchBridgeActionLabel(L.runStop, 'run-stop');
+                btn.innerHTML = researchBridgeActionLabel(inDeviceMode() ? L.stopRun : L.runStop, 'run-stop');
                 btn.onclick = () => void this.stopRun(run.id);
             }
             row.appendChild(btn);

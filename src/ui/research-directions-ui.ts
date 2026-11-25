@@ -9,6 +9,7 @@
  * already has such a direction. Bridge text is set as text, never HTML.
  */
 
+import { inDeviceMode } from './device-mode-ui.js';
 import { setResearchActionLabel } from './research-open-mark.js';
 import { workingWhyText } from './research-offline-ui.js';
 import { DataManager } from '../data.js';
@@ -1742,7 +1743,7 @@ export const researchDirectionsMethods = uiModule({
                 meta.appendChild(link);
             }
             if (isEmpty(d)) {
-                meta.appendChild(el('span', 'research-direction__empty', phone ? L.dirEmptyPhone : L.dirEmpty));
+                meta.appendChild(el('span', 'research-direction__empty', phone && !inDeviceMode() ? L.dirEmptyPhone : L.dirEmpty));
             } else {
                 if (d.tasks) meta.appendChild(el('span', undefined, L.dirTasks(d.tasks)));
                 if (d.waiting) meta.appendChild(el('span', 'research-direction__waiting', L.dirWaiting(d.waiting)));
