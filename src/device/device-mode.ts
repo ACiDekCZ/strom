@@ -71,14 +71,16 @@ export function deviceModeCandidate(): boolean {
 
 let takenCode: DeviceCode | null | undefined;
 
-/** The code of this address, taken once: the address is cleaned at once (`/`, nothing after #). */
+/** The code of this address, taken once: the address is cleaned at once (nothing after #; `/pair?m=app` becomes `/`). */
 export function takeDeviceCode(): DeviceCode | null {
     if (takenCode !== undefined) return takenCode;
     takenCode = null;
     if (typeof location === 'undefined' || excludedFromDeviceMode(location.protocol, location.hostname)) return null;
     takenCode = parseDeviceCode(location.pathname, location.search, location.hash);
     if (takenCode) {
-        try { history.replaceState(history.state, '', '/'); } catch { /* the address stays; the code is used once anyway */ }
+        // The pairing's own address (`/pair?m=app`) becomes `/`; any other keeps its path, only without the code.
+        const left = location.pathname === '/pair' ? '/' : location.pathname + location.search;
+        try { history.replaceState(history.state, '', left); } catch { /* the address stays; the code is used once anyway */ }
     }
     return takenCode;
 }
