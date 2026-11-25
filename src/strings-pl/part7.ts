@@ -729,6 +729,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         othersConnected: (n: number) => `Połączone jeszcze ${nPl(n, 'urządzenie', 'urządzenia', 'urządzeń')}`,
         renameFailed: 'Nazwa nie została zapisana.',
         notHere: 'Zgody i uruchamianie agenta są tylko na komputerze z badaniem. Nowego drzewa, importu, usuwania drzewa, połączonego pliku i kopii przeglądarki tu nie ma: drzewo należy do badania na komputerze. Eksport pliku działa.',
+        dirWorkOnComputer: (pc: string) => `„Pracuj nad tą linią” (agent) jest na komputerze ${pc}.`,
         treesNotHere: (pc?: string) => `${pc ? `Na komputerze ${pc}. ` : ''}Nowe drzewo, import i zarządzanie drzewami są na komputerze z badaniem.`,
         disconnect: 'Odłącz to urządzenie',
         disconnectAsk: 'Odłączyć to urządzenie?',

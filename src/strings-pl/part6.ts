@@ -1676,6 +1676,7 @@ export const plPart6: Pick<StringsType, 'merge' | 'mergeWizard' | 'personMerge' 
         dirWork: 'Pracuj nad tą linią',
         dirShow: 'Pokaż w drzewie',
         dirMenu: 'Akcje linii',
+        dirActions: (n: string) => `Działania linii · ${n}`,
         dirPause: 'Wstrzymaj',
         dirPauseHint: 'Zadania opuszczą kolejkę, nic nie zostanie usunięte',
         dirEnd: 'Zakończ',

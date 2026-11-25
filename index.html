@@ -26576,6 +26576,8 @@
         }
         .research-direction__side > .busy-st { align-self: center; }
         .research-direction__side { display: flex; align-items: flex-start; gap: 6px; }
+        /* A device's phone (spec 094 §4, 4.6): the line's ⋯ opens its actions' sheet, a target of 44 px (also with a mouse). */
+        .research-overview--sheet .research-direction--managed .research-direction__more { width: 44px; height: 44px; }
         .research-direction__moves { display: none; }
         .research-direction__move {
             width: 40px; height: 40px; padding: 0; margin: 0; border: 1px solid var(--border); background: var(--surface);
