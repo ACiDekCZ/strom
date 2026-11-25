@@ -20,7 +20,8 @@ test('the side bar: 76px on the left, the tabs top to bottom with the FAB in the
     expect(bar.x).toBe(0);
     expect(Math.round(bar.width)).toBe(76);
     expect(Math.round(bar.height)).toBe(390);
-    const ys = await page.locator('#bottom-bar > button').evaluateAll(els => els.map(el => ({
+    // The phone's Research tab (device mode only) stays hidden here.
+    const ys = await page.locator('#bottom-bar > button:visible').evaluateAll(els => els.map(el => ({
         id: el.id, y: Math.round(el.getBoundingClientRect().y), h: el.getBoundingClientRect().height,
     })));
     expect(ys.map(b => b.id)).toEqual(['bb-view-family', 'bb-view-descendants', 'bottom-bar-fab', 'bb-view-table', 'bb-view-more']);
