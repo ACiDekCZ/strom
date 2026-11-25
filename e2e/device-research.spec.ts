@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { card, seedResearchPromoSeen, seedSetting, seedWhatsNewSeen } from './helpers.js';
-import { dropFile, poll } from './research-bridge.js';
+import { poll } from './research-bridge.js';
 import { startDeviceGateway, type FakeGateway, type TunnelReply } from './device-gateway.js';
 import type { DeviceRequest } from '../src/device/device-crypto';
 
@@ -88,8 +88,8 @@ function watchDirect(page: Page): string[] {
 }
 
 /**
- * The app opened from the gateway's QR code and paired, the tree of the research in it (as its import after the
- * pairing makes it; dropped here), the bridge asked once through the tunnel.
+ * The app opened from the gateway's QR code and paired, the tree of the research in it (the start loads it through
+ * the gateway), the bridge asked once through the tunnel.
  */
 async function pairedTree(page: Page, opts: { lang: 'en' | 'de'; width: number; dark: boolean }): Promise<void> {
     await page.setViewportSize({ width: opts.width, height: opts.width < 641 ? 844 : 900 });
@@ -117,7 +117,8 @@ async function pairedTree(page: Page, opts: { lang: 'en' | 'de'; width: number; 
         ui.__links = [];
         ui.handOverResearchLink = (u: string) => { ui.__links.push(u); };
     });
-    await dropFile(page, 'pychavkovi.ged', GED);
+    // The start loads the research's tree through the gateway, editable (as the research's tree on the computer).
+    await expect(page.locator('#device-boot')).toHaveCount(0, { timeout: 15000 });
     await expect(card(page, 'Hřibík')).toBeVisible();
     await page.evaluate(() => {
         const tm = window.Strom.TreeManager;

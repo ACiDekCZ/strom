@@ -147,9 +147,14 @@ export const deviceStartMethods = uiModule({
         await run(false);
     },
 
-    /** The research's tree through the gateway, as the app follows a research's tree (its bridge's base on this origin). */
+    /**
+     * The research's tree through the gateway, as the research's tree on the computer: editable (its people, the
+     * sync block, Send changes), "Follow live" only as a read-only choice (spec 094 §4 point 8). Its first time the
+     * tree is loaded from the bridge (as ?import-url= does); afterwards the tree held here opens and the research's
+     * newer version (the agent's, another device's) is offered as on the computer, by the status asked now and then.
+     */
     async openDeviceTree(treeId: string, first: boolean): Promise<void> {
-        // A research's tree has the research's id (strom.json's); anything else is no tree the app can follow.
+        // A research's tree has the research's id (strom.json's); anything else is no tree the app can open.
         if (!normalizeResearchId(treeId)) {
             this.closeDeviceBoot();
             return;
@@ -157,11 +162,13 @@ export const deviceStartMethods = uiModule({
         const base = deviceBridgeBase(treeId, researchDeviceState()?.origin ?? location.origin);
         const boot = document.getElementById(BOOT_ID);
         if (boot && !boot.classList.contains('is-opening')) this.renderDeviceBoot('opening', { pc: '', host: location.hostname });
-        const settle = (): void => this.closeDeviceBoot();
         try {
-            await this.startLiveFollow(base, first
-                ? { progress: { step: () => undefined, settle, hint: () => undefined } }
-                : { resume: true });
+            const held = TreeManager.findTreeByResearchId(treeId);
+            if (held && !first) {
+                if (DataManager.getCurrentTreeId() !== held.id) await this.switchToTree(held.id);
+            } else {
+                await this.importResearchFromUrl(`${base}/tree.ged`, { takeSame: true });
+            }
         } finally {
             this.closeDeviceBoot();
         }
@@ -169,6 +176,7 @@ export const deviceStartMethods = uiModule({
         if (first && held && DataManager.getCurrentTreeId() === held.id) this.setDisplayViewMode('family');
         this.showDeviceHomeLine();
         this.refreshResearchMenu();
+        void this.pollResearchBridge({ reschedule: true });
     },
 
     /** The start screen over the app (the toolbar and the tree under it, never seen until the tree is in). */

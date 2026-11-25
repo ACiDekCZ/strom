@@ -17,9 +17,15 @@ const PYCH = '6a1d2c3e-4b5f-4a6b-8c7d-9e0f1a2b3c4d';
 const HROT = '7b2e3d4f-5c6a-4b7c-9d8e-0f1a2b3c4d5e';
 const MATR = '8c3f4e5a-6d7b-4c8d-8e9f-1a2b3c4d5e6f';
 
-function ged(id: string, surname: string, more: string[] = []): string {
+/** The research's versions (its commits). */
+const H1 = '3c7a9e1f05b2';
+const H2 = '8d4b6f2a91c0';
+
+/** The research's tree as its export gives it (its head and the links it takes: sends, so the tree is editable). */
+function ged(id: string, surname: string, more: string[] = [], head = H1): string {
     return [
-        '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 24 NOV 2026', `1 _STROM_TREE ${id}`, '1 CHAR UTF-8',
+        '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 24 NOV 2026', `1 _STROM_TREE ${id}`, `1 _STROM_HEAD ${head}`,
+        '1 _STROM_LINKS send open live app setup', '1 CHAR UTF-8',
         '0 @P0001@ INDI', `1 NAME Jan /${surname}/`, '1 SEX M', '1 BIRT', '2 DATE 1851', '1 REFN P0001', '1 FAMS @F0001@',
         '0 @P0002@ INDI', '1 NAME Marie /Bedlová/', '1 SEX F', '1 BIRT', '2 DATE 1855', '1 REFN P0002', '1 FAMS @F0001@',
         '0 @P0003@ INDI', `1 NAME Josef /${surname}/`, '1 SEX M', '1 BIRT', '2 DATE 1880', '1 REFN P0003', '1 FAMC @F0001@',
@@ -40,7 +46,7 @@ interface Research {
 function research(gw: FakeGateway, trees: { id: string; name: string; archive: boolean }[], o: { actions?: string[] } = {}): Research {
     gw.trees = trees;
     const r: Research = {
-        heads: Object.fromEntries(trees.map(t => [t.id, 'h1'])),
+        heads: Object.fromEntries(trees.map(t => [t.id, H1])),
         geds: Object.fromEntries(trees.map(t => [t.id, ged(t.id, t.id === HROT ? 'Hrotek' : 'Pýchavka')])),
         rows: {
             [PYCH]: { persons: 412, working: [{ person: 'P0001', task: 'T0001' }], waiting: [] },
@@ -58,6 +64,8 @@ function research(gw: FakeGateway, trees: { id: string; name: string; archive: b
                 body: {
                     ok: true, features: ['device.gateway'], tree: { id: tree.id, name: tree.name }, head: r.heads[tree.id],
                     persons: row.persons, working: [], waiting: [], queue: [], links: [],
+                    // what it takes (sends by hand): the tree is the research's, editable, its newer version loaded when asked
+                    accepts: { mode: 'research', sync: { auto: 'off' } },
                     device: { id: device.id, name: device.name, kind: device.kind, actions: r.actions },
                     // what works and waits there now (a test puts them into the lists)
                     rows: row,
@@ -148,13 +156,28 @@ test.describe('en', () => {
         }
         await expectNoOverflow(page, '#device-home-line');
 
-        // another device (or the agent) changed the tree: it comes by itself
-        await expect.poll(() => gw.streams(), { timeout: 15000 }).toBe(1);
-        r.heads[PYCH] = 'h2';
-        r.geds[PYCH] = ged(PYCH, 'Pýchavka', ['0 @P0004@ INDI', '1 NAME Ludmila /Pýchavková/', '1 SEX F', '1 BIRT', '2 DATE 1883', '1 REFN P0004', '1 FAMC @F0001@'])
+        // another device (or the agent) changed the tree: the research's newer version, loaded when asked, as the
+        // research's tree on the computer (the tree here is editable, not followed live)
+        r.heads[PYCH] = H2;
+        r.geds[PYCH] = ged(PYCH, 'Pýchavka', ['0 @P0004@ INDI', '1 NAME Ludmila /Pýchavková/', '1 SEX F', '1 BIRT', '2 DATE 1883', '1 REFN P0004', '1 FAMC @F0001@'], H2)
             .replace('1 CHIL @P0003@', '1 CHIL @P0003@\n1 CHIL @P0004@');
-        gw.sendEvent({ event: 'change', data: { head: 'h2', what: ['person P0004: Ludmila Pýchavková'] } });
-        await expect(page.locator('.person-card', { hasText: 'Ludmila' }).first()).toBeVisible({ timeout: 15000 });
+        // the research's word reaches the device at its next question (the poll, asked now rather than waited for)
+        type Sync = { pollResearchBridge(): Promise<boolean>; currentResearchSyncState(): { core: string } };
+        await expect.poll(() => page.evaluate(async () => {
+            const ui = window.Strom.UI as unknown as Sync;
+            await ui.pollResearchBridge();
+            return ui.currentResearchSyncState().core;
+        }), { timeout: 15000 }).toBe('newer');
+        await page.locator('#bb-view-more').click();
+        const state = page.locator('#research-sheet-state');
+        await expect(state).toBeVisible();
+        await state.locator('button').click();
+        // what loading changes, asked first (unless it was said not to ask)
+        const ask = page.locator('#research-load-modal');
+        const ludmila = page.locator('.person-card', { hasText: 'Ludmila' }).first();
+        await expect(ask.or(ludmila).first()).toBeVisible({ timeout: 15000 });
+        if (await ask.isVisible()) await ask.locator('button.primary').last().click();
+        await expect(ludmila).toBeVisible({ timeout: 15000 });
     });
 
     test('a code that paired nothing: one screen with one "Try again"', async ({ page }) => {

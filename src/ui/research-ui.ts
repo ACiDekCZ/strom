@@ -2530,7 +2530,8 @@ export const researchUiMethods = uiModule({
     async importResearchFromUrlNow(raw: string, opts: { afterSend?: TreeId; plainAsk?: boolean; takeSame?: boolean }, load?: TreeLoadRun): Promise<void> {
         // "Load new version" asked for this: its spinner is done.
         this.settleResearchVersion();
-        const url = parseLoopbackUrl(raw);
+        // A device (spec 094 P3): the tree's bridge through the gateway, at the device's own origin.
+        const url = parseLoopbackUrl(raw) ?? (parseDeviceBridge(raw) ? new URL(raw, location.href) : null);
         if (!url) {
             this.showToast(strings.research.notLocal, 6000);
             return;
