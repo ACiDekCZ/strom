@@ -68,7 +68,7 @@ export const EXPORT_DYNAMIC_CONTAINER_IDS: readonly string[] = [
     'tree-canvas', 'tree-lines', 'gen-labels', 'timeline-container', 'map-container', 'table-container',
     'fan-chart', 'slideshow-caption', 'places-datalist',
     // Toolbar / focus / badges
-    'current-tree-name', 'toolbar-search-picker', 'search-result-count', 'toolbar-focus-name',
+    'current-tree-name', 'current-tree-conn', 'toolbar-search-picker', 'search-result-count', 'toolbar-focus-name',
     'toolbar-focus-count', 'focus-name', 'focus-person-count', 'actions-tree-name',
     'collab-bar-text', 'descendants-badge-text', 'otd-text', 'tree-switcher-dropdown',
     // Person dialog

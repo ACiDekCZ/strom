@@ -72,10 +72,14 @@ export interface FakeGateway {
     onMedia: (m: FakeMedia, device: FakeDevice) => TunnelReply | undefined;
     /** Each connection closed at once without an answer. */
     unreachable: boolean;
+    /** The gateway's own paths (/device/*) held without an answer (the app's request times out: connecting meanwhile). */
+    stall: boolean;
     /** The gateway's clock offset from the real one (ms): beyond ±2 min a request gets 409 device.clock. */
     clockOffsetMs: number;
     /** A new code to pair (one at a time, 10 minutes): its pairId, secret and the QR code's address. */
     pairCode(mode?: 'app'): { pairId: string; secret: string; url: string };
+    /** A home-screen icon's code (the same pairing, one at a time): its address `/#home.<pairId>.<secret>`. */
+    homeCode(): { pairId: string; secret: string; url: string };
     /** The next refusals outside the tunnel (taken one per request of /device/x, first first). */
     refuseNext(status: number, body: Record<string, unknown>, headers?: Record<string, string>): void;
     /** An event (`{event, data}`: the bridge's event's name and data) sent to every open stream (sealed for each). */
@@ -131,12 +135,19 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         media: [],
         onMedia: () => undefined,
         unreachable: false,
+        stall: false,
         clockOffsetMs: 0,
         pairCode() {
             const pairId = b64url(randomBytes(16));
             const secret = new Uint8Array(randomBytes(32));
             code = { pairId, secret, expiresAt: Date.now() + 10 * 60_000 };
             return { pairId, secret: b64url(secret), url: `${gw.origin}/pair?m=app#${pairId}.${b64url(secret)}` };
+        },
+        homeCode() {
+            const pairId = b64url(randomBytes(16));
+            const secret = new Uint8Array(randomBytes(32));
+            code = { pairId, secret, expiresAt: Date.now() + 24 * 60 * 60_000 };
+            return { pairId, secret: b64url(secret), url: `${gw.origin}/#home.${pairId}.${b64url(secret)}` };
         },
         refuseNext(status, body, headers) {
             refusals.push({ status, body, headers });
@@ -190,6 +201,19 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         let reply = gw.onTunnel(r, device);
         if (!reply) {
             if (r.p === 'status' && r.m === 'GET') reply = { s: 200, body: { ...STATUS, device: { id: device.id, name: device.name, kind: device.kind, actions: ['device.rename', 'device.unpair'] } } };
+            else if (r.p === 'device/rename' && r.m === 'POST') {
+                // NFC, at most 60 characters, as the research keeps it
+                const name = typeof (r.b as { name?: unknown } | undefined)?.name === 'string' ? ((r.b as { name: string }).name).normalize('NFC').trim() : '';
+                if (!name || name.length > 60) reply = { s: 400, body: { code: 'device.name' } };
+                else {
+                    device.name = name;
+                    reply = { s: 200, body: { device: { id: device.id, name, kind: device.kind } } };
+                }
+            } else if (r.p === 'device/unpair' && r.m === 'POST') {
+                // the whole row goes: the next request is 401 device.unpaired
+                gw.devices = gw.devices.filter(d => d.id !== device.id);
+                reply = { s: 200, body: { unpaired: true } };
+            }
             else if (r.p === 'device' || r.p.startsWith('device/')) reply = { s: 404, body: { code: 'device.unknown-action' } };
             else reply = { s: 404, body: { code: 'not-found' } };
         }
@@ -259,6 +283,7 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
             return;
         }
         const p = url.pathname;
+        if (gw.stall && p.startsWith('/device/')) return;
         if (req.method === 'GET' && (p === '/' || p === '/pair')) {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
             res.end(app);

@@ -19,11 +19,20 @@ import {
 } from '../phone.js';
 import { fetchWithTimeout, bridgeFailure, researchHere } from './research-ui.js';
 import { uiModule } from './module.js';
+import { DataManager } from '../data.js';
+import { TreeManager } from '../tree-manager.js';
 import { runBusy } from './busy.js';
 import { tallyBridgeAsk } from '../bridge-ask.js';
 import { iconSvg } from '../icons.js';
 
 const DIALOG_ID = 'phone-modal';
+
+/** The open tree's research id (as activeResearchId: none in a view of a shared file or on a copy) — of this module's own. */
+function openResearchId(): string | null {
+    if (DataManager.isViewMode()) return null;
+    const id = DataManager.getCurrentTreeId();
+    return (id && TreeManager.canSendToResearch(id) ? TreeManager.getTreeMetadata(id)?.research?.id : undefined) ?? null;
+}
 const POLL_MS = 2000;
 const ASK_TIMEOUT_MS = 5000;
 /** How long an unpaired row stays struck through with "Undo" (the research keeps it 15 s). */
@@ -201,7 +210,7 @@ export const phoneMethods = uiModule({
 
     /** What the research's bridge offers for the devices (spec 094 P3): nothing of it without `device.gateway`. */
     phoneCaps(researchId?: string | null): DeviceGatewayCaps {
-        const id = researchId === undefined ? ph?.researchId ?? this.activeResearchId() : researchId;
+        const id = researchId === undefined ? ph?.researchId ?? openResearchId() : researchId;
         return deviceGatewayCaps(id ? this.researchStatusOf(id)?.features : null);
     },
 

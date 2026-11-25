@@ -23472,6 +23472,263 @@
         /* A bar's dot sits on its first line (the title), whatever the bar's height. */
         .phone-bar > .phone-dot { align-self: flex-start; margin-top: 6px; }
         .phone-dot.is-wait { width: 10px; height: 10px; margin-top: 6px; background: var(--warning); box-shadow: 0 0 0 4px var(--warning-soft); }
+
+        /* ==================== DEVICE START (spec 094 §2) ====================
+           A device of the home network: the start screen over the app (connecting →
+           paired → the tree; a code that paired nothing; the icon not paired), the
+           chooser of the research's trees, the home-screen icon's quiet line and its
+           "How". Only drawn in the device mode (src/ui/device-start-ui.ts). */
+        .device-boot {
+            position: fixed; inset: 0; z-index: 900;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: max(24px, env(safe-area-inset-top, 0px)) 24px max(24px, env(safe-area-inset-bottom, 0px));
+            box-sizing: border-box; overflow-y: auto;
+            background: var(--bg); color: var(--text);
+        }
+        .device-boot-inner {
+            display: flex; flex-direction: column; align-items: center; gap: 14px;
+            max-width: 340px; width: 100%; text-align: center;
+        }
+        .device-boot-logo {
+            display: inline-flex; align-items: flex-end; gap: 3px;
+            font-family: var(--font-serif); font-size: 30px; font-weight: 600; line-height: 1; color: var(--text);
+        }
+        .device-boot-logo i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-bottom: 4px; }
+        .device-boot-row { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; }
+        .device-boot-row .busy-spin { color: var(--primary); }
+        .device-boot-msg { font-size: 15px; color: var(--text-light); max-width: 320px; overflow-wrap: anywhere; }
+        .device-boot-msg b { color: var(--text); font-weight: 600; }
+        .device-boot-how { font-size: 14px; }
+        .device-boot-ins { font-size: 12.5px; color: var(--text-light); max-width: 300px; overflow-wrap: anywhere; }
+        .device-boot-ok {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 44px; height: 44px; border-radius: 50%; background: var(--primary-soft); color: var(--primary);
+        }
+        .device-boot-retry { margin-top: 6px; min-height: 40px; padding: 0 18px; }
+        /* The chooser (2.4, 2.9): the whole screen on a phone; a framed list in the middle elsewhere. */
+        .device-boot.is-trees { justify-content: flex-start; align-items: stretch; padding: 0; }
+        .device-trees { display: flex; flex-direction: column; width: 100%; min-width: 0; }
+        .device-trees-head {
+            display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0;
+            min-height: var(--toolbar-h, 56px); box-sizing: border-box;
+            padding: env(safe-area-inset-top, 0px) 16px 0; background: var(--toolbar-bg, var(--surface)); border-bottom: 1px solid var(--border);
+        }
+        .device-trees-title {
+            margin: 0; font-family: var(--font-serif); font-size: 16px; font-weight: 600; line-height: 1.25; color: var(--text);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .device-trees-pc { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; color: var(--text-light); }
+        .device-trees-pc .phone-dot { width: 7px; height: 7px; }
+        .device-trees-pc-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .device-trees-list { display: flex; flex-direction: column; background: var(--surface); }
+        .device-tree-row {
+            display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; min-height: 60px; box-sizing: border-box;
+            padding: 8px 16px; border: 0; border-bottom: 1px solid var(--divider); border-radius: 0;
+            background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+        }
+        .device-tree-row:last-child { border-bottom: 0; }
+        @media (hover: hover) { .device-tree-row:hover { background: var(--hover-bg); } }
+        .device-tree-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .device-tree-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+        .device-tree-name {
+            font-family: var(--font-serif); font-size: 17px; font-weight: 600; line-height: 1.3;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .device-tree-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-height: 16px; font-size: 12.5px; color: var(--text-light); }
+        .device-tree-sub .research-sync-tag { margin: 0; }
+        .device-tree-state { display: inline-flex; align-items: center; gap: 5px; }
+        .device-tree-state .phone-dot { width: 7px; height: 7px; }
+        .device-tree-sep { color: var(--text-faint); }
+        .device-tree-chev { flex: none; display: inline-flex; color: var(--text-faint); transform: rotate(-90deg); }
+        .device-trees-note { margin: 0; padding: 12px 16px; font-size: 13px; color: var(--text-light); }
+        @media (min-width: 641px) {
+            .device-boot.is-trees { justify-content: center; align-items: center; padding: 24px; }
+            .device-trees {
+                max-width: 560px; border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden;
+                background: var(--surface); box-shadow: var(--shadow-sm);
+            }
+            .device-trees-head { min-height: 0; padding: 14px 16px 12px; }
+        }
+        /* A phone held sideways: the list from the top, scrolled. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .device-boot.is-trees { justify-content: flex-start; align-items: stretch; padding: 0; overflow-y: auto; }
+            .device-trees { max-width: none; border: 0; border-radius: 0; box-shadow: none; }
+            .device-boot-inner { gap: 10px; }
+        }
+        /* The home-screen icon's quiet line (2.5): under the toolbar (and the phone's person panel), once. */
+        :root { --device-home-line-h: 38px; }
+        .device-home-line {
+            position: fixed; top: var(--toolbar-h, 56px); left: 0; right: 0; z-index: 99;
+            display: flex; align-items: center; gap: 8px; min-height: var(--device-home-line-h); box-sizing: border-box;
+            padding: 0 4px 0 12px; background: var(--toolbar-bg, var(--surface)); border-bottom: 1px solid var(--border);
+            font-size: 13px; color: var(--text-light);
+        }
+        .device-home-line-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; line-height: 1.3; padding: 4px 0; }
+        .device-home-line-how {
+            flex: none; padding: 4px 8px; border: 0; background: none; color: var(--primary-dark);
+            font: inherit; font-weight: 600; cursor: pointer; border-radius: var(--r-md);
+        }
+        .device-home-line-x {
+            flex: none; width: 32px; height: 32px; padding: 0; border: 0; background: none; color: var(--text-light);
+            font-size: 20px; line-height: 1; cursor: pointer; border-radius: var(--r-md);
+        }
+        @media (hover: hover) {
+            .device-home-line-how:hover { text-decoration: underline; }
+            .device-home-line-x:hover { color: var(--text); background: var(--hover-bg); }
+        }
+        .device-home-line-how:focus-visible, .device-home-line-x:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (pointer: coarse) {
+            .device-home-line-how { min-height: 44px; }
+            .device-home-line-x { width: 44px; height: 44px; }
+        }
+        /* Desktop and tablet (not a phone held sideways): what floats under the toolbar goes under the line. */
+        @media (min-width: 641px) and (min-height: 501px), (min-width: 1025px) {
+            body.device-home-line-on .focus-controls,
+            body.device-home-line-on .collab-bar,
+            body.device-home-line-on .collab-badge,
+            body.device-home-line-on .descendants-badge { top: calc(64px + var(--device-home-line-h)); }
+        }
+        @media (max-width: 640px) {
+            body.has-focus-panel:not(.descendants-view):not(.standalone-view) .device-home-line { top: calc(var(--toolbar-h) + 48px); }
+            body.has-focus-panel.focus-steppers-open:not(.descendants-view):not(.standalone-view) .device-home-line { top: calc(var(--toolbar-h) + 100px); }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .device-home-line { top: var(--toolbar-h); left: var(--side-bar-w, 0px); }
+        }
+        /* "How" of the home-screen icon (2.6, 2.7): this system first. */
+        .device-home-dialog { width: min(440px, calc(100vw - 32px)); }
+        .device-home-content { display: flex; flex-direction: column; gap: 12px; }
+        .device-home-sys { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg); padding: 12px 14px; }
+        .device-home-sys h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: var(--text); }
+        .device-home-sys p { margin: 0; font-size: 13.5px; color: var(--text); overflow-wrap: anywhere; }
+        .device-home-note { margin: 0; font-size: 13px; color: var(--text-light); }
+        @media (max-width: 640px) {
+            .device-home-dialog { width: 100%; }
+        }
+        /* The Connection of a device (spec 094 3.5, 3.6): a sheet from below on a phone, a dialog elsewhere (3.12);
+           its state and "Connection…" on top of the tree switcher's dropdown (3.11). */
+        .tree-switcher-conn-top {
+            display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; box-sizing: border-box;
+            padding: 8px 14px; font-size: 13px; color: var(--text-light); cursor: pointer;
+        }
+        .tree-switcher-conn-top .phone-dot { margin-top: 0; }
+        .tree-switcher-conn-top-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tree-switcher-conn-top-t::first-letter { text-transform: uppercase; }
+        .tree-switcher-conn-top-a { flex: none; color: var(--primary-dark); font-weight: 600; }
+        @media (hover: hover) {
+            .tree-switcher-conn-top:hover { background: var(--hover-bg); }
+            .tree-switcher-conn-top:hover .tree-switcher-conn-top-a { text-decoration: underline; }
+        }
+        .tree-switcher-conn-top:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .device-conn { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+        .device-conn--sheet { padding: 4px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+        .device-conn-row {
+            display: flex; align-items: center; gap: 12px; min-width: 0;
+            padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg);
+        }
+        .device-conn-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .device-conn-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
+        .device-conn-name { font-size: 15px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .device-conn-state { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--text); }
+        .device-conn-state .phone-dot { margin-top: 0; }
+        .device-conn-ell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .device-conn-sub { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .device-conn-input {
+            width: 100%; box-sizing: border-box; min-height: 40px; margin-top: 2px; padding: 6px 10px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font: inherit; font-size: 16px;
+        }
+        .device-conn-input:focus-visible { outline: 2px solid var(--primary); outline-offset: 0; }
+        .device-conn-edit-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+        .device-conn .device-conn-home {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0 14px;
+            border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg); color: var(--text);
+            font: inherit; font-size: 15px; text-align: left; cursor: pointer;
+        }
+        .device-conn-chev { color: var(--text-light); font-size: 18px; line-height: 1; }
+        .device-conn-quiet, .device-conn-ask { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .device-conn-ask { font-size: 15px; color: var(--text); }
+        .device-conn-err { margin: 0; font-size: 13px; color: var(--error-text); overflow-wrap: anywhere; }
+        .device-conn-err[hidden] { display: none; }
+        .device-conn .device-conn-link {
+            align-self: flex-start; padding: 4px 0; border: 0; border-radius: var(--r-md); background: none;
+            color: var(--primary-dark); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .device-conn--sheet button.secondary, .device-conn--sheet button.primary, .device-conn--sheet button.danger {
+            min-height: 44px; padding: 0 16px; border-radius: var(--r-lg); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+        }
+        .device-conn--sheet button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+        .device-conn--sheet button.primary { background: var(--primary); color: var(--on-primary); border: 0; }
+        .device-conn--sheet button.danger { background: var(--danger); color: white; border: 0; }
+        .device-conn--sheet button.device-conn-off { width: 100%; color: var(--error-text); }
+        .device-conn-pair { display: flex; gap: 10px; }
+        .device-conn-pair > button { flex: 1 1 0; min-width: 0; }
+        .modal .buttons button.device-conn-off { margin-right: auto; color: var(--error-text); }
+        .modal .buttons button.device-conn-ok { margin-right: 0; }
+        .device-conn button:disabled, .device-conn-buttons button:disabled { opacity: 0.55; cursor: default; }
+        .device-conn button:focus-visible, .device-conn-buttons button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) {
+            .device-conn .device-conn-home:hover { background: var(--hover-bg); }
+            .device-conn .device-conn-link:hover { text-decoration: underline; }
+            .device-conn--sheet button.secondary:hover { background: var(--hover-bg); }
+        }
+        @media (pointer: coarse) {
+            .device-conn-btn, .device-conn .device-conn-link { min-height: 44px; }
+            .device-conn-input { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .device-conn-dialog .buttons { flex-wrap: wrap; }
+        }
+        /* A phone held sideways: the sheet is a panel at the right, its body scrolls. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .device-conn--sheet { gap: 8px; }
+            .device-conn-row { padding: 8px 12px; }
+        }
+        /* ==================== DEVICE MODE (spec 094 §3) ====================
+           The tree switcher's second line: the connection with the computer.
+           Outside the device mode the wrapper is no box at all and the line is hidden. */
+        .tree-switcher-lines { display: contents; }
+        .tree-switcher-conn[hidden] { display: none !important; }
+        body.device-mode .toolbar .tree-switcher-btn { max-width: min(300px, 100%); }
+        body.device-mode .toolbar .tree-switcher-btn .tree-switcher-lines {
+            display: flex; flex-direction: column; justify-content: center; gap: 1px;
+            flex: 0 1 auto; min-width: 0; text-align: left;
+        }
+        body.device-mode .toolbar .tree-switcher-btn .tree-name {
+            max-width: none; min-width: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-family: var(--font-serif); font-size: 14px; font-weight: 600; line-height: 1.15;
+        }
+        .tree-switcher-conn {
+            display: flex; align-items: center; gap: 5px; min-width: 0;
+            font-size: 11px; line-height: 1.2; font-weight: 400; color: var(--text-light);
+        }
+        .tree-switcher-conn .phone-dot { width: 7px; height: 7px; margin: 0; }
+        .tree-switcher-conn .phone-dot.is-wait { box-shadow: 0 0 0 3px var(--warning-soft); }
+        .tree-switcher-conn-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        body.device-mode .toolbar.toolbar-squeeze-name .tree-switcher-btn .tree-switcher-lines { max-width: 110px; }
+        /* What belongs to the computer's research is not offered on the device (3.7): a linked file and
+           its save, the storage state of the browser, "Export all"; one quiet line in the switcher instead. */
+        body.device-mode #file-link-indicator,
+        body.device-mode #unsaved-copy-indicator,
+        body.device-mode #actions-storage-row,
+        body.device-mode .actions-storage-divider,
+        body.device-mode #actions-export-reminder,
+        body.device-mode #export-modal .fsa-only,
+        body.device-mode #export-modal .fsa-linked-only { display: none !important; }
+        .bottom-sheet-quiet { margin: 8px 16px 12px; font-size: 13px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .tree-switcher-quiet {
+            padding: 10px 14px; max-width: 320px; box-sizing: border-box;
+            font-size: 12.5px; line-height: 1.45; color: var(--text-light); white-space: normal;
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            body.device-mode .toolbar .tree-switcher-btn .tree-switcher-lines { max-width: 200px; }
+        }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            body.device-mode .toolbar .tree-switcher-btn { max-width: 100%; }
+            body.device-mode .toolbar .tree-switcher-btn .tree-switcher-lines { max-width: none; }
+            body.device-mode .toolbar .tree-switcher-btn .tree-name { font-size: 16px; }
+            .tree-switcher-conn { font-size: 12px; }
+        }
         .phone-section-title { margin: 0 0 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
         .phone-intro { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
         .phone-intro li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; }
@@ -35589,7 +35846,7 @@
             <button class="tree-switcher-btn" onclick="window.Strom.UI.toggleTreeSwitcher()">
                 <!-- Phone: one dot for "only in the browser" / offline (the pills have no room) -->
                 <span class="toolbar-state-dot" aria-hidden="true"></span>
-                <span id="current-tree-name" class="tree-name">…</span>
+                <span class="tree-switcher-lines"><span id="current-tree-name" class="tree-name">…</span><span id="current-tree-conn" class="tree-switcher-conn" hidden></span></span>
                 <svg class="tree-dropdown-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
             </button>
             <div id="tree-switcher-dropdown" class="tree-switcher-dropdown" role="menu">

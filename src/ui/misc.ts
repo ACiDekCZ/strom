@@ -72,6 +72,7 @@ import { syncControlBlock } from './minimap.js';
 import { addLender, cancelWaiting, removeLender, watchToasts, whenFree } from '../toast-slot.js';
 import { defaultFocusKey, focusDefaultPerson, isDefaultFocusContext, updateDefaultFocusButtons } from './default-focus.js';
 import { syncMergeHold } from '../merge/research-hold.js';
+import { inDeviceMode } from './device-mode-ui.js';
 
 
 
@@ -1226,6 +1227,14 @@ export const miscMethods = uiModule({
                         this.closePhoneDialog();
                         return;
                     }
+                    if (currentDialog === 'device-conn-modal') {
+                        this.closeDeviceConnection();
+                        return;
+                    }
+                    if (currentDialog === 'device-home-modal') {
+                        this.closeDeviceHomeHow();
+                        return;
+                    }
                     if (currentDialog === 'research-update-modal') {
                         this.closeResearchUpdateHelp();
                         return;
@@ -1473,7 +1482,8 @@ export const miscMethods = uiModule({
             // view copy keeps the browser default.
             const saveMod = this.isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
             if (saveMod && !e.altKey && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
-                if (DataManager.isViewMode() || DataManager.isLocked() || !DataManager.getCurrentTreeId()) return;
+                // A device of the home network has no file of its own to save into (spec 094 §3).
+                if (DataManager.isViewMode() || DataManager.isLocked() || !DataManager.getCurrentTreeId() || inDeviceMode()) return;
                 e.preventDefault();
                 this.saveTreeCopy();
                 return;

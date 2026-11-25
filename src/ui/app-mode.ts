@@ -4,6 +4,7 @@
  */
 
 import { DataManager, auditPersonName } from '../data.js';
+import { deviceModeCandidate } from '../device/device-mode.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import type { FanLook } from '../fan-look.js';
@@ -455,7 +456,8 @@ export const appModeMethods = uiModule({
         this.appMode = mode;
         this.refreshGoOnlineLinksOnClick();
 
-        if (mode === 'embedded') {
+        // A device of the home network (spec 094 P3): the app at the research's gateway is no standalone file.
+        if (mode === 'embedded' && !deviceModeCandidate()) {
             this.showEmbeddedBanner();
             this.updateExportButtonForEmbedded();
             this.setupBeforeUnloadWarning();
