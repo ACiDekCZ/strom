@@ -362,7 +362,7 @@ test.describe('de, the browser\'s language at the first start', () => {
         await expect(rows.nth(1).locator('.research-count-badge')).toHaveText('3');
         await expect(rows.nth(1)).toContainText('wartet');
         await expect(rows.nth(2).locator('.research-sync-tag')).toHaveText('Strom-Archiv');
-        await expect(list).toContainText('Das Gerät merkt sich den Stammbaum');
+        await expect(list).toContainText('Das Gerät merkt sich den gewählten Stammbaum');
         // no mark of the terminal or the agent on a device
         await expect(boot.locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
 

@@ -64,6 +64,7 @@ import { shownNameOrEmpty } from '../person-name.js';
 import { forgetTreeMaterials } from './materials-ui.js';
 import { updateDefaultFocusButtons } from './default-focus.js';
 import { inDeviceMode, deviceTreesNotHere } from './device-mode-ui.js';
+import { deviceTreeTextHtml } from './device-start-ui.js';
 
 /** Room (px) a row menu needs beside ⋯ to show a useful part of its rows. */
 const TREE_MENU_MIN_ROOM = 240;
@@ -276,8 +277,22 @@ export const treeManagementMethods = uiModule({
         // A device of the home network: the connection's state and "Connection…" on top (spec 094 3.11).
         let html = this.deviceConnTopHtml();
 
+        // A device of the home network: the research's trees (spec 094 3.7), the open one marked, each as in the
+        // chooser; a tree not opened here yet is loaded through the gateway when chosen.
+        const deviceTrees = inDeviceMode() ? this.deviceTreeChoicesNow() : null;
+        if (deviceTrees) {
+            html += `<div class="tree-switcher-head" id="tree-switcher-device-head">${this.escapeHtml(strings.device.treesTitle)}</div>`;
+            deviceTrees.forEach((c, i) => {
+                html += `
+                <div class="tree-switcher-item sel-opt device-tree-item ${c.current ? 'active' : ''}" data-sel-form="row" role="menuitem" tabindex="0"
+                     data-device-tree="${i}"${c.current ? ' aria-current="true"' : ''}>
+                    <span class="tree-item-check">${c.current ? iconSvg('check') : ''}</span>
+                    ${deviceTreeTextHtml(c)}
+                </div>`;
+            });
+        }
         // Tree list (only visible trees): ✓ in its own column, the name, the research marks (spec 011).
-        for (const tree of trees) {
+        for (const tree of deviceTrees ? [] : trees) {
             const isActive = tree.id === activeId;
             const title = this.treeSwitcherTitle(tree);
             html += `
@@ -315,6 +330,16 @@ export const treeManagementMethods = uiModule({
         `;
 
         dropdown.innerHTML = html;
+        dropdown.classList.toggle('device-trees-on', !!deviceTrees);
+        if (deviceTrees) {
+            dropdown.querySelectorAll<HTMLElement>('[data-device-tree]').forEach(item => {
+                const c = deviceTrees[Number(item.dataset.deviceTree)];
+                item.addEventListener('click', () => {
+                    dropdown.classList.remove('active');
+                    if (c) void this.pickDeviceTree(c);
+                });
+            });
+        }
         this.refreshTreeSwitcherDot();
     },
 
@@ -735,14 +760,19 @@ export const treeManagementMethods = uiModule({
             dropdown.classList.toggle('active');
             if (dropdown.classList.contains('active')) {
                 this.updateTreeSwitcher();
-                // The other trees' research state: asked now unless fresh.
-                this.kickOtherResearch();
+                // The other trees' research state: asked now unless fresh (on a device: each research tree's status).
+                if (inDeviceMode()) this.kickDeviceTreeRows();
+                else this.kickOtherResearch();
             }
         }
     },
 
     /** The phone's tree list: the visible trees (the open one marked), then Manage trees ›. */
     showTreeSwitcherSheet(): void {
+        if (inDeviceMode()) {
+            this.showDeviceTreesSheet();
+            return;
+        }
         const activeId = TreeManager.getActiveTreeId();
         const trees = TreeManager.getVisibleTrees();
         this.noteBottomSheetTrigger();
@@ -765,14 +795,34 @@ export const treeManagementMethods = uiModule({
                     run: () => { if (tree.id !== activeId) void this.switchToTree(tree.id); },
                 };
             }) },
-            // A device of the home network: the trees are the computer's, one quiet line instead (spec 094 §3).
-            inDeviceMode() ? { divider: true, lead: blocked, rows: [], quiet: deviceTreesNotHere() } : { divider: true, lead: blocked, rows: [
+            { divider: true, lead: blocked, rows: [
                 ...(DataManager.isReadOnly() ? [] : [{ label: strings.treeSwitcher.import, id: 'tree-sheet-import', run: () => this.showImportDialog() }]),
                 { label: strings.treeManager.manageTreesTitle, value: '\u203a', run: () => this.showTreeManagerDialog() },
             ] },
         ]);
         // The other trees' research state: asked now unless fresh.
         this.kickOtherResearch();
+    },
+
+    /**
+     * A device's Trees sheet (spec 094 3.7): "Research trees" — every tree of the research, each as in the
+     * chooser (its name in the serif, its persons, what its research does, the archive's label), the open one
+     * marked; then one quiet line where import and managing trees would be (they are the computer's).
+     */
+    showDeviceTreesSheet(): void {
+        this.noteBottomSheetTrigger();
+        this.hideBottomSheet();
+        const rows = this.deviceTreeChoicesNow().map((c, i) => {
+            const text = document.createElement('span');
+            text.className = 'device-tree-sheet-text';
+            text.innerHTML = deviceTreeTextHtml(c);
+            return { label: '', id: `device-tree-sheet-${i}`, className: 'device-tree-item', active: c.current, extra: text, run: () => { void this.pickDeviceTree(c); } };
+        });
+        this.presentMenuSheet(strings.device.treesTitle, [
+            { rows },
+            { divider: true, rows: [], quiet: deviceTreesNotHere() },
+        ]);
+        this.kickDeviceTreeRows();
     },
 
     /**

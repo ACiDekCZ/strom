@@ -15,11 +15,13 @@ import { DataManager } from '../data.js';
 import {
     deviceModeCandidate, takeDeviceCode, startDeviceMode, restartDeviceMode, type DeviceModeStart,
 } from '../device/device-mode.js';
-import { hasPairingMark, chosenTreeId, chooseTree, computerLabelOf, deviceTreeIdOk, type DevicePairing, type DeviceTree } from '../device/device-store.js';
+import { hasPairingMark, chosenTreeId, chooseTree, computerLabelOf, deviceTreeIdOk, pairingNow, type DevicePairing, type DeviceTree } from '../device/device-store.js';
+import { retryDeviceConnection } from '../device/device-connection.js';
+import { startTreeLoad } from './tree-load-progress.js';
 import { deviceFetch, type GatewayHello } from '../device/gateway-client.js';
 import {
-    deviceStartEnd, deviceStartScreen, deviceTreeToOpen, deviceTreeRename, deviceTreeRow, homeHowSystem, homeLineDue, homeAddressHere,
-    type DeviceTreeRow, type HomeHowSystem,
+    deviceStartEnd, deviceStartScreen, deviceTreeToOpen, deviceTreeRename, deviceTreeRow, deviceTreeChoices, homeHowSystem, homeLineDue, homeAddressHere,
+    type DeviceTreeRow, type DeviceTreeChoice, type HomeHowSystem,
 } from '../device/device-start.js';
 import { setResearchDevicePage, deviceBridgeBase, researchDeviceState } from '../research-link.js';
 
@@ -30,6 +32,11 @@ const HOME_DIALOG_ID = 'device-home-modal';
 const HOME_LINE_KEY = 'strom-device-home-line';
 /** How long a tree's row waits for its status in the chooser. */
 const ROW_STATUS_MS = 4000;
+/** A tree's row in the switcher asks its status again only after this long (it is asked at each opening otherwise). */
+const ROW_FRESH_MS = 20_000;
+/** What each research tree's status said last (its persons, working, waiting): the rows drawn from it at once. */
+const treeRows = new Map<string, { row: DeviceTreeRow; at: number }>();
+
 /** How long "Paired with …" stays before the tree opens (it is read, not waited for). */
 const PAIRED_SHOWN_MS = 700;
 
@@ -71,6 +78,25 @@ function thisSystem(): HomeHowSystem {
     } catch {
         return 'computer';
     }
+}
+
+/** A tree's second line: its persons, what its research does now, the archive's label (what is known so far). */
+function treeSubHtml(row: DeviceTreeRow | null, archive: boolean): string {
+    const d = strings.device;
+    const parts: string[] = [];
+    if (row?.persons != null) parts.push(`<span>${esc(d.persons(row.persons))}</span>`);
+    if (row?.working) parts.push(`<span class="device-tree-state"><span class="phone-dot is-on" aria-hidden="true"></span>${esc(d.treeWorking)}</span>`);
+    else if (row && row.waiting > 0) parts.push(`<span class="device-tree-state"><span class="research-count-badge">${row.waiting}</span>${esc(d.treeWaiting)}</span>`);
+    if (archive) parts.push(`<span class="research-sync-tag">${esc(strings.sync.archiveTag)}</span>`);
+    return parts.join('<span class="device-tree-sep" aria-hidden="true">·</span>');
+}
+
+/** A research tree's name and second line, as in the chooser (the switcher's list and the Trees sheet). */
+export function deviceTreeTextHtml(c: Pick<DeviceTreeChoice, 'researchId' | 'name' | 'archive'>): string {
+    const row = c.researchId ? treeRows.get(c.researchId)?.row ?? null : null;
+    const sub = c.researchId ? ` data-device-sub="${esc(c.researchId)}"` : '';
+    return `<span class="device-tree-text"><span class="device-tree-name">${esc(c.name)}</span>`
+        + `<span class="device-tree-sub"${sub}${c.archive ? ' data-archive="1"' : ''}>${treeSubHtml(row, c.archive)}</span></span>`;
 }
 
 const wordmark = (): string => '<span class="device-boot-logo" aria-hidden="true">Strom<i></i></span>';
@@ -256,10 +282,7 @@ export const deviceStartMethods = uiModule({
         el.dataset.state = 'trees';
         const rows = trees.map(t => `
             <button type="button" class="device-tree-row" data-tree="${esc(t.id)}">
-                <span class="device-tree-text">
-                    <span class="device-tree-name">${esc(t.name)}</span>
-                    <span class="device-tree-sub" data-sub="${esc(t.id)}">${t.archive ? `<span class="research-sync-tag">${esc(strings.sync.archiveTag)}</span>` : ''}</span>
-                </span>
+                ${deviceTreeTextHtml({ researchId: t.id, name: t.name, archive: !!t.archive })}
                 <span class="device-tree-chev" aria-hidden="true">${iconSvg('chevron-down', { size: 16 })}</span>
             </button>`).join('');
         el.innerHTML = `
@@ -298,15 +321,67 @@ export const deviceStartMethods = uiModule({
             }
         } catch { /* the row keeps its name alone */ }
         if (!row) return;
-        const sub = document.querySelector<HTMLElement>(`#${BOOT_ID} [data-sub="${CSS.escape(tree.id)}"]`);
-        if (!sub) return;
-        const d = strings.device;
-        const parts: string[] = [];
-        if (row.persons !== null) parts.push(`<span>${esc(d.persons(row.persons))}</span>`);
-        if (row.working) parts.push(`<span class="device-tree-state"><span class="phone-dot is-on" aria-hidden="true"></span>${esc(d.treeWorking)}</span>`);
-        else if (row.waiting > 0) parts.push(`<span class="device-tree-state"><span class="research-count-badge">${row.waiting}</span>${esc(d.treeWaiting)}</span>`);
-        if (tree.archive) parts.push(`<span class="research-sync-tag">${esc(strings.sync.archiveTag)}</span>`);
-        sub.innerHTML = parts.join('<span class="device-tree-sep" aria-hidden="true">·</span>');
+        treeRows.set(tree.id, { row, at: Date.now() });
+        // Wherever the tree's row stands now (the chooser, the switcher's list, the Trees sheet).
+        for (const sub of document.querySelectorAll<HTMLElement>(`[data-device-sub="${CSS.escape(tree.id)}"]`)) {
+            sub.innerHTML = treeSubHtml(row, sub.dataset.archive === '1');
+        }
+    },
+
+    /** The rows of the switcher's "Research trees" now (spec 094 3.7): the pairing's trees, then what is held here only. */
+    deviceTreeChoicesNow(): DeviceTreeChoice[] {
+        const held = TreeManager.getVisibleTrees().map(t => ({
+            id: t.id, name: t.name, persons: t.personCount ?? 0, ...(t.research?.id ? { researchId: t.research.id } : {}),
+        }));
+        const researchId = TreeManager.getActiveTreeMetadata()?.research?.id;
+        return deviceTreeChoices(pairingNow()?.trees ?? [], held, {
+            currentId: TreeManager.getActiveTreeId(),
+            statusName: researchId ? this.researchStatusOf(researchId)?.name ?? null : null,
+        });
+    },
+
+    /** The trees' second lines asked of the research (each at most every 20 s), drawn where they stand. */
+    kickDeviceTreeRows(): void {
+        const now = Date.now();
+        for (const t of pairingNow()?.trees ?? []) {
+            const known = treeRows.get(t.id);
+            if (known && now - known.at < ROW_FRESH_MS) continue;
+            treeRows.set(t.id, { row: known?.row ?? { persons: null, working: false, waiting: 0 }, at: now });
+            void this.fillDeviceTreeRow(t);
+        }
+    },
+
+    /**
+     * Another research tree chosen in the switcher (spec 094 3.7): one held here opens as any tree does (its
+     * edits not sent stay in it, its changes go first when they go by themselves); one never opened here is
+     * loaded through the gateway as at the start ("Loading the tree from the research…", Cancel, Try again).
+     * The choice is remembered and the research's events follow it.
+     */
+    async pickDeviceTree(c: DeviceTreeChoice): Promise<void> {
+        if (c.current) return;
+        if (!c.researchId) {
+            if (c.localId) await this.switchToTree(c.localId);
+            return;
+        }
+        const researchId = c.researchId;
+        if (!deviceTreeIdOk(researchId)) return;
+        const held = TreeManager.findTreeByResearchId(researchId);
+        if (held) {
+            if (DataManager.getCurrentTreeId() !== held.id && await this.switchToTree(held.id) !== 'switched') return;
+        } else {
+            const load = startTreeLoad({ treeId: null, retry: () => { void this.pickDeviceTree(c); } });
+            const base = deviceBridgeBase(researchId, researchDeviceState()?.origin ?? location.origin);
+            await this.importResearchFromUrl(`${base}/tree.ged`, { takeSame: true, load });
+            const now = TreeManager.findTreeByResearchId(researchId);
+            if (!now || DataManager.getCurrentTreeId() !== now.id) return;
+            this.setDisplayViewMode('family');
+        }
+        await chooseTree(researchId);
+        // The event stream is of the chosen tree.
+        retryDeviceConnection();
+        this.refreshResearchMenu();
+        const pairedName = pairingNow()?.trees.find(t => t.id === researchId)?.name;
+        void this.pollResearchBridge({ reschedule: true }).then(() => this.deviceTreeNamed(researchId, pairedName));
     },
 
     /** The quiet line of the home-screen icon under the toolbar (2.5): once, never in the icon, × hides it for good. */

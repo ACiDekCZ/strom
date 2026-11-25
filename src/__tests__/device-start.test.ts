@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    deviceStartEnd, deviceStartScreen, deviceTreeToOpen, deviceTreeRename, deviceTreeRow, homeHowSystem, homeLineDue, homeAddressHere,
+    deviceStartEnd, deviceStartScreen, deviceTreeToOpen, deviceTreeRename, deviceTreeRow, deviceTreeChoices, homeHowSystem, homeLineDue, homeAddressHere,
 } from '../device/device-start';
 import { codePairs, type DeviceCode } from '../device/device-mode';
 
@@ -90,5 +90,60 @@ describe('deviceTreeRename', () => {
         expect(deviceTreeRename('Research', 'Research', defaults)).toBeNull();
         expect(deviceTreeRename('Research', undefined, defaults)).toBeNull();
         expect(deviceTreeRename('Research', '  ', defaults)).toBeNull();
+    });
+});
+
+describe('deviceTreeChoices (the switcher\'s Research trees, 3.7)', () => {
+    const paired = [
+        { id: 'pychavkovi', name: 'Pýchavkovi z Mlýnků' },
+        { id: 'hrotkovi', name: 'Hrotkovi z Hrotova' },
+        { id: 'matrika', name: 'Mlýnky – farní matrika', archive: true },
+    ];
+
+    it('every tree of the pairing, those held here tied to their local tree, the open one marked', () => {
+        const held = [
+            { id: 'local-empty', name: 'My tree', persons: 0 },
+            { id: 'local-p', name: 'Pýchavkovi', researchId: 'pychavkovi', persons: 3 },
+        ];
+        const rows = deviceTreeChoices(paired, held, { currentId: 'local-p' });
+        expect(rows.map(r => [r.researchId, r.localId, r.current, r.archive])).toEqual([
+            ['pychavkovi', 'local-p', true, false],
+            ['hrotkovi', null, false, false],
+            ['matrika', null, false, true],
+        ]);
+    });
+
+    it('the open tree named by the research\'s status (tree.name), the others by the pairing', () => {
+        const held = [
+            { id: 'local-p', name: 'Research', researchId: 'pychavkovi', persons: 3 },
+            { id: 'local-h', name: 'Hrotkovi (old)', researchId: 'hrotkovi', persons: 3 },
+        ];
+        const rows = deviceTreeChoices(paired, held, { currentId: 'local-p', statusName: 'Pýchavkovi z Mlýnků a Horní Lhoty' });
+        expect(rows.map(r => r.name)).toEqual(['Pýchavkovi z Mlýnků a Horní Lhoty', 'Hrotkovi z Hrotova', 'Mlýnky – farní matrika']);
+        // no status name: the pairing's
+        expect(deviceTreeChoices(paired, held, { currentId: 'local-p', statusName: '  ' })[0].name).toBe('Pýchavkovi z Mlýnků');
+    });
+
+    it('a tree held here the pairing does not offer stays in reach (its edits never lost); an empty tree of its own does not', () => {
+        const held = [
+            { id: 'local-empty', name: 'My tree', persons: 0 },
+            { id: 'local-gone', name: 'Bedlovi', researchId: 'gone', persons: 12 },
+            { id: 'local-own', name: 'Own notes', persons: 4 },
+        ];
+        const rows = deviceTreeChoices(paired.slice(0, 1), held, { currentId: null });
+        expect(rows.map(r => [r.researchId, r.localId, r.name])).toEqual([
+            ['pychavkovi', null, 'Pýchavkovi z Mlýnků'],
+            [null, 'local-gone', 'Bedlovi'],
+            [null, 'local-own', 'Own notes'],
+        ]);
+        // the open tree always, even an empty one
+        expect(deviceTreeChoices([], held, { currentId: 'local-empty' }).map(r => [r.localId, r.current])).toContainEqual(['local-empty', true]);
+    });
+
+    it('an id of any shape (opaque, up to 200 characters), each once', () => {
+        const long = 'x'.repeat(200);
+        const rows = deviceTreeChoices([{ id: long, name: 'A' }, { id: long, name: 'A again' }, { id: 'tree 7/β', name: 'B' }],
+            [{ id: 'l', name: 'B', researchId: 'tree 7/β', persons: 1 }], { currentId: 'l' });
+        expect(rows.map(r => [r.researchId, r.localId, r.current])).toEqual([[long, null, false], ['tree 7/β', 'l', true]]);
     });
 });

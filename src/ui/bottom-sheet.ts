@@ -54,6 +54,8 @@ interface MenuRow {
     page?: { title: string; rows: MenuRow[]; note?: string };
     /** A stable id for the row (tests, focus). */
     id?: string;
+    /** An extra class of the row (a device's research tree: its name and second line as in the chooser). */
+    className?: string;
     /** A small sign before the label (the Table view's row actions: ⌖ ▤ ✎); '' keeps its place empty. */
     icon?: string;
     /** A drawn sign (an SVG, trusted markup) in place of `icon`'s text (the Table's pin). */
@@ -583,6 +585,7 @@ export const bottomSheetMethods = uiModule({
                 btn.dataset.selForm = 'row';
             }
             if (row.id) btn.id = row.id;
+            if (row.className) btn.classList.add(row.className);
             if (row.icon !== undefined) {
                 const icon = document.createElement('span');
                 icon.className = 'bottom-sheet-icon';

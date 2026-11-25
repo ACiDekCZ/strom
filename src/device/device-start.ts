@@ -54,6 +54,59 @@ export function deviceTreeRename(current: string, paired: string | undefined, de
     return !current.trim() || defaults.includes(current) ? name : null;
 }
 
+/** A tree held on this device, as the switcher's list reads it. */
+export interface DeviceHeldTree {
+    /** Its id here (TreeManager's). */
+    id: string;
+    name: string;
+    /** The research's id it is tied to, when it is a research's tree. */
+    researchId?: string;
+    persons: number;
+}
+
+/** A row of the switcher's "Research trees" (spec 094 3.7). */
+export interface DeviceTreeChoice {
+    /** The research's tree of the pairing (null: a tree held here the pairing does not offer any more). */
+    researchId: string | null;
+    /** The tree held here (null: not opened on this device yet, it is loaded through the gateway). */
+    localId: string | null;
+    name: string;
+    archive: boolean;
+    current: boolean;
+}
+
+/**
+ * The switcher's list on a device: every tree of the pairing (the open one's name from the research's
+ * status, `tree.name`, else the pairing's), then the trees held here the pairing does not offer — a
+ * research's tree or one with people (its edits never get out of reach), or the open one. An empty tree
+ * of its own (the app's first default) is left out.
+ */
+export function deviceTreeChoices(
+    paired: readonly DeviceTree[],
+    held: readonly DeviceHeldTree[],
+    o: { currentId: string | null; statusName?: string | null },
+): DeviceTreeChoice[] {
+    const out: DeviceTreeChoice[] = [];
+    const seen = new Set<string>();
+    const taken = new Set<string>();
+    for (const t of paired) {
+        if (seen.has(t.id)) continue;
+        seen.add(t.id);
+        const h = held.find(x => x.researchId === t.id && !taken.has(x.id)) ?? null;
+        if (h) taken.add(h.id);
+        const current = !!h && h.id === o.currentId;
+        const statusName = current ? (o.statusName ?? '').trim() : '';
+        out.push({ researchId: t.id, localId: h?.id ?? null, name: statusName || t.name, archive: !!t.archive, current });
+    }
+    for (const h of held) {
+        if (taken.has(h.id)) continue;
+        const current = h.id === o.currentId;
+        if (!h.researchId && h.persons <= 0 && !current) continue;
+        out.push({ researchId: null, localId: h.id, name: h.name, archive: false, current });
+    }
+    return out;
+}
+
 /** A tree's row in the chooser, read from its bridge's status (any field may be missing). */
 export interface DeviceTreeRow {
     persons: number | null;

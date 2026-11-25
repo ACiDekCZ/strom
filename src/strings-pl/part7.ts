@@ -698,7 +698,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         homeUnpaired: 'Ikona na ekranie głównym nie jest jeszcze sparowana.',
         homeUnpairedHow: 'Zeskanować kod QR na komputerze z badaniem: Badanie → Urządzenia → Połącz urządzenie.',
         treesTitle: 'Drzewa badania',
-        treesNote: 'Urządzenie zapamięta drzewo; przełączyć można przełącznikiem drzew u góry.',
+        treesNote: 'Urządzenie zapamięta wybrane drzewo; inne otwiera się z przełącznika drzew u góry.',
         onComputer: (pc: string) => `na komputerze ${pc}`,
         persons: (n: number) => nPl(n, 'osoba', 'osoby', 'osób'),
         treeWorking: 'pracuje',
