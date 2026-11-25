@@ -229,6 +229,20 @@ async function overlapping(page: Page, sel: string): Promise<string[]> {
 
 
 const panel = (page: Page) => page.locator('#prc-panel');
+
+/** Until `sel` stands still: its finite animations done and its box the same over two frames. */
+async function settled(page: Page, sel: string): Promise<void> {
+    await page.waitForFunction(async (s) => {
+        const el = document.querySelector(s);
+        if (!el) return false;
+        const finite = document.getAnimations().filter(a => a.effect?.getTiming().iterations !== Infinity);
+        await Promise.all(finite.map(a => a.finished.catch(() => undefined)));
+        const a = el.getBoundingClientRect();
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const b = el.getBoundingClientRect();
+        return a.top === b.top && a.left === b.left && a.height === b.height && a.width === b.width;
+    }, sel);
+}
 const choice = (page: Page, which: 'user' | 'research') => panel(page).locator(`.prc-panel-row[data-side="${which}"] .prc-panel-choice`);
 const hypo = (page: Page, id: string) => page.locator(`#person-research-modal .person-research-hypo[data-hypo="${id}"]`);
 
@@ -261,11 +275,19 @@ test.describe('a person\'s conflict on a phone of the home network', () => {
                 await openConflict(page);
                 const p = panel(page);
                 await expect(p).toHaveClass(/prc-panel--sheet/);
+                // The sheet comes up from below: measured once it stands still, all boxes at one moment.
+                await settled(page, '#prc-panel');
+                const { user, research, box } = await page.evaluate(() => {
+                    const r = (sel: string) => { const b = document.querySelector(sel)!.getBoundingClientRect(); return { y: b.top, height: b.height, width: b.width }; };
+                    return {
+                        user: r('#prc-panel .prc-panel-row[data-side="user"] .prc-panel-choice'),
+                        research: r('#prc-panel .prc-panel-row[data-side="research"] .prc-panel-choice'),
+                        box: r('#prc-panel'),
+                    };
+                });
                 // The values one under the other, the choices across the width (44 px).
-                const [user, research] = [await choice(page, 'user').boundingBox(), await choice(page, 'research').boundingBox()];
-                const box = (await p.boundingBox())!;
-                expect(research!.y).toBeGreaterThan(user!.y + user!.height);
-                for (const b of [user!, research!]) {
+                expect(research.y).toBeGreaterThan(user.y + user.height);
+                for (const b of [user, research]) {
                     expect(b.height).toBeGreaterThanOrEqual(44);
                     expect(b.width).toBeGreaterThan(box.width * 0.75);
                 }
