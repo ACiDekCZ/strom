@@ -163,11 +163,15 @@ export function ctlSeg(ctx: RuleEditorCtx, name: string, label: string, options:
         + `</div>`;
 }
 
-/** A control that opens a choice (`.pln-ctl` "value ▾"); `missing`: nothing chosen yet (the text is a call to choose). */
-export function ctlPick(ctx: RuleEditorCtx, name: string, label: string, text: string, missing = false, cls = ''): string {
-    return `<button type="button" class="pln-ctl plr-pick${missing ? ' miss' : ''}${cls ? ` ${cls}` : ''}" data-pc="${escHtml(name)}" data-key="${escHtml(ctx.key(name))}"`
-        + ` aria-haspopup="true" aria-expanded="false" aria-label="${escHtml(`${label}: ${text}`)}">`
-        + `<span class="plr-pick-t">${escHtml(text)}</span><span class="plr-pick-c" aria-hidden="true">▾</span></button>`;
+/**
+ * A control that opens a choice (`.pln-ctl` "value ▾"); `missing`: nothing chosen yet (the text is a call to choose);
+ * `gone`: the chosen person, place, list or line is no longer in the tree (§11) – the stored name in a dashed frame with "missing".
+ */
+export function ctlPick(ctx: RuleEditorCtx, name: string, label: string, text: string, missing = false, cls = '', gone = false): string {
+    const tag = strings.lists.rules.missing;
+    return `<button type="button" class="pln-ctl plr-pick${missing ? ' miss' : ''}${gone ? ' plr-gone' : ''}${cls ? ` ${cls}` : ''}" data-pc="${escHtml(name)}" data-key="${escHtml(ctx.key(name))}"`
+        + ` aria-haspopup="true" aria-expanded="false" aria-label="${escHtml(`${label}: ${gone ? strings.lists.rules.gone(text) : text}`)}">`
+        + `<span class="plr-pick-t">${escHtml(text)}</span>${gone ? `<span class="tag">${escHtml(tag)}</span>` : ''}<span class="plr-pick-c" aria-hidden="true">▾</span></button>`;
 }
 
 /** A number typed in a field: a whole number in range, '' = not set (undefined), NaN = not one. */

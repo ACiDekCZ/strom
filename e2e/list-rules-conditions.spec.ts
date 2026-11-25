@@ -307,8 +307,8 @@ test.describe('Conditions: a computer', () => {
         await expect(ctl(page, '0', 'period', 'd7')).toHaveAttribute('aria-pressed', 'true');
         // Arvid two and a half hours ago, Benedikt four days ago, Cilka three weeks ago.
         await expect(total(page)).toHaveText('2 people match');
-        // Gustav has no date added (an older tree): said under the row.
-        await expect(row(page, '0').locator('> .plr-m > .plr-s')).toHaveText('Nothing yet – the date added is recorded from version 3.30.');
+        // Gustav has no date added (part of the tree is older): from which version, without "Nothing yet" (§15).
+        await expect(row(page, '0').locator('> .plr-m > .plr-s')).toHaveText('the date added is recorded from version 3.30 – people added earlier do not count');
         await ctl(page, '0', 'period', 'h24').click();
         await expect(total(page)).toHaveText('1 person matches');
         await ctl(page, '0', 'period', 'd30').click();

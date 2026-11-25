@@ -367,7 +367,8 @@ export function condNeed(cond: RuleCond): RuleNeed | null {
 /** A reference of a condition that is no longer in the tree (§11): the condition counts as empty. */
 export interface MissingRef { kind: 'person' | 'place' | 'list' | 'rod' | 'line'; name: string; path: string }
 
-function condMissing(index: LineageIndex, cond: RuleCond): Omit<MissingRef, 'path'> | null {
+/** The reference of a condition no longer in the tree (§11), or null. */
+export function condMissing(index: LineageIndex, cond: RuleCond): Omit<MissingRef, 'path'> | null {
     const data = index.data;
     switch (cond.c) {
         case 'family': case 'ancestors': case 'descendants':
@@ -765,6 +766,11 @@ function listIdsOfRule(node: RuleNode, out: string[] = []): string[] {
     if (node.t === 'cond') { if (node.c === 'list' && node.p.listId) out.push(node.p.listId); return out; }
     for (const n of node.items) listIdsOfRule(n, out);
     return out;
+}
+
+/** The lists whose custom rule uses the list `listId` in a condition "Another list" (§11: asked before it is deleted). */
+export function listUsedBy(lists: readonly PersonList[], listId: string): PersonList[] {
+    return lists.filter(l => l.id !== listId && !!l.custom && listIdsOfRule(l.custom.root).includes(listId));
 }
 
 /**

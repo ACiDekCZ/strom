@@ -22,7 +22,7 @@ import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import type { PersonId, RuleCond, RuleGroup, RuleNode } from '../types.js';
 import type { LineageIndex } from '../lineage.js';
-import { condNeed, evalRuleCounts, nodeLabel, ruleIssues, type RuleCounts, type RuleNeed } from '../person-list-rules.js';
+import { condMissing, condNeed, evalRuleCounts, listCycle, nodeLabel, ruleIssues, type RuleCounts, type RuleNeed } from '../person-list-rules.js';
 import {
     addCondition, addGroup, canAddGroup, canExcept, cloneRuleNode, dissolveGroup, duplicateNode, firstIncomplete,
     groupWithNext, groupWithNextState, joinPath, moveBounds, moveNode, moveNodeTo, nodeAt, normalizeRule,
@@ -199,6 +199,13 @@ function zeroPath(st: RuleBuilderState, counts: RuleCounts): string | null {
     return counts.zeroAt;
 }
 
+/** The loop a condition "Another list" makes (§11): "would make a loop: A → B → A", or null. */
+function rowCycle(st: RuleBuilderState | null, node: RuleNode): string | null {
+    if (!st?.listId || node.t !== 'cond' || node.c !== 'list' || !node.p.listId) return null;
+    const names = listCycle(DataManager.getPersonLists(), st.listId, node.p.listId);
+    return names ? strings.lists.rules.cycle(names.join(' → ')) : null;
+}
+
 function rowKey(path: string, name: string): string {
     return `plr-${path || 'root'}-${name}`;
 }
@@ -255,7 +262,8 @@ export const personListRuleMethods = uiModule({
         const n = counts.nodes.get(path);
         const need = node.t === 'cond' ? condNeed(node) : null;
         const busy = !need && rb ? ruleBuilderCountsBusy(rb) : false;
-        const countText = need ? fillText(need) : busy ? '…' : n === null || n === undefined ? '–' : strings.lists.persons(n);
+        const cycle = rowCycle(rb, node);
+        const countText = need ? fillText(need) : cycle ? '–' : busy ? '…' : n === null || n === undefined ? '–' : strings.lists.persons(n);
         const miss = need ? ' miss' : busy ? ' is-busy' : '';
         const zero = rb && zeroPath(rb, counts) === path ? `<span class="plr-zero">${esc(t.zeroHere)}</span>` : '';
         const name = node.t === 'cond' ? t.cond[node.c] : t.group;
@@ -286,6 +294,7 @@ export const personListRuleMethods = uiModule({
         return `<div class="plr-row" ${attrs}>${head}`
             + `<div class="plr-m">${inline}<span class="plr-n">${esc(name)}</span>${zero}${k2}`
             + (params ? `<span class="plr-p">${params}</span>` : '')
+            + (cycle ? `<span class="plr-s plr-cyc">${esc(cycle)}</span>` : '')
             + (hint ? `<span class="plr-s">${esc(hint)}</span>` : '')
             + (hintHtml ? `<div class="plr-s plr-sx">${hintHtml}</div>` : '')
             + `</div>${tail}</div>`;
@@ -376,7 +385,7 @@ export const personListRuleMethods = uiModule({
             if (!node) continue;
             const need = node.t === 'cond' ? condNeed(node) : null;
             const n = counts.nodes.get(path);
-            const text = need ? fillText(need) : busy ? '…' : n === null || n === undefined ? '–' : strings.lists.persons(n);
+            const text = need ? fillText(need) : rowCycle(st, node) ? '–' : busy ? '…' : n === null || n === undefined ? '–' : strings.lists.persons(n);
             for (const cell of row.querySelectorAll<HTMLElement>(':scope > .plr-k, :scope > .plr-m > .plr-k2')) {
                 cell.textContent = text;
                 cell.classList.toggle('miss', !!need);
@@ -580,10 +589,13 @@ export const personListRuleMethods = uiModule({
         const l = strings.lists;
         const moves = moveBounds(st.root, path);
         const rows: RuleMenuRow[] = [];
+        // A reference no longer in the tree (§11): its choice comes first.
+        const gone = node.t === 'cond' ? condMissing(index(), node) : null;
+        if (gone) rows.push({ id: `other-${gone.kind}`, label: t.pickOther[gone.kind] });
         const exceptOk = canExcept(st.root, path);
         rows.push({
             id: 'except', label: node.not ? t.include : t.except,
-            disabled: !exceptOk, ...(!exceptOk ? { why: t.firstOfGroup } : {}),
+            disabled: !exceptOk, ...(!exceptOk ? { why: t.firstOfGroup } : {}), ...(gone ? { sep: true } : {}),
         });
         if (node.t === 'group') rows.push({ id: 'dissolve', label: t.dissolve });
         rows.push({ id: 'up', label: l.up, kbd: 'Alt+↑', disabled: !moves.up, sep: true });
@@ -604,6 +616,15 @@ export const personListRuleMethods = uiModule({
         if (!st) return;
         const root = st.root;
         let r: RuleEdit | null = null;
+        if (id.startsWith('other-')) {
+            // "Choose another person / place / list…": the row's own choice opens.
+            // After the menu has closed, so the choice is not closed with it.
+            setTimeout(() => {
+                const row = document.querySelector<HTMLElement>(`.pln-overlay .plr-row[data-path="${CSS.escape(path)}"]`);
+                row?.querySelector<HTMLElement>(`:scope > .plr-m [data-pc="${CSS.escape(id.slice(6))}"]`)?.click();
+            }, 0);
+            return;
+        }
         switch (id) {
             case 'except': r = toggleExcept(root, path); break;
             case 'dissolve': r = dissolveGroup(root, path); break;

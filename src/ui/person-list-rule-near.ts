@@ -10,7 +10,7 @@
 
 import { strings } from '../strings.js';
 import type { RuleNearEvent, RuleParamsMap } from '../types.js';
-import { NEAR_MAX_KM, nearPlaces, placeHasBelow, rulePlaceChoices, treeHasPlaceCoords } from '../person-list-rules.js';
+import { condMissing, NEAR_MAX_KM, nearPlaces, placeHasBelow, rulePlaceChoices, treeHasPlaceCoords } from '../person-list-rules.js';
 import { geoOfKey } from '../live-follow-map.js';
 import { getUI } from '../ui-ref.js';
 import { ctlPick, ctlSeg, escHtml, registerRuleCondEditor, typedInt, type RuleEditorCtx, type RulePickRow } from './person-list-rule-editors.js';
@@ -50,7 +50,8 @@ registerRuleCondEditor('near', {
         const n = t.near;
         const p = cond.p;
         const center = hasCenter(ctx, p);
-        const place = ctlPick(ctx, 'place', t.pick.place, p.placeKey ? p.placeName || p.placeKey : t.pick.choose, !p.placeKey);
+        const gone = !!condMissing(ctx.index, cond);
+        const place = ctlPick(ctx, 'place', t.pick.place, p.placeKey ? p.placeName || p.placeKey : t.pick.choose, !p.placeKey, '', gone);
         const off = (v: string): string | false => v !== '0' && !center ? (treeHasPlaceCoords(ctx.index.data) ? n.noCoords : n.noneInTree) : false;
         const seg = ctlSeg(ctx, 'km', n.kmAria,
             [...KM_PRESETS.map(k => [String(k), k === 0 ? n.only : n.km(k)] as [string, string]), ['other', n.other]],

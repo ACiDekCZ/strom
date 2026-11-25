@@ -26,6 +26,7 @@ import {
     PERSON_LIST_SORTS, type ListKind,
 } from '../person-lists.js';
 import { addedTime } from '../person-lists-data.js';
+import { customMissing, listUsedBy, type MissingRef } from '../person-list-rules.js';
 import { shownName } from '../person-name.js';
 import { cardYears } from '../card-fields.js';
 import { listKindIcon, LIST_KIND_COLOR } from './list-kind-icon.js';
@@ -131,10 +132,17 @@ function shownLists(st: ListsState): PersonList[] {
     return q ? all.filter(l => foldListName(listDisplayName(l)).includes(q)) : all;
 }
 
+/** The first reference of an automatic list's custom rule no longer in the tree (spec 136 §11), or null. */
+function listMissing(list: PersonList): MissingRef | null {
+    return list.custom && listIsAuto(list) ? customMissing(DataManager.getLineageIndex(), list.custom)[0] ?? null : null;
+}
+
 /** The line under a list's name in the overview: its kind and what tells it apart. */
 function rowMeta(list: PersonList): string {
     const kind = listKind(list);
     const index = DataManager.getLineageIndex();
+    const gone = listMissing(list);
+    if (gone) return `${kindWord(kind)} · ${strings.lists.rules.missingRef[gone.kind]}`;
     if (kind === 'auto') return `${kindWord(kind)} · ${listRuleLabel(list, index)}`;
     if (kind === 'work') {
         const s = listSummary(index, list);
@@ -397,7 +405,7 @@ export const personListsMethods = uiModule({
             const dots = ro ? '' : `<button type="button" class="pl-dots${hot ? ' is-open' : ''}" data-act="menu-row" data-key="dots-${esc(l.id)}" tabindex="-1" aria-label="${esc(t.actions)}" aria-haspopup="menu" aria-expanded="${hot}">${DOTS}</button>`;
             return `<div class="sel-opt pl-row" data-sel-form="row" role="option" data-list="${esc(l.id)}" data-key="row-${esc(l.id)}" data-kind="${kind}" aria-selected="${on}" aria-label="${esc(aria)}" tabindex="${l.id === focusable ? 0 : -1}">`
                 + `<span class="pl-row-icon">${listKindIcon(kind, 16)}</span>`
-                + `<span class="pl-row-mid"><span class="pl-row-name" title="${esc(name)}">${esc(name)}</span><span class="pl-row-meta">${esc(rowMeta(l))}</span></span>`
+                + `<span class="pl-row-mid"><span class="pl-row-name" title="${esc(name)}">${esc(name)}</span><span class="pl-row-meta${listMissing(l) ? ' is-warn' : ''}">${esc(rowMeta(l))}</span></span>`
                 + `<span class="pl-row-count">${fmtNum(n)}</span>${dots}</div>`;
         }).join('');
         return `<div class="pl-side"><div class="pl-tools">${newBtn}<div class="sel-seg pl-order" role="group" aria-label="${esc(t.title)}">${seg}</div></div>${search}`
@@ -440,10 +448,24 @@ export const personListsMethods = uiModule({
                     : `<button type="button" class="pl-link" data-act="fill" data-key="fill">${esc(t.fill)}</button>`)
                 + `<button type="button" class="pl-link" data-act="add-condition" data-key="add-condition">${esc(t.addCondition)}</button>`;
             const words = listRuleLabel(list, index);
-            ruleRow = `<div class="pl-rule"><span class="pl-rule-k">${esc(auto ? t.rule.key : t.rule.origin)}</span> <span class="pl-rule-v" title="${esc(words)}">${esc(words)}</span>${link ? `<span class="pl-rule-acts">${link}</span>` : ''}</div>`;
+            // The words at most 2 lines (4 on a phone), whole in the tooltip (spec 136 §8); a phone has "Whole rule ›":
+            // the rule's dialog, or the words unfolded in a read-only tree (the dialog does not open there).
+            const whole = narrow && (ro || personListHooks.editRule)
+                ? `<button type="button" class="pl-link pl-rule-whole" data-act="${ro ? 'whole-rule' : 'edit-rule'}" data-key="whole-rule">${esc(t.wholeRule)}</button>` : '';
+            ruleRow = `<div class="pl-rule"><div class="pl-rule-t" title="${esc(words)}"><span class="pl-rule-k">${esc(auto ? t.rule.key : t.rule.origin)}</span> <span class="pl-rule-v">${esc(words)}</span></div>`
+                + `${whole}${link ? `<div class="pl-rule-acts">${link}</div>` : ''}</div>`;
         }
+        // Where the list came from: a template or the agent, with the day (spec 136 §8); none for a list made by hand.
+        const origin = list.origin?.by === 'template' ? t.origin.template(list.origin.name, shortDate(list.origin.at, true))
+            : list.origin?.by === 'agent' ? t.origin.agent(shortDate(list.origin.at, true)) : '';
+        if (origin) ruleRow += `<div class="pl-origin">${esc(origin)}</div>`;
+        const gone = broken ? null : listMissing(list);
         let note = '';
-        if (broken) {
+        if (gone) {
+            const text = t.rules.missingNote(t.rules.missingRef[gone.kind], gone.name);
+            const acts = ro || !personListHooks.editRule ? '' : `<button type="button" class="secondary" data-act="edit-rule" data-key="note-edit-rule">${esc(t.editRule)}</button>`;
+            note = `<div class="pl-note pl-note--warn" role="note"><span class="pl-note-dot" aria-hidden="true"></span><span class="pl-note-text">${esc(text)}</span>${acts}</div>`;
+        } else if (broken) {
             const text = broken.kind === 'person' ? t.ruleGone(broken.name) : broken.kind === 'rod' ? t.ruleGoneRod : t.ruleGoneLine;
             const acts = ro ? '' : (personListHooks.editRule ? `<button type="button" class="secondary" data-act="edit-rule" data-key="note-edit-rule">${esc(t.editRule)}</button>` : '')
                 + `<button type="button" class="secondary" data-act="delete" data-key="note-delete">${esc(t.deleteList)}</button>`;
@@ -813,8 +835,32 @@ export const personListsMethods = uiModule({
         if (copy && state) this.selectPersonList(copy.id);
     },
 
-    /** Delete without asking (2e): the toast offers Undo; the next list is chosen. */
+    /**
+     * Delete without asking (2e): the toast offers Undo; the next list is chosen. A list another list's rule
+     * uses asks first, naming those lists (spec 136 §11); Undo brings the references back with the list.
+     */
     deletePersonListUi(listId: string): void {
+        const st = state;
+        if (!st) return;
+        const list = DataManager.getPersonList(listId);
+        const users = list ? listUsedBy(DataManager.getPersonLists(), listId) : [];
+        if (list && users.length) {
+            const t = strings.lists;
+            const shown = users.slice(0, 3).map(l => listDisplayName(l)).join(', ');
+            const n = listPersonIds(DataManager.getLineageIndex(), list).length;
+            st.menu = null;
+            void this.showConfirm(`${t.deletePeople(t.persons(n))}\n\n${t.deleteUsedBy(shown, users.length - 3 > 0 ? users.length - 3 : 0)}`,
+                t.deleteTitle(listDisplayName(list)), { confirmLabel: t.menu.delete, variant: 'danger', note: { text: t.deleteUsedNote } })
+                .then(ok => {
+                    if (ok && state === st) this.deletePersonListNow(listId);
+                    else if (state === st) this.renderPersonLists();
+                });
+            return;
+        }
+        this.deletePersonListNow(listId);
+    },
+
+    deletePersonListNow(listId: string): void {
         const st = state;
         if (!st) return;
         const shown = shownLists(st);
@@ -903,6 +949,12 @@ export const personListsMethods = uiModule({
             case 'on-map': if (listId) personListHooks.showOnMap(this, listId); return;
             case 'no-cite': if (listId) personListHooks.openInTable(this, listId, { noSource: true }); return;
             case 'edit-rule': if (listId) personListHooks.editRule?.(this, listId); return;
+            case 'whole-rule': {
+                // A read-only tree: the rule's words unfolded in place.
+                el?.closest('.pl-rule')?.classList.add('is-whole');
+                el?.remove();
+                return;
+            }
             case 'add-condition': if (listId) this.showNewPersonList({ listId, startWith: 'addCondition' }); return;
             case 'add-person': if (listId) personListHooks.addPerson?.(this, listId); return;
             case 'fill': {

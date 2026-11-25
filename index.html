@@ -35165,8 +35165,15 @@
         .modal.pl-modal input.pl-name-input { box-sizing: border-box; width: auto; flex: 1 1 auto; min-width: 0; font-family: var(--font-serif); font-size: 19px; font-weight: 600; padding: 3px 8px; border: 1px solid var(--primary); border-radius: var(--r-md); background: var(--surface); color: var(--text); }
         .modal.pl-modal input.pl-name-input[aria-invalid="true"] { border-color: var(--danger); }
         .pl-name-err { margin: 4px 0 0; font-size: 12px; color: var(--error-text); }
-        .pl-rule { margin-top: 6px; font-size: 13px; color: var(--text-light); flex: none; }
+        .pl-rule { margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--text-light); flex: none; min-width: 0; }
+        /* The rule in words (spec 136 §8): at most 2 lines, whole in the tooltip; 4 lines and "Whole rule ›" on a phone. */
+        .pl-rule-t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
         .pl-rule-v { color: var(--text); }
+        .pl-rule.is-whole .pl-rule-t { display: block; -webkit-line-clamp: none; }
+        .pl-rule-acts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; }
+        .modal .pl-rule-acts .pl-link, .modal .pl-rule .pl-rule-whole { margin-left: 0; }
+        .pl-origin { margin-top: 4px; font-size: 12.5px; color: var(--text-light); flex: none; overflow-wrap: anywhere; }
+        .pl-row-meta.is-warn { color: var(--warning-text); }
         .modal .pl-link { padding: 0; margin-left: 8px; border: 0; background: none; color: var(--primary); font-size: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
         .pl-note { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding: 8px 12px; border-radius: var(--r-md); background: var(--surface-2); font-size: 12.5px; color: var(--text-light); flex: none; }
         .pl-note-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
@@ -35283,6 +35290,7 @@
         .pl-modal.pl-narrow .pl-tools .pl-new { flex: 1 1 auto; }
         .pl-modal.pl-narrow .pl-tools { flex-wrap: wrap; }
         .pl-modal.pl-narrow .pl-detail { padding: 14px 16px 0; overflow-y: auto; }
+        .pl-modal.pl-narrow .pl-rule-t { -webkit-line-clamp: 4; }
         .pl-modal.pl-narrow .pl-people { flex: none; overflow: visible; }
         .pl-modal.pl-narrow .pl-people-head { flex-wrap: wrap; }
         .pl-modal.pl-narrow .pl-tiles { flex-wrap: wrap; }
@@ -35459,6 +35467,11 @@
         .plr-pick-c { flex: none; font-size: 10px; color: var(--text-light); }
         .modal.pln-modal .plr-pick.miss { border-style: dashed; color: var(--text-light); font-style: italic; }
         .modal.pln-modal .plr-pick.open { background: var(--hover-bg); }
+        /* A reference no longer in the tree (spec 136 §11): the stored name in a dashed frame with the tag "missing". */
+        .modal.pln-modal .plr-pick.plr-gone { border: 1px dashed var(--line-color); border-radius: var(--r-md); color: var(--text-light); }
+        .plr-gone .tag { flex: none; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-tag); font-size: 11.5px; line-height: 18px; color: var(--warning-text); }
+        /* A list condition that would make a loop (§11): the loop's path under the row. */
+        .plr-s.plr-cyc { color: var(--warning-text); }
         .modal.pln-modal input.pln-ctl.plr-num { width: 64px; }
         .modal.pln-modal input.pln-ctl.plr-txt { width: 180px; font-weight: 400; }
         .modal.pln-modal input.pln-ctl.plr-date { width: 150px; font-weight: 400; }

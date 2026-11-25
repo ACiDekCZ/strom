@@ -15,7 +15,7 @@ import type { LineageIndex } from '../lineage.js';
 import { rodLabels, type RodId } from '../lineage.js';
 import { rodPickerItems, rodPickerSmallItems } from '../rod-picker.js';
 import { listCycle, ruleOccupationChoices } from '../person-list-rules.js';
-import { tableModelOf } from '../person-lists.js';
+import { listPersonIds, tableModelOf } from '../person-lists.js';
 import { researchLinesOf, selectionLines } from './table-view/table-research.js';
 import { researchTableLive } from './research-ui.js';
 import { filterSummary, type TableFilter } from './table-view/table-filter.js';
@@ -245,8 +245,15 @@ function periodEditor(c: 'added' | 'changed', order: number): RuleCondEditor<'ad
             }
         },
         hint: (_cond, ctx) => {
-            if (c === 'changed') return strings.lists.rules.changedFrom(CHANGED_FROM);
-            return Object.values(ctx.index.data.persons).some(p => p && !p.isPlaceholder && !p.addedAt) ? strings.lists.addedNone(ADDED_FROM) : '';
+            // "Nothing yet – … from version X" only when no person has the time at all (§15); when some
+            // have it, the version without "Nothing yet"; when everyone has the date added, nothing.
+            const t = strings.lists.rules;
+            const people = Object.values(ctx.index.data.persons).filter(p => p && !p.isPlaceholder);
+            const has = (p: typeof people[number]): boolean => !!(c === 'changed' ? p.changedAt : p.addedAt);
+            const some = people.some(has);
+            if (c === 'changed') return some ? t.changedFrom(CHANGED_FROM) : t.changedNone(CHANGED_FROM);
+            if (!some) return strings.lists.addedNone(ADDED_FROM);
+            return people.every(has) ? '' : t.addedFrom(ADDED_FROM);
         },
         firstControl: 'period-d7',
     };
@@ -305,16 +312,21 @@ registerRuleCondEditor('list', {
     paramsHtml: (cond, ctx) => {
         const t = strings.lists.rules;
         const list = DataManager.getPersonLists().find(l => l.id === cond.p.listId);
-        const text = list ? list.name : cond.p.listId ? t.gone(cond.p.listName || '?') : t.pick.choose;
-        return ctlPick(ctx, 'list', t.pick.list, text, !cond.p.listId);
+        const gone = !list && !!cond.p.listId;
+        const text = list ? list.name : gone ? cond.p.listName || '?' : t.pick.choose;
+        return ctlPick(ctx, 'list', t.pick.list, text, !cond.p.listId, '', gone);
     },
     click: (cond, el, ctx) => {
         const t = strings.lists.rules;
         const lists = DataManager.getPersonLists();
         const self = ctx.listId;
+        // A list leading back to this one is disabled with the loop's path (§11); the list's people as the value.
         const rows: RulePickRow[] = lists.filter(l => l.id !== self).map(l => {
             const cycle = self ? listCycle(lists, self, l.id) : null;
-            return { id: l.id, label: l.name, checked: l.id === cond.p.listId, ...(cycle ? { disabled: true, why: strings.lists.rules.cantSave } : {}) };
+            const value = String(listPersonIds(ctx.index, l).length);
+            return cycle
+                ? { id: l.id, label: l.name, value, checked: l.id === cond.p.listId, disabled: true, why: t.cycle(cycle.join(' → ')), sub: t.cycle(cycle.join(' → ')) }
+                : { id: l.id, label: l.name, value, checked: l.id === cond.p.listId };
         });
         ctx.menu(el, t.pick.list, rows, (id) => {
             const l = lists.find(x => x.id === id);
@@ -351,8 +363,9 @@ registerRuleCondEditor('rod', {
         const t = strings.lists.rules;
         const labels = rodLabels(ctx.index);
         const names = cond.p.rodIds.map(id => labels.get(id as RodId) ?? '').filter(Boolean);
-        const text = names.length ? names.join(', ') : cond.p.rodIds.length ? t.gone(cond.p.rodName || '?') : t.pick.choose;
-        return ctlPick(ctx, 'rod', t.pick.rod, text, !cond.p.rodIds.length);
+        const gone = !names.length && !!cond.p.rodIds.length;
+        const text = names.length ? names.join(', ') : gone ? cond.p.rodName || '?' : t.pick.choose;
+        return ctlPick(ctx, 'rod', t.pick.rod, text, !cond.p.rodIds.length, '', gone);
     },
     click: (cond, el, ctx) => {
         const t = strings.lists.rules;
@@ -377,8 +390,9 @@ registerRuleCondEditor('line', {
     paramsHtml: (cond, ctx) => {
         const t = strings.lists.rules;
         const line = researchLinesOf(ctx.index.data).lines.find(l => l.id === cond.p.directionId);
-        const text = line ? `${line.id} ${line.name}` : cond.p.directionId ? t.gone(cond.p.lineName || cond.p.directionId) : t.pick.choose;
-        return ctlPick(ctx, 'line', t.pick.line, text, !cond.p.directionId);
+        const gone = !line && !!cond.p.directionId;
+        const text = line ? `${line.id} ${line.name}` : gone ? cond.p.lineName || cond.p.directionId : t.pick.choose;
+        return ctlPick(ctx, 'line', t.pick.line, text, !cond.p.directionId, '', gone);
     },
     click: (cond, el, ctx) => {
         const t = strings.lists.rules;
@@ -439,14 +453,14 @@ registerRuleCondEditor('tableFilter', {
 // Ancestors / descendants of a person
 // ---------------------------------------------------------------------------
 
-/** "Name · 1798–1861" of a person's control (or the stored name, missing). */
-export function rulePersonText(ctx: RuleEditorCtx, id: PersonId, stored: string): { text: string; missing: boolean } {
+/** "Name · 1798–1861" of a person's control (or the stored name when the person is gone, §11). */
+export function rulePersonText(ctx: RuleEditorCtx, id: PersonId, stored: string): { text: string; missing: boolean; gone: boolean } {
     const t = strings.lists.rules;
-    if (!id) return { text: t.pick.choose, missing: true };
+    if (!id) return { text: t.pick.choose, missing: true, gone: false };
     const p = ctx.index.data.persons[id];
-    if (!p || p.isPlaceholder) return { text: t.gone(stored || '?'), missing: false };
+    if (!p || p.isPlaceholder) return { text: stored || '?', missing: false, gone: true };
     const years = cardYears(p);
-    return { text: years ? `${shownName(p)} · ${years}` : shownName(p), missing: false };
+    return { text: years ? `${shownName(p)} · ${years}` : shownName(p), missing: false, gone: false };
 }
 
 function generationsEditor(c: 'ancestors' | 'descendants', order: number): RuleCondEditor<'ancestors' | 'descendants'> {
@@ -461,7 +475,7 @@ function generationsEditor(c: 'ancestors' | 'descendants', order: number): RuleC
             const who = rulePersonText(ctx, cond.p.personId, cond.p.personName);
             const gens: Array<[string, string]> = [['all', t.allGen]];
             for (let n = 1; n <= GEN_MAX; n++) gens.push([String(n), t.gen(n)]);
-            return ctlPick(ctx, 'person', t.pick.person, who.text, who.missing)
+            return ctlPick(ctx, 'person', t.pick.person, who.text, who.missing, '', who.gone)
                 + ctlSelect(ctx, 'gen', t.family.axes[c === 'ancestors' ? 'up' : 'down'], gens, cond.p.generations === undefined ? 'all' : String(cond.p.generations));
         },
         change: (cond, el) => {

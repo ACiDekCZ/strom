@@ -84,7 +84,7 @@ registerRuleCondEditor('family', {
             + axis(f.axes.width, ctlSeg(ctx, 'width', f.axes.width, (['line', 'siblings', 'cousins'] as const).map(w => [w, f.width[w]]), p.width) + cousins)
             + axis(f.axes.spouses, ctlSeg(ctx, 'spouses', f.axes.spouses, (['none', 'spouses', 'families'] as const).map(s => [s, f.spouses[s]]), p.spouses))
             + `</div>`;
-        return ctlPick(ctx, 'person', t.pick.person, who.text, who.missing, 'plr-pick--wide') + chips + axes;
+        return ctlPick(ctx, 'person', t.pick.person, who.text, who.missing, 'plr-pick--wide', who.gone) + chips + axes;
     },
     change: (cond, el) => {
         if (el.dataset.pc !== 'via') return null;
