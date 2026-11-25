@@ -5,7 +5,7 @@
  * messages. Invented data only.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs,
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
     decideResearchOpen, stabilizeIds, keepTitles, carryOverMedia, sanitizeLiveStatus, sanitizeLiveChange, sanitizeLiveEnd,
@@ -257,6 +257,43 @@ describe('create / update / ask', () => {
         expect(decideResearchOpen({ fingerprint: legacy }, fingerprintLike(data, legacy))).toBe('update');
         expect(fingerprintLike(data, contentFingerprint(data))).toBe(contentFingerprint(data));
         expect(contentFingerprint(data).startsWith('v2-')).toBe(true);
+    });
+});
+
+describe('contentFingerprint on a phone without JIT: as little hashing as it can', () => {
+    const tree = (n: number): StromData => {
+        const persons: Record<string, unknown> = {};
+        for (let i = 0; i < n; i++) persons['p' + i] = { id: 'p' + i, firstName: 'Václav ' + i, lastName: 'Pýchavka', gender: i % 2 ? 'female' : 'male', partnerships: [], notes: 'Žluťoučký kůň '.repeat(i) };
+        return { version: 11, persons, partnerships: {}, sources: { s1: { id: 's1', title: 'Matrika' } } } as unknown as StromData;
+    };
+
+    it('gives what it gave before (stored fingerprints keep matching)', () => {
+        expect(contentFingerprint(tree(40))).toBe('v2-bvb-1wrct4v-15gwigx');
+        expect(fingerprintLike(tree(40), 'abc')).toBe('bvb-1wrct4v-15gwigx');
+    });
+
+    it('hashes a new tree in one pass, and the same tree again not at all', () => {
+        const data = tree(400);
+        const charCodeAt = vi.spyOn(String.prototype, 'charCodeAt');
+        try {
+            const first = contentFingerprint(data);
+            const once = charCodeAt.mock.calls.length;
+            const textLength = parseInt(first.split('-')[1], 36);
+            // One pass over the text (two passes before: one per offset basis).
+            expect(once).toBeLessThan(textLength * 1.1);
+            expect(once).toBeGreaterThanOrEqual(textLength);
+            charCodeAt.mockClear();
+            // Unchanged (the same object or an equal copy): the text compared, not hashed.
+            expect(contentFingerprint(data)).toBe(first);
+            expect(contentFingerprint(structuredClone(data))).toBe(first);
+            expect(fingerprintLike(data, first)).toBe(first);
+            expect(charCodeAt.mock.calls.length).toBeLessThan(100);
+            // A change is hashed anew.
+            (data.persons['p1' as PersonId] as { firstName: string }).firstName = 'Jan';
+            expect(contentFingerprint(data)).not.toBe(first);
+        } finally {
+            charCodeAt.mockRestore();
+        }
     });
 });
 

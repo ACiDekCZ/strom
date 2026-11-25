@@ -1092,6 +1092,42 @@ export function parseLiveBridge(raw: unknown): LiveBridgeUrls | null {
 
 // ==================== UPDATE OR ASK ====================
 
+/**
+ * FNV-1a of a string with the two offset bases the fingerprints use
+ * (0x811c9dc5, 0x01000193), in one pass: the same two numbers as fnv1a with
+ * each, for half the work (a phone's browser without JIT spent a second on
+ * the two passes over a large tree).
+ */
+function fnv1aPair(text: string): string {
+    let a = 0x811c9dc5, b = 0x01000193;
+    for (let i = 0; i < text.length; i++) {
+        const c = text.charCodeAt(i);
+        a = Math.imul(a ^ c, 0x01000193);
+        b = Math.imul(b ^ c, 0x01000193);
+    }
+    return `${(a >>> 0).toString(36)}-${(b >>> 0).toString(36)}`;
+}
+
+/** The last fingerprinted texts (at most this many characters) with what they gave. */
+const FINGERPRINT_MEMO_CHARS = 16 * 1024 * 1024;
+const fingerprintMemo: { text: string; out: string }[] = [];
+
+/**
+ * `<length>-<fnv1a>-<fnv1a>` of a fingerprint's text. The same text as one
+ * of the last two gives what it gave without hashing it again: a tree
+ * fingerprinted several times while it does not change (opening a research,
+ * images coming, the status) costs its JSON text and one comparison only.
+ */
+function textFingerprint(text: string): string {
+    for (const m of fingerprintMemo) if (m.text === text) return m.out;
+    const out = `${text.length.toString(36)}-${fnv1aPair(text)}`;
+    if (text.length <= FINGERPRINT_MEMO_CHARS) {
+        fingerprintMemo.unshift({ text, out });
+        if (fingerprintMemo.length > 2) fingerprintMemo.pop();
+    }
+    return out;
+}
+
 /** FNV-1a over a string with a given offset basis (32-bit). */
 function fnv1a(text: string, seed: number): number {
     let h = seed >>> 0;
@@ -1195,13 +1231,13 @@ function imageToken(url: string): string {
 export function contentFingerprint(data: StromData): string {
     const text = JSON.stringify(fingerprintParts(data), (_key, value) =>
         typeof value === 'string' && ((value.length >= 1024 && value.startsWith('data:')) || isPoolRef(value)) ? imageToken(value) : value);
-    return `${FINGERPRINT_V2}${text.length.toString(36)}-${fnv1a(text, 0x811c9dc5).toString(36)}-${fnv1a(text, 0x01000193).toString(36)}`;
+    return `${FINGERPRINT_V2}${textFingerprint(text)}`;
 }
 
 /** The fingerprint before images counted by sample (links synced by older versions). */
 function legacyFingerprint(data: StromData): string {
     const text = JSON.stringify(fingerprintParts(data));
-    return `${text.length.toString(36)}-${fnv1a(text, 0x811c9dc5).toString(36)}-${fnv1a(text, 0x01000193).toString(36)}`;
+    return textFingerprint(text);
 }
 
 /**

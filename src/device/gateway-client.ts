@@ -13,9 +13,11 @@
  */
 
 import {
-    b64url, fromB64url, deriveKey, pairProof, sealRequest, openResponse, openPair, responseBody, canGunzip, newNonce, gzip,
+    b64url, fromB64url, deriveKey, pairProof, sealRequest, openPair, canGunzip, newNonce, gzip,
     type DeviceRequest,
 } from './device-crypto';
+import { runHeavyJob, type OpenedAnswer } from '../heavy-job';
+import { canWorkOffThread, runOffThread } from '../heavy-work';
 import {
     loadPairing, savePairing, forgetPairing, chosenTreeId, deviceTreesOf,
     type DeviceKind, type DevicePairing, type DeviceTree,
@@ -379,15 +381,14 @@ export async function tunnel(req: TunnelRequest): Promise<TunnelAnswer> {
             throw e;
         }
         if (r.status === 200) {
-            const opened = openResponse(pairing.key, pairing.deviceId, envelope.n, r.json);
-            const body = opened ? await responseBody(opened) : undefined;
-            if (!opened || body === undefined) {
+            const opened = await openAnswer(pairing.key, pairing.deviceId, envelope.n, r.json);
+            if (!opened) {
                 const err = new GatewayError('device.answer', 200, {}, r.elapsed);
                 report({ ok: false, error: err });
                 throw err;
             }
             report({ ok: true });
-            return { s: opened.s, h: opened.h, body };
+            return { s: opened.s, h: opened.h, body: opened.body };
         }
         const err = refusal(r.status, r.json, r.elapsed);
         if (err.code === 'device.clock' && err.extra.replay === true && inner.m !== 'GET' && inner.m !== 'HEAD') {
@@ -410,6 +411,27 @@ export async function tunnel(req: TunnelRequest): Promise<TunnelAnswer> {
         report({ ok: false, error: err });
         throw err;
     }
+}
+
+/** A sealed answer from this many characters on is opened off the page's thread (a research's tree, its images). */
+export const OFF_THREAD_ANSWER_CHARS = 64 * 1024;
+
+/**
+ * The answer to the request with nonce `nonce` opened (heavy-job.ts): a large
+ * one in a worker — ChaCha20-Poly1305 in pure JS took over two seconds on a
+ * phone for each part of a research's images, the page frozen meanwhile — a
+ * small one, or any when no worker starts, here. Null when it does not open.
+ */
+async function openAnswer(key: Uint8Array, deviceId: string, nonce: string, envelope: unknown): Promise<OpenedAnswer> {
+    const c = (envelope as { c?: unknown } | null)?.c;
+    if (typeof c === 'string' && c.length >= OFF_THREAD_ANSWER_CHARS && canWorkOffThread()) {
+        try {
+            const r = await runOffThread({ op: 'open-answer', key, deviceId, nonce, envelope });
+            if ('answer' in r) return r.answer;
+        } catch { /* opened here */ }
+    }
+    const { result } = await runHeavyJob({ op: 'open-answer', key, deviceId, nonce, envelope });
+    return 'answer' in result ? result.answer : null;
 }
 
 /** Statuses a Response carries without a body. */

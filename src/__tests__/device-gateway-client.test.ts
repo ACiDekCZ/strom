@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     b64url, deriveKey, openRequest, sealResponse, sealPair, pairProof, fromB64url, sha256Hex, type RequestEnvelope,
 } from '../device/device-crypto';
-import { configureGateway, pair, tunnel, deviceFetch, hello, GatewayError, gatewayClockSkew, DEVICE_REPLAY, isDeviceReplay, deviceTreeRequest, DEVICE_TREE_TIMEOUT_MS, onGatewayOutcome } from '../device/gateway-client';
+import { configureHeavyWork } from '../heavy-work';
+import { runHeavyJob, type HeavyJob } from '../heavy-job';
+import { configureGateway, pair, tunnel, deviceFetch, OFF_THREAD_ANSWER_CHARS, hello, GatewayError, gatewayClockSkew, DEVICE_REPLAY, isDeviceReplay, deviceTreeRequest, DEVICE_TREE_TIMEOUT_MS, onGatewayOutcome } from '../device/gateway-client';
 import {
     setDeviceKv, memoryKv, loadPairing, savePairing, hasPairingMark, deviceQueue, chooseTree, chosenTreeId, forgetPairing, saveLastView, loadLastView, proposeDevice, deviceKindOf,
     computerLabelOf, deviceTreeIdOk, deviceTreesOf,
@@ -388,6 +390,42 @@ describe('gateway client: the tunnel', () => {
         expect(aborted, 'the request to the gateway itself stopped').toBe(true);
         expect(outcomes).toEqual([]);
         off();
+    });
+});
+
+describe('gateway client: a large answer is opened off the page', () => {
+    beforeEach(paired);
+    afterEach(() => configureHeavyWork(null));
+
+    it('opens a large answer (the research\'s images) in a worker, a small one here, with the same result', async () => {
+        const jobs: HeavyJob[] = [];
+        configureHeavyWork({ run: async job => { jobs.push(job); return (await runHeavyJob(job)).result; } });
+        // Bytes that do not shrink when gzipped: the sealed answer stays large.
+        let x = 0x9e3779b9;
+        const noise = new Uint8Array(OFF_THREAD_ANSWER_CHARS).map(() => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return x & 0xff; });
+        const big = JSON.stringify({ images: [{ data: b64url(noise) }] });
+        configureGateway({ fetch: fakeFetch(tunnelHandler(req => ({ s: 200, body: req?.p === 'images' ? big : '{"ok":1}', gzip: req?.p === 'images' }))) });
+        const res = await deviceFetch('/images', { method: 'POST', body: '{"sha":[]}' });
+        expect(await res.text()).toBe(big);
+        expect(jobs.map(j => j.op)).toEqual(['open-answer']);
+        // The page opens a small answer itself.
+        expect(await (await deviceFetch('/status')).json()).toEqual({ ok: 1 });
+        expect(jobs).toHaveLength(1);
+    });
+
+    it('a worker that fails or is not there: the answer is opened here as before', async () => {
+        configureHeavyWork({ run: async () => { throw new Error('no worker'); } });
+        const big = 'x'.repeat(OFF_THREAD_ANSWER_CHARS * 2);
+        configureGateway({ fetch: fakeFetch(tunnelHandler(() => ({ s: 200, body: big }))) });
+        expect(await (await deviceFetch('/tree.ged')).text()).toBe(big);
+        configureHeavyWork({ off: true });
+        expect(await (await deviceFetch('/tree.ged')).text()).toBe(big);
+    });
+
+    it('an answer sealed for another request does not open in the worker either', async () => {
+        configureHeavyWork({ run: async job => (await runHeavyJob(job)).result });
+        configureGateway({ fetch: fakeFetch(() => ({ status: 200, body: sealResponse(KEY, DEVICE, 'another-nonce', { s: 200, h: {}, b: b64url(new Uint8Array(OFF_THREAD_ANSWER_CHARS)) }) })) });
+        await expect(tunnel({ p: 'tree.ged' })).rejects.toMatchObject({ code: 'device.answer' });
     });
 });
 

@@ -67,6 +67,12 @@ const mediaSealWorker = buildSync({
     entryPoints: ['src/device/media-seal-worker.ts'], bundle: true, minify: true, format: 'iife', platform: 'browser', write: false,
 }).outputFiles[0].text;
 
+// The worker of the page's heavy pure-JS work without WebCrypto (SHA-256, a
+// gateway's answer opened: src/heavy-job.ts), embedded likewise.
+const heavyWorker = buildSync({
+    entryPoints: ['src/heavy-worker.ts'], bundle: true, minify: true, format: 'iife', platform: 'browser', write: false,
+}).outputFiles[0].text;
+
 buildSync({
     entryPoints: ['src/main.ts'],
     bundle: true,
@@ -77,6 +83,7 @@ buildSync({
         __RELEASE_NOTES__: JSON.stringify(releaseNotes),
         __HELP_DATA__: JSON.stringify(helpData),
         __MEDIA_SEAL_WORKER__: JSON.stringify(mediaSealWorker),
+        __HEAVY_WORKER__: JSON.stringify(heavyWorker),
     },
     logLevel: 'warning',
 });

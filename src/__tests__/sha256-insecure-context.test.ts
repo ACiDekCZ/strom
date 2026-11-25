@@ -27,7 +27,9 @@ vi.mock('../storage.js', () => ({
     },
 }));
 
-import { sha256Bytes } from '../sha256.js';
+import { sha256Bytes, OFF_THREAD_MIN_BYTES } from '../sha256.js';
+import { configureHeavyWork } from '../heavy-work.js';
+import { runHeavyJob, type HeavyJob } from '../heavy-job.js';
 import { sha256Hex } from '../research-image-refs.js';
 import { storeImages, forgetPoolScope } from '../media-pool.js';
 
@@ -67,5 +69,56 @@ describe('SHA-256 without crypto.subtle', () => {
         expect(plain.ids.get(url)).toBe(secure.ids.get(url));
         expect(plain.ids.get(url)).toMatch(/^p:[0-9a-f]{40}$/);
         expect(media.has(plain.ids.get(url)!)).toBe(true);
+    });
+});
+
+describe('SHA-256 without crypto.subtle: off the page\'s thread', () => {
+    afterEach(() => configureHeavyWork(null));
+
+    it('a photo is hashed in a worker (the same digest), a few bytes here', async () => {
+        const photo = new Uint8Array(OFF_THREAD_MIN_BYTES + 5).map((_, i) => i % 251);
+        const want = hex(await realCrypto.subtle.digest('SHA-256', photo as BufferSource));
+        const jobs: HeavyJob[] = [];
+        configureHeavyWork({ run: async job => { jobs.push(job); return (await runHeavyJob(job)).result; } });
+        insecure();
+        expect(hex(await sha256Bytes(photo))).toBe(want);
+        expect(hex(await sha256Bytes(enc('abc')))).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+        expect(jobs.map(j => j.op)).toEqual(['sha256']);
+        // A view of a larger buffer goes as its own bytes, not the whole buffer.
+        const inside = new Uint8Array(OFF_THREAD_MIN_BYTES * 4).subarray(10, 10 + OFF_THREAD_MIN_BYTES);
+        await sha256Bytes(inside);
+        expect((jobs[1] as { bytes: Uint8Array }).bytes.buffer.byteLength).toBe(OFF_THREAD_MIN_BYTES);
+    });
+
+    it('without a worker a photo is hashed here after a pause for the page', async () => {
+        configureHeavyWork({ off: true });
+        insecure();
+        const photo = new Uint8Array(OFF_THREAD_MIN_BYTES).fill(7);
+        let paused = false;
+        setTimeout(() => { paused = true; }, 0);
+        await sha256Bytes(photo);
+        expect(paused).toBe(true);
+    });
+
+    it('the pool hashes its new images in workers, two at a time, with the ids of a secure context', async () => {
+        const urls = new Set(Array.from({ length: 5 }, (_, i) => 'data:image/jpeg;base64,' + btoa(String.fromCharCode(...new Uint8Array(1000).fill(i + 1))).repeat(70)));
+        forgetPoolScope('secure');
+        const secure = await storeImages(urls, false, 'secure');
+        media.clear();
+        let running = 0, most = 0;
+        const jobs: HeavyJob[] = [];
+        configureHeavyWork({ run: async job => {
+            jobs.push(job);
+            running++; most = Math.max(most, running);
+            await new Promise(r => setTimeout(r, 1));
+            running--;
+            return (await runHeavyJob(job)).result;
+        } });
+        insecure();
+        forgetPoolScope('insecure');
+        const got = await storeImages(urls, false, 'insecure');
+        expect([...got.ids]).toEqual([...secure.ids]);
+        expect(jobs.filter(j => j.op === 'sha256').length).toBeGreaterThanOrEqual(5);
+        expect(most).toBe(2);
     });
 });

@@ -26,6 +26,7 @@ import { StorageManager } from './storage.js';
 import { CryptoSession, EncryptedData } from './crypto.js';
 import { bytesToBase64, base64ToBytes, canonicalBase64Bytes } from './base64.js';
 import { sha256Bytes } from './sha256.js';
+import { HEAVY_WORKERS } from './heavy-work.js';
 import { takeKnownImage } from './known-image-bytes.js';
 import { computeImageMeta, imageMetaOf, setImageMeta, noteImageMeta, noteOwnImages, headMime, type ImageMeta, type ImageMetaRecord } from './image-meta.js';
 
@@ -132,23 +133,30 @@ async function contentIds(urls: Set<string>, encrypted: boolean, scope: string):
     const pepperKey = pepper ? hex(pepper.buffer as ArrayBuffer, pepper.byteLength) : 'plain';
     const cached = idCaches.get(scope);
     const previous = cached?.pepper === pepperKey ? cached.ids : new Map<string, string>();
-    const ids = new Map<string, string>();
     const encoder = new TextEncoder();
-    for (const url of urls) {
-        let id = previous.get(url);
-        if (!id) {
-            const text = encoder.encode(url);
-            let input: Uint8Array = text;
-            if (pepper) {
-                input = new Uint8Array(pepper.length + text.length);
-                input.set(pepper);
-                input.set(text, pepper.length);
-            }
-            const digest = await sha256Bytes(input);
-            id = (encrypted ? 'e:' : 'p:') + hex(digest, 20);
+    const idOf = async (url: string): Promise<string> => {
+        const text = encoder.encode(url);
+        let input: Uint8Array = text;
+        if (pepper) {
+            input = new Uint8Array(pepper.length + text.length);
+            input.set(pepper);
+            input.set(text, pepper.length);
         }
-        ids.set(url, id);
-    }
+        const digest = await sha256Bytes(input);
+        return (encrypted ? 'e:' : 'p:') + hex(digest, 20);
+    };
+    // The new ones a few at a time: without WebCrypto each goes to a worker of its own (sha256Bytes).
+    const fresh = new Map<string, string>();
+    const todo = [...urls].filter(url => !previous.has(url));
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(HEAVY_WORKERS, todo.length) }, async () => {
+        while (next < todo.length) {
+            const url = todo[next++];
+            fresh.set(url, await idOf(url));
+        }
+    }));
+    const ids = new Map<string, string>();
+    for (const url of urls) ids.set(url, previous.get(url) ?? fresh.get(url)!);
     idCaches.set(scope, { pepper: pepperKey, ids });
     return ids;
 }

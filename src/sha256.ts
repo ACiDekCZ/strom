@@ -9,6 +9,7 @@
  */
 
 import { sha256 as nobleSha256 } from '@noble/hashes/sha2.js';
+import { canWorkOffThread, runOffThread, yieldToPage } from './heavy-work.js';
 
 /** Files up to this size go through crypto.subtle.digest in one piece. */
 export const SUBTLE_MAX_BYTES = 64 * 1024 * 1024;
@@ -196,8 +197,24 @@ export async function sha256Bytes(bytes: Uint8Array): Promise<ArrayBuffer> {
     if (typeof crypto !== 'undefined' && crypto.subtle) {
         return crypto.subtle.digest('SHA-256', bytes as BufferSource);
     }
+    // Without JIT a photo takes over half a second: in a worker, or after a
+    // pause for the page (a run of them never freezes it for seconds).
+    if (bytes.length >= OFF_THREAD_MIN_BYTES) {
+        if (canWorkOffThread()) {
+            try {
+                // A view of a larger buffer goes as its own bytes (a clone would copy all of that buffer).
+                const own = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes : bytes.slice();
+                const r = await runOffThread({ op: 'sha256', bytes: own });
+                if ('digest' in r) return r.digest;
+            } catch { /* done here */ }
+        }
+        await yieldToPage();
+    }
     return nobleSha256(bytes).slice().buffer as ArrayBuffer;
 }
+
+/** Bytes from this many on are hashed off the page's thread when it has no WebCrypto (sha256Bytes). */
+export const OFF_THREAD_MIN_BYTES = 64 * 1024;
 
 /**
  * SHA-256 of a whole Blob as lowercase hex. Small files in one piece through
