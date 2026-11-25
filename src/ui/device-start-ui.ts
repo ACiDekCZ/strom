@@ -193,7 +193,13 @@ export const deviceStartMethods = uiModule({
             if (held && !first) {
                 if (DataManager.getCurrentTreeId() !== held.id) await this.switchToTree(held.id);
             } else {
-                await this.importResearchFromUrl(`${base}/tree.ged`, { takeSame: true });
+                // The download's progress with Cancel over the start screen (as a tree chosen in the switcher);
+                // a failure says so with Try again, which opens the tree again from the start screen.
+                const load = startTreeLoad({ treeId: null, retry: () => {
+                    this.showDeviceBoot();
+                    void this.openDeviceTree(treeId, first, pairedName);
+                } });
+                await this.importResearchFromUrl(`${base}/tree.ged`, { takeSame: true, load });
             }
         } finally {
             this.closeDeviceBoot();

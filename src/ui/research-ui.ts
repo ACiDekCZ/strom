@@ -2561,9 +2561,16 @@ export const researchUiMethods = uiModule({
             let media: true | undefined;
             // A bridge known here whose research keeps the tree's own files: the file with them (spec 108 §5);
             // any other as always, the whole file.
-            const at = /\/tree\.ged$/.test(url.pathname) ? researchIdAtBridge(`${url.origin}${url.pathname.replace(/\/tree\.ged$/, '')}`) : null;
-            const features = at ? this.researchStatusOf(at)?.features : null;
+            const device = parseDeviceBridge(url.href);
+            const at = device?.path === 'tree.ged' ? device.treeId
+                : /\/tree\.ged$/.test(url.pathname) ? researchIdAtBridge(`${url.origin}${url.pathname.replace(/\/tree\.ged$/, '')}`) : null;
+            let features = at ? this.researchStatusOf(at)?.features : null;
             try {
+                // A device's first open of a tree (spec 094): its status not asked yet — asked now through the
+                // gateway, so the file comes as on the computer (its images by hash), never the whole file with
+                // its images in it (a big research is 100 MB and more over the home network).
+                if (!features && device?.path === 'tree.ged') features = (await fetchStatus(`${device.base}/status`).catch(() => null))?.features;
+                if (load?.cancelled) return;
                 if (treeAsksAppMedia(features, SettingsManager.isImportImages())) ({ text, images, media } = await readResearchTreeFile(url.href, features, load?.watch));
                 else text = await fetchGedcomText(url.href, load?.watch);
             } catch (err) {

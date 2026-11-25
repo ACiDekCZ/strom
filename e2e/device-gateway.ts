@@ -94,8 +94,8 @@ export interface FakeGateway {
     devices: FakeDevice[];
     trees: { id: string; name: string; archive: boolean }[];
     computer: { name: string; label?: string };
-    /** Answers of the tunnel by path (`status`, `waiting/T0001`, …); absent: the default (status, 404). */
-    onTunnel: (req: DeviceRequest, device: FakeDevice) => TunnelReply | undefined;
+    /** Answers of the tunnel by path (`status`, `waiting/T0001`, …); absent: the default (status, 404). A promise: the answer held until it settles. */
+    onTunnel: (req: DeviceRequest, device: FakeDevice) => TunnelReply | undefined | Promise<TunnelReply | undefined>;
     /** Files of PUT /device/media opened, in order: the open headers' batch, the meta block's headers, the bytes. */
     media: FakeMedia[];
     /** The bridge's answer to a file of PUT /device/media (absent: 200 `{id}`). */
@@ -259,7 +259,7 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
             delete r.z;
         }
         gw.tunnelled.push(r);
-        let reply = gw.onTunnel(r, device);
+        let reply = await gw.onTunnel(r, device);
         const state = /^device\/media\/([0-9a-f]{64})$/.exec(r.p);
         if (!reply && state && r.m === 'GET') {
             const k = kept.get(`${device.id}|${state[1]}`);

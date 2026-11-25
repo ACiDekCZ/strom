@@ -23518,6 +23518,8 @@
             width: 44px; height: 44px; border-radius: 50%; background: var(--primary-soft); color: var(--primary);
         }
         .device-boot-retry { margin-top: 6px; min-height: 40px; padding: 0 18px; }
+        /* The tree's first download (its progress, Cancel) over the start screen, at every width. */
+        body:has(#device-boot) .toast[data-kind="tree-load"] { z-index: 950; }
         /* The chooser (2.4, 2.9): the whole screen on a phone; a framed list in the middle elsewhere. */
         .device-boot.is-trees { justify-content: flex-start; align-items: stretch; padding: 0; }
         .device-trees { display: flex; flex-direction: column; width: 100%; min-width: 0; }

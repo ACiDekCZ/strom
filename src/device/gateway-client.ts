@@ -67,6 +67,10 @@ export interface TunnelRequest {
     bytes?: Uint8Array;
     /** The body sent gzipped (`z: "gzip"` with `b64`) where the browser can: a send of the whole tree (`sync`). */
     gzip?: boolean;
+    /** Its own time limit (ms), else the gateway's (GATEWAY_TIMEOUT_MS). */
+    timeoutMs?: number;
+    /** The caller's cancel: the request given up at once (an AbortError, never a failure of the connection). */
+    signal?: AbortSignal | null;
 }
 
 /** A tunnelled answer: the bridge's status, headers and body bytes (gunzipped). */
@@ -99,6 +103,12 @@ export interface GatewayOptions {
 export const GATEWAY_TIMEOUT_MS = 8_000;
 /** A refusal within this is "not running / turned off" (§2.5). */
 export const REFUSED_AT_ONCE_MS = 1_000;
+/**
+ * The research's tree and its images through the tunnel (`tree.ged`, `images.ged`, `POST images`): the bridge may
+ * build the tree a minute or more and the answer is the whole file, sealed — as long as on the computer
+ * (TREE_GED_TIMEOUT_MS) and as the gateway waits for its bridge, never the 8 s of a quick request.
+ */
+export const DEVICE_TREE_TIMEOUT_MS = 120_000;
 /** The longest Retry-After waited for one repeat of a busy research. */
 const BUSY_WAIT_MAX_MS = 10_000;
 
@@ -170,16 +180,26 @@ function asRecord(v: unknown): Record<string, unknown> {
 }
 
 /** One HTTP exchange with the gateway, timed out; network failures become GatewayError. */
-async function exchange(path: string, init: RequestInit, base?: string): Promise<{ status: number; json: unknown; headers: Headers; elapsed: number }> {
+async function exchange(path: string, init: RequestInit, base?: string, o: { timeoutMs?: number; signal?: AbortSignal | null } = {}): Promise<{ status: number; json: unknown; headers: Headers; elapsed: number }> {
     const started = nowMs();
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutMs = options.timeoutMs ?? GATEWAY_TIMEOUT_MS;
+    const timeoutMs = o.timeoutMs ?? options.timeoutMs ?? GATEWAY_TIMEOUT_MS;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let stop: (() => void) | undefined;
     const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
             ctrl?.abort();
             reject(new GatewayError('timeout', 0, {}, nowMs() - started));
         }, timeoutMs);
+        // The caller's cancel: given up at once, said as an abort.
+        if (o.signal) {
+            stop = () => {
+                ctrl?.abort();
+                reject(abortError());
+            };
+            if (o.signal.aborted) stop();
+            else o.signal.addEventListener('abort', stop, { once: true });
+        }
     });
     try {
         const res = await Promise.race([
@@ -191,10 +211,16 @@ async function exchange(path: string, init: RequestInit, base?: string): Promise
         return { status: res.status, json, headers: res.headers, elapsed: nowMs() - started };
     } catch (e) {
         if (e instanceof GatewayError) throw e;
+        if (o.signal?.aborted) throw abortError();
         throw new GatewayError('network', 0, {}, nowMs() - started);
     } finally {
         if (timer !== undefined) clearTimeout(timer);
+        if (stop) o.signal?.removeEventListener('abort', stop);
     }
+}
+
+function abortError(): Error {
+    return typeof DOMException === 'function' ? new DOMException('Aborted', 'AbortError') : Object.assign(new Error('Aborted'), { name: 'AbortError' });
 }
 
 function refusal(status: number, json: unknown, elapsed: number): GatewayError {
@@ -345,8 +371,10 @@ export async function tunnel(req: TunnelRequest): Promise<TunnelAnswer> {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(envelope),
-            });
+            }, undefined, { ...(req.timeoutMs ? { timeoutMs: req.timeoutMs } : {}), signal: req.signal ?? null });
         } catch (e) {
+            // Cancelled by the caller: nothing about the connection.
+            if (!(e instanceof GatewayError)) throw e;
             report({ ok: false, error: e as GatewayError });
             throw e;
         }
@@ -405,6 +433,11 @@ async function bodyOf(body: BodyInit | null | undefined): Promise<{ b?: unknown;
     return { bytes: new Uint8Array(await new Response(body).arrayBuffer()) };
 }
 
+/** The research's tree or its images (DEVICE_TREE_TIMEOUT_MS): `GET tree.ged`, `GET images.ged`, `POST images`. */
+export function deviceTreeRequest(m: string, p: string): boolean {
+    return (m === 'GET' && (p === 'tree.ged' || p === 'images.ged')) || (m === 'POST' && p === 'images');
+}
+
 /**
  * A bridge request through the tunnel as a `Response`: `path` is the bridge's
  * path without its token (`status`, `/tree.ged`, `waiting/T0001?lang=cs`).
@@ -426,6 +459,8 @@ export async function deviceFetch(path: string, init: RequestInit & { tree?: str
         q,
         h: headersRecord(init.headers),
         ...(await bodyOf(init.body)),
+        ...(deviceTreeRequest(m, p) ? { timeoutMs: DEVICE_TREE_TIMEOUT_MS } : {}),
+        signal: init.signal ?? null,
     });
     const status = answer.s >= 200 && answer.s <= 599 ? answer.s : 502;
     const body = NULL_BODY.has(status) ? null : (answer.body as BodyInit | null);

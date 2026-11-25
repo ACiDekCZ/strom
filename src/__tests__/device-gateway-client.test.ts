@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     b64url, deriveKey, openRequest, sealResponse, sealPair, pairProof, fromB64url, sha256Hex, type RequestEnvelope,
 } from '../device/device-crypto';
-import { configureGateway, pair, tunnel, deviceFetch, hello, GatewayError, gatewayClockSkew, DEVICE_REPLAY, isDeviceReplay } from '../device/gateway-client';
+import { configureGateway, pair, tunnel, deviceFetch, hello, GatewayError, gatewayClockSkew, DEVICE_REPLAY, isDeviceReplay, deviceTreeRequest, DEVICE_TREE_TIMEOUT_MS, onGatewayOutcome } from '../device/gateway-client';
 import {
     setDeviceKv, memoryKv, loadPairing, savePairing, hasPairingMark, deviceQueue, chooseTree, chosenTreeId, forgetPairing, saveLastView, loadLastView, proposeDevice, deviceKindOf,
     computerLabelOf, deviceTreeIdOk, deviceTreesOf,
@@ -327,6 +327,67 @@ describe('gateway client: the tunnel', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('waits for the research\'s tree and its images as long as on the computer, never the 8 s of a quick request', async () => {
+        expect(deviceTreeRequest('GET', 'tree.ged')).toBe(true);
+        expect(deviceTreeRequest('GET', 'images.ged')).toBe(true);
+        expect(deviceTreeRequest('POST', 'images')).toBe(true);
+        expect(deviceTreeRequest('GET', 'status')).toBe(false);
+        expect(deviceTreeRequest('POST', 'tree.ged')).toBe(false);
+        vi.useFakeTimers();
+        vi.setSystemTime(NOW);
+        try {
+            // The tree's answer comes after 30 s (a big research, the bridge building it).
+            const answer = tunnelHandler(() => ({ s: 200, h: { 'Content-Type': 'text/plain; charset=utf-8' }, body: '0 HEAD\n0 TRLR' }));
+            configureGateway({
+                timeoutMs: 8000,
+                fetch: (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+                    await new Promise(r => setTimeout(r, 30_000));
+                    const r = await answer(String(input), init);
+                    return new Response(JSON.stringify(r.body), { status: r.status, headers: { 'Content-Type': 'application/json' } });
+                }) as typeof fetch,
+            });
+            const tree = deviceFetch('tree.ged?images=ref&media=app').catch(e => e);
+            const status = deviceFetch('status').catch(e => e);
+            await vi.advanceTimersByTimeAsync(8000);
+            expect(await status).toMatchObject({ code: 'timeout' });
+            await vi.advanceTimersByTimeAsync(23_000);
+            const res = await tree;
+            expect(res).toBeInstanceOf(Response);
+            expect(await (res as Response).text()).toBe('0 HEAD\n0 TRLR');
+            // Still given up at DEVICE_TREE_TIMEOUT_MS.
+            configureGateway({ fetch: (() => new Promise(() => undefined)) as typeof fetch });
+            const never = deviceFetch('tree.ged').catch(e => e);
+            await vi.advanceTimersByTimeAsync(DEVICE_TREE_TIMEOUT_MS);
+            expect(await never).toMatchObject({ code: 'timeout' });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('a cancel of the caller gives the request up at once, an abort and no failure of the connection', async () => {
+        const outcomes: unknown[] = [];
+        const off = onGatewayOutcome(o => outcomes.push(o));
+        let aborted = false;
+        let sent!: () => void;
+        const asked = new Promise<void>(r => { sent = r; });
+        configureGateway({
+            fetch: ((_: RequestInfo | URL, init: RequestInit = {}) => new Promise((_r, reject) => {
+                init.signal?.addEventListener('abort', () => { aborted = true; reject(new DOMException('Aborted', 'AbortError')); });
+                sent();
+            })) as typeof fetch,
+        });
+        const ctl = new AbortController();
+        const p = deviceFetch('tree.ged', { signal: ctl.signal }).catch(e => e);
+        await asked;
+        ctl.abort();
+        const err = await p;
+        expect(err).toMatchObject({ name: 'AbortError' });
+        expect(err).not.toBeInstanceOf(GatewayError);
+        expect(aborted, 'the request to the gateway itself stopped').toBe(true);
+        expect(outcomes).toEqual([]);
+        off();
     });
 });
 
