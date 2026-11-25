@@ -9,6 +9,7 @@ import { StorageManager } from '../storage.js';
 import { expandImageText } from '../image-expand.js';
 import {
     buildFanModel, buildFanSvg, buildFanPosterSvg, fanPosterGeometry, FanModel, FOCUS_R, RING_W, ancestorRingRadii,
+    fanPortraitPeople, fanPrintPortraitMinPx, FAN_PORTRAIT_MIN_PX, FAN_PORTRAIT_MIN_MM,
 } from '../fan-chart.js';
 import { FAN_PALETTES, fanLineColor, fanPalette } from '../fan-colors.js';
 import { estimateFanMeasure as estimate, fanScreenSizes } from '../fan-labels.js';
@@ -836,16 +837,60 @@ describe('portraits (spec 118 §6)', () => {
     const sectorOf2 = (svg: string, key: string) => svg.match(new RegExp(`<g class="fan-(?:sector|focus)[^"]*" data-fan-key="${key}"[^]*?</g>(?=<g class="fan-|<a |</svg>|<g class="fan-hl)`))?.[0] ?? '';
     const images = (svg: string) => (svg.match(/<image /g) ?? []).length;
 
-    it('only in the centre and the rings 1–2 (at most 7 photos)', () => {
+    it('any ring, as far as a portrait is large enough at the zoom (K2.8): zooming in shows more, zooming out hides them', () => {
         const m = buildFanModel(withPhotos(5), 'a1' as PersonId, { generations: 5, shape: 'half' })!;
-        const svg = buildFanSvg(m, { ...svgOpts, uid: 'pt', measure: estimate, ppu: 2, portrait: photoOf });
-        expect(images(svg)).toBe(7);
-        for (const key of ['f', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7']) expect(sectorOf2(svg, key), key).toContain('<image ');
-        for (const key of ['a8', 'a15', 'a16', 'a31']) expect(sectorOf2(svg, key), key).not.toContain('<image ');
+        const at = (ppu: number) => buildFanSvg(m, { ...svgOpts, uid: 'pt', measure: estimate, ppu, portrait: photoOf });
+        const near = at(2);
+        // Every ring up to the fifth: 1 + 2 + 4 + 8 + 16 + 32.
+        expect(images(near)).toBe(63);
+        for (const key of ['f', 'a2', 'a3', 'a7', 'a8', 'a15', 'a16', 'a31', 'a32', 'a63']) expect(sectorOf2(near, key), key).toContain('<image ');
         // Round: clipped by a circle, the photo's ring in the surface colour.
-        expect(svg).toContain('clip-path="url(#ptc0)"');
-        expect(svg).toContain('preserveAspectRatio="xMidYMid slice"');
-        expect(svg).toMatch(/\.fan-photo-ring\{stroke:/);
+        expect(near).toContain('clip-path="url(#ptc0)"');
+        expect(near).toContain('preserveAspectRatio="xMidYMid slice"');
+        expect(near).toMatch(/\.fan-photo-ring\{stroke:/);
+        // At the whole fan's scale the outer rings are too small: no portrait there, the inner rings keep theirs.
+        const far = at(1);
+        for (const key of ['a32', 'a47', 'a63']) expect(sectorOf2(far, key), key).not.toContain('<image ');
+        for (const key of ['f', 'a2', 'a3', 'a4']) expect(sectorOf2(far, key), key).toContain('<image ');
+        // More zoom never fewer portraits.
+        const counts = [0.4, 0.7, 1, 1.5, 2, 4].map(ppu => images(at(ppu)));
+        for (let i = 1; i < counts.length; i++) expect(counts[i]).toBeGreaterThanOrEqual(counts[i - 1]);
+        expect(counts[0]).toBeLessThan(counts[counts.length - 1]);
+    });
+
+    it('a portrait of at least FAN_PORTRAIT_MIN_PX (32 px) across; portraitMinPx changes it', () => {
+        expect(FAN_PORTRAIT_MIN_PX).toBe(32);
+        const m = buildFanModel(withPhotos(5), 'a1' as PersonId, { generations: 5, shape: 'half' })!;
+        const draw = (o: { ppu: number; portraitMinPx?: number }) => buildFanSvg(m, { ...svgOpts, uid: 'pm', measure: estimate, portrait: photoOf, ...o });
+        const diam = (svg: string) => [...svg.matchAll(/<circle class="fan-photo-ring" cx="[-0-9.]+" cy="[-0-9.]+" r="([0-9.]+)"/g)].map(x => 2 * Number(x[1]));
+        for (const ppu of [0.6, 1, 1.4, 2]) {
+            for (const d of diam(draw({ ppu }))) expect(d * ppu).toBeGreaterThanOrEqual(FAN_PORTRAIT_MIN_PX - 1e-6);
+        }
+        // The fifth ring's portraits are about 46 px at this scale: a 50 px threshold leaves them out, the fourth ring keeps its own.
+        const strict = draw({ ppu: 2, portraitMinPx: 50 });
+        for (const key of ['a32', 'a63']) expect(sectorOf2(strict, key), key).not.toContain('<image ');
+        for (const key of ['a16', 'a31']) expect(sectorOf2(strict, key), key).toContain('<image ');
+        for (const d of diam(strict)) expect(d * 2).toBeGreaterThanOrEqual(50 - 1e-6);
+    });
+
+    it('the photos asked for only of the sectors in view that would show one (spec 116: the loads stay small)', () => {
+        const m = buildFanModel(withPhotos(6), 'a1' as PersonId, { generations: 6, shape: 'half' })!;
+        const asked: string[] = [];
+        const drawn: string[] = [];
+        // Zoomed into the father's father's side (upper left, ring 3–4), 8× the whole fan's scale.
+        const [x, y] = [-260, -200];
+        const svg = buildFanSvg(m, {
+            ...svgOpts, uid: 'pv', measure: estimate, ppu: 8, viewport: { x, y, w: 120, h: 90 },
+            portrait: p => { asked.push(p.id); return photoOf(p); },
+            onPortrait: p => { drawn.push(p.id); },
+        });
+        expect(asked.length).toBeGreaterThan(0);
+        expect(asked.length).toBeLessThan(20);
+        // The mother's side (right) is out of view: never asked.
+        for (const id of asked.filter(x => x !== 'a1')) expect(m.sectors.find(s => s.person?.id === id)!.lo, id).toBeGreaterThanOrEqual(90);
+        // Every portrait drawn is told, once.
+        expect(drawn.length).toBe(images(svg));
+        expect(new Set(drawn).size).toBe(drawn.length);
     });
 
     it('the photo rules only where a portrait is drawn: without one the drawing (and the person page) stays as it was', () => {
@@ -856,9 +901,9 @@ describe('portraits (spec 118 §6)', () => {
 
     it('a pooled image\'s reference: the placeholder with its id, filled on screen (spec 135)', () => {
         const id = 'p:' + 'ab'.repeat(20);
-        const d = withPhotos(3);
+        const d = withPhotos(2);
         for (const p of Object.values(d.persons)) p.photo = '\u0000sm:' + id;
-        const m = buildFanModel(d, 'a1' as PersonId, { generations: 3, shape: 'half' })!;
+        const m = buildFanModel(d, 'a1' as PersonId, { generations: 2, shape: 'half' })!;
         const svg = buildFanSvg(m, { ...svgOpts, uid: 'pr', measure: estimate, ppu: 2, portrait: photoOf });
         expect(images(svg)).toBe(7);
         expect((svg.match(new RegExp(`<image href="data:image/gif;base64,[^"]+" data-pool-ref="${id}" x="-?[0-9.]+" y="-?[0-9.]+"`, 'g')) ?? []).length).toBe(7);
@@ -872,9 +917,9 @@ describe('portraits (spec 118 §6)', () => {
         const getMany = vi.spyOn(StorageManager, 'getMany').mockImplementation(async (_s: string, keys: string[]) =>
             new Map(keys.map(k => [k, k === id ? { head: 'data:image/jpeg;base64,', bytes: bytes.slice().buffer } : null])) as never);
         try {
-            const d = withPhotos(3);
+            const d = withPhotos(2);
             for (const p of Object.values(d.persons)) p.photo = '\u0000sm:' + id;
-            const m = buildFanModel(d, 'a1' as PersonId, { generations: 3, shape: 'half' })!;
+            const m = buildFanModel(d, 'a1' as PersonId, { generations: 2, shape: 'half' })!;
             const svg = buildFanSvg(m, { ...svgOpts, uid: 'pp', measure: estimate, ppu: 2, portrait: (p: Person) => photoOf(p) });
             const { data: out, missing } = await expandImageText(svg);
             expect(missing).toBe(0);
@@ -887,15 +932,32 @@ describe('portraits (spec 118 §6)', () => {
         }
     });
 
-    it('two-way: the centre and the ancestors only, never the descendants', () => {
+    it('two-way (K2.7): the descendants and the partners in their band too, as far as they are large enough', () => {
         const d = withPhotos(3);
-        d.persons['k1' as PersonId] = person('k1', 'male', ['a1'], { photo: PHOTO });
-        d.persons['a1' as PersonId].childIds = ['k1' as PersonId];
-        const m = buildFanModel(d, 'a1' as PersonId, { generations: 3, shape: 'two', descGenerations: 1 })!;
-        const svg = buildFanSvg(m, { ...svgOpts, uid: 'pw', measure: estimate, ppu: 2, portrait: photoOf });
-        expect(m.desc.some(s => s.person?.id === 'k1')).toBe(true);
-        expect(images(svg)).toBe(7);
-        expect(svg.match(/<g class="fan-sector[^"]*fan-desc[^]*?<\/g>/)![0]).not.toContain('<image ');
+        d.persons['w1' as PersonId] = person('w1', 'female', [], { firstName: 'Ida', lastName: 'Quernova', photo: PHOTO, birthDate: '2001' });
+        d.persons['k1' as PersonId] = person('k1', 'male', [], { firstName: 'Kamil', lastName: 'Belmudr', photo: PHOTO, birthDate: '2025' });
+        d.persons['g1' as PersonId] = person('g1', 'female', [], { firstName: 'Lea', lastName: 'Belmudrova', photo: PHOTO, birthDate: '2050' });
+        d.persons['w2' as PersonId] = person('w2', 'female', [], { firstName: 'Eva', lastName: 'Tollgrist', photo: PHOTO, birthDate: '2026' });
+        const fam = withUnions(Object.values(d.persons), [union('u1', 'a1', 'w1', ['k1']), union('u2', 'k1', 'w2', ['g1'])]);
+        const m = buildFanModel(fam, 'a1' as PersonId, { generations: 3, shape: 'two', descGenerations: 2 })!;
+        const keyOf = (id: string, kind: string) => m.desc.find(s => s.person?.id === id && s.kind === kind)!.key;
+        const draw = (ppu: number) => buildFanSvg(m, { ...svgOpts, uid: 'pw', measure: estimate, ppu, portrait: photoOf });
+        const near = draw(8);
+        for (const [id, kind] of [['k1', 'desc'], ['g1', 'desc'], ['w1', 'partner'], ['w2', 'partner']]) {
+            expect(sectorOf2(near, keyOf(id, kind)), `${id} ${kind}`).toContain('<image ');
+        }
+        // The partner's band keeps its name beside the photo.
+        expect(sectorOf2(near, keyOf('w1', 'partner'))).toMatch(/<textPath[^>]*>[^<]*(Ida|Quernova)/);
+        // At the whole fan's scale the thin band has no room for a photo; the children's ring has.
+        const far = draw(2);
+        expect(sectorOf2(far, keyOf('w1', 'partner'))).not.toContain('<image ');
+        expect(sectorOf2(far, keyOf('k1', 'desc'))).toContain('<image ');
+        const plain = (svg: string) => sectorOf2(svg, keyOf('w1', 'partner')).replace(/pwr\d+/g, 'pwr');
+        expect(plain(far)).toBe(plain(buildFanSvg(m, { ...svgOpts, uid: 'pw', measure: estimate, ppu: 2 })));
+        // The fan's people with a possible portrait: the descendants and the partners among them.
+        const ids = fanPortraitPeople(m).map(p => p.id);
+        for (const id of ['a1', 'a2', 'a15', 'k1', 'g1', 'w1', 'w2']) expect(ids, id).toContain(id);
+        expect(fanPortraitPeople(m, p => p.id === 'k1').map(p => p.id)).not.toContain('k1');
     });
 
     it('none for a protected living person, none without a photo: the sector as without portraits', () => {
@@ -919,6 +981,41 @@ describe('portraits (spec 118 §6)', () => {
         const m = buildFanModel(withPhotos(3), 'a1' as PersonId, { generations: 3, shape: 'half' })!;
         const o = { ...svgOpts, uid: 'ps', measure: estimate, ppu: 0.4 };
         expect(buildFanSvg(m, { ...o, portrait: photoOf })).toBe(buildFanSvg(m, o));
+    });
+
+    it('the text comes first in every ring (K2.8): a portrait never changes what a sector says, a long name keeps its sector without one', () => {
+        // Long names as in the finding of 1124 ("Kristina Johann Jarnwick 1879–1947" → "Jarnwick").
+        const d = withPhotos(7);
+        for (const p of Object.values(d.persons)) {
+            const n = Number(p.id.slice(1));
+            if (n >= 8 && n % 3 === 0) { p.firstName = p.gender === 'male' ? 'Bartolomej Johann' : 'Kristina Johann'; p.lastName = 'Jarnwick'; }
+        }
+        d.persons['w1' as PersonId] = person('w1', 'female', [], { firstName: 'Ida', lastName: 'Quernova', photo: PHOTO, birthDate: '2001' });
+        d.persons['k1' as PersonId] = person('k1', 'male', [], { firstName: 'Kristian Johann', lastName: 'Oberwaldenfeldt', photo: PHOTO, birthDate: '2024' });
+        const fam = withUnions(Object.values(d.persons), [union('u1', 'a1', 'w1', ['k1'])]);
+        const m = buildFanModel(fam, 'a1' as PersonId, { generations: 7, shape: 'two', descGenerations: 1 })!;
+        // The sectors (the focus disc has its own room for the photo above its text).
+        const keys = [...m.sectors.filter(s => s.person).map(s => s.key), ...m.desc.filter(s => s.person).map(s => s.key)];
+        const text = (g: string) => [...g.matchAll(/>([^<>]+)</g)].map(x => x[1]).filter(t => !/^\s*$/.test(t)).join(' ')
+            .replace(/#\d+ · .*$/, '').replace(/\s+/g, ' ').replace(/\s*–\s*/g, '–').replace(/-\s+/g, '-').trim();
+        let portraits = 0;
+        const changed: string[] = [];
+        for (const ppu of [1, 1.5, 2, 3, 4, 6, 8]) {
+            const o = { ...svgOpts, uid: 'pt', measure: estimate, ppu };
+            const on = buildFanSvg(m, { ...o, portrait: photoOf });
+            const off = buildFanSvg(m, o);
+            for (const key of keys) {
+                const a = sectorOf2(on, key);
+                if (a.includes('<image ')) portraits++;
+                if (text(a) !== text(sectorOf2(off, key))) changed.push(`${key} @${ppu}: ${text(sectorOf2(off, key))} → ${text(a)}`);
+            }
+        }
+        expect(changed).toEqual([]);
+        // Portraits are still drawn where the text keeps beside them.
+        expect(portraits).toBeGreaterThan(20);
+        // a9 (Kristina Johann Jarnwick) in the fourth ring next to the narrow fifth: no portrait where its text would be shortened.
+        const o = { ...svgOpts, uid: 'pt', measure: estimate, ppu: 2 };
+        expect(text(sectorOf2(buildFanSvg(m, { ...o, portrait: photoOf }), 'a9'))).toBe(text(sectorOf2(buildFanSvg(m, o), 'a9')));
     });
 
     it('a portrait moves the text outward, past itself', () => {
@@ -952,6 +1049,34 @@ describe('portraits (spec 118 §6)', () => {
         expect(draw('pastel')).not.toContain('<filter');
     });
 
+    it('a large tree zoomed in: hundreds of portraits within the time budget of a redraw (scaled by the machine speed)', () => {
+        // Nine rings of a full circle, everyone with a photo (1023 people), at 3× the whole fan's scale and over it all.
+        const m = buildFanModel(withPhotos(9), 'a1' as PersonId, { generations: 9, shape: 'full' })!;
+        const CALIBRATION_ROUNDS = 4;
+        const REFERENCE_MS = 22; // as the ten-ring tests
+        const BUDGET_MS = 250;
+        const run = () => buildFanSvg(m, { esc, editable: false, addParentLabel: '', ppu: 3, measure: estimate, portrait: photoOf });
+        expect(images(run())).toBeGreaterThan(200);
+        const r = measureAgainstBudget(run, { budgetMs: BUDGET_MS, calibrationRounds: CALIBRATION_ROUNDS, referenceMs: REFERENCE_MS, maxPairs: 6 });
+        console.log(budgetReport('fan 9 rings full, portraits', r, BUDGET_MS));
+        if (r.judged) expect(r.ms).toBeLessThan(BUDGET_MS);
+    }, 30_000);
+
+    it('the view\'s own print: 7 mm on the landscape sheet, never under the screen\'s 32 px', () => {
+        // A half fan of 5 rings is 868 units wide: 277 mm across, 0.319 mm a unit; 7 mm = 21.9 units.
+        const m = buildFanModel(withPhotos(5), 'a1' as PersonId, { generations: 5, shape: 'half' })!;
+        const mmPerUnit = Math.min(277 / m.bounds.w, 161.5 / m.bounds.h);
+        expect(fanPrintPortraitMinPx(m.bounds, 2)).toBeCloseTo(Math.max(32, 7 / mmPerUnit * 2), 5);
+        expect(fanPrintPortraitMinPx(m.bounds, 2)).toBeGreaterThan(32);
+        // A tiny scale: the screen's own threshold still holds.
+        expect(fanPrintPortraitMinPx(m.bounds, 0.5)).toBe(32);
+        // Each printed portrait at least 7 mm.
+        const svg = buildFanSvg(m, { ...svgOpts, uid: 'pq', measure: estimate, ppu: 2, portrait: photoOf, portraitMinPx: fanPrintPortraitMinPx(m.bounds, 2) });
+        const rs = [...svg.matchAll(/<circle class="fan-photo-ring" cx="[-0-9.]+" cy="[-0-9.]+" r="([0-9.]+)"/g)].map(x => Number(x[1]));
+        expect(rs.length).toBeGreaterThan(0);
+        for (const r of rs) expect(2 * r * mmPerUnit).toBeGreaterThanOrEqual(7 - 1e-6);
+    });
+
     it('a photo on its way: initials on grey under the veil, an older photo under it', () => {
         const m = buildFanModel(withPhotos(2), 'a1' as PersonId, { generations: 2, shape: 'half' })!;
         const svg = buildFanSvg(m, {
@@ -970,12 +1095,24 @@ describe('portraits (spec 118 §6)', () => {
         expect(a3).toContain('class="fan-photo-veil"');
     });
 
-    it('the poster takes the portraits (no veil: outputs wait for the photos)', () => {
-        const m = buildFanModel(withPhotos(3), 'a1' as PersonId, { generations: 3, shape: 'half' })!;
+    it('the poster takes the portraits (no veil: outputs wait for the photos), each at least 7 mm on paper', () => {
+        const m = buildFanModel(withPhotos(5), 'a1' as PersonId, { generations: 5, shape: 'half' })!;
         const poster = buildFanPosterSvg(m, { ...svgOpts, measure: estimate, portrait: photoOf, style: 'antique' }, {});
-        expect(images(poster)).toBe(7);
+        // Beyond the rings 1–2 (K2.8): the third and fourth rings have room on paper too.
+        expect(images(poster)).toBeGreaterThan(7);
         expect(poster).not.toContain('fan-photo-veil"');
         expect(poster).toContain('filter="url(#fanpostersepia)"');
         expect(buildFanPosterSvg(m, { ...svgOpts, measure: estimate }, {})).not.toContain('<image ');
+        // Every photo at least FAN_PORTRAIT_MIN_MM across: the fan's units × the poster's scale × mm per px.
+        const scale = Number(poster.match(/<svg class="fan-svg" x="[-0-9.]+" y="[-0-9.]+" width="([0-9.]+)"/)![1]) / m.bounds.w;
+        for (const mmPerPx of [0.26, 0.5]) {
+            const out = buildFanPosterSvg(m, { ...svgOpts, measure: estimate, portrait: photoOf, mmPerPx }, {});
+            const rs = [...out.matchAll(/<circle class="fan-photo-ring" cx="[-0-9.]+" cy="[-0-9.]+" r="([0-9.]+)"/g)].map(x => Number(x[1]));
+            expect(rs.length).toBeGreaterThan(0);
+            for (const r of rs) expect(2 * r * scale * mmPerPx).toBeGreaterThanOrEqual(FAN_PORTRAIT_MIN_MM - 1e-6);
+        }
+        // A larger print (0.5 mm per px): 7 mm are fewer px, so the outer rings get theirs too.
+        const coarse = buildFanPosterSvg(m, { ...svgOpts, measure: estimate, portrait: photoOf, mmPerPx: 0.5 }, {});
+        expect(images(coarse)).toBeGreaterThan(images(poster));
     });
 });

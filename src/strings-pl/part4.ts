@@ -799,7 +799,7 @@ export const plPart4: Pick<StringsType, 'csv' | 'zoomControls' | 'labels' | 'too
         contentPlacesEx: '* 22.11.1888 Kessenau',
         contentNamesEx: 'Wenzel Quellmayer',
         portraits: 'Portrety',
-        portraitsSub: 'W środku, u rodziców i dziadków',
+        portraitsSub: 'Przodkowie i potomkowie tam, gdzie jest miejsce; przybliżenie pokaże kolejne',
         portraitsLoading: (k: number, n: number) => `Wczytywanie portretów (${k} / ${n})`,
         portraitsNone: 'Nikt w wachlarzu nie ma jeszcze portretu.',
         lookDiffers: 'Różni się od domyślnego wyglądu.',

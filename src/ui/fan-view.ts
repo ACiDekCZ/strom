@@ -21,7 +21,7 @@
 
 import type { Person, PersonId, StromData } from '../types.js';
 import {
-    buildFanModel, buildFanSvg, fanLineages, FanHighlight, FanModel, FanShape, FanSvgOptions, FanPortrait, fanPortraitPeople,
+    buildFanModel, buildFanSvg, fanLineages, FanHighlight, FanModel, FanShape, FanSvgOptions, FanPortrait, fanPortraitPeople, fanPrintPortraitMinPx,
 } from '../fan-chart.js';
 import {
     FanColorMode, FanTheme, FanStyle, fanLegend, fanHasRepeats, FanLegendItem, FanRodGroup, FanRodSlot, parseFanRodSlot, fanPalette, fanRodOtherSwatch,
@@ -58,7 +58,7 @@ export interface FanViewSettings {
     rodScope?: FanRodScope;
     /** What the sectors write besides the names (spec 118 §5); default years. */
     content?: FanContent;
-    /** Portraits in the centre and the rings 1–2 (spec 118 §6); default off. */
+    /** Portraits (spec 118 §6, K2.7–K2.8): in every sector large enough at the current zoom; default off. */
     portraits?: boolean;
 }
 
@@ -219,6 +219,8 @@ export class FanViewController {
     private chart: HTMLElement | null = null;
     private zoom: FanZoom | null = null;
     private model: FanModel | null = null;
+    /** The portraits of the last drawing (K2.8: which depends on the zoom), by person. */
+    private drawnPortraits = new Map<PersonId, FanPortrait>();
     private modelKey = '';
     private redrawFrame = 0;
     private legendOpen: boolean;
@@ -461,6 +463,7 @@ export class FanViewController {
         // The veils of photos on their way pulse in the window's one phase (spec 116).
         if (portraits) chart.style.setProperty('--img-phase', imgPhaseDelay());
         else chart.style.removeProperty('--img-phase');
+        const drawnPortraits = new Map<PersonId, FanPortrait>();
         chart.innerHTML = buildFanSvg(model, {
             esc: this.host.esc,
             editable: this.host.editable(),
@@ -471,15 +474,21 @@ export class FanViewController {
             colorMode: this.host.settings().colorMode,
             style: this.style(),
             content: set.content ?? 'years',
-            ...(portraits ? { portrait: (p: Person) => fanPhotoPortrait(p) } : {}),
+            ...(portraits ? {
+                portrait: (p: Person) => fanPhotoPortrait(p),
+                onPortrait: (p: Person, ph: FanPortrait) => { drawnPortraits.set(p.id, ph); },
+            } : {}),
             ...(this.rodColors() ? { rodColors: this.rodColors()! } : {}),
             measure: fanMeasureFor(fanStyleFont(this.style())),
             ppu: vb.ppu,
             viewport: { x: vb.x, y: vb.y, w: vb.w, h: vb.h },
+            // The view's print: the portraits as large as 7 mm on paper.
+            ...(this.printing ? { portraitMinPx: fanPrintPortraitMinPx(model.bounds, vb.ppu) } : {}),
             sizes: fanScreenSizes(isMobile()),
             uid: SVG_UID,
             ...this.svgExtras(),
         });
+        this.drawnPortraits = drawnPortraits;
         // Pooled portraits are put in while on screen (image-src.ts).
         if (portraits) startImageHydrator(document);
         this.setupSectors(keyFocused);
@@ -500,20 +509,20 @@ export class FanViewController {
     }
 
     /**
-     * The portraits of the fan drawn (spec 118 §6, the panel's state): of the
-     * focus and the rings 1–2, the people with a photo or one on its way
-     * (`total`) and those whose photo is in (`ready`). Null without a model.
+     * The fan's portraits (spec 118 §6, K2.8; the panel's state): `any` — someone
+     * in the fan has a photo or one on its way; of the portraits drawn at the
+     * current zoom, how many there are (`total`) and how many are in (`ready`).
+     * Null without a model.
      */
-    portraitCounts(): { ready: number; total: number } | null {
+    portraitCounts(): { ready: number; total: number; any: boolean } | null {
         if (!this.model) return null;
         let ready = 0, total = 0;
-        for (const p of fanPortraitPeople(this.model)) {
-            const ph = fanPhotoPortrait(p);
-            if (!ph) continue;
+        for (const ph of this.drawnPortraits.values()) {
             total++;
             if (!ph.loading) ready++;
         }
-        return { ready, total };
+        const any = total > 0 || fanPortraitPeople(this.model).some(p => !!fanPhotoPortrait(p));
+        return { ready, total, any };
     }
 
     /** Extra options of the drawing: the outlined first occurrence, the way back in the focus disc. */
@@ -1658,7 +1667,7 @@ export class FanViewController {
         let text = '';
         if (this.host.settings().portraits) {
             const n = this.portraitCounts();
-            if (n && n.total === 0) text = strings.fan.portraitsNone;
+            if (n && !n.any) text = strings.fan.portraitsNone;
             else if (n && n.ready < n.total) text = strings.fan.portraitsLoading(n.ready, n.total);
         }
         states.forEach(el => {
