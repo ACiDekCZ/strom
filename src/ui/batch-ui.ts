@@ -23,8 +23,13 @@ import {
     batchCloseWaitMs, CLOSE_RETRY_DEFAULT_MS, CLOSE_RETRY_TOTAL_MS, batchHeicRefused,
 } from '../batch.js';
 import { putDeviceMedia, DEVICE_MEDIA_ACTION } from '../device/device-media.js';
-import { loadDeviceDraft, saveDeviceDraft, dropDeviceDraft, type DevicePhoto } from '../device/device-photos.js';
-import { PersonPicker } from '../person-picker.js';
+import { loadDeviceDraft, saveDeviceDraft, dropDeviceDraft, type DeviceBatchDraft, type DevicePhoto } from '../device/device-photos.js';
+import { PersonPicker, filterAndSort } from '../person-picker.js';
+import { mountPhonePersonSearch } from './phone-person-search.js';
+import { phoneComputerOnlyNote, type BatchQueueInfo } from './phone-research-ui.js';
+import { computerLabelOf, pairingNow } from '../device/device-store.js';
+import type { DevicePersonHit } from '../device/device-research-data.js';
+import type { TreeId } from '../types.js';
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { isWriteHeldCode, joinSaid, writeHeldOfRefusal } from '../research-write-held.js';
 import { formatBytesShort } from './originals-ui.js';
@@ -52,10 +57,22 @@ function coarsePointer(): boolean {
     try { return window.matchMedia?.('(pointer: coarse)').matches ?? false; } catch { return false; }
 }
 
+/**
+ * The research a batch of a phone's Research screen goes to (spec 094 K3.13 §6): set while that batch is chosen or
+ * sent — it needs no tree here (its person found through the bridge, its photos sent to the screen's research).
+ */
+let screenOf: string | null = null;
+
 /** A touch device of the home network (a phone, a tablet; spec 094 §5): tiles to take or pick photos, their grid, the hand-over. */
 function deviceTouch(): boolean {
-    return researchDevice() && coarsePointer();
+    return researchDevice() && (coarsePointer() || screenOf !== null);
 }
+
+/** How a batch of the Research screen is picked from its dock: the camera, the gallery (many at once), any file (PDF too). */
+export type BatchPick = 'camera' | 'gallery' | 'file';
+const PICK_INPUT: Record<BatchPick, string> = { camera: '#batch-input-camera', gallery: '#batch-input-gallery', file: '#batch-input-file' };
+
+let lastEnded: BatchQueueInfo['ended'] = null;
 
 /** The gateway takes files of a device (`media.put` in `status.device.actions`); without it they wait on the device. */
 function deviceMediaOn(): boolean {
@@ -178,6 +195,9 @@ let st: {
     resume: UnfinishedBatch | null;
     /** Handed over on a device whose computer takes no files of devices yet: they wait on it (spec 094 §5). */
     held: boolean;
+    /** The person chosen through the research's search (the Research screen: `personId` is its P…): its name and years. */
+    personName?: string;
+    personSpan?: string;
 } | null = null;
 let run: Run | null = null;
 /** Trees whose handed photos this page sent again by itself since the connection last came back. */
@@ -261,17 +281,24 @@ export const batchMethods = uiModule({
 
     /**
      * Open the wizard (from the menu, the material dialog with its person, a drop, the unfinished line).
-     * `capture` (a touch device of the home network): the camera opens at once, within the same tap.
+     * `capture` (a touch device of the home network): the camera opens at once, within the same tap; `pick` the
+     * same for the gallery or any file. `screen` (a phone's Research screen, spec 094 K3.13 §6): the batch of that
+     * research, no tree needed here — its person found through the bridge.
      */
-    showBatchDialog(opts: { personId?: string; files?: { file: File; path: string }[]; capture?: boolean } = {}): void {
+    showBatchDialog(opts: { personId?: string; files?: { file: File; path: string }[]; capture?: boolean; pick?: BatchPick; screen?: string } = {}): void {
         if (run && !run.finished && !run.cancelled) {
             run.hidden = false;
             this.openBatchOverlay();
             this.renderBatchDialog();
             return;
         }
-        const link = this.researchOriginalsLink();
-        if (!link || !this.batchAvailable()) return;
+        const was = screenOf;
+        screenOf = opts.screen && researchDevice() ? opts.screen : null;
+        const link = this.batchLink();
+        if (!link || (!screenOf && !this.batchAvailable())) {
+            screenOf = was;
+            return;
+        }
         this.closeActionsMenu();
         this.hideContextMenu?.();
         const resume = readUnfinished(link.treeId);
@@ -283,20 +310,53 @@ export const batchMethods = uiModule({
         this.openBatchOverlay();
         if (opts.files?.length) this.addBatchFiles(opts.files);
         else this.renderBatchDialog();
-        if (opts.capture && deviceTouch()) document.querySelector<HTMLInputElement>('#batch-input-camera')?.click();
+        const pick = opts.pick ?? (opts.capture ? 'camera' : null);
+        if (pick && deviceTouch()) document.querySelector<HTMLInputElement>(`#${DIALOG_ID} ${PICK_INPUT[pick]}`)?.click();
         // A device: the photos of a batch not handed over yet are back (kept in its queue, spec 094 §5).
         if (researchDevice()) void this.batchLoadDeviceDraft(link.treeId, opts.personId);
+    },
+
+    /**
+     * Where a batch goes: the research of the phone's Research screen when it was opened there (the tree held here
+     * keys what is kept of it, else the research's ID), else the open tree's research.
+     */
+    batchLink(): { treeId: TreeId; researchId: string } | null {
+        if (screenOf) {
+            const held = TreeManager.findTreeByResearchId(screenOf);
+            return { treeId: (held?.id ?? screenOf) as TreeId, researchId: screenOf };
+        }
+        return this.researchOriginalsLink();
+    },
+
+    /**
+     * The people of the copy of the tree held here (the Research screen's search without the connection, §6 point 3):
+     * only when that tree is the one loaded now — it is never loaded for it; null otherwise.
+     */
+    batchHeldPeople(researchId: string, q: string): DevicePersonHit[] | null {
+        const held = TreeManager.findTreeByResearchId(researchId);
+        if (!held || DataManager.getCurrentTreeId() !== held.id) return null;
+        const data = DataManager.getData();
+        const year = (d?: string): string => /\b(\d{3,4})\b/.exec(d ?? '')?.[1] ?? '';
+        return filterAndSort(q, Object.values(data.persons).filter(p => !p.isPlaceholder && !!p.refn), data).slice(0, 8).map(p => {
+            const b = year(p.birthDate);
+            const dd = year(p.deathDate);
+            const span = b && dd ? `${b}–${dd}` : b ? `*${b}` : dd ? `†${dd}` : '';
+            return { id: p.refn!, name: `${p.firstName} ${p.lastName}`.trim(), ...(span ? { span } : {}), ...(p.birthPlace ? { place: p.birthPlace } : {}) };
+        });
     },
 
     /** The batch kept on this device for the tree, put before what is chosen now (its person and note unless given). */
     async batchLoadDeviceDraft(treeId: string, personId?: string): Promise<void> {
         const s = st;
-        const draft = await loadDeviceDraft(treeId);
+        const draft = await this.batchDraftOf(treeId);
         if (!draft || st !== s || !s || run) return;
         const have = new Set(s.items.map(i => i.key));
         const kept: Item[] = draft.photos.filter(p => !have.has(p.id)).map(p => this.batchItemOf(new File([p.blob], p.name, { type: p.type }), p.name, p.id));
         s.items = [...kept, ...s.items];
-        if (!personId && draft.personId) s.personId = draft.personId;
+        if (!personId && draft.personId) {
+            s.personId = draft.personId;
+            if (draft.personName) { s.personName = draft.personName; s.personSpan = draft.personSpan; }
+        }
         if (draft.note && !s.note) s.note = draft.note.slice(0, noteMax());
         if (draft.name && !s.nameTouched) { s.name = draft.name; s.nameTouched = true; }
         if (s.items.length && s.step === 'pick') s.step = 'check';
@@ -305,7 +365,7 @@ export const batchMethods = uiModule({
 
     /** One chosen file as an item of the batch: the rules tick or untick it (HEIC on a device by what the research takes). */
     batchItemOf(file: File, path: string, key?: string): Item {
-        const link = this.researchOriginalsLink();
+        const link = this.batchLink();
         const accepts = link ? this.researchAcceptsOf(link.researchId) : null;
         const limits = batchLimitsOf(accepts);
         const skip = batchSkip({ path, size: file.size }, limits?.maxFile ?? 0)
@@ -320,10 +380,31 @@ export const batchMethods = uiModule({
      */
     batchSaveDeviceDraft(handed = false): void {
         const s = st;
-        const link = this.researchOriginalsLink();
+        const link = this.batchLink();
         if (!s || !link || !researchDevice()) return;
         const photos: DevicePhoto[] = s.items.filter(i => i.key).map(i => ({ id: i.key!, blob: i.file, name: i.path.split('/').pop() || i.file.name, type: i.file.type, size: i.size }));
-        void saveDeviceDraft({ treeId: link.treeId, name: s.nameTouched ? s.name : '', personId: s.personId, note: s.note, photos, ...(handed || s.held ? { handedAt: new Date().toISOString() } : {}) });
+        void saveDeviceDraft({
+            treeId: link.treeId, name: s.nameTouched ? s.name : '', personId: s.personId, note: s.note, photos,
+            ...(s.personId && s.personName ? { personName: s.personName, ...(s.personSpan ? { personSpan: s.personSpan } : {}) } : {}),
+            ...(handed || s.held ? { handedAt: new Date().toISOString() } : {}),
+        });
+        this.phoneQueueChanged();
+    },
+
+    /**
+     * The batch kept for a tree: under its own key, else (a tree downloaded after its batch was chosen on the
+     * Research screen) under the research's ID — taken over to the tree's key then.
+     */
+    async batchDraftOf(treeId: string): Promise<DeviceBatchDraft | null> {
+        const own = await loadDeviceDraft(treeId);
+        if (own) return own;
+        const researchId = TreeManager.getTreeMetadata(treeId as TreeId)?.research?.id;
+        if (!researchId || researchId === treeId) return null;
+        const early = await loadDeviceDraft(researchId);
+        if (!early) return null;
+        await saveDeviceDraft({ ...early, treeId });
+        await dropDeviceDraft(researchId);
+        return { ...early, treeId };
     },
 
     openBatchOverlay(): void {
@@ -403,7 +484,7 @@ export const batchMethods = uiModule({
     batchDeviceGridHtml(): string {
         const b = strings.batch;
         const s = st!;
-        const link = this.researchOriginalsLink();
+        const link = this.batchLink();
         const maxFile = batchLimitsOf(link ? this.researchAcceptsOf(link.researchId) : null)?.maxFile ?? 0;
         const chosen = s.items.filter(i => i.checked);
         const bytes = chosen.reduce((sum, i) => sum + i.size, 0);
@@ -440,16 +521,18 @@ export const batchMethods = uiModule({
         const s = st!;
         const chosen = s.items.filter(i => i.checked);
         const bytes = chosen.reduce((sum, i) => sum + i.size, 0);
-        const p = s.personId ? DataManager.getData().persons[s.personId as PersonId] : undefined;
-        const person = p ? `${p.firstName} ${p.lastName}`.trim() : '';
+        const p = s.personId && !screenOf ? DataManager.getData().persons[s.personId as PersonId] : undefined;
+        // The Research screen: the person found through the research (its name and years kept with it).
+        const person = screenOf ? (s.personId ? s.personName || s.personId : '') : p ? `${p.firstName} ${p.lastName}`.trim() : '';
+        const span = screenOf && s.personId ? s.personSpan ?? '' : '';
         const max = noteMax();
         return `
                 <div class="modal-content batch-content">
                     <p class="batch-confirm-sum">${esc(b.photoCount(chosen.length, formatBytesShort(bytes)))}</p>
                     <div class="batch-field batch-device-field"><span>${esc(b.person)} <span class="batch-optional">${esc(b.optional)}</span></span>
-                        ${person ? `<div class="batch-person-chip"><span class="batch-person-name">${esc(person)}</span>
+                        ${person ? `<div class="batch-person-chip"><span class="batch-person-name">${esc(person)}</span>${span ? `<span class="batch-person-span">${esc(span)}</span>` : ''}
                             <button type="button" class="batch-chip-x" data-act="person-clear" aria-label="${esc(b.removePerson)}">&times;</button></div>`
-                            : '<div id="batch-device-person" class="batch-person-picker"></div>'}
+                            : screenOf ? '<div id="batch-phone-person" class="batch-person-picker"></div>' : '<div id="batch-device-person" class="batch-person-picker"></div>'}
                     </div>
                     <label class="batch-field batch-device-field"><span>${esc(b.note)} <span class="batch-optional">${esc(b.optional)}</span></span>
                         <textarea id="batch-note" rows="3" maxlength="${max}" placeholder="${esc(b.notePlaceholder)}">${esc(s.note)}</textarea>
@@ -513,8 +596,9 @@ export const batchMethods = uiModule({
         const inside = r.states.filter(x => x === 'in').length;
         const had = r.states.filter(x => x === 'had').length;
         const failed = r.queue.map((item, i) => ({ item, i })).filter(x => r.states[x.i] === 'error');
-        const link = this.researchOriginalsLink();
+        const link = this.batchLink();
         const stored = !!link && (this.researchModeOf(link.researchId) === 'archive' || this.researchAgentAway(link.researchId));
+        const pc = computerLabelOf(pairingNow()?.computer);
         return `
                 <div class="modal-content batch-content batch-done">
                     <h3 class="batch-confirm-title">${failed.length ? '' : '✓ '}${esc(b.doneDevice(inside + had, r.total))}</h3>
@@ -523,7 +607,7 @@ export const batchMethods = uiModule({
                         <span class="batch-photo-name">${esc(item.path.split('/').pop() || item.path)}</span>
                         <span class="batch-photo-state">${esc(b.stateError)}</span>
                         <span class="batch-photo-why">${esc(r.errs.get(i) ?? '')}</span></li>`).join('')}</ul>` : ''}
-                    ${stored ? '' : `<p class="batch-done-text">${esc(b.sortOnComputer)}</p>`}
+                    ${stored ? '' : `<p class="batch-done-text">${esc(phoneComputerOnlyNote('batch-sort', pc))}</p>`}
                 </div>
                 <div class="buttons batch-footer">
                     <span class="batch-foot-note"></span>
@@ -556,8 +640,8 @@ export const batchMethods = uiModule({
 
     batchFrameHtml(body: string, step: Step | null): string {
         const b = strings.batch;
-        const link = this.researchOriginalsLink();
-        const tree = link ? TreeManager.getTreeMetadata(link.treeId)?.name ?? '' : '';
+        const link = this.batchLink();
+        const tree = link ? TreeManager.getTreeMetadata(link.treeId)?.name ?? pairingNow()?.trees.find(t => t.id === link.researchId)?.name ?? '' : '';
         const research = link ? this.researchStatusOf(link.researchId)?.name || tree : tree;
         const steps: [Step, string][] = [['pick', b.stepPick], ['check', b.stepCheck], ['send', b.stepSend]];
         const at = step ? steps.findIndex(s => s[0] === step) : -1;
@@ -919,13 +1003,13 @@ export const batchMethods = uiModule({
                     this.renderBatchKeepScroll();
                     break;
                 }
-                case 'person-clear': if (s) { s.personId = ''; this.batchSaveDeviceDraft(); this.renderBatchDialog(); } break;
+                case 'person-clear': if (s) { s.personId = ''; s.personName = undefined; s.personSpan = undefined; this.batchSaveDeviceDraft(); this.renderBatchDialog(); } break;
                 case 'retry-failed': this.batchRetryFailed(); break;
                 case 'pick-folder': overlay.querySelector<HTMLInputElement>('#batch-input-folder')?.click(); break;
                 case 'add-more': overlay.querySelector<HTMLInputElement>('#batch-input-files')?.click(); break;
                 case 'start': this.researchSyncAction('startResearch'); break;
                 case 'discard': {
-                    const link = this.researchOriginalsLink();
+                    const link = this.batchLink();
                     if (link) writeUnfinished(link.treeId, null);
                     if (s) s.resume = null;
                     this.renderBatchDialog();
@@ -992,6 +1076,7 @@ export const batchMethods = uiModule({
         fromInput(overlay.querySelector('#batch-input-folder'));
         fromInput(overlay.querySelector('#batch-input-camera'));
         fromInput(overlay.querySelector('#batch-input-gallery'));
+        fromInput(overlay.querySelector('#batch-input-file'));
         if (s && deviceTouch()) this.wireBatchDevice(overlay);
         const drop = overlay.querySelector<HTMLElement>('.batch-drop:not(.is-down)');
         drop?.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.add('is-over'); });
@@ -1061,6 +1146,23 @@ export const batchMethods = uiModule({
                 },
             });
         }
+        // The Research screen (no tree here): the person searched in the research through the bridge (§6 point 3).
+        const phone = overlay.querySelector<HTMLElement>('#batch-phone-person');
+        const researchId = screenOf;
+        if (phone && researchId) {
+            mountPhonePersonSearch(phone, {
+                treeId: researchId,
+                computer: computerLabelOf(pairingNow()?.computer),
+                local: q => this.batchHeldPeople(researchId, q),
+                onPick: hit => {
+                    s.personId = hit.id;
+                    s.personName = hit.name;
+                    s.personSpan = hit.span;
+                    this.batchSaveDeviceDraft();
+                    this.renderBatchDialog();
+                },
+            });
+        }
         const note = overlay.querySelector<HTMLTextAreaElement>('#batch-note');
         const count = overlay.querySelector<HTMLElement>('.batch-note-count');
         note?.addEventListener('input', () => {
@@ -1081,14 +1183,14 @@ export const batchMethods = uiModule({
     /** While the pick step waits for the research to run: look every few seconds, the area turns into the picker. */
     watchBatchBridge(): void {
         const waiting = st?.step === 'pick' && !run && !!document.getElementById(DIALOG_ID);
-        const link = this.researchOriginalsLink();
+        const link = this.batchLink();
         if (!waiting || !link || this.researchBridgeUp(link.researchId)) {
             if (downTimer) { clearInterval(downTimer); downTimer = null; }
             return;
         }
         if (downTimer) return;
         downTimer = setInterval(() => {
-            const l = this.researchOriginalsLink();
+            const l = this.batchLink();
             if (!document.getElementById(DIALOG_ID) || !l || st?.step !== 'pick') {
                 if (downTimer) { clearInterval(downTimer); downTimer = null; }
                 return;
@@ -1113,11 +1215,13 @@ export const batchMethods = uiModule({
 
     async startBatchRun(opts: { hidden?: boolean } = {}): Promise<void> {
         const s = st;
-        const link = this.researchOriginalsLink();
+        const link = this.batchLink();
         const bridge = link ? parseLiveBridge(storedResearchBridge(link.researchId)?.base) : null;
         if (!s || !link || !bridge) return;
         const queue = s.items.filter(i => i.checked);
-        const person = s.personId ? originalTargets({ personId: s.personId as PersonId }, DataManager.getData()).person ?? '' : '';
+        // The Research screen's person is the research's own ID already (P…).
+        const person = !s.personId ? '' : screenOf ? s.personId
+            : originalTargets({ personId: s.personId as PersonId }, DataManager.getData()).person ?? '';
         const resume = s.resume;
         run = {
             id: resume?.id ?? newBatchId(), treeId: link.treeId, researchId: link.researchId, base: bridge.base,
@@ -1130,6 +1234,7 @@ export const batchMethods = uiModule({
             states: [], errs: new Map(), curDone: 0,
         };
         s.step = 'progress';
+        lastEnded = null;
         if (opts.hidden) run.hidden = true;
         // A device: its photos kept as handed over until they reach the research (they go again by themselves).
         if (researchDevice()) this.batchSaveDeviceDraft(true);
@@ -1153,8 +1258,8 @@ export const batchMethods = uiModule({
         if (!r) return;
         let lastDraw = 0;
         const draw = (force = false): void => {
-            if (r.hidden) { if (force || Date.now() - lastDraw > 1000) { lastDraw = Date.now(); this.refreshResearchSyncUi(); } return; }
-            if (force || Date.now() - lastDraw > 250) { lastDraw = Date.now(); this.renderBatchDialog(); }
+            if (r.hidden) { if (force || Date.now() - lastDraw > 1000) { lastDraw = Date.now(); this.refreshResearchSyncUi(); this.phoneQueueChanged(); } return; }
+            if (force || Date.now() - lastDraw > 250) { lastDraw = Date.now(); this.renderBatchDialog(); this.phoneQueueChanged(); }
         };
         while (r.index < r.queue.length && !r.cancelled) {
             if (r.pauseAsked) {
@@ -1239,6 +1344,10 @@ export const batchMethods = uiModule({
         r.closeWait = false;
         r.closeFailed = false;
         r.finished = true;
+        if (!r.discarded && !r.unclosed) {
+            const failed = r.states.filter(x => x === 'error').length;
+            lastEnded = { researchId: r.researchId, at: Date.now(), k: r.states.filter(x => x === 'in' || x === 'had').length, n: r.total, failed };
+        }
         // The followed research's changes held while the batch went: its tree read once now.
         this.liveReleaseHeld();
         window.removeEventListener('beforeunload', onLeave);
@@ -1269,8 +1378,9 @@ export const batchMethods = uiModule({
         }
         // The Materials window open under it says the batch in its strip and reads the list again (spec 102 §8).
         this.materialsBatchAdded(r.result?.inputs ?? r.received);
+        this.phoneQueueChanged();
         if (r.hidden || !document.getElementById(DIALOG_ID)) {
-            const link = this.researchOriginalsLink();
+            const link = this.batchLink();
             const archive = !!link && this.researchModeOf(link.researchId) === 'archive';
             this.showToast(strings.batch.doneToast(r.name, r.result?.inputs ?? r.received, r.refused.length), 8000, {
                 closable: true, action: { label: strings.batch.summary, run: () => { r.hidden = false; this.openBatchOverlay(); this.renderBatchDialog(); } },
@@ -1598,18 +1708,26 @@ export const batchMethods = uiModule({
      * could not be closed is not sent over and over). `count`: only how many would go.
      * How many photos go (0: none).
      */
-    async batchResumeDevicePhotos(opts: { count?: boolean } = {}): Promise<number> {
+    async batchResumeDevicePhotos(opts: { count?: boolean; screen?: string } = {}): Promise<number> {
         const idle = (): boolean => !(run && !run.finished) && !document.getElementById(DIALOG_ID);
-        const link = this.researchOriginalsLink();
+        const linkOf = (): { treeId: TreeId; researchId: string } | null => {
+            if (!opts.screen) return this.researchOriginalsLink();
+            const held = TreeManager.findTreeByResearchId(opts.screen);
+            return { treeId: (held?.id ?? opts.screen) as TreeId, researchId: opts.screen };
+        };
+        const link = linkOf();
         if (!researchDevice() || !link || !idle() || deviceResumed.has(link.treeId)) return 0;
-        const draft = await loadDeviceDraft(link.treeId);
-        if (!draft?.handedAt || !draft.photos.length || !idle() || this.researchOriginalsLink()?.treeId !== link.treeId) return 0;
+        const draft = await this.batchDraftOf(link.treeId);
+        if (!draft?.handedAt || !draft.photos.length || !idle() || linkOf()?.treeId !== link.treeId) return 0;
         if (opts.count) return draft.photos.length;
-        if (!this.batchAvailable() || !deviceMediaOn() || deviceResumed.has(link.treeId)) return 0;
+        if ((opts.screen ? false : !this.batchAvailable()) || !deviceMediaOn() || deviceResumed.has(link.treeId)) return 0;
         deviceResumed.add(link.treeId);
+        // The Research screen's batch goes to its research (no tree needed); any other to the open tree's.
+        screenOf = opts.screen ?? null;
         st = {
             step: 'send', items: [], name: draft.name, nameTouched: !!draft.name, personId: draft.personId, note: draft.note,
             search: '', full: new Set(), collapsed: new Set(), resume: readUnfinished(link.treeId), held: false,
+            ...(draft.personName ? { personName: draft.personName, personSpan: draft.personSpan } : {}),
         };
         st.items = draft.photos.map(p => this.batchItemOf(new File([p.blob], p.name, { type: p.type }), p.name, p.id));
         run = null;
@@ -1617,6 +1735,7 @@ export const batchMethods = uiModule({
         if (n > 0) void this.startBatchRun({ hidden: true });
         if (!run) {
             st = null;
+            screenOf = null;
             return 0;
         }
         return n;
@@ -1684,6 +1803,8 @@ export const batchMethods = uiModule({
         if (downTimer) { clearInterval(downTimer); downTimer = null; }
         if (run?.finished) run = null;
         st = null;
+        if (!run) screenOf = null;
+        this.phoneQueueChanged();
     },
 
     // ==================== THE BLOCK'S LINE ====================
@@ -1698,10 +1819,10 @@ export const batchMethods = uiModule({
             + `<span class="research-sync-line2-text">${esc(text)}</span>${links}</div>`;
         const btn = (label: string, call: string): string =>
             `<button type="button" class="research-sync-link" role="menuitem" onclick="window.Strom.UI.${call}">${esc(label)}</button>`;
-        if (run && !run.finished && run.treeId === link.treeId && (run.closeWait || run.closeFailed)) {
+        if (run && !run.finished && run.researchId === link.researchId && (run.closeWait || run.closeFailed)) {
             return line(b.notClosed(run.name), btn(b.show, 'showBatchDialog()'), run.closeFailed);
         }
-        if (run && !run.finished && run.treeId === link.treeId) {
+        if (run && !run.finished && run.researchId === link.researchId) {
             return line(`${b.sendingTitle(run.name)} · ${b.sendingSub(run.index, run.total)}`, btn(b.show, 'showBatchDialog()'));
         }
         const rec = readUnfinished(link.treeId);
@@ -1723,11 +1844,45 @@ export const batchMethods = uiModule({
 
     /** The More sheet's row while a batch goes (a device's sheet closed): "Sending to the research · k of n", opens it again. */
     batchSheetRow(): { label: string; value: string; run: () => void } | null {
-        const link = this.researchOriginalsLink();
+        const link = this.batchLink();
         const r = run;
-        if (!link || !r || r.finished || r.treeId !== link.treeId) return null;
+        if (!link || !r || r.finished || r.researchId !== link.researchId) return null;
         const sent = r.states.filter(x => x === 'in' || x === 'had').length;
         return { label: strings.batch.sendingRow, value: strings.batch.progressCount(sent, r.total), run: () => this.batchReopen() };
+    },
+
+    /** How the batches of this page stand (the phone's queue strip, spec 094 §6 point 4). */
+    batchQueueInfo(): BatchQueueInfo {
+        const r = run;
+        if (!r || r.cancelled || !researchDevice()) return { run: null, ended: lastEnded };
+        const sent = r.states.filter(x => x === 'in' || x === 'had').length;
+        const failed = r.states.filter(x => x === 'error').length;
+        const item = r.queue[r.index];
+        const part = !r.finished && !r.paused && item?.size ? Math.min(1, r.curDone / item.size) : 0;
+        return {
+            run: {
+                researchId: r.researchId, total: r.total, sent, failed, share: r.total ? Math.min(1, (sent + failed + part) / r.total) : 0,
+                finished: r.finished, paused: r.paused, lost: r.lost,
+            },
+            ended: lastEnded,
+        };
+    },
+
+    /** The batch going (or ended, its window not closed yet): its failed photos sent again, a paused one goes on; else false. */
+    batchRetryFromStrip(): boolean {
+        const r = run;
+        // Its window closed: the failed photos wait as the tree's batch; the caller opens it again.
+        if (!r || r.cancelled) { lastEnded = null; return false; }
+        if (r.finished) {
+            if (!r.states.some(x => x === 'error')) return false;
+            this.batchRetryFailed();
+            return true;
+        }
+        if (r.paused) {
+            this.resumeBatchRun();
+            return true;
+        }
+        return false;
     },
 
     /** The batch's list again (from the sheet's row): its run, also one that ended meanwhile (its Done with what failed). */
@@ -1770,7 +1925,8 @@ function dropThumbs(items: readonly Item[]): void {
 /** The inputs of a touch device: the camera, the gallery and any file. */
 const DEVICE_INPUTS = `<input type="file" id="batch-input-camera" accept="image/*" capture="environment" hidden>
                     <input type="file" id="batch-input-gallery" accept="image/*" multiple hidden>
-                    <input type="file" id="batch-input-files" multiple hidden>`;
+                    <input type="file" id="batch-input-files" multiple hidden>
+                    <input type="file" id="batch-input-file" hidden>`;
 
 /** Every folder path of the files (for "Expand all"). */
 function batchFolderPaths(items: readonly Item[]): string[] {

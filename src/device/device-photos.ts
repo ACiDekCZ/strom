@@ -26,6 +26,9 @@ export interface DeviceBatchDraft {
     treeId: string;
     name: string;
     personId: string;
+    /** The person's name and years as the research's search gave them (a phone's Research screen: no tree to name it). */
+    personName?: string;
+    personSpan?: string;
     note: string;
     photos: DevicePhoto[];
     /** When it was handed over (it waits for the computer to take files of a device): absent while it is chosen. */
@@ -54,6 +57,8 @@ export function parseDeviceDraft(v: unknown): DeviceBatchDraft | null {
         treeId: r.treeId,
         name: typeof r.name === 'string' ? r.name : '',
         personId: typeof r.personId === 'string' ? r.personId : '',
+        ...(typeof r.personName === 'string' && r.personName ? { personName: r.personName.slice(0, 200) } : {}),
+        ...(typeof r.personSpan === 'string' && r.personSpan ? { personSpan: r.personSpan.slice(0, 60) } : {}),
         note: typeof r.note === 'string' ? r.note : '',
         photos,
         ...(typeof r.handedAt === 'string' ? { handedAt: r.handedAt } : {}),

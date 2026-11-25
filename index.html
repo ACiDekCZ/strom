@@ -23884,9 +23884,60 @@
         /* The dock (§6; its buttons: D6): Take a photo 48px across, From the gallery | File 44px under it. */
         .phone-dock {
             flex: none; grid-area: dock; background: var(--surface); border-top: 1px solid var(--border);
-            padding: 6px 16px 10px; box-sizing: border-box;
+            padding: 6px 16px 10px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px;
         }
-        .phone-dock__actions { min-height: 100px; }
+        .phone-dock__actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+        .phone-dock__btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 44px;
+            padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+            color: var(--text); font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer;
+        }
+        .phone-dock__btn > span { overflow: hidden; text-overflow: ellipsis; }
+        .phone-dock__btn svg { width: 20px; height: 20px; flex: none; }
+        .phone-dock__btn.is-primary {
+            grid-column: 1 / -1; min-height: 48px; font-size: 15px; font-weight: 600;
+            background: var(--primary); border-color: var(--primary); color: var(--on-primary);
+        }
+        .phone-dock__btn:focus-visible, .phone-dock__queue:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        /* The queue's strip (§6 point 4): 36px, no border, only while something is sent or waits. */
+        .phone-dock__queue {
+            display: flex; align-items: center; gap: 10px; min-height: 36px; width: 100%; padding: 0; border: 0;
+            background: none; color: var(--text-light); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+        }
+        .phone-dock__queue[hidden] { display: none; }
+        .phone-dock__queue-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .phone-dock__queue-text b { color: var(--text); font-weight: 600; }
+        .phone-dock__queue.is-failed .phone-dock__queue-text b { color: var(--error-text); }
+        .phone-dock__queue-bar { flex: none; width: 64px; height: 3px; border-radius: var(--r-sm); background: var(--gen-track); overflow: hidden; }
+        .phone-dock__queue-bar > i { display: block; height: 100%; background: var(--primary); }
+        .phone-dock__queue-retry { flex: none; margin-left: auto; color: var(--primary); font-weight: 600; }
+        @media (hover: hover) {
+            .phone-dock__btn:not(.is-primary):hover { background: var(--hover-bg); }
+            .phone-dock__btn.is-primary:hover { background: var(--primary-dark); }
+        }
+        @media (max-width: 360px) {
+            .phone-dock__btn { padding: 0 10px; gap: 6px; }
+        }
+        /* The person of the Research screen's batch, searched in the research (§6 point 3). */
+        .phone-person { display: flex; flex-direction: column; gap: 6px; }
+        .phone-person__input {
+            min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--surface); color: var(--text); font: inherit; font-size: 16px; box-sizing: border-box; width: 100%;
+        }
+        .phone-person__input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .phone-person__hits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+        .phone-person__hits:empty { display: none; }
+        .phone-person__hit {
+            display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; width: 100%;
+            min-height: 48px; padding: 6px 4px; border: 0; border-bottom: 1px solid var(--divider); background: none;
+            color: var(--text); font: inherit; text-align: left; cursor: pointer;
+        }
+        .phone-person__name { font-family: var(--font-serif); font-size: 16px; }
+        .phone-person__sub { font-size: 12px; color: var(--text-light); }
+        .phone-person__none { padding: 10px 4px; font-size: 13px; color: var(--text-light); }
+        .phone-person__note { margin: 0; font-size: 12px; line-height: 1.35; color: var(--text-faint); }
+        @media (hover: hover) { .phone-person__hit:hover { background: var(--hover-bg); } }
+        .batch-person-span { flex: none; font-size: 12px; color: var(--text-light); }
         .phone-dock__note { margin: 6px 0 0; font-size: 12px; line-height: 1.3; color: var(--text-faint); text-align: center; overflow-wrap: anywhere; }
         /* The toasts (the tree's download first of all, §7 point 2) stand over the dock, never over its buttons. */
         body.phone-research-on .toast { bottom: calc(var(--bottom-bar-h, 0px) + var(--phone-dock-h, 116px) + 12px); }
@@ -23901,8 +23952,10 @@
             .phone-research__col--a { grid-area: a; border-right: 1px solid var(--divider); }
             .phone-research__col--b { grid-area: b; }
             .phone-finds-new { grid-area: b; align-self: start; position: relative; }
-            .phone-dock { padding: 6px 12px 8px; }
-            .phone-dock__actions { min-height: 44px; }
+            .phone-dock { padding: 6px 12px 8px; gap: 4px; }
+            .phone-dock__actions { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); }
+            .phone-dock__btn, .phone-dock__btn.is-primary { grid-column: auto; min-height: 44px; padding: 0 8px; gap: 6px; font-size: 13px; }
+            .phone-dock__btn svg { width: 18px; height: 18px; }
         }
         /* What waits on this device (7.4): the photos' thumbnails, the persons edited, save and discard. */
         .device-waiting { display: flex; flex-direction: column; gap: 14px; }
@@ -36711,7 +36764,7 @@
     <nav id="bottom-bar" class="bottom-bar">
         <!-- A phone in the device mode (spec 094 K3.13): its Research screen, first; hidden anywhere else. -->
         <button type="button" class="bottom-bar-tab sel-tab" data-sel-dir="up" data-sel-land="side" id="bb-view-research" onclick="window.Strom.UI.phoneResearchTab()">
-            <svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v3"/><path d="M13 3v5h5"/><circle cx="16.5" cy="16.5" r="3"/><path d="m21 21-2.4-2.4"/></svg>
+            <span class="bottom-bar-icon-wrap"><svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v3"/><path d="M13 3v5h5"/><circle cx="16.5" cy="16.5" r="3"/><path d="m21 21-2.4-2.4"/></svg><span class="bottom-bar-more-dot" id="bb-research-dot" hidden></span></span>
             <span class="bottom-bar-label sel-l" data-i18n="deviceResearch.researchTab"></span>
         </button>
         <button type="button" class="bottom-bar-tab sel-tab active" data-sel-dir="up" data-sel-land="side" id="bb-view-family" onclick="window.Strom.UI.setDisplayViewMode('family')">

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { seedResearchPromoSeen, seedWhatsNewSeen } from './helpers.js';
 import { startDeviceGateway, fakeGlance, fakeFinds, fakeWaiting, type FakeGateway, type TunnelReply } from './device-gateway.js';
@@ -676,5 +676,183 @@ test.describe('Waiting (en)', () => {
         await expect(sec.locator('.phone-sec__quiet')).toHaveText('Nothing is waiting.');
         await expect(sec.locator('.phone-sec__head')).toBeHidden();
         await expect(sec.locator('.phone-wait')).toHaveCount(0);
+    });
+});
+
+/**
+ * The dock (§6): Take photo across, From gallery | File under it; the batch of the screen's research with its
+ * person searched through the bridge (`people?q=`), the queue's strip over the buttons and the dot on Research.
+ */
+const PNG = readFileSync('e2e/fixtures/avatar.png');
+const photo = (name: string, n: number) => ({ name, mimeType: 'image/png', buffer: Buffer.concat([PNG, Buffer.from(`mlynky-${n}`)]) });
+const ACCEPTS = {
+    mode: 'research', sync: { auto: 'off' }, sources: true, verified: true,
+    media: { max: 500 * 1024 * 1024, region: true, tasks: 'open', batch: { files: 5000, bytes: 20 * 1024 * 1024 * 1024, zip: true } },
+};
+const PEOPLE = [
+    { id: 'P0003', name: 'Josef Pýchavka', span: '1880–1944', place: 'Mlýnky' },
+    { id: 'P0001', name: 'Jan Pýchavka', span: '1851–1919', place: 'Mlýnky' },
+];
+
+interface DockAsked extends Asked {
+    /** Every `people` query. */
+    people: string[];
+    /** Every `batch/<id>/done` body. */
+    done: unknown[];
+}
+
+/** The research of `research()` that also takes files of devices and searches its people; `holdDone`: the batch's end waits for it. */
+function dockResearch(gw: FakeGateway, o: { holdDone?: Promise<void> } = {}): DockAsked {
+    const asked = research(gw) as DockAsked;
+    asked.people = [];
+    asked.done = [];
+    const base = gw.onTunnel;
+    gw.onTunnel = async (req, device): Promise<TunnelReply | undefined> => {
+        if (req.p === 'status' && req.m === 'GET') {
+            return { s: 200, body: {
+                ok: true, tree: { id: PYCH, name: NAME }, head: '3c7a9e1f05b2', links: ['send', 'open', 'live', 'app', 'setup'], accepts: ACCEPTS,
+                features: ['device.gateway', 'glance', 'finds', 'finds.person', 'people.search'],
+                device: { id: device.id, name: device.name, kind: device.kind, actions: ['device.rename', 'device.unpair', 'media.put'] },
+            } };
+        }
+        if (req.p === 'people') {
+            const q = String(req.q?.q ?? '');
+            asked.people.push(q);
+            return { s: 200, body: { people: PEOPLE.filter(p => p.name.toLowerCase().includes(q.toLowerCase())) } };
+        }
+        if (/^batch\/[^/]+\/done$/.test(req.p)) {
+            if (o.holdDone) await o.holdDone;
+            asked.done.push(typeof req.b === 'string' ? JSON.parse(req.b) : req.b);
+            return { s: 200, body: { ok: true, inputs: gw.media.length, known: 0, refused: 0, tasks: [] } };
+        }
+        return base(req, device);
+    };
+    return asked;
+}
+
+const dock = (page: Page) => page.locator('#phone-dock');
+const DLG = '#batch-modal .batch-dialog';
+
+test.describe('Dock (en)', () => {
+    test.use({ locale: 'en-US' });
+
+    test('Take photo across, From gallery | File under it; gallery photos with a person found through the bridge, the strip and the dot while they go', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        let release!: () => void;
+        const asked = dockResearch(gw, { holdDone: new Promise<void>(r => { release = r; }) });
+        await pairedOnScreen(page, gw);
+        const btns = dock(page).locator('.phone-dock__btn');
+        await expect(btns).toHaveText(['Take photo', 'From gallery', 'File']);
+        const [cam, gal, file] = await Promise.all([0, 1, 2].map(i => btns.nth(i).boundingBox()));
+        expect(Math.round(cam!.height)).toBe(48);
+        expect(Math.round(cam!.width)).toBe(390 - 32);
+        expect(Math.round(gal!.height)).toBe(44);
+        expect(Math.round(file!.y)).toBe(Math.round(gal!.y));
+        expect(gal!.y).toBeGreaterThan(cam!.y + cam!.height);
+        // Nothing sent or waiting: no strip, no dot.
+        await expect(dock(page).locator('.phone-dock__queue')).toBeHidden();
+        await expect(page.locator('#bb-research-dot')).toBeHidden();
+        await shot(page, 'dock-en-390');
+
+        // From gallery: the chooser opens within the tap; the batch of the screen's research, its grid.
+        const chooser = page.waitForEvent('filechooser');
+        await btns.nth(1).click();
+        await (await chooser).setFiles([photo('IMG_3101.png', 1), photo('IMG_3102.png', 2)]);
+        const dlg = page.locator(DLG);
+        await expect(dlg.locator('.batch-grid .batch-cell:not(.batch-cell-add)')).toHaveCount(2);
+        await expect(dlg).toContainText(NAME);
+        await dlg.locator('[data-act="next"]').click();
+
+        // The person: searched in the research (not the tree, never downloaded), at most 8, "years · place".
+        const search = dlg.locator('#batch-phone-person .phone-person__input');
+        await expect(dlg.locator('.phone-person__note')).toHaveText('Searched in the research on Pracovna, at most 8 people. The tree is not downloaded for it.');
+        await search.fill('Pých');
+        const hits = dlg.locator('.phone-person__hit');
+        await expect(hits).toHaveCount(2);
+        await expect(hits.first().locator('.phone-person__name')).toHaveText('Josef Pýchavka');
+        await expect(hits.first().locator('.phone-person__sub')).toHaveText('1880–1944 · Mlýnky');
+        expect(asked.people).toEqual(['Pých']);
+        await search.fill('Zzzz');
+        await expect(dlg.locator('.phone-person__none')).toHaveText('No one found.');
+        await search.fill('Josef');
+        await expect(hits).toHaveCount(1);
+        await hits.first().click();
+        await expect(dlg.locator('.batch-person-name')).toHaveText('Josef Pýchavka');
+        await expect(dlg.locator('.batch-person-span')).toHaveText('1880–1944');
+        await shot(page, 'dock-person-en-390');
+
+        // Handed over: while the batch goes the strip says so and Research has its dot.
+        await dlg.locator('[data-act="go"]').click();
+        const strip = dock(page).locator('.phone-dock__queue');
+        await expect(strip).toHaveText('2 photos · sending 2 of 2');
+        await expect(strip.locator('.phone-dock__queue-bar')).toBeVisible();
+        await expect(page.locator('#bb-research-dot')).toBeVisible();
+        release();
+        await expect(dlg.locator('.batch-confirm-title')).toHaveText('✓ 2 of 2 photos are in the research');
+        await expect(dlg.locator('.batch-done-text')).toHaveText('Sorting by the agent is started on the computer with the research.');
+        await expect(strip).toHaveText('2 of 2 photos are in the research');
+        await expect(page.locator('#bb-research-dot')).toBeHidden();
+        expect(gw.media.every(m => m.tree === PYCH && m.meta['X-Strom-Person'] === 'P0003')).toBe(true);
+        expect(gw.media).toHaveLength(2);
+        expect(asked.done).toHaveLength(1);
+        expect(asked.done[0]).toMatchObject({ person: 'P0003' });
+        expect(asked.trees).toBe(0);
+        await dlg.locator('.batch-footer [data-act="close"]').click();
+        // Done for 5 s, then no strip.
+        await expect(strip).toBeHidden({ timeout: 8000 });
+    });
+
+    test('File takes any file, a PDF too', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        const asked = dockResearch(gw);
+        await pairedOnScreen(page, gw);
+        const chooser = page.waitForEvent('filechooser');
+        await dock(page).locator('.phone-dock__btn', { hasText: 'File' }).click();
+        const fc = await chooser;
+        expect(await fc.element().getAttribute('accept')).toBeNull();
+        await fc.setFiles([{ name: 'kupni-smlouva.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n1 0 obj << >> endobj\ntrailer << >>\n%%EOF\n') }]);
+        const dlg = page.locator(DLG);
+        await expect(dlg.locator('.batch-grid .batch-cell:not(.batch-cell-add)')).toHaveCount(1);
+        await dlg.locator('[data-act="next"]').click();
+        await dlg.locator('[data-act="go"]').click();
+        await expect(dlg.locator('.batch-confirm-title')).toContainText('1 of 1');
+        expect(gw.media).toHaveLength(1);
+        expect(decodeURIComponent(String(gw.media[0].meta['X-Strom-Name']))).toBe('kupni-smlouva.pdf');
+        expect(asked.trees).toBe(0);
+    });
+
+    test('held sideways the dock is one row', async ({ page }) => {
+        await page.setViewportSize({ width: 844, height: 390 });
+        await seeds(page);
+        dockResearch(gw);
+        await pairedOnScreen(page, gw);
+        const btns = dock(page).locator('.phone-dock__btn');
+        await expect(btns).toHaveCount(3);
+        const boxes = await Promise.all([0, 1, 2].map(i => btns.nth(i).boundingBox()));
+        expect(new Set(boxes.map(b => Math.round(b!.y))).size).toBe(1);
+        expect(boxes[0]!.width).toBeGreaterThan(boxes[1]!.width);
+        expect(boxes.every(b => Math.round(b!.height) >= 44)).toBe(true);
+        await shot(page, 'dock-en-844-landscape');
+    });
+});
+
+test.describe('Dock (de)', () => {
+    test.use({ locale: 'de-DE' });
+
+    test('the German buttons stay on one line at 360 px', async ({ page }) => {
+        await page.setViewportSize({ width: 360, height: 780 });
+        await seeds(page);
+        dockResearch(gw);
+        await pairedOnScreen(page, gw);
+        const btns = dock(page).locator('.phone-dock__btn');
+        await expect(btns).toHaveText(['Foto aufnehmen', 'Aus der Galerie', 'Datei']);
+        const cut = await btns.evaluateAll(els => els.filter(el => {
+            const label = el.querySelector('span')!;
+            return label.scrollWidth > label.clientWidth || el.scrollWidth > el.clientWidth;
+        }).map(el => el.textContent));
+        expect(cut).toEqual([]);
+        await shot(page, 'dock-de-360');
     });
 });

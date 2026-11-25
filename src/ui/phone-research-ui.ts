@@ -41,6 +41,7 @@ import { WaitingAnswerForm, type WaitingAnswerOutcome } from './waiting-answer-f
 import { deviceHypothesisBody, type DeviceHypothesisDo } from './device-decide-ui.js';
 import { postRunStop } from '../research-runs-write.js';
 import { formatLiveClock, formatWaitingSince } from '../live-time.js';
+import { deviceDrafts } from '../device/device-photos.js';
 import type { ViewMode } from '../types.js';
 
 export const PHONE_RESEARCH_ID = 'phone-research';
@@ -249,6 +250,85 @@ export function phoneComputerOnlyNote(kind: PhoneComputerOnly, pc: string): stri
         case 'batch-sort': return strings.batch.sortOnComputer;
         case 'conflict': return strings.deviceResearch.conflictOnComputer(pc);
     }
+}
+
+// ——— The dock (§6) ———
+
+/** How the batches of this page stand (batch-ui's `batchQueueInfo`), for the queue's strip (§6 point 4). */
+export interface BatchQueueInfo {
+    /** The batch going (or ended, its window not closed yet): its photos, sent, failed, the share sent with the one on its way. */
+    run: { researchId: string; total: number; sent: number; failed: number; share: number; finished: boolean; paused: boolean; lost: boolean } | null;
+    /** The last batch that ended in this page: when, how many of how many reached the research, how many failed. */
+    ended: { researchId: string; at: number; k: number; n: number; failed: number } | null;
+}
+
+/** How long "k of n photos are in the research" stays in the strip. */
+export const QUEUE_DONE_MS = 5000;
+
+/** What the queue's strip says (nothing waiting or sent: no strip). */
+export type PhoneQueueStrip =
+    | { kind: 'sending'; n: number; a: number; b: number; share: number }
+    | { kind: 'offline'; n: number }
+    | { kind: 'failed'; n: number }
+    | { kind: 'done'; k: number; n: number }
+    | null;
+
+/**
+ * The strip of the queue (§6 point 4) from the batches' state, the photos handed over that wait here (`held`) and the
+ * time now: a batch going is "sending a of b" (lost connection: waiting for it), failed photos "n not sent" with
+ * Try again, handed photos waiting here "waiting for connection", a batch just ended "k of n in the research" for 5 s.
+ */
+export function phoneQueueStrip(info: BatchQueueInfo, held: number, now: number): PhoneQueueStrip {
+    const r = info.run;
+    if (r && !r.finished) {
+        if (r.paused && r.lost) return { kind: 'offline', n: Math.max(1, r.total - r.sent) };
+        return { kind: 'sending', n: r.total, a: Math.min(r.total, r.sent + r.failed + 1), b: r.total, share: Math.max(0, Math.min(1, r.share)) };
+    }
+    if (r?.finished && r.failed > 0) return { kind: 'failed', n: r.failed };
+    if (held > 0) return { kind: 'offline', n: held };
+    const e = info.ended;
+    if (e && e.failed > 0) return { kind: 'failed', n: e.failed };
+    if (e && now - e.at < QUEUE_DONE_MS) return { kind: 'done', k: e.k, n: e.n };
+    return null;
+}
+
+/** The strip's text: its count in bold (the part before " · "), the rest quiet; failed photos all bold, then Try again. */
+export function phoneQueueStripHtml(strip: NonNullable<PhoneQueueStrip>): string {
+    const r = strings.deviceResearch;
+    const bold = (text: string): string => {
+        const at = text.indexOf(' · ');
+        return at < 0 ? `<b>${esc(text)}</b>` : `<b>${esc(text.slice(0, at))}</b>${esc(text.slice(at))}`;
+    };
+    switch (strip.kind) {
+        case 'sending':
+            return `<span class="phone-dock__queue-text">${bold(r.queueSending(strip.n, strip.a, strip.b))}</span>`
+                + `<span class="phone-dock__queue-bar" aria-hidden="true"><i style="width:${Math.round(strip.share * 100)}%"></i></span>`;
+        case 'offline': return `<span class="phone-dock__queue-text">${bold(r.queueOffline(strip.n))}</span>`;
+        case 'failed':
+            return `<span class="phone-dock__queue-text"><b>${esc(r.queueFailed(strip.n))}</b></span>`
+                + `<span class="phone-dock__queue-retry">${esc(strings.batch.retry)}</span>`;
+        case 'done': return `<span class="phone-dock__queue-text">${esc(strings.batch.doneDevice(strip.k, strip.n))}</span>`;
+    }
+}
+
+function esc(text: string): string {
+    return text.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+}
+
+/** Photos handed over on this device that wait here (read again when the queue changes, not while a batch is sent). */
+let heldHanded = 0;
+let queueTimer: ReturnType<typeof setTimeout> | null = null;
+
+const DOCK_ICONS = {
+    camera: '<path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2.5h6L16.5 7h2A1.5 1.5 0 0 1 20 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18Z"/><circle cx="12" cy="13" r="3.5"/>',
+    gallery: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17.5 5-4.5 4 3.5 2.5-2 4.5 3.5"/>',
+    file: '<path d="M14 3.5H7a1.5 1.5 0 0 0-1.5 1.5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8Z"/><path d="M14 3.5V8h4.5"/>',
+} as const;
+
+function dockButton(pick: keyof typeof DOCK_ICONS, label: string, primary = false): string {
+    return `<button type="button" class="phone-dock__btn${primary ? ' is-primary' : ''}" data-act="dock-pick" data-pick="${pick}">`
+        + `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${DOCK_ICONS[pick]}</svg>`
+        + `<span>${esc(label)}</span></button>`;
 }
 
 // ——— Finds (§4) ———
@@ -1078,6 +1158,8 @@ export const phoneResearchMethods = uiModule({
             else if (act === 'waiting-do' && at?.dataset.id && at.dataset.do) this.phoneWaitingDo(at.dataset.id, at.dataset.do as DeviceWaitingDo);
             else if (act === 'waiting-person' && at?.dataset.person) void this.phoneOpenTree({ person: at.dataset.person });
             else if (act === 'waiting-more') void this.phoneOpenTree({ overview: 'waiting' });
+            else if (act === 'dock-pick' && at?.dataset.pick) this.phoneDockPick(at.dataset.pick as 'camera' | 'gallery' | 'file');
+            else if (act === 'dock-queue') this.phoneQueueOpen();
         });
         const tabbar = document.getElementById('bottom-bar');
         if (tabbar?.parentElement) tabbar.parentElement.insertBefore(screen, tabbar);
@@ -1805,9 +1887,17 @@ export const phoneResearchMethods = uiModule({
         if (!dock) return;
         let actions = dock.querySelector<HTMLElement>('.phone-dock__actions');
         if (!actions) {
+            const queue = document.createElement('button');
+            queue.type = 'button';
+            queue.className = 'phone-dock__queue';
+            queue.dataset.act = 'dock-queue';
+            queue.hidden = true;
             actions = document.createElement('div');
             actions.className = 'phone-dock__actions';
-            dock.append(actions);
+            actions.innerHTML = dockButton('camera', strings.batch.photo, true)
+                + dockButton('gallery', strings.batch.gallery) + dockButton('file', strings.deviceResearch.file);
+            dock.append(queue, actions);
+            this.phoneQueueChanged();
         }
         let note = dock.querySelector<HTMLElement>('.phone-dock__note');
         const treeId = phoneResearchTreeId();
@@ -1823,6 +1913,70 @@ export const phoneResearchMethods = uiModule({
             dock.append(note);
         }
         note.textContent = strings.deviceResearch.treeNotYet(persons);
+    },
+
+    /** A dock's button: the batch of the screen's research, its camera, gallery or file chooser opened within the same tap. */
+    phoneDockPick(pick: 'camera' | 'gallery' | 'file'): void {
+        const treeId = phoneResearchTreeId();
+        if (!treeId) return;
+        this.showBatchDialog({ screen: treeId, pick });
+    },
+
+    /** The strip tapped: the batch's progress; photos waiting here: what waits on this device; failed ones sent again. */
+    phoneQueueOpen(): void {
+        const info = this.batchQueueInfo();
+        const strip = phoneQueueStrip(info, heldHanded, Date.now());
+        if (strip?.kind === 'failed') {
+            if (!this.batchRetryFromStrip()) {
+                const treeId = phoneResearchTreeId();
+                if (treeId) this.showBatchDialog({ screen: treeId });
+            }
+        } else if (strip?.kind === 'offline' && !info.run) void this.showDeviceWaiting();
+        else this.batchReopen();
+        this.phoneQueueChanged();
+    },
+
+    /** The batches changed: the strip and the Research tab's dot again (the photos waiting here read anew unless one is sent). */
+    phoneQueueChanged(): void {
+        if (!phoneResearchReady()) {
+            const dot = document.getElementById('bb-research-dot');
+            if (dot) dot.hidden = true;
+            return;
+        }
+        const info = this.batchQueueInfo();
+        if (info.run && !info.run.finished) {
+            this.renderPhoneQueue();
+            return;
+        }
+        void deviceDrafts()
+            .then(ds => { heldHanded = ds.filter(d => d.handedAt).reduce((n, d) => n + d.photos.length, 0); })
+            .catch(() => undefined)
+            .then(() => this.renderPhoneQueue());
+    },
+
+    /** The strip (none when nothing is sent or waits) and the dot on Research while photos are sent or wait. */
+    renderPhoneQueue(): void {
+        const strip = phoneQueueStrip(this.batchQueueInfo(), heldHanded, Date.now());
+        const dot = document.getElementById('bb-research-dot');
+        if (dot) dot.hidden = !strip || strip.kind === 'done';
+        const queue = document.querySelector<HTMLButtonElement>(`#${PHONE_DOCK_ID} .phone-dock__queue`);
+        if (queueTimer) clearTimeout(queueTimer);
+        queueTimer = null;
+        if (!queue) return;
+        queue.hidden = !strip;
+        queue.classList.toggle('is-failed', strip?.kind === 'failed');
+        queue.dataset.kind = strip?.kind ?? '';
+        if (!strip) {
+            queue.innerHTML = '';
+            return;
+        }
+        const html = phoneQueueStripHtml(strip);
+        if (queue.innerHTML !== html) queue.innerHTML = html;
+        if (strip.kind === 'done') {
+            const ended = this.batchQueueInfo().ended;
+            const left = ended ? Math.max(0, QUEUE_DONE_MS - (Date.now() - ended.at)) : 0;
+            queueTimer = setTimeout(() => { queueTimer = null; this.renderPhoneQueue(); }, left + 50);
+        }
     },
 
     /** The screen's data read now (the held state first when nothing is drawn yet); a failed read keeps what is shown. */
@@ -1861,6 +2015,8 @@ export const phoneResearchMethods = uiModule({
             if (phoneResearchShown()) readWhileShown = true;
             shownState = state.glance || state.finds ? state : shownState;
             readFailed = false;
+            // Photos handed over here for this research go now that it answers (§6 point 4; no tree needed).
+            if (phoneResearchShown()) void this.batchResumeDevicePhotos({ screen: treeId }).then(() => this.phoneQueueChanged());
         } catch {
             if (reading !== ctl) return;
             readFailed = true;
@@ -2021,5 +2177,8 @@ export function resetPhoneResearchForTests(): void {
     findsInView = false;
     if (seenTimer) clearTimeout(seenTimer);
     seenTimer = null;
+    heldHanded = 0;
+    if (queueTimer) clearTimeout(queueTimer);
+    queueTimer = null;
 }
 
