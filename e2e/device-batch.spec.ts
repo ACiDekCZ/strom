@@ -253,6 +253,36 @@ test.describe('a phone of the home network (touch)', () => {
         expect(gw.media.map(m => decodeURIComponent(String(m.meta['X-Strom-Name'])))).toEqual(['IMG_2040.png', 'IMG_2042.png', 'IMG_2041.png']);
     });
 
+    test('a photo cut off on the way goes on from the blocks the computer has, waits while another file of the device goes, and is sent again from the start when its hash did not hold; a file of 0 B is refused as empty', async ({ page }) => {
+        // 2.5 MiB: three blocks of the gateway's PUT /device/media (U9c).
+        const big = { name: 'IMG_2050.png', mimeType: 'image/png', buffer: Buffer.concat([PNG, Buffer.alloc(2.5 * 1024 * 1024, 7)]) };
+        const empty = { name: 'IMG_2051.png', mimeType: 'image/png', buffer: Buffer.alloc(0) };
+        await pairedTree(page, { lang: 'en', width: 390 });
+        await openBatch(page);
+        const dlg = page.locator(DLG);
+        // The first request: block 1 kept, then the connection ends without an answer; going on (the batch
+        // pauses and goes on by itself) the gateway is asked what it has, is busy with another file of the
+        // device once, then the hash does not hold.
+        gw.mediaSteps = [{ cutAfter: 1 }, 'busy', 'badHash'];
+        await dlg.locator('#batch-input-gallery').setInputFiles([big, empty]);
+        await dlg.locator('[data-act="next"]').tap();
+        await dlg.locator('[data-act="go"]').tap();
+        await expect(dlg.locator('.batch-confirm-title')).toHaveText('1 of 2 photos is in the research', { timeout: 20000 });
+        const sha = gw.mediaRequests[0].sha;
+        expect(gw.tunnelled.filter(r => r.p.startsWith('device/media/')).map(r => `${r.m} ${r.p}`)).toEqual([`GET device/media/${sha}`]);
+        expect(gw.mediaRequests.map(r => [r.from, r.blocks])).toEqual([[0, [1, 2, 3]], [1, [2, 3]], [1, [2, 3]], [0, [1, 2, 3]]]);
+        // Nothing of the file in the open headers: no batch, no name; the meta block has them.
+        expect(Object.keys(gw.mediaRequests[0].headers).filter(k => k.startsWith('x-strom-')).sort()).toEqual(
+            ['x-strom-app-version', 'x-strom-device', 'x-strom-from', 'x-strom-nonce', 'x-strom-size', 'x-strom-time', 'x-strom-tree']);
+        expect(gw.media).toHaveLength(1);
+        expect(decodeURIComponent(gw.media[0].meta['X-Strom-Name'])).toBe('IMG_2050.png');
+        expect(gw.media[0].meta['X-Strom-Batch']).toBeTruthy();
+        expect(gw.media[0].bytes.equals(big.buffer)).toBe(true);
+        // The file of 0 B never went: refused here as empty.
+        await expect(dlg.locator('.batch-photo-row.is-error .batch-photo-why')).toHaveText('the file is empty (0 B)');
+        expect(await overflowing(page, DLG)).toEqual([]);
+    });
+
     test('a computer that takes no files of devices: the photos stay on the device with a quiet sentence, also after a reload', async ({ page }) => {
         mediaPut = false;
         await pairedTree(page, { lang: 'en', width: 390 });

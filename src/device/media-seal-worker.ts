@@ -4,12 +4,12 @@
  * device-media.ts starts it from a blob URL, as sha256.ts does its own): the
  * page stays responsive while 20 MB are sealed.
  *
- * In: `{job: MediaSealJob, blob: Blob}`. Out: `{progress: plain bytes done}`
- * after each block, then `{parts: Uint8Array[]}` (their buffers transferred)
+ * In: `{job: MediaSealJob, blob: Blob}` (the meta block and blocks From+1…N
+ * sealed). Out: `{progress: the plain end of the block}` after each block, then `{parts: Uint8Array[]}` (their buffers transferred)
  * or `{error}`.
  */
 
-import { mediaBlockRanges, sealMediaMeta, sealFileBlock, type MediaSealJob } from './media-blocks';
+import { mediaBlockCount, mediaBlockRange, sealMediaMeta, sealDataBlock, type MediaSealJob } from './media-blocks';
 
 interface WorkerScope {
     onmessage: ((e: MessageEvent<{ job: MediaSealJob; blob: Blob }>) => void) | null;
@@ -22,11 +22,9 @@ scope.onmessage = async (e) => {
     try {
         const { job, blob } = e.data;
         const parts: Uint8Array[] = [sealMediaMeta(job)];
-        const ranges = mediaBlockRanges(blob.size);
-        for (let i = 0; i < ranges.length; i++) {
-            const [a, b] = ranges[i];
-            const bytes = new Uint8Array(await blob.slice(a, b).arrayBuffer());
-            parts.push(sealFileBlock(job, i, i === ranges.length - 1, bytes));
+        for (let i = job.from + 1; i <= mediaBlockCount(job.size); i++) {
+            const [a, b] = mediaBlockRange(job.size, i);
+            parts.push(sealDataBlock(job, i, new Uint8Array(await blob.slice(a, b).arrayBuffer())));
             scope.postMessage({ progress: b });
         }
         scope.postMessage({ parts }, parts.map(p => p.buffer as ArrayBuffer));

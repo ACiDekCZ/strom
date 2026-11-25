@@ -1305,6 +1305,11 @@ export const batchMethods = uiModule({
                 if (!isTimeout(err)) return 'down';
             }
         }
+        // A device never sends a file of 0 B (the gateway takes a size of 1 B at least): that file is refused here.
+        if (item.file.size === 0 && researchDevice() && parseDeviceBridge(r.base)) {
+            r.refused.push({ path: item.path, why: strings.batch.whyEmpty });
+            return 'ok';
+        }
         const headers: Record<string, string> = {
             'Content-Type': item.file.type || 'application/octet-stream',
             'X-Strom-Name': encodeURIComponent(item.path.split('/').pop() || 'file'),
@@ -1363,6 +1368,11 @@ export const batchMethods = uiModule({
             }
             // Held by the research (sealed elsewhere, files not downloaded, a full disk): never a new batch, never again by itself.
             if (this.batchHeld(r, res.status, body)) return 'held';
+            // A device's file whose SHA-256 did not hold twice (sent once more from the start already): refused, never a new batch.
+            if (device && res.status === 409 && body?.code === 'media.hash') {
+                r.refused.push({ path: item.path, why: strings.mediaRefusal.shaDiffers });
+                return 'ok';
+            }
             // Closed meanwhile (24 h without a file): the rest goes as a new batch.
             if (res.status === 409) {
                 r.id = newBatchId();

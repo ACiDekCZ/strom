@@ -1,22 +1,44 @@
 /**
- * A file sent by PUT /device/media/<sha256> (the research's interface §2.4):
- * its body sealed block by block, so a large photo never goes through the
- * tunnel's JSON. The body is
+ * A file sent by PUT /device/media/<sha256> (the research's interface §2.4,
+ * as its U9c settled it): its body sealed block by block, so a large photo
+ * never goes through the tunnel's JSON. The open headers say only the device,
+ * its time and nonce base, the tree, the file's size (≥ 1) and `X-Strom-From`
+ * (how many of its data blocks the gateway has already; 0 = from the start).
+ * The body is
  *
- * - the meta block (index 0, never the last): the bridge's headers of the
- *   file as JSON `{h: {...}}` (its name, path, batch, person: what is not
- *   said in an open header), its sealed length in `X-Strom-Meta`;
- * - the file's blocks (index 1…k): 1 MiB of it each, the last shorter, a
- *   file of 0 B one empty block; the last one sealed with `last` = 1.
+ * - the meta block (index 0, `last` 0): the bridge's headers of the file as
+ *   UTF-8 JSON `{"h": {...}}` padded with spaces to exactly 4096 bytes
+ *   (sealed: 4112) — only the headers of the allowlist, printable ASCII of at
+ *   most 2048 characters each (Unicode percent-encoded);
+ * - the data blocks `i = From+1 … N`, `N = ceil(size / 1 MiB)`: 1 MiB of the
+ *   file each, the last the rest, block N sealed with `last` = 1. A request
+ *   with From = N carries the meta block alone ("you have it all, deliver").
  *
  * Each block is ChaCha20-Poly1305 with the nonce base XOR its index and the
  * AAD strom-device/1|<d>|<t>|media|<sha>|<i>|<last 0/1> (device-crypto.ts).
- * No DOM here: the blob worker of the build seals with the same code.
+ * No DOM here: the blob worker of the build seals with the same code, and the
+ * fake gateway of the tests opens with it.
  */
 
 import { MEDIA_BLOCK, sealMediaBlock, openMediaBlock } from './device-crypto';
 
-/** What the blocks of one file are sealed with. */
+/** The meta block's plain length (the JSON padded with spaces). */
+export const MEDIA_META = 4096;
+/** The tag each sealed block carries. */
+export const MEDIA_TAG = 16;
+/** The longest value of a header of the meta block. */
+export const MEDIA_HEADER_MAX = 2048;
+
+/** The bridge's headers of a file a device may send in the meta block (U9c), as the bridge spells them. */
+export const MEDIA_META_HEADERS: readonly string[] = [
+    'X-Strom-Name', 'X-Strom-Note', 'X-Strom-Person', 'X-Strom-Family', 'X-Strom-Source', 'X-Strom-Region', 'X-Strom-Batch',
+    'X-Strom-Path', 'X-Strom-Zip', 'X-Strom-Task', 'X-Strom-Image', 'X-Strom-Replace', 'X-Strom-List-Ref', 'Prefer',
+];
+const ALLOWED = new Map(MEDIA_META_HEADERS.map(h => [h.toLowerCase(), h]));
+/** Values cut first when the meta block would be over 4096 bytes: free text the file does not depend on. */
+const CUTTABLE = ['X-Strom-Path', 'X-Strom-Note', 'X-Strom-Name'];
+
+/** What the blocks of one request are sealed with. */
 export interface MediaSealJob {
     key: Uint8Array;
     deviceId: string;
@@ -26,59 +48,157 @@ export interface MediaSealJob {
     nonce: Uint8Array;
     /** The file's SHA-256 (hex), in the path. */
     sha: string;
-    /** The meta block's plain bytes (JSON). */
+    /** The meta block's plain bytes (4096). */
     meta: Uint8Array;
+    /** The file's size (≥ 1), in `X-Strom-Size`. */
+    size: number;
+    /** The data blocks the gateway has already (`X-Strom-From`): blocks from+1…N are sealed. */
+    from: number;
 }
 
-/** The plain ranges [from, to) of a file's blocks: 1 MiB each, the last shorter; a file of 0 B is one empty block. */
-export function mediaBlockRanges(size: number): [number, number][] {
-    const n = Math.max(0, Math.floor(size));
-    if (n === 0) return [[0, 0]];
-    const out: [number, number][] = [];
-    for (let at = 0; at < n; at += MEDIA_BLOCK) out.push([at, Math.min(n, at + MEDIA_BLOCK)]);
+/** N: the file's data blocks. */
+export function mediaBlockCount(size: number): number {
+    return Math.ceil(Math.max(0, size) / MEDIA_BLOCK);
+}
+
+/** The plain range [from, to) of data block `i` (1…N). */
+export function mediaBlockRange(size: number, i: number): [number, number] {
+    return [(i - 1) * MEDIA_BLOCK, Math.min(size, i * MEDIA_BLOCK)];
+}
+
+/** The body's length for a file of `size` sent from block `from`: the sealed meta block and blocks from+1…N. */
+export function mediaBodyLength(size: number, from: number): number {
+    const n = mediaBlockCount(size);
+    let len = MEDIA_META + MEDIA_TAG;
+    for (let i = from + 1; i <= n; i++) {
+        const [a, b] = mediaBlockRange(size, i);
+        len += b - a + MEDIA_TAG;
+    }
+    return len;
+}
+
+/** A value as printable ASCII: anything else percent-encoded (as the bridge reads it). */
+function printable(v: string): string {
+    return v.replace(/[^ -~]/gu, c => {
+        try { return encodeURIComponent(c); } catch { return ''; }
+    });
+}
+
+function decodes(s: string): boolean {
+    try { decodeURIComponent(s); return true; } catch { return false; }
+}
+
+/** A value cut to `max` characters, never inside a percent-encoded character. */
+function cutValue(v: string, max: number): string {
+    if (v.length <= max) return v;
+    let out = v.slice(0, Math.max(0, max));
+    if (!decodes(v)) return out.replace(/%[0-9A-Fa-f]?$/u, '');
+    while (out && !decodes(out)) out = out.slice(0, Math.max(0, out.lastIndexOf('%')));
     return out;
 }
 
-/** The meta block sealed (index 0, never the last). */
+/**
+ * The meta block's headers from the bridge's headers of a file: only those of
+ * the allowlist (Content-Type, the app's version and anything else stay out),
+ * each once, printable ASCII of at most 2048 characters.
+ */
+export function mediaMetaHeaders(headers: Record<string, string>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [k, raw] of Object.entries(headers)) {
+        const name = ALLOWED.get(k.toLowerCase());
+        if (!name || name in out || raw === undefined || raw === null) continue;
+        out[name] = cutValue(printable(String(raw)), MEDIA_HEADER_MAX);
+    }
+    return out;
+}
+
+const enc = new TextEncoder();
+
+/**
+ * The meta block's plain bytes: `{"h": {...}}` padded with spaces to exactly
+ * 4096 bytes. Over that, the longest of the free texts (path, note, name) is
+ * cut until it fits; null only when nothing is left to cut.
+ */
+export function mediaMetaBlock(headers: Record<string, string>): Uint8Array | null {
+    const h = { ...headers };
+    for (let guard = 0; guard < 64; guard++) {
+        const json = enc.encode(JSON.stringify({ h }));
+        if (json.length <= MEDIA_META) {
+            const out = new Uint8Array(MEDIA_META).fill(0x20);
+            out.set(json);
+            return out;
+        }
+        const over = json.length - MEDIA_META;
+        const key = CUTTABLE.filter(k => h[k]).sort((a, b) => h[b].length - h[a].length)[0];
+        if (!key) return null;
+        h[key] = cutValue(h[key], h[key].length - over);
+        if (!h[key]) delete h[key];
+    }
+    return null;
+}
+
+/** The meta block sealed (index 0, `last` 0). */
 export function sealMediaMeta(job: MediaSealJob): Uint8Array {
     return sealMediaBlock(job.key, job.deviceId, job.t, job.nonce, job.sha, 0, false, job.meta);
 }
 
-/** The file's block `i` (from 0) sealed: index i + 1 in its AAD and nonce. */
-export function sealFileBlock(job: MediaSealJob, i: number, last: boolean, bytes: Uint8Array): Uint8Array {
-    return sealMediaBlock(job.key, job.deviceId, job.t, job.nonce, job.sha, i + 1, last, bytes);
+/** Data block `i` (1…N) sealed; block N with `last` = 1. */
+export function sealDataBlock(job: MediaSealJob, i: number, bytes: Uint8Array): Uint8Array {
+    return sealMediaBlock(job.key, job.deviceId, job.t, job.nonce, job.sha, i, i === mediaBlockCount(job.size), bytes);
 }
 
-/** The whole body of bytes in memory: the meta block, then the file's blocks. */
+/** The whole body of a file in memory: the meta block, then its blocks from+1…N. */
 export function sealMediaBody(job: MediaSealJob, file: Uint8Array): Uint8Array[] {
-    const ranges = mediaBlockRanges(file.length);
-    return [sealMediaMeta(job), ...ranges.map(([a, b], i) => sealFileBlock(job, i, i === ranges.length - 1, file.subarray(a, b)))];
+    const parts = [sealMediaMeta(job)];
+    for (let i = job.from + 1; i <= mediaBlockCount(job.size); i++) {
+        const [a, b] = mediaBlockRange(job.size, i);
+        parts.push(sealDataBlock(job, i, file.subarray(a, b)));
+    }
+    return parts;
 }
+
+/** What a body opened again says (the fake gateway of the tests, as the research reads it). */
+export type OpenedMediaBody =
+    | { ok: true; headers: Record<string, string>; blocks: Map<number, Uint8Array>; have: number }
+    /** The meta block does not open (refused open, 400 device.bad). */
+    | { ok: false; meta: false }
+    /** The meta block is not `{"h": {...}}`, or a header (`header`) is not one of the allowlist, twice, or not printable. */
+    | { ok: false; meta: true; header?: string }
+    /** A data block cut, not opening or past the last: `have` the blocks whole before it. */
+    | { ok: false; meta: true; headers: Record<string, string>; blocks: Map<number, Uint8Array>; have: number };
 
 /**
- * A body opened again (the fake gateway of the tests, as the research does):
- * the meta block by its sealed length, then blocks of 1 MiB + 16 until the
- * end, the last one opened as the last. Null when anything does not hold
- * (a block moved, cut, left out or sealed for another file).
+ * A body opened again: the meta block (4112 B), then data blocks from+1…N by
+ * their lengths from the size. A body that ends before block N is fine (`have`
+ * says how far it came); a block cut, one that does not open (moved, sealed
+ * for another file or request, `last` wrong) or anything past block N stops
+ * it with the blocks whole before it.
  */
-export function openMediaBody(key: Uint8Array, deviceId: string, t: number, nonce: Uint8Array, sha: string, metaLength: number, body: Uint8Array): { meta: Uint8Array; file: Uint8Array } | null {
-    if (!Number.isSafeInteger(metaLength) || metaLength < 16 || metaLength > body.length - 16) return null;
-    const meta = openMediaBlock(key, deviceId, t, nonce, sha, 0, false, body.subarray(0, metaLength));
-    if (!meta) return null;
-    const sealedBlock = MEDIA_BLOCK + 16;
-    const parts: Uint8Array[] = [];
-    let size = 0;
-    for (let at = metaLength, i = 1; at < body.length; at += sealedBlock, i++) {
-        const end = Math.min(body.length, at + sealedBlock);
-        const last = end === body.length;
-        const plain = openMediaBlock(key, deviceId, t, nonce, sha, i, last, body.subarray(at, end));
-        if (!plain) return null;
-        parts.push(plain);
-        size += plain.length;
+export function openMediaBody(key: Uint8Array, deviceId: string, t: number, nonce: Uint8Array, sha: string, size: number, from: number, body: Uint8Array): OpenedMediaBody {
+    const metaPlain = body.length >= MEDIA_META + MEDIA_TAG ? openMediaBlock(key, deviceId, t, nonce, sha, 0, false, body.subarray(0, MEDIA_META + MEDIA_TAG)) : null;
+    if (!metaPlain) return { ok: false, meta: false };
+    let h: unknown;
+    try { h = (JSON.parse(new TextDecoder().decode(metaPlain)) as { h?: unknown }).h; } catch { h = undefined; }
+    if (!h || typeof h !== 'object' || Array.isArray(h)) return { ok: false, meta: true };
+    const headers: Record<string, string> = {};
+    for (const [k, v] of Object.entries(h as Record<string, unknown>)) {
+        const name = ALLOWED.get(k.toLowerCase());
+        if (!name || name in headers || typeof v !== 'string' || v.length > MEDIA_HEADER_MAX || !/^[ -~]*$/u.test(v)) return { ok: false, meta: true, header: k.slice(0, 60) };
+        headers[name] = v;
     }
-    if (parts.length === 0) return null;
-    const file = new Uint8Array(size);
-    let off = 0;
-    for (const p of parts) { file.set(p, off); off += p.length; }
-    return { meta, file };
+    const n = mediaBlockCount(size);
+    const blocks = new Map<number, Uint8Array>();
+    let at = MEDIA_META + MEDIA_TAG;
+    let have = from;
+    for (let i = from + 1; i <= n && at < body.length; i++) {
+        const [a, b] = mediaBlockRange(size, i);
+        const end = at + (b - a) + MEDIA_TAG;
+        const plain = end <= body.length ? openMediaBlock(key, deviceId, t, nonce, sha, i, i === n, body.subarray(at, end)) : null;
+        if (!plain) return { ok: false, meta: true, headers, blocks, have };
+        blocks.set(i, plain);
+        have = i;
+        at = end;
+    }
+    if (at < body.length) return { ok: false, meta: true, headers, blocks, have };
+    return { ok: true, headers, blocks, have };
 }
