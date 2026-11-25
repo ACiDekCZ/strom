@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLanguage } from '../strings.js';
 import {
-    conflictDevicePair, conflictDevicePairLine, conflictDeviceWords, deviceWords, otherDeviceWords, sharedConflictWords,
+    conflictDevicePair, conflictDevicePairLine, conflictDeviceWords, deviceWords, otherDeviceWords, sendSourceWords, sharedConflictWords,
+    shortDeviceName,
 } from '../conflict-devices.js';
 
 /** The devices of the research's sends in words (spec 094 K2.4): this browser, a name, an id, a send's words. */
@@ -85,5 +86,39 @@ describe('sharedConflictWords', () => {
         expect(sharedConflictWords([a, { user: 'this browser', research: 'Firefox · Linux' }])).toBeNull();
         expect(sharedConflictWords([a, null])).toBeNull();
         expect(sharedConflictWords([])).toBeNull();
+    });
+});
+
+describe('sendSourceWords (spec 094 §9: a line\'s source where the research has the devices\' gateway)', () => {
+    const PHONE = { id: 'dv_7f3a9c21e0b4', name: 'iPhone · Safari' };
+
+    it('names a device by its name (its id\'s first 8 characters without one), the computer by its name, the agent', () => {
+        expect(sendSourceWords(PHONE, false, '', thisOne)).toBe('from iPhone · Safari');
+        expect(sendSourceWords({ id: 'dv_7f3a9c21e0b4' }, false, '', thisOne)).toBe('from dv_7f3a9');
+        expect(sendSourceWords(EDGE, false, 'Pracovna', thisOne)).toBe('from computer Pracovna');
+        expect(sendSourceWords(undefined, true, 'Pracovna', thisOne)).toBe('agent');
+        expect(sendSourceWords(undefined, false, 'Pracovna', thisOne)).toBe('');
+    });
+
+    it('on the computer (its name not known there) another browser as before, this browser nothing', () => {
+        expect(sendSourceWords(EDGE, false, '', thisOne)).toBe('from Edge · Windows');
+        expect(sendSourceWords({ id: OWN }, false, '', thisOne)).toBe('');
+    });
+
+    it('in Czech, German and Polish', () => {
+        setLanguage('cs');
+        expect(sendSourceWords(PHONE, false, '', thisOne)).toBe('ze zařízení iPhone · Safari');
+        expect(sendSourceWords(EDGE, false, 'Pracovna', thisOne)).toBe('z počítače Pracovna');
+        setLanguage('de');
+        expect(sendSourceWords(PHONE, false, '', thisOne)).toBe('von iPhone · Safari');
+        expect(sendSourceWords(EDGE, false, 'Pracovna', thisOne)).toBe('vom Computer Pracovna');
+        setLanguage('pl');
+        expect(sendSourceWords(EDGE, false, 'Pracovna', thisOne)).toBe('z komputera Pracovna');
+    });
+
+    it('a device\'s short name is the first part of its name', () => {
+        expect(shortDeviceName('iPhone · Safari')).toBe('iPhone');
+        expect(shortDeviceName('Pracovna')).toBe('Pracovna');
+        expect(shortDeviceName(' · Safari')).toBe(' · Safari');
     });
 });

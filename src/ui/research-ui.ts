@@ -140,7 +140,7 @@ import type { DropInto } from '../tree-drop.js';
 import { createSha256 } from '../sha256.js';
 import { localIsoDay } from '../import-origin.js';
 import { deviceClient, type DeviceClient } from '../device-client.js';
-import { otherDeviceWords } from '../conflict-devices.js';
+import { otherDeviceWords, sendSourceWords } from '../conflict-devices.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -271,6 +271,11 @@ export interface LiveChangeItem {
     inApp?: boolean;
     /** The browser whose send wrote it (`via`, spec 094 K2.4); absent: not a send, or one without a device. */
     via?: DeviceClient;
+}
+
+/** The research has the gateway of the home network's devices (spec 094 §9): `pc` the computer's name ('' on it). */
+export interface ChangeSourceGateway {
+    pc: string;
 }
 
 /** What one research commit added (the "+N people, +N sources" of the last 24 hours). */
@@ -773,8 +778,11 @@ export interface ChangeSourceLinks {
  * A change's text with the people in it as links (a click shows them in the
  * tree) and, with `sources`, the sources it names (a click opens the source).
  * Returns whether the line names a source the app's version does not have.
+ * With `gateway` (the research has the home network's devices, spec 094 §9)
+ * every line says where it came from: a device, the computer, the agent.
  */
-export function appendChangeText(host: HTMLElement, c: LiveChangeItem, show: (id: PersonId) => void, sources?: ChangeSourceLinks): boolean {
+export function appendChangeText(host: HTMLElement, c: LiveChangeItem, show: (id: PersonId) => void, sources?: ChangeSourceLinks,
+    gateway?: ChangeSourceGateway): boolean {
     type Mark = { person?: PersonId; source?: string; name: string; at: number; length: number };
     const marks: Mark[] = [];
     for (const id of c.personIds) {
@@ -827,9 +835,11 @@ export function appendChangeText(host: HTMLElement, c: LiveChangeItem, show: (id
     if (pos < c.text.length) host.appendChild(document.createTextNode(c.text.slice(pos)));
     // A hypothesis decided in the app (spec 074 DEV §5): the same tag as in the Load dialog.
     if (c.inApp) host.append(' ', el('span', 'research-change-inapp', strings.research.hypoInApp));
-    // Written by a send of another browser (spec 094 K2.4): which one, quietly after the line.
-    const from = otherDeviceWords(c.via);
-    if (from) host.append(' ', el('span', 'research-change-via', strings.research.fromDevice(from)));
+    // Written by a send of another browser (spec 094 K2.4): which one, quietly after the line; with the
+    // gateway of the devices (§9) every line's source: a device, the computer, the agent.
+    const other = gateway ? '' : otherDeviceWords(c.via);
+    const from = gateway ? sendSourceWords(c.via, !!c.task, gateway.pc) : other ? strings.research.fromDevice(other) : '';
+    if (from) host.append(' ', el('span', 'research-change-via', from));
     return missing;
 }
 
@@ -5421,7 +5431,7 @@ export const researchUiMethods = uiModule({
             const li = el('li');
             const row = el('div', 'live-change');
             const text = el('span', 'live-change-text');
-            const missing = appendChangeText(text, c, (id) => this.showLivePerson(id), sources);
+            const missing = appendChangeText(text, c, (id) => this.showLivePerson(id), sources, s ? this.changeSourceGateway(s.researchId) : undefined);
             if (missing && s) this.appendSourceInNewer(text, s, c, false);
             row.appendChild(text);
             const at = timeEl(c.at, 'ago');

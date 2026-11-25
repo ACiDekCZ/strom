@@ -15,8 +15,9 @@ import { DataManager } from '../data.js';
 import { researchDeviceAllows, type ResearchSendRecord } from '../research-link.js';
 import type { DeviceClient } from '../device-client.js';
 import { researchBridgeWrite } from '../research-directions-write.js';
-import { deviceComputerName, thisDeviceId } from './device-mode-ui.js';
-import { appendChangeText, el, type LiveChangeItem, type LiveSession } from './research-ui.js';
+import { deviceComputerName, inDeviceMode, thisDeviceId } from './device-mode-ui.js';
+import { sendSourceWords } from '../conflict-devices.js';
+import { appendChangeText, el, type ChangeSourceGateway, type LiveChangeItem, type LiveSession } from './research-ui.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
@@ -55,12 +56,7 @@ export function noteDeviceProgressSeen(tree: string, newest: number): void {
 
 /** Where a row came from: a device of the home network, the computer, the agent ('' when not known). */
 export function deviceSourceWords(client: DeviceClient | undefined, byAgent: boolean, pc: string = deviceComputerName()): string {
-    const D = strings.device;
-    if (client?.id) {
-        if (client.id.startsWith('dv_')) return D.fromDevice(client.name || client.id.slice(0, 8));
-        return pc ? D.fromComputer(pc) : '';
-    }
-    return byAgent ? D.byAgent : '';
+    return sendSourceWords(client, byAgent, pc);
 }
 
 /** The sends of the last 24 hours the research wrote (`status.sends`), as Progress shows them. */
@@ -115,6 +111,15 @@ export function undoFieldLine(f: UndoField): string {
 }
 
 export const deviceProgressMethods = uiModule({
+    /**
+     * The research has the gateway of the home network's devices (a device, or `device.gateway` in its features;
+     * spec 094 §9): its change lists say every line's source. undefined: as before (only another browser named).
+     */
+    changeSourceGateway(researchId: string): ChangeSourceGateway | undefined {
+        if (inDeviceMode()) return { pc: deviceComputerName() };
+        return this.phoneCaps(researchId).gateway ? { pc: '' } : undefined;
+    },
+
     /**
      * Progress's rows on a device: the changes `shown` (the filter's) and the sends, newest first; `seen`: when it was
      * seen before (rows after it are new).

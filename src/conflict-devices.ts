@@ -18,6 +18,36 @@ export type ThisDevice = (id: string) => boolean;
 /** Characters of an id shown when a device has no name (as the research shows it). */
 const ID_SHOWN = 8;
 
+/** The id of a device paired at the research's gateway (spec 094 P3): the bridge writes it as a send's client. */
+export const DEVICE_ID_PREFIX = 'dv_';
+
+/** Whether a send's client is a device of the gateway (not a browser of the computer). */
+export function isGatewayDevice(d: ConflictSideDevice | null | undefined): boolean {
+    return !!d?.id && d.id.startsWith(DEVICE_ID_PREFIX);
+}
+
+/** A device's short name: the first part of "iPhone · Safari" (the whole name when it has no parts). */
+export function shortDeviceName(name: string): string {
+    return name.split(' · ')[0].trim() || name;
+}
+
+/**
+ * Where a send or a line of the research's history came from, where the research has the gateway of the home
+ * network's devices (spec 094 §9): a device by its name, the computer by its name (known on a device), another
+ * browser as before, the agent; '' when not known (or this browser on the computer).
+ */
+export function sendSourceWords(client: ConflictSideDevice | null | undefined, byAgent: boolean, pc = '',
+    thisDevice: ThisDevice = isThisDevice): string {
+    const D = strings.device;
+    if (client?.id) {
+        if (isGatewayDevice(client)) return D.fromDevice(client.name || client.id.slice(0, ID_SHOWN));
+        if (pc) return D.fromComputer(pc);
+        const other = otherDeviceWords(client, thisDevice);
+        return other ? strings.research.fromDevice(other) : '';
+    }
+    return byAgent ? D.byAgent : '';
+}
+
 /** A device after "from": this browser, its name, or its id's first characters; '' when none is said. */
 export function deviceWords(d: ConflictSideDevice | null | undefined, thisDevice: ThisDevice = isThisDevice): string {
     if (!d?.id) return '';
