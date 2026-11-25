@@ -76,6 +76,7 @@ import { chipCount, searchIndex, searchSection, sectionPartOpen, toggleSectionPa
 import type { HypothesisListSearch } from './hypothesis-waiting-ui.js';
 import { knowsSearchIndex, type KnowsIndex, type KnowsSearchRow } from '../knows-search.js';
 import { inDeviceMode, deviceComputerName } from './device-mode-ui.js';
+import { deviceProgressSeenAt, deviceProgressSends, noteDeviceProgressSeen, resetDeviceProgressSeen } from './device-progress-ui.js';
 import { PREF_KEYS, PrefKey, SectionPref, prefKeyOfOverview, overviewKeyOf, sectionOrder, sectionPrefs, setSectionPref, topPrefs, topTileShown } from './live-section-prefs.js';
 import { OverviewSourceKind, afterTurnOnKeys, skeletonLines } from '../research-overview-source.js';
 import { sectionTitle } from './live-section-edit.js';
@@ -539,6 +540,7 @@ export const researchOverviewMethods = uiModule({
             return;
         }
         openedAt = Date.now();
+        resetDeviceProgressSeen();
         if (overviewMode() !== 'sheet') {
             try { localStorage.setItem(OPEN_KEY, '1'); } catch { /* not kept */ }
         }
@@ -3430,14 +3432,23 @@ export const researchOverviewMethods = uiModule({
             : groupChanges(s.changes)[0].items;
         const older = s.changes.length - changes.length;
         noteOverviewSectionRows('changes', changes.length);
-        const host = liveSection(body, { ...fold, title: L.timeline, summary: changes.length > 0 ? String(changes.length) : undefined });
+        // A device (spec 094 §4, 4.6): the sends among the rows, and what came since Progress was last seen here.
+        const device = inDeviceMode();
+        const sends = device ? deviceProgressSends(this.researchStatusOf(s.researchId)?.sends) : [];
+        const seen = device ? deviceProgressSeenAt(s.treeId) : Infinity;
+        const times = [...changes.map(c => Date.parse(c.at)), ...sends.map(x => Date.parse(x.at))].filter(Number.isFinite);
+        const unseen = times.filter(t => t > seen).length;
+        if (device && !fold.collapsed && times.length > 0) noteDeviceProgressSeen(s.treeId, Math.max(...times));
+        const summary = unseen > 0 ? L.newChanges(unseen) : changes.length + sends.length > 0 ? String(changes.length + sends.length) : undefined;
+        const host = liveSection(body, { ...fold, title: L.timeline, summary });
         host.classList.add('research-overview__timeline');
 
         const bar = el('div', 'research-overview__timeline-bar');
         const filters = el('div', 'research-overview__filters');
         filters.setAttribute('role', 'radiogroup');
         filters.setAttribute('aria-label', L.filterLabel);
-        const count = (f: Filter): number => (f === 'all' ? changes.length : changes.filter(c => c.kind === f).length);
+        const sendsIn = (f: Filter): boolean => f === 'all' || f === 'persons';
+        const count = (f: Filter): number => (f === 'all' ? changes.length : changes.filter(c => c.kind === f).length) + (sendsIn(f) ? sends.length : 0);
         const labels: Record<Filter, string> = { all: L.filterAll, persons: L.filterPersons, sources: L.filterSources, stories: L.filterStories };
         for (const f of ['all', 'persons', 'sources', 'stories'] as Filter[]) {
             const chip = el('button', 'research-overview__filter sel-opt', `${labels[f]} ${count(f)}`);
@@ -3481,6 +3492,11 @@ export const researchOverviewMethods = uiModule({
         host.appendChild(bar);
 
         const shown = filter === 'all' ? changes : changes.filter(c => c.kind === filter);
+        if (device) {
+            this.appendDeviceTimeline(host, s, shown, sendsIn(filter) ? sends : [], seen, mode);
+            this.appendOverviewOlder(host, older, mode);
+            return;
+        }
         if (shown.length === 0) {
             host.appendChild(el('p', 'live-empty', strings.research.noChanges));
             this.appendOverviewOlder(host, older, mode);

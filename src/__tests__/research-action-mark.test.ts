@@ -175,6 +175,10 @@ describe('on a device of the home network (spec 094 §6)', () => {
         expect(deviceActionOfBridgeWrite('PUT', 'media/ab12', true)).toBe('waiting-answer');
         expect(deviceActionOfBridgeWrite('PUT', 'media/ab12')).toBe('media');
         expect(deviceActionOfBridgeWrite('POST', 'directions/G0001/state')).toBe('direction');
+        // The gateway's own decisions (spec 094 §2.7).
+        expect(deviceActionOfBridgeWrite('POST', 'device/conflict/X0003')).toBe('conflict');
+        expect(deviceActionOfBridgeWrite('POST', 'device/hypothesis/H0002')).toBe('hypothesis');
+        expect(deviceActionOfBridgeWrite('POST', 'device/sync/I0007/undo')).toBe('sync-undo-this');
         expect(deviceActionOfBridgeWrite('GET', 'waiting/T0001/fix')).toBeNull();
         expect(deviceActionOfBridgeWrite('POST', 'status')).toBeNull();
         device();

@@ -1995,6 +1995,13 @@ const stringsEN = {
     // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
     // Where a research tree stands with its research (Strom Research 1.12+)
     sync: {
+        /** A device (spec 094 §4, 4.9): one send of the tree's edits taken back, asked first with what goes back. */
+        undoThis: 'Undo this send',
+        undoThisAsk: 'Undo this send?',
+        undoThisKeep: (pc: string) => `Only these fields are reverted. Later changes from other devices and from ${pc} stay.`,
+        undoThisOk: 'Undo send',
+        undoThisEmpty: 'empty',
+        undoThisFailed: 'The send could not be undone.',
         // Writes the research holds until something there is settled (spec 017 U7). Its own sentence is shown first.
         held: {
             titleSeal: 'Sealed on another computer',
@@ -9377,6 +9384,14 @@ const stringsEN = {
         notHere: 'Approvals and starting the agent are only on the computer with the research. New tree, import, deleting a tree, a linked file and browser backups are not here: the tree belongs to the research on the computer. Exporting a file works.',
         /** Under a line's actions on a device (spec 094 §4, 4.7): its agent's work is the computer's. */
         dirWorkOnComputer: (pc: string) => `“Work on this line” (agent) is on ${pc}.`,
+        /** Progress on a device (spec 094 §4, 4.6; §9): where a row came from, under it. */
+        fromDevice: (name: string) => `from ${name}`,
+        fromComputer: (name: string) => `from computer ${name}`,
+        byAgent: 'agent',
+        /** After the source of a row new since Progress was last seen. */
+        newMark: 'new',
+        /** A send of the tree's edits as one row of Progress (n: its changes; null: not said). */
+        sendRow: (n: number | null) => n === null ? 'Send' : `Send: ${nEn(n, 'change', 'changes')}`,
         treesNotHere: (pc?: string) => `${pc ? `On computer ${pc}. ` : ''}New tree, import and managing trees are on the computer with the research.`,
         disconnect: 'Disconnect this device',
         disconnectAsk: 'Disconnect this device?',
@@ -14005,6 +14020,12 @@ const stringsCZ: StringsType = {
     // Otevření výzkumu ze Strom Research (obsluha souborů, odkaz, přetažení, živý most)
     // Where a research tree stands with its research (Strom Research 1.12+)
     sync: {
+        undoThis: 'Vrátit toto poslání',
+        undoThisAsk: 'Vrátit toto poslání?',
+        undoThisKeep: (pc: string) => `Vrátí se jen tato pole. Pozdější změny z jiných zařízení a z počítače ${pc} zůstanou.`,
+        undoThisOk: 'Vrátit poslání',
+        undoThisEmpty: 'prázdné',
+        undoThisFailed: 'Poslání se vrátit nepodařilo.',
         // Zápisy, které výzkum drží, dokud se u něj něco nevyřeší (spec 017 U7). Jeho vlastní věta je první.
         held: {
             titleSeal: 'Zapečetěno na jiném počítači',
@@ -21238,6 +21259,11 @@ const stringsCZ: StringsType = {
         renameFailed: 'Název se neuložil.',
         notHere: 'Souhlasy a spuštění agenta jsou jen na počítači s výzkumem. Nový strom, import, smazání stromu, propojený soubor a zálohy prohlížeče tu nejsou: strom patří výzkumu na počítači. Export souboru jde.',
         dirWorkOnComputer: (pc: string) => `„Pracovat na této linii“ (agent) je na počítači ${pc}.`,
+        fromDevice: (name: string) => `ze zařízení ${name}`,
+        fromComputer: (name: string) => `z počítače ${name}`,
+        byAgent: 'agent',
+        newMark: 'nové',
+        sendRow: (n: number | null) => n === null ? 'Poslání' : `Poslání: ${nCs(n, 'úprava', 'úpravy', 'úprav')}`,
         treesNotHere: (pc?: string) => `${pc ? `Na počítači ${pc}. ` : ''}Nový strom, import a správa stromů jsou na počítači s výzkumem.`,
         disconnect: 'Odpojit toto zařízení',
         disconnectAsk: 'Odpojit toto zařízení?',
@@ -25769,6 +25795,12 @@ const stringsDE: StringsType = {
     // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
     // Where a research tree stands with its research (Strom Research 1.12+)
     sync: {
+        undoThis: 'Dieses Senden zurücknehmen',
+        undoThisAsk: 'Dieses Senden zurücknehmen?',
+        undoThisKeep: (pc: string) => `Nur diese Felder werden zurückgesetzt. Spätere Änderungen von anderen Geräten und von ${pc} bleiben.`,
+        undoThisOk: 'Senden zurücknehmen',
+        undoThisEmpty: 'leer',
+        undoThisFailed: 'Das Senden ließ sich nicht zurücknehmen.',
         // Schreibvorgänge, die die Forschung zurückhält, bis dort etwas geklärt ist (Spec 017 U7). Ihr eigener Satz steht zuerst.
         held: {
             titleSeal: 'Auf einem anderen Computer versiegelt',
@@ -32932,6 +32964,11 @@ const stringsDE: StringsType = {
         renameFailed: 'Der Name wurde nicht gespeichert.',
         notHere: 'Zustimmungen und der Start des Agenten gibt es nur auf dem Computer mit der Forschung. Neuer Stammbaum, Import, Löschen, verknüpfte Datei und Browser-Sicherungen fehlen hier: der Stammbaum gehört der Forschung auf dem Computer. Datei exportieren geht.',
         dirWorkOnComputer: (pc: string) => `„An dieser Linie arbeiten“ (Agent) ist auf ${pc}.`,
+        fromDevice: (name: string) => `von ${name}`,
+        fromComputer: (name: string) => `vom Computer ${name}`,
+        byAgent: 'Agent',
+        newMark: 'neu',
+        sendRow: (n: number | null) => n === null ? 'Senden' : `Senden: ${nDe(n, 'Änderung', 'Änderungen')}`,
         treesNotHere: (pc?: string) => `${pc ? `Auf dem Computer ${pc}. ` : ''}Neuer Stammbaum, Import und Verwaltung der Stammbäume gibt es am Computer mit der Forschung.`,
         disconnect: 'Dieses Gerät trennen',
         disconnectAsk: 'Dieses Gerät trennen?',

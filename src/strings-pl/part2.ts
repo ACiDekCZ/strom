@@ -361,6 +361,12 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
     // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
     // Where a research tree stands with its research (Strom Research 1.12+)
     sync: {
+        undoThis: 'Cofnij to wysłanie',
+        undoThisAsk: 'Cofnąć to wysłanie?',
+        undoThisKeep: (pc: string) => `Cofną się tylko te pola. Późniejsze zmiany z innych urządzeń i z komputera ${pc} zostają.`,
+        undoThisOk: 'Cofnij wysłanie',
+        undoThisEmpty: 'puste',
+        undoThisFailed: 'Nie udało się cofnąć wysłania.',
         // Writes the research holds until something there is settled (spec 017 U7). Its own sentence is shown first.
         held: {
             titleSeal: 'Zapieczętowano na innym komputerze',

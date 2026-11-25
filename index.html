@@ -15474,6 +15474,8 @@
             /* A sentence of the research can carry a long path (disk.full): it wraps, never widens the dialog. */
             overflow-wrap: anywhere;
         }
+        /* A confirm that is only a list (Undo this send, spec 094 §4): no empty line above it. */
+        #confirmation-modal .confirm-message:empty { display: none; }
         #confirmation-modal label.confirm-check {
             display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); margin: 8px 0 0;
         }
@@ -26223,6 +26225,12 @@
         @media (prefers-reduced-motion: reduce) { .research-overview__row.is-new { animation: none; } }
         .research-overview__row-time { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; padding-top: 2px; white-space: nowrap; }
         .research-overview__row-text { font-size: 14px; overflow-wrap: anywhere; }
+        /* Progress on a device (spec 094 §4, 4.6): a dot before the time of what is new, its source under it, a send's undo. */
+        .research-overview__new-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 5px; vertical-align: 1px; }
+        .research-overview__row-src { display: block; font-size: 12px; color: var(--text-light); margin-top: 2px; }
+        .research-overview__send { font-weight: 600; }
+        .research-overview__undo-send { display: inline-flex; align-items: center; min-height: 32px; padding: 0; font-size: 14px; text-align: left; }
+        @media (pointer: coarse) { .research-overview__undo-send { min-height: 44px; } }
         .research-overview__knows-row {
             display: block; width: 100%; padding: 4px 0; border: 0; background: none; text-align: left;
             font: inherit; font-size: 13px; color: var(--text); cursor: pointer; overflow-wrap: anywhere;

@@ -47,6 +47,9 @@ interface Scene {
     refuse: Record<string, TunnelReply>;
     /** Every write through the tunnel. */
     writes: DeviceRequest[];
+    /** The research's history (`GET log`) and its sends (`status.sends`). */
+    log: Record<string, unknown>[];
+    sends: (device: { id: string; name: string }) => Record<string, unknown>[];
 }
 let scene: Scene;
 
@@ -56,7 +59,7 @@ const bodyOf = <B>(req: DeviceRequest): B => (typeof req.b === 'string' ? JSON.p
 function status(device: { id: string; name: string; kind: string }): Record<string, unknown> {
     return {
         ok: true, tree: { id: TREE, name: 'Pýchavkovi z Mlýnků' }, head: HEAD, links: ['send', 'open', 'live', 'app', 'setup', 'chat', 'task'],
-        accepts: ACCEPTS, inbox: { trees: [], material: 0 }, lastIntake: null, sends: [], features: FEATURES, caps: CAPS,
+        accepts: ACCEPTS, inbox: { trees: [], material: 0 }, lastIntake: null, sends: scene.sends(device), features: FEATURES, caps: CAPS,
         waiting: [], working: [], runs: [], runsEnded: [], researches: scene.researches, queue: [],
         device: { id: device.id, name: device.name, kind: device.kind, actions: scene.actions },
     };
@@ -67,6 +70,7 @@ function bridge(req: DeviceRequest, device: { id: string; name: string; kind: st
     if (req.p === 'status') return { s: 200, body: status(device) };
     if (req.p === 'tree.ged') return { s: 200, h: { 'Content-Type': 'text/plain; charset=utf-8' }, body: GED };
     if (req.p === 'material') return { s: 200, body: { files: [], batches: [], people: {} } };
+    if (req.p === 'log') return { s: 200, body: { entries: scene.log } };
     if (req.m === 'GET') return undefined;
     scene.writes.push(req);
     const refused = scene.refuse[`${req.m} ${req.p}`];
@@ -82,12 +86,38 @@ function bridge(req: DeviceRequest, device: { id: string; name: string; kind: st
         scene.researches = scene.researches.map(d => d.id === state[1] ? { ...d, state: what === 'pause' ? 'paused' : what === 'done' ? 'done' : 'active' } : d);
         return { s: 200, body: { direction: scene.researches.find(d => d.id === state[1]), head: HEAD } };
     }
+    const undo = /^device\/sync\/(I\d+)\/undo$/.exec(req.p);
+    if (undo) {
+        if (bodyOf<{ dry?: boolean }>(req).dry) {
+            return { s: 200, body: { input: undo[1], undone: false, fields: [{ what: 'Hřibík Pýchavka · birth', field: 'BIRT.DATE', from: '1901', to: '1902' }],
+                kept: [{ event: 'E0031', fields: ['BIRT.PLAC'], what: 'Hřibík Pýchavka · birth place', by: 'device', client: { id: 'dv_ipad0000000000000000000000000', name: 'iPad · Safari' } }] } };
+        }
+        undone.add(undo[1]);
+        return { s: 200, body: { input: undo[1], undone: true, fields: [] } };
+    }
     return undefined;
 }
 
+/** The sends undone through the gateway (their state then says it). */
+const undone = new Set<string>();
+const IPAD = { id: 'dv_ipad0000000000000000000000000', name: 'iPad · Safari' };
+/** Progress: one change from another device, one of the agent, one from the computer, one story (newest first). */
+const LOG = (): Record<string, unknown>[] => [
+    { head: 'a5', at: at(-5), what: ['~P0003'], text: ['Hřibík Pýchavka: birth 1902 in Mlýnky'], kinds: ['person'], task: '', via: IPAD },
+    { head: 'a4', at: at(-60), what: ['~P0002'], text: ['Holubinka Ryzcová: marriage 1899 in Lipová, record of the parish of Mährisch-Schönberg'], kinds: ['person'], task: 'T0012' },
+    { head: 'a3', at: at(-120), what: ['+S0031'], text: ['Register of births Mlýnky 1895–1910'], kinds: ['source'], task: '', via: { id: 'cl_pracovna', name: 'Pracovna' } },
+    { head: 'a2', at: at(-200), what: ['~P0001'], text: ['Bonifác Pýchavka: the mill story'], kinds: ['story'], task: 'T0011' },
+];
+/** This device's send (undoable) and the iPad's. */
+const SENDS = (device: { id: string; name: string }): Record<string, unknown>[] => [
+    { intake: 'in7', at: at(-30), state: undone.has('I0007') ? 'undone' : 'written', changes: 2, input: 'I0007', client: { id: device.id, name: device.name } },
+    { intake: 'in6', at: at(-90), state: 'written', changes: 1, input: 'I0006', client: IPAD },
+];
+
 let gw: FakeGateway;
 test.beforeEach(async () => {
-    scene = { researches: LINES(), actions: ['device.rename', 'device.unpair'], refuse: {}, writes: [] };
+    scene = { researches: LINES(), actions: ['device.rename', 'device.unpair'], refuse: {}, writes: [], log: [], sends: () => [] };
+    undone.clear();
     gw = await startDeviceGateway();
     gw.trees = [{ id: TREE, name: 'Pýchavkovi z Mlýnků', archive: false }];
     gw.onTunnel = bridge;
@@ -295,4 +325,158 @@ test.describe('a line\'s menu on a computer-wide device', () => {
         await noSideways(page);
         await shot(page, 'line-menu-1440');
     });
+});
+
+const P = {
+    en: { newN: '2 new', mark: 'new', agent: 'agent', pc: 'from computer Pracovna', ipad: 'from iPad · Safari', from: (n: string) => `from ${n}`,
+        send2: 'Send: 2 changes', send1: 'Send: 1 change', undo: 'Undo this send', persons: 'Persons', sources: 'Sources', stories: 'Stories' },
+    de: { newN: '2 neu', mark: 'neu', agent: 'Agent', pc: 'vom Computer Pracovna', ipad: 'von iPad · Safari', from: (n: string) => `von ${n}`,
+        send2: 'Senden: 2 Änderungen', send1: 'Senden: 1 Änderung', undo: 'Dieses Senden zurücknehmen', persons: 'Personen', sources: 'Quellen', stories: 'Erzählungen' },
+} as const;
+
+/** Progress seen on this device until `ms` (the overview's next opening marks what came after). */
+async function seenUntil(page: Page, ms: number): Promise<void> {
+    await page.evaluate((ms) => {
+        const id = window.Strom.TreeManager.getActiveTreeId()!;
+        localStorage.setItem(`strom-device-progress-seen:${id}`, String(ms));
+    }, ms);
+}
+
+/** Each row of Progress as its time-less text and source. */
+async function progressRows(page: Page): Promise<string[]> {
+    return page.locator('#research-overview .research-overview__row--device').evaluateAll(rows => rows.map(r => {
+        const src = r.querySelector('.research-overview__row-src')?.textContent ?? '';
+        const what = r.querySelector('.research-overview__send, .research-change-text, .research-overview__row-text')?.textContent ?? '';
+        return `${what.replace(src, '').slice(0, 24)}|${src}|${r.querySelector('.research-overview__new-dot') ? 'dot' : ''}`;
+    }));
+}
+
+test.describe('Progress on a phone of the home network', () => {
+    test.use({ hasTouch: true, isMobile: true });
+    test.beforeEach(() => {
+        scene.log = LOG();
+        scene.sends = SENDS;
+        scene.actions = ['device.rename', 'device.unpair', 'sync.undo'];
+    });
+
+    for (const lang of ['en', 'de'] as const) {
+        for (const dark of [false, true]) {
+            test(`what is new since last seen, each row's source, a send of this device undoable (390, ${lang}${dark ? ', dark' : ''})`, async ({ page }) => {
+                await paired(page, { lang, width: 390, dark });
+                await seenUntil(page, Date.parse(at(-45)));
+                await openOverview(page);
+                const ov = page.locator('#research-overview');
+                const head = ov.locator('[aria-controls="ov-sec-timeline"]');
+                await expect(head).toContainText(P[lang].newN);
+                await unfold(page, 'timeline');
+                const rows = ov.locator('.research-overview__row--device');
+                await expect(rows).toHaveCount(6);
+                const me = gw.devices[0].name;
+                const t = P[lang];
+                const rowsSeen = await progressRows(page);
+                expect(rowsSeen.map(r => r.split('|').slice(1).join('|'))).toEqual([
+                    `${t.ipad} · ${t.mark}|dot`, `${t.from(me)} · ${t.mark}|dot`, `${t.agent}|`, `${t.ipad}|`, `${t.pc}|`, `${t.agent}|`,
+                ]);
+                await expect(rows.nth(1).locator('.research-overview__send')).toHaveText(t.send2);
+                await expect(rows.nth(3).locator('.research-overview__send')).toHaveText(t.send1);
+                // Only this device's own send is offered back; no mark (through the bridge).
+                const undo = ov.locator('.research-overview__undo-send');
+                await expect(undo).toHaveCount(1);
+                await expect(rows.nth(1).locator('.research-overview__undo-send')).toHaveText(t.undo);
+                expect((await undo.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+                await expect(ov.locator('.research-overview__timeline .research-open-mark, .research-overview__timeline .research-ai-badge')).toHaveCount(0);
+                expect(await overflowing(page, '#research-overview')).toEqual([]);
+                expect(await overlapping(page, '#research-overview .research-overview__row--device')).toEqual([]);
+                await noSideways(page);
+                if (lang === 'de') {
+                    await ov.locator('.research-overview__timeline').evaluate(e => e.scrollIntoView({ block: 'start' }));
+                    await shot(page, `progress-390${dark ? '-dark' : ''}`);
+                }
+                // The filter: the sends go with Persons.
+                await ov.locator('.research-overview__filter[data-filter="sources"]').tap();
+                await expect(rows).toHaveCount(1);
+                await expect(rows.first().locator('.research-overview__row-src')).toHaveText(t.pc);
+                await ov.locator('.research-overview__filter[data-filter="stories"]').tap();
+                await expect(rows).toHaveCount(1);
+                await ov.locator('.research-overview__filter[data-filter="persons"]').tap();
+                await expect(rows).toHaveCount(4);
+                await expect(ov.locator('.research-overview__new-dot')).toHaveCount(2);
+            });
+        }
+    }
+
+    test('Undo this send: the fields first, then the undo through the gateway', async ({ page }) => {
+        await paired(page, { lang: 'en', width: 390, dark: false });
+        await openOverview(page);
+        await unfold(page, 'timeline');
+        const ov = page.locator('#research-overview');
+        // Never seen before: nothing is marked new.
+        await expect(ov.locator('.research-overview__new-dot')).toHaveCount(0);
+        await ov.locator('.research-overview__undo-send').tap();
+        const confirm = page.locator('#confirmation-modal');
+        await expect(confirm.locator('#confirm-title')).toHaveText('Undo this send?');
+        await expect(confirm.locator('.confirm-list li')).toHaveText(['Hřibík Pýchavka · birth: 1901 → 1902']);
+        await expect(confirm.locator('.confirm-list-after')).toHaveText('Only these fields are reverted. Later changes from other devices and from Pracovna stay.');
+        expect(scene.writes.map(w => `${w.p} ${JSON.stringify(bodyOf(w))}`)).toEqual(['device/sync/I0007/undo {"dry":true}']);
+        await noSideways(page);
+        await shot(page, 'undo-send-390');
+        await confirm.locator('#confirm-ok-btn').tap();
+        await expect.poll(() => scene.writes.map(w => `${w.p} ${JSON.stringify(bodyOf(w))}`)).toEqual(['device/sync/I0007/undo {"dry":true}', 'device/sync/I0007/undo {}']);
+        await poll(page);
+        await expect(ov.locator('.research-overview__row--device[data-send="I0007"]')).toHaveCount(0);
+        await expect(ov.locator('.research-overview__undo-send')).toHaveCount(0);
+    });
+
+    test('a 403 device.computer-only takes Undo this send away; without sync.undo it is not offered', async ({ page }) => {
+        scene.refuse['POST device/sync/I0007/undo'] = { s: 403, body: { code: 'device.computer-only', action: 'sync.undo' } };
+        await paired(page, { lang: 'en', width: 390, dark: false });
+        await openOverview(page);
+        await unfold(page, 'timeline');
+        const ov = page.locator('#research-overview');
+        await ov.locator('.research-overview__undo-send').tap();
+        await expect(page.locator('.toast').filter({ hasText: L.en.only })).toBeVisible();
+        await expect(ov.locator('.research-overview__undo-send')).toHaveCount(0);
+        await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
+    });
+
+    test('seen once, the next opening marks nothing; no Undo when the gateway does not offer it', async ({ page }) => {
+        scene.actions = ['device.rename', 'device.unpair'];
+        await paired(page, { lang: 'en', width: 390, dark: false });
+        await seenUntil(page, Date.parse(at(-45)));
+        await openOverview(page);
+        await unfold(page, 'timeline');
+        const ov = page.locator('#research-overview');
+        await expect(ov.locator('.research-overview__new-dot')).toHaveCount(2);
+        await expect(ov.locator('.research-overview__undo-send')).toHaveCount(0);
+        await page.evaluate(() => (window.Strom.UI as unknown as { closeResearchOverview(): void }).closeResearchOverview());
+        await openOverview(page);
+        await unfold(page, 'timeline');
+        await expect(ov.locator('.research-overview__row--device')).toHaveCount(6);
+        await expect(ov.locator('.research-overview__new-dot')).toHaveCount(0);
+    });
+});
+
+test.describe('Progress on a wider device', () => {
+    for (const width of [1024, 1440]) {
+        for (const dark of [false, true]) {
+            test(`${width}${dark ? ', dark' : ''}: the rows with their sources, nothing overflows`, async ({ page }) => {
+                scene.log = LOG();
+                scene.sends = SENDS;
+                scene.actions = ['device.rename', 'device.unpair', 'sync.undo'];
+                await paired(page, { lang: 'de', width, dark });
+                await seenUntil(page, Date.parse(at(-45)));
+                await openOverview(page);
+                await unfold(page, 'timeline');
+                const ov = page.locator('#research-overview');
+                await expect(ov.locator('.research-overview__row--device')).toHaveCount(6);
+                await expect(ov.locator('.research-overview__new-dot')).toHaveCount(2);
+                await expect(ov.locator('.research-overview__undo-send')).toHaveCount(1);
+                await ov.locator('.research-overview__timeline').evaluate(e => e.scrollIntoView({ block: 'start' }));
+                expect(await overflowing(page, '#research-overview')).toEqual([]);
+                expect(await overlapping(page, '#research-overview .research-overview__row--device')).toEqual([]);
+                await noSideways(page);
+                await shot(page, `progress-${width}${dark ? '-dark' : ''}`);
+            });
+        }
+    }
 });

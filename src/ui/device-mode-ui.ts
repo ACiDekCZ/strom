@@ -11,6 +11,7 @@
 import { strings } from '../strings.js';
 import { uiModule } from './module.js';
 import { deviceConnection, onDeviceConnection, type DeviceConnection } from '../device/device-connection.js';
+import { pairingNow } from '../device/device-store.js';
 import { DEVICE_COMPUTER_ONLY_EVENT, researchDeviceState } from '../research-link.js';
 
 const CONN_ID = 'current-tree-conn';
@@ -23,6 +24,11 @@ let unwatch: (() => void) | null = null;
 /** The app runs as a device of the research's gateway (paired, or unpaired since). */
 export function inDeviceMode(): boolean {
     return researchDeviceState() !== null || deviceConnection() !== null;
+}
+
+/** This device's id at the research (`dv_…`, as its sends and decisions name it; '' when not paired). */
+export function thisDeviceId(): string {
+    return inDeviceMode() ? pairingNow()?.deviceId ?? '' : '';
 }
 
 /** The computer's name for the device's texts ('' when never known). */

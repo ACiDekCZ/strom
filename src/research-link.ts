@@ -308,6 +308,10 @@ export function deviceActionOfBridgeWrite(method: string, path: string, task = f
     if (method === 'GET' || method === 'HEAD') return null;
     const p = path.split('?')[0];
     if (p === 'runs/stop') return 'run-stop';
+    // The gateway's own decisions (spec 094 §2.7).
+    if (p.startsWith('device/conflict/')) return 'conflict';
+    if (p.startsWith('device/hypothesis/')) return 'hypothesis';
+    if (p.startsWith('device/sync/')) return 'sync-undo-this';
     if (p.startsWith('waiting/') || (p.startsWith('media/') && task)) return 'waiting-answer';
     if (p.startsWith('directions/')) return 'direction';
     if (p === 'sync') return 'send';
