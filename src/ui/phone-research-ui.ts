@@ -24,8 +24,12 @@ import { chosenTreeId, chooseTree, computerLabelOf, pairingNow } from '../device
 import { retryDeviceConnection } from '../device/device-connection.js';
 import {
     heldResearchState, readDeviceResearch, readDeviceResearchFeatures, watchDeviceResearch,
-    type DeviceResearchFeatures, type DeviceResearchState,
+    type DeviceGlance, type DeviceGlanceLine, type DeviceGlanceNow, type DeviceResearchFeatures, type DeviceResearchState, type DeviceWay,
 } from '../device/device-research-data.js';
+import { deviceBridgeBase, researchDeviceAllows } from '../research-link.js';
+import { setDirectionState, writeDirectionOrder, type BridgeWriteResult, type DirectionStateDo } from '../research-directions-write.js';
+import { postRunStop } from '../research-runs-write.js';
+import { formatLiveClock } from '../live-time.js';
 import type { ViewMode } from '../types.js';
 
 export const PHONE_RESEARCH_ID = 'phone-research';
@@ -146,6 +150,9 @@ function sectionEl(screen: HTMLElement, key: PhoneSection): { sec: HTMLElement; 
     return sec && head && sum && body ? { sec, head, sum, body } : null;
 }
 
+/** The sections whose rows are kept by their keys across a render (only their texts change). */
+const KEYED_SECTIONS: ReadonlySet<PhoneSection> = new Set<PhoneSection>(['now', 'lines']);
+
 /** One quiet sentence in a section's body (an empty section, §8 point 8). */
 function quiet(body: HTMLElement, text: string): void {
     const p = document.createElement('p');
@@ -155,6 +162,169 @@ function quiet(body: HTMLElement, text: string): void {
 }
 
 const CHEVRON = '<svg class="phone-research__chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+
+// ——— Now and Lines (§2, §3) ———
+
+/** The glyph of a line's way: ↑ ancestors, ↓ descendants, ? a person or a question. */
+export function wayGlyph(way: DeviceWay): string {
+    return way === 'up' ? '↑' : way === 'down' ? '↓' : '?';
+}
+
+/** How a line is moved in the order of work (§3 point 2). */
+export type PhoneLineMove = 'up' | 'down' | 'first';
+
+/** The order of work (line IDs) after `id` is moved; null when the move changes nothing (or the line is not there). */
+export function movedLineOrder(ids: readonly string[], id: string, move: PhoneLineMove): string[] | null {
+    const i = ids.indexOf(id);
+    if (i < 0) return null;
+    const to = move === 'up' ? i - 1 : move === 'down' ? i + 1 : 0;
+    if (to < 0 || to >= ids.length || to === i) return null;
+    const out = ids.filter(x => x !== id);
+    out.splice(to, 0, id);
+    return out;
+}
+
+/**
+ * The lines in the order of work, numbered again from 1: by `order` when given (a move on its way; lines it does
+ * not name keep their order after it), else by the research's own numbers.
+ */
+export function linesInOrder(lines: readonly DeviceGlanceLine[], order: readonly string[] | null = null): DeviceGlanceLine[] {
+    const sorted = [...lines].sort((a, b) => a.n - b.n);
+    if (order) {
+        const at = new Map(order.map((id, i) => [id, i] as const));
+        const rank = (l: DeviceGlanceLine): number => at.get(l.id) ?? order.length + sorted.indexOf(l);
+        sorted.sort((a, b) => rank(a) - rank(b));
+    }
+    return sorted.map((l, i) => (l.n === i + 1 ? l : { ...l, n: i + 1 }));
+}
+
+/** Now's heading: "Now · n lines" when more than one line is worked on, else "Now". */
+export function phoneNowTitle(now: readonly DeviceGlanceNow[]): string {
+    const r = strings.deviceResearch;
+    const lines = new Set(now.map(n => n.line ?? '')).size;
+    return lines > 1 ? r.nowTitleLines(lines) : r.nowTitle;
+}
+
+/** What a row of Now says under its task: stopping, paused until a time, or working since a time. */
+export function phoneNowMeta(n: DeviceGlanceNow, o: { stopping: boolean; lang: string; now?: number }): string {
+    const r = strings.deviceResearch;
+    if (o.stopping) return r.nowStopping;
+    const at = o.now ?? Date.now();
+    const clock = (iso: string): string => formatLiveClock(Date.parse(iso), at, o.lang);
+    return n.paused ? r.nowPaused(clock(n.paused.until)) : r.nowSince(clock(n.since));
+}
+
+/** What Now says when nobody works (§2 point 4): never worked on, or nothing now and when it was worked on last. */
+export function phoneNowIdle(g: DeviceGlance | null, o: { lang: string; now?: number }): { kind: 'never' } | { kind: 'idle'; last: string } | null {
+    if (g?.now.length) return null;
+    if (!g?.lastWorked) return { kind: 'never' };
+    return { kind: 'idle', last: strings.live.lastWorked(formatLiveClock(Date.parse(g.lastWorked), o.now ?? Date.now(), o.lang), '') };
+}
+
+/** Whether a refusal of a line's write is the research being written just now (409, 503): "linesBusy" under the list. */
+export function lineWriteBusy(r: BridgeWriteResult<object>): boolean {
+    return !r.ok && (r.status === 409 || r.status === 503);
+}
+
+/**
+ * The quiet sentences of what stays on the computer for now (spec 094 K3.15: the device starts the agent later, in
+ * U19b, where each of these becomes a button). One place, so U19b replaces them here.
+ */
+export type PhoneComputerOnly = 'line-work' | 'batch-sort' | 'conflict';
+export function phoneComputerOnlyNote(kind: PhoneComputerOnly, pc: string): string {
+    switch (kind) {
+        case 'line-work': return strings.device.dirWorkOnComputer(pc);
+        case 'batch-sort': return strings.batch.sortOnComputer;
+        case 'conflict': return strings.deviceResearch.conflictOnComputer(pc);
+    }
+}
+
+/** A stop asked here for a run, until the research says it finishes (or it is gone). */
+const stopsAsked = new Set<string>();
+/** A move of the order of work on its way (the list shown in it at once); null: none. */
+let orderMoving: string[] | null = null;
+/** The research refused the last write of the lines as being written just now: "linesBusy" until a write goes. */
+let linesBusy = false;
+
+/** The section's element shape (appendPhoneNow…). */
+type PhoneSectionEl = { sec: HTMLElement; head: HTMLElement; sum: HTMLElement; body: HTMLElement };
+
+/** A keyed child of a section's body: kept across live changes (only its texts change, nothing flashes). */
+interface KeyedRow {
+    key: string;
+    make: () => HTMLElement;
+    fill: (el: HTMLElement) => void;
+}
+
+/** The body's children by `rows` (each kept by its key, only its texts rewritten); anything else goes. */
+function syncRows(body: HTMLElement, rows: readonly KeyedRow[]): void {
+    const old = new Map<string, HTMLElement>();
+    for (const c of Array.from(body.children) as HTMLElement[]) {
+        if (c.dataset.key) old.set(c.dataset.key, c);
+    }
+    const next = rows.map((row) => {
+        const el = old.get(row.key) ?? row.make();
+        el.dataset.key = row.key;
+        row.fill(el);
+        return el;
+    });
+    const keep = new Set(next);
+    for (const c of Array.from(body.children)) if (!keep.has(c as HTMLElement)) c.remove();
+    next.forEach((el, i) => {
+        if (body.children[i] !== el) body.insertBefore(el, body.children[i] ?? null);
+    });
+}
+
+/** Text set only when it changed. */
+function setText(el: Element | null, text: string): void {
+    if (el && el.textContent !== text) el.textContent = text;
+}
+
+/** A quiet sentence as a keyed row. */
+function quietRow(key: string, text: string, cls = 'phone-sec__quiet'): KeyedRow {
+    return {
+        key,
+        make: () => {
+            const p = document.createElement('p');
+            p.className = cls;
+            return p;
+        },
+        fill: el => setText(el, text),
+    };
+}
+
+/** A row of Now or Lines: (number), glyph, name, task, meta, ⋯ (44 px). */
+function makeLineRow(act: 'now-menu' | 'line-menu', numbered: boolean): HTMLElement {
+    const row = document.createElement('div');
+    row.className = `phone-line${numbered ? ' phone-line--num' : ''}`;
+    row.dataset.act = act;
+    row.innerHTML = `${numbered ? '<span class="phone-line__n"></span>' : ''}<span class="phone-line__glyph" aria-hidden="true"></span>`
+        + '<div class="phone-line__main"><span class="phone-line__name"></span><span class="phone-line__task"></span>'
+        + '<span class="phone-line__meta"><span class="phone-line__meta-text"></span><span class="phone-line__chip"></span></span></div>'
+        + '<button type="button" class="phone-line__more" aria-haspopup="menu">⋯</button>';
+    return row;
+}
+
+function fillLineRow(row: HTMLElement, o: { n?: number; way: DeviceWay; name: string; task?: string; meta: string; chip?: string; off?: boolean; menu: string }): void {
+    if (o.n !== undefined) setText(row.querySelector('.phone-line__n'), String(o.n));
+    setText(row.querySelector('.phone-line__glyph'), wayGlyph(o.way));
+    setText(row.querySelector('.phone-line__name'), o.name);
+    const task = row.querySelector<HTMLElement>('.phone-line__task');
+    if (task) {
+        setText(task, o.task ?? '');
+        task.hidden = !o.task;
+    }
+    setText(row.querySelector('.phone-line__meta-text'), o.meta);
+    const chip = row.querySelector<HTMLElement>('.phone-line__chip');
+    if (chip) {
+        setText(chip, o.chip ?? '');
+        chip.hidden = !o.chip;
+    }
+    row.classList.toggle('is-off', !!o.off);
+    const more = row.querySelector<HTMLElement>('.phone-line__more');
+    if (more && more.getAttribute('aria-label') !== o.menu) more.setAttribute('aria-label', o.menu);
+}
+
 
 export const phoneResearchMethods = uiModule({
     /** The Research screen is what is seen now. */
@@ -255,8 +425,11 @@ export const phoneResearchMethods = uiModule({
         // Upright the sections stand one under the other in the order of §1 point 1 (Now, Waiting, Finds, Lines):
         // the columns are only the sideways layout's.
         screen.addEventListener('click', (e) => {
-            const act = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-act]')?.dataset.act;
+            const at = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-act]');
+            const act = at?.dataset.act;
             if (act === 'overview') void this.phoneOpenOverview();
+            else if (act === 'now-menu' && at) this.openPhoneNowMenu(Number(at.dataset.index));
+            else if (act === 'line-menu' && at?.dataset.line) this.openPhoneLineMenu(at.dataset.line);
         });
         const tabbar = document.getElementById('bottom-bar');
         if (tabbar?.parentElement) tabbar.parentElement.insertBefore(screen, tabbar);
@@ -286,7 +459,8 @@ export const phoneResearchMethods = uiModule({
         for (const key of PHONE_SECTIONS) {
             const el = sectionEl(screen, key);
             if (!el) continue;
-            el.body.replaceChildren();
+            // Now and Lines keep their rows (a live change rewrites their texts only, §2 point 2).
+            if (!state || !KEYED_SECTIONS.has(key)) el.body.replaceChildren();
             el.sum.textContent = '';
             el.sec.hidden = false;
         }
@@ -314,13 +488,64 @@ export const phoneResearchMethods = uiModule({
         this.renderPhoneDock();
     },
 
-    /** Now (§2; its rows: D3). */
-    appendPhoneNow(el: { sec: HTMLElement; head: HTMLElement; sum: HTMLElement; body: HTMLElement }, state: DeviceResearchState): void {
+    /**
+     * Now (§2): each line at work — its glyph, its name, the task, since when (paused: until when; stopping…), ⋯ —
+     * and the last 24 hours in one quiet line. Nobody at work: "Nothing is being worked on now" and when it was
+     * last; never: one sentence. A live change rewrites the rows' texts only. An archive has no Now (§8).
+     */
+    appendPhoneNow(el: PhoneSectionEl, state: DeviceResearchState): void {
         const r = strings.deviceResearch;
         const g = state.glance;
-        const lines = new Set((g?.now ?? []).map(n => n.line ?? '')).size;
-        el.head.textContent = lines > 1 ? r.nowTitleLines(lines) : r.nowTitle;
-        if (!g || (!g.now.length && !g.lastWorked)) quiet(el.body, r.neverWorked);
+        const lang = getCurrentLanguage();
+        if (g?.tree.state === 'archive') {
+            el.sec.hidden = true;
+            el.body.replaceChildren();
+            return;
+        }
+        const now = g?.now ?? [];
+        setText(el.head, phoneNowTitle(now));
+        // A stop asked is forgotten once its run finishes or is gone (the research says so).
+        for (const run of [...stopsAsked]) {
+            const known = g?.runs.find(x => x.id === run);
+            const atWork = now.some(n => n.run === run);
+            if (!atWork || known?.state === 'finishing') stopsAsked.delete(run);
+        }
+        const rows: KeyedRow[] = now.map((n, i) => {
+            const line = n.line ? g?.lines.find(l => l.id === n.line) : undefined;
+            const name = line?.name || (n.person ? g?.people[n.person]?.name : '') || n.task?.text || '';
+            const task = name === n.task?.text ? undefined : n.task?.text;
+            const finishing = !!n.run && g?.runs.find(x => x.id === n.run)?.state === 'finishing';
+            const stopping = !!n.run && (stopsAsked.has(n.run) || finishing);
+            return {
+                key: `now:${n.run ?? n.line ?? i}`,
+                make: () => makeLineRow('now-menu', false),
+                fill: (row: HTMLElement) => {
+                    row.dataset.index = String(i);
+                    fillLineRow(row, { way: n.way, name, task, meta: phoneNowMeta(n, { stopping, lang }), menu: strings.deviceResearch.lineActions });
+                    row.classList.toggle('is-stopping', stopping);
+                },
+            };
+        });
+        const idle = phoneNowIdle(g, { lang });
+        if (idle?.kind === 'never') rows.push(quietRow('never', r.neverWorked));
+        else if (idle?.kind === 'idle') {
+            rows.push({
+                key: 'idle',
+                make: () => {
+                    const box = document.createElement('div');
+                    box.className = 'phone-now-idle';
+                    box.innerHTML = '<span class="phone-dot is-ring" aria-hidden="true"></span>'
+                        + '<div class="phone-line__main"><span class="phone-line__name"></span><span class="phone-line__meta"></span></div>';
+                    return box;
+                },
+                fill: (box) => {
+                    setText(box.querySelector('.phone-line__name'), strings.live.nothingAtWork);
+                    setText(box.querySelector('.phone-line__meta'), idle.last);
+                },
+            });
+        }
+        if (g?.day) rows.push(quietRow('day', r.dayLine(g.day.persons, g.day.sources, g.day.saves), 'phone-sec__day'));
+        syncRows(el.body, rows);
     },
 
     /** Waiting (§5; its rows: D5). Nothing waits: the section goes, one sentence said in its place. */
@@ -339,11 +564,158 @@ export const phoneResearchMethods = uiModule({
         if (!state.finds?.groups.length) quiet(el.body, r.findsNone);
     },
 
-    /** Lines (§3; its rows: D3). */
-    appendPhoneLines(el: { sec: HTMLElement; head: HTMLElement; sum: HTMLElement; body: HTMLElement }, state: DeviceResearchState): void {
+    /**
+     * Lines (§3) in the order of work: number, glyph, name, tasks, "paused" / "ended", ⋯ (the row too) for the
+     * line's actions. A move shows at once; a refusal puts the row back and says "linesBusy" under the list until
+     * a write goes. None: one sentence. An archive has no Lines (§8).
+     */
+    appendPhoneLines(el: PhoneSectionEl, state: DeviceResearchState): void {
         const r = strings.deviceResearch;
-        el.head.textContent = r.linesTitle;
-        if (!state.glance?.lines.length) quiet(el.body, r.linesNone);
+        const g = state.glance;
+        setText(el.head, r.linesTitle);
+        if (g?.tree.state === 'archive') {
+            el.sec.hidden = true;
+            el.body.replaceChildren();
+            return;
+        }
+        const lines = linesInOrder(g?.lines ?? [], orderMoving);
+        const rows: KeyedRow[] = lines.map(l => ({
+            key: `line:${l.id}`,
+            make: () => makeLineRow('line-menu', true),
+            fill: (row: HTMLElement) => {
+                row.dataset.line = l.id;
+                const chip = l.state === 'paused' ? strings.live.dirPausedChip('') : l.state === 'done' ? r.lineEnded : undefined;
+                fillLineRow(row, {
+                    n: l.n, way: l.way, name: l.name, meta: l.state === 'done' ? '' : r.lineMeta(l.tasks), chip,
+                    off: l.state !== 'active', menu: strings.deviceResearch.lineActions,
+                });
+            },
+        }));
+        if (!lines.length) rows.push(quietRow('none', r.linesNone));
+        if (linesBusy) rows.push(quietRow('busy', r.linesBusy, 'phone-sec__quiet phone-sec__warn'));
+        syncRows(el.body, rows);
+    },
+
+    /** The ⋯ of a row of Now (§2 point 3): Show in the tree, Line actions…, Stop run (with its confirmation). */
+    openPhoneNowMenu(index: number): void {
+        const g = shownState?.glance;
+        const n = g?.now[index];
+        if (!g || !n) return;
+        const r = strings.deviceResearch;
+        const L = strings.live;
+        const line = n.line ? g.lines.find(l => l.id === n.line) : undefined;
+        const name = line?.name || (n.person ? g.people[n.person]?.name : '') || n.task?.text || '';
+        const stopping = !!n.run && (stopsAsked.has(n.run) || g.runs.find(x => x.id === n.run)?.state === 'finishing');
+        const person = n.person ?? line?.focus;
+        const rows: { label: string; run: () => void; danger?: boolean; sub?: string; id?: string }[] = [];
+        if (person) rows.push({ label: L.showInTree, id: 'phone-now-tree', run: () => { void this.phoneOpenTree({ person }); } });
+        if (line) rows.push({ label: `${r.lineActions}…`, id: 'phone-now-line', run: () => this.openPhoneLineMenu(line.id) });
+        if (n.run && !stopping && researchDeviceAllows('run-stop')) {
+            const run = n.run;
+            rows.push({ label: L.stopRun, sub: r.stopSub(computerName()), danger: true, id: 'phone-now-stop', run: () => { void this.phoneStopRun(run, name); } });
+        }
+        if (!rows.length) return;
+        const sub = [name === n.task?.text ? '' : n.task?.text ?? '', phoneNowMeta(n, { stopping, lang: getCurrentLanguage() })].filter(Boolean).join(' · ');
+        this.presentMenuSheet(name, [{ rows }], { subtitle: sub, overlayClass: 'phone-sheet-overlay' });
+    },
+
+    /** Stop run (§2 point 3): asked first (as on the computer), then through the bridge; "stopping…" until it finishes. */
+    async phoneStopRun(runId: string, lineName: string): Promise<void> {
+        const r = strings.deviceResearch;
+        const treeId = phoneResearchTreeId();
+        if (!treeId || stopsAsked.has(runId) || !researchDeviceAllows('run-stop')) return;
+        const pc = computerName();
+        const ok = await this.showConfirm(r.stopText(pc), r.stopAsk(lineName), { confirmLabel: strings.live.stopRun, cancel: r.stopKeep, variant: 'danger' });
+        if (!ok) return;
+        stopsAsked.add(runId);
+        this.renderPhoneResearch();
+        const res = await postRunStop(deviceBridgeBase(treeId), runId);
+        // 404: the run is gone already, nothing more to stop.
+        if (!res.ok && res.status !== 404) {
+            stopsAsked.delete(runId);
+            if (res.reason) this.showToast(res.reason, 6000);
+        }
+        this.renderPhoneResearch();
+        void this.refreshPhoneResearch();
+    },
+
+    /**
+     * Line actions (§3 point 2): move up, down, to the top, pause ↔ resume, Show in the tree, End… (with its
+     * confirmation) — each through the bridge, none with a mark. Under them the quiet sentence of what is on the
+     * computer for now (phoneComputerOnlyNote).
+     */
+    openPhoneLineMenu(lineId: string): void {
+        const g = shownState?.glance;
+        if (!g || g.tree.state === 'archive') return;
+        const lines = linesInOrder(g.lines, orderMoving);
+        const line = lines.find(l => l.id === lineId);
+        if (!line) return;
+        const r = strings.deviceResearch;
+        const L = strings.live;
+        const rows: { label: string; run: () => void; danger?: boolean; id?: string }[] = [];
+        const writes = researchDeviceAllows('direction');
+        if (writes) {
+            const move = (m: PhoneLineMove, label: string, id: string): void => {
+                if (movedLineOrder(lines.map(l => l.id), line.id, m)) rows.push({ label, id, run: () => { void this.phoneMoveLine(line.id, m); } });
+            };
+            move('up', r.lineUp, 'phone-line-up');
+            move('down', r.lineDown, 'phone-line-down');
+            if (line.n > 2) move('first', r.lineFirst, 'phone-line-first');
+            if (line.state === 'active') rows.push({ label: L.dirPause, id: 'phone-line-pause', run: () => { void this.phoneLineState(line.id, 'pause'); } });
+            else rows.push({ label: r.lineResume, id: 'phone-line-resume', run: () => { void this.phoneLineState(line.id, 'resume'); } });
+        }
+        const focus = line.focus;
+        if (focus) rows.push({ label: L.showInTree, id: 'phone-line-tree', run: () => { void this.phoneOpenTree({ person: focus }); } });
+        if (writes && line.state !== 'done') {
+            rows.push({ label: L.dirEndMenu, danger: true, id: 'phone-line-end', run: () => { void this.phoneEndLine(line.id, line.name); } });
+        }
+        this.presentMenuSheet(line.name, [{ rows, quiet: phoneComputerOnlyNote('line-work', computerName()) }], {
+            subtitle: r.lineSheetSub(line.n, line.tasks), overlayClass: 'phone-sheet-overlay',
+        });
+    },
+
+    /** A line moved in the order of work: shown at once, written through the bridge; refused, back where it was. */
+    async phoneMoveLine(lineId: string, move: PhoneLineMove): Promise<void> {
+        const treeId = phoneResearchTreeId();
+        const g = shownState?.glance;
+        if (!treeId || !g || orderMoving) return;
+        const order = movedLineOrder(linesInOrder(g.lines).map(l => l.id), lineId, move);
+        if (!order) return;
+        orderMoving = order;
+        this.renderPhoneResearch();
+        const res = await writeDirectionOrder(deviceBridgeBase(treeId), order);
+        orderMoving = null;
+        if (res.ok) {
+            linesBusy = false;
+            // The research's order kept until its next glance says the same.
+            const held = shownState?.glance;
+            if (held) shownState = { ...shownState!, glance: { ...held, lines: linesInOrder(held.lines, order) } };
+        } else if (lineWriteBusy(res)) linesBusy = true;
+        this.renderPhoneResearch();
+        if (res.ok) void this.refreshPhoneResearch();
+    },
+
+    /** A line paused, resumed or ended through the bridge; a refusal as the research being written says so under the list. */
+    async phoneLineState(lineId: string, what: DirectionStateDo): Promise<boolean> {
+        const treeId = phoneResearchTreeId();
+        if (!treeId) return false;
+        const res = await setDirectionState(deviceBridgeBase(treeId), lineId, what);
+        if (res.ok) {
+            linesBusy = false;
+            const held = shownState?.glance;
+            const next = what === 'pause' ? 'paused' : what === 'done' ? 'done' : 'active';
+            if (held) shownState = { ...shownState!, glance: { ...held, lines: held.lines.map(l => (l.id === lineId ? { ...l, state: next } : l)) } };
+        } else if (lineWriteBusy(res)) linesBusy = true;
+        this.renderPhoneResearch();
+        if (res.ok) void this.refreshPhoneResearch();
+        return res.ok;
+    },
+
+    /** End… (§3 point 2, 3.5): asked first, then ended through the bridge. */
+    async phoneEndLine(lineId: string, name: string): Promise<void> {
+        const r = strings.deviceResearch;
+        const ok = await this.showConfirm(r.lineEndText, r.lineEndAsk(name), { confirmLabel: r.lineEndOk, cancel: r.lineEndKeep, variant: 'danger' });
+        if (ok) await this.phoneLineState(lineId, 'done');
     },
 
     /**
@@ -536,5 +908,8 @@ export function resetPhoneResearchForTests(): void {
     readFailed = false;
     treesOpened.clear();
     opening = null;
+    stopsAsked.clear();
+    orderMoving = null;
+    linesBusy = false;
 }
 

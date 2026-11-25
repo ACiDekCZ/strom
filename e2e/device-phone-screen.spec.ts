@@ -243,3 +243,159 @@ test.describe('en', () => {
         expect(asked.trees).toBe(1);
     });
 });
+
+/** Two lines at work (each its run), the research's other answers as before; `answer` gives the writes. */
+function atWork(gw: FakeGateway, answer: (req: { p: string; m: string; b?: unknown }) => TunnelReply | undefined): void {
+    research(gw);
+    const at = (m: number): string => new Date(Date.now() - m * 60_000).toISOString();
+    const lines = [
+        { id: 'G0001', n: 1, name: 'Předci Jana Pýchavky', direction: 'ancestors', way: 'up', state: 'active', tasks: 2, waiting: 1, working: true, since: at(2880), focus: 'P0001' },
+        { id: 'G0002', n: 2, name: 'Potomci Josefa Pýchavky', direction: 'descendants', way: 'down', state: 'active', tasks: 1, waiting: 0, working: true, since: at(1800), focus: 'P0003' },
+        { id: 'G0003', n: 3, name: 'Bedlovi z Mlýnků', direction: 'ancestors', way: 'up', state: 'paused', tasks: 3, waiting: 0, working: false, since: at(900), focus: 'P0002' },
+    ];
+    // The research as written: its order and its lines' states.
+    gw.glance = () => fakeGlance({ id: PYCH, name: NAME }, {
+        lastWorked: undefined,
+        lines,
+        now: [
+            { since: at(35), line: 'G0001', way: 'up', task: { id: 'T0003', text: 'Křest Jana Pýchavky 1851' }, person: 'P0001', run: 'run-a1' },
+            { since: at(12), line: 'G0002', way: 'down', task: { id: 'T0009', text: 'Sňatek Josefa Pýchavky' }, person: 'P0003', run: 'run-b2' },
+        ],
+        runs: [
+            { id: 'run-a1', line: 'G0001', way: 'up', since: at(35), state: 'working', task: 'T0003' },
+            { id: 'run-b2', line: 'G0002', way: 'down', since: at(12), state: 'working', task: 'T0009' },
+        ],
+    });
+    const glanceAndTree = gw.onTunnel;
+    gw.onTunnel = async (req, device) => {
+        const reply = answer(req);
+        if (reply?.s === 200 && req.p === 'directions/order') {
+            (bodyOf(req.b) as { order: string[] }).order.forEach((id, i) => { lines.find(l => l.id === id)!.n = i + 1; });
+        }
+        const state = /^directions\/(G\d+)\/state$/.exec(req.p);
+        if (reply?.s === 200 && state) {
+            const d = (bodyOf(req.b) as { do: string }).do;
+            lines.find(l => l.id === state[1])!.state = d === 'pause' ? 'paused' : d === 'done' ? 'done' : 'active';
+        }
+        return reply ?? glanceAndTree(req, device);
+    };
+}
+
+const nowRows = (page: Page) => screen(page).locator('.phone-sec[data-sec="now"] .phone-line');
+const lineRows = (page: Page) => screen(page).locator('.phone-sec[data-sec="lines"] .phone-line');
+const sheet = (page: Page) => page.locator('.bottom-sheet-overlay');
+/** A tunnelled request's JSON body (sent as its text). */
+const bodyOf = (b: unknown): unknown => (typeof b === 'string' ? JSON.parse(b) : b);
+const writes = (p: string) => gw.tunnelled.filter(r => r.p === p && r.m === 'POST').map(r => ({ ...r, b: bodyOf(r.b) }));
+/** No mark of a research action on the screen nor in a sheet (an action through the bridge has none). */
+async function noMarks(page: Page): Promise<void> {
+    await expect(page.locator('#phone-research .research-open-mark, #phone-research .research-ai-badge, .bottom-sheet-overlay .research-open-mark, .bottom-sheet-overlay .research-ai-badge')).toHaveCount(0);
+    for (const t of await page.locator('#phone-research, .bottom-sheet-overlay').allInnerTexts()) expect(t).not.toMatch(/[◆↗]/);
+}
+
+test.describe('Now and Lines (en)', () => {
+    test.use({ locale: 'en-US' });
+
+    test('Now with two lines: glyph, line, task, since when, the day; Lines in the order of work', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        atWork(gw, () => undefined);
+        await pairedOnScreen(page, gw);
+        await expect(screen(page).locator('.phone-sec[data-sec="now"] .phone-sec__title')).toHaveText('Now · 2 lines');
+        await expect(nowRows(page)).toHaveCount(2);
+        await expect(nowRows(page).nth(0).locator('.phone-line__glyph')).toHaveText('↑');
+        await expect(nowRows(page).nth(0).locator('.phone-line__name')).toHaveText('Předci Jana Pýchavky');
+        await expect(nowRows(page).nth(0).locator('.phone-line__task')).toHaveText('Křest Jana Pýchavky 1851');
+        await expect(nowRows(page).nth(0).locator('.phone-line__meta')).toHaveText(/^working since \d/);
+        await expect(nowRows(page).nth(1).locator('.phone-line__glyph')).toHaveText('↓');
+        await expect(screen(page).locator('.phone-sec__day')).toHaveText('Last 24 h: 1 person · 1 source · 4 saves');
+        await expect(lineRows(page).locator('.phone-line__n')).toHaveText(['1', '2', '3']);
+        await expect(lineRows(page).nth(2).locator('.phone-line__chip')).toHaveText('paused');
+        await expect(lineRows(page).nth(0).locator('.phone-line__meta')).toHaveText('2 tasks');
+        // The ⋯ is a 44 px target.
+        const more = await nowRows(page).nth(0).locator('.phone-line__more').boundingBox();
+        expect(more?.width).toBeGreaterThanOrEqual(44);
+        expect(more?.height).toBeGreaterThanOrEqual(44);
+        await nowRows(page).nth(0).locator('.phone-line__more').click();
+        await expect(sheet(page).locator('.bottom-sheet-menu-title')).toHaveText('Předci Jana Pýchavky');
+        await expect(sheet(page).locator('.bottom-sheet-label')).toHaveText([/^Show in tree/, /^Line actions…/, /^Stop run/]);
+        await expect(sheet(page).locator('.bottom-sheet-sub')).toHaveText('the agent on Pracovna stops after the step in progress');
+        await noMarks(page);
+        await shot(page, 'vyzkum-ted-390');
+    });
+
+    test('Stop run: asked first, then runs/stop with the run, the row "stopping…"', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        atWork(gw, req => (req.p === 'runs/stop' ? { s: 200, body: { head: '4d8b0f2a16c3', run: null } } : undefined));
+        await pairedOnScreen(page, gw);
+        await nowRows(page).nth(1).locator('.phone-line__more').click();
+        await sheet(page).locator('#phone-now-stop').click();
+        const ask = page.locator('.dialog-confirm.active');
+        await expect(ask).toContainText('Stop the run of the line Potomci Josefa Pýchavky?');
+        await ask.locator('#confirm-cancel-btn').click();
+        expect(writes('runs/stop')).toEqual([]);
+        await nowRows(page).nth(1).locator('.phone-line__more').click();
+        await sheet(page).locator('#phone-now-stop').click();
+        await page.locator('.dialog-confirm.active #confirm-ok-btn').click();
+        await expect.poll(() => writes('runs/stop').map(r => r.b)).toEqual([{ run: 'run-b2' }]);
+        await expect(nowRows(page).nth(1).locator('.phone-line__meta')).toHaveText('stopping…');
+        await expect(nowRows(page).nth(0).locator('.phone-line__meta')).toHaveText(/^working since/);
+    });
+
+    test('Move up: the order sent, the lines numbered again; a 409 puts the row back and says the research is being written', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        let refuse = false;
+        atWork(gw, req => {
+            if (req.p !== 'directions/order') return undefined;
+            if (refuse) return { s: 409, body: { error: 'research.write', code: 'research.write', text: 'Writing in progress' } };
+            return { s: 200, body: { head: '4d8b0f2a16c3', order: (bodyOf(req.b) as { order: string[] }).order, ignored: [] } };
+        });
+        await pairedOnScreen(page, gw);
+        await lineRows(page).nth(1).click();
+        await expect(sheet(page).locator('.bottom-sheet-menu-title')).toHaveText('Potomci Josefa Pýchavky');
+        await expect(sheet(page).locator('.bottom-sheet-menu-sub')).toHaveText('No. 2 in the order of work · 1 task');
+        await expect(sheet(page).locator('.bottom-sheet-quiet')).toHaveText('“Work on this line” (agent) is on Pracovna.');
+        await noMarks(page);
+        await sheet(page).locator('#phone-line-up').click();
+        await expect.poll(() => writes('directions/order').map(r => r.b)).toEqual([{ order: ['G0002', 'G0001', 'G0003'] }]);
+        await expect(lineRows(page).locator('.phone-line__name')).toHaveText(['Potomci Josefa Pýchavky', 'Předci Jana Pýchavky', 'Bedlovi z Mlýnků']);
+        await expect(lineRows(page).locator('.phone-line__n')).toHaveText(['1', '2', '3']);
+        // Refused: the row back where it was, the sentence under the list.
+        refuse = true;
+        await lineRows(page).nth(2).locator('.phone-line__more').click();
+        await sheet(page).locator('#phone-line-first').click();
+        await expect.poll(() => writes('directions/order').length).toBe(2);
+        await expect(lineRows(page).locator('.phone-line__name')).toHaveText(['Potomci Josefa Pýchavky', 'Předci Jana Pýchavky', 'Bedlovi z Mlýnků']);
+        await expect(screen(page).locator('.phone-sec__warn')).toHaveText('The research is being written just now — again in a moment.');
+        await expect(page.locator('.toast')).toHaveCount(0);
+        await shot(page, 'vyzkum-linie-zapis-390');
+        // A write that goes: the sentence gone.
+        refuse = false;
+        await lineRows(page).nth(1).locator('.phone-line__more').click();
+        await sheet(page).locator('#phone-line-down').click();
+        await expect.poll(() => writes('directions/order').length).toBe(3);
+        await expect(screen(page).locator('.phone-sec__warn')).toHaveCount(0);
+    });
+
+    test('End…: asked first, then the line ended through the bridge', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        atWork(gw, req => (/^directions\/G\d+\/state$/.test(req.p) ? { s: 200, body: { head: '4d8b0f2a16c3' } } : undefined));
+        await pairedOnScreen(page, gw);
+        await lineRows(page).nth(0).locator('.phone-line__more').click();
+        await expect(sheet(page).locator('.bottom-sheet-label')).toHaveText(['Move down', 'Pause', 'Show in tree', 'End…']);
+        await sheet(page).locator('#phone-line-end').click();
+        const ask = page.locator('.dialog-confirm.active');
+        await expect(ask).toContainText('End the line Předci Jana Pýchavky?');
+        await expect(ask.locator('#confirm-cancel-btn')).toHaveText('Back');
+        await ask.locator('#confirm-ok-btn').click();
+        await expect.poll(() => writes('directions/G0001/state').map(r => r.b)).toEqual([{ do: 'done' }]);
+        await expect(lineRows(page).nth(0).locator('.phone-line__chip')).toHaveText('ended');
+        // A paused line: Resume.
+        await lineRows(page).nth(2).locator('.phone-line__more').click();
+        await sheet(page).locator('#phone-line-resume').click();
+        await expect.poll(() => writes('directions/G0003/state').map(r => r.b)).toEqual([{ do: 'resume' }]);
+    });
+});

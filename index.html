@@ -23711,6 +23711,39 @@
         .phone-sec__sum:empty { display: none; }
         .phone-sec__body:empty { display: none; }
         .phone-sec__quiet { margin: 0; padding: 0 16px 12px; font-size: 13px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
+        /* Now and Lines (§2, §3): (number), the way's glyph, name / task / meta, the ⋯ of the line's actions (44px). */
+        .phone-line {
+            display: grid; grid-template-columns: 20px minmax(0, 1fr) 44px; column-gap: 10px; align-items: start;
+            margin: 0 16px; padding: 8px 0; border-top: 1px solid var(--border); cursor: pointer;
+        }
+        .phone-line--num { grid-template-columns: 14px 20px minmax(0, 1fr) 44px; column-gap: 8px; }
+        .phone-sec__body > .phone-line:first-child { border-top: 0; }
+        .phone-line__n { font-size: 12px; line-height: 20px; color: var(--text-faint); text-align: right; font-variant-numeric: tabular-nums; }
+        .phone-line__glyph {
+            display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: var(--r-md);
+            background: var(--dir-icon-bg); color: var(--dir-icon-fg); font-size: 12px; font-weight: 600; line-height: 1;
+        }
+        .phone-line__main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        .phone-line__name { font-size: 15px; font-weight: 500; line-height: 20px; color: var(--text); overflow-wrap: anywhere; }
+        .phone-line__task { font-size: 13.5px; line-height: 1.35; color: var(--text); overflow-wrap: anywhere; }
+        .phone-line__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 12.5px; line-height: 1.35; color: var(--text-light); }
+        .phone-line__meta-text:empty, .phone-line__chip[hidden], .phone-line__task[hidden] { display: none; }
+        .phone-line__chip {
+            padding: 0 6px; border-radius: var(--r-tag); background: var(--dir-icon-bg); color: var(--text-light);
+            font-size: 11px; font-weight: 600; line-height: 18px;
+        }
+        .phone-line.is-off .phone-line__name { color: var(--text-light); }
+        .phone-line.is-stopping .phone-line__meta { color: var(--warning-text); }
+        .phone-line__more {
+            display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -8px 0;
+            padding: 0; border: 0; border-radius: var(--r-md); background: none; color: var(--text-light); font: inherit; font-size: 18px; cursor: pointer;
+        }
+        .phone-line__more:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (hover: hover) { .phone-line__more:hover { background: var(--hover-bg); color: var(--text); } }
+        .phone-now-idle { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 10px; align-items: center; margin: 0 16px; padding: 8px 0; }
+        .phone-now-idle .phone-dot { justify-self: center; }
+        .phone-sec__day { margin: 0; padding: 4px 16px 12px; font-size: 12.5px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
+        .phone-sec__warn { padding-top: 6px; color: var(--warning-text); }
         .phone-research__more {
             display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 48px; margin: 0;
             padding: 0 16px; box-sizing: border-box; border: 0; border-bottom: 1px solid var(--divider); border-radius: 0;
