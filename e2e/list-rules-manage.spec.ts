@@ -8,12 +8,15 @@
  * "missing", "Choose another person…" first in the row's ⋯, the overview's
  * and the detail's warning; a list another list uses asks before it is
  * deleted, Undo brings the references back; a read-only tree shows the words
- * and the origin without actions; the phone's four lines and "Whole rule ›".
+ * and the origin without actions; a slow count says "Counting…"; the phone's four lines and "Whole rule ›";
+ * in another window (079): Show in the tree and the time of a change, which
+ * the main window writes when it saves the window's edit.
  * Invented names only; the clock is fixed.
  */
 
 import { test, expect, Page } from '@playwright/test';
-import { form, listRow, lists, openList, seedFamily } from './list-rules-seed';
+import { card } from './helpers';
+import { form, listRow, lists, openList, seedFamily, NOW } from './list-rules-seed';
 
 const row = (page: Page, path: string) => form(page).locator(`.plr-row[data-path="${path}"]`);
 const menu = (page: Page) => page.locator('.plr-menu');
@@ -147,6 +150,43 @@ test.describe('Custom rules in the lists: a computer', () => {
         await expect(listRow(page, 'l-plain')).toHaveCount(0);
     });
 
+    test('a slow count: "Counting…" with the total so far, the rows quiet, then the new count', async ({ page }) => {
+        await seedFamily(page);
+        await openList(page, 'l-mill');
+        await lists(page).locator('.pl-rule [data-act="edit-rule"]').click();
+        const f = form(page);
+        await expect(f).toBeVisible();
+        const total = f.locator('.pln-total');
+        const before = await total.innerText();
+        // Every count takes 300 ms from now on; the paint after "Counting…" waits until released.
+        await page.evaluate(() => {
+            const real = performance.now.bind(performance);
+            let extra = 0;
+            performance.now = () => real() + (extra += 300);
+            const w = window as unknown as { __held: FrameRequestCallback[]; __raf: typeof requestAnimationFrame };
+            w.__held = [];
+            w.__raf = window.requestAnimationFrame.bind(window);
+            window.requestAnimationFrame = (cb) => { w.__held.push(cb); return 0; };
+        });
+        // The first change counts as before (the last count was quick) and learns it is slow now.
+        await f.locator('.plr-top [data-op="any"]').click();
+        await expect(total).not.toHaveText(before);
+        const any = await total.innerText();
+        // The next change: "Counting…" with the total so far, the rows' counts quiet.
+        await f.locator('.plr-top [data-op="all"]').click();
+        await expect(total).toHaveText(`Counting… ${any.replace(/ match$/, '').replace(/^/, 'so far ')}`);
+        await expect(total).toHaveClass(/is-busy/);
+        await expect(f.locator('.plr-row[data-path="0"] > .plr-k')).toHaveClass(/is-busy/);
+        // The paint comes: the new count.
+        await page.evaluate(() => {
+            const w = window as unknown as { __held: FrameRequestCallback[]; __raf: typeof requestAnimationFrame };
+            window.requestAnimationFrame = w.__raf;
+            for (const cb of w.__held.splice(0)) cb(performance.now());
+        });
+        await expect(total).toHaveText(before);
+        await expect(total).not.toHaveClass(/is-busy/);
+    });
+
     test('a read-only tree: the words and the origin without actions', async ({ page }) => {
         await seedFamily(page);
         await page.evaluate(() => { (window.Strom.DataManager as unknown as { viewMode: boolean }).viewMode = true; });
@@ -188,5 +228,40 @@ test.describe('Custom rules in the lists: a phone', () => {
         expect(await lines()).toBeGreaterThanOrEqual(folded);
         await expect(d.locator('.pl-rule-whole')).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    });
+});
+
+test.describe('Custom rules in the lists: another window (079)', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('Show in the tree from a Family window; an edit there gets its change time in the main window', async ({ page, context }) => {
+        await seedFamily(page);
+        const treeId = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId() as string);
+        const sat = await context.newPage();
+        await sat.clock.setFixedTime(NOW);
+        await sat.goto(`/strom.html?okno=family&tree=${encodeURIComponent(treeId)}&w=lr01aa`);
+        await expect(card(sat, 'Benedikt')).toBeVisible();
+        expect(await sat.evaluate(() => window.Strom.DataManager.isWindowCopy())).toBe(true);
+
+        await openList(sat, 'l-mill');
+        await lists(sat).locator('.pl-rule [data-act="edit-rule"]').click();
+        await expect(form(sat)).toBeVisible();
+        const show = form(sat).locator('.pln-foot [data-act="show-tree"]');
+        await show.click();
+        const pill = sat.locator('#evidence-pill');
+        await expect(pill).toBeVisible();
+        await expect(form(sat)).toBeHidden();
+        await expect(card(sat, 'Benedikt')).toHaveClass(/evidence-hit/);
+        await pill.locator('.evidence-pill-back').click();
+        await expect(form(sat)).toBeVisible();
+        await expect(show).toBeFocused();
+        await sat.evaluate(() => window.Strom.UI.closeNewPersonList());
+
+        // A person edited in the window: the main window saves it with the time.
+        await sat.evaluate(() => window.Strom.DataManager.updatePerson('g' as never, { birthPlace: 'Vrbatín' }));
+        await expect.poll(() => page.evaluate(() => window.Strom.DataManager.getPerson('g' as never)?.changedAt ?? null)).toBe(NOW.toISOString());
+        expect(await page.evaluate(() => window.Strom.DataManager.getPerson('a' as never)?.changedAt ?? null)).toBeNull();
+        await expect.poll(() => sat.evaluate(() => window.Strom.DataManager.getPerson('g' as never)?.changedAt ?? null)).toBe(NOW.toISOString());
+        await sat.close();
     });
 });

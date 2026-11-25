@@ -554,6 +554,23 @@ describe('D4 Person.changedAt', () => {
             expect(DataManager.getPerson(id('emil'))?.changedAt).toBeUndefined();
         });
 
+        it('an edit from another window (079) gets the time where it is saved: the main window', () => {
+            vi.useFakeTimers({ toFake: ['Date'] });
+            vi.setSystemTime(NOW);
+            const copy = structuredClone(dm.data);
+            copy.persons[id('emil')].birthPlace = 'Vrbatín';
+            expect(DataManager.applyWindowEdit(JSON.stringify(copy), 'Edit person')).toBe(true);
+            expect(DataManager.getPerson(id('emil'))?.changedAt).toBe('2026-11-16T10:30:00.000Z');
+            expect(DataManager.getPerson(id('ada'))?.changedAt).toBeUndefined();
+            // A change of the lists alone changes no person.
+            const lists = structuredClone(dm.data);
+            lists.personLists = [{ id: 'l1', name: 'Letters', dynamic: false, personIds: [id('ada')], sort: 'old', updated: '' }];
+            vi.setSystemTime(NOW + 60_000);
+            expect(DataManager.applyWindowEdit(JSON.stringify(lists), 'New list', true)).toBe(true);
+            expect(DataManager.getPerson(id('ada'))?.changedAt).toBeUndefined();
+            expect(DataManager.getPerson(id('emil'))?.changedAt).toBe('2026-11-16T10:30:00.000Z');
+        });
+
         it('a custom list is stored with dynamic false and its people, refreshed when they change', () => {
             const made = DataManager.createCustomPersonList({ name: 'Paternal without photo', custom: stored().custom!, origin: stored().origin })!;
             const kept = DataManager.getPersonList(made.id)!;

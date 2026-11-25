@@ -579,6 +579,8 @@ class DataManagerClass {
 
     // Undo/redo: deep copy of the data taken at the start of the current mutation.
     private pendingBefore: StromData | null = null;
+    /** A satellite's people and unions before its edit (only for Person.changedAt; it keeps no undo step). */
+    private windowBefore: StromData | null = null;
     /** The research base of `pendingBefore` (it goes on the undo step with it). */
     private pendingBase: ResearchBase | null = null;
     /** The mutation being committed changes only lists of people (an undo step allowed while following a research). */
@@ -1800,8 +1802,13 @@ class DataManagerClass {
         // changed here: refuse before anything changes (defense in depth —
         // the UI hides every edit entry point).
         if (this.isLocked() || this.isNewerData()) throw new DataLockedError();
-        // A satellite keeps no undo history (the main window does).
-        if (this.viewMode || this.windowSink) return;
+        if (this.viewMode) return;
+        // A satellite keeps no undo history (the main window does); its people and unions as they were, for the
+        // time of a change (spec 136 D4).
+        if (this.windowSink) {
+            if (!this.batchActive) this.windowBefore = { persons: structuredClone(this.data.persons), partnerships: structuredClone(this.data.partnerships) } as StromData;
+            return;
+        }
         // Inside a batch the pre-state was captured once by beginBatch; the inner
         // mutations must not re-snapshot (that would split the batch into steps).
         if (this.batchActive) return;
@@ -1825,7 +1832,10 @@ class DataManagerClass {
             return;
         }
         if (this.windowSink) {
-            // A satellite: the main window saves the edit and keeps its undo step.
+            // A satellite: the main window saves the edit and keeps its undo step. The changed people get the
+            // time here too, so this window's copy counts them (spec 136 D4); the main window writes its own.
+            if (this.windowBefore) stampChangedAt(this.windowBefore, this.data, new Date().toISOString());
+            this.windowBefore = null;
             this.pendingBefore = null;
             this.save();
             this.noteUserChange();
