@@ -3392,7 +3392,9 @@ export const researchOverviewMethods = uiModule({
         runStopNotes.set(runId, { state: 'stopping' });
         this.renderResearchOverview();
         const r = await this.writeRunStop(runId);
-        runStopNotes.set(runId, r.ok ? { state: 'stopped' } : { state: 'failed', text: r.text });
+        // Refused as the computer's only (a device): its button goes and one quiet sentence says why, nothing under the run.
+        if (!r.ok && !researchDeviceAllows('run-stop')) runStopNotes.delete(runId);
+        else runStopNotes.set(runId, r.ok ? { state: 'stopped' } : { state: 'failed', text: r.text });
         this.renderResearchOverview();
     },
 

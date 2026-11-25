@@ -67,8 +67,9 @@ export function deviceBridgeRequest(input: RequestInfo | URL, init?: RequestInit
     const body = init?.body !== undefined ? Promise.resolve(init.body)
         : req && method !== 'GET' && method !== 'HEAD' ? req.arrayBuffer() : Promise.resolve(undefined);
     const asked = body.then(b => deviceFetch(target.path, { method, headers, body: b ?? null, tree: target.treeId }))
-        .then(res => {
-            if (res.status === 403) void noteComputerOnly(res.clone(), method, target.path, headers);
+        .then(async res => {
+            // Noted before the caller reads its answer: the refused action is then already not drawn.
+            if (res.status === 403) await noteComputerOnly(res.clone(), method, target.path, headers);
             return res;
         });
     if (!signal) return asked;

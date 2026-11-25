@@ -23546,6 +23546,9 @@
             body.device-home-line-on .collab-bar,
             body.device-home-line-on .collab-badge,
             body.device-home-line-on .descendants-badge { top: calc(64px + var(--device-home-line-h)); }
+            /* The research's overview beside the tree, or over it, starts under the line (its head and the line both seen). */
+            body.device-home-line-on .research-overview--docked { top: calc(56px + var(--device-home-line-h)); }
+            body.device-home-line-on .research-overview--overlay { top: calc(64px + var(--device-home-line-h)); }
         }
         @media (max-width: 640px) {
             body.has-focus-panel:not(.descendants-view):not(.standalone-view) .device-home-line { top: calc(var(--toolbar-h) + 48px); }

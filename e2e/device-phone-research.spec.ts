@@ -96,7 +96,7 @@ test.afterEach(async () => {
     await gw.close();
 });
 
-/** Where the screenshots of the review go (de, 390 light and dark, a tablet), when asked for: STROM_SHOTS=<folder>. */
+/** Where the screenshots of the review go (de at 390, 1024 and 1440, light and dark), when asked for: STROM_SHOTS=<folder>. */
 type Lang = 'en' | 'de';
 const SHOTS = process.env.STROM_SHOTS ?? '';
 const shot = (page: Page, name: string): Promise<unknown> => SHOTS ? page.screenshot({ path: `${SHOTS}/d5-${name}.png` }) : Promise.resolve();
@@ -164,6 +164,15 @@ async function overflowing(page: Page, sel: string): Promise<string[]> {
         }
         return out;
     }, sel);
+}
+
+/** The home-screen icon's line under the toolbar and the overview share no area (the overview's head stays seen). */
+async function besideHomeLine(page: Page): Promise<void> {
+    const line = page.locator('#device-home-line');
+    if (!(await line.isVisible())) return;
+    const ov = page.locator('#research-overview');
+    if (await ov.evaluate(el => el.classList.contains('research-overview--sheet'))) return;
+    expect(overlap(await line.boundingBox(), await ov.boundingBox())).toBe(false);
 }
 
 /** Two boxes that share some area. */
@@ -267,7 +276,12 @@ test.describe('the research on a phone of the home network', () => {
         await ov.getByRole('button', { name: L.de.stop }).first().tap();
         await expect(page.locator('.toast').filter({ hasText: L.de.only })).toBeVisible();
         await expect(ov.getByRole('button', { name: L.de.stop })).toHaveCount(0);
+        // One sentence only: no refusal under the run beside it.
+        await expect(ov.getByText('Der Agent wurde nicht gestoppt', { exact: false })).toHaveCount(0);
         expect(scene.writes.filter(w => w.p === 'runs/stop')).toHaveLength(1);
+        // The toast in full (its fade-in done) on the shot.
+        await expect.poll(() => page.locator('.toast').filter({ hasText: L.de.only }).evaluate(el => getComputedStyle(el).opacity)).toBe('1');
+        await shot(page, 'computer-only-390-dark');
     });
 
     test('an answer in its own sheet through the bridge; a 409 says the task changed; Take photo / From gallery to a task', async ({ page }) => {
@@ -321,6 +335,7 @@ test.describe('the research on a phone of the home network', () => {
         await expect(sheet.locator('.waiting-upload__cancel')).toHaveCount(0);
         expect(await overflowing(page, '#waiting-answer-sheet')).toEqual([]);
         await noSideways(page);
+        await shot(page, 'answer-photos-360');
     });
 });
 
@@ -339,7 +354,7 @@ test.describe('the research on a device at every width, light and dark', () => {
                     await expect(sheet.locator('#sheet-research-item-overview')).toBeVisible();
                     expect(await overflowing(page, '.bottom-sheet-menu')).toEqual([]);
                     await noSideways(page);
-                    if (lang === 'de' && (width === 390 || width === 768) && !(width === 768 && dark)) {
+                    if (lang === 'de' && (width === 390 || width === 1024)) {
                         await shot(page, `more-${width}${dark ? '-dark' : ''}`);
                     }
                     await sheet.locator('#sheet-research-item-overview').tap();
@@ -352,11 +367,39 @@ test.describe('the research on a device at every width, light and dark', () => {
                     const stop = await ov.getByRole('button', { name: L[lang].stop }).first().boundingBox();
                     const head = await ov.locator('.research-overview__head, .research-overview__header').first().boundingBox().catch(() => null);
                     expect(overlap(stop, head)).toBe(false);
-                    if (lang === 'de' && (width === 390 || width === 768) && !(width === 768 && dark)) {
+                    await besideHomeLine(page);
+                    if (lang === 'de' && (width === 390 || width === 1024)) {
                         await shot(page, `overview-${width}${dark ? '-dark' : ''}`);
                     }
                 });
             }
+        }
+    }
+});
+
+test.describe('the research on a computer-wide device (a notebook\'s browser), light and dark', () => {
+    for (const lang of ['en', 'de'] as const) {
+        for (const dark of [false, true]) {
+            test(`${lang} 1440${dark ? ' dark' : ''}: the research menu and the overview, nothing past the edge`, async ({ page }) => {
+                scene.working = [WORKING];
+                scene.runs = [RUN];
+                await paired(page, { lang, width: 1440, dark });
+                await page.locator('#research-menu-btn').click();
+                const menu = page.locator('#research-menu');
+                await expect(menu).toBeVisible();
+                await expect(menu.locator('#research-item-overview')).toBeVisible();
+                expect(await overflowing(page, '#research-menu')).toEqual([]);
+                await noSideways(page);
+                if (lang === 'de') await shot(page, `menu-1440${dark ? '-dark' : ''}`);
+                await menu.locator('#research-item-overview').click();
+                const ov = page.locator('#research-overview');
+                await expect(ov).toBeVisible();
+                await expect(ov.getByRole('button', { name: L[lang].stop }).first()).toBeVisible();
+                expect(await overflowing(page, '#research-overview')).toEqual([]);
+                await noSideways(page);
+                await besideHomeLine(page);
+                if (lang === 'de') await shot(page, `overview-1440${dark ? '-dark' : ''}`);
+            });
         }
     }
 });
