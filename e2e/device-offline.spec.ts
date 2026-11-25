@@ -181,7 +181,7 @@ async function shot(page: Page, name: string): Promise<void> {
 const DLG = '#batch-modal .batch-dialog';
 
 test.describe('a phone of the home network (touch)', () => {
-    test.use({ hasTouch: true, isMobile: true });
+    test.use({ hasTouch: true, isMobile: true, timezoneId: 'Europe/Prague' });
 
     test('not reachable: the quiet line, the tree read only and dimmed, the research grey but Add materials, what waits, Try again, back', async ({ page }) => {
         await pairedTree(page, { lang: 'en', width: 390 });
@@ -189,7 +189,7 @@ test.describe('a phone of the home network (touch)', () => {
         await goAway(page);
         const line = page.locator('#device-qline');
         await expect(line).toContainText('The computer Pracovna is not reachable. The state shown is the last one known (');
-        await expect(line).toContainText(/known \((02:05 PM|14:05|13:05)\)/);
+        await expect(line).toContainText('known (02:05 PM)');
         await expect(line.locator('[data-act="pending"]')).toHaveText('Waiting to be sent: 3 photos, 1 edit ›');
         await expect(line.getByRole('button', { name: 'Try again' })).toBeVisible();
         await expect(page.locator('#current-tree-conn')).toContainText('Pracovna');

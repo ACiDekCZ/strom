@@ -228,7 +228,8 @@ test.describe('Retry with the agent at an item (spec 089)', () => {
         // The answer comes late: the row says "saving" (no second write meanwhile).
         let release: () => void = () => {};
         const held = new Promise<void>(r => { release = r; });
-        await page.context().route(`${BRIDGE}/waiting/T0412`, async (route) => {
+        // By the path: the write carries the app's version in its query (?app=…).
+        await page.context().route((url) => url.href.startsWith(`${BRIDGE}/waiting/T0412`) && url.pathname.endsWith('/waiting/T0412'), async (route) => {
             if (route.request().method() !== 'POST') return route.fallback();
             await held;
             return route.fallback();
