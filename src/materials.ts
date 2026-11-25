@@ -542,11 +542,19 @@ export function materialMatches(item: MaterialItem, query: string): boolean {
 }
 
 /**
- * A file nobody said whom it concerns: no person on it, none from sorting and none on its batch.
+ * A file the research keeps at a couple (`material.links`: the family F…, or one of its events): the tree holds it
+ * at that union, so it is assigned as surely as a file of a person — sorting proposes no person for it.
+ */
+export function fileOnCouple(file: Pick<MaterialFile, 'links'> | undefined): boolean {
+    return !!file?.links?.some(l => l.type === 'family' || (l.type === 'event' && /^F\d/.test(l.ref)));
+}
+
+/**
+ * A file nobody said whom it concerns: no person on it, none from sorting, none on its batch and no couple.
  * `sourceOf` (the research has `material.sourceOf`): the file of a source counts as assigned (spec 102 §7).
  */
 export function fileWithoutPerson(file: MaterialFile, list: Pick<MaterialList, 'batches'>, opts: { sourceOf?: boolean } = {}): boolean {
-    if (file.persons.length || file.sorted?.persons?.length) return false;
+    if (file.persons.length || file.sorted?.persons?.length || fileOnCouple(file)) return false;
     if (opts.sourceOf && file.uses?.of?.length) return false;
     const batch = file.batch ? list.batches.find(b => b.id === file.batch) : undefined;
     return !batch?.persons?.length;

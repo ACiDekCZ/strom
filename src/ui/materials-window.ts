@@ -54,7 +54,7 @@ import {
 } from './materials-ui.js';
 import { uiModule } from './module.js';
 import type { SortStripView } from './material-sort-ui.js';
-import type { SortStripState } from '../material-sort.js';
+import { sortLacksPerson, type SortStripState } from '../material-sort.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { researchBridgeActionLabel } from './research-open-mark.js';
 import { barHtml } from './prog-bar.js';
@@ -689,7 +689,7 @@ export const materialsWindowMethods = uiModule({
             delete i.agentLeft;
             delete i.copyOf;
             // The file of a source is assigned (spec 102 §7): no "Not assigned by the agent", no copy tag.
-            if (!marks || !i.file || i.hidden || i.sourceOf?.length || (i.titled && (i.persons.length || i.viaBatch.length))) continue;
+            if (!marks || !i.file || i.hidden || i.sourceOf?.length || (i.titled && !sortLacksPerson(i))) continue;
             const left = marks.left.get(i.file.id);
             if (left) i.agentLeft = { ...left };
             const copy = marks.copyOf.get(i.file.id);
@@ -1829,7 +1829,7 @@ export const materialsWindowMethods = uiModule({
         }
         // Sort with the agent over the batch's files without a title or a person (spec 102 §1: the batch's strip went).
         const gate = this.materialSortGate();
-        if (!folder && (gate === 'on' || gate === 'offRun') && (group.pending || group.items.some(i => !!i.file && !i.hidden && (!i.titled || (!i.persons.length && !i.viaBatch.length))))) {
+        if (!folder && (gate === 'on' || gate === 'offRun') && (group.pending || group.items.some(i => !!i.file && !i.hidden && (!i.titled || sortLacksPerson(i))))) {
             rows.push({ id: 'sort', label: m.agentSort.sort, divider: rows.length > 0 });
         }
         if (ctx.caps.openLinks !== false) rows.push({ id: 'research', label: strings.batch.openInResearch, divider: rows.length > 0 });

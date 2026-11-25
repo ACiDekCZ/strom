@@ -9,17 +9,25 @@
  */
 
 import type { MaterialItem } from './materials.js';
-import { SORT_MAX_FILES, fileExt, materialFolder, materialType, type SortJob, type SortLink, type SortProposal, type SortRunState, type SortState } from './materials.js';
+import { SORT_MAX_FILES, fileExt, fileOnCouple, materialFolder, materialType, type SortJob, type SortLink, type SortProposal, type SortRunState, type SortState } from './materials.js';
 import type { ResearchSortRemembered, ResearchSortRun, SortRunErrorCode } from './research-device.js';
 import type { MaterialKind, MediaBy, MediaPlace, PartnershipId, PersonId, StromData } from './types.js';
 import { researchPersonRef } from './research-link.js';
 
-/** What the files lack: a title of their own, a person. */
+/**
+ * Nobody said whom the file concerns: no person (its own, from sorting, through its batch) and no couple the
+ * research keeps it at — the one test of the strip's count, "Sort more" and the filter without a person.
+ */
+export function sortLacksPerson(i: Pick<MaterialItem, 'persons' | 'viaBatch' | 'file'>): boolean {
+    return !i.persons.length && !i.viaBatch.length && !fileOnCouple(i.file);
+}
+
+/** What the files lack: a title of their own, a person (or a couple). */
 export function sortNeeds(items: readonly MaterialItem[]): { n: number; t: number; p: number } {
     let t = 0, p = 0;
     for (const i of items) {
         if (!i.titled) t++;
-        if (!i.persons.length && !i.viaBatch.length) p++;
+        if (sortLacksPerson(i)) p++;
     }
     return { n: items.length, t, p };
 }
@@ -31,7 +39,7 @@ export function sortable(i: Pick<MaterialItem, 'file' | 'tree'>): boolean {
 
 /** The files a sorting over the whole window takes: the research's files, not hidden, without a title of their own or a person. */
 export function sortNeedy(items: readonly MaterialItem[]): MaterialItem[] {
-    return items.filter(i => sortable(i) && !i.hidden && (!i.titled || (!i.persons.length && !i.viaBatch.length)));
+    return items.filter(i => sortable(i) && !i.hidden && (!i.titled || sortLacksPerson(i)));
 }
 
 /** The most batches one action sends (1500 files, the research's `SORT_RUN_MOST_FILES`, spec 102 K1.12). */

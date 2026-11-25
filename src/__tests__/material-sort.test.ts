@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSortJob, parseMaterialFile, startMaterialSort, parseSortRun, type MaterialItem, type SortLink, type SortJob } from '../materials.js';
+import { parseSortJob, parseMaterialFile, startMaterialSort, parseSortRun, fileWithoutPerson, type MaterialItem, type SortLink, type SortJob } from '../materials.js';
 import { sortRememberedFrom, type ResearchSortRemembered } from '../research-device.js';
 import { sortNeeds, sortNeedy, sortNext, sortLeftMap, sortCopyOf, sortIsText, SORT_MAX_BATCHES, sortStripState, sortProposalCounts, sortLeftIds, sortRows, sortRowProposes, sortWrite, sortChip, sortBackRow, parseSortRevert, sortUnrelatedHideable, sortRunBatches, sortJobsMerged, sortRunView, sortRunAdvance, sortRunEnded, sortRunCancelled, sortRunRest, sortRunContinued, sortFinishedSorts, sortRunErrorCode, type SortChip, type SortRow, type SortTreeIndex } from '../material-sort.js';
 import type { PartnershipId } from '../types.js';
@@ -136,6 +136,27 @@ describe('the files a sorting takes', () => {
         const hidden = item('I0005', { hidden: {} });
         const tree = item('I0006', { file: undefined, origin: 'tree' });
         expect(sortNeedy([done, viaBatch, noTitle, noPerson, hidden, tree]).map(i => i.file!.id)).toEqual(['I0003', 'I0004']);
+    });
+
+    it('a file the research keeps at a couple (its family, or one of its events) is assigned: never sent again by "Sort more"', () => {
+        const file = (id: string, links: { type: string; ref: string; event?: string }[]) =>
+            ({ id, name: `${id}.jpg`, sha: id.padEnd(64, '0'), persons: [], links }) as unknown as MaterialItem['file'];
+        const couple = item('I0007', { titled: true, file: file('I0007', [{ type: 'family', ref: 'F0006' }]) });
+        const wedding = item('I0008', { titled: true, file: file('I0008', [{ type: 'event', ref: 'F0005', event: 'E0332' }]) });
+        const personEvent = item('I0009', { titled: true, file: file('I0009', [{ type: 'event', ref: 'P0001', event: 'E0001' }]) });
+        expect(sortNeedy([couple, wedding]).map(i => i.file!.id)).toEqual([]);
+        expect(sortNext([couple, wedding], { scope: 'all', left: new Set() }).send).toEqual([]);
+        expect(sortNeeds([couple, wedding])).toEqual({ n: 2, t: 0, p: 0 });
+        // A couple's file without a title still goes, for its title alone.
+        const untitled = item('I0010', { file: file('I0010', [{ type: 'family', ref: 'F0006' }]) });
+        expect(sortNeedy([untitled]).map(i => i.file!.id)).toEqual(['I0010']);
+        expect(sortNeeds([untitled]).p).toBe(0);
+        // A person's event is not a couple: the person comes from `persons` as before.
+        expect(sortNeeds([personEvent]).p).toBe(1);
+        // The materials' filter "without a person" agrees.
+        expect(fileWithoutPerson(couple.file!, { batches: [] })).toBe(false);
+        expect(fileWithoutPerson(wedding.file!, { batches: [] })).toBe(false);
+        expect(fileWithoutPerson(personEvent.file!, { batches: [] })).toBe(true);
     });
 });
 
