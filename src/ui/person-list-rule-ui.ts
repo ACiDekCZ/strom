@@ -684,20 +684,22 @@ export const personListRuleMethods = uiModule({
         if (!overlay) return;
         const multi = !!opts.multi;
         const menu = document.createElement('div');
-        menu.className = `pl-menu plr-menu${opts.wide ? ' plr-menu--wide' : ''}${opts.search ? ' plr-menu--search' : ''}`;
+        menu.className = `pl-menu plr-menu${opts.wide ? ' plr-menu--wide' : ''}${opts.search ? ' plr-menu--search' : ''}${opts.cls ? ` ${opts.cls}` : ''}`;
         menu.setAttribute('role', opts.search ? 'dialog' : 'menu');
         menu.setAttribute('aria-label', title);
         const listRole = multi ? 'listbox' : 'menu';
         const rowsHtml = rows.map(r => (r.sep ? '<div class="pl-menu-sep" role="separator"></div>' : '')
             + (r.head ? `<div class="pl-mh" role="presentation">${esc(r.head)}</div>` : '')
+            + (r.more ? '<div class="plr-mrow" role="none">' : '')
             + `<button type="button" class="pl-menu-item${r.danger ? ' is-danger' : ''}" role="${multi ? 'option' : r.checked !== undefined ? 'menuitemradio' : 'menuitem'}"`
             + `${r.checked !== undefined ? ` aria-${multi ? 'selected' : 'checked'}="${!!r.checked}"` : ''} data-id="${esc(r.id)}"`
             + ` data-find="${esc(foldSearch2(`${r.label} ${r.sub ?? ''}`))}"${r.disabled ? ' aria-disabled="true"' : ''}${r.why ? ` title="${esc(r.why)}"` : ''}>`
-            + `<span class="pl-menu-label">${esc(r.label)}${r.sub ? `<span class="pl-menu-sub">${esc(r.sub)}</span>` : ''}</span>`
+            + `<span class="pl-menu-label">${esc(r.label)}${r.sub || r.need ? `<span class="pl-menu-sub">${esc(r.sub ?? '')}${r.need ? `${r.sub ? ' · ' : ''}<span class="plr-need">${esc(r.need)}</span>` : ''}</span>` : ''}</span>`
             + (r.value ? `<span class="pl-menu-val">${esc(r.value)}</span>` : '')
             + (r.kbd ? `<span class="pl-menu-key" aria-hidden="true">${esc(r.kbd)}</span>` : '')
             + (r.checked !== undefined ? `<span class="pl-menu-check" aria-hidden="true">${r.checked ? '✓' : ''}</span>` : '')
-            + `</button>`).join('');
+            + `</button>`
+            + (r.more ? `<button type="button" class="plr-mdots" data-more="${esc(r.id)}" aria-label="${esc(`${r.more}: ${r.label}`)}" title="${esc(r.more)}" tabindex="-1"><span aria-hidden="true">⋯</span></button></div>` : '')).join('');
         menu.innerHTML = opts.search
             ? `<input type="search" class="pl-msearch" placeholder="${esc(opts.search)}" aria-label="${esc(opts.search)}" autocomplete="off" spellcheck="false">`
                 + `<div class="pl-mlist" role="${listRole}" aria-label="${esc(title)}"${multi ? ' aria-multiselectable="true"' : ''}>${rowsHtml}</div>`
@@ -754,6 +756,12 @@ export const personListRuleMethods = uiModule({
         };
         menu.addEventListener('click', (ev) => {
             ev.stopPropagation();
+            const dots = (ev.target as HTMLElement).closest<HTMLElement>('.plr-mdots');
+            if (dots) {
+                close(false);
+                opts.onMore?.(dots.dataset.more ?? '');
+                return;
+            }
             const item = (ev.target as HTMLElement).closest<HTMLElement>('.pl-menu-item');
             if (item) pick(item);
         });
@@ -777,7 +785,23 @@ export const personListRuleMethods = uiModule({
         menu.addEventListener('keydown', (ev) => {
             const list = items();
             const inSearch = ev.target === search;
-            const at = list.indexOf(document.activeElement as HTMLElement);
+            // On a row's ⋯ the arrows count from its row; → / ← go between the row and its ⋯.
+            const act = document.activeElement as HTMLElement | null;
+            const onDots = !!act?.classList.contains('plr-mdots');
+            const at = list.indexOf((onDots ? act!.previousElementSibling : act) as HTMLElement);
+            if ((ev.key === 'ArrowRight' && !onDots && act?.nextElementSibling?.classList.contains('plr-mdots'))
+                || (ev.key === 'ArrowLeft' && onDots)) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                ((onDots ? act!.previousElementSibling : act!.nextElementSibling) as HTMLElement).focus();
+                return;
+            }
+            if (onDots && (ev.key === 'Enter' || ev.key === ' ')) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                act!.click();
+                return;
+            }
             if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
                 ev.preventDefault();
                 if (inSearch) { (ev.key === 'ArrowDown' ? list[0] : list[list.length - 1])?.focus(); }
@@ -822,7 +846,7 @@ export const personListRuleMethods = uiModule({
                 id: `plr-opt-${i}`, label: r.label, run: () => { if (!r.disabled) onPick(r.id); },
                 ...(r.danger ? { danger: true } : {}), ...(r.disabled ? { disabled: true } : {}),
                 ...(r.why && r.disabled ? { why: r.why } : {}), ...(r.checked !== undefined ? { active: !!r.checked } : {}),
-                ...(r.sub ? { sub: r.sub } : {}), ...(r.value ? { value: r.value } : {}),
+                ...(r.sub || r.need ? { sub: [r.sub, r.need].filter(Boolean).join(' · ') } : {}), ...(r.value ? { value: r.value } : {}),
             });
         });
         this.presentMenuSheet(title, blocks, opts.onClose ? { onClose: opts.onClose } : {});
@@ -836,6 +860,24 @@ export const personListRuleMethods = uiModule({
             btn.removeAttribute('id');
             btn.dataset.id = r.id;
             btn.dataset.find = foldSearch2(`${r.label} ${r.sub ?? ''}`);
+            if (r.more) {
+                // A row's ⋯ beside it (the sheet closes first).
+                const row = document.createElement('div');
+                row.className = 'plr-sheet-row';
+                btn.replaceWith(row);
+                row.appendChild(btn);
+                const dots = document.createElement('button');
+                dots.type = 'button';
+                dots.className = 'plr-sheet-dots';
+                dots.setAttribute('aria-label', `${r.more}: ${r.label}`);
+                dots.innerHTML = '<span aria-hidden="true">⋯</span>';
+                dots.addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    this.hideBottomSheet();
+                    opts.onMore?.(r.id);
+                });
+                row.appendChild(dots);
+            }
             if (!opts.multi || r.disabled) return;
             // Several rows: a tap ticks (the sheet stays open).
             const tick = btn.cloneNode(true) as HTMLElement;

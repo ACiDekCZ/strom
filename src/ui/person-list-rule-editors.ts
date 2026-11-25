@@ -67,6 +67,10 @@ export interface RulePickRow {
     why?: string;
     kbd?: string;
     danger?: boolean;
+    /** A faint note after the second line ("needs a person"). */
+    need?: string;
+    /** A ⋯ button beside the row (its accessible name); its click goes to RulePickOpts.onMore. */
+    more?: string;
 }
 
 export interface RulePickOpts {
@@ -80,6 +84,10 @@ export interface RulePickOpts {
     multi?: boolean;
     /** Called once when the choice closes (any way). */
     onClose?: () => void;
+    /** A row's ⋯ (`RulePickRow.more`): the choice closes first. */
+    onMore?: (id: string) => void;
+    /** An extra class of the popup (its width). */
+    cls?: string;
 }
 
 type CondOf<C extends RuleCondName> = Extract<RuleCond, { c: C }>;

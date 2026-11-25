@@ -38,10 +38,14 @@
 
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import type { PersonId, PersonList, PersonListRule, RuleGroup } from '../types.js';
+import type { ListTemplate, PersonId, PersonList, PersonListOrigin, PersonListRule, RuleGroup, RuleNode } from '../types.js';
 import { listIsAuto, rulePersonIds } from '../person-lists.js';
-import { customPersonIds, customToRule, ruleToCustom } from '../person-list-rules.js';
-import { cloneRuleNode, editedConditions, emptyRuleRoot } from '../person-list-rule-edit.js';
+import { customLabel, customPersonIds, customToRule, makeListTemplate, ruleNeeds, ruleToCustom } from '../person-list-rules.js';
+import { cloneRuleNode, editedConditions, emptyRuleRoot, firstIncomplete, nodeAt } from '../person-list-rule-edit.js';
+import { templateRoot, templatesFor, type BuiltinListTemplate } from '../person-list-templates.js';
+import { ruleCatalog, ruleCondEditor } from './person-list-rule-editors.js';
+import { ruleResearchTree } from './person-list-rule-cond-editors.js';
+import { SettingsManager } from '../settings.js';
 import {
     newRuleBuilder, ruleBuilderBlock, ruleBuilderCounts, ruleBuilderCountsBusy, type RuleBuilderState, type RuleMenuRow,
 } from './person-list-rule-ui.js';
@@ -93,6 +97,8 @@ export interface NewPersonListOptions {
     pinOut?: string;
     listId?: string;
     custom?: RuleGroup;
+    /** Edit rule…: open with a new condition's place under the rule and the catalog open (§9 "Add condition…"). */
+    startWith?: 'addCondition';
     openLists?: boolean;
     onSaved?: (list: PersonList) => void;
 }
@@ -128,6 +134,10 @@ interface NewListState {
     counts: Map<string, number>;
     /** The custom rule's builder (kept while the dialog is open, also when a tile is chosen again). */
     rb: RuleBuilderState | null;
+    /** The template the rule was started from (§7; kept when the rule is edited, gone with "Drop the template"). */
+    origin: PersonListOrigin | null;
+    /** What the template asked for: the name gets " – {person|place}" once it is filled. */
+    tplNeed: 'person' | 'place' | null;
 }
 
 let state: NewListState | null = null;
@@ -234,7 +244,12 @@ function defaultName(st: NewListState): string {
         case 'line': return researchLines().find(l => l.id === st.lineId)?.name ?? '';
         case 'added': return t.rule.added(st.days);
         case 'custom': {
-            // One Family of a person: "Family – {person}"; else the name is typed (or a template's).
+            // From a template: its name, then " – {person|place}" once that is filled (§7).
+            if (st.origin?.by === 'template') {
+                const fill = st.rb && st.tplNeed ? filledParam(st.rb.root, st.tplNeed) : '';
+                return fill ? `${st.origin.name} – ${fill}` : st.origin.name;
+            }
+            // One Family of a person: "Family – {person}"; else the name is typed.
             const items = st.rb?.root.items ?? [];
             const only = items.length === 1 ? items[0] : null;
             if (only?.t === 'cond' && only.c === 'family' && only.p.personId && !only.not) {
@@ -256,6 +271,59 @@ function canKeep(st: NewListState): boolean {
 function customRoot(st: NewListState): RuleGroup | null {
     return st.opt === 'custom' && st.rb ? st.rb.root : null;
 }
+
+/** The first person (or place) filled in a rule, by its shown name. */
+function filledParam(root: RuleGroup, need: 'person' | 'place'): string {
+    const walk = (node: RuleNode): string => {
+        if (node.t === 'group') {
+            for (const it of node.items) { const v = walk(it); if (v) return v; }
+            return '';
+        }
+        if (need === 'person' && (node.c === 'family' || node.c === 'ancestors' || node.c === 'descendants') && node.p.personId) {
+            const p = personOf(node.p.personId);
+            return p ? shownName(p) : node.p.personName;
+        }
+        if (need === 'place' && node.c === 'near' && node.p.placeKey) return node.p.placeName;
+        return '';
+    };
+    return walk(root);
+}
+
+/** Whether every condition of a rule is one this tree offers (§15: a template the tree has no data for is not drawn). */
+function ruleOffered(root: RuleGroup, offered: ReadonlySet<string>): boolean {
+    const walk = (node: RuleNode): boolean => node.t === 'group' ? node.items.every(walk) : offered.has(node.c);
+    return root.items.length > 0 && walk(root);
+}
+
+/** The templates the menu offers in this tree: the device's own, then the built-in ones (§7). */
+function offeredTemplates(): { own: ListTemplate[]; builtin: BuiltinListTemplate[] } {
+    const offered = new Set<string>(ruleCatalog(DataManager.getLineageIndex()).map(x => x.c));
+    return {
+        own: SettingsManager.getListTemplates().filter(t => ruleOffered(t.root, offered)),
+        builtin: templatesFor(ruleResearchTree()).filter(t => {
+            const root = templateRoot(t.id);
+            return !!root && ruleOffered(root, offered);
+        }),
+    };
+}
+
+/** What a template asks for first, said in the menu ("needs a person"). */
+function needOf(root: RuleGroup): 'person' | 'place' | null {
+    const needs = ruleNeeds(root);
+    return needs.includes('person') ? 'person' : needs.includes('place') ? 'place' : null;
+}
+
+/** A template name no other template has: the name itself, else "name (2)", "name (3)", … */
+function freeTemplateName(name: string, exceptId: string | null): string {
+    const taken = new Set(SettingsManager.getListTemplates().filter(t => t.id !== exceptId).map(t => t.name.toLocaleLowerCase()));
+    if (!taken.has(name.toLocaleLowerCase())) return name;
+    for (let n = 2; ; n++) {
+        const next = `${name} (${n})`;
+        if (!taken.has(next.toLocaleLowerCase())) return next;
+    }
+}
+
+const TPL_ID = 'person-list-template';
 
 export const personListNewMethods = uiModule({
     /**
@@ -291,6 +359,8 @@ export const personListNewMethods = uiModule({
             opener: active instanceof HTMLElement ? active : null,
             counts: new Map(),
             rb: null,
+            origin: null,
+            tplNeed: null,
         };
         if (mode !== 'save' && rule) {
             switch (rule.kind) {
@@ -454,11 +524,211 @@ export const personListNewMethods = uiModule({
 
     /**
      * "Start from a template ▾" on the right of the line "Based on" (§1.2,
-     * §7; new lists only): the next part draws the button here (`.pln-tbtn`,
-     * `data-act="templates"`). Empty for now.
+     * §7; new lists only, and only when the tree has a template to offer).
+     * On a phone the custom rule has it in ⋯ instead (index.html).
      */
     newPersonListTemplateHtml(): string {
-        return '';
+        const st = state;
+        if (st?.mode !== 'new') return '';
+        const { own, builtin } = offeredTemplates();
+        if (!own.length && !builtin.length) return '';
+        return `<button type="button" class="pln-tbtn" data-act="templates" data-key="templates" aria-haspopup="menu" aria-expanded="false">`
+            + `${esc(strings.lists.new.fromTemplate)}<span class="pln-caret" aria-hidden="true">▾</span></button>`;
+    },
+
+    /** Over the builder of a rule started from a template: "From template: {name} · Drop the template" (§7). */
+    newPersonListFromHtml(): string {
+        const st = state;
+        if (st?.origin?.by !== 'template' || st.mode !== 'new') return '';
+        const t = strings.lists.templates;
+        const [before, after = ''] = t.from('\u0001').split('\u0001');
+        return `<div class="pln-from">${esc(before)}<b>${esc(st.origin.name)}</b>${esc(after)}`
+            + `<button type="button" class="pl-link pln-link" data-act="template-drop" data-key="template-drop">${esc(t.cancel)}</button></div>`;
+    },
+
+    /** The templates' menu (§7): own ones first (with ⋯), then the built-in ones by their groups; no counts. */
+    openNewPersonListTemplates(anchor: HTMLElement): void {
+        const st = state;
+        if (!st || st.mode !== 'new') return;
+        const t = strings.lists.templates;
+        const index = DataManager.getLineageIndex();
+        const { own, builtin } = offeredTemplates();
+        const needText = (root: RuleGroup | null): string | undefined => {
+            const need = root ? needOf(root) : null;
+            return need === 'person' ? t.needsPerson : need === 'place' ? t.needsPlace : undefined;
+        };
+        const rows: RuleMenuRow[] = [];
+        own.forEach((x, i) => {
+            const need = needText(x.root);
+            rows.push({
+                id: `own:${x.id}`, label: x.name, sub: customLabel(x.root, index), more: t.more,
+                ...(need ? { need } : {}), ...(i === 0 ? { head: t.group.own } : {}),
+            });
+        });
+        let last = '';
+        for (const b of builtin) {
+            const words = t[b.id];
+            const need = needText(templateRoot(b.id));
+            rows.push({
+                id: b.id, label: words.name, sub: words.sub,
+                ...(need ? { need } : {}), ...(b.group !== last ? { head: t.group[b.group] } : {}),
+            });
+            last = b.group;
+        }
+        this.openRuleMenu(anchor, t.menuTitle, rows, (id) => this.applyNewPersonListTemplate(id), {
+            cls: 'plr-menu--tpl',
+            onMore: (id) => this.openNewPersonListTemplateActions(anchor, id.replace(/^own:/, '')),
+        });
+    },
+
+    /**
+     * A template chosen (§7): the custom rule with its conditions, the name
+     * the template's (until typed over), the first missing parameter focused
+     * and its choice open (the person's search).
+     */
+    applyNewPersonListTemplate(id: string): void {
+        const st = state;
+        if (!st || st.mode !== 'new') return;
+        const ownId = id.startsWith('own:') ? id.slice(4) : null;
+        const own = ownId ? SettingsManager.getListTemplates().find(x => x.id === ownId) : null;
+        const root = own ? cloneRuleNode(own.root) : templateRoot(id);
+        if (!root) return;
+        const name = own ? own.name : (strings.lists.templates as unknown as Record<string, { name: string }>)[id]?.name ?? id;
+        this.closeRuleMenu();
+        st.origin = { by: 'template', template: id, name, at: new Date().toISOString() };
+        st.tplNeed = needOf(root);
+        st.rb = newRuleBuilder(root, st.listId);
+        const miss = firstIncomplete(st.rb.root);
+        const missCond = miss ? nodeAt(st.rb.root, miss.path) : null;
+        const ctl = missCond?.t === 'cond' ? ruleCondEditor(missCond.c)?.firstControl : undefined;
+        st.rb.focus = miss ? { path: miss.path, ...(ctl ? { ctl } : {}) } : { path: '0' };
+        this.setNewPersonListOpt('custom');
+        if (miss && ctl) {
+            const el = document.querySelector<HTMLElement>(`#${st.overlayId} .plr-row[data-path="${CSS.escape(miss.path)}"] [data-pc="${CSS.escape(ctl)}"]`);
+            el?.click();
+        }
+    },
+
+    /** "Drop the template": an empty builder, no origin; the name follows the rule again (§7). */
+    dropNewPersonListTemplate(): void {
+        const st = state;
+        if (!st || st.origin?.by !== 'template') return;
+        this.closeRuleMenu();
+        st.origin = null;
+        st.tplNeed = null;
+        st.rb = newRuleBuilder(emptyRuleRoot(), st.listId);
+        st.rb.focus = { add: '' };
+        this.setNewPersonListOpt('custom');
+    },
+
+    /** An own template's ⋯: Rename / Delete (with Undo). */
+    openNewPersonListTemplateActions(anchor: HTMLElement, id: string): void {
+        const tpl = SettingsManager.getListTemplates().find(x => x.id === id);
+        if (!tpl || !anchor.isConnected) return;
+        const m = strings.lists.menu;
+        this.openRuleMenu(anchor, tpl.name, [
+            { id: 'rename', label: `${m.rename}…` },
+            { id: 'delete', label: m.delete, danger: true },
+        ], (act) => {
+            if (act === 'rename') { this.openListTemplateNameDialog({ renameId: id, opener: anchor }); return; }
+            const all = SettingsManager.getListTemplates();
+            const at = all.findIndex(x => x.id === id);
+            if (at < 0) return;
+            const gone = all[at];
+            SettingsManager.setListTemplates(all.filter(x => x.id !== id));
+            this.showToast(strings.lists.templates.deleted(gone.name), 6000, {
+                clearOf: '.pln-foot',
+                action: {
+                    label: strings.undo.undo,
+                    run: () => {
+                        const now = SettingsManager.getListTemplates();
+                        if (now.some(x => x.id === gone.id)) return;
+                        now.splice(Math.min(at, now.length), 0, gone);
+                        SettingsManager.setListTemplates(now);
+                        if (state) this.renderNewPersonList();
+                    },
+                },
+            });
+            if (state) this.renderNewPersonList();
+            document.querySelector<HTMLElement>(`#${state?.overlayId ?? NEW_ID} .pln-tbtn, #${state?.overlayId ?? NEW_ID} .pln-more`)?.focus({ preventScroll: true });
+        });
+    },
+
+    /**
+     * The small dialog "Save as template" (the rule without its people,
+     * places and lists, D5; the name the list's) or "Rename template": a
+     * name another template has is framed and the next free one suggested;
+     * Save takes the suggested one.
+     */
+    openListTemplateNameDialog(o: { renameId?: string; opener: HTMLElement | null }): void {
+        const st = state;
+        const rename = o.renameId ? SettingsManager.getListTemplates().find(x => x.id === o.renameId) ?? null : null;
+        if (!rename && !st?.rb) return;
+        const root = rename ? null : cloneRuleNode(st!.rb!.root);
+        if (root && !root.items.length) return;
+        document.getElementById(TPL_ID)?.remove();
+        const t = strings.lists.templates;
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active plt-overlay';
+        overlay.id = TPL_ID;
+        const start = rename ? rename.name : st!.name.trim();
+        overlay.innerHTML = `<div class="modal modal--sm plt-modal" role="dialog" aria-modal="true" aria-labelledby="plt-title" data-dialog-kind="decision" data-skeleton="done">`
+            + `<div class="modal-header"><h2 id="plt-title">${esc(rename ? t.renameTitle : t.saveTitle)}</h2>`
+            + `<button type="button" class="close-btn" data-dismiss data-act="tpl-cancel" aria-label="${esc(strings.buttons.close)}">&times;</button></div>`
+            + `<div class="modal-content"><div class="pln-field"><label class="pln-label" for="plt-name">${esc(t.name)}</label>`
+            + `<input type="text" id="plt-name" class="pln-name" maxlength="120" autocomplete="off" spellcheck="false" value="${esc(start)}" aria-describedby="plt-err">`
+            + `<p class="pln-err" id="plt-err" hidden></p></div>`
+            + (rename ? '' : `<p class="plt-note">${esc(t.saveNote)}</p>`) + `</div>`
+            + `<div class="buttons"><button type="button" class="secondary" data-dismiss data-act="tpl-cancel">${esc(strings.buttons.cancel)}</button>`
+            + `<button type="button" class="primary" data-act="tpl-save">${esc(strings.buttons.save)}</button></div></div>`;
+        const input = overlay.querySelector<HTMLInputElement>('#plt-name')!;
+        const err = overlay.querySelector<HTMLElement>('#plt-err')!;
+        const saveBtn = overlay.querySelector<HTMLButtonElement>('[data-act="tpl-save"]')!;
+        const check = (): string => {
+            const typed = input.value.trim();
+            const free = typed ? freeTemplateName(typed, rename?.id ?? null) : '';
+            const taken = !!typed && free !== typed;
+            input.classList.toggle('is-taken', taken);
+            input.setAttribute('aria-invalid', String(taken));
+            err.hidden = !taken;
+            err.textContent = taken ? t.dup(free) : '';
+            saveBtn.disabled = !typed;
+            return free;
+        };
+        const close = (): void => {
+            overlay.remove();
+            this.dialogStack = this.dialogStack.filter(d => d !== TPL_ID);
+            if (o.opener?.isConnected) o.opener.focus({ preventScroll: true });
+            else document.querySelector<HTMLElement>(`#${state?.overlayId ?? NEW_ID} .pln-more, #${state?.overlayId ?? NEW_ID} .pln-tbtn`)?.focus({ preventScroll: true });
+        };
+        const save = (): void => {
+            const name = check();
+            if (!name) return;
+            const all = SettingsManager.getListTemplates();
+            if (rename) {
+                SettingsManager.setListTemplates(all.map(x => x.id === rename.id ? { ...x, name } : x));
+            } else if (root) {
+                const id = `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+                SettingsManager.setListTemplates([...all, makeListTemplate(id, name, root, new Date().toISOString())]);
+            }
+            close();
+            if (state) this.renderNewPersonList();
+        };
+        overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(); });
+        overlay.addEventListener('click', (e) => {
+            const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+            if (act === 'tpl-cancel') close();
+            else if (act === 'tpl-save') save();
+        });
+        input.addEventListener('input', () => { check(); });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); save(); }
+        });
+        document.body.appendChild(overlay);
+        this.pushDialog(TPL_ID);
+        check();
+        input.focus({ preventScroll: true });
+        input.select();
     },
 
     /**
@@ -468,14 +738,24 @@ export const personListNewMethods = uiModule({
      */
     newPersonListMoreRows(): RuleMenuRow[] {
         const st = state;
-        if (!st?.rb || !phoneBar()) return [];
-        const n = ruleBuilderBlock(st.rb) === null ? ruleBuilderCounts(st.rb).total : 0;
-        return [{ id: 'show-tree', label: strings.lists.rules.showInTree, ...(n ? {} : { disabled: true }) }];
+        if (!st?.rb) return [];
+        const t = strings.lists.templates;
+        const rows: RuleMenuRow[] = [];
+        if (phoneBar()) {
+            if (this.newPersonListTemplateHtml()) rows.push({ id: 'templates', label: t.startMore });
+            const n = ruleBuilderBlock(st.rb) === null ? ruleBuilderCounts(st.rb).total : 0;
+            rows.push({ id: 'show-tree', label: strings.lists.rules.showInTree, ...(n ? {} : { disabled: true }) });
+        }
+        rows.push({ id: 'save-template', label: t.saveAs, ...(st.rb.root.items.length ? {} : { disabled: true }) });
+        return rows;
     },
 
     /** A row of the custom rule's ⋯ other than "Clear the rule". */
     newPersonListMoreAction(id: string): void {
+        const more = state ? document.querySelector<HTMLElement>(`#${state.overlayId} .pln-more`) : null;
         if (id === 'show-tree') this.showNewPersonListInTree();
+        else if (id === 'templates' && more) this.openNewPersonListTemplates(more);
+        else if (id === 'save-template') this.openListTemplateNameDialog({ opener: more });
     },
 
     /**
@@ -535,6 +815,7 @@ export const personListNewMethods = uiModule({
             + `<span class="pln-by-gap"></span>${st.mode === 'new' ? this.newPersonListTemplateHtml() : ''}`
             + `<button type="button" class="pln-more" data-act="more" data-key="more" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t.rules.more)}"><span aria-hidden="true">⋯</span></button>`
             + `</div>`
+            + this.newPersonListFromHtml()
             + this.ruleBuilderHtml();
     },
 
@@ -696,6 +977,8 @@ export const personListNewMethods = uiModule({
         if (act === 'family-more') { this.newPersonListToFamily(); return; }
         if (act === 'by') { this.openNewPersonListByMenu(el!); return; }
         if (act === 'more') { this.openNewPersonListMoreMenu(el!); return; }
+        if (act === 'templates') { this.openNewPersonListTemplates(el!); return; }
+        if (act === 'template-drop') { this.dropNewPersonListTemplate(); return; }
         // A click anywhere on a tile (not on its controls) chooses it.
         const tile = target.closest<HTMLElement>('.pln-opt');
         if (tile && !target.closest('select, input, button, label') && tile.getAttribute('aria-disabled') !== 'true') {
@@ -977,9 +1260,9 @@ export const personListNewMethods = uiModule({
             } else if (st.opt === 'empty') {
                 list = DataManager.createPersonList({ name, dynamic: false, personIds: st.given ?? [] });
             } else if (custom) {
-                list = DataManager.createCustomPersonList({ name, custom });
+                list = DataManager.createCustomPersonList({ name, custom, ...(st.origin ? { origin: st.origin } : {}) });
             } else if (rule) {
-                list = DataManager.createPersonList({ name, dynamic: st.dynamic, rule });
+                list = DataManager.createPersonList({ name, dynamic: st.dynamic, rule, ...(st.origin && st.opt === 'custom' ? { origin: st.origin } : {}) });
             }
         }
         if (!list) return;
