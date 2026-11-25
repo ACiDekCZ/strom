@@ -1184,12 +1184,15 @@ export const researchSyncMethods = uiModule({
             let why: BridgeRuntime['why'] = '';
             let timedOut = false;
             let deviceActions: unknown;
+            let deviceOthers: unknown;
             try {
                 // A bridge that answers the light status: its heavy parts read only when they changed.
                 const res = await fetchWithTimeout(statusAskUrl(url), BRIDGE_ANSWER_MS);
                 if (res.ok) {
                     const json: unknown = await res.json();
-                    deviceActions = (json as { device?: { actions?: unknown } } | null)?.device?.actions;
+                    const device = (json as { device?: { actions?: unknown; others?: unknown } } | null)?.device;
+                    deviceActions = device?.actions;
+                    deviceOthers = device?.others;
                     status = sanitizeLiveStatus(await completeStatus(url, json, readStatusPart));
                 }
                 // Busy (starting up, a long write): ask again after the time it names.
@@ -1216,7 +1219,7 @@ export const researchSyncMethods = uiModule({
                 busyUntil: busyFor ? Date.now() + busyFor : 0, why: status ? '' : why });
             if (status) {
                 // A device (spec 094): the actions the gateway announced for it; it hands over no links.
-                if (researchDevice()) noteResearchDeviceActions(deviceActions);
+                if (researchDevice()) noteResearchDeviceActions(deviceActions, deviceOthers);
                 else noteResearchLinks(status.links, status.linkScheme);
                 noteResearchWaiting(researchId, status.waiting, status);
                 noteResearchBridgeStatus(researchId, status.accepts, status.head, researchTreeOfStatus(status));

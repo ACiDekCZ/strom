@@ -153,11 +153,13 @@ export const deviceConnMethods = uiModule({
         const d = strings.device;
         const name = pairingNow()?.name ?? '';
         const canRename = researchDeviceState()?.actions.includes('device.rename') ?? false;
+        // Other devices connected now (spec 094 §9, 3.5), when the gateway's status says how many.
+        const others = researchDeviceState()?.others ?? 0;
         return '<section class="device-conn-row device-conn-me">'
             + '<div class="device-conn-text">'
             + `<span class="device-conn-label">${esc(d.thisDevice)}</span>`
             + `<span class="device-conn-name" title="${esc(name)}">${esc(name)}</span>`
-            // "{n} more devices connected" waits for a gateway that tells the count.
+            + (others > 0 ? `<span class="device-conn-sub device-conn-others">${esc(d.othersConnected(others))}</span>` : '')
             + '</div>'
             + (canRename ? `<button type="button" class="secondary device-conn-btn" data-act="rename">${esc(d.rename)}</button>` : '')
             + '</section>';

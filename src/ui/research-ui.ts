@@ -1700,7 +1700,10 @@ export async function fetchStatus(url: string, ms = BRIDGE_ANSWER_MS): Promise<L
     const status = sanitizeLiveStatus(await completeStatus(url, json, readStatusPart));
     // The bridge runs on this computer: what it announces holds here. A device (spec 094 P3): the actions
     // the gateway announced for it (status.device.actions); the gateway hands over no links.
-    if (status && researchDevice()) noteResearchDeviceActions((json as { device?: { actions?: unknown } } | null)?.device?.actions);
+    if (status && researchDevice()) {
+        const device = (json as { device?: { actions?: unknown; others?: unknown } } | null)?.device;
+        noteResearchDeviceActions(device?.actions, device?.others);
+    }
     else if (status) noteResearchLinks(status.links, status.linkScheme);
     if (status?.treeId) {
         noteResearchWaiting(status.treeId, status.waiting, status);

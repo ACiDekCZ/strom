@@ -181,6 +181,8 @@ export interface ResearchDeviceState {
     trees: readonly string[];
     computer: string;
     actions: readonly string[];
+    /** How many other devices are connected now (`status.device.others`, spec 094 §9); absent: not said. */
+    others?: number;
 }
 
 let deviceState: ResearchDeviceState | null = null;
@@ -203,10 +205,15 @@ export function setResearchDeviceState(next: ResearchDeviceState | null): void {
     if (!next) refusedOnDevice.clear();
 }
 
-/** The device actions a status announced (`status.device.actions`), kept with the device's state. */
-export function noteResearchDeviceActions(actions: unknown): void {
+/**
+ * The device actions a status announced (`status.device.actions`), kept with the device's state, and how many
+ * other devices it says are connected now (`status.device.others`; a status without it: not known).
+ */
+export function noteResearchDeviceActions(actions: unknown, others?: unknown): void {
     if (!deviceState || !Array.isArray(actions)) return;
-    deviceState = { ...deviceState, actions: actions.filter((a): a is string => typeof a === 'string') };
+    const n = typeof others === 'number' && Number.isFinite(others) && others >= 0 ? Math.min(999, Math.floor(others)) : null;
+    const { others: _was, ...rest } = deviceState;
+    deviceState = { ...rest, actions: actions.filter((a): a is string => typeof a === 'string'), ...(n !== null ? { others: n } : {}) };
 }
 
 /** The device's state, or null outside the device mode. */
