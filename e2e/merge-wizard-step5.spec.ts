@@ -111,6 +111,24 @@ test('Write into Modřínovi: the open tree gets the new people at once, its res
     expect(await page.evaluate(() => window.Strom.DataManager.canUndo())).toBe(true);
 });
 
+test('Write into a tree whose name is one long word: the choice wraps the word inside the button, nothing is cut off (390 and 1440)', async ({ page }) => {
+    const name = 'Modřínovilesnickodřevozpracujícíspolečnost';
+    for (const width of [390, 1440]) {
+        await page.setViewportSize({ width, height: width < 641 ? 844 : 900 });
+        await openApp(page);
+        await importJsonAsNewTree(page, 'e2e/fixtures/modrinovi.json', name);
+        await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/rodokmen-jilmovi.ged');
+        const wizard = page.locator('#merge-modal');
+        await expect(wizard).toBeVisible();
+        await mergeCompare(wizard);
+        await mergeToStep5(wizard);
+        const into = wizard.locator('.merge-s5-into [data-into="tree"]');
+        await expect(into).toHaveText(`Write into ${name}`);
+        const fit = await into.evaluate((b: HTMLElement) => ({ sw: b.scrollWidth, cw: b.clientWidth }));
+        expect(fit.sw, `width ${width}`).toBeLessThanOrEqual(fit.cw);
+    }
+});
+
 test('8d: the backup "Before merge" fails, so nothing is written; its state says why and what can be done, Try again writes', async ({ page }) => {
     const wizard = await openGuide(page);
     await mergeToStep5(wizard);

@@ -21,7 +21,7 @@ import {
 import { generateTreeId, uniqueIdSuffix } from './ids.js';
 import { LAST_FOCUSED } from './model-values.js';
 import { STROM_DATA_VERSION } from './version.js';
-import { strings } from './strings.js';
+import { strings, getCurrentLanguage } from './strings.js';
 import { isEncrypted, EncryptedData, CryptoSession, decrypt, classifyCryptoError, CryptoFailure } from './crypto.js';
 import { SettingsManager } from './settings.js';
 import { peekReloadPoint, forgetLastView } from './resume-view.js';
@@ -1634,12 +1634,17 @@ class TreeManagerClass {
     }
 
     /**
-     * Format bytes to human readable string
+     * Format bytes to human readable string, with the decimal sign of the
+     * UI language ("46.3 MB" in English, "46,3 MB" in Czech, German, Polish).
      */
     formatBytes(bytes: number): string {
         if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        const num = (v: number): string => {
+            const s = v.toFixed(1);
+            return getCurrentLanguage() === 'en' ? s : s.replace('.', ',');
+        };
+        if (bytes < 1024 * 1024) return num(bytes / 1024) + ' KB';
+        return num(bytes / (1024 * 1024)) + ' MB';
     }
 
     // ==================== HELPERS ====================

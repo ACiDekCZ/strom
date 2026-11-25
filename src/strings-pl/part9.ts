@@ -78,7 +78,7 @@ export const plPart9: Pick<StringsType, 'lists'> = {
         keepByRule: {
             title: 'Utrzymywać według reguły?',
             confirm: (a: number, r: number, m: boolean) => `Lista będzie liczona według reguły. Ręcznie dodane (${a}) i usunięte (${r}) osoby${m ? ' oraz ręczna kolejność' : ''} zostaną odrzucone.`,
-            checklistFirst: 'Najpierw wyłącz Odhaczanie zrobionych',
+            checklistFirst: 'Najpierw wyłącz Odhaczaj gotowe',
         },
         export: { ged: 'GEDCOM…', csv: 'CSV (kolejność listy)' },
         toast: {
@@ -210,7 +210,7 @@ export const plPart9: Pick<StringsType, 'lists'> = {
             },
             pick: {
                 search: 'Szukaj', none: 'Nic nie pasuje.', choose: 'wybierz…',
-                place: 'Miejsce', list: 'Lista', view: 'Widok Tabeli', rod: 'Ród', line: 'Linia badań', occupation: 'Zawody', person: 'Osoba',
+                place: 'Miejsce', list: 'Lista', view: 'Widok Tabeli', rod: 'Ród', line: 'Linia badania', occupation: 'Zawody', person: 'Osoba',
             },
             livedHint: 'bez daty śmierci przyjmuje się 90 lat od urodzenia',
             textHint: 'bez względu na wielkość liter i znaki diakrytyczne',
@@ -285,7 +285,7 @@ export const plPart9: Pick<StringsType, 'lists'> = {
             },
             cond: {
                 family: 'Rodzina osoby', ancestors: 'Przodkowie osoby', descendants: 'Potomkowie osoby',
-                rod: 'Ród', line: 'Linia badań', list: 'Inna lista',
+                rod: 'Ród', line: 'Linia badania', list: 'Inna lista',
                 born: 'Urodzenie w okresie', died: 'Śmierć w okresie', married: 'Ślub w okresie', livedIn: 'Żył w okresie',
                 deathAge: 'Wiek w chwili śmierci', alive: 'Żyjący / zmarły', near: 'Miejsce i okolica', gender: 'Płeć',
                 occupation: 'Zawód', has: 'Ma dane', count: 'Liczba', text: 'Tekst w opowieści lub notatce',
