@@ -7,7 +7,14 @@
  * - `pairing`: {deviceId, K, name, kind, computer {name, label}, trees, treeId};
  * - `last`: the last form of the tree to read without a connection;
  * - `queue`: photos and edits not sent yet — never cleared by an unpairing
- *   (the person decides to send them elsewhere or drop them).
+ *   (the person decides to send them elsewhere or drop them);
+ * - `research`: the last state of each tree's research read through the
+ *   bridge (the phone's Research screen without a connection, spec 094 §8);
+ * - `seen`: when each tree's finds were last seen on this device.
+ *
+ * `last`, `research` and `seen` go with an unpairing; `queue` stays. None of
+ * them is sealed on its own: the origin's storage holds the key beside them,
+ * so they are kept exactly as the queue is.
  *
  * The chosen tree is also in localStorage (read at start, synchronously).
  * Nothing here is ever logged: the key and the pairing secret stay on the device.
@@ -42,8 +49,8 @@ export interface DevicePairing {
 }
 
 /** The stores of the device's database. */
-export type DeviceStoreName = 'pairing' | 'last' | 'queue';
-const STORES: DeviceStoreName[] = ['pairing', 'last', 'queue'];
+export type DeviceStoreName = 'pairing' | 'last' | 'queue' | 'research' | 'seen';
+const STORES: DeviceStoreName[] = ['pairing', 'last', 'queue', 'research', 'seen'];
 
 /** A key-value backend (IndexedDB, or memory in the tests and without IndexedDB). */
 export interface DeviceKv {
@@ -54,6 +61,8 @@ export interface DeviceKv {
 }
 
 const DB_NAME = 'strom-device';
+/** 2: the stores `research` and `seen` (spec 094 K3.13); an upgrade only adds the stores missing. */
+const DB_VERSION = 2;
 const PAIRING_KEY = 'this';
 const TREE_KEY = 'strom-device-tree';
 /** A mark that this origin holds a pairing: read synchronously at start, so the app on the web never opens this database. */
@@ -76,11 +85,19 @@ function indexedDbKv(): DeviceKv {
     const db = (): Promise<IDBDatabase> => {
         if (!dbPromise) {
             dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-                const req = indexedDB.open(DB_NAME, 1);
+                const req = indexedDB.open(DB_NAME, DB_VERSION);
                 req.onupgradeneeded = () => {
                     for (const s of STORES) if (!req.result.objectStoreNames.contains(s)) req.result.createObjectStore(s);
                 };
-                req.onsuccess = () => resolve(req.result);
+                req.onsuccess = () => {
+                    const opened = req.result;
+                    // A newer page of this origin upgrades the database: this one lets go and opens it again when asked.
+                    opened.onversionchange = () => {
+                        opened.close();
+                        dbPromise = null;
+                    };
+                    resolve(opened);
+                };
                 req.onerror = () => reject(req.error);
             }).catch(err => {
                 dbPromise = null;
@@ -216,8 +233,9 @@ export async function savePairing(p: DevicePairing): Promise<void> {
 
 /**
  * The pairing forgotten (unpaired on the computer, 401 device.unpaired, or by
- * the person): the key, the chosen tree and the last form of the tree go; the
- * queue of photos and edits stays.
+ * the person): the key, the chosen tree, the last form of the tree, the last
+ * state of the research and when its finds were seen go; the queue of photos
+ * and edits stays.
  */
 export async function forgetPairing(): Promise<void> {
     cached = null;
@@ -227,7 +245,9 @@ export async function forgetPairing(): Promise<void> {
     } catch { /* no storage */ }
     const b = backend();
     await b.delete('pairing', PAIRING_KEY).catch(() => undefined);
-    for (const k of await b.keys('last').catch(() => [] as string[])) await b.delete('last', k).catch(() => undefined);
+    for (const store of ['last', 'research', 'seen'] as const) {
+        for (const k of await b.keys(store).catch(() => [] as string[])) await b.delete(store, k).catch(() => undefined);
+    }
 }
 
 // ——— the tree chosen ———
@@ -265,6 +285,44 @@ export async function saveLastView(treeId: string, value: unknown): Promise<void
 
 export async function loadLastView(treeId: string): Promise<unknown> {
     return backend().get('last', treeId).catch(() => undefined);
+}
+
+/**
+ * The last state of a tree's research read through the bridge (spec 094 §8,
+ * `device-research-data.ts` says its shape and cleans it when read back).
+ */
+export async function saveResearchState(treeId: string, state: unknown): Promise<void> {
+    await backend().put('research', treeId, state);
+}
+
+/** The last state of a tree's research kept here (undefined: none, or the storage failed). */
+export async function loadResearchState(treeId: string): Promise<unknown> {
+    return backend().get('research', treeId).catch(() => undefined);
+}
+
+/** A moment as kept: an ISO time the clock reads. */
+function isoMs(v: unknown): number | null {
+    if (typeof v !== 'string' || v.length > 40) return null;
+    const ms = Date.parse(v);
+    return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * A tree's finds seen up to `at` (an ISO time) on this device; never moved
+ * back (a later mark stays). An invalid time is not kept.
+ */
+export async function markFindsSeen(treeId: string, at: string): Promise<void> {
+    const ms = isoMs(at);
+    if (ms === null) return;
+    const before = isoMs(await backend().get('seen', treeId).catch(() => undefined));
+    if (before !== null && before >= ms) return;
+    await backend().put('seen', treeId, at);
+}
+
+/** When a tree's finds were last seen on this device (an ISO time), or null. */
+export async function findsSeenAt(treeId: string): Promise<string | null> {
+    const v = await backend().get('seen', treeId).catch(() => undefined);
+    return isoMs(v) !== null ? (v as string) : null;
 }
 
 /** The queue of photos and edits not sent yet (kept over an unpairing). */
