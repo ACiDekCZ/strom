@@ -15,13 +15,13 @@ import { DataManager } from '../data.js';
 import {
     deviceModeCandidate, takeDeviceCode, startDeviceMode, restartDeviceMode, type DeviceModeStart,
 } from '../device/device-mode.js';
-import { hasPairingMark, chosenTreeId, chooseTree, type DevicePairing, type DeviceTree } from '../device/device-store.js';
+import { hasPairingMark, chosenTreeId, chooseTree, computerLabelOf, deviceTreeIdOk, type DevicePairing, type DeviceTree } from '../device/device-store.js';
 import { deviceFetch, type GatewayHello } from '../device/gateway-client.js';
 import {
     deviceStartEnd, deviceStartScreen, deviceTreeToOpen, deviceTreeRename, deviceTreeRow, homeHowSystem, homeLineDue, homeAddressHere,
     type DeviceTreeRow, type HomeHowSystem,
 } from '../device/device-start.js';
-import { setResearchDevicePage, deviceBridgeBase, researchDeviceState, normalizeResearchId } from '../research-link.js';
+import { setResearchDevicePage, deviceBridgeBase, researchDeviceState } from '../research-link.js';
 
 const BOOT_ID = 'device-boot';
 const HOME_LINE_ID = 'device-home-line';
@@ -56,7 +56,7 @@ function hideHomeLineForGood(): void {
 }
 
 function computerOf(said: GatewayHello | null, pairing: DevicePairing | null): string {
-    return pairing?.computer.label || pairing?.computer.name || said?.label || said?.name || '';
+    return computerLabelOf(pairing?.computer) || computerLabelOf(said);
 }
 
 function thisSystem(): HomeHowSystem {
@@ -94,7 +94,7 @@ export const deviceStartMethods = uiModule({
             computerWord: strings.device.computerWord,
             onHello: (said: GatewayHello | null) => {
                 if (!screen) return;
-                const pc = said?.label || said?.name || '';
+                const pc = computerLabelOf(said);
                 this.renderDeviceBoot('connecting', { pc, host: location.hostname, home: code?.kind === 'home' });
             },
         };
@@ -154,8 +154,8 @@ export const deviceStartMethods = uiModule({
      * newer version (the agent's, another device's) is offered as on the computer, by the status asked now and then.
      */
     async openDeviceTree(treeId: string, first: boolean, pairedName?: string): Promise<void> {
-        // A research's tree has the research's id (strom.json's); anything else is no tree the app can open.
-        if (!normalizeResearchId(treeId)) {
+        // A research's tree has the research's id (strom.json's): an opaque string (U9d), never checked for a UUID.
+        if (!deviceTreeIdOk(treeId)) {
             this.closeDeviceBoot();
             return;
         }
@@ -173,17 +173,24 @@ export const deviceStartMethods = uiModule({
             this.closeDeviceBoot();
         }
         const held = TreeManager.findTreeByResearchId(treeId);
-        // A file whose header names nothing: the research's name the pairing knows, not the default one.
-        const rename = held ? deviceTreeRename(held.name, pairedName, SUPPORTED_LANGUAGES.map(l => getStringsForLang(l.code).research.defaultName)) : null;
-        if (held && rename) {
-            TreeManager.renameTree(held.id, rename);
-            if (DataManager.getCurrentTreeId() === held.id) this.updateUrlTreeParam(held.id);
-            this.updateTreeSwitcher();
-        }
         if (first && held && DataManager.getCurrentTreeId() === held.id) this.setDisplayViewMode('family');
         this.showDeviceHomeLine();
         this.refreshResearchMenu();
-        void this.pollResearchBridge({ reschedule: true });
+        // A file whose header names nothing: the research's name now (its status, `tree.name`), the pairing's only
+        // when the status says none (U9d) — never the default one.
+        void this.pollResearchBridge({ reschedule: true }).then(() => this.deviceTreeNamed(treeId, pairedName));
+    },
+
+    /** The research's tree held here named from the research (its status's `tree.name`, else the pairing's name). */
+    deviceTreeNamed(treeId: string, pairedName?: string): void {
+        const held = TreeManager.findTreeByResearchId(treeId);
+        if (!held) return;
+        const said = this.researchStatusOf(held.research?.id ?? treeId)?.name;
+        const rename = deviceTreeRename(held.name, said || pairedName, SUPPORTED_LANGUAGES.map(l => getStringsForLang(l.code).research.defaultName));
+        if (!rename) return;
+        TreeManager.renameTree(held.id, rename);
+        if (DataManager.getCurrentTreeId() === held.id) this.updateUrlTreeParam(held.id);
+        this.updateTreeSwitcher();
     },
 
     /** The start screen over the app (the toolbar and the tree under it, never seen until the tree is in). */

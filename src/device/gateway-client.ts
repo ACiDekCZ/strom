@@ -245,7 +245,7 @@ export async function pair(pairId: string, secret: string | Uint8Array, name: st
     const deviceKind: DeviceKind = a.device.kind === 'tablet' || a.device.kind === 'computer' ? a.device.kind : 'phone';
     const result: PairResult = {
         device: { id: a.device.id, name: typeof a.device.name === 'string' ? a.device.name : name, kind: deviceKind },
-        computer: { name: a.computer.name, ...(typeof a.computer.label === 'string' ? { label: a.computer.label } : {}) },
+        computer: { name: typeof a.computer.name === 'string' ? a.computer.name : '', ...(typeof a.computer.label === 'string' ? { label: a.computer.label } : {}) },
         trees: deviceTreesOf(a.trees),
     };
     const was = await loadPairing();
@@ -289,9 +289,30 @@ function retryAfterMs(headers: Headers | Record<string, string>): number {
 }
 
 /**
+ * The code a write of the tunnel is refused with when the gateway took its
+ * nonce already (409 device.clock `replay: true`, the research's U9d): the
+ * first request may have been carried and only its answer lost (a browser
+ * sends a request again by itself after a cut). It is never sent again
+ * blindly: the caller treats it as an answer lost on the way, the page reads
+ * the research's state again (DEVICE_REPLAY_EVENT).
+ */
+export const DEVICE_REPLAY = 'device.replay';
+
+/** A write refused with DEVICE_REPLAY: its answer lost on the way, perhaps carried (never sent again). */
+export function isDeviceReplay(e: unknown): boolean {
+    return e instanceof GatewayError && e.code === DEVICE_REPLAY;
+}
+
+/** Said on the page when a write of the bridge met DEVICE_REPLAY: the research's state is read again (detail: `{action, path}`). */
+export const DEVICE_REPLAY_EVENT = 'strom-device-replay';
+
+/**
  * One request carried through the tunnel to the bridge of a tree. Refusals of
  * the gateway (outside the tunnel) throw GatewayError; 409 device.clock evens
- * out the clock and asks once more, 503 research.busy waits its Retry-After
+ * out the clock and asks once more — a read always, a write only when the
+ * gateway says its time was off (`replay` false or not said): a write whose
+ * nonce the gateway took already (`replay: true`) is not sent again but
+ * refused with DEVICE_REPLAY (U9d). 503 research.busy waits its Retry-After
  * and asks once more; 401 device.unpaired forgets the pairing (the queue
  * stays). Errors of the bridge inside the tunnel are an ordinary answer.
  */
@@ -341,9 +362,15 @@ export async function tunnel(req: TunnelRequest): Promise<TunnelAnswer> {
             return { s: opened.s, h: opened.h, body };
         }
         const err = refusal(r.status, r.json, r.elapsed);
-        if (err.code === 'device.clock' && !clockTried && typeof err.extra.now === 'number') {
+        if (err.code === 'device.clock' && err.extra.replay === true && inner.m !== 'GET' && inner.m !== 'HEAD') {
+            // Its nonce taken already: the first may have been carried. The gateway answered (it lives, the key holds).
+            report({ ok: true });
+            throw new GatewayError(DEVICE_REPLAY, r.status, { ...err.extra }, r.elapsed);
+        }
+        if (err.code === 'device.clock' && !clockTried && (typeof err.extra.now === 'number' || err.extra.replay === true)) {
             clockTried = true;
-            clockSkew = err.extra.now - nowMs();
+            // A time off is evened out; a read whose nonce came again is asked once more with a new one.
+            if (err.extra.replay !== true && typeof err.extra.now === 'number') clockSkew = err.extra.now - nowMs();
             continue;
         }
         if (err.code === 'research.busy' && !busyTried) {

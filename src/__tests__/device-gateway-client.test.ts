@@ -2,8 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
     b64url, deriveKey, openRequest, sealResponse, sealPair, pairProof, fromB64url, sha256Hex, type RequestEnvelope,
 } from '../device/device-crypto';
-import { configureGateway, pair, tunnel, deviceFetch, hello, GatewayError, gatewayClockSkew } from '../device/gateway-client';
-import { setDeviceKv, memoryKv, loadPairing, savePairing, hasPairingMark, deviceQueue, chooseTree, chosenTreeId, forgetPairing, saveLastView, loadLastView, proposeDevice, deviceKindOf } from '../device/device-store';
+import { configureGateway, pair, tunnel, deviceFetch, hello, GatewayError, gatewayClockSkew, DEVICE_REPLAY, isDeviceReplay } from '../device/gateway-client';
+import {
+    setDeviceKv, memoryKv, loadPairing, savePairing, hasPairingMark, deviceQueue, chooseTree, chosenTreeId, forgetPairing, saveLastView, loadLastView, proposeDevice, deviceKindOf,
+    computerLabelOf, deviceTreeIdOk, deviceTreesOf,
+} from '../device/device-store';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import vectors from './fixtures/device-crypto.json';
 import { getStringsForLang } from '../strings';
@@ -90,6 +93,35 @@ describe('gateway client: pairing', () => {
         expect(p?.computer).toEqual({ name: 'Pracovna.local', label: 'Pracovna' });
         expect(hasPairingMark()).toBe(true);
         expect(chosenTreeId(p)).toBe('pychavkovi');
+    });
+
+    it('takes a tree id as an opaque string of at most 200 characters, never a UUID check (U9d)', async () => {
+        const long = 'x'.repeat(200);
+        configureGateway({
+            fetch: fakeFetch(() => ({ status: 200, body: sealPair(KEY, PAIR_ID, {
+                device: { id: DEVICE, name: 'iPhone · Safari', kind: 'phone' },
+                // a computer whose answer has its label only: shown by it
+                computer: { label: 'Pracovna Mlýnky' } as unknown as { name: string },
+                trees: [{ id: 'pychavkovi', name: 'Pýchavkovi z Mlýnků', archive: false }, { id: long, name: 'Dlouhý', archive: false },
+                    { id: `${long}y`, name: 'Příliš dlouhý', archive: false }, { id: 'a\u0000b', name: 'Řídicí', archive: false }],
+            }) })),
+        });
+        const r = await pair(PAIR_ID, b64url(SECRET), 'iPhone · Safari', 'phone');
+        expect(r.trees.map(t => t.id)).toEqual(['pychavkovi', long]);
+        expect(r.computer).toEqual({ name: '', label: 'Pracovna Mlýnky' });
+        expect((await loadPairing())?.computer).toEqual({ name: '', label: 'Pracovna Mlýnky' });
+        expect(deviceTreesOf([{ id: `${long}y` }, { id: '' }, { id: 7 }])).toEqual([]);
+        expect(deviceTreeIdOk('3f1c2a9e-0000-4000-8000-000000000000')).toBe(true);
+        expect(deviceTreeIdOk('strom 1')).toBe(true);
+    });
+
+    it('shows the computer by its label, else its name, else the app\'s word (U9d)', () => {
+        expect(computerLabelOf({ name: 'pracovna.local', label: 'Pracovna' }, 'Computer')).toBe('Pracovna');
+        expect(computerLabelOf({ name: 'pracovna.local', label: ' ' }, 'Computer')).toBe('pracovna.local');
+        expect(computerLabelOf({ name: '' }, 'Počítač')).toBe('Počítač');
+        expect(computerLabelOf(null, 'Počítač')).toBe('Počítač');
+        // GET /device/hello: label to show, name for the address
+        expect(computerLabelOf({ name: 'Pracovna.local', label: 'Pracovna' })).toBe('Pracovna');
     });
 
     it('turns a refused code into GatewayError', async () => {
@@ -184,6 +216,52 @@ describe('gateway client: the tunnel', () => {
         expect((await tunnel({ p: 'status' })).s).toBe(200);
         expect(calls).toBe(2);
         expect(gatewayClockSkew()).toBe(5 * 60_000);
+    });
+
+    it('a write met with a time off (replay: false) evens the clock out and is sent once more (U9d)', async () => {
+        let calls = 0;
+        const gatewayNow = NOW + 4 * 60_000;
+        const inner = tunnelHandler(() => ({ s: 200, body: '{}' }));
+        configureGateway({
+            fetch: fakeFetch((url, init) => {
+                calls++;
+                if (calls === 1) return { status: 409, body: { code: 'device.clock', now: gatewayNow, replay: false } };
+                return inner(url, init);
+            }),
+        });
+        expect((await tunnel({ m: 'POST', p: 'device/rename', b: { name: 'Mlýnek' } })).s).toBe(200);
+        expect(calls).toBe(2);
+        expect(gatewayClockSkew()).toBe(4 * 60_000);
+    });
+
+    it('a write whose nonce the gateway took already (replay: true) is never sent again: device.replay (U9d)', async () => {
+        let calls = 0;
+        configureGateway({ fetch: fakeFetch(() => { calls++; return { status: 409, body: { code: 'device.clock', now: NOW + 1000, replay: true } }; }) });
+        const err = await tunnel({ m: 'POST', p: 'sync/apply', b: {} }).catch((e: unknown) => e);
+        expect(err).toMatchObject({ code: DEVICE_REPLAY, status: 409 });
+        expect(isDeviceReplay(err)).toBe(true);
+        expect(calls).toBe(1);
+        // its clock was right: nothing evened out
+        expect(gatewayClockSkew()).toBe(0);
+        // the bridge's interceptor too: an error, never a second request
+        calls = 0;
+        await expect(deviceFetch('device/rename', { method: 'POST', body: '{}' })).rejects.toMatchObject({ code: DEVICE_REPLAY });
+        expect(calls).toBe(1);
+    });
+
+    it('a read whose nonce came again (replay: true) is asked once more, its clock left as it is (U9d)', async () => {
+        let calls = 0;
+        const inner = tunnelHandler(() => ({ s: 200, body: '{"ok":true}' }));
+        configureGateway({
+            fetch: fakeFetch((url, init) => {
+                calls++;
+                if (calls === 1) return { status: 409, body: { code: 'device.clock', now: NOW + 90_000, replay: true } };
+                return inner(url, init);
+            }),
+        });
+        expect((await tunnel({ p: 'status' })).s).toBe(200);
+        expect(calls).toBe(2);
+        expect(gatewayClockSkew()).toBe(0);
     });
 
     it('asks only once more after a second device.clock', async () => {

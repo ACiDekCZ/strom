@@ -13,9 +13,9 @@
  *   (revoked when the image goes or changes); no service worker.
  */
 
-import { deviceFetch } from './gateway-client';
+import { DEVICE_REPLAY_EVENT, deviceFetch, isDeviceReplay } from './gateway-client';
 import { onDeviceConnection, onDeviceEvent, deviceConnection } from './device-connection';
-import { chosenTreeId, pairingNow, type DevicePairing } from './device-store';
+import { chosenTreeId, computerLabelOf, pairingNow, type DevicePairing } from './device-store';
 import {
     DEVICE_BRIDGE_PATH, DEVICE_COMPUTER_ONLY_EVENT, deviceActionOfBridgeWrite, deviceBridgeBase, noteResearchDeviceRefused, parseDeviceBridge, researchDeviceState,
     setResearchDeviceState,
@@ -23,12 +23,15 @@ import {
 
 export { deviceBridgeBase };
 
-/** The device's state for the research's code: its origin, the trees it opens, the computer's name. */
-export function enterDeviceBridge(pairing: DevicePairing, origin: string = location.origin): void {
+/**
+ * The device's state for the research's code: its origin, the trees it opens, the computer's name to show (its
+ * label, else its name, else `computerWord`, the app's word for a computer).
+ */
+export function enterDeviceBridge(pairing: DevicePairing, origin: string = location.origin, computerWord = ''): void {
     setResearchDeviceState({
         origin,
         trees: pairing.trees.map(t => t.id),
-        computer: pairing.computer.label || pairing.computer.name,
+        computer: computerLabelOf(pairing.computer, computerWord),
         actions: researchDeviceState()?.actions ?? [],
     });
     installDeviceFetch();
@@ -71,6 +74,11 @@ export function deviceBridgeRequest(input: RequestInfo | URL, init?: RequestInit
             // Noted before the caller reads its answer: the refused action is then already not drawn.
             if (res.status === 403) await noteComputerOnly(res.clone(), method, target.path, headers);
             return res;
+        }, (e: unknown) => {
+            // A write the gateway took already (its answer lost on the way): never sent again; to the caller an
+            // answer lost, the page reads the research's state again.
+            if (isDeviceReplay(e)) noteReplay(method, target.path, headers);
+            throw e;
         });
     if (!signal) return asked;
     return new Promise<Response>((resolve, reject) => {
@@ -94,6 +102,14 @@ async function noteComputerOnly(res: Response, method: string, path: string, hea
     if (!action) return;
     noteResearchDeviceRefused(action);
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(DEVICE_COMPUTER_ONLY_EVENT, { detail: { action } }));
+}
+
+/** A write met DEVICE_REPLAY: the page is told (it reads the research's state again, one quiet sentence). */
+function noteReplay(method: string, path: string, headers: HeadersInit | undefined): void {
+    let task = false;
+    try { task = new Headers(headers).has('X-Strom-Task'); } catch { /* none */ }
+    const action = deviceActionOfBridgeWrite(method.toUpperCase(), path, task);
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(DEVICE_REPLAY_EVENT, { detail: { action, path: path.split('?')[0] } }));
 }
 
 /** The interceptor in place (once); only called in the confirmed device mode. */

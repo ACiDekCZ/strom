@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { b64url, fromB64url, openRequest, sealResponse, sha256Hex, MEDIA_BLOCK, type RequestEnvelope } from '../device/device-crypto';
-import { openMediaBody, mediaBlockCount } from '../device/media-blocks';
+import { openMediaBody, mediaBlockCount, mediaBodyLength } from '../device/media-blocks';
 import { configureGateway, gatewayClockSkew, GatewayError } from '../device/gateway-client';
 import { setDeviceKv, memoryKv, savePairing, loadPairing } from '../device/device-store';
 import { putDeviceMedia, configureDeviceMedia, forgetBegunMedia, type MediaSender } from '../device/device-media';
@@ -26,7 +26,7 @@ function bytes(n: number): Uint8Array {
     return new Uint8Array(n).map((_, i) => (i * 17 + 3) & 0xff);
 }
 
-interface Seen { url: string; headers: Record<string, string>; meta: Record<string, string>; blocks: number[] }
+interface Seen { url: string; headers: Record<string, string>; meta: Record<string, string>; blocks: number[]; length: number }
 
 /** What the fake gateway does with the next request (first first); none: takes it all. */
 type Step =
@@ -34,10 +34,12 @@ type Step =
     | { sealed: number; body: Record<string, unknown>; h?: Record<string, string> }
     /** Takes the blocks up to this one, then the request ends (200 {have} — or `cut`: no answer at all). */
     | { takeTo: number; cut?: boolean }
+    /** Takes the blocks up to this one, then answers as to a request the browser sent again (sealed 409 media.replay {params: {have}}). */
+    | { replayTo: number }
     /** Takes it all, but the hash does not hold (409 media.hash, nothing kept). */
     | { badHash: true };
 
-/** The gateway as the research's U9c: blocks kept per file, From checked, the bridge's answer sealed. */
+/** The gateway as the research's U9c/U9d: blocks kept per file, From checked, refusals' values in `params`, the bridge's answer sealed. */
 class Gateway {
     seen: Seen[] = [];
     kept = new Map<string, { size: number; blocks: Map<number, Uint8Array> }>();
@@ -62,19 +64,21 @@ class Gateway {
             const n = headers['X-Strom-Nonce'];
             const opened = openMediaBody(KEY, headers['X-Strom-Device'], Number(headers['X-Strom-Time']), fromB64url(n, 12)!, sha, size, from, raw);
             if (!opened.ok && !opened.meta) return { status: 400, text: JSON.stringify({ code: 'device.bad' }) };
-            if (!opened.ok && !('blocks' in opened)) return this.sealed(n, 400, { code: 'device.bad', header: opened.header });
-            this.seen.push({ url, headers, meta: opened.headers, blocks: [...opened.blocks.keys()] });
+            if (!opened.ok && !('blocks' in opened)) return this.sealed(n, 400, { code: 'device.bad', params: { header: opened.header } });
+            this.seen.push({ url, headers, meta: opened.headers, blocks: [...opened.blocks.keys()], length: raw.length });
             const step = this.steps.shift();
             if (step && 'open' in step) return { status: step.open, text: JSON.stringify(step.body) };
             if (step && 'sealed' in step) return this.sealed(n, step.sealed, step.body, step.h);
             const kept = this.kept.get(sha) ?? { size, blocks: new Map() };
-            if (from > 0 && from !== kept.blocks.size) return this.sealed(n, 409, { code: 'media.from', have: String(kept.blocks.size) });
+            if (from > 0 && from !== kept.blocks.size) return this.sealed(n, 409, { code: 'media.from', params: { have: String(kept.blocks.size) } });
             if (from === 0) kept.blocks.clear();
+            const upTo = step && 'takeTo' in step ? step.takeTo : step && 'replayTo' in step ? step.replayTo : Infinity;
             for (const [i, b] of opened.blocks) {
-                if (step && 'takeTo' in step && i > step.takeTo) break;
+                if (i > upTo) break;
                 kept.blocks.set(i, b);
             }
             this.kept.set(sha, kept);
+            if (step && 'replayTo' in step) return this.sealed(n, 409, { code: 'media.replay', params: { have: String(kept.blocks.size) } });
             if (step && 'takeTo' in step && step.cut) throw new GatewayError('network', 0);
             const total = mediaBlockCount(size);
             if (kept.blocks.size < total) return this.sealed(n, 200, { sha, have: kept.blocks.size, size });
@@ -181,6 +185,38 @@ describe('PUT /device/media of a device (U9c)', () => {
         expect(gw.seen).toHaveLength(3);
     });
 
+    it('reads have of a refusal in its params, as the research sends it (media.from, device.bad)', async () => {
+        const blocks = new Map<number, Uint8Array>([[1, bytes(SIZE).subarray(0, MEDIA_BLOCK)]]);
+        gw.steps.push({ sealed: 409, body: { code: 'media.from', params: { have: '1' } } }, { sealed: 400, body: { code: 'device.bad', params: { have: '1' } } });
+        gw.kept.set(sha256Hex(bytes(SIZE)), { size: SIZE, blocks });
+        const res = await put(bytes(SIZE));
+        expect(res.status).toBe(200);
+        expect(gw.seen.map(s => s.headers['X-Strom-From'])).toEqual(['0', '1', '1']);
+        expect(gw.asked).toEqual([]);
+    });
+
+    it('409 media.replay (the request came again after a cut) goes on from have by a new request, nothing asked (U9d)', async () => {
+        gw.steps.push({ replayTo: 2 });
+        const res = await put(bytes(SIZE));
+        expect(res.status).toBe(200);
+        expect(gw.asked).toEqual([]);
+        expect(gw.seen.map(s => [s.headers['X-Strom-From'], s.blocks])).toEqual([['0', [1, 2, 3]], ['2', [3]]]);
+        // a new request: its own nonce and time
+        expect(gw.seen[1].headers['X-Strom-Nonce']).not.toBe(gw.seen[0].headers['X-Strom-Nonce']);
+    });
+
+    it('sends a file over 8 MiB in batches of at most 8 blocks, each From = k with blocks k+1…min(k+8, N) (U9d)', async () => {
+        const size = MEDIA_BLOCK * 17 + 5;
+        const file = bytes(size);
+        const res = await put(file);
+        expect(res.status).toBe(200);
+        expect(gw.seen.map(s => [s.headers['X-Strom-From'], s.blocks])).toEqual([
+            ['0', [1, 2, 3, 4, 5, 6, 7, 8]], ['8', [9, 10, 11, 12, 13, 14, 15, 16]], ['16', [17, 18]],
+        ]);
+        expect(gw.seen.map(s => s.length)).toEqual([mediaBodyLength(size, 0, 8), mediaBodyLength(size, 8, 16), mediaBodyLength(size, 16)]);
+        expect(gw.asked).toEqual([]);
+    });
+
     it('waits the Retry-After of 429 device.busy (one file of a device at a time), then sends it', async () => {
         gw.steps.push({ sealed: 429, body: { code: 'device.busy' }, h: { 'Retry-After': '5' } });
         const res = await put(bytes(10));
@@ -201,13 +237,25 @@ describe('PUT /device/media of a device (U9c)', () => {
         expect(gw.seen).toHaveLength(2);
     });
 
-    it('cut off on the way: the next time it asks the gateway first and sends only the blocks it lacks', async () => {
+    it('cut off on the way (no answer, the network): asks the gateway what it has and goes on from there at once (U9d)', async () => {
         gw.steps.push({ takeTo: 2, cut: true });
-        await expect(put(bytes(SIZE))).rejects.toBeInstanceOf(GatewayError);
         const res = await put(bytes(SIZE));
         expect(res.status).toBe(200);
         expect(gw.asked).toEqual([`GET device/media/${sha256Hex(bytes(SIZE))}`]);
         expect(gw.seen.map(s => [s.headers['X-Strom-From'], s.blocks])).toEqual([['0', [1, 2, 3]], ['2', [3]]]);
+    });
+
+    it('cut off again and again without getting further: the file waits on the device; the next time it goes on from have', async () => {
+        gw.steps.push({ takeTo: 1, cut: true }, { takeTo: 1, cut: true }, { takeTo: 1, cut: true }, { takeTo: 1, cut: true }, { takeTo: 1, cut: true });
+        await expect(put(bytes(SIZE))).rejects.toMatchObject({ code: 'network' });
+        // the first cut got further (block 1), then three without getting further
+        expect(gw.seen.map(s => s.headers['X-Strom-From'])).toEqual(['0', '1', '1', '1', '1']);
+        expect(gw.asked).toHaveLength(4);
+        gw.asked = [];
+        const res = await put(bytes(SIZE));
+        expect(res.status).toBe(200);
+        expect(gw.asked).toEqual([`GET device/media/${sha256Hex(bytes(SIZE))}`]);
+        expect(gw.seen[gw.seen.length - 1].headers['X-Strom-From']).toBe('1');
     });
 
     it('the gateway has it all (the bridge was away): the meta block alone with From = N', async () => {

@@ -289,7 +289,7 @@ export function openPair(key: Uint8Array, pairId: string, envelope: unknown): Pa
     const a = asRecord(parseJson(openEnvelope(key, pairAad(pairId), envelope, true)));
     const device = asRecord(a?.device);
     const computer = asRecord(a?.computer);
-    if (!a || !device || typeof device.id !== 'string' || !computer || typeof computer.name !== 'string' || !Array.isArray(a.trees)) return null;
+    if (!a || !device || typeof device.id !== 'string' || !computer || (typeof computer.name !== 'string' && typeof computer.label !== 'string') || !Array.isArray(a.trees)) return null;
     return a as unknown as PairAnswer;
 }
 

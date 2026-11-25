@@ -28,6 +28,15 @@ export const MEDIA_META = 4096;
 export const MEDIA_TAG = 16;
 /** The longest value of a header of the meta block. */
 export const MEDIA_HEADER_MAX = 2048;
+/**
+ * The data blocks one request carries at most (8 MiB, the research's U9d): the
+ * gateway reads an answer's leftover body up to 8 MiB on the same connection,
+ * so its early answer always reaches the browser, and a cut connection costs
+ * one batch at most. A file over that goes in several requests, each From = k
+ * with blocks k+1…min(k+8, N); the gateway answers one short of block N with
+ * 200 {sha, have, size}.
+ */
+export const MEDIA_BATCH_BLOCKS = 8;
 
 /** The bridge's headers of a file a device may send in the meta block (U9c), as the bridge spells them. */
 export const MEDIA_META_HEADERS: readonly string[] = [
@@ -52,8 +61,10 @@ export interface MediaSealJob {
     meta: Uint8Array;
     /** The file's size (≥ 1), in `X-Strom-Size`. */
     size: number;
-    /** The data blocks the gateway has already (`X-Strom-From`): blocks from+1…N are sealed. */
+    /** The data blocks the gateway has already (`X-Strom-From`): blocks from+1…to are sealed. */
     from: number;
+    /** The last data block of this request (none: N, the file's last). */
+    to?: number;
 }
 
 /** N: the file's data blocks. */
@@ -66,9 +77,20 @@ export function mediaBlockRange(size: number, i: number): [number, number] {
     return [(i - 1) * MEDIA_BLOCK, Math.min(size, i * MEDIA_BLOCK)];
 }
 
-/** The body's length for a file of `size` sent from block `from`: the sealed meta block and blocks from+1…N. */
-export function mediaBodyLength(size: number, from: number): number {
-    const n = mediaBlockCount(size);
+/** The last data block a request of `job` carries: its `to`, never past N. */
+export function mediaJobEnd(job: Pick<MediaSealJob, 'size' | 'to'>): number {
+    const n = mediaBlockCount(job.size);
+    return job.to === undefined ? n : Math.max(0, Math.min(n, job.to));
+}
+
+/** The last data block of a batch sent from block `from`: at most MEDIA_BATCH_BLOCKS of them, never past N. */
+export function mediaBatchEnd(size: number, from: number): number {
+    return Math.min(mediaBlockCount(size), from + MEDIA_BATCH_BLOCKS);
+}
+
+/** The body's length for a file of `size` sent from block `from` (to block `to`, none: N): the sealed meta block and its blocks. */
+export function mediaBodyLength(size: number, from: number, to?: number): number {
+    const n = mediaJobEnd({ size, to });
     let len = MEDIA_META + MEDIA_TAG;
     for (let i = from + 1; i <= n; i++) {
         const [a, b] = mediaBlockRange(size, i);
@@ -147,10 +169,10 @@ export function sealDataBlock(job: MediaSealJob, i: number, bytes: Uint8Array): 
     return sealMediaBlock(job.key, job.deviceId, job.t, job.nonce, job.sha, i, i === mediaBlockCount(job.size), bytes);
 }
 
-/** The whole body of a file in memory: the meta block, then its blocks from+1…N. */
+/** The body of a request of a file in memory: the meta block, then its blocks from+1…to (none: N). */
 export function sealMediaBody(job: MediaSealJob, file: Uint8Array): Uint8Array[] {
     const parts = [sealMediaMeta(job)];
-    for (let i = job.from + 1; i <= mediaBlockCount(job.size); i++) {
+    for (let i = job.from + 1; i <= mediaJobEnd(job); i++) {
         const [a, b] = mediaBlockRange(job.size, i);
         parts.push(sealDataBlock(job, i, file.subarray(a, b)));
     }

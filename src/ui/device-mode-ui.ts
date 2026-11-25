@@ -12,6 +12,7 @@ import { strings } from '../strings.js';
 import { uiModule } from './module.js';
 import { deviceConnection, onDeviceConnection, type DeviceConnection } from '../device/device-connection.js';
 import { pairingNow } from '../device/device-store.js';
+import { DEVICE_REPLAY_EVENT } from '../device/gateway-client.js';
 import { DEVICE_COMPUTER_ONLY_EVENT, researchDeviceState } from '../research-link.js';
 
 const CONN_ID = 'current-tree-conn';
@@ -74,6 +75,7 @@ export const deviceModeMethods = uiModule({
         if (!refusalWatched) {
             refusalWatched = true;
             window.addEventListener(DEVICE_COMPUTER_ONLY_EVENT, () => this.deviceActionRefused());
+            window.addEventListener(DEVICE_REPLAY_EVENT, () => this.deviceWriteUnsure());
         }
         this.refreshDeviceModeUi();
     },
@@ -84,6 +86,18 @@ export const deviceModeMethods = uiModule({
         this.refreshResearchMenu();
         this.refreshActionMenuBadges();
         if (document.getElementById('research-overview')) this.renderResearchOverview();
+    },
+
+    /**
+     * A write's answer was lost on the way (the gateway took the request already, U9d): it is not sent again.
+     * One quiet sentence, and the research's state read now — a send whose answer never came is settled from it
+     * (as after a cut), the overview drawn again from what the research says.
+     */
+    deviceWriteUnsure(): void {
+        this.showToast(strings.device.writeUnsure, 5000);
+        void this.pollResearchBridge({ reschedule: false }).then(() => {
+            if (document.getElementById('research-overview')) this.renderResearchOverview();
+        });
     },
 
     /** The device mode's marks on the page: the body's class and the switcher's second line. */

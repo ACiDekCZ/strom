@@ -49,6 +49,7 @@ import {
     noteResearchDeviceActions, researchDeviceAllows,
 } from '../research-link.js';
 import { deviceComputerName, inDeviceMode } from './device-mode-ui.js';
+import { isDeviceReplay } from '../device/gateway-client.js';
 import { SettingsManager } from '../settings.js';
 import { loadResearchCopy } from '../research-copy.js';
 import { foreignSendCheck } from '../research-foreign-send.js';
@@ -2206,10 +2207,10 @@ export const researchSyncMethods = uiModule({
         this.refreshResearchSyncUi();
         // Leaving the page: its answer may never come back here — remembered, so the next look at the
         // research takes this send as the last one, never sends it a second time (audit 017 a-D1).
-        if (opts.keepalive && !again) {
-            patchResearchAutoState(treeId, { leftSend: { fingerprint: sentFp, at: new Date().toISOString(), head,
-                ...(ownBase ? { ownBase: true as const } : {}), ...(carriesTitles ? { titles: true as const } : {}), ...(version ? { version } : {}) } });
-        }
+        const sentAt = new Date().toISOString();
+        const leftSend = () => ({ fingerprint: sentFp, at: sentAt, head,
+            ...(ownBase ? { ownBase: true as const } : {}), ...(carriesTitles ? { titles: true as const } : {}), ...(version ? { version } : {}) });
+        if (opts.keepalive && !again) patchResearchAutoState(treeId, { leftSend: leftSend() });
         if (hand) {
             const n = this.researchChangesCount();
             const k = n ? n.persons + n.other : 0;
@@ -2225,6 +2226,15 @@ export const researchSyncMethods = uiModule({
             if (opts.keepalive) patchResearchAutoState(treeId, { leftSend: undefined });
         } catch (err) {
             if (opts.keepalive) patchResearchAutoState(treeId, { leftSend: undefined });
+            // A device: the gateway took this send already and only its answer was lost (U9d). Never sent again:
+            // remembered as a send left, the research's state read at once (deviceWriteUnsure) says whether it
+            // was written — as after leaving the page; not written, its changes wait as before.
+            if (isDeviceReplay(err)) {
+                if (!again) patchResearchAutoState(treeId, { leftSend: leftSend() });
+                sendingTree = null;
+                this.refreshResearchSyncUi();
+                return;
+            }
             console.warn('Sending to the research failed', err);
             sendingTree = null;
             const prev = runtime.get(link.id);

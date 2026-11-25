@@ -684,6 +684,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         newToastLink: 'Urządzenia…',
         onlyComputer: 'Tylko na komputerze z badaniem.',
         onlyComputerAll: (pc: string) => `Zgody, uruchamianie agenta i ustawienia badania są na komputerze ${pc}.`,
+        writeUnsure: 'Odpowiedź na ostatnią zmianę zaginęła po drodze; stan badania jest wczytywany ponownie.',
         connecting: (pc: string) => `Łączenie z komputerem ${pc}…`,
         connectingAny: 'Łączenie z komputerem…',
         bootWhere: (host: string) => `sieć domowa · ${host}`,

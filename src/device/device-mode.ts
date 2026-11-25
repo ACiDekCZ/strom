@@ -161,7 +161,7 @@ async function doStart(opts: DeviceModeOptions): Promise<DeviceModeStart | null>
     if (out.pairing) {
         out.connection = startDeviceConnection();
         // The research's bridge through the gateway (spec 094 P3): its fetch, events and images; gone once unpaired.
-        enterDeviceBridge(out.pairing);
+        enterDeviceBridge(out.pairing, location.origin, opts.computerWord);
         if (!watchingUnpair) {
             watchingUnpair = true;
             onDeviceConnection(c => { if (c.state === 'unpaired') leaveDeviceBridge(); });

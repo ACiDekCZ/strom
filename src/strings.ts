@@ -9350,6 +9350,8 @@ const stringsEN = {
         // A device of the home network (spec 094 §6): what stays on the computer with the research, one quiet sentence.
         onlyComputer: 'Only on the computer with the research.',
         onlyComputerAll: (pc: string) => `Approvals, starting the agent and research settings are on ${pc}.`,
+        // A write whose answer was lost on the way (the gateway took it already, U9d): never sent again, the state read again.
+        writeUnsure: 'The answer to the last change was lost on the way; the research\'s state is being read again.',
         // The first start on a device (spec 094 §2): the start screen, the tree chooser, the home-screen icon.
         connecting: (pc: string) => `Connecting to ${pc}…`,
         connectingAny: 'Connecting to the computer…',
@@ -21487,6 +21489,7 @@ const stringsCZ: StringsType = {
         newToastLink: 'Zařízení…',
         onlyComputer: 'Jen na počítači s výzkumem.',
         onlyComputerAll: (pc: string) => `Souhlasy, spuštění agenta a nastavení výzkumu jsou na počítači ${pc}.`,
+        writeUnsure: 'Odpověď na poslední změnu se cestou ztratila, stav výzkumu se načítá znovu.',
         connecting: (pc: string) => `Připojování k počítači ${pc}…`,
         connectingAny: 'Připojování k počítači…',
         bootWhere: (host: string) => `domácí síť · ${host}`,
@@ -33447,6 +33450,7 @@ const stringsDE: StringsType = {
         newToastLink: 'Geräte…',
         onlyComputer: 'Nur auf dem Computer mit der Forschung.',
         onlyComputerAll: (pc: string) => `Zustimmungen, Start des Agenten und Forschungseinstellungen sind auf ${pc}.`,
+        writeUnsure: 'Die Antwort auf die letzte Änderung ging unterwegs verloren; der Stand der Forschung wird neu geladen.',
         connecting: (pc: string) => `Verbindung mit ${pc}…`,
         connectingAny: 'Verbindung mit dem Computer…',
         bootWhere: (host: string) => `Heimnetz · ${host}`,

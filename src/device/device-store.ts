@@ -130,12 +130,35 @@ interface StoredPairing extends Omit<DevicePairing, 'key'> {
 
 const KINDS: DeviceKind[] = ['phone', 'tablet', 'computer'];
 
+/** The longest id of a research's tree a device takes (the research's U9d). */
+export const DEVICE_TREE_ID_MAX = 200;
+
+/**
+ * An id of a research's tree as a pairing gives it: an opaque string of at
+ * most 200 characters, no control characters (the research's U9d — new trees
+ * have a UUID, but its shape is never checked here).
+ */
+export function deviceTreeIdOk(id: unknown): id is string {
+    return typeof id === 'string' && id.length > 0 && id.length <= DEVICE_TREE_ID_MAX && !/[\u0000-\u001f\u007f]/u.test(id);
+}
+
+/**
+ * The computer's name to show (the research's U9d): its `label` (diacritics,
+ * at most 60 characters), else its `name` (the address it is found at), else
+ * `generic` (the app's word for a computer). The same for GET /device/hello.
+ */
+export function computerLabelOf(c: { name?: unknown; label?: unknown } | null | undefined, generic = ''): string {
+    const label = typeof c?.label === 'string' ? c.label.trim() : '';
+    const name = typeof c?.name === 'string' ? c.name.trim() : '';
+    return label || name || generic;
+}
+
 function parseTrees(v: unknown): DeviceTree[] {
     if (!Array.isArray(v)) return [];
     const out: DeviceTree[] = [];
     for (const t of v) {
         const r = t && typeof t === 'object' ? (t as Record<string, unknown>) : null;
-        if (!r || typeof r.id !== 'string' || !r.id) continue;
+        if (!r || !deviceTreeIdOk(r.id)) continue;
         out.push({ id: r.id, name: typeof r.name === 'string' && r.name ? r.name : r.id, ...(r.archive === true ? { archive: true } : {}) });
     }
     return out;
@@ -150,7 +173,7 @@ function fromStored(v: unknown): DevicePairing | null {
     const r = v && typeof v === 'object' ? (v as Partial<StoredPairing>) : null;
     const key = fromB64url(r?.key, 32);
     if (!r || !key || typeof r.deviceId !== 'string' || !r.deviceId) return null;
-    const computer = r.computer && typeof r.computer.name === 'string' ? { name: r.computer.name, ...(typeof r.computer.label === 'string' ? { label: r.computer.label } : {}) } : { name: '' };
+    const computer = { name: typeof r.computer?.name === 'string' ? r.computer.name : '', ...(typeof r.computer?.label === 'string' ? { label: r.computer.label } : {}) };
     return {
         deviceId: r.deviceId,
         key,

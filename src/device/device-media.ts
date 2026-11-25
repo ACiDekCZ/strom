@@ -19,7 +19,9 @@
 import { MEDIA_BLOCK, b64url, newNonce, openResponse, responseBody } from './device-crypto';
 import { chosenTreeId, forgetPairing, loadPairing } from './device-store';
 import { GatewayError, evenGatewayClock, gatewayAppVersion, gatewaySleep, gatewayTime, gatewayUrl, reportGatewayOutcome, tunnel } from './gateway-client';
-import { mediaBlockCount, mediaBlockRange, mediaMetaBlock, mediaMetaHeaders, sealDataBlock, sealMediaMeta, type MediaSealJob } from './media-blocks';
+import {
+    mediaBatchEnd, mediaBlockCount, mediaBlockRange, mediaJobEnd, mediaMetaBlock, mediaMetaHeaders, sealDataBlock, sealMediaMeta, type MediaSealJob,
+} from './media-blocks';
 
 declare const __MEDIA_SEAL_WORKER__: string | undefined;
 
@@ -66,7 +68,7 @@ function xhrSend(url: string, headers: Record<string, string>, body: Blob, onPro
 /** The blocks sealed on the page: a pause after each, so a large photo never freezes it. */
 async function sealOnPage(job: MediaSealJob, blob: Blob, onProgress?: (done: number) => void): Promise<Uint8Array[]> {
     const parts: Uint8Array[] = [sealMediaMeta(job)];
-    for (let i = job.from + 1; i <= mediaBlockCount(job.size); i++) {
+    for (let i = job.from + 1; i <= mediaJobEnd(job); i++) {
         const [a, b] = mediaBlockRange(job.size, i);
         parts.push(sealDataBlock(job, i, new Uint8Array(await blob.slice(a, b).arrayBuffer())));
         onProgress?.(b);
@@ -114,12 +116,18 @@ const begun = new Set<string>();
 
 /** How long to wait for another file of this device (429 device.busy) before the batch pauses: about 2 minutes. */
 const BUSY_WAITS = 24;
-/** How many times a request goes on from what the gateway has before the batch pauses (no progress made). */
+/** How many times a request goes on from what the gateway has without getting further before the batch pauses. */
 const GO_ONS = 6;
+/** How many times a request cut on the way (no answer: the network) goes on from what the gateway has, without getting further, before the file waits on the device. */
+const CUTS = 3;
 
 /** Tests: forget the files sent in part. */
 export function forgetBegunMedia(): void {
     begun.clear();
+}
+
+function recordOf(v: unknown): Record<string, unknown> {
+    return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 }
 
 function numberOf(v: unknown): number | undefined {
@@ -155,16 +163,21 @@ function busyWaitMs(h: Record<string, string>): number {
  * headers of the file (as the computer's `PUT media/<sha>` sends them; only
  * those the gateway takes go into the meta block); the answer the bridge's.
  *
- * A file sent in part before is asked for first and goes on from the blocks
- * the gateway has (all of them: the meta block alone, From = N). Inside the
- * seal: 200 `{have}` short of the last block and `409 media.from` go on from
- * `have`, `400 device.bad {have}` too (a block cut on the way), `429
- * device.busy` waits its Retry-After (one file of a device at a time), `409
- * media.hash` sends the file once more from the start. A refusal of the
- * gateway itself (outside the seal), no answer, a time-out or `502
- * bridge.down` throw GatewayError (the file waits; the batch pauses); 409
- * device.clock evens the clock out, asks what the gateway has and sends it
- * once more, 401
+ * The file goes in batches of at most 8 data blocks (8 MiB, the research's
+ * U9d): From = k, blocks k+1…min(k+8, N). A file sent in part before is asked
+ * for first and goes on from the blocks the gateway has (all of them: the
+ * meta block alone, From = N). Inside the seal: 200 `{have}` short of the
+ * last block, `409 media.from` and `409 media.replay` (the browser sent this
+ * request again by itself after a cut: nothing of it taken) go on from `have`
+ * by a new request, `400 device.bad {have}` too (a block cut on the way);
+ * `have` in the refusal's `params` (the research's) or beside its code.
+ * `429 device.busy` waits its Retry-After (one file of a device at a time),
+ * `409 media.hash` sends the file once more from the start. A request cut on
+ * the way (no answer, the network) asks what the gateway has and goes on
+ * from there, a few times without getting further at most. A refusal of the
+ * gateway itself (outside the seal), a time-out or `502 bridge.down` throw
+ * GatewayError (the file waits; the batch pauses); 409 device.clock evens
+ * the clock out, asks what the gateway has and sends it once more, 401
  * device.unpaired forgets the pairing (the queue stays). A file of 0 B is
  * never sent (the gateway takes a size of 1 at least): `media.empty`.
  */
@@ -202,14 +215,25 @@ export async function putDeviceMedia(opts: {
     let clockTried = false;
     let hashTried = false;
     let busy = 0;
-    let goOns = 0;
+    /** Go-ons (and cuts) since the gateway last got further. */
+    let stuck = 0;
+    let cuts = 0;
+    /** On from `have` the gateway said: getting further starts the counts again; none past N, nor too many without getting further. */
+    const goOnFrom = (have: number, code: string, status: number): void => {
+        begun.add(mark);
+        if (have > blocks) fail(new GatewayError(code, status));
+        if (have > from) { stuck = 0; cuts = 0; }
+        else if (++stuck > GO_ONS) fail(new GatewayError(code, status));
+        from = have;
+    };
     for (;;) {
         if (opts.signal?.aborted) fail(new GatewayError('timeout', 0));
         const nonce = newNonce();
-        const job: MediaSealJob = { key: pairing.key, deviceId: pairing.deviceId, t: gatewayTime(), nonce, sha: opts.sha, meta, size, from };
+        const to = mediaBatchEnd(size, from);
+        const job: MediaSealJob = { key: pairing.key, deviceId: pairing.deviceId, t: gatewayTime(), nonce, sha: opts.sha, meta, size, from, to };
         const base = Math.min(size, from * MEDIA_BLOCK);
-        const rest = size - base;
-        // Sealing is the first tenth of what is left, the upload the rest.
+        const span = Math.min(size, to * MEDIA_BLOCK) - base;
+        // Sealing is the first tenth of this batch, the upload the rest.
         const parts = await sealBody(job, opts.file, done => opts.onProgress?.(Math.round(base + (done - base) * 0.1)));
         const body = new Blob(parts as BlobPart[], { type: 'application/octet-stream' });
         const n = b64url(nonce);
@@ -226,10 +250,24 @@ export async function putDeviceMedia(opts: {
         let r: MediaSendResult;
         try {
             r = await (sender ?? xhrSend)(gatewayUrl(`/device/media/${opts.sha}`), headers, body,
-                loaded => opts.onProgress?.(Math.round(base + rest * (0.1 + 0.9 * Math.min(1, loaded / Math.max(1, body.size))))), opts.signal);
+                loaded => opts.onProgress?.(Math.round(base + span * (0.1 + 0.9 * Math.min(1, loaded / Math.max(1, body.size))))), opts.signal);
         } catch (e) {
             begun.add(mark);
-            fail(e instanceof GatewayError ? e : new GatewayError('network', 0));
+            const err = e instanceof GatewayError ? e : new GatewayError('network', 0);
+            // Cut on the way (no answer at all): as an interruption, on from what the gateway has (U9d) —
+            // a few times without getting further, then the file waits on the device.
+            if (err.code === 'network' && !opts.signal?.aborted && ++cuts <= CUTS) {
+                let have: number;
+                try {
+                    have = await deviceMediaHave(opts.sha, size, tree);
+                } catch (e2) {
+                    throw e2 instanceof GatewayError ? e2 : new GatewayError('network', 0);
+                }
+                if (have > from) { stuck = 0; cuts = 0; }
+                from = have;
+                continue;
+            }
+            fail(err);
             throw e;
         }
         let json: unknown = undefined;
@@ -256,20 +294,21 @@ export async function putDeviceMedia(opts: {
         const status = opened!.s >= 200 && opened!.s <= 599 ? opened!.s : 502;
         let said: Record<string, unknown> = {};
         try {
-            const v = plain ? JSON.parse(new TextDecoder().decode(plain)) as unknown : null;
-            if (v && typeof v === 'object' && !Array.isArray(v)) said = v as Record<string, unknown>;
+            said = recordOf(plain ? JSON.parse(new TextDecoder().decode(plain)) as unknown : null);
         } catch { /* the bridge's own body */ }
-        const have = numberOf(said.have);
-        // On from what the gateway has: the request ended before the last block (200 {have}), From was not what
-        // it has (409 media.from), a block was cut on the way (400 device.bad {have}). Going on without getting
-        // further pauses the batch (the file is asked for when it goes again).
+        // The gateway's refusals carry their values in `params` (the research's `{code, params}`); 200 {have} beside.
+        const params = recordOf(said.params);
+        const have = numberOf(params.have ?? said.have);
+        // On from what the gateway has: the batch ended before the last block (200 {have}), From was not what
+        // it has (409 media.from), the request came again (409 media.replay: the browser sent it once more after a
+        // cut, nothing of it taken — on by a new request, nothing asked), a block was cut on the way (400
+        // device.bad {have}). Going on without getting further pauses the batch (the file is asked for when it
+        // goes again).
         const onFrom = (status === 200 && have !== undefined && numberOf(said.size) === size && have < blocks)
-            || (status === 409 && said.code === 'media.from' && have !== undefined)
-            || (status === 400 && said.code === 'device.bad' && have !== undefined && !said.header);
+            || (status === 409 && (said.code === 'media.from' || said.code === 'media.replay') && have !== undefined)
+            || (status === 400 && said.code === 'device.bad' && have !== undefined && !(params.header ?? said.header));
         if (onFrom) {
-            begun.add(mark);
-            if (++goOns > GO_ONS || have! > blocks) fail(new GatewayError(typeof said.code === 'string' ? said.code : 'media.from', status));
-            from = have!;
+            goOnFrom(have!, typeof said.code === 'string' ? said.code : 'media.from', status);
             continue;
         }
         if (status === 429 && said.code === 'device.busy') {
