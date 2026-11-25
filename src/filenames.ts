@@ -34,3 +34,22 @@ export function asciiSlug(text: string): string {
 export function safeFileName(name: string | null | undefined, fallback: string): string {
     return asciiSlug(name ?? '') || fallback;
 }
+
+/** Characters no file system takes in a name (Windows' list, '/' and '\' everywhere) and the control characters. */
+const FORBIDDEN_IN_NAME = /[/\\:*?"<>|\u0000-\u001f\u007f]/g;
+
+/**
+ * A file or folder name that keeps its letters (spec 093 §5: names in the
+ * letter's language, UTF-8 in the archive): `/ \ : * ? " < > |` and control
+ * characters become a hyphen, runs of spaces one space, no leading or
+ * trailing space or dot (Windows drops a trailing dot). `fallback` when
+ * nothing is left.
+ */
+export function unicodeFileName(name: string | null | undefined, fallback: string): string {
+    const out = (name ?? '')
+        .normalize('NFC')
+        .replace(FORBIDDEN_IN_NAME, '-')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s.]+|[\s.]+$/g, '');
+    return out || fallback;
+}

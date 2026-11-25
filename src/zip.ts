@@ -1,9 +1,12 @@
 /**
- * A .zip archive without compression (method 0, STORE) and without a
- * library: the local headers, the central directory and its end record,
- * names in UTF-8 (flag bit 11), CRC-32 of the IEEE polynomial. Enough for a
- * set of pages whose images are JPEG already (spec 026 §6.4). No ZIP64:
- * an archive stays under 4 GB and 65 535 entries.
+ * A .zip archive without a library: the local headers, the central directory
+ * and its end record, names in UTF-8 (flag bit 11), CRC-32 of the IEEE
+ * polynomial. Entries are stored (method 0) — enough for a set of pages whose
+ * images are JPEG already (spec 026 §6.4) — or, written asynchronously,
+ * deflated (method 8) by the browser's `CompressionStream('deflate-raw')`
+ * where it pays (text; spec 093 §5): JPEG, PNG and archives stay stored, and
+ * without `CompressionStream` everything is stored. No ZIP64: an archive
+ * stays under 4 GB and 65 535 entries.
  */
 
 export interface ZipEntry {
@@ -27,8 +30,13 @@ function crcTable(): Uint32Array {
 
 /** CRC-32 (IEEE 802.3, as zip, gzip and PNG use it). */
 export function crc32(bytes: Uint8Array): number {
+    return crc32Update(0, bytes);
+}
+
+/** CRC-32 continued over more bytes: `crc32Update(crc32(a), b) === crc32(a + b)`. */
+export function crc32Update(crc: number, bytes: Uint8Array): number {
     const t = crcTable();
-    let c = 0xFFFFFFFF;
+    let c = (crc ^ 0xFFFFFFFF) >>> 0;
     for (let i = 0; i < bytes.length; i++) c = t[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
     return (c ^ 0xFFFFFFFF) >>> 0;
 }
@@ -42,7 +50,10 @@ function dosDateTime(d: Date): { time: number; date: number } {
     };
 }
 
-interface ZipFile { name: Uint8Array; size: number; crc: number; offset: number }
+/** STORE or DEFLATE. */
+export type ZipMethod = 0 | 8;
+
+interface ZipFile { name: Uint8Array; size: number; csize: number; crc: number; offset: number; method: ZipMethod }
 
 /** A local or central header (30 or 46 bytes before the name). */
 function header(central: boolean, f: ZipFile, time: number, date: number): Uint8Array<ArrayBuffer> {
@@ -54,11 +65,11 @@ function header(central: boolean, f: ZipFile, time: number, date: number): Uint8
     if (central) { v.setUint16(at, 20, true); at += 2; }   // made by: 2.0, MS-DOS attributes
     v.setUint16(at, 20, true);           // version needed: 2.0
     v.setUint16(at + 2, 0x0800, true);   // UTF-8 names
-    v.setUint16(at + 4, 0, true);        // STORE
+    v.setUint16(at + 4, f.method, true); // STORE / DEFLATE
     v.setUint16(at + 6, time, true);
     v.setUint16(at + 8, date, true);
     v.setUint32(at + 10, f.crc, true);
-    v.setUint32(at + 14, f.size, true);
+    v.setUint32(at + 14, f.csize, true);
     v.setUint32(at + 18, f.size, true);
     v.setUint16(at + 22, f.name.length, true);
     v.setUint16(at + 24, 0, true);       // extra field
@@ -73,11 +84,100 @@ function header(central: boolean, f: ZipFile, time: number, date: number): Uint8
     return out;
 }
 
+/** A part of the archive as it is written: bytes, or a stored entry's data as the Blob it already is. */
+export type ZipPart = Uint8Array<ArrayBuffer> | Blob;
+
+/** How an entry written asynchronously is kept: deflated where it pays (default), or stored as it is. */
+export type ZipCompress = 'auto' | 'store';
+
+/** What an entry became: its size, its size in the archive and how it went in. */
+export interface ZipAdded { size: number; csize: number; method: ZipMethod }
+
+/** Files already compressed (images, archives, PDF, fonts): stored, deflating them gains nothing. */
+const STORED_EXT = /\.(jpe?g|png|gif|webp|avif|zip|gz|pdf|woff2?|mp[34]|m4a|ogg|webm)$/i;
+
+/** Whether deflating a file of this name is worth it (text: HTML, CSS, scripts, SVG, GEDCOM, JSON). */
+export function isCompressible(path: string): boolean {
+    return !STORED_EXT.test(path);
+}
+
+/** Whether the browser deflates (`CompressionStream('deflate-raw')`); without it entries are stored. */
+export function canDeflate(): boolean {
+    if (typeof CompressionStream === 'undefined') return false;
+    try {
+        new CompressionStream('deflate-raw');
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/** The bytes of a Blob a chunk at a time (its stream, else read whole). */
+async function* blobChunks(blob: Blob): AsyncGenerator<Uint8Array> {
+    if (typeof blob.stream !== 'function') {
+        yield new Uint8Array(await blob.arrayBuffer());
+        return;
+    }
+    const reader = blob.stream().getReader();
+    try {
+        for (;;) {
+            const r = await reader.read();
+            if (r.done) return;
+            if (r.value?.length) yield r.value;
+        }
+    } finally {
+        reader.releaseLock();
+    }
+}
+
+/**
+ * Deflate (raw, as zip's method 8) the chunks while their CRC-32 is counted;
+ * null when the browser cannot. The deflated bytes come as chunks too.
+ */
+async function deflateChunks(chunks: AsyncIterable<Uint8Array>): Promise<{ out: Uint8Array<ArrayBuffer>[]; crc: number; size: number; csize: number } | null> {
+    if (!canDeflate()) return null;
+    const cs = new CompressionStream('deflate-raw');
+    const out: Uint8Array<ArrayBuffer>[] = [];
+    let csize = 0;
+    const reading = (async () => {
+        const reader = cs.readable.getReader();
+        for (;;) {
+            const r = await reader.read();
+            if (r.done) return;
+            out.push(r.value as Uint8Array<ArrayBuffer>);
+            csize += r.value.length;
+        }
+    })();
+    const writer = cs.writable.getWriter();
+    let crc = 0;
+    let size = 0;
+    try {
+        for await (const c of chunks) {
+            crc = crc32Update(crc, c);
+            size += c.length;
+            await writer.write(c as Uint8Array<ArrayBuffer>);
+        }
+        await writer.close();
+    } catch (e) {
+        void writer.abort(e).catch(() => { /* already failed */ });
+        await reading.catch(() => { /* the write's error is the one */ });
+        throw e;
+    }
+    await reading;
+    return { out, crc, size, csize };
+}
+
 /**
  * The archive written an entry at a time (1102 §7.5): each entry becomes its
  * bytes at once and goes to `out` (a Blob's parts, a file's stream), so a set
  * of thousands of pages never holds all its pages as text together; only the
  * central directory waits for the end.
+ *
+ * `add` stores an entry at once. `addAsync` (spec 093 §5) deflates text where
+ * the browser can and takes a Blob as well (a stored Blob goes to `out` as
+ * the Blob itself, read only for its CRC); its entries are written in the
+ * order of the calls, one after another. `finishAsync` waits for them.
+ * Mixing `add` with `addAsync` still running is not allowed.
  */
 export class ZipWriter {
     private readonly enc = new TextEncoder();
@@ -85,8 +185,20 @@ export class ZipWriter {
     private readonly time: number;
     private readonly date: number;
     private at = 0;
+    private queue: Promise<unknown> = Promise.resolve();
+    private pending = 0;
+    private readonly out: (part: ZipPart) => void;
+    /** Whether `out` takes a Blob as a part (else a stored Blob goes out read into arrays). */
+    private readonly blobParts: boolean;
 
-    constructor(private readonly out: (part: Uint8Array<ArrayBuffer>) => void, when: Date = new Date()) {
+    constructor(out: (part: Uint8Array<ArrayBuffer>) => void, when?: Date);
+    constructor(out: (part: ZipPart) => void, when: Date | undefined, opts: { blobParts: true });
+    constructor(
+        out: ((part: Uint8Array<ArrayBuffer>) => void) | ((part: ZipPart) => void),
+        when: Date = new Date(), opts?: { blobParts?: boolean },
+    ) {
+        this.out = out as (part: ZipPart) => void;
+        this.blobParts = !!opts?.blobParts;
         ({ time: this.time, date: this.date } = dosDateTime(when));
     }
 
@@ -96,12 +208,21 @@ export class ZipWriter {
     get bytes(): number { return this.at; }
 
     add(path: string, data: Uint8Array | string): void {
+        if (this.pending) throw new Error('ZipWriter: add() while addAsync() runs');
         const bytes = (typeof data === 'string' ? this.enc.encode(data) : data) as Uint8Array<ArrayBuffer>;
-        const f: ZipFile = { name: this.enc.encode(path), size: bytes.length, crc: crc32(bytes), offset: this.at };
-        this.files.push(f);
-        this.write(header(false, f, this.time, this.date));
-        this.write(f.name as Uint8Array<ArrayBuffer>);
-        this.write(bytes);
+        this.entry(path, { crc: crc32(bytes), size: bytes.length, csize: bytes.length, method: 0 }, [bytes]);
+    }
+
+    /**
+     * An entry deflated when `compress` is 'auto', the name is text
+     * (isCompressible), the browser deflates and the result is smaller;
+     * stored otherwise. Resolves once it is written.
+     */
+    addAsync(path: string, data: Uint8Array | string | Blob, compress: ZipCompress = 'auto'): Promise<ZipAdded> {
+        this.pending++;
+        const run = this.queue.then(() => this.addNow(path, data, compress));
+        this.queue = run.catch(() => { /* the caller gets the error; the next entry still runs */ });
+        return run.finally(() => { this.pending--; });
     }
 
     /** The central directory and its end record. */
@@ -121,10 +242,88 @@ export class ZipWriter {
         this.write(end);
     }
 
-    private write(part: Uint8Array<ArrayBuffer>): void {
-        if (!part.length) return;
+    /** `finish` after every entry added asynchronously is written. */
+    async finishAsync(): Promise<void> {
+        await this.queue;
+        this.finish();
+    }
+
+    private async addNow(path: string, data: Uint8Array | string | Blob, compress: ZipCompress): Promise<ZipAdded> {
+        const deflate = compress === 'auto' && isCompressible(path) && canDeflate();
+        if (data instanceof Blob) {
+            if (deflate) {
+                const d = await deflateChunks(blobChunks(data));
+                if (d && d.csize < d.size) return this.entry(path, { crc: d.crc, size: d.size, csize: d.csize, method: 8 }, d.out);
+            }
+            // Stored: read once for the CRC, then the Blob itself goes out (or its bytes, read again).
+            let crc = 0;
+            for await (const c of blobChunks(data)) crc = crc32Update(crc, c);
+            const added = this.entry(path, { crc, size: data.size, csize: data.size, method: 0 }, this.blobParts ? [data] : []);
+            if (!this.blobParts) for await (const c of blobChunks(data)) this.write(c as Uint8Array<ArrayBuffer>);
+            return added;
+        }
+        const bytes = (typeof data === 'string' ? this.enc.encode(data) : data) as Uint8Array<ArrayBuffer>;
+        if (deflate && bytes.length > 0) {
+            const d = await deflateChunks((async function* () { yield bytes; })());
+            if (d && d.csize < d.size) return this.entry(path, { crc: d.crc, size: d.size, csize: d.csize, method: 8 }, d.out);
+        }
+        return this.entry(path, { crc: crc32(bytes), size: bytes.length, csize: bytes.length, method: 0 }, [bytes]);
+    }
+
+    private entry(path: string, e: Omit<ZipFile, 'name' | 'offset'>, body: readonly ZipPart[]): ZipAdded {
+        const f: ZipFile = { ...e, name: this.enc.encode(path), offset: this.at };
+        this.files.push(f);
+        this.write(header(false, f, this.time, this.date));
+        this.write(f.name as Uint8Array<ArrayBuffer>);
+        for (const part of body) this.write(part);
+        return { size: f.size, csize: f.csize, method: f.method };
+    }
+
+    private write(part: ZipPart): void {
+        const n = part instanceof Blob ? part.size : part.length;
+        if (!n) return;
         this.out(part);
-        this.at += part.length;
+        this.at += n;
+    }
+}
+
+/** Bytes gathered into a Blob this often, so the parts of a large archive are not all held as arrays. */
+const SINK_FOLD_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Where a ZipWriter writes to make a Blob: the parts folded into Blobs as
+ * they come (every ~8 MB), so the archive is held by the browser's Blob
+ * storage rather than as arrays in the script's memory.
+ */
+export class ZipBlobSink {
+    private blobs: Blob[] = [];
+    private run: BlobPart[] = [];
+    private runBytes = 0;
+
+    readonly write = (part: ZipPart): void => {
+        this.run.push(part);
+        this.runBytes += part instanceof Blob ? 0 : part.length;
+        if (this.runBytes >= SINK_FOLD_BYTES) this.fold();
+    };
+
+    /** The archive written so far as one Blob. */
+    blob(type = 'application/zip'): Blob {
+        this.fold();
+        return new Blob(this.blobs, { type });
+    }
+
+    /** Drop what was written (a build cancelled). */
+    clear(): void {
+        this.blobs = [];
+        this.run = [];
+        this.runBytes = 0;
+    }
+
+    private fold(): void {
+        if (!this.run.length) return;
+        this.blobs.push(new Blob(this.run));
+        this.run = [];
+        this.runBytes = 0;
     }
 }
 

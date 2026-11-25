@@ -453,6 +453,38 @@ class AppExporterClass {
     }
 
     /**
+     * The app with `data` embedded as a Blob, not downloaded (spec 093 §5, the
+     * gift package): as exportFocusAsApp with a sender and a message (the
+     * welcome on opening), but `data` is taken as it is — the package has
+     * protected it already (D4), so no privacy mode or content choice runs
+     * here. Opens on `data.defaultPersonId`. `trackTreeId` keeps the export id
+     * and the baseline on the source tree (a reply can be read back). Throws
+     * outside the built app (the dev server has no inlined bundle).
+     */
+    async buildFocusAppBlob(data: StromData, opts: { treeName: string; senderName?: string; senderMessage?: string; trackTreeId?: TreeId }): Promise<Blob> {
+        if (!this.isBuiltVersion()) throw new Error(strings.export.devModeNotSupported);
+        const html = this.getExportHtml();
+        const exportId = generateExportId();
+        const envelope: EmbeddedDataEnvelope = {
+            exportId,
+            exportedAt: new Date().toISOString(),
+            appVersion: APP_VERSION,
+            treeName: opts.treeName || 'Family Tree',
+            data,
+            ...(opts.senderMessage ? { senderMessage: opts.senderMessage } : {}),
+            ...(opts.senderName ? { senderName: opts.senderName } : {}),
+        };
+        let baseline: (() => void) | null = null;
+        if (opts.trackTreeId) {
+            TreeManager.setLastExportId(opts.trackTreeId, exportId);
+            baseline = exportBaseline(opts.trackTreeId, exportId, data);
+        }
+        const file = await htmlFileWithImages(html, envelope, (e) => `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(e)};<\/script>`);
+        baseline?.();
+        return file.blob;
+    }
+
+    /**
      * Helper to download HTML content as a file
      */
     private downloadHtml(html: string | Blob, filename: string): void {

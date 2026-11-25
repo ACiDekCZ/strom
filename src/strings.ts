@@ -12728,6 +12728,34 @@ const stringsEN = {
             births: 'nobody has a birth year recorded.',
         },
     },
+    /** "Give a family tree" (spec 093): the gift package's files and its steps. */
+    giftTree: {
+        /** The package's file and folder names (§5), in the letter's language. */
+        files: {
+            zip: (name: string, year: number) => `Family tree – ${name} – ${year}.zip`,
+            folder: (name: string) => `Family tree – ${name}`,
+            start: 'Start here.html',
+            app: 'Family tree (app).html',
+            pages: 'Family pages',
+            book: 'Family book.html',
+            /** The fan's stem (.svg / .png follow); a couple's fans carry the name. */
+            fan: 'Ancestor fan',
+            fanOf: (name: string) => `Ancestor fan – ${name}`,
+            gedcomFolder: 'For other programs',
+            gedcom: 'Family tree.ged',
+            batch: (year: number) => `Family trees ${year}.zip`,
+        },
+        /** The steps of making a package (§8). */
+        steps: {
+            cut: 'Computing the family tree and protecting the living',
+            app: 'App with the family tree',
+            pages: 'Family pages',
+            book: 'Family book',
+            fan: 'Ancestor fan',
+            gedcom: 'GEDCOM',
+            zip: 'Writing the ZIP',
+        },
+    },
 };
 
 const stringsCZ: StringsType = {
@@ -24902,6 +24930,30 @@ const stringsCZ: StringsType = {
             births: 'nikdo nemá zapsaný rok narození.',
         },
     },
+    giftTree: {
+        files: {
+            zip: (name: string, year: number) => `Rodokmen – ${name} – ${year}.zip`,
+            folder: (name: string) => `Rodokmen – ${name}`,
+            start: 'Začít zde.html',
+            app: 'Rodokmen (aplikace).html',
+            pages: 'Stránky rodiny',
+            book: 'Kniha rodu.html',
+            fan: 'Vějíř předků',
+            fanOf: (name: string) => `Vějíř předků – ${name}`,
+            gedcomFolder: 'Pro jiné programy',
+            gedcom: 'Rodokmen.ged',
+            batch: (year: number) => `Rodokmeny ${year}.zip`,
+        },
+        steps: {
+            cut: 'Výpočet rodokmenu a ochrana žijících',
+            app: 'Aplikace s rodokmenem',
+            pages: 'Stránky rodiny',
+            book: 'Kniha rodu',
+            fan: 'Vějíř předků',
+            gedcom: 'GEDCOM',
+            zip: 'Zápis ZIP',
+        },
+    },
 };
 
 const stringsDE: StringsType = {
@@ -36982,6 +37034,30 @@ const stringsDE: StringsType = {
             firstChildAge: 'kein Elternteil mit bekannter Geburt hat ein Kind mit Geburtsdatum.',
             childrenPerCouple: 'es gibt keine Paare.',
             births: 'niemand hat ein Geburtsjahr eingetragen.',
+        },
+    },
+    giftTree: {
+        files: {
+            zip: (name: string, year: number) => `Stammbaum – ${name} – ${year}.zip`,
+            folder: (name: string) => `Stammbaum – ${name}`,
+            start: 'Hier beginnen.html',
+            app: 'Stammbaum (App).html',
+            pages: 'Familienseiten',
+            book: 'Familienbuch.html',
+            fan: 'Ahnenfächer',
+            fanOf: (name: string) => `Ahnenfächer – ${name}`,
+            gedcomFolder: 'Für andere Programme',
+            gedcom: 'Stammbaum.ged',
+            batch: (year: number) => `Stammbäume ${year}.zip`,
+        },
+        steps: {
+            cut: 'Stammbaum berechnen und Lebende schützen',
+            app: 'App mit dem Stammbaum',
+            pages: 'Familienseiten',
+            book: 'Familienbuch',
+            fan: 'Ahnenfächer',
+            gedcom: 'GEDCOM',
+            zip: 'ZIP schreiben',
         },
     },
 };

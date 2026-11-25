@@ -9,9 +9,10 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import {
-    buildTreeSvg, computeBounds, escapeXml, PosterOptions, PosterFooterMeta, posterFooterHeight, POSTER_PADDING, posterPngScales, PNG_SCALE,
+    buildTreeSvg, computeBounds, escapeXml, PosterOptions, PosterFooterMeta, posterFooterHeight, POSTER_PADDING, PNG_SCALE,
 } from '../export-image.js';
 import { buildFanModel, buildFanPosterSvg, fanPosterGeometry, fanLineages } from '../fan-chart.js';
+import { svgToPngDataUrl } from './svg-png.js';
 import { fanStyleFont } from '../fan-colors.js';
 import { fanMeasureFor } from '../fan-labels.js';
 import { assignFanRodColors } from '../fan-rod-assign.js';
@@ -690,53 +691,15 @@ export const exportImageMethods = uiModule({
                 this.showAlert(strings.poster.empty, 'warning');
                 return;
             }
-            const svg = poster.svg;
-            const baseW = poster.widthPx;
-            const baseH = poster.heightPx;
-            // Too large even scaled down to a readable size: no PNG (an empty file before, N3);
-            // the dialog stays open with SVG and Print / PDF.
-            const scales = posterPngScales(baseW, baseH);
-            if (scales.length === 0) {
-                void this.showAlert(strings.poster.pngTooLarge, 'warning');
-                return;
-            }
-
             try {
-                const img = new Image();
-                img.width = baseW;
-                img.height = baseH;
-                await new Promise<void>((resolve, reject) => {
-                    img.onload = () => resolve();
-                    img.onerror = () => reject(new Error('SVG image load failed'));
-                    img.src = svgDataUrl(svg);
-                });
-
-                // A canvas the browser cannot make draws nothing and gives no image ("data:,"): the next scale.
-                let dataUrl = '';
-                let scale = 0;
-                for (const s of scales) {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = Math.max(1, Math.floor(baseW * s));
-                    canvas.height = Math.max(1, Math.floor(baseH * s));
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) continue;
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    const url = canvas.toDataURL('image/png');
-                    // Freed at once: the next try (or the download) needs the memory.
-                    canvas.width = canvas.height = 0;
-                    if (url.startsWith('data:image/png')) {
-                        dataUrl = url;
-                        scale = s;
-                        break;
-                    }
-                }
-                // Never an empty file.
-                if (!dataUrl) {
+                // Too large even scaled down to a readable size, or no canvas holds it: no PNG (an empty
+                // file before, N3); the dialog stays open with SVG and Print / PDF.
+                const png = await svgToPngDataUrl(poster.svg, poster.widthPx, poster.heightPx);
+                if (!png) {
                     void this.showAlert(strings.poster.pngTooLarge, 'warning');
                     return;
                 }
+                const { dataUrl, scale } = png;
                 const a = document.createElement('a');
                 a.href = dataUrl;
                 a.download = posterFilename('png');
