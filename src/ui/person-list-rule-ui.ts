@@ -20,6 +20,7 @@
 
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
+import { placeMenuVertically } from './menu-place.js';
 import type { PersonId, RuleCond, RuleGroup, RuleNode } from '../types.js';
 import type { LineageIndex } from '../lineage.js';
 import { condMissing, condNeed, evalRuleCounts, listCycle, nodeLabel, ruleIssues, type RuleCounts, type RuleNeed } from '../person-list-rules.js';
@@ -764,16 +765,15 @@ export const personListRuleMethods = uiModule({
         const search = menu.querySelector<HTMLInputElement>('.pl-msearch');
         const a = anchor.getBoundingClientRect();
         const w = menu.offsetWidth;
-        const room = window.innerHeight - a.bottom - 12;
         const h = menu.offsetHeight;
         let left = Math.min(a.left, window.innerWidth - w - 8);
         if (anchor.classList.contains('plr-d') || anchor.classList.contains('pln-more')) left = Math.min(a.right - w, window.innerWidth - w - 8);
         left = Math.max(8, left);
-        let top = a.bottom + 4;
-        if (h > room && a.top - 4 - h > 8) top = a.top - 4 - h;
-        else if (h > room) menu.style.maxHeight = `${Math.max(160, room)}px`;
+        // Near the window's bottom the menu opens upwards where there is more room.
+        const spot = placeMenuVertically(a, h, window.innerHeight);
+        if (spot.maxHeight !== null) menu.style.maxHeight = `${Math.floor(spot.maxHeight)}px`;
         menu.style.left = `${Math.round(left)}px`;
-        menu.style.top = `${Math.round(top)}px`;
+        menu.style.top = `${Math.round(spot.top)}px`;
         anchor.setAttribute('aria-expanded', 'true');
         anchor.classList.add('open');
         const items = (): HTMLElement[] => [...menu.querySelectorAll<HTMLElement>('.pl-menu-item:not([aria-disabled="true"]):not([hidden])')];
