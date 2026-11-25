@@ -16,6 +16,7 @@ import { isHelpOpen } from './help-ui.js';
 import { helpMark } from './help-mark.js';
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
+import { inDeviceMode } from './device-mode-ui.js';
 import { PersonId, ResearchConflict, ResearchConflictValue } from '../types.js';
 import { researchConflictRef, ResearchConflictTake, researchLinkMark } from '../research-link.js';
 import { canDecideInApp, conflictSides } from '../research-decide.js';
@@ -211,7 +212,7 @@ export const conflictPanelMethods = uiModule({
         } else if (view.notice) {
             const n = view.notice;
             const text = n.text === 'sendFirst' ? k.sendFirst
-                : n.text === 'remote' ? k.remote
+                : n.text === 'remote' ? (inDeviceMode() ? strings.device.onlyComputer : k.remote)
                 : n.text === 'errBusy' ? k.errBusy
                 : n.text === 'errLocked' ? k.errLocked
                 : n.text === 'noEdit' ? k.noEdit

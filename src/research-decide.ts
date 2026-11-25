@@ -229,6 +229,8 @@ export function decideReply(kind: DecideKind, id: string, status: number, body: 
     const params = asRecord(r.params);
     if (status === 404) return code === `${kind}.none` ? refused(`${kind}.none`) : refused('unknown');
     if (status === 409) {
+        // The gateway of a device (spec 094 §2.7): decided meanwhile, its decision not said.
+        if (code === `${kind}.gone`) return refused(`${kind}.decided`);
         if (code === `${kind}.decided`) {
             const resolution = cleanText(typeof r.resolution === 'string' ? r.resolution : params?.resolution, 300);
             const take = kind === 'conflict' ? takeOf(r.take ?? params?.take) : undefined;
@@ -245,6 +247,17 @@ export function decideReply(kind: DecideKind, id: string, status: number, body: 
     return refused('unknown');
 }
 
+/**
+ * A decision as a device's gateway takes it (`device/conflict/<X>`: `{take, reasoning?}`;
+ * `device/hypothesis/<H>`: `{variant, decision?}`).
+ */
+export function deviceDecideBody(body: Record<string, string>): Record<string, string> {
+    const { do: _do, note, ...rest } = body;
+    void _do;
+    if (rest.take) return { take: rest.take, ...(note ? { reasoning: note } : {}) };
+    return { ...rest, ...(note ? { decision: note } : {}) };
+}
+
 /** Decisions on their way, one per bridge and id: a second ask while it runs gets the same answer. */
 const inFlight = new Map<string, Promise<DecideResult>>();
 
@@ -254,9 +267,10 @@ const inFlight = new Map<string, Promise<DecideResult>>();
  * cookies), as the sync. Never throws: no answer is `network`.
  */
 export function postBridgeDecide<K extends DecideKind>(base: string, kind: K, id: string, body: DecideBody<K>,
-    opts: { timeoutMs?: number } = {}): Promise<DecideResult> {
+    opts: { timeoutMs?: number; device?: boolean } = {}): Promise<DecideResult> {
     const ref = decideRef(kind, id);
-    const payload = decideRequestBody(kind, body);
+    const plain = decideRequestBody(kind, body);
+    const payload = plain && opts.device ? deviceDecideBody(plain) : plain;
     if (!ref || ref !== id || !payload) return Promise.resolve({ ok: false, code: 'invalid', status: 0, reason: '' });
     if (typeof fetch !== 'function') return Promise.resolve({ ok: false, code: 'network', status: 0, reason: '' });
     const key = `${base}|${kind}|${ref}`;
@@ -266,7 +280,8 @@ export function postBridgeDecide<K extends DecideKind>(base: string, kind: K, id
         const ctl = typeof AbortController === 'function' ? new AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), opts.timeoutMs ?? DECIDE_TIMEOUT_MS) : null;
         try {
-            const res = await fetch(withAppVersion(`${base}/${kind}/${encodeURIComponent(ref)}`), {
+            // A device of the home network decides through its gateway's own path (spec 094 §2.7).
+            const res = await fetch(withAppVersion(`${base}/${opts.device ? 'device/' : ''}${kind}/${encodeURIComponent(ref)}`), {
                 method: 'POST',
                 mode: 'cors',
                 credentials: 'omit',

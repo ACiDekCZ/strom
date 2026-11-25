@@ -12,6 +12,7 @@ import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
+import { inDeviceMode } from './device-mode-ui.js';
 import { formatFlexDate } from '../dates.js';
 import { PersonId, ResearchEdge, ResearchEdgeHypo, ResearchEdgeMode, ResearchHypothesis } from '../types.js';
 import { familyGroups } from '../view-links.js';
@@ -349,6 +350,10 @@ export const researchEdgeUiMethods = uiModule({
             if (pickBtn) {
                 if (pickBtn.disabled || !rid) return;
                 const variant = pickBtn.dataset.variant ?? '';
+                if (inDeviceMode()) {
+                    void this.deviceDecideHypotheses([hypo], 'decide', variant);
+                    return;
+                }
                 const h = (DataManager.getPerson(personId)?.research?.hypotheses ?? []).find(x => x.id === hypo);
                 const url = this.activeResearchLink('hypothesis', { hypothesis: hypo, hypothesisDo: 'decide', variant });
                 if (!h || !url) return;

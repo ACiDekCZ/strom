@@ -380,6 +380,21 @@ describe('postBridgeDecide: the shared request and its answers', () => {
         expect(r).toEqual({ ok: true, decided: 'X0007', take: 'user', head: 'a'.repeat(40), written: 'E0102 BIRT 1852', person: 'P0012' });
     });
 
+    it('a device of the home network (spec 094 §2.7): <base>/device/conflict/<X> with {take, reasoning}; 409 conflict.gone reads as decided elsewhere', async () => {
+        answer(200, { decided: 'X0007', take: 'research', head: 'a'.repeat(40) });
+        const r = await postBridgeDecide(BASE, 'conflict', 'X0007', { do: 'decide', take: 'research', note: 'Matrika' }, { device: true });
+        expect(calls[0].url).toMatch(/^http:\/\/127\.0\.0\.1:47321\/tok123\/device\/conflict\/X0007\?app=/);
+        expect(JSON.parse(calls[0].init.body as string)).toEqual({ take: 'research', reasoning: 'Matrika' });
+        expect(r).toMatchObject({ ok: true, decided: 'X0007', take: 'research' });
+        answer(409, { code: 'conflict.gone' });
+        expect(await postBridgeDecide(BASE, 'conflict', 'X0007', { do: 'decide', take: 'user' }, { device: true }))
+            .toMatchObject({ ok: false, code: 'conflict.decided', status: 409 });
+        answer(200, { decided: 'H0031', variant: 'B', head: 'a'.repeat(40) });
+        await postBridgeDecide(BASE, 'hypothesis', 'H0031', { do: 'decide', variant: 'B' }, { device: true });
+        expect(calls[0].url).toMatch(/\/tok123\/device\/hypothesis\/H0031\?app=/);
+        expect(JSON.parse(calls[0].init.body as string)).toEqual({ variant: 'B' });
+    });
+
     it('200 of a couple\'s conflict: the family', async () => {
         answer(200, { decided: 'X0009', take: 'research', head: 'b'.repeat(40), written: 'F0003 MARR', family: 'F0003' });
         const r = await postBridgeDecide(BASE, 'conflict', 'X0009', { do: 'decide', take: 'research' });

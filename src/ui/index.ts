@@ -117,6 +117,7 @@ import { deviceConnMethods } from './device-conn-ui.js';
 import { devicePhotosMethods } from './device-photos-ui.js';
 import { deviceModeMethods } from './device-mode-ui.js';
 import { deviceProgressMethods } from './device-progress-ui.js';
+import { deviceDecideMethods } from './device-decide-ui.js';
 import { readDocumentMethods } from './read-document-ui.js';
 import { readProposeMethods } from './read-propose-ui.js';
 import { researchImagesMethods } from './research-images-ui.js';
@@ -910,6 +911,9 @@ Object.assign(UIClass.prototype, deviceModeMethods);
 type DeviceProgressMethods = typeof deviceProgressMethods;
 export interface UIClass extends DeviceProgressMethods {}
 Object.assign(UIClass.prototype, deviceProgressMethods);
+type DeviceDecideMethods = typeof deviceDecideMethods;
+export interface UIClass extends DeviceDecideMethods {}
+Object.assign(UIClass.prototype, deviceDecideMethods);
 
 type ReadDocumentMethods = typeof readDocumentMethods;
 export interface UIClass extends ReadDocumentMethods {}

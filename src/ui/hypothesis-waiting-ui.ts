@@ -15,6 +15,7 @@ import { waitingDrawn, waitingGroupTagEl, waitingSideEl } from './waiting-order-
 import { isTimeOrder } from '../research-waiting.js';
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
+import { inDeviceMode } from './device-mode-ui.js';
 import type { PersonId, ResearchHypothesis } from '../types.js';
 import { HYPOTHESES_ACCEPT_LINK_FEATURE, LiveWaiting, researchLinkMark } from '../research-link.js';
 import type { HypothesisPick } from '../research-hypothesis-pick.js';
@@ -307,6 +308,11 @@ export const hypothesisWaitingMethods = uiModule({
      * asked (its version decided, or no version holds), the list as one.
      */
     acceptHypothesisProposals(ids: readonly string[]): void {
+        // A device: through its gateway (spec 094 §4, 4.8).
+        if (inDeviceMode()) {
+            void this.deviceDecideHypotheses(ids, 'proposed');
+            return;
+        }
         const rid = this.activeResearchId();
         const url = rid ? this.activeResearchLink('hypotheses', { hypothesesDo: 'accept', ids }) : null;
         if (!rid || !url) return;
@@ -329,6 +335,10 @@ export const hypothesisWaitingMethods = uiModule({
 
     /** Ask the research (its terminal) to decide one hypothesis of "What waits", and wait in its row. */
     askWaitingHypothesis(h: ResearchHypothesis, what: 'decide' | 'abandon' | 'keep-open', variant?: string): void {
+        if (inDeviceMode()) {
+            if (h.id) void this.deviceDecideHypotheses([h.id], what, variant);
+            return;
+        }
         const rid = this.activeResearchId();
         const url = h.id ? this.activeResearchLink('hypothesis', { hypothesis: h.id, hypothesisDo: what, ...(variant ? { variant } : {}) }) : null;
         if (!rid || !url || !h.id) return;

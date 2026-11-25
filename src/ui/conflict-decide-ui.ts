@@ -16,6 +16,7 @@ import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
+import { inDeviceMode } from './device-mode-ui.js';
 import { FactPart, PartnershipId, PersonId, ResearchConflict, ResearchConflictValue, StromData } from '../types.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
@@ -213,7 +214,7 @@ export const conflictDecideMethods = uiModule({
         if (view.notice) {
             const n = view.notice;
             const text = n.text === 'sendFirst' ? k.sendFirst
-                : n.text === 'remote' ? k.remote
+                : n.text === 'remote' ? (inDeviceMode() ? strings.device.onlyComputer : k.remote)
                 : n.text === 'alreadyDecided' ? k.alreadyDecided(state?.kind === 'elsewhere' && state.resolution ? state.resolution
                     : state?.kind === 'elsewhere' && state.take ? said(state.take === 'user' ? decidedValues.user : decidedValues.research) : '')
                 : n.text === 'takenPending' ? k.takenPending(said(decidedValues.research))

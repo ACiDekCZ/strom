@@ -46,8 +46,9 @@ import {
     researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef, isResearchHead, SYNC_REMOVED_FEATURE, SyncPersonConflict,
     SYNC_NW_CODES_FEATURE, researchLinkMark, researchUrlMark, type ResearchActionMark,
     researchMediaOut, researchSendDeclaresMedia, researchSyncUrl, researchMediaFirstSendDue, researchKeepsAppMedia,
-    noteResearchDeviceActions,
+    noteResearchDeviceActions, researchDeviceAllows,
 } from '../research-link.js';
+import { inDeviceMode } from './device-mode-ui.js';
 import { SettingsManager } from '../settings.js';
 import { loadResearchCopy } from '../research-copy.js';
 import { foreignSendCheck } from '../research-foreign-send.js';
@@ -703,6 +704,8 @@ export const researchSyncMethods = uiModule({
      * its bridge answering in this page with `conflict.decide`, else a link into the research, else not on this device.
      */
     researchConflictDecideMode(): ConflictDecideMode {
+        // A device of the home network (spec 094 §4, 4.8): through its gateway when announced, never a link.
+        if (inDeviceMode()) return researchDeviceAllows('conflict') ? 'bridge' : 'none';
         const id = this.activeResearchId();
         const status = id ? this.researchStatusOf(id) : null;
         return conflictDecideMode({ bridge: status ? { features: status.features } : null, linkAvailable: this.researchLinkAvailable('conflict') });
@@ -719,7 +722,8 @@ export const researchSyncMethods = uiModule({
         return hypothesisPickable(h, {
             readOnly: !id || DataManager.isReadOnly(),
             features: status?.features ?? null,
-            linkAvailable: this.researchLinkAvailable('hypothesis'),
+            // A device decides through its gateway when announced (spec 094 §4, 4.8).
+            linkAvailable: inDeviceMode() ? researchDeviceAllows('hypothesis') : this.researchLinkAvailable('hypothesis'),
         });
     },
 
@@ -735,7 +739,7 @@ export const researchSyncMethods = uiModule({
         let result: DecideResult = { ok: false, code: 'network', status: 0, reason: '' };
         if (!ctx || !bridge) return result;
         await this.researchWindowLock(ctx.treeId, false, async () => {
-            result = await postBridgeDecide(bridge.base, kind, id, body);
+            result = await postBridgeDecide(bridge.base, kind, id, body, { device: inDeviceMode() });
         });
         // The research's version after the write: known at once (not only at the next ask).
         const answer = result as DecideResult;

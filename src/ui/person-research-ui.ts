@@ -14,6 +14,7 @@ import { researchActionLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
+import { inDeviceMode } from './device-mode-ui.js';
 import { PersonId, ResearchConflict, ResearchConflictValue, ResearchHypothesis, ResearchHypothesisVariant } from '../types.js';
 import { isOpenHypothesis, loadViewLinks, researchHypotheses } from '../view-links.js';
 import {
@@ -681,7 +682,7 @@ export const personResearchMethods = uiModule({
         if (plan.decided) {
             const dis = plan.decided.off ? ' disabled' : '';
             buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="change"${dis}>${esc(r.hypoChangeHere)}</button>`);
-            if (plan.decided.reopen) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="reopen"${dis}>${researchActionLabel(r.hypoReopen, terminal)}</button>`);
+            if (plan.decided.reopen && !inDeviceMode()) buttons.push(`<button type="button" class="secondary prh-act" data-hypo-act="reopen"${dis}>${researchActionLabel(r.hypoReopen, terminal)}</button>`);
         }
         if (buttons.length) underHtml += `
                     <div class="person-research-hypo-actions prh-choices">${buttons.join('')}</div>`;
@@ -849,6 +850,11 @@ export const personResearchMethods = uiModule({
         // Ask the research (its terminal) to decide for a version, abandon, leave open or reopen,
         // and wait here for its confirmation (DEV §4).
         const ask = (hypo: string, what: 'decide' | 'abandon' | 'keep-open' | 'reopen', variant?: string): void => {
+            // A device: through its gateway (spec 094 §4, 4.8); reopening is the computer's (not drawn there).
+            if (inDeviceMode()) {
+                if (what !== 'reopen') void this.deviceDecideHypotheses([hypo], what, variant);
+                return;
+            }
             const rid = this.activeResearchId();
             const h = hypothesisOf(hypo);
             const url = this.activeResearchLink('hypothesis', { hypothesis: hypo, hypothesisDo: what, ...(variant ? { variant } : {}) });
