@@ -74,6 +74,8 @@ export interface RulePickOpts {
     wide?: boolean;
     /** A search field over the rows (its placeholder); rows filtered by label and sub, without accents. */
     search?: string;
+    /** What the search says when no row matches (default: the choice's "Nothing matches."). */
+    none?: string;
     /** Several rows can be ticked: a pick toggles its row and the choice stays open. */
     multi?: boolean;
     /** Called once when the choice closes (any way). */

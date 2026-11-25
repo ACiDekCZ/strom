@@ -515,7 +515,7 @@ export const personListRuleMethods = uiModule({
                 const ctl = document.querySelector<HTMLElement>(`.pln-overlay [data-key="${CSS.escape(rowKey(r.path, `p-${editor.firstControl}`))}"]`);
                 ctl?.click();
             }
-        }, { wide: true, search: t.catalog.search });
+        }, { wide: true, search: t.catalog.search, none: t.catalog.none });
     },
 
     /** A person's choice by an editor's control (the dialog's person popover). */
@@ -701,7 +701,7 @@ export const personListRuleMethods = uiModule({
         menu.innerHTML = opts.search
             ? `<input type="search" class="pl-msearch" placeholder="${esc(opts.search)}" aria-label="${esc(opts.search)}" autocomplete="off" spellcheck="false">`
                 + `<div class="pl-mlist" role="${listRole}" aria-label="${esc(title)}"${multi ? ' aria-multiselectable="true"' : ''}>${rowsHtml}</div>`
-                + `<div class="pl-mnone" hidden>${esc(strings.lists.rules.pick.none)}</div>`
+                + `<div class="pl-mnone" hidden>${esc(opts.none ?? strings.lists.rules.pick.none)}</div>`
             : rowsHtml;
         overlay.appendChild(menu);
         const search = menu.querySelector<HTMLInputElement>('.pl-msearch');
@@ -863,7 +863,7 @@ export const personListRuleMethods = uiModule({
         const none = document.createElement('div');
         none.className = 'pl-mnone';
         none.hidden = true;
-        none.textContent = strings.lists.rules.pick.none;
+        none.textContent = opts.none ?? strings.lists.rules.pick.none;
         list.before(box);
         list.after(none);
         input.addEventListener('input', () => {

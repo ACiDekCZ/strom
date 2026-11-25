@@ -520,6 +520,9 @@ export const personListNewMethods = uiModule({
         const modal = st ? document.querySelector<HTMLElement>(`#${st.overlayId} .pln-modal`) : null;
         const btn = modal?.querySelector<HTMLElement>('[data-act="show-tree"]:not([hidden])') ?? modal?.querySelector<HTMLElement>('.pln-more');
         btn?.focus({ preventScroll: true });
+        // The dialogs shown again count as opened (dialog-focus, after these class changes): each would take the
+        // focus to its first field, so the focus goes back to "Show in the tree" once that has run.
+        queueMicrotask(() => { if (btn?.isConnected) btn.focus({ preventScroll: true }); });
     },
 
     /** The custom rule: "Based on: Custom rule ▾", the template button, ⋯, then the builder. */
