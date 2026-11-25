@@ -161,6 +161,8 @@ interface Run {
     states: PhotoState[];
     errs: Map<number, string>;
     curDone: number;
+    /** Its photos discarded on the device meanwhile (Discard…, spec 094 §7): stopped, nothing of it kept again. */
+    discarded?: boolean;
 }
 
 let st: {
@@ -1231,6 +1233,14 @@ export const batchMethods = uiModule({
         // The followed research's changes held while the batch went: its tree read once now.
         this.liveReleaseHeld();
         window.removeEventListener('beforeunload', onLeave);
+        // Discarded on the device while it went: its photos stay gone, nothing is said of it.
+        if (r.discarded) {
+            void dropDeviceDraft(r.treeId);
+            this.closeBatchDialog();
+            wakeRun(r);
+            this.refreshResearchSyncUi();
+            return;
+        }
         if (r.unclosed) {
             // Not closed: the batch stays remembered unfinished (the same folder chosen again closes it), no summary.
             this.closeBatchDialog();
@@ -1525,6 +1535,32 @@ export const batchMethods = uiModule({
             else if (f.known) r.skipped++;
             else if (f.refused) r.refused.push({ path: f.path || path, why: this.batchRefusalText(r, f.refused, f.refused.code || '') });
         }
+    },
+
+    /**
+     * The photos waiting on a device discarded (Discard…, spec 094 §7): a batch of
+     * theirs still going is stopped at once — the file on its way may still come in —,
+     * and what it had not sent is never kept on the device again.
+     */
+    batchDiscardDeviceRun(): void {
+        const r = run;
+        if (!r || r.finished || !researchDevice()) return;
+        r.discarded = true;
+        r.cancelled = true;
+        r.paused = false;
+        r.pauseAsked = false;
+        r.resume?.();
+    },
+
+    /**
+     * The connection of a device came back (spec 094 §7): a batch paused because the
+     * computer was away goes on. How many of its photos are still to go (0: none paused).
+     */
+    batchResumeAfterReconnect(): number {
+        const r = run;
+        if (!r || r.finished || r.cancelled || !r.paused || !r.lost || !researchDevice()) return 0;
+        this.resumeBatchRun();
+        return Math.max(0, r.queue.length - r.index);
     },
 
     resumeBatchRun(): void {

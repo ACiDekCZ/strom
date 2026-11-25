@@ -41,17 +41,26 @@ export const devicePhotosMethods = uiModule({
     /**
      * "Discard…": asks first (how many photos, cannot be undone), then every
      * photo waiting on the device is forgotten. How many went (0: kept).
+     * The list of what waits (spec 094 §7) asks once for its edits too:
+     * `edits` counted in the question, `note` a sentence after it, `then`
+     * what goes besides the photos once it is confirmed.
      */
-    async askDiscardDevicePhotos(): Promise<number> {
+    async askDiscardDevicePhotos(opts: { edits?: number; note?: string; then?: () => Promise<void> } = {}): Promise<number> {
         const n = await devicePhotoCount();
-        if (n === 0) return 0;
+        const m = opts.edits ?? 0;
+        if (n + m === 0) return 0;
         const b = strings.batch;
-        const asked = this.showConfirm(b.discardDeviceText(n, 0), b.discardDeviceAsk, {
+        const text = m > 0 || opts.note ? `${strings.device.discardText(n, m)}${opts.note ? ` ${opts.note}` : ''}` : b.discardDeviceText(n, 0);
+        const asked = this.showConfirm(text, b.discardDeviceAsk, {
             confirmLabel: b.discardDeviceOk, cancel: strings.buttons.cancel, variant: 'danger',
         });
         // asked from a sheet from below as well (the Connection, the waiting list on a phone): above it
         document.getElementById('confirmation-modal')?.classList.add('over-sheet');
         if (!await asked) return 0;
-        return discardDevicePhotos();
+        // A batch of them still going stops first: it would keep what it had not sent again.
+        this.batchDiscardDeviceRun();
+        const gone = await discardDevicePhotos();
+        await opts.then?.();
+        return gone + m;
     },
 });
