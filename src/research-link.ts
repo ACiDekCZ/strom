@@ -3433,6 +3433,30 @@ export function sortAsksCost(status: Pick<LiveStatus, 'sort'> | null | undefined
     return status?.sort?.confirm !== 'no';
 }
 /**
+ * `/status.features` (spec 123 P2, Strom Research 1.37): `POST /settings/sort {"confirm": "no"}` goes from the app's
+ * page on the research's computer too (without it `no` is refused 403 `sort.raise`: only the research's terminal).
+ */
+export const SORT_CONFIRM_APP_FEATURE = 'sort.confirm.app';
+/**
+ * `/status.features` (spec 123 P2, Strom Research 1.37): `POST /settings/run {"confirm": …}` — whether the app's
+ * actions that start the agent ask in the research's terminal first (`ask`) or start at once (`no`), a setting of
+ * the computer for all its researches; its value is `/status.work.confirm`.
+ */
+export const RUN_CONFIRM_FEATURE = 'run.confirm';
+
+/** `/status.work.confirm` of a research with `run.confirm` (null: the switch is not offered). */
+export function runConfirmOf(status: Pick<LiveStatus, 'work' | 'features'> | null | undefined): SortConfirm | null {
+    return status?.features?.includes(RUN_CONFIRM_FEATURE) ? status.work?.confirm ?? null : null;
+}
+
+/**
+ * Whether a "without asking" switch (`sort.confirm`, `run.confirm`; spec 123 K2.4) is inactive: on a device of the
+ * research's gateway (spec 094) switching on is never offered (the gateway refuses it); switching off goes anywhere.
+ */
+export function confirmSwitchLocked(on: boolean, device: boolean): boolean {
+    return device && !on;
+}
+/**
  * `/status.features` (spec 060): `/status.hypotheses.decide`, `POST /hypotheses {decide}` and who decided a
  * hypothesis in the research's file (`_BY`, `DECI`, `_AT`).
  */
@@ -5248,7 +5272,9 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...directionsRevSaid(r, features),
         ...verifyStatusSaid(r, features),
         ...(features?.includes(STATUS_BUSY_FEATURE) && sanitizeBusy(r.busy) ? { busy: sanitizeBusy(r.busy)! } : {}),
-        ...(features?.includes(WORK_LINK_FEATURE) && sanitizeLiveWork(r.work) ? { work: sanitizeLiveWork(r.work)! } : {}),
+        // `run.confirm` (spec 123 P2) reads `work.confirm` even from a research that would not say `work.link`.
+        ...((features?.includes(WORK_LINK_FEATURE) || features?.includes(RUN_CONFIRM_FEATURE)) && sanitizeLiveWork(r.work)
+            ? { work: sanitizeLiveWork(r.work)! } : {}),
         ...(sanitizeResearchCaps(r.caps) ? { caps: sanitizeResearchCaps(r.caps)! } : {}),
         ...(features?.includes(OFF_LINE_BRANCHES_FEATURE) && sanitizeOffLine(r.offLine) ? { offLine: sanitizeOffLine(r.offLine)! } : {}),
         ...(statusBooks(r.books, features) ? { books: statusBooks(r.books, features)! } : {}),

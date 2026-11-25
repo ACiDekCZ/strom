@@ -150,9 +150,16 @@ export interface FakeBridge {
      * Sorting with the agent without asking (spec 102 U8, `sort.confirm` in `features`): `/status.sort` (`sort`, sent
      * as it is; unset: not said), every `POST /settings/sort` body (`posts`). `{"confirm": "ask"}` is written;
      * `{"confirm": "no"}` while `ask` is refused 403 `sort.raise` with the terminal's command; the same value again
-     * writes nothing; `replies` answer instead.
+     * writes nothing; `replies` answer instead. With `sort.confirm.app` (spec 123 P2) `no` is written too, unless
+     * `raiseReason` refuses it (403 `sort.raise` with that `reason`).
      */
     sortConfirm?: FakeSortConfirm;
+    /**
+     * Starting the agent without confirming (spec 123 P2, `run.confirm` in `features`): `/status.work.confirm`
+     * (`confirm`; unset: not said), every `POST /settings/run` body (`posts`). `ask` and `no` are written (no commit,
+     * no `head`), unless `raiseReason` refuses `no` (403 `run.raise`); `replies` answer instead.
+     */
+    runConfirm?: FakeRunConfirm;
     /** Stuck (SIGSTOP): `/status` never answers. */
     statusHang?: boolean;
     /**
@@ -259,6 +266,20 @@ export interface FakeSortConfirm {
     sort?: unknown;
     posts: unknown[];
     replies: { status: number; body: unknown }[];
+    raiseReason?: 'device' | 'browser';
+}
+
+/** The computer's setting of starting the agent without confirming (spec 123 P2). */
+export interface FakeRunConfirm {
+    confirm?: 'ask' | 'no';
+    posts: unknown[];
+    replies: { status: number; body: unknown }[];
+    raiseReason?: 'device' | 'browser';
+}
+
+/** A computer whose app actions starting the agent ask in the research terminal first (`ask`) or not (`no`). */
+export function fakeRunConfirm(confirm: 'ask' | 'no'): FakeRunConfirm {
+    return { confirm, posts: [], replies: [] };
 }
 
 /** A research whose Sort with the agent asks for the cost each time (`ask`, the default) or not (`no`). */
@@ -2538,12 +2559,30 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             }
             const was = (b.sortConfirm.sort as { confirm?: unknown } | undefined)?.confirm;
             if (was === r.confirm) return json(200, { sort: b.sortConfirm.sort, head: b.head, parent: b.head });
-            if (r.confirm === 'no') {
+            if (r.confirm === 'no' && (!b.features?.includes('sort.confirm.app') || b.sortConfirm.raiseReason)) {
                 return json(403, { error: 'Only a person in the research terminal switches this on.', code: 'sort.raise',
-                    command: 'strom config set sort.confirm no --for-tree' });
+                    command: 'strom config set sort.confirm no --for-tree', ...(b.sortConfirm.raiseReason ? { reason: b.sortConfirm.raiseReason } : {}) });
             }
             b.sortConfirm.sort = { confirm: r.confirm };
             return json(200, { sort: b.sortConfirm.sort, ...commitWrite(b) });
+        }
+        // Starting the agent without confirming (spec 123 P2): the computer's setting, no commit.
+        if (b.runConfirm && method === 'POST' && /\/settings\/run$/.test(url.pathname) && b.features?.includes('run.confirm')) {
+            let body: unknown = null;
+            try { body = JSON.parse(route.request().postData() ?? ''); } catch { /* not JSON */ }
+            b.runConfirm.posts.push(body);
+            const said = b.runConfirm.replies.shift();
+            if (said) return json(said.status, said.body);
+            const r = body && typeof body === 'object' ? body as Record<string, unknown> : null;
+            if (!r || Object.keys(r).length !== 1 || (r.confirm !== 'ask' && r.confirm !== 'no')) {
+                return json(400, { error: 'Not a body /settings/run takes.', code: 'run.body' });
+            }
+            if (r.confirm === 'no' && r.confirm !== b.runConfirm.confirm && b.runConfirm.raiseReason) {
+                return json(403, { error: 'Not switched on here.', code: 'run.raise', command: 'strom config set run.confirm no',
+                    reason: b.runConfirm.raiseReason });
+            }
+            b.runConfirm.confirm = r.confirm;
+            return json(200, { run: { confirm: r.confirm } });
         }
         // A heavy part apart (research 1.26.0, `status.parts`): its rev and its fields as the full status has them.
         const partPath = /\/status\/([A-Za-z]+)$/.exec(url.pathname);
@@ -2593,6 +2632,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.census ? { census: b.census.census } : {}),
                 ...(b.intake?.intake !== undefined ? { intake: b.intake.intake } : {}),
                 ...(b.sortConfirm?.sort !== undefined ? { sort: b.sortConfirm.sort } : {}),
+                ...(b.runConfirm?.confirm !== undefined ? { work: { gate: null, minutes: 60, confirm: b.runConfirm.confirm } } : {}),
                 ...(b.live ? { live: { idleMinutes: b.live.idleMinutes, idleChoices: b.live.idleChoices ?? [0, 120] } } : {}),
                 ...(b.handoffs ? { handoffs: b.handoffs } : {}),
                 ...(b.statusExtra ?? {}),

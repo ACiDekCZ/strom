@@ -690,6 +690,16 @@ export const researchSyncMethods = uiModule({
         return true;
     },
 
+    /**
+     * `POST /settings/run` written (spec 123 P2): its value put into the last status's `work.confirm` at once (no
+     * commit, so no event may follow), until the next status says it. Only for a status that has `work`.
+     */
+    noteRunConfirm(researchId: string, confirm: 'ask' | 'no'): void {
+        const rt = runtime.get(researchId);
+        if (!rt?.status?.work || rt.status.work.confirm === confirm) return;
+        runtime.set(researchId, { ...rt, status: { ...rt.status, work: { ...rt.status.work, confirm } } });
+    },
+
     /** The research's version as its bridge said it in this page ('' = not asked yet, or not said). */
     researchBridgeVersion(researchId: string): string {
         return runtime.get(researchId)?.status?.version ?? '';

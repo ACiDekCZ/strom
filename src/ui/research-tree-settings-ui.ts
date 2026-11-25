@@ -16,10 +16,12 @@ import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
 import {
-    researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, HYPOTHESES_DECIDE_FEATURE, CENSUS_FEATURE, INTAKE_AUTO_FEATURE, SORT_CONFIRM_FEATURE, researchLinkMark, researchUrlMark,
+    researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE, HYPOTHESES_DECIDE_FEATURE, CENSUS_FEATURE, INTAKE_AUTO_FEATURE, SORT_CONFIRM_FEATURE, SORT_CONFIRM_APP_FEATURE, RUN_CONFIRM_FEATURE,
+    confirmSwitchLocked, researchLinkMark, researchUrlMark,
     booksOn, BOOKS_MIN_TASKS_DEFAULT, BOOKS_SAME_BOOK_DEFAULT, type ResearchHypothesesDecide, type LiveBooksSettings, type SortConfirm,
 } from '../research-link.js';
-import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask, postBridgeBooks, postBridgeCensus, postBridgeIntake, postBridgeSortConfirm, type BooksSettingBody } from '../history-bridge.js';
+import { postBridgeStories, postBridgeHypotheses, postBridgeReadTask, postBridgeBooks, postBridgeCensus, postBridgeIntake, postBridgeSortConfirm, postBridgeRunConfirm,
+    type BooksSettingBody, type ConfirmRaiseReason } from '../history-bridge.js';
 import { booksSettingHtml, booksMinTasksInput, type BooksSettingNote } from './books-setting-view.js';
 import { READ_SOURCE_TASK_FEATURE, type ReadTaskSetting } from '../research-read-task.js';
 import { readTaskSettingHtml, type ReadTaskSettingNote } from './read-task-setting-view.js';
@@ -28,7 +30,8 @@ import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, 
 import { sourceReadingHash, unverifiedOlderSources, newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
-import { el, readTree, researchHere } from './research-ui.js';
+import { el, readTree, researchHere, liveSession } from './research-ui.js';
+import { inDeviceMode } from './device-mode-ui.js';
 import { researchDisplayName, researchSendMode, onBridgeStatus, lastBridgeStatus } from './research-sync-ui.js';
 import { SettingsManager } from '../settings.js';
 import { formatBytesShort } from './originals-ui.js';
@@ -70,9 +73,32 @@ const intake: { rid: string; note?: string; want?: boolean; busy?: boolean; send
  * under the row with the terminal's command when switching on was refused (403 `sort.raise`: only a person in the
  * research's terminal sets `no`).
  */
-const sortConfirm: {
-    rid: string; note?: { text: string; command?: string | null; raise?: boolean }; want?: SortConfirm; busy?: boolean; sending?: SortConfirm; gone?: boolean;
-} = { rid: '' };
+const sortConfirm: ConfirmSwitchState = { rid: '' };
+
+/**
+ * "Start the agent without confirming" (spec 123 P2, `run.confirm`): the computer's setting for all its researches,
+ * read from `/status.work.confirm`; its own group under Materials, the same parts as `sortConfirm`.
+ */
+const runConfirm: ConfirmSwitchState = { rid: '' };
+
+/** A "without asking" switch's state (`asking`: its confirmation dialog is open). */
+interface ConfirmSwitchState {
+    rid: string; note?: { text: string; command?: string | null; raise?: boolean }; want?: SortConfirm; busy?: boolean; sending?: SortConfirm;
+    gone?: boolean; asking?: boolean;
+}
+
+/** The sentence of a refused raise to `no` (403 `*.raise`): only on the computer (a device), else the terminal's command. */
+function raiseNote(raiseReason: ConfirmRaiseReason | undefined, command: string | undefined): NonNullable<ConfirmSwitchState['note']> {
+    return raiseReason === 'device'
+        ? { text: strings.history.confirmRaiseComputer }
+        : { text: strings.history.sortConfirmRaise, command: command ?? null, raise: true };
+}
+
+/** Forgets a "without asking" switch's state for the research `rid`. */
+function resetConfirmSwitch(st: ConfirmSwitchState, rid: string): void {
+    st.rid = rid;
+    delete st.note; delete st.want; delete st.busy; delete st.sending; delete st.gone; delete st.asking;
+}
 
 /**
  * "Who decides hypotheses" (spec 060): the same parts as `stories` — the
@@ -105,6 +131,7 @@ const RUNS_PEND = 'tree:runs';
 const runsMax: { rid: string; want?: number; sending?: number; note?: { text: string; command?: string | null }; away?: boolean; stale?: boolean } = { rid: '' };
 const INTAKE_PEND = 'tree:intake';
 const SORT_CONFIRM_PEND = 'tree:sortconfirm';
+const RUN_CONFIRM_PEND = 'tree:runconfirm';
 /** How long the group stays highlighted when a link opens the dialog at it. */
 const READ_TASK_FLASH_MS = 1500;
 
@@ -533,8 +560,8 @@ export const researchTreeSettingsMethods = uiModule({
         this.renderResearchCensusRow();
         intake.rid = link.id;
         delete intake.note; delete intake.want; delete intake.busy; delete intake.sending; delete intake.gone;
-        sortConfirm.rid = link.id;
-        delete sortConfirm.note; delete sortConfirm.want; delete sortConfirm.busy; delete sortConfirm.sending; delete sortConfirm.gone;
+        resetConfirmSwitch(sortConfirm, link.id);
+        resetConfirmSwitch(runConfirm, link.id);
         this.renderResearchIntakeRow();
         hypos.rid = link.id;
         delete hypos.note; delete hypos.want; delete hypos.busy;
@@ -870,7 +897,9 @@ export const researchTreeSettingsMethods = uiModule({
      * research's `/status.intake` (neither in an archive nor a research waiting for its agent: no host there, and
      * gone once the research says so); the switch follows `/status.intake.auto`; without the bridge inactive with
      * its sentence. No mark: the write goes through the bridge, no terminal. The same group holds "Sort with the
-     * agent without asking" (spec 102 U8: `sort.confirm` and `/status.sort`, on the same conditions).
+     * agent without asking" (spec 102 U8: `sort.confirm` and `/status.sort`, on the same conditions); under it its
+     * own group "Starting the agent" with "Start the agent without confirming" (spec 123 P2: `run.confirm` and
+     * `/status.work.confirm`). Switching either of those two on is never offered on a device (spec 123 K2.4).
      */
     renderResearchIntakeRow(): void {
         const host = document.querySelector<HTMLElement>(`#${SETTINGS_ID} #research-intake-host`);
@@ -883,16 +912,21 @@ export const researchTreeSettingsMethods = uiModule({
         const said = last?.intake;
         const showIntake = !intake.gone && features.includes(INTAKE_AUTO_FEATURE) && (!!said || intake.want !== undefined) && !agentless;
         // Spec 102 U8: "Sort with the agent without asking" in the same group, on the same conditions.
-        const sortSaid = last?.sort;
+        const sortSaid = last?.sort?.confirm;
         const showSort = sortConfirm.rid === rid && !sortConfirm.gone && features.includes(SORT_CONFIRM_FEATURE)
             && (!!sortSaid || sortConfirm.want !== undefined) && !agentless;
-        if (!showIntake && !showSort) {
+        // Spec 123 P2: "Start the agent without confirming", its value `/status.work.confirm`.
+        const runSaid = features.includes(RUN_CONFIRM_FEATURE) ? last?.work?.confirm : undefined;
+        const showRun = runConfirm.rid === rid && !runConfirm.gone && features.includes(RUN_CONFIRM_FEATURE)
+            && (!!runSaid || runConfirm.want !== undefined) && !agentless;
+        if (!showIntake && !showSort && !showRun) {
             host.innerHTML = '';
             return;
         }
         const h = strings.history;
         const up = this.researchBridgeUp(rid);
-        const focusId = ['research-intake-auto', 'research-sort-confirm'].find(id => document.activeElement?.id === id) ?? '';
+        const device = inDeviceMode();
+        const focusId = ['research-intake-auto', 'research-sort-confirm', 'research-run-confirm'].find(id => document.activeElement?.id === id) ?? '';
         let intakeHtml = '';
         if (showIntake) {
             if (intake.want !== undefined && said?.auto === intake.want) delete intake.want;
@@ -910,36 +944,57 @@ export const researchTreeSettingsMethods = uiModule({
                 </label>
                 ${note ? `<p class="research-stories-note research-intake-note" id="research-intake-note"><span>${esc(note)}</span></p>` : ''}`;
         }
-        let sortHtml = '';
-        let sortNote: { text: string; command?: string | null } | undefined;
-        if (showSort) {
-            if (sortConfirm.want !== undefined && sortSaid?.confirm === sortConfirm.want) delete sortConfirm.want;
+        // A "without asking" switch (sort, run): through the bridge, no terminal, so no mark (a refused switching on
+        // gives the terminal's command as text); on a device switching on is not offered, switching off is.
+        const confirmRow = (st: ConfirmSwitchState, saidNow: SortConfirm | undefined, o: {
+            id: string; rowClass: string; pendKey: string; title: string; desc: string;
+        }): { html: string; note?: { text: string; command?: string | null } } => {
+            if (st.want !== undefined && saidNow === st.want) delete st.want;
             // Switched on in the terminal after a refusal: the command is not needed any more.
-            if (sortConfirm.note?.raise && sortSaid?.confirm === 'no') delete sortConfirm.note;
-            const on = (sortConfirm.sending ?? sortConfirm.want ?? sortSaid?.confirm) === 'no';
-            sortNote = !up ? { text: h.storiesBridgeDown } : sortConfirm.note;
-            const pend = !!sortConfirm.busy;
-            // Through the bridge, no terminal: no mark (the refused switching on gives the terminal's command as text).
-            sortHtml = `
-                <label class="settings-checkbox research-intake-row research-sort-confirm-row"${pend ? pendAttrs(SORT_CONFIRM_PEND).replace(' aria-disabled="true"', '') : ''}>
-                    <input type="checkbox" id="research-sort-confirm"${on ? ' checked' : ''}${!up ? ' disabled' : pend ? ' aria-disabled="true"' : ''}>
+            if (st.note?.raise && saidNow === 'no') delete st.note;
+            const on = (st.sending ?? st.want ?? saidNow) === 'no';
+            const locked = confirmSwitchLocked(on, device);
+            const note = !up ? { text: h.storiesBridgeDown } : st.note ?? (locked ? { text: h.confirmComputerOnly } : undefined);
+            const pend = !!st.busy;
+            return {
+                html: `
+                <label class="settings-checkbox research-intake-row ${o.rowClass}"${pend ? pendAttrs(o.pendKey).replace(' aria-disabled="true"', '') : ''}>
+                    <input type="checkbox" id="${o.id}"${on ? ' checked' : ''}${!up || locked ? ' disabled' : pend ? ' aria-disabled="true"' : ''}>
                     <span class="settings-text">
-                        <span class="settings-name">${esc(h.sortConfirmTitle)}</span>
-                        <span class="settings-desc">${esc(h.sortConfirmDesc)}</span>${pend ? pendStatusHtml(SORT_CONFIRM_PEND) : ''}
+                        <span class="settings-name">${esc(o.title)}</span>
+                        <span class="settings-desc">${esc(o.desc)}</span>${pend ? pendStatusHtml(o.pendKey) : ''}
                     </span>
-                </label>`;
-        }
-        host.innerHTML = `
+                </label>`,
+                ...(note ? { note } : {}),
+            };
+        };
+        // Spec 123 P2: with `sort.confirm.app` it is switched on here (after a confirmation); else only in the terminal.
+        const sortApp = features.includes(SORT_CONFIRM_APP_FEATURE);
+        const sort = showSort ? confirmRow(sortConfirm, sortSaid, {
+            id: 'research-sort-confirm', rowClass: 'research-sort-confirm-row', pendKey: SORT_CONFIRM_PEND,
+            title: h.sortConfirmTitle, desc: sortApp ? h.sortConfirmDesc : `${h.sortConfirmDesc} ${h.sortConfirmTerminalOnly}`,
+        }) : null;
+        const run = showRun ? confirmRow(runConfirm, runSaid, {
+            id: 'research-run-confirm', rowClass: 'research-run-confirm-row', pendKey: RUN_CONFIRM_PEND,
+            title: h.runConfirmTitle, desc: h.runConfirmDesc,
+        }) : null;
+        host.innerHTML = `${showIntake || sort ? `
             <fieldset class="research-transcripts research-intake">
-                <legend>${esc(h.intakeSection)}</legend>${intakeHtml}${sortHtml}
-            </fieldset>`;
-        if (sortNote) {
-            const p = el('p', 'research-stories-note research-intake-note research-sort-confirm-note');
-            p.id = 'research-sort-confirm-note';
-            p.appendChild(el('span', undefined, sortNote.text));
-            if (sortNote.command) p.append(' ', commandLine(sortNote.command, c => this.copyResearchLiveCommand(c)));
-            host.querySelector('fieldset')!.appendChild(p);
-        }
+                <legend>${esc(h.intakeSection)}</legend>${intakeHtml}${sort?.html ?? ''}
+            </fieldset>` : ''}${run ? `
+            <fieldset class="research-transcripts research-run-confirm">
+                <legend>${esc(h.runConfirmSection)}</legend>${run.html}
+            </fieldset>` : ''}`;
+        const addNote = (fieldset: string, id: string, note: { text: string; command?: string | null } | undefined): void => {
+            if (!note) return;
+            const p = el('p', `research-stories-note research-intake-note ${id}`);
+            p.id = id;
+            p.appendChild(el('span', undefined, note.text));
+            if (note.command) p.append(' ', commandLine(note.command, c => this.copyResearchLiveCommand(c)));
+            host.querySelector(fieldset)!.appendChild(p);
+        };
+        addNote('fieldset.research-intake', 'research-sort-confirm-note', sort?.note);
+        addNote('fieldset.research-run-confirm', 'research-run-confirm-note', run?.note);
         const input = host.querySelector<HTMLInputElement>('#research-intake-auto');
         // Locked while on its way: a click changes nothing (the row drawn again as it stands).
         input?.addEventListener('change', () => {
@@ -948,10 +1003,42 @@ export const researchTreeSettingsMethods = uiModule({
         });
         const sortInput = host.querySelector<HTMLInputElement>('#research-sort-confirm');
         sortInput?.addEventListener('change', () => {
-            if (sortConfirm.busy) { this.renderResearchIntakeRow(); return; }
-            void this.setResearchSortConfirm(sortInput.checked ? 'no' : 'ask');
+            if (sortConfirm.busy || sortConfirm.asking) { this.renderResearchIntakeRow(); return; }
+            void this.switchResearchConfirm('sort', sortInput.checked, sortApp);
+        });
+        const runInput = host.querySelector<HTMLInputElement>('#research-run-confirm');
+        runInput?.addEventListener('change', () => {
+            if (runConfirm.busy || runConfirm.asking) { this.renderResearchIntakeRow(); return; }
+            void this.switchResearchConfirm('run', runInput.checked, true);
         });
         if (focusId) host.querySelector<HTMLInputElement>(`#${focusId}`)?.focus({ preventScroll: true });
+    },
+
+    /**
+     * Spec 123 K2.2: a "without asking" switch clicked. Switching on asks first in the app's confirmation dialog
+     * (`ask`: when the research lets the app write `no`; else the research refuses it with the terminal's command, as
+     * before); Cancel writes nothing and the switch stays off. Switching off is written at once.
+     */
+    async switchResearchConfirm(which: 'sort' | 'run', on: boolean, ask: boolean): Promise<void> {
+        const st = which === 'sort' ? sortConfirm : runConfirm;
+        const set = (c: SortConfirm) => which === 'sort' ? this.setResearchSortConfirm(c) : this.setResearchRunConfirm(c);
+        if (!on) { await set('ask'); return; }
+        if (!ask) { await set('no'); return; }
+        const h = strings.history;
+        const rid = st.rid;
+        st.asking = true;
+        let ok = false;
+        try {
+            ok = await this.showConfirm(
+                which === 'sort' ? h.sortConfirmAskText : h.runConfirmAskText,
+                which === 'sort' ? h.sortConfirmAskTitle : h.runConfirmAskTitle,
+                { confirmLabel: h.confirmSwitchOn },
+            );
+        } finally {
+            delete st.asking;
+        }
+        if (!ok || st.rid !== rid) { this.renderResearchIntakeRow(); return; }
+        await set('no');
     },
 
     /**
@@ -1014,7 +1101,7 @@ export const researchTreeSettingsMethods = uiModule({
         } else {
             const W = strings.live.waitingWrite;
             switch (r.code) {
-                case 'raise': sortConfirm.note = { text: strings.history.sortConfirmRaise, command: r.command ?? null, raise: true }; break;
+                case 'raise': sortConfirm.note = raiseNote(r.raiseReason, r.command); break;
                 case 'archive': sortConfirm.gone = true; break;
                 case 'busy': sortConfirm.note = { text: strings.history.errBusy }; break;
                 case 'held': sortConfirm.note = { text: this.researchWriteHeldText(r.held!, false).toast }; break;
@@ -1022,6 +1109,46 @@ export const researchTreeSettingsMethods = uiModule({
                 case 'full': sortConfirm.note = { text: r.reason || W.fileFull }; break;
                 case 'network': sortConfirm.note = { text: strings.history.storiesBridgeDown }; break;
                 default: sortConfirm.note = { text: r.reason || W.writeFailed };
+            }
+        }
+        this.renderResearchIntakeRow();
+    },
+
+    /**
+     * Spec 123 P2: `POST /settings/run {"confirm": …}` (the computer's setting, no commit): the value of the reply is
+     * kept until the status says it, and put into the status known here, so the dialog of the work on the queue says
+     * it at once. A refused switching on (403 `run.raise`) keeps the switch off with its sentence; an archive's
+     * refusal takes the row away.
+     */
+    async setResearchRunConfirm(confirm: SortConfirm): Promise<void> {
+        const rid = runConfirm.rid;
+        const ctx = this.historyManageContext();
+        const base = ctx?.researchId === rid ? ctx.base : null;
+        if (!base || runConfirm.busy) { this.renderResearchIntakeRow(); return; }
+        runConfirm.busy = true;
+        runConfirm.sending = confirm;
+        delete runConfirm.note;
+        startPend(RUN_CONFIRM_PEND, { redraw: () => this.renderResearchIntakeRow() });
+        this.renderResearchIntakeRow();
+        const r = await postBridgeRunConfirm(base, confirm, ctx!.features);
+        if (runConfirm.rid !== rid) { dropPend(RUN_CONFIRM_PEND); return; }
+        await endPend(RUN_CONFIRM_PEND);
+        delete runConfirm.busy;
+        delete runConfirm.sending;
+        if (r.ok) {
+            const now = r.confirm ?? confirm;
+            runConfirm.want = now;
+            const s = liveSession();
+            if (s?.researchId === rid && s.work) s.work = { ...s.work, confirm: now };
+            this.noteRunConfirm(rid, now);
+        } else {
+            const W = strings.live.waitingWrite;
+            switch (r.code) {
+                case 'raise': runConfirm.note = raiseNote(r.raiseReason, r.command); break;
+                case 'archive': runConfirm.gone = true; break;
+                case 'busy': runConfirm.note = { text: strings.history.errBusy }; break;
+                case 'network': runConfirm.note = { text: strings.history.storiesBridgeDown }; break;
+                default: runConfirm.note = { text: r.reason || W.writeFailed };
             }
         }
         this.renderResearchIntakeRow();
