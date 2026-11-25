@@ -1684,6 +1684,14 @@ export interface FamilySpec {
     width: 'line' | 'siblings' | 'cousins';
     cousins?: number | 'all';
     spouses: 'none' | 'spouses' | 'families';
+    /**
+     * Exceptions by sibling (of the person or of an ancestor in range, with
+     * width 'siblings' or 'cousins'): true takes the sibling's descendants
+     * along whatever the cousin degree, false keeps the sibling alone (their
+     * descendants only when another line reaches them). Missing = as the
+     * degree says. The tree gift's "branches" (spec 093 §3).
+     */
+    siblingFamilies?: ReadonlyMap<PersonId, boolean>;
 }
 
 /** The quick choices of "Family of a person" (spec 136 §4); a choice is on exactly when the axes match. */
@@ -1732,8 +1740,11 @@ function descentChildren(data: StromData, id: PersonId): PersonId[] {
     });
 }
 
-/** `id` and their descendants down to `depth` generations (null = all), into `out`. */
-function addDescendants(data: StromData, id: PersonId, depth: number | null, out: Set<PersonId>): void {
+/**
+ * `id` and their descendants down to `depth` generations (null = all), into
+ * `out`. A descendant `stop` marks false is taken but not walked below.
+ */
+function addDescendants(data: StromData, id: PersonId, depth: number | null, out: Set<PersonId>, stop?: ReadonlyMap<PersonId, boolean>): void {
     let frontier = [id];
     const seen = new Set<PersonId>([id]);
     out.add(id);
@@ -1744,11 +1755,54 @@ function addDescendants(data: StromData, id: PersonId, depth: number | null, out
                 if (seen.has(ch)) continue;
                 seen.add(ch);
                 out.add(ch);
-                next.push(ch);
+                if (stop?.get(ch) !== false) next.push(ch);
             }
         }
         frontier = next;
     }
+}
+
+/** The parents of a person that carry descent (not step or foster), existing in the data. */
+export function descentParentIds(data: StromData, id: PersonId): PersonId[] {
+    const p = data.persons[id];
+    return p ? descentParents(data, p).map(x => x.id) : [];
+}
+
+/**
+ * A person's ancestors by generation (index 0 = parents) up to `up`
+ * generations, through both parents or the father's / mother's side only (at
+ * every step); each ancestor once, at the nearest generation. Placeholders
+ * are included (familySet walks through them).
+ */
+export function ancestorGenerations(source: StromData | LineageIndex, personId: PersonId, via: FamilySpec['via'] = 'both', up: number | 'all' = 'all'): PersonId[][] {
+    const data = 'rodByPerson' in source ? source.data : source;
+    const start = data.persons[personId];
+    if (!start) return [];
+    const out: PersonId[][] = [];
+    const upLimit = up === 'all' ? Infinity : Math.max(0, up);
+    const seenUp = new Set<PersonId>([personId]);
+    let frontier: Person[] = [start];
+    for (let g = 1; frontier.length && g <= upLimit; g++) {
+        const next: Person[] = [];
+        for (const child of frontier) {
+            const parents = via === 'both'
+                ? descentParents(data, child)
+                : [parentInRole(data, child, via)].filter((x): x is Person => !!x);
+            for (const par of parents) {
+                if (seenUp.has(par.id)) continue;
+                seenUp.add(par.id);
+                next.push(par);
+            }
+        }
+        if (next.length) out.push(next.map(p => p.id));
+        frontier = next;
+    }
+    return out;
+}
+
+/** The siblings of a person through the parents that carry descent (half-siblings included). */
+export function descentSiblingsOf(data: StromData, id: PersonId): PersonId[] {
+    return descentSiblings(data, id);
 }
 
 /** The siblings of `id` through the parents that carry descent. */
@@ -1776,25 +1830,7 @@ export function familySet(source: StromData | LineageIndex, spec: FamilySpec): S
     if (!start) return new Set();
     const all = new Set<PersonId>([spec.personId]);
     // Ancestors in range by generation (1 = parents).
-    const ancestorsByGen: PersonId[][] = [];
-    const upLimit = spec.up === 'all' ? Infinity : Math.max(0, spec.up);
-    const seenUp = new Set<PersonId>([spec.personId]);
-    let frontier: Person[] = [start];
-    for (let g = 1; frontier.length && g <= upLimit; g++) {
-        const next: Person[] = [];
-        for (const child of frontier) {
-            const parents = spec.via === 'both'
-                ? descentParents(data, child)
-                : [parentInRole(data, child, spec.via)].filter((x): x is Person => !!x);
-            for (const par of parents) {
-                if (seenUp.has(par.id)) continue;
-                seenUp.add(par.id);
-                next.push(par);
-            }
-        }
-        if (next.length) ancestorsByGen.push(next.map(p => p.id));
-        frontier = next;
-    }
+    const ancestorsByGen = ancestorGenerations(data, spec.personId, spec.via, spec.up);
     for (const gen of ancestorsByGen) for (const id of gen) all.add(id);
     // Down from the person.
     const downLimit = spec.down === 'all' ? null : Math.max(0, spec.down);
@@ -1802,12 +1838,20 @@ export function familySet(source: StromData | LineageIndex, spec: FamilySpec): S
     // Sideways.
     if (spec.width !== 'line') {
         const line = [spec.personId, ...ancestorsByGen.flat()];
-        for (const id of line) for (const sib of descentSiblings(data, id)) all.add(sib);
+        const exceptions = spec.siblingFamilies?.size ? spec.siblingFamilies : undefined;
+        const withFamily: PersonId[] = [];
+        for (const id of line) {
+            for (const sib of descentSiblings(data, id)) {
+                all.add(sib);
+                if (exceptions?.get(sib) === true) withFamily.push(sib);
+            }
+        }
         if (spec.width === 'cousins') {
             const degree = spec.cousins ?? 'all';
             const top = degree === 'all' ? ancestorsByGen.length : Math.min(ancestorsByGen.length, degree + 1);
-            for (let g = 0; g < top; g++) for (const id of ancestorsByGen[g]) addDescendants(data, id, null, all);
+            for (let g = 0; g < top; g++) for (const id of ancestorsByGen[g]) addDescendants(data, id, null, all, exceptions);
         }
+        for (const sib of withFamily) addDescendants(data, sib, null, all, exceptions);
     }
     // Spouses.
     if (spec.spouses !== 'none') {

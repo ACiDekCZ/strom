@@ -9,7 +9,7 @@
  */
 
 import { rewriteStorySources, storySourceIds } from './story-sources.js';
-import { StromData, Person, Partnership, SourceExcerpt } from './types.js';
+import { StromData, Person, PersonId, Partnership, SourceExcerpt } from './types.js';
 import { strings } from './strings.js';
 import { yearOf } from './dates.js';
 import { forgetHiddenImports } from './import-origin.js';
@@ -418,6 +418,208 @@ export interface LivingPrivacyOptions {
      * attachment goes (book, tree export).
      */
     keepDeceasedSources?: boolean;
+    /**
+     * Living people shown in full whatever the mode (a gift's household and
+     * its exceptions, spec 093 §4); `sensitive` masks their details by kind.
+     */
+    fullIds?: Iterable<string>;
+    /**
+     * What the living shown in full keep, by kind (true = kept). Missing =
+     * everything. Under 'full' it applies to every living person.
+     */
+    sensitive?: LivingSensitive;
+    /** What the deceased keep (true = kept). Missing = everything. */
+    dead?: DeceasedDetails;
+}
+
+/**
+ * The kinds of detail of a living person shown in full (spec 093 §4):
+ * - birthDates: the date of birth (the year stays) and of the baptism;
+ * - addresses: addresses and residences (the birth and event addresses, the
+ *   residence and census events, a couple's address);
+ * - contacts: e-mail addresses (also those in notes) and another program's
+ *   own lines (phone numbers among them);
+ * - photos: the portrait and the attachments;
+ * - notes: notes, narratives, the open question;
+ * - religion: the religion event and the religious rites;
+ * - sources: the citations, their details and the attachments.
+ */
+export interface LivingSensitive {
+    birthDates: boolean;
+    addresses: boolean;
+    contacts: boolean;
+    photos: boolean;
+    notes: boolean;
+    religion: boolean;
+    sources: boolean;
+}
+
+/** What the deceased keep: the causes of death, notes and narratives, citations. */
+export interface DeceasedDetails {
+    causes: boolean;
+    notes: boolean;
+    sources: boolean;
+}
+
+/** Events that tell a person's faith (the religion itself and its rites). */
+const RELIGION_EVENTS: ReadonlySet<string> = new Set(['religion', 'baptism', 'confirmation', 'firstCommunion', 'barMitzvah', 'batMitzvah', 'ordination']);
+/** Events that tell where a person lives. */
+const RESIDENCE_EVENTS: ReadonlySet<string> = new Set(['residence', 'census']);
+/** Events whose date tells the date of birth. */
+const BIRTH_DATE_EVENTS: ReadonlySet<string> = new Set(['birth', 'baptism']);
+/** A line of free text with an e-mail address in it. */
+const EMAIL_LINE = /^.*[^\s@]+@[^\s@]+\.[^\s@]+.*$/gm;
+
+/** Free text without the lines that carry an e-mail address. */
+function withoutEmailLines(text: string | undefined): string | undefined {
+    if (!text) return text;
+    const out = text.replace(EMAIL_LINE, '').replace(/\n{2,}/g, '\n').trim();
+    return out || undefined;
+}
+
+type EventLike = { type?: string; date?: string; address?: string; gedcomAddress?: unknown; note?: string; cause?: string; sourceIds?: string[];
+    citationQuay?: unknown; citationMain?: unknown; gedcomEmails?: string[]; participants?: { note?: string }[] };
+
+/** Set or delete an optional text field (undefined deletes it). */
+function setText<T extends object, K extends keyof T>(holder: T, key: K, value: T[K] | undefined): void {
+    if (value === undefined) delete holder[key];
+    else holder[key] = value as T[K];
+}
+
+/** Mask one event's details by kind (the event itself stays unless the caller drops it). */
+function maskEvent(ev: EventLike, s: LivingSensitive): void {
+    if (!s.birthDates && ev.type && BIRTH_DATE_EVENTS.has(ev.type) && ev.date) {
+        const y = yearOf(ev.date);
+        if (y === null) delete ev.date; else ev.date = String(y);
+    }
+    if (!s.addresses) { delete ev.address; delete ev.gedcomAddress; }
+    if (!s.contacts) {
+        delete ev.gedcomEmails;
+        setText(ev, 'note', withoutEmailLines(ev.note));
+        for (const part of ev.participants ?? []) setText(part, 'note', withoutEmailLines(part.note));
+    }
+    if (!s.notes) {
+        delete ev.note;
+        for (const part of ev.participants ?? []) delete part.note;
+    }
+    if (!s.sources) { delete ev.sourceIds; delete ev.citationQuay; delete ev.citationMain; }
+}
+
+/** Which events a person shown in full keeps. */
+function keepsEvent(ev: { type?: string }, s: LivingSensitive): boolean {
+    if (!s.addresses && ev.type && RESIDENCE_EVENTS.has(ev.type)) return false;
+    if (!s.religion && ev.type && RELIGION_EVENTS.has(ev.type)) return false;
+    return true;
+}
+
+/** Whether a mask hides anything at all. */
+function masksAny(s: object): boolean {
+    return Object.values(s).some(v => v === false);
+}
+
+/** A living person shown in full: their details masked by kind. */
+function maskSensitive(person: Person, s: LivingSensitive): void {
+    if (!s.birthDates) {
+        const y = yearOf(person.birthDate);
+        if (y === null) delete person.birthDate; else person.birthDate = String(y);
+        delete person.birthAge;
+        delete person.gedcomDates;
+    }
+    if (!s.addresses) { delete person.birthAddress; delete person.deathAddress; }
+    if (!s.contacts) {
+        delete person.emails;
+        setText(person, 'notes', withoutEmailLines(person.notes));
+    }
+    if (!s.photos) {
+        delete person.photo;
+        delete person.photoOriginalName;
+        delete person.photoDate;
+        delete person.photoSource;
+    }
+    if (!s.notes) {
+        delete person.notes;
+        delete person.story;
+        delete person.question;
+        delete person.research;
+    }
+    if (!s.sources) {
+        delete person.sourceIds;
+        delete person.birthSourceIds;
+        delete person.deathSourceIds;
+        delete person.citationQuay;
+        delete person.citationMain;
+        delete person.research;
+        rewriteStorySources(person.story, () => []);
+    }
+    if (person.events) {
+        person.events = person.events.filter(ev => keepsEvent(ev, s));
+        for (const ev of person.events) maskEvent(ev, s);
+        if (person.events.length === 0) delete person.events;
+    }
+    if (masksAny(s)) forgetHiddenImports(person, true);
+}
+
+/** A couple whose living partners are shown in full: its details masked by kind. */
+function maskSensitiveCouple(partnership: Partnership, s: LivingSensitive): void {
+    if (!s.addresses) delete partnership.address;
+    if (!s.photos) {
+        delete partnership.photo;
+        delete partnership.photoOriginalName;
+        delete partnership.photoDate;
+        delete partnership.photoOriginal;
+    }
+    if (!s.contacts) setText(partnership, 'note', withoutEmailLines(partnership.note));
+    if (!s.notes) {
+        delete partnership.note;
+        delete partnership.story;
+        for (const part of partnership.participants ?? []) delete part.note;
+    }
+    if (!s.sources) {
+        delete partnership.sourceIds;
+        delete partnership.divorceSourceIds;
+        delete partnership.citationQuay;
+        delete partnership.citationMain;
+        rewriteStorySources(partnership.story, () => []);
+    }
+    if (partnership.events) {
+        partnership.events = partnership.events.filter(ev => keepsEvent(ev, s));
+        for (const ev of partnership.events) maskEvent(ev, s);
+        if (partnership.events.length === 0) delete partnership.events;
+    }
+    if (masksAny(s)) forgetHiddenImports(partnership, true);
+}
+
+/** A deceased person (or a couple of the deceased): causes, notes and citations by `d`. */
+function maskDeceased(holder: Person | Partnership, d: DeceasedDetails): void {
+    const h = holder as Partial<Person> & Partial<Partnership>;
+    if (!d.causes) delete h.deathCause;
+    if (!d.notes) {
+        delete h.notes;
+        delete h.note;
+        delete h.story;
+        delete h.question;
+        delete h.research;
+        for (const part of h.participants ?? []) delete part.note;
+    }
+    if (!d.sources) {
+        delete h.sourceIds;
+        delete h.birthSourceIds;
+        delete h.deathSourceIds;
+        delete h.divorceSourceIds;
+        delete h.citationQuay;
+        delete h.citationMain;
+        delete h.research;
+        rewriteStorySources(h.story, () => []);
+    }
+    for (const ev of (h.events ?? []) as EventLike[]) {
+        if (!d.causes) delete ev.cause;
+        if (!d.notes) {
+            delete ev.note;
+            for (const part of ev.participants ?? []) delete part.note;
+        }
+        if (!d.sources) { delete ev.sourceIds; delete ev.citationQuay; delete ev.citationMain; }
+    }
+    if (masksAny(d)) forgetHiddenImports(holder, false);
 }
 
 /**
@@ -431,7 +633,9 @@ export function applyLivingPrivacy(
     options: LivingPrivacyOptions = {}
 ): StromData {
     const copy = structuredClone(data);
-    if (mode === 'full') return copy;
+    // A gift's choices (spec 093 §4): people in full, masks by kind, the deceased's details.
+    const gift = !!(options.fullIds || options.sensitive || options.dead);
+    if (mode === 'full' && !gift) return copy;
     // The merge history keeps the details a merge changed, of the living too: never under a privacy mode.
     delete copy.merges;
 
@@ -466,19 +670,40 @@ export function applyLivingPrivacy(
             .filter(p => !p.isPlaceholder && isLivingPerson(p, currentYear, bounds))
             .map(p => p.id)
     );
+    // The living shown in full (all of them under 'full'); the rest are obscured by the mode.
+    const fullIds = new Set<string>(options.fullIds ?? []);
+    const shown = new Set([...living].filter(id => mode === 'full' || fullIds.has(id)));
+    const obscured = shown.size ? new Set([...living].filter(id => !shown.has(id))) : living;
+    const sensitive = options.sensitive;
+    const dead = options.dead;
 
     // A couple's details (dates, place, note, witnesses, narrative) describe
     // both of them, so they go as soon as either one is living — there is no
-    // half of them to keep.
+    // half of them to keep. A couple of the living shown in full keeps them,
+    // masked like the people.
     for (const partnership of Object.values(copy.partnerships)) {
-        if (living.has(partnership.person1Id) || living.has(partnership.person2Id)) {
+        if (obscured.has(partnership.person1Id) || obscured.has(partnership.person2Id)) {
             stripPartnershipDetails(partnership, mode);
             forgetHiddenImports(partnership, true);
+        } else if (shown.has(partnership.person1Id) || shown.has(partnership.person2Id)) {
+            if (sensitive) maskSensitiveCouple(partnership, sensitive);
+            if (dead) maskDeceased(partnership, dead);
+        } else if (dead) {
+            const p1 = copy.persons[partnership.person1Id];
+            const p2 = copy.persons[partnership.person2Id];
+            if ((p1 && !p1.isPlaceholder) || (p2 && !p2.isPlaceholder)) maskDeceased(partnership, dead);
         }
     }
 
     for (const person of Object.values(copy.persons)) {
-        if (!living.has(person.id)) continue;
+        if (shown.has(person.id)) {
+            if (sensitive) maskSensitive(person, sensitive);
+            continue;
+        }
+        if (!living.has(person.id)) {
+            if (dead && !person.isPlaceholder) maskDeceased(person, dead);
+            continue;
+        }
 
         switch (mode) {
             case 'initials': {
@@ -510,12 +735,15 @@ export function applyLivingPrivacy(
         forgetHiddenImports(person, true);
     }
     // Attachments (scans, letters) of the living and of their couples are private documents — always dropped.
+    // Those of the living shown in full go with their photos or their sources.
+    const shownMediaGo = !!sensitive && (!sensitive.photos || !sensitive.sources);
+    const mediaGo = (id: PersonId): boolean => obscured.has(id) || (shownMediaGo && shown.has(id));
     dropMediaPlaces(copy, place => {
         const pid = placePersonId(place);
-        if (pid) return living.has(pid);
+        if (pid) return mediaGo(pid);
         const uid = placePartnershipId(place);
         const union = uid ? copy.partnerships[uid] : undefined;
-        return !!union && (living.has(union.person1Id) || living.has(union.person2Id));
+        return !!union && (mediaGo(union.person1Id) || mediaGo(union.person2Id));
     });
     // A deceased person's own godparent or witness event keeps its role but
     // not whose event it was when that is a living person or a couple whose
@@ -526,8 +754,8 @@ export function applyLivingPrivacy(
             const at = ev.roleAt;
             if (!at) continue;
             const partnership = at.partnershipId ? copy.partnerships[at.partnershipId] : undefined;
-            if ((at.personId && living.has(at.personId))
-                || (partnership && (living.has(partnership.person1Id) || living.has(partnership.person2Id)))) {
+            if ((at.personId && obscured.has(at.personId))
+                || (partnership && (obscured.has(partnership.person1Id) || obscured.has(partnership.person2Id)))) {
                 delete at.personId;
                 delete at.partnershipId;
                 delete at.eventId;
