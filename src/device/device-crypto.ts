@@ -201,6 +201,8 @@ export interface DeviceRequest {
     b?: unknown;
     /** A binary body, base64url (b or b64, never both). */
     b64?: string;
+    /** `b64` is the body gzipped (only with b64; the gateway unpacks it, at most 200 MiB). */
+    z?: 'gzip';
 }
 
 /** What an answer says inside: the status, the headers, the body's bytes (base64url, null for none), gzipped or not. */
@@ -328,6 +330,17 @@ export async function gunzip(bytes: Uint8Array): Promise<Uint8Array | null> {
     }
 }
 
+/** Bytes gzipped by `CompressionStream`; null when the browser has none or it fails. */
+export async function gzip(bytes: Uint8Array): Promise<Uint8Array | null> {
+    if (typeof CompressionStream === 'undefined') return null;
+    try {
+        const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new CompressionStream('gzip'));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+    } catch {
+        return null;
+    }
+}
+
 /** Whether this browser can unpack a gzipped answer (else the app asks `Accept-Encoding: identity`). */
 export function canGunzip(): boolean {
     return typeof DecompressionStream !== 'undefined';
@@ -348,16 +361,16 @@ export async function responseBody(response: DeviceResponse): Promise<Uint8Array
 export const MEDIA_BLOCK = 1024 * 1024;
 
 /**
- * The nonce of block `index`: the base nonce XOR the index as a 64-bit
- * big-endian number in its last 8 bytes (as TLS 1.3 does with its sequence).
+ * The nonce of block `index`: the base nonce XOR the index as a 32-bit
+ * big-endian number in its last 4 bytes (the research's U9c).
  */
 export function mediaNonce(baseNonce: Uint8Array, index: number): Uint8Array {
     const out = new Uint8Array(baseNonce);
-    let n = index;
-    for (let i = 11; i >= 4 && n > 0; i--) {
-        out[i] ^= n & 0xff;
-        n = Math.floor(n / 256);
-    }
+    const n = index >>> 0;
+    out[8] ^= (n >>> 24) & 0xff;
+    out[9] ^= (n >>> 16) & 0xff;
+    out[10] ^= (n >>> 8) & 0xff;
+    out[11] ^= n & 0xff;
     return out;
 }
 

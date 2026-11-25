@@ -13,7 +13,7 @@
  */
 
 import {
-    b64url, fromB64url, deriveKey, pairProof, sealRequest, openResponse, openPair, responseBody, canGunzip, newNonce,
+    b64url, fromB64url, deriveKey, pairProof, sealRequest, openResponse, openPair, responseBody, canGunzip, newNonce, gzip,
     type DeviceRequest,
 } from './device-crypto';
 import {
@@ -65,6 +65,8 @@ export interface TunnelRequest {
     b?: unknown;
     /** Binary bytes (sent base64url). */
     bytes?: Uint8Array;
+    /** The body sent gzipped (`z: "gzip"` with `b64`) where the browser can: a send of the whole tree (`sync`). */
+    gzip?: boolean;
 }
 
 /** A tunnelled answer: the bridge's status, headers and body bytes (gunzipped). */
@@ -136,6 +138,11 @@ function report(o: GatewayOutcome): void {
 const nowMs = (): number => (options.now ?? Date.now)();
 const fetcher = (): typeof fetch => options.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
 const sleep = (ms: number): Promise<void> => (options.sleep ?? (m => new Promise(r => setTimeout(r, m))))(ms);
+
+/** A wait of the gateway's requests (tests give their own through configureGateway). */
+export function gatewaySleep(ms: number): Promise<void> {
+    return sleep(ms);
+}
 const url = (path: string, base = options.base ?? ''): string => `${base.replace(/\/+$/, '')}${path}`;
 
 /** The gateway's clock said by a 409 device.clock `{now}`: this device's evened out to it (PUT /device/media too). */
@@ -259,6 +266,22 @@ export async function pair(pairId: string, secret: string | Uint8Array, name: st
     return result;
 }
 
+/**
+ * The body of a tunnelled request: JSON or text as `b`, bytes as `b64`; asked
+ * gzipped (a send of the tree, U9c), its bytes gzipped in `b64` with `z:
+ * "gzip"` — a GEDCOM shrinks several times. A browser without
+ * CompressionStream sends it as before.
+ */
+async function bodyFields(req: TunnelRequest): Promise<Pick<DeviceRequest, 'b' | 'b64' | 'z'>> {
+    const plain = req.bytes ?? (typeof req.b === 'string' ? new TextEncoder().encode(req.b) : undefined);
+    if (req.gzip && plain) {
+        const packed = await gzip(plain);
+        if (packed) return { b64: b64url(packed), z: 'gzip' };
+    }
+    if (req.bytes) return { b64: b64url(req.bytes) };
+    return req.b !== undefined && req.b !== null ? { b: req.b } : {};
+}
+
 function retryAfterMs(headers: Headers | Record<string, string>): number {
     const raw = headers instanceof Headers ? headers.get('Retry-After') : (headers['Retry-After'] ?? headers['retry-after']);
     const s = Number(raw);
@@ -288,7 +311,7 @@ export async function tunnel(req: TunnelRequest): Promise<TunnelAnswer> {
         tree,
         ...(req.q && Object.keys(req.q).length ? { q: req.q } : {}),
         ...(Object.keys(h).length ? { h } : {}),
-        ...(req.bytes ? { b64: b64url(req.bytes) } : req.b !== undefined && req.b !== null ? { b: req.b } : {}),
+        ...(await bodyFields(req)),
     };
     let clockTried = false;
     let busyTried = false;
@@ -366,9 +389,12 @@ export async function deviceFetch(path: string, init: RequestInit & { tree?: str
     const p = qAt >= 0 ? clean.slice(0, qAt) : clean;
     const q: Record<string, string> = {};
     if (qAt >= 0) new URLSearchParams(clean.slice(qAt + 1)).forEach((v, k) => { q[k] = v; });
+    const m = (init.method ?? 'GET').toUpperCase();
     const answer = await tunnel({
-        m: init.method ?? 'GET',
+        m,
         p,
+        // A send of the tree goes gzipped (413 device.large / 400 device.body come back as its refusal).
+        ...(m === 'POST' && p === 'sync' ? { gzip: true } : {}),
         ...(init.tree ? { tree: init.tree } : {}),
         q,
         h: headersRecord(init.headers),

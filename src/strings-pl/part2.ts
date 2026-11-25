@@ -504,6 +504,8 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
             'tree.foreign': 'to nie wygląda na drzewo genealogiczne tego badania; można je wyeksportować i wczytać w badaniu jako inne drzewo',
             'tree.empty': 'drzewo dotarło puste lub nieczytelne',
             'adopt.busy': 'badanie właśnie przejmuje to drzewo',
+            'device.large': 'zmiany są zbyt duże, by wysłać je z tego urządzenia; można je wysłać z komputera',
+            'device.body': 'wysyłka dotarła uszkodzona; można ją wysłać ponownie',
             'send.failed': 'badanie nie zapisało zmian',
         } as Record<string, string>,
         refusedDetails: (r: string) => `Szczegóły (do przekazania): ${r}`,
@@ -898,6 +900,8 @@ export const plPart2: Pick<StringsType, 'crop' | 'portrait' | 'importImages' | '
         stepPick: 'Wybór',
         stepCheck: 'Kontrola',
         stepSend: 'Wysyłka',
+        /** A file of 0 B: a device never sends it (the research takes 1 B at least). */
+        whyEmpty: 'plik jest pusty (0 B)',
         dropHere: 'Przeciągnij tutaj pliki lub folder',
         zipNote: 'ZIP jest wysyłany w całości, rozpakuje go badanie.',
         pickFiles: 'Wybierz pliki…',

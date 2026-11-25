@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-    b64url, deriveKey, openRequest, sealResponse, sealPair, pairProof, fromB64url, type RequestEnvelope,
+    b64url, deriveKey, openRequest, sealResponse, sealPair, pairProof, fromB64url, sha256Hex, type RequestEnvelope,
 } from '../device/device-crypto';
 import { configureGateway, pair, tunnel, deviceFetch, hello, GatewayError, gatewayClockSkew } from '../device/gateway-client';
 import { setDeviceKv, memoryKv, loadPairing, savePairing, hasPairingMark, deviceQueue, chooseTree, chosenTreeId, forgetPairing, saveLastView, loadLastView, proposeDevice, deviceKindOf } from '../device/device-store';
-import { gzipSync } from 'node:zlib';
+import { gzipSync, gunzipSync } from 'node:zlib';
+import vectors from './fixtures/device-crypto.json';
+import { getStringsForLang } from '../strings';
 
 const NOW = Date.UTC(2026, 10, 24, 10, 30, 0);
 const SECRET = new Uint8Array(32).map((_, i) => i + 1);
@@ -125,9 +127,37 @@ describe('gateway client: the tunnel', () => {
         const seen: unknown[] = [];
         configureGateway({ fetch: fakeFetch(tunnelHandler(req => { seen.push(req); return { s: 200, body: '{}' }; })) });
         await deviceFetch('waiting/T0001', { method: 'POST', body: JSON.stringify({ do: 'answer' }), headers: { 'Content-Type': 'application/json' } });
-        await deviceFetch('sync', { method: 'POST', body: new Uint8Array([1, 2, 3]) });
+        await deviceFetch('media/known', { method: 'POST', body: new Uint8Array([1, 2, 3]) });
         expect(seen[0]).toMatchObject({ m: 'POST', p: 'waiting/T0001', b: '{"do":"answer"}', h: { 'content-type': 'application/json' } });
         expect(fromB64url((seen[1] as { b64: string }).b64)).toEqual(new Uint8Array([1, 2, 3]));
+    });
+
+    it('sends a send of the tree gzipped (z: gzip with b64) as the research\'s requestGzip vector', async () => {
+        await paired();
+        const V = vectors.requestGzip;
+        const seen: NonNullable<ReturnType<typeof openRequest>>[] = [];
+        configureGateway({ fetch: fakeFetch(tunnelHandler(req => { seen.push(req!); return { s: 200, body: '{"ok":true}' }; })) });
+        await deviceFetch('sync', { method: 'POST', body: V.body, headers: V.request.h, tree: V.request.tree });
+        const r = seen[0];
+        expect(Object.keys(r).sort()).toEqual(Object.keys(V.request).sort());
+        expect(r).toMatchObject({ m: V.request.m, p: V.request.p, tree: V.request.tree, z: 'gzip' });
+        expect(r.h).toMatchObject({ 'content-type': V.request.h['Content-Type'] });
+        expect(r.b).toBeUndefined();
+        const unpacked = new Uint8Array(gunzipSync(fromB64url(r.b64)!));
+        expect(unpacked.length).toBe(V.bodyLength);
+        expect(sha256Hex(unpacked)).toBe(V.bodySha256);
+        expect(fromB64url(r.b64)!.length).toBeLessThan(V.bodyLength);
+        // Other writes go as before.
+        await deviceFetch('waiting/T0001', { method: 'POST', body: '{"do":"answer"}' });
+        expect(seen[1].z).toBeUndefined();
+    });
+
+    it('a send refused by the gateway as too large or damaged reads as the send\'s refusal in the app\'s words', () => {
+        for (const lang of ['en', 'cs', 'de', 'pl'] as const) {
+            const words = getStringsForLang(lang).sync.refusedCodes;
+            expect(words['device.large']).toBeTruthy();
+            expect(words['device.body']).toBeTruthy();
+        }
     });
 
     it('returns an error of the bridge inside the tunnel as an answer (403 computer-only with its action)', async () => {
