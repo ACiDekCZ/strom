@@ -270,7 +270,7 @@ test.describe('en', () => {
         const dlg = page.locator('#device-home-modal');
         await expect(dlg.getByRole('heading', { name: 'Home-screen icon' })).toBeVisible();
         // a computer here: its bookmark first, then the phones
-        await expect(dlg.locator('.device-home-sys h3')).toHaveText(['Computer', 'iPhone and iPad (Safari)', 'Android (Chrome)']);
+        await expect(dlg.locator('.device-home-sys h3')).toHaveText(['Computer', 'iPhone and iPad (Safari, Chrome)', 'Android (Chrome)']);
         await expect(dlg).toContainText('The icon opens the Strom app from Pracovna');
         await expect.poll(() => new URL(page.url()).hash).toMatch(/^#home\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}$/);
         expect(gw.tunnelled.find(t => t.p === 'device/home')).toMatchObject({ m: 'POST' });
