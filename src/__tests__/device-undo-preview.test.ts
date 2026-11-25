@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { undoPreviewOf, undoFieldLine, deviceUndoableSend } from '../ui/device-progress-ui';
 import type { ResearchSendRecord } from '../research-link';
+import type { StromData } from '../types';
 import { setLanguage } from '../strings';
 
 afterEach(() => setLanguage('en'));
@@ -20,7 +21,7 @@ describe('Undo this send on a device: the preview (spec 094 §4, 4.9; K2.3)', ()
         }, ME);
         expect(p.already).toBe(false);
         expect(p.fields.map(undoFieldLine)).toEqual([
-            'Death – Bohumil Pýchavka: 12 JAN 1934 → 1934',
+            'Death – Bohumil Pýchavka: 12 Jan 1934 → 1934',
             'Marriage – Bohumil Pýchavka: Mlýnky → empty',
             'Note – Bohumil Pýchavka: The miller of Mlýnky → removed',
         ]);
@@ -70,5 +71,46 @@ describe('"Undo send…" among the research\'s actions on a device (4.2, 6.1): w
         expect(deviceUndoableSend(sends, IPAD.id + 'x', NOW)).toBeNull();
         expect(deviceUndoableSend(sends, '', NOW)).toBeNull();
         expect(deviceUndoableSend(null, ME, NOW)).toBeNull();
+    });
+});
+
+describe('Undo this send on a device: each change in the app\'s words (094 U10-n1, N2)', () => {
+    const DATA = {
+        persons: {
+            p1: { id: 'p1', firstName: 'Hřibík', lastName: 'Pýchavka', gender: 'male', refn: 'P0003', parentIds: [], partnerships: ['u1'],
+                researchVerify: { birth: { eid: 'E0031' }, 'event:ev1': { eid: 'E0033' } },
+                events: [{ id: 'ev1', type: 'occupation' }] },
+            p2: { id: 'p2', firstName: 'Holubinka', lastName: 'Ryzcová', gender: 'female', refn: 'P0002', parentIds: [], partnerships: ['u1'] },
+        },
+        partnerships: {
+            u1: { id: 'u1', person1Id: 'p1', person2Id: 'p2', childIds: [], researchId: 'F0001', researchVerify: { marriage: { eid: 'E0040' } } },
+        },
+    } as unknown as StromData;
+    const BODY = {
+        input: 'I0007', undone: 4, fields: [
+            { what: 'Birth – Hřibík Pýchavka (E0031)', field: 'date', from: '3 APR 1902', to: '1902', event: 'E0031', person: 'P0003' },
+            { what: 'Marriage – Hřibík Pýchavka & Holubinka Ryzcová (E0040)', field: 'place', from: 'Mlýnky', to: '', event: 'E0040', family: 'F0001' },
+            { what: 'Occupation – Hřibík Pýchavka (E0033)', field: 'fact', from: '1925, Mlýnky, miller', to: '', event: 'E0033', person: 'P0003' },
+            { what: 'Hřibík Pýchavka', field: 'name', from: 'Hřibík Pýchavka', to: '', person: 'P0003' },
+        ],
+    };
+
+    it('the fact and the person from the tree here, the date in the app\'s style, in the app\'s language', () => {
+        setLanguage('de');
+        expect(undoPreviewOf(BODY, ME, DATA).fields.map(undoFieldLine)).toEqual([
+            'Geburt – Hřibík Pýchavka: 3.4.1902 → 1902',
+            'Heirat – Hřibík Pýchavka & Holubinka Ryzcová: Mlýnky → leer',
+            'Beruf – Hřibík Pýchavka: 1925, Mlýnky, miller → wird entfernt',
+            'Name – Hřibík Pýchavka: Hřibík Pýchavka → wird entfernt',
+        ]);
+        setLanguage('cs');
+        expect(undoFieldLine(undoPreviewOf(BODY, ME, DATA).fields[0])).toBe('Narození – Hřibík Pýchavka: 3. 4. 1902 → 1902');
+    });
+
+    it('the research\'s words only when the tree here does not hold the fact (without its id)', () => {
+        const other = { persons: {}, partnerships: {} } as unknown as StromData;
+        const lines = undoPreviewOf(BODY, ME, other).fields.map(undoFieldLine);
+        expect(lines[0]).toBe('Birth – Hřibík Pýchavka: 3 Apr 1902 → 1902');
+        expect(lines[1]).toBe('Marriage – Hřibík Pýchavka & Holubinka Ryzcová: Mlýnky → empty');
     });
 });

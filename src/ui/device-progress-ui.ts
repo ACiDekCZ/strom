@@ -20,6 +20,12 @@ import { sendSourceWords } from '../conflict-devices.js';
 import { appendChangeText, el, researchSession, type ChangeSourceGateway, type LiveChangeItem, type LiveSession } from './research-ui.js';
 import { storedResearchBridge } from '../research-device.js';
 import { BRIDGE_ANSWER_MS } from '../bridge-ask.js';
+import { researchFactRef, researchFamilyRef, researchPersonRef } from '../verify.js';
+import { shownName } from '../person-name.js';
+import { coupleEventLabel } from '../events.js';
+import { originFactLabel } from './fact-origin-ui.js';
+import { researchValueText } from './person-research-ui.js';
+import type { StromData } from '../types.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet' | 'window';
 
@@ -80,6 +86,8 @@ export function deviceUndoableSend(sends: readonly ResearchSendRecord[] | null |
 /** One change of `device/sync/<I>/undo`'s preview: `from` as it is now, `to` once the send is undone. */
 interface UndoField {
     what: string;
+    /** The part changed as the research names it (date, place, value…; fact, name, person: the whole of it). */
+    field: string;
     from: string;
     to: string;
     /** A whole fact, name or person the send added (it goes away; not just emptied). */
@@ -95,14 +103,61 @@ export interface UndoPreview {
     already: boolean;
 }
 
-/** The preview of an undo as the gateway answers it (`me`: this device, never named as another). */
-export function undoPreviewOf(body: Record<string, unknown>, me: string | null): UndoPreview {
+/**
+ * The fact a preview's change is about in the app's words ("Birth – Hřibík Pýchavka"), from the research's
+ * refs (`person` / `family`, `event`) and this tree's facts with their research ids (`_STROM_EID`); null when
+ * the tree here does not hold it (the research's own words are shown then).
+ */
+export function undoFieldWhat(data: StromData, f: { field: string; event?: unknown; person?: unknown; family?: unknown }): string | null {
+    const eid = researchFactRef(f.event);
+    const factOf = (verify: Record<string, { eid?: string } | undefined> | undefined): string | null =>
+        eid ? Object.entries(verify ?? {}).find(([, v]) => v?.eid === eid)?.[0] ?? null : null;
+    const pref = researchPersonRef(f.person);
+    if (pref) {
+        const person = Object.values(data.persons ?? {}).find(p => researchPersonRef(p?.refn) === pref);
+        if (!person) return null;
+        const name = shownName(person);
+        if (f.field === 'person') return name;
+        if (f.field === 'name') return `${strings.research.factName} – ${name}`;
+        const fact = factOf(person.researchVerify);
+        return fact ? `${originFactLabel(person, fact)} – ${name}` : null;
+    }
+    const fref = researchFamilyRef(f.family);
+    if (!fref) return null;
+    const couple = Object.values(data.partnerships ?? {}).find(x => researchFamilyRef(x?.researchId) === fref);
+    if (!couple) return null;
+    const fact = factOf(couple.researchVerify);
+    const ev = fact?.startsWith('event:') ? (couple.events ?? []).find(e => e?.id === fact.slice(6)) : undefined;
+    const label = fact === 'marriage' ? strings.table.evKind.marriage : fact === 'divorce' ? strings.table.evKind.divorce
+        : ev ? coupleEventLabel(ev) : '';
+    if (!label) return null;
+    const names = [couple.person1Id, couple.person2Id].map(id => data.persons?.[id]).filter(p => !!p).map(p => shownName(p!));
+    return `${label} – ${names.join(' & ')}`;
+}
+
+/** A preview's value as the app shows it: a GEDCOM date in the app's date style (also within a whole fact), else as said. */
+export function undoValueText(field: string, value: string): string {
+    if (!value) return value;
+    if (field === 'date') return researchValueText('', value);
+    if (field === 'fact') return value.split(', ').map(part => researchValueText('', part)).join(', ');
+    return value;
+}
+
+/**
+ * The preview of an undo as the gateway answers it (`me`: this device, never named as another). `data`: the tree
+ * here — each change named from its refs in the app's words; the research's `what` only when the tree cannot.
+ */
+export function undoPreviewOf(body: Record<string, unknown>, me: string | null, data?: StromData): UndoPreview {
     const text = (v: unknown): string => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '').replace(/\s+/g, ' ').trim().slice(0, 200);
     const list = Array.isArray(body.fields) ? body.fields : [];
     const fields = list.slice(0, 50).flatMap((f: unknown) => {
         const r = f && typeof f === 'object' ? f as Record<string, unknown> : null;
-        const what = r ? text(r.what) || text(r.field) : '';
-        return r && what ? [{ what, from: text(r.from), to: text(r.to), whole: ['fact', 'name', 'person'].includes(text(r.field)) }] : [];
+        if (!r) return [];
+        const field = text(r.field);
+        const own = data ? undoFieldWhat(data, { field, event: r.event, person: r.person, family: r.family }) : null;
+        // The research's words: without the fact's id it adds ("Birth – Jan Lhoták (E0001)").
+        const what = own || text(r.what).replace(/\s*\(E\d+\)$/, '') || field;
+        return what ? [{ what, field, from: undoValueText(field, text(r.from)), to: undoValueText(field, text(r.to)), whole: ['fact', 'name', 'person'].includes(field) }] : [];
     });
     const keptFrom: string[] = [];
     for (const k of Array.isArray(body.kept) ? body.kept.slice(0, 50) : []) {
@@ -229,7 +284,7 @@ export const deviceProgressMethods = uiModule({
         const input = send.input;
         if (!input) return;
         const path = `device/sync/${encodeURIComponent(input)}/undo`;
-        const preview = await researchBridgeWrite(base, 'POST', path, { dry: true }, r => undoPreviewOf(r, thisDeviceId()));
+        const preview = await researchBridgeWrite(base, 'POST', path, { dry: true }, r => undoPreviewOf(r, thisDeviceId(), DataManager.getData()));
         if (!preview.ok) {
             // Refused as the computer's (403): said once by the transport, the button gone.
             if (!researchDeviceAllows('sync-undo-this')) return;

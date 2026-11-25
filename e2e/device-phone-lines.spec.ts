@@ -26,7 +26,8 @@ const GED = [
     '0 @P0001@ INDI', '1 NAME Bonifác /Pýchavka/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '1 FAMS @F0001@',
     '0 @P0002@ INDI', '1 NAME Holubinka /Ryzcová/', '1 SEX F', '1 REFN P0002', '2 TYPE strom-research', '1 FAMS @F0001@',
     '0 @P0003@ INDI', '1 NAME Hřibík /Pýchavka/', '1 SEX M', '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
-    '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@',
+    '1 BIRT', '2 DATE 3 APR 1902', '2 _STROM_EID E0031', '1 OCCU The miller of Mlýnky', '2 _STROM_EID E0041',
+    '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@', '1 MARR', '2 PLAC Mlýnky', '2 _STROM_EID E0040',
     '0 TRLR',
 ].join('\n');
 const ACCEPTS = { mode: 'research', sync: { auto: 'off' }, sources: true, media: { max: 50 * 1024 * 1024, taskImages: true, tasks: 'open' } };
@@ -91,9 +92,12 @@ function bridge(req: DeviceRequest, device: { id: string; name: string; kind: st
         if (bodyOf<{ dry?: boolean }>(req).dry) {
             if (undone.has(undo[1])) return { s: 200, body: { input: undo[1], undone: 0, undoneAt: at(-10) } };
             return { s: 200, body: { input: undo[1], undone: 3, fields: [
-                { what: 'Birth – Hřibík Pýchavka', field: 'date', from: '3 APR 1902', to: '1902', event: 'E0031', person: 'P0003' },
-                { what: 'Marriage – Bonifác Pýchavka', field: 'place', from: 'Mlýnky', to: '', event: 'E0040', family: 'F0001' },
-                { what: 'Note – Hřibík Pýchavka', field: 'fact', from: 'The miller of Mlýnky', to: '', event: 'E0041', person: 'P0003' },
+                // As the research names them (in its own language, the fact's id after it); the app says them in its own.
+                { what: 'Narození – Hřibík Pýchavka (E0031)', field: 'date', from: '3 APR 1902', to: '1902', event: 'E0031', person: 'P0003' },
+                { what: 'Sňatek – Bonifác Pýchavka & Holubinka Ryzcová (E0040)', field: 'place', from: 'Mlýnky', to: '', event: 'E0040', family: 'F0001' },
+                { what: 'Povolání – Hřibík Pýchavka (E0041)', field: 'fact', from: 'The miller of Mlýnky', to: '', event: 'E0041', person: 'P0003' },
+                // A fact the tree here does not hold: the research's words (without the id).
+                { what: 'Pohřeb – Hřibík Pýchavka (E0050)', field: 'place', from: 'Mlýnky', to: '', event: 'E0050', person: 'P0003' },
             ], kept: [{ event: 'E0031', fields: ['place'], what: 'Birth – Hřibík Pýchavka', by: 'send', client: { id: 'dv_ipad0000000000000000000000000', name: 'iPad · Safari' } }] } };
         }
         undone.add(undo[1]);
@@ -411,6 +415,13 @@ test.describe('Progress on a phone of the home network', () => {
         }
     }
 
+    const UNDO_LINES = {
+        en: ['Birth – Hřibík Pýchavka: 3 Apr 1902 → 1902', 'Marriage – Bonifác Pýchavka & Holubinka Ryzcová: Mlýnky → empty',
+            'Occupation – Hřibík Pýchavka: The miller of Mlýnky → removed', 'Pohřeb – Hřibík Pýchavka: Mlýnky → empty'],
+        de: ['Geburt – Hřibík Pýchavka: 3.4.1902 → 1902', 'Heirat – Bonifác Pýchavka & Holubinka Ryzcová: Mlýnky → leer',
+            'Beruf – Hřibík Pýchavka: The miller of Mlýnky → wird entfernt', 'Pohřeb – Hřibík Pýchavka: Mlýnky → leer'],
+    };
+
     test('Undo this send: the fields first, then the undo through the gateway', async ({ page }) => {
         await paired(page, { lang: 'en', width: 390, dark: false });
         await openOverview(page);
@@ -423,9 +434,7 @@ test.describe('Progress on a phone of the home network', () => {
         await expect(confirm.locator('#confirm-title')).toHaveText('Undo this send?');
         // Whose send and when, each field now → after (a fact it added is removed), whose later changes stay.
         await expect(confirm.locator('#confirm-message')).toHaveText(new RegExp(`^From ${gw.devices[0].name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}, \\d{1,2}:\\d{2}`));
-        await expect(confirm.locator('.confirm-list li')).toHaveText([
-            'Birth – Hřibík Pýchavka: 3 APR 1902 → 1902', 'Marriage – Bonifác Pýchavka: Mlýnky → empty', 'Note – Hřibík Pýchavka: The miller of Mlýnky → removed',
-        ]);
+        await expect(confirm.locator('.confirm-list li')).toHaveText(UNDO_LINES.en);
         await expect(confirm.locator('.confirm-list-after')).toHaveText('Only these fields are reverted. Later changes from iPad · Safari and from Pracovna stay.');
         expect(scene.writes.map(w => `${w.p} ${JSON.stringify(bodyOf(w))}`)).toEqual(['device/sync/I0007/undo {"dry":true}']);
         await noSideways(page);
@@ -470,7 +479,8 @@ test.describe('Progress on a phone of the home network', () => {
             const confirm = page.locator('#confirmation-modal');
             await expect(confirm.locator('#confirm-title')).toHaveText('Dieses Senden zurücknehmen?');
             await expect(confirm.locator('#confirm-message')).toHaveText(/^Von .+, \d{1,2}:\d{2}/);
-            await expect(confirm.locator('.confirm-list li').nth(2)).toHaveText('Note – Hřibík Pýchavka: The miller of Mlýnky → wird entfernt');
+            // Each field in the app's words and date style, not the research's (the research's own only for a fact not held here).
+            await expect(confirm.locator('.confirm-list li')).toHaveText(UNDO_LINES.de);
             await expect(confirm.locator('.confirm-list-after')).toHaveText('Nur diese Felder werden zurückgesetzt. Spätere Änderungen von iPad · Safari und von Pracovna bleiben.');
             await expect(confirm.locator('#confirm-ok-btn')).toHaveText('Senden zurücknehmen');
             await expect(confirm.locator('.research-open-mark, .research-ai-badge')).toHaveCount(0);
