@@ -256,7 +256,8 @@ export const treeManagementMethods = uiModule({
         // Normal mode: show storage trees
         const activeTree = TreeManager.getActiveTreeMetadata();
         if (nameEl) {
-            nameEl.textContent = activeTree?.name || '…';
+            // A phone's Research screen names its own tree (the tree under it may be another, or none yet).
+            nameEl.textContent = this.phoneResearchTreeName() || activeTree?.name || '…';
         }
         // A merge not sent to the tree's research yet, quietly beside the switcher (spec 134 11b).
         this.listenForMergeHold();
@@ -317,6 +318,7 @@ export const treeManagementMethods = uiModule({
         // research: one quiet line says where new trees and import are (spec 094 §3).
         if (inDeviceMode()) html += `
             <div class="tree-switcher-divider"></div>
+            ${this.phoneResearchActive() ? `<div class="tree-switcher-quiet" id="tree-switcher-no-load">${this.escapeHtml(strings.deviceResearch.switchNoLoad)}</div>` : ''}
             <div class="tree-switcher-quiet" id="tree-switcher-not-here">${this.escapeHtml(deviceTreesNotHere())}</div>
         `;
         else html += `
@@ -820,7 +822,9 @@ export const treeManagementMethods = uiModule({
         });
         this.presentMenuSheet(strings.device.treesTitle, [
             { rows },
-            { divider: true, rows: [], quiet: deviceTreesNotHere() },
+            // On a phone's Research screen a switch changes only the screen's data (spec 094 §1 point 8).
+            ...(this.phoneResearchActive() ? [{ divider: true, rows: [], quiet: strings.deviceResearch.switchNoLoad }] : []),
+            { divider: !this.phoneResearchActive(), rows: [], quiet: deviceTreesNotHere() },
         ]);
         this.kickDeviceTreeRows();
     },

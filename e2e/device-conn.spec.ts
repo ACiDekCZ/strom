@@ -72,7 +72,7 @@ async function pairedApp(page: Page, gw: FakeGateway): Promise<void> {
 async function queue(page: Page, entries: Record<string, unknown>): Promise<void> {
     await page.evaluate(async (all) => {
         const db = await new Promise<IDBDatabase>((resolve, reject) => {
-            const req = indexedDB.open('strom-device', 1);
+            const req = indexedDB.open('strom-device');
             req.onsuccess = () => resolve(req.result);
             req.onerror = () => reject(req.error);
         });
@@ -90,7 +90,7 @@ async function queue(page: Page, entries: Record<string, unknown>): Promise<void
 async function keptPhotos(page: Page, names: string[]): Promise<void> {
     await page.evaluate(async ({ tree, names }) => {
         const db = await new Promise<IDBDatabase>((resolve, reject) => {
-            const req = indexedDB.open('strom-device', 1);
+            const req = indexedDB.open('strom-device');
             req.onsuccess = () => resolve(req.result);
             req.onerror = () => reject(req.error);
         });
@@ -111,7 +111,7 @@ async function keptPhotos(page: Page, names: string[]): Promise<void> {
 /** The keys of the device's queue. */
 async function queueKeys(page: Page): Promise<string[]> {
     return page.evaluate(async () => {
-        const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('strom-device', 1); r.onsuccess = () => resolve(r.result); });
+        const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('strom-device'); r.onsuccess = () => resolve(r.result); });
         const keys = await new Promise<IDBValidKey[]>((resolve) => { const r = db.transaction('queue').objectStore('queue').getAllKeys(); r.onsuccess = () => resolve(r.result); });
         db.close();
         return keys.map(String).sort();

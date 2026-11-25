@@ -116,6 +116,7 @@ import { deviceStartMethods } from './device-start-ui.js';
 import { deviceConnMethods } from './device-conn-ui.js';
 import { devicePhotosMethods } from './device-photos-ui.js';
 import { deviceModeMethods } from './device-mode-ui.js';
+import { phoneResearchMethods } from './phone-research-ui.js';
 import { deviceOfflineMethods } from './device-offline-ui.js';
 import { deviceProgressMethods } from './device-progress-ui.js';
 import { deviceDecideMethods } from './device-decide-ui.js';
@@ -910,6 +911,9 @@ Object.assign(UIClass.prototype, devicePhotosMethods);
 type DeviceModeMethods = typeof deviceModeMethods;
 export interface UIClass extends DeviceModeMethods {}
 Object.assign(UIClass.prototype, deviceModeMethods);
+type PhoneResearchMethods = typeof phoneResearchMethods;
+export interface UIClass extends PhoneResearchMethods {}
+Object.assign(UIClass.prototype, phoneResearchMethods);
 type DeviceOfflineMethods = typeof deviceOfflineMethods;
 export interface UIClass extends DeviceOfflineMethods {}
 Object.assign(UIClass.prototype, deviceOfflineMethods);

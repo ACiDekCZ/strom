@@ -537,6 +537,11 @@ export const miscMethods = uiModule({
     // ==================== DISPLAY VIEW MODE (family / descendants) ====================
 
     setDisplayViewMode(mode: ViewMode): void {
+        // A phone's Research screen (spec 094 §7): a view is the tree's, opened from the screen first.
+        if (this.phoneResearchActive()) {
+            void this.phoneOpenTree({ view: mode });
+            return;
+        }
         // The Research overview open without following closes with a switch, as by its ⤡.
         const from = TreeRenderer.getViewMode();
         if (mode === from) return;
@@ -586,10 +591,12 @@ export const miscMethods = uiModule({
         refreshWindowControls();
         // Mobile bottom bar: three primary view tabs plus "More" (fan, map and
         // timeline live in the More sheet, so More lights up while one is active; spec 082 K1.1).
-        document.getElementById('bb-view-family')?.classList.toggle('active', mode === 'family');
-        document.getElementById('bb-view-descendants')?.classList.toggle('active', mode === 'descendants');
-        document.getElementById('bb-view-table')?.classList.toggle('active', mode === 'table');
-        document.getElementById('bb-view-more')?.classList.toggle('active', mode === 'fan' || mode === 'map' || mode === 'timeline');
+        // A phone's Research screen seen: its own tab is the one marked (spec 094 §1 point 3).
+        const tree = !this.phoneResearchActive();
+        document.getElementById('bb-view-family')?.classList.toggle('active', tree && mode === 'family');
+        document.getElementById('bb-view-descendants')?.classList.toggle('active', tree && mode === 'descendants');
+        document.getElementById('bb-view-table')?.classList.toggle('active', tree && mode === 'table');
+        document.getElementById('bb-view-more')?.classList.toggle('active', tree && (mode === 'fan' || mode === 'map' || mode === 'timeline'));
 
         const badge = document.getElementById('descendants-badge');
         const text = document.getElementById('descendants-badge-text');

@@ -111,7 +111,7 @@ async function keptPhotos(page: Page, names: string[], handed = false): Promise<
     await page.evaluate(async ({ research, names, png, handed }) => {
         const tree = handed ? window.Strom.TreeManager.getActiveTreeId()! : research;
         const db = await new Promise<IDBDatabase>((resolve, reject) => {
-            const req = indexedDB.open('strom-device', 1);
+            const req = indexedDB.open('strom-device');
             req.onsuccess = () => resolve(req.result);
             req.onerror = () => reject(req.error);
         });
@@ -133,7 +133,7 @@ async function keptPhotos(page: Page, names: string[], handed = false): Promise<
 
 async function queueKeys(page: Page): Promise<string[]> {
     return page.evaluate(async () => {
-        const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('strom-device', 1); r.onsuccess = () => resolve(r.result); });
+        const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('strom-device'); r.onsuccess = () => resolve(r.result); });
         const keys = await new Promise<IDBValidKey[]>((resolve) => { const r = db.transaction('queue').objectStore('queue').getAllKeys(); r.onsuccess = () => resolve(r.result); });
         db.close();
         return keys.map(String).sort();
@@ -304,7 +304,7 @@ test.describe('a phone of the home network (touch)', () => {
         // on the device says it was handed over, which is what a reload leaves (the tests above).
         const handed = await page.evaluate(async () => {
             const tree = window.Strom.TreeManager.getActiveTreeId()!;
-            const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('strom-device', 1); r.onsuccess = () => resolve(r.result); });
+            const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('strom-device'); r.onsuccess = () => resolve(r.result); });
             const v = await new Promise<{ handedAt?: string; photos: unknown[] } | undefined>((resolve) => {
                 const r = db.transaction('queue').objectStore('queue').get(`batch:${tree}`);
                 r.onsuccess = () => resolve(r.result as never);

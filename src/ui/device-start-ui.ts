@@ -16,7 +16,8 @@ import {
     deviceModeCandidate, takeDeviceCode, startDeviceMode, restartDeviceMode, type DeviceModeStart,
 } from '../device/device-mode.js';
 import { hasPairingMark, chosenTreeId, chooseTree, computerLabelOf, deviceTreeIdOk, pairingNow, type DevicePairing, type DeviceTree } from '../device/device-store.js';
-import { retryDeviceConnection } from '../device/device-connection.js';
+import { retryDeviceConnection, deviceConnection } from '../device/device-connection.js';
+import { phoneResearchReady, phoneResearchTreeId, type PhoneTreeOpen } from './phone-research-ui.js';
 import { startTreeLoad, currentTreeLoad } from './tree-load-progress.js';
 import { bridgeGivesImagesByHash } from '../research-tree-file.js';
 import { imagesUrlOf } from '../research-image-refs.js';
@@ -185,6 +186,15 @@ export const deviceStartMethods = uiModule({
             } else if (pairing.trees.length > 1 && !pairing.treeId) {
                 await chooseTree(treeId);
             }
+            // A phone (spec 094 K3.13, §8 points 6–7): the Research screen first, the tree never downloaded for it —
+            // it comes when asked for (phoneOpenTree). A research that gives the screen nothing: the tree as before.
+            if (deviceTreeIdOk(treeId) && await this.phoneResearchFirst(treeId)) {
+                this.closeDeviceBoot();
+                this.showPhoneResearch();
+                this.showDeviceHomeLine();
+                this.refreshResearchMenu();
+                return;
+            }
             // A first open cancelled (or failed, Try again not taken) with no research's tree open here: the
             // chooser again, never the app's own empty tree under the research's connection.
             // A tree held here already (paired again, its earlier pairing's tree) opens as it is, never downloaded again:
@@ -255,7 +265,8 @@ export const deviceStartMethods = uiModule({
         }
         if (back) return false;
         const held = TreeManager.findTreeByResearchId(treeId);
-        if (first && held && DataManager.getCurrentTreeId() === held.id) this.setDisplayViewMode('family');
+        // A phone's first open from its Research screen chooses the view itself (phoneOpenTree).
+        if (first && held && DataManager.getCurrentTreeId() === held.id && !phoneResearchReady()) this.setDisplayViewMode('family');
         this.showDeviceHomeLine();
         this.refreshResearchMenu();
         // A file whose header names nothing: the research's name now (its status, `tree.name`), the pairing's only
@@ -317,6 +328,50 @@ export const deviceStartMethods = uiModule({
                 if (timer !== undefined) clearTimeout(timer);
             },
         };
+    },
+
+    /** A copy of the research's tree is held on this device (it opens without a download). */
+    deviceTreeHeldHere(researchId: string): boolean {
+        return !!TreeManager.findTreeByResearchId(researchId);
+    },
+
+    /**
+     * The research's tree opened from a phone's Research screen (spec 094 §7): the copy held here at once (its newer
+     * version afterwards, as on the computer); else downloaded through the gateway with the progress's toast (over
+     * the screen's dock) and its Cancel; a failure said by that toast with Try again (`retry`). No connection and no
+     * copy: nothing asked ('offline').
+     */
+    async deviceOpenPhoneTree(researchId: string, retry: () => void): Promise<PhoneTreeOpen> {
+        if (!deviceTreeIdOk(researchId)) return 'failed';
+        const pairedName = pairingNow()?.trees.find(t => t.id === researchId)?.name;
+        const after = (): void => {
+            this.refreshResearchMenu();
+            void this.pollResearchBridge({ reschedule: true }).then(() => {
+                this.deviceTreeNamed(researchId, pairedName);
+                this.deviceResumeImages(researchId);
+            });
+        };
+        const held = TreeManager.findTreeByResearchId(researchId);
+        if (held) {
+            if (DataManager.getCurrentTreeId() !== held.id && await this.switchToTree(held.id) !== 'switched') return 'cancel';
+            after();
+            return 'open';
+        }
+        const conn = deviceConnection()?.state;
+        if (conn && conn !== 'connected' && conn !== 'connecting') return 'offline';
+        const load = startTreeLoad({ treeId: null, retry });
+        const base = deviceBridgeBase(researchId, researchDeviceState()?.origin ?? location.origin);
+        await this.importResearchFromUrl(`${base}/tree.ged`, { takeSame: true, load });
+        const now = TreeManager.findTreeByResearchId(researchId);
+        if (!now || DataManager.getCurrentTreeId() !== now.id) return load.cancelled ? 'cancel' : 'failed';
+        after();
+        return 'open';
+    },
+
+    /** A person of the research's tree open here (P…, its REFN) in focus, brought into view (§7 point 8). */
+    deviceShowResearchPerson(refn: string): void {
+        const person = Object.values(DataManager.getData().persons).find(p => p.refn === refn);
+        if (person) this.showLivePerson(person.id);
     },
 
     /** The tree open now is one of the pairing's research trees (never the app's own tree of its first start). */
@@ -468,10 +523,14 @@ export const deviceStartMethods = uiModule({
             id: t.id, name: t.name, persons: t.personCount ?? 0, ...(t.research?.id ? { researchId: t.research.id } : {}),
         }));
         const researchId = TreeManager.getActiveTreeMetadata()?.research?.id;
-        return deviceTreeChoices(pairingNow()?.trees ?? [], held, {
+        const choices = deviceTreeChoices(pairingNow()?.trees ?? [], held, {
             currentId: TreeManager.getActiveTreeId(),
             statusName: researchId ? this.researchStatusOf(researchId)?.name ?? null : null,
         });
+        // A phone's Research screen: its tree is the one marked (the tree open under it may be another).
+        if (!this.phoneResearchActive()) return choices;
+        const shown = phoneResearchTreeId();
+        return choices.map(c => ({ ...c, current: !!c.researchId && c.researchId === shown }));
     },
 
     /** The trees' second lines asked of the research (each at most every 20 s), drawn where they stand. */
@@ -499,6 +558,11 @@ export const deviceStartMethods = uiModule({
         }
         const researchId = c.researchId;
         if (!deviceTreeIdOk(researchId)) return;
+        // On a phone's Research screen only the screen's data change: nothing downloaded (§1 point 8).
+        if (this.phoneResearchActive()) {
+            await this.phonePickTree(researchId);
+            return;
+        }
         const held = TreeManager.findTreeByResearchId(researchId);
         if (held) {
             if (DataManager.getCurrentTreeId() !== held.id && await this.switchToTree(held.id) !== 'switched') return;

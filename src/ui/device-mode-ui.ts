@@ -6,6 +6,8 @@
  * import, managing and deleting trees, a linked file, browser backups, the
  * export reminder) is not offered here: one quiet sentence says where it is.
  * Outside the device mode none of this is drawn and the app is as before.
+ * `body.device-phone`: the device mode on a phone (MQ_PHONE_BAR), where the
+ * Research screen stands first (phone-research-ui.ts).
  */
 
 import { strings } from '../strings.js';
@@ -14,6 +16,7 @@ import { deviceConnection, onDeviceConnection, type DeviceConnection } from '../
 import { pairingNow } from '../device/device-store.js';
 import { DEVICE_REPLAY_EVENT } from '../device/gateway-client.js';
 import { DEVICE_COMPUTER_ONLY_EVENT, researchDeviceState } from '../research-link.js';
+import { phoneViewport, watchPhoneViewport } from './phone-research-ui.js';
 
 const CONN_ID = 'current-tree-conn';
 
@@ -104,6 +107,10 @@ export const deviceModeMethods = uiModule({
     refreshDeviceModeUi(): void {
         const on = inDeviceMode();
         document.body.classList.toggle('device-mode', on);
+        // A phone (either way up) in the device mode: its Research screen and bar (spec 094 K3.13); followed as the
+        // viewport changes (a phone turned, a window resized).
+        document.body.classList.toggle('device-phone', on && phoneViewport());
+        if (on) watchPhoneViewport(() => this.phoneViewportChanged());
         this.refreshDeviceOffline();
         const el = document.getElementById(CONN_ID);
         if (!el) return;

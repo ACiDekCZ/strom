@@ -13,7 +13,7 @@ import path from 'node:path';
 const SRC = path.resolve(__dirname, '..');
 
 /** The modules of the Research screen (paths under src/). */
-const SCREEN_MODULES = ['device/device-research-data.ts'];
+const SCREEN_MODULES = ['device/device-research-data.ts', 'ui/phone-research-ui.ts'];
 
 /** Modules the screen must never load. */
 const FORBIDDEN_FILES = ['data.ts', 'renderer.ts', 'person-picker.ts'];
@@ -66,6 +66,16 @@ describe('the Research screen of a phone loads no tree', () => {
             if (FORBIDDEN_FILES.includes(rel) || FORBIDDEN_EXPORTS.test(fs.readFileSync(f, 'utf8'))) bad.push(chain(graph, f));
         }
         expect(bad).toEqual([]);
+    });
+
+    it('a type-only import (the UI class of uiModule) is not followed, a value import is', () => {
+        const typeOnly = "import type { UIClass } from './index.js';";
+        const value = "import { UIClass } from './index.js';";
+        expect([...typeOnly.matchAll(IMPORT)]).toHaveLength(0);
+        expect([...value.matchAll(IMPORT)].map(m => m[1])).toEqual(['./index.js']);
+        // uiModule's own file names the UI class by its type only: the facade (and the whole app) stays out.
+        const rel = [...graphOf(path.join(SRC, 'ui/module.ts')).keys()].map(f => path.relative(SRC, f));
+        expect(rel).toEqual(['ui/module.ts']);
     });
 
     it('the check sees a module that does reach them', () => {

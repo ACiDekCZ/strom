@@ -24,6 +24,7 @@ import { researchTrialTagHtml } from './research-tree-settings-ui.js';
 import { getSelection, selectionText } from './view-selection-ui.js';
 import { selectionOffered } from './selection-picker-ui.js';
 import { satelliteResearchMenu } from '../windows/window-research-menu.js';
+import { phoneResearchReady } from './phone-research-ui.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
 interface MenuRow {
@@ -485,7 +486,12 @@ export const bottomSheetMethods = uiModule({
                 : () => toggleFullscreen(),
         } : null;
         const sideways = typeof matchMedia === 'function' && matchMedia(MQ_PHONE_LANDSCAPE).matches;
+        // A phone's Research screen takes Descendants' place in the bar (spec 094 §1 point 3): here instead.
+        const descendantsTile = phoneResearchReady()
+            ? [{ label: s.viewModeSwitch.descendants, id: 'sheet-descendants', run: () => this.setDisplayViewMode('descendants'), active: !this.phoneResearchActive() && mode === 'descendants' }]
+            : [];
         blocks.push({ divider: true, rows: [], pairLabel: s.menu.sectionView, pair: [
+            ...descendantsTile,
             { label: s.viewModeSwitch.fan, run: () => this.setDisplayViewMode('fan'), active: mode === 'fan' },
             { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
             { label: s.viewModeSwitch.timeline, run: () => this.setDisplayViewMode('timeline'), active: mode === 'timeline' },

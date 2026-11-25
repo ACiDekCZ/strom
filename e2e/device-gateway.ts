@@ -118,6 +118,14 @@ export interface FakeGateway {
     replayWrites: string[];
     /** Other devices connected now, said in GET status (`device.others`, U9d). */
     others: number;
+    /**
+     * A phone's Research screen (spec 094 K3.13): set, the default GET status says the feature `glance` and the
+     * default GET glance answers it (by the tree asked, when a function); null: a research without it (the tree opens
+     * at the start as before).
+     */
+    glance: unknown | ((tree: string) => unknown) | null;
+    /** As `glance`, for GET finds (feature `finds`): by the tree and the query (`since`, `lang`) when a function. */
+    finds: unknown | ((tree: string, q: Record<string, string>) => unknown) | null;
     /** Each connection closed at once without an answer. */
     unreachable: boolean;
     /** The gateway's own paths (/device/*) held without an answer (the app's request times out: connecting meanwhile). */
@@ -148,6 +156,49 @@ const STATUS = {
     ok: true,
     features: ['device.gateway'],
 };
+
+/**
+ * A research's glance (GET glance, spec 094 K3.13) of an invented tree: nobody at work now (worked on two hours
+ * ago), two lines in the order of work, one task waiting, the tree's size. `o` changes any part.
+ */
+export function fakeGlance(tree: { id: string; name: string }, o: Record<string, unknown> = {}): Record<string, unknown> {
+    const at = (h: number): string => new Date(Date.now() - h * 3600_000).toISOString();
+    return {
+        head: '3c7a9e1f05b2',
+        headAt: at(2),
+        tree: { id: tree.id, name: tree.name, lang: 'cs', state: 'research', kind: 'research', persons: 3, families: 1, ged: { bytes: 2048, head: '3c7a9e1f05b2' } },
+        day: { persons: 1, sources: 1, saves: 4, since: at(24) },
+        now: [],
+        runs: [],
+        lastWorked: at(2),
+        lines: [
+            { id: 'G0001', n: 1, name: 'Předci Jana Pýchavky', direction: 'ancestors', way: 'up', state: 'active', tasks: 2, waiting: 1, working: false, since: at(48), focus: 'P0001' },
+            { id: 'G0002', n: 2, name: 'Potomci Josefa Pýchavky', direction: 'descendants', way: 'down', state: 'paused', tasks: 1, waiting: 0, working: false, since: at(30), focus: 'P0003' },
+        ],
+        waiting: {
+            n: 1,
+            items: [{
+                id: 'T0007', kind: 'archive', section: 'archive', phase: 'todo', what: 'Matrika N Mlýnky 1849–1860, fol. 12',
+                at: at(5), group: { key: 'archive:mlynky', name: 'Archiv Mlýnky', kind: 'archive' }, person: 'P0001', line: 'G0001', do: ['answer', 'sent'],
+            }],
+        },
+        people: { P0001: { name: 'Jan Pýchavka', span: '1851–1919' }, P0003: { name: 'Josef Pýchavka', span: '1880–1944' } },
+        ...o,
+    };
+}
+
+/** A research's finds (GET finds) since `since`: one person with two lines, one new source. */
+export function fakeFinds(since: string = new Date(Date.now() - 24 * 3600_000).toISOString()): Record<string, unknown> {
+    const at = (h: number): string => new Date(Date.now() - h * 3600_000).toISOString();
+    return {
+        since,
+        groups: [
+            { key: 'person:P0001', kind: 'person', name: 'Jan Pýchavka', span: '1851–1919', person: 'P0001', at: at(2),
+                lines: [{ kind: 'fact', text: 'Narozen 3. 3. 1851 v Mlýnkách', at: at(2) }, { kind: 'cited', text: 'Sňatek 1878', at: at(3) }] },
+            { key: 'sources', kind: 'sources', at: at(4), lines: [{ kind: 'source', text: 'Matrika Mlýnky 1851', at: at(4) }] },
+        ],
+    };
+}
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
     return new Promise((resolve, reject) => {
@@ -190,6 +241,8 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         mediaSteps: [],
         replayWrites: [],
         others: 0,
+        glance: null,
+        finds: null,
         unreachable: false,
         stall: false,
         clockOffsetMs: 0,
@@ -272,8 +325,15 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         if (!reply) {
             if (r.p === 'status' && r.m === 'GET') {
                 const tree = gw.trees.find(x => x.id === r.tree);
-                reply = { s: 200, body: { ...STATUS, tree: { id: r.tree, name: tree?.name ?? 'Pýchavkovi z Mlýnků' },
+                const features = [...STATUS.features, ...(gw.glance ? ['glance'] : []), ...(gw.finds ? ['finds'] : [])];
+                reply = { s: 200, body: { ...STATUS, features, tree: { id: r.tree, name: tree?.name ?? 'Pýchavkovi z Mlýnků' },
                     device: { id: device.id, name: device.name, kind: device.kind, actions: ['device.rename', 'device.unpair'], others: gw.others } } };
+            }
+            else if (r.p === 'glance' && r.m === 'GET' && gw.glance) {
+                reply = { s: 200, body: typeof gw.glance === 'function' ? (gw.glance as (tree: string) => unknown)(r.tree) : gw.glance };
+            } else if (r.p === 'finds' && r.m === 'GET' && gw.finds) {
+                const q = r.q ?? {};
+                reply = { s: 200, body: typeof gw.finds === 'function' ? (gw.finds as (tree: string, q: Record<string, string>) => unknown)(r.tree, q) : gw.finds };
             }
             else if (r.p === 'device/rename' && r.m === 'POST') {
                 // NFC, at most 60 characters, as the research keeps it
