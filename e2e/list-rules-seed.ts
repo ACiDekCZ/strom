@@ -3,9 +3,9 @@
  * responsive specs of the custom list rules (spec 136 §8, §11, §14, §15).
  *
  * Arvid Quellmayer (born in Mlýnky) and Dorota Talvanen (born in Vrbatín,
- * 6 km away) have Benedikt (born in Mlýnky), Cilka (born in Horní Vranice,
- * without a location) and Bětka Ostrovidová-Quellmayerová (born in a place
- * with a long name). Benedikt and Eliška Ostrovid have Gustav.
+ * 6 km away) have a son born in Mlýnky, a daughter born in Horní Vranice (a place
+ * without a location) and a daughter with a long double surname (born in a place
+ * with a long name). The son and his wife Ostrovid have a son.
  *
  * The lists: "Mlýnky branch" (automatic, three conditions with an except,
  * from a template), "To look up" (automatic, its person deleted), "Neighbours"

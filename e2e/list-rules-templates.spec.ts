@@ -22,9 +22,9 @@ interface Seed { firstName: string; lastName: string; gender?: 'male' | 'female'
 
 /**
  * Arvid Quellmayer (born in Mlýnky) and Dorota Talvanen (born in Vrbatín,
- * 6 km away) have Benedikt (born in Mlýnky), Cilka (born in Horní Vranice,
- * without a location) and Edvin (born in Dolní Krsovec, 40 km away).
- * Benedikt and Eliška Ostrovid have Gustav.
+ * 6 km away) have a son born in Mlýnky, a daughter born in Horní Vranice (a place
+ * without a location) and a son born in Dolní Krsovec, 40 km away.
+ * The first son and his wife Ostrovid have a son.
  */
 const PEOPLE: Record<string, Seed> = {
     b: { firstName: 'Benedikt', lastName: 'Quellmayer', parents: ['a', 'd'], partners: ['e'], birthDate: '1850', birthPlace: 'Mlýnky' },
