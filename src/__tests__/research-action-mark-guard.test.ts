@@ -296,6 +296,7 @@ describe('the marks of research actions come from the one map', () => {
         const others = FILES.filter(f => f.rel !== 'history-symbols.ts' && f.rel !== 'ui/research-open-mark.ts');
         expect(hits(others, /\bresearchOpenSvg\(/)).toEqual({
             'ui/research-actions-ui.ts': 1, // the Research menu's footer: the legend of the mark, not an action
+            'ui/device-agent-ui.ts': 1, // the agent sheet's row saying where the terminal opens (only for a link whose mark has the terminal), not an action
             'book.ts': 1, // the book's story links (keep, final, approve), drawn when researchLinkMark('story') has a mark
             'person-page.ts': 1, // the person page's research links, each with the mark of its link
         });
