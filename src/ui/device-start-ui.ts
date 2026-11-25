@@ -37,6 +37,9 @@ const ROW_FRESH_MS = 20_000;
 /** What each research tree's status said last (its persons, working, waiting): the rows drawn from it at once. */
 const treeRows = new Map<string, { row: DeviceTreeRow; at: number }>();
 
+/** The chooser of the research's trees standing now: picks a tree as a tap on its row does (null: none). */
+let chooserPick: ((id: string) => void) | null = null;
+
 /** How long "Paired with …" stays before the tree opens (it is read, not waited for). */
 const PAIRED_SHOWN_MS = 700;
 
@@ -159,16 +162,24 @@ export const deviceStartMethods = uiModule({
                 this.renderDeviceBoot('paired', { pc, host: location.hostname });
                 await new Promise(r => setTimeout(r, PAIRED_SHOWN_MS));
             }
-            let treeId = deviceTreeToOpen(pairing.trees, chosenTreeId(pairing));
-            if (!treeId) {
-                treeId = await this.chooseDeviceTree(pairing.trees, pc);
-                await chooseTree(treeId);
+            const choose = async (): Promise<string> => {
+                const id = await this.chooseDeviceTree(pairing.trees, pc);
+                await chooseTree(id);
                 // The event stream is of a tree: asked for now that one is chosen.
                 started.connection?.retryNow();
+                return id;
+            };
+            let treeId = deviceTreeToOpen(pairing.trees, chosenTreeId(pairing));
+            if (!treeId) {
+                treeId = await choose();
             } else if (pairing.trees.length > 1 && !pairing.treeId) {
                 await chooseTree(treeId);
             }
-            await this.openDeviceTree(treeId, !!screen || !TreeManager.findTreeByResearchId(treeId), pairing.trees.find(t => t.id === treeId)?.name);
+            // A first open cancelled (or failed, Try again not taken) with no research's tree open here: the
+            // chooser again, never the app's own empty tree under the research's connection.
+            while (!await this.openDeviceTree(treeId, !!screen || !TreeManager.findTreeByResearchId(treeId), pairing.trees.find(t => t.id === treeId)?.name)) {
+                treeId = await choose();
+            }
         };
         await run(false);
     },
@@ -179,31 +190,41 @@ export const deviceStartMethods = uiModule({
      * tree is loaded from the bridge (as ?import-url= does); afterwards the tree held here opens and the research's
      * newer version (the agent's, another device's) is offered as on the computer, by the status asked now and then.
      */
-    async openDeviceTree(treeId: string, first: boolean, pairedName?: string): Promise<void> {
+    async openDeviceTree(treeId: string, first: boolean, pairedName?: string): Promise<boolean> {
         // A research's tree has the research's id (strom.json's): an opaque string (U9d), never checked for a UUID.
         if (!deviceTreeIdOk(treeId)) {
             this.closeDeviceBoot();
-            return;
+            return true;
         }
         const base = deviceBridgeBase(treeId, researchDeviceState()?.origin ?? location.origin);
         const boot = document.getElementById(BOOT_ID);
         if (boot && !boot.classList.contains('is-opening')) this.renderDeviceBoot('opening', { pc: '', host: location.hostname });
+        let back = false;
         try {
             const held = TreeManager.findTreeByResearchId(treeId);
             if (held && !first) {
                 if (DataManager.getCurrentTreeId() !== held.id) await this.switchToTree(held.id);
             } else {
                 // The download's progress with Cancel over the start screen (as a tree chosen in the switcher);
-                // a failure says so with Try again, which opens the tree again from the start screen.
+                // a failure says so with Try again: the same tree picked again in the chooser standing under it,
+                // else opened again from the start screen.
                 const load = startTreeLoad({ treeId: null, retry: () => {
+                    if (chooserPick) {
+                        chooserPick(treeId);
+                        return;
+                    }
                     this.showDeviceBoot();
                     void this.openDeviceTree(treeId, first, pairedName);
                 } });
                 await this.importResearchFromUrl(`${base}/tree.ged`, { takeSame: true, load });
             }
         } finally {
-            this.closeDeviceBoot();
+            // Nothing of the research open after a first open (Cancel, a failure): the caller's chooser takes the
+            // start screen; a research's tree open here already (another one, or this one's older copy) stays.
+            back = first && !this.deviceResearchTreeOpen();
+            if (!back) this.closeDeviceBoot();
         }
+        if (back) return false;
         const held = TreeManager.findTreeByResearchId(treeId);
         if (first && held && DataManager.getCurrentTreeId() === held.id) this.setDisplayViewMode('family');
         this.showDeviceHomeLine();
@@ -211,6 +232,16 @@ export const deviceStartMethods = uiModule({
         // A file whose header names nothing: the research's name now (its status, `tree.name`), the pairing's only
         // when the status says none (U9d) — never the default one.
         void this.pollResearchBridge({ reschedule: true }).then(() => this.deviceTreeNamed(treeId, pairedName));
+        return true;
+    },
+
+    /** The tree open now is one of the pairing's research trees (never the app's own tree of its first start). */
+    deviceResearchTreeOpen(): boolean {
+        const researchId = TreeManager.getActiveTreeMetadata()?.research?.id;
+        if (!researchId) return false;
+        const held = TreeManager.findTreeByResearchId(researchId);
+        if (!held || DataManager.getCurrentTreeId() !== held.id) return false;
+        return (pairingNow()?.trees ?? []).some(t => t.id === researchId);
     },
 
     /** The research's tree held here named from the research (its status's `tree.name`, else the pairing's name). */
@@ -303,13 +334,19 @@ export const deviceStartMethods = uiModule({
         for (const t of trees) void this.fillDeviceTreeRow(t);
         el.querySelector<HTMLButtonElement>('.device-tree-row')?.focus();
         return new Promise(resolve => {
-            el!.addEventListener('click', (e) => {
-                const row = (e.target as HTMLElement | null)?.closest<HTMLElement>('.device-tree-row');
-                const id = row?.dataset.tree;
-                if (!id) return;
+            const pick = (id: string): void => {
+                if (chooserPick !== pick) return;
+                chooserPick = null;
+                el!.onclick = null;
                 this.renderDeviceBoot('opening', { pc: '', host: location.hostname });
                 resolve(id);
-            });
+            };
+            chooserPick = pick;
+            // One listener on the start screen, whichever time the chooser is drawn on it.
+            el!.onclick = (e) => {
+                const id = (e.target as HTMLElement | null)?.closest<HTMLElement>('.device-tree-row')?.dataset.tree;
+                if (id) pick(id);
+            };
         });
     },
 

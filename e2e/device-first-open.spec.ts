@@ -1,5 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { seedResearchPromoSeen, seedWhatsNewSeen } from './helpers.js';
 import { startDeviceGateway, type FakeGateway, type TunnelReply } from './device-gateway.js';
 
@@ -11,11 +13,16 @@ import { startDeviceGateway, type FakeGateway, type TunnelReply } from './device
  * — never the whole file with its images in it (a big research is 100 MB and
  * more over the home network, a phone's browser stuck on "Opening the
  * research…"). The download shows its progress over the start screen, with
- * Cancel, and a failure says so with Try again. Invented data only (the
- * Pýchavkovi of Mlýnky, the computer Pracovna).
+ * Cancel, and a failure says so with Try again. A first open cancelled (or
+ * failed, Try again not taken) goes back to the chooser of the research's
+ * trees, never the app's own empty tree; Cancel of a tree chosen in the
+ * switcher keeps the tree open before. Invented data only (the Pýchavkovi of
+ * Mlýnky, the Hrotkovi of Hrotov, the computer Pracovna). `STROM_SHOTS_DIR`
+ * set: screenshots go there.
  */
 
 const PYCH = '6a1d2c3e-4b5f-4a6b-8c7d-9e0f1a2b3c4d';
+const HROT = '7b2e3d4f-5c6a-4b7c-9d8e-0f1a2b3c4d5e';
 
 /** A 1×1 PNG: a real picture the browser can show. */
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -110,6 +117,27 @@ async function seeds(page: Page): Promise<void> {
 
 const loadToast = (page: Page) => page.locator('.toast[data-kind="tree-load"]');
 
+/** The chooser of the research's trees on the start screen: the tree's row, nothing of the app's own empty tree to be seen. */
+async function expectChooser(page: Page): Promise<void> {
+    const boot = page.locator('#device-boot');
+    await expect(boot).toHaveAttribute('data-state', 'trees');
+    await expect(boot.locator('.device-tree-row')).toHaveCount(1);
+    await expect(boot.locator('.device-tree-name')).toHaveText('Pýchavkovi z Mlýnků');
+    // The start screen covers the page: the empty tree's "Add the first person" never what a tap meets.
+    const covered = await page.evaluate(() => {
+        const el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+        return !!el?.closest('#device-boot');
+    });
+    expect(covered, 'the chooser over the page').toBe(true);
+}
+
+async function shot(page: Page, name: string): Promise<void> {
+    const dir = process.env.STROM_SHOTS_DIR;
+    if (!dir) return;
+    mkdirSync(dir, { recursive: true });
+    await page.screenshot({ path: join(dir, `${name}.png`) });
+}
+
 let gw: FakeGateway;
 test.beforeEach(async () => {
     gw = await startDeviceGateway();
@@ -146,7 +174,7 @@ test.describe('en', () => {
         expect(asked.trees).toHaveLength(1);
     });
 
-    test('the download shows its progress over the start screen; Cancel stops it, nothing opened', async ({ page }) => {
+    test('the download shows its progress over the start screen; Cancel stops it, nothing opened, the chooser back', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await seeds(page);
         let release!: () => void;
@@ -165,14 +193,21 @@ test.describe('en', () => {
         expect(onTop, 'Cancel above the start screen').toBe(true);
         await cancel.click();
         await expect(loadToast(page)).toHaveCount(0);
-        await expect(page.locator('#device-boot')).toHaveCount(0);
+        // Back on the chooser of the research's trees: never the app's own empty tree under the research's connection.
+        await expectChooser(page);
         release();
         await page.waitForTimeout(500);
         await expect(page.locator('.person-card', { hasText: 'Josef' })).toHaveCount(0);
         expect(asked.trees).toHaveLength(1);
+        await shot(page, 'zrusit-vyber-390');
+        // Chosen again from there: it opens.
+        await page.locator('#device-boot .device-tree-row').first().click();
+        await expect(page.locator('.person-card', { hasText: 'Josef' }).first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('#device-boot')).toHaveCount(0);
+        expect(asked.trees).toHaveLength(2);
     });
 
-    test('Cancel while the images come stops them at once: the start screen gone, nothing opened', async ({ page }) => {
+    test('Cancel while the images come stops them at once: "Opening…" gone, nothing opened, the chooser back', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await seeds(page);
         let release!: () => void;
@@ -180,8 +215,8 @@ test.describe('en', () => {
         await page.goto(gw.pairCode().url);
         await expect.poll(() => asked.images.length, { timeout: 20000 }).toBeGreaterThan(0);
         await loadToast(page).getByRole('button', { name: 'Cancel' }).click();
-        // Not after the images asked already: at once, the answer still held.
-        await expect(page.locator('#device-boot')).toHaveCount(0, { timeout: 3000 });
+        // Not after the images asked already: at once, the answer still held — the chooser instead of "Opening…".
+        await expect(page.locator('#device-boot')).toHaveAttribute('data-state', 'trees', { timeout: 3000 });
         await expect(loadToast(page)).toHaveCount(0);
         release();
         await page.waitForTimeout(500);
@@ -201,5 +236,64 @@ test.describe('en', () => {
         await expect(page.locator('#device-boot')).toHaveCount(0);
         // The variant by hash, the whole file it fell back to (both refused), then by hash again.
         expect(asked.trees.map(q => q.images ?? 'data')).toEqual(['ref', 'data', 'ref']);
+    });
+
+    test('a failed download, Try again not taken: the chooser under its message, a tree chosen there opens', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        const asked = research(gw, { fail: true });
+        await page.goto(gw.pairCode().url);
+        const failed = page.locator('.toast').filter({ has: page.getByRole('button', { name: 'Try again' }) });
+        await expect(failed).toBeVisible({ timeout: 20000 });
+        await expectChooser(page);
+        await failed.getByRole('button', { name: /close/i }).click();
+        await expect(failed).toHaveCount(0);
+        await expectChooser(page);
+        await page.locator('#device-boot .device-tree-row').first().click();
+        await expect(page.locator('.person-card', { hasText: 'Josef' }).first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('#device-boot')).toHaveCount(0);
+        expect(asked.trees.map(q => q.images ?? 'data')).toEqual(['ref', 'data', 'ref']);
+    });
+
+    test('Cancel of a tree chosen in the switcher: the tree open before stays, no chooser', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        research(gw);
+        gw.trees = [{ id: PYCH, name: 'Pýchavkovi z Mlýnků', archive: false }, { id: HROT, name: 'Hrotkovi z Hrotova', archive: false }];
+        // The first tree answers as research() does; the second one's file waits until released.
+        const first = gw.onTunnel!;
+        let release!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        let hrotAsked = 0;
+        gw.onTunnel = async (req, device) => {
+            if (req.tree === HROT && req.p === 'status') {
+                const r = await first(req, device);
+                return r && { ...r, body: { ...(r.body as object), tree: { id: HROT, name: 'Hrotkovi z Hrotova' } } };
+            }
+            if (req.tree === HROT && req.p === 'tree.ged') {
+                hrotAsked++;
+                await held;
+                return { s: 200, h: { 'Content-Type': 'text/plain; charset=utf-8' }, body: ged(false).replace(PYCH, HROT).replace(/Pýchavka/g, 'Hrotek') };
+            }
+            return first(req, device);
+        };
+        await page.goto(gw.pairCode().url);
+        await page.locator('#device-boot .device-tree-row').first().click({ timeout: 20000 });
+        await expect(page.locator('.person-card', { hasText: 'Josef' }).first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('#device-boot')).toHaveCount(0);
+
+        await page.locator('.tree-switcher-btn').click();
+        const sheet = page.locator('.bottom-sheet-menu');
+        await expect(sheet).toBeVisible();
+        await sheet.locator('.device-tree-item').nth(1).click();
+        await expect.poll(() => hrotAsked, { timeout: 15000 }).toBe(1);
+        await loadToast(page).getByRole('button', { name: 'Cancel' }).click();
+        await expect(loadToast(page)).toHaveCount(0);
+        release();
+        await page.waitForTimeout(500);
+        await expect(page.locator('#device-boot')).toHaveCount(0);
+        await expect(page.locator('.person-card', { hasText: 'Josef Pýchavka' }).first()).toBeVisible();
+        await expect(page.locator('.person-card', { hasText: 'Hrotek' })).toHaveCount(0);
+        await expect(page.locator('#current-tree-name')).toHaveText('Pýchavkovi z Mlýnků');
     });
 });

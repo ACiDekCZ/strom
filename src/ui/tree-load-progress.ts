@@ -182,7 +182,10 @@ export function startTreeLoad(opts: { el?: HTMLElement | null; retry?: () => voi
             if (ended) return;
             const why = busyErrFromBridge(err, { timeoutMs: 120_000 }).text;
             if (!toast) open();
-            toast?.fail(`${why} ${b.treeUnchanged}`, opts.retry ? { label: b.retry, run: opts.retry } : undefined, { title: b.loadFailed });
+            const t = toast as ProgressToastHandle | null;
+            t?.fail(`${why} ${b.treeUnchanged}`, opts.retry ? { label: b.retry, run: opts.retry } : undefined, { title: b.loadFailed });
+            // Still the load's toast: over a device's start screen (its chooser of trees) as its progress was.
+            if (t) t.el.dataset.kind = 'tree-load';
             toast = null;
             end();
         },
