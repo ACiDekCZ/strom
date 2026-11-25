@@ -421,9 +421,12 @@ test.describe('German, a long computer and tree name', () => {
             const mark = page.locator('#research-sync-mark');
             await expect(page.locator('#current-tree-conn .phone-dot')).toBeVisible();
             await expect(mark).toHaveCount(0);
+            // The toolbar's Selection in the language switched to while the app runs (094 U10-n1).
+            await expect(page.locator('#view-rod-picker .sp-rodpick-btn')).toContainText('Auswahl');
             await goAway(page);
             await expect(page.locator('#device-qline')).toContainText('nicht erreichbar');
             await expect(mark).toHaveCount(0);
+            await expect(page.locator('#view-rod-picker .sp-rodpick-btn')).toContainText('Auswahl');
         });
     }
 

@@ -733,6 +733,10 @@ export const miscMethods = uiModule({
         this.updateTreeSwitcher();
         this.updateEncryptionStatus();
         this.retranslateNewerDataNotice();
+        // The toolbar's Selection choice now, with the rest of the bar: not left to the render's beat
+        // (asynchronous; a render overtaken or failed kept its old language).
+        const pick = document.getElementById('view-rod-picker');
+        if (pick && !pick.hidden && pick.querySelector('details.sp-rodpick')) this.renderSelectionPickerHost();
         TreeRenderer.render();
         // Panels drawn from code: the live research panel and its overview,
         // the research menu, the highlight pill, "Show on card".

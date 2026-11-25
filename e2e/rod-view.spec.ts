@@ -93,6 +93,22 @@ test.describe('the toolbar\'s choice on a computer', () => {
         await expect(host(page).locator('.sp-rodpick-btn')).toHaveText(/^Selection/);
     });
 
+    test('a change of the language while the app runs: the button says Selection in the new language at once (094 U10-n1)', async ({ page }) => {
+        await setup(page);
+        const btn = host(page).locator('.sp-rodpick-btn');
+        await expect(btn).toContainText('Selection');
+        // In the same moment as the rest of the bar, not left to a later redraw (a render overtaken or failed kept it English).
+        expect(await page.evaluate(() => {
+            window.Strom.UI.setLanguage('de');
+            return document.querySelector('#view-rod-picker .sp-rodpick-btn')?.textContent ?? '';
+        })).toContain('Auswahl');
+        await expect(btn).toContainText('Auswahl');
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs'));
+        await expect(btn).toContainText('Výběr');
+        await page.evaluate(() => window.Strom.UI.setLanguage('en'));
+        await expect(btn).toContainText('Selection');
+    });
+
     test('Descendants: another line already chosen, a line with nobody drawn moves the focus; ↩ Back brings it back', async ({ page }) => {
         await setup(page);
         await page.locator('#view-mode-descendants').click();
