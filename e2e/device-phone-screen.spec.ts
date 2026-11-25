@@ -399,3 +399,157 @@ test.describe('Now and Lines (en)', () => {
         await expect.poll(() => writes('directions/G0003/state').map(r => r.b)).toEqual([{ do: 'resume' }]);
     });
 });
+
+/** The moment of the Finds tests: the page's and the gateway's clock, away from midnight UTC. */
+const T = Date.parse('2026-11-25T11:00:00Z');
+const ago = (min: number): string => new Date(T - min * 60_000).toISOString();
+
+interface FindLine { kind: string; text: string; at: string; fact?: { kind: string; name: string; what: string }; span?: string; person?: string }
+interface FindGroup { key: string; kind: string; name?: string; span?: string; person?: string; lines: FindLine[] }
+
+/** What the research found (Jan four times, a source, a conflict resolved, Marie three days ago), as written. */
+function findsOfResearch(): FindGroup[] {
+    return [
+        { key: 'p:P0001', kind: 'person', name: 'Jan Pýchavka', span: '1851–1919', person: 'P0001', lines: [
+            { kind: 'name', text: 'Jan Pýchavka', at: ago(50) },
+            { kind: 'child', text: 'Josef Pýchavka (1880)', span: '1880', person: 'P0003', at: ago(40) },
+            { kind: 'cited', text: 'Marriage: 1878, Mlýnky', fact: { kind: 'MARR', name: 'Marriage', what: '1878, Mlýnky' }, at: ago(30) },
+            { kind: 'fact', text: 'Birth: 3 Mar 1851, Mlýnky', fact: { kind: 'BIRT', name: 'Birth', what: '3 Mar 1851, Mlýnky' }, at: ago(20) },
+        ] },
+        { key: 'sources', kind: 'sources', lines: [{ kind: 'source', text: 'Register N Mlýnky 1849–1860', at: ago(90) }] },
+        { key: 'resolved', kind: 'resolved', lines: [{ kind: 'conflict', text: 'Birth of Marie Bedlová', at: ago(120) }] },
+        { key: 'p:P0002', kind: 'person', name: 'Marie Bedlová', span: '1855–1920', person: 'P0002', lines: [
+            { kind: 'fact', text: 'Death: 1920, Mlýnky', fact: { kind: 'DEAT', name: 'Death', what: '1920, Mlýnky' }, at: ago(3 * 24 * 60) },
+        ] },
+    ];
+}
+
+/** GET finds as the bridge answers it: the groups since `since` (none: the last 24 hours), newest first, `earlier` before them. */
+function findsSince(all: FindGroup[], since: string | undefined): Record<string, unknown> {
+    const from = since && Number.isFinite(Date.parse(since)) ? since : ago(24 * 60);
+    const groups = all
+        .map(g => ({ ...g, lines: g.lines.filter(l => l.at >= from) }))
+        .filter(g => g.lines.length)
+        .map(g => ({ ...g, at: g.lines.map(l => l.at).sort().at(-1)! }))
+        .sort((a, b) => b.at.localeCompare(a.at));
+    const earlier = all.flatMap(g => g.lines).map(l => l.at).filter(at => at < from).sort().at(-1);
+    return { since: from, groups, ...(earlier ? { earlier } : {}) };
+}
+
+const findGroups = (page: Page) => screen(page).locator('.phone-sec[data-sec="finds"] .phone-find');
+const findsSum = (page: Page) => screen(page).locator('.phone-sec[data-sec="finds"] .phone-sec__sum');
+
+test.describe('Finds (en)', () => {
+    test.use({ locale: 'en-US', timezoneId: 'UTC' });
+    let all: FindGroup[];
+
+    test.beforeEach(async ({ page }) => {
+        await page.clock.setFixedTime(T);
+        // The gateway's clock goes with the page's (a sealed request carries its time).
+        gw.clockOffsetMs = T - Date.now();
+        all = findsOfResearch();
+        research(gw);
+        gw.finds = (_tree: string, q: Record<string, string>) => findsSince(all, q.since);
+    });
+
+    test('groups newest first with the prefixes of their lines, at most three, and a dot for each new one; seen after 2 s, the heading moves on the next start', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        await pairedOnScreen(page, gw);
+        await expect(findGroups(page)).toHaveCount(3);
+        // Read at once (after 2 s in view the dots go).
+        const shown = await findGroups(page).evaluateAll(gs => gs.map(g => ({
+            name: g.querySelector('.phone-find__name')?.textContent,
+            years: g.querySelector('.phone-find__years')?.textContent ?? null,
+            lines: Array.from(g.querySelectorAll('.phone-find__line')).map(l => (l as HTMLElement).innerText.replace(/\s+/g, ' ').trim()),
+            dots: g.querySelectorAll('.phone-find__dot.is-new').length,
+            more: g.querySelector('.phone-find__more')?.textContent ?? null,
+        })));
+        expect(shown).toEqual([
+            { name: 'Jan Pýchavka', years: '1851–1919', lines: ['Birth · 3 Mar 1851, Mlýnky', 'Marriage · 1878, Mlýnky · newly documented', 'Child: Josef Pýchavka · 1880'], dots: 3, more: 'and 1 more' },
+            { name: 'New sources', years: null, lines: ['Register N Mlýnky 1849–1860'], dots: 1, more: null },
+            { name: 'Resolved', years: null, lines: ['Conflict: Birth of Marie Bedlová'], dots: 1, more: null },
+        ]);
+        await expect(findsSum(page)).toHaveText('in the last 24 h');
+        await expect(findGroups(page).nth(0).locator('.phone-find__at')).toHaveText(/10:40/);
+        await expect(findGroups(page).nth(0).locator('.phone-find__dot.is-new').first()).toHaveAttribute('aria-label', 'new');
+        // The group is a 44 px target.
+        expect((await findGroups(page).nth(0).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await shot(page, 'vyzkum-nalezy-390');
+        // 2 s in view: seen, the dots go; the heading stays until the next start.
+        await expect(screen(page).locator('.phone-find__dot.is-new')).toHaveCount(0, { timeout: 6000 });
+        await expect(findsSum(page)).toHaveText('in the last 24 h');
+        await expect(findGroups(page)).toHaveCount(3);
+        // The next start: since the newest seen (10:40), nothing new after it, the older finds offered.
+        await page.reload();
+        await expect(screen(page)).toBeVisible({ timeout: 20000 });
+        await expect(findsSum(page)).toHaveText(/^since 10:40/);
+        await expect(screen(page).locator('.phone-sec[data-sec="finds"] .phone-sec__body')).toContainText('Nothing new found.');
+        // Asked just after what was seen.
+        expect(gw.tunnelled.filter(r => r.p === 'finds').map(r => r.q?.since)).toContain('2026-11-25T10:40:00.001Z');
+        // Show older finds: the last 31 days, all of them under the list, no dots.
+        await screen(page).locator('.phone-sec__link', { hasText: 'Show older finds' }).click();
+        await expect(findGroups(page).locator('.phone-find__name')).toHaveText(['Jan Pýchavka', 'New sources', 'Resolved', 'Marie Bedlová']);
+        await expect(findGroups(page).nth(0)).toHaveAttribute('data-older', '1');
+        await expect(screen(page).locator('.phone-find__dot.is-new')).toHaveCount(0);
+        await expect(screen(page).locator('.phone-sec__link', { hasText: 'Show older finds' })).toHaveCount(0);
+        await noMarks(page);
+    });
+
+    test('a group tapped: all its lines with their times; Show in tree downloads the tree on the person; sources without it', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        await pairedOnScreen(page, gw);
+        await findGroups(page).nth(1).click();
+        await expect(sheet(page).locator('.bottom-sheet-menu-title')).toHaveText('New sources');
+        await expect(sheet(page).locator('.phone-find-sheet__row')).toHaveCount(1);
+        await expect(sheet(page).locator('#phone-find-tree')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(sheet(page)).toHaveCount(0);
+        await findGroups(page).nth(0).click();
+        await expect(sheet(page).locator('.bottom-sheet-menu-title')).toHaveText('Jan Pýchavka · 1851–1919');
+        await expect(sheet(page).locator('.bottom-sheet-menu-sub')).toHaveText(/^4 finds since /);
+        await expect(sheet(page).locator('.phone-find-sheet__text')).toHaveText(['Birth · 3 Mar 1851, Mlýnky', 'Marriage · 1878, Mlýnky · newly documented', 'Child: Josef Pýchavka · 1880', 'Name: Jan Pýchavka']);
+        await expect(sheet(page).locator('.phone-find-sheet__at')).toHaveText([/10:40/, /10:30/, /10:20/, /10:10/]);
+        await expect(sheet(page).locator('#phone-find-tree')).toHaveText(/^Show in tree/);
+        await noMarks(page);
+        await shot(page, 'vyzkum-nalez-390');
+        await sheet(page).locator('#phone-find-tree').click();
+        await expect(josef(page)).toBeVisible({ timeout: 20000 });
+        await expect(screen(page)).toBeHidden();
+        await expect(page.locator('#tree-container .person-card.focused')).toContainText('Jan');
+    });
+
+    test('a find coming with Finds out of view: "1 new ↓" over the screen, a tap brings Finds; nothing moves under the finger', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        // Many lines: Finds can scroll out of view.
+        const lines = Array.from({ length: 14 }, (_, i) => ({
+            id: `G${String(i + 1).padStart(4, '0')}`, n: i + 1, name: `Linie ${i + 1} Pýchavkových`, direction: 'ancestors', way: 'up',
+            state: 'active', tasks: 1, waiting: 0, working: false, since: ago(3000), focus: 'P0001',
+        }));
+        gw.glance = fakeGlance({ id: PYCH, name: NAME }, { lines, headAt: ago(120), lastWorked: ago(120), day: { persons: 1, sources: 1, saves: 4, since: ago(1440) } });
+        await pairedOnScreen(page, gw);
+        await expect(findGroups(page)).toHaveCount(3);
+        const main = screen(page).locator('[data-scroll="main"]');
+        await main.evaluate(el => { el.scrollTop = el.scrollHeight; });
+        await expect(screen(page).locator('.phone-sec[data-sec="finds"]')).not.toBeInViewport();
+        const pill = screen(page).locator('.phone-finds-new__btn');
+        await expect(pill).toBeHidden();
+        const before = await main.evaluate(el => el.scrollTop);
+        // A new find: the research changed.
+        all[0].lines.push({ kind: 'fact', text: 'Occupation: miller', fact: { kind: 'OCCU', name: 'Occupation', what: 'miller' }, at: ago(1) });
+        gw.sendEvent({ event: 'change', data: { head: '5e9c1a7b3d20', what: ['person P0001: Jan Pýchavka'] } });
+        await expect(pill).toBeVisible({ timeout: 10000 });
+        await expect(pill).toHaveText('1 new ↓');
+        await expect(findGroups(page).nth(0).locator('.phone-find__line').first()).toContainText('Occupation · miller');
+        expect(Math.abs(await main.evaluate(el => el.scrollTop) - before)).toBeLessThanOrEqual(2);
+        const box = await pill.boundingBox();
+        expect(box?.height).toBeGreaterThanOrEqual(44);
+        await shot(page, 'vyzkum-nalezy-nove-390');
+        await pill.click();
+        await expect(screen(page).locator('.phone-sec[data-sec="finds"]')).toBeInViewport();
+        await expect(pill).toBeHidden();
+        await noMarks(page);
+    });
+});

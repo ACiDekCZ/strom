@@ -89,6 +89,8 @@ interface MenuBlock {
     research?: ResearchSheetGroup;
     /** A quiet line with its link before the block (the research programs out of the browser's reach); hidden until it applies. */
     lead?: { id: string; text: string; link: string; run: () => void; hidden?: boolean };
+    /** What the block shows before its rows, read only (a phone's group of finds with their times). */
+    content?: HTMLElement;
 }
 
 /** Coarse pointer = touch device; used to gate touch-only behaviour. */
@@ -547,6 +549,8 @@ export const bottomSheetMethods = uiModule({
         research?: boolean; more?: boolean;
         /** A quiet line under the title (the fan's sector: years and number). */
         subtitle?: string;
+        /** Quiet words after the title on its line (a person's years). */
+        titleAside?: string;
         /** Extra class of the overlay (its own scrim). */
         overlayClass?: string;
         /** Called once when the sheet closes (any way). */
@@ -567,6 +571,12 @@ export const bottomSheetMethods = uiModule({
         const title = document.createElement('div');
         title.className = 'bottom-sheet-menu-title';
         title.textContent = titleText;
+        if (opts.titleAside) {
+            const aside = document.createElement('span');
+            aside.className = 'bottom-sheet-menu-aside';
+            aside.textContent = ` · ${opts.titleAside}`;
+            title.appendChild(aside);
+        }
         sheet.appendChild(title);
         // The quiet line under the title goes with it on a second page.
         let subLine: HTMLElement | null = null;
@@ -981,6 +991,7 @@ export const bottomSheetMethods = uiModule({
                 list.appendChild(header);
             }
             if (block.research) appendResearchGroup(block.research);
+            if (block.content) list.appendChild(block.content);
             for (const row of block.rows) {
                 list.appendChild(makeButton(row));
                 if (row.after) list.appendChild(makeAfter(row.after));

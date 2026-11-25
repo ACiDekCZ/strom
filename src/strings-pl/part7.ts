@@ -827,6 +827,7 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         findConflict: 'Konflikt:',
         findQuestion: 'Pytanie:',
         findDecided: (v: string) => `rozstrzygnięto: ${v}`,
+        findNew: 'nowe',
         waitingTitle: (n: number) => `Czeka · ${n}`,
         waitingNone: 'Nic nie czeka.',
         waitingMore: (n: number) => `Kolejne ${n}`,

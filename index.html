@@ -23744,6 +23744,59 @@
         .phone-now-idle .phone-dot { justify-self: center; }
         .phone-sec__day { margin: 0; padding: 4px 16px 12px; font-size: 12.5px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
         .phone-sec__warn { padding-top: 6px; color: var(--warning-text); }
+        /* Finds (§4): each group a button — the name (a person's or a family's serif 16px, new sources and resolved
+           sans-serif), the years, the time at the end; at most three lines 13.5px, the dot "new" 7px; "and n more". */
+        .phone-find {
+            display: block; width: calc(100% - 32px); min-height: 44px; margin: 0 16px; padding: 8px 0; box-sizing: border-box;
+            border: 0; border-top: 1px solid var(--border); border-radius: 0; background: none; color: var(--text);
+            font: inherit; text-align: start; cursor: pointer;
+        }
+        .phone-sec__body > .phone-find:first-child { border-top: 0; }
+        .phone-find:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) { .phone-find:hover { background: var(--hover-bg); } }
+        .phone-find__head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+        .phone-find__name { min-width: 0; font-family: var(--font-serif); font-size: 16px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+        .phone-find__head.is-plain .phone-find__name { font-family: var(--font-sans); font-size: 14.5px; }
+        .phone-find__years { flex: none; font-size: 12.5px; color: var(--text-light); }
+        .phone-find__at { flex: none; margin-left: auto; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .phone-find__line { display: grid; grid-template-columns: 12px minmax(0, 1fr); column-gap: 4px; margin-top: 2px; font-size: 13.5px; line-height: 1.4; }
+        .phone-find__dot { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; }
+        .phone-find__dot.is-new { background: var(--accent); }
+        .phone-find__text { min-width: 0; overflow-wrap: anywhere; }
+        .phone-find__k { color: var(--text-light); }
+        .phone-find__more { display: block; margin-top: 2px; padding-left: 16px; font-size: 12.5px; color: var(--text-light); }
+        .phone-sec__link {
+            display: flex; align-items: center; min-height: 44px; margin: 0 12px 4px; padding: 0 4px; border: 0; border-radius: var(--r-md);
+            background: none; color: var(--primary-dark); font: inherit; font-size: 14px; font-weight: 600; text-align: start; cursor: pointer;
+        }
+        .phone-sec__link:disabled { color: var(--text-light); cursor: default; }
+        .phone-sec__link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (hover: hover) { .phone-sec__link:not(:disabled):hover { background: var(--hover-bg); } }
+        /* "n new ↓" at the top of the content while finds came with Finds out of view (a 44px target, the pill 32px). */
+        .phone-finds-new { position: sticky; top: 0; z-index: 3; display: flex; justify-content: center; height: 0; overflow: visible; pointer-events: none; }
+        .phone-finds-new[hidden] { display: none; }
+        .phone-finds-new__btn {
+            display: flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: none; color: var(--text);
+            font: inherit; cursor: pointer; pointer-events: auto;
+        }
+        .phone-finds-new__pill {
+            display: inline-flex; align-items: center; min-height: 32px; padding: 0 14px; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); box-shadow: var(--shadow-sm);
+            font-size: 13px; font-weight: 600; white-space: nowrap;
+        }
+        .phone-finds-new__btn:focus-visible { outline: none; }
+        .phone-finds-new__btn:focus-visible .phone-finds-new__pill { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) { .phone-finds-new__btn:hover .phone-finds-new__pill { background: var(--hover-bg); } }
+        /* A group's detail in the sheet: every line with its time. */
+        .bottom-sheet-menu-aside { font-family: var(--font-sans); font-size: 13px; font-weight: 400; color: var(--text-light); }
+        .phone-find-sheet { padding: 0 16px 8px; }
+        .phone-find-sheet__row {
+            display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; align-items: baseline;
+            padding: 9px 0; border-top: 1px solid var(--border); font-size: 13.5px; line-height: 1.35;
+        }
+        .phone-find-sheet__row:first-child { border-top: 0; }
+        .phone-find-sheet__text { min-width: 0; overflow-wrap: anywhere; }
+        .phone-find-sheet__at { font-size: 12.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         .phone-research__more {
             display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 48px; margin: 0;
             padding: 0 16px; box-sizing: border-box; border: 0; border-bottom: 1px solid var(--divider); border-radius: 0;
@@ -23771,6 +23824,7 @@
             .phone-research__col { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
             .phone-research__col--a { grid-area: a; border-right: 1px solid var(--divider); }
             .phone-research__col--b { grid-area: b; }
+            .phone-finds-new { grid-area: b; align-self: start; position: relative; }
             .phone-dock { padding: 6px 12px 8px; }
             .phone-dock__actions { min-height: 44px; }
         }

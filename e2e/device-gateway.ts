@@ -325,7 +325,7 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         if (!reply) {
             if (r.p === 'status' && r.m === 'GET') {
                 const tree = gw.trees.find(x => x.id === r.tree);
-                const features = [...STATUS.features, ...(gw.glance ? ['glance'] : []), ...(gw.finds ? ['finds'] : [])];
+                const features = [...STATUS.features, ...(gw.glance ? ['glance'] : []), ...(gw.finds ? ['finds', 'finds.person'] : [])];
                 reply = { s: 200, body: { ...STATUS, features, tree: { id: r.tree, name: tree?.name ?? 'Pýchavkovi z Mlýnků' },
                     device: { id: device.id, name: device.name, kind: device.kind, actions: ['device.rename', 'device.unpair'], others: gw.others } } };
             }

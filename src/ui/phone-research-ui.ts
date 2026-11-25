@@ -20,10 +20,11 @@
 import { strings, getCurrentLanguage } from '../strings.js';
 import { uiModule } from './module.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
-import { chosenTreeId, chooseTree, computerLabelOf, pairingNow } from '../device/device-store.js';
+import { chosenTreeId, chooseTree, computerLabelOf, findsSeenAt, markFindsSeen, pairingNow } from '../device/device-store.js';
 import { retryDeviceConnection } from '../device/device-connection.js';
 import {
-    heldResearchState, readDeviceResearch, readDeviceResearchFeatures, watchDeviceResearch,
+    heldResearchState, readDeviceResearch, readDeviceResearchFeatures, readFinds, watchDeviceResearch,
+    type DeviceFindGroup, type DeviceFindLine, type DeviceFinds,
     type DeviceGlance, type DeviceGlanceLine, type DeviceGlanceNow, type DeviceResearchFeatures, type DeviceResearchState, type DeviceWay,
 } from '../device/device-research-data.js';
 import { deviceBridgeBase, researchDeviceAllows } from '../research-link.js';
@@ -151,7 +152,7 @@ function sectionEl(screen: HTMLElement, key: PhoneSection): { sec: HTMLElement; 
 }
 
 /** The sections whose rows are kept by their keys across a render (only their texts change). */
-const KEYED_SECTIONS: ReadonlySet<PhoneSection> = new Set<PhoneSection>(['now', 'lines']);
+const KEYED_SECTIONS: ReadonlySet<PhoneSection> = new Set<PhoneSection>(['now', 'finds', 'lines']);
 
 /** One quiet sentence in a section's body (an empty section, §8 point 8). */
 function quiet(body: HTMLElement, text: string): void {
@@ -239,12 +240,187 @@ export function phoneComputerOnlyNote(kind: PhoneComputerOnly, pc: string): stri
     }
 }
 
+// ——— Finds (§4) ———
+
+/** At most this many lines of a group on the screen; the rest says "and n more". */
+export const FIND_GROUP_LINES = 3;
+/** How long Finds stay in view before what they show counts as seen here. */
+export const FINDS_SEEN_MS = 2000;
+/** How far back "Show older finds" reads (the bridge goes no further). */
+const FINDS_OLDER_DAYS = 31;
+/** How much of Finds is to be in view (px; a shorter section: all of it) for them to count as seen. */
+const FINDS_VIEW_PX = 96;
+
+function isoMs(iso: string | null | undefined): number {
+    const t = iso ? Date.parse(iso) : NaN;
+    return Number.isFinite(t) ? t : NaN;
+}
+
+/** Whether a find is newer than the finds last seen here (nothing seen yet: every find is). */
+export function findIsNew(at: string, seenAt: string | null): boolean {
+    const t = isoMs(at);
+    if (!Number.isFinite(t)) return false;
+    const seen = isoMs(seenAt);
+    return !Number.isFinite(seen) || t > seen;
+}
+
+/**
+ * What the finds are asked since, by when they were last seen here: just after it (the bridge's window holds its
+ * start, and what was seen is not new); nothing seen yet: null (the last 24 hours).
+ */
+export function findsWindowSince(seenAt: string | null): string | null {
+    const t = isoMs(seenAt);
+    return Number.isFinite(t) ? new Date(t + 1).toISOString() : null;
+}
+
+/** The newest moment of the finds (ISO), or '' when there is none. */
+export function newestFindAt(finds: DeviceFinds | null | undefined): string {
+    let best = '';
+    let bestMs = -Infinity;
+    for (const g of finds?.groups ?? []) {
+        for (const at of [g.at, ...g.lines.map(l => l.at)]) {
+            const t = isoMs(at);
+            if (Number.isFinite(t) && t > bestMs) {
+                bestMs = t;
+                best = at;
+            }
+        }
+    }
+    return best;
+}
+
+/** The heading's quiet summary: since the finds were last seen here, or (nothing seen yet) the last 24 hours. */
+export function phoneFindsSummary(seenAt: string | null, o: { lang: string; now?: number }): string {
+    const r = strings.deviceResearch;
+    const t = isoMs(seenAt);
+    return Number.isFinite(t) ? r.findsSince(formatLiveClock(t, o.now ?? Date.now(), o.lang)) : r.findsDay;
+}
+
+/** A name with its years in brackets ("Jan Lhoták (1851–1919)", as the research writes it) without them. */
+function withoutSpan(text: string, span: string | undefined): string {
+    const tail = span ? ` (${span})` : '';
+    return tail && text.endsWith(tail) ? text.slice(0, -tail.length) : text;
+}
+
+/** A group's heading: a person or a family by its name (serif) with the years, sources and resolved by the app's words. */
+export interface PhoneFindHead {
+    name: string;
+    years?: string;
+    /** Sources and resolved: the app's own heading, sans-serif. */
+    plain: boolean;
+}
+
+export function phoneFindHead(g: DeviceFindGroup): PhoneFindHead {
+    const r = strings.deviceResearch;
+    if (g.kind === 'sources') return { name: r.findsSources, plain: true };
+    if (g.kind === 'resolved') return { name: r.findsResolved, plain: true };
+    const name = g.kind === 'person' ? (g.name || withoutSpan(g.title ?? '', g.span)) : (g.title || g.name || '');
+    return { name, ...(g.span ? { years: g.span } : {}), plain: false };
+}
+
+/** What a line of finds says: a quiet prefix (its kind), the record's words, a quiet suffix ("· corrected"). */
+export interface PhoneFindText {
+    prefix?: string;
+    text: string;
+    suffix?: string;
+}
+
+export function phoneFindText(l: DeviceFindLine, g: DeviceFindGroup): PhoneFindText {
+    const r = strings.deviceResearch;
+    const head = phoneFindHead(g);
+    const named = (): string => (head.plain ? '' : head.years ? `${head.name} · ${head.years}` : head.name);
+    switch (l.kind) {
+        case 'person':
+        case 'family':
+            return { prefix: r.findPerson, text: l.text || named() };
+        case 'name':
+            return { prefix: r.findName, text: l.text };
+        case 'child': {
+            const name = withoutSpan(l.text, l.span);
+            return { prefix: r.findChild, text: l.span ? `${name} · ${l.span}` : name };
+        }
+        case 'fact':
+        case 'fixed':
+        case 'cited': {
+            const text = l.fact?.what && l.fact.name ? `${l.fact.name} · ${l.fact.what}` : l.text;
+            const suffix = l.kind === 'fixed' ? r.findFixed : l.kind === 'cited' ? r.findCited : undefined;
+            return { text, ...(suffix ? { suffix } : {}) };
+        }
+        case 'source':
+            // Under "New sources" the heading says it already.
+            return g.kind === 'sources' ? { text: l.text } : { prefix: r.findSource, text: l.text };
+        case 'conflict':
+            return { prefix: r.findConflict, text: l.text };
+        case 'hypothesis':
+            return { prefix: r.findQuestion, text: l.text, ...(l.decided ? { suffix: r.findDecided(l.decided) } : {}) };
+    }
+}
+
+/** A group's lines newest first: at most `max` of them, and how many more there are. */
+export function phoneFindLines(g: DeviceFindGroup, max: number = FIND_GROUP_LINES): { lines: DeviceFindLine[]; more: number } {
+    const sorted = [...g.lines].sort((a, b) => (isoMs(b.at) || 0) - (isoMs(a.at) || 0));
+    return { lines: sorted.slice(0, max), more: Math.max(0, sorted.length - max) };
+}
+
+/** The groups newest first. */
+export function phoneFindGroups(groups: readonly DeviceFindGroup[]): DeviceFindGroup[] {
+    return [...groups].sort((a, b) => (isoMs(b.at) || 0) - (isoMs(a.at) || 0));
+}
+
+/**
+ * The older finds read on "Show older finds" that the list does not show yet: only their lines before `before`
+ * (the start of the window shown), each group's moment its newest such line; groups left with none go.
+ */
+export function olderFindGroups(older: DeviceFinds, before: string): DeviceFindGroup[] {
+    const limit = isoMs(before);
+    const out: DeviceFindGroup[] = [];
+    for (const g of older.groups) {
+        const lines = Number.isFinite(limit) ? g.lines.filter(l => isoMs(l.at) < limit) : g.lines;
+        if (!lines.length) continue;
+        out.push({ ...g, lines, at: newestFindAt({ since: '', groups: [{ ...g, at: '', lines }] }) || g.at });
+    }
+    return phoneFindGroups(out);
+}
+
+/** How many lines of `next` are newer than all of `prev` (the finds that came while the screen ran). */
+export function findsArrived(prev: DeviceFinds | null | undefined, next: DeviceFinds | null | undefined): number {
+    const last = isoMs(newestFindAt(prev));
+    if (!Number.isFinite(last)) return 0;
+    let n = 0;
+    for (const g of next?.groups ?? []) for (const l of g.lines) if (isoMs(l.at) > last) n++;
+    return n;
+}
+
+/** Since when the detail of a group counts its finds: the window shown when all its lines are in it, else its oldest line. */
+export function findGroupSince(g: DeviceFindGroup, windowSince: string | null): string {
+    const w = isoMs(windowSince);
+    const oldest = g.lines.reduce((a, l) => (isoMs(l.at) < isoMs(a) || !a ? l.at : a), '');
+    return Number.isFinite(w) && g.lines.every(l => isoMs(l.at) >= w) ? windowSince! : oldest;
+}
+
 /** A stop asked here for a run, until the research says it finishes (or it is gone). */
 const stopsAsked = new Set<string>();
 /** A move of the order of work on its way (the list shown in it at once); null: none. */
 let orderMoving: string[] | null = null;
 /** The research refused the last write of the lines as being written just now: "linesBusy" until a write goes. */
 let linesBusy = false;
+
+/** The finds' window of each tree for this page's life: since they were last seen when the screen first read them (null: the last 24 hours). */
+const findsWindow = new Map<string, string | null>();
+/** When the screen's tree's finds were last seen here: the dots "new" are of the finds after it. */
+let findsSeen: string | null = null;
+/** The tree `findsSeen` is of (null: not read yet). */
+let findsSeenOf: string | null = null;
+/** The older finds read on "Show older finds" (until the tree changes or the page goes). */
+let olderFinds: { treeId: string; finds: DeviceFinds } | null = null;
+let olderReading = false;
+/** The lines of finds that came while the screen ran with Finds out of view ("n new ↓"). */
+let findsCame = 0;
+/** What the screen shows was read while it was seen: a later read's newer finds came while it ran. */
+let readWhileShown = false;
+let findsObserver: IntersectionObserver | null = null;
+let findsInView = false;
+let seenTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** The section's element shape (appendPhoneNow…). */
 type PhoneSectionEl = { sec: HTMLElement; head: HTMLElement; sum: HTMLElement; body: HTMLElement };
@@ -325,6 +501,135 @@ function fillLineRow(row: HTMLElement, o: { n?: number; way: DeviceWay; name: st
     if (more && more.getAttribute('aria-label') !== o.menu) more.setAttribute('aria-label', o.menu);
 }
 
+/** A find's words into `el`: its quiet prefix, the record's words, its quiet suffix. */
+function fillFindText(el: HTMLElement, t: PhoneFindText): void {
+    const parts: Node[] = [];
+    if (t.prefix) {
+        const k = document.createElement('span');
+        k.className = 'phone-find__k';
+        k.textContent = t.prefix;
+        parts.push(k, document.createTextNode(' '));
+    }
+    parts.push(document.createTextNode(t.text));
+    if (t.suffix) {
+        const k = document.createElement('span');
+        k.className = 'phone-find__k';
+        k.textContent = ` · ${t.suffix}`;
+        parts.push(k);
+    }
+    el.replaceChildren(...parts);
+}
+
+/** A moment of the finds as Now says it: the time today, the day and time before. */
+function findClock(iso: string, lang: string): string {
+    const t = isoMs(iso);
+    return Number.isFinite(t) ? formatLiveClock(t, Date.now(), lang) : '';
+}
+
+/** A group of finds on the screen (a button: its detail in a sheet): heading, time, at most three lines, "and n more". */
+function findGroupRow(key: string, g: DeviceFindGroup, seenAt: string | null, older: boolean, dots = !older): KeyedRow {
+    return {
+        key,
+        make: () => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'phone-find';
+            b.dataset.act = 'find-group';
+            b.setAttribute('aria-haspopup', 'dialog');
+            return b;
+        },
+        fill: (b) => {
+            const lang = getCurrentLanguage();
+            const head = phoneFindHead(g);
+            const { lines, more } = phoneFindLines(g);
+            const shown = lines.map(l => ({ t: phoneFindText(l, g), fresh: dots && findIsNew(l.at, seenAt) }));
+            const at = findClock(g.at, lang);
+            const sig = JSON.stringify([head, at, shown, more, lang]);
+            b.dataset.group = g.key;
+            b.dataset.older = older ? '1' : '';
+            if (b.dataset.sig === sig) return;
+            b.dataset.sig = sig;
+            const h = document.createElement('span');
+            h.className = `phone-find__head${head.plain ? ' is-plain' : ''}`;
+            const name = document.createElement('span');
+            name.className = 'phone-find__name';
+            name.textContent = head.name;
+            h.append(name);
+            if (head.years) {
+                const years = document.createElement('span');
+                years.className = 'phone-find__years';
+                years.textContent = head.years;
+                h.append(years);
+            }
+            const time = document.createElement('span');
+            time.className = 'phone-find__at';
+            time.textContent = at;
+            h.append(time);
+            const rows: HTMLElement[] = shown.map(({ t, fresh }) => {
+                const line = document.createElement('span');
+                line.className = 'phone-find__line';
+                const dot = document.createElement('span');
+                dot.className = `phone-find__dot${fresh ? ' is-new' : ''}`;
+                if (fresh) {
+                    dot.setAttribute('role', 'img');
+                    dot.setAttribute('aria-label', strings.deviceResearch.findNew);
+                } else dot.setAttribute('aria-hidden', 'true');
+                const text = document.createElement('span');
+                text.className = 'phone-find__text';
+                fillFindText(text, t);
+                line.append(dot, text);
+                return line;
+            });
+            if (more) {
+                const m = document.createElement('span');
+                m.className = 'phone-find__more';
+                m.textContent = strings.deviceResearch.findsGroupMore(more);
+                rows.push(m);
+            }
+            b.replaceChildren(h, ...rows);
+        },
+    };
+}
+
+/** A quiet link-like button as a keyed row ("Show older finds"). */
+function linkRow(key: string, act: string, text: string, busy: boolean): KeyedRow {
+    return {
+        key,
+        make: () => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'phone-sec__link';
+            b.dataset.act = act;
+            return b;
+        },
+        fill: (b) => {
+            setText(b, text);
+            b.toggleAttribute('aria-busy', busy);
+            (b as HTMLButtonElement).disabled = busy;
+        },
+    };
+}
+
+/** The scrolled part of the screen and the first kept element at its top (to keep it where it is across a render). */
+function scrollAnchor(screen: HTMLElement): { box: HTMLElement; el: HTMLElement; top: number } | null {
+    for (const box of Array.from(screen.querySelectorAll<HTMLElement>('[data-scroll]'))) {
+        if (box.scrollTop <= 0 || box.scrollHeight <= box.clientHeight) continue;
+        const top = box.getBoundingClientRect().top;
+        for (const el of Array.from(box.querySelectorAll<HTMLElement>('.phone-sec__head, [data-key]'))) {
+            const r = el.getBoundingClientRect();
+            if (r.height > 0 && r.top >= top) return { box, el, top: r.top };
+        }
+    }
+    return null;
+}
+
+/** What was under the finger stays there: rows put in above it move the scroll by as much (no overflow-anchor everywhere). */
+function keepScrollAnchor(a: { box: HTMLElement; el: HTMLElement; top: number } | null): void {
+    if (!a || !a.el.isConnected) return;
+    const moved = a.el.getBoundingClientRect().top - a.top;
+    if (Math.abs(moved) >= 1) a.box.scrollTop += moved;
+}
+
 
 export const phoneResearchMethods = uiModule({
     /** The Research screen is what is seen now. */
@@ -369,6 +674,8 @@ export const phoneResearchMethods = uiModule({
         if (line && line.parentElement !== screen) screen.prepend(line);
         this.syncPhoneBar();
         this.updateTreeSwitcher();
+        readWhileShown = false;
+        findsCame = 0;
         this.renderPhoneResearch();
         for (const k of ['main', 'a', 'b'] as const) {
             const el = screen.querySelector<HTMLElement>(`[data-scroll="${k}"]`);
@@ -391,6 +698,8 @@ export const phoneResearchMethods = uiModule({
             if (line && line.parentElement === screen) document.body.append(line);
         }
         document.body.classList.remove(PHONE_RESEARCH_ON);
+        if (seenTimer) clearTimeout(seenTimer);
+        seenTimer = null;
         unwatch?.();
         unwatch = null;
         reading?.abort();
@@ -416,6 +725,7 @@ export const phoneResearchMethods = uiModule({
         const col = (c: 'a' | 'b'): string => PHONE_SECTIONS.filter(k => PHONE_COLUMNS[k] === c).map(sec).join('');
         screen.innerHTML = `
             <div class="phone-research__main" data-scroll="main">
+                <div class="phone-finds-new" hidden><button type="button" class="phone-finds-new__btn" data-act="finds-new"><span class="phone-finds-new__pill"></span></button></div>
                 <div class="phone-research__col phone-research__col--a" data-scroll="a">${col('a')}</div>
                 <div class="phone-research__col phone-research__col--b" data-scroll="b">${col('b')}
                     <button type="button" class="phone-research__more" data-act="overview"><span class="phone-research__more-text"></span>${CHEVRON}</button>
@@ -430,6 +740,9 @@ export const phoneResearchMethods = uiModule({
             if (act === 'overview') void this.phoneOpenOverview();
             else if (act === 'now-menu' && at) this.openPhoneNowMenu(Number(at.dataset.index));
             else if (act === 'line-menu' && at?.dataset.line) this.openPhoneLineMenu(at.dataset.line);
+            else if (act === 'find-group' && at?.dataset.group) this.openPhoneFindGroup(at.dataset.group, at.dataset.older === '1');
+            else if (act === 'finds-older') void this.phoneFindsOlder();
+            else if (act === 'finds-new') this.phoneScrollToFinds();
         });
         const tabbar = document.getElementById('bottom-bar');
         if (tabbar?.parentElement) tabbar.parentElement.insertBefore(screen, tabbar);
@@ -443,6 +756,18 @@ export const phoneResearchMethods = uiModule({
             });
             dockObserver.observe(dock);
         }
+        const finds = screen.querySelector<HTMLElement>('.phone-sec[data-sec="finds"]');
+        if (finds && typeof IntersectionObserver === 'function') {
+            findsObserver?.disconnect();
+            // Finds in view (enough of them, past the header and the dock's edge): seen after FINDS_SEEN_MS (§4).
+            findsObserver = new IntersectionObserver((entries) => {
+                for (const e of entries) {
+                    findsInView = e.isIntersecting && e.intersectionRect.height >= Math.min(FINDS_VIEW_PX, e.boundingClientRect.height) - 1;
+                }
+                this.phoneFindsViewChanged();
+            }, { threshold: Array.from({ length: 21 }, (_, i) => i / 20) });
+            findsObserver.observe(finds);
+        }
         return screen;
     },
 
@@ -454,6 +779,7 @@ export const phoneResearchMethods = uiModule({
         const more = screen.querySelector('.phone-research__more-text');
         if (more) more.textContent = r.moreOverview;
         const state = shownState;
+        const anchor = scrollAnchor(screen);
         screen.classList.toggle('is-down', readFailed);
         screen.classList.toggle('is-empty', !state);
         for (const key of PHONE_SECTIONS) {
@@ -476,6 +802,7 @@ export const phoneResearchMethods = uiModule({
                 quiet(now.body, r.stateNotHere);
             }
             this.renderPhoneDock();
+            this.syncFindsPill();
             return;
         }
         if (now) this.appendPhoneNow(now, state);
@@ -486,6 +813,9 @@ export const phoneResearchMethods = uiModule({
         const lines = sectionEl(screen, 'lines');
         if (lines) this.appendPhoneLines(lines, state);
         this.renderPhoneDock();
+        keepScrollAnchor(anchor);
+        this.syncFindsPill();
+        this.phoneFindsSeenLater();
     },
 
     /**
@@ -557,11 +887,138 @@ export const phoneResearchMethods = uiModule({
         if (!n) quiet(el.body, r.waitingNone);
     },
 
-    /** Finds (§4; its groups: D4). */
-    appendPhoneFinds(el: { sec: HTMLElement; head: HTMLElement; sum: HTMLElement; body: HTMLElement }, state: DeviceResearchState): void {
+    /**
+     * Finds (§4): since they were last seen here (or the last 24 hours), the groups newest first — a person or a
+     * family by its name and years, new sources, resolved — each with its time, at most three lines (a dot for what
+     * came since they were last seen) and "and n more"; a tap shows the whole group. Under them the older finds once
+     * asked for, "and n more in the overview" when the research cut the list, "Show older finds" when there are any.
+     */
+    appendPhoneFinds(el: PhoneSectionEl, state: DeviceResearchState): void {
         const r = strings.deviceResearch;
-        el.head.textContent = r.findsTitle;
-        if (!state.finds?.groups.length) quiet(el.body, r.findsNone);
+        setText(el.head, r.findsTitle);
+        const treeId = phoneResearchTreeId();
+        const finds = state.finds;
+        if (finds) setText(el.sum, phoneFindsSummary(treeId ? findsWindow.get(treeId) ?? null : null, { lang: getCurrentLanguage() }));
+        // Until it is known when they were last seen here, no dots (none flash and go).
+        const known = !!treeId && findsSeenOf === treeId;
+        const rows: KeyedRow[] = phoneFindGroups(finds?.groups ?? []).map(g => findGroupRow(`find:${g.key}`, g, findsSeen, false, known));
+        if (!rows.length) rows.push(quietRow('none', r.findsNone));
+        const older = olderFinds && olderFinds.treeId === treeId && finds ? olderFinds.finds : null;
+        if (older && finds) rows.push(...olderFindGroups(older, finds.since).map(g => findGroupRow(`old:${g.key}`, g, null, true)));
+        const cut = older ? older.cut : finds?.cut;
+        if (cut) rows.push(quietRow('cut', r.findsCut(cut)));
+        if (finds?.earlier && !older) rows.push(linkRow('older', 'finds-older', r.findsOlder, olderReading));
+        syncRows(el.body, rows);
+    },
+
+    /** A group of finds tapped: its detail (§4 point 2). */
+    openPhoneFindGroup(key: string, older: boolean): void {
+        const treeId = phoneResearchTreeId();
+        const finds = shownState?.finds;
+        const pool = older
+            ? (olderFinds && olderFinds.treeId === treeId && finds ? olderFindGroups(olderFinds.finds, finds.since) : [])
+            : finds?.groups ?? [];
+        const g = pool.find(x => x.key === key);
+        if (g) this.showFindGroupSheet(g, older);
+    },
+
+    /**
+     * The detail of a group of finds in a sheet from below: all its lines with their times, "n finds since t"; a
+     * person (or a family by its first partner) with "Show in the tree", which opens the tree on that person (§7).
+     * Sources have no "Open in the Research overview": the overview needs the tree.
+     */
+    showFindGroupSheet(g: DeviceFindGroup, older = false): void {
+        const lang = getCurrentLanguage();
+        const head = phoneFindHead(g);
+        const treeId = phoneResearchTreeId();
+        const list = document.createElement('div');
+        list.className = 'phone-find-sheet';
+        for (const l of phoneFindLines(g, Infinity).lines) {
+            const row = document.createElement('div');
+            row.className = 'phone-find-sheet__row';
+            const text = document.createElement('span');
+            text.className = 'phone-find-sheet__text';
+            fillFindText(text, phoneFindText(l, g));
+            const at = document.createElement('span');
+            at.className = 'phone-find-sheet__at';
+            at.textContent = findClock(l.at, lang);
+            row.append(text, at);
+            list.append(row);
+        }
+        const rows: { label: string; id?: string; run: () => void }[] = [];
+        const person = g.person;
+        if (person) rows.push({ label: strings.live.showInTree, id: 'phone-find-tree', run: () => { void this.phoneOpenTree({ person }); } });
+        const since = findGroupSince(g, older || !treeId ? null : findsWindow.get(treeId) ?? null);
+        this.presentMenuSheet(head.name, [{ rows, content: list }], {
+            titleAside: head.years,
+            subtitle: strings.deviceResearch.findsDetailSub(g.lines.length, findClock(since, lang)),
+            overlayClass: `phone-sheet-overlay phone-find-overlay${head.plain ? ' is-plain' : ''}`,
+        });
+    },
+
+    /** "Show older finds" (§4 point 3): the finds of the last 31 days read, those before the list's shown under it. */
+    async phoneFindsOlder(): Promise<void> {
+        const treeId = phoneResearchTreeId();
+        if (!treeId || olderReading || !shownState?.finds) return;
+        olderReading = true;
+        this.renderPhoneResearch();
+        try {
+            const since = new Date(Date.now() - FINDS_OLDER_DAYS * 24 * 3600_000).toISOString();
+            const older = await readFinds(treeId, { since, lang: getCurrentLanguage() });
+            if (older && phoneResearchTreeId() === treeId) olderFinds = { treeId, finds: older };
+        } catch { /* no connection: the link stays for another try */ } finally {
+            olderReading = false;
+        }
+        if (phoneResearchShown()) this.renderPhoneResearch();
+    },
+
+    /** "n new ↓": its count while finds came with Finds out of view, hidden otherwise. */
+    syncFindsPill(): void {
+        const wrap = document.querySelector<HTMLElement>(`#${PHONE_RESEARCH_ID} .phone-finds-new`);
+        if (!wrap) return;
+        const show = findsCame > 0 && !findsInView && phoneResearchShown();
+        wrap.hidden = !show;
+        if (show) setText(wrap.querySelector('.phone-finds-new__pill'), strings.deviceResearch.findsNew(findsCame));
+    },
+
+    /** "n new ↓" tapped: Finds scrolled into view. */
+    phoneScrollToFinds(): void {
+        const sec = document.querySelector<HTMLElement>(`#${PHONE_RESEARCH_ID} .phone-sec[data-sec="finds"]`);
+        findsCame = 0;
+        this.syncFindsPill();
+        sec?.scrollIntoView({ block: 'start' });
+    },
+
+    /** Finds came into view or went out of it: "n new ↓" goes once they are seen, the 2 s of "seen" start or stop. */
+    phoneFindsViewChanged(): void {
+        if (findsInView) findsCame = 0;
+        this.syncFindsPill();
+        this.phoneFindsSeenLater();
+    },
+
+    /**
+     * Finds in view with something new among them: after FINDS_SEEN_MS still in view, what they show counts as seen
+     * here (`markFindsSeen` with their newest moment) and the dots go. The heading's "since" moves on the next start.
+     */
+    phoneFindsSeenLater(): void {
+        const treeId = phoneResearchTreeId();
+        const newest = newestFindAt(shownState?.finds);
+        const unseen = !!treeId && findsSeenOf === treeId && !!newest && findIsNew(newest, findsSeen);
+        if (!findsInView || !phoneResearchShown() || !unseen) {
+            if (seenTimer) clearTimeout(seenTimer);
+            seenTimer = null;
+            return;
+        }
+        if (seenTimer) return;
+        seenTimer = setTimeout(() => {
+            seenTimer = null;
+            const now = phoneResearchTreeId();
+            const at = newestFindAt(shownState?.finds);
+            if (!findsInView || !phoneResearchShown() || !now || now !== treeId || !at || !findIsNew(at, findsSeen)) return;
+            findsSeen = at;
+            void markFindsSeen(now, at).catch(() => undefined);
+            this.renderPhoneResearch();
+        }, FINDS_SEEN_MS);
     },
 
     /**
@@ -751,6 +1208,16 @@ export const phoneResearchMethods = uiModule({
     async refreshPhoneResearch(): Promise<void> {
         const treeId = phoneResearchTreeId();
         if (!treeId) return;
+        if (findsSeenOf !== treeId || !findsWindow.has(treeId)) {
+            // When the finds were last seen here: the dots' line, and (once per page) the window of the finds read.
+            const seen = await findsSeenAt(treeId).catch(() => null);
+            if (phoneResearchTreeId() !== treeId) return;
+            if (!findsWindow.has(treeId)) findsWindow.set(treeId, seen);
+            if (findsSeenOf !== treeId) {
+                findsSeen = seen;
+                findsSeenOf = treeId;
+            }
+        }
         if (!shownState) {
             const held = await heldResearchState(treeId).catch(() => null);
             if (held && phoneResearchTreeId() === treeId && !shownState) {
@@ -763,8 +1230,14 @@ export const phoneResearchMethods = uiModule({
         reading = ctl;
         try {
             if (!features) features = await readDeviceResearchFeatures(treeId, ctl?.signal ?? null);
-            const state = await readDeviceResearch(treeId, { features, lang: getCurrentLanguage(), signal: ctl?.signal ?? null });
+            const state = await readDeviceResearch(treeId, {
+                features, lang: getCurrentLanguage(), findsSince: findsWindowSince(findsWindow.get(treeId) ?? null), signal: ctl?.signal ?? null,
+            });
             if (reading !== ctl || phoneResearchTreeId() !== treeId) return;
+            // Finds newer than all shown, read while the screen ran with Finds out of view: "n new ↓" (§4 point 4).
+            const came = readWhileShown && phoneResearchShown() ? findsArrived(shownState?.finds, state.finds) : 0;
+            if (came && !findsInView) findsCame += came;
+            if (phoneResearchShown()) readWhileShown = true;
             shownState = state.glance || state.finds ? state : shownState;
             readFailed = false;
         } catch {
@@ -793,6 +1266,9 @@ export const phoneResearchMethods = uiModule({
         features = null;
         shownState = null;
         readFailed = false;
+        olderFinds = null;
+        findsCame = 0;
+        readWhileShown = false;
         if (this.deviceTreeHeldHere(researchId)) treesOpened.add(researchId);
         this.updateTreeSwitcher();
         this.renderPhoneResearch();
@@ -911,5 +1387,15 @@ export function resetPhoneResearchForTests(): void {
     stopsAsked.clear();
     orderMoving = null;
     linesBusy = false;
+    findsWindow.clear();
+    findsSeen = null;
+    findsSeenOf = null;
+    olderFinds = null;
+    olderReading = false;
+    findsCame = 0;
+    readWhileShown = false;
+    findsInView = false;
+    if (seenTimer) clearTimeout(seenTimer);
+    seenTimer = null;
 }
 

@@ -172,6 +172,8 @@ export interface DeviceFindLine {
     span?: string;
     /** A child: its person (P…), with `finds.person`. */
     person?: string;
+    /** A hypothesis decided: the answer chosen, when the research says it ("· decided: yes"). */
+    decided?: string;
 }
 
 export interface DeviceFindGroup {
@@ -454,6 +456,7 @@ function cleanFindLine(v: unknown): DeviceFindLine | null {
     const factKind = id(f?.kind, 40);
     const span = optText(r.span, 40);
     const person = personId(r.person);
+    const decided = optText(r.decided, MAX_NAME);
     return {
         kind,
         text: text(r.text),
@@ -461,6 +464,7 @@ function cleanFindLine(v: unknown): DeviceFindLine | null {
         ...(f && factKind ? { fact: { kind: factKind, name: text(f.name, MAX_NAME), what: text(f.what) } } : {}),
         ...(span ? { span } : {}),
         ...(person ? { person } : {}),
+        ...(decided ? { decided } : {}),
     };
 }
 
