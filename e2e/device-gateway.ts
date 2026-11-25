@@ -124,8 +124,11 @@ export interface FakeGateway {
     stall: boolean;
     /** The gateway's clock offset from the real one (ms): beyond ±2 min a request gets 409 device.clock. */
     clockOffsetMs: number;
-    /** A new code to pair (one at a time, 10 minutes): its pairId, secret and the QR code's address. */
-    pairCode(mode?: 'app'): { pairId: string; secret: string; url: string };
+    /**
+     * A new code to pair (one at a time, 10 minutes): its pairId, secret and the QR code's address. `tree`: the
+     * tree whose window made the code, said in the pairing's answer (`tree`, as the research's U11); none: no field.
+     */
+    pairCode(mode?: 'app', tree?: string): { pairId: string; secret: string; url: string };
     /** A home-screen icon's code (the same pairing, one at a time): its address `/#home.<pairId>.<secret>`. */
     homeCode(): { pairId: string; secret: string; url: string };
     /** The next refusals outside the tunnel (taken one per request of /device/x, first first). */
@@ -163,7 +166,7 @@ function json(res: ServerResponse, status: number, body: unknown, headers: Recor
 export async function startDeviceGateway(opts: { appPath?: string } = {}): Promise<FakeGateway> {
     const appPath = opts.appPath ?? process.env.STROM_DEVICE_APP ?? 'e2e-dist/strom.html';
     const app = readFileSync(appPath);
-    let code: { pairId: string; secret: Uint8Array; expiresAt: number } | null = null;
+    let code: { pairId: string; secret: Uint8Array; expiresAt: number; tree?: string } | null = null;
     const used = new Set<string>();
     const refusals: { status: number; body: Record<string, unknown>; headers?: Record<string, string> }[] = [];
     const streams = new Set<{ res: ServerResponse; device: FakeDevice; n: string; seq: number }>();
@@ -190,10 +193,10 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         unreachable: false,
         stall: false,
         clockOffsetMs: 0,
-        pairCode() {
+        pairCode(_mode, tree) {
             const pairId = b64url(randomBytes(16));
             const secret = new Uint8Array(randomBytes(32));
-            code = { pairId, secret, expiresAt: Date.now() + 10 * 60_000 };
+            code = { pairId, secret, expiresAt: Date.now() + 10 * 60_000, ...(tree ? { tree } : {}) };
             return { pairId, secret: b64url(secret), url: `${gw.origin}/pair?m=app#${pairId}.${b64url(secret)}` };
         },
         homeCode() {
@@ -229,11 +232,12 @@ export async function startDeviceGateway(opts: { appPath?: string } = {}): Promi
         const key = deriveKey(code.secret, pairId);
         if (sent.proof !== pairProof(key, pairId)) return json(res, 400, { code: 'device.bad' });
         used.add(pairId);
+        const tree = code.tree && gw.trees.some(t => t.id === code!.tree) ? { tree: code.tree } : {};
         code = null;
         const id = `dv_${Array.from(randomBytes(16), b => 'abcdefghijklmnopqrstuvwxyz234567'[b & 31]).join('')}`;
         const device: FakeDevice = { id, key, name: typeof sent.name === 'string' && sent.name ? sent.name : id, kind: typeof sent.kind === 'string' ? sent.kind : 'phone' };
         gw.devices.push(device);
-        const answer: PairAnswer = { device: { id, name: device.name, kind: device.kind }, computer: gw.computer, trees: gw.trees };
+        const answer: PairAnswer = { device: { id, name: device.name, kind: device.kind }, computer: gw.computer, trees: gw.trees, ...tree };
         json(res, 200, sealPair(key, pairId, answer));
     };
 

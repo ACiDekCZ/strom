@@ -4,7 +4,7 @@ import {
 } from '../device/device-crypto';
 import { configureHeavyWork } from '../heavy-work';
 import { runHeavyJob, type HeavyJob } from '../heavy-job';
-import { configureGateway, pair, tunnel, deviceFetch, OFF_THREAD_ANSWER_CHARS, hello, GatewayError, gatewayClockSkew, DEVICE_REPLAY, isDeviceReplay, deviceTreeRequest, DEVICE_TREE_TIMEOUT_MS, onGatewayOutcome } from '../device/gateway-client';
+import { configureGateway, pair, pairedTreeId, tunnel, deviceFetch, OFF_THREAD_ANSWER_CHARS, hello, GatewayError, gatewayClockSkew, DEVICE_REPLAY, isDeviceReplay, deviceTreeRequest, DEVICE_TREE_TIMEOUT_MS, onGatewayOutcome } from '../device/gateway-client';
 import {
     setDeviceKv, memoryKv, loadPairing, savePairing, hasPairingMark, deviceQueue, chooseTree, chosenTreeId, forgetPairing, saveLastView, loadLastView, proposeDevice, deviceKindOf,
     computerLabelOf, deviceTreeIdOk, deviceTreesOf,
@@ -124,6 +124,55 @@ describe('gateway client: pairing', () => {
         expect(computerLabelOf(null, 'Počítač')).toBe('Počítač');
         // GET /device/hello: label to show, name for the address
         expect(computerLabelOf({ name: 'Pracovna.local', label: 'Pracovna' })).toBe('Pracovna');
+    });
+
+    it('opens the tree the answer names (the window that made the code), over the tree chosen before (U11)', async () => {
+        const trees = [{ id: 'pychavkovi', name: 'Pýchavkovi z Mlýnků', archive: false }, { id: 'hrotkovi', name: 'Hrotkovi z Hrotova', archive: false }];
+        const answer = (tree?: string) => fakeFetch(() => ({ status: 200, body: sealPair(KEY, PAIR_ID, {
+            device: { id: DEVICE, name: 'iPhone · Safari', kind: 'phone' }, computer: { name: 'Pracovna.local', label: 'Pracovna' }, trees,
+            ...(tree ? { tree } : {}),
+        }) }));
+        await paired();
+        await chooseTree('pychavkovi');
+        configureGateway({ fetch: answer('hrotkovi') });
+        const r = await pair(PAIR_ID, b64url(SECRET), 'iPhone · Safari', 'phone');
+        expect(r.tree).toBe('hrotkovi');
+        expect((await loadPairing())?.treeId).toBe('hrotkovi');
+        expect(localStorage.getItem('strom-device-tree')).toBe('hrotkovi');
+        expect(chosenTreeId(await loadPairing())).toBe('hrotkovi');
+        // A tree the answer names that it does not offer: none named.
+        configureGateway({ fetch: answer('nikde') });
+        expect((await pair(PAIR_ID, b64url(SECRET), 'iPhone · Safari', 'phone')).tree).toBeUndefined();
+    });
+
+    it('a new QR code naming no tree chooses anew; a home or move code keeps the tree chosen before', async () => {
+        const trees = [{ id: 'pychavkovi', name: 'Pýchavkovi z Mlýnků', archive: false }, { id: 'hrotkovi', name: 'Hrotkovi z Hrotova', archive: false }];
+        configureGateway({ fetch: fakeFetch(() => ({ status: 200, body: sealPair(KEY, PAIR_ID, {
+            device: { id: DEVICE, name: 'iPhone · Safari', kind: 'phone' }, computer: { name: 'Pracovna.local', label: 'Pracovna' }, trees,
+        }) })) });
+        await paired();
+        await chooseTree('pychavkovi');
+        await pair(PAIR_ID, b64url(SECRET), 'iPhone · Safari', 'phone', 'move');
+        expect((await loadPairing())?.treeId).toBe('pychavkovi');
+        expect(chosenTreeId(await loadPairing())).toBe('pychavkovi');
+        await pair(PAIR_ID, b64url(SECRET), 'iPhone · Safari', 'phone', 'home');
+        expect(chosenTreeId(await loadPairing())).toBe('pychavkovi');
+        // A new QR code: the chooser (two trees), the earlier choice gone from the pairing and from the browser.
+        await pair(PAIR_ID, b64url(SECRET), 'iPhone · Safari', 'phone');
+        expect((await loadPairing())?.treeId).toBeUndefined();
+        expect(localStorage.getItem('strom-device-tree')).toBeNull();
+        expect(chosenTreeId(await loadPairing())).toBeNull();
+    });
+
+    it('pairedTreeId: the tree named, else a home / move code\'s earlier one, else none', () => {
+        const trees = [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }];
+        expect(pairedTreeId(trees, 'b', 'pair', 'a')).toBe('b');
+        expect(pairedTreeId(trees, 'b', 'move', 'a')).toBe('b');
+        expect(pairedTreeId(trees, undefined, 'pair', 'a')).toBeNull();
+        expect(pairedTreeId(trees, 'c', 'pair', 'a')).toBeNull();
+        expect(pairedTreeId(trees, undefined, 'home', 'a')).toBe('a');
+        expect(pairedTreeId(trees, undefined, 'move', 'a')).toBe('a');
+        expect(pairedTreeId(trees, undefined, 'move', 'c')).toBeNull();
     });
 
     it('turns a refused code into GatewayError', async () => {

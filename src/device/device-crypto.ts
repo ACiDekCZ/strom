@@ -233,6 +233,8 @@ export interface PairAnswer {
     device: { id: string; name: string; kind: string };
     computer: { name: string; label?: string };
     trees: unknown[];
+    /** The tree the code was made for (one of `trees[].id`, the research's window that made it); none for a code of no tree (home, move). */
+    tree?: string;
 }
 
 function parseJson(b: Uint8Array | null): unknown {

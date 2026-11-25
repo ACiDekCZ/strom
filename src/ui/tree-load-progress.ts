@@ -92,6 +92,8 @@ export interface TreeLoadRun {
     readonly watch: TreeDownloadWatch;
     /** Cancelled by the person (nothing changed). */
     readonly cancelled: boolean;
+    /** Cancel it (as its toast's Cancel, while the file downloads): nothing changed. */
+    cancel(): void;
     /** The file is in: its people are being processed (Cancel goes). */
     processing(persons: number): Promise<void>;
     /** A question is asked on the way: the toast goes meanwhile. */

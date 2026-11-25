@@ -693,6 +693,8 @@ export const plPart7: Pick<StringsType, 'cardDensity' | 'fanChart' | 'crossTree'
         codeBad: 'Ten kod jest już nieważny.',
         codeBadHow: 'Na komputerze z badaniem: Badanie → Urządzenia → Nowy kod.',
         codeBadNote: 'Kod jest ważny 10 minut, raz i tylko w tej samej sieci domowej.',
+        openStuck: 'Badanie się nie otwiera.',
+        openStuckHow: 'Od minuty z komputera nic nie przyszło.',
         retry: 'Spróbuj ponownie',
         homePairing: (pc: string) => `Ikona na ekranie głównym paruje się z komputerem ${pc}…`,
         homeUnpaired: 'Ikona na ekranie głównym nie jest jeszcze sparowana.',

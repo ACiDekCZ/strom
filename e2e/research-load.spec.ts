@@ -275,6 +275,11 @@ test.describe('loading the research version: a census the research writes as EVE
         const janEvents = () => page.evaluate(() => ((Object.values(window.Strom.DataManager.getData().persons) as any[])
             .find(p => p.firstName === 'Jan').events ?? []).map((e: { type: string; customLabel?: string }) => e.customLabel ? `${e.type}:${e.customLabel}` : e.type));
         expect(await janEvents()).toEqual(['census']);
+        // The very same tree under the very same head (nothing new, e.g. a device paired again): nothing asked either.
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await expect(page.locator('.toast', { hasText: 'In sync with the research' }).first()).toBeVisible();
+        await expect(dialog(page)).toHaveCount(0);
+        expect(await head(page)).toBe(HEAD);
         // The very same tree, its head moved on: taken, nothing asked.
         bridge.head = NEW_HEAD;
         bridge.treeGed = researchGed(NEW_HEAD, CENSUS);

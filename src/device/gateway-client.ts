@@ -19,7 +19,7 @@ import {
 import { runHeavyJob, type OpenedAnswer } from '../heavy-job';
 import { canWorkOffThread, runOffThread } from '../heavy-work';
 import {
-    loadPairing, savePairing, forgetPairing, chosenTreeId, deviceTreesOf,
+    loadPairing, savePairing, forgetPairing, chosenTreeId, noteChosenTree, deviceTreesOf,
     type DeviceKind, type DevicePairing, type DeviceTree,
 } from './device-store';
 
@@ -247,14 +247,29 @@ export interface PairResult {
     device: { id: string; name: string; kind: DeviceKind };
     computer: { name: string; label?: string };
     trees: DeviceTree[];
+    /** The tree the code was made for (one of `trees`), when the answer says it (the research's U11). */
+    tree?: string;
+}
+
+/**
+ * The tree a new pairing opens (pure): the one the answer says (the code made in that tree's window); else a
+ * home / move code keeps the tree chosen before (the same device, another address), while a new QR code chooses
+ * anew — its research may have more trees now, and an earlier choice never outweighs the window the code came
+ * from (null: one tree opens by itself, several ask the chooser).
+ */
+export function pairedTreeId(trees: readonly DeviceTree[], said: string | undefined, codeKind: 'pair' | 'home' | 'move', before: string | undefined): string | null {
+    if (said && trees.some(t => t.id === said)) return said;
+    if (codeKind !== 'pair' && before && trees.some(t => t.id === before)) return before;
+    return null;
 }
 
 /**
  * The device paired by the code of a QR code (or of a home / move code):
  * K derived from the secret, its proof sent, the answer opened with K and
- * the pairing kept. Refusals: 400 device.bad, 410 pair.used / pair.expired.
+ * the pairing kept with the tree it opens (pairedTreeId). Refusals: 400
+ * device.bad, 410 pair.used / pair.expired.
  */
-export async function pair(pairId: string, secret: string | Uint8Array, name: string, kind: DeviceKind): Promise<PairResult> {
+export async function pair(pairId: string, secret: string | Uint8Array, name: string, kind: DeviceKind, codeKind: 'pair' | 'home' | 'move' = 'pair'): Promise<PairResult> {
     const raw = typeof secret === 'string' ? fromB64url(secret, 32) : secret;
     if (!raw || raw.length !== 32) throw new GatewayError('device.bad', 0);
     const key = deriveKey(raw, pairId);
@@ -271,13 +286,16 @@ export async function pair(pairId: string, secret: string | Uint8Array, name: st
     const a = openPair(key, pairId, r.json);
     if (!a) throw new GatewayError('device.answer', r.status);
     const deviceKind: DeviceKind = a.device.kind === 'tablet' || a.device.kind === 'computer' ? a.device.kind : 'phone';
+    const trees = deviceTreesOf(a.trees);
     const result: PairResult = {
         device: { id: a.device.id, name: typeof a.device.name === 'string' ? a.device.name : name, kind: deviceKind },
         computer: { name: typeof a.computer.name === 'string' ? a.computer.name : '', ...(typeof a.computer.label === 'string' ? { label: a.computer.label } : {}) },
-        trees: deviceTreesOf(a.trees),
+        trees,
+        ...(typeof a.tree === 'string' && trees.some(t => t.id === a.tree) ? { tree: a.tree } : {}),
     };
     const was = await loadPairing();
-    const keepTree = was?.treeId && result.trees.some(t => t.id === was.treeId) ? { treeId: was.treeId } : {};
+    const treeId = pairedTreeId(result.trees, result.tree, codeKind, was?.treeId);
+    const keepTree = treeId ? { treeId } : {};
     const pairing: DevicePairing = {
         deviceId: result.device.id,
         key,
@@ -290,6 +308,8 @@ export async function pair(pairId: string, secret: string | Uint8Array, name: st
         pairedAt: new Date(nowMs()).toISOString(),
     };
     await savePairing(pairing);
+    // The browser's own note of the chosen tree (read first) follows: never an earlier choice over the new code's.
+    if (treeId || codeKind === 'pair') noteChosenTree(treeId);
     report({ ok: true });
     return result;
 }

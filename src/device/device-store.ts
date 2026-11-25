@@ -241,9 +241,17 @@ export function chosenTreeId(p: DevicePairing | null = pairingNow()): string | n
     return id ?? (p?.trees.length === 1 ? p.trees[0].id : null);
 }
 
+/** The tree chosen on this device noted (null: none chosen, the chooser asks), the pairing left as it is. */
+export function noteChosenTree(treeId: string | null): void {
+    try {
+        if (treeId) localStorage.setItem(TREE_KEY, treeId);
+        else localStorage.removeItem(TREE_KEY);
+    } catch { /* no storage */ }
+}
+
 /** A tree chosen (kept in localStorage and in the pairing). */
 export async function chooseTree(treeId: string): Promise<void> {
-    try { localStorage.setItem(TREE_KEY, treeId); } catch { /* no storage */ }
+    noteChosenTree(treeId);
     const p = await loadPairing();
     if (p) await savePairing({ ...p, treeId });
 }

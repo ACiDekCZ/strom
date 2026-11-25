@@ -152,7 +152,7 @@ async function doStart(opts: DeviceModeOptions): Promise<DeviceModeStart | null>
     if (code && said && codePairs(code, !!stored)) {
         const proposal = proposeThisDevice(opts.computerWord);
         try {
-            out.paired = await pair(code.id, code.secret, stored?.name || proposal.name, stored?.kind ?? proposal.kind);
+            out.paired = await pair(code.id, code.secret, stored?.name || proposal.name, stored?.kind ?? proposal.kind, code.kind);
             out.pairing = await loadPairing();
         } catch (e) {
             out.pairError = e instanceof GatewayError ? e.code : 'network';

@@ -23518,6 +23518,23 @@
             width: 44px; height: 44px; border-radius: 50%; background: var(--primary-soft); color: var(--primary);
         }
         .device-boot-retry { margin-top: 6px; min-height: 40px; padding: 0 18px; }
+        /* "Opening…" too long with nothing to see: Cancel and Try again side by side, wrapping when narrow. */
+        .device-boot-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 100%; }
+        .device-boot-acts .device-boot-retry {
+            max-width: 100%; overflow-wrap: anywhere; border-radius: var(--r-md); font-size: 14px; cursor: pointer; font-family: var(--font-sans);
+        }
+        .device-boot-acts button.primary { background: var(--primary); color: var(--on-primary); border: 1px solid var(--primary); }
+        .device-boot-acts button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+        .device-boot-acts button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) {
+            .device-boot-acts button.primary:hover { background: var(--primary-dark); }
+            .device-boot-acts button.secondary:hover { background: var(--hover-bg); }
+        }
+        @media (pointer: coarse) {
+            .device-boot-acts .device-boot-retry { min-height: 44px; }
+        }
+        /* A question asked while the start screen stands (a dialog of the tree's opening): over it, never hidden under it. */
+        body:has(#device-boot) .modal-overlay.active { z-index: 960; }
         /* The tree's first download (its progress, Cancel) over the start screen, at every width. */
         body:has(#device-boot) .toast[data-kind="tree-load"] { z-index: 950; }
         /* The chooser (2.4, 2.9): the whole screen on a phone; a framed list in the middle elsewhere. */

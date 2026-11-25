@@ -17,7 +17,7 @@ import {
 } from '../device/device-mode.js';
 import { hasPairingMark, chosenTreeId, chooseTree, computerLabelOf, deviceTreeIdOk, pairingNow, type DevicePairing, type DeviceTree } from '../device/device-store.js';
 import { retryDeviceConnection } from '../device/device-connection.js';
-import { startTreeLoad } from './tree-load-progress.js';
+import { startTreeLoad, currentTreeLoad } from './tree-load-progress.js';
 import { bridgeGivesImagesByHash } from '../research-tree-file.js';
 import { imagesUrlOf } from '../research-image-refs.js';
 import { deviceFetch, type GatewayHello } from '../device/gateway-client.js';
@@ -44,6 +44,14 @@ let chooserPick: ((id: string) => void) | null = null;
 
 /** How long "Paired with …" stays before the tree opens (it is read, not waited for). */
 const PAIRED_SHOWN_MS = 700;
+
+/**
+ * How long "Opening the research…" may stand with nothing on its way to be seen (no download's progress, no
+ * question over it) before it says so with Try again and Cancel: never a spinner without an end.
+ */
+const OPENING_LIMIT_MS = 60_000;
+/** How often the start screen's "Opening…" is looked at. */
+const OPENING_LOOK_MS = 1000;
 
 function esc(text: string): string {
     return text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -179,7 +187,9 @@ export const deviceStartMethods = uiModule({
             }
             // A first open cancelled (or failed, Try again not taken) with no research's tree open here: the
             // chooser again, never the app's own empty tree under the research's connection.
-            while (!await this.openDeviceTree(treeId, !!screen || !TreeManager.findTreeByResearchId(treeId), pairing.trees.find(t => t.id === treeId)?.name)) {
+            // A tree held here already (paired again, its earlier pairing's tree) opens as it is, never downloaded again:
+            // the research's newer version is offered afterwards, as on the computer (pollResearchBridge).
+            while (!await this.openDeviceTree(treeId, !TreeManager.findTreeByResearchId(treeId), pairing.trees.find(t => t.id === treeId)?.name)) {
                 treeId = await choose();
             }
         };
@@ -202,7 +212,7 @@ export const deviceStartMethods = uiModule({
         const boot = document.getElementById(BOOT_ID);
         if (boot && !boot.classList.contains('is-opening')) this.renderDeviceBoot('opening', { pc: '', host: location.hostname });
         let back = false;
-        try {
+        const open = async (): Promise<'done'> => {
             const held = TreeManager.findTreeByResearchId(treeId);
             if (held && !first) {
                 if (DataManager.getCurrentTreeId() !== held.id) await this.switchToTree(held.id);
@@ -220,11 +230,28 @@ export const deviceStartMethods = uiModule({
                 } });
                 await this.importResearchFromUrl(`${base}/tree.ged`, { takeSame: true, load });
             }
+            return 'done';
+        };
+        // "Opening…" with nothing to be seen on its way for too long: said, with Try again and Cancel (the chooser).
+        const stuck = this.watchDeviceOpening();
+        let outcome: 'done' | 'retry' | 'cancel' = 'done';
+        try {
+            outcome = await Promise.race([open(), stuck.answer]);
         } finally {
+            stuck.stop();
             // Nothing of the research open after a first open (Cancel, a failure): the caller's chooser takes the
             // start screen; a research's tree open here already (another one, or this one's older copy) stays.
-            back = first && !this.deviceResearchTreeOpen();
-            if (!back) this.closeDeviceBoot();
+            if (outcome === 'done') {
+                back = first && !this.deviceResearchTreeOpen();
+                if (!back) this.closeDeviceBoot();
+            }
+        }
+        if (outcome !== 'done') {
+            // Whatever was still on its way stops (a download nobody sees).
+            currentTreeLoad()?.cancel();
+            if (outcome === 'cancel') return false;
+            this.renderDeviceBoot('opening', { pc: '', host: location.hostname });
+            return this.openDeviceTree(treeId, !TreeManager.findTreeByResearchId(treeId), pairedName);
         }
         if (back) return false;
         const held = TreeManager.findTreeByResearchId(treeId);
@@ -251,6 +278,45 @@ export const deviceStartMethods = uiModule({
         if (!bridgeGivesImagesByHash(this.researchStatusOf(researchId)?.features)) return;
         const base = deviceBridgeBase(researchId, researchDeviceState()?.origin ?? location.origin);
         this.researchResumePendingImages(held.id, researchId, imagesUrlOf(`${base}/tree.ged`));
+    },
+
+    /**
+     * The start screen's "Opening the research…" watched: standing for OPENING_LIMIT_MS with nothing on its way to
+     * be seen — no download's progress over it, no question asked over it — it says the research is not opening,
+     * with Try again and Cancel; `answer` resolves with the one taken. Measured by the clock (a phone's page put
+     * aside and back counts the time it was away).
+     */
+    watchDeviceOpening(): { answer: Promise<'retry' | 'cancel'>; stop(): void } {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let stopped = false;
+        let since: number | null = null;
+        let answered!: (a: 'retry' | 'cancel') => void;
+        const answer = new Promise<'retry' | 'cancel'>(resolve => { answered = resolve; });
+        const look = (): void => {
+            if (stopped) return;
+            const boot = document.getElementById(BOOT_ID);
+            const waiting = boot?.dataset.state === 'opening'
+                && !document.querySelector('.toast[data-kind="tree-load"]')
+                && !document.querySelector('.modal-overlay.active');
+            const now = Date.now();
+            since = waiting ? since ?? now : null;
+            if (!boot || since === null || now - since < OPENING_LIMIT_MS) {
+                timer = setTimeout(look, OPENING_LOOK_MS);
+                return;
+            }
+            this.renderDeviceBoot('openStuck', { pc: '', host: location.hostname });
+            boot.querySelector<HTMLButtonElement>('[data-act="retry"]')?.addEventListener('click', () => answered('retry'), { once: true });
+            boot.querySelector<HTMLButtonElement>('[data-act="cancel"]')?.addEventListener('click', () => answered('cancel'), { once: true });
+            boot.querySelector<HTMLButtonElement>('[data-act="retry"]')?.focus();
+        };
+        timer = setTimeout(look, OPENING_LOOK_MS);
+        return {
+            answer,
+            stop: () => {
+                stopped = true;
+                if (timer !== undefined) clearTimeout(timer);
+            },
+        };
     },
 
     /** The tree open now is one of the pairing's research trees (never the app's own tree of its first start). */
@@ -288,15 +354,15 @@ export const deviceStartMethods = uiModule({
         document.getElementById(BOOT_ID)?.remove();
     },
 
-    /** One state of the start screen (2.1, 2.2, 2.3, 2.8a, 2.8b). */
-    renderDeviceBoot(state: 'connecting' | 'paired' | 'opening' | 'codeBad' | 'homeUnpaired', o: { pc: string; host: string; home?: boolean }): void {
+    /** One state of the start screen (2.1, 2.2, 2.3, 2.8a, 2.8b; `openStuck`: "Opening…" too long with nothing to see). */
+    renderDeviceBoot(state: 'connecting' | 'paired' | 'opening' | 'openStuck' | 'codeBad' | 'homeUnpaired', o: { pc: string; host: string; home?: boolean }): void {
         const el = document.getElementById(BOOT_ID);
         if (!el) return;
         const d = strings.device;
         const pcB = (text: string): string => o.pc ? esc(text).replace(esc(o.pc), `<b>${esc(o.pc)}</b>`) : esc(text);
         el.classList.remove('is-trees');
         el.classList.toggle('is-opening', state === 'opening');
-        el.setAttribute('role', state === 'codeBad' || state === 'homeUnpaired' ? 'alert' : 'status');
+        el.setAttribute('role', state === 'codeBad' || state === 'homeUnpaired' || state === 'openStuck' ? 'alert' : 'status');
         el.setAttribute('aria-live', 'polite');
         el.dataset.state = state;
         let body = '';
@@ -309,6 +375,13 @@ export const deviceStartMethods = uiModule({
                 ? `<span class="device-boot-ok" aria-hidden="true">${iconSvg('check', { size: 22, strokeWidth: 2.5 })}</span><span class="device-boot-msg">${pcB(d.paired(o.pc))}</span>`
                 : `<span class="device-boot-row"><i class="busy-spin s16" aria-hidden="true"></i><span class="device-boot-msg">${esc(d.opening)}</span></span>`;
             body = head + (state === 'paired' ? `<span class="device-boot-ins">${esc(d.opening)}</span>` : '');
+        } else if (state === 'openStuck') {
+            body = `<span class="device-boot-msg"><b>${esc(d.openStuck)}</b></span>`
+                + `<span class="device-boot-msg device-boot-how">${esc(d.openStuckHow)}</span>`
+                + '<span class="device-boot-acts">'
+                + `<button type="button" class="secondary device-boot-retry" data-act="cancel">${esc(strings.buttons.cancel)}</button>`
+                + `<button type="button" class="primary device-boot-retry" data-act="retry">${esc(d.retry)}</button>`
+                + '</span>';
         } else {
             const bad = state === 'codeBad';
             body = `<span class="device-boot-msg"><b>${esc(bad ? d.codeBad : d.homeUnpaired)}</b></span>`

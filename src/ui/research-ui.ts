@@ -2816,14 +2816,15 @@ export const researchUiMethods = uiModule({
     /**
      * The research's version (`data` as read, `research` as it came) is the
      * open tree `treeId` as it is and its base unchanged — its head moved on
-     * by a write that left the tree alone (the family's material): its head
-     * is taken, nothing loaded, no backup, said briefly. False when anything
-     * would change (the usual load then asks).
+     * by a write that left the tree alone (the family's material), or not
+     * moved at all (nothing new): its head is taken, nothing loaded, no
+     * backup, said briefly. False when anything would change (the usual load
+     * then asks).
      */
     researchTakeSameVersion(treeId: TreeId, previous: StromData, data: StromData, research: StromData, source: ResearchSource,
         head: string, includeImages: boolean, knowsTitles: boolean): boolean {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        if (!head || !link || !source.treeId || DataManager.getCurrentTreeId() !== treeId || head === link.head) return false;
+        if (!head || !link || !source.treeId || DataManager.getCurrentTreeId() !== treeId) return false;
         const incoming = includeImages ? data : stripMedia(data);
         const carry = carryOverMedia(stabilizeIds(incoming, previous), previous, includeImages ? researchMediaBaseOf(treeId, source) : undefined);
         const kept = carry.data;
