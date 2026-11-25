@@ -249,6 +249,26 @@ test.describe('en', () => {
         await expect(line).toHaveCount(0);
     });
 
+    test('the quiet line follows a change of the language while it stands, with the switcher\'s second line', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        research(gw, [{ id: PYCH, name: 'Pýchavkovi z Mlýnků', archive: false }]);
+        await page.goto(gw.pairCode().url);
+        const line = page.locator('#device-home-line');
+        await expect(line).toContainText('A home-screen icon opens the research with one tap.', { timeout: 15000 });
+        await expect(page.locator('#current-tree-conn')).toHaveText('on computer Pracovna');
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs'));
+        await expect(line.locator('.device-home-line-text')).toHaveText('Ikona na ploše otevře výzkum jedním klepnutím.');
+        await expect(line.locator('button')).toHaveText(['Jak', '×']);
+        await expect(line.locator('[data-act="hide"]')).toHaveAttribute('aria-label', 'Skrýt');
+        await expect(page.locator('#current-tree-conn')).toHaveText('na počítači Pracovna');
+        await expectNoOverflow(page, '#device-home-line');
+        // and back: the same line, not a second one
+        await page.evaluate(() => window.Strom.UI.setLanguage('en'));
+        await expect(line.locator('.device-home-line-text')).toHaveText('A home-screen icon opens the research with one tap.');
+        await expect(page.locator('#device-home-line')).toHaveCount(1);
+    });
+
     test('without device/home announced, "How" asks nothing of the gateway', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await seeds(page);

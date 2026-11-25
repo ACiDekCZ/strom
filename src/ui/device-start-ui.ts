@@ -326,6 +326,18 @@ export const deviceStartMethods = uiModule({
         document.body.classList.add('device-home-line-on');
     },
 
+    /** The home-screen icon's quiet line said again in the UI's language (UI.setLanguage), where it stands. */
+    retranslateDeviceHomeLine(): void {
+        const el = document.getElementById(HOME_LINE_ID);
+        if (!el) return;
+        const d = strings.device;
+        const text = el.querySelector('.device-home-line-text');
+        const how = el.querySelector('.device-home-line-how');
+        if (text) text.textContent = d.homeLine;
+        if (how) how.textContent = d.homeHow;
+        el.querySelector('.device-home-line-x')?.setAttribute('aria-label', d.homeHide);
+    },
+
     closeDeviceHomeLine(): void {
         document.getElementById(HOME_LINE_ID)?.remove();
         document.body.classList.remove('device-home-line-on');

@@ -741,6 +741,8 @@ export const miscMethods = uiModule({
         this.renderEvidencePill();
         this.renderCardSignalSettings();
         this.renderResearchEdgeSettings();
+        // A device's quiet line of the home-screen icon (spec 094 §2); the switcher's second line comes with updateTreeSwitcher.
+        this.retranslateDeviceHomeLine();
         // Settings drawn from code while open (the originals waiting, the change history's state): the new language
         // at once, not at the next opening (J4 of the language round).
         if (document.getElementById('settings-modal')?.classList.contains('active')) this.showSettingsDialog();
