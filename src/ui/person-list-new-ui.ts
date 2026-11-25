@@ -40,9 +40,13 @@ import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import type { PersonId, PersonList, PersonListRule, RuleGroup } from '../types.js';
 import { listIsAuto, rulePersonIds } from '../person-lists.js';
-import { customToRule, ruleToCustom } from '../person-list-rules.js';
+import { customPersonIds, customToRule, ruleToCustom } from '../person-list-rules.js';
 import { cloneRuleNode, editedConditions, emptyRuleRoot } from '../person-list-rule-edit.js';
-import { newRuleBuilder, ruleBuilderBlock, ruleBuilderCounts, type RuleBuilderState, type RuleMenuRow } from './person-list-rule-ui.js';
+import {
+    newRuleBuilder, ruleBuilderBlock, ruleBuilderCounts, ruleBuilderCountsBusy, type RuleBuilderState, type RuleMenuRow,
+} from './person-list-rule-ui.js';
+import { MQ_PHONE_BAR } from '../breakpoints.js';
+import type { ViewMode } from '../types.js';
 import { rodLabels, type RodId } from '../lineage.js';
 import { rodPickerItems, rodPickerSmallItems } from '../rod-picker.js';
 import { researchLinesOf, selectionLines } from './table-view/table-research.js';
@@ -127,6 +131,13 @@ interface NewListState {
 }
 
 let state: NewListState | null = null;
+
+/** The rule's preview in the tree (§6): what was hidden for it and the view to go back to. */
+let preview: { overlays: HTMLElement[]; stack: string[]; view: ViewMode | null } | null = null;
+
+function phoneBar(): boolean {
+    return typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia(MQ_PHONE_BAR).matches;
+}
 let closePicker: (() => void) | null = null;
 
 function esc(s: string): string {
@@ -434,11 +445,11 @@ export const personListNewMethods = uiModule({
     },
 
     /**
-     * Beside the count in a custom rule's footer: "Show in the tree" (§6,
-     * the next part). Empty for now.
+     * Beside the count in a custom rule's footer: "Show in the tree" (§6;
+     * hidden while nobody matches, on a phone in ⋯ instead).
      */
     newPersonListFootExtraHtml(): string {
-        return '';
+        return `<button type="button" class="secondary pln-show" data-act="show-tree" data-key="show-tree" hidden>${esc(strings.lists.rules.showInTree)}</button>`;
     },
 
     /**
@@ -456,12 +467,59 @@ export const personListNewMethods = uiModule({
      * in the tree (§14). Each row's id goes to newPersonListMoreAction.
      */
     newPersonListMoreRows(): RuleMenuRow[] {
-        return [];
+        const st = state;
+        if (!st?.rb || !phoneBar()) return [];
+        const n = ruleBuilderBlock(st.rb) === null ? ruleBuilderCounts(st.rb).total : 0;
+        return [{ id: 'show-tree', label: strings.lists.rules.showInTree, ...(n ? {} : { disabled: true }) }];
     },
 
-    /** A row of the custom rule's ⋯ other than "Clear the rule" (the next parts). */
-    newPersonListMoreAction(_id: string): void {
-        /* the next parts */
+    /** A row of the custom rule's ⋯ other than "Clear the rule". */
+    newPersonListMoreAction(id: string): void {
+        if (id === 'show-tree') this.showNewPersonListInTree();
+    },
+
+    /**
+     * "Show in the tree" (§6): the dialog (and the Lists of people under it)
+     * hidden, not closed; the Family view (switched to when another view is
+     * on); the rule's people highlighted with "Back to the rule". Back, × and
+     * Escape end the highlight, return the view and show the dialog again as
+     * it was, the focus on "Show in the tree".
+     */
+    showNewPersonListInTree(): void {
+        const st = state;
+        if (!st?.rb || preview || ruleBuilderBlock(st.rb) !== null) return;
+        const ids = customPersonIds(DataManager.getLineageIndex(), { v: 1, root: st.rb.root }, { now: Date.now() }, st.listId ?? undefined);
+        if (!ids.length) return;
+        this.closeRuleMenu();
+        const overlays = [...document.querySelectorAll<HTMLElement>('.modal-overlay.active')];
+        for (const o of overlays) { o.classList.remove('active'); o.hidden = true; }
+        const view = TreeRenderer.getViewMode();
+        preview = { overlays, stack: [...this.dialogStack], view: view === 'family' ? null : view };
+        this.dialogStack = [];
+        if (view !== 'family') TreeRenderer.setViewMode('family');
+        const r = strings.lists.rules;
+        this.highlightGroup({
+            kind: 'rulePreview', title: (n: number) => r.preview(n), personIds: ids, recount: null, cite: false,
+            returnTo: () => this.backToNewPersonList(), returnLabel: r.backToRule,
+        });
+    },
+
+    /** Back from the rule's preview in the tree: the view as it was, the dialog shown again. */
+    backToNewPersonList(): void {
+        const p = preview;
+        if (!p) return;
+        preview = null;
+        if (p.view) TreeRenderer.setViewMode(p.view);
+        for (const o of p.overlays) {
+            if (!o.isConnected) continue;
+            o.hidden = false;
+            o.classList.add('active');
+        }
+        this.dialogStack = [...p.stack, ...this.dialogStack.filter(d => !p.stack.includes(d))];
+        const st = state;
+        const modal = st ? document.querySelector<HTMLElement>(`#${st.overlayId} .pln-modal`) : null;
+        const btn = modal?.querySelector<HTMLElement>('[data-act="show-tree"]:not([hidden])') ?? modal?.querySelector<HTMLElement>('.pln-more');
+        btn?.focus({ preventScroll: true });
     },
 
     /** The custom rule: "Based on: Custom rule ▾", the template button, ⋯, then the builder. */
@@ -604,8 +662,14 @@ export const personListNewMethods = uiModule({
         if (total && st.rb) {
             const r = strings.lists.rules;
             const n = block === null ? ruleBuilderCounts(st.rb).total : null;
+            const busy = block === null && ruleBuilderCountsBusy(st.rb);
             total.classList.toggle('is-block', block !== null);
-            total.textContent = block ?? (n ? r.match(n) : r.nobody);
+            total.classList.toggle('is-busy', busy);
+            // A slow count: "Counting…" and, quietly, the total so far (§6); no spinner.
+            if (busy) total.innerHTML = `<span>${esc(r.computing)}</span> <span class="pln-prev">${esc(r.previous(n ?? 0))}</span>`;
+            else total.textContent = block ?? (n ? r.match(n) : r.nobody);
+            const show = modal.querySelector<HTMLElement>('[data-act="show-tree"]');
+            if (show) show.hidden = !n;
         }
     },
 
@@ -617,6 +681,7 @@ export const personListNewMethods = uiModule({
         const act = el?.dataset.act;
         if (this.ruleBuilderClick(e)) return;
         if (act === 'cancel') { this.requestCloseNewPersonList(); return; }
+        if (act === 'show-tree') { this.showNewPersonListInTree(); return; }
         if (act === 'create') { this.saveNewPersonList(); return; }
         if (act === 'keep') {
             if (el!.getAttribute('aria-disabled') === 'true') return;

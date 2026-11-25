@@ -37,7 +37,7 @@ import { overviewChanged } from '../windows/overview-window.js';
 
 /** A highlighted group of people: what it is, who, and where Next › stands. */
 interface Highlight {
-    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction' | 'direction-found' | 'ancestorGap' | 'selection' | 'merged';
+    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction' | 'direction-found' | 'ancestorGap' | 'selection' | 'merged' | 'rulePreview';
     label: string;
     ids: PersonId[];
     index: number;
@@ -49,6 +49,8 @@ interface Highlight {
     cite?: boolean;
     /** "Back to overview": ends the highlight and reopens where it was started from. */
     returnTo?: () => void;
+    /** The back button's text (default "Back to overview"). */
+    returnLabel?: string;
     /** People shown faintly beside the group, recounted with it (a lineage's spouses). */
     faint?: () => PersonId[];
     /** Stays up with nobody in it (the window's selection, spec 098 §12). */
@@ -64,6 +66,8 @@ export interface HighlightGroup {
     recount: (() => PersonId[]) | null;
     cite: boolean;
     returnTo?: () => void;
+    /** The back button's text (default "Back to overview"; a rule's preview: "Back to the rule"). */
+    returnLabel?: string;
     /** People shown faintly beside the group (neither framed nor dimmed), recounted with it. */
     faint?: () => PersonId[];
     /** Shown with nobody in it, the pill counting 0 and Next unavailable (the window's selection, spec 098 §12). */
@@ -152,7 +156,7 @@ export const evidenceUiMethods = uiModule({
         levelsMode = false;
         evidence = {
             kind: group.kind, label: group.title(group.personIds.length), ids: [...group.personIds], index: -1,
-            recount: group.recount, title: group.title, cite: group.cite, returnTo: group.returnTo, faint: group.faint,
+            recount: group.recount, title: group.title, cite: group.cite, returnTo: group.returnTo, returnLabel: group.returnLabel, faint: group.faint,
             keepEmpty: group.keepEmpty,
         };
         TreeRenderer.setEvidenceLevels(null);
@@ -276,6 +280,8 @@ export const evidenceUiMethods = uiModule({
     },
 
     endEvidenceHighlight(): void {
+        // A list rule's preview (spec 136 §6): however it ends (×, Escape, Back, another tree), the rule comes back.
+        const back = evidence?.kind === 'rulePreview' ? evidence.returnTo : undefined;
         evidence = null;
         levelsMode = false;
         TreeRenderer.setEvidenceHighlight(null);
@@ -286,6 +292,7 @@ export const evidenceUiMethods = uiModule({
         this.syncPersonFilter();
         // The overview's own window says what is lit here.
         overviewChanged();
+        back?.();
     },
 
     /**
@@ -463,10 +470,11 @@ export const evidenceUiMethods = uiModule({
                 const back = document.createElement('button');
                 back.type = 'button';
                 back.className = 'evidence-pill-back';
-                back.textContent = strings.treeOverview.back;
+                back.textContent = evidence.returnLabel ?? strings.treeOverview.back;
+                const viaDismiss = evidence.kind === 'rulePreview';
                 back.onclick = () => {
                     this.dismissEvidenceHighlight();
-                    returnTo();
+                    if (!viaDismiss) returnTo();
                 };
                 pill.append(back);
             }

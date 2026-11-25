@@ -77,7 +77,7 @@ test.describe('Custom rule: a computer', () => {
 
         // Women; then born 1900–1999 (an incomplete period first: Create waits).
         await addCond(page, '', 'gender');
-        await expect(row(page, '0').locator('select[data-pc="value"]')).toHaveValue('female');
+        await expect(row(page, '0').locator('button[data-pc="value"][data-v="female"]')).toHaveAttribute('aria-pressed', 'true');
         await expect(f.locator('.pln-total')).toHaveText('4 people match');
         await addCond(page, '', 'born');
         await expect(row(page, '1').locator('input[data-pc="from"]')).toBeFocused();
@@ -98,7 +98,7 @@ test.describe('Custom rule: a computer', () => {
 
         // Except the deceased: the first item cannot be an except, the second can.
         await addCond(page, '', 'alive');
-        await row(page, '1').locator('select[data-pc="value"]').selectOption('deceased');
+        await row(page, '1').locator('button[data-pc="value"][data-v="deceased"]').click();
         await row(page, '0.0').locator('> .plr-d').click();
         await expect(menu(page).locator('.pl-menu-item[data-id="except"]')).toHaveAttribute('aria-disabled', 'true');
         await page.keyboard.press('Escape');
@@ -132,11 +132,11 @@ test.describe('Custom rule: a computer', () => {
         await expect(f.locator('.pln-bybtn')).toContainText('Custom rule');
         await expect(row(page, '0')).toHaveClass(/plr-grp/);
         await expect(row(page, '0').locator('[data-rb="op"][data-op="any"]').first()).toHaveAttribute('aria-pressed', 'true');
-        await expect(row(page, '0.0').locator('select[data-pc="value"]')).toHaveValue('female');
+        await expect(row(page, '0.0').locator('button[data-pc="value"][data-v="female"]')).toHaveAttribute('aria-pressed', 'true');
         await expect(row(page, '0.1').locator('input[data-pc="from"]')).toHaveValue('1900');
         await expect(row(page, '0.1').locator('input[data-pc="to"]')).toHaveValue('1999');
         await expect(row(page, '1')).toHaveAttribute('data-not', '1');
-        await expect(row(page, '1').locator('select[data-pc="value"]')).toHaveValue('deceased');
+        await expect(row(page, '1').locator('button[data-pc="value"][data-v="deceased"]')).toHaveAttribute('aria-pressed', 'true');
         await expect(f.locator('.pln-total')).toHaveText('3 people match');
         await f.locator('.pln-foot [data-act="cancel"]').click();
         await expect(f).toHaveCount(0);
@@ -214,9 +214,11 @@ test.describe('Custom rule: a phone', () => {
         expect(box).toEqual({ x: 0, y: 0, width: 390, height: 844 });
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
         await expect(f.locator('.pln-total')).toHaveText('3 people match');
+        // "Show in the tree" is in ⋯ on a phone, not in the footer.
+        await expect(f.locator('.pln-foot [data-act="show-tree"]')).toBeHidden();
         await expect(row(page, '1').locator('> .plr-m > .plr-ci')).toBeVisible();
         await expect(row(page, '1').locator('> .plr-c')).toBeHidden();
-        for (const el of await f.locator('.plr-d, .pln-more, .plr-seg > .sel-opt, .pln-bybtn, .plr .pln-ctl, .pln-foot > button').all()) {
+        for (const el of await f.locator('.plr-d, .pln-more, .plr-seg > .sel-opt, .pln-bybtn, .plr .pln-ctl, .pln-foot > button:visible').all()) {
             const b = (await el.boundingBox())!;
             expect(b.height).toBeGreaterThanOrEqual(44);
             expect(b.x + b.width).toBeLessThanOrEqual(390);

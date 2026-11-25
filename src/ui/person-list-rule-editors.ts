@@ -40,8 +40,44 @@ export interface RuleEditorCtx {
     key(name: string): string;
     /** The overlay of the dialog (a popover or a choice is put there). */
     host: HTMLElement | null;
+    /** The list being edited (a list condition must not lead back to it), null: a new one. */
+    listId: string | null;
     /** Change the row's condition: drawn again (default) or only counted (`render: false`, while typing). */
     update(cond: RuleCond, opts?: { render?: boolean }): void;
+    /** A choice by a control (a popup with a search; a sheet on a phone), see openRuleMenu. */
+    menu(anchor: HTMLElement, title: string, rows: RulePickRow[], onPick: (id: string) => void, opts?: RulePickOpts): void;
+    /** A person's choice by a control (search, the person in focus, the recent ones). */
+    pickPerson(anchor: HTMLElement, selectedId: PersonId | null, onPick: (id: PersonId) => void): void;
+}
+
+/** A row of a choice (the catalog, a place, an occupation, a list…). */
+export interface RulePickRow {
+    id: string;
+    label: string;
+    /** A quiet second line (searched too). */
+    sub?: string;
+    /** A quiet value at the end (a count of people, a distance). */
+    value?: string;
+    /** A heading before the row (a group). */
+    head?: string;
+    /** A line before the row. */
+    sep?: boolean;
+    checked?: boolean;
+    disabled?: boolean;
+    why?: string;
+    kbd?: string;
+    danger?: boolean;
+}
+
+export interface RulePickOpts {
+    /** A wide popup (330 px). */
+    wide?: boolean;
+    /** A search field over the rows (its placeholder); rows filtered by label and sub, without accents. */
+    search?: string;
+    /** Several rows can be ticked: a pick toggles its row and the choice stays open. */
+    multi?: boolean;
+    /** Called once when the choice closes (any way). */
+    onClose?: () => void;
 }
 
 type CondOf<C extends RuleCondName> = Extract<RuleCond, { c: C }>;
@@ -57,6 +93,8 @@ export interface RuleCondEditor<C extends RuleCondName = RuleCondName> {
     input?(cond: CondOf<C>, el: Control, ctx: RuleEditorCtx): RuleParamsMap[C] | null;
     click?(cond: CondOf<C>, el: HTMLElement, ctx: RuleEditorCtx): void;
     hint?(cond: CondOf<C>, ctx: RuleEditorCtx): string;
+    /** A quiet block under the row as HTML (links with `data-pc` go to `click`), drawn in place of `hint`. */
+    hintHtml?(cond: CondOf<C>, ctx: RuleEditorCtx): string;
     firstControl?: string;
     /** Open the first control's choice right after the condition is added (a person, a place, a list). */
     openOnAdd?: boolean;
@@ -98,6 +136,38 @@ export function ctlSelect(ctx: RuleEditorCtx, name: string, label: string, optio
         + `</select>`;
 }
 
+/**
+ * A segment of buttons (`.sel-seg`): each a `button.sel-opt` with `data-pc`
+ * = name and `data-v` = its value; a disabled one is `aria-disabled` (with
+ * its reason as a title). The editor's `click` reads `data-v`.
+ */
+export function ctlSeg(ctx: RuleEditorCtx, name: string, label: string, options: Array<[string, string]>, value: string | null,
+    opts: { disabled?: (v: string) => string | false; cls?: string } = {}): string {
+    return `<div class="sel-seg plr-seg plr-pseg${opts.cls ? ` ${opts.cls}` : ''}" role="group" aria-label="${escHtml(label)}">`
+        + options.map(([v, l]) => {
+            const off = opts.disabled ? opts.disabled(v) : false;
+            return `<button type="button" class="sel-opt" data-sel-form="seg" data-pc="${escHtml(name)}" data-v="${escHtml(v)}"`
+                + ` data-key="${escHtml(ctx.key(`${name}-${v}`))}" aria-pressed="${v === value}"`
+                + `${off !== false ? ` aria-disabled="true" title="${escHtml(off)}"` : ''}>${escHtml(l)}</button>`;
+        }).join('')
+        + `</div>`;
+}
+
+/** A control that opens a choice (`.pln-ctl` "value ▾"); `missing`: nothing chosen yet (the text is a call to choose). */
+export function ctlPick(ctx: RuleEditorCtx, name: string, label: string, text: string, missing = false, cls = ''): string {
+    return `<button type="button" class="pln-ctl plr-pick${missing ? ' miss' : ''}${cls ? ` ${cls}` : ''}" data-pc="${escHtml(name)}" data-key="${escHtml(ctx.key(name))}"`
+        + ` aria-haspopup="true" aria-expanded="false" aria-label="${escHtml(`${label}: ${text}`)}">`
+        + `<span class="plr-pick-t">${escHtml(text)}</span><span class="plr-pick-c" aria-hidden="true">▾</span></button>`;
+}
+
+/** A number typed in a field: a whole number in range, '' = not set (undefined), NaN = not one. */
+export function typedInt(v: string, min: number, max: number): number | undefined {
+    const s = v.trim();
+    if (!s) return undefined;
+    const n = Number(s);
+    return Number.isInteger(n) && n >= min && n <= max ? n : NaN;
+}
+
 // ---------------------------------------------------------------------------
 // The simple editors of this part: sex, living / deceased, the periods of
 // birth, death and marriage (the others come with the catalog, §3).
@@ -107,21 +177,35 @@ const YEAR_MIN = 1;
 const YEAR_MAX = 2999;
 
 /** A year typed in a field: a whole number in range, '' = not set (undefined), NaN = not a year. */
-function typedYear(v: string): number | undefined {
-    const s = v.trim();
-    if (!s) return undefined;
-    const n = Number(s);
-    return Number.isInteger(n) && n >= YEAR_MIN && n <= YEAR_MAX ? n : NaN;
+export function typedYear(v: string): number | undefined {
+    return typedInt(v, YEAR_MIN, YEAR_MAX);
+}
+
+/** The two fields "from – to" of a period of years (or of ages: `min`/`max`, `aria`). */
+export function yearsFieldsHtml(p: RuleYears, ctx: RuleEditorCtx, opts: { min?: number; max?: number; aria?: { from: string; to: string } } = {}): string {
+    const a = opts.aria ?? strings.lists.rules.yearAria;
+    const min = opts.min ?? YEAR_MIN;
+    const max = opts.max ?? YEAR_MAX;
+    const field = (name: 'from' | 'to', v: number | undefined, label: string): string =>
+        `<input type="number" class="pln-ctl plr-yr" data-pc="${name}" data-key="${escHtml(ctx.key(name))}" min="${min}" max="${max}" step="1"`
+        + ` inputmode="numeric" value="${v === undefined || !Number.isFinite(v) ? '' : v}" aria-label="${escHtml(label)}">`;
+    return field('from', p.from, a.from) + `<span class="plr-dash" aria-hidden="true">–</span>` + field('to', p.to, a.to);
+}
+
+/** The period after a typed "from" or "to" (null: not one of them). */
+export function readYears(cond: { p: RuleYears }, el: Control, min = YEAR_MIN, max = YEAR_MAX): RuleYears | null {
+    const name = el.dataset.pc;
+    if (name !== 'from' && name !== 'to') return null;
+    const y = typedInt(el.value, min, max);
+    const next: RuleYears = { from: cond.p.from, to: cond.p.to };
+    if (next.from === undefined) delete next.from;
+    if (next.to === undefined) delete next.to;
+    if (y === undefined) delete next[name]; else next[name] = y;
+    return next;
 }
 
 function yearsEditor(): RuleCondEditor<'born' | 'died' | 'married'> {
-    const html = (p: RuleYears, ctx: RuleEditorCtx): string => {
-        const a = strings.lists.rules.yearAria;
-        const field = (name: 'from' | 'to', v: number | undefined, label: string): string =>
-            `<input type="number" class="pln-ctl plr-yr" data-pc="${name}" data-key="${escHtml(ctx.key(name))}" min="${YEAR_MIN}" max="${YEAR_MAX}" step="1"`
-            + ` inputmode="numeric" value="${v === undefined || !Number.isFinite(v) ? '' : v}" aria-label="${escHtml(label)}">`;
-        return field('from', p.from, a.from) + `<span class="plr-dash" aria-hidden="true">–</span>` + field('to', p.to, a.to);
-    };
+    const html = (p: RuleYears, ctx: RuleEditorCtx): string => yearsFieldsHtml(p, ctx);
     const read = (cond: { p: RuleYears }, el: Control): RuleYears | null => {
         const name = el.dataset.pc;
         if (name !== 'from' && name !== 'to') return null;
@@ -149,10 +233,13 @@ registerRuleCondEditor('alive', {
     create: () => ({ value: 'living' }),
     paramsHtml: (cond, ctx) => {
         const w = strings.lists.rules.say.alive;
-        return ctlSelect(ctx, 'value', strings.lists.rules.cond.alive, [['living', w.living], ['deceased', w.deceased]], cond.p.value);
+        return ctlSeg(ctx, 'value', strings.lists.rules.cond.alive, [['living', w.living], ['deceased', w.deceased]], cond.p.value);
     },
-    change: (_cond, el) => el.value === 'deceased' ? { value: 'deceased' } : { value: 'living' },
-    firstControl: 'value',
+    click: (cond, el, ctx) => {
+        const v = el.dataset.v === 'deceased' ? 'deceased' : 'living';
+        if (v !== cond.p.value) ctx.update({ ...cond, p: { value: v } });
+    },
+    firstControl: 'value-living',
 });
 
 registerRuleCondEditor('gender', {
@@ -160,8 +247,11 @@ registerRuleCondEditor('gender', {
     create: () => ({ value: 'female' }),
     paramsHtml: (cond, ctx) => {
         const w = strings.lists.rules.say.gender;
-        return ctlSelect(ctx, 'value', strings.lists.rules.cond.gender, [['female', w.female], ['male', w.male], ['unknown', w.unknown]], cond.p.value);
+        return ctlSeg(ctx, 'value', strings.lists.rules.cond.gender, [['female', w.female], ['male', w.male], ['unknown', w.unknown]], cond.p.value);
     },
-    change: (_cond, el) => ({ value: el.value === 'male' ? 'male' : el.value === 'unknown' ? 'unknown' : 'female' }),
-    firstControl: 'value',
+    click: (cond, el, ctx) => {
+        const v = el.dataset.v === 'male' ? 'male' : el.dataset.v === 'unknown' ? 'unknown' : 'female';
+        if (v !== cond.p.value) ctx.update({ ...cond, p: { value: v } });
+    },
+    firstControl: 'value-female',
 });

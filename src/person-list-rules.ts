@@ -290,6 +290,36 @@ function nearKeys(index: LineageIndex, p: RuleParamsMap['near']): Set<string> {
     return out;
 }
 
+/** The tree's places a condition can choose (a person's birth, death, marriage or residence place), most people first. */
+export function rulePlaceChoices(index: LineageIndex): Array<{ key: string; name: string; persons: number }> {
+    return memo(index, 'placeChoices', () => [...placeIndexOf(index).places.entries()]
+        .map(([key, pl]) => ({ key, name: pl.name, persons: pl.persons.size }))
+        .sort((a, b) => b.persons - a.persons || a.name.localeCompare(b.name)));
+}
+
+/**
+ * The tree's occupations as the Statistics group them (by the folded text):
+ * the most used spelling as the label, the other spellings, the people with it;
+ * most people first.
+ */
+export function ruleOccupationChoices(index: LineageIndex): Array<{ key: string; label: string; forms: string[]; persons: number }> {
+    return memo(index, 'occupationChoices', () => {
+        const by = new Map<string, { forms: Map<string, number>; persons: number }>();
+        for (const p of realPeople(index.data)) {
+            for (const o of occupationsOf(p)) {
+                let e = by.get(o.key);
+                if (!e) by.set(o.key, e = { forms: new Map(), persons: 0 });
+                e.persons++;
+                e.forms.set(o.label, (e.forms.get(o.label) ?? 0) + 1);
+            }
+        }
+        return [...by.entries()].map(([key, e]) => {
+            const forms = [...e.forms.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(f => f[0]);
+            return { key, label: forms[0], forms: forms.slice(1), persons: e.persons };
+        }).sort((a, b) => b.persons - a.persons || a.label.localeCompare(b.label));
+    });
+}
+
 /** Whether a place key is still a place of the tree (a person's or a union's place, a located or researched place). */
 function placeInTree(index: LineageIndex, key: string): boolean {
     const data = index.data;

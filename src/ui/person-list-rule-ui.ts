@@ -28,7 +28,14 @@ import {
     groupWithNext, groupWithNextState, joinPath, moveBounds, moveNode, moveNodeTo, nodeAt, normalizeRule,
     parentOf, removeNode, replaceCondition, setGroupOp, toggleExcept, type RuleEdit,
 } from '../person-list-rule-edit.js';
-import { escHtml as esc, newRuleCond, ruleCatalog, ruleCondEditor, type RuleEditorCtx } from './person-list-rule-editors.js';
+import { escHtml as esc, newRuleCond, ruleCatalog, ruleCondEditor, type RuleEditorCtx, type RulePickOpts, type RulePickRow } from './person-list-rule-editors.js';
+import './person-list-rule-cond-editors.js';
+import './person-list-rule-near.js';
+import './person-list-rule-family.js';
+import { foldSearch2 } from '../section-search-match.js';
+import { openPersonPopover } from './person-popover.js';
+import { readRecent } from './tree-overview.js';
+import { getUI } from '../ui-ref.js';
 import { TreeRenderer } from '../renderer.js';
 import { MQ_PHONE_BAR } from '../breakpoints.js';
 import { uiModule } from './module.js';
@@ -46,7 +53,7 @@ export interface RuleBuilderState {
     listId: string | null;
     /** What to focus after the next drawing: a row, or a control of it. */
     focus: { path: string; ctl?: string } | { add: string } | null;
-    counts: { key: string; value: RuleCounts } | null;
+    counts: { key: string; index: LineageIndex; value: RuleCounts } | null;
 }
 
 /** What the dialog does when the rule changes. */
@@ -56,23 +63,7 @@ export interface RuleBuilderHost {
 }
 
 /** A row of the builder's menus (the same rows in the popup and in the phone's sheet). */
-export interface RuleMenuRow {
-    id: string;
-    label: string;
-    /** A shortcut shown with a mouse (Alt+↑). */
-    kbd?: string;
-    disabled?: boolean;
-    /** Why it is disabled (`title`; under the label in a sheet). */
-    why?: string;
-    danger?: boolean;
-    checked?: boolean;
-    /** A line before the row. */
-    sep?: boolean;
-    /** A quiet second line. */
-    sub?: string;
-    /** A heading before the row (the catalog's groups). */
-    head?: string;
-}
+export type RuleMenuRow = RulePickRow;
 
 const UNDO_MAX = 50;
 const UNDO_MS = 6000;
@@ -81,6 +72,7 @@ let rb: RuleBuilderState | null = null;
 let host: RuleBuilderHost | null = null;
 let menuClose: (() => void) | null = null;
 let menuAnchor: HTMLElement | null = null;
+let closePersonPick: (() => void) | null = null;
 let drag: { cleanup: () => void; path: string; lo: number; k: number } | null = null;
 
 export function newRuleBuilder(root: RuleGroup, listId: string | null, start: RuleGroup | null = null): RuleBuilderState {
@@ -99,13 +91,75 @@ function focusId(): PersonId | null {
     return TreeRenderer.getFocusPersonId();
 }
 
-/** The counts of the rule now (each node's own over the whole tree, and the total), kept while the rule is the same. */
+/** A change counts after this pause (spec 136 §6). */
+export const RULE_COUNT_DEBOUNCE_MS = 120;
+/** A count that took longer shows "Counting…" (and the previous total) while the next one runs. */
+export const RULE_COUNT_SLOW_MS = 200;
+
+let countTimer: ReturnType<typeof setTimeout> | null = null;
+/** How long the last count took (ms). */
+let lastCountMs = 0;
+/** "Counting…" is shown (the rows' counts "…"). */
+let countBusy = false;
+
+function countNow(st: RuleBuilderState, key: string, ix: LineageIndex): void {
+    const t0 = performance.now();
+    st.counts = { key, index: ix, value: evalRuleCounts(ix, st.root, { now: Date.now() }, st.listId ?? undefined) };
+    lastCountMs = performance.now() - t0;
+}
+
+function countsFresh(st: RuleBuilderState): boolean {
+    return !!st.counts && st.counts.key === JSON.stringify(st.root) && st.counts.index === index();
+}
+
+/**
+ * The counts of the rule (each node's own over the whole tree, and the
+ * total), kept while the rule and the tree are the same. The first count is
+ * made at once; after a change the last counts are returned and the new ones
+ * follow after a pause (RULE_COUNT_DEBOUNCE_MS): the rows and the footer are
+ * written again then, without a drawing.
+ */
 export function ruleBuilderCounts(st: RuleBuilderState): RuleCounts {
     const key = JSON.stringify(st.root);
-    if (st.counts?.key !== key) {
-        st.counts = { key, value: evalRuleCounts(index(), st.root, { now: Date.now() }, st.listId ?? undefined) };
-    }
-    return st.counts.value;
+    const ix = index();
+    if (!st.counts) countNow(st, key, ix);
+    else if (st.counts.key !== key || st.counts.index !== ix) scheduleCount(st);
+    return st.counts!.value;
+}
+
+/** The counts shown are not the rule's yet and "Counting…" is up (a slow count runs). */
+export function ruleBuilderCountsBusy(st: RuleBuilderState): boolean {
+    return countBusy && !countsFresh(st);
+}
+
+/** Count the rule (now, without the pause): the tests and the preview in the tree need the result at once. */
+export function ruleBuilderCountsNow(st: RuleBuilderState): RuleCounts {
+    if (!countsFresh(st)) countNow(st, JSON.stringify(st.root), index());
+    if (countTimer) { clearTimeout(countTimer); countTimer = null; }
+    countBusy = false;
+    return st.counts!.value;
+}
+
+function scheduleCount(st: RuleBuilderState): void {
+    if (countTimer) clearTimeout(countTimer);
+    countTimer = setTimeout(() => {
+        countTimer = null;
+        if (rb !== st || countsFresh(st)) return;
+        const run = (): void => {
+            if (rb !== st) return;
+            if (!countsFresh(st)) countNow(st, JSON.stringify(st.root), index());
+            countBusy = false;
+            const ui = getUI() as unknown as { ruleBuilderRefreshCounts(): void };
+            ui.ruleBuilderRefreshCounts();
+            host?.changed(false);
+        };
+        if (lastCountMs <= RULE_COUNT_SLOW_MS) { run(); return; }
+        // A slow count: "Counting…" first (the previous total beside it), then the count after a paint.
+        countBusy = true;
+        (getUI() as unknown as { ruleBuilderRefreshCounts(): void }).ruleBuilderRefreshCounts();
+        host?.changed(false);
+        requestAnimationFrame(() => setTimeout(run, 0));
+    }, RULE_COUNT_DEBOUNCE_MS);
 }
 
 /**
@@ -136,6 +190,15 @@ function fillText(need: RuleNeed): string {
     }
 }
 
+/**
+ * The row where the rule's people fell to nobody ("0 here", §6): only when the
+ * total is 0, the rule's own group is "all" and the counts are the rule's.
+ */
+function zeroPath(st: RuleBuilderState, counts: RuleCounts): string | null {
+    if (counts.total !== 0 || st.root.op !== 'all' || !countsFresh(st)) return null;
+    return counts.zeroAt;
+}
+
 function rowKey(path: string, name: string): string {
     return `plr-${path || 'root'}-${name}`;
 }
@@ -153,6 +216,8 @@ export const personListRuleMethods = uiModule({
         drag = null;
         rb = null;
         host = null;
+        if (countTimer) { clearTimeout(countTimer); countTimer = null; }
+        countBusy = false;
     },
 
     /** The builder's HTML (`.plr`). */
@@ -189,8 +254,10 @@ export const personListRuleMethods = uiModule({
         const ex = node.not ? ' ex' : '';
         const n = counts.nodes.get(path);
         const need = node.t === 'cond' ? condNeed(node) : null;
-        const countText = need ? fillText(need) : n === null || n === undefined ? '–' : strings.lists.persons(n);
-        const miss = need ? ' miss' : '';
+        const busy = !need && rb ? ruleBuilderCountsBusy(rb) : false;
+        const countText = need ? fillText(need) : busy ? '…' : n === null || n === undefined ? '–' : strings.lists.persons(n);
+        const miss = need ? ' miss' : busy ? ' is-busy' : '';
+        const zero = rb && zeroPath(rb, counts) === path ? `<span class="plr-zero">${esc(t.zeroHere)}</span>` : '';
         const name = node.t === 'cond' ? t.cond[node.c] : t.group;
         const words = need ? name : nodeLabel(node, ix);
         const aria = `${node.not ? `${t.except} ` : ''}${words}, ${countText}`;
@@ -204,7 +271,7 @@ export const personListRuleMethods = uiModule({
         const attrs = `role="group" tabindex="0" data-path="${esc(path)}" data-not="${node.not ? 1 : 0}" data-key="${esc(rowKey(path, 'row'))}" aria-label="${esc(aria)}"`;
         if (node.t === 'group') {
             return `<div class="plr-row plr-grp" ${attrs}>${head}`
-                + `<div class="plr-m plr-gh">${inline}<span class="plr-n">${esc(t.group)}</span>${k2}`
+                + `<div class="plr-m plr-gh">${inline}<span class="plr-n">${esc(t.group)}</span>${zero}${k2}`
                 + `<div class="sel-seg plr-seg" role="group" aria-label="${esc(t.group)}">`
                 + (['all', 'any'] as const).map(op => `<button type="button" class="sel-opt" data-sel-form="seg" data-rb="op" data-op="${op}" data-key="${esc(rowKey(path, `op-${op}`))}" aria-pressed="${node.op === op}">${esc(op === 'all' ? t.all : t.any)}</button>`).join('')
                 + `</div></div>${tail}`
@@ -214,11 +281,13 @@ export const personListRuleMethods = uiModule({
         const editor = ruleCondEditor(node.c);
         const ctx = this.ruleEditorCtx(path);
         const params = editor ? editor.paramsHtml(node as never, ctx) : need ? '' : `<span class="plr-w">${esc(words)}</span>`;
-        const hint = editor?.hint ? editor.hint(node as never, ctx) : '';
+        const hint = editor?.hintHtml ? '' : editor?.hint ? editor.hint(node as never, ctx) : '';
+        const hintHtml = editor?.hintHtml ? editor.hintHtml(node as never, ctx) : '';
         return `<div class="plr-row" ${attrs}>${head}`
-            + `<div class="plr-m">${inline}<span class="plr-n">${esc(name)}</span>${k2}`
+            + `<div class="plr-m">${inline}<span class="plr-n">${esc(name)}</span>${zero}${k2}`
             + (params ? `<span class="plr-p">${params}</span>` : '')
             + (hint ? `<span class="plr-s">${esc(hint)}</span>` : '')
+            + (hintHtml ? `<div class="plr-s plr-sx">${hintHtml}</div>` : '')
             + `</div>${tail}</div>`;
     },
 
@@ -226,8 +295,10 @@ export const personListRuleMethods = uiModule({
     ruleEditorCtx(path: string): RuleEditorCtx {
         const overlay = document.querySelector<HTMLElement>('.pln-overlay');
         return {
-            path, index: index(), focusId: focusId(), host: overlay,
+            path, index: index(), focusId: focusId(), host: overlay, listId: rb?.listId ?? null,
             key: (name: string) => rowKey(path, `p-${name}`),
+            menu: (anchor, title, rows, onPick, opts) => this.openRuleMenu(anchor, title, rows, onPick, opts),
+            pickPerson: (anchor, selectedId, onPick) => this.ruleBuilderPickPerson(anchor, selectedId, onPick),
             update: (cond: RuleCond, opts?: { render?: boolean }) => {
                 const st = rb;
                 if (!st) return;
@@ -297,17 +368,28 @@ export const personListRuleMethods = uiModule({
         const box = document.querySelector<HTMLElement>('.pln-overlay .plr');
         if (!st || !box) return;
         const counts = ruleBuilderCounts(st);
+        const busy = ruleBuilderCountsBusy(st);
+        const zeroAt = zeroPath(st, counts);
         for (const row of box.querySelectorAll<HTMLElement>('.plr-row')) {
             const path = row.dataset.path ?? '';
             const node = nodeAt(st.root, path);
             if (!node) continue;
             const need = node.t === 'cond' ? condNeed(node) : null;
             const n = counts.nodes.get(path);
-            const text = need ? fillText(need) : n === null || n === undefined ? '–' : strings.lists.persons(n);
+            const text = need ? fillText(need) : busy ? '…' : n === null || n === undefined ? '–' : strings.lists.persons(n);
             for (const cell of row.querySelectorAll<HTMLElement>(':scope > .plr-k, :scope > .plr-m > .plr-k2')) {
                 cell.textContent = text;
                 cell.classList.toggle('miss', !!need);
+                cell.classList.toggle('is-busy', !need && busy);
             }
+            const m = row.querySelector<HTMLElement>(':scope > .plr-m');
+            const mark = m?.querySelector<HTMLElement>(':scope > .plr-zero');
+            if (zeroAt === path && m && !mark) {
+                const z = document.createElement('span');
+                z.className = 'plr-zero';
+                z.textContent = strings.lists.rules.zeroHere;
+                m.querySelector(':scope > .plr-n')?.after(z);
+            } else if (zeroAt !== path) mark?.remove();
         }
     },
 
@@ -321,7 +403,7 @@ export const personListRuleMethods = uiModule({
         const row = el.closest<HTMLElement>('.plr-row');
         const path = row?.dataset.path ?? '';
         if (el.dataset.pc !== undefined) {
-            if (el.tagName !== 'BUTTON' || !row) return true;
+            if (el.tagName !== 'BUTTON' || !row || el.getAttribute('aria-disabled') === 'true') return true;
             const node = nodeAt(st.root, path);
             const editor = node?.t === 'cond' ? ruleCondEditor(node.c) : null;
             if (node?.t === 'cond' && editor?.click) editor.click(node as never, el, this.ruleEditorCtx(path));
@@ -410,10 +492,14 @@ export const personListRuleMethods = uiModule({
         if (!st) return;
         const t = strings.lists.rules;
         const items = ruleCatalog(index());
+        const heads = t.catalog.head as Partial<Record<string, string>>;
+        const subs = t.catalog.sub as Partial<Record<string, string>>;
         let last = '';
         const rows: RuleMenuRow[] = items.map(({ c, group }) => {
-            const row: RuleMenuRow = { id: c, label: t.cond[c], sep: !!last && last !== group };
-            last = group;
+            // Groups f and g (count, text) sit under the facts' heading.
+            const g = group === 'f' || group === 'g' ? 'e' : group;
+            const row: RuleMenuRow = { id: c, label: t.cond[c], ...(subs[c] ? { sub: subs[c] } : {}), ...(g !== last && heads[g] ? { head: heads[g] } : {}) };
+            last = g;
             return row;
         });
         this.openRuleMenu(anchor, asGroup ? t.addGroup : t.addCondition, rows, (c) => {
@@ -429,7 +515,28 @@ export const personListRuleMethods = uiModule({
                 const ctl = document.querySelector<HTMLElement>(`.pln-overlay [data-key="${CSS.escape(rowKey(r.path, `p-${editor.firstControl}`))}"]`);
                 ctl?.click();
             }
-        }, { wide: true });
+        }, { wide: true, search: t.catalog.search });
+    },
+
+    /** A person's choice by an editor's control (the dialog's person popover). */
+    ruleBuilderPickPerson(anchor: HTMLElement, selectedId: PersonId | null, onPick: (id: PersonId) => void): void {
+        if (closePersonPick) { closePersonPick(); return; }
+        const overlay = anchor.closest<HTMLElement>('.modal-overlay');
+        if (!overlay) return;
+        const tt = strings.treeOverview;
+        const suggested: Array<{ id: PersonId; meta: string }> = [];
+        if (selectedId) suggested.push({ id: selectedId, meta: '' });
+        const focus = focusId();
+        if (focus && focus !== selectedId) suggested.push({ id: focus, meta: tt.inFocus });
+        const treeId = DataManager.getCurrentTreeId();
+        if (treeId) for (const id of readRecent(treeId)) suggested.push({ id, meta: tt.recent });
+        anchor.setAttribute('aria-expanded', 'true');
+        closePersonPick = openPersonPopover({
+            host: overlay, anchor, data: DataManager.getData(), selectedId, suggested,
+            labels: { search: strings.lists.pickSearch, list: strings.lists.rules.pick.person, noMatch: tt.noMatch },
+            onClose: () => { closePersonPick = null; if (anchor.isConnected) anchor.setAttribute('aria-expanded', 'false'); },
+            onPick: (id) => onPick(id),
+        });
     },
 
     /** ⋯ of a condition or a group. */
@@ -568,38 +675,36 @@ export const personListRuleMethods = uiModule({
      * click outside closes it), on a phone a sheet from below. `onPick` gets
      * the row's id (a disabled row does nothing).
      */
-    openRuleMenu(anchor: HTMLElement, title: string, rows: RuleMenuRow[], onPick: (id: string) => void, opts: { wide?: boolean } = {}): void {
+    openRuleMenu(anchor: HTMLElement, title: string, rows: RuleMenuRow[], onPick: (id: string) => void, opts: RulePickOpts = {}): void {
         const same = menuAnchor === anchor;
         this.closeRuleMenu();
         if (same) return;
-        if (isNarrow()) {
-            const blocks: Array<{ rows: Array<{ id: string; label: string; run: () => void; danger?: boolean; disabled?: boolean; why?: string; active?: boolean; sub?: string }>; divider?: boolean; header?: string }> = [];
-            for (const r of rows) {
-                if (!blocks.length || r.sep || r.head) blocks.push({ rows: [], divider: blocks.length > 0, ...(r.head ? { header: r.head } : {}) });
-                blocks[blocks.length - 1].rows.push({
-                    id: r.id, label: r.label, run: () => { if (!r.disabled) onPick(r.id); },
-                    ...(r.danger ? { danger: true } : {}), ...(r.disabled ? { disabled: true } : {}),
-                    ...(r.why && r.disabled ? { why: r.why } : {}), ...(r.checked ? { active: true } : {}), ...(r.sub ? { sub: r.sub } : {}),
-                });
-            }
-            this.presentMenuSheet(title, blocks);
-            return;
-        }
+        if (isNarrow()) { this.openRuleSheet(anchor, title, rows, onPick, opts); return; }
         const overlay = anchor.closest<HTMLElement>('.modal-overlay');
         if (!overlay) return;
+        const multi = !!opts.multi;
         const menu = document.createElement('div');
-        menu.className = `pl-menu plr-menu${opts.wide ? ' plr-menu--wide' : ''}`;
-        menu.setAttribute('role', 'menu');
+        menu.className = `pl-menu plr-menu${opts.wide ? ' plr-menu--wide' : ''}${opts.search ? ' plr-menu--search' : ''}`;
+        menu.setAttribute('role', opts.search ? 'dialog' : 'menu');
         menu.setAttribute('aria-label', title);
-        menu.innerHTML = rows.map(r => (r.sep ? '<div class="pl-menu-sep" role="separator"></div>' : '')
+        const listRole = multi ? 'listbox' : 'menu';
+        const rowsHtml = rows.map(r => (r.sep ? '<div class="pl-menu-sep" role="separator"></div>' : '')
             + (r.head ? `<div class="pl-mh" role="presentation">${esc(r.head)}</div>` : '')
-            + `<button type="button" class="pl-menu-item${r.danger ? ' is-danger' : ''}" role="${r.checked !== undefined ? 'menuitemradio' : 'menuitem'}"`
-            + `${r.checked !== undefined ? ` aria-checked="${!!r.checked}"` : ''} data-id="${esc(r.id)}"${r.disabled ? ' aria-disabled="true"' : ''}${r.why ? ` title="${esc(r.why)}"` : ''}>`
+            + `<button type="button" class="pl-menu-item${r.danger ? ' is-danger' : ''}" role="${multi ? 'option' : r.checked !== undefined ? 'menuitemradio' : 'menuitem'}"`
+            + `${r.checked !== undefined ? ` aria-${multi ? 'selected' : 'checked'}="${!!r.checked}"` : ''} data-id="${esc(r.id)}"`
+            + ` data-find="${esc(foldSearch2(`${r.label} ${r.sub ?? ''}`))}"${r.disabled ? ' aria-disabled="true"' : ''}${r.why ? ` title="${esc(r.why)}"` : ''}>`
             + `<span class="pl-menu-label">${esc(r.label)}${r.sub ? `<span class="pl-menu-sub">${esc(r.sub)}</span>` : ''}</span>`
+            + (r.value ? `<span class="pl-menu-val">${esc(r.value)}</span>` : '')
             + (r.kbd ? `<span class="pl-menu-key" aria-hidden="true">${esc(r.kbd)}</span>` : '')
             + (r.checked !== undefined ? `<span class="pl-menu-check" aria-hidden="true">${r.checked ? '✓' : ''}</span>` : '')
             + `</button>`).join('');
+        menu.innerHTML = opts.search
+            ? `<input type="search" class="pl-msearch" placeholder="${esc(opts.search)}" aria-label="${esc(opts.search)}" autocomplete="off" spellcheck="false">`
+                + `<div class="pl-mlist" role="${listRole}" aria-label="${esc(title)}"${multi ? ' aria-multiselectable="true"' : ''}>${rowsHtml}</div>`
+                + `<div class="pl-mnone" hidden>${esc(strings.lists.rules.pick.none)}</div>`
+            : rowsHtml;
         overlay.appendChild(menu);
+        const search = menu.querySelector<HTMLInputElement>('.pl-msearch');
         const a = anchor.getBoundingClientRect();
         const w = menu.offsetWidth;
         const room = window.innerHeight - a.bottom - 12;
@@ -614,7 +719,7 @@ export const personListRuleMethods = uiModule({
         menu.style.top = `${Math.round(top)}px`;
         anchor.setAttribute('aria-expanded', 'true');
         anchor.classList.add('open');
-        const items = (): HTMLElement[] => [...menu.querySelectorAll<HTMLElement>('.pl-menu-item:not([aria-disabled="true"])')];
+        const items = (): HTMLElement[] => [...menu.querySelectorAll<HTMLElement>('.pl-menu-item:not([aria-disabled="true"]):not([hidden])')];
         const close = (refocus: boolean): void => {
             menu.remove();
             document.removeEventListener('pointerdown', outside, true);
@@ -623,6 +728,7 @@ export const personListRuleMethods = uiModule({
             anchor.classList.remove('open');
             if (menuClose === closeFn) { menuClose = null; menuAnchor = null; }
             if (refocus && anchor.isConnected) anchor.focus({ preventScroll: true });
+            opts.onClose?.();
         };
         const closeFn = (): void => close(false);
         const outside = (ev: Event): void => {
@@ -633,23 +739,60 @@ export const personListRuleMethods = uiModule({
             close(false);
         };
         const onScroll = (): void => close(false);
+        const pick = (item: HTMLElement): void => {
+            if (item.getAttribute('aria-disabled') === 'true') return;
+            if (multi) {
+                const on = item.getAttribute('aria-selected') !== 'true';
+                item.setAttribute('aria-selected', String(on));
+                const mark = item.querySelector('.pl-menu-check');
+                if (mark) mark.textContent = on ? '✓' : '';
+                onPick(item.dataset.id ?? '');
+                return;
+            }
+            close(true);
+            onPick(item.dataset.id ?? '');
+        };
         menu.addEventListener('click', (ev) => {
             ev.stopPropagation();
             const item = (ev.target as HTMLElement).closest<HTMLElement>('.pl-menu-item');
-            if (!item || item.getAttribute('aria-disabled') === 'true') return;
-            close(true);
-            onPick(item.dataset.id ?? '');
+            if (item) pick(item);
+        });
+        search?.addEventListener('input', () => {
+            const q = foldSearch2(search.value.trim());
+            let shown = 0;
+            for (const it of menu.querySelectorAll<HTMLElement>('.pl-menu-item')) {
+                const hit = !q || (it.dataset.find ?? '').includes(q);
+                it.hidden = !hit;
+                if (hit) shown++;
+            }
+            // A heading or a line stays only over a row still shown.
+            for (const el of menu.querySelectorAll<HTMLElement>('.pl-mh, .pl-menu-sep')) {
+                let n = el.nextElementSibling as HTMLElement | null;
+                while (n && !n.classList.contains('pl-menu-item')) n = n.nextElementSibling as HTMLElement | null;
+                el.hidden = !n || n.hidden;
+            }
+            const none = menu.querySelector<HTMLElement>('.pl-mnone');
+            if (none) none.hidden = shown > 0;
         });
         menu.addEventListener('keydown', (ev) => {
             const list = items();
+            const inSearch = ev.target === search;
             const at = list.indexOf(document.activeElement as HTMLElement);
             if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
                 ev.preventDefault();
-                const next = ev.key === 'ArrowDown' ? (at + 1) % list.length : (at - 1 + list.length) % list.length;
-                list[next]?.focus();
-            } else if (ev.key === 'Home' || ev.key === 'End') {
+                if (inSearch) { (ev.key === 'ArrowDown' ? list[0] : list[list.length - 1])?.focus(); }
+                else if (search && ev.key === 'ArrowUp' && at === 0) search.focus();
+                else {
+                    const next = ev.key === 'ArrowDown' ? (at + 1) % list.length : (at - 1 + list.length) % list.length;
+                    list[next]?.focus();
+                }
+            } else if ((ev.key === 'Home' || ev.key === 'End') && !inSearch) {
                 ev.preventDefault();
                 (ev.key === 'Home' ? list[0] : list[list.length - 1])?.focus();
+            } else if (ev.key === 'Enter' && inSearch) {
+                // Enter in the search takes the first row shown.
+                ev.preventDefault();
+                if (list[0]) pick(list[0]);
             } else if (ev.key === 'Escape') {
                 ev.preventDefault();
                 close(true);
@@ -662,11 +805,87 @@ export const personListRuleMethods = uiModule({
         overlay.querySelector('.pln-body')?.addEventListener('scroll', onScroll, { passive: true });
         menuClose = closeFn;
         menuAnchor = anchor;
-        items()[0]?.focus({ preventScroll: true });
+        if (search) search.focus({ preventScroll: true });
+        else items()[0]?.focus({ preventScroll: true });
+    },
+
+    /**
+     * The phone's sheet of a menu or a choice: its rows from below, a search
+     * field over them (16 px, 44 px high) and, for several rows (`multi`),
+     * a tap ticks a row and the sheet stays.
+     */
+    openRuleSheet(_anchor: HTMLElement, title: string, rows: RuleMenuRow[], onPick: (id: string) => void, opts: RulePickOpts): void {
+        const blocks: Array<{ rows: Array<{ id: string; label: string; run: () => void; danger?: boolean; disabled?: boolean; why?: string; active?: boolean; sub?: string; value?: string }>; divider?: boolean; header?: string }> = [];
+        rows.forEach((r, i) => {
+            if (!blocks.length || r.sep || r.head) blocks.push({ rows: [], divider: blocks.length > 0, ...(r.head ? { header: r.head } : {}) });
+            blocks[blocks.length - 1].rows.push({
+                id: `plr-opt-${i}`, label: r.label, run: () => { if (!r.disabled) onPick(r.id); },
+                ...(r.danger ? { danger: true } : {}), ...(r.disabled ? { disabled: true } : {}),
+                ...(r.why && r.disabled ? { why: r.why } : {}), ...(r.checked !== undefined ? { active: !!r.checked } : {}),
+                ...(r.sub ? { sub: r.sub } : {}), ...(r.value ? { value: r.value } : {}),
+            });
+        });
+        this.presentMenuSheet(title, blocks, opts.onClose ? { onClose: opts.onClose } : {});
+        const sheet = (this.bottomSheet as HTMLElement | null)?.querySelector<HTMLElement>('.bottom-sheet');
+        const list = sheet?.querySelector<HTMLElement>('.bottom-sheet-items');
+        if (!sheet || !list) return;
+        sheet.classList.add('plr-sheet');
+        rows.forEach((r, i) => {
+            const btn = list.querySelector<HTMLElement>(`#plr-opt-${i}`);
+            if (!btn) return;
+            btn.removeAttribute('id');
+            btn.dataset.id = r.id;
+            btn.dataset.find = foldSearch2(`${r.label} ${r.sub ?? ''}`);
+            if (!opts.multi || r.disabled) return;
+            // Several rows: a tap ticks (the sheet stays open).
+            const tick = btn.cloneNode(true) as HTMLElement;
+            tick.setAttribute('role', 'menuitemcheckbox');
+            tick.setAttribute('aria-checked', String(!!r.checked));
+            tick.addEventListener('click', () => {
+                const on = tick.getAttribute('aria-checked') !== 'true';
+                tick.setAttribute('aria-checked', String(on));
+                tick.classList.toggle('active', on);
+                onPick(r.id);
+            });
+            btn.replaceWith(tick);
+        });
+        if (!opts.search) return;
+        const box = document.createElement('div');
+        box.className = 'plr-sheet-search';
+        const input = document.createElement('input');
+        input.type = 'search';
+        input.className = 'pl-msearch';
+        input.placeholder = opts.search;
+        input.setAttribute('aria-label', opts.search);
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        box.appendChild(input);
+        const none = document.createElement('div');
+        none.className = 'pl-mnone';
+        none.hidden = true;
+        none.textContent = strings.lists.rules.pick.none;
+        list.before(box);
+        list.after(none);
+        input.addEventListener('input', () => {
+            const q = foldSearch2(input.value.trim());
+            let shown = 0;
+            for (const it of list.querySelectorAll<HTMLElement>('.bottom-sheet-item')) {
+                const hit = !q || (it.dataset.find ?? '').includes(q);
+                it.hidden = !hit;
+                if (hit) shown++;
+            }
+            for (const el of list.querySelectorAll<HTMLElement>('.bottom-sheet-section, .bottom-sheet-divider')) {
+                let n = el.nextElementSibling as HTMLElement | null;
+                while (n && !n.classList.contains('bottom-sheet-item')) n = n.nextElementSibling as HTMLElement | null;
+                el.hidden = !n || n.hidden;
+            }
+            none.hidden = shown > 0;
+        });
     },
 
     /** Close the builder's open menu (true: one was open). */
     closeRuleMenu(): boolean {
+        if (closePersonPick) { closePersonPick(); return true; }
         if (!menuClose) return false;
         const f = menuClose;
         menuClose = null;
