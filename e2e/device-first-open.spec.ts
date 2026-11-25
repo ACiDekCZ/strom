@@ -13,7 +13,9 @@ import { startDeviceGateway, type FakeGateway, type TunnelReply } from './device
  * — never the whole file with its images in it (a big research is 100 MB and
  * more over the home network, a phone's browser stuck on "Opening the
  * research…"). The download shows its progress over the start screen, with
- * Cancel, and a failure says so with Try again. A first open cancelled (or
+ * Cancel, and a failure says so with Try again. The tree opens before its
+ * photos (spec 116): they come after it, counted, stored as they come, and a
+ * page closed meanwhile asks for the rest when the tree opens again. A first open cancelled (or
  * failed, Try again not taken) goes back to the chooser of the research's
  * trees, never the app's own empty tree; Cancel of a tree chosen in the
  * switcher keeps the tree open before. Invented data only (the Pýchavkovi of
@@ -32,12 +34,14 @@ function ged(ref: boolean): string {
     const file = ref
         ? [`2 FILE strom-image:${SHA}`, '3 _MIME image/png', '3 _WIDTH 1', '3 _HEIGHT 1', `3 _BYTES ${Buffer.from(PNG, 'base64').length}`]
         : [`2 FILE data:image/png;base64,${PNG}`];
+    // Josef's portrait: the same picture.
+    const portrait = ['1 OBJE', '2 FORM png', '2 _STROM_KIND photo', ...file];
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 25 NOV 2026', `1 _STROM_TREE ${PYCH}`, '1 _STROM_HEAD 3c7a9e1f05b2',
         '1 _STROM_LINKS send open live app setup', '1 CHAR UTF-8',
         '0 @P0001@ INDI', '1 NAME Jan /Pýchavka/', '1 SEX M', '1 BIRT', '2 DATE 1851', '1 REFN P0001', '1 FAMS @F0001@', '1 SOUR @S0001@',
         '0 @P0002@ INDI', '1 NAME Marie /Bedlová/', '1 SEX F', '1 BIRT', '2 DATE 1855', '1 REFN P0002', '1 FAMS @F0001@',
-        '0 @P0003@ INDI', '1 NAME Josef /Pýchavka/', '1 SEX M', '1 BIRT', '2 DATE 1880', '1 REFN P0003', '1 FAMC @F0001@',
+        '0 @P0003@ INDI', '1 NAME Josef /Pýchavka/', '1 SEX M', '1 BIRT', '2 DATE 1880', '1 REFN P0003', '1 FAMC @F0001@', ...portrait,
         '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@',
         '0 @S0001@ SOUR', '1 TITL Matrika Mlýnky 1851', '1 REFN S0001',
         '1 OBJE', '2 FORM png', '2 _STROM_KIND excerpt', '2 _STROM_CLIP C0001', ...file,
@@ -54,7 +58,7 @@ interface Asked {
 
 /**
  * One tree of the research behind the gateway. `hold`: the answer of the next `tree.ged` waits for it;
- * `holdImages`: every `POST images` waits for it; `fail`: `tree.ged` answers 500 until asked again after the failure is said (its variant by hash, then the whole file it falls back to); `slowMs`: every `tree.ged` answers after it (the bridge building the tree).
+ * `holdImages`: every `POST images` waits for it (read at each ask: a test may take it away); `fail`: `tree.ged` answers 500 until asked again after the failure is said (its variant by hash, then the whole file it falls back to); `slowMs`: every `tree.ged` answers after it (the bridge building the tree).
  */
 function research(gw: FakeGateway, o: { hold?: Promise<void>; holdImages?: Promise<void>; fail?: boolean; slowMs?: number } = {}): Asked {
     gw.trees = [{ id: PYCH, name: 'Pýchavkovi z Mlýnků', archive: false }];
@@ -160,7 +164,7 @@ test.describe('en', () => {
         // The first ask already the variant with images by hash and the tree's own files.
         expect(asked.trees[0]).toMatchObject({ images: 'ref', media: 'app' });
         expect(asked.trees.filter(q => q.images !== 'ref'), 'the whole file with its images in it').toEqual([]);
-        expect(asked.images.flat()).toContain(SHA);
+        await expect.poll(() => asked.images.flat(), { timeout: 15000 }).toContain(SHA);
     });
 
     test('a tree the bridge builds longer than a quick request (8 s) still opens', async ({ page }) => {
@@ -207,21 +211,65 @@ test.describe('en', () => {
         expect(asked.trees).toHaveLength(2);
     });
 
-    test('Cancel while the images come stops them at once: "Opening…" gone, nothing opened, the chooser back', async ({ page }) => {
+    test('the tree shows before its photos come: the start screen gone, the photos counted, then in and stored (spec 116)', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await seeds(page);
         let release!: () => void;
         const asked = research(gw, { holdImages: new Promise<void>(r => { release = r; }) });
         await page.goto(gw.pairCode().url);
-        await expect.poll(() => asked.images.length, { timeout: 20000 }).toBeGreaterThan(0);
-        await loadToast(page).getByRole('button', { name: 'Cancel' }).click();
-        // Not after the images asked already: at once, the answer still held — the chooser instead of "Opening…".
-        await expect(page.locator('#device-boot')).toHaveAttribute('data-state', 'trees', { timeout: 3000 });
+        // The tree with its people while the bridge still holds the photos: never "Opening…" until they all came.
+        await expect(page.locator('.person-card', { hasText: 'Josef' }).first()).toBeVisible({ timeout: 20000 });
+        await expect(page.locator('#device-boot')).toHaveCount(0);
         await expect(loadToast(page)).toHaveCount(0);
+        expect(asked.images.length, 'the photos asked').toBeGreaterThan(0);
+        const avatar = page.locator('.person-card[aria-label^="Josef"] .card-avatar').first();
+        await expect(avatar).toHaveAttribute('data-img-state', 'loading');
+        const chip = page.locator('#img-load-chip');
+        await expect(chip).toBeVisible();
+        await expect(chip).toHaveText(/Photos\s*0 \/ \d/);
+        await shot(page, 'fotky-prichazeji-390');
+
         release();
+        await expect(chip).toHaveText(/✓\s*Photos\s*(\d) \/ \1/, { timeout: 15000 });
+        await expect(avatar.locator('img')).toBeVisible();
+        await expect(avatar).not.toHaveAttribute('data-img-state', /loading|failed/);
+        // Stored with the tree: after a reload the card has its photo, nothing asked again.
+        const asks = asked.images.length;
+        await page.reload();
+        const again = page.locator('.person-card[aria-label^="Josef"] .card-avatar').first();
+        await expect(again.locator('img')).toBeVisible({ timeout: 20000 });
+        await expect(again).not.toHaveAttribute('data-img-state', /loading|failed/);
         await page.waitForTimeout(500);
-        await expect(page.locator('.person-card', { hasText: 'Josef' })).toHaveCount(0);
-        expect(asked.images).toHaveLength(1);
+        expect(asked.images.length, 'no photo asked again').toBe(asks);
+    });
+
+    test('the page closed while the photos come: opened again, the ones missing are asked again and come (spec 116, I1)', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        let release!: () => void;
+        const o: { holdImages?: Promise<void> } = { holdImages: new Promise<void>(r => { release = r; }) };
+        const asked = research(gw, o);
+        await page.goto(gw.pairCode().url);
+        const avatar = page.locator('.person-card[aria-label^="Josef"] .card-avatar').first();
+        await expect(avatar).toHaveAttribute('data-img-state', 'loading', { timeout: 20000 });
+        // The tree stored without them, what is still to come noted with it.
+        await expect.poll(() => page.evaluate(() => {
+            const id = window.Strom.DataManager.getCurrentTreeId();
+            return !!window.Strom.TreeManager.getTrees().find(t => t.id === id)?.pendingImages;
+        })).toBe(true);
+        const asks = asked.images.length;
+        // Closed before the bridge answered; from now on it answers at once.
+        o.holdImages = undefined;
+        await page.reload();
+        const again = page.locator('.person-card[aria-label^="Josef"] .card-avatar').first();
+        await expect(again.locator('img')).toBeVisible({ timeout: 20000 });
+        await expect(again).not.toHaveAttribute('data-img-state', /loading|failed/);
+        expect(asked.images.length, 'asked again after the reload').toBeGreaterThan(asks);
+        await expect.poll(() => page.evaluate(() => {
+            const id = window.Strom.DataManager.getCurrentTreeId();
+            return !!window.Strom.TreeManager.getTrees().find(t => t.id === id)?.pendingImages;
+        })).toBe(false);
+        release();
     });
 
     test('a failed download says so with Try again, which opens the tree', async ({ page }) => {

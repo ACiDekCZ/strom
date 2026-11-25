@@ -64,7 +64,7 @@ import { keepImports } from '../import-origin.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
 import { researchDevicePage, researchDeviceState, noteResearchDeviceActions, parseDeviceBridge } from '../research-link.js';
-import { deviceEventSource } from '../device/device-bridge.js';
+import { deviceEventSource, isDeviceTunnelled } from '../device/device-bridge.js';
 import { withAppVersion, researchGedcomTitles, researchSendsReadings, researchSendsSourceFields, researchMediaOut, NO_MEDIA_FEATURES, type ResearchMediaOut, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent, waitingAnswerPlace, booksOn, waitingGainOn } from '../research-link.js';
 import { overviewChanged, overviewInWindow } from '../windows/overview-window.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
@@ -1440,8 +1440,13 @@ async function pooledImagesBySha(shas: readonly string[]): Promise<Map<string, s
     return out;
 }
 
-// The images held for a research take their references once stored (spec 135, D6).
-onImagesInterned((_treeId, map) => internHeldImages(map));
+// The images held for a research take their references once stored (spec 135, D6), and so do those the
+// load of the tree's images kept of what came: none of them stays a whole image in memory.
+onImagesInterned((treeId, map) => {
+    internHeldImages(map);
+    const load = imageLoads.current();
+    if (load && load.treeId === treeId) load.internArrived(map);
+});
 registerMemoryImages(heldImageIds);
 
 /** The images coming after a tree stop when another tree opens (wired once). */
@@ -1453,6 +1458,8 @@ const imageDeps: ImageResolveDeps = {
     sha256Hex,
     sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
     address: url => withAppVersion(url),
+    // A device's images come through the gateway's sealed tunnel: taken under the hash the research named.
+    sealed: isDeviceTunnelled,
     treeImages: researchTreeImages,
     pooledBySha: pooledImagesBySha,
 };
@@ -2562,6 +2569,8 @@ export const researchUiMethods = uiModule({
             let text: string;
             let images: ReadonlyMap<string, string> | undefined;
             let media: true | undefined;
+            /** A device's images still to come after the tree (spec 116): the tree opens before them. */
+            let later: { refs: ReadonlyMap<string, ImageRef>; url: string } | null = null;
             // A bridge known here whose research keeps the tree's own files: the file with them (spec 108 §5);
             // any other as always, the whole file.
             const device = parseDeviceBridge(url.href);
@@ -2574,7 +2583,17 @@ export const researchUiMethods = uiModule({
                 // its images in it (a big research is 100 MB and more over the home network).
                 if (!features && device?.path === 'tree.ged') features = (await fetchStatus(`${device.base}/status`).catch(() => null))?.features;
                 if (load?.cancelled) return;
-                if (treeAsksAppMedia(features, SettingsManager.isImportImages())) ({ text, images, media } = await readResearchTreeFile(url.href, features, load?.watch));
+                const takeImages = SettingsManager.isImportImages();
+                if (device && takeImages && bridgeGivesImagesByHash(features)) {
+                    // A device: the tree first, its images after it (as the live follow takes them, spec 116) —
+                    // a phone never holds a big research's photos all at once, and the tree shows in seconds.
+                    const got = await fetchResearchTree(url.href, { byHash: true, media: treeAsksAppMedia(features, takeImages), defer: true,
+                        ...(load?.watch ? { watch: load.watch } : {}) });
+                    text = got.text;
+                    images = got.images;
+                    if (got.media) media = true;
+                    later = got.pendingImages && got.imagesUrl ? { refs: got.pendingImages, url: got.imagesUrl } : null;
+                } else if (treeAsksAppMedia(features, takeImages)) ({ text, images, media } = await readResearchTreeFile(url.href, features, load?.watch));
                 else text = await fetchGedcomText(url.href, load?.watch);
             } catch (err) {
                 // Cancelled: nothing changed, nothing to say.
@@ -2599,7 +2618,7 @@ export const researchUiMethods = uiModule({
                 void fetchStatus(`${base}/status`).then(() => this.refreshResearchSyncUi()).catch(() => undefined);
             }
             if (load) await load.processing(countGedcomPersons(text));
-            await this.openGedcomText(text, { ...opts, ...(images ? { images } : {}), ...(media ? { appMedia: true } : {}) });
+            await this.openGedcomText(text, { ...opts, ...(images ? { images } : {}), ...(media ? { appMedia: true } : {}), ...(later ? { pendingImages: later } : {}) });
         });
     },
 
@@ -2755,6 +2774,8 @@ export const researchUiMethods = uiModule({
         images?: ReadonlyMap<string, string>;
         /** The file came with the tree's own files (spec 108 §5). */
         appMedia?: boolean;
+        /** Images the research's file names that come after the tree (spec 116): stand-ins until then. */
+        pendingImages?: { refs: ReadonlyMap<string, ImageRef>; url: string };
         /** A local file (dropped, opened from the system): its name and fingerprint for the import guide. */
         file?: { name: string; sha: string; at: string };
         /** Dropped on a tree's row in Manage trees (K10.3): the guide's target, back to Manage trees on close. */
@@ -2766,7 +2787,8 @@ export const researchUiMethods = uiModule({
         const header = readResearchHeader(text);
         let result;
         try {
-            result = convertToStrom(parseGedcom(text), opts.images ? { images: opts.images } : {});
+            result = convertToStrom(parseGedcom(text), { ...(opts.images ? { images: opts.images } : {}),
+                ...(opts.pendingImages ? { pendingImages: opts.pendingImages.refs } : {}) });
         } catch (err) {
             console.error('GEDCOM parse error:', err);
             await this.showAlert(strings.gedcom.parseError, 'error');
@@ -2788,7 +2810,7 @@ export const researchUiMethods = uiModule({
         }
         if (!await this.ensureLocalUnlocked()) return;
         await this.applyResearch(result.data, { ...header, ...(opts.appMedia ? { appMedia: true as const } : {}) }, { ...(opts.afterSend ? { afterSend: opts.afterSend } : {}), ...(opts.plainAsk ? { plainAsk: true } : {}),
-            ...(opts.takeSame ? { takeSame: true } : {}) });
+            ...(opts.takeSame ? { takeSame: true } : {}), ...(opts.pendingImages ? { pendingImages: opts.pendingImages } : {}) });
     },
 
     /**

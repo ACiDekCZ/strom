@@ -260,6 +260,14 @@ export interface ImageFetchDeps {
     sleep(ms: number): Promise<void>;
     /** The address with what the bridge is told of the app (e.g. `app=`); as it is by default. */
     address?(url: string): string;
+    /**
+     * The bridge at `url` is reached through a channel that authenticates
+     * every byte as the research's own (a device's sealed tunnel to its
+     * paired computer, spec 094): an image is taken under the hash the
+     * research named, not hashed again — a phone's page from the gateway has
+     * no WebCrypto and hashes in JavaScript, slowly. Never by default.
+     */
+    sealed?(url: string): boolean;
 }
 
 /** What resolving needs besides: the images and files (data URLs) of the tree stored for a research. */
@@ -408,7 +416,7 @@ async function askImagesAnswer(url: string, shas: string[], deps: ImageFetchDeps
  * the file with its images in it would carry it, or null when its type is
  * not the one asked or its bytes do not give its hash.
  */
-async function checkedImage(img: { sha: string; mime: string; data: string }, ref: ImageRef, deps: ImageFetchDeps): Promise<{ url: string } | { wrongType: true } | null> {
+async function checkedImage(img: { sha: string; mime: string; data: string }, ref: ImageRef, deps: ImageFetchDeps, sealed = false): Promise<{ url: string } | { wrongType: true } | null> {
     const sha = ref.sha;
     const mime = img.mime.toLowerCase();
     if (mime !== ref.mime || !SAFE_IMAGE_MIME.test(mime)) return { wrongType: true };
@@ -423,7 +431,8 @@ async function checkedImage(img: { sha: string; mime: string; data: string }, re
             bytes = null;
         }
     }
-    if (!bytes || await deps.sha256Hex(bytes) !== sha) return null;
+    // Through a sealed channel the research's own bytes: its hash taken as it named it (ImageFetchDeps.sealed).
+    if (!bytes || (!sealed && await deps.sha256Hex(bytes) !== sha)) return null;
     const dataUrl = `data:${mime};base64,${canonical ? img.data : bytesToBase64(bytes)}`;
     // Storing the tree takes these checked bytes (and their hash) instead of decoding and hashing them again.
     rememberImageBytes(dataUrl, bytes, sha);
@@ -440,6 +449,7 @@ async function checkedImage(img: { sha: string; mime: string; data: string }, re
 export async function fetchImagesByHash(url: string, refs: readonly ImageRef[], deps: ImageFetchDeps, signal?: AbortSignal): Promise<Map<string, string>> {
     const out = new Map<string, string>();
     const wanted = new Map(refs.map(r => [r.sha, r]));
+    const sealed = !!deps.sealed?.(url);
     const queue: string[][] = imageAsks(wanted.values());
     /** Hashes whose bytes did not give them once: asked once more. */
     const mismatched = new Set<string>();
@@ -456,7 +466,7 @@ export async function fetchImagesByHash(url: string, refs: readonly ImageRef[], 
             const ref = wanted.get(sha);
             // Only what was asked, once: nothing is ever kept under a hash not asked for.
             if (!ref || !open.delete(sha)) continue;
-            const got = await checkedImage(img, ref, deps);
+            const got = await checkedImage(img, ref, deps, sealed);
             if (got && 'wrongType' in got) throw new ImagesNotResolved(`unexpected type ${img.mime}`);
             if (got) {
                 out.set(sha, got.url);
@@ -520,6 +530,7 @@ export interface ImageBatchResult {
 export async function fetchImageBatch(url: string, refs: readonly ImageRef[], deps: ImageFetchDeps, signal?: AbortSignal): Promise<ImageBatchResult> {
     const wanted = new Map(refs.map(r => [r.sha, r]));
     const out: ImageBatchResult = { images: new Map(), missing: [], more: [] };
+    const sealed = !!deps.sealed?.(url);
     let ask = [...wanted.keys()];
     /** Bytes that did not give their hash once: asked once more. */
     const mismatched = new Set<string>();
@@ -539,7 +550,7 @@ export async function fetchImageBatch(url: string, refs: readonly ImageRef[], de
             const ref = wanted.get(sha);
             // Only what was asked, once: nothing is ever kept under a hash not asked for.
             if (!ref || !open.delete(sha)) continue;
-            const got = await checkedImage(img, ref, deps);
+            const got = await checkedImage(img, ref, deps, sealed);
             if (got && 'url' in got) {
                 out.images.set(sha, got.url);
             } else if (got || mismatched.has(sha)) {

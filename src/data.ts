@@ -1512,7 +1512,7 @@ class DataManagerClass {
     /**
      * Images that came after the tree (spec 116, image-loads.ts) put into
      * the open tree `treeId` by `apply`: no undo step and no edit of the
-     * user's; not stored here (storeArrivedImages, once they all came).
+     * user's; not stored here (storeArrivedImages, a part of them at a time).
      * Null when `treeId` is not the open tree (or it cannot be changed).
      */
     applyImageArrivals<T>(treeId: TreeId, apply: (data: StromData) => T): T | null {
@@ -1605,11 +1605,19 @@ class DataManagerClass {
     /** Images came while a staged dialog held the saves: stored when it ends (also when it is thrown away). */
     private imagesUnstored = false;
 
-    /** Store the open tree `treeId` with the images that came (one save after them all). */
-    storeArrivedImages(treeId: TreeId): void {
-        if (this.currentTreeId !== treeId) return;
-        if (this.editSession) this.imagesUnstored = true;
+    /**
+     * Store the open tree `treeId` with the images that came so far (a part
+     * of them at a time, and after the last: image-loads.ts). Resolves once
+     * that write landed — the images are then references in memory.
+     */
+    storeArrivedImages(treeId: TreeId): Promise<void> {
+        if (this.currentTreeId !== treeId) return Promise.resolve();
+        if (this.editSession) {
+            this.imagesUnstored = true;
+            return Promise.resolve();
+        }
         this.save('content');
+        return TreeManager.flush(treeId);
     }
 
     /**

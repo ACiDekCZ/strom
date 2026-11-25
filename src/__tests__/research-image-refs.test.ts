@@ -14,7 +14,7 @@ import { exportToGedcom } from '../ged-exporter.js';
 import { stripMedia } from '../attachments.js';
 import { researchGedcom } from '../ui/research-ui.js';
 import {
-    findImageRefs, imageRefSha, resolveImageFile, imagesUrlOf, refTreeUrl, fetchImagesByHash, resolveImageRefs,
+    findImageRefs, imageRefSha, resolveImageFile, imagesUrlOf, refTreeUrl, fetchImagesByHash, fetchImageBatch, resolveImageRefs,
     forgetHeldImages, heldImageShas, internHeldImages, ImagesNotResolved, IMAGE_BATCH, IMAGE_ASK_BYTES, IMAGE_RETRY_MS, sha256Hex,
     type ImageFetchDeps, type ImageRef, type ImageResolveDeps,
 } from '../research-image-refs.js';
@@ -386,6 +386,23 @@ describe('the images from the bridge', () => {
 
         const always = bridge(storeOf(imgs), { corrupt: sha => sha === target ? IMG_C : null });
         await expect(fetchImagesByHash(URL_IMAGES, imgs.map(refOf), always.deps)).rejects.toThrow(/does not give its hash/);
+    });
+
+    it('through a sealed channel (a device\'s tunnel) an image is taken under the hash the research named, not hashed again', async () => {
+        const imgs = many(3);
+        const b = bridge(storeOf(imgs));
+        const hashed: number[] = [];
+        const deps: ImageFetchDeps = { ...b.deps, sha256Hex: async (bytes) => { hashed.push(bytes.length); return sha256Hex(bytes); },
+            sealed: url => url === URL_IMAGES };
+        const got = await fetchImagesByHash(URL_IMAGES, imgs.map(refOf), deps);
+        expect([...got.values()]).toEqual(imgs.map(dataUrlOf));
+        expect(hashed).toEqual([]);
+        const batch = await fetchImageBatch(URL_IMAGES, imgs.map(refOf), deps);
+        expect(batch.images.size).toBe(3);
+        expect(hashed).toEqual([]);
+        // Any other bridge: every image hashed.
+        await fetchImagesByHash(URL_IMAGES, imgs.map(refOf), { ...deps, sealed: () => false });
+        expect(hashed).toHaveLength(3);
     });
 
     it('an image not asked for is never taken; one never answered fails', async () => {

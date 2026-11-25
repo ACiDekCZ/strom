@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { b64url, deriveKey, openRequest, sealResponse, type RequestEnvelope } from '../device/device-crypto';
 import { configureGateway } from '../device/gateway-client';
 import { setDeviceKv, memoryKv, savePairing } from '../device/device-store';
-import { installDeviceFetch, uninstallDeviceFetch, deviceBridgeRequest, deviceBridgeBase } from '../device/device-bridge';
+import { installDeviceFetch, uninstallDeviceFetch, deviceBridgeRequest, deviceBridgeBase, isDeviceTunnelled } from '../device/device-bridge';
 import { parseLiveBridge, parseDeviceBridge, setResearchDeviceState, researchDevicePage, setResearchDevicePage } from '../research-link';
 import { storedResearchBridge } from '../research-device';
 
@@ -75,6 +75,18 @@ describe('the bridge of a device of the home network (spec 094 P3)', () => {
         expect(parseDeviceBridge('http://192.168.1.99:47800/__device/pychavkovi/status')).toBeNull();
         expect(parseDeviceBridge(`${ORIGIN}/device/x`)).toBeNull();
         expect(researchDevicePage()).toBe(true);
+    });
+
+    it('says which requests go through the sealed tunnel: a device base with the interceptor in place, nothing else', () => {
+        const images = `${deviceBridgeBase(TREE, ORIGIN)}/images`;
+        expect(isDeviceTunnelled(images)).toBe(false);
+        device();
+        expect(isDeviceTunnelled(images)).toBe(false);
+        vi.stubGlobal('fetch', vi.fn(async () => new Response('page')));
+        installDeviceFetch();
+        expect(isDeviceTunnelled(images)).toBe(true);
+        expect(isDeviceTunnelled('http://127.0.0.1:47123/tok/images')).toBe(false);
+        expect(isDeviceTunnelled('http://192.168.1.99:47800/__device/pychavkovi/images')).toBe(false);
     });
 
     it('leaves fetch as it is outside the device mode', async () => {

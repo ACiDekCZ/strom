@@ -18,6 +18,8 @@ import {
 import { hasPairingMark, chosenTreeId, chooseTree, computerLabelOf, deviceTreeIdOk, pairingNow, type DevicePairing, type DeviceTree } from '../device/device-store.js';
 import { retryDeviceConnection } from '../device/device-connection.js';
 import { startTreeLoad } from './tree-load-progress.js';
+import { bridgeGivesImagesByHash } from '../research-tree-file.js';
+import { imagesUrlOf } from '../research-image-refs.js';
 import { deviceFetch, type GatewayHello } from '../device/gateway-client.js';
 import {
     deviceStartEnd, deviceStartScreen, deviceTreeToOpen, deviceTreeRename, deviceTreeRow, deviceTreeChoices, homeHowSystem, homeLineDue, homeAddressHere,
@@ -231,8 +233,24 @@ export const deviceStartMethods = uiModule({
         this.refreshResearchMenu();
         // A file whose header names nothing: the research's name now (its status, `tree.name`), the pairing's only
         // when the status says none (U9d) — never the default one.
-        void this.pollResearchBridge({ reschedule: true }).then(() => this.deviceTreeNamed(treeId, pairedName));
+        void this.pollResearchBridge({ reschedule: true }).then(() => {
+            this.deviceTreeNamed(treeId, pairedName);
+            this.deviceResumeImages(treeId);
+        });
         return true;
+    },
+
+    /**
+     * The images of the research's tree held here that had not come when the page closed (spec 116, I1): asked
+     * again through the gateway, as the live follow asks them on the computer — once the research's status says
+     * it gives its images by hash. Nothing while a load of the tree's images runs already.
+     */
+    deviceResumeImages(researchId: string): void {
+        const held = TreeManager.findTreeByResearchId(researchId);
+        if (!held?.pendingImages || DataManager.getCurrentTreeId() !== held.id) return;
+        if (!bridgeGivesImagesByHash(this.researchStatusOf(researchId)?.features)) return;
+        const base = deviceBridgeBase(researchId, researchDeviceState()?.origin ?? location.origin);
+        this.researchResumePendingImages(held.id, researchId, imagesUrlOf(`${base}/tree.ged`));
     },
 
     /** The tree open now is one of the pairing's research trees (never the app's own tree of its first start). */
@@ -424,7 +442,10 @@ export const deviceStartMethods = uiModule({
         retryDeviceConnection();
         this.refreshResearchMenu();
         const pairedName = pairingNow()?.trees.find(t => t.id === researchId)?.name;
-        void this.pollResearchBridge({ reschedule: true }).then(() => this.deviceTreeNamed(researchId, pairedName));
+        void this.pollResearchBridge({ reschedule: true }).then(() => {
+            this.deviceTreeNamed(researchId, pairedName);
+            this.deviceResumeImages(researchId);
+        });
     },
 
     /** The quiet line of the home-screen icon under the toolbar (2.5): once, never in the icon, × hides it for good. */

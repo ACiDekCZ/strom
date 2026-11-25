@@ -478,6 +478,96 @@ describe('the queue', () => {
     });
 });
 
+/** The characters of the whole images (data URLs) `data`'s portraits hold. */
+const imageChars = (data: StromData): number =>
+    Object.values(data.persons).reduce((n, p) => n + (p.photo?.startsWith('data:') ? p.photo.length : 0), 0);
+
+/**
+ * A load whose store does what the app's does to memory (image-intern.ts): every whole image of the data
+ * becomes its reference, and the load's own record of what came takes it too. `hold`: each store lands
+ * only when released.
+ */
+function storingLoad(o: { pending: PendingImage[]; data: StromData; fetch: ImageFetchDeps; storeChars: number; batch: number; hold?: boolean }) {
+    let stores = 0;
+    let most = 0;
+    const landing: (() => void)[] = [];
+    let q: ReturnType<typeof startImageLoad> = null;
+    const done: { arrived: ReadonlyMap<string, string> }[] = [];
+    const deps: ImageLoadDeps = {
+        fetch: o.fetch,
+        currentTreeId: () => 'tree-a',
+        write: (_id, fills) => {
+            const written = applyImageFills(o.data, fills);
+            most = Math.max(most, imageChars(o.data));
+            return written;
+        },
+        store: () => {
+            stores++;
+            const map = new Map<string, string>();
+            for (const p of Object.values(o.data.persons)) if (p.photo?.startsWith('data:')) map.set(p.photo, `ref:${shaOf(Buffer.from(p.photo.slice(p.photo.indexOf(',') + 1), 'base64'))}`);
+            const land = (): void => {
+                for (const p of Object.values(o.data.persons)) if (p.photo && map.has(p.photo)) p.photo = map.get(p.photo)!;
+                q?.internArrived(map);
+            };
+            if (!o.hold) {
+                land();
+                return Promise.resolve();
+            }
+            return new Promise<void>(r => landing.push(() => { land(); r(); }));
+        },
+        emit: () => {},
+    };
+    q = startImageLoad({ treeId: 'tree-a', url: URL_IMAGES, pending: o.pending, deps, firstBatch: o.batch, batch: o.batch, storeChars: o.storeChars,
+        onDone: r => done.push({ arrived: new Map(r.arrived) }) })!;
+    return { q: q!, stores: () => stores, most: () => most, done, land: () => { for (const l of landing.splice(0)) l(); }, landing: () => landing.length };
+}
+
+describe('the images stored a part at a time: never all of them in memory (a phone, a big research)', () => {
+    it('a store after each part that came, the whole images in memory never more than about one part', async () => {
+        const { data, pending, store } = chain(40);
+        const one = [...store.values()][0].length;
+        const b = bridge(store);
+        const l = storingLoad({ pending, data, fetch: b.deps, storeChars: 4 * one, batch: 5 });
+        await l.q.whenIdle();
+        await tick();
+        expect(l.q.snapshot()).toMatchObject({ done: 40, failed: 0 });
+        // 40 images, a store after each 4 of them came (a batch of 5): about ten stores, not one after them all.
+        expect(l.stores()).toBeGreaterThanOrEqual(8);
+        // Never more whole images than a part and the batches on their way (2 × 5), far from all 40.
+        expect(l.most()).toBeLessThanOrEqual(4 * one + 10 * one);
+        expect(l.most()).toBeLessThan(40 * one);
+        // After the last store: no whole image in the data, nor in what the load keeps of what came.
+        expect(imageChars(data)).toBe(0);
+        expect([...l.done[0].arrived.values()].every(v => v.startsWith('ref:'))).toBe(true);
+        expect(l.q.fillsWritten().every(f => f.url.startsWith('ref:'))).toBe(true);
+    });
+
+    it('a store still landing with a part come again: nothing more asked until it landed', async () => {
+        const { data, pending, store } = chain(30);
+        const one = [...store.values()][0].length;
+        const b = bridge(store);
+        const l = storingLoad({ pending, data, fetch: b.deps, storeChars: 5 * one, batch: 5, hold: true });
+        // The first batch came and is being stored; the asks go on until another part waits.
+        await vi.waitFor(() => expect(l.landing()).toBe(1));
+        await vi.waitFor(() => expect(b.asks.length).toBe(3));
+        await tick();
+        await tick();
+        expect(b.asks.length).toBe(3);
+        expect(l.q.snapshot()).toMatchObject({ done: 15, left: 15 });
+        // Landed: the part waiting is stored, the asks go on.
+        l.land();
+        await vi.waitFor(() => expect(b.asks.length).toBeGreaterThan(3));
+        await vi.waitFor(() => {
+            l.land();
+            expect(l.q.snapshot().phase).toBe('done');
+        });
+        await vi.waitFor(() => {
+            l.land();
+            expect(imageChars(data)).toBe(0);
+        });
+    });
+});
+
 /** The wait's look as a record: what it showed, and the answers to its question. */
 function fakeView(answers: AwaitImagesChoice[] = []) {
     const shown: { done: number; total: number }[] = [];

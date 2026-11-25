@@ -112,6 +112,14 @@ function noteReplay(method: string, path: string, headers: HeadersInit | undefin
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(DEVICE_REPLAY_EVENT, { detail: { action, path: path.split('?')[0] } }));
 }
 
+/**
+ * A request of `url` goes through the gateway's sealed tunnel (the interceptor in place, a device base): every byte
+ * of its answer authenticated as the paired research's own (spec 094).
+ */
+export function isDeviceTunnelled(url: string): boolean {
+    return pageFetch !== null && parseDeviceBridge(url) !== null;
+}
+
 /** The interceptor in place (once); only called in the confirmed device mode. */
 export function installDeviceFetch(): void {
     if (pageFetch || typeof globalThis.fetch !== 'function') return;

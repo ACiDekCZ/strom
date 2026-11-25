@@ -13,7 +13,10 @@
  * batches, checks each image against its hash and puts it into the open
  * tree — no undo step, no edit of the user's — only while that tree and that
  * load are still the current ones. A stand-in is never stored (validation
- * drops one that would be).
+ * drops one that would be). The images that came are stored as they come,
+ * a part at a time (IMAGE_STORE_CHARS): the store puts them into the image
+ * pool and every copy in memory takes their references (image-intern.ts),
+ * so a phone never holds a big research's photos all at once.
  *
  * Pure of the UI: the network, the tree and the events come in as
  * dependencies (tests, the app's wiring in ui/research-ui.ts).
@@ -42,6 +45,14 @@ export type ImageLoadState = 'pending' | 'loaded' | 'failed';
 
 /** The first batch asked (the images on screen come quickly). */
 export const IMAGE_FIRST_BATCH = 30;
+
+/**
+ * Images that came and are not stored yet, in characters of their data
+ * URLs: once they reach this, the tree is stored (their references take
+ * their place in memory), and no further batch is asked while that store
+ * runs with this much waiting again.
+ */
+export const IMAGE_STORE_CHARS = 16 * 1024 * 1024;
 
 /** Event: images came into the open tree. Detail: ImagesArrivedDetail. */
 export const IMAGES_ARRIVED_EVENT = 'strom:images-arrived';
@@ -553,8 +564,12 @@ export interface ImageLoadDeps {
     currentTreeId(): string | null;
     /** Put the images into the open tree `treeId` (applyImageFills on its data, no undo step); the keys written. */
     write(treeId: string, fills: readonly ImageFill[]): FieldKey[];
-    /** Store the open tree `treeId` once (after the images came). */
-    store(treeId: string): void;
+    /**
+     * Store the open tree `treeId` with the images that came so far (each
+     * IMAGE_STORE_CHARS of them, and after the last); a promise: settled
+     * once that store landed (its images then references in memory).
+     */
+    store(treeId: string): void | Promise<unknown>;
     /** Tell the app (window events by default). */
     emit(type: string, detail: unknown): void;
     /** Images came and were checked (the images held for the research grow, spec 116). */
@@ -589,6 +604,8 @@ export interface ImageLoadOptions {
     firstBatch?: number;
     batch?: number;
     concurrency?: number;
+    /** Store after this many characters of images came (IMAGE_STORE_CHARS). */
+    storeChars?: number;
 }
 
 /** The images of one load of a tree: their evidence and the asking. */
@@ -606,6 +623,10 @@ export class ImageLoadQueue {
     private readonly ctl: AbortController | null = typeof AbortController === 'function' ? new AbortController() : null;
     private aborted = false;
     private unstored = false;
+    /** Characters of the images written and not stored yet. */
+    private unstoredChars = 0;
+    /** A store of the images that came, still landing. */
+    private storing: Promise<void> | null = null;
     /** A round (the start, a retry) not yet told done. */
     private roundOpen = true;
     private readonly arrived = new Map<string, string>();
@@ -824,6 +845,8 @@ export class ImageLoadQueue {
         if (this.aborted) return;
         const concurrency = this.o.concurrency ?? IMAGE_CONCURRENCY;
         while (this.running < concurrency && this.waiting.length) {
+            // A store still landing and as much come again: no more asked until it landed (memory).
+            if (this.storing && this.unstoredChars >= this.storeChars()) return;
             if (!this.current()) {
                 this.abort();
                 return;
@@ -894,9 +917,41 @@ export class ImageLoadQueue {
         this.o.deps.arrived?.(got.images);
         if (keys.length) {
             this.unstored = true;
+            for (const { entry, url } of fills) if (written.has(entry.key)) this.unstoredChars += url.length;
             this.o.deps.emit(IMAGES_ARRIVED_EVENT, this.arrivedDetail(keys));
         }
         this.emitState();
+        // Enough came: stored now (not after all of them), their references in memory from then on.
+        if (!this.storing && this.unstoredChars >= this.storeChars() && this.current()) this.storeNow();
+    }
+
+    private storeChars(): number {
+        return this.o.storeChars ?? IMAGE_STORE_CHARS;
+    }
+
+    /** Store the tree with the images that came (deps.store); a store still landing is waited for before more is asked. */
+    private storeNow(): void {
+        this.unstored = false;
+        this.unstoredChars = 0;
+        const out = this.o.deps.store(this.treeId);
+        if (!out || typeof (out as Promise<unknown>).then !== 'function') return;
+        const landed: Promise<void> = Promise.resolve(out).then(() => undefined, () => undefined).then(() => {
+            if (this.storing !== landed) return;
+            this.storing = null;
+            if (this.aborted) return;
+            if (this.unstoredChars >= this.storeChars() && this.current()) this.storeNow();
+            this.pump();
+            this.settle();
+        });
+        this.storing = landed;
+    }
+
+    /** Images of the tree stored (image-intern.ts): those kept here take their references too. */
+    internArrived(map: ReadonlyMap<string, string>): void {
+        for (const [sha, url] of this.arrived) {
+            const ref = map.get(url);
+            if (ref !== undefined) this.arrived.set(sha, ref);
+        }
     }
 
     private fail(shas: readonly string[], reason: ImageFailReason): void {
@@ -944,10 +999,7 @@ export class ImageLoadQueue {
     /** Nothing more to come: the tree is stored once, and whoever waits is told. */
     private settle(): void {
         if (this.aborted || this.running > 0 || this.waiting.length || this.hasPending()) return;
-        if (this.unstored && this.current()) {
-            this.unstored = false;
-            this.o.deps.store(this.treeId);
-        }
+        if (this.unstored && this.current()) this.storeNow();
         if (this.roundOpen) {
             this.roundOpen = false;
             this.o.onDone?.({ arrived: this.arrived, failed: this.failedKeys().length });
