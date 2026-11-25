@@ -24779,6 +24779,10 @@
             .research-overview__head--window > .research-overview__stop,
             .research-overview__head--window > .research-overview__follow-live { height: 44px; }
         }
+        /* A tablet held sideways (spec 094 4.19): the overview's overlay panel keeps 44px targets in its head. */
+        @media (pointer: coarse) {
+            .research-overview--overlay .research-overview__head > button { min-width: 44px; min-height: 44px; }
+        }
         /* A narrow window (a phone's width): the name under the title wraps, the head's buttons stay on its line. */
         @media (max-width: 640px) {
             .research-overview__head--window { padding: 10px 10px 10px 14px; gap: 8px; }

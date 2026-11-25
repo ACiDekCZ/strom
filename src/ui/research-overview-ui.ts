@@ -851,7 +851,8 @@ export const researchOverviewMethods = uiModule({
             const closedStrip = ownWindow?.strip?.() ?? null;
             if (closedStrip) root.appendChild(closedStrip);
             // Without following, the bridge answering: what "Follow live" does, under the head (6b).
-            if (source === 'bridge' && !this.activeResearchAgentless() && frozenAt === null) {
+            // A device of the home network (spec 094 §4, 9): its tree is the research's already; following is an option of the menu.
+            if (source === 'bridge' && !this.activeResearchAgentless() && frozenAt === null && !inDeviceMode()) {
                 root.appendChild(el('p', 'research-overview__window-note', L.followNote));
             }
         } else {
@@ -888,7 +889,9 @@ export const researchOverviewMethods = uiModule({
             head.appendChild(close);
             root.appendChild(head);
             // Without following, the bridge answering: "Follow live" and what it does, under the head (§7.3).
-            if (source === 'bridge' && viewed) {
+            // Not on a device of the home network (spec 094 §4, 9): its tree is the research's already, editable; following
+            // live stays an option of the menu (read-only meanwhile, with the follow panel of today).
+            if (source === 'bridge' && viewed && !inDeviceMode()) {
                 const strip = this.overviewFollowStrip(viewed);
                 if (strip) root.appendChild(strip);
             }
@@ -3952,7 +3955,7 @@ export const researchOverviewMethods = uiModule({
             stop.type = 'button';
             stop.onclick = () => this.stopLiveFollow();
             head.appendChild(stop);
-        } else if (source === 'bridge' && !this.activeResearchAgentless()) {
+        } else if (source === 'bridge' && !this.activeResearchAgentless() && !inDeviceMode()) {
             const follow = el('button', 'research-overview__follow-live research-overview__follow-live--head', r.followLive);
             follow.type = 'button';
             follow.title = L.followNote;
