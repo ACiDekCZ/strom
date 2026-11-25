@@ -131,6 +131,14 @@ async function keptPhotos(page: Page, names: string[], handed = false): Promise<
     }, { research: TREE, names, png: PNG.toString('base64'), handed });
 }
 
+/**
+ * The key of photos chosen for the research before its tree was here, once the tree is back: taken over to the
+ * tree's own key (`batchDraftOf`), nothing discarded.
+ */
+async function treeBatchKey(page: Page): Promise<string> {
+    return `batch:${await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())}`;
+}
+
 async function queueKeys(page: Page): Promise<string[]> {
     return page.evaluate(async () => {
         const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('strom-device'); r.onsuccess = () => resolve(r.result); });
@@ -243,7 +251,7 @@ test.describe('a phone of the home network (touch)', () => {
         await expect(page.locator('#device-qline')).toHaveCount(0);
         await expect(page.locator('body')).not.toHaveClass(/tree-locked/);
         // nothing was discarded
-        expect(await queueKeys(page)).toEqual([`batch:${TREE}`, 'edit-1']);
+        expect(await queueKeys(page)).toEqual([await treeBatchKey(page), 'edit-1']);
     });
 
     test('a batch cut off by the computer away goes on by itself when it is back, the toast says what is sent', async ({ page }) => {
@@ -328,7 +336,7 @@ test.describe('a phone of the home network (touch)', () => {
         await poll(page);
         await page.waitForTimeout(500);
         expect(gw.media.length).toBe(0);
-        expect(await queueKeys(page)).toEqual([`batch:${TREE}`, 'edit-1']);
+        expect(await queueKeys(page)).toEqual([await treeBatchKey(page), 'edit-1']);
     });
 
     test('Discard… while a cut-off batch waits: it stops and keeps none of its photos again', async ({ page }) => {

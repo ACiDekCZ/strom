@@ -94,6 +94,8 @@ export type PhoneTreeOpen = 'open' | 'cancel' | 'failed' | 'offline';
 let screenTreeId: string | null = null;
 let features: DeviceResearchFeatures | null = null;
 let shownState: DeviceResearchState | null = null;
+/** Without the computer (§8 point 1): the last state shown, its actions grey; the dock goes on. */
+let away = false;
 /** The screen's tree's last read failed (no connection): the held state is shown. */
 let readFailed = false;
 let unwatch: (() => void) | null = null;
@@ -143,6 +145,11 @@ export function phoneResearchReady(): boolean {
 /** The tree of the screen (the device's chosen tree, as switched on the screen). */
 export function phoneResearchTreeId(): string | null {
     return screenTreeId ?? chosenTreeId();
+}
+
+/** The screen is seen and its research is an archive (3.6): no Now nor Lines, no actions, "Archive · read-only". */
+export function phoneResearchArchive(): boolean {
+    return phoneResearchShown() && shownState?.glance?.tree.state === 'archive';
 }
 
 /** A tree opened here (or held here): the dock's "downloaded when opened" goes. */
@@ -696,7 +703,7 @@ function makeLineRow(act: 'now-menu' | 'line-menu', numbered: boolean): HTMLElem
     return row;
 }
 
-function fillLineRow(row: HTMLElement, o: { n?: number; way: DeviceWay; name: string; task?: string; meta: string; chip?: string; off?: boolean; menu: string }): void {
+function fillLineRow(row: HTMLElement, o: { n?: number; way: DeviceWay; name: string; task?: string; meta: string; chip?: string; off?: boolean; menu: string; locked?: boolean }): void {
     if (o.n !== undefined) setText(row.querySelector('.phone-line__n'), String(o.n));
     setText(row.querySelector('.phone-line__glyph'), wayGlyph(o.way));
     setText(row.querySelector('.phone-line__name'), o.name);
@@ -712,8 +719,13 @@ function fillLineRow(row: HTMLElement, o: { n?: number; way: DeviceWay; name: st
         chip.hidden = !o.chip;
     }
     row.classList.toggle('is-off', !!o.off);
-    const more = row.querySelector<HTMLElement>('.phone-line__more');
+    const more = row.querySelector<HTMLButtonElement>('.phone-line__more');
     if (more && more.getAttribute('aria-label') !== o.menu) more.setAttribute('aria-label', o.menu);
+    // Without the computer the line's actions are grey (§8 point 1): nothing is asked of the research.
+    if (more) more.disabled = !!o.locked;
+    row.classList.toggle('is-locked', !!o.locked);
+    if (o.locked) row.setAttribute('aria-disabled', 'true');
+    else row.removeAttribute('aria-disabled');
 }
 
 // ——— Waiting's rows (§5) ———
@@ -794,6 +806,8 @@ interface WaitingRowData {
     note?: string;
     acts: { do: DeviceWaitingDo; label: string; cls: string }[];
     busy: boolean;
+    /** Without the computer: its actions grey (§8 point 1). */
+    locked?: boolean;
     problem?: string;
 }
 
@@ -822,7 +836,7 @@ function waitingActLabel(d: DeviceWaitingDo): { label: string; cls: string } {
 
 /** A row's data from the item and what was done here. */
 function phoneWaitingRowData(item: DeviceGlanceWaiting, here: WaitingHere | undefined, o: {
-    g: DeviceGlance; lang: string; now: number; seen: string | null; pc: string; allows: (d: DeviceWaitingDo) => boolean;
+    g: DeviceGlance; lang: string; now: number; seen: string | null; pc: string; allows: (d: DeviceWaitingDo) => boolean; locked?: boolean;
 }): WaitingRowData {
     const r = strings.deviceResearch;
     const kind = phoneWaitingKind(item);
@@ -859,6 +873,7 @@ function phoneWaitingRowData(item: DeviceGlanceWaiting, here: WaitingHere | unde
         ...(kind === 'conflict' ? { note: phoneComputerOnlyNote('conflict', o.pc) } : {}),
         acts: acts.map(d => ({ do: d, ...waitingActLabel(d) })),
         busy: waitingWriting.has(item.id),
+        locked: !!o.locked,
         ...(waitingProblems.has(item.id) ? { problem: waitingProblems.get(item.id) } : {}),
     };
 }
@@ -906,7 +921,7 @@ function fillWaitingRow(row: HTMLElement, d: WaitingRowData): void {
         }));
     }
     acts.hidden = !d.acts.length;
-    for (const b of Array.from(acts.children) as HTMLButtonElement[]) b.disabled = d.busy;
+    for (const b of Array.from(acts.children) as HTMLButtonElement[]) b.disabled = d.busy || !!d.locked;
     row.classList.toggle('is-busy', d.busy);
     const problem = row.querySelector<HTMLElement>('.phone-wait__problem')!;
     setText(problem, d.problem ?? '');
@@ -1004,7 +1019,7 @@ function findGroupRow(key: string, g: DeviceFindGroup, seenAt: string | null, ol
 }
 
 /** A quiet link-like button as a keyed row ("Show older finds"). */
-function linkRow(key: string, act: string, text: string, busy: boolean): KeyedRow {
+function linkRow(key: string, act: string, text: string, busy: boolean, locked = false): KeyedRow {
     return {
         key,
         make: () => {
@@ -1017,7 +1032,7 @@ function linkRow(key: string, act: string, text: string, busy: boolean): KeyedRo
         fill: (b) => {
             setText(b, text);
             b.toggleAttribute('aria-busy', busy);
-            (b as HTMLButtonElement).disabled = busy;
+            (b as HTMLButtonElement).disabled = busy || locked;
         },
     };
 }
@@ -1081,9 +1096,8 @@ export const phoneResearchMethods = uiModule({
         if (!screen) screen = this.buildPhoneResearch();
         screen.hidden = false;
         document.body.classList.add(PHONE_RESEARCH_ON);
-        // The home-screen icon's quiet line stands under the screen's header (§8 point 6).
-        const line = document.getElementById('device-home-line');
-        if (line && line.parentElement !== screen) screen.prepend(line);
+        this.placePhoneScreenLines();
+        if (this.deviceDownKind()) void this.renderDeviceQline();
         this.syncPhoneBar();
         this.updateTreeSwitcher();
         readWhileShown = false;
@@ -1097,6 +1111,51 @@ export const phoneResearchMethods = uiModule({
         void this.refreshPhoneResearch();
     },
 
+    /**
+     * The quiet lines under the screen's header while it is seen: the home-screen icon's (§8 point 6) and, without
+     * the computer, the one that says so (§8 point 1; the home line gives way to it meanwhile).
+     */
+    placePhoneScreenLines(): void {
+        const screen = document.getElementById(PHONE_RESEARCH_ID);
+        if (!screen || screen.hidden || !phoneResearchShown()) return;
+        for (const id of ['device-home-line', 'device-qline']) {
+            const line = document.getElementById(id);
+            if (line && line.parentElement !== screen) screen.prepend(line);
+        }
+    },
+
+    /** When the state the screen shows was read (null: none; undefined: the screen is not seen). */
+    phoneResearchStateAt(): string | null | undefined {
+        if (!phoneResearchShown()) return undefined;
+        return shownState?.at ?? null;
+    },
+
+    /**
+     * Unpaired (§8 point 4): the research's last state went with the pairing (forgetPairing) and the tree held here
+     * with it (deviceForgetHeldTree): the screen forgets what it showed — "The research's state is not on this
+     * device yet." and the dock, whose queue stays.
+     */
+    phoneResearchForget(): void {
+        reading?.abort();
+        reading = null;
+        features = null;
+        shownState = null;
+        readFailed = false;
+        treesOpened.clear();
+        stopsAsked.clear();
+        orderMoving = null;
+        linesBusy = false;
+        waitingHere.clear();
+        waitingWriting.clear();
+        waitingProblems.clear();
+        findsWindow.clear();
+        findsSeen = null;
+        findsSeenOf = null;
+        olderFinds = null;
+        findsCame = 0;
+        if (phoneResearchShown()) this.renderPhoneResearch();
+    },
+
     /** The screen goes (the tree is seen): where it was scrolled kept, the live reads stopped. */
     hidePhoneResearch(): void {
         const screen = document.getElementById(PHONE_RESEARCH_ID);
@@ -1106,10 +1165,14 @@ export const phoneResearchMethods = uiModule({
                 if (el) scrollKept[k] = el.scrollTop;
             }
             screen.hidden = true;
-            const line = document.getElementById('device-home-line');
-            if (line && line.parentElement === screen) document.body.append(line);
+            for (const id of ['device-home-line', 'device-qline']) {
+                const line = document.getElementById(id);
+                if (line && line.parentElement === screen) document.body.append(line);
+            }
         }
         document.body.classList.remove(PHONE_RESEARCH_ON);
+        // The quiet line over the tree says what the tree shows (its copy, or none).
+        if (this.deviceDownKind()) void this.renderDeviceQline();
         if (seenTimer) clearTimeout(seenTimer);
         seenTimer = null;
         unwatch?.();
@@ -1149,6 +1212,8 @@ export const phoneResearchMethods = uiModule({
         screen.addEventListener('click', (e) => {
             const at = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-act]');
             const act = at?.dataset.act;
+            // A grey row (without the computer) asks nothing.
+            if (at?.getAttribute('aria-disabled') === 'true') return;
             if (act === 'overview') void this.phoneOpenOverview();
             else if (act === 'now-menu' && at) this.openPhoneNowMenu(Number(at.dataset.index));
             else if (act === 'line-menu' && at?.dataset.line) this.openPhoneLineMenu(at.dataset.line);
@@ -1196,9 +1261,16 @@ export const phoneResearchMethods = uiModule({
         const more = screen.querySelector('.phone-research__more-text');
         if (more) more.textContent = r.moreOverview;
         const state = shownState;
+        // Nothing known of the research: nothing of it to open either (8.2).
+        const moreBtn = screen.querySelector<HTMLElement>('.phone-research__more');
+        if (moreBtn) moreBtn.hidden = !state;
         const anchor = scrollAnchor(screen);
+        away = this.deviceDownKind() !== null;
         screen.classList.toggle('is-down', readFailed);
+        screen.classList.toggle('is-away', away);
         screen.classList.toggle('is-empty', !state);
+        // The switcher's second line follows the screen's research (an archive: read-only, 3.6).
+        this.refreshDeviceSwitcherLine();
         for (const key of PHONE_SECTIONS) {
             const el = sectionEl(screen, key);
             if (!el) continue;
@@ -1206,6 +1278,7 @@ export const phoneResearchMethods = uiModule({
             if (!state || !KEYED_SECTIONS.has(key)) el.body.replaceChildren();
             el.sum.textContent = '';
             el.sec.hidden = false;
+            el.sec.classList.remove('is-none');
         }
         const now = sectionEl(screen, 'now');
         // Nothing known of the research yet (§8 point 2): one sentence, the dock under it.
@@ -1215,7 +1288,9 @@ export const phoneResearchMethods = uiModule({
                 if (el) el.sec.hidden = key !== 'now';
             }
             if (now) {
+                // One quiet sentence, no heading (8.2, 8.4).
                 now.head.textContent = r.nowTitle;
+                now.sec.classList.add('is-none');
                 quiet(now.body, r.stateNotHere);
             }
             this.renderPhoneDock();
@@ -1268,7 +1343,7 @@ export const phoneResearchMethods = uiModule({
                 make: () => makeLineRow('now-menu', false),
                 fill: (row: HTMLElement) => {
                     row.dataset.index = String(i);
-                    fillLineRow(row, { way: n.way, name, task, meta: phoneNowMeta(n, { stopping, lang }), menu: strings.deviceResearch.lineActions });
+                    fillLineRow(row, { way: n.way, name, task, meta: phoneNowMeta(n, { stopping, lang }), menu: strings.deviceResearch.lineActions, locked: away });
                     row.classList.toggle('is-stopping', stopping);
                 },
             };
@@ -1321,11 +1396,13 @@ export const phoneResearchMethods = uiModule({
         const now = Date.now();
         const seen = treeId ? findsWindow.get(treeId) ?? null : null;
         const pc = computerName();
-        const allows = (d: DeviceWaitingDo): boolean => researchDeviceAllows(d === 'decide' ? 'hypothesis' : 'waiting-answer');
+        // An archive is read only (3.6): what waits is shown without its actions.
+        const archive = g?.tree.state === 'archive';
+        const allows = (d: DeviceWaitingDo): boolean => !archive && researchDeviceAllows(d === 'decide' ? 'hypothesis' : 'waiting-answer');
         const rows: KeyedRow[] = shown.items.map(({ item, here }) => ({
             key: `w:${item.id}`,
             make: makeWaitingRow,
-            fill: (row: HTMLElement) => fillWaitingRow(row, phoneWaitingRowData(item, here, { g: g!, lang, now, seen, pc, allows })),
+            fill: (row: HTMLElement) => fillWaitingRow(row, phoneWaitingRowData(item, here, { g: g!, lang, now, seen, pc, allows, locked: away })),
         }));
         if (shown.more) {
             rows.push({
@@ -1347,7 +1424,7 @@ export const phoneResearchMethods = uiModule({
     /** An action of an item of Waiting (its `do`). */
     phoneWaitingDo(id: string, d: DeviceWaitingDo): void {
         const found = phoneWaitingFind(id);
-        if (!found) return;
+        if (!found || away || shownState?.glance?.tree.state === 'archive') return;
         const { item } = found;
         const kind = phoneWaitingKind(item);
         const L = strings.live;
@@ -1610,7 +1687,7 @@ export const phoneResearchMethods = uiModule({
         if (older && finds) rows.push(...olderFindGroups(older, finds.since).map(g => findGroupRow(`old:${g.key}`, g, null, true)));
         const cut = older ? older.cut : finds?.cut;
         if (cut) rows.push(quietRow('cut', r.findsCut(cut)));
-        if (finds?.earlier && !older) rows.push(linkRow('older', 'finds-older', r.findsOlder, olderReading));
+        if (finds?.earlier && !older) rows.push(linkRow('older', 'finds-older', r.findsOlder, olderReading, away));
         syncRows(el.body, rows);
     },
 
@@ -1662,7 +1739,7 @@ export const phoneResearchMethods = uiModule({
     /** "Show older finds" (§4 point 3): the finds of the last 31 days read, those before the list's shown under it. */
     async phoneFindsOlder(): Promise<void> {
         const treeId = phoneResearchTreeId();
-        if (!treeId || olderReading || !shownState?.finds) return;
+        if (!treeId || olderReading || !shownState?.finds || away) return;
         olderReading = true;
         this.renderPhoneResearch();
         try {
@@ -1747,7 +1824,7 @@ export const phoneResearchMethods = uiModule({
                 const chip = l.state === 'paused' ? strings.live.dirPausedChip('') : l.state === 'done' ? r.lineEnded : undefined;
                 fillLineRow(row, {
                     n: l.n, way: l.way, name: l.name, meta: l.state === 'done' ? '' : r.lineMeta(l.tasks), chip,
-                    off: l.state !== 'active', menu: strings.deviceResearch.lineActions,
+                    off: l.state !== 'active', menu: strings.deviceResearch.lineActions, locked: away,
                 });
             },
         }));
@@ -1760,7 +1837,7 @@ export const phoneResearchMethods = uiModule({
     openPhoneNowMenu(index: number): void {
         const g = shownState?.glance;
         const n = g?.now[index];
-        if (!g || !n) return;
+        if (!g || !n || away) return;
         const r = strings.deviceResearch;
         const L = strings.live;
         const line = n.line ? g.lines.find(l => l.id === n.line) : undefined;
@@ -1806,7 +1883,7 @@ export const phoneResearchMethods = uiModule({
      */
     openPhoneLineMenu(lineId: string): void {
         const g = shownState?.glance;
-        if (!g || g.tree.state === 'archive') return;
+        if (!g || g.tree.state === 'archive' || away) return;
         const lines = linesInOrder(g.lines, orderMoving);
         const line = lines.find(l => l.id === lineId);
         if (!line) return;

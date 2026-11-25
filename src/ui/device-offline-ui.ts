@@ -116,8 +116,19 @@ export const deviceOfflineMethods = uiModule({
             this.refreshResearchMenu();
         }
         if (was && was !== 'unpaired' && !down && conn?.state === 'connected') void this.deviceReconnected();
-        if (down === 'unpaired' && was !== 'unpaired') void this.deviceForgetHeldTree();
+        if (down === 'unpaired' && was !== 'unpaired') {
+            // The research's last state went with the pairing (forgetPairing): the phone's screen forgets it too.
+            this.phoneResearchForget();
+            void this.deviceForgetHeldTree();
+        }
+        // The phone's Research screen: its actions grey while away, back with the connection.
+        if (was !== down && this.phoneResearchActive()) this.renderPhoneResearch();
         void this.renderDeviceQline();
+    },
+
+    /** Why the device is without its computer now (null: connected, or not a device). */
+    deviceDownKind(): DeviceDownKind | null {
+        return down;
     },
 
     /** The research group's state line on the More sheet while away (7.3): "The computer … is not reachable · last known state 14:05". */
@@ -146,8 +157,12 @@ export const deviceOfflineMethods = uiModule({
         if (seq !== renderSeq || !down) return;
         const d = strings.device;
         const pc = deviceComputerName();
-        const t = lastOkAt !== null ? formatLiveClock(lastOkAt, Date.now(), getCurrentLanguage()) : '';
-        const text = deviceDownText(down, pc, t, !!this.researchSyncLink());
+        const clock = (at: number | null): string => (at !== null && Number.isFinite(at) ? formatLiveClock(at, Date.now(), getCurrentLanguage()) : '');
+        // The phone's Research screen shows the research's last state (§8 points 1–2): its time, or none held.
+        const screenAt = this.phoneResearchStateAt();
+        const text = screenAt !== undefined
+            ? deviceDownText(down, pc, screenAt ? clock(lastOkAt ?? Date.parse(screenAt)) : '', true)
+            : deviceDownText(down, pc, clock(lastOkAt), !!this.researchSyncLink());
         const pending = waiting.photos + waiting.edits > 0
             ? `<button type="button" class="qline-link" data-act="pending" aria-haspopup="dialog">${esc(d.pending(waiting.photos, waiting.edits))}<span aria-hidden="true"> ›</span></button>`
             : '';
@@ -171,6 +186,8 @@ export const deviceOfflineMethods = uiModule({
                 } else if (btn.dataset.act === 'pending') void this.showDeviceWaiting();
             });
             document.body.appendChild(el);
+            // On the phone's Research screen: under its header (§8 point 1).
+            this.placePhoneScreenLines();
         }
         el.dataset.state = down;
         const focused = (document.activeElement as HTMLElement | null)?.closest('#' + QLINE_ID) ? (document.activeElement as HTMLElement).dataset.act : '';

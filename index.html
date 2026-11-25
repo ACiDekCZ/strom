@@ -23697,7 +23697,7 @@
             display: flex; flex-direction: column; background: var(--surface); color: var(--text);
         }
         .phone-research[hidden] { display: none; }
-        .phone-research > .device-home-line { position: static; flex: none; grid-area: line; }
+        .phone-research > .device-home-line, .phone-research > .device-qline { position: static; flex: none; grid-area: line; }
         .phone-research__main { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
         .phone-sec { border-bottom: 1px solid var(--divider); }
         .phone-sec[hidden] { display: none; }
@@ -23739,7 +23739,10 @@
             padding: 0; border: 0; border-radius: var(--r-md); background: none; color: var(--text-light); font: inherit; font-size: 18px; cursor: pointer;
         }
         .phone-line__more:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-        @media (hover: hover) { .phone-line__more:hover { background: var(--hover-bg); color: var(--text); } }
+        @media (hover: hover) { .phone-line__more:not(:disabled):hover { background: var(--hover-bg); color: var(--text); } }
+        /* Without the computer (§8 point 1): the last state known, its actions grey; the dock goes on. */
+        .phone-line.is-locked { cursor: default; }
+        .phone-line__more:disabled, .phone-research.is-away .phone-sec__link:disabled { opacity: .5; cursor: default; }
         .phone-now-idle { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 10px; align-items: center; margin: 0 16px; padding: 8px 0; }
         .phone-now-idle .phone-dot { justify-self: center; }
         .phone-sec__day { margin: 0; padding: 4px 16px 12px; font-size: 12.5px; line-height: 1.4; color: var(--text-light); overflow-wrap: anywhere; }
@@ -23805,6 +23808,7 @@
         .phone-research__more:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         @media (hover: hover) { .phone-research__more:hover { background: var(--hover-bg); } }
         .phone-research__chev { flex: none; color: var(--text-faint); }
+        .phone-research__more[hidden] { display: none; }
         /* Waiting (§5): a row of tags, what waits, whom and since when, its actions (44 px) only as the research offers them. */
         .phone-sec.is-none .phone-sec__head { display: none; }
         .phone-sec.is-none .phone-sec__quiet { padding-top: 12px; }
@@ -23956,6 +23960,9 @@
             .phone-dock__actions { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); }
             .phone-dock__btn, .phone-dock__btn.is-primary { grid-column: auto; min-height: 44px; padding: 0 8px; gap: 6px; font-size: 13px; }
             .phone-dock__btn svg { width: 18px; height: 18px; }
+            /* A long label (de "Foto aufnehmen", "Aus der Galerie") takes a second line, never cut. */
+            .phone-dock__btn { white-space: normal; line-height: 1.15; text-align: center; }
+            .phone-dock__btn > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
         }
         /* What waits on this device (7.4): the photos' thumbnails, the persons edited, save and discard. */
         .device-waiting { display: flex; flex-direction: column; gap: 14px; }

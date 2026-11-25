@@ -16,7 +16,7 @@ import { deviceConnection, onDeviceConnection, type DeviceConnection } from '../
 import { pairingNow } from '../device/device-store.js';
 import { DEVICE_REPLAY_EVENT } from '../device/gateway-client.js';
 import { DEVICE_COMPUTER_ONLY_EVENT, researchDeviceState } from '../research-link.js';
-import { phoneViewport, watchPhoneViewport } from './phone-research-ui.js';
+import { phoneResearchArchive, phoneViewport, watchPhoneViewport } from './phone-research-ui.js';
 
 const CONN_ID = 'current-tree-conn';
 
@@ -24,6 +24,8 @@ const CONN_ID = 'current-tree-conn';
 let lastComputer = '';
 let refusalWatched = false;
 let unwatch: (() => void) | null = null;
+/** The research's tree held here opened from the phone's Research screen, its newer version asked meanwhile (§7 point 4). */
+let treeUpdating = false;
 
 /** The app runs as a device of the research's gateway (paired, or unpaired since). */
 export function inDeviceMode(): boolean {
@@ -44,12 +46,18 @@ export function deviceComputerName(): string {
 
 export type DeviceSwitcherDot = 'is-on' | 'is-wait' | 'is-error';
 
-/** The switcher's second line for a connection's state (3.1–3.3). */
-export function deviceSwitcherLine(conn: Pick<DeviceConnection, 'state'> | null, pc: string): { dot: DeviceSwitcherDot; text: string } {
+/**
+ * The switcher's second line for a connection's state (3.1–3.3). Connected, the phone's Research screen of an
+ * archive says it is read-only (3.6); the tree held here just opened says it is being updated meanwhile (§7 point 4).
+ */
+export function deviceSwitcherLine(conn: Pick<DeviceConnection, 'state'> | null, pc: string,
+    o: { archive?: boolean; updating?: boolean } = {}): { dot: DeviceSwitcherDot; text: string } {
     const d = strings.device;
     switch (conn?.state) {
         case undefined:
         case 'connected':
+            if (o.updating) return { dot: 'is-wait', text: `${d.onComputer(pc)} · ${strings.deviceResearch.treeUpdating}` };
+            if (o.archive) return { dot: 'is-on', text: strings.deviceResearch.archiveRead };
             return { dot: 'is-on', text: d.onComputer(pc) };
         case 'connecting':
             return { dot: 'is-wait', text: d.connectingShort(pc) };
@@ -112,14 +120,26 @@ export const deviceModeMethods = uiModule({
         document.body.classList.toggle('device-phone', on && phoneViewport());
         if (on) watchPhoneViewport(() => this.phoneViewportChanged());
         this.refreshDeviceOffline();
+        this.refreshDeviceSwitcherLine();
+    },
+
+    /** The tree held here being updated (true while its newer version is asked, after it opened from the screen). */
+    deviceTreeUpdating(on: boolean): void {
+        if (treeUpdating === on) return;
+        treeUpdating = on;
+        this.refreshDeviceSwitcherLine();
+    },
+
+    /** The switcher's second line drawn again (the connection, the screen's archive, the tree being updated). */
+    refreshDeviceSwitcherLine(): void {
         const el = document.getElementById(CONN_ID);
         if (!el) return;
-        if (!on) {
+        if (!inDeviceMode()) {
             el.hidden = true;
             el.textContent = '';
             return;
         }
-        const line = deviceSwitcherLine(deviceConnection(), deviceComputerName());
+        const line = deviceSwitcherLine(deviceConnection(), deviceComputerName(), { archive: phoneResearchArchive(), updating: treeUpdating });
         el.hidden = false;
         el.dataset.state = line.dot;
         el.replaceChildren();

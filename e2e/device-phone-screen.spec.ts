@@ -856,3 +856,339 @@ test.describe('Dock (de)', () => {
         await shot(page, 'dock-de-360');
     });
 });
+
+// ——— States (§8, 3.6): without the computer, unpaired, an archive, empty; light, dark, de ———
+
+/** A date `min` minutes before the fixed clock T. */
+const atT = (min: number): string => new Date(T - min * 60_000).toISOString();
+
+/** The research's glance dated by T: one line at work, one paused, the seven of Waiting. `tree`/`line`: longer names. */
+function stateGlance(o: Record<string, unknown> = {}, names: { tree?: string; line?: string } = {}): Record<string, unknown> {
+    return fakeGlance({ id: PYCH, name: names.tree ?? NAME }, {
+        headAt: atT(120),
+        lastWorked: atT(120),
+        day: { persons: 2, sources: 1, saves: 5, since: atT(1440) },
+        lines: [
+            { id: 'G0001', n: 1, name: names.line ?? 'Předci Jana Pýchavky', direction: 'ancestors', way: 'up', state: 'active', tasks: 2, waiting: 1, working: true, since: atT(2880), focus: 'P0001' },
+            { id: 'G0002', n: 2, name: 'Potomci Josefa Pýchavky', direction: 'descendants', way: 'down', state: 'paused', tasks: 1, waiting: 0, working: false, since: atT(1800), focus: 'P0003' },
+        ],
+        now: [{ since: atT(35), line: 'G0001', way: 'up', task: { id: 'T0003', text: 'Křest Jana Pýchavky 1851' }, person: 'P0001', run: 'run-a1' }],
+        runs: [{ id: 'run-a1', line: 'G0001', way: 'up', since: atT(35), state: 'working', task: 'T0003' }],
+        waiting: fakeWaiting(atT),
+        ...o,
+    });
+}
+
+/** Finds dated by T: one person, new sources; `earlier`: older ones to show. */
+function stateFinds(o: { earlier?: boolean; none?: boolean } = {}): Record<string, unknown> {
+    return {
+        since: atT(1440),
+        groups: o.none ? [] : [
+            { key: 'person:P0001', kind: 'person', name: 'Jan Pýchavka', span: '1851–1919', person: 'P0001', at: atT(30),
+                lines: [{ kind: 'fact', text: 'Narozen 3. 3. 1851 v Mlýnkách', at: atT(30) }, { kind: 'cited', text: 'Sňatek 1878', at: atT(40) }] },
+            { key: 'sources', kind: 'sources', at: atT(90), lines: [{ kind: 'source', text: 'Matrika Mlýnky 1851', at: atT(90) }] },
+        ],
+        ...(o.earlier ? { earlier: atT(3 * 1440) } : {}),
+    };
+}
+
+/** The research of the States' tests: `glance` and `finds` as given, the tree as `research()`. */
+function stateResearch(gw: FakeGateway, glance: unknown = stateGlance(), finds: unknown = stateFinds()): Asked {
+    const asked = research(gw);
+    gw.glance = glance;
+    gw.finds = finds;
+    return asked;
+}
+
+const connState = (page: Page): Promise<string | undefined> =>
+    page.evaluate(() => (globalThis as unknown as { __stromDevice?: { connection(): { state: string } | null } }).__stromDevice?.connection()?.state);
+const qline = (page: Page) => screen(page).locator('#device-qline');
+const conn = (page: Page) => page.locator('#current-tree-conn');
+
+/** The computer away: each connection closed; the quiet line under the screen's header. */
+async function goAway(page: Page): Promise<void> {
+    gw.unreachable = true;
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await expect.poll(() => connState(page), { timeout: 15000 }).toBe('unreachable');
+    await expect(qline(page)).toBeVisible();
+}
+
+/** The keys kept in a store of the device's IndexedDB. */
+async function storeKeys(page: Page, store: string): Promise<string[]> {
+    return page.evaluate(async (store) => {
+        const db = await new Promise<IDBDatabase>((resolve) => { const r = indexedDB.open('strom-device'); r.onsuccess = () => resolve(r.result); });
+        if (!db.objectStoreNames.contains(store)) { db.close(); return []; }
+        const keys = await new Promise<IDBValidKey[]>((resolve) => { const r = db.transaction(store).objectStore(store).getAllKeys(); r.onsuccess = () => resolve(r.result); });
+        db.close();
+        return keys.map(String);
+    }, store);
+}
+
+/**
+ * Nothing of the screen past its width (the screen, its columns, sections, the quiet line, the dock) and nothing
+ * over anything else: the quiet line under the header, the content above the dock, the dock and the screen off the bar.
+ */
+async function expectScreenFits(page: Page, label: string): Promise<void> {
+    const m = await page.evaluate(() => {
+        const vis = (el: Element): boolean => {
+            const r = el.getBoundingClientRect();
+            const cs = getComputedStyle(el);
+            return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none';
+        };
+        const name = (el: Element): string => el.id || (typeof el.className === 'string' ? el.className : el.tagName);
+        const scr = document.getElementById('phone-research')!;
+        const wide = [scr, ...scr.querySelectorAll<HTMLElement>('.phone-research__main, .phone-research__col, .phone-sec, .phone-sec__body, #phone-dock, #device-qline')]
+            .filter(vis).filter(el => el.scrollWidth > el.clientWidth + 0.5).map(name);
+        const box = scr.getBoundingClientRect();
+        const out = [...scr.querySelectorAll('*')].filter(vis).filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.right > box.right + 0.5 || r.left < box.left - 0.5;
+        }).map(name);
+        const rect = (el: Element | null): DOMRect | null => (el && vis(el) ? el.getBoundingClientRect() : null);
+        const meet = (a: DOMRect | null, b: DOMRect | null): boolean => !!a && !!b
+            && a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+        const main = scr.querySelector('.phone-research__main')!;
+        // Upright the content scrolls in one box; sideways in its two columns.
+        const content = getComputedStyle(main).display === 'contents'
+            ? [...scr.querySelectorAll('.phone-research__col')].map(rect)
+            : [rect(main)];
+        const dock = rect(document.getElementById('phone-dock'));
+        const bar = rect(document.getElementById('bottom-bar'));
+        const header = rect(document.querySelector('.toolbar'));
+        const line = rect(document.getElementById('device-qline'));
+        const over: string[] = [];
+        if (content.some(c => meet(c, dock))) over.push('content × dock');
+        if (meet(dock, bar)) over.push('dock × bar');
+        if (meet(box, bar)) over.push('screen × bar');
+        if (meet(line, header)) over.push('quiet line × header');
+        if (line && content.some(c => meet(c, line))) over.push('content × quiet line');
+        if (meet(box, header)) over.push('screen × header');
+        return { page: document.documentElement.scrollWidth - window.innerWidth, wide, out, over };
+    });
+    expect(m.page, `${label}: the page scrolls sideways`).toBeLessThanOrEqual(0);
+    expect(m.wide, `${label}: scrolls sideways`).toEqual([]);
+    expect(m.out, `${label}: past the screen`).toEqual([]);
+    expect(m.over, `${label}: overlaps`).toEqual([]);
+}
+
+test.describe('States (en)', () => {
+    test.use({ locale: 'en-US', timezoneId: 'UTC' });
+
+    test.beforeEach(async ({ page }) => {
+        await page.clock.setFixedTime(T);
+        gw.clockOffsetMs = T - Date.now();
+    });
+
+    test('without the computer: the last state, its actions grey, the dock goes on; back: a toast and the state read again', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        const asked = stateResearch(gw);
+        await pairedOnScreen(page, gw);
+        await expect(nowRows(page)).toHaveCount(1);
+        await expect(waitRows(page)).toHaveCount(5);
+        await expect(conn(page)).toHaveText('on computer Pracovna');
+        await goAway(page);
+        await expect(qline(page)).toContainText('The computer Pracovna is not reachable. The state shown is the last one known (');
+        await expect(qline(page).locator('[data-act="retry"]')).toHaveText('Try again');
+        await expect(conn(page)).toHaveText('Pracovna not reachable');
+        await expect(conn(page).locator('.phone-dot')).toHaveClass(/is-error/);
+        // The last state known stays: Now, Waiting, Finds, Lines.
+        await expect(nowRows(page)).toHaveCount(1);
+        await expect(lineRows(page)).toHaveCount(2);
+        await expect(waitRows(page)).toHaveCount(5);
+        await expect(findGroups(page)).toHaveCount(2);
+        // Its actions grey: ⋯, the answers; a tap on a row asks nothing.
+        const more = screen(page).locator('.phone-line__more');
+        await expect(more).toHaveCount(3);
+        for (const b of await more.all()) await expect(b).toBeDisabled();
+        expect(await more.first().evaluate(el => getComputedStyle(el).opacity)).toBe('0.5');
+        const acts = screen(page).locator('.phone-wait__btn');
+        expect(await acts.count()).toBeGreaterThan(0);
+        for (const b of await acts.all()) await expect(b).toBeDisabled();
+        expect(await acts.first().evaluate(el => getComputedStyle(el).opacity)).toBe('0.5');
+        await lineRows(page).first().locator('.phone-line__name').click();
+        await expect(sheet(page)).toHaveCount(0);
+        // The dock goes on.
+        for (const b of await dock(page).locator('.phone-dock__btn').all()) await expect(b).toBeEnabled();
+        await expectScreenFits(page, 'away 390');
+        await shot(page, 'stav-bez-spojeni-en-390');
+
+        // Back: the toast, the state read again, the actions back.
+        const glances = asked.glances;
+        gw.unreachable = false;
+        await qline(page).locator('[data-act="retry"]').click();
+        await expect(page.locator('.toast[data-kind="device-back"]')).toHaveText(/Reconnected/, { timeout: 15000 });
+        await expect(qline(page)).toHaveCount(0);
+        await expect(conn(page)).toHaveText('on computer Pracovna');
+        await expect.poll(() => asked.glances, { timeout: 10000 }).toBeGreaterThan(glances);
+        for (const b of await more.all()) await expect(b).toBeEnabled();
+        await lineRows(page).first().locator('.phone-line__more').click();
+        await expect(sheet(page)).toBeVisible();
+    });
+
+    test('without the computer and no state held: one sentence and the dock', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        research(gw);
+        gw.finds = null;
+        const base = gw.onTunnel;
+        // The research offers the screen, its glance never answers.
+        gw.onTunnel = async (req, device) => (req.p === 'glance' ? { s: 503, body: { code: 'busy' } } : base(req, device));
+        await pairedOnScreen(page, gw);
+        await goAway(page);
+        await expect(qline(page)).toContainText('The computer Pracovna is not reachable.');
+        await expect(qline(page)).not.toContainText('last one known');
+        await expect(screen(page).locator('.phone-sec:not([hidden])')).toHaveCount(1);
+        await expect(screen(page).locator('.phone-sec[data-sec="now"] .phone-sec__quiet')).toHaveText('The research’s state is not on this device yet.');
+        await expect(screen(page).locator('.phone-sec[data-sec="now"] .phone-sec__head')).toBeHidden();
+        await expect(screen(page).locator('.phone-research__more')).toBeHidden();
+        await expect(dock(page).locator('.phone-dock__btn')).toHaveCount(3);
+        await expectScreenFits(page, 'no state 390');
+        await shot(page, 'stav-bez-stavu-en-390');
+    });
+
+    test('unpaired: the last state and the tree held here go, the screen says nothing is here; paired again, nothing old', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        const asked = stateResearch(gw);
+        await pairedOnScreen(page, gw);
+        await expect(nowRows(page)).toHaveCount(1);
+        // The tree opened once (held here), then the screen again.
+        await page.locator('#bb-view-family').click();
+        await expect(josef(page)).toBeVisible({ timeout: 15000 });
+        await page.locator('#bb-view-research').click();
+        await expect(screen(page)).toBeVisible();
+        await expect.poll(() => storeKeys(page, 'research')).toEqual([PYCH]);
+        expect(await page.evaluate((id) => !!window.Strom.TreeManager.findTreeByResearchId(id), PYCH)).toBe(true);
+
+        await page.route('**/device/x', route => route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ code: 'device.unpaired' }) }));
+        await page.evaluate(() => window.dispatchEvent(new Event('online')));
+        await expect.poll(() => connState(page), { timeout: 15000 }).toBe('unpaired');
+        await expect(qline(page)).toContainText('This device is no longer paired with Pracovna. To pair again: scan the QR code on the computer with the research.');
+        await expect(qline(page).locator('[data-act="retry"]')).toHaveCount(0);
+        await expect(conn(page)).toHaveText('not paired with Pracovna');
+        await expect(screen(page).locator('.phone-sec[data-sec="now"] .phone-sec__quiet')).toHaveText('The research’s state is not on this device yet.');
+        await expect(screen(page).locator('.phone-sec:not([hidden])')).toHaveCount(1);
+        await expect(dock(page).locator('.phone-dock__btn')).toHaveCount(3);
+        // Gone from the device: the state, the tree held here.
+        await expect.poll(() => storeKeys(page, 'research')).toEqual([]);
+        await expect.poll(() => page.evaluate((id) => !!window.Strom.TreeManager.findTreeByResearchId(id), PYCH)).toBe(false);
+        await expectScreenFits(page, 'unpaired 390');
+        await shot(page, 'stav-odparovano-en-390');
+
+        // Paired again, its research not answering the screen yet: nothing of the old state, the tree not here.
+        await page.unroute('**/device/x');
+        const base = gw.onTunnel;
+        gw.finds = null;
+        gw.onTunnel = async (req, device) => (req.p === 'glance' ? { s: 503, body: { code: 'busy' } } : base(req, device));
+        const trees = asked.trees;
+        await page.goto(gw.pairCode().url);
+        await expect(page.locator('#device-boot')).toHaveCount(0, { timeout: 20000 });
+        await expect(screen(page)).toBeVisible({ timeout: 15000 });
+        await expect(screen(page).locator('.phone-sec[data-sec="now"] .phone-sec__quiet')).toHaveText('The research’s state is not on this device yet.');
+        await expect(screen(page)).not.toContainText('Předci Jana Pýchavky');
+        await expect(findGroups(page)).toHaveCount(0);
+        expect(await page.evaluate((id) => !!window.Strom.TreeManager.findTreeByResearchId(id), PYCH)).toBe(false);
+        expect(asked.trees).toBe(trees);
+    });
+
+    test('an archive: no Now nor Lines, Waiting and Finds without actions, "Archive · read-only" in the switcher', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        stateResearch(gw, stateGlance({ tree: { id: PYCH, name: NAME, lang: 'cs', state: 'archive', kind: 'research', persons: 3, families: 1, ged: { bytes: 2048, head: '3c7a9e1f05b2' } } }));
+        gw.trees = [{ id: PYCH, name: NAME, archive: true }];
+        await pairedOnScreen(page, gw);
+        await expect(waitRows(page)).toHaveCount(5);
+        await expect(screen(page).locator('.phone-sec:not([hidden])')).toHaveCount(2);
+        await expect(screen(page).locator('.phone-sec[data-sec="now"]')).toBeHidden();
+        await expect(screen(page).locator('.phone-sec[data-sec="lines"]')).toBeHidden();
+        await expect(findGroups(page)).toHaveCount(2);
+        await expect(screen(page).locator('.phone-wait__btn')).toHaveCount(0);
+        await expect(conn(page)).toHaveText('Archive · read-only');
+        await expect(conn(page).locator('.phone-dot')).toHaveClass(/is-on/);
+        await expectScreenFits(page, 'archive 390');
+        await shot(page, 'stav-archiv-en-390');
+    });
+
+    test('the tree held here opens at once; "updating…" in the switcher while its newer version is asked', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        // A research that says what it takes (status with `accepts`): asked again on each opening.
+        const asked = dockResearch(gw);
+        gw.glance = stateGlance();
+        gw.finds = stateFinds();
+        await pairedOnScreen(page, gw);
+        await page.locator('#bb-view-family').click();
+        await expect(josef(page)).toBeVisible({ timeout: 15000 });
+        await page.locator('#bb-view-research').click();
+        await expect(screen(page)).toBeVisible();
+        await expect(conn(page)).toHaveText('on computer Pracovna');
+        let release!: () => void;
+        let hold: Promise<void> | null = new Promise<void>(r => { release = r; });
+        const base = gw.onTunnel;
+        gw.onTunnel = async (req, device) => {
+            if (req.p === 'status' && hold) await hold;
+            return base(req, device);
+        };
+        await page.locator('#bb-view-family').click();
+        await expect(josef(page)).toBeVisible();
+        expect(asked.trees).toBe(1);
+        await expect(conn(page)).toHaveText('on computer Pracovna · updating…');
+        await expect(conn(page).locator('.phone-dot')).toHaveClass(/is-wait/);
+        hold = null;
+        release();
+        await expect(conn(page)).toHaveText('on computer Pracovna', { timeout: 15000 });
+        await expect(conn(page).locator('.phone-dot')).toHaveClass(/is-on/);
+    });
+
+    test('empty: one quiet sentence each (Now, Waiting without its heading, Finds with older ones, Lines)', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        stateResearch(gw, stateGlance({ now: [], runs: [], lastWorked: undefined, lines: [], waiting: { n: 0, items: [] } }), stateFinds({ none: true, earlier: true }));
+        await pairedOnScreen(page, gw);
+        const sec = (k: string) => screen(page).locator(`.phone-sec[data-sec="${k}"]`);
+        await expect(sec('now').locator('.phone-sec__quiet')).toHaveText('This tree has not been worked on yet.');
+        await expect(sec('waiting').locator('.phone-sec__quiet')).toHaveText('Nothing is waiting.');
+        await expect(sec('waiting').locator('.phone-sec__head')).toBeHidden();
+        await expect(sec('finds').locator('.phone-sec__quiet')).toHaveText('Nothing new found.');
+        await expect(sec('finds').locator('.phone-sec__link')).toHaveText('Show older finds');
+        await expect(sec('lines').locator('.phone-sec__quiet')).toHaveText('The research has no lines yet. A new line is made on the computer with the research.');
+        await expectScreenFits(page, 'empty 390');
+        await shot(page, 'stav-prazdny-en-390');
+    });
+});
+
+test.describe('States (de): light and dark, upright and sideways', () => {
+    test.use({ locale: 'de-DE', timezoneId: 'UTC' });
+    const TREE_DE = 'Pýchavkovi z Mlýnků nad Hřibovou Lhotou';
+    const LINE_DE = 'Vorfahren von Bohumil Pýchavka aus Mlýnky nad Potokem';
+
+    test.beforeEach(async ({ page }) => {
+        await page.clock.setFixedTime(T);
+        gw.clockOffsetMs = T - Date.now();
+    });
+
+    for (const [width, height] of [[390, 844], [844, 390]] as const) {
+        test(`${width}×${height}: the screen, then without the computer — nothing overflows or overlaps`, async ({ page }) => {
+            await page.setViewportSize({ width, height });
+            await seeds(page);
+            stateResearch(gw, stateGlance({}, { tree: TREE_DE, line: LINE_DE }));
+            gw.trees = [{ id: PYCH, name: TREE_DE, archive: false }];
+            await pairedOnScreen(page, gw);
+            await expect(nowRows(page)).toHaveCount(1);
+            await expect(screen(page).locator('.phone-sec[data-sec="now"] .phone-sec__title')).toHaveText(/^Jetzt/);
+            for (const scheme of ['light', 'dark'] as const) {
+                await page.emulateMedia({ colorScheme: scheme });
+                await expectScreenFits(page, `de ${width} ${scheme}`);
+                await shot(page, `stav-de-${width}x${height}-${scheme}`);
+            }
+            await goAway(page);
+            await expect(qline(page)).toContainText('nicht erreichbar');
+            for (const scheme of ['light', 'dark'] as const) {
+                await page.emulateMedia({ colorScheme: scheme });
+                await expectScreenFits(page, `de away ${width} ${scheme}`);
+                await shot(page, `stav-de-bez-spojeni-${width}x${height}-${scheme}`);
+            }
+        });
+    }
+});

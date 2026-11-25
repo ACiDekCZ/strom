@@ -15,6 +15,14 @@ describe('device mode: the tree switcher\'s second line (spec 094 §3)', () => {
         expect(deviceSwitcherLine({ state: 'unpaired' }, 'Pracovna')).toEqual({ dot: 'is-error', text: 'not paired with Pracovna' });
     });
 
+    it('the phone\'s screen of an archive is read-only; the tree held here says it is being updated (094 K3.13 §7, §8)', () => {
+        expect(deviceSwitcherLine({ state: 'connected' }, 'Pracovna', { archive: true })).toEqual({ dot: 'is-on', text: 'Archive · read-only' });
+        expect(deviceSwitcherLine({ state: 'connected' }, 'Pracovna', { updating: true })).toEqual({ dot: 'is-wait', text: 'on computer Pracovna · updating…' });
+        // Away, the connection's state says more than either.
+        expect(deviceSwitcherLine({ state: 'unreachable' }, 'Pracovna', { archive: true, updating: true })).toEqual({ dot: 'is-error', text: 'Pracovna not reachable' });
+        expect(deviceSwitcherLine({ state: 'unpaired' }, 'Pracovna', { archive: true })).toEqual({ dot: 'is-error', text: 'not paired with Pracovna' });
+    });
+
     it('only in the device mode; the computer\'s name kept once the state is gone', () => {
         expect(inDeviceMode()).toBe(false);
         setResearchDeviceState({ origin: 'http://192.168.1.20:47800', trees: ['t'], computer: 'Pracovna', actions: [] });

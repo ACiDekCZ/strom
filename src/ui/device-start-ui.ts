@@ -354,7 +354,13 @@ export const deviceStartMethods = uiModule({
         const held = TreeManager.findTreeByResearchId(researchId);
         if (held) {
             if (DataManager.getCurrentTreeId() !== held.id && await this.switchToTree(held.id) !== 'switched') return 'cancel';
-            after();
+            // The copy held here at once; its newer version asked meanwhile: "updating…" in the switcher (§7 point 4).
+            this.refreshResearchMenu();
+            this.deviceTreeUpdating(deviceConnection()?.state === 'connected');
+            void this.pollResearchBridge({ reschedule: true }).finally(() => this.deviceTreeUpdating(false)).then(() => {
+                this.deviceTreeNamed(researchId, pairedName);
+                this.deviceResumeImages(researchId);
+            });
             return 'open';
         }
         const conn = deviceConnection()?.state;
@@ -607,6 +613,8 @@ export const deviceStartMethods = uiModule({
         });
         document.body.appendChild(el);
         document.body.classList.add('device-home-line-on');
+        // On the phone's Research screen: under its header (§8 point 6).
+        this.placePhoneScreenLines();
     },
 
     /** The home-screen icon's quiet line said again in the UI's language (UI.setLanguage), where it stands. */
