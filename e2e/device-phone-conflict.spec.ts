@@ -1,6 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
 import { seedResearchPromoSeen, seedSetting, seedWhatsNewSeen } from './helpers.js';
-import { poll } from './research-bridge.js';
 import { startDeviceGateway, type FakeGateway, type TunnelReply } from './device-gateway.js';
 import type { DeviceRequest } from '../src/device/device-crypto';
 
@@ -173,7 +172,11 @@ async function paired(page: Page, opts: { lang: Lang; width: number; dark: boole
         localStorage.setItem(`strom-research-auto:${id}`, JSON.stringify({ modeAsked: true, skipPreview: true, placesOffer: 'done' }));
     });
     if (opts.lang === 'de') await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
-    await poll(page);
+    // A status read in this page (its features and the device actions it announces) before anything opens: the
+    // panels are drawn once from what is known then, without `hypothesis.decide.link` or `status.device.actions`
+    // no choices. A plain poll returns at once while the start's own ask is under way (or before the bridge is
+    // known); with a timeout it joins that ask and says whether a status came.
+    await expect.poll(() => page.evaluate(() => window.Strom.UI.pollResearchBridge({ timeout: 10_000 }))).toBe(true);
 }
 
 /** The research's overview opened as the More sheet's row does. */
