@@ -10,9 +10,9 @@ import { startDeviceGateway, fakeGlance, type FakeGateway, type TunnelReply } fr
  * `started` (run.confirm no), `computer` and `said` show no sheet; 503
  * agent.noterminal says the app's own sentence, never the bridge's; a yes that
  * expired (410) is asked again, a new sheet; Automatically / Only N asks with
- * the new link. The Research screen's buttons come later (part C): the flow is
- * started by the device mode's test hook. Invented data only (the Pýchavkovi
- * of Mlýnky, the computer Pracovna).
+ * the new link. The flow is started by the device mode's test hook, then by
+ * the Research screen's own buttons (Now's row of a start by its state).
+ * Invented data only (the Pýchavkovi of Mlýnky, the computer Pracovna).
  */
 
 const PYCH = '6a1d2c3e-4b5f-4a6b-8c7d-9e0f1a2b3c4d';
@@ -242,5 +242,176 @@ test.describe('a tablet (en)', () => {
         await expect(s).toHaveCount(0);
         expect(await ended(page)).toBe('started');
         expect(gw.agentRequests.map(r => !!r.yes)).toEqual([false, true]);
+    });
+});
+
+/**
+ * The Research screen's buttons of the agent (spec 094 K3.15 part C1, 10.2–10.13): Work on the queue… under Now,
+ * a line's run in Line actions, Discuss with the agent and Leave it to the agent in Waiting; Now's row of a start
+ * by its state; grey without the connection; the quiet sentences without `agent.start`.
+ */
+test.describe('the Research screen\'s buttons (a phone, en)', () => {
+    test.use({ locale: 'en-US' });
+    /** The page's and the gateway's clock, away from midnight UTC. */
+    const T = Date.parse('2026-11-25T14:40:00Z');
+    const scr = (page: Page) => page.locator('#phone-research');
+    const nowSec = (page: Page) => scr(page).locator('.phone-sec[data-sec="now"]');
+    const startRow = (page: Page) => nowSec(page).locator('.phone-start');
+    const queueWork = (page: Page) => nowSec(page).locator('.phone-now-work');
+    const menu = (page: Page) => page.locator('.bottom-sheet-overlay');
+    const waitingSec = (page: Page) => scr(page).locator('.phone-sec[data-sec="waiting"]');
+
+    async function onScreen(page: Page, o: { clock?: boolean } = {}): Promise<void> {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await seeds(page);
+        if (o.clock) {
+            await page.clock.install({ time: T });
+            gw.clockOffsetMs = T - Date.now();
+        }
+        await paired(page, gw);
+        await expect(scr(page)).toBeVisible();
+    }
+
+    test.beforeEach(() => {
+        research(gw);
+    });
+
+    test('Work on the queue…: the sheet, Start, starting, then the run of the queue in Now with Stop run', async ({ page }) => {
+        let started = false;
+        const at = (m: number): string => new Date(Date.now() - m * 60_000).toISOString();
+        gw.glance = () => fakeGlance({ id: PYCH, name: NAME }, started ? {
+            now: [{ since: at(0), way: 'other', task: { id: 'T0003', text: 'Křest Jana Pýchavky 1851' }, run: 'run-q1' }],
+            runs: [{ id: 'run-q1', line: null, way: 'other', since: at(0), state: 'working', task: 'T0003' }],
+        } : {});
+        await onScreen(page);
+        const b = queueWork(page);
+        await expect(b).toContainText('Work on the queue…');
+        await expect(b.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(b.locator('.research-open-mark')).toHaveCount(1);
+        expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await b.click();
+        await expect(sheet(page).locator('#device-agent-title')).toHaveText('Work on the queue');
+        expect(gw.agentRequests[0].link).toBe(LOOP);
+        await sheet(page).locator('#device-agent-go').click();
+        await expect(sheet(page)).toHaveCount(0);
+        await expect(startRow(page)).toHaveClass(/is-starting/);
+        await expect(startRow(page)).toContainText('Starting work on the queue…');
+        await expect(startRow(page)).toContainText('The agent comes up in a new terminal window on Pracovna.');
+        await expect(queueWork(page)).toHaveCount(0);
+        // No toast on the screen: Now says it.
+        await expect(toast(page)).toHaveCount(0);
+        // The research's glance with the run: Now's own row of the queue.
+        started = true;
+        gw.sendEvent({ event: 'change', data: { head: '5e9c1a7b3d20', what: ['run run-q1'] } });
+        await expect(startRow(page)).toHaveCount(0, { timeout: 10000 });
+        const row = nowSec(page).locator('.phone-line').first();
+        await expect(row).toContainText('Queue · agent');
+        await row.locator('.phone-line__more').click();
+        await expect(menu(page).locator('#phone-now-stop')).toBeVisible();
+    });
+
+    test('Line actions: Put an agent on this direction (AI + terminal, where) and Work on this direction', async ({ page }) => {
+        await onScreen(page);
+        await scr(page).locator('.phone-sec[data-sec="lines"] .phone-line').first().locator('.phone-line__more').click();
+        const run = menu(page).locator('#phone-line-run');
+        await expect(run).toContainText('Put an agent on this direction');
+        await expect(run).toContainText('in a new terminal window on Pracovna');
+        await expect(run.locator('.research-ai-badge')).toHaveCount(1);
+        await expect(menu(page).locator('#phone-line-work')).toContainText('Work on this direction');
+        await expect(menu(page).locator('.bottom-sheet-quiet')).toHaveCount(0);
+        await run.click();
+        await expect(sheet(page).locator('#device-agent-go')).toBeVisible();
+        expect(gw.agentRequests[0].link).toMatch(/^strom-research[a-z-]*:\/\/work\?/);
+        expect(gw.agentRequests[0].link).toContain('research=G0001');
+        expect(gw.agentRequests[0].link).toContain('do=loop');
+    });
+
+    test('Waiting: Discuss with the agent opens on Pracovna; Now shows the conversation at the computer', async ({ page }) => {
+        await onScreen(page);
+        const discuss = waitingSec(page).locator('button[data-act="waiting-agent"][data-do="discuss"]');
+        await expect(discuss).toContainText('Discuss with the agent');
+        await expect(discuss.locator('.research-ai-badge')).toHaveCount(1);
+        await discuss.click();
+        const go = sheet(page).locator('#device-agent-go');
+        await expect(go).toContainText('Open on Pracovna');
+        expect(gw.agentRequests[0].link).toMatch(/:\/\/task\?/);
+        expect(gw.agentRequests[0].link).toContain('task=T0007');
+        expect(gw.agentRequests[0].link).toContain('do=chat');
+        await go.click();
+        await expect(startRow(page)).toContainText('Conversation with the agent · on Pracovna');
+        await startRow(page).locator('[data-act="agent-close"]').click();
+        await expect(startRow(page)).toHaveCount(0);
+    });
+
+    test('Waiting: a conflict left to the agent', async ({ page }) => {
+        const at = (m: number): string => new Date(Date.now() - m * 60_000).toISOString();
+        gw.glance = fakeGlance({ id: PYCH, name: NAME }, {
+            waiting: { n: 1, items: [{ id: 'X0001', kind: 'conflict', section: 'conflict', phase: 'todo', what: 'Birth of Jan Pýchavka',
+                on: 'between two devices', at: at(100), group: { key: 'conflict', name: 'Conflicts', kind: 'conflict' }, person: 'P0001', do: ['keep'] }] },
+        });
+        await onScreen(page);
+        const leave = waitingSec(page).locator('button[data-act="waiting-agent"][data-do="leave"]');
+        await expect(leave).toContainText('Leave it to the agent');
+        await leave.click();
+        await expect(sheet(page).locator('#device-agent-go')).toBeVisible();
+        expect(gw.agentRequests[0].link).toMatch(/:\/\/conflict\?/);
+        expect(gw.agentRequests[0].link).toContain('id=X0001');
+        expect(gw.agentRequests[0].link).toContain('do=agent');
+    });
+
+    test('started without a yes (run.confirm no): the quiet sentence in Now; 30 s without a proof: "Did the queue work not start?"', async ({ page }) => {
+        gw.agentScenario = 'started';
+        await onScreen(page, { clock: true });
+        await queueWork(page).click();
+        await expect(startRow(page)).toContainText('Without confirmation (a setting of Pracovna) · uses the AI subscription.');
+        await expect(sheet(page)).toHaveCount(0);
+        await page.clock.runFor(31_000);
+        await expect(startRow(page)).toContainText('Did the queue work not start?');
+        const retry = startRow(page).locator('[data-act="agent-retry"]');
+        await expect(retry).toHaveText('Try again');
+        await retry.click();
+        await expect.poll(() => gw.agentRequests.length).toBe(2);
+        expect(gw.agentRequests[1].link).toBe(LOOP);
+        await expect(startRow(page)).toHaveClass(/is-starting/);
+    });
+
+    test('computer: waiting on the computer in Now', async ({ page }) => {
+        gw.agentScenario = 'computer';
+        await onScreen(page);
+        await queueWork(page).click();
+        await expect(startRow(page)).toHaveClass(/is-waitPc/);
+        await expect(startRow(page)).toContainText('Waiting on Pracovna: the terminal asks for a confirmation.');
+        await expect(startRow(page)).toContainText('A cost estimate or a consent is confirmed at the computer');
+    });
+
+    test('noterminal: not started, why and Try again — never silent', async ({ page }) => {
+        gw.agentScenario = 'noterminal';
+        await onScreen(page);
+        await queueWork(page).click();
+        await expect(startRow(page)).toHaveClass(/is-notStarted/);
+        await expect(startRow(page)).toContainText('The work on the queue did not start');
+        await expect(startRow(page).locator('.phone-start__why')).toHaveText('A terminal cannot be opened on Pracovna. Nothing was started.');
+        await expect(startRow(page).locator('[data-act="agent-retry"]')).toBeVisible();
+    });
+
+    test('without the connection the agent\'s buttons are grey and nothing is asked', async ({ page }) => {
+        await onScreen(page);
+        await expect(queueWork(page)).toBeEnabled();
+        gw.unreachable = true;
+        await page.evaluate(() => window.dispatchEvent(new Event('online')));
+        await expect(queueWork(page)).toBeDisabled({ timeout: 15000 });
+        await expect(waitingSec(page).locator('button[data-act="waiting-agent"]')).toBeDisabled();
+        expect(gw.agentRequests).toHaveLength(0);
+    });
+
+    test('without agent.start the quiet sentences stay, no agent\'s button', async ({ page }) => {
+        gw.agent = {};
+        await onScreen(page);
+        await expect(waitingSec(page).locator('.phone-wait__btn').first()).toBeVisible();
+        await expect(queueWork(page)).toHaveCount(0);
+        await expect(scr(page).locator('[data-act="waiting-agent"]')).toHaveCount(0);
+        await scr(page).locator('.phone-sec[data-sec="lines"] .phone-line').first().locator('.phone-line__more').click();
+        await expect(menu(page).locator('.bottom-sheet-quiet')).toContainText('Pracovna');
+        await expect(menu(page).locator('#phone-line-run, #phone-line-work')).toHaveCount(0);
     });
 });
