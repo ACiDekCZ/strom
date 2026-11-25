@@ -18,8 +18,8 @@ import {
     nearPlaces, ruleIssues, ruleNeeds, ruleToCustom, stripTemplateParams, FAMILY_PRESETS,
 } from '../person-list-rules.js';
 import {
-    lineageIndexOf, listIsAuto, listKind, listPersonIds, listRuleLabel, onPersonsMerged, rulePersonIds, sanitizePersonList,
-    sanitizePersonLists, stampChangedAt, subsetForSubtree, withCustomSnapshot, withFrozen,
+    keptByRuleLoss, lineageIndexOf, listIsAuto, listKind, listPersonIds, listRuleLabel, onPersonsMerged, rulePersonIds, sanitizePersonList,
+    sanitizePersonLists, stampChangedAt, subsetForSubtree, withCustomSnapshot, withFrozen, withKeptByRule,
 } from '../person-lists.js';
 import { LIST_TEMPLATE_IDS, LIST_TEMPLATES, templateNeeds, templateRoot, templatesFor } from '../person-list-templates.js';
 import { setLanguage } from '../strings.js';
@@ -405,6 +405,48 @@ const custom: CustomRule & { auto: boolean } = { v: 1, auto: true, root: all(fam
 const stored = (over: Partial<PersonList> = {}): PersonList => ({
     id: 'c1', name: 'Paternal without photo', dynamic: false, personIds: [id('konst')], sort: 'old', updated: '', custom,
     origin: { by: 'template', template: 'noPhoto', name: 'Ancestors without a photo', at: '2026-11-16T10:30:00.000Z' }, ...over,
+});
+
+describe('§10 Keep by the rule', () => {
+    const AT = '2026-11-24T10:30:00.000Z';
+
+    it('a fixed custom list: what was done by hand is counted, then dropped; the rule\'s people stored', () => {
+        const ix = lineageIndexOf(family());
+        // Lena added by hand (the rule does not find her), Viktor taken out, a manual order.
+        const fixed = stored({ custom: { ...custom, auto: false }, personIds: [id('lena'), id('konst')], removed: [id('viktor')], sort: 'manual' });
+        expect(listIsAuto(fixed)).toBe(false);
+        expect(keptByRuleLoss(ix, fixed)).toEqual({ added: 1, removed: 1, manual: true });
+        const kept = withKeptByRule(ix, fixed, AT);
+        expect(listIsAuto(kept)).toBe(true);
+        expect(kept.custom?.auto).toBe(true);
+        expect(kept.dynamic).toBe(false);
+        expect(kept.removed).toBeUndefined();
+        expect(kept.sort).toBe('old');
+        expect(kept.updated).toBe(AT);
+        expect(kept.personIds).toEqual(['viktor', 'konst', 'ada']);
+        expect(kept.origin).toEqual(fixed.origin);
+        // Nothing by hand: nothing to ask about.
+        expect(keptByRuleLoss(ix, stored({ custom: { ...custom, auto: false }, personIds: [id('konst')] }))).toEqual({ added: 0, removed: 0, manual: false });
+    });
+
+    it('a fixed one-condition list becomes dynamic; a checklist, an automatic list and one without a rule are not switched', () => {
+        const ix = lineageIndexOf(family());
+        const rule: PersonListRule = { kind: 'ancestors', personId: id('ada') };
+        const fixed: PersonList = { id: 'r1', name: 'Ancestors of Ada', dynamic: false, rule, personIds: [id('konst')], done: [id('konst')], sort: 'name', updated: '' };
+        const kept = withKeptByRule(ix, fixed, AT);
+        expect(kept.dynamic).toBe(true);
+        expect(kept.personIds).toBeUndefined();
+        expect(kept.done).toBeUndefined();
+        expect(kept.sort).toBe('name');
+        expect(listPersonIds(ix, kept)).toContain('viktor');
+        const work = { ...fixed, checklist: true };
+        expect(keptByRuleLoss(ix, work)).toBeNull();
+        expect(withKeptByRule(ix, work, AT)).toBe(work);
+        expect(keptByRuleLoss(ix, kept)).toBeNull();
+        const plain: PersonList = { id: 'p1', name: 'Wedding', dynamic: false, personIds: [id('ada')], sort: 'old', updated: '' };
+        expect(keptByRuleLoss(ix, plain)).toBeNull();
+        expect(withKeptByRule(ix, plain, AT)).toBe(plain);
+    });
 });
 
 describe('K1.8 storage an older app reads', () => {
